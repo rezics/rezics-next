@@ -38,8 +38,8 @@ export function scaleIngredients(records: readonly OccurrenceRecord[], factor: E
     const line = record.qualifier;
     const sourceAmount = line.amount ? rational(line.amount) : undefined;
     const sourceUpper = line.amountUpper ? rational(line.amountUpper) : undefined;
-    const unitText = line.unitText ?? (line.unit ? RECIPE_UNIT_DEFINITIONS.get(line.unit) : undefined);
     const storedDisplay = line.name === undefined && line.textParts === undefined;
+    const unitText = line.unitText ?? (!storedDisplay && line.unit ? RECIPE_UNIT_DEFINITIONS.get(line.unit) : undefined);
     const unit = recognizeUnit(unitText, storedDisplay);
     const name = ingredientName(line);
     const judgment = judgmentOf(name);

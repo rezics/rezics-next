@@ -82,6 +82,8 @@ const corpus: readonly IngredientCase[] = [
   { input: { text: '1½ cups flour', value: '3/2', amountLexical: '1½ cups flour', unitText: 'cups' }, amount: [3, 2], lexical: '1½ cups flour', unit: 'cups', name: 'flour', shown: '1 ½ cups flour', doubled: '3 cups flour' },
   { input: { text: '1.50 cups cream', value: '3/2', amountLexical: '1.50 cups cream', unitText: 'cups' }, amount: [3, 2], lexical: '1.50 cups cream', unit: 'cups', name: '1.50 cups cream', shown: '1 ½ cups 1.50 cups cream', doubled: '3 cups 1.50 cups cream' },
   { input: { text: '200 克 牛奶', value: 200, amountLexical: '200', unitText: '克' }, amount: [200, 1], lexical: '200', unit: '克', name: '克 牛奶', shown: '200 克 克 牛奶', doubled: '400 克 克 牛奶' },
+  { input: { text: '200 g butter', value: 200, amountLexical: '200', unitCode: 'https://qudt.org/vocab/unit/GM' }, amount: [200, 1], lexical: '200', iri: 'https://qudt.org/vocab/unit/GM', name: 'g butter', shown: '200 g butter', doubled: '400 g butter' },
+  { input: { text: '200 g butter', value: 200, unitCode: 'https://qudt.org/vocab/unit/GM' }, amount: [200, 1], iri: 'https://qudt.org/vocab/unit/GM', name: '200 g butter', shown: '200 200 g butter', doubled: '400 200 g butter' },
 ];
 const root = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
 const exact = (amount: Amount | undefined) => amount ? { numerator: amount[0], denominator: amount[1] } : undefined;
@@ -183,6 +185,16 @@ function assertIndependentFields() {
     expect(doubled.sourceLexical).toBe(qualifier.amountLexical);
     expect(doubled.amount).toEqual(qualifier.amount ? { numerator: 400n, denominator: 1n } : undefined);
     expect(doubled.amountUpper).toEqual(qualifier.amountUpper ? { numerator: 600n, denominator: 1n } : undefined);
+    // Literal previous-Main display outcomes for every old-shape subset; an IRI alone
+    // did not supply a display label, while written unit text did. Do not recalculate
+    // these expectations with the current locator or presenter.
+    const previousLines = [
+      '200 g butter', '200 g butter', '400–600 200 g butter', '400–600 g butter',
+      '200 g butter', '200 g butter', '400–600 200 g butter', '400–600 g butter',
+      '200 g butter', '200 g butter', '400–600 g 200 g butter', '400–600 g butter',
+      '200 g butter', '200 g butter', '400–600 g 200 g butter', '400–600 g butter',
+    ];
+    if (mask < previousLines.length) expect(doubled.line).toBe(previousLines[mask]!);
   }
 }
 
