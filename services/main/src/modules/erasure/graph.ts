@@ -33,9 +33,10 @@ const XSD_BOOLEAN = 'http://www.w3.org/2001/XMLSchema#boolean';
 export class GraphErasureUnavailable extends Error {}
 export class GraphErasureConflict extends Error {}
 
-export function graphErasureReceipt(erasureId: string): string {
+export function graphErasureReceipt(erasureId: string, closureDigest?: string): string {
   if (!UUID.test(erasureId)) throw new GraphErasureConflict('invalid erasure identity');
-  return `urn:rezics:receipt:erasure-graph:${hash(erasureId)}`;
+  if (closureDigest !== undefined && !/^[0-9a-f]{64}$/.test(closureDigest)) throw new GraphErasureConflict('invalid closure digest');
+  return `urn:rezics:receipt:erasure-graph:${hash(closureDigest ? `${erasureId}\0${closureDigest}` : erasureId)}`;
 }
 
 const GRAPH_REVISION =
@@ -404,18 +405,21 @@ export async function graphErasureSuppressed(
   epoch: string,
   revisionIds: readonly string[],
   held?: HeldGraphErasureProof,
+  expectedReceipt?: string,
 ): Promise<boolean> {
   if (held)
     return (await probeHeldGraphErasureProof(fuseki, erasureId, epoch, revisionIds, held)) !== null;
   const targets = checkedTargets(revisionIds);
-  const receipt = graphErasureReceipt(erasureId);
   const digest = hash(JSON.stringify({ family: 'erasure-graph-v1', erasureId, epoch, targets }));
+  const receipt = expectedReceipt ?? graphErasureReceipt(erasureId);
+  const receipts = expectedReceipt ? [receipt] : [receipt, graphErasureReceipt(erasureId, digest)];
   const result = await fuseki.query(
     `PREFIX rv: <${RV}> SELECT DISTINCT ?target WHERE {
     VALUES ?target { ${targets.map(iri).join(' ')} }
+    VALUES ?receipt { ${receipts.map(iri).join(' ')} }
     GRAPH ${iri(GRAPHS.revisions)} { ?target a rv:ErasedRevision ;
       rv:erasureEpoch ${epoch} . }
-    GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ;
+    GRAPH ${iri(GRAPHS.receipts)} { ?receipt a rv:OperationReceipt ;
       rv:outcome rv:Succeeded ; rv:requestDigest ${lit(digest)} ;
       rv:erasureId ${lit(erasureId)} ;
       rv:erasureEpoch ${epoch} . }
@@ -436,6 +440,8 @@ export interface GraphSuppressionProof {
   receipt: string;
   dataEpoch: string;
   sequence: string;
+  /** Present only for a closure that supersedes the original immutable receipt. */
+  closureDigest?: string;
 }
 
 /** Rebuild checks one historical active publication against its immutable
@@ -474,7 +480,7 @@ export async function graphRevisionSuppressed(
   }
   const target = checkedTargets([revisionId])[0]!;
   if (
-    proof.receipt !== graphErasureReceipt(erasureId) ||
+    proof.receipt !== graphErasureReceipt(erasureId, proof.closureDigest) ||
     !UUID.test(proof.dataEpoch) ||
     !/^[1-9][0-9]*$/.test(proof.sequence)
   )
@@ -547,17 +553,18 @@ export async function readGraphErasureProof(
     return proof;
   }
   const targets = checkedTargets(revisionIds);
-  const receipt = graphErasureReceipt(erasureId);
   const digest = hash(JSON.stringify({ family: 'erasure-graph-v1', erasureId, epoch, targets }));
+  const candidates = [graphErasureReceipt(erasureId), graphErasureReceipt(erasureId, digest)];
   const result = await fuseki.query(
     `PREFIX rv: <${RV}>
-    SELECT DISTINCT ?target ?sequence ?receiptEpoch ?currentSequence WHERE {
+    SELECT DISTINCT ?target ?sequence ?receiptEpoch ?currentSequence ?receipt WHERE {
     VALUES ?target { ${targets.map(iri).join(' ')} }
+    VALUES ?receipt { ${candidates.map(iri).join(' ')} }
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(lineage.dataEpoch)} ;
       rv:routingEpoch ${lit(lineage.routingEpoch)} ; rv:sequence ?currentSequence .
       FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
     GRAPH ${iri(GRAPHS.revisions)} { ?target a rv:ErasedRevision ; rv:erasureEpoch ${epoch} . }
-    GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ;
+    GRAPH ${iri(GRAPHS.receipts)} { ?receipt a rv:OperationReceipt ;
       rv:requestDigest ${lit(digest)} ; rv:outcome rv:Succeeded ;
       rv:erasureId ${lit(erasureId)} ; rv:erasureEpoch ${epoch} ;
       rv:dataEpoch ?receiptEpoch ; rv:sequence ?sequence . }
@@ -588,7 +595,11 @@ export async function readGraphErasureProof(
   ) {
     throw new GraphErasureUnavailable('exact graph suppression proof is unavailable');
   }
-  return { receipt, dataEpoch: receiptEpoch!, sequence: sequence! };
+  const receipt = rows[0]?.receipt?.value ?? candidates[0]!;
+  if (!candidates.includes(receipt) || rows.some(row => row.receipt && row.receipt.value !== receipt))
+    throw new GraphErasureUnavailable('graph suppression receipts differ');
+  return { receipt, dataEpoch: receiptEpoch!, sequence: sequence!,
+    ...(receipt === candidates[1] ? { closureDigest: digest } : {}) };
 }
 
 /** One bounded native command, with at most three retries for a racing projection. */
@@ -598,13 +609,16 @@ export async function suppressGraphContentRevisions(
   erasureId: string,
   epoch: string,
   revisionIds: readonly string[],
+  expectedReceipt?: string,
 ): Promise<void> {
   if (!/^[1-9][0-9]{0,18}$/.test(epoch)) throw new GraphErasureConflict('invalid erasure epoch');
   const targets = checkedTargets(revisionIds);
-  const receipt = graphErasureReceipt(erasureId);
   const digest = hash(JSON.stringify({ family: 'erasure-graph-v1', erasureId, epoch, targets }));
+  const receipt = expectedReceipt ?? graphErasureReceipt(erasureId);
+  if (![graphErasureReceipt(erasureId), graphErasureReceipt(erasureId, digest)].includes(receipt))
+    throw new GraphErasureConflict('graph erasure receipt differs from the exact closure');
   const installed = await profile(fuseki);
-  if (await graphErasureSuppressed(fuseki, erasureId, epoch, revisionIds)) return;
+  if (await graphErasureSuppressed(fuseki, erasureId, epoch, revisionIds, undefined, receipt)) return;
   let lastFailure: unknown;
   for (let attempt = 0; attempt < 3; attempt++) {
     const units = await indexedUnits(fuseki, targets);
@@ -637,7 +651,7 @@ export async function suppressGraphContentRevisions(
       lastFailure = error;
       // An ambiguous HTTP outcome is resolved by the exact native receipt.
     }
-    if (await graphErasureSuppressed(fuseki, erasureId, epoch, revisionIds)) return;
+    if (await graphErasureSuppressed(fuseki, erasureId, epoch, revisionIds, undefined, receipt)) return;
   }
   throw new GraphErasureUnavailable(
     `graph erasure did not produce an exact suppression receipt: ${String(lastFailure)}`,
@@ -740,6 +754,7 @@ function checkedHeld(
   )
     throw new GraphErasureConflict('held erasure entry differs');
   const cut = checkedCut(held.cut);
+  const originalDigest = hash(JSON.stringify({ family: PROFILE, erasureId, epoch, targets }));
   const original = {
     receipt: held.original.receipt,
     dataEpoch: held.original.dataEpoch,
@@ -749,13 +764,12 @@ function checkedHeld(
     ![original.receipt, original.dataEpoch, original.sequence].every(
       (value) => typeof value === 'string',
     ) ||
-    original.receipt !== graphErasureReceipt(erasureId) ||
+    ![graphErasureReceipt(erasureId), graphErasureReceipt(erasureId, originalDigest)].includes(original.receipt) ||
     !UUID.test(original.dataEpoch) ||
     original.dataEpoch === cut.dataEpoch ||
     !/^[1-9][0-9]*$/.test(original.sequence)
   )
     throw new GraphErasureConflict('invalid retained historical graph proof');
-  const originalDigest = hash(JSON.stringify({ family: PROFILE, erasureId, epoch, targets }));
   const digest = hash(
     JSON.stringify([
       HELD_FAMILY,
@@ -768,6 +782,7 @@ function checkedHeld(
       originalDigest,
       cut.priorDataEpoch,
       cut.priorSequence,
+      ...(original.receipt !== graphErasureReceipt(erasureId) ? [original.receipt] : []),
     ]),
   );
   return {
@@ -1092,6 +1107,7 @@ export function buildHeldGraphErasureCommand(
     expiresAt,
     input.cut.priorDataEpoch,
     input.cut.priorSequence,
+    ...(input.original.receipt !== graphErasureReceipt(erasureId) ? [input.original.receipt] : []),
   ]);
   return {
     receipt: input.receipt,

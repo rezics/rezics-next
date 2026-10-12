@@ -22,7 +22,7 @@ export const outboxEventHandlers: readonly OwnerOutboxEventHandler[] = [{
     const erasureId = rows[0]?.erasure?.value;
     const erasureEpoch = rows[0]?.epoch?.value;
     if (rows.length !== 1 || !erasureId || !/^[0-9a-f-]{36}$/.test(erasureId)
-      || receipt !== graphErasureReceipt(erasureId)
+      || ![graphErasureReceipt(erasureId), graphErasureReceipt(erasureId, value('digest')!)].includes(receipt)
       || !/^[1-9][0-9]{0,18}$/.test(erasureEpoch ?? '')
       || rows[0]?.eventErasure?.value !== erasureId
       || rows[0]?.eventEpoch?.value !== erasureEpoch) {

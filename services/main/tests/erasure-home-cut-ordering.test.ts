@@ -11,7 +11,8 @@ import { FusekiClient, type CommandEnvelope, type CommandResult, type SparqlResu
   from '../src/infrastructure/fuseki.ts';
 import { boundedPool } from '../src/infrastructure/pg-pool.ts';
 import type { RegisteredAdmission } from '../src/modules/access/admission.ts';
-import { readErasure, sha256 } from '../src/modules/erasure/journal.ts';
+import { readErasure, sha256, journalErasure, extendErasureTargets, ErasureStale } from '../src/modules/erasure/journal.ts';
+import { graphErasureReceipt } from '../src/modules/erasure/graph.ts';
 import { ErasureService, requestContentErasure } from '../src/modules/erasure/request.ts';
 import { lockPreservationTarget } from '../src/modules/public-report/preservation.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
@@ -107,6 +108,7 @@ class SelectingHomeGraph extends FusekiClient {
   inventories: string[][] = [];
   commands: { held: boolean; targets: string[]; retained: string[] }[] = [];
   suppressed = new Set<string>();
+  receipts = new Map<string, string>();
   constructor(readonly pool: Pool, readonly document: string, readonly observation: FenceObservation) {
     super('http://erasure-home-owner.invalid');
     this.owner = document;
@@ -127,18 +129,19 @@ class SelectingHomeGraph extends FusekiClient {
     if (query.includes('SELECT DISTINCT ?target')) {
       const selected = /VALUES \?target \{([^}]+)\}/.exec(query)?.[1] ?? '';
       const targets = [...selected.matchAll(/<([^>]+)>/g)].map(match => match[1]!);
-      return { results: { bindings: targets.filter(target => this.suppressed.has(target)).map(target => ({
+      const receipt = [...this.receipts].find(([receipt, digest]) => query.includes(`<${receipt}>`) && query.includes(`"${digest}"`))?.[0];
+      return { results: { bindings: receipt ? targets.filter(target => this.suppressed.has(target)).map(target => ({
         target: uri(target), sequence: literal('7'), currentSequence: literal('7'),
-        receiptEpoch: literal(this.lineage.dataEpoch),
-      })) } };
+        receiptEpoch: literal(this.lineage.dataEpoch), receipt: uri(receipt),
+      })) : [] } };
     }
     throw new Error(`unexpected home-owner query: ${query.slice(0, 100)}`);
   }
   override async commandWithReceipt(envelope: CommandEnvelope): Promise<CommandResult> {
-    const row = (await this.pool.query<{ id: string }>(
-      'SELECT id FROM relay.erasure WHERE operation_id = $1',
+    const row = (await this.pool.query<{ id: string; suppression_receipt: string | null }>(
+      'SELECT id, suppression_receipt FROM relay.erasure WHERE operation_id = $1',
       [`erasure:${this.admissionId}`])).rows[0];
-    if (!row || envelope.receipt !== `urn:rezics:receipt:erasure-graph:${sha256(row.id)}`) {
+    if (!row || envelope.receipt !== (row.suppression_receipt ?? graphErasureReceipt(row.id))) {
       throw new Error('suppression has no matching durable erasure intent');
     }
     const report = await readErasure(this.pool, row.id);
@@ -152,6 +155,9 @@ class SelectingHomeGraph extends FusekiClient {
     if (this.failCommands) {
       return { status: 'deadline' };
     }
+    const retainedDigest = this.receipts.get(envelope.receipt);
+    if (retainedDigest && retainedDigest !== envelope.digest) return { status: 'conflict' };
+    this.receipts.set(envelope.receipt, envelope.digest);
     for (const target of targets) this.suppressed.add(target);
     return { status: 'committed', position: { datasetId: 'urn:rezics:dataset:product',
       dataEpoch: this.lineage.dataEpoch, sequence: '7' } };
@@ -290,6 +296,54 @@ test('same-key retry reacquires the home fence and durably covers a newly select
     expect(f.graph.inventories).toContainEqual([...f.graph.homes]);
     expect(f.observation.graphReads.every(Boolean)).toBe(true);
     expect(f.graph.commands.at(-1)!.targets).toEqual(f.graph.commands.at(-1)!.retained);
+  });
+});
+
+// Extension state x suppression state: unchanged closures reuse their record;
+// new closures get a new receipt before suppressing, in every crash window.
+test('home extension reconciles before suppression, after native commit and after header advancement', async () => {
+  for (const state of ['before', 'native', 'header'] as const) for (const addition of [false, true]) await fixture(async f => {
+    f.graph.homes.push(resource());
+    if (state === 'before') {
+      f.graph.failCommands = true;
+      await expect(f.call()).rejects.toThrow();
+      f.graph.failCommands = false;
+    } else if (state === 'native') {
+      await f.pool.query(`CREATE FUNCTION content.refuse_erasure() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN RAISE EXCEPTION 'interrupted after native suppression'; END $$;
+        CREATE TRIGGER refuse_erasure BEFORE INSERT ON content.revision_erasure
+          FOR EACH ROW EXECUTE FUNCTION content.refuse_erasure()`);
+      await expect(f.call()).rejects.toThrow('interrupted after native suppression');
+      await f.pool.query('DROP TRIGGER refuse_erasure ON content.revision_erasure; DROP FUNCTION content.refuse_erasure()');
+    } else await f.call();
+    const row = (await f.pool.query<{ id: string }>('SELECT id FROM relay.erasure')).rows[0]!;
+    const before = await readErasure(f.pool, row.id), receipts = new Map(f.graph.receipts);
+    if (addition) await f.publish(resource());
+    const after = (await f.call()).report;
+    expect(after.erasureId).toBe(before.erasureId);
+    expect(after.erasureEpoch).toBe(before.erasureEpoch);
+    expect(after.targets).toHaveLength(before.targets.length + Number(addition));
+    expect(after.targets.every(target => target.completionState === 'completed')).toBe(true);
+    if (before.suppressedAt) expect(after.suppressedAt).toBe(before.suppressedAt);
+    for (const [receipt, digest] of receipts) expect(f.graph.receipts.get(receipt)).toBe(digest);
+    if (addition && state !== 'before') expect(f.graph.receipts.size).toBe(receipts.size + 1);
+  });
+});
+
+test('a newly selecting home already owned by another retained journal refuses atomically', async () => {
+  await fixture(async f => {
+    f.graph.failCommands = true;
+    await expect(f.call()).rejects.toThrow();
+    const row = (await f.pool.query<{ id: string }>('SELECT id FROM relay.erasure')).rows[0]!;
+    const before = await readErasure(f.pool, row.id), home = resource();
+    const other = await journalErasure(f.pool, { operationId: `erasure:${randomUUID()}`, requestDigest: sha256(home),
+      kind: 'revision', principalId: randomUUID(), admissionId: randomUUID(), authorityEpoch: '1',
+      targets: [{ kind: 'semantic_revision', ref: home.slice(-36) }] });
+    await expect(extendErasureTargets(f.pool, row.id, before.erasureEpoch, before.admissionId!,
+      [{ kind: 'semantic_revision', ref: home.slice(-36) }])).rejects.toBeInstanceOf(ErasureStale);
+    expect((await readErasure(f.pool, row.id)).targets).toEqual(before.targets);
+    expect((await f.pool.query('SELECT erasure_id FROM relay.erasure_target WHERE target_ref=$1',
+      [home.slice(-36)])).rows).toEqual([{ erasure_id: other.erasureId }]);
   });
 });
 

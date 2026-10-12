@@ -3,7 +3,8 @@ import { spawnSync } from 'node:child_process';
 import { preserveReapEnvironment } from '../../../scripts/qa/container-reaper.ts';
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { buildHeldGraphErasureCommand, graphErasureReceipt } from '../src/modules/erasure/graph.ts';
+import { buildHeldGraphErasureCommand, graphErasureReceipt, canonicalErasureTargets } from '../src/modules/erasure/graph.ts';
+import { hash } from '../src/modules/work/activate.ts';
 
 const root = join(import.meta.dir, '../../..');
 const uuid = (n: number) => `00000000-0000-4000-8000-${n.toString().padStart(12, '0')}`;
@@ -31,11 +32,14 @@ test('held caller exact bytes pass the lent native policy and keep the real TDB2
     revisionIds: [uuid(1), uuid(2)],
     original: { receipt: graphErasureReceipt(uuid(13)), dataEpoch: uuid(12), sequence: '9' },
   };
-  const command = buildHeldGraphErasureCommand(
+  const closureDigest = hash(JSON.stringify({ family: 'erasure-graph-v1', erasureId: uuid(13), epoch: '7',
+    targets: canonicalErasureTargets(held.revisionIds) }));
+  const expanded = { ...held, original: { ...held.original, receipt: graphErasureReceipt(uuid(13), closureDigest) } };
+  const command = (proof = held) => buildHeldGraphErasureCommand(
     uuid(13),
     '7',
     held.revisionIds,
-    held,
+    proof,
     [
       { graph: 'urn:rezics:search:public', unit: 'urn:rezics:held-caller:unit:1' },
       { graph: 'urn:rezics:search:private', unit: 'urn:rezics:held-caller:unit:2' },
@@ -50,7 +54,6 @@ test('held caller exact bytes pass the lent native policy and keep the real TDB2
   const java = join(build, 'src/test/java/com/rezics/jena');
   mkdirSync(java, { recursive: true });
   mkdirSync(join(build, 'tmp'));
-  writeFileSync(join(build, 'command.json'), JSON.stringify(command));
   writeFileSync(
     join(java, 'ErasureHeldCallerContractTest.java'),
     `package com.rezics.jena;
@@ -73,7 +76,8 @@ public class ErasureHeldCallerContractTest {
   private static Node text(String v){return NodeFactory.createLiteralString(v);}
   private static Node integer(int v){return NodeFactory.createLiteralByValue(java.math.BigInteger.valueOf(v),org.apache.jena.datatypes.xsd.XSDDatatype.XSDinteger);}
   @Test public void typeScriptBodyReplaysExactHeldErasureAndPreservesControl() throws Exception {
-    var body=JSON.parse(Files.readString(Path.of("command.json")));
+    for(String path : List.of("command.json", "command-closure.json")) {
+    var body=JSON.parse(Files.readString(Path.of(path)));
     String receipt=body.get("receipt").getAsString().value(),digest=body.get("digest").getAsString().value(),update=body.get("update").getAsString().value();
     var data=TDB2Factory.connectDataset(Files.createTempDirectory(Path.of(System.getProperty("java.io.tmpdir")),"held-caller-").toString()).asDatasetGraph();
     Node control=iri(CommandPolicy.CONTROL), product=iri("urn:rezics:dataset:product"),marker=iri("${held.cut.restoreCutover}");
@@ -99,18 +103,19 @@ public class ErasureHeldCallerContractTest {
     assertNull(ErasureRestorePolicy.check(staged,before));staged.apply();data.commit();data.end();
     data.begin(ReadWrite.READ);
     var after=CommandInvariant.readControl(data);assertTrue(after.held());assertEquals(java.math.BigInteger.ZERO,after.sequence());assertEquals(java.math.BigInteger.valueOf(5),after.cursor());
-    assertTrue(data.contains(iri(CommandPolicy.RECEIPTS),iri("${held.original.receipt}"),rv("sequence"),integer(9)));
+    assertTrue(data.contains(iri(CommandPolicy.RECEIPTS),iri(path.equals("command.json") ? "${held.original.receipt}" : "${expanded.original.receipt}"),rv("sequence"),integer(9)));
     assertTrue(data.contains(iri(CommandPolicy.RECEIPTS),iri(receipt),rv("sequence"),integer(0)));
     assertFalse(data.contains(iri(CommandPolicy.PUBLIC_SEARCH),iri("urn:rezics:held-caller:unit:1"),Node.ANY,Node.ANY));
     assertFalse(data.contains(iri(CommandPolicy.PRIVATE_SEARCH),iri("urn:rezics:held-caller:unit:2"),Node.ANY,Node.ANY));
     data.end();data.close();
+    }
   }
 }
 `,
   );
   const name = `rezics-held-caller-native-${Date.now()}`;
   try {
-    const result = spawnSync(
+    const run = (goals: string[]) => spawnSync(
       'docker',
       [
         'run',
@@ -134,10 +139,17 @@ public class ErasureHeldCallerContractTest {
         '-Dmaven.repo.local=/maven-cache',
         '-Djava.io.tmpdir=/build/tmp',
         '-Dtest=ErasureHeldCallerContractTest',
-        'test',
+        ...goals,
       ],
       { cwd: root, encoding: 'utf8', timeout: 300_000, env: preserveReapEnvironment(process.env) },
     );
+    const compiled = run(['-DskipTests', 'test-compile']);
+    if (compiled.status !== 0) throw new Error(`Native caller compilation failed: ${compiled.stdout}\n${compiled.stderr}`);
+    // Signing belongs after compilation: a slow cold build must not expire an
+    // otherwise valid maintenance fixture before the native policy reads it.
+    writeFileSync(join(build, 'command.json'), JSON.stringify(command()));
+    writeFileSync(join(build, 'command-closure.json'), JSON.stringify(command(expanded)));
+    const result = run(['surefire:test']);
     mkdirSync(join(root, '.temp/goal'), { recursive: true });
     writeFileSync(
       join(root, '.temp/goal/held-caller-native.log'),

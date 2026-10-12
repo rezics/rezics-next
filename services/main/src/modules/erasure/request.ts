@@ -22,7 +22,7 @@ import { assertErasureJournalTargetBound, GraphErasureConflict, GraphErasureUnav
 import { ERASURE_JOURNAL_EPOCH, ErasureInvalid, ErasureNotFound, ErasureStale, ErasureUnavailable,
   ERASURE_PREFLIGHT_LIMITS, createErasurePreflightBudget, consumeErasurePreflight, type ErasurePreflightBudget, erasurePreflightRemaining, ErasurePreflightUnsupported, findErasureByOperation,
   completeErasureTarget, failErasureTarget, isValidErasureTargetList, journalErasure,
-  markErasureBlocked, markErasureSuppressed, readErasure, extendErasureTargets, type ErasureTargetInput,
+  markErasureBlocked, markErasureSuppressed, readErasure, extendErasureTargets, erasureSuppressionReceipt, type ErasureTargetInput,
   recordErasureInventory, type ErasureReport, ensureRetentionDomain, relayTransaction,
   sha256 } from './journal.ts';
 
@@ -138,6 +138,7 @@ async function completeFencedContentErasure(service: ErasureService, graph: Work
       plan.custodyReadReservation += bytes;
     }
   }
+  const suppressionReceipt = await erasureSuppressionReceipt(service.relay, erasureId);
   const guarded = await withErasureFence(service, resourceId, erasureId,
     async (fence, accessClient) => {
       if (!mediaApplied) {
@@ -151,11 +152,11 @@ async function completeFencedContentErasure(service: ErasureService, graph: Work
             revisionIds: journaled.targets.filter(target => target.kind === 'content_revision').map(target => target.ref),
             admission }, fence, { relay: service.relay, erasureId, erasureEpoch: journaled.erasureEpoch,
             graph }, service.mediaObjects, budget, () => suppressGraphContentRevisions(graph.fuseki,
-            graph.lineage, journaled.erasureId, journaled.erasureEpoch, graphRevisionIds(journaled.targets)));
+            graph.lineage, journaled.erasureId, journaled.erasureEpoch, graphRevisionIds(journaled.targets), suppressionReceipt));
         }
       }
       // Media commits its exact namespace inventory before other owners clear their bytes.
-      await applyRevisionOwners(service, graph, admission, journaled, fence, accessClient, plan);
+      await applyRevisionOwners(service, graph, admission, journaled, fence, accessClient, plan, suppressionReceipt);
       await markErasureSuppressed(service.relay, erasureId);
       // Disclosure is suppressed even while physical objects await retry.
       return completeLiveTargets(service, graph, journaled, accessClient, resourceId);
@@ -260,9 +261,9 @@ function validateCompletion(report: ErasureReport, admission: RegisteredAdmissio
 
 async function applyRevisionOwners(service: ErasureService, graph: WorkActivationEnvironment,
   admission: RegisteredAdmission, report: ErasureReport, fence: PreservationFence,
-  accessClient: PoolClient, plan: ErasurePreflightPlan): Promise<void> {
+  accessClient: PoolClient, plan: ErasurePreflightPlan, suppressionReceipt?: string): Promise<void> {
   const graphIds = graphRevisionIds(report.targets);
-  await suppressGraphContentRevisions(graph.fuseki, graph.lineage, report.erasureId, report.erasureEpoch, graphIds);
+  await suppressGraphContentRevisions(graph.fuseki, graph.lineage, report.erasureId, report.erasureEpoch, graphIds, suppressionReceipt);
   const graphProof = await readGraphErasureProof(graph.fuseki, graph.lineage, report.erasureId,
     report.erasureEpoch, graphIds);
   const contentIds = report.targets.filter(target => target.kind === 'content_revision').map(target => target.ref);

@@ -63,10 +63,9 @@ export async function readRetainedNativeGraphSuppressionProof(relayClient: PoolC
     throw new GraphErasureUnavailable('retained native erasure proof input is invalid');
   }
   const source = 'https://rezics.com/services/main';
-  const receipt = graphErasureReceipt(erasureId);
-  const eventId = `urn:rezics:event:${hash(`${receipt}\0event`)}`;
-  const batchId = `urn:rezics:outbox:${hash(`${receipt}\0batch`)}`;
   const requestDigest = hash(JSON.stringify({ family: 'erasure-graph-v1', erasureId, epoch, targets }));
+  const receipts = [graphErasureReceipt(erasureId), graphErasureReceipt(erasureId, requestDigest)];
+  const eventIds = receipts.map(receipt => `urn:rezics:event:${hash(`${receipt}\0event`)}`);
   const rows = (await relayClient.query<{ stream_scope: string; source: string; event_id: string;
     data_epoch: string; sequence: string; envelope: unknown; batch_id: string; routing_epoch: string;
     event_count: number; batch_scope: string; batch_epoch: string; batch_sequence: string; actual_count: string }>(
@@ -86,9 +85,13 @@ export async function readRetainedNativeGraphSuppressionProof(relayClient: PoolC
            AND sibling.sequence = event.sequence LIMIT 2 FOR SHARE OF sibling
        ) AS bounded
      ) AS inventory
-     WHERE event.stream_scope = $1 AND event.source = $2 AND event.event_id = $3
-     LIMIT 2 FOR SHARE OF event, batch`, [MAIN_RELAY_STREAM_SCOPE, source, eventId])).rows;
+     WHERE event.stream_scope = $1 AND event.source = $2 AND event.event_id = ANY($3::text[])
+       AND event.envelope #>> '{data,receipt,requestDigest}' = $4
+     LIMIT 2 FOR SHARE OF event, batch`, [MAIN_RELAY_STREAM_SCOPE, source, eventIds, requestDigest])).rows;
   const row = rows[0], envelope = row?.envelope;
+  const receipt = receipts[eventIds.indexOf(row?.event_id ?? '')] ?? receipts[0]!;
+  const eventId = `urn:rezics:event:${hash(`${receipt}\0event`)}`;
+  const batchId = `urn:rezics:outbox:${hash(`${receipt}\0batch`)}`;
   if (rows.length !== 1 || !row
     || !nativeEventFields(envelope, ['specversion', 'id', 'source', 'type', 'datacontenttype', 'data'])) {
     throw new GraphErasureUnavailable('retained native erasure event or header is unavailable');
@@ -125,7 +128,8 @@ export async function readRetainedNativeGraphSuppressionProof(relayClient: PoolC
     || system.erasureId !== erasureId || system.erasureEpoch !== epoch) {
     throw new GraphErasureUnavailable('retained native erasure proof differs from its exact original');
   }
-  return { original: { receipt, dataEpoch: diagnostic.dataEpoch, sequence: diagnostic.sequence },
+  return { original: { receipt, dataEpoch: diagnostic.dataEpoch, sequence: diagnostic.sequence,
+    ...(receipt === receipts[1] ? { closureDigest: requestDigest } : {}) },
     evidenceDigest: hash(JSON.stringify([row.stream_scope, row.source, row.event_id, row.data_epoch,
       row.sequence, row.batch_id, row.routing_epoch, row.event_count, envelope])) };
 }

@@ -108,6 +108,7 @@ export async function checkContentErasureTargets(content: Pool, resourceId: stri
 }
 
 export interface ContentErasureGraphProof {
+  closureDigest?: string;
   receipt: string;
   dataEpoch: string;
   sequence: string;
@@ -135,7 +136,7 @@ export async function applyContentErasure(content: Pool, command: ContentErasure
   if (!UUID.test(command.erasureId) || !/^[1-9][0-9]{0,18}$/.test(command.erasureEpoch)) {
     throw new ContentErasureInvalid('Content erasure journal identity is invalid');
   }
-  if (command.graphProof && (command.graphProof.receipt !== graphErasureReceipt(command.erasureId)
+  if (command.graphProof && (command.graphProof.receipt !== graphErasureReceipt(command.erasureId, command.graphProof.closureDigest)
     || !command.graphProof.dataEpoch || !/^[1-9][0-9]*$/.test(command.graphProof.sequence))) {
     throw new ContentErasureInvalid('Content graph suppression proof is invalid');
   }

@@ -252,6 +252,7 @@ export async function extendErasureTargets(relay: Pool, erasureId: string, erasu
     throw new ErasureInvalid('Home erasure targets are invalid');
   }
   await relayTransaction(relay, async client => {
+    await client.query("SELECT pg_advisory_xact_lock(hashtextextended('rezics-relay-erasure-epoch', 0))");
     const entry = (await client.query<{ admission_id: string; erasure_epoch: string; stage: string }>(
       `SELECT admission_id, erasure_epoch::text, stage FROM relay.erasure WHERE id=$1 FOR UPDATE`,
       [erasureId])).rows[0];
@@ -271,13 +272,30 @@ export async function extendErasureTargets(relay: Pool, erasureId: string, erasu
     if (entry.stage === 'verified' || entry.stage === 'blocked') {
       throw new ErasureInvalid('terminal erasure cannot acquire new home targets');
     }
+    const taken = (await client.query<{ erasure_id: string }>(`SELECT t.erasure_id
+      FROM unnest($1::text[]) AS wanted(ref) JOIN relay.erasure_target t
+        ON t.owner='graph' AND t.target_kind='semantic_revision' AND t.target_ref=wanted.ref
+      WHERE t.erasure_id <> $2 ORDER BY t.erasure_id LIMIT 1`,
+    [additions.map(target => target.ref), erasureId])).rows[0];
+    if (taken) throw new ErasureStale('home erasure target is already journaled', taken.erasure_id);
     await client.query(`INSERT INTO relay.erasure_target (erasure_id, ordinal, owner, target_kind, target_ref)
       SELECT $1, $2 + ordinal, 'graph', kind, ref
       FROM unnest($3::text[], $4::text[]) WITH ORDINALITY AS t(kind, ref, ordinal)`,
     [erasureId, retained.length, additions.map(target => target.kind), additions.map(target => target.ref)]);
-    await client.query(`UPDATE relay.erasure SET stage='requested', suppression_status='pending'
-      WHERE id=$1`, [erasureId]);
+    const targets = combined.filter(target => target.kind === 'content_revision'
+      || ERASURE_TARGET_OWNERS[target.kind] === 'graph').map(target => target.kind === 'content_revision'
+      ? `urn:rezics:content:revision:${target.ref}` : `https://rezics.com/id/${target.ref}`).sort();
+    const digest = sha256(JSON.stringify({ family: 'erasure-graph-v1', erasureId, epoch: erasureEpoch, targets }));
+    await client.query(`UPDATE relay.erasure SET suppression_receipt=$2,
+      stage=CASE WHEN suppression_status='pending' THEN 'requested' ELSE 'fenced' END
+      WHERE id=$1`, [erasureId, `urn:rezics:receipt:erasure-graph:${sha256(`${erasureId}\0${digest}`)}`]);
   });
+}
+
+/** Only the journal extension owner selects a replacement for an immutable receipt. */
+export async function erasureSuppressionReceipt(relay: Pool, erasureId: string): Promise<string | undefined> {
+  return (await relay.query<{ suppression_receipt: string | null }>(
+    'SELECT suppression_receipt FROM relay.erasure WHERE id=$1', [erasureId])).rows[0]?.suppression_receipt ?? undefined;
 }
 
 /** The journal's disclosure fence after every live owner applied its tombstone. */

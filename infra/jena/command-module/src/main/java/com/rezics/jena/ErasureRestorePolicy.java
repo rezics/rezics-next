@@ -54,7 +54,8 @@ final class ErasureRestorePolicy {
                     Map<Key, Set<Quad>> expected, Set<Key> units, boolean replayed, String error) {}
     private record Claims(String dataEpoch, String routingEpoch, String marker, String accessGeneration,
                           String erasureId, String epoch, List<String> targets, String originalEpoch,
-                          String originalSequence, String originalDigest, String priorEpoch, String priorSequence) {}
+                          String originalSequence, String originalDigest, String priorEpoch, String priorSequence,
+                          String originalReceipt) {}
     private static Node uri(String value) { return NodeFactory.createURI(value); }
     private static Node rv(String value) { return uri("https://rezics.com/vocab/" + value); }
     private static Node text(String value) { return NodeFactory.createLiteralString(value); }
@@ -137,7 +138,7 @@ final class ErasureRestorePolicy {
                 Triple.create(PRODUCT, rv("restoreCutover"), control.marker()),
                 Triple.create(PRODUCT, rv("restoreHold"), NodeFactory.createLiteralByValue(true, org.apache.jena.datatypes.xsd.XSDDatatype.XSDboolean)))))
                 return failure("held erasure requires exact positive control guards");
-            Node original = uri("urn:rezics:receipt:erasure-graph:" + hash(claims.erasureId()));
+            Node original = uri(claims.originalReceipt());
             Map<Key, Set<Quad>> expected = new HashMap<>();
             for (String target : claims.targets()) expected.put(new Key(REVISIONS, uri(target)), record(REVISIONS, uri(target), Map.of(
                 RDF.type.asNode(), rv("ErasedRevision"), rv("erasureEpoch"), integer(claims.epoch()))));
@@ -239,14 +240,15 @@ final class ErasureRestorePolicy {
         if (!MessageDigest.isEqual(mac.doFinal(payload.getBytes(StandardCharsets.UTF_8)), HexFormat.of().parseHex(signature)))
             throw new IllegalArgumentException("signature differs");
         JsonArray c = JSON.parseAny(payload).getAsArray();
-        if (c.size() != 17 || !string(c, 0).equals(DOMAIN) || !string(c, 1).equals(receipt)
+        if ((c.size() != 17 && c.size() != 18) || !string(c, 0).equals(DOMAIN) || !string(c, 1).equals(receipt)
             || !string(c, 2).equals(digest) || !string(c, 3).equals(hash(update))) throw new IllegalArgumentException("admission binding differs");
         List<String> targets = new ArrayList<>(); c.get(10).getAsArray().forEach(value -> targets.add(value.getAsString().value()));
         if (targets.isEmpty() || targets.size() > MAX_TARGETS || targets.stream().anyMatch(target -> !target.matches(TARGET))
             || targets.size() != new HashSet<>(targets).size() || !targets.equals(targets.stream().sorted().toList()))
             throw new IllegalArgumentException("exact targets differ");
         Claims claims = new Claims(string(c,4), string(c,5), string(c,6), string(c,7), string(c,8), string(c,9), List.copyOf(targets),
-            string(c,11), string(c,12), string(c,13), string(c,15), string(c,16));
+            string(c,11), string(c,12), string(c,13), string(c,15), string(c,16),
+            c.size() == 18 ? string(c,17) : "urn:rezics:receipt:erasure-graph:" + hash(string(c,8)));
         if (!claims.dataEpoch().matches(UUID) || !(claims.routingEpoch().matches("0|[1-9][0-9]*") || claims.routingEpoch().matches(UUID))
             || !claims.marker().equals("urn:rezics:restore:" + claims.dataEpoch()) || !claims.accessGeneration().matches("0|[1-9][0-9]{0,18}")
             || !claims.erasureId().matches(UUID) || !claims.epoch().matches("[1-9][0-9]{0,18}")
@@ -259,7 +261,12 @@ final class ErasureRestorePolicy {
         String identity = "[\"" + DOMAIN + "\",\"" + claims.dataEpoch() + "\",\"" + claims.routingEpoch()
             + "\",\"" + claims.marker() + "\",\"" + claims.accessGeneration() + "\",\"" + claims.originalEpoch()
             + "\",\"" + claims.originalSequence() + "\",\"" + claims.originalDigest() + "\",\"" + claims.priorEpoch()
-            + "\",\"" + claims.priorSequence() + "\"]";
+            + "\",\"" + claims.priorSequence() + "\""
+            + (c.size() == 18 ? ",\"" + claims.originalReceipt() + "\"" : "") + "]";
+        String expectedOriginalReceipt = "urn:rezics:receipt:erasure-graph:"
+            + hash(c.size() == 18 ? claims.erasureId() + (char) 0 + claims.originalDigest() : claims.erasureId());
+        if (!claims.originalReceipt().equals(expectedOriginalReceipt))
+            throw new IllegalArgumentException("exact original erasure receipt differs");
         if (!hash(originalJson).equals(claims.originalDigest()) || !hash(identity).equals(digest) || !receipt.equals(PREFIX + digest))
             throw new IllegalArgumentException("exact original erasure digest differs");
         return claims;
