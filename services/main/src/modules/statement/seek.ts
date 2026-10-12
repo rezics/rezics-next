@@ -14,6 +14,10 @@ import type { StatementPublicationNativeResult } from '../../infrastructure/fuse
 export const PUBLICATION_RECONSTRUCTION_PENDING = 'Publication subject reconstruction is pending';
 export const STATEMENT_SEEK_COST = { candidates: 20, frameChannels: 256, visitedRows: 4096,
   projectionSequences: 64, rebuildBatch: 128, projectionReferences: 8192, responseBytes: 1024 * 1024 } as const;
+export const STATEMENT_CUSTODY_POSITION_SQL = `SELECT graph_sequence::text,
+  stream_sequence::text,receipt,outbox->>'batchId' AS batch_id
+  FROM access.command_custody WHERE data_epoch=$1 AND graph_sequence=ANY($2::numeric[])
+  LIMIT $3`;
 export interface StatementSeekReference { subject: string; predicate: string; meaningKey: string;
   statementId: string; head: string; applicability: { slot: string; iri: string }[] | null }
 export interface StatementSeekOrder { predicate: string; meaningKey: string; statementId: string; score: number }
@@ -388,13 +392,13 @@ export class StatementSeek {
     // still binds both position domains. Never assume their numbers coincide.
     // Extra turn cost: one SQL mapping statement and at most projectionSequences
     // owner reads, once per position, including physical/custody agreement checks.
-    // The current PostgreSQL owner uses four statements per ordinary read;
-    // interrupted reconciliation adds four SQL statements and two proof queries.
+    // Historical reads use this held transaction: one indexed statement each.
+    // An interrupted reconciliation uses four SQL statements and two proof
+    // queries on the same client. At 64 positions: 65 SQL ordinarily, 257 SQL
+    // and 128 proof queries if every position needs recovery; no extra checkout.
     const records = (await client.query<{ graph_sequence: string; stream_sequence: string;
-      receipt: string; batch_id: string }>(`SELECT outbox->>'graphSequence' AS graph_sequence,
-        stream_sequence::text,receipt,outbox->>'batchId' AS batch_id
-      FROM access.command_custody WHERE data_epoch=$1 AND outbox->>'graphSequence'=ANY($2::text[])
-      LIMIT ${sequences.length+1}`,[epoch,[...requested]])).rows;
+      receipt: string; batch_id: string }>(STATEMENT_CUSTODY_POSITION_SQL,
+    [epoch,[...requested],sequences.length+1])).rows;
     const byGraph = new Map<string,typeof records[number]>();
     for (const record of records) {
       if (!requested.has(record.graph_sequence) || byGraph.has(record.graph_sequence)
@@ -411,7 +415,10 @@ export class StatementSeek {
         continue;
       }
       if (!stream || !/^[1-9][0-9]{0,99}$/.test(stream)) incomplete();
-      const retained = await this.env.receiptCustody?.read(epoch,stream).catch(incomplete);
+      const owner = this.env.receiptCustody;
+      const retained = record
+        ? (await owner?.readHistorical({ dataEpoch: epoch, streamSequence: stream },client).catch(incomplete))?.outbox
+        : await owner?.read(epoch,stream,client).catch(incomplete);
       if (!retained) return incomplete();
       if (retained.batch.graphSequence !== sequence || retained.batch.dataEpoch !== epoch
         || retained.batch.sequence !== stream || retained.batch.custodiedReceipt !== receipt

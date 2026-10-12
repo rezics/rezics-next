@@ -113,7 +113,7 @@ export interface ReceiptCustodySession {
   clearPayloadForErasure?(erasure: CustodyPayloadErasure): Promise<void>;
 }
 export interface ReceiptCustodyStore {
-  receiptAt(dataEpoch: string, streamSequence: string): Promise<string | null>;
+  receiptAt(dataEpoch: string, streamSequence: string, client?: PoolClient): Promise<string | null>;
   /** Serialize receipt work across processes. A borrowed client must be used
    * exclusively and sequentially, with all prior queries complete. A callback
    * entered in a caller transaction must leave it and its enclosing savepoints
@@ -181,8 +181,8 @@ export class PostgresReceiptCustodyStore implements ReceiptCustodyStore {
   constructor(private readonly pool: Pool) {
     this.sessions = receiptSessionPool(pool);
   }
-  async receiptAt(dataEpoch: string, streamSequence: string): Promise<string | null> {
-    const rows = (await this.pool.query<{ receipt: string }>(`SELECT receipt FROM access.command_custody
+  async receiptAt(dataEpoch: string, streamSequence: string, client?: PoolClient): Promise<string | null> {
+    const rows = (await (client ?? this.pool).query<{ receipt: string }>(`SELECT receipt FROM access.command_custody
       WHERE data_epoch = $1 AND stream_sequence = $2`, [dataEpoch, streamSequence])).rows;
     return rows[0]?.receipt ?? null;
   }
@@ -1036,9 +1036,9 @@ export class ReceiptCustody implements CustodiedOutboxSource {
 
   /** The existing relay probes one indexed owner position; an interrupted
    * reconciliation resolves the exact native proof before the handoff proceeds. */
-  async read(dataEpoch: string, streamSequence: string): Promise<CustodiedOutbox | null> {
+  async read(dataEpoch: string, streamSequence: string, client?: PoolClient): Promise<CustodiedOutbox | null> {
     if (!dataEpoch || !/^[1-9][0-9]{0,99}$/.test(streamSequence)) throw new ObjectIntegrityError('Invalid owner outbox position');
-    let receipt = await this.store.receiptAt(dataEpoch, streamSequence);
+    let receipt = await this.store.receiptAt(dataEpoch, streamSequence, client);
     if (!receipt) {
       const rows = (await this.fuseki.query(`PREFIX rv: <${RV}> SELECT ?receipt WHERE {
         GRAPH <${RECEIPTS}> { ?receipt a rv:CommitProof ; rv:dataEpoch ${JSON.stringify(dataEpoch)} ;
@@ -1062,7 +1062,7 @@ export class ReceiptCustody implements CustodiedOutboxSource {
       const prepared = await this.exactObject(row);
       const retained = this.outbox(row, prepared, terminal);
       return this.deliveredOutbox(receipt,retained);
-    });
+    }, client);
   }
 
   /** Terminal cancellations race the same serialized receipt, including proof retirement. */

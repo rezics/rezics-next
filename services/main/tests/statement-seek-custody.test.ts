@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
-import type { Pool } from 'pg';
-import { StatementSeek, STATEMENT_SEEK_COST } from '../src/modules/statement/seek.ts';
+import type { Pool, PoolClient } from 'pg';
+import { StatementSeek, STATEMENT_SEEK_COST, STATEMENT_CUSTODY_POSITION_SQL } from '../src/modules/statement/seek.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import type { CustodiedOutbox } from '../src/modules/outbox/relay.ts';
 
@@ -18,6 +18,7 @@ function projection(input: { headers?: { sequence: string; batch: string; count?
   unavailable?: boolean; changed?: boolean } = {}) {
   const sql: { text: string; values?: unknown[] }[] = [];
   const lookups: string[][] = [];
+  const ownerReads: { historical: boolean; client: PoolClient }[] = [];
   const queries: string[] = [];
   const client = { query: async (text: string, values?: unknown[]) => {
     sql.push({ text, values });
@@ -26,16 +27,25 @@ function projection(input: { headers?: { sequence: string; batch: string; count?
     if (text.includes('FROM access.command_custody')) return { rows: input.records ?? [record()] };
     return { rows: [] };
   }, release() {} };
+  const read = async (epoch: string, stream: string) => {
+    lookups.push([epoch, stream]);
+    if (input.unavailable) throw new Error('Owner unavailable');
+    if (input.position && input.position > 64) {
+      const graph = input.records?.find(row => row.stream_sequence === stream)?.graph_sequence;
+      return { ...retained(), batch: { ...retained().batch, sequence: stream, graphSequence: graph,
+        batchId: `urn:rezics:test:batch:${graph}` } };
+    }
+    return input.custody === undefined ? retained() : input.custody;
+  };
   const env = { lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' }, receiptCustody: {
-    read: async (epoch: string, stream: string) => {
-      lookups.push([epoch, stream]);
-      if (input.unavailable) throw new Error('Owner unavailable');
-      if (input.position && input.position > 64) {
-        const graph = input.records?.find(row => row.stream_sequence === stream)?.graph_sequence;
-        return { ...retained(), batch: { ...retained().batch, sequence: stream, graphSequence: graph,
-          batchId: `urn:rezics:test:batch:${graph}` } };
-      }
-      return input.custody === undefined ? retained() : input.custody;
+    read: async (epoch: string, stream: string, held: PoolClient) => {
+      ownerReads.push({ historical: false, client: held });
+      return read(epoch, stream);
+    },
+    readHistorical: async (position: { dataEpoch: string; streamSequence: string }, held: PoolClient) => {
+      ownerReads.push({ historical: true, client: held });
+      const outbox = await read(position.dataEpoch, position.streamSequence);
+      return outbox ? { outbox } : null;
     },
   }, fuseki: { query: async (query: string) => {
     queries.push(query);
@@ -62,13 +72,14 @@ function projection(input: { headers?: { sequence: string; batch: string; count?
     return { results: { bindings: [] } };
   } } } as unknown as WorkActivationEnvironment;
   const pool = { query: client.query, connect: async () => client } as unknown as Pool;
-  return { seek: new StatementSeek(pool, env), sql, lookups, queries };
+  return { seek: new StatementSeek(pool, env), sql, lookups, queries, ownerReads, client: client as unknown as PoolClient };
 }
 
 test('slim graph sequence projects through its distinct custodied Main stream position', async () => {
   const run = projection({ changed: true });
   expect(await run.seek.projectOnce()).toBe(true);
   expect(run.lookups).toEqual([['epoch', '7']]);
+  expect(run.ownerReads).toEqual([{ historical: true, client: run.client }]);
   expect(run.sql.some(query => query.text.includes('INSERT INTO access.statement_seek\n'))).toBe(true);
   expect(run.sql.find(query => query.text.includes('SET through_sequence=GREATEST'))?.values).toEqual(['epoch', '64']);
 });
@@ -110,6 +121,7 @@ test('compact proof recovers interrupted reconciliation through the custody owne
   const run = projection({ records: [], proofs: [{ sequence: '64', receipt, stream: '7' }] });
   expect(await run.seek.projectOnce()).toBe(true);
   expect(run.lookups).toEqual([['epoch', '7']]);
+  expect(run.ownerReads).toEqual([{ historical: false, client: run.client }]);
 });
 
 test('proof and durable custody must bind the same exact receipt and Main position', async () => {
@@ -129,6 +141,9 @@ test('one projection turn maps custody once and reads each missing batch at most
   const run = projection({ through: 0, position: 130, records });
   expect(await run.seek.projectOnce()).toBe(true);
   expect(run.sql.filter(query => query.text.includes('FROM access.command_custody'))).toHaveLength(1);
+  expect(run.sql.find(query => query.text === STATEMENT_CUSTODY_POSITION_SQL)?.values)
+    .toEqual(['epoch', records.map(row => row.graph_sequence), 65]);
+  expect(run.ownerReads.every(read => read.historical && read.client === run.client)).toBe(true);
   expect(run.lookups).toEqual(records.map(row => ['epoch', row.stream_sequence]));
   expect(run.sql.find(query => query.text.includes('SET through_sequence=GREATEST'))?.values).toEqual(['epoch', '64']);
 });
