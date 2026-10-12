@@ -8,11 +8,13 @@ import { FEED_COST } from './contract.ts';
 import { feedReviewSources, feedSources, type FeedSource } from './source.ts';
 
 type FeedSession = Pick<WorkReadSession, 'deps' | 'viewer'>;
+export type FeedDisclosureOccurrence = Pick<FeedSource, 'id' | 'kind' | 'target' | 'work' | 'realm'
+  | 'reply' | 'contentTarget' | 'contentRevision' | 'readerReview'>;
 
 /** The retained activity selects an occurrence, not an alternate placement of
  * the same Work. Its owner must revalidate publication, preparation and approval
  * when resolving and rereading this reference. Context is only a lookup hint. */
-export function closedRealmFeedTargets(source: FeedSource): readonly DisclosureTarget[] {
+export function closedRealmFeedTargets(source: FeedDisclosureOccurrence): readonly DisclosureTarget[] {
   if (source.reply && !source.realm || (source.reply || source.contentTarget)
     && !source.contentRevision?.match(/^urn:rezics:content:revision:.+$/)
     || source.kind === 'review' && !source.readerReview?.revision)
@@ -36,8 +38,8 @@ export function closedRealmFeedTargets(source: FeedSource): readonly DisclosureT
 
 /** Capture after current-source admission and before grouping, ranking, counts
  * or card hydration. Every reader class uses the same disclosure owner. */
-export async function captureClosedRealmFeedSources(session: FeedSession,
-  sources: readonly FeedSource[], channel: 'feed' | 'count' = 'feed') {
+export async function captureClosedRealmFeedSources<Source extends FeedDisclosureOccurrence>(session: FeedSession,
+  sources: readonly Source[], channel: 'feed' | 'count' = 'feed') {
   if (sources.length > FEED_COST.refreshItems || new Set(sources.map(source => source.id)).size !== sources.length)
     throw new DisclosureUnavailable('Feed occurrence batch is invalid');
   sources = sources.map(source => Object.freeze({ ...source,

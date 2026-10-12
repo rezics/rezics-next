@@ -137,6 +137,16 @@ export function closedFeedCases(actor: ClosedFeedReader) {
     expect((await batch.fence()).map(source => source.actor)).toEqual(owner.sources.filter(source => !source.realm).map(source => source.actor));
     expect(owner.calls.every(call => call.channel === 'count')).toBe(true);
   });
+  test(`closed-feed-${actor}: count receipts carry the exact placement without hydrated card fields`, async () => {
+    const owner = closedFeedOwner(actor);
+    const source = owner.sources[0]!;
+    const receipt = { id: source.id, kind: source.kind, target: source.target, work: source.work,
+      realm: source.realm, reply: source.reply, contentTarget: source.contentTarget, contentRevision: source.contentRevision };
+    const counted = await captureClosedRealmFeedSources(owner.session, [receipt], 'count');
+    expect(counted.sources).toEqual([receipt]);
+    owner.state.closed = true;
+    expect(await counted.fence()).toEqual([]);
+  });
   test(`closed-feed-${actor}: closure during hydration discards cards and their continuation attribution`, async () => {
     const owner = closedFeedOwner(actor);
     const batch = await captureClosedRealmFeedSources(owner.session, owner.sources);
