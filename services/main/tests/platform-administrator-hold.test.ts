@@ -303,7 +303,7 @@ test('the gate-aware migration fences consumers that accepted retained permissio
   expect((await grants.readPage(f.identity, f.actor)).grants).toEqual(retained.grants);
   expect((await grants.readOne(f.identity, f.actor, id)).grant.id).toBe(id);
   expect((await readPlatformPermissions(f.pool, f.principalId)).length).toBeGreaterThan(0);
-  await f.pool.query(readFileSync(join(root, 'services/main/migrations/access/1789_platform_permission_gate.sql'), 'utf8'));
+  await f.pool.query(readFileSync(join(root, 'services/main/migrations/access/1790_platform_permission_gate.sql'), 'utf8'));
   expect(await readPlatformPermissions(f.pool, f.principalId)).toEqual([]);
   await expect(grants.readPage(f.identity, f.actor)).rejects.toBeInstanceOf(PlatformGrantDenied);
   await expect(grants.readOne(f.identity, f.actor, id)).rejects.toBeInstanceOf(PlatformGrantDenied);
