@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { Pool } from 'pg';
+import { Pool, type PoolClient } from 'pg';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { startMediaStack, type MediaStack } from '../../../tests/qa/integration/media-support.ts';
 import {
@@ -205,6 +205,37 @@ async function productionJson<T>(response: Response, status = 201): Promise<T> {
   return JSON.parse(body) as T;
 }
 
+/** Read old saved rows through the real store without weakening SQL write guards. */
+async function withSavedRead<T>(database: Pool, decisionId: string,
+  transform: (row: Record<string, unknown>, sql: string) => Record<string, unknown>,
+  work: () => Promise<T>): Promise<T> {
+  const connect = database.connect.bind(database);
+  const decorate = (client: PoolClient) => {
+    const query = client.query;
+    const read = query.bind(client);
+    const release = client.release;
+    client.query = (async (sql: string, values?: unknown[]) => {
+      const result = await read<Record<string, unknown>>(sql, values);
+      if (values?.[0] === decisionId && sql.trimStart().startsWith('SELECT')) {
+        result.rows = result.rows.map(row => transform(row, sql));
+      }
+      return result;
+    }) as typeof client.query;
+    client.release = (error?: Error | boolean) => {
+      client.query = query;
+      client.release = release;
+      release.call(client, error);
+    };
+    return client;
+  };
+  database.connect = ((callback?: Parameters<Pool['connect']>[0]) => {
+    if (callback) return connect(callback);
+    return connect().then(decorate);
+  }) as typeof database.connect;
+  try { return await work(); }
+  finally { database.connect = connect; }
+}
+
 /** All heads, evidence, rules, plans and receipts come from Main's composition. */
 async function productionFixture(kind: 'content_report' | 'rights_complaint' = 'content_report',
   resourceKind: 'Realm' | 'Space' | 'Agent' | 'Concept' = 'Realm',
@@ -331,13 +362,16 @@ for (const resourceKind of ['Agent', 'Space'] as const) {
     const input = { ...f.input, targets: [{ ...f.input.targets[0]!, effect: 'search' as const }] };
     const confirmed = await f.store.decide(f.member.principal, input);
     expect(confirmed.operation.status).toBe('completed');
-    await f.stack.accessPool.query("UPDATE access.safety_decision_effect SET plan=plan-'realm' WHERE decision_id=$1",
-      [confirmed.decisionId]);
     const original = f.stack.fuseki.query;
     let reads = 0;
     f.stack.fuseki.query = async () => { reads++; throw new Error('Graph owner unavailable during retained-key replay'); };
     try {
-      const replay = await f.store.decide(f.member.principal, input);
+      const replay = await withSavedRead(f.stack.accessPool, confirmed.decisionId, row => {
+        if (!row.plan) return row;
+        const plan = { ...row.plan as Record<string, unknown> };
+        delete plan.realm;
+        return { ...row, plan };
+      }, () => f.store.decide(f.member.principal, input));
       expect(replay.decisionId).toBe(confirmed.decisionId);
       expect(replay.operation.status).toBe('completed');
       expect(reads).toBe(0);
@@ -354,14 +388,44 @@ for (const component of ['body', 'structure'] as const) {
       expect(accepted.operation.status).toBe('accepted');
       // Model a saved pre-upgrade plan: resume must validate the dispatched grain
       // even when the original acceptance bypassed today's owner classification.
-      await f.stack.accessPool.query('UPDATE access.moderation_decision_target SET component=$2 WHERE decision_id=$1',
-        [accepted.decisionId, component]);
-      const result = await f.store.resumeDecision(f.member.principal, f.member.actor, accepted.decisionId);
+      const result = await withSavedRead(f.stack.accessPool, accepted.decisionId,
+        row => row.resource === f.realm && row.component === 'record' ? { ...row, component } : row,
+        () => f.store.resumeDecision(f.member.principal, f.member.actor, accepted.decisionId));
       expect(result.operation.status).not.toBe('completed');
       expect((await f.stack.accessPool.query('SELECT 1 FROM access.governance_enforcement WHERE decision_id=$1',
         [accepted.decisionId])).rowCount).toBe(0);
       expect((await f.stack.accessPool.query('SELECT state FROM access.safety_decision_effect WHERE decision_id=$1',
         [accepted.decisionId])).rows[0]!.state).not.toBe('confirmed');
+    });
+  }
+}
+
+for (const kind of ['content_report', 'rights_complaint'] as const) {
+  for (const jurisdiction of ['resource_owner', 'realm', 'wrong_scope', 'non_global'] as const) {
+    test(`production ${kind} resume rejects saved Realm ${jurisdiction} jurisdiction with valid action authority`, async () => {
+      const f = await productionFixture(kind);
+      const accepted = await f.store.decide(f.member.principal, f.input, true);
+      expect(accepted.operation.status).toBe('accepted');
+      const scope = jurisdiction === 'realm' ? `governance:realm:${f.realm}`
+        : jurisdiction === 'resource_owner' || jurisdiction === 'wrong_scope'
+          ? `governance:resource:${f.space}` : 'governance:platform';
+      await f.grant(scope, DECIDE_ACTION[kind]);
+      const authorityKind = jurisdiction === 'resource_owner' || jurisdiction === 'realm'
+        ? jurisdiction : 'platform';
+      await expect(withSavedRead(f.stack.accessPool, accepted.decisionId, row =>
+        'authority_kind' in row ? { ...row, authority_kind: authorityKind,
+          authority_scope_id: scope, context: jurisdiction === 'non_global' || jurisdiction === 'realm'
+            ? f.realm : GLOBAL_CONTEXT } : row,
+      () => f.store.resumeDecision(f.member.principal, f.member.actor, accepted.decisionId)))
+        .rejects.toThrow('whole-Realm disclosure requires platform/global jurisdiction');
+      expect((await f.stack.accessPool.query('SELECT 1 FROM access.governance_enforcement WHERE decision_id=$1',
+        [accepted.decisionId])).rowCount).toBe(0);
+      expect((await f.stack.accessPool.query('SELECT state FROM access.safety_decision_effect WHERE decision_id=$1',
+        [accepted.decisionId])).rows[0]!.state).toBe('pending');
+      // The unchanged saved platform basis succeeds immediately: action authority
+      // and the reviewed owner head stayed valid throughout the refusal.
+      const completed = await f.store.resumeDecision(f.member.principal, f.member.actor, accepted.decisionId);
+      expect(completed.operation.status).toBe('completed');
     });
   }
 }
