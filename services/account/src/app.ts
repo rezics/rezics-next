@@ -142,6 +142,7 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
   const credentialPaths = new Set([...sensitiveAuthPaths].filter(path => path !== '/api/auth/delete-user'));
   credentialPaths.add('/api/auth/update-user');
   credentialPaths.add('/api/auth/two-factor/verify-totp');
+  credentialPaths.add('/api/auth/two-factor/verify-backup-code');
   const guardedAuthHandler = async (request: Request, held?: PoolClient): Promise<Response> => {
     const path = new URL(request.url).pathname;
     const subject = await authenticationSubject(pool, request,
@@ -217,7 +218,7 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
       }
       if (totpUserId) {
         const factor = await client.query<{ verified: boolean | null }>('SELECT verified FROM "twoFactor" WHERE "userId" = $1', [totpUserId]);
-        if (factor.rows[0] && factor.rows[0].verified !== true) await requireStepUp(client, session);
+        if (path === '/api/auth/two-factor/verify-totp' && factor.rows[0] && factor.rows[0].verified !== true) await requireStepUp(client, session);
         const failure = await authenticationLimit(client);
         if (failure) {
           if (!held) await client.query(failure.status >= 500 ? 'ROLLBACK' : 'COMMIT');
@@ -301,13 +302,13 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
     .use(contentPreferencesApi(auth, pool, options.displayPreferenceClientIds ?? new Set()))
     .use(mailSuppressionApi(pool, String(auth.options.secret), options.mailEventsSecret))
     .use(consentApi(auth, pool))
-    .use(methodsApi(auth, pool))
+    .use(methodsApi(auth, pool, guard))
     .use(emailChangeApi(auth, pool))
     .use(securityActivityApi(auth, pool))
     .use(connectedAppsApi(auth, pool))
     .use(dataExportApi(auth, pool))
     .use(adminApi(auth, pool))
-    .use(accountSettingsApi(auth, pool))
+    .use(accountSettingsApi(auth, pool, guard))
     .use(displayPreferencesApi(auth, pool, options.displayPreferenceClientIds ?? new Set()))
     .post('/api/auth/oauth2/token', ({ request }) =>
       guardedAuthorizationCodeExchange(guard(), request, () =>
