@@ -411,18 +411,19 @@ test('whole-Realm release preserves exact-revision, search, publication, title, 
   ]));
 });
 
-async function counterNotice(f: Fixture, restriction: DecisionResult, delivered = true) {
+async function counterNotice(f: Fixture, restriction: DecisionResult, delivered = true,
+  reportId = f.report.reportId, receivedAt = new Date('2026-10-01T14:37:12Z')) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     await client.query('SELECT id FROM access.governance_case WHERE id = $1 FOR UPDATE', [f.report.caseId]);
     const stepId = await recordCounterNotice(client, {
-      caseId: f.report.caseId, reportId: f.report.reportId, decisionId: restriction.decisionId,
+      caseId: f.report.caseId, reportId, decisionId: restriction.decisionId,
       principalId: f.principalId, partySubject: f.actor, statement: 'This Realm was restricted by mistake.',
       contentLanguage: 'en', declarations: { signature: 'Subscriber signature', materialLocation: f.realm,
         goodFaithMistakeUnderPerjury: true, name: 'Subscriber', address: 'Subscriber address',
         phone: '+1 555 987 1234', courtJurisdiction: 'Federal District Court', consentToJurisdiction: true,
-        acceptService: true }, key: randomUUID(), requestDigest: 'd'.repeat(64), now: new Date('2026-10-01T14:37:12Z'),
+        acceptService: true }, key: randomUUID(), requestDigest: 'd'.repeat(64), now: receivedAt,
     });
     if (delivered) await client.query(`UPDATE access.rights_counter_notice
       SET delivered_at = received_at, phase = 'waiting' WHERE step_id = $1`, [stepId]);
@@ -439,6 +440,55 @@ async function claimantStay(f: Fixture, restriction: DecisionResult) {
     actingSubject: f.actor, process: 'dmca_512', step: 'claimant_action', partySubject: null,
     statement: 'Claimant filed a court action.', documentDigest: null, occurredAt: '2026-10-01T14:37:12Z',
     dueAt: null, idempotencyKey: randomUUID() });
+}
+
+async function additionalCopyrightReport(f: Fixture) {
+  const evidence = { owner: 'graph' as const, resource: f.realm, component: 'record' as const,
+    locator: null, revision: f.evidenceHead };
+  const report = await f.store.submitReport(f.principal, {
+    kind: 'rights_complaint', actingSubject: f.actor,
+    authority: { kind: 'platform', scopeId: 'governance:platform' }, context: GLOBAL_CONTEXT,
+    target: evidence, evidence: [evidence], disclosure: 'private', reasonCode: 'copyright',
+    statement: 'A second claimant reports the same Realm record.', idempotencyKey: randomUUID(),
+    complaint: { process: 'dmca_512', claimantKind: 'rights_holder', claimantName: 'Second claimant',
+      claimantContact: null, claimedWork: f.realm, claimedRight: 'copyright', noticeDigest: 'e'.repeat(64),
+      noticeReceivedAt: '2026-10-01T14:37:12Z' },
+  });
+  expect(report.caseId).toBe(f.report.caseId);
+  expect(report.reportId).not.toBe(f.report.reportId);
+  return report;
+}
+
+for (const gate of ['queued', 'unripe'] as const) {
+  for (const dispatch of ['manual', 'scheduled'] as const) {
+    test(`${dispatch} Realm restoration cannot skip a second ${gate} counter-notice beside a ripe delivered notice`, async () => {
+      const f = await fixture({ kind: 'rights_complaint', process: 'dmca_512' });
+      const original = await f.store.decide(f.principal, f.input);
+      const first = await counterNotice(f, original);
+      const secondReport = await additionalCopyrightReport(f);
+      const second = await counterNotice(f, original, gate !== 'queued', secondReport.reportId,
+        new Date('2026-10-02T14:37:12Z'));
+      expect(second.notBefore.getTime()).toBeGreaterThan(first.notBefore.getTime());
+      f.setClock(first.notBefore);
+      const notices = (await pool.query(`SELECT delivered_at,not_before FROM access.rights_counter_notice
+        WHERE restriction_id=$1 ORDER BY received_at`, [original.decisionId])).rows;
+      expect(notices).toHaveLength(2);
+      expect(notices[0]!.delivered_at).not.toBeNull();
+      expect(notices[0]!.not_before.getTime()).toBeLessThanOrEqual(first.notBefore.getTime());
+      expect(gate === 'queued' ? notices[1]!.delivered_at === null
+        : notices[1]!.not_before.getTime() > first.notBefore.getTime()).toBe(true);
+      if (dispatch === 'manual') {
+        await expect(f.store.decide(f.principal, await f.release(original, 'restore', first.stepId)))
+          .rejects.toBeInstanceOf(GovernanceStale);
+      } else {
+        await expect(f.store.restoreCounterNotice(first.stepId)).rejects.toBeInstanceOf(GovernanceStale);
+      }
+      await assertRestricted(f, original);
+      expect(f.ownerCalls()).toBe(1);
+      expect((await pool.query('SELECT 1 FROM access.moderation_decision WHERE case_id=$1',
+        [f.report.caseId])).rowCount).toBe(1);
+    });
+  }
 }
 
 for (const gate of ['undelivered', 'unripe', 'claimant stay'] as const) {
