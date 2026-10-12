@@ -219,7 +219,10 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
         const factor = await client.query<{ verified: boolean }>('SELECT verified FROM "twoFactor" WHERE "userId" = $1', [totpUserId]);
         if (factor.rows[0]?.verified === false) await requireStepUp(client, session);
         const failure = await authenticationLimit(client);
-        if (failure) return failure;
+        if (failure) {
+          if (!held) await client.query(failure.status >= 500 ? 'ROLLBACK' : 'COMMIT');
+          return failure;
+        }
         // The provider rereads the factor. A concurrent enrollment after an
         // empty snapshot must still spend this authenticated user's budget.
         await consumeStepUpAttempt(client, String(auth.options.secret), totpUserId);
