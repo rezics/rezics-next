@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, test as bunTest } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { meterStatements } from './feed-read-support.ts';
 import { workRead } from '../../../services/main/src/modules/work/read-session.ts';
@@ -16,6 +16,9 @@ import {
   restoreRealmRankingCorpus,
   timeRealmRankingStage,
 } from '../../../services/main/tests/realm-ranking-corpus.ts';
+
+// Bun calls its pending-case marker todo; keep this adapter local to the file.
+const test = Object.assign(bunTest.bind(null), { fixme: bunTest.todo });
 
 test('G1042: depth, row and ancestor caps report partial results; retired cuts and reply tombstones drain through invalidation', async () => {
   const restoreStarted = performance.now();
@@ -527,3 +530,58 @@ test('G1042: depth, row and ancestor caps report partial results; retired cuts a
     }
   }
 }, 420_000);
+
+type RestoredRealmCorpus = Awaited<ReturnType<typeof restoreRealmRankingCorpus>>;
+
+async function assertRealmLifecycleDrain(
+  command: (restored: RestoredRealmCorpus) => Promise<void>,
+) {
+  const restored = await restoreRealmRankingCorpus(400);
+  try {
+    const { home, manifest } = restored;
+    const realm = manifest.identity.followups?.realm;
+    if (!realm) throw new Error('Retained Realm ranking corpus has no followup topology');
+    const epoch = home.stack.env.lineage.dataEpoch;
+    const count = async (table: string) =>
+      Number(
+        (
+          await home.stack.accessPool.query<{ count: string }>(
+            `SELECT count(*)::text FROM access.${table} WHERE data_epoch=$1 AND realm=$2`,
+            [epoch, realm],
+          )
+        ).rows[0]!.count,
+      );
+    expect(await count('realm_thread_reference')).toBeGreaterThan(0);
+    expect(await count('realm_thread_order')).toBeGreaterThan(0);
+    await home.deps.realmReplyThreads.historyPopulation(epoch, realm, {
+      dataEpoch: epoch,
+      sequence: '0',
+    });
+    expect(await count('realm_thread_population')).toBe(1);
+    await command(restored);
+    await home.project();
+    for (const table of [
+      'realm_thread_reference',
+      'realm_thread_order',
+      'realm_thread_population',
+      'realm_thread_population_admission',
+      'realm_thread_population_job',
+      'realm_thread_private_order',
+    ])
+      expect(await count(table)).toBe(0);
+  } finally {
+    await restored.close();
+  }
+}
+
+test.fixme('retired Realm invalidation drains all reference, order and population indexes', async () =>
+  assertRealmLifecycleDrain(async () => {
+    // Missing product Realm retirement command; Space exposes creation and reads only.
+    throw new Error('Realm retirement command is unavailable');
+  }));
+
+test.fixme('deleted Realm invalidation drains all reference, order and population indexes', async () =>
+  assertRealmLifecycleDrain(async () => {
+    // Missing product Realm deletion command; native mutation retains canonical resource types.
+    throw new Error('Realm deletion command is unavailable');
+  }));
