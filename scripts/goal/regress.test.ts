@@ -114,6 +114,8 @@ describe('pinned main-wide regression', () => {
       }
       expect(regressionBatchCommand({ id: 'native-proof', tier: 'jena:check', files: [longProof], state: 'pending', attempts: [] },
         '/disk/report.json', '/disk/native.xml')).toEqual([
+        'bun', join(import.meta.dir, 'goalctl.ts'), 'slot', '--',
+        'bun', join(import.meta.dir, '../qa/host-admission.ts'), '--gib', '4', '--',
         'bun', 'test', `--preload=${join(import.meta.dir, '../qa/container-reaper.ts')}`,
         '--reporter=junit', '--reporter-outfile=/disk/native.xml', longProof,
       ]);

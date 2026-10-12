@@ -12,6 +12,7 @@ import { newRunId, type Tier } from '../qa/core.ts';
 import { directoryLeaseHeld, tryAcquireDirectoryLease } from '../qa/process/lease.ts';
 import { defaultStopGraceMs, terminateProcessGroup } from '../qa/process/terminate.ts';
 import { ownerTierBudgetMs } from '../qa/owner-tier-budget.ts';
+import { BUILD_ADMISSION_GIB } from '../qa/host-admission.ts';
 import type { DeclaredTestTimeout } from './goalctl.ts';
 import { physicalPath, POSTGRES_SOCKET_LIMIT, postgresSocketByteLength } from './postgres-socket.ts';
 
@@ -627,7 +628,10 @@ async function command(checkout: string, args: string[], logPath: string, timeou
   diskDirectory(dirname(logPath), 'log directory');
   mkdirSync(dirname(logPath), { recursive: true });
   const log = openSync(logPath, 'w', 0o600);
-  const bunTest = args[0] === 'bun' && args[1] === 'test';
+  // A direct test run, also when it is wrapped in the slot and memory admission: the reaper preload is
+  // what marks it, and its containers must carry this batch's scope.
+  const bunTest = args.some((arg, index) => arg === 'test' && args[index - 1] === 'bun'
+    && args.slice(index + 1).some(option => option.startsWith('--preload=') && option.endsWith('container-reaper.ts')));
   const commandEnvironment = bunTest
     ? reapChildEnvironment({ ...env, REZICS_REAP_PRELOAD: '1' })
     : env;
@@ -722,7 +726,11 @@ export function executionOutcomes(checkout: string, batch: Batch, tests: TestRes
 
 export function regressionBatchCommand(batch: Batch, report: string, junitXmlPath: string): string[] {
   if (batch.tier === 'jena:check') return batch.files.some(file => nativeImageProofs.has(file))
-    ? ['bun', 'test', `--preload=${join(import.meta.dir, '../qa/container-reaper.ts')}`,
+    // Native proofs build an image and run Maven. They take a QA slot and host memory like any other
+    // heavy command, so they wait when the host is full instead of starting beside it.
+    ? ['bun', join(import.meta.dir, 'goalctl.ts'), 'slot', '--',
+      'bun', join(import.meta.dir, '../qa/host-admission.ts'), '--gib', String(BUILD_ADMISSION_GIB), '--',
+      'bun', 'test', `--preload=${join(import.meta.dir, '../qa/container-reaper.ts')}`,
       '--reporter=junit', `--reporter-outfile=${junitXmlPath}`, ...batch.files]
     : ['task', 'jena:check'];
   const standaloneStories = batch.files.every(file => file.includes('.stories.'));
