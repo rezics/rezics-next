@@ -792283,6 +792283,15 @@
           },
           {
             "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "maxLength": 2048,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "safeTheme",
             "required": false,
             "schema": {
@@ -794447,6 +794456,27 @@
                       "maxItems": 50,
                       "type": "array"
                     },
+                    "navigationComplete": {
+                      "type": "boolean"
+                    },
+                    "navigationNext": {
+                      "~elyTyp": 7,
+                      "maxLength": 2048,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "navigationRevision": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "official": {
                       "~elyTyp": 7,
                       "nullable": true,
@@ -796003,6 +796033,9 @@
                     "slideMedia",
                     "moduleData",
                     "navigation",
+                    "navigationRevision",
+                    "navigationNext",
+                    "navigationComplete",
                     "renderTokens",
                     "execution",
                     "cost"
@@ -806526,6 +806559,14 @@
                           ],
                           "type": "object"
                         },
+                        "publicationStatus": {
+                          "enum": [
+                            "private",
+                            "live",
+                            "behind"
+                          ],
+                          "type": "string"
+                        },
                         "renderTokens": {
                           "properties": {
                             "accent": {
@@ -807062,6 +807103,7 @@
                       "required": [
                         "page",
                         "presentation",
+                        "publicationStatus",
                         "moduleData",
                         "slideMedia",
                         "renderTokens",
