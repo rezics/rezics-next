@@ -55,6 +55,14 @@ export function sqlRequestFlows(project: Project, files: readonly ts.SourceFile[
       httpCalls.set(node, false);
       return false;
     }
+    // The relay input owner reads retained batches, not HTTP responses. Identify
+    // its method declaration; a client named "store" must still be checked.
+    if (nameOf(node.expression) === 'read' && declaration && ts.isMethodDeclaration(declaration)
+      && ts.isClassDeclaration(declaration.parent) && declaration.parent.name?.text === 'DiscoveryRefreshInputs'
+      && /\/modules\/discovery\/source\.ts$/.test(file)) {
+      httpCalls.set(node, false);
+      return false;
+    }
     // Collection lookups (including nested provider.accepted Maps) are storage
     // inspection, not requests. Resolve the declaration rather than its spelling.
     if (nameOf(node.expression) === 'get'

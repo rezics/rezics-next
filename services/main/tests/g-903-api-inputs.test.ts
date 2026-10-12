@@ -77,6 +77,9 @@ test('G-903 exclusions resolve routers and collections without hiding callback H
     owner.read('/v1/replies/' + id);
     const storage: any = {};
     storage.get('/v1/replies/' + id, () => {});
+    const { DiscoveryRefreshInputs } = await import('../../services/main/src/modules/discovery/source.ts');
+    const retained = new DiscoveryRefreshInputs(pool, 'fixture');
+    retained.read({ dataEpoch: 'fixture', sequence: id }, id);
   ` });
   expect(result.map(flow => flow.request)).toEqual([6, 7, 10, 14, 16, 18].map(line => `${fileName}:${line}`));
 });
