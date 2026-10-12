@@ -48,6 +48,10 @@ test('graph erasure relay compares exact receipt and batch Work sets without mul
     { name: 'different-members', receiptWorks: [work(2), work(4)], eventWorks: [[work(2)], [work(3)]], allowed: false },
     { name: 'no-receipt-work', receiptWorks: [], eventWorks: [[work(2)]], allowed: false },
     { name: 'no-event-work', receiptWorks: [work(2)], eventWorks: [[]], allowed: false },
+    { name: 'detached-event-work', receiptWorks: [work(2), work(3)], eventWorks: [[work(2)]],
+      foreignWorks: [work(3)], sharedEvent: false, allowed: false },
+    { name: 'ambiguous-source-batch', receiptWorks: [work(2), work(3)], eventWorks: [[work(2)]],
+      foreignWorks: [work(3)], sharedEvent: true, allowed: false },
   ];
   mkdirSync(join(root, '.temp'), { recursive: true });
   const build = mkdtempSync(join(root, '.temp/graph-erasure-relay-native-'));
@@ -103,6 +107,17 @@ public class GraphErasureRelayContractTest {
             .addProperty(p("receipt"),outbox.createResource("${receipt}"))
             .addLiteral(p("erasureId"),"${erasureId}").addLiteral(p("erasureEpoch"),7);
           for(var w:works.getAsArray())event.addProperty(p("work"),outbox.createResource(w.getAsString().value()));
+        }
+        if(fixture.get("foreignWorks")!=null){
+          var foreignBatch=outbox.createResource("${batch.batchId}:foreign");
+          foreignBatch.addProperty(RDF.type,outbox.createResource(RV+"OutboxBatch"))
+            .addLiteral(p("dataEpoch"),"${batch.dataEpoch}").addLiteral(p("sequence"),2);
+          var foreignEvent=outbox.createResource("${eventPlaceholder}:foreign");
+          foreignBatch.addProperty(p("event"),foreignEvent);
+          foreignEvent.addProperty(RDF.type,outbox.createResource(RV+"GraphErasureEvent"))
+            .addProperty(p("receipt"),outbox.createResource("${receipt}"));
+          for(var w:fixture.get("foreignWorks").getAsArray())foreignEvent.addProperty(p("work"),outbox.createResource(w.getAsString().value()));
+          if(fixture.get("sharedEvent").getAsBoolean().value())foreignBatch.addProperty(p("event"),outbox.createResource("${eventPlaceholder}:0"));
         }
         data.commit();data.end();data.begin(ReadWrite.READ);
         var events=new JsonArray();for(var idValue:ids){String id=idValue.getAsString().value();var event=new JsonObject();

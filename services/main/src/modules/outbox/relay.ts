@@ -1055,6 +1055,12 @@ async function readMainOutboxGraphEnvelope(fuseki: FusekiClient, batch: MainOutb
     # inside this same read, without multiplying each event by the receipt set.
     FILTER(?kind != rv:GraphErasureEvent || (BOUND(?erasureBatch) &&
       NOT EXISTS {
+        GRAPH ${iri(GRAPHS.outbox)} {
+          ?otherErasureBatch a rv:OutboxBatch ; rv:dataEpoch ?epoch ; rv:sequence ?sequence ; rv:event ${iri(eventId)} .
+        }
+        FILTER(?otherErasureBatch != ?erasureBatch)
+      } &&
+      NOT EXISTS {
         GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:work ?receiptWork }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.outbox)} {
           ?erasureBatch rv:event ?erasureEvent .
