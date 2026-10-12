@@ -123,7 +123,7 @@ export function ChapterProgress({ work, api, t, className }: { work: string; api
       <p className="text-muted-foreground text-sm">{t.continueChapter({ place: named(standing.next, t) })}</p>
       <div><Button type="button" className="min-h-11 w-full sm:w-auto" disabled={saving} onClick={() => void write(standing.next!, true)}>
         <CheckIcon aria-hidden="true" />{saving ? t.episodeSaving : t.markChapter({ place: named(standing.next, t) })}</Button></div>
-    </div> : standing.caughtUp && standing.last ? <p className="text-muted-foreground text-sm" data-caught-up>{t.allChaptersRead}</p> : null}
+    </div> : standing.caughtUp === true && standing.last ? <p className="text-muted-foreground text-sm" data-caught-up>{t.allChaptersRead}</p> : null}
 
     {places.length ? <ul className="grid gap-2">
       {places.map(place => <li key={place.occurrence}>
