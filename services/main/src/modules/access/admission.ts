@@ -2001,7 +2001,9 @@ export class AccessAdmissionRegistry {
       throw new AdmissionDenied('unknown admission');
     }
     const borrowed = accessClient(this.pool);
+    let connected = false;
     return withAccessClient(this.pool, async client => {
+      connected = true;
       const ownsTransaction = !borrowed || !await inExplicitTransaction(client);
       let parentTimeout: string | undefined;
       try {
@@ -2027,6 +2029,7 @@ export class AccessAdmissionRegistry {
           "SELECT set_config('statement_timeout', $1, true)", [parentTimeout]).catch(() => {});
       }
     }, borrowed).catch(error => {
+      if (!connected) throw new AdmissionUnavailable('Access admission store could not be reached');
       if (error instanceof AdmissionDenied || error instanceof AdmissionUnavailable) throw error;
       throw admissionError(error);
     });

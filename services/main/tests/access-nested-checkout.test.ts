@@ -9,6 +9,15 @@ import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/su
 import { boundedPool, NestedPoolCheckoutError, nestedPoolCheckoutMode, setNestedPoolCheckoutMode } from '../src/infrastructure/pg-pool.ts';
 import type { FusekiClient, TemplateIndexDelta, TemplateIndexKey } from '../src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry, AdmissionUnavailable, type VerifiedPrincipal } from '../src/modules/access/admission.ts';
+import { readReferenceDisclosure } from '../src/modules/access/semantic-disclosure.ts';
+import { PolicyUnavailable } from '../src/modules/access/policy-errors.ts';
+import { inAccessTransaction } from '../src/modules/access/policy-transaction.ts';
+import { realmTransaction } from '../src/modules/access/realm-management-authority.ts';
+import { GovernanceRules, realmRulesRef } from '../src/modules/governance/rules.ts';
+import { GovernanceUnavailable } from '../src/modules/governance/store.ts';
+import { AccountAssertionDenied } from '../src/modules/account/verify-assertion.ts';
+import { workRead } from '../src/modules/work/read-session.ts';
+import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import { grantFixtureAuthority } from '../src/modules/access/fixture-authority.ts';
 import { accessClient, controlRead, controlTransaction, ControlConflict, ControlUnavailable } from '../src/modules/access/topology-control.ts';
 import { AliasRegistry } from '../src/modules/address/registry.ts';
@@ -18,6 +27,7 @@ const root = resolve(import.meta.dir, '../../..');
 const native = () => `https://rezics.com/id/${randomUUID()}`;
 const previousMode = nestedPoolCheckoutMode();
 const actor = native(), work = native(), semantic = native();
+const realm = native();
 const principal: VerifiedPrincipal = { issuer: 'https://account.nested.test', subject: randomUUID(), emailVerified: true };
 const absent = { ...principal, subject: 'absent' };
 const ownerRequest = { principal, actingSubject: actor, action: 'work.create', scope: 'work:create:root' };
@@ -25,6 +35,7 @@ let cluster: PostgresCluster | undefined;
 let pool: Pool;
 let other: Pool;
 let admission: AccessAdmissionRegistry;
+let principalId: string;
 
 beforeAll(async () => {
   setNestedPoolCheckoutMode('throw');
@@ -34,7 +45,7 @@ beforeAll(async () => {
   for (const file of schemaFiles(root, 'access')) {
     await pool.query(readFileSync(join(root, 'services/main/migrations/access', file), 'utf8'));
   }
-  const id = randomUUID();
+  const id = principalId = randomUUID();
   await pool.query('INSERT INTO access.principal(id,account_issuer,account_subject) VALUES ($1,$2,$3)',
     [id, principal.issuer, principal.subject]);
   await pool.query("INSERT INTO access.authority_subject(id,kind) VALUES ($1,'agent')", [actor]);
@@ -47,6 +58,106 @@ beforeAll(async () => {
   }
   admission = new AccessAdmissionRegistry(pool);
 }, 120_000);
+
+test('Alias-held semantic batches and private Realm proofs borrow the parent transaction and rollback', async () => {
+  const aliases = new AliasRegistry(pool);
+  const graph = { query: async () => ({ results: { bindings: [] } }) };
+  expect(await readReferenceDisclosure({ pool, graph }, principal, actor, [semantic])).toEqual(new Set([semantic]));
+  expect(await admission.realmReadProof(principal, actor, realm)).toBeNull();
+  await expect(aliases.withRead(async client => {
+    await client.query('BEGIN');
+    const id = (await client.query('SELECT txid_current()::text AS id')).rows[0]!.id;
+    await grantFixtureAuthority(client, { scope: `governance:realm:${realm}`, requireDispatch: true,
+      representations: [{ principalId, actor, action: 'realm.owner', lifetime: 'infinity' }],
+      grant: { actor, action: 'realm.owner', lifetime: 'infinity' } });
+    try {
+      expect(await readReferenceDisclosure({ pool, graph }, principal, actor, [semantic])).toEqual(new Set([semantic]));
+      expect(await readReferenceDisclosure({ pool, graph }, absent, actor, [semantic])).toEqual(new Set());
+      await client.query("SET LOCAL lock_timeout='500ms'");
+      await client.query("SET LOCAL statement_timeout='1s'");
+      expect(await admission.realmReadProof(principal, actor, realm)).toBeString();
+      expect(await admission.realmReadProof(absent, actor, realm)).toBeNull();
+      await realmTransaction(pool, realm, false, async inner => expect(inner).toBe(client));
+      expect((await client.query('SHOW lock_timeout')).rows[0]?.lock_timeout).toBe('500ms');
+      expect((await client.query('SHOW statement_timeout')).rows[0]?.statement_timeout).toBe('1s');
+      expect((await client.query('SELECT txid_current()::text AS id')).rows[0]!.id).toBe(id);
+      await client.query('UPDATE access.recovery_fence SET open=false WHERE id');
+      await expect(readReferenceDisclosure({ pool, graph }, principal, actor, [semantic])).rejects.toBeInstanceOf(PolicyUnavailable);
+      await expect(admission.realmReadProof(principal, actor, realm)).rejects.toBeInstanceOf(AdmissionUnavailable);
+      // A denied borrowed child leaves the parent's transaction usable.
+      expect((await client.query('SELECT txid_current()::text AS id')).rows[0]!.id).toBe(id);
+      throw new Error('Alias caller rolls back');
+    } finally { await client.query('ROLLBACK'); }
+  })).rejects.toThrow('Alias caller rolls back');
+  expect(await admission.realmReadProof(principal, actor, realm)).toBeNull();
+  await admission.assertRecoveryOpen();
+}, 30_000);
+
+test('Alias-held WorkRead identity, recovery, Rules and count/admin leaves observe uncommitted parent state', async () => {
+  const aliases = new AliasRegistry(pool);
+  const rules = new GovernanceRules(pool);
+  const graph = { query: async () => ({ results: { bindings: [{ epoch: { type: 'literal', value: 'nested' },
+    sequence: { type: 'literal', value: '1' } }] } }) } as unknown as FusekiClient;
+  const deps = { environment: { fuseki: graph, objectDirectory: '.temp/access-nested-checkout',
+    lineage: { dataEpoch: 'nested', routingEpoch: 'nested' } }, access: admission,
+    account: { verify: async () => principal } } as unknown as MainWorkDependencies;
+  const signed = new Request('http://main.test/v1/works', { headers: { authorization: 'Bearer fixture' } });
+  const anonymous = new Request('http://main.test/v1/works');
+  await aliases.withRead(async client => {
+    await client.query('BEGIN');
+    try {
+      const id = (await client.query('SELECT txid_current()::text AS id')).rows[0]!.id;
+      await client.query('INSERT INTO access.realm_member_count(realm,value) VALUES ($1,7)', [realm]);
+      expect(await admission.publicRealmCount(realm)).toMatchObject({ kind: 'exact', value: 7 });
+      expect(await admission.activePrincipalId(principal)).toBe(principalId);
+      expect(await admission.canActAsPlatformAdministrator(principal, actor)).toBe(false);
+      expect(await workRead(deps, signed, { actingSubject: actor }, async session => session.principal?.subject)).toBe(principal.subject);
+      expect(await workRead(deps, anonymous, {}, async session => session.principal)).toBeNull();
+      const document = { profile: 'realm-settings-rules-v2', public: false, rules: [{ id: 'kind',
+        title: { original: 'en', labels: { en: 'Be kind' } }, body: { original: 'en', labels: { en: 'Read kindly' } }, governanceRule: null }] };
+      await client.query('INSERT INTO access.scope_gate(id) VALUES ($1)', [`governance:realm:${realm}`]);
+      await client.query(`INSERT INTO access.governance_rule_head(ref,scope_id,revision,digest) VALUES ($1,$2,1,$3)`,
+        [realmRulesRef(realm), `governance:realm:${realm}`, 'a'.repeat(64)]);
+      await client.query(`INSERT INTO access.governance_rule_revision
+        (ref,scope_id,revision,digest,document,principal_id,acting_subject,idempotency_key,request_digest)
+        VALUES ($1,$2,1,$3,$4,$5,$6,$7,$3)`,
+      [realmRulesRef(realm), `governance:realm:${realm}`, 'a'.repeat(64), document, principalId, actor, randomUUID()]);
+      expect((await rules.realmHeaderRules(realm, null)).rules?.map(rule => rule.id)).toEqual(['kind']);
+      expect(await rules.publishedRealmRules(realm)).toBeNull();
+      expect((await rules.publishedRealmRules(realm, true))?.map(rule => rule.id)).toEqual(['kind']);
+      await client.query('UPDATE access.principal SET active=false WHERE id=$1', [principalId]);
+      await expect(workRead(deps, signed, { actingSubject: actor }, async () => 'unreachable')).rejects.toBeInstanceOf(AccountAssertionDenied);
+      await client.query('UPDATE access.recovery_fence SET open=false WHERE id');
+      await expect(workRead(deps, anonymous, {}, async () => 'unreachable')).rejects.toBeInstanceOf(AdmissionUnavailable);
+      await expect(rules.realmHeaderRules(realm, null)).rejects.toBeInstanceOf(GovernanceUnavailable);
+      await expect(rules.publishedRealmRules(realm, true)).rejects.toBeInstanceOf(GovernanceUnavailable);
+      await expect(admission.publicRealmCount(realm)).rejects.toBeInstanceOf(AdmissionUnavailable);
+      expect((await client.query('SELECT txid_current()::text AS id')).rows[0]!.id).toBe(id);
+    } finally { await client.query('ROLLBACK'); }
+  });
+  expect(await admission.activePrincipalId(principal)).toBe(principalId);
+  expect((await admission.publicRealmCount(realm)).value).toBe(0);
+}, 30_000);
+
+test('a borrowed policy snapshot refuses weaker isolation without ending its parent transaction', async () => {
+  await controlTransaction(pool, async client => {
+    const id = (await client.query('SELECT txid_current()::text AS id')).rows[0]!.id;
+    await expect(inAccessTransaction(pool, 'repeatable read', async () => 'unreachable')).rejects.toBeInstanceOf(PolicyUnavailable);
+    expect((await client.query('SELECT txid_current()::text AS id')).rows[0]!.id).toBe(id);
+    expect((await client.query('SHOW transaction_isolation')).rows[0]?.transaction_isolation).toBe('read committed');
+  });
+  await new AliasRegistry(pool).withRead(async client => {
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+    try {
+      const id = (await client.query('SELECT txid_current()::text AS id')).rows[0]!.id;
+      await inAccessTransaction(pool, 'repeatable read', async inner => {
+        expect(inner).toBe(client);
+        expect((await inner.query('SELECT txid_current()::text AS id')).rows[0]!.id).toBe(id);
+      });
+      expect((await client.query('SELECT txid_current()::text AS id')).rows[0]!.id).toBe(id);
+    } finally { await client.query('ROLLBACK'); }
+  });
+}, 30_000);
 
 afterAll(async () => {
   await other?.end();

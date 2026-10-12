@@ -21,10 +21,10 @@ export async function realmTransaction<T>(pool: Pool, realm: string | null, writ
     const ownsTransaction = !borrowed || !await inExplicitTransaction(client);
     try {
       if (ownsTransaction) await client.query('BEGIN');
-      await client.query("SET LOCAL lock_timeout = '2s'");
+      if (ownsTransaction) await client.query("SET LOCAL lock_timeout = '2s'");
       // statement_timeout rides the recovery fence this transaction already reads.
       // A separate round trip would put the public roster over its request cap.
-      if (!(await client.query(`SELECT set_config('statement_timeout', '5s', true)
+      if (!(await client.query(`SELECT ${ownsTransaction ? "set_config('statement_timeout', '5s', true)" : '1'}
         FROM access.recovery_fence WHERE id AND open FOR SHARE`)).rowCount) {
         throw new RealmAdminUnavailable('Access recovery is in progress');
       }

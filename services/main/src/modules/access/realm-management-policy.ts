@@ -75,9 +75,11 @@ export async function withRealmPermit<T>(pool: Pool, principal: VerifiedPrincipa
   return withAccessClient(pool, async client => {
     const ownsTransaction = !borrowed || !await inExplicitTransaction(client);
     try {
-      if (ownsTransaction) await client.query('BEGIN');
-      await client.query("SET LOCAL lock_timeout = '2s'");
-      await client.query("SET LOCAL statement_timeout = '5s'");
+      if (ownsTransaction) {
+        await client.query('BEGIN');
+        await client.query("SET LOCAL lock_timeout = '2s'");
+        await client.query("SET LOCAL statement_timeout = '5s'");
+      }
       const recovery = await client.query('SELECT 1 FROM access.recovery_fence WHERE id AND open FOR SHARE');
       if (!recovery.rowCount) throw new AdmissionUnavailable('Access recovery is in progress');
       const permit = await realmPermit(client, principal, actor, realm, purpose);

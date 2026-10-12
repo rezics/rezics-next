@@ -32,7 +32,7 @@ export async function withWorkEditAuthority<T>(pool: Pool, principal: VerifiedPr
     const ownsTransaction = !borrowed || !await inExplicitTransaction(client);
     try {
       if (ownsTransaction) await client.query('BEGIN');
-      const result = await withWorkEditAuthorityInTransaction(client, principal, actingSubject, work, commit, graph);
+      const result = await workEditAuthority(client, principal, actingSubject, work, commit, graph, ownsTransaction);
       if (ownsTransaction) await client.query('COMMIT');
       return result;
     } catch (error) {
@@ -47,6 +47,12 @@ export async function withWorkEditAuthority<T>(pool: Pool, principal: VerifiedPr
 export async function withWorkEditAuthorityInTransaction<T>(client: PoolClient, principal: VerifiedPrincipal,
   actingSubject: string, work: string, commit: (proof: WorkEditAuthorityProof) => Promise<T>,
   graph?: Pick<FusekiClient, 'query'>): Promise<T> {
+  return workEditAuthority(client, principal, actingSubject, work, commit, graph, true);
+}
+
+async function workEditAuthority<T>(client: PoolClient, principal: VerifiedPrincipal,
+  actingSubject: string, work: string, commit: (proof: WorkEditAuthorityProof) => Promise<T>,
+  graph: Pick<FusekiClient, 'query'> | undefined, ownsLimits: boolean): Promise<T> {
   const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
   if (!native.test(work) || !native.test(actingSubject) || !principal.issuer || !principal.subject) {
     throw new AdmissionDenied('invalid Work edit authority');
@@ -63,11 +69,13 @@ export async function withWorkEditAuthorityInTransaction<T>(client: PoolClient, 
     }
   }
   try {
-    await client.query("SET LOCAL lock_timeout = '2s'");
-    await client.query("SET LOCAL statement_timeout = '5s'");
-    // Statement/lock timeouts bound admission work; the idle lease starts afresh
-    // after the final proof query and exceeds the five-second Source transaction.
-    await client.query("SET LOCAL idle_in_transaction_session_timeout = '15s'");
+    if (ownsLimits) {
+      await client.query("SET LOCAL lock_timeout = '2s'");
+      await client.query("SET LOCAL statement_timeout = '5s'");
+      // Statement/lock timeouts bound admission work; the idle lease starts afresh
+      // after the final proof query and exceeds the five-second Source transaction.
+      await client.query("SET LOCAL idle_in_transaction_session_timeout = '15s'");
+    }
     const recovery = (await client.query<{ open: boolean; generation: string }>(
       'SELECT open, generation FROM access.recovery_fence WHERE id = true FOR SHARE')).rows[0];
     if (!recovery?.open) throw new AdmissionUnavailable('Access is held for recovery');
