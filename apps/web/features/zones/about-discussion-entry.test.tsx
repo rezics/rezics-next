@@ -1,18 +1,37 @@
 import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import * as mainApi from '../api/main.ts';
 import * as platformAccess from '../api/platform-access.ts';
+import * as authSession from '../auth/session.ts';
+import type { AboutDiscussionTargetReader } from './about-discussion-api.ts';
 
 const actingSubject = 'https://rezics.com/id/00000000-0000-4000-8000-000000000004';
+const about = 'https://rezics.com/id/00000000-0000-4000-8000-000000000003';
+const revision = 'https://rezics.com/id/00000000-0000-4000-8000-000000000006';
+let lookupFailure = true;
+const projections: Array<[string, string | undefined]> = [];
+let target: Awaited<ReturnType<AboutDiscussionTargetReader>>;
 
-void mock.module('../auth/session.ts', () => ({ readSession: async () => null }));
+void mock.module('../auth/session.ts', () => ({ ...authSession, readSession: async () => null }));
 void mock.module('../work-page/read.ts', () => ({
   reader: async () => ({ main: {}, signedIn: true, actingSubject }),
 }));
-void mock.module('../api/main.ts', () => ({ readPlatformAccess: async () => ({}) }));
+void mock.module('../api/main.ts', () => ({ ...mainApi, readPlatformAccess: async () => ({}) }));
 void mock.module('../api/platform-access.ts', () => ({ ...platformAccess, operationOpen: () => true }));
+void mock.module('../entity-page/read.ts', () => ({
+  readEntityProjection: async (resource: string, position?: string) => {
+    projections.push([resource, position]);
+    return { ok: true, data: { target: { resource: about, revision } } };
+  },
+}));
 void mock.module('./about-discussion-api.ts', () => ({
-  readAboutDiscussion: async () => { throw new Error('DisclosureUnavailable'); },
+  readAboutDiscussion: async (_main: unknown, _input: unknown, readTarget?: AboutDiscussionTargetReader) => {
+    if (lookupFailure) throw new Error('DisclosureUnavailable');
+    if (!readTarget) throw new Error('Current projection reader is missing');
+    target = await readTarget(about);
+    return { kind: 'ready' };
+  },
 }));
 void mock.module('./about-discussion.tsx', () => ({
   AboutDiscussion: ({ read, recoveryScope }: {
@@ -34,4 +53,17 @@ test('a failed discussion lookup leaves its parent Zone page renderable', async 
   expect(page).toContain('<h1>Harbor field guide</h1>');
   expect(page).toContain('data-discussion-state="unavailable"');
   expect(page).toContain(`data-acting-subject="${actingSubject}"`);
+});
+
+test('the discussion shares the entity frame reader with an explicit current position', async () => {
+  lookupFailure = false;
+  try {
+    const discussion = await ZoneAboutDiscussion({
+      zone: '00000000-0000-4000-8000-000000000001', path: '/guide/harbor-field-guide',
+      href: '/guide/harbor-field-guide', locale: 'en',
+    });
+    expect(renderToStaticMarkup(discussion!)).toContain('data-discussion-state="ready"');
+    expect(projections).toEqual([[about.slice(-36), undefined]]);
+    expect(target).toEqual({ resource: about, revision });
+  } finally { lookupFailure = true; }
 });

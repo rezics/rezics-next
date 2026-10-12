@@ -62,11 +62,13 @@ export type AboutDiscussionRead =
   | { kind: 'ready'; basis: AboutDiscussionBasis; thread: ThreadRead | null;
       realmName?: { value: string; language: string; direction: 'ltr' | 'rtl' };
       mode: AboutDiscussionMode; actingSubject: string | null };
+export type AboutDiscussionTargetReader =
+  (resource: string) => Promise<{ resource: string; revision: string } | null>;
 
 /** Reads the current route, never the Zone's cached frame attachment or reading-position route. */
 export async function readAboutDiscussion(main: MainClient, input: {
   zone: string; path: string; signedIn: boolean; actingSubject?: string; personal: boolean; postingOpen?: boolean;
-}): Promise<AboutDiscussionRead> {
+}, readCurrentTarget?: AboutDiscussionTargetReader): Promise<AboutDiscussionRead> {
   try {
     const query = { actingSubject: input.actingSubject };
     const routeRead = await main.v1.zones({ id: uuid(input.zone) }).routes.get({ query: { ...query, path: input.path } });
@@ -79,12 +81,14 @@ export async function readAboutDiscussion(main: MainClient, input: {
     if (!about) return { kind: 'none' };
     const realm = uuid(route.realm);
     const [target, lookup, header, joining] = await Promise.all([
-      main.v1.resources({ resource: uuid(about) }).page.get({ query }),
+      readCurrentTarget ? readCurrentTarget(about)
+        : main.v1.resources({ resource: uuid(about) }).page.get({ query })
+          .then(read => read.error ? null : read.data?.target ?? null),
       main.v1.realms({ realm })['about-thread'].get({ query: { ...query, about } }),
       main.v1.realms({ realm }).get({ query }),
       input.actingSubject ? main.v1.realms({ realm }).joining.get({ query: { actingSubject: input.actingSubject } }) : null,
     ]);
-    if (!target.data || target.error || !lookup.data || lookup.error || !header.data || header.error)
+    if (!target || target.resource !== about || !lookup.data || lookup.error || !header.data || header.error)
       return { kind: 'unavailable' };
     let thread: ThreadRead | null = null;
     if (lookup.data.thread) {
@@ -101,7 +105,7 @@ export async function readAboutDiscussion(main: MainClient, input: {
           : joining.data.state === 'joined' ? 'open' : 'join'
         : 'open';
     return { kind: 'ready', basis: { realm: route.realm, about,
-      targetRevision: target.data.target.revision, zone: `https://rezics.com/id/${uuid(route.zone)}`,
+      targetRevision: target.revision, zone: `https://rezics.com/id/${uuid(route.zone)}`,
       path: route.path, routeRevision: route.revision }, thread, mode,
       realmName: header.data.name, actingSubject: input.actingSubject ?? null };
   } catch { return { kind: 'unavailable' }; }

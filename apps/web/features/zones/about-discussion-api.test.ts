@@ -134,6 +134,31 @@ test('the live route selects the Realm, canonical path and current target, then 
   expect(transport.calls.find(call => call.url.pathname.endsWith('/about-thread'))!.url.searchParams.get('about')).toBe(about);
 });
 
+test('a shared current projection supplies the posting revision without another resource-page read', async () => {
+  const transport = reader({ thread: visibleThread });
+  const currentRevision = reference(66), resources: string[] = [];
+  const result = await readAboutDiscussion(transport.main, readInput, async resource => {
+    resources.push(resource);
+    return { resource, revision: currentRevision };
+  });
+  expect(resources).toEqual([about]);
+  expect(result).toMatchObject({ kind: 'ready', basis: { about, targetRevision: currentRevision },
+    thread: { rootRevision: targetRevision } });
+  expect(transport.calls).toHaveLength(5);
+  expect(transport.calls.some(call => call.url.pathname.includes('/resources/'))).toBe(false);
+});
+
+test('a missing, mismatched or failed shared projection keeps the discussion unavailable without rereading it', async () => {
+  for (const target of [null, { resource: reference(99), revision: targetRevision }, new Error('Projection unavailable')]) {
+    const transport = reader();
+    expect(await readAboutDiscussion(transport.main, readInput, async () => {
+      if (target instanceof Error) throw target;
+      return target;
+    })).toEqual({ kind: 'unavailable' });
+    expect(transport.calls.some(call => call.url.pathname.includes('/resources/'))).toBe(false);
+  }
+});
+
 test('home and mounted document resources share the same command basis, while hidden and absent threads stay empty', async () => {
   for (const routeKind of ['home', 'document', 'detail'] as const) {
     const hidden = reader({ routeKind, thread: null }), absent = reader({ routeKind, thread: null });

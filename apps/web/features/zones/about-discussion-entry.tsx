@@ -4,10 +4,11 @@ import { resolveSite } from '../realm/read.ts';
 import { reader } from '../work-page/read.ts';
 import { readPlatformAccess } from '../api/main.ts';
 import { operationOpen } from '../api/platform-access.ts';
+import { readEntityProjection } from '../entity-page/read.ts';
 import { readAboutDiscussion } from './about-discussion-api.ts';
 import { AboutDiscussion } from './about-discussion.tsx';
 
-/** Shared by the Work, entity and home renderers; only Main chooses the current attachment. */
+/** Shared by Work, entity and mounted document frames; Main chooses the current attachment. */
 export async function ZoneAboutDiscussion({ zone, ref, path, href, locale }: {
   zone?: string; ref?: string; path: string; href: string; locale: UiLocale;
 }) {
@@ -30,6 +31,11 @@ export async function ZoneAboutDiscussion({ zone, ref, path, href, locale }: {
     const read = await readAboutDiscussion(viewer.main, {
       zone, path, signedIn: viewer.signedIn, actingSubject: viewer.actingSubject, personal,
       postingOpen: operationOpen('postV1RealmsByRealmAbout-posts', access),
+    }, async resource => {
+      // Share the entity frame's request cache. Posting always uses a current
+      // projection, even when the frame renders a retained reading position.
+      const projection = await readEntityProjection(resource.slice(-36), undefined);
+      return projection.ok ? projection.data.target : null;
     });
     return <AboutDiscussion read={read} locale={locale} href={href} recoveryScope={recoveryScope} />;
   } catch {
