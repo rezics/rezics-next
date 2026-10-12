@@ -5,6 +5,7 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import type { VerifiedPrincipal } from '../../../services/main/src/modules/access/admission.ts';
 import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import type { DecisionInput, DecisionResult, ReportResult } from '../../../services/main/src/modules/governance/store.ts';
+import type { RoleCommand } from '../../../services/main/src/modules/realm-admin/contract.ts';
 import { initializeRelayCheckpoint, relayMainOutboxOnce } from '../../../services/main/src/modules/outbox/relay.ts';
 import { readZoneConfiguration } from '../../../services/main/src/modules/zone/configuration.ts';
 import { GRAPHS, iri, RV } from '../../../services/main/src/modules/work/activate.ts';
@@ -20,7 +21,7 @@ interface Actor { actor: string; token: string; principal: VerifiedPrincipal; pr
 interface Realm { realm: string; space: string }
 interface Work { work: string; mainVersion: string; workRevision: string }
 interface Reply { reply: string; revisionId: string; revisionDigest: string; placement: string }
-interface Site { zone: string; space: string; navigationRevision: string }
+interface Site { zone: string; space: string; navigationRevision: string; homeRevision?: string }
 interface Observable { status: number; body: string; headers: [string, string][] }
 interface Decision { input: DecisionInput; response: Observable; result: DecisionResult | null; reportId: string }
 interface Page { items: Array<{ id: string; reply?: string }>; nextCursor: string | null;
@@ -38,7 +39,7 @@ async function json<T>(response: Response, status = 200): Promise<T> {
 
 let stack: Stack;
 let app: ReturnType<typeof createMainApp>;
-let manager: Actor, member: Actor, party: Actor, platform: Actor;
+let builder: Actor, manager: Actor, member: Actor, party: Actor, platform: Actor;
 let realm: Realm, unaffected: Realm, privateRealm: Realm, unlistedRealm: Realm;
 let work: Work, selection: string, opener: Reply, reply: Reply, restrictedReply: Reply;
 let sites: Site[];
@@ -63,7 +64,7 @@ function call(method: string, path: string, actor?: Actor, body?: unknown, key: 
 function get(path: string, reader: Reader) {
   const actor = actorFor(reader);
   const url = new URL(`http://main.local${path}`);
-  if (actor && !url.pathname.endsWith('/join-page') && !url.pathname.includes('/modules/')
+  if (actor && !url.pathname.includes('/modules/')
     && !path.startsWith('/v1/zones/') && url.pathname !== '/v1/realms') {
     url.searchParams.set('actingSubject', actor.actor);
   }
@@ -86,31 +87,31 @@ async function provision(name: string, kind: 'person' | 'organization' = 'person
   return { actor: agent, token, principal, principalId: row.id };
 }
 async function createRealm(name: string, visibility = 'public') {
-  return json<Realm>(await call('POST', '/v1/spaces', manager, { profile: 'space-realm-v1', name,
-    capabilities: ['realm'], actingSubject: manager.actor,
+  return json<Realm>(await call('POST', '/v1/spaces', builder, { profile: 'space-realm-v1', name,
+    capabilities: ['realm'], actingSubject: builder.actor,
     initialSettings: { visibility, reviewRequired: true, whoMaySubmit: 'granted', rules: [] } }), 201);
 }
 async function createWork(): Promise<Work & { contribution: string; publicationDecision: string }> {
-  await grant(manager, 'work:create:root', 'work.create');
-  const created = await json<Work>(await call('POST', '/v1/works', manager, {
+  await grant(builder, 'work:create:root', 'work.create');
+  const created = await json<Work>(await call('POST', '/v1/works', builder, {
     profile: 'metadata-only-v1', title: 'Independent original', language: 'en', authoring: 'own-work',
-    actingSubject: manager.actor }), 201);
-  await grant(manager, `work:read:${created.work}`, 'work.read');
-  await grant(manager, `contribution:create:${created.work}`, 'contribution.create');
+    actingSubject: builder.actor }), 201);
+  await grant(builder, `work:read:${created.work}`, 'work.read');
+  await grant(builder, `contribution:create:${created.work}`, 'contribution.create');
   const draft = await json<{ contribution: string; draftRevision: string }>(await call('POST',
-    '/v1/contributions', manager, { profile: 'text-contribution-v1', work: created.work, language: 'en',
-      body: 'Independent public original', actingSubject: manager.actor }), 201);
-  await grant(manager, `contribution:read:${draft.contribution}`, 'contribution.read');
-  await grant(manager, `contribution:publish:${draft.contribution}`, 'contribution.publish');
+    '/v1/contributions', builder, { profile: 'text-contribution-v1', work: created.work, language: 'en',
+      body: 'Independent public original', actingSubject: builder.actor }), 201);
+  await grant(builder, `contribution:read:${draft.contribution}`, 'contribution.read');
+  await grant(builder, `contribution:publish:${draft.contribution}`, 'contribution.publish');
   const published = await json<{ publicationDecision: string }>(await call('POST', '/v1/contribution-publications',
-    manager, { profile: 'text-publication-v1', contribution: draft.contribution,
+    builder, { profile: 'text-publication-v1', contribution: draft.contribution,
       expectedDraftHead: draft.draftRevision, expectedPublicationHead: null, rightsBasis: 'original-contribution',
-      disclosure: 'public', actingSubject: manager.actor }), 201);
-  await grant(manager, `publication:select:${created.mainVersion}`, 'publication.select');
-  await json(await call('POST', '/v1/publication-selections', manager, { profile: 'main-default-selection-v1',
+      disclosure: 'public', actingSubject: builder.actor }), 201);
+  await grant(builder, `publication:select:${created.mainVersion}`, 'publication.select');
+  await json(await call('POST', '/v1/publication-selections', builder, { profile: 'main-default-selection-v1',
     context: { kind: 'main-version-default', id: created.mainVersion }, work: created.work,
     contribution: draft.contribution, publicationDecision: published.publicationDecision, expectedSelectionHead: null,
-    selectionBasis: 'main-maintainer', actingSubject: manager.actor }), 201);
+    selectionBasis: 'main-maintainer', actingSubject: builder.actor }), 201);
   return { ...created, contribution: draft.contribution, publicationDecision: published.publicationDecision };
 }
 async function place(body: string, parent?: Reply): Promise<Reply> {
@@ -136,6 +137,38 @@ async function place(body: string, parent?: Reply): Promise<Reply> {
       actingSubject: manager.actor }), 201);
   return { reply: id, ...saved, placement: placed.placement };
 }
+async function installManager(target: Realm) {
+  const policy = (await stack.accessPool.query<{ revision: string; terms_revision: string }>(
+    "SELECT revision::text,terms_revision FROM access.membership_policy WHERE kind='realm' AND owner_subject=$1",
+    [target.realm])).rows[0]!;
+  const consent = await json<{ consentReference: string }>(await call('POST', '/v1/me/membership-consents', manager,
+    { profile: 'access-membership-consent-v1', kind: 'realm', ownerSubject: target.realm, memberSubject: manager.actor,
+      expectedGeneration: '0', expectedPolicyRevision: policy.revision, termsRevision: policy.terms_revision }));
+  const admin = await json<{ generation: string }>(await call('GET',
+    `/v1/realms/${short(target.realm)}/settings?actingSubject=${encodeURIComponent(builder.actor)}`, builder));
+  await json(await call('POST', `/v1/realms/${short(target.realm)}/members`, builder, {
+    actingSubject: builder.actor, expectedGeneration: admin.generation, member: manager.actor,
+    expectedMembershipGeneration: '0', action: 'add', consent: consent.consentReference,
+    durationSeconds: null, reason: 'Admit the Person manager' }), 201);
+  const roleId = randomUUID();
+  const changeRole = async (change: RoleCommand['change']) => {
+    const roles = await json<{ generation: string }>(await call('GET',
+      `/v1/realms/${short(target.realm)}/roles?actingSubject=${encodeURIComponent(builder.actor)}`, builder));
+    const input: RoleCommand = { actingSubject: builder.actor, expectedGeneration: roles.generation,
+      reason: 'Assign current Realm management authority', change };
+    const impact = await json<{ digest: string }>(await call('POST',
+      `/v1/realms/${short(target.realm)}/role-impact`, builder, input));
+    await json(await call('POST', `/v1/realms/${short(target.realm)}/role-changes`, builder,
+      { ...input, impactDigest: impact.digest }), 201);
+  };
+  await changeRole({ kind: 'role', roleId, name: 'Managers', permissions: ['governance.moderate', 'governance.rule.publish',
+    'realm.members.manage', 'realm.roles.manage', 'realm.settings.manage', 'review.decide', 'publication.adopt'] });
+  await changeRole({ kind: 'assignment', roleId, member: manager.actor, assigned: true,
+    validUntil: new Date(Date.now() + 60 * 60 * 1000).toISOString() });
+  const verified = await json<{ roles: { id: string; holders: { member: string }[] | null }[] }>(await call('GET',
+    `/v1/realms/${short(target.realm)}/roles?actingSubject=${encodeURIComponent(manager.actor)}`, manager));
+  expect(verified.roles.find(role => role.id === roleId)?.holders?.some(holder => holder.member === manager.actor)).toBe(true);
+}
 async function head(resource: string) {
   if (sites?.some(site => site.zone === resource)) return (await readZoneConfiguration(stack.env, resource)).revision;
   const rows = (await stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head WHERE {
@@ -152,7 +185,8 @@ async function decide(resource: string, options: { rights?: boolean; component?:
         authority: { kind: 'platform', scopeId: 'governance:platform' }, context: 'urn:rezics:context:global',
         target: { owner: options.revision ? 'content' : 'graph', resource, component: options.component ?? 'record' },
         disclosure: 'parties', reasonCode: 'reviewed_removal', statement: 'Review the exact named target',
-        evidence: [{ owner: 'graph', resource: work.work, component: 'title', revision: work.workRevision, locator: null }],
+        evidence: [{ owner: options.revision ? 'content' : 'graph', resource, component: options.component ?? 'record',
+          revision: options.revision ?? null, locator: null }],
         idempotencyKey: key, ...(rights ? { complaint: { process: 'ordinary_dispute', claimantKind: 'rights_holder',
           claimantName: 'Case party', claimantContact: null, claimedWork: 'Realm discussion', claimedRight: 'copyright',
           noticeDigest: sha(resource), noticeReceivedAt: new Date().toISOString() } } : {}) }, key), 201);
@@ -227,22 +261,22 @@ beforeAll(async () => {
     } } });
   // A provisioned organization with explicit fixture authority owns this multi-Space
   // corpus; an ordinary Person's three monthly Space creations remain a product limit.
-  manager = await provision('Realm manager', 'organization'); member = await provision('Realm member');
+  builder = await provision('Corpus builder', 'organization'); manager = await provision('Realm manager'); member = await provision('Realm member');
   party = await provision('Case party'); platform = await provision('Platform decider');
-  await grant(manager, 'space:create:root', 'space.create');
+  await grant(builder, 'space:create:root', 'space.create');
   realm = await createRealm('Platform closure community'); unaffected = await createRealm('Unaffected community');
   privateRealm = await createRealm('Private request community', 'private');
   const privateSettings = await json<{ generation: string }>(await call('GET',
-    `/v1/spaces/${short(privateRealm.space)}/settings?actingSubject=${encodeURIComponent(manager.actor)}`, manager));
-  await json(await call('PUT', `/v1/spaces/${short(privateRealm.space)}/settings`, manager, {
-    actingSubject: manager.actor, expectedGeneration: privateSettings.generation,
+    `/v1/spaces/${short(privateRealm.space)}/settings?actingSubject=${encodeURIComponent(builder.actor)}`, builder));
+  await json(await call('PUT', `/v1/spaces/${short(privateRealm.space)}/settings`, builder, {
+    actingSubject: builder.actor, expectedGeneration: privateSettings.generation,
     settings: { visibility: 'private', listing: 'listed', admission: 'request', history: 'everything' },
     reason: 'Private request restoration control' }), 201);
   unlistedRealm = await createRealm('Unlisted community');
   const settings = await json<{ generation: string; settings: object }>(await call('GET',
-    `/v1/spaces/${short(unlistedRealm.space)}/settings?actingSubject=${encodeURIComponent(manager.actor)}`, manager));
-  await json(await call('PUT', `/v1/spaces/${short(unlistedRealm.space)}/settings`, manager, {
-    actingSubject: manager.actor, expectedGeneration: settings.generation,
+    `/v1/spaces/${short(unlistedRealm.space)}/settings?actingSubject=${encodeURIComponent(builder.actor)}`, builder));
+  await json(await call('PUT', `/v1/spaces/${short(unlistedRealm.space)}/settings`, builder, {
+    actingSubject: builder.actor, expectedGeneration: settings.generation,
     settings: { visibility: 'public', listing: 'unlisted', admission: 'open', history: 'everything' },
     reason: 'Unlisted restoration control' }), 201);
   const policy = (await stack.accessPool.query<{ revision: string; terms_revision: string }>(
@@ -253,55 +287,59 @@ beforeAll(async () => {
     { profile: 'access-membership-consent-v1', kind: 'realm', ownerSubject: realm.realm, memberSubject: member.actor,
       expectedGeneration: '0', expectedPolicyRevision: policy.revision, termsRevision: policy.terms_revision }));
   const admin = await json<{ generation: string }>(await call('GET',
-    `/v1/realms/${short(realm.realm)}/settings?actingSubject=${encodeURIComponent(manager.actor)}`, manager));
-  await json(await call('POST', `/v1/realms/${short(realm.realm)}/members`, manager, {
-    actingSubject: manager.actor, expectedGeneration: admin.generation, member: member.actor,
+    `/v1/realms/${short(realm.realm)}/settings?actingSubject=${encodeURIComponent(builder.actor)}`, builder));
+  await json(await call('POST', `/v1/realms/${short(realm.realm)}/members`, builder, {
+    actingSubject: builder.actor, expectedGeneration: admin.generation, member: member.actor,
     expectedMembershipGeneration: '0', action: 'add', consent: consent.consentReference,
     durationSeconds: null, reason: 'Admitted closure reader' }), 201);
+  await grant(manager, 'work:create:root', 'access.membership.consent');
+  for (const target of [realm, unaffected, privateRealm, unlistedRealm]) await installManager(target);
   const original = await createWork(); work = original;
+  await grant(manager, `work:read:${work.work}`, 'work.read');
+  await grant(manager, `reply:place:${realm.realm}`, 'reply.place');
   await grant(party, `work:read:${work.work}`, 'work.read');
-  await grant(manager, `publication:adopt:${realm.realm}`, 'publication.adopt');
-  const adopted = await json<{ selection: string }>(await call('POST', '/v1/publication-selections', manager,
+  await grant(builder, `publication:adopt:${realm.realm}`, 'publication.adopt');
+  const adopted = await json<{ selection: string }>(await call('POST', '/v1/publication-selections', builder,
     { profile: 'realm-local-selection-v1', context: { kind: 'realm-local', id: realm.realm }, work: work.work,
       mainVersion: work.mainVersion, contribution: original.contribution, publicationDecision: original.publicationDecision,
-      expectedSelectionHead: null, selectionBasis: 'realm-manager-review', actingSubject: manager.actor }), 201);
+      expectedSelectionHead: null, selectionBasis: 'realm-manager-review', actingSubject: builder.actor }), 201);
   selection = adopted.selection;
-  await grant(manager, `work:read:${work.work}`, 'work.read');
-  await grant(manager, `review:decide:${realm.realm}`, 'review.decide');
-  await grant(manager, `reply:place:${realm.realm}`, 'reply.place');
+  await grant(builder, `work:read:${work.work}`, 'work.read');
   opener = await place('Closure acceptance thread\nApproved public discussion');
   reply = await place('Approved reply retained through restoration', opener);
   restrictedReply = await place('Independently restricted reply', opener);
   sites = [];
   const same = { zone: native(), space: realm.space };
-  await grant(manager, `zone:edit:${same.zone}`, 'zone.edit');
-  const created = await json<{ revision: string }>(await call('POST', '/v1/zones', manager,
-    { ...same, disclosure: 'public', name: 'Same Space site', language: 'en', actingSubject: manager.actor }), 201);
+  await grant(builder, `zone:edit:${same.zone}`, 'zone.edit');
+  const created = await json<{ revision: string }>(await call('POST', '/v1/zones', builder,
+    { ...same, disclosure: 'public', name: 'Same Space site', language: 'en', actingSubject: builder.actor }), 201);
   sites.push({ ...same, navigationRevision: created.revision });
-  sites.push(await json<Site>(await call('POST', '/v1/spaces', manager,
+  sites.push(await json<Site>(await call('POST', '/v1/spaces', builder,
     { profile: 'space-zone-v1', name: 'Cross Space site', language: 'en', capabilities: ['zone'],
-      visibility: 'public', listing: 'listed', actingSubject: manager.actor }), 201));
+      visibility: 'public', listing: 'listed', actingSubject: builder.actor }), 201));
   for (const site of sites) {
-    await grant(manager, `zone:edit:${site.zone}`, 'zone.edit');
-    await grant(manager, `realm:attach:${realm.realm}`, 'realm.attach');
-    await json(await call('PUT', `/v1/zones/${short(site.zone)}/configuration`, manager,
+    await grant(builder, `zone:edit:${site.zone}`, 'zone.edit');
+    await grant(builder, `realm:attach:${realm.realm}`, 'realm.attach');
+    await json(await call('PUT', `/v1/zones/${short(site.zone)}/configuration`, builder,
       { expectedHead: (await readZoneConfiguration(stack.env, site.zone)).revision, defaultRealm: realm.realm,
-        actingSubject: manager.actor }));
-    const mount = await json<{ revision: string }>(await call('POST', `/v1/zones/${short(site.zone)}/mounts`, manager,
+        actingSubject: builder.actor }));
+    const mount = await json<{ revision: string }>(await call('POST', `/v1/zones/${short(site.zone)}/mounts`, builder,
       { expectedHead: site.navigationRevision, target: work.work, routeSegment: 'original',
-        disclosure: 'public', actingSubject: manager.actor }));
+        disclosure: 'public', actingSubject: builder.actor }));
     site.navigationRevision = mount.revision;
     // The Realm Space's existing Zone API serves a curated home and mounted
     // documents. A Zone-only Space also publishes its own native home document.
     if (site.space === realm.space) continue;
     const variantId = `urn:rezics:variant:${randomUUID()}`;
     const draft = await json<{ revisionId: string; byteDigest: string; sourcePosition: { dataEpoch: string } }>(
-      await call('POST', '/v1/content-drafts', manager, { profile: 'content-text-v1', resourceId: site.zone, variantId,
+      await call('POST', '/v1/content-drafts', builder, { profile: 'content-text-v1', resourceId: site.zone, variantId,
         expectedHead: null, document: fromPlainText('Independent Zone home document', 'blocks'),
-        language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr', actingSubject: manager.actor }), 201);
-    await json(await call('POST', `/v1/zones/${short(site.zone)}/site-publications`, manager,
+        language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr', actingSubject: builder.actor }), 201);
+    site.homeRevision = draft.revisionId;
+    await grant(party, `work:read:${site.zone}`, 'work.read');
+    await json(await call('POST', `/v1/zones/${short(site.zone)}/site-publications`, builder,
       { routesRevision: site.navigationRevision, navigationRevision: site.navigationRevision,
-        expectedHead: (await readZoneConfiguration(stack.env, site.zone)).revision, actingSubject: manager.actor,
+        expectedHead: (await readZoneConfiguration(stack.env, site.zone)).revision, actingSubject: builder.actor,
         pages: [{ page: site.zone, variantId, revisionId: draft.revisionId, byteDigest: draft.byteDigest,
           contentEpoch: draft.sourcePosition.dataEpoch }] }), 201);
   }
@@ -438,7 +476,7 @@ test('rights whole-Realm restriction confirms through existing rights and notice
     expect(await observable(await get(`/v1/realms/${short(unaffected.realm)}`, reader)))
       .toEqual(await observable(await get(`/v1/realms/${short(native())}`, reader)));
   }
-  const notices = await json<{ items: { caseId: string }[] }>(await call('GET', '/v1/safety-notices', manager));
+  const notices = await json<{ items: { caseId: string }[] }>(await call('GET', '/v1/safety-notices', builder));
   expect(notices.items.some(item => item.caseId === decision.input.caseId)).toBe(true);
   const reopened = await restore(decision, unaffected.realm, true);
   completed(reopened, 'Rights notice restoration prerequisite (trust-ops session 1)');
@@ -499,8 +537,10 @@ test('whole-Realm restore preserves a narrower search restriction and unlisted p
 });
 
 test('a decision naming a Zone does not close its attached Realm', async () => {
-  const decision = await decide(sites[0]!.zone);
-  completed(decision, 'Zone record target prerequisite');
+  const site = sites.find(site => site.homeRevision)!;
+  expect(site).toBeDefined();
+  const decision = await decide(site.zone, { component: 'body', revision: site.homeRevision! });
+  completed(decision, 'Zone home Content target prerequisite');
   await settleReadProjections();
   for (const reader of readers) {
     expect((await get(`/v1/realms/${short(realm.realm)}`, reader)).status).toBe(200);
@@ -521,7 +561,7 @@ test('Realm-local moderation authority cannot decide whole-Realm closure', async
     { profile: 'content-report-v1', actingSubject: manager.actor, authority: { kind: 'realm', scopeId },
       context: realm.realm, target: { owner: 'graph', resource: realm.realm, component: 'record' },
       disclosure: 'parties', reasonCode: 'reviewed_removal', statement: 'Realm owner request',
-      evidence: [{ owner: 'graph', resource: work.work, component: 'title', revision: work.workRevision, locator: null }],
+      evidence: [{ owner: 'graph', resource: realm.realm, component: 'record', revision: null, locator: null }],
       idempotencyKey: reportKey }, reportKey), 201);
   const input: DecisionInput = { caseId: report.caseId, expectedGeneration: report.caseGeneration,
     actingSubject: manager.actor, outcome: 'restrict', targets: [{ owner: 'graph', resource: realm.realm,

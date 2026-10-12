@@ -60,7 +60,8 @@ export function realmReadRoutes(work: MainWorkDependencies) {
   };
   return new Elysia()
     .get('/v1/realms/:realm/join-page', { params,
-      query: t.Object({ language: t.Optional(readLanguage), languages: t.Optional(t.String({ maxLength: 720 })) }, { additionalProperties: false }),
+      query: t.Object({ actingSubject: t.Optional(readId), language: t.Optional(readLanguage),
+        languages: t.Optional(t.String({ maxLength: 720 })) }, { additionalProperties: false }),
       response: { 200: realmJoinPage, ...workReadProblems },
     }, async ({ request, params: path, query }) => {
       try { return await read(request, query, id(path.realm), async session => {
