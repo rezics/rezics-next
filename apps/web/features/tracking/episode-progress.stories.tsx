@@ -16,7 +16,7 @@ function fixture(count = 12, done: number[] = []) {
   return memoryEpisodeApi(memory);
 }
 
-interface Args { api: EpisodeApi; locale: UiLocale; refresh?: () => void; settleRead?: () => Promise<void> }
+interface Args { api: EpisodeApi; locale: UiLocale; refresh?: () => void; settleRead?: () => Promise<void>; pageStarted?: () => Promise<void>; marked?: () => string[] }
 function Sheet({ api, locale }: Args) {
   return <PageContainer className="grid max-w-md gap-6"><EpisodeProgress work={saoOne} api={api} t={copyOf(locale)} /></PageContainer>;
 }
@@ -193,6 +193,53 @@ export const JumpByNumber: Story = {
     await jump(canvasElement, '40');
     await expect(await view.findByText('There is no episode 40 in this series.')).toBeVisible();
     await expect(canvasElement.querySelector('[data-selected]')).toBeNull();
+  },
+};
+
+function cancelledPage(): Args {
+  const memory = createMemoryEpisodes({ ...episodeSeries({ mains: 60, specials: 2 }), page: 20 });
+  const api = memoryEpisodeApi(memory);
+  const page = api.page;
+  let release!: () => void;
+  let started!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  const requested = new Promise<void>(resolve => { started = resolve; });
+  let delay = true;
+  api.page = async (structure, options) => {
+    const result = await page(structure, options);
+    if (delay && !options?.parent && options?.after === '20') {
+      delay = false;
+      started();
+      await held;
+    }
+    return result;
+  };
+  return { api, locale: 'en', pageStarted: () => requested,
+    settleRead: async () => { release(); await new Promise<void>(resolve => requestAnimationFrame(() => resolve())); },
+    marked: () => [...memory.progress.entries()].filter(([, progress]) => progress.completed)
+      .map(([occurrence, progress]) => `${occurrence}:${progress.position}`),
+  };
+}
+
+export const CancelledPageJump: Story = {
+  args: cancelledPage(),
+  async play({ canvasElement, args }) {
+    const view = within(canvasElement);
+    await jump(canvasElement, '21');
+    await args.pageStarted?.();
+    await userEvent.click(view.getByRole('button', { name: 'Special 1' }));
+    await view.findByRole('button', { name: 'Mark watched' });
+    await jump(canvasElement, '21');
+    await expect(await view.findByText('Episode 21')).toBeVisible();
+    await view.findByRole('button', { name: 'Mark watched' });
+    await args.settleRead?.();
+    await jump(canvasElement, '41');
+    await expect(await view.findByText('Episode 41')).toBeVisible();
+    await userEvent.click(await view.findByRole('button', { name: 'Mark watched' }));
+    await view.findByText('Last watched: Episode 41');
+    await waitFor(() => expect(canvasElement.querySelector('[data-selected="main"] [data-state="done"]')).not.toBeNull());
+    const occurrence = episodeSeries({ mains: 60, specials: 2 }).mains[40]!.occurrence;
+    await expect(args.marked?.()).toEqual([`${occurrence}:episode:41`]);
   },
 };
 

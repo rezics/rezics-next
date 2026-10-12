@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import type { MainClient } from '../features/discover/types.ts';
 import { mainEpisodeApi } from '../features/tracking/episode-api.ts';
 import { createMemoryEpisodes, memoryEpisodeApi, type MemoryEpisodes } from '../features/tracking/episode-memory.ts';
-import { MAX_PAGES, markPosition, reach, standingOf } from '../features/tracking/episodes.ts';
+import { MAX_PAGES, advance, markPosition, reach, standingOf } from '../features/tracking/episodes.ts';
 import { episodeProgressWhere } from '../features/tracking/episode-progress.tsx';
 import { copyOf } from '../features/tracking/messages.ts';
 import { episodeSeries, saoOne } from '../features/tracking/fixtures.ts';
@@ -82,6 +82,84 @@ describe('where the reader stands in a series', () => {
     expect(read.mains.items).toHaveLength(1000);
     expect(read.mains.next).toBeNull();
     expect(await reach(api, read.mains, 1001)).toBeNull();
+  });
+
+  test('a cancelled jump cannot append over a newer selection or mark the wrong occurrence', async () => {
+    const memory = store(60, 2, 20);
+    const api = memoryEpisodeApi(memory);
+    const read = await standing(memory);
+    const page = api.page;
+    let release!: () => void;
+    let started!: () => void;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    const requested = new Promise<void>(resolve => { started = resolve; });
+    let delay = true;
+    api.page = async (structure, options) => {
+      const result = await page(structure, options);
+      if (delay && !options?.parent && options?.after === '20') {
+        delay = false;
+        started();
+        await held;
+      }
+      return result;
+    };
+    let token = 1;
+    const cancelled = reach(api, read.mains, 21, () => token === 1);
+    await requested;
+    token = 2;
+    await api.progress(read.specials[0]!.walk.items[0]!);
+    token = 3;
+    expect((await reach(api, read.mains, 21, () => token === 3))?.occurrence).toBe(memory.mains[20]!.occurrence);
+    const before = { items: [...read.mains.items], groups: [...read.mains.groups], next: read.mains.next, pages: read.mains.pages };
+    release();
+    expect(await cancelled).toBeNull();
+    expect(read.mains).toMatchObject(before);
+    token = 4;
+    const selected = await reach(api, read.mains, 41, () => token === 4);
+    expect(selected).toMatchObject({ occurrence: memory.mains[40]!.occurrence, number: 41, label: 'Episode 41' });
+    if (!selected) throw new Error('no episode 41');
+    await api.mark(selected, { completed: true, position: markPosition(selected) });
+    expect([...memory.progress.entries()]).toEqual([[memory.mains[40]!.occurrence,
+      { completed: true, position: 'episode:41', version: 1 }]]);
+  });
+
+  test('overlapping inventory pages deduplicate parts and groups by occurrence', async () => {
+    const memory = store(60, 2, 20);
+    const api = memoryEpisodeApi(memory);
+    const page = api.page;
+    api.page = async (structure, options) => {
+      const result = await page(structure, options);
+      if (!result.ok || options?.parent) return result;
+      return { ok: true, data: { ...result.data,
+        parts: options?.after ? [memory.mains[19]!, ...result.data.parts, result.data.parts[0]!] : result.data.parts,
+        groups: [memory.groups[0]!, memory.groups[0]!],
+      } };
+    };
+    const loaded = await standingOf(api, saoOne);
+    if (!loaded.ok || !loaded.data) throw new Error('no standing');
+    const read = loaded.data;
+    expect(read.mains.groups).toHaveLength(1);
+    expect(read.specials).toHaveLength(1);
+    expect((await reach(api, read.mains, 41))?.occurrence).toBe(memory.mains[40]!.occurrence);
+    expect(read.mains.items).toHaveLength(60);
+    expect(new Set(read.mains.items.map(item => item.occurrence)).size).toBe(60);
+    read.mains.items.reverse();
+    expect((await reach(api, read.mains, 1))?.occurrence).toBe(memory.mains[0]!.occurrence);
+  });
+
+  test('a cancelled inventory request changes no items, groups, cursor or page budget', async () => {
+    const memory = store(60, 2, 20);
+    const api = memoryEpisodeApi(memory);
+    const read = await standing(memory);
+    const before = { items: [...read.mains.items], groups: [...read.mains.groups], next: read.mains.next, pages: read.mains.pages };
+    let current = true;
+    const page = api.page;
+    api.page = async (structure, options) => { const result = await page(structure, options); current = false; return result; };
+    expect(await advance(api, read.mains, () => current)).toBe(false);
+    expect(read.mains).toMatchObject(before);
+    const calls = memory.calls.length;
+    expect(await reach(api, read.mains, 41, () => current)).toBeNull();
+    expect(memory.calls).toHaveLength(calls);
   });
 
   test('a series longer than the walk bound is not read without end', async () => {
