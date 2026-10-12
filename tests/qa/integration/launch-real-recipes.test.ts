@@ -208,7 +208,7 @@ async function readAllBrowsePages(api: CorpusApi, realm: string, q?: string): Pr
   return pages;
 }
 
-test('recipes / Pinned Schema.org imports retain ordered content and expose quantity parser gaps', async () => {
+test('recipes / Pinned Schema.org imports retain ordered content, quantities and separate flour steps', async () => {
   const sources = launchRecipeSources();
   const sourceByKey = new Map(sources.map(item => [`${item.pinId}/${item.recipeId}`, item]));
   const failures: string[] = [];
@@ -242,6 +242,8 @@ test('recipes / Pinned Schema.org imports retain ordered content and expose quan
     const ingredients = (recipePages.get(record.work) ?? []).flatMap(item => item.ingredients);
     return sourceRecipe.ingredients.map((line, index) => ({ record, line: line.trim(), index, ingredients }));
   });
+  const fractionRows = quantities.filter(row => /[½¼¾⅓⅔⅛⅜⅝⅞]/u.test(row.line));
+  const rangeRows = quantities.filter(row => /\b\d+\s+(?:to|or)\s+\d+\b/iu.test(row.line));
   for (const row of quantities) {
     const actual = row.ingredients[row.index];
     if (/[½¼¾⅓⅔⅛⅜⅝⅞]/u.test(row.line) && !actual?.amount)
@@ -250,6 +252,10 @@ test('recipes / Pinned Schema.org imports retain ordered content and expose quan
       && (!actual?.amount || !actual.amountUpper))
       failures.push(`${row.record.title}: range is not retained as lower and upper quantities (${row.line})`);
   }
+  if (fractionRows.filter(row => row.ingredients[row.index]?.amount).length !== 47)
+    failures.push('Recipe corpus: all 47 source fractions must be retained as parsed quantities');
+  if (rangeRows.filter(row => row.ingredients[row.index]?.amount && row.ingredients[row.index]?.amountUpper).length !== 2)
+    failures.push('Recipe corpus: both source ranges must be retained as lower and upper quantities');
 
   const puff = corpus.records.find(item => item.recipeId === 'puff-paste')!;
   const puffPages = recipePages.get(puff.work)!;
@@ -258,15 +264,23 @@ test('recipes / Pinned Schema.org imports retain ordered content and expose quan
   const flour = puffIngredients.find(item => item.originalText === '1 pound pastry flour');
   if (!flour)
     failures.push('Puff paste: ingredient flour line is missing');
+  const puffSteps = puffOccurrences.filter(item => item.role === 'step');
   const doughUse = puffOccurrences.find(item => item.role === 'step'
     && item.qualifier?.instructionText?.value.startsWith('Work two tablespoons of butter into flour'));
   const rollingUse = puffOccurrences.find(item => item.role === 'step'
     && item.qualifier?.instructionText?.value.includes('dredging board slightly with flour when necessary'));
   if (!rollingUse)
     failures.push('Puff paste: rolling flour instruction line is missing');
-  if (flour && (!doughUse?.qualifier?.usesIngredient?.includes(flour.occurrence)
-    || !rollingUse?.qualifier?.usesIngredient?.includes(flour.occurrence)))
-    failures.push('Puff paste: the dough and rolling stages do not both retain their flour use');
+  if (!doughUse)
+    failures.push('Puff paste: dough flour instruction line is missing');
+  if (doughUse && rollingUse) {
+    const doughIndex = puffSteps.indexOf(doughUse);
+    const rollingIndex = puffSteps.indexOf(rollingUse);
+    if (doughIndex < 0 || rollingIndex <= doughIndex)
+      failures.push('Puff paste: dough and rolling flour instruction lines must stay separate and in order');
+    if (flour && [doughUse, rollingUse].some(step => step.qualifier?.usesIngredient?.includes(flour.occurrence)))
+      failures.push('Puff paste: flour instruction lines must not be linked to the ingredient occurrence');
+  }
 
   expect(failures, failures.join('\n')).toEqual([]);
   expect(corpus.records.filter(item => item.language === 'it')).toHaveLength(10);
