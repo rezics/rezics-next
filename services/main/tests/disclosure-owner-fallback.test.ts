@@ -8,7 +8,7 @@ import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/su
 import {
   captureDisclosure, configureDisclosure, configureDisclosureAncestrySource, disclose,
   discloseInventory, discloseInventoryWithAnonymousNames, discloseInventoryWithCost, DisclosureStore, DisclosureUnavailable,
-  fenceDisclosure, resolveDisclosureSelections, type DisclosureAncestryEvidence,
+  fenceDisclosure, requireEstablishedAncestry, resolveDisclosureSelections, type DisclosureAncestryEvidence,
   type DisclosureTarget,
 } from '../src/modules/disclosure/read.ts';
 import { governanceOwners } from '../src/modules/governance/schema.ts';
@@ -73,6 +73,19 @@ function evidence(env: WorkActivationEnvironment, target: DisclosureTarget): Dis
       revision: 'publication:1', targetResource: target.resource, targetRevision: target.revision ?? null,
       token: 'c'.repeat(64), dataEpoch: env.lineage.dataEpoch } };
 }
+
+test('strict ancestry inspection rejects missing and legacy evidence and preserves the established proof', async () => {
+  const f = fixture(), input: DisclosureTarget = { owner: 'content', resource: id(10), component: 'body' };
+  expect(() => requireEstablishedAncestry(input)).toThrow(DisclosureUnavailable);
+  const [legacy] = await resolveDisclosureSelections(f.env, [input]);
+  expect(() => requireEstablishedAncestry(legacy!)).toThrow(DisclosureUnavailable);
+  expect(() => requireEstablishedAncestry({ ...input, ancestry: legacy!.ancestry })).toThrow(DisclosureUnavailable);
+  const proof = evidence(f.env, input);
+  configureDisclosureAncestrySource(f.env, 'content', { read: async () => [proof], reread: async () => [proof] });
+  const [strict] = await resolveDisclosureSelections(f.env, [input]);
+  expect(strict!.ancestry).toBe(requireEstablishedAncestry(strict!));
+  expect(requireEstablishedAncestry(strict!).relationshipBasis).toEqual(proof.relationshipBasis);
+});
 
 for (const owner of governanceOwners) {
   test(`${owner} without an ancestry source retains hinted Work parents, current revisions and channel gates`, async () => {

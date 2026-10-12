@@ -3,7 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { slideIsCurrent, ZONE_SHOWCASE_DISCLOSURE_COST } from '../src/modules/zone/showcase-disclosure.ts';
 import { bindZoneCampaignArtVariant, readZoneCampaignArt, requestNewZoneCampaignRenditions } from '../src/modules/zone/campaign-art.ts';
-import { configureDisclosure, configureDisclosureAncestrySource, type DisclosureTarget,
+import { configureDisclosure, configureDisclosureAncestrySource, requireEstablishedAncestry, type DisclosureTarget,
   type DisclosureAncestryEvidence, type DisclosureRelationshipBasis, type DisclosureReader } from '../src/modules/disclosure/read.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import type { MediaStore } from '../src/modules/media/store.ts';
@@ -233,7 +233,7 @@ for (const restrictedHead of ['historical', 'current'] as const) {
       expect(target.occurrence).toEqual({ owner: 'media', kind: 'media-use',
         resource: `https://rezics.com/id/${use}`, revision: `https://rezics.com/id/${use}` });
       expect(target.ancestry!.parents).toMatchObject([{ kind: 'realm', resource: realm, head: current }]);
-      expect(target.ancestry!.relationshipBasis.resource).toBe(`https://rezics.com/id/${use}`);
+      expect(requireEstablishedAncestry(target).relationshipBasis.resource).toBe(`https://rezics.com/id/${use}`);
     }
     expect(candidateReads).toBe(restrictedHead === 'historical' ? 1 : 0);
   });

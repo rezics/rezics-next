@@ -13,6 +13,7 @@ import {
   discloseInventory,
   discloseInventoryWithCost,
   fenceDisclosure,
+  requireEstablishedAncestry,
   resolveDisclosureSelections,
   type DisclosureAncestryEvidence,
   type DisclosureAncestrySource,
@@ -638,8 +639,8 @@ test('disclosure ancestry: paired anonymous name reads use one registered ancest
   expect(result.anonymousNames).toEqual(['hidden']);
   expect(f.ownerReads).toHaveLength(1);
   expect(f.anonymousFlags).toEqual([true]);
-  expect(f.ownerReads[0]![0]!.ancestry!.relationshipBasis.targetResource).toBe(named.resource);
-  expect(f.ownerReads[0]![0]!.ancestry!.relationshipBasis.targetRevision).toBe(named.revision);
+  expect(requireEstablishedAncestry(f.ownerReads[0]![0]!).relationshipBasis.targetResource).toBe(named.resource);
+  expect(requireEstablishedAncestry(f.ownerReads[0]![0]!).relationshipBasis.targetRevision).toBe(named.revision);
 });
 
 test('disclosure assembly: direct Content keeps Work and Realm ancestry without inventing a Work from resourceId', async () => {
@@ -823,7 +824,7 @@ test('disclosure assembly: batch media preserves owner rows and order while boun
     ]),
   );
   expect(captured.every(input => input.ancestry!.parents.map(parent => parent.kind).join(',') === 'work,realm')).toBe(true);
-  expect(captured.every(input => input.ancestry!.relationshipBasis.targetRevision === null)).toBe(true);
+  expect(captured.every(input => requireEstablishedAncestry(input).relationshipBasis.targetRevision === null)).toBe(true);
 
   const hiddenAsset = [...rows.values()][17]!.asset;
   const hiddenReader: DisclosureReader = {
