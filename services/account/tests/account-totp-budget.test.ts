@@ -1,6 +1,7 @@
 import { expect, spyOn, test } from 'bun:test';
 import { createHmac } from 'node:crypto';
-import { Client } from 'pg';
+import { Client, Pool } from 'pg';
+import { APIError } from 'better-auth/api';
 import { symmetricDecrypt, symmetricEncrypt } from 'better-auth/crypto';
 import { createOTP } from '@better-auth/utils/otp';
 import { accountFixture } from './account-fixture.ts';
@@ -50,6 +51,54 @@ for (const max of [1, 4]) {
       } finally { await f.close(); }
     }, 60_000);
   }
+}
+
+for (const path of ['/api/account/reauthenticate', '/api/auth/two-factor/verify-totp',
+  '/api/auth/two-factor/verify-backup-code', '/api/account/reauthenticate/passkey']) {
+  test(`${path} refunds provider outages and owner checkout timeouts`, async () => {
+    const f = await accountFixture({}, '127.0.0.1', { max: 1, connectionTimeoutMillis: 250 });
+    try {
+      const member = await f.signup('proof-outages@example.test');
+      const body = path.endsWith('/passkey') ? { response: { id: 'fixture', rawId: 'fixture', type: 'public-key',
+        response: { clientDataJSON: 'fixture', authenticatorData: 'fixture', signature: 'fixture' }, clientExtensionResults: {} } }
+        : path === '/api/account/reauthenticate' ? { password: member.password } : { code: 'invalid' };
+      for (const mode of ['exception', '503', 'owner-checkout', 'guard-checkout'] as const) {
+        const before = (await f.pool.query('SELECT count, started_at FROM rezics_account_rate_limit WHERE key = $1',
+          [userBudgetKey(f.secret, member.id)])).rows;
+        const unavailable = async () => {
+          if (mode === 'owner-checkout') {
+            const held = await f.pool.connect();
+            try { await f.pool.query('SELECT 1'); } finally { held.release(); }
+          }
+          if (mode === 'exception') throw new Error('injected provider outage');
+          throw new APIError('SERVICE_UNAVAILABLE', { message: 'injected provider 503' });
+        };
+        const interception = path === '/api/account/reauthenticate' ? spyOn(f.auth.api, 'verifyPassword').mockImplementationOnce(unavailable)
+          : path.endsWith('/passkey') ? spyOn(f.auth.api, 'verifyPasskeyAuthentication').mockImplementationOnce(unavailable)
+          : spyOn(f.auth, 'handler').mockImplementationOnce(async () => {
+            if (mode === '503') return Response.json({ error: 'temporarily_unavailable' }, { status: 503 });
+            return unavailable();
+          });
+        const connect = Pool.prototype.connect;
+        const checkout = mode === 'guard-checkout' ? spyOn(Pool.prototype, 'connect').mockImplementation(function(this: Pool, ...args: unknown[]) {
+          if (this !== f.pool) return Promise.reject(new Error('injected guard checkout timeout')) as never;
+          return Reflect.apply(connect, this, args);
+        }) : undefined;
+        try {
+          expect((await f.request(path, body, member.cookie)).status).toBe(503);
+          expect(interception).toHaveBeenCalledTimes(mode === 'guard-checkout' ? 0 : 1);
+        } finally { interception.mockRestore(); checkout?.mockRestore(); }
+        expect((await f.pool.query('SELECT count, started_at FROM rezics_account_rate_limit WHERE key = $1',
+          [userBudgetKey(f.secret, member.id)])).rows).toEqual(before);
+      }
+      for (let attempt = 0; attempt < 5; attempt++) {
+        expect((await f.request(path, { ...body, ...(path === '/api/account/reauthenticate' ? { password: 'incorrect' } : {}) }, member.cookie)).status)
+          .toBe(path.startsWith('/api/account/') ? 403 : 401);
+      }
+      expect((await f.pool.query('SELECT count FROM rezics_account_rate_limit WHERE key = $1',
+        [userBudgetKey(f.secret, member.id)])).rows[0].count).toBe(5);
+    } finally { await f.close(); }
+  }, 60_000);
 }
 
 // The unfenced implementation pauses after its stale read. Once verification

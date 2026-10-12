@@ -308,7 +308,7 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
     .use(connectedAppsApi(auth, pool))
     .use(dataExportApi(auth, pool))
     .use(adminApi(auth, pool))
-    .use(accountSettingsApi(auth, pool, guard))
+    .use(accountSettingsApi(auth, guard))
     .use(displayPreferencesApi(auth, pool, options.displayPreferenceClientIds ?? new Set()))
     .post('/api/auth/oauth2/token', ({ request }) =>
       guardedAuthorizationCodeExchange(guard(), request, () =>

@@ -3,7 +3,7 @@ import { Elysia, t } from 'elysia';
 import { APIError } from 'better-auth/api';
 import type { Pool } from 'pg';
 import { accountLocale, type AccountLocale } from './email.ts';
-import { accountFailure, accountJson, AccountProblem, accountSession, type AccountAuth } from './http.ts';
+import { accountFailure, accountJson, accountSession, type AccountAuth } from './http.ts';
 import { reauthenticate } from './methods.ts';
 import { accountResponses } from './views.ts';
 
@@ -130,7 +130,7 @@ const assertionJson = t.Object({ id: base64url(1024), rawId: base64url(1024), ty
   clientExtensionResults: t.Record(t.String(), t.Unknown()),
   authenticatorAttachment: t.Optional(t.Union([t.Literal('platform'), t.Literal('cross-platform')])) });
 
-export function accountSettingsApi(auth: AccountAuth, pool: Pool, guard: () => Pool) {
+export function accountSettingsApi(auth: AccountAuth, guard: () => Pool) {
   const secret = String(auth.options.secret);
   return new Elysia()
     // The same five-per-five-minutes budget as password step-up. The challenge

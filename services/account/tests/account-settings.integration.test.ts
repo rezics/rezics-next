@@ -371,7 +371,7 @@ test('SR-5: a counterless authenticator can step up; failed persistence grants n
       RAISE EXCEPTION 'counter unavailable'; END $$;
       CREATE TRIGGER reject_counter_write BEFORE UPDATE ON passkey
       FOR EACH ROW EXECUTE FUNCTION reject_counter_write()`);
-    expect((await assertion()).status).toBe(403);
+    expect((await assertion()).status).toBe(503);
     expect((await f.pool.query('SELECT 1 FROM rezics_account_step_up')).rowCount).toBe(0);
     await f.pool.query('DROP TRIGGER reject_counter_write ON passkey');
     expect((await assertion()).status).toBe(200);
