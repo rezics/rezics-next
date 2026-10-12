@@ -347,7 +347,14 @@ test('recovery atomically revokes passkeys, TOTP, backup codes, links, sessions 
     const currentMail = [...f.messages]
       .reverse()
       .find((mail) => mail.to === member.email && mail.subject === 'Verify your email address')!;
-    expect((await f.request(/https?:\/\/\S+/.exec(currentMail.text)![0])).status).toBe(302);
+    const emailVerified = await f.request(/https?:\/\/\S+/.exec(currentMail.text)![0]);
+    expect(emailVerified.status).toBe(302);
+    expect(new URL(emailVerified.headers.get('location')!, f.baseURL).searchParams.has('error')).toBe(false);
+    expect((await f.pool.query('SELECT "emailVerified" FROM "user" WHERE id = $1', [member.id]))
+      .rows[0].emailVerified).toBe(true);
+    expect(cookies(emailVerified)).not.toBe('');
+    expect(await (await f.request('/api/auth/get-session', undefined, cookies(emailVerified))).json())
+      .toMatchObject({ user: { id: member.id, emailVerified: true } });
     expect(
       (
         await f.request(

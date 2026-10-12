@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { createAuthMiddleware, createEmailVerificationToken } from 'better-auth/api';
+import { queueAfterTransactionHook } from '@better-auth/core/context';
 import { bootstrapOperators } from '../src/operators.ts';
 import { accountFixture } from './account-fixture.ts';
 import { cookies, recoveryProof } from './recovery-fixture.ts';
@@ -111,7 +112,34 @@ async function resendByOperator(f: Fixture, userId: string, cookie: string) {
   return link(f.messages.at(-1)!.text);
 }
 
-for (const issuer of ['signup', 'operator'] as const) {
+async function issueVerification(f: Fixture, issuer: 'resend' | 'operator' | 'bulk', userId: string,
+  email: string, cookie: string) {
+  if (issuer === 'operator') return resendByOperator(f, userId, cookie);
+  if (issuer === 'resend') {
+    expect((await f.request('/api/auth/send-verification-email', { email, callbackURL: '/' })).status).toBe(200);
+  } else {
+    const started = await f.request('/api/account/admin/bulk-actions', { commandId: randomUUID(),
+      action: 'resend-verification', reasonCode: 'support', reason: 'Requested verification links',
+      userIds: [userId] }, cookie);
+    expect(started.status).toBe(200);
+    const { jobId } = await started.json() as { jobId: string };
+    for (let attempt = 0; ; attempt++) {
+      const response = await f.request(`/api/account/admin/bulk-actions/${jobId}`, undefined, cookie);
+      expect(response.status).toBe(200);
+      const job = await response.json() as { finishedAt: string | null; succeeded: number };
+      if (job.finishedAt) {
+        expect(job.succeeded).toBe(1);
+        break;
+      }
+      if (attempt === 199) throw new Error('Verification bulk job did not finish');
+      await Bun.sleep(25);
+    }
+  }
+  await f.email.drain();
+  return link(f.messages.at(-1)!.text);
+}
+
+for (const issuer of ['signup', 'resend', 'operator', 'bulk'] as const) {
   test(`${issuer} verification cannot authenticate a replacement account after email reuse`, async () => {
     const f = await accountFixture();
     try {
@@ -124,7 +152,7 @@ for (const issuer of ['signup', 'operator'] as const) {
       const originalId = (await f.pool.query<{ id: string }>('SELECT id FROM "user" WHERE email = $1',
         [original.email])).rows[0]!.id;
       const retained = issuer === 'signup' ? link(f.messages.at(-1)!.text)
-        : await resendByOperator(f, originalId, operator.cookie);
+        : await issueVerification(f, issuer, originalId, original.email, operator.cookie);
       const verified = await f.request(retained);
       expect(verified.status).toBe(302);
       expect(new URL(verified.headers.get('location')!, f.baseURL).searchParams.has('error')).toBe(false);
@@ -198,7 +226,8 @@ test('legacy verification JWTs without an immutable identity binding are rejecte
   } finally { await f.close(); }
 }, 60_000);
 
-test('operator verification uses the current recovery generation and rejects its stale link', async () => {
+for (const issuer of ['resend', 'operator', 'bulk'] as const) {
+test(`${issuer} verification uses the current recovery generation and rejects its stale link`, async () => {
   const f = await accountFixture();
   try {
     const member = await f.signup('recovered@example.test');
@@ -208,17 +237,55 @@ test('operator verification uses the current recovery generation and rejects its
     await bootstrapOperators(f.pool, f.operators);
     const recovery = await recoveryProof(f, member, guardian);
     await f.pool.query('UPDATE "user" SET "emailVerified" = false WHERE id = $1', [member.id]);
-    const stale = await resendByOperator(f, member.id, operator.cookie);
+    const stale = await issueVerification(f, issuer, member.id, member.email, operator.cookie);
     expect((await recovery.activate()).status).toBe(200);
     const rejected = await f.request(stale);
     expect(cookies(rejected)).toBe('');
     expect((await f.pool.query('SELECT "emailVerified" FROM "user" WHERE id = $1', [member.id]))
       .rows[0].emailVerified).toBe(false);
-    const fresh = await resendByOperator(f, member.id, operator.cookie);
+    expect((await f.pool.query('SELECT generation FROM rezics_account_recovery_policy WHERE id = $1', [member.id]))
+      .rows[0].generation).toBe('1');
+    const fresh = await issueVerification(f, issuer, member.id, member.email, operator.cookie);
     const verified = await f.request(fresh);
     expect(verified.status).toBe(302);
     expect(new URL(verified.headers.get('location')!, f.baseURL).searchParams.has('error')).toBe(false);
+    expect((await f.pool.query('SELECT "emailVerified" FROM "user" WHERE id = $1', [member.id]))
+      .rows[0].emailVerified).toBe(true);
+    expect(cookies(verified)).not.toBe('');
     expect(await (await f.request('/api/auth/get-session', undefined, cookies(verified))).json())
       .toMatchObject({ user: { id: member.id, emailVerified: true } });
+  } finally { await f.close(); }
+}, 60_000);
+}
+
+test('signup mail binds the recovery generation current at post-commit issuance', async () => {
+  const f = await accountFixture();
+  try {
+    const guardian = await f.signup('guardian@example.test');
+    const context = await f.auth.$context;
+    const send = context.options.emailVerification!.sendVerificationEmail!;
+    context.options.emailVerification!.sendVerificationEmail = async (data, request) => {
+      // Signup mail is issued after commit. Seed that later owner state before
+      // the queued issuer runs, rather than testing only the default generation.
+      await queueAfterTransactionHook(async () => {
+        await f.pool.query(`INSERT INTO rezics_account_recovery_policy (id, guardian_user_id, generation)
+          VALUES ($1, $2, 1)`, [data.user.id, guardian.id]);
+      });
+      await send(data, request);
+    };
+    const email = 'signup-generation@example.test';
+    expect((await f.request('/api/auth/sign-up/email', { email, name: 'Signup',
+      password: 'signup sufficiently long password' })).status).toBe(200);
+    await f.email.drain();
+    const memberId = (await f.pool.query('SELECT id FROM "user" WHERE email = $1', [email])).rows[0].id;
+    expect((await f.pool.query('SELECT generation FROM rezics_account_recovery_policy WHERE id = $1', [memberId]))
+      .rows[0].generation).toBe('1');
+    const verified = await f.request(link(f.messages.at(-1)!.text));
+    expect(new URL(verified.headers.get('location')!, f.baseURL).searchParams.has('error')).toBe(false);
+    expect((await f.pool.query('SELECT "emailVerified" FROM "user" WHERE id = $1', [memberId]))
+      .rows[0].emailVerified).toBe(true);
+    expect(cookies(verified)).not.toBe('');
+    expect(await (await f.request('/api/auth/get-session', undefined, cookies(verified))).json())
+      .toMatchObject({ user: { id: memberId, emailVerified: true } });
   } finally { await f.close(); }
 }, 60_000);
