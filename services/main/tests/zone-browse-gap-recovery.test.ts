@@ -344,6 +344,34 @@ test('an incomplete restored batch preserves the usable cut, defers without faul
   } finally { consoleError.mockRestore(); }
 });
 
+test('a restored Zone cursor ahead of acknowledgement preserves its cut and resumes without faults', async () => {
+  const f = fixture(1);
+  f.seed({ ...f.graph.rows[0]!, adopted_order: '7' });
+  f.acknowledged.sequence = '2';
+  const faults: string[] = [], deferred: string[] = [];
+  const error = spyOn(console, 'error').mockImplementation(line => { faults.push(String(line)); });
+  const warn = spyOn(console, 'warn').mockImplementation(line => { deferred.push(String(line)); });
+  try {
+    for (let poll = 0; poll < 4; poll++) {
+      expect(await f.instance.tick()).toBe(0);
+      expect(f.state.checkpoint.sequence).toBe('3');
+      expect(f.state.ready).toBe(true);
+      expect(await f.current()).toBe(false);
+      expect(f.candidates().size).toBe(1);
+    }
+    expect(faults).toEqual([]);
+    expect(deferred.map(line => JSON.parse(line))).toEqual(Array.from({ length: 4 }, () => expect.objectContaining({
+      event: 'worker_run_deferred', 'error.code': 'main_relay_handoff_incomplete',
+      'rezics.relay.requested_sequence': '3',
+      'rezics.projection.recovery_retry_ms': ZONE_BROWSE_PROJECTION_COST.pollMs,
+    })));
+    f.acknowledged.sequence = '3';
+    expect(await f.instance.tick()).toBe(0);
+    expect(await f.current()).toBe(true);
+    expect(f.state.checkpoint.sequence).toBe('3');
+  } finally { error.mockRestore(); warn.mockRestore(); }
+});
+
 test('a later graph mutation and delivery invalidate the cut before checkpoint advancement', async () => {
   const f = fixture();
   await f.gap();

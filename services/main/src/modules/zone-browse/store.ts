@@ -406,13 +406,24 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
     throw error;
   }
 
+  private deferHandoff(sequence: string): number {
+    telemetryLog('worker_run_deferred', 'warn', {
+      'rezics.worker.name': 'main.zone-browse.projection',
+      'error.code': 'main_relay_handoff_incomplete',
+      'rezics.relay.data_epoch': this.checkpoint.dataEpoch,
+      'rezics.relay.requested_sequence': sequence,
+      'rezics.projection.recovery_retry_ms': ZONE_BROWSE_PROJECTION_COST.pollMs,
+    });
+    return 0;
+  }
+
   async tick(): Promise<number> {
     if (!this.ready) { await this.reconcilePage(); return 0; }
     const coverage = await this.mainStreamCoverage();
     let covered: number;
     try { covered = compareRelayPositions(this.checkpoint, coverage); }
     catch (error) { throw new WorkReadUnavailable('Zone browse checkpoint belongs to another Main stream', { cause: error }); }
-    if (covered > 0) throw new WorkReadUnavailable('Zone browse checkpoint is ahead of Main stream coverage');
+    if (covered > 0) return this.deferHandoff(this.checkpoint.sequence);
     if (covered === 0) return 0;
 
     const expected = (BigInt(this.checkpoint.sequence) + 1n).toString();
@@ -453,14 +464,7 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
         if (!reconstructed) {
           // A partial restored handoff may heal as delivery resumes. Preserve
           // the last usable cut and advertise incomplete coverage until then.
-          telemetryLog('worker_run_deferred', 'warn', {
-            'rezics.worker.name': 'main.zone-browse.projection',
-            'error.code': 'main_relay_handoff_incomplete',
-            'rezics.relay.data_epoch': batchPosition.dataEpoch,
-            'rezics.relay.requested_sequence': expected,
-            'rezics.projection.recovery_retry_ms': ZONE_BROWSE_PROJECTION_COST.pollMs,
-          });
-          return 0;
+          return this.deferHandoff(expected);
         }
       }
     }
