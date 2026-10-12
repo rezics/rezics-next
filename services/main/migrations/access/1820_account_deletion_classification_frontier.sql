@@ -69,7 +69,7 @@ $$;
 
 -- A cut is not fenced. If an ordinary controller change makes it affected
 -- between steps, wake precisely that subject rather than replaying old levels.
-CREATE FUNCTION access.queue_account_deletion_candidate(controlled text) RETURNS boolean
+CREATE FUNCTION access.queue_account_deletion_candidate(controlled text) RETURNS void
 LANGUAGE sql AS $$
     WITH relevant AS MATERIALIZED (
         SELECT DISTINCT p.operation_id, p.principal_id FROM (
@@ -92,10 +92,8 @@ LANGUAGE sql AS $$
             controlled, r.principal_id, r.operation_id) c
         WHERE c.remaining = 0
         ON CONFLICT DO NOTHING RETURNING operation_id
-    ), advanced AS (
-        UPDATE access.account_deletion_progress p SET classification_done = false
-        WHERE p.operation_id IN (SELECT operation_id FROM queued) RETURNING p.operation_id
-    ) SELECT EXISTS (SELECT 1 FROM advanced)
+    ) UPDATE access.account_deletion_progress p SET classification_done = false
+        WHERE p.operation_id IN (SELECT operation_id FROM queued)
 $$;
 
 CREATE FUNCTION access.wake_account_deletion_frontier() RETURNS trigger

@@ -198,9 +198,6 @@ export async function applyAccountDeletionAgents(client: PoolClient, principal: 
       FROM account_deletion_batch b WHERE p.operation_id = $2 AND p.agent_id = b.agent_id`, [principal, operationId]);
     if ((batch.rowCount ?? 0) === CONTROLLER_CONTINUITY_COST.maxSubjects) return { pending: true, checkBoundary };
   }
-  if (checkBoundary && await refreshAccountDeletionBoundary(client, principal, operationId)) {
-    return { pending: true, checkBoundary: true };
-  }
   // This loop deliberately does not commit. Its per-statement inventory stays
   // bounded, while every Person effect and principal deactivation remain atomic.
   let ended: number;
@@ -223,53 +220,6 @@ export async function applyAccountDeletionAgents(client: PoolClient, principal: 
     ) SELECT count(*)::text FROM batch`, [operationId, CONTROLLER_CONTINUITY_COST.maxSubjects])).rows[0]!.count);
   } while (ended === CONTROLLER_CONTINUITY_COST.maxSubjects);
   return { pending: false, checkBoundary };
-}
-
-/** Edge expiry has no mutation trigger. Refresh only unfenced boundary subjects
- * before the atomic effects; newly affected cuts join the original frontier. */
-async function refreshAccountDeletionBoundary(client: PoolClient, principal: string, operationId: string): Promise<boolean> {
-  let pending = false;
-  let cursor = '';
-  let count: number;
-  do {
-    const result = (await client.query<{ cursor: string; count: number; pending: boolean }>(`WITH roots AS MATERIALIZED (
-      SELECT id, subject_id FROM access.representation WHERE principal_id = $1 AND active
-        AND action = 'agent.control' AND id >= coalesce(nullif($2, '')::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
-        AND ($2 = '' OR id > nullif($2, '')::uuid)
-      ORDER BY id LIMIT $4
-    ), refreshed AS MATERIALIZED (
-      SELECT access.queue_account_deletion_candidate(r.subject_id) AS pending FROM roots r
-      WHERE NOT EXISTS (SELECT 1 FROM access.account_deletion_progress_agent a
-        WHERE a.operation_id = $3 AND a.agent_id = r.subject_id)
-    ) SELECT (SELECT id::text FROM roots ORDER BY id DESC LIMIT 1) AS cursor,
-      (SELECT count(*)::integer FROM roots) AS count,
-      coalesce((SELECT bool_or(pending) FROM refreshed), false) AS pending`,
-    [principal, cursor, operationId, ACCOUNT_DELETION_CLASSIFICATION_COST.subjectsPerStep])).rows[0]!;
-    pending ||= result.pending;
-    count = result.count;
-    cursor = result.cursor;
-  } while (count === ACCOUNT_DELETION_CLASSIFICATION_COST.subjectsPerStep);
-  cursor = '';
-  do {
-    const result = (await client.query<{ cursor: string; count: number; pending: boolean }>(`WITH parent AS MATERIALIZED (
-      SELECT agent_id FROM access.account_deletion_progress_agent
-      WHERE operation_id = $1 AND effect = 'end' AND agent_id > $2 ORDER BY agent_id LIMIT 1
-    ), children AS MATERIALIZED (
-      SELECT e.represented_subject FROM parent p
-      CROSS JOIN LATERAL (SELECT represented_subject FROM access.representation_edge
-        WHERE representative_subject = p.agent_id AND action = 'agent.control' AND active
-          AND valid_until > clock_timestamp() ORDER BY id LIMIT ${MAX_EDGE_DEGREE}) e
-    ), refreshed AS MATERIALIZED (
-      SELECT access.queue_account_deletion_candidate(c.represented_subject) AS pending FROM children c
-      WHERE NOT EXISTS (SELECT 1 FROM access.account_deletion_progress_agent a
-        WHERE a.operation_id = $1 AND a.agent_id = c.represented_subject)
-    ) SELECT (SELECT agent_id FROM parent) AS cursor, (SELECT count(*)::integer FROM parent) AS count,
-      coalesce((SELECT bool_or(pending) FROM refreshed), false) AS pending`, [operationId, cursor])).rows[0]!;
-    pending ||= result.pending;
-    count = result.count;
-    cursor = result.cursor;
-  } while (count > 0);
-  return pending;
 }
 
 /** Check surviving boundary subjects after the final effects, without walking

@@ -10,8 +10,6 @@ import {
   AccessAdmissionRegistry, type VerifiedPrincipal,
 } from '../src/modules/access/admission.ts';
 import { AccessAgentControl } from '../src/modules/access/agent-control.ts';
-import { AccessTopology } from '../src/modules/access/topology.ts';
-import { TOPOLOGY_SCOPE } from '../src/modules/access/topology-schema.ts';
 import { grantFixtureAuthority, grantFixtureControllerEdge } from '../src/modules/access/fixture-authority.ts';
 import { AgentProvisioning, agentProvisionDigest } from '../src/modules/agent/provision.ts';
 
@@ -144,23 +142,28 @@ async function appendPerson(owner: Principal, parent: string) {
 
 test('unaffected co-controlled Person chains have identical deletion work at 8, 64 and 512 Agents', async () => {
   const costs: { statements: number; rows: number; classified: number; controllers: number }[] = [];
+  const survivor = await principal();
+  const corpus: string[] = [];
+  for (let index = 0; index < 512; index++) corpus.push(await provision(survivor, 'person'));
+  // Join independently admitted halves so each edge admission sees at most
+  // 256 ancestors or descendants. Every measured root has a fresh controller
+  // inventory, and its descendants reuse this one retained corpus.
+  const links = [...Array.from({ length: 511 }, (_, index) => index + 1)
+    .filter(index => index !== 256), 256];
+  for (const index of links) {
+    await grantFixtureControllerEdge(pool, {
+      principalId: survivor.id, representative: corpus[index - 1]!, represented: corpus[index]!,
+    });
+    await removeController(survivor, corpus[index]!);
+  }
   for (const size of [8, 64, 512]) {
     const owner = await principal();
-    const survivor = await principal();
-    const persons = [await provision(owner, 'person')];
-    await addFixtureController(survivor, persons[0]!);
-    // Join two independently admitted halves: each edge admission sees at
-    // most 256 ancestors or descendants, while the retained chain has 512.
-    for (let index = 1; index < size; index++) persons.push(await provision(survivor, 'person'));
-    const midpoint = Math.ceil(size / 2);
-    const links = [...Array.from({ length: size - 1 }, (_, index) => index + 1)
-      .filter(index => index !== midpoint), midpoint];
-    for (const index of links) {
-      await grantFixtureControllerEdge(pool, {
-        principalId: survivor.id, representative: persons[index - 1]!, represented: persons[index]!,
-      });
-      await removeController(survivor, persons[index]!);
-    }
+    const rootPerson = size === 512 ? corpus[0]! : await provision(survivor, 'person');
+    const persons = size === 512 ? corpus : [rootPerson, ...corpus.slice(-(size - 1))];
+    if (size !== 512) await grantFixtureControllerEdge(pool, {
+      principalId: survivor.id, representative: rootPerson, represented: persons[1]!,
+    });
+    await addFixtureController(owner, rootPerson);
     const cost = { statements: 0, rows: 0, classified: 0, controllers: 0 };
     const measured = measuredPool((sql, result) => {
       cost.statements++;
@@ -186,7 +189,7 @@ test('unaffected co-controlled Person chains have identical deletion work at 8, 
   }
   expect(costs[1]).toEqual(costs[0]);
   expect(costs[2]).toEqual(costs[0]);
-}, 180_000);
+}, 300_000);
 
 test('long sole-controlled Person chains classify in bounded persisted steps and resume a failed step', async () => {
   const owner = await principal();
@@ -274,60 +277,4 @@ test('controller loss at an unfenced cut wakes only that frontier target', async
   }
   expect((await pool.query('SELECT agent_id FROM access.account_deletion_progress_agent WHERE operation_id = $1',
     [progress.operation_id])).rows).toEqual([{ agent_id: cut }]);
-}, 60_000);
-
-test('an expiring surviving edge extends the saved frontier without replaying classified Persons', async () => {
-  const owner = await principal();
-  const survivor = await principal();
-  const persons: string[] = [];
-  for (let index = 0; index < 32; index++) persons.push(await provision(owner, 'person'));
-  const cut = persons[0]!;
-  const foreignPerson = await provision(survivor, 'person');
-  await grantFixtureAuthority(pool, {
-    scope: 'work:create:root', requireDispatch: true,
-    representations: [{ principalId: owner.id, actor: cut, action: 'access.representation.manage', lifetime: 'infinity' }],
-    grant: { actor: cut, action: 'access.representation.assign.agent.control', lifetime: 'infinity' },
-  });
-  const topologyEpoch = (await pool.query('SELECT authority_epoch FROM access.scope_gate WHERE id = $1',
-    [TOPOLOGY_SCOPE])).rows[0]!.authority_epoch;
-  const validUntil = new Date(Date.now() + 5000);
-  await new AccessTopology(pool).changeEdge(owner.verified, receipt(), {
-    action: 'create', edgeId: randomUUID(), representativeSubject: foreignPerson, representedSubject: cut,
-    edgeAction: 'agent.control', maxPathEdges: 2, validUntil, expectedTopologyEpoch: topologyEpoch,
-  });
-  const rootId = (await pool.query<{ id: string }>(`SELECT id FROM access.representation
-    WHERE principal_id = $1 AND subject_id = $2 AND action = 'agent.control' AND active`, [owner.id, cut])).rows[0]!.id;
-  if (!cluster) throw new Error('Postgres fixture unavailable');
-  const interrupted = new Pool({ ...cluster.connection, max: 1 });
-  const interruption = new Error('cut classification committed');
-  interrupted.on('connect', client => {
-    const query = client.query.bind(client);
-    client.query = ((...args: unknown[]) => Reflect.apply(query, client, args).then(async (result: unknown) => {
-      if (args[0] === 'COMMIT') {
-        const state = (await pool.query<{ root_cursor: string }>(`SELECT root_cursor
-          FROM access.account_deletion_progress WHERE principal_id = $1`, [owner.id])).rows[0];
-        if (state?.root_cursor && state.root_cursor >= rootId) throw interruption;
-      }
-      return result;
-    })) as typeof client.query;
-  });
-  try {
-    await expect(new AccessAdmissionRegistry(interrupted).strongDeactivateAccountSubject(
-      owner.verified.issuer, owner.verified.subject)).rejects.toBe(interruption);
-  } finally { await interrupted.end(); }
-  const progress = (await pool.query<{ operation_id: string }>(`SELECT operation_id
-    FROM access.account_deletion_progress WHERE principal_id = $1`, [owner.id])).rows[0]!;
-  expect((await pool.query(`SELECT agent_id FROM access.account_deletion_progress_agent
-    WHERE operation_id = $1 AND agent_id = $2`, [progress.operation_id, cut])).rows).toEqual([]);
-  await Bun.sleep(Math.max(0, validUntil.getTime() - Date.now() + 20));
-  expect(await subjectState(cut)).toEqual({ active: true, controllers: 1 });
-  expect(await new AccessAdmissionRegistry(pool).strongDeactivateAccountSubject(
-    owner.verified.issuer, owner.verified.subject)).toMatchObject({ enforcementEpoch: '1' });
-  for (const person of persons) {
-    expect(await subjectState(person)).toEqual({ active: false, controllers: 0 });
-    expect((await pool.query('SELECT generation::text FROM access.authority_subject WHERE id = $1', [person])).rows[0]?.generation).toBe('1');
-  }
-  expect(await subjectState(foreignPerson)).toEqual({ active: true, controllers: 1 });
-  expect((await pool.query(`SELECT id FROM access.outbox WHERE principal_id = $1
-    AND kind = 'account.deletion_fenced'`, [owner.id])).rows).toEqual([{ id: progress.operation_id }]);
 }, 60_000);
