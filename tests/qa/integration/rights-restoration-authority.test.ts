@@ -171,7 +171,8 @@ async function createRightsCase(
     },
   });
   const parallel = withParallelRestriction ? await f.report(image, 'harassment') : null;
-  const restriction = await f.complete(await f.input(receipt, image, 'interim_restrict'));
+  const restrictionInput = await f.input(receipt, image, 'interim_restrict');
+  const restriction = await f.complete(restrictionInput);
   if (parallel) await f.complete(await f.input(parallel, image));
   const affected = await affectedCredential(f, receipt, restriction.decisionId);
   const counter = await json<{ stepId: string }>(
@@ -189,7 +190,7 @@ async function createRightsCase(
       affected,
     ),
   );
-  return { image, receipt, restriction, affected, counter, parallel };
+  return { image, receipt, restriction, restrictionInput, affected, counter, parallel };
 }
 
 async function receiptStatus(
@@ -232,42 +233,24 @@ async function restoreInput(
   receipt: Receipt,
   image: Image,
   stepId: string,
+  restrictionInput: DecisionInput,
 ): Promise<DecisionInput> {
   const view = await json<{
     generation: string;
     reports: { evidenceDigest: string }[];
   }>(await f.read(`/v1/safety-cases/${receipt.caseId}`, f.backup));
-  const basis = (
-    await f.stack.accessPool.query<{
-      rule_ref: string;
-      rule_revision: string;
-      rule_digest: string;
-      disclosure: DecisionInput['disclosure'];
-    }>(
-      `SELECT rule_ref,rule_revision,rule_digest,disclosure
-      FROM access.moderation_decision WHERE id = $1`,
-      [
-        (
-          await f.stack.accessPool.query<{ restriction_id: string }>(
-            'SELECT restriction_id FROM access.rights_counter_notice WHERE step_id = $1',
-            [stepId],
-          )
-        ).rows[0]!.restriction_id,
-      ],
-    )
-  ).rows[0]!;
   return {
     caseId: receipt.caseId,
     expectedGeneration: view.generation,
     actingSubject: f.backup.actor,
     outcome: 'restore',
     targets: [f.target(image)],
-    rule: { ref: basis.rule_ref, revision: basis.rule_revision, digest: basis.rule_digest },
+    rule: restrictionInput.rule,
     evidenceDigest: view.reports[0]!.evidenceDigest,
     reversesDecisionId: null,
     answersStepId: stepId,
     rationale: 'A current responder reviewed the signed counter-notice and due receipt.',
-    disclosure: basis.disclosure,
+    disclosure: restrictionInput.disclosure,
     reasons: {
       ...fixtureReasons,
       facts: 'The claimant received the signed counter-notice and the restoration date arrived.',
@@ -364,7 +347,7 @@ test('A current responder completes a due counter-notice restoration after the o
     );
 
     await f.claim(item.receipt, f.backup);
-    const body = await restoreInput(f, item.receipt, item.image, item.counter.stepId);
+    const body = await restoreInput(f, item.receipt, item.image, item.counter.stepId, item.restrictionInput);
     const accepted = await json<DecisionResult>(await decideAsBackup(f, body), 202);
     expect(accepted.outcome).toBe('restore');
     const completed = await json<DecisionResult>(await decideAsBackup(f, body), 200);
@@ -471,6 +454,7 @@ test('Court filings and parallel restrictions still keep due counter-notice case
       parallel.receipt,
       parallel.image,
       parallel.counter.stepId,
+      parallel.restrictionInput,
     );
     const response = await decideAsBackup(f, blockedRestore);
     expect(response.status).toBe(409);

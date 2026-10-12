@@ -48,6 +48,9 @@ test('G-903 guard traces aliases, helper returns and request URLs while allowing
     new Request('/v1/changes', { body: JSON.stringify(payload) });
     const encoded = (await pool.query('SELECT raw_bytes FROM "source".observation')).rows[0].raw_bytes;
     fetch('/v1/changes/' + JSON.parse(Buffer.from(encoded).toString('utf8')).location);
+    app.get('/cards', () => alias);
+    app.get('/handler-request', () => fetch('/v1/replies/' + id));
+    app.get('/v1/replies/' + id);
   ` });
-  expect(result.map(flow => flow.request)).toEqual([6, 8, 15, 18, 19, 21].map(line => `${fileName}:${line}`));
+  expect(result.map(flow => flow.request)).toEqual([6, 8, 15, 18, 19, 21, 23, 24].map(line => `${fileName}:${line}`));
 });

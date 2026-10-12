@@ -34,7 +34,10 @@ type Avatar = { kind: string; selection?: string; use?: string; representation?:
 type WorkPage = { id: string; revision: string; mainVersion: string; title: { value: string };
   cover: Avatar };
 type ImportedMapping = { id: string; kind: string; receipt: { mainVersion: string; workRevision: string } };
-type ImportJournal = { native: Record<string, ImportedMapping> };
+type ImportJournal = { native: Record<string, ImportedMapping>; entries: Record<string, {
+  phase?: string; path: string; body?: { importedCover?: { targetWork: string } };
+  result?: { asset?: string; upload?: string; revision?: string };
+}> };
 type NoticeReceipt = Receipt & { replayed?: boolean };
 
 async function json<T>(response: Response, status = 200): Promise<T> {
@@ -99,19 +102,27 @@ async function frozenCover(root: string, bytes: Buffer, title: string): Promise<
   return freezeSnapshot(acquisition, [source], 'covers');
 }
 
-async function selectAvatar(stack: MediaStack, owner: Member, work: string, asset: string,
+function importedAsset(journal: ImportJournal, work: string): { asset: string; revision: string } {
+  const entries = Object.values(journal.entries);
+  const reservation = entries.find(entry => entry.phase === 'cover-reserve'
+    && entry.body?.importedCover?.targetWork === work)?.result;
+  const transfer = entries.find(entry => entry.phase === 'cover-transfer'
+    && entry.path === `/v1/media/uploads/${reservation?.upload}/bytes`)?.result;
+  if (!reservation?.asset || !transfer?.revision) throw new Error('import has no activated cover API receipt');
+  return { asset: reservation.asset, revision: transfer.revision };
+}
+
+async function selectAvatar(_stack: MediaStack, owner: Member, work: string, upload: { asset: string; revision: string },
   expectedSelection: string | null) {
   await owner.grant(`media:avatar:${work}`, 'media.avatar');
   const response = await owner.send('PUT', `/v1/resources/${work.slice(-36)}/avatar`, {
-    profile: 'resource-avatar-selection-v1', expectedSelection, asset, actingSubject: owner.actor,
+    profile: 'resource-avatar-selection-v1', expectedSelection, asset: upload.asset, actingSubject: owner.actor,
   });
   const selected = await json<{ selection: string }>(response, 201);
-  const row = (await stack.contentPool.query<UseRow>(`SELECT s.id::text AS selection,u.id::text AS use,
-      u.asset_revision_id::text AS revision,u.asset_id::text AS asset
-    FROM media.selection_revision s JOIN media.use u ON u.id=s.use_id WHERE s.id=$1`,
-  [selected.selection])).rows[0];
-  if (!row) throw new Error('avatar selection has no retained Media Use');
-  return row;
+  const page = await json<WorkPage>(await owner.read(`/v1/works/${work.slice(-36)}`));
+  expect(page.cover.selection).toBe(selected.selection);
+  if (!page.cover.use) throw new Error('avatar selection has no readable Media Use');
+  return { selection: selected.selection, use: page.cover.use, ...upload };
 }
 
 function copyrightNotice(target: string, use: string, revision: string, statement: string) {
@@ -217,12 +228,7 @@ test('GOV24/GOV25: frozen imported covers keep exact credit and lifecycle fences
       expect(before.cover).toMatchObject({ kind: 'image', coverCredit: expectedCredit });
       expect(before.title.value).toBe(record.title);
       const importedUse: UseRow = { selection: before.cover.selection!, use: before.cover.use!,
-        revision: '', asset: '' };
-      const importedRow = (await stack.contentPool.query<{ revision: string; asset: string }>(
-        `SELECT u.asset_revision_id::text AS revision,u.asset_id::text AS asset FROM media.use u WHERE u.id=$1`,
-      [importedUse.use])).rows[0]!;
-      importedUse.revision = importedRow.revision;
-      importedUse.asset = importedRow.asset;
+        ...importedAsset(initialJournal, work) };
       const coverMetadata = await json<{ items: Array<{ status: string; url: string; coverCredit: unknown }> }>(
         await call('POST', '/v1/media/metadata', { items: [{ representation: before.cover.representation,
           use: importedUse.use }] }));
@@ -300,12 +306,12 @@ test('GOV24/GOV25: frozen imported covers keep exact credit and lifecycle fences
       const unrelated = await stack.publicWork(owner.actor, ['en'], `Unrelated cover ${randomUUID()}`);
       const unrelatedBytes = await image({ r: 211, g: 38, b: 97 });
       const unrelatedUpload = await owner.upload(unrelatedBytes, 'public');
-      const unrelatedUse = await selectAvatar(stack, owner, unrelated.work, unrelatedUpload.asset, null);
+      const unrelatedUse = await selectAvatar(stack, owner, unrelated.work, unrelatedUpload, null);
       const unrelatedUrl = `/v1/media/representations/${unrelatedUpload.representation}/bytes?use=${unrelatedUse.use}`;
 
       const foreign = await stack.publicWork(owner.actor, ['en'], `Foreign cover ${randomUUID()}`);
       const foreignUpload = await owner.upload(await image({ r: 93, g: 29, b: 161 }), 'public');
-      const foreignUse = await selectAvatar(stack, owner, foreign.work, foreignUpload.asset, null);
+      const foreignUse = await selectAvatar(stack, owner, foreign.work, foreignUpload, null);
       const reportInput = copyrightNotice(work, importedUse.use, importedUse.revision,
         'The imported cover displays artwork I own.');
       const wrongUse = await govern('POST', '/v1/public-reports', copyrightNotice(work,
@@ -324,7 +330,7 @@ test('GOV24/GOV25: frozen imported covers keep exact credit and lifecycle fences
 
       const privateUseWork = await stack.publicWork(owner.actor, ['en'], `Private cover use ${randomUUID()}`);
       const privateUseUpload = await owner.upload(await image({ r: 62, g: 180, b: 34 }), 'private');
-      const privateUse = await selectAvatar(stack, owner, privateUseWork.work, privateUseUpload.asset, null);
+      const privateUse = await selectAvatar(stack, owner, privateUseWork.work, privateUseUpload, null);
       const hiddenUse = await govern('POST', '/v1/public-reports', copyrightNotice(privateUseWork.work,
         privateUse.use, privateUse.revision, 'A private cover use is concealed.'), undefined,
         `private-use-${randomUUID()}`);
@@ -338,7 +344,7 @@ test('GOV24/GOV25: frozen imported covers keep exact credit and lifecycle fences
       const privateWork = await stack.privateWork(owner.actor, `Private Work cover ${randomUUID()}`);
       const privateWorkUpload = await owner.upload(await image({ r: 8, g: 160, b: 141 }), 'public');
       await owner.grant(`work:read:${privateWork.work}`, 'work.read');
-      const privateWorkUse = await selectAvatar(stack, owner, privateWork.work, privateWorkUpload.asset, null);
+      const privateWorkUse = await selectAvatar(stack, owner, privateWork.work, privateWorkUpload, null);
       const hiddenWork = await govern('POST', '/v1/public-reports', copyrightNotice(privateWork.work,
         privateWorkUse.use, privateWorkUse.revision, 'A private Work cover is concealed.'), undefined,
         `private-work-${randomUUID()}`);
@@ -443,7 +449,7 @@ test('GOV24/GOV25: frozen imported covers keep exact credit and lifecycle fences
       const editorBytes = await image({ r: 236, g: 161, b: 24 });
       const editorAsset = await owner.upload(editorBytes, 'public');
       expect(editorAsset.asset).not.toBe(importedUse.asset);
-      const editorUse = await selectAvatar(stack, owner, work, editorAsset.asset, importedUse.selection);
+      const editorUse = await selectAvatar(stack, owner, work, editorAsset, importedUse.selection);
       const editorCover = await json<WorkPage>(await call('GET', workPath));
       expect(editorCover.cover).toMatchObject({ kind: 'image', selection: editorUse.selection, use: editorUse.use });
       expect(editorCover.cover.coverCredit).toBeNull();
@@ -498,7 +504,7 @@ test('GOV24/GOV25: frozen imported covers keep exact credit and lifecycle fences
         `/v1/media/representations/${before.cover.representation}?use=${importedUse.use}`))).coverCredit)
         .toEqual(expectedCredit);
 
-      const restoredUse = await selectAvatar(stack, owner, work, importedUse.asset, editorUse.selection);
+      const restoredUse = await selectAvatar(stack, owner, work, importedUse, editorUse.selection);
       expect(restoredUse.asset).toBe(importedUse.asset);
       expect(restoredUse.use).not.toBe(importedUse.use);
       const reimported = await importDataset(root, snapshot, importOptions);
@@ -581,9 +587,7 @@ test('copyright erasure suppresses identical bytes on another imported cover', a
     expect(firstPage.cover.kind).toBe('image');
     const firstUse = firstPage.cover.use!;
     const firstRepresentation = firstPage.cover.representation!;
-    const firstUseRow = (await stack.contentPool.query<{ revision: string; asset: string }>(
-      `SELECT asset_revision_id::text AS revision,asset_id::text AS asset FROM media.use WHERE id=$1`,
-      [firstUse])).rows[0]!;
+    const firstUseRow = importedAsset(firstJournal, firstWork);
 
     const secondSnapshot = await frozenCover(root, bytes, `Second record ${randomUUID().replaceAll('-', '')}`);
     const secondRecord = secondSnapshot.sources[0]!.records[0]!;
@@ -596,9 +600,7 @@ test('copyright erasure suppresses identical bytes on another imported cover', a
     expect(secondPage.cover.kind).toBe('image');
     const secondUse = secondPage.cover.use!;
     const secondRepresentation = secondPage.cover.representation!;
-    const secondUseRow = (await stack.contentPool.query<{ revision: string; asset: string }>(
-      `SELECT asset_revision_id::text AS revision,asset_id::text AS asset FROM media.use WHERE id=$1`,
-      [secondUse])).rows[0]!;
+    const secondUseRow = importedAsset(secondJournal, secondWork);
     expect(secondUseRow.asset).not.toBe(firstUseRow.asset);
     const importedCopies = await stack.contentPool.query<{ asset: string; digest: string }>(
       `SELECT asset_id::text AS asset,original_digest AS digest FROM media.imported_cover_revision

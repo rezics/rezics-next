@@ -1,7 +1,6 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { Value } from 'typebox/value';
 import { registerTelemetryPeers } from '@rezics/observability/runtime';
 import { CountingPool } from './support/operation-cost.ts';
 import { foregroundCounted } from './support/query-cost-meter.ts';
@@ -16,6 +15,7 @@ import { connectionBoundOptions } from '../../../services/main/src/infrastructur
 import { type RegisteredAdmission, type VerifiedPrincipal }
   from '../../../services/main/src/modules/access/admission.ts';
 import { createAgentGraph } from '../../../services/main/src/modules/agent/graph.ts';
+import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import { provisionFixtureAuthor } from '../fixtures/authored-work.ts';
 import { MediaAccessBatchReader } from '../../../services/main/src/modules/media/access-batch.ts';
 import { activateTextContribution, textContributionDigest }
@@ -32,7 +32,6 @@ import { activateMetadataWork, GRAPHS, ID, RV, iri, metadataWorkRequestDigest,
   type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
 import { requiredMatcherMode, requiredSafetyMatcher } from '../../../services/main/src/modules/media-screen/required-matcher.ts';
-import { readUuid } from '../../../services/main/src/modules/work/read-contract.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 export const sha = (bytes: Uint8Array | string) => createHash('sha256').update(bytes).digest('hex');
@@ -195,32 +194,19 @@ export async function startMediaStack(label: string, options: { contentProjectio
       id: randomUUID(), agent: actor, kind: 'person', displayName: name, digest: sha(actor),
     });
     const grant = async (scope: string, action: string) => {
-      if (stable) {
-        const held = await accessPool.query<{ id: string }>(`SELECT id FROM access.permission_grant
-          WHERE recipient_subject = $1 AND scope_id = $2 AND action = $3 AND active AND valid_until > now()
-          LIMIT 1`, [actor, scope, action]);
-        // A reused fixture grant can enter an HTTP request, so admit its owner
-        // value through the same UUID contract as a client-supplied grant id.
-        if (held.rows[0]) return Value.Parse(readUuid, held.rows[0].id);
-      }
-      const grantId = randomUUID();
       const client = await accessPool.connect();
       // Controller mandates are rejected unless they are open-ended.
       const openEnded = action === 'agent.control';
       try {
         await client.query('BEGIN');
-        await client.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING', [scope]);
-        await client.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
-          VALUES ($1,$2,$3,$4,CASE WHEN $5 THEN 'infinity'::timestamptz ELSE now() + interval '1 hour' END)`,
-          [randomUUID(), principalId, actor, action, openEnded]);
-        await client.query(`INSERT INTO access.permission_grant
-          (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
-          VALUES ($1,$2,$2,$3,$4,CASE WHEN $5 THEN 'infinity'::timestamptz ELSE now() + interval '1 hour' END)`,
-          [grantId, actor, scope, action, openEnded]);
+        const lifetime = openEnded ? 'infinity' : '8 hours';
+        const authority = await grantFixtureAuthority(client, { scope, requireDispatch: true,
+          representations: [{ principalId, actor, action, lifetime }],
+          grant: { actor, action, lifetime } });
         await client.query('COMMIT');
+        return authority.grantId;
       } catch (error) { await client.query('ROLLBACK'); throw error; }
       finally { client.release(); }
-      return grantId;
     };
     const send = (method: string, path: string, body?: unknown, key = `${name}-${randomUUID()}`) =>
       call(method, path, { token, body, key });

@@ -42,6 +42,10 @@ export function sqlRequestFlows(project: Project, files: readonly ts.SourceFile[
     : ts.isIdentifier(node) ? node.text : '';
   const isHttp = (node: ts.CallExpression) => {
     if (!/^(fetch|call|request|post|read|get|put|patch|move|revoke|handle)$/.test(nameOf(node.expression))) return false;
+    // Router declarations install callbacks; they do not send those callbacks
+    // as request payloads. Calls inside each handler are still visited.
+    if (/^(get|post|put|patch)$/.test(nameOf(node.expression))
+      && node.arguments.slice(1).some(argument => ts.isArrowFunction(argument) || ts.isFunctionExpression(argument))) return false;
     // Collection lookups (including nested provider.accepted Maps) are storage
     // inspection, not requests. Resolve the declaration rather than its spelling.
     if (nameOf(node.expression) === 'get'

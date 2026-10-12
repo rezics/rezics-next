@@ -196,18 +196,15 @@ test('SOURCE-COVER-READ carries revision-pinned copyright credit through public 
     }),
     201,
   );
-  const use = (
-    await f.contentPool.query<{ use: string }>(
-      `SELECT use_id AS use FROM media.selection_revision WHERE id=$1`,
-      [selected.selection],
-    )
-  ).rows[0]!.use;
   const expectedCredit = evidence.expectedCredit;
 
-  const workRead = await json<{ revision: string; cover: { kind: string; coverCredit?: unknown } }>(
+  const workRead = await json<{ revision: string; cover: { kind: string; selection?: string; use?: string; coverCredit?: unknown } }>(
     await f.call('GET', `/v1/works/${created.work.slice(ID.length)}`),
   );
   expect(workRead.cover).toMatchObject({ kind: 'image', coverCredit: expectedCredit });
+  expect(workRead.cover.selection).toBe(selected.selection);
+  const use = workRead.cover.use!;
+  expect(use).toBeString();
 
   const summary = await json<{
     summaries: Array<{ avatar: { kind: string; coverCredit?: unknown } }>;
