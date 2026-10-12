@@ -58,10 +58,13 @@ async function fixture(identity: { provider: string | null; namespace: string | 
       expectedAssessment: head.assessmentId, idempotencyKey: randomUUID() });
   };
   const hold = async (resource = work.work) => {
+    const privateReport = privateTarget && resource === work.work;
     const receipt = await stack.composition.dependencies.publicReports!.submit({
       profile: 'public-report-v1', category: 'child_exploitation', target: resource,
       statement: 'Preserve reported material', contentLanguage: 'en',
-    }, randomUUID(), new Request('http://main.local'), null);
+      ...(privateReport ? { actingSubject: member.actor } : {}),
+    }, randomUUID(), new Request('http://main.local', { headers: privateReport
+      ? { authorization: `Bearer ${member.token}` } : {} }), privateReport ? member.principal : null);
     return receipt;
   };
   let attempts = 0;
@@ -404,8 +407,14 @@ test('all snapshot statements cost one indexed read per store, independent of mo
   for (const history of [0, 1000]) {
     if (history) {
       const before = await stack.accessPool.query<{ n: string }>('SELECT count(*)::text AS n FROM access.governance_preservation_hold');
+      // Intake requires actual readable targets. Create through the graph owner,
+      // then hold them after graph movement stops so intake has a stable cut.
+      const unrelated: string[] = [];
+      for (let ordinal = 0; ordinal < history; ordinal++) {
+        unrelated.push((await stack.catalogueWork(f.member.actor, `Unrelated preserved metadata ${ordinal}`)).work);
+      }
       for (let batch = 0; batch < 50; batch++) {
-        await Promise.all(Array.from({ length: 20 }, () => f.hold(`https://rezics.com/id/${randomUUID()}`)));
+        await Promise.all(unrelated.slice(batch * 20, (batch + 1) * 20).map(resource => f.hold(resource)));
       }
       const after = await stack.accessPool.query<{ n: string }>('SELECT count(*)::text AS n FROM access.governance_preservation_hold');
       expect(BigInt(after.rows[0]!.n) - BigInt(before.rows[0]!.n)).toBe(1000n);
@@ -434,7 +443,7 @@ test('all snapshot statements cost one indexed read per store, independent of mo
       expect(text).not.toMatch(/Seq Scan|governance_preservation_hold/);
     } finally { await client.query('ROLLBACK'); client.release(); }
   }
-}, 180_000);
+}, 420_000);
 
 test('held and missing owners fail closed before the callback; owner failures after work discard bytes', async () => {
   const f = await fixture();
