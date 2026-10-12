@@ -2,7 +2,9 @@ import { expect, test } from 'bun:test';
 import { exportRecipe } from '../src/modules/recipe/export.ts';
 import { parseRecipeFile, RecipeFileInvalid } from '../src/modules/recipe/file-intake.ts';
 import { importRecipe, MAX_RECIPE_IMPORT_BYTES, MAX_RECIPE_IMPORT_OCCURRENCES,
-  RecipeNotImportable, recipeSourceSupportCandidates } from '../src/modules/recipe/importer.ts';
+  RecipeNotImportable, RecipeInstructionNotSupported, measureRecipeJSON,
+  recipeSourceSupportCandidates } from '../src/modules/recipe/importer.ts';
+import { RecipeUnitNotRegistered } from '../src/modules/recipe/display.ts';
 import type { OccurrenceRecord } from '../src/modules/structure/format.ts';
 
 const id = (index: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(index).padStart(12, '0')}`;
@@ -126,7 +128,78 @@ test('module normalization preserves sixteen section levels and rejects a sevent
   expect(imported.steps[0]?.section).toBe(15);
   expect(imported.steps[0]?.order).toBe(16);
   expect([...imported.sections, ...imported.steps].every(item => item.sourceKey.length <= 200)).toBe(true);
-  expect(() => importRecipe(source(17), 'recipe')).toThrow('depth 16');
+  expect(() => importRecipe(source(17), 'recipe')).toThrow(RecipeNotImportable);
+});
+
+test('structured unit composition uses a registered symbol and survives export then intake', () => {
+  const unitCode = 'https://qudt.org/vocab/unit/GM';
+  const imported = importRecipe({ recipeIngredient: [{ name: 'butter', value: '200', unitCode }] }, id(99));
+  const qualifier = imported.ingredients[0]!.qualifier;
+  expect(qualifier.originalText.value).toBe('200 g butter');
+  const exported = exportRecipe([{ ...base(10, structure, 'ingredient'), qualifier }], structure);
+  expect(parseRecipeFile(Buffer.from(JSON.stringify(exported.recipe)), 'application/ld+json')
+    .preview.ingredients[0]?.qualifier).toEqual(qualifier);
+  const unit = id(999999);
+  const unknown = exportRecipe([line(11, 'butter', 'en', { unit })], structure);
+  expect(unknown.importability).toEqual({ status: 'not-importable', code: 'recipe_unit_not_registered', unit });
+  expect(() => parseRecipeFile(Buffer.from(JSON.stringify(unknown.recipe)), 'application/ld+json'))
+    .toThrow(RecipeUnitNotRegistered);
+});
+
+test('singleton instruction objects retain sections, children and exact support pointers at every level', () => {
+  const recipe = { '@type': 'Recipe', recipeIngredient: ['salt'], recipeInstructions: {
+    '@type': 'HowToSection', name: 'Prepare', itemListElement: {
+      '@type': 'HowToSection', name: 'Mix', itemListElement: { '@type': 'HowToStep', text: 'Stir.' },
+    },
+  } };
+  const { source, preview } = parseRecipeFile(Buffer.from(JSON.stringify(recipe)), 'application/json');
+  expect(preview.sections.map(item => [item.label, item.parent, item.order])).toEqual([
+    ['Prepare', -1, 0], ['Mix', 0, 1],
+  ]);
+  expect(preview.steps[0]).toMatchObject({ text: 'Stir.', section: 1, order: 2 });
+  expect(recipeSourceSupportCandidates(source, preview).at(-1)?.sourcePointer)
+    .toBe('/recipeInstructions/itemListElement/itemListElement/text');
+  for (const unknown of [null, 42, {}, [['Stir.']], { '@type': 'VideoObject', text: 'Stir.' }]) {
+    for (const recipeInstructions of [unknown, [unknown], { '@type': 'HowToSection', itemListElement: unknown }]) {
+      expect(() => parseRecipeFile(Buffer.from(JSON.stringify({ ...recipe, recipeInstructions })), 'application/json'))
+        .toThrow(RecipeInstructionNotSupported);
+    }
+  }
+});
+
+test('empty sections alone are importable occurrences and survive file exchange', () => {
+  const exported = exportRecipe([group(10, structure, '仕上げ')], structure);
+  expect(exported.importability).toEqual({ status: 'importable' });
+  const imported = parseRecipeFile(Buffer.from(JSON.stringify(exported.recipe)), 'application/ld+json').preview;
+  expect(imported.sections).toMatchObject([{ label: '仕上げ', parent: -1, order: 0 }]);
+  expect(imported.steps).toHaveLength(0);
+  expect(imported.ingredients).toHaveLength(0);
+});
+
+test('sixteen exported section levels round-trip through the shared shape measure and seventeen are typed refusals', () => {
+  const records = (depth: number) => [
+    ...Array.from({ length: depth }, (_, index) => group(index + 10,
+      index ? id(index + 9) : structure, `Layer ${index}`)),
+    step(99, id(depth + 9), 'Serve.'),
+  ];
+  for (const depth of [15, 16]) {
+    const exported = exportRecipe(records(depth), structure);
+    expect(exported.importability).toEqual({ status: 'importable' });
+    expect(measureRecipeJSON(exported.recipe).depth).toBeLessThanOrEqual(32);
+    const preview = parseRecipeFile(Buffer.from(JSON.stringify(exported.recipe)), 'application/ld+json').preview;
+    expect(preview.sections.map(item => item.parent))
+      .toEqual(Array.from({ length: depth }, (_, index) => index - 1));
+    expect(preview.steps[0]).toMatchObject({ section: depth - 1, order: depth, text: 'Serve.' });
+  }
+  let refusal: unknown;
+  try { exportRecipe(records(17), structure); } catch (error) { refusal = error; }
+  expect(refusal).toBeInstanceOf(RecipeNotImportable);
+  expect(refusal).toMatchObject({ code: 'recipe_not_importable', limit: 'depth', measured: 17, allowed: 16 });
+  let metadata: unknown = 'safe';
+  for (let index = 0; index < 33; index++) metadata = { nested: metadata };
+  const hostile = { '@type': 'Recipe', recipeIngredient: ['salt'], metadata };
+  expect(measureRecipeJSON(hostile).depth).toBeGreaterThan(32);
+  expect(() => parseRecipeFile(Buffer.from(JSON.stringify(hostile)), 'application/json')).toThrow(RecipeFileInvalid);
 });
 
 test('export metadata and intake refusal carry the same structured importability value', () => {

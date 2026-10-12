@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { MAX_RECIPE_FILE_BYTES, parseRecipeFile, readRecipeFileBytes,
   RecipeFileInvalid, RecipeFileTooLarge } from '../src/modules/recipe/file-intake.ts';
-import { NATIVE_RECIPE_UNIT_IRIS } from '../src/modules/recipe/export.ts';
+import { RECIPE_UNIT_DEFINITIONS, RecipeUnitNotRegistered } from '../src/modules/recipe/display.ts';
 import { MAX_RECIPE_IMPORT_BYTES, RecipeNotImportable } from '../src/modules/recipe/importer.ts';
 
 const asBytes = (value: unknown) => Buffer.from(JSON.stringify(value));
@@ -56,8 +56,8 @@ test('file intake accepts exactly 256 KiB and rejects the next byte before parsi
 });
 
 test('file intake admits each native unit identifier only in consumed ingredient rows', () => {
-  expect(NATIVE_RECIPE_UNIT_IRIS.size).toBeGreaterThan(0);
-  for (const unitCode of NATIVE_RECIPE_UNIT_IRIS) {
+  expect(RECIPE_UNIT_DEFINITIONS.size).toBeGreaterThan(0);
+  for (const unitCode of RECIPE_UNIT_DEFINITIONS.keys()) {
     const ingredient = { '@type': 'PropertyValue', text: '200 g butter', name: 'butter',
       value: '200', unitText: 'g', unitCode };
     for (const recipeIngredient of [[ingredient], { itemListElement: [ingredient] }]) {
@@ -70,7 +70,7 @@ test('file intake admits each native unit identifier only in consumed ingredient
 });
 
 test('file intake rejects unknown or altered unit identifiers and identifiers outside their field', () => {
-  for (const unitCode of NATIVE_RECIPE_UNIT_IRIS) {
+  for (const unitCode of RECIPE_UNIT_DEFINITIONS.keys()) {
     const ingredient = { text: '200 g butter', value: '200', unitCode };
     const documents = [
       { ...recipe, unitCode },
@@ -96,14 +96,14 @@ test('file intake rejects unknown or altered unit identifiers and identifiers ou
       ` ${unitCode}`, `${unitCode} `, unitCode.replace('https:', 'http:')]) {
       expect(() => parseRecipeFile(asBytes({ ...recipe,
         recipeIngredient: [{ ...ingredient, unitCode: altered }] }), 'application/json'))
-        .toThrow(RecipeFileInvalid);
+        .toThrow(RecipeUnitNotRegistered);
     }
   }
   for (const unitCode of ['https://qudt.org/vocab/unit/UnknownUnit', 'https://schema.org',
     'https://example.com/unit/GM']) {
     expect(() => parseRecipeFile(asBytes({ ...recipe,
       recipeIngredient: [{ text: '200 g butter', unitCode }] }), 'application/json'))
-      .toThrow(RecipeFileInvalid);
+      .toThrow(RecipeUnitNotRegistered);
   }
 });
 
@@ -120,8 +120,10 @@ test('hostile strings remain invalid across recipe fields and nested shapes', ()
       { ...recipe, recipeInstructions: [{ '@type': 'HowToStep', text: hostile }] },
       { ...recipe, metadata: [{ nested: { description: hostile } }] },
     ];
-    for (const document of documents) {
-      expect(() => parseRecipeFile(asBytes(document), 'application/json')).toThrow(RecipeFileInvalid);
+    for (const [index, document] of documents.entries()) {
+      expect(() => parseRecipeFile(asBytes(document), 'application/json')).toThrow(
+        index === 2 && hostileStrings.indexOf(hostile) >= 5
+          ? RecipeUnitNotRegistered : RecipeFileInvalid);
     }
   }
 });
@@ -143,6 +145,16 @@ test('hostile graph keywords, scripts and structure bounds remain invalid', () =
   }
   expect(() => parseRecipeFile(asBytes({ ...recipe, '@context': 'https://schema.org/' }),
     'application/ld+json')).toThrow(RecipeFileInvalid);
+});
+
+test('shared shape measurement retains the 8192-value boundary with or without the fixed context', () => {
+  for (const context of [undefined, 'https://schema.org']) {
+    const document = { '@type': 'Recipe', ...(context ? { '@context': context } : {}),
+      recipeIngredient: ['salt'], metadata: Array.from({ length: 8187 }, () => 'safe') };
+    expect(parseRecipeFile(asBytes(document), 'application/json').preview.ingredients).toHaveLength(1);
+    document.metadata.push('one too many');
+    expect(() => parseRecipeFile(asBytes(document), 'application/json')).toThrow(RecipeFileInvalid);
+  }
 });
 
 test('file intake retains typed occurrence outcomes from normalization', () => {
@@ -190,17 +202,17 @@ test('byte limit outcomes carry the exact parsed, declared and cumulative stream
   expect(canceled).toBe(true);
 });
 
-test('native unit definition identities remain confined to ingredient unitCode', () => {
+test('unregistered native identities are typed unit refusals, never inferred from a namespace', () => {
   const unitCode = 'https://rezics.com/id/00000000-0000-4000-8000-000000000090';
   const ingredient = { text: '200 g butter', value: '200', unitCode };
-  expect(parseRecipeFile(asBytes({ ...recipe, recipeIngredient: [ingredient] }), 'application/json')
-    .preview.ingredients[0]?.qualifier.unit).toBe(unitCode);
+  expect(() => parseRecipeFile(asBytes({ ...recipe, recipeIngredient: [ingredient] }), 'application/json'))
+    .toThrow(RecipeUnitNotRegistered);
   for (const altered of [`${unitCode}?a=1`, `${unitCode}#unit`, `${unitCode}/`,
     ` ${unitCode}`, `${unitCode} `, `${unitCode}\n`, `${unitCode}\r\n`,
     unitCode.replace('rezics.com', 'rezics.com.attacker.example')]) {
     expect(() => parseRecipeFile(asBytes({ ...recipe,
       recipeIngredient: [{ ...ingredient, unitCode: altered }] }), 'application/json'))
-      .toThrow(RecipeFileInvalid);
+      .toThrow(RecipeUnitNotRegistered);
   }
   for (const document of [{ ...recipe, recipeIngredient: [{ text: unitCode }] },
     { ...recipe, description: unitCode }, { ...recipe, recipeInstructions: [{ text: 'Stir.', unitCode }] }]) {

@@ -101,6 +101,10 @@ function targetMode(profile: string, role: string): 'required' | 'forbidden' | '
 
 const nativeId = Type.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const reference = Type.String({ minLength: 1, maxLength: 2048, pattern: '^[a-z][a-z0-9+.-]*:\\S+$' });
+/** Stored unit references use the same format as the qualifier's unit slot. */
+export function isStructureUnitReference(value: unknown): value is string {
+  return Value.Check(reference, value);
+}
 const objectRef = Type.String({ pattern: '^sha256:[0-9a-f]{64}$' });
 const orderKey = Type.String({ pattern: '^[0-9a-z]+$', maxLength: STRUCTURE_LIMITS.orderKeyBytes });
 const text = (maxLength: number) => Type.Object({

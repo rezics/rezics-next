@@ -79,6 +79,23 @@ const units = new Map<string, Unit>([
   ['pat', count('pat')], ['pats', count('pat')],
 ]);
 
+/** Inert identities of the written units this owner knows; no namespace implies membership. */
+export const RECIPE_UNIT_DEFINITIONS: ReadonlyMap<string, string> = new Map([
+  ['https://qudt.org/vocab/unit/GM', gram.abbreviation!],
+  ['https://qudt.org/vocab/unit/KiloGM', kilogram.abbreviation!],
+  ['https://qudt.org/vocab/unit/MilliL', milliliter.abbreviation!],
+  ['https://qudt.org/vocab/unit/L', liter.abbreviation!],
+  ['https://qudt.org/vocab/unit/OZ', 'oz'],
+]);
+
+export class RecipeUnitNotRegistered extends Error {
+  readonly code = 'recipe_unit_not_registered';
+  constructor(readonly unit: string) {
+    super(`Recipe unit has no registered inert definition: ${unit}`);
+    this.name = 'RecipeUnitNotRegistered';
+  }
+}
+
 const seasonings = ['salt', 'pepper', 'paprika', 'cumin', 'cinnamon', 'nutmeg', 'cayenne', 'chili', 'chilli',
   'spice', 'seasoning', 'oregano', 'thyme', 'rosemary', 'basil', 'saffron', 'turmeric', 'cloves'];
 const leavenings = ['baking powder', 'baking soda', 'bicarbonate', 'yeast', 'cream of tartar'];

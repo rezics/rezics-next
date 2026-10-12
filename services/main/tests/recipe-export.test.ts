@@ -1,6 +1,28 @@
 import { expect, test } from 'bun:test';
 import { exportRecipe, RecipeExportLimit, RECIPE_EXPORT_OCCURRENCE_LIMIT } from '../src/modules/recipe/export.ts';
 import type { OccurrenceRecord } from '../src/modules/structure/format.ts';
+import { checkOccurrenceQualifier } from '../src/modules/structure/format.ts';
+
+test('recipe export enforces its own 1 MiB ceiling independently of synchronous import capacity', () => {
+  const records = Array.from({ length: 256 }, (_, index) => ({ ...ingredient(index), role: 'step' as const,
+    qualifier: { type: 'recipe-step' as const, instructionText: { value: '香'.repeat(4000), language: 'zh' },
+      usesIngredient: [], media: [], scaling: 'linear' as const } }));
+  expect(Buffer.byteLength(JSON.stringify(records.map(record => record.qualifier)))).toBeGreaterThan(1_048_576);
+  expect(() => exportRecipe(records, structure)).toThrow(RecipeExportLimit);
+});
+
+test('owner-admitted units export unchanged and unsupported exchange units are never capacity errors', () => {
+  for (const unit of ['https://qudt.org/vocab/unit/OZ', 'https://example.com/unit/cup',
+    'https://rezics.com/id/00000000-0000-4000-8000-000000999999']) {
+    const record = ingredient(0);
+    const qualifier = { ...record.qualifier!, type: 'ingredient-line' as const, unit };
+    record.qualifier = checkOccurrenceQualifier(qualifier);
+    const exported = exportRecipe([record], structure);
+    expect(exported.recipe.recipeIngredient[0]?.unitCode).toBe(unit);
+    expect(exported.importability).toEqual(unit.endsWith('/OZ') ? { status: 'importable' }
+      : { status: 'not-importable', code: 'recipe_unit_not_registered', unit });
+  }
+});
 
 const structure = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
 

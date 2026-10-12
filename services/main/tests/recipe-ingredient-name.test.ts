@@ -22,7 +22,7 @@ test('imported quantity prefixes keep ingredient names through naming, display a
     { line: '⅔ cup sugar', lexical: '⅔', name: 'sugar' },
     { line: '1 1/2 cups flour', lexical: '1 1/2', name: 'flour' },
     { line: '2 to 3 tablespoons butter', lexical: '2 to 3', name: 'butter' },
-    { line: 'salt to taste', lexical: undefined, name: 'salt to taste' },
+    { line: 'salt to taste', lexical: 'salt to taste', name: 'salt to taste' },
   ];
   const imported = importRecipe({ recipeIngredient: cases.map(item => item.line) }, 'recipe');
   expect(imported.ingredients).toHaveLength(cases.length);
@@ -40,12 +40,12 @@ test('imported quantity prefixes keep ingredient names through naming, display a
     expect(exported[index]).toMatchObject({ text: item.line });
     expect(roundTrip[index]?.qualifier).toEqual(qualifier);
 
-    if (item.lexical) {
+    if (qualifier.amount) {
       expect(exported[index]).toMatchObject({ amountLexical: item.lexical });
       expect(roundTrip[index]?.qualifier.amountLexical).toBe(item.lexical);
     } else {
       expect(exported[index]).not.toHaveProperty('value');
-      expect(roundTrip[index]?.qualifier.amountLexical).toBeUndefined();
+      expect(roundTrip[index]?.qualifier.amountLexical).toBe(item.lexical);
     }
   });
 });

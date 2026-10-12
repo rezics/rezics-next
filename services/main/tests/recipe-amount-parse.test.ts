@@ -59,6 +59,7 @@ test('ranges populate both exact endpoints and consume the entire quantity befor
     ['1⁄2-2 1⁄2 cups flour', amount(1, 2), amount(5, 2), 'cups', '1⁄2-2 1⁄2'],
     ['4 or 5 sour apples', amount(4), amount(5), 'sour', '4 or 5'],
     ['2 to 2', amount(2), amount(2), undefined, '2 to 2'],
+    ['1 to 2.5 cups flour', amount(1), amount(5, 2), 'cups', '1 to 2.5'],
   ] as const) {
     const parsed = parse(line);
     expect(parsed.amount).toEqual(lower);
@@ -82,10 +83,10 @@ test('bounds apply before reduction and reject a failed range rather than retain
     '1000000000001 eggs', '1/1000000000001 cup flour',
     '1000000000001/1000000000001 cup flour', '500000000000½ cups flour',
     '1/0 cup flour', '2 1/0 cups flour', '1⁄0 cup flour',
-    '1.5 cups flour', '-½ cup flour', '½cup flour', '⅟ cup flour',
+    '-½ cup flour', '⅟ cup flour',
     '1 to 1/0 cups flour', '1 to 1000000000001 cups flour',
-    '1/0 to 2 cups flour', '3 to 2 cups flour', '1 to 2.5 cups flour',
-    '1 to ½cup flour',
+    '1/0 to 2 cups flour', '3 to 2 cups flour',
+    '1 to 0.5 cups flour',
   ]) {
     const parsed = parse(line);
     expect(parsed.amount).toBeUndefined();
@@ -101,7 +102,11 @@ test('existing scalar ingredient outputs retain their amount, lexical text, unit
     ['1', amount(1), undefined, '1'], ['1 egg', amount(1), 'egg', '1'],
     ['1/2 cup flour', amount(1, 2), 'cup', '1/2'], ['1 1/2 cups flour', amount(3, 2), 'cups', '1 1/2'],
     ['2 1/2-inch pieces', amount(2), undefined, '2'], ['2-inch pieces', undefined, undefined, undefined],
-    ['Salt to taste', undefined, undefined, undefined], ['Grated rind ½ lemon', undefined, undefined, undefined],
+    ['Salt to taste', undefined, undefined, 'Salt to taste'],
+    ['Grated rind ½ lemon', undefined, undefined, 'Grated rind ½ lemon'],
+    ['1.5 cups flour', amount(3, 2), 'cups', '1.5'],
+    ['½cup flour', amount(1, 2), 'cup', '½'],
+    ['1 to ½cup flour', undefined, undefined, undefined],
   ] as const) {
     const parsed = parse(line);
     expect(parsed.amount).toEqual(expected);
@@ -149,7 +154,7 @@ test('Boston cookbook pin parses 46 leading fractions and both ranges; its embed
     const tokens = line.trim().split(/\s+/u);
     const expected = expectedAmounts[tokens[0]!];
     const isRange = tokens[1] === 'to' || tokens[1] === 'or';
-    expect(qualifier.amountLexical).toBe(expected ? (isRange ? tokens.slice(0, 3).join(' ') : tokens[0]) : undefined);
+    expect(qualifier.amountLexical).toBe(expected ? (isRange ? tokens.slice(0, 3).join(' ') : tokens[0]) : line.trim());
     expect(qualifier.amount).toEqual(expected);
     expect(qualifier.parseStatus).toBe(expected ? 'partial' : 'unparsed');
     expect(qualifier.amountUpper).toEqual(isRange ? amount(Number(tokens[2])) : undefined);

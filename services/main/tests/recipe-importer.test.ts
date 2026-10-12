@@ -72,3 +72,24 @@ test('complete ingredient names never receive a duplicated quantity or unit', ()
     name: 'butter', value: '200', unitText: 'g' }] }, 'recipe');
   expect(explicit.ingredients[0]?.qualifier.originalText.value).toBe('  200 g butter\t');
 });
+
+test('structured quantities preserve numbered names and parse complete fraction or decimal-range names once', () => {
+  for (const [input, original, lower, upper] of [
+    [{ name: '5 spice powder', value: '2', unitText: 'g' }, '2 g 5 spice powder', 2, undefined],
+    [{ name: '½cup flour', value: '1/2', unitText: 'cup' }, '½cup flour', 0.5, undefined],
+    [{ name: '1.5–2 cups cream', value: 1.5, maxValue: 2, unitText: 'cups' }, '1.5–2 cups cream', 1.5, 2],
+    [{ name: '1.5–2 cups cream' }, '1.5–2 cups cream', 1.5, 2],
+    [{ name: 'flour', value: 1, maxValue: 2, unitText: 'cups' }, '1 to 2 cups flour', 1, 2],
+    [{ name: 'flour', value: '2', maxValue: '1', unitText: 'cups' }, '2 to 1 cups flour', undefined, undefined],
+    [{ name: 'flour', value: 2, maxValue: 1, unitText: 'cups', parseStatus: 'parsed' }, '2 to 1 cups flour', undefined, undefined],
+    [{ name: 'flour', value: 1, maxValue: null, unitText: 'cups' }, '1 to  cups flour', undefined, undefined],
+    [{ name: 'flour', value: 1, maxValue: '1/0', unitText: 'cups' }, '1 to 1/0 cups flour', undefined, undefined],
+    [{ name: 'flour', value: '1/2', maxValue: '3/4', unitText: 'cup' }, '1/2 to 3/4 cup flour', 0.5, 0.75],
+  ] as const) {
+    const qualifier = importRecipe({ recipeIngredient: [input] }, 'recipe').ingredients[0]!.qualifier;
+    expect(qualifier.originalText.value).toBe(original);
+    expect(qualifier.amount && qualifier.amount.numerator / qualifier.amount.denominator).toBe(lower);
+    expect(qualifier.amountUpper && qualifier.amountUpper.numerator / qualifier.amountUpper.denominator).toBe(upper);
+    expect(qualifier.parseStatus).toBe(lower === undefined ? 'unparsed' : 'partial');
+  }
+});

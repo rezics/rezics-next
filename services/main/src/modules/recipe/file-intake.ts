@@ -1,5 +1,7 @@
-import { importRecipe, MAX_RECIPE_IMPORT_BYTES, RecipeNotImportable, type RecipeImport } from './importer.ts';
-import { isRecipeUnitIdentifier } from './export.ts';
+import { importRecipe, MAX_RECIPE_IMPORT_BYTES, MAX_RECIPE_JSON_DEPTH, measureRecipeJSON,
+  RecipeNotImportable, RecipeInstructionNotSupported, type RecipeImport } from './importer.ts';
+import { RECIPE_UNIT_DEFINITIONS, RecipeUnitNotRegistered } from './display.ts';
+import { isStructureUnitReference } from '../structure/format.ts';
 import { MAX_RETAINED_SOURCE_BYTES } from '../source/intake.ts';
 
 export const MAX_RECIPE_FILE_BYTES = MAX_RETAINED_SOURCE_BYTES;
@@ -36,19 +38,22 @@ function checkMediaType(value: string | null): void {
 type InspectionLocation = 'other' | 'ingredients' | 'ingredient' | 'unit-code';
 
 function inspect(value: unknown, root: boolean, context: string | undefined,
-  state: { recipes: number; values: number }, depth = 0,
+  state: { recipes: number },
   location: InspectionLocation = 'other'): void {
-  if (depth > 32 || ++state.values > 8192) invalid('Recipe file exceeds the supported JSON structure bound');
   if (typeof value === 'string') {
     if (HTML_MARKUP.test(value) || SCRIPT_URL.test(value)) invalid('HTML and scripts are not recipe files');
+    if (location === 'unit-code' && (isStructureUnitReference(value) || REMOTE_URL.test(value))
+      && !RECIPE_UNIT_DEFINITIONS.has(value)) {
+      throw new RecipeUnitNotRegistered(value);
+    }
     if (REMOTE_URL.test(value) && !(root && value === SCHEMA_CONTEXT && context === value)
-      && !(location === 'unit-code' && isRecipeUnitIdentifier(value))) {
+      && !(location === 'unit-code' && RECIPE_UNIT_DEFINITIONS.has(value))) {
       invalid('Recipe file cannot contain remote URLs');
     }
     return;
   }
   if (Array.isArray(value)) {
-    for (const child of value) inspect(child, false, context, state, depth + 1,
+    for (const child of value) inspect(child, false, context, state,
       location === 'ingredients' ? 'ingredient' : 'other');
     return;
   }
@@ -83,7 +88,7 @@ function inspect(value: unknown, root: boolean, context: string | undefined,
       || location === 'ingredients' && key === 'itemListElement' && Array.isArray(child)
       ? 'ingredients' : location === 'ingredient' && key === 'unitCode' && typeof child === 'string'
         ? 'unit-code' : 'other';
-    inspect(child, false, context, state, depth + 1, childLocation);
+    inspect(child, false, context, state, childLocation);
   }
 }
 
@@ -144,7 +149,11 @@ export function parseRecipeFile(bytes: Uint8Array, mediaType: string | null): {
     && context !== SCHEMA_CONTEXT) {
     invalid('JSON-LD Recipe file must name the fixed Schema.org context');
   }
-  const state = { recipes: 0, values: 0 };
+  const state = { recipes: 0 };
+  const shape = measureRecipeJSON(root);
+  if (shape.depth > MAX_RECIPE_JSON_DEPTH || shape.values > 8192) {
+    invalid('Recipe file exceeds the supported JSON structure bound');
+  }
   inspect(root, true, typeof context === 'string' ? context : undefined, state);
   if (state.recipes !== 1) invalid('File must contain one Schema.org Recipe');
 
@@ -155,11 +164,11 @@ export function parseRecipeFile(bytes: Uint8Array, mediaType: string | null): {
   let preview: RecipeImport;
   try { preview = importRecipe(source, 'recipe-file-preview'); }
   catch (error) {
-    if (error instanceof RecipeNotImportable) throw error;
+    if (error instanceof RecipeNotImportable || error instanceof RecipeInstructionNotSupported) throw error;
     invalid(error instanceof Error ? error.message : 'Recipe content is invalid');
   }
-  if (!preview.ingredients.length && !preview.steps.length) {
-    invalid('Recipe file has no importable ingredients or steps');
+  if (!preview.ingredients.length && !preview.steps.length && !preview.sections.length) {
+    invalid('Recipe file has no importable occurrences');
   }
   return { source, preview };
 }
