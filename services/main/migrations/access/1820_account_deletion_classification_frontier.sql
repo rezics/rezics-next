@@ -8,6 +8,8 @@ ALTER TABLE access.account_deletion_progress
     ADD COLUMN orphan_count integer NOT NULL DEFAULT 0,
     ADD COLUMN steps integer NOT NULL DEFAULT 0,
     ADD COLUMN needs_boundary_check boolean NOT NULL DEFAULT false;
+CREATE INDEX account_deletion_progress_open ON access.account_deletion_progress (principal_id, operation_id)
+    WHERE NOT completed;
 ALTER TABLE access.account_deletion_progress_agent
     ADD COLUMN expanded boolean NOT NULL DEFAULT false;
 CREATE INDEX account_deletion_root_frontier ON access.representation (principal_id, id)
@@ -97,6 +99,10 @@ CREATE FUNCTION access.wake_account_deletion_frontier() RETURNS trigger
 LANGUAGE plpgsql AS $$
 DECLARE controlled text;
 BEGIN
+    -- Ordinary writes do not enter the frontier planner without an open deletion.
+    IF NOT EXISTS (SELECT 1 FROM access.account_deletion_progress WHERE NOT completed) THEN
+        RETURN NEW;
+    END IF;
     IF TG_TABLE_NAME = 'principal' THEN
         IF NEW.active OR NOT OLD.active THEN RETURN NEW; END IF;
         FOR controlled IN SELECT subject_id FROM access.representation
