@@ -35,7 +35,7 @@ export function observeStatementPool(pool: Pool): void {
     const counters = measurements.getStore();
     if (typeof callback === 'function') return Reflect.apply(connect, this, [
       (error: Error | undefined, client: PoolClient | undefined, release: unknown) => {
-        if (client && !('connect' in client)) observeStatementClient(client);
+        if (client) observeStatementClient(client);
         // Idle-client queues may deliver in the releasing caller's async
         // context. Attribute SQL to the scope that requested this checkout.
         return measurements.run(counters ?? [], () => callback(error, client, release));
@@ -49,7 +49,7 @@ export function observeStatementPool(pool: Pool): void {
 }
 
 export async function measureStatements<T>(run: () => Promise<T>, client?: PoolClient) {
-  if (client && !('connect' in client)) observeStatementClient(client);
+  if (client && ('connection' in client || !('connect' in client))) observeStatementClient(client);
   const counter = { statements: 0 };
   const result = await measurements.run([...(measurements.getStore() ?? []), counter], run);
   return { result, statements: counter.statements };
