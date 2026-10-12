@@ -551,20 +551,23 @@ public class RealmTargetOwnerContractTest {
       profiles.put(id, new ProfileRegistry.Profile(sha, model, null));
       phase("profile-loaded " + id);
     }
-    for (JsonValue item : scenarios) {
+    // Reuse the isolated physical store, clearing its committed fixture before
+    // each scenario. Opening hundreds of TDB2 stores spends the probe budget
+    // creating indexes rather than exercising the actual owner command.
+    var data = TDB2Factory.connectDataset(Files.createTempDirectory(
+      Path.of(System.getProperty("java.io.tmpdir")), "realm-target-").toString()).asDatasetGraph();
+    try { for (JsonValue item : scenarios) {
       JsonObject scenario = item.getAsObject(), command = scenario.get("command").getAsObject();
       String name = scenario.get("name").getAsString().value();
       String receipt = command.get("receipt").getAsString().value();
       String digest = command.get("digest").getAsString().value();
       String update = command.get("update").getAsString().value();
       String expected = scenario.get("expected").getAsString().value();
-      phase(name + " tdb-open");
-      var data = TDB2Factory.connectDataset(Files.createTempDirectory(
-        Path.of(System.getProperty("java.io.tmpdir")), "realm-target-").toString()).asDatasetGraph();
       try {
         phase(name + " seed-start");
         data.begin(ReadWrite.WRITE);
         try {
+          data.clear();
           UpdateAction.parseExecute(scenario.get("seed").getAsString().value(), DatasetFactory.wrap(data));
           String mutation = scenario.get("mutation").getAsString().value();
           if (!mutation.isEmpty()) UpdateAction.parseExecute(mutation, DatasetFactory.wrap(data));
@@ -625,8 +628,8 @@ public class RealmTargetOwnerContractTest {
             iri(receipt), iri("${RV}work"), iri("${realm}")));
         } finally { data.end(); }
         System.out.println("REALM_NATIVE_CASE " + name + " " + outcome);
-      } finally { phase(name + " tdb-close"); data.close(); }
-    }
+      } finally { phase(name + " case-end"); }
+    } } finally { data.close(); }
   }
 }
 `);
@@ -867,6 +870,7 @@ test('a public Work with an owner-attached Character description still accepts a
       GRAPH <${GRAPHS.current}> { <${work.work}> rv:head ?head } } LIMIT 2`, 4096))
       .results!.bindings[0]!.head!.value;
     await f.grant(f.editor, `semantic:edit:${work.work}`, 'semantic.change');
+    await f.grant(f.editor, `work:read:${work.work}`, 'work.read');
     await responseJson(await f.editor.send('POST', '/v1/semantic/changes', {
       profile: 'semantic-change-v1', target: work.work, expectedHead: workHead, actingSubject: f.editor.actor,
       state: { component: 'resource', types: [`${RV}Character`], properties: [], lifecycle: 'active' },
