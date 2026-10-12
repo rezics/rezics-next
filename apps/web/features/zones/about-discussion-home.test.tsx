@@ -98,7 +98,15 @@ for (const home of ['package', 'fallback', 'standalone published', 'standalone u
       attached = false;
       if (home === 'standalone published') {
         publication.home = { document: fromPlainText('Published Harbor home', 'blocks'),
-          blocks: [], showcases: [], showcaseData: { slides: [], slideMedia: [] } };
+          definitions: [], blocks: [], showcases: [], showcaseData: { slides: [], slideMedia: [] },
+          cost: { nodesVisited: 3, extensions: 0, showcases: 0, responseBytes: 0,
+            graphReads: 0, definitionExecutions: 0 },
+          reference: { owner: 'content', resourceId: `https://rezics.com/id/${zone}`,
+            variantId: `https://rezics.com/id/${zone}`, revisionId: `https://rezics.com/id/${zone}`,
+            format: 'rezics-content-json-v1', model: 'document-blocks-v1', byteDigest: '0'.repeat(64),
+            byteLength: 0, language: { kind: 'tag', tag: 'en', originalTag: 'en' },
+            direction: direction('en', 'Published Harbor home'), sourceRevision: null,
+            predecessor: null, provenance: {} } };
         content = 'Published Harbor home';
       } else content = 'Harbor field guide';
     }

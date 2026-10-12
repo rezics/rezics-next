@@ -4,16 +4,20 @@ import { Pool } from 'pg';
 import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { appendContentEvent, ContentCore, contentDraftIntentDigest, type SaveDraftCommand } from '../../content/src/core.ts';
 import { migrateContent } from '../../content/src/migrate.ts';
-import type { RegisteredAdmission } from '../src/modules/access/admission.ts';
+import { AdmissionDenied, type RegisteredAdmission } from '../src/modules/access/admission.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
-import { RealmAboutPostCommand } from '../src/modules/realm-reply/about-command.ts';
+import { RealmAboutPostCommand, type RealmAboutPostInput } from '../src/modules/realm-reply/about-command.ts';
 import { RealmAboutThreadStore } from '../src/modules/realm-reply/about-store.ts';
-import { RealmReplyContentStore, RealmReplyConflict, RealmReplyInvalid, RealmReplyStale, RealmReplyUnavailable,
+import { RealmReplyContentStore, RealmReplyConflict, RealmReplyDenied, RealmReplyInvalid, RealmReplyStale, RealmReplyUnavailable,
   type ReplyIdentityInput } from '../src/modules/realm-reply/content-store.ts';
-import type { ReplyGraphReceipt } from '../src/modules/realm-reply/graph.ts';
+import { replyReceiptIri, type ReplyGraphReceipt } from '../src/modules/realm-reply/graph.ts';
+import { realmReplyDigest } from '../src/modules/realm-reply/store.ts';
+import { WorkReadMissing, WorkReadMoved } from '../src/modules/work/read-session.ts';
+import { RV } from '../src/modules/work/activate.ts';
 
 const nativeId = () => `https://rezics.com/id/${randomUUID()}`;
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
+const refusal = { kind: 'reply-denied' as const, message: 'Realm policy requires moderator approval' };
 type Operation = Awaited<ReturnType<RealmAboutThreadStore['reserve']>>;
 let cluster: PostgresCluster | undefined;
 let pool: Pool;
@@ -199,8 +203,8 @@ test('definite pre-dispatch refusals release selected drafted and identified ope
     } else if (phase === 'identified') await identify(selected);
     const before = await about.resume(selected.id);
     expect(before.phase).toBe(phase);
-    expect(await about.refuseBeforeDispatch(selected.id)).toBe(true);
-    expect(await about.refuseBeforeDispatch(selected.id)).toBe(true);
+    expect(await about.refuseBeforeDispatch(selected.id, refusal)).toMatchObject({ kind: 'refused', operation: { terminalOutcome: refusal } });
+    expect(await about.refuseBeforeDispatch(selected.id, refusal)).toMatchObject({ kind: 'refused', operation: { terminalOutcome: refusal } });
     expect(await about.readThread(input.realm, input.about)).toBeNull();
     const retained = (await pool.query(`SELECT phase,terminal_refusal,draft_operation_id,identity_operation_id
       FROM content.realm_about_post_operation WHERE id=$1`, [selected.id])).rows[0];
@@ -227,23 +231,23 @@ test('pre-dispatch refusal serializes with dispatch and fences an admission whos
   const basis = { zone: nativeId(), zoneRevision: nativeId(), routeRevision: nativeId() };
   const refused = (await identify(await about.reserve(intent()))).operation;
   const lostAdmission = admission(refused, 'reply.place', `reply:place:${refused.realm}`);
-  expect(await about.refuseBeforeDispatch(refused.id)).toBe(true);
+  expect(await about.refuseBeforeDispatch(refused.id, refusal)).toMatchObject({ kind: 'refused', operation: { terminalOutcome: refusal } });
   await expect(about.recordDispatch(refused.id, lostAdmission.id, basis)).rejects.toBeInstanceOf(RealmReplyStale);
   const dispatched = (await identify(await about.reserve(intent()))).operation;
   const dispatchAdmission = admission(dispatched, 'reply.place', `reply:place:${dispatched.realm}`);
   await about.recordDispatch(dispatched.id, dispatchAdmission.id, basis);
-  expect(await about.refuseBeforeDispatch(dispatched.id)).toBe(false);
+  expect(await about.refuseBeforeDispatch(dispatched.id, refusal)).toMatchObject({ kind: 'recoverable' });
   expect(await about.readThread(dispatched.realm, dispatched.about)).toMatchObject({ openerReply: dispatched.reply });
   const racing = (await identify(await about.reserve(intent()))).operation;
   const racingAdmission = admission(racing, 'reply.place', `reply:place:${racing.realm}`);
   const [release, dispatch] = await Promise.allSettled([
-    about.refuseBeforeDispatch(racing.id), about.recordDispatch(racing.id, racingAdmission.id, basis),
+    about.refuseBeforeDispatch(racing.id, refusal), about.recordDispatch(racing.id, racingAdmission.id, basis),
   ]);
   expect(release.status).toBe('fulfilled');
   if (release.status !== 'fulfilled') throw release.reason;
   const row = (await pool.query(`SELECT terminal_refusal,placement_admission_id
     FROM content.realm_about_post_operation WHERE id=$1`, [racing.id])).rows[0];
-  if (release.value) {
+  if (release.value.kind === 'refused') {
     expect(dispatch.status).toBe('rejected');
     if (dispatch.status === 'rejected') expect(dispatch.reason).toBeInstanceOf(RealmReplyStale);
     expect(row).toEqual({ terminal_refusal: true, placement_admission_id: null });
@@ -257,14 +261,175 @@ test('pre-dispatch refusal serializes with dispatch and fences an admission whos
 
 test('a refused child and posted intent retain the activated canonical key', async () => {
   const opener = await about.reserve(intent()), winner = await post(opener);
-  expect(await about.refuseBeforeDispatch(opener.id)).toBe(false);
+  expect(await about.refuseBeforeDispatch(opener.id, refusal)).toMatchObject({ kind: 'posted' });
   const child = await about.reserve(intent({ realm: opener.realm, about: opener.about }));
-  expect(await about.refuseBeforeDispatch(child.id)).toBe(true);
+  expect(await about.refuseBeforeDispatch(child.id, refusal)).toMatchObject({ kind: 'refused', operation: { terminalOutcome: refusal } });
   await expect(about.resume(child.id)).rejects.toBeInstanceOf(RealmReplyStale);
   expect(await about.readThread(opener.realm, opener.about)).toMatchObject({ state: 'active',
     openerReply: opener.reply, revisionId: winner.saved.revisionId });
   const fresh = await about.reserve(intent({ realm: opener.realm, about: opener.about }));
   expect(fresh.parentReply).toBe(opener.reply);
+});
+
+function barrier() {
+  let release!: () => void;
+  const reached = new Promise<void>(resolve => { release = resolve; });
+  return { reached, release };
+}
+
+function commandFixture() {
+  const principal = { issuer: 'discussion-owner-test', subject: randomUUID() };
+  const principalKey = JSON.stringify([principal.issuer, principal.subject]);
+  const realm = nativeId(), key = randomUUID();
+  const input: RealmAboutPostInput = { profile: 'realm-about-post-v1', about: nativeId(),
+    targetRevision: nativeId(), zone: nativeId(), path: '/', routeRevision: nativeId(),
+    actingSubject: nativeId(), body: 'An independent contribution', language: 'en', direction: 'ltr' };
+  const basis = { zone: input.zone, zoneRevision: nativeId(), routeRevision: input.routeRevision };
+  const selection = { realm, about: input.about, actor: input.actingSubject, intentKey: key,
+    intentDigest: realmReplyDigest({ realm, input }), rootRevision: input.targetRevision };
+  let graphOutcome: { operation: Operation; permit: RegisteredAdmission; outcome: 'succeeded' | 'cancelled' } | undefined;
+  const work = { realmReplyThreads: { rankingContent: pool }, contentAuthoring: {},
+    access: { assertAuthority: async () => {} }, realmReplies: {},
+    environment: { fuseki: { query: async () => {
+      if (!graphOutcome) return { results: { bindings: [] } };
+      const { operation, permit, outcome } = graphOutcome;
+      const values = { outcome: `${RV}${outcome === 'succeeded' ? 'Succeeded' : 'Cancelled'}`,
+        digest: permit.requestDigest, id: permit.id, epoch: permit.authorityEpoch,
+        scope: permit.scope, dataEpoch: randomUUID(), sequence: '1',
+        ...(outcome === 'succeeded' ? { placement: nativeId(), revision: `urn:rezics:content:revision:${operation.revisionId}`,
+          realm, reply: operation.reply } : {}) };
+      return { results: { bindings: [Object.fromEntries(Object.entries(values).map(([name, value]) =>
+        [name, { type: 'literal', value }]))] } };
+    } } } } as unknown as MainWorkDependencies;
+  const command = new RealmAboutPostCommand(work);
+  // Replace the external read cut only; durable selection and ordering use the
+  // real Content owner and its SQL locks below.
+  Object.defineProperty(command, 'basis', { value: async () => basis, configurable: true });
+  return { principal, principalKey, realm, key, input, selection, basis, work, command,
+    graph: (operation: Operation, permit: RegisteredAdmission, outcome: 'succeeded' | 'cancelled' = 'succeeded') => {
+      graphOutcome = { operation, permit, outcome };
+    }, post: () => command.post(new Request('http://main.local'), principal, realm, input, key) };
+}
+
+async function prepare(operation: Operation, permit: RegisteredAdmission) {
+  const saved = await about.savedDraft(operation);
+  if (!saved) throw new Error('expected durable draft');
+  await identities.preparePlacement(permit, { realm: operation.realm, reply: operation.reply,
+    revisionId: saved.revisionId, revisionDigest: saved.revisionDigest,
+    reviewDecisionId: null, expectedHead: null }, nativeId());
+}
+
+test('locked intent outcomes supersede stale basis disclosure and admission refusals at every winning boundary', async () => {
+  for (const initial of ['selected', 'absent'] as const) {
+    for (const failure of ['stale', 'disclosure', 'policy', 'admission'] as const) {
+      if (initial === 'absent' && failure === 'admission') continue;
+      for (const progress of ['dispatched', 'graph', 'posted'] as const) {
+        const f = commandFixture(), entered = barrier(), resume = barrier();
+        let operation = initial === 'selected'
+          ? (await identify(await about.reserve(f.selection, f.principalKey))).operation : undefined;
+        const error = failure === 'stale' ? new WorkReadMoved('Zone discussion basis changed')
+          : failure === 'disclosure' ? new WorkReadMissing('Realm is unavailable')
+          : failure === 'policy' ? new RealmReplyDenied(refusal.message) : new AdmissionDenied('Authority changed');
+        const refuse = async () => { entered.release(); await resume.reached; throw error; };
+        if (failure === 'admission') f.work.access.register = refuse;
+        else Object.defineProperty(f.command, 'basis', { value: refuse });
+        const response = f.post().then(value => value, reason => reason);
+        await entered.reached;
+        operation ??= (await identify(await about.reserve(f.selection, f.principalKey))).operation;
+        const permit = admission(operation, 'reply.place', `reply:place:${f.realm}`);
+        await about.recordDispatch(operation.id, permit.id, f.basis);
+        if (progress !== 'dispatched') {
+          await prepare(operation, permit);
+          f.graph(operation, permit);
+        }
+        if (progress === 'posted') await about.recordPosted(operation.id, permit.id, replyReceiptIri(permit));
+        resume.release();
+        const result = await response;
+        if (progress === 'posted') expect(result).toMatchObject({ status: 200, body: { reply: operation.reply } });
+        else expect(result).toBeInstanceOf(RealmReplyUnavailable);
+        const retained = await about.readIntent(f.principalKey, f.key, f.selection.intentDigest);
+        expect(retained).toMatchObject({ id: operation.id, terminalRefusal: false, terminalOutcome: null,
+          placementAdmissionId: permit.id });
+        expect((await pool.query('SELECT id FROM content.realm_about_post_operation WHERE realm=$1 AND about=$2',
+          [f.realm, f.input.about])).rows).toHaveLength(1);
+        expect((await pool.query('SELECT id FROM content.reply WHERE root_target=$1', [f.input.about])).rows).toHaveLength(1);
+      }
+    }
+  }
+}, 30_000);
+
+test('same-admission dispatch retains its first Zone cut and recovers a posted concurrent request', async () => {
+  for (const posted of [false, true]) {
+    const f = commandFixture();
+    const operation = (await identify(await about.reserve(f.selection, f.principalKey))).operation;
+    const permit = admission(operation, 'reply.place', `reply:place:${f.realm}`);
+    const registering = barrier(), resume = barrier();
+    const laterBasis = { ...f.basis, zoneRevision: nativeId() };
+    Object.defineProperty(f.command, 'basis', { value: async () => laterBasis });
+    f.work.access.register = async () => { registering.release(); await resume.reached; return permit; };
+    let placements = 0;
+    f.work.realmReplies!.place = async (...args) => {
+      placements++;
+      expect(args[5]).toEqual(f.basis);
+      throw new Error('placement response lost');
+    };
+    const response = f.post().then(value => value, reason => reason);
+    await registering.reached;
+    await about.recordDispatch(operation.id, permit.id, f.basis);
+    if (posted) {
+      await prepare(operation, permit);
+      f.graph(operation, permit);
+      await about.recordPosted(operation.id, permit.id, replyReceiptIri(permit));
+    }
+    resume.release();
+    const result = await response;
+    if (posted) expect(result).toMatchObject({ status: 200, body: { reply: operation.reply } });
+    else expect(result).toBeInstanceOf(RealmReplyUnavailable);
+    expect(placements).toBe(posted ? 0 : 1);
+    expect(await about.readIntent(f.principalKey, f.key, f.selection.intentDigest)).toMatchObject({ dispatchBasis: f.basis,
+      terminalRefusal: false, terminalOutcome: null });
+    await expect(about.recordDispatch(operation.id, randomUUID(), laterBasis)).rejects.toBeInstanceOf(RealmReplyUnavailable);
+  }
+});
+
+test('terminal owner errors replay exactly across new policy target cuts and canonical replacement', async () => {
+  for (const error of [new RealmReplyDenied(refusal.message), new WorkReadMissing('Realm is unavailable'),
+    new WorkReadMoved('Discussion target changed')]) {
+    const f = commandFixture();
+    const operation = await about.reserve(f.selection, f.principalKey);
+    Object.defineProperty(f.command, 'basis', { value: async () => { throw error; } });
+    const initial = await f.post().catch(reason => reason);
+    expect(initial.constructor).toBe(error.constructor);
+    expect(initial.message).toBe(error.message);
+    expect(await about.readThread(f.realm, f.input.about)).toBeNull();
+    const winner = await post(await about.reserve(intent({ realm: f.realm, about: f.input.about })));
+    let basisCalls = 0;
+    Object.defineProperty(f.command, 'basis', { value: async () => { basisCalls++; return { ...f.basis, zoneRevision: nativeId() }; } });
+    const replay = await f.post().catch(reason => reason);
+    expect(replay.constructor).toBe(initial.constructor);
+    expect(replay.message).toBe(initial.message);
+    expect(basisCalls).toBe(0);
+    expect(await about.readThread(f.realm, f.input.about)).toMatchObject({ openerReply: winner.operation.reply });
+    await expect(pool.query(`UPDATE content.realm_about_post_operation
+      SET terminal_outcome=$2 WHERE id=$1`, [operation.id, { kind: 'read-moved', message: 'changed' }])).rejects.toThrow();
+  }
+});
+
+test('native cancelled placement keeps its initial refusal instead of a generic stale replay', async () => {
+  const f = commandFixture();
+  const operation = (await identify(await about.reserve(f.selection, f.principalKey))).operation;
+  const permit = admission(operation, 'reply.place', `reply:place:${f.realm}`);
+  f.work.access.register = async () => permit;
+  f.work.realmReplies!.place = async () => { f.graph(operation, permit, 'cancelled'); throw new RealmReplyDenied(refusal.message); };
+  const initial = await f.post().catch(reason => reason);
+  expect(initial).toBeInstanceOf(RealmReplyDenied);
+  expect(await about.readThread(f.realm, f.input.about)).toBeNull();
+  await about.reserve(intent({ realm: f.realm, about: f.input.about }));
+  const replay = await f.post().catch(reason => reason);
+  expect(replay.constructor).toBe(initial.constructor);
+  expect(replay.message).toBe(initial.message);
+  expect(await about.readIntent(f.principalKey, f.key, f.selection.intentDigest)).toMatchObject({ terminalRefusal: false,
+    terminalOutcome: refusal, placementAdmissionId: permit.id });
 });
 
 test('draft cancellation proof binds the exact owner admission and digest and never treats absence as refusal', async () => {

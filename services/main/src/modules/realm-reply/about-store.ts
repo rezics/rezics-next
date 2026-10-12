@@ -18,6 +18,14 @@ export interface AboutThread {
   realm: string; about: string; openerReply: string; rootRevision: string;
   revisionId: string | null; state: 'reserved' | 'active';
 }
+export interface AboutTerminalOutcome {
+  kind: 'reply-denied' | 'reply-invalid' | 'reply-stale' | 'admission-denied'
+    | 'draft-denied' | 'draft-rights-denied' | 'draft-stale' | 'content-conflict'
+    | 'target-not-bound' | 'target-unavailable' | 'read-missing' | 'read-moved' | 'read-invalid';
+  message: string;
+}
+export type AboutRefusalOutcome = { kind: 'absent' }
+  | { kind: 'refused' | 'recoverable' | 'posted'; operation: AboutPostOperation };
 export interface AboutPostOperation extends Omit<AboutPostIntent, 'rootRevision'> {
   id: string; reply: string; variantId: string; rootRevision: string;
   openerReply: string; parentReply: string | null; parentRevision: string | null;
@@ -26,6 +34,7 @@ export interface AboutPostOperation extends Omit<AboutPostIntent, 'rootRevision'
   identityOperationId: string | null; placementOperationId: string | null;
   placementReceipt: string | null; pending: boolean; replayed: boolean;
   terminalRefusal: boolean; placementAdmissionId: string | null; dispatchBasis: RealmReplyDispatchBasis | null;
+  terminalOutcome: AboutTerminalOutcome | null;
 }
 interface OperationRow {
   id: string; realm: string; about: string; actor: string; intent_key: string; intent_digest: string;
@@ -36,6 +45,7 @@ interface OperationRow {
   identity_operation_id: string | null; placement_operation_id: string | null; placement_receipt: string | null;
   terminal_refusal: boolean; placement_admission_id: string | null; dispatch_zone: string | null;
   dispatch_zone_revision: string | null; dispatch_route_revision: string | null;
+  terminal_outcome: AboutTerminalOutcome | null;
 }
 function operation(row: OperationRow, replayed: boolean): AboutPostOperation {
   return { id: row.id, realm: row.realm, about: row.about, actor: row.actor,
@@ -46,6 +56,7 @@ function operation(row: OperationRow, replayed: boolean): AboutPostOperation {
     identityOperationId: row.identity_operation_id, placementOperationId: row.placement_operation_id,
     placementReceipt: row.placement_receipt,
     terminalRefusal: row.terminal_refusal, placementAdmissionId: row.placement_admission_id,
+    terminalOutcome: row.terminal_outcome,
     dispatchBasis: row.dispatch_zone ? { zone: row.dispatch_zone,
       zoneRevision: row.dispatch_zone_revision!, routeRevision: row.dispatch_route_revision! } : null,
     pending: row.parent_reply !== null && row.parent_revision === null, replayed };
@@ -191,23 +202,59 @@ export class RealmAboutThreadStore {
    * The operation lock orders this with recordDispatch, including a registered
    * admission whose response was lost. Once dispatch is recorded, only its
    * graph cancellation can release the reservation. */
-  async refuseBeforeDispatch(id: string): Promise<boolean> {
+  async refuseBeforeDispatch(id: string, outcome: AboutTerminalOutcome): Promise<AboutRefusalOutcome> {
     assertOperationId(id);
+    return this.transaction(async client => this.refuseSelected(client, await this.selected(client, id), outcome));
+  }
+
+  /** A refusal can race allocation even when the command's first read was empty. */
+  async refuseIntent(principal: string, key: string, digest: string,
+    outcome: AboutTerminalOutcome): Promise<AboutRefusalOutcome> {
+    const storedKey = principalIntentKey(principal, key);
+    return this.transaction(async client => {
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+        [JSON.stringify(['realm-about-intent', principal, storedKey])]);
+      const row = (await client.query<OperationRow>(`SELECT * FROM content.realm_about_post_operation
+        WHERE intent_key=$1 FOR UPDATE`, [storedKey])).rows[0];
+      if (!row) return { kind: 'absent' };
+      if (row.intent_digest !== digest) throw new RealmReplyConflict('discussion intent key binds different input');
+      return this.refuseSelected(client, row, outcome);
+    });
+  }
+
+  private async refuseSelected(client: PoolClient, row: OperationRow,
+    outcome: AboutTerminalOutcome): Promise<AboutRefusalOutcome> {
+    if (row.terminal_outcome) return { kind: 'refused', operation: operation(row, true) };
+    if (row.phase === 'posted') return { kind: 'posted', operation: operation(row, true) };
+    if (row.placement_admission_id) return { kind: 'recoverable', operation: operation(row, true) };
+    const canonical = (await client.query<{ opener_reply: string }>(
+      'SELECT opener_reply FROM content.realm_about_thread WHERE realm=$1 AND about=$2 FOR UPDATE',
+      [row.realm, row.about])).rows[0];
+    if (!canonical || canonical.opener_reply !== row.opener_reply) {
+      return { kind: 'recoverable', operation: operation(row, true) };
+    }
+    const refused = (await client.query<OperationRow>(`UPDATE content.realm_about_post_operation
+      SET terminal_refusal=true,terminal_outcome=$2 WHERE id=$1 RETURNING *`, [row.id, outcome])).rows[0]!;
+    // A failed child retains the active opener. Only this selected opener
+    // can relinquish an unactivated reservation.
+    await client.query(`DELETE FROM content.realm_about_thread
+      WHERE realm=$1 AND about=$2 AND opener_reply=$3 AND state='reserved'`,
+    [row.realm, row.about, row.reply]);
+    return { kind: 'refused', operation: operation(refused, true) };
+  }
+
+  /** Retain a native cancellation's response without marking it pre-dispatch. */
+  async recordCancellation(id: string, receipt: ReplyGraphReceipt,
+    outcome: AboutTerminalOutcome): Promise<AboutPostOperation> {
     return this.transaction(async client => {
       const row = await this.selected(client, id);
-      if (row.terminal_refusal) return true;
-      if (row.placement_admission_id || row.phase === 'posted') return false;
-      const canonical = (await client.query<{ opener_reply: string }>(
-        'SELECT opener_reply FROM content.realm_about_thread WHERE realm=$1 AND about=$2 FOR UPDATE',
-        [row.realm, row.about])).rows[0];
-      if (!canonical || canonical.opener_reply !== row.opener_reply) return false;
-      await client.query('UPDATE content.realm_about_post_operation SET terminal_refusal=true WHERE id=$1', [id]);
-      // A failed child retains the active opener. Only this selected opener
-      // can relinquish an unactivated reservation.
-      await client.query(`DELETE FROM content.realm_about_thread
-        WHERE realm=$1 AND about=$2 AND opener_reply=$3 AND state='reserved'`,
-      [row.realm, row.about, row.reply]);
-      return true;
+      if (receipt.outcome !== 'cancelled' || receipt.admissionId !== row.placement_admission_id
+        || receipt.scope !== `reply:place:${row.realm}` || row.phase === 'posted') {
+        throw new RealmReplyUnavailable('Discussion cancellation receipt differs');
+      }
+      if (row.terminal_outcome) return operation(row, true);
+      return operation((await client.query<OperationRow>(`UPDATE content.realm_about_post_operation
+        SET terminal_outcome=$2 WHERE id=$1 RETURNING *`, [id, outcome])).rows[0]!, false);
     });
   }
 
@@ -315,11 +362,13 @@ export class RealmAboutThreadStore {
     }
     return this.transaction(async client => {
       const row = await this.selected(client, id);
+      if (row.terminal_outcome) return operation(row, true);
       if (row.placement_admission_id) {
-        if (row.placement_admission_id !== admissionId || row.dispatch_zone !== basis.zone
-          || row.dispatch_zone_revision !== basis.zoneRevision || row.dispatch_route_revision !== basis.routeRevision) {
-          throw new RealmReplyStale('discussion dispatch basis changed');
+        if (row.placement_admission_id !== admissionId) {
+          throw new RealmReplyUnavailable('discussion dispatch admission differs');
         }
+        // The first dispatch owns the server-observed basis. Same-admission
+        // retries consume that cut, even across a Zone configuration change.
         return operation(row, true);
       }
       await this.resolve(client, row);

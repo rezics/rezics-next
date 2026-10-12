@@ -4,18 +4,40 @@ import { hasDocumentContent, type DocumentSnapshot } from '@rezics/document';
 import { authoredDocumentBody } from '../../../../content/src/document-body.ts';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import { AdmissionConflict, AdmissionDenied, AdmissionExpired, type RegisteredAdmission, type VerifiedPrincipal } from '../access/admission.ts';
-import { ContentDraftDenied, ContentDraftStale } from '../content-publication/draft.ts';
+import { ContentDraftDenied, ContentDraftRightsDenied, ContentDraftStale } from '../content-publication/draft.ts';
 import { saveVerifiedMemberReplyDraft, type CanonicalAboutReplyDraftResult } from '../content-publication/reply-draft.ts';
-import { resolveTargets, TargetNotBound } from '../target/resolve.ts';
+import { resolveTargets, TargetNotBound, TargetUnavailable } from '../target/resolve.ts';
 import { workRead, WorkReadInvalid, WorkReadLimit, WorkReadMissing, WorkReadMoved } from '../work/read-session.ts';
 import { parseLanguage } from '../display-language/tag.ts';
 import { resolveZoneRoute, ZoneRouteMissing } from '../zone/route.ts';
 import { readZoneConfiguration } from '../zone/configuration.ts';
-import { RealmAboutThreadStore, type AboutPostOperation } from './about-store.ts';
+import { RealmAboutThreadStore, type AboutPostOperation, type AboutTerminalOutcome } from './about-store.ts';
 import { RealmReplyConflict, RealmReplyDenied, RealmReplyInvalid, RealmReplyStale, RealmReplyUnavailable } from './content-store.ts';
 import { readReplyGraphReceipt } from './graph.ts';
 import { realmReplyDigest } from './store.ts';
 import type { CanonicalReplyParentReader } from './root.ts';
+
+// Retain the owner's bounded error identity; the existing route adapter still
+// owns HTTP status, code and body. Subclasses precede their base classes.
+const terminalErrors = {
+  'draft-rights-denied': ContentDraftRightsDenied, 'target-unavailable': TargetUnavailable,
+  'reply-denied': RealmReplyDenied, 'reply-invalid': RealmReplyInvalid, 'reply-stale': RealmReplyStale,
+  'admission-denied': AdmissionDenied, 'draft-denied': ContentDraftDenied, 'draft-stale': ContentDraftStale,
+  'content-conflict': ContentConflict, 'target-not-bound': TargetNotBound,
+  'read-missing': WorkReadMissing, 'read-moved': WorkReadMoved, 'read-invalid': WorkReadInvalid,
+} as const;
+function terminalOutcome(error: unknown): AboutTerminalOutcome | null {
+  if (error instanceof AdmissionExpired) return { kind: 'reply-stale', message: 'Discussion admission expired' };
+  for (const [kind, constructor] of Object.entries(terminalErrors)) {
+    if (error instanceof constructor) return { kind: kind as AboutTerminalOutcome['kind'], message: error.message };
+  }
+  return null;
+}
+function terminalError(outcome: AboutTerminalOutcome): Error {
+  if (outcome.kind === 'target-not-bound') return new TargetNotBound();
+  if (outcome.kind === 'target-unavailable') return new TargetUnavailable();
+  return new terminalErrors[outcome.kind](outcome.message);
+}
 
 export interface RealmAboutPostInput {
   profile: 'realm-about-post-v1'; about: string; targetRevision: string;
@@ -108,7 +130,15 @@ export class RealmAboutPostCommand {
     let selected = await this.store.readIntent(principalKey, key, digest);
     // Exact successful replay consumes receipts, never a newer route/target cut.
     if (selected?.phase === 'posted') return { status: 200 as const, body: await this.posted(selected) };
-    if (selected?.terminalRefusal) throw new RealmReplyStale('Discussion intent was refused before placement');
+    if (selected?.terminalOutcome) {
+      if (selected.placementAdmissionId) {
+        const receipt = await readReplyGraphReceipt(this.work.environment,
+          { id: selected.placementAdmissionId, action: 'reply.place' });
+        if (receipt?.outcome !== 'cancelled') throw new RealmReplyUnavailable('Discussion cancellation receipt is unavailable');
+        await this.store.releaseReservation(selected, receipt);
+      }
+      throw terminalError(selected.terminalOutcome);
+    }
     let draftAdmission: RegisteredAdmission | undefined;
     type Stage = 'basis' | 'draft' | 'identity' | 'admission' | 'dispatch' | 'placement' | 'receipt';
     let stage: Stage = 'receipt';
@@ -125,20 +155,29 @@ export class RealmAboutPostCommand {
           requestDigest: realmReplyDigest(placement) });
         stage = 'dispatch';
         selected = await this.store.recordDispatch(selected!.id, admission.id, basis);
+        if (selected.terminalOutcome) throw terminalError(selected.terminalOutcome);
+        if (selected.phase === 'posted') return { status: 200 as const, body: await this.posted(selected) };
+        basis = selected.dispatchBasis!;
+        replay ||= selected.replayed;
         stage = 'placement';
         try {
           await this.work.realmReplies!.place(principal, input.actingSubject, placement,
             phaseKey('placement'), realmReplyDigest(placement), basis);
         } catch (error) {
           const terminal = await readReplyGraphReceipt(this.work.environment, admission);
-          if (terminal?.outcome === 'cancelled') await this.store.releaseReservation(selected!, terminal);
+          if (terminal?.outcome === 'cancelled') {
+            const outcome = terminalOutcome(error);
+            if (!outcome) throw new RealmReplyUnavailable('Discussion cancellation recovery is pending');
+            selected = await this.store.recordCancellation(selected!.id, terminal, outcome);
+            await this.store.releaseReservation(selected, terminal);
+            throw terminalError(selected.terminalOutcome!);
+          }
           else {
             // Unknown outcomes and graph winners remain recoverable when
             // settlement returns a refusal. The composer must keep the same intent, rather than
             // treating a committed post as a terminal pre-placement failure.
             throw new RealmReplyUnavailable('Discussion placement settlement is pending');
           }
-          throw error;
         }
         stage = 'receipt';
         const receipt = await readReplyGraphReceipt(this.work.environment, admission);
@@ -154,8 +193,10 @@ export class RealmAboutPostCommand {
         const receipt = await readReplyGraphReceipt(this.work.environment,
           { id: selected.placementAdmissionId, action: 'reply.place' });
         if (receipt?.outcome === 'cancelled') {
+          selected = await this.store.recordCancellation(selected.id, receipt,
+            { kind: 'reply-stale', message: 'Discussion placement was cancelled' });
           await this.store.releaseReservation(selected, receipt);
-          throw new RealmReplyStale('Discussion placement was cancelled');
+          throw terminalError(selected.terminalOutcome!);
         }
         const draft = await this.store.savedDraft(selected);
         if (!draft) throw new RealmReplyUnavailable('Discussion draft receipt is unavailable');
@@ -262,6 +303,10 @@ export class RealmAboutPostCommand {
       const basis = await this.basis(request, principal, realm, input);
       return await place(draft, basis, false);
     } catch (error) {
+      // A concurrent terminal transition is immutable even if this request was
+      // still reading a draft or recording dispatch on its older selection.
+      const retained = await this.store.readIntent(principalKey, key, digest);
+      if (retained?.terminalOutcome) throw terminalError(retained.terminalOutcome);
       const failedStage = currentStage();
       // Error classes carry the existing owners' definite refusals. Receipt
       // corruption/conflict, missing responses and owner outages are uncertain
@@ -278,18 +323,20 @@ export class RealmAboutPostCommand {
         || failedStage === 'identity' && (error instanceof RealmReplyDenied || error instanceof RealmReplyInvalid
           || error instanceof RealmReplyStale || error instanceof AdmissionDenied || error instanceof AdmissionExpired)
         || failedStage === 'admission' && (error instanceof AdmissionDenied || error instanceof AdmissionExpired);
-      if (selected && terminal) {
-        const refused = await this.store.refuseBeforeDispatch(selected.id);
-        if (!refused && selected.placementAdmissionId) {
-          throw new RealmReplyUnavailable('Discussion dispatch recovery is pending');
-        }
+      if (terminal) {
+        const outcome = terminalOutcome(error);
+        if (!outcome) throw new RealmReplyUnavailable('Discussion refusal recovery is pending');
+        const current = await this.store.refuseIntent(principalKey, key, digest, outcome);
+        if (current.kind === 'posted') return { status: 200 as const, body: await this.posted(current.operation) };
+        if (current.kind === 'recoverable') throw new RealmReplyUnavailable('Discussion dispatch recovery is pending');
+        if (current.kind === 'refused') throw terminalError(current.operation.terminalOutcome!);
+        throw terminalError(outcome);
       }
       if (selected && (error instanceof ContentConflict && !cancelledDraft
         || error instanceof WorkReadLimit || error instanceof AdmissionConflict
         || error instanceof RealmReplyConflict)) {
         throw new RealmReplyUnavailable('Discussion owner receipt recovery is pending');
       }
-      if (terminal && error instanceof AdmissionExpired) throw new RealmReplyStale('Discussion admission expired');
       throw error;
     }
   }
