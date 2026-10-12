@@ -9,6 +9,7 @@ import {
   DisclosureUnavailable,
   DisclosureStore,
   disclose,
+  discloseInventory,
   fenceDisclosure,
   resolveDisclosureSelections,
   type DisclosureAncestryEvidence,
@@ -171,7 +172,7 @@ async function captured(f: ReturnType<typeof fixture>) {
   );
 }
 
-test('disclosure policy batches accept plain owner targets but reject forged descriptors and invalid legacy Work identities', async () => {
+test('disclosure policy batches reject missing ancestry, forged descriptors and invalid legacy Work identities', async () => {
   const pool = { query: async (_sql: string, params: unknown[]) => ({ rows:
     (JSON.parse(params[0] as string) as { ordinal: number }[]).map(({ ordinal }) => ({
       ordinal, open: true, restricted: false, realmClosed: false, assessments: [], nameVisible: true,
@@ -179,10 +180,11 @@ test('disclosure policy batches accept plain owner targets but reject forged des
     })) }) } as unknown as Pool;
   const reader = new DisclosureStore(pool);
   const plain = [target, { ...target, work, workRevision: workHead }];
-  expect(await reader.read(plain, ANONYMOUS_VIEWER, 'read')).toEqual(['visible', 'visible']);
-  expect(await reader.readWithAnonymousNames(plain, ANONYMOUS_VIEWER, 'summary')).toEqual({
-    decisions: ['visible', 'visible'], anonymousNames: ['hidden', 'hidden'],
-  });
+  for (const inputs of plain.map(input => [input])) {
+    await expect(reader.read(inputs, ANONYMOUS_VIEWER, 'read')).rejects.toBeInstanceOf(DisclosureUnavailable);
+    await expect(reader.readAtCut(inputs, ANONYMOUS_VIEWER, 'read')).rejects.toBeInstanceOf(DisclosureUnavailable);
+    await expect(reader.readWithAnonymousNames(inputs, ANONYMOUS_VIEWER, 'summary')).rejects.toBeInstanceOf(DisclosureUnavailable);
+  }
   expect(await reader.read([], ANONYMOUS_VIEWER, 'read')).toEqual([]);
   await expect(reader.read([{ ...target, work: 'unproven' }], ANONYMOUS_VIEWER, 'read'))
     .rejects.toBeInstanceOf(DisclosureUnavailable);
@@ -203,6 +205,8 @@ test('disclosure ancestry: zero, one and two positively established parents pres
     [parent('work'), parent('realm')],
   ] as OwnerEstablishedGraphParents[]) {
     const f = fixture(parents);
+    if (!parents.some(item => item.kind === 'realm')) f.setEvidence([{ ...evidence(target, parents),
+      relationshipBasis: { ...basis(), kind: 'publication' } }]);
     const selections = await resolveDisclosureSelections(f.env, [target]);
     expect(selections).toHaveLength(1);
     expect(selections[0]!.target.resource).toBe(target.resource);
@@ -315,6 +319,7 @@ test('disclosure ancestry: request context and legacy Work hints never substitut
 
 test('disclosure ancestry: independent publication needs an explicit complete empty proof', async () => {
   const f = fixture([]);
+  f.setEvidence([{ ...evidence(target), relationshipBasis: { ...basis(), kind: 'publication' } }]);
   expect((await captured(f))[0]!.decision).toBe('visible');
   // Legacy adapters carry null coordinates for resources with no Work parent.
   const [independent] = await resolveDisclosureSelections(f.env, [
@@ -334,6 +339,57 @@ test('disclosure ancestry: independent publication needs an explicit complete em
   await expect(resolveDisclosureSelections(f.env, [target])).rejects.toBeInstanceOf(
     DisclosureUnavailable,
   );
+});
+
+test('disclosure ancestry: relationship kinds refuse unresolved required parents before capture', async () => {
+  for (const kind of ['realm-placement', 'realm-selection', 'realm-module'] as const) {
+    for (const parents of [[], [parent('work')]] as OwnerEstablishedGraphParents[]) {
+      const f = fixture(parents);
+      f.setEvidence([{ ...evidence(target, parents), relationshipBasis: { ...basis(), kind } }]);
+      await expect(captured(f)).rejects.toBeInstanceOf(DisclosureUnavailable);
+      expect(f.headQueries).toHaveLength(0);
+      expect(f.ownerReads).toHaveLength(0);
+    }
+  }
+  const f = fixture([]);
+  f.setEvidence([{ ...evidence(target), relationshipBasis: { ...basis(), kind: 'work-ownership' } }]);
+  await expect(captured(f)).rejects.toBeInstanceOf(DisclosureUnavailable);
+});
+
+test('disclosure final fence compares only a cut’s established dependencies in a mixed batch', async () => {
+  const f = fixture([]);
+  const inputs: DisclosureTarget[] = [
+    { owner: 'content', resource: work, component: 'body' },
+    { owner: 'graph', resource: work, component: 'record' },
+  ];
+  const rows = inputs.map(input => ({ ...evidence(input),
+    resourceKind: input.owner === 'graph' ? 'work' as const : 'other' as const,
+    relationshipBasis: { ...basis(input), kind: input.owner === 'graph' ? 'identity' as const : 'publication' as const,
+      resource: work, revision: workHead },
+  }));
+  const source: DisclosureAncestrySource = {
+    read: async targets => targets.map(input => rows.find(row => row.relationshipBasis.owner === input.owner)!),
+    reread: async bases => bases.map(input => rows.find(row => row.relationshipBasis.owner === input.owner)!),
+  };
+  for (const owner of ['content', 'graph'] as const) configureDisclosureAncestrySource(f.env, owner, source);
+  const cuts = await captureDisclosure(f.env, await resolveDisclosureSelections(f.env, inputs), ANONYMOUS_VIEWER, 'read');
+  expect(await fenceDisclosure(f.env, [cuts[0]!], ANONYMOUS_VIEWER, 'read')).toEqual(['visible']);
+});
+
+test('disclosure public batch entries reject 65 targets before any owner or graph work', async () => {
+  for (const entry of [disclose, discloseInventory, discloseInventoryWithAnonymousNames]) {
+    const f = fixture();
+    let sourceReads = 0;
+    configureDisclosureAncestrySource(f.env, 'content', {
+      read: async targets => { sourceReads++; return targets.map(input => evidence(input, [parent('realm', input)])); },
+      reread: f.source.reread,
+    });
+    const inputs = Array.from({ length: 65 }, () => target);
+    await expect(entry(f.env, inputs, ANONYMOUS_VIEWER, 'read')).rejects.toBeInstanceOf(DisclosureUnavailable);
+    expect(sourceReads).toBe(0);
+    expect(f.headQueries).toHaveLength(0);
+    expect(f.ownerReads).toHaveLength(0);
+  }
 });
 
 test('disclosure ancestry: final fence refuses moved heads, changed placement/review/attachment and owner outage', async () => {
