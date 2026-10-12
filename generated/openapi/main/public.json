@@ -68873,6 +68873,13 @@
                                             "null"
                                           ]
                                         },
+                                        "identityStatus": {
+                                          "enum": [
+                                            "active",
+                                            "deleted"
+                                          ],
+                                          "type": "string"
+                                        },
                                         "kind": {
                                           "const": "agent",
                                           "type": "string"
@@ -68881,6 +68888,7 @@
                                       "required": [
                                         "kind",
                                         "agent",
+                                        "identityStatus",
                                         "handle",
                                         "displayName"
                                       ],
@@ -70885,6 +70893,13 @@
                                         "null"
                                       ]
                                     },
+                                    "identityStatus": {
+                                      "enum": [
+                                        "active",
+                                        "deleted"
+                                      ],
+                                      "type": "string"
+                                    },
                                     "kind": {
                                       "const": "agent",
                                       "type": "string"
@@ -70893,6 +70908,7 @@
                                   "required": [
                                     "kind",
                                     "agent",
+                                    "identityStatus",
                                     "handle",
                                     "displayName"
                                   ],
@@ -124971,6 +124987,13 @@
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                       "type": "string"
                                     },
+                                    "identityStatus": {
+                                      "enum": [
+                                        "active",
+                                        "deleted"
+                                      ],
+                                      "type": "string"
+                                    },
                                     "key": {
                                       "type": "null"
                                     },
@@ -124997,6 +125020,7 @@
                                     "key",
                                     "ordinal",
                                     "agent",
+                                    "identityStatus",
                                     "displayName",
                                     "handle"
                                   ],
@@ -167523,6 +167547,13 @@
                                                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                                     "type": "string"
                                                   },
+                                                  "identityStatus": {
+                                                    "enum": [
+                                                      "active",
+                                                      "deleted"
+                                                    ],
+                                                    "type": "string"
+                                                  },
                                                   "key": {
                                                     "type": "null"
                                                   },
@@ -167549,6 +167580,7 @@
                                                   "key",
                                                   "ordinal",
                                                   "agent",
+                                                  "identityStatus",
                                                   "displayName",
                                                   "handle"
                                                 ],
@@ -198251,6 +198283,13 @@
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                       "type": "string"
                                     },
+                                    "identityStatus": {
+                                      "enum": [
+                                        "active",
+                                        "deleted"
+                                      ],
+                                      "type": "string"
+                                    },
                                     "key": {
                                       "type": "null"
                                     },
@@ -198277,6 +198316,7 @@
                                     "key",
                                     "ordinal",
                                     "agent",
+                                    "identityStatus",
                                     "displayName",
                                     "handle"
                                   ],
@@ -450268,6 +450308,13 @@
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                           "type": "string"
                                         },
+                                        "identityStatus": {
+                                          "enum": [
+                                            "active",
+                                            "deleted"
+                                          ],
+                                          "type": "string"
+                                        },
                                         "key": {
                                           "type": "null"
                                         },
@@ -450294,6 +450341,7 @@
                                         "key",
                                         "ordinal",
                                         "agent",
+                                        "identityStatus",
                                         "displayName",
                                         "handle"
                                       ],
@@ -452431,6 +452479,13 @@
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                           "type": "string"
                                         },
+                                        "identityStatus": {
+                                          "enum": [
+                                            "active",
+                                            "deleted"
+                                          ],
+                                          "type": "string"
+                                        },
                                         "key": {
                                           "type": "null"
                                         },
@@ -452457,6 +452512,7 @@
                                         "key",
                                         "ordinal",
                                         "agent",
+                                        "identityStatus",
                                         "displayName",
                                         "handle"
                                       ],
@@ -454603,6 +454659,13 @@
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                           "type": "string"
                                         },
+                                        "identityStatus": {
+                                          "enum": [
+                                            "active",
+                                            "deleted"
+                                          ],
+                                          "type": "string"
+                                        },
                                         "key": {
                                           "type": "null"
                                         },
@@ -454629,6 +454692,7 @@
                                         "key",
                                         "ordinal",
                                         "agent",
+                                        "identityStatus",
                                         "displayName",
                                         "handle"
                                       ],
@@ -456926,6 +456990,13 @@
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                           "type": "string"
                                         },
+                                        "identityStatus": {
+                                          "enum": [
+                                            "active",
+                                            "deleted"
+                                          ],
+                                          "type": "string"
+                                        },
                                         "key": {
                                           "type": "null"
                                         },
@@ -456952,6 +457023,7 @@
                                         "key",
                                         "ordinal",
                                         "agent",
+                                        "identityStatus",
                                         "displayName",
                                         "handle"
                                       ],
@@ -459260,6 +459332,13 @@
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                           "type": "string"
                                         },
+                                        "identityStatus": {
+                                          "enum": [
+                                            "active",
+                                            "deleted"
+                                          ],
+                                          "type": "string"
+                                        },
                                         "key": {
                                           "type": "null"
                                         },
@@ -459286,6 +459365,7 @@
                                         "key",
                                         "ordinal",
                                         "agent",
+                                        "identityStatus",
                                         "displayName",
                                         "handle"
                                       ],
@@ -461621,6 +461701,13 @@
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                           "type": "string"
                                         },
+                                        "identityStatus": {
+                                          "enum": [
+                                            "active",
+                                            "deleted"
+                                          ],
+                                          "type": "string"
+                                        },
                                         "key": {
                                           "type": "null"
                                         },
@@ -461647,6 +461734,7 @@
                                         "key",
                                         "ordinal",
                                         "agent",
+                                        "identityStatus",
                                         "displayName",
                                         "handle"
                                       ],
@@ -466965,6 +467053,13 @@
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                           "type": "string"
                                         },
+                                        "identityStatus": {
+                                          "enum": [
+                                            "active",
+                                            "deleted"
+                                          ],
+                                          "type": "string"
+                                        },
                                         "key": {
                                           "type": "null"
                                         },
@@ -466991,6 +467086,7 @@
                                         "key",
                                         "ordinal",
                                         "agent",
+                                        "identityStatus",
                                         "displayName",
                                         "handle"
                                       ],
@@ -467939,6 +468035,13 @@
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                           "type": "string"
                                         },
+                                        "identityStatus": {
+                                          "enum": [
+                                            "active",
+                                            "deleted"
+                                          ],
+                                          "type": "string"
+                                        },
                                         "key": {
                                           "type": "null"
                                         },
@@ -467965,6 +468068,7 @@
                                         "key",
                                         "ordinal",
                                         "agent",
+                                        "identityStatus",
                                         "displayName",
                                         "handle"
                                       ],
@@ -468925,6 +469029,13 @@
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                           "type": "string"
                                         },
+                                        "identityStatus": {
+                                          "enum": [
+                                            "active",
+                                            "deleted"
+                                          ],
+                                          "type": "string"
+                                        },
                                         "key": {
                                           "type": "null"
                                         },
@@ -468951,6 +469062,7 @@
                                         "key",
                                         "ordinal",
                                         "agent",
+                                        "identityStatus",
                                         "displayName",
                                         "handle"
                                       ],
@@ -470059,6 +470171,13 @@
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                           "type": "string"
                                         },
+                                        "identityStatus": {
+                                          "enum": [
+                                            "active",
+                                            "deleted"
+                                          ],
+                                          "type": "string"
+                                        },
                                         "key": {
                                           "type": "null"
                                         },
@@ -470085,6 +470204,7 @@
                                         "key",
                                         "ordinal",
                                         "agent",
+                                        "identityStatus",
                                         "displayName",
                                         "handle"
                                       ],
@@ -471203,6 +471323,13 @@
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                           "type": "string"
                                         },
+                                        "identityStatus": {
+                                          "enum": [
+                                            "active",
+                                            "deleted"
+                                          ],
+                                          "type": "string"
+                                        },
                                         "key": {
                                           "type": "null"
                                         },
@@ -471229,6 +471356,7 @@
                                         "key",
                                         "ordinal",
                                         "agent",
+                                        "identityStatus",
                                         "displayName",
                                         "handle"
                                       ],
@@ -472374,6 +472502,13 @@
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                           "type": "string"
                                         },
+                                        "identityStatus": {
+                                          "enum": [
+                                            "active",
+                                            "deleted"
+                                          ],
+                                          "type": "string"
+                                        },
                                         "key": {
                                           "type": "null"
                                         },
@@ -472400,6 +472535,7 @@
                                         "key",
                                         "ordinal",
                                         "agent",
+                                        "identityStatus",
                                         "displayName",
                                         "handle"
                                       ],
@@ -476438,6 +476574,13 @@
                                                   "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                                   "type": "string"
                                                 },
+                                                "identityStatus": {
+                                                  "enum": [
+                                                    "active",
+                                                    "deleted"
+                                                  ],
+                                                  "type": "string"
+                                                },
                                                 "key": {
                                                   "type": "null"
                                                 },
@@ -476464,6 +476607,7 @@
                                                 "key",
                                                 "ordinal",
                                                 "agent",
+                                                "identityStatus",
                                                 "displayName",
                                                 "handle"
                                               ],
@@ -477412,6 +477556,13 @@
                                                   "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                                   "type": "string"
                                                 },
+                                                "identityStatus": {
+                                                  "enum": [
+                                                    "active",
+                                                    "deleted"
+                                                  ],
+                                                  "type": "string"
+                                                },
                                                 "key": {
                                                   "type": "null"
                                                 },
@@ -477438,6 +477589,7 @@
                                                 "key",
                                                 "ordinal",
                                                 "agent",
+                                                "identityStatus",
                                                 "displayName",
                                                 "handle"
                                               ],
@@ -478398,6 +478550,13 @@
                                                   "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                                   "type": "string"
                                                 },
+                                                "identityStatus": {
+                                                  "enum": [
+                                                    "active",
+                                                    "deleted"
+                                                  ],
+                                                  "type": "string"
+                                                },
                                                 "key": {
                                                   "type": "null"
                                                 },
@@ -478424,6 +478583,7 @@
                                                 "key",
                                                 "ordinal",
                                                 "agent",
+                                                "identityStatus",
                                                 "displayName",
                                                 "handle"
                                               ],
@@ -479532,6 +479692,13 @@
                                                   "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                                   "type": "string"
                                                 },
+                                                "identityStatus": {
+                                                  "enum": [
+                                                    "active",
+                                                    "deleted"
+                                                  ],
+                                                  "type": "string"
+                                                },
                                                 "key": {
                                                   "type": "null"
                                                 },
@@ -479558,6 +479725,7 @@
                                                 "key",
                                                 "ordinal",
                                                 "agent",
+                                                "identityStatus",
                                                 "displayName",
                                                 "handle"
                                               ],
@@ -480676,6 +480844,13 @@
                                                   "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                                   "type": "string"
                                                 },
+                                                "identityStatus": {
+                                                  "enum": [
+                                                    "active",
+                                                    "deleted"
+                                                  ],
+                                                  "type": "string"
+                                                },
                                                 "key": {
                                                   "type": "null"
                                                 },
@@ -480702,6 +480877,7 @@
                                                 "key",
                                                 "ordinal",
                                                 "agent",
+                                                "identityStatus",
                                                 "displayName",
                                                 "handle"
                                               ],
@@ -481847,6 +482023,13 @@
                                                   "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                                   "type": "string"
                                                 },
+                                                "identityStatus": {
+                                                  "enum": [
+                                                    "active",
+                                                    "deleted"
+                                                  ],
+                                                  "type": "string"
+                                                },
                                                 "key": {
                                                   "type": "null"
                                                 },
@@ -481873,6 +482056,7 @@
                                                 "key",
                                                 "ordinal",
                                                 "agent",
+                                                "identityStatus",
                                                 "displayName",
                                                 "handle"
                                               ],
@@ -482883,6 +483067,13 @@
                                               "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                               "type": "string"
                                             },
+                                            "identityStatus": {
+                                              "enum": [
+                                                "active",
+                                                "deleted"
+                                              ],
+                                              "type": "string"
+                                            },
                                             "key": {
                                               "type": "null"
                                             },
@@ -482909,6 +483100,7 @@
                                             "key",
                                             "ordinal",
                                             "agent",
+                                            "identityStatus",
                                             "displayName",
                                             "handle"
                                           ],
@@ -483893,6 +484085,13 @@
                                               "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                               "type": "string"
                                             },
+                                            "identityStatus": {
+                                              "enum": [
+                                                "active",
+                                                "deleted"
+                                              ],
+                                              "type": "string"
+                                            },
                                             "key": {
                                               "type": "null"
                                             },
@@ -483919,6 +484118,7 @@
                                             "key",
                                             "ordinal",
                                             "agent",
+                                            "identityStatus",
                                             "displayName",
                                             "handle"
                                           ],
@@ -484900,6 +485100,13 @@
                                               "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                               "type": "string"
                                             },
+                                            "identityStatus": {
+                                              "enum": [
+                                                "active",
+                                                "deleted"
+                                              ],
+                                              "type": "string"
+                                            },
                                             "key": {
                                               "type": "null"
                                             },
@@ -484926,6 +485133,7 @@
                                             "key",
                                             "ordinal",
                                             "agent",
+                                            "identityStatus",
                                             "displayName",
                                             "handle"
                                           ],
@@ -486117,6 +486325,13 @@
                                                   "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                                   "type": "string"
                                                 },
+                                                "identityStatus": {
+                                                  "enum": [
+                                                    "active",
+                                                    "deleted"
+                                                  ],
+                                                  "type": "string"
+                                                },
                                                 "key": {
                                                   "type": "null"
                                                 },
@@ -486143,6 +486358,7 @@
                                                 "key",
                                                 "ordinal",
                                                 "agent",
+                                                "identityStatus",
                                                 "displayName",
                                                 "handle"
                                               ],
@@ -540755,6 +540971,13 @@
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                       "type": "string"
                                     },
+                                    "identityStatus": {
+                                      "enum": [
+                                        "active",
+                                        "deleted"
+                                      ],
+                                      "type": "string"
+                                    },
                                     "key": {
                                       "type": "null"
                                     },
@@ -540781,6 +541004,7 @@
                                     "key",
                                     "ordinal",
                                     "agent",
+                                    "identityStatus",
                                     "displayName",
                                     "handle"
                                   ],
@@ -544819,6 +545043,13 @@
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                           "type": "string"
                                         },
+                                        "identityStatus": {
+                                          "enum": [
+                                            "active",
+                                            "deleted"
+                                          ],
+                                          "type": "string"
+                                        },
                                         "key": {
                                           "type": "null"
                                         },
@@ -544845,6 +545076,7 @@
                                         "key",
                                         "ordinal",
                                         "agent",
+                                        "identityStatus",
                                         "displayName",
                                         "handle"
                                       ],
@@ -546207,6 +546439,13 @@
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                       "type": "string"
                                     },
+                                    "identityStatus": {
+                                      "enum": [
+                                        "active",
+                                        "deleted"
+                                      ],
+                                      "type": "string"
+                                    },
                                     "key": {
                                       "type": "null"
                                     },
@@ -546233,6 +546472,7 @@
                                     "key",
                                     "ordinal",
                                     "agent",
+                                    "identityStatus",
                                     "displayName",
                                     "handle"
                                   ],
@@ -549167,6 +549407,13 @@
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                       "type": "string"
                                     },
+                                    "identityStatus": {
+                                      "enum": [
+                                        "active",
+                                        "deleted"
+                                      ],
+                                      "type": "string"
+                                    },
                                     "key": {
                                       "type": "null"
                                     },
@@ -549193,6 +549440,7 @@
                                     "key",
                                     "ordinal",
                                     "agent",
+                                    "identityStatus",
                                     "displayName",
                                     "handle"
                                   ],
@@ -640561,6 +640809,13 @@
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                       "type": "string"
                                     },
+                                    "identityStatus": {
+                                      "enum": [
+                                        "active",
+                                        "deleted"
+                                      ],
+                                      "type": "string"
+                                    },
                                     "key": {
                                       "type": "null"
                                     },
@@ -640587,6 +640842,7 @@
                                     "key",
                                     "ordinal",
                                     "agent",
+                                    "identityStatus",
                                     "displayName",
                                     "handle"
                                   ],
@@ -641713,6 +641969,13 @@
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                       "type": "string"
                                     },
+                                    "identityStatus": {
+                                      "enum": [
+                                        "active",
+                                        "deleted"
+                                      ],
+                                      "type": "string"
+                                    },
                                     "key": {
                                       "type": "null"
                                     },
@@ -641739,6 +642002,7 @@
                                     "key",
                                     "ordinal",
                                     "agent",
+                                    "identityStatus",
                                     "displayName",
                                     "handle"
                                   ],
@@ -736130,6 +736394,13 @@
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                       "type": "string"
                                     },
+                                    "identityStatus": {
+                                      "enum": [
+                                        "active",
+                                        "deleted"
+                                      ],
+                                      "type": "string"
+                                    },
                                     "key": {
                                       "type": "null"
                                     },
@@ -736156,6 +736427,7 @@
                                     "key",
                                     "ordinal",
                                     "agent",
+                                    "identityStatus",
                                     "displayName",
                                     "handle"
                                   ],
@@ -740250,6 +740522,13 @@
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                             "type": "string"
                           },
+                          "identityStatus": {
+                            "enum": [
+                              "active",
+                              "deleted"
+                            ],
+                            "type": "string"
+                          },
                           "role": {
                             "enum": [
                               "author",
@@ -740267,7 +740546,8 @@
                           "role",
                           "agent",
                           "displayName",
-                          "handle"
+                          "handle",
+                          "identityStatus"
                         ],
                         "type": "object"
                       },
@@ -742392,6 +742672,13 @@
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                       "type": "string"
                                     },
+                                    "identityStatus": {
+                                      "enum": [
+                                        "active",
+                                        "deleted"
+                                      ],
+                                      "type": "string"
+                                    },
                                     "key": {
                                       "type": "null"
                                     },
@@ -742418,6 +742705,7 @@
                                     "key",
                                     "ordinal",
                                     "agent",
+                                    "identityStatus",
                                     "displayName",
                                     "handle"
                                   ],
