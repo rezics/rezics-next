@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path';
 import { preserveReapEnvironment } from '../../../scripts/qa/container-reaper.ts';
 import { FusekiClient, type SparqlResult } from '../src/infrastructure/fuseki.ts';
 import { graphErasureReceipt } from '../src/modules/erasure/graph.ts';
-import { outboxEventHandlers } from '../src/modules/erasure/outbox-event.ts';
+import type { OwnerOutboxEventHandler } from '../src/modules/outbox/event-handlers.ts';
 import { OutboxIncomplete, readMainOutboxEnvelope, type MainOutboxBatch } from '../src/modules/outbox/relay.ts';
 import { GRAPHS, RV } from '../src/modules/work/activate.ts';
 
@@ -16,26 +16,27 @@ const work = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${Str
 const eventPlaceholder = 'urn:rezics:event:erasure-work-set';
 const batch: MainOutboxBatch = { dataEpoch: 'erasure-work-set', routingEpoch: '1', sequence: '2',
   batchId: 'urn:rezics:outbox:erasure-work-set', eventIds: [eventPlaceholder] };
-const handler = outboxEventHandlers.find(candidate => candidate.kind === `${RV}GraphErasureEvent`)!;
 
-async function queryTemplates() {
+async function queryTemplates(handler: OwnerOutboxEventHandler) {
   const queries: string[] = [];
   const graph = new FusekiClient('http://unused.invalid');
   const captured = new Error('query captured');
   graph.query = async query => { queries.push(query); throw captured; };
-  await expect(readMainOutboxEnvelope(graph, batch, eventPlaceholder, () => handler)).rejects.toBe(captured);
+  await readMainOutboxEnvelope(graph, batch, eventPlaceholder, () => handler).then(
+    () => { throw new Error('Relay query capture did not reject'); }, error => { expect(error).toBe(captured); });
   const values: Record<string, string> = { receipt, outcome: `${RV}Succeeded`,
     epoch: batch.dataEpoch, sequence: batch.sequence, digest: 'a'.repeat(64) };
-  await expect(handler.read({ fuseki: graph, batch, eventId: eventPlaceholder,
-    ordinal: 0, value: name => values[name] })).rejects.toBe(captured);
+  await handler.read({ fuseki: graph, batch, eventId: eventPlaceholder,
+    ordinal: 0, value: name => values[name] }).then(
+    () => { throw new Error('Handler query capture did not reject'); }, error => { expect(error).toBe(captured); });
   expect(queries).toHaveLength(2);
   return { relay: queries[0]!, facts: queries[1]! };
 }
 
-// ARQ evaluates the actual exported reader and handler queries. A Person's
-// canonical receipt names all Works, while each batch event names one Work.
-test('graph erasure relay compares exact receipt and batch Work sets without multiplying event rows', async () => {
-  const queries = await queryTemplates();
+test('finding 7: graph erasure relay compares exact receipt and batch Work sets without multiplying event rows', async () => {
+  const { outboxEventHandlers } = await import('../src/modules/erasure/outbox-event.ts');
+  const handler = outboxEventHandlers.find(candidate => candidate.kind === `${RV}GraphErasureEvent`)!;
+  const queries = await queryTemplates(handler);
   const cases = [
     { name: 'zero', receiptWorks: [], eventWorks: [[]], allowed: true },
     { name: 'one', receiptWorks: [work(2)], eventWorks: [[work(2)]], allowed: true },
@@ -139,7 +140,7 @@ public class GraphErasureRelayContractTest {
       '--env', 'MAVEN_CONFIG=/maven-cache', '--env', 'MAVEN_OPTS=-Xmx128m', '--workdir', '/build',
       image, 'mvn', '-B', '-ntp', '-Dmaven.repo.local=/maven-cache', '-Djava.io.tmpdir=/build/tmp',
       '-DargLine=-Xmx384m', '-Dtest=GraphErasureRelayContractTest', 'test'],
-    { cwd: root, encoding: 'utf8', timeout: 300_000, env: preserveReapEnvironment(process.env) });
+    { cwd: root, encoding: 'utf8', timeout: 300_000, killSignal: 'SIGKILL', env: preserveReapEnvironment(process.env) });
     writeFileSync(join(root, '.temp/graph-erasure-relay-native.log'), `${native.stdout}\n${native.stderr}`);
     if (native.status !== 0) throw new Error(`Native erasure relay queries failed: ${native.stdout}\n${native.stderr}`);
     const actual = JSON.parse(readFileSync(join(build, 'results.json'), 'utf8')) as {
@@ -155,10 +156,22 @@ public class GraphErasureRelayContractTest {
           if (query === queries.facts.replaceAll(eventPlaceholder, event.id)) return event.facts;
           throw new Error(`Unexpected erasure relay query: ${query}`);
         };
-        const delivered = readMainOutboxEnvelope(graph, { ...batch, eventIds: fixture.eventIds }, event.id, () => handler);
-        if (!allowed) { await expect(delivered).rejects.toBeInstanceOf(OutboxIncomplete); continue; }
-        expect(event.relay.results?.bindings).toHaveLength(1);
+        let handlerCalls = 0;
+        const checkedHandler = { ...handler, read: async (...args: Parameters<typeof handler.read>) => {
+          handlerCalls++;
+          return handler.read(...args);
+        } };
+        if (allowed) expect(event.relay.results?.bindings).toHaveLength(1);
+        const delivered = readMainOutboxEnvelope(graph, { ...batch, eventIds: fixture.eventIds }, event.id, () => checkedHandler);
+        if (!allowed) {
+          let refusal: unknown;
+          try { await delivered; } catch (error) { refusal = error; }
+          expect(refusal).toBeInstanceOf(OutboxIncomplete);
+          expect(handlerCalls).toBe(0);
+          continue;
+        }
         const envelope = await delivered;
+        expect(handlerCalls).toBe(1);
         expect(envelope.data.ordinal).toBe(ordinal);
         expect(envelope.data.receipt.id).toBe(receipt);
         if (!('systemProof' in envelope.data.receipt)) throw new Error('Erasure event lacks its system proof');
@@ -166,7 +179,7 @@ public class GraphErasureRelayContractTest {
       }
     }
   } finally {
-    spawnSync('docker', ['rm', '-f', name], { encoding: 'utf8', timeout: 30_000,
+    spawnSync('docker', ['rm', '-f', name], { encoding: 'utf8', timeout: 30_000, killSignal: 'SIGKILL',
       env: preserveReapEnvironment(process.env) });
     rmSync(build, { recursive: true, force: true });
   }
