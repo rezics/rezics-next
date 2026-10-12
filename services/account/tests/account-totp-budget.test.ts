@@ -59,6 +59,16 @@ for (const path of ['/api/account/reauthenticate', '/api/auth/two-factor/verify-
     const f = await accountFixture({}, '127.0.0.1', { max: 1, connectionTimeoutMillis: 250 });
     try {
       const member = await f.signup('proof-outages@example.test');
+      let cookie = member.cookie;
+      if (path.startsWith('/api/auth/two-factor/')) {
+        expect((await f.request('/api/auth/two-factor/enable', { password: member.password }, cookie)).status).toBe(200);
+        const secret = await symmetricDecrypt({ key: f.secret,
+          data: (await f.pool.query('SELECT secret FROM "twoFactor" WHERE "userId" = $1', [member.id])).rows[0].secret });
+        const verified = await f.request('/api/auth/two-factor/verify-totp', { code: await createOTP(secret).totp() }, cookie);
+        expect(verified.status).toBe(200);
+        cookie = cookies(verified);
+        await expireUserBudget(f, member.id);
+      }
       const body = path.endsWith('/passkey') ? { response: { id: 'fixture', rawId: 'fixture', type: 'public-key',
         response: { clientDataJSON: 'fixture', authenticatorData: 'fixture', signature: 'fixture' }, clientExtensionResults: {} } }
         : path === '/api/account/reauthenticate' ? { password: member.password } : { code: 'invalid' };
@@ -73,8 +83,8 @@ for (const path of ['/api/account/reauthenticate', '/api/auth/two-factor/verify-
           if (mode === 'exception') throw new Error('injected provider outage');
           throw new APIError('SERVICE_UNAVAILABLE', { message: 'injected provider 503' });
         };
-        const interception = path === '/api/account/reauthenticate' ? spyOn(f.auth.api, 'verifyPassword').mockImplementationOnce(unavailable)
-          : path.endsWith('/passkey') ? spyOn(f.auth.api, 'verifyPasskeyAuthentication').mockImplementationOnce(unavailable)
+        const interception = path === '/api/account/reauthenticate' ? spyOn(f.auth.api, 'verifyPassword').mockImplementationOnce(unavailable as typeof f.auth.api.verifyPassword)
+          : path.endsWith('/passkey') ? spyOn(f.auth.api, 'verifyPasskeyAuthentication').mockImplementationOnce(unavailable as typeof f.auth.api.verifyPasskeyAuthentication)
           : spyOn(f.auth, 'handler').mockImplementationOnce(async () => {
             if (mode === '503') return Response.json({ error: 'temporarily_unavailable' }, { status: 503 });
             return unavailable();
@@ -85,14 +95,14 @@ for (const path of ['/api/account/reauthenticate', '/api/auth/two-factor/verify-
           return Reflect.apply(connect, this, args);
         }) : undefined;
         try {
-          expect((await f.request(path, body, member.cookie)).status).toBe(503);
+          expect((await f.request(path, body, cookie)).status).toBe(503);
           expect(interception).toHaveBeenCalledTimes(mode === 'guard-checkout' ? 0 : 1);
         } finally { interception.mockRestore(); checkout?.mockRestore(); }
         expect((await f.pool.query('SELECT count, started_at FROM rezics_account_rate_limit WHERE key = $1',
           [userBudgetKey(f.secret, member.id)])).rows).toEqual(before);
       }
       for (let attempt = 0; attempt < 5; attempt++) {
-        expect((await f.request(path, { ...body, ...(path === '/api/account/reauthenticate' ? { password: 'incorrect' } : {}) }, member.cookie)).status)
+        expect((await f.request(path, { ...body, ...(path === '/api/account/reauthenticate' ? { password: 'incorrect' } : {}) }, cookie)).status)
           .toBe(path.startsWith('/api/account/') ? 403 : 401);
       }
       expect((await f.pool.query('SELECT count FROM rezics_account_rate_limit WHERE key = $1',
