@@ -44,6 +44,7 @@ Inside the window (Program's cuts): eligibility chain (one branch, after the cla
 - [Pinned catalogue import cost](reports/catalogue-import-cost.md): recipe and bounded Bangumi import measurements, including the refused native episode batch.
 - [Bangumi episode reference refusal](reports/anime-episode-reference-refusal.md): the missing Person provisioning prerequisite in the measurement fixture, proven by a two-episode import.
 - [Content projection stop](reports/content-projection-stop-diagnosis.md): the eligibility digest depends on property order; the API-written proof never verifies in the reader.
+- [Pending bulk stage, supported causes](reports/semantic-bulk-pending-supported-causes.md): no supported command was found to leave a bulk stage pending; erasure, retirement and read revocation complete it.
 
 ## Open
 
