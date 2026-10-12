@@ -111,7 +111,7 @@ const priorSourcePins = [
   ['work-derivation-v1', '27e4e0f2871f58bd1b7434dff809342721109220daec1b5b0f817da8abf176df'],
   ['work-reference-block-v1', 'c72c3a6b828632aeddc1a3078dead4dd0dfd0f989fca550530ad850dbcb9b9a0'],
   ['work-title-control-v1', '4b9028fab23fb2fa56e3be8ba4364cb15d0bcfdaaee646c868203fed48f26822'],
-  ['zone-capability-v1', '1b5fa82ec8c40e4a6b6b25223a7ca7bebc573b517e900858895a5a12ff6424a5'],
+  ['zone-capability-v1', 'a7296e09f052999c0578caa2894ebdbd272cedd04357e4f291e2506e73eed611'],
   ['zone-presentation-v1', '6aecbd83013a8a9f9e2dc712d26b6450df29554f2f2c7d6174c2897b418bece7'],
   ['zone-presentation-v2', 'e331efea63e2bfb3ce883fb4d005ab63d7dd976973e43fd1599f655eef3ea730'],
 ] as const;
