@@ -3,7 +3,7 @@ import { join, relative, resolve } from 'node:path';
 import { restoreCatalogueBackup, retainStoppedOwnerBackup,
   type CorpusPreparationTiming } from './catalogue-backup.ts';
 import type { CorpusBackupDriver } from './work-profile-corpus.ts';
-import { dockerEnvironment, root, stream } from '../fixture/stack.ts';
+import { dockerEnvironment, postgresImage, root, run, stream } from '../fixture/stack.ts';
 import type { QaResourceClass } from '../qa/resource-classes.ts';
 
 export interface CorpusRestoreSmokeInput {
@@ -60,8 +60,47 @@ async function migrateRestoredCopy(runId: string, signal: AbortSignal): Promise<
   signal.throwIfAborted();
 }
 
+const postgresStopRuntime = { dockerEnvironment, postgresImage, run, stream };
+
+/** A stopped container alone can still contain an interrupted checkpoint. */
+export async function stopCorpusSourcePostgres(runId: string, signal: AbortSignal,
+  dependencies: Partial<typeof postgresStopRuntime> = {}): Promise<void> {
+  if (!/^[a-z0-9][a-z0-9-]{0,30}$/.test(runId)) throw new Error('Invalid corpus source run');
+  const runtime = { ...postgresStopRuntime, ...dependencies };
+  const docker = runtime.dockerEnvironment();
+  const source = `rezics-qa-${runId}`;
+  const container = `${source}-postgres-1`;
+  signal.throwIfAborted();
+  await runtime.stream('docker', ['stop', '--timeout', '120', container], docker, undefined, 150_000, signal);
+  signal.throwIfAborted();
+  const state = JSON.parse(runtime.run('docker', ['inspect', '--format', '{{json .State}}', container],
+    docker, 15_000)) as { Status?: string; Running?: boolean; ExitCode?: number; OOMKilled?: boolean };
+  if (state.Status !== 'exited' || state.Running !== false || state.ExitCode !== 0 || state.OOMKilled !== false)
+    throw new Error('Corpus source PostgreSQL did not stop cleanly');
+  const image = runtime.postgresImage();
+  const major = image.match(/^postgres:(\d+)\./)?.[1];
+  if (!major || Number(major) < 18) throw new Error('Corpus source PostgreSQL data directory is unsupported');
+  const control = await runtime.stream('docker', ['run', '--rm', '--network', 'none', '--read-only',
+    '--user', 'postgres', '--env', 'LC_ALL=C', '--volume', `${source}_postgres_data:/var/lib/postgresql:ro`,
+    '--entrypoint', 'pg_controldata', image, `/var/lib/postgresql/${major}/docker`],
+    docker, undefined, 30_000, signal);
+  signal.throwIfAborted();
+  if (!/^Database cluster state:\s+shut down\s*$/m.test(control))
+    throw new Error('Corpus source PostgreSQL control file is not shut down');
+}
+
+export interface CorpusBackupRuntime {
+  stopSourcePostgres: typeof stopCorpusSourcePostgres;
+  retainStoppedOwnerBackup: typeof retainStoppedOwnerBackup;
+  restoreCatalogueBackup: typeof restoreCatalogueBackup;
+  migrateRestoredCopy: typeof migrateRestoredCopy;
+}
+
 /** A real public-corpus driver backed by the stopped owner-copy lifecycle. */
-export function createCorpusBackupDriver(options: CorpusBackupDriverOptions): ManagedCorpusBackupDriver {
+export function createCorpusBackupDriver(options: CorpusBackupDriverOptions,
+  dependencies: Partial<CorpusBackupRuntime> = {}): ManagedCorpusBackupDriver {
+  const runtime: CorpusBackupRuntime = { stopSourcePostgres: stopCorpusSourcePostgres,
+    retainStoppedOwnerBackup, restoreCatalogueBackup, migrateRestoredCopy, ...dependencies };
   const directory = resolve(options.directory);
   const restored = new Map<string, RestoredCopy>();
 
@@ -73,7 +112,10 @@ export function createCorpusBackupDriver(options: CorpusBackupDriverOptions): Ma
       let failed = false;
       try {
         signal.throwIfAborted();
-        return await retainStoppedOwnerBackup(options.sourceRunId, id, backupDirectory, Date.now(), {
+        // Certify shutdown before Compose removes the container and capture copies its volume.
+        await runtime.stopSourcePostgres(options.sourceRunId, signal);
+        signal.throwIfAborted();
+        return await runtime.retainStoppedOwnerBackup(options.sourceRunId, id, backupDirectory, Date.now(), {
           purpose: 'work-profile',
           resumeSource: options.resumeSource,
           signal,
@@ -92,11 +134,11 @@ export function createCorpusBackupDriver(options: CorpusBackupDriverOptions): Ma
       signal.throwIfAborted();
       const runId = restoreRunId(target);
       const startedAt = performance.now();
-      const backup = await restoreCatalogueBackup(backupPath, runId, { signal, resourceClass: options.restoreResourceClass });
+      const backup = await runtime.restoreCatalogueBackup(backupPath, runId, { signal, resourceClass: options.restoreResourceClass });
       let stopSmokeRead: (() => Promise<void>) | undefined;
       try {
         signal.throwIfAborted();
-        await migrateRestoredCopy(runId, signal);
+        await runtime.migrateRestoredCopy(runId, signal);
         stopSmokeRead = (await options.smokeRead({ target, runId, apps: backup.apps, signal })) ?? undefined;
         signal.throwIfAborted();
         const totalMs = performance.now() - startedAt;
