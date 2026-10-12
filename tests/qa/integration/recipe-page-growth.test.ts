@@ -145,6 +145,20 @@ function recipePagePath(work: string, actor: string, cursor?: string) {
   return url;
 }
 
+function reportedCounters(profile: WorkProfile, observedMainCalls: number | null) {
+  return {
+    mainCalls: observedMainCalls,
+    fusekiRequests: profile.fusekiRequests,
+    fusekiSentBytes: profile.fusekiSentBytes,
+    fusekiReceivedBytes: profile.fusekiReceivedBytes,
+    fusekiEngineMs: profile.fusekiEngineMs,
+    postgresStatements: profile.postgresStatements,
+    accountCalls: profile.accountCalls,
+    otherFetches: profile.otherFetches,
+    unclassifiedFetches: profile.unclassifiedFetches,
+  };
+}
+
 test(
   'Recipe Work page counters stay constant as unrelated Works grow at the first and deepest continuation pages',
   async () => {
@@ -471,7 +485,9 @@ test(
       );
       expect(profile.mainCalls).toBe(0);
       expect(profile.request.route).toBe('/v1/recipes/works/:id');
-      return { result, profile: { ...profile, mainCalls: scale } };
+      // The scale helper requires a numeric WorkProfile dimension; carry the
+      // corpus scale in mainCalls only after checking and retaining its real count.
+      return { result, observedMainCalls: profile.mainCalls, profile: { ...profile, mainCalls: scale } };
     };
 
     try {
@@ -522,6 +538,22 @@ test(
             ...continuation.result.occurrences.map((item) => item.occurrence),
           ]).size,
         ).toBe(recipeOccurrenceCount);
+        console.log('recipe-page-growth-checkpoint', JSON.stringify({
+          checkpoint: checkpoint.scale,
+          unrelatedWorks: expectedWorkCount,
+          firstPage: {
+            counters: reportedCounters(first.profile, first.observedMainCalls),
+            pages: first.result.cost.pages,
+            pagesRead: first.result.cost.pagesRead,
+            occurrences: first.result.occurrences.length,
+          },
+          deepContinuation: {
+            counters: reportedCounters(continuation.profile, continuation.observedMainCalls),
+            pages: continuation.result.cost.pages,
+            pagesRead: continuation.result.cost.pagesRead,
+            occurrences: continuation.result.occurrences.length,
+          },
+        }));
         measured.deepContinuation.push(continuation.profile);
         await backupDriver.stop(target);
       }
