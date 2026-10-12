@@ -1,22 +1,22 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { startMediaStack, type MediaStack } from '../../../tests/qa/integration/media-support.ts';
-import { grantFixtureAuthority, registerFixtureIdentity } from '../src/modules/access/fixture-authority.ts';
-import type { VerifiedPrincipal } from '../src/modules/access/admission.ts';
-import { boundedPool } from '../src/infrastructure/pg-pool.ts';
-import { mirrorAccountDeletionIntent } from '../src/modules/outbox/account-deletion-journal.ts';
-import { retainAccountSubjectDeletion } from '../src/modules/outbox/account-subject-deletion.ts';
-import { backfillCatalogueNames } from '../src/modules/search/names.ts';
-import { iri, lit } from '../src/modules/work/activate.ts';
-import { DEFAULT_MEDIA_CONTEXT } from '../src/modules/media/store.ts';
-import { PUBLIC_SEARCH_GRAPH } from '../src/modules/work/select-main.ts';
-import { automaticDiscovery } from '../src/modules/discovery/automation.ts';
-import { projectDiscoveryBatch } from '../src/modules/discovery/source.ts';
-import { workRead } from '../src/modules/work/read-session.ts';
-import { digest } from '../src/modules/recommendation/derived-generation.ts';
+import { startMediaStack, type MediaStack } from './media-support.ts';
+import { grantFixtureAuthority, registerFixtureIdentity } from '../../../services/main/src/modules/access/fixture-authority.ts';
+import type { VerifiedPrincipal } from '../../../services/main/src/modules/access/admission.ts';
+import { boundedPool } from '../../../services/main/src/infrastructure/pg-pool.ts';
+import { backfillCatalogueNames } from '../../../services/main/src/modules/search/names.ts';
+import { iri, lit } from '../../../services/main/src/modules/work/activate.ts';
+import { DEFAULT_MEDIA_CONTEXT } from '../../../services/main/src/modules/media/store.ts';
+import { PUBLIC_SEARCH_GRAPH } from '../../../services/main/src/modules/work/select-main.ts';
+import { automaticDiscovery } from '../../../services/main/src/modules/discovery/automation.ts';
+import { projectDiscoveryBatch } from '../../../services/main/src/modules/discovery/source.ts';
+import { workRead } from '../../../services/main/src/modules/work/read-session.ts';
+import { digest } from '../../../services/main/src/modules/recommendation/derived-generation.ts';
+import { startPersonDeletionAccount } from './person-deletion-support.ts';
 
 type Member = Awaited<ReturnType<typeof fixtureMember>>;
 let stack: MediaStack;
+let account: Awaited<ReturnType<typeof startPersonDeletionAccount>>;
 let closing: Member;
 let reader: Member;
 let person: string;
@@ -31,8 +31,8 @@ type EntityPage = { result: { items: Array<{ id: string }>; count: { value: numb
 
 const bearers = new Map<string, VerifiedPrincipal>();
 
-async function fixtureMember(subject: string) {
-  const principal = { issuer: 'https://qa-person-disclosure.test', subject, emailVerified: true };
+async function fixtureMember(subject: string, identity?: VerifiedPrincipal) {
+  const principal = identity ?? { issuer: 'https://qa-person-disclosure.test', subject, emailVerified: true };
   const principalId = randomUUID();
   const actor = `https://rezics.com/id/${randomUUID()}`;
   const token = randomUUID();
@@ -113,7 +113,8 @@ beforeAll(async () => {
     if (!principal) throw new Error('unknown fixture bearer');
     return { ...principal, currentAssertion: async () => principal };
   };
-  closing = await fixtureMember(`closing-${marker}`);
+  account = await startPersonDeletionAccount();
+  closing = await fixtureMember(`closing-${marker}`, account.principal);
   reader = await fixtureMember(`reader-${marker}`);
   person = await provision(closing, name);
   similar = await provision(reader, similarName);
@@ -148,7 +149,7 @@ beforeAll(async () => {
   });
 }, 180_000);
 
-afterAll(async () => { await stack?.stop(); });
+afterAll(async () => { try { await account?.close(); } finally { await stack?.stop(); } });
 
 test('name, alias, phrase and entity search find the live Person before Account deletion', async () => {
   for (const token of [undefined, reader.token]) {
@@ -166,14 +167,20 @@ test('name, alias, phrase and entity search find the live Person before Account 
 test('Account deletion with consent ends the Person without removing indexed names', async () => {
   const relay = boundedPool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL! });
   try {
-    // Match Account's inline accessDeletionFence hook in services/account/src/index.ts.
-    const fence = await stack.access.strongDeactivateAccountSubject(
-      closing.principal.issuer, closing.principal.subject, { leaveOwnedAgentsStanding: true });
-    if (fence) await mirrorAccountDeletionIntent(stack.accessPool, relay, fence.principalId, fence.enforcementEpoch);
-    await retainAccountSubjectDeletion(relay, closing.principal.issuer, closing.principal.subject);
-    expect(fence?.principalId).toBe(closing.principalId);
-    expect((await relay.query('SELECT authority_epoch::text FROM relay.account_deletion_intent WHERE principal_id = $1',
-      [closing.principalId])).rows).toEqual([{ authority_epoch: fence!.enforcementEpoch }]);
+    expect((await relay.query('SELECT 1 FROM relay.account_deletion_intent WHERE principal_id = $1',
+      [closing.principalId])).rows).toEqual([]);
+    expect((await relay.query('SELECT 1 FROM relay.account_subject_deletion WHERE issuer = $1 AND account_subject = $2',
+      [closing.principal.issuer, closing.principal.subject])).rows).toEqual([]);
+    await account.deleteWithConsent();
+    const intent = await stack.accessPool.query(`SELECT id AS outbox_id, principal_id,
+      authority_epoch::text AS authority_epoch FROM access.outbox
+      WHERE kind = 'account.deletion_fenced' AND principal_id = $1`, [closing.principalId]);
+    expect(intent.rows).toHaveLength(1);
+    // Neither retention hook can be removed: these records are absent before
+    // the HTTP deletion, and no fixture or relay worker writes them afterwards.
+    expect((await relay.query(`SELECT outbox_id, principal_id, authority_epoch::text AS authority_epoch
+      FROM relay.account_deletion_intent WHERE principal_id = $1`, [closing.principalId])).rows)
+      .toEqual(intent.rows);
     expect((await relay.query('SELECT issuer, account_subject FROM relay.account_subject_deletion WHERE issuer = $1 AND account_subject = $2',
       [closing.principal.issuer, closing.principal.subject])).rows)
       .toEqual([{ issuer: closing.principal.issuer, account_subject: closing.principal.subject }]);

@@ -90,6 +90,4 @@ export const integrationGateFiles = [
   'services/main/tests/zone-resource-page-budget.integration.test.ts',
   'services/account/tests/account-deletion-agents.integration.test.ts',
   'services/main/tests/account-deletion-person-avatar.test.ts',
-  'services/main/tests/person-ended-typeahead.test.ts',
-  'services/main/tests/person-ended-name-search.test.ts',
 ] as const;
