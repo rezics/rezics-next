@@ -1,11 +1,13 @@
 import { expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
+import type { Pool } from 'pg';
 import {
   captureDisclosure,
   configureDisclosure,
   configureDisclosureAncestrySource,
   DISCLOSURE_COST,
   DisclosureUnavailable,
+  DisclosureStore,
   disclose,
   fenceDisclosure,
   resolveDisclosureSelections,
@@ -168,6 +170,31 @@ async function captured(f: ReturnType<typeof fixture>) {
     'read',
   );
 }
+
+test('disclosure policy batches accept plain owner targets but reject forged descriptors and invalid legacy Work identities', async () => {
+  const pool = { query: async (_sql: string, params: unknown[]) => ({ rows:
+    (JSON.parse(params[0] as string) as { ordinal: number }[]).map(({ ordinal }) => ({
+      ordinal, open: true, restricted: false, realmClosed: false, assessments: [], nameVisible: true,
+      recoveryGeneration: '1', enforcementCut: hash('policy-cut'),
+    })) }) } as unknown as Pool;
+  const reader = new DisclosureStore(pool);
+  const plain = [target, { ...target, work, workRevision: workHead }];
+  expect(await reader.read(plain, ANONYMOUS_VIEWER, 'read')).toEqual(['visible', 'visible']);
+  expect(await reader.readWithAnonymousNames(plain, ANONYMOUS_VIEWER, 'summary')).toEqual({
+    decisions: ['visible', 'visible'], anonymousNames: ['visible', 'visible'],
+  });
+  expect(await reader.read([], ANONYMOUS_VIEWER, 'read')).toEqual([]);
+  await expect(reader.read([{ ...target, work: 'unproven' }], ANONYMOUS_VIEWER, 'read'))
+    .rejects.toBeInstanceOf(DisclosureUnavailable);
+  const f = fixture();
+  const [selection] = await resolveDisclosureSelections(f.env, [target]);
+  await expect(reader.read([{ ...target, ancestry: { ...selection!.ancestry } }], ANONYMOUS_VIEWER, 'read'))
+    .rejects.toBeInstanceOf(DisclosureUnavailable);
+  const unproven = { lineage: f.env.lineage, fuseki: f.env.fuseki } as WorkActivationEnvironment;
+  configureDisclosure(unproven, reader);
+  await expect(disclose(unproven, [{ ...target, work }], ANONYMOUS_VIEWER, 'read'))
+    .rejects.toBeInstanceOf(DisclosureUnavailable);
+});
 
 test('disclosure ancestry: zero, one and two positively established parents preserve input order', async () => {
   for (const parents of [
@@ -477,6 +504,39 @@ test('disclosure assembly: direct media retains use/target ancestry and requires
   await expect(store.assetDelivery(asset, realm, realm)).rejects.toBeInstanceOf(
     DisclosureUnavailable,
   );
+});
+
+test('disclosure assembly: every media delivery refuses an owner selection moved before capture', async () => {
+  for (const method of ['assetDelivery', 'avatarDelivery', 'itemDelivery', 'itemDeliveryBatch'] as const) {
+    const f = fixture();
+    const seen = new Map<string, DisclosureTarget>();
+    let moved = false;
+    const source: DisclosureAncestrySource = {
+      read: async inputs => {
+        moved = true;
+        return inputs.map(input => {
+          seen.set(`${input.owner}:${input.resource}`, input);
+          return evidence(input, [parent('work', input), parent('realm', input)]);
+        });
+      },
+      reread: async bases => bases.map(item => {
+        const input = seen.get(`${item.owner}:${item.targetResource}`)!;
+        return evidence(input, [parent('work', input), parent('realm', input)]);
+      }),
+    };
+    for (const owner of ['media', 'graph'] as const) configureDisclosureAncestrySource(f.env, owner, source);
+    const use = native(71).slice(-36), asset = native(72).slice(-36);
+    const row = { target: realm, context: realm, asset, use, sha256: hash('old selected bytes') };
+    const read = async () => {
+      const current = moved ? { ...row, sha256: hash('new selected bytes') } : row;
+      return method === 'itemDeliveryBatch' ? new Map([[use, current]]) : current;
+    };
+    const store = disclosureMedia({ [method]: read } as unknown as MediaStore, f.env);
+    const delivery = method === 'assetDelivery' ? store.assetDelivery(asset, realm, realm)
+      : method === 'avatarDelivery' ? store.avatarDelivery(use)
+        : method === 'itemDelivery' ? store.itemDelivery(use) : store.itemDeliveryBatch([use]);
+    await expect(delivery).rejects.toThrow('Media delivery selection moved');
+  }
 });
 
 test('disclosure assembly: batch media preserves owner rows and order while bounding expanded ancestry across capture and fence', async () => {

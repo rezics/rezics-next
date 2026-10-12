@@ -11,6 +11,7 @@ import {
   DISCLOSURE_CHANNELS,
   DisclosureStore,
   DisclosureUnavailable,
+  disclose,
   fenceDisclosure,
   resolveDisclosureSelections,
   type DisclosureAncestryEvidence,
@@ -327,6 +328,12 @@ test('Realm disclosure: real Access preserves Work and Realm fences, independent
       ]);
 
     const releaseWork = await restrict(work, 'title', workHead);
+    // Low-level policy batches remain usable by existing owners. Public
+    // compatibility reads below still require positively established ancestry.
+    expect(await reader.read([body], ANONYMOUS_VIEWER, 'read')).toEqual(['visible']);
+    expect(await reader.read([{ ...body, work, workRevision: workHead }], ANONYMOUS_VIEWER, 'read'))
+      .toEqual(['tombstone']);
+    expect(await reader.read([{ ...body, work }], ANONYMOUS_VIEWER, 'read')).toEqual(['tombstone']);
     const constrained = await capture([body]);
     expect(constrained[0]!.decision).toBe('tombstone');
     expect(constrained[0]!.parents.map((parent) => parent.kind)).toEqual(['work', 'realm']);
@@ -454,7 +461,7 @@ test('Realm disclosure: real Access preserves Work and Realm fences, independent
     }
     sourceAvailable = false;
     await expect(capture([body])).rejects.toBeInstanceOf(DisclosureUnavailable);
-    await expect(reader.read([body], ANONYMOUS_VIEWER, 'read')).rejects.toBeInstanceOf(
+    await expect(disclose(f.env, [body], ANONYMOUS_VIEWER, 'read')).rejects.toBeInstanceOf(
       DisclosureUnavailable,
     );
   } finally {

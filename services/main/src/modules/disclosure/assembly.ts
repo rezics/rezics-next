@@ -1,4 +1,5 @@
 import type { ContentCore, ExactReadResult } from '../../../../content/src/core.ts';
+import { isDeepStrictEqual } from 'node:util';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { DEFAULT_MEDIA_CONTEXT, type MediaStore } from '../media/store.ts';
@@ -24,6 +25,18 @@ async function finalDisclosure<T>(env: WorkActivationEnvironment, targets: reado
   const decisions: DisclosureDecision[] = [];
   for (const cuts of batches) decisions.push(...await fenceDisclosure(env, cuts, viewer, channel));
   return { value, decisions };
+}
+
+/** Delivery may first locate a mutable slot to select its exact asset/use.
+ * Reread that same owner selection after capture so newer provenance cannot
+ * authorize the bytes obtained from its predecessor. */
+function rereadDelivery<T>(selected: T, read: () => Promise<T>): () => Promise<T> {
+  const basis = structuredClone(selected);
+  return async () => {
+    const fresh = await read();
+    if (!isDeepStrictEqual(basis, fresh)) throw new DisclosureUnavailable('Media delivery selection moved');
+    return fresh;
+  };
 }
 
 export async function discloseContent(env: WorkActivationEnvironment, results: readonly ExactReadResult[],
@@ -75,14 +88,15 @@ export function disclosureMedia(store: MediaStore, env: WorkActivationEnvironmen
         ...(row.use ? [{ owner: 'media' as const, resource: `https://rezics.com/id/${row.use}`,
           component: 'media_use' as const, context }] : []),
         { owner: 'graph', resource: row.target, component: 'name', context },
-      ], viewer, 'media', async () => row);
+      ], viewer, 'media', rereadDelivery(row, () => target.avatarDelivery(...args)));
       return decisions.every(decision => decision === 'visible') ? row : null;
     };
     if (property === 'itemDelivery') return async (...args: Parameters<MediaStore['itemDelivery']>) => {
       const row = await target.itemDelivery(...args);
       if (!row) return null;
       const viewer = currentDisclosureViewer();
-      const { decisions } = await finalDisclosure(env, itemTargets(args[0], row), viewer, 'media', async () => row);
+      const { decisions } = await finalDisclosure(env, itemTargets(args[0], row), viewer, 'media',
+        rereadDelivery(row, () => target.itemDelivery(...args)));
       return decisions.every(decision => decision === 'visible') ? row : null;
     };
     if (property === 'itemDeliveryBatch') return async (...args: Parameters<MediaStore['itemDeliveryBatch']>) => {
@@ -91,7 +105,8 @@ export function disclosureMedia(store: MediaStore, env: WorkActivationEnvironmen
       const entries = [...rows];
       const viewer = currentDisclosureViewer();
       const targets = entries.flatMap(([use, row]) => itemTargets(use, row));
-      const { decisions } = await finalDisclosure(env, targets, viewer, 'media', async () => rows);
+      const { decisions } = await finalDisclosure(env, targets, viewer, 'media',
+        rereadDelivery(rows, () => target.itemDeliveryBatch(...args)));
       return new Map(entries.filter((_, index) => decisions.slice(index * 4, index * 4 + 4)
         .every(decision => decision === 'visible')));
     };
@@ -102,7 +117,7 @@ export function disclosureMedia(store: MediaStore, env: WorkActivationEnvironmen
       const { decisions } = await finalDisclosure(env, [
         { owner: 'media', resource: `https://rezics.com/id/${args[0]}`, component: 'cover', context },
         { owner: 'graph', resource: args[1], component: 'name', context },
-      ], viewer, 'media', async () => row);
+      ], viewer, 'media', rereadDelivery(row, () => target.assetDelivery(...args)));
       return decisions.every(decision => decision === 'visible') ? row : null;
     };
     const value: unknown = Reflect.get(target, property, target);

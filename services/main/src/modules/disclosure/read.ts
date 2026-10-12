@@ -213,7 +213,8 @@ export class DisclosureStore implements DisclosureReader {
     if (targets.length > DISCLOSURE_COST.batch || !DISCLOSURE_CHANNELS.includes(channel)
       || targets.some(target => !ownerReference.test(target.resource)
         || !governanceOwners.includes(target.owner) || !governanceComponents.includes(target.component)
-        || !validIssuedTarget(target, this.environment)
+        || target.work != null && !native.test(target.work)
+        || target.ancestry !== undefined && !validIssuedTarget(target, this.environment)
         || target.nameOwner !== undefined && !native.test(target.nameOwner)
         || (target.context?.length ?? 0) > 512 || (target.revision?.length ?? 0) > 512)
       || typeof viewer.signedIn !== 'boolean' || !['unknown', 'under-15', '15-17', 'adult'].includes(viewer.age)
@@ -329,7 +330,11 @@ export class DisclosureStore implements DisclosureReader {
           FROM requested wanted CROSS JOIN fence LEFT JOIN name_policy n ON n.agent = wanted."nameOwner"
           ORDER BY wanted.ordinal`, [JSON.stringify(targets.map((target, ordinal) => ({
           ...target, ordinal, revision: target.revision ?? null, context: target.context ?? GLOBAL_CONTEXT,
-          resourceKind: target.ancestry!.resourceKind, parents: target.ancestry!.parents,
+          // Low-level owner reads retain their legacy Work fence semantics.
+          // Public wrappers resolve positive ancestry before reaching this reader.
+          resourceKind: target.ancestry?.resourceKind ?? 'other',
+          parents: target.ancestry?.parents ?? (target.work ? [{ kind: 'work', resource: target.work,
+            head: target.workRevision ?? null, protectedRevision: target.workRevision ?? null }] : []),
           nameOwner: owners[ordinal] ?? null,
         }))), effects(channel), GLOBAL_CONTEXT, distinct, principal?.issuer ?? null,
         principal?.subject ?? null, BASELINE_MEMBER_POLICY])).rows;

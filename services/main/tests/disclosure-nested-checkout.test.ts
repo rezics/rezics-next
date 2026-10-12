@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { AsyncResource } from 'node:async_hooks';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { Pool } from 'pg';
@@ -10,8 +10,8 @@ import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { boundedPool, NestedPoolCheckoutError, nestedPoolCheckoutMode, setNestedPoolCheckoutMode } from '../src/infrastructure/pg-pool.ts';
 import { ensureFixtureScopeGate } from '../src/modules/access/fixture-authority.ts';
 import { accessClient, controlRead, controlTransaction, withAccessClient } from '../src/modules/access/topology-control.ts';
-import { configureDisclosure, DISCLOSURE_COST, discloseInventory, discloseInventoryWithAnonymousNames,
-  DisclosureStore, DisclosureUnavailable, type DisclosureDecision, type DisclosureTarget } from '../src/modules/disclosure/read.ts';
+import { configureDisclosure, configureDisclosureAncestrySource, DISCLOSURE_COST, discloseInventory, discloseInventoryWithAnonymousNames,
+  DisclosureStore, DisclosureUnavailable, type DisclosureAncestryEvidence, type DisclosureDecision, type DisclosureTarget } from '../src/modules/disclosure/read.ts';
 import { ANONYMOUS_VIEWER } from '../src/modules/suitability/policy.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -44,13 +44,29 @@ beforeAll(async () => {
   await pool.query("INSERT INTO access.authority_subject(id,kind,active) VALUES ($1,'agent',true),($2,'agent',false)",
     [publicAgent, inactiveAgent]);
   await ensureFixtureScopeGate(pool, gate, { open: false });
-  // Content bodies already carry their parent descriptors. Exact graph name
-  // probes return one row per requested resource, without a second SQL owner.
-  graph.query = async sql => ({ results: { bindings: [publicAgent, inactiveAgent]
-    .filter(resource => sql.includes(`<${resource}>`))
-    .map(resource => ({ work: { type: 'uri', value: resource } })) } });
+  // A trusted fixture owner proves each selected occurrence; context alone is
+  // never an ancestry descriptor. Head and name probes stay graph-only.
+  graph.query = async sql => ({ results: { bindings: (sql.includes('SELECT ?resource ?head')
+    ? [work].filter(resource => sql.includes(`<${resource}>`))
+      .map(resource => ({ resource: { type: 'uri', value: resource }, head: { type: 'uri', value: restricted.workRevision! } }))
+    : [publicAgent, inactiveAgent].filter(resource => sql.includes(`<${resource}>`))
+      .map(resource => ({ work: { type: 'uri', value: resource } }))) } });
   reader = new DisclosureStore(pool);
   configureDisclosure(environment, reader);
+  const evidence = (target: DisclosureTarget): DisclosureAncestryEvidence => {
+    const relationshipBasis = { owner: target.owner === 'graph' ? 'graph' as const : 'content' as const,
+      kind: 'publication' as const, resource: target.resource, revision: target.revision ?? 'urn:rezics:fixture:revision',
+      targetResource: target.resource, targetRevision: target.revision ?? null,
+      token: createHash('sha256').update(JSON.stringify(target)).digest('hex'), dataEpoch: environment.lineage.dataEpoch };
+    return { resource: target.resource, resourceKind: 'other', relationshipBasis, status: 'complete',
+      parents: target.resource === restricted.resource ? [{ owner: 'graph', kind: 'work', resource: work,
+        head: restricted.workRevision!, protectedRevision: restricted.workRevision!, relationshipBasis }] : [] };
+  };
+  for (const owner of ['graph', 'content'] as const) configureDisclosureAncestrySource(environment, owner, {
+    read: async targets => targets.map(evidence),
+    reread: async bases => bases.map(basis => evidence([body, restricted, ...names]
+      .find(target => target.resource === basis.targetResource)!)),
+  });
   poolOnly = new DisclosureStore(other);
 }, 120_000);
 
