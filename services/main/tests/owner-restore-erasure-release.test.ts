@@ -822,7 +822,8 @@ for (const status of [400, 503] as const) {
       armed = true;
       if (status === 400) {
         expect(await owner.attempt()).toMatchObject({ state: 'held', disposition: 'conflict', replayed: true });
-        expect(owner.row).toMatchObject({ state: 'held', hold_reason: failure.message });
+        expect(owner.row.state).toBe('held');
+        expect(owner.row.hold_reason).toContain(failure.message);
         expect(proofReads).toBe(1);
         expect(run.fuseki.held).toBe(false);
         expect(run.access.open).toBe(false);

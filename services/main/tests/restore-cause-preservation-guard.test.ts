@@ -188,7 +188,7 @@ test('one owner completion boundary classifies every phase before permanent sett
   ).sort((a, b) => b.range.byteOffset.start - a.range.byteOffset.start);
   const handler = handlers.find(caught =>
     caught.text.includes("restoreInterruption(error, 'restore owner completion was interrupted')"));
-  expect(handler).toBeDefined();
+  if (!handler) throw new Error('owner restore completion catch was not found');
   const body = Buffer.from(boundary.text).subarray(
     0, handler.range.byteOffset.start - boundary.range.byteOffset.start,
   ).toString('utf8');

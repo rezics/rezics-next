@@ -381,14 +381,18 @@ export class OwnerOperations {
           // completion and the final outcome write. Wrappers retain owner causes.
           const interruption = restoreInterruption(error, 'restore owner completion was interrupted');
           if (interruption) {
-            throw new OwnerOperationUnavailable(interruption.message, { cause: interruption });
+            error = interruption;
+            throw new OwnerOperationUnavailable(interruption.message, { cause: error });
           }
           const failure = error instanceof Error ? error
             : new Error('restore owner completion failed', { cause: error });
           try { await this.settleRestoreOutcome(client, row.id, coverage, generation, failure); }
           catch (settlementError) {
             const interrupted = restoreInterruption(settlementError, 'restore outcome settlement was interrupted');
-            if (interrupted) throw new OwnerOperationUnavailable(interrupted.message, { cause: interrupted });
+            if (interrupted) {
+              settlementError = interrupted;
+              throw new OwnerOperationUnavailable(interrupted.message, { cause: settlementError });
+            }
             throw settlementError;
           }
           return await this.reconciliation(client, row.id, replayed) as RestoreReconciliationView;
