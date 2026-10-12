@@ -12,6 +12,7 @@ import { compositionReadRoutes } from '../src/routes/composition-reads.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import { evaluatePublicationQueries, structuredWorkPublicationAnswer, structuredWorkSourceRow }
   from './structured-work-publication-fixture.ts';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
 
 const work = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
 const main = 'https://rezics.com/id/00000000-0000-4000-8000-000000000002';
@@ -29,8 +30,19 @@ const term = (value: string) => ({ value });
 const sourceRow = (includeCandidate = false) => structuredWorkSourceRow(source, includeCandidate);
 
 function env(query: (text: string, maxBytes?: number) => Promise<unknown>) {
-  return { fuseki: { query }, lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' },
+  const environment = { fuseki: { query: async (text: string, maxBytes?: number) => {
+    if (text.includes('SELECT ?resource ?head')) {
+      const resources = [...(text.match(/VALUES \?resource \{([^}]+)\}/)?.[1] ?? '').matchAll(/<([^>]+)>/g)]
+        .map(match => match[1]!);
+      return { results: { bindings: resources.map(resource => ({ resource: term(resource), head: term(main) })) } };
+    }
+    return query(text, maxBytes);
+  } }, lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' },
     objectDirectory: '.temp/structured-work-publication-read' } as unknown as WorkActivationEnvironment;
+  configureFixtureDisclosureAncestry(environment, target => target.work
+    ? { resource: target.work, head: main, ...(target.workRevision !== undefined
+      ? { protectedRevision: target.workRevision } : {}) } : undefined);
+  return environment;
 }
 
 function publicationDataset(roots: readonly string[], options: {
@@ -215,7 +227,7 @@ test('WORK10/VIEW03: exact-source batches keep published and ordinary Works in o
     }
     throw new Error(`Unexpected disclosure query: ${query}`);
   });
-  configureDisclosure(ordinary, { read: async targets => targets.map(() => 'visible') });
+  configureDisclosure(ordinary, fixtureDisclosureReader(async targets => targets.map(() => 'visible')));
   expect(await admittedPublicWorks(ordinary, candidates)).toEqual(new Set(candidates));
 });
 
@@ -237,7 +249,7 @@ test('WORK10/VIEW03: public candidate admission requires the selected Structure 
   const reader: DisclosureReader = { read: async targets => targets.map(target =>
     target.component === 'structure' && hiddenStructure
       || target.component === 'publication' && hiddenParent ? 'hidden' : 'visible') };
-  configureDisclosure(environment, reader);
+  configureDisclosure(environment, fixtureDisclosureReader(reader.read));
 
   expect(await admittedPublicWorks(environment, [work])).toEqual(new Set([work]));
   hiddenStructure = true;
@@ -270,10 +282,10 @@ test('WORK10/VIEW03: parent admission stays bounded to one immediate parent per 
     }
     throw new Error(`Unexpected disclosure query: ${text}`);
   });
-  configureDisclosure(environment, { read: async targets => {
+  configureDisclosure(environment, fixtureDisclosureReader(async targets => {
     disclosures.push(targets);
     return targets.map(() => 'visible');
-  } });
+  }));
   expect(await admittedPublicWorks(environment, [...candidates, ...candidates])).toEqual(new Set(candidates));
   const worksPerBatch = Math.floor(DISCLOSURE_COST.batch / 3);
   expect(parentQueries.map(query => query.count)).toEqual([worksPerBatch, worksPerBatch, worksPerBatch, 2]);
