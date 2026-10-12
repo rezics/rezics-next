@@ -16,23 +16,28 @@ export function bindMediaAudience(
   audiences.set(viewer, { principal, actor });
   return viewer;
 }
-type Gate = (targets: readonly DisclosureTarget[], viewer: Viewer) => Promise<boolean[]>;
+interface MediaVisibilityProbe { reference: string; exactUse: boolean }
+type Gate = (targets: readonly DisclosureTarget[], viewer: Viewer,
+  probes: readonly MediaVisibilityProbe[]) => Promise<boolean[]>;
 // An enumerable symbol survives composed environments with a wrapped graph client.
 const gateOwner = Symbol('mediaVisibility');
 type MediaEnvironment = WorkActivationEnvironment & { [gateOwner]?: Gate };
 
-/** Uses resolve their exact current attachment; bare Assets and exports retain
- * the conservative inventory audience and fail closed when it exceeds one page. */
+/** Issued occurrences resolve only their exact Use attachment. Bare Asset
+ * representations and exports retain the conservative inventory audience
+ * and fail closed when it exceeds one page. */
 export function configureMediaVisibility(deps: MainWorkDependencies): void {
   if (!deps.media) return;
   const store = deps.media.store;
-  (deps.environment as MediaEnvironment)[gateOwner] = async (targets, viewer) => {
+  (deps.environment as MediaEnvironment)[gateOwner] = async (targets, viewer, probes) => {
+    if (probes.length !== targets.length) throw new MediaUnavailable('Media visibility probes are incomplete');
     const references = [
       ...new Set(
-        targets.filter((target) => target.owner === 'media').map((target) => target.resource),
+        targets.flatMap((target, index) => target.owner === 'media' ? [probes[index]!.reference] : []),
       ),
     ];
     if (!references.length) return targets.map(() => true);
+    const exactUses = new Set(probes.filter(probe => probe.exactUse).map(probe => probe.reference));
     const facts = new Map<string, MediaVisibilityFact>();
     for (let offset = 0; offset < references.length; offset += 64)
       for (const [reference, fact] of await store.visibilityFacts(
@@ -93,9 +98,9 @@ export function configureMediaVisibility(deps: MainWorkDependencies): void {
           : undefined,
     };
     const byContext = new Map<string, Set<string>>();
-    for (const fact of facts.values()) {
+    for (const [reference, fact] of facts) {
       // A truncated Asset inventory cannot prove readability. Do not probe it.
-      if (fact.attachmentOverflow) continue;
+      if (fact.attachmentOverflow || exactUses.has(reference) && fact.attachments.length !== 1) continue;
       for (const attachment of fact.attachments) {
         const resources = byContext.get(attachment.context) ?? new Set<string>();
         resources.add(attachment.target);
@@ -116,11 +121,14 @@ export function configureMediaVisibility(deps: MainWorkDependencies): void {
           if (summary.status === 'available') readable.add(`${context}\0${summary.reference}`);
       }
     }
-    return targets.map((target) => {
+    return targets.map((target, index) => {
       if (target.owner !== 'media') return true;
-      const fact = facts.get(target.resource);
+      const probe = probes[index]!;
+      const fact = facts.get(probe.reference);
       // A media target may name a Work for governance rather than an Asset or Use.
-      if (!fact) return true;
+      if (!fact) return !probe.exactUse;
+      // An exact Use must still be attached, including mutable selection slots.
+      if (probe.exactUse && fact.attachments.length !== 1) return false;
       if (fact.blocked || fact.attachmentOverflow) return false;
       if ((fact.disclosure !== 'public' || fact.pending) && !(canManage && actor === fact.owner))
         return false;
@@ -135,11 +143,12 @@ export async function mediaVisibility(
   env: WorkActivationEnvironment,
   targets: readonly DisclosureTarget[],
   viewer: Viewer,
+  probes: readonly MediaVisibilityProbe[],
 ) {
   const gate = (env as MediaEnvironment)[gateOwner];
   if (!gate) return targets.map(() => true);
   try {
-    return await gate(targets, viewer);
+    return await gate(targets, viewer, probes);
   } catch (cause) {
     throw new MediaUnavailable('Media visibility owner is unavailable', { cause });
   }

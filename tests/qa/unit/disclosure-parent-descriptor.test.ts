@@ -33,6 +33,8 @@ import {
 import type { ExactReadResult } from '../../../services/content/src/core.ts';
 import type { MediaStore } from '../../../services/main/src/modules/media/store.ts';
 import { discloseInventoryWithAnonymousNames } from '../../../services/main/src/modules/disclosure/read.ts';
+import { configureMediaVisibility } from '../../../services/main/src/modules/media/visibility.ts';
+import type { MainWorkDependencies } from '../../../services/main/src/routes/dependencies.ts';
 
 const native = (index: number) =>
   `https://rezics.com/id/00000000-0000-4000-8000-${String(index).padStart(12, '0')}`;
@@ -164,6 +166,39 @@ function fixture(parents: OwnerEstablishedGraphParents = [parent('work'), parent
     },
   };
 }
+
+test('paired media selections probe only the issued Use and preserve Asset governance targets', async () => {
+  for (const state of ['missing', 'detached', 'overbroad'] as const) {
+    const f = fixture();
+    const use = native(901), asset = native(902);
+    const targets: DisclosureTarget[] = [
+      { owner: 'media', resource: asset, component: 'cover' },
+      { owner: 'media', resource: use, component: 'media_use' },
+    ];
+    f.setEvidence(targets.map(input => ({ ...evidence(input), relationshipBasis: {
+      ...basis(input), resource: use, revision: use,
+    } })));
+    configureDisclosureAncestrySource(f.env, 'media', f.source);
+    const probes: string[][] = [];
+    configureMediaVisibility({ environment: f.env, media: { store: {
+      visibilityFacts: async (references: readonly string[]) => {
+        probes.push([...references]);
+        return state === 'missing' ? new Map() : new Map([[use, {
+          owner: native(903), disclosure: 'public', pending: false, blocked: false,
+          attachments: state === 'detached' ? [] : [
+            { target: work, context: realm }, { target: native(904), context: realm },
+          ],
+        }]]);
+      },
+    } }, access: {} } as unknown as MainWorkDependencies);
+    const selections = await resolveDisclosureSelections(f.env, targets);
+    const cuts = await captureDisclosure(f.env, selections, ANONYMOUS_VIEWER, 'media');
+    expect(await fenceDisclosure(f.env, cuts, ANONYMOUS_VIEWER, 'media')).toEqual(['hidden', 'hidden']);
+    expect(probes).toEqual([[use], [use]]);
+    expect(f.ownerReads.map(inputs => inputs.map(input => input.resource))).toEqual([[asset, use], [asset, use]]);
+    expect(f.headQueries).toHaveLength(0);
+  }
+});
 async function captured(f: ReturnType<typeof fixture>) {
   return captureDisclosure(
     f.env,

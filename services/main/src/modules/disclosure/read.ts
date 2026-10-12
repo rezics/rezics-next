@@ -661,7 +661,13 @@ async function evaluateSelections(env: WorkActivationEnvironment, selections: re
   requireSelections(env, selections);
   const reader = requireReader(env);
   const targets = selections.map(selection => ({ ...selection.target, ancestry: selection.ancestry }));
-  const mediaAllowed = await mediaVisibility(env, targets, viewer);
+  // Governance still checks the Asset. Its audience comes from the exact Use
+  // receipt the ancestry owner issued for this occurrence, never Asset inventory.
+  const mediaAllowed = await mediaVisibility(env, targets, viewer, selections.map(selection => {
+    const basis = selection.ancestry.relationshipBasis;
+    const exactUse = selection.target.owner === 'media' && basis.owner === 'media' && basis.kind === 'media-use';
+    return { reference: exactUse ? basis.resource : selection.target.resource, exactUse };
+  }));
   try {
     const evaluated = await reader.readAtCut(targets, viewer, channel, client, anonymousNames);
     if (mediaAllowed.length !== targets.length || mediaAllowed.some(allowed => typeof allowed !== 'boolean')
