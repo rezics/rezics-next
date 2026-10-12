@@ -205,6 +205,12 @@ test('SOURCE-COVER-READ carries revision-pinned copyright credit through public 
   expect(workRead.cover.selection).toBe(selected.selection);
   const use = workRead.cover.use!;
   expect(use).toBeString();
+  const retainedCover = await f.contentPool.query<{ use: string; asset: string; revision: string }>(
+    `SELECT u.id::text AS use,u.asset_id::text AS asset,u.asset_revision_id::text AS revision
+      FROM media.selection_revision s JOIN media.use u ON u.id=s.use_id WHERE s.id=$1`,
+    [selected.selection],
+  );
+  expect(retainedCover.rows).toEqual([{ use, asset: reserved.asset, revision: activated.revision }]);
 
   const avatarReads = spyOn(f.store, 'avatarRows');
   try {
