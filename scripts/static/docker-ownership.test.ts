@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import {
   scanDockerOwnership, scanDockerSpawnFiles, staleDockerSpawnDebt, uncoveredDockerSpawns,
   type DockerSpawn,
@@ -31,4 +31,20 @@ test('a fixture that spawns docker compose with a bare environment is caught', (
     "spawnSync('docker', ['compose', 'up', '-d'], { cwd, env: process.env })",
   ]);
   expect(uncoveredDockerSpawns(found, debt)).toEqual(found);
+});
+
+// An identity escape still names Docker after tokenization. Candidate filtering
+// may avoid unrelated source, but it must keep every program spelling the parser accepts.
+test('Docker program identity escapes remain covered by the inventory', () => {
+  const temporaryBase = join(root, '.temp');
+  mkdirSync(temporaryBase, { recursive: true });
+  const directory = mkdtempSync(join(temporaryBase, 'docker-ownership-'));
+  try {
+    writeFileSync(join(directory, 'escaped.ts'), String.raw`spawnSync('do\cker', ['version'], { env: process.env });`);
+    writeFileSync(join(directory, 'unrelated.ts'), `const source = 'ordinary code';`);
+    const found = scanDockerSpawnFiles(directory, ['escaped.ts', 'unrelated.ts']);
+    expect(found).toHaveLength(1);
+    expect(found[0]?.file).toBe('escaped.ts');
+    expect(found[0]?.call).toContain(String.raw`'do\cker'`);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
 });

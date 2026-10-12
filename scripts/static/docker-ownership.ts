@@ -311,6 +311,8 @@ export function scanDockerSpawnFiles(root: string, files: readonly string[]): Do
   const found: DockerSpawn[] = [];
   for (const file of files) {
     const text = readFileSync(join(root, file), 'utf8');
+    // String tokenization accepts identity escapes; keep those candidates too.
+    if (!text.replaceAll('\\', '').includes('docker')) continue;
     const tokens = tokenize(text);
     const bound = bindings(tokens);
     const coveredUntil: number[] = [];

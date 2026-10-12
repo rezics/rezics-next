@@ -23,6 +23,7 @@ const truncateList = /\btruncate\s+(?:table\s+)?([^;`']*)/gi;
 const listedTable = new RegExp(tableReference, 'gi');
 
 export function scanAccessFixtureWriteText(source: string, file = '<source>'): AccessFixtureWrite[] {
+  if (!/access/i.test(source)) return [];
   const writes = new Set<AccessFixtureWriteTable>();
   const add = (name: string) => writes.add(`access.${name.toLowerCase() as (typeof tableNames)[number]}`);
   for (const pattern of [rowWrite, copyIn]) for (const match of source.matchAll(pattern)) add(match[1]!);
@@ -38,10 +39,11 @@ function isExcluded(file: string): boolean {
 function sourceFiles(root: string): string[] {
   const files: string[] = [];
   const walk = (directory: string) => {
-    for (const name of readdirSync(directory)) {
-      const path = join(directory, name);
-      if (statSync(path).isDirectory()) walk(path);
-      else if (sourceExtensions.has(extname(name)) && !isExcluded(relative(root, path))) files.push(path);
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const path = join(directory, entry.name);
+      // Directory entries already carry type information; only links need a stat.
+      if (entry.isDirectory() || entry.isSymbolicLink() && statSync(path).isDirectory()) walk(path);
+      else if (sourceExtensions.has(extname(entry.name)) && !isExcluded(relative(root, path))) files.push(path);
     }
   };
   for (const directory of sourceRoots) {
