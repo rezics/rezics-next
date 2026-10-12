@@ -138,7 +138,7 @@ test('Person command and completion query execute against retained TDB2 data', a
 <${GRAPHS.control}> { <${DATASET}> rv:dataEpoch "${lineage.dataEpoch}" ; rv:routingEpoch "1" ; rv:sequence 1 . }
 <${GRAPHS.current}> {
   <${person}> a rv:Agent ; rv:agentKind rv:PersonAgent ; rv:head <${head}> ; rv:publicProfileHead <${head}> ;
-    rdfs:label "Exact identifying name" ; schema:name "Exact identifying name" ; rv:profileBio "Identifying biography" .
+    rdfs:label "ExactIdentifying" ; schema:name "Exact identifying name" ; rv:profileBio "Identifying biography" .
   <${credit}> a rv:NativeAgentCredit ; rv:agent <${person}> ; rv:work <${work}> ; schema:roleName "author" .
   <${work}> a schema:CreativeWork ; rdfs:label "Surviving Work" .
   <${foreignWork}> a schema:CreativeWork ; rdfs:label "Unrelated Work" .
@@ -273,6 +273,8 @@ public class PersonProfileCallerContractTest {
   }
   private void coauthorProjection(Dataset data) {
     data.begin(ReadWrite.WRITE);try {var graph=data.asDatasetGraph();
+      graph.add(iri("${publicGraph}"),iri("urn:rezics:search:name:policy-state"),rv("complete"),
+        NodeFactory.createLiteralByValue(true,org.apache.jena.datatypes.xsd.XSDDatatype.XSDboolean));
       Node current=iri("${GRAPHS.current}"),revisions=iri("${GRAPHS.revisions}"),pub=iri("${publicGraph}"),work=iri("${work}"),
         main=iri("${main}"),selection=iri("${selection}"),contribution=iri("${contribution}"),decision=iri("${decision}"),draft=iri("${draft}"),unit=iri("${authorUnit}");
       graph.add(current,work,rv("mainVersion"),main);
@@ -333,7 +335,7 @@ public class PersonProfileCallerContractTest {
       data.begin(ReadWrite.WRITE);try {PublicNameProjection.refresh(data.asDatasetGraph(),a);data.commit();}finally{data.end();}
       Set<Quad> after=snapshot(data);
       for(Node entry:bEntries)assertTrue("B's prefix identity must survive",after.contains(new Quad(pub,entry,rv("prefixAuthor"),b)));
-      assertFalse(after.stream().anyMatch(q->q.getGraph().equals(pub)&&q.getPredicate().equals(rv("prefixAuthor"))&&q.getObject().equals(a)));
+      assertFalse("native refresh must remove A's author edges",after.stream().anyMatch(q->q.getGraph().equals(pub)&&q.getPredicate().equals(rv("prefixAuthor"))&&q.getObject().equals(a)));
       assertTrue(after.contains(new Quad(pub,iri("${authorUnit}"),rv("publicTitle"),text("Surviving Work"))));
       assertTrue(after.contains(new Quad(iri("${GRAPHS.current}"),iri("${coauthorCredit}"),rv("agent"),b)));
       assertTrue("a shared sealed prefix retained for B must permit completion",complete(data,command));
