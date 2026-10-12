@@ -115,12 +115,15 @@ export function governance(sequence: number, topic: string, reason: NonNullable<
 export function memoryInbox(stream: StreamItem[], options: { refuse?: boolean; refuseTriage?: boolean; staleTriage?: boolean;
   generation?: string } = {}) {
   const generation = options.generation ?? '1';
+  let readThrough = generation === '1' ? '100' : '0';
+  const individuallyRead = new Set<string>();
   const calls: string[] = [];
   const answer = <T>(data: T) => Promise.resolve(options.refuse
     ? { data: null, error: { status: 503, value: null } } : { data, error: null });
   const notifications = Object.assign((params: { item: string }) => ({
     read: { put: () => {
       calls.push(`read:${params.item.slice(0, 8)}`);
+      individuallyRead.add(params.item);
       return answer({ profile: 'notification-item-read-v1', id: params.item, readAt: new Date(NOW).toISOString() });
     } },
     triage: { put: (body: { saved?: boolean; done?: boolean; expectedRevision: string | null }) => {
@@ -144,15 +147,22 @@ export function memoryInbox(stream: StreamItem[], options: { refuse?: boolean; r
         && (!query.reason || entry.reason === query.reason));
       const page = remaining.slice(0, query.limit);
       return answer({ profile: 'notification-stream-page-v1', generation, head: stream.at(-1)?.sequence ?? '0', reset,
-        readThrough: generation === '1' ? '100' : '0', items: page, groups: [],
+        readThrough, items: page, groups: [],
         next: remaining.length > query.limit ? `older:${generation}:${page.at(-1)!.sequence}` : null });
     },
+    'unread-count': { get: () => {
+      calls.push('count');
+      const unread = stream.filter(entry => !entry.done && !entry.read && !individuallyRead.has(entry.id)
+        && BigInt(entry.sequence) > BigInt(readThrough)).length;
+      return answer({ profile: 'notification-unread-count-v1', generation, count: Math.min(unread, 99), overflow: unread > 99 });
+    } },
     hint: { get: () => answer({ profile: 'notification-stream-hint-v1', generation, head: stream.at(-1)?.sequence ?? '0' }) },
   });
   const main = { v1: { me: { notifications, 'notification-read-watermarks': { inbox: { put: (body: {
     readThrough: string }) => {
     calls.push(`read-through:${body.readThrough}`);
-    return answer({ profile: 'notification-read-watermark-v1', generation, readThrough: body.readThrough });
+    if (!options.refuse && BigInt(body.readThrough) > BigInt(readThrough)) readThrough = body.readThrough;
+    return answer({ profile: 'notification-read-watermark-v1', generation, readThrough });
   } } } } } } as unknown as MainClient;
   return { main, calls };
 }

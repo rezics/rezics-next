@@ -15,7 +15,7 @@ import { materializeData } from 'native-i18n';
 import { messages as newWorkMessages } from './messages.ts';
 import { sanctionSentence } from './sanction.ts';
 import type { UiLocale } from '../../../i18n/define.ts';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { localizedPath } from '../../../i18n/locale.ts';
 import { browserMainApi } from '../../api/browser.ts';
 import { relativeTime } from '../../feed/time.ts';
@@ -25,12 +25,13 @@ import { EmptyState, failureDetail } from '../empty-state.tsx';
 import LocalizedLink from '../localized-link.tsx';
 import { PageContainer, PageHeader } from '../page.tsx';
 import { useShell } from '../shell-provider.tsx';
-import { setUnread } from '../unread.ts';
+import { setUnread, setUnreadGeneration } from '../unread.ts';
 import { inboxReasons, inboxViews, type NotificationSelection, type NotificationWindow, notificationsHref,
   readWindow, type StreamItem } from './window.ts';
 
 type T = ReturnType<typeof useShell>['t'];
 type Kind = NonNullable<StreamItem['display']>['kind'];
+type Traversal = { generation: string; head: string; revision: number };
 
 const icons: Record<Kind, LucideIcon> = { reply: MessageSquareReplyIcon, submission_decision: FileCheckIcon,
   moderation_outcome: ShieldIcon, realm_role_change: UserRoundCogIcon, follow: UserPlusIcon,
@@ -141,10 +142,10 @@ function destination(item: StreamItem): string | null {
     || display.kind === 'reply') ? spaceHref(realm, 'community') : null;
 }
 
-function NotificationRow({ item, grouped, now, avatarQuery, onRead, onTriage, triageBusy, actingSubject, main }: { item: StreamItem;
+function NotificationRow({ item, grouped, now, avatarQuery, onRead, onTriage, triageBusy, actingSubject, main, isCurrent }: { item: StreamItem;
   grouped: number; now: number; avatarQuery: string; onRead: (item: StreamItem) => void;
   onTriage: (item: StreamItem, patch: { saved?: boolean; done?: boolean }) => void; triageBusy: boolean;
-  actingSubject?: string; main: () => MainClient }) {
+  actingSubject?: string; main: () => MainClient; isCurrent: () => boolean }) {
   const { t, locale } = useShell();
   const [listed, setListed] = useState(false);
   const [answer, setAnswer] = useState<'accept' | 'decline' | null>(null);
@@ -164,13 +165,14 @@ function NotificationRow({ item, grouped, now, avatarQuery, onRead, onTriage, tr
   const invitation = item.state === 'active' && display?.kind === 'realm_invitation' && actingSubject && item.subject?.ref
     && uuid(display.realm) ? { realm: uuid(display.realm)!, id: item.subject.ref } : null;
   async function respond(action: 'accept' | 'decline') {
-    if (!invitation || !actingSubject) return;
+    if (!invitation || !actingSubject || !isCurrent()) return;
     if (attempt.current?.action !== action || attempt.current.listed !== listed)
       attempt.current = { action, listed, key: crypto.randomUUID() };
     setBusy(true); setFailed(false);
     const result = await settle(() => main().v1.realms({ realm: invitation.realm })
       .invitations({ invitation: invitation.id }).response.post({ actingSubject, action, listed },
         { headers: { 'idempotency-key': attempt.current!.key } }));
+    if (!isCurrent()) return;
     setBusy(false);
     if (!result.ok) { setFailed(true); return; }
     setAnswer(action);
@@ -273,41 +275,101 @@ export function NotificationsView({ initial, now, avatarQuery, invitations, main
   const [busy, setBusy] = useState<string | null>(null);
   const [triageNote, setTriageNote] = useState<string | null>(null);
   const [triageError, setTriageError] = useState<string | null>(null);
-  const loadingMore = useRef(false);
+  // Identity fences completions even when a restart retains the same generation.
+  const traversal = useRef<Traversal>({ generation: initial.generation, head: initial.head, revision: 0 });
+  const mounted = useRef(true);
+  const loadingMore = useRef<Traversal | null>(null);
+  const restartRequired = useRef(false);
+  const countRequest = useRef(0);
+  const triageBusy = useRef<string | null>(null);
+  const displayed = traversal.current;
+  useEffect(() => {
+    mounted.current = true;
+    setUnreadGeneration(traversal.current.generation);
+    return () => {
+      mounted.current = false;
+      setUnreadGeneration(null);
+    };
+  }, []);
+  const isCurrent = (request: Traversal) => mounted.current && traversal.current === request;
   const lastWindow = windows.at(-1)!;
   const isRead = (item: StreamItem) => item.read || readHere.has(item.id)
     || BigInt(item.sequence) <= BigInt(readThrough);
   const unread = windows.some(window => window.items.some(item => !isRead(item)));
 
+  async function refreshCount(request: Traversal) {
+    const version = ++countRequest.current;
+    const count = await settle(() => client().v1.me.notifications['unread-count'].get());
+    if (!isCurrent(request) || version !== countRequest.current || !count.ok
+      || count.data.generation !== request.generation) return;
+    setUnread({ count: count.data.count, overflow: count.data.overflow, generation: count.data.generation });
+  }
+
   async function markAll() {
+    const request = displayed;
+    if (!isCurrent(request) || restartRequired.current) return;
     const result = await settle(() => client().v1.me['notification-read-watermarks'].inbox.put({
-      profile: 'notification-read-watermark-v1', generation: lastWindow.generation, readThrough: lastWindow.head }));
+      profile: 'notification-read-watermark-v1', generation: request.generation, readThrough: request.head }));
+    if (!isCurrent(request)) return;
     if (!result.ok) { setState('mark-failed'); return; }
-    setReadThrough(result.data.readThrough);
-    setUnread({ count: 0, overflow: false });
+    if (result.data.generation !== request.generation) return;
+    setReadThrough(current => BigInt(current) > BigInt(result.data.readThrough) ? current : result.data.readThrough);
     setState('marked');
+    await refreshCount(request);
   }
 
   function markOne(item: StreamItem) {
-    if (isRead(item)) return;
+    const request = displayed;
+    if (!isCurrent(request) || restartRequired.current || isRead(item)) return;
     setReadHere(current => new Set(current).add(item.id));
-    void settle(() => client().v1.me.notifications({ item: item.id }).read.put()).then(async () => {
-      const count = await settle(() => client().v1.me.notifications['unread-count'].get());
-      if (count.ok) setUnread({ count: count.data.count, overflow: count.data.overflow });
+    void settle(() => client().v1.me.notifications({ item: item.id }).read.put()).then(async result => {
+      if (!isCurrent(request) || !result.ok) return;
+      await refreshCount(request);
     });
   }
 
+  function replaceTraversal(window: NotificationWindow) {
+    traversal.current = { generation: window.generation, head: window.head, revision: traversal.current.revision + 1 };
+    setUnreadGeneration(window.generation);
+    ++countRequest.current;
+    triageBusy.current = null;
+    setBusy(null); setTriageError(null); setTriageNote(null);
+    setWindows([window]);
+    setReadThrough(window.readThrough);
+    setReadHere(new Set());
+  }
+
   async function older() {
-    if (loadingMore.current || lastWindow.next === null) return;
-    loadingMore.current = true;
+    let request = displayed;
+    if (!isCurrent(request) || loadingMore.current || (!restartRequired.current && lastWindow.next === null)) return;
+    loadingMore.current = request;
     setState('loading');
-    const next = await readWindow(client(), lastWindow.next, selection);
-    loadingMore.current = false;
+    let restarting = restartRequired.current;
+    let next = await readWindow(client(), restarting ? null : lastWindow.next, selection);
+    if (!isCurrent(request)) return;
+    if (!next.ok && next.failure === 'invalid' && !restarting) {
+      // Invalidate the rejected cursor before recovery, including a failed recovery's retry.
+      restartRequired.current = true;
+      restarting = true;
+      request = { ...request, revision: request.revision + 1 };
+      traversal.current = request;
+      loadingMore.current = request;
+      ++countRequest.current;
+      triageBusy.current = null;
+      setBusy(null); setTriageError(null); setTriageNote(null);
+      setUnreadGeneration(request.generation);
+      next = await readWindow(client(), null, selection);
+      if (!isCurrent(request)) return;
+    }
+    loadingMore.current = null;
     if (!next.ok) { setState('older-failed'); return; }
-    if (next.data.reset || next.data.generation !== lastWindow.generation) {
-      setWindows([next.data]);
-      setReadThrough(next.data.readThrough);
-      setReadHere(new Set());
+    if (BigInt(next.data.generation) < BigInt(request.generation)
+      || (next.data.generation !== request.generation && !next.data.reset && !restarting)) {
+      setState('older-failed'); return;
+    }
+    if (restarting || next.data.reset || next.data.generation !== request.generation) {
+      restartRequired.current = false;
+      replaceTraversal(next.data);
     } else {
       setWindows(current => [...current, next.data]);
       setReadThrough(current => BigInt(current) > BigInt(next.data.readThrough) ? current : next.data.readThrough);
@@ -317,10 +379,14 @@ export function NotificationsView({ initial, now, avatarQuery, invitations, main
 
   /** One flag at a time. Main keeps the flag we omit, and the response is what this view shows. */
   async function triage(item: StreamItem, patch: { saved?: boolean; done?: boolean }) {
-    if (busy) return;
+    const request = displayed;
+    if (!isCurrent(request) || restartRequired.current || triageBusy.current) return;
+    triageBusy.current = item.id;
     setBusy(item.id); setTriageError(null); setTriageNote(null);
     const result = await settle(() => client().v1.me.notifications({ item: item.id }).triage.put({
       profile: 'notification-item-triage-v1', ...patch, expectedRevision: item.triageRevision }));
+    if (!isCurrent(request)) return;
+    triageBusy.current = null;
     setBusy(null);
     if (!result.ok) { setTriageError(result.failure === 'moved' ? t.triageStale : t.triageFailed); return; }
     const next = result.data;
@@ -370,9 +436,9 @@ export function NotificationsView({ initial, now, avatarQuery, invitations, main
     {invitations}
     {rows.length ? <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/60
       bg-card shadow-(--aura-shadow-card)">
-      {rows.map(({ item, grouped }) => <NotificationRow key={item.id} item={{ ...item, read: isRead(item) }}
+      {rows.map(({ item, grouped }) => <NotificationRow key={`${displayed.revision}:${item.id}`} item={{ ...item, read: isRead(item) }}
         grouped={grouped} now={now} avatarQuery={avatarQuery} onRead={markOne} onTriage={(entry, patch) => void triage(entry, patch)}
-        triageBusy={busy === item.id} actingSubject={actingSubject} main={client} />)}
+        triageBusy={busy === item.id} actingSubject={actingSubject} main={client} isCurrent={() => isCurrent(displayed)} />)}
     </ul> : <EmptyState icon={BellIcon} title={empty.title} description={empty.description} />}
     {lastWindow.next !== null ? <div className="flex flex-col items-center gap-2">
       {state === 'older-failed' ? <p role="alert" className="text-muted-foreground text-sm">{t.olderFailed}</p> : null}

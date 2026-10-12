@@ -250,3 +250,26 @@ export const InvalidCursorRestartsFiltered: Story = {
     await waitFor(() => expect(args.calls).toContain('mark:1:200'));
   },
 };
+
+/** Recovery failing once retries the newest page, never the rejected token. */
+export const FailedRestartRetriesNewest: Story = {
+  args: (() => {
+    let attempts = 0;
+    return { ...base, initial: windowOf([{ ...notice(100), saved: true }], '1', '100', 'expired'),
+      selection: { view: 'saved', reason: 'manual' } as const,
+      ...scripted({ page: query => query.before === 'expired'
+        ? { data: null, error: { status: 400, value: null } }
+        : ++attempts === 1 ? { data: null, error: { status: 503, value: null } }
+          : page(windowOf([{ ...notice(200), saved: true }])) }) };
+  })(),
+  async play({ canvasElement, args }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
+    await expect(await canvas.findByRole('alert')).toHaveTextContent('Couldn’t load more notifications.');
+    await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
+    await waitFor(() => expect(canvas.queryByRole('button', { name: 'Show more' })).toBeNull());
+    await expect(args.calls).toEqual(['page:expired:saved:manual', 'page:latest:saved:manual', 'page:latest:saved:manual']);
+    await expect(canvas.getByRole('link', { name: 'A correction was revised' }))
+      .toHaveAttribute('href', `/en/proposals/${streamId(1200)}?revision=2`);
+  },
+};
