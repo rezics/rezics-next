@@ -14,6 +14,7 @@ import { RealmDirectoryIndex } from '../src/modules/realm-directory/index.ts';
 import { prepareRealmHistoryAdmission, recordRealmHistoryAdmission, RealmHistoryAdmissionStale }
   from '../src/modules/realm-admin/history.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
+import { configureDisclosure } from '../src/modules/disclosure/read.ts';
 
 test('Realm directory pages use the last built position and perform no graph reads or row locking', async () => {
   const queries: string[] = [];
@@ -151,7 +152,11 @@ test('Realm directory is a public typed Main route', () => {
 
 test('community topics use the current shared vocabulary and match both languages', async () => {
   const id = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
-  const session = { displayLanguages: ['zh-CN'], query: async (sparql: string) => {
+  const environment = { fuseki: {} } as WorkActivationEnvironment;
+  const reader = { read: async (targets: readonly unknown[]) => targets.map(() => 'visible' as const) };
+  configureDisclosure(environment, reader);
+  const session = { deps: { environment }, displayLanguages: ['zh-CN'],
+    disclosure: reader.read, query: async (sparql: string) => {
     expect(sparql).toContain('rv:VocabularyDefinition');
     return [{ concept: { value: id }, label: { value: 'Mystery', 'xml:lang': 'en' } },
       { concept: { value: id }, label: { value: '悬疑', 'xml:lang': 'zh-Hans' } }];

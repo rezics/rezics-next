@@ -9,6 +9,7 @@ import { realmDirectoryItem } from './contract.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
 import { DisclosureUnavailable, hasDisclosure } from '../disclosure/read.ts';
 import type { RealmDirectorySort } from './index.ts';
+import { visibleSharedConcepts } from './vocabulary.ts';
 export type { RealmDirectorySort } from './index.ts';
 export { searchText } from './source.ts';
 
@@ -35,6 +36,7 @@ export async function readRealmDirectory(session: WorkReadSession,
         FILTER NOT EXISTS { ${iri(input.topic)} rv:protectionHead ?protection }
       } } LIMIT 20`, 20);
     if (!labels.length) throw new WorkReadInvalid('Topic is unavailable');
+    if (!(await visibleSharedConcepts(session, [input.topic])).has(input.topic)) throw new WorkReadInvalid('Topic is unavailable');
     const names = new Map(labels.flatMap(row => row.label?.['xml:lang']
       ? [[row.label['xml:lang'].toLowerCase(), row.label.value] as const] : []));
     const label = selectDisplayName(names, session.displayLanguages);
@@ -121,6 +123,9 @@ export async function readRealmDirectory(session: WorkReadSession,
         || row.mode?.value !== prior.mode?.value;
     })) throw new WorkReadMoved('Realm identity changed');
   const final = await classify();
+  if (input.topic && !(await visibleSharedConcepts(session, [input.topic])).has(input.topic)) {
+    throw new WorkReadInvalid('Topic is unavailable');
+  }
   const visible = new Set(page.rows.filter((_, ordinal) => opening[ordinal] === 'visible'
     && final[ordinal] === 'visible').map(row => row.realm));
   return { profile: 'realm-directory-v1' as const, topic, ...pageResult(session, items.filter(item => visible.has(item.id)), page.next),

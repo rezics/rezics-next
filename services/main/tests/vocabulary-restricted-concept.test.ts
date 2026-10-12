@@ -10,13 +10,13 @@ import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import type { VerifiedPrincipal } from '../src/modules/access/admission.ts';
 import { grantFixtureAuthority } from '../src/modules/access/fixture-authority.ts';
 import { AgentProvisioning, agentProvisionDigest } from '../src/modules/agent/provision.ts';
-import { configureDisclosure } from '../src/modules/disclosure/read.ts';
+import { configureDisclosure, DisclosureUnavailable, DISCLOSURE_COST } from '../src/modules/disclosure/read.ts';
 import { ownerModerationEffects } from '../src/modules/governance/effects.ts';
 import { GLOBAL_CONTEXT, GovernanceStore, type DecisionInput } from '../src/modules/governance/store.ts';
 import { readRealmDirectory } from '../src/modules/realm-directory/read.ts';
 import { readSharedVocabulary } from '../src/modules/realm-directory/vocabulary.ts';
 import { type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
-import { WorkReadInvalid, WorkReadSession, type ReadRow } from '../src/modules/work/read-session.ts';
+import { WorkReadInvalid, WorkReadUnavailable, WorkReadSession, type ReadRow } from '../src/modules/work/read-session.ts';
 import { ANONYMOUS_VIEWER } from '../src/modules/suitability/policy.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -136,7 +136,7 @@ function fixture(concepts: Concept[]) {
     expect(await governance.disclosure.read([target], ANONYMOUS_VIEWER, 'search')).toEqual(['hidden']);
     return decision;
   }
-  return { session, restrict };
+  return { session, restrict, reader: governance.disclosure };
 }
 
 test('restricted-concept-unique-label: anonymous vocabulary search omits a committed graph record search fence', async () => {
@@ -224,4 +224,35 @@ test('restricted-concept-topic-final-fence: a committed restriction after openin
   const result = await topicFailure(f.session, hidden.id);
   expect(installed).toBe(true);
   expect(result).toEqual({ error: 'WorkReadInvalid', message: 'Topic is unavailable' });
+});
+
+test('concept-disclosure-missing-owner: neither public resolver may turn an absent owner into visible labels', async () => {
+  const visible = concept('Concept without disclosure owner');
+  const f = fixture([visible]);
+  configureDisclosure(f.session.deps.environment, null);
+  await expect(readSharedVocabulary(f.session)).rejects.toBeInstanceOf(WorkReadUnavailable);
+  await expect(readRealmDirectory(f.session, { sort: 'newest', topic: visible.id })).rejects.toBeInstanceOf(WorkReadUnavailable);
+});
+
+test('concept-disclosure-incomplete-owner: failed or truncated classifications cannot disclose either resolver', async () => {
+  const visible = concept('Concept with incomplete disclosure');
+  const f = fixture([visible]);
+  for (const read of [async () => [] as never[], async (): Promise<never[]> => { throw new DisclosureUnavailable('Owner unavailable'); }]) {
+    configureDisclosure(f.session.deps.environment, { read });
+    await expect(readSharedVocabulary(f.session)).rejects.toBeInstanceOf(WorkReadUnavailable);
+    await expect(readRealmDirectory(f.session, { sort: 'newest', topic: visible.id })).rejects.toBeInstanceOf(WorkReadUnavailable);
+  }
+});
+
+test('concept-disclosure-bounded-inventory: both current policy passes keep transport batches at 64', async () => {
+  const visible = Array.from({ length: 256 }, (_, index) => concept(`Vocabulary ${index}`));
+  const f = fixture(visible);
+  const sizes: number[] = [];
+  configureDisclosure(f.session.deps.environment, { read: async (...args) => {
+    sizes.push(args[0].length); return f.reader.read(...args);
+  } });
+  const page = await readSharedVocabulary(f.session);
+  expect(page.items).toHaveLength(20);
+  expect(page.hasMore).toBe(true);
+  expect(sizes).toEqual(Array.from({ length: 16 }, () => DISCLOSURE_COST.batch));
 });
