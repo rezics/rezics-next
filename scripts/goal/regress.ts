@@ -563,7 +563,9 @@ async function batchesFor(checkout: string, files: ExpectedFile[], options: Regr
 
 export function classify(evidence: string, code = 1): Classification {
   // Bun prints nearby source branches even when they did not execute; their error literals are not runtime evidence.
-  const runtime = evidence.replace(/^\s*\d+\s*\|.*$/gm, '');
+  // Nor is a test's title: a passing case named "classifies ECONNREFUSED as Docker failure" voided its whole
+  // batch as an infrastructure failure in every run from 2026-10-09 to 2026-10-12.
+  const runtime = evidence.replace(/^\s*\d+\s*\|.*$/gm, '').replace(/^\((?:pass|fail|skip|todo)\) .*$/gm, '');
   if (/cannot connect to the docker daemon|failed to connect to (?:the )?docker (?:daemon|API)|docker.*ECONNREFUSED|ECONNREFUSED.*(?:docker|237[56])|(?:docker\.sock|dockerDesktopLinuxEngine)[^\n]*(?:connection refused|no such file|cannot find)|is the docker daemon running|mounts denied|is not shared from the host and is not known to Docker|all predefined address pools|no available.*address pool|could not find an available, non-overlapping.*address pool|network pool exhausted|oom-kill|Out of memory: Killed process/i.test(runtime)) return 'infrastructure';
   if (code === 137 || /heap out of memory|SIGKILL|resource exhausted|ENOMEM/.test(runtime)) return 'resource';
   if (/exceeded[^\n]*(?:budget|deadline)|timed out|ETIMEDOUT|deadline exceeded|admission deadline reached|reached its run deadline|heavy QA lock stayed held|No QA slot became free/i.test(runtime)) return 'deadline';

@@ -1719,6 +1719,8 @@ test('regression yielding stops at its deadline or an interruption', async () =>
 
 test('classification uses engine evidence without treating application ECONNREFUSED as Docker failure', () => {
   expect(classify('connect ECONNREFUSED 127.0.0.1:3001')).toBe('deterministic');
+  // A test title is not evidence, this test's own included.
+  expect(classify('(pass) classification uses engine evidence without treating application ECONNREFUSED as Docker failure [0.12ms]\n(fail) land > stops [1.00ms]\n 1 fail')).toBe('deterministic');
   for (const log of ['docker engine ECONNREFUSED', 'dial unix /var/run/docker.sock: connect: no such file or directory',
     'failed to connect to the Docker API', 'Error response from daemon: mounts denied',
     'The path /tmp/qa/init.sh is not shared from the host and is not known to Docker.',
