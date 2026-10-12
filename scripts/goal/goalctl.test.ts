@@ -2775,6 +2775,20 @@ child.on('close', code => process.exit(code ?? 1));
     } finally { r.cleanup(); }
   });
 
+  test('auto-land switches a dispatched task to land by itself and back', () => {
+    const r = repo();
+    try {
+      expect(r.run(['dispatch', r.brief('G-001')]).status).toBe(0);
+      expect(r.ledger().tasks['G-001']!.land).toBeUndefined();
+      const on = r.run(['auto-land', 'G-001']);
+      expect(on.stderr).toBe('');
+      expect(on.stdout).toContain('lands by itself');
+      expect(r.ledger().tasks['G-001']!.land).toBe('auto');
+      expect(r.run(['auto-land', 'G-001', 'off']).stdout).toContain("manager's command only");
+      expect(r.ledger().tasks['G-001']!.land).toBeUndefined();
+    } finally { r.cleanup(); }
+  });
+
   test('wait resumes the same Codex session after a capacity refusal', async () => {
     const r = repo();
     const script = join(r.dir, '.temp/worker-script.json');

@@ -1591,6 +1591,18 @@ export async function waitFor(id: string, options: { pollMs?: number; settleMs?:
   }
 }
 
+/** A task already dispatched takes or drops automatic landing; a brief's `land: auto` sets it at dispatch.
+ * It takes effect when a `wait` on the task sees its worker hand off. */
+async function setAutoLand(id: string, on: boolean): Promise<void> {
+  await withLedger(ledger => {
+    const task = taskOf(ledger, id);
+    assertOwner(task);
+    if (task.state !== 'running' && task.state !== 'exited') throw new Error(`${task.id}: auto-land needs a running or exited task (${task.state})`);
+    if (on) task.land = 'auto'; else delete task.land;
+    console.log(`${task.id}: ${on ? 'lands by itself when its worker hands off done' : 'lands on the manager\'s command only'}`);
+  });
+}
+
 async function landTask(id: string): Promise<void> {
   const initial = taskOf(readLedger(), id);
   assertOwner(initial);
@@ -6130,6 +6142,7 @@ async function main(argv: string[]): Promise<number> {
     case 'merge': await mergeTask(positional[0] ?? '', flags); return 0;
     case 'gate': await mergeTask(positional[0] ?? '', flags, undefined, undefined, undefined, true); return 0;
     case 'land': await landTask(positional[0] ?? ''); return 0;
+    case 'auto-land': await setAutoLand(positional[0] ?? '', positional[1] !== 'off'); return 0;
     case 'close': await closeTasks(positional.slice(0, -1), positional.at(-1) ?? ''); return 0;
     case 'reclaim': await reclaimTask(positional[0] ?? '', positional[1] ?? '', flags); return 0;
     case 'owner': {
