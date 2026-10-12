@@ -60,6 +60,8 @@ export const commandCounters = [
   'work_name_scope_links_visited',
   'typeahead_prefix_entries_visited',
   'source_author_name_entries_visited',
+  'occurrence_fields_visited',
+  'occurrence_labels_visited',
 ] as const;
 
 export function fusekiCommandWork(headers: Headers): Record<string, number> {
