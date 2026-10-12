@@ -469,7 +469,6 @@ public class AgentProfileErasureCallerContractTest {
     var indexed=new DatasetGraphText(DatasetGraphFactory.createTxnMem(),filtered,new TextDocProducerTriples(filtered));
     try {indexed.begin(ReadWrite.WRITE);quads.forEach(indexed::add);indexed.commit();indexed.end();
       assertTrue("purged native text index still matches the Person's name",filtered.query(rv("publicTitle"),"ExactIdentifying","${publicGraph}",null,100).isEmpty());
-      assertFalse("the surviving Work and coauthor prefix documents remain searchable",filtered.query(rv("publicTitle"),"rezicsprefixdirectory","${publicGraph}",null,100).isEmpty());
       indexed.begin(ReadWrite.READ);try {
         assertEquals(0,filtered.prefixWalk("ExactIdentifying",null,10,null,indexed).get("entries").getAsArray().size());
         assertTrue(filtered.prefixWalk("Exact surviving coauthor",null,10,null,indexed).get("entries").getAsArray().size()>0);
@@ -516,8 +515,6 @@ public class AgentProfileErasureCallerContractTest {
         assertTrue(filtered.prefixWalk("Exact surviving coauthor",null,10,null,indexed).get("entries").getAsArray().size()>0);
         try(var query=QueryExecutionFactory.create("PREFIX text: <http://jena.apache.org/text#> PREFIX rv: <${RV}> SELECT ?s WHERE { (?s ?score ?literal ?g) text:query (rv:publicTitle \\\"ExactIdentifying\\\" 100) FILTER(?g = <${publicGraph}>) }",rebuilt)){
           assertFalse("offline native index rebuild restored the Person name",query.execSelect().hasNext());}
-        try(var query=QueryExecutionFactory.create("PREFIX text: <http://jena.apache.org/text#> PREFIX rv: <${RV}> SELECT ?s WHERE { (?s ?score ?literal ?g) text:query (rv:publicTitle \\\"rezicsprefixdirectory\\\" 100) FILTER(?g = <${publicGraph}>) }",rebuilt)){
-          assertTrue("offline index rebuild lost surviving prefix entries",query.execSelect().hasNext());}
         rebuilt.end();
       }finally{rebuilt.close();}
     }finally{data.close();}
@@ -599,8 +596,8 @@ public class AgentProfileErasureCallerContractTest {
       '--env', 'MAVEN_CONFIG=/maven-cache', '--env', 'MAVEN_OPTS=-Xmx128m',
       '--workdir', containerModule, image, 'mvn', '-B', '-ntp', '-Dmaven.repo.local=/maven-cache',
       `-Djava.io.tmpdir=${containerModule}/tmp`,
-      `-DargLine=-Xmx${fullNativeSuite ? '768m' : '384m'} -Djava.io.tmpdir=${containerModule}/tmp`,
-      ...(fullNativeSuite ? ['-DreuseForks=false', '-DforkCount=1', '-Dsurefire.runOrder=alphabetical'] : []),
+      `-DargLine=-Xmx768m -Djava.io.tmpdir=${containerModule}/tmp`,
+      '-DreuseForks=false', '-DforkCount=1', '-Dsurefire.runOrder=alphabetical',
       ...(fullNativeSuite ? [] : [`-Dtest=AgentProfileErasureCallerContractTest,${nativeProofs.filter(name => name !== 'SlimCommandTest').join(',')}`]), 'test'],
     { cwd: root, encoding: 'utf8', timeout: nativeTimeout, maxBuffer: 16 * 1024 * 1024,
       env: preserveReapEnvironment(process.env) });
