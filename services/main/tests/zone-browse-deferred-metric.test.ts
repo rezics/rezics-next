@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { attributes, decode } from '../../../packages/observability/tests/otlp.ts';
 
 type MetricSignal = { resourceMetrics: { scopeMetrics: { metrics: { name: string;
-  sum?: { dataPoints: { asDouble?: number; asInt?: number;
+  sum?: { aggregationTemporality: number; dataPoints: { asDouble?: number; asInt?: number;
     attributes: { key: string; value: Record<string, unknown> }[] }[] } }[] }[] }[] };
 
 test('finding 5: the real Zone loop counts a healing retry as deferred even after earlier progress', async () => {
@@ -45,12 +45,18 @@ test('finding 5: the real Zone loop counts a healing retry as deferred even afte
     expect(errors).not.toContain('worker_fault');
     expect(JSON.parse(output.trim().split('\n').at(-1)!)).toMatchObject({ state: 'incomplete-healing',
       checkpoint: { sequence: '1' }, deferral: { code: 'main_relay_handoff_incomplete', retries: 1, intervalMs: 500 } });
-    const runs = signals.flatMap(signal => signal.resourceMetrics).flatMap(resource => resource.scopeMetrics)
-      .flatMap(scope => scope.metrics).filter(metric => metric.name === 'rezics.worker.runs')
-      .flatMap(metric => metric.sum!.dataPoints).filter(point =>
+    const counters = signals.flatMap(signal => signal.resourceMetrics).flatMap(resource => resource.scopeMetrics)
+      .flatMap(scope => scope.metrics).filter(metric => metric.name === 'rezics.worker.runs');
+    for (const counter of counters) expect(counter.sum!.aggregationTemporality).toBe(2);
+    const runs = counters.flatMap(metric => metric.sum!.dataPoints).filter(point =>
         attributes(point.attributes)['rezics.worker.name'] === 'main.zone-browse.projection');
-    expect(runs).toHaveLength(1);
-    expect(attributes(runs[0]!.attributes)['rezics.worker.outcome']).toBe('deferred');
-    expect(runs[0]!.asDouble ?? runs[0]!.asInt).toBe(1);
+    const series = new Map<string, typeof runs[number]>();
+    for (const point of runs) {
+      expect(point.asDouble ?? point.asInt).toBe(1);
+      const labels = attributes(point.attributes);
+      expect(labels['rezics.worker.outcome']).toBe('deferred');
+      series.set(JSON.stringify(Object.entries(labels).sort(([a], [b]) => a.localeCompare(b))), point);
+    }
+    expect(series.size).toBe(1);
   } finally { await sink.stop(true); }
 }, 15_000);
