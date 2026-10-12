@@ -98,7 +98,10 @@ async function fixture(options: {
   const target = (e: EvidenceTarget) => ({
     ...e, scopeKind: options.scopeKind ?? 'exact_revision' as const,
     revision: options.scopeKind === 'component' ? null : e.revision,
-    expectedHead: e.revision, effect: 'disclosure' as const,
+    expectedHead: e.revision,
+    // Decision identity excludes locators; distinct effects let this fixture
+    // exercise two cited locations without colliding with that unique key.
+    effect: e === b && b.locator !== a.locator ? 'search' as const : 'disclosure' as const,
   });
   const input: DecisionInput = {
     caseId: privateReport.caseId, expectedGeneration: privateReport.caseGeneration,
