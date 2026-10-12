@@ -164,7 +164,7 @@ test('Final summary classification observes a public-to-private change while ret
   expect(f.ownerCalls).toHaveLength(2);
 });
 
-test('A full summary batch spends the same graph calls signed in and anonymous, with two owner statements per pass', async () => {
+test('A full summary batch spends the same graph calls signed in and anonymous, with bounded parent and name probes', async () => {
   for (const viewer of [ANONYMOUS_VIEWER, disclosureViewer(principal)]) {
     const f = fixture(MAX_SUMMARY_BATCH);
     for (let pass = 0; pass < 2; pass++) {
@@ -172,7 +172,7 @@ test('A full summary batch spends the same graph calls signed in and anonymous, 
       expect(result.summaries).toHaveLength(MAX_SUMMARY_BATCH);
       expect(result.summaries.every(summary => summary.status === 'available' && summary.disclosure === 'public')).toBe(true);
       expect(result.cost).toMatchObject({ graphQueries: 3, accessQueries: 2 });
-      expect(f.graphCalls).toHaveLength((pass + 1) * 3);
+      expect(f.graphCalls).toHaveLength((pass + 1) * 5);
       expect(f.ownerCalls).toHaveLength((pass + 1) * 2);
       expect(f.ownerCalls.at(-1)!.targets).toHaveLength(MAX_SUMMARY_BATCH);
     }
@@ -196,7 +196,7 @@ test('A full summary batch with covers preserves name indexes across two bounded
   expect(result.summaries.every(summary => summary.status === 'available'
     && summary.disclosure === 'public' && summary.avatar.kind === 'fallback')).toBe(true);
   expect(f.ownerCalls.map(call => call.targets.length)).toEqual([64, 64, 64]);
-  expect(f.graphCalls).toHaveLength(4);
+  expect(f.graphCalls).toHaveLength(7);
   expect(result.cost).toMatchObject({ graphQueries: 4, accessQueries: 3, mediaQueries: 1 });
 });
 
@@ -244,7 +244,7 @@ test('Paired inventory retains every exact target, parent revision, context and 
     });
   }
   expect(f.ownerCalls).toHaveLength(3);
-  expect(f.graphCalls).toHaveLength(3);
+  expect(f.graphCalls).toHaveLength(6);
 });
 
 test('Paired anonymous classification applies its own suitability audience at the same owner cut', async () => {

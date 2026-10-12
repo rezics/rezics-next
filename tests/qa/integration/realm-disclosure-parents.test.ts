@@ -400,6 +400,7 @@ test('Realm disclosure: real Access preserves Work and Realm fences, independent
       DisclosureUnavailable,
     );
     expect(await decisions([body])).toEqual(['tombstone']);
+    expect(await decisions([selfWork])).toEqual(['tombstone']);
     const [legacy] = await resolveDisclosureSelections(f.env, [
       { ...body, work, workRevision: pinnedWorkHead },
     ]);

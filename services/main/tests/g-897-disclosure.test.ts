@@ -46,7 +46,7 @@ function fixture() {
     if (query.includes('SELECT ?target WHERE') && query.includes('rv:ErasedRevision')) {
       return { results: { bindings: [] } };
     }
-    if (query.includes('?structuredDecision')) return { results: { bindings: [] } };
+    if ((query.includes('SELECT ?work ?main ?structuredDecision') || query.includes('SELECT ?structuredDecision'))) return { results: { bindings: [] } };
     if (query.includes('SELECT ?epoch ?sequence WHERE')) return { results: { bindings: [{
       epoch: term('epoch'), sequence: term('1'),
     }] } };
@@ -146,7 +146,7 @@ test('G-897: graph-only public target resolution retains the configured assessme
 
 test('G-897: ratings leave Access-authorized composition and reader counts available', async () => {
   const f = fixture();
-  f.environment.fuseki.query = async query => ({ results: { bindings: query.includes('?structuredDecision') ? []
+  f.environment.fuseki.query = async query => ({ results: { bindings: (query.includes('SELECT ?work ?main ?structuredDecision') || query.includes('SELECT ?structuredDecision')) ? []
     : [{ ...(query.includes('SELECT ?resource ?head') ? { resource: term(id(1)) } : { work: term(id(1)) }), head: term(id(11)) }] } });
   const deps = { environment: f.environment, access: { canReadWork: async () => true } } as unknown as MainWorkDependencies;
   const session = new WorkReadSession(deps, new Request('http://main.local/v1/works'), { actingSubject: id(9) },

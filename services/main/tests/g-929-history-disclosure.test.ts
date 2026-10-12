@@ -23,7 +23,7 @@ function fixture() {
   const graph = new FusekiClient('http://graph.invalid');
   graph.query = async (query) => ({
     results: {
-      bindings: query.includes('?structuredDecision') ? []
+      bindings: (query.includes('SELECT ?work ?main ?structuredDecision') || query.includes('SELECT ?structuredDecision')) ? []
         : query.includes('SELECT ?resource ?head') ? [{ resource: term(work), head: term(work) }]
         : query.includes('SELECT ?epoch ?sequence')
         ? [{ epoch: term('epoch'), sequence: term('1') }]

@@ -99,7 +99,8 @@ test('G-542: the search graph adapter retains the live required owner across gra
   const env = { fuseki: graph, objectDirectory: '.temp/g-542', lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } };
   const position = { dataEpoch: 'epoch', sequence: '1', generation: 'generation' } as PublicTextPosition;
   configureDisclosure(env, new DisclosureStore(s.pool));
-  configureFixtureDisclosureAncestry(env, () => undefined);
+  configureFixtureDisclosureAncestry(env, target => target.work ? { resource: target.work, head: id(11),
+    ...(target.workRevision !== undefined ? { protectedRevision: target.workRevision } : {}) } : undefined);
   const adapt = () => searchGraphSnapshot.run({ clients: new Set([graph]), lineage: env.lineage, position },
     () => searchCardReadDependencies({ environment: env } as MainWorkDependencies));
   const deps = adapt();
@@ -113,7 +114,8 @@ test('G-542: the search graph adapter retains the live required owner across gra
 
 test('G-542: summary assembly keeps unavailable entries in position and never hydrates a restricted name', async () => {
   const s = storage(), graph = new FusekiClient('http://graph.invalid');
-  graph.query = async () => ({ results: { bindings: fixtures.slice(0, 1).map(target => ({
+  graph.query = async query => ({ results: { bindings: fixtures.slice(0, 1).map(target => ({
+    ...(query.includes('SELECT ?resource ?head') ? { resource: { type: 'uri', value: target.resource } } : {}),
     epoch: { type: 'literal', value: 'epoch' }, sequence: { type: 'literal', value: '1' },
     r: { type: 'uri', value: target.resource }, work: { type: 'uri', value: target.resource },
     type: { type: 'literal', value: 'work' }, head: { type: 'uri', value: target.revision! },
@@ -121,7 +123,8 @@ test('G-542: summary assembly keeps unavailable entries in position and never hy
   })) } });
   const env = { fuseki: graph, objectDirectory: '.temp/g-542', lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } };
   configureDisclosure(env, new DisclosureStore(s.pool));
-  configureFixtureDisclosureAncestry(env, () => undefined);
+  configureFixtureDisclosureAncestry(env, target => target.work ? { resource: target.work, head: id(11),
+    ...(target.workRevision !== undefined ? { protectedRevision: target.workRevision } : {}) } : undefined);
   let wikiAllows = true;
   const read = () => readResourceSummaries(env, undefined, {
     visibleRecords: async refs => new Set(wikiAllows ? refs : []),
@@ -164,7 +167,10 @@ test('G-542: two Governance stores on one pool retain current heads for notices 
     { current: async () => null }, { current: async () => null });
   const first = createOwner();
   configureDisclosure(env, first.disclosure);
-  configureFixtureDisclosureAncestry(env, target => target.work ? { resource: target.work, head: current } : undefined);
+  configureFixtureDisclosureAncestry(env, target => {
+    const work = target.work ?? (target.resource === id(1) ? id(1) : undefined);
+    return work ? { resource: work, head: current } : undefined;
+  });
   const second = createOwner();
   expect(second.disclosure).not.toBe(first.disclosure);
   expect(disclosurePoolReader(pool)).toBe(second.disclosure);
@@ -187,11 +193,13 @@ test('G-542: two Governance stores on one pool retain current heads for notices 
 
 test('G-542: asset adapters and export manifests discard all denied payload and notices', async () => {
   const s = storage(), graph = new FusekiClient('http://graph.invalid');
-  graph.query = async () => ({ results: { bindings: [{ work: { type: 'uri', value: id(1) },
+  graph.query = async query => ({ results: { bindings: [{
+    ...(query.includes('SELECT ?resource ?head') ? { resource: { type: 'uri', value: id(1) } } : { work: { type: 'uri', value: id(1) } }),
     head: { type: 'uri', value: id(11) } }] } });
   const env = { fuseki: graph, objectDirectory: '.temp/g-542', lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } };
   configureDisclosure(env, new DisclosureStore(s.pool));
-  configureFixtureDisclosureAncestry(env, () => undefined);
+  configureFixtureDisclosureAncestry(env, target => target.work ? { resource: target.work, head: id(11),
+    ...(target.workRevision !== undefined ? { protectedRevision: target.workRevision } : {}) } : undefined);
   const asset = { asset: id(5).slice(-36), target: id(1), context: DEFAULT_MEDIA_CONTEXT,
     selection: id(11).slice(-36), selectionPosition: null, use: id(12).slice(-36), crop: null,
     representation: id(13).slice(-36), sha256: 'b'.repeat(64), mediaType: 'image/png', byteLength: 100,
