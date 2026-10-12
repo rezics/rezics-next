@@ -104,23 +104,14 @@ export async function Availability({ workRef, id, locale, messages }: Common & {
 
 /**
  * Parts and connections: the next unfinished part and the reader's series progress first (G-838), then the
- * parts and the typed relations (G-837). The edition choice is made once, in the availability section. Main
- * answers parts and relations to a reader acting as an Agent, so anyone else is told what signing in shows.
+ * parts and the typed relations (G-837). The edition choice is made once, in the availability section.
+ * Main discloses structural previews publicly; personal progress still needs an eligible Agent.
  */
 export async function Parts({ workRef, id, locale, messages }: Common & { workRef: WorkAt; id: string }) {
-  const { actingSubject, signedIn } = await readingAgent();
-  const t = materializeData(messages, { locale });
-  if (!actingSubject) {
-    return <Region id="work-parts" title={t.sectionParts}>
-      <p className="text-muted-foreground text-sm">
-        <Link href={signedIn ? localizedPath(`/identity?next=${encodeURIComponent(localizedPath(workHref(workRef), locale))}`, locale)
-          : signInPath(localizedPath(workHref(workRef), locale))}
-        className="text-primary underline underline-offset-4 hover:no-underline">{t.signInForParts}</Link></p>
-    </Region>;
-  }
+  const { actingSubject } = await readingAgent();
   const embedded = { id, workRef: workRefOf(workRef), locale, pageMessages: messages };
   return <>
-    <SeriesProgressPanel work={iriOf(id)} locale={locale} preferenceForm={false} />
+    {actingSubject ? <SeriesProgressPanel work={iriOf(id)} locale={locale} preferenceForm={false} /> : null}
     <Suspense fallback={null}><PartsPreview {...embedded} /></Suspense>
     <Suspense fallback={null}><ConnectionsPreview {...embedded} /></Suspense>
   </>;

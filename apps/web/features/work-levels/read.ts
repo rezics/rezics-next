@@ -7,10 +7,9 @@ import type { CollectionMember, CollectionMembers, Loaded, Names, PartsPage, Rea
   People, RelationEntry, RelationsPage, Release, ReleasePage, Summary, WholesPage } from './types.ts';
 
 // Server reads for the Work-level pages. Each returns a `Loaded` result instead
-// of throwing, so one section's failure never takes down another. Main answers
-// parts, wholes, relations and Collections only with a bearer token and an
-// acting Agent, so a reader without one is told which step is missing rather
-// than shown an empty list.
+// of throwing, so one section's failure never takes down another. Main decides
+// disclosure for public parts, wholes and relations reads. Collection reads
+// still require an acting Agent.
 
 type Answer<T> = { data: T | null; error: { status: number } | null };
 
@@ -36,23 +35,20 @@ async function actor() {
 
 export async function readParts(id: string, query: { parent?: string; after?: string; limit?: number }):
   Promise<Loaded<PartsPage>> {
-  const current = await actor();
-  if (current.failure) return { ok: false, failure: current.failure };
+  const current = await reader();
   return settle(() => current.main.v1.resources({ resource: id }).parts.get({ query: { actingSubject: current.actingSubject,
     parent: query.parent ? iriOf(query.parent) : undefined, after: query.after, limit: query.limit } }), query.after);
 }
 
 export async function readWholes(id: string, query: { after?: string; limit?: number } = {}): Promise<Loaded<WholesPage>> {
-  const current = await actor();
-  if (current.failure) return { ok: false, failure: current.failure };
+  const current = await reader();
   return settle(() => current.main.v1.resources({ resource: id }).wholes.get({ query: {
     actingSubject: current.actingSubject, after: query.after, limit: query.limit ?? 20 } }), query.after);
 }
 
 export async function readRelations(id: string, query: { after?: string; limit?: number }):
   Promise<Loaded<RelationsPage>> {
-  const current = await actor();
-  if (current.failure) return { ok: false, failure: current.failure };
+  const current = await reader();
   return settle(() => current.main.v1.resources({ resource: id }).relations.get({ query: {
     actingSubject: current.actingSubject, after: query.after, limit: query.limit } }), query.after);
 }
