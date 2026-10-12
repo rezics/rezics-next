@@ -215,6 +215,14 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
         if (!held) await client.query('ROLLBACK');
         return Response.json({ error: 'stale_credential_session' }, { status: 403 });
       }
+      if (path.startsWith('/api/auth/two-factor/')) {
+        // Enrollment can insert a missing factor or replace an unverified one.
+        // Lock the user, rather than a possibly absent factor row, across all
+        // factor changes and the provider's read/verification. The recovery
+        // share lock remains first so recovery keeps its existing ordering.
+        await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+          [`account-totp:${session.user.id}`]);
+      }
       if (totpUserId) {
         const factor = await client.query<{ verified: boolean }>('SELECT verified FROM "twoFactor" WHERE "userId" = $1', [totpUserId]);
         if (factor.rows[0]?.verified === false) await requireStepUp(client, session);
@@ -223,8 +231,8 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
           if (!held) await client.query(failure.status >= 500 ? 'ROLLBACK' : 'COMMIT');
           return failure;
         }
-        // The provider rereads the factor. A concurrent enrollment after an
-        // empty snapshot must still spend this authenticated user's budget.
+        // Every signed-in proof spends the same budget, including a missing
+        // factor. Both admission decisions stay under the factor-change lock.
         await consumeStepUpAttempt(client, String(auth.options.secret), totpUserId);
       }
       const response = await auth.handler(request);
