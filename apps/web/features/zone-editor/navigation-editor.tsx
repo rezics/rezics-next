@@ -3,7 +3,7 @@
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/alert';
 import { Button, buttonVariants } from '@rezics/ui/button';
 import { cn } from '@rezics/ui/utils';
-import { Children, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Children, useRef, useState, type ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { commandLane, type WriteRound } from '../api/command.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
@@ -21,7 +21,7 @@ import {
 import { EditorActions } from './editor-actions.tsx';
 import { CollectionPageLookup } from './collection-page-lookup.tsx';
 import { PageSearchPicker } from './page-search-picker.tsx';
-import { useZoneEditorDraft, useZoneEditorRef, useZoneEditorSessionState } from './draft-provider.tsx';
+import { useZoneEditorDraft, useZoneEditorExitActions, useZoneEditorRef, useZoneEditorSessionState } from './draft-provider.tsx';
 import { confirmPublicationReview, readSavedPublicationSelection, reviewedPublicationChoice, stagePublicationReview,
   type PublicationReview } from './publication-review.ts';
 import { PublicationReviewPanel } from './publication-review-panel.tsx';
@@ -140,12 +140,24 @@ export function ZoneNavigationEditor({
     publishLane.current = commandLane({ ok: false, failure: 'unavailable' });
   const dirty = isNavigationDirty(state);
 
-  useEffect(() => {
-    if (!dirty) return;
-    const ask = (event: BeforeUnloadEvent) => event.preventDefault();
-    window.addEventListener('beforeunload', ask);
-    return () => window.removeEventListener('beforeunload', ask);
-  }, [dirty]);
+  useZoneEditorExitActions('navigation', async () => {
+    const current = stateRef.current;
+    if (inflight.current || !current.complete || hasInvalidNavigationPaths(current) || current.notice.kind === 'stale') return false;
+    if (publishChoice.current) {
+      const published = await publishLane.current!.submit(publishChoice.current, applyPublish);
+      if (!published.ok) return false;
+    }
+    if (!saveSession.current && !isNavigationDirty(stateRef.current)) return true;
+    const result = await saveLane.current!.submit(saveSession.current?.choice ?? current, applySave);
+    if (result.ok) put({ type: 'saved', ...result.data });
+    else if (result.failure === 'stale') put({ type: 'stale', currentHead: result.currentHead });
+    else put({ type: 'failed', failure: result.failure });
+    return result.ok && !isNavigationDirty(stateRef.current);
+  }, () => {
+    saveSession.current = null;
+    publishChoice.current = null;
+    dispatch(current => ({ ...current, links: current.saved, pending: [], pathBuffers: {}, notice: { kind: 'idle' } }));
+  }, () => saveSession.current !== null || publishChoice.current !== null);
 
   function track(kind: 'save' | 'publish' | 'load' | 'continue', work: Promise<unknown>) {
     inflight.current += 1;

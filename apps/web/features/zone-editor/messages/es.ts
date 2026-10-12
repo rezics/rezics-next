@@ -3,6 +3,13 @@ import type { ZoneEditorMessages } from '../messages.ts';
 
 const messages: ZoneEditorMessages = {
   realmFailedBody: 'REZICS no respondió. Tu elección de conexión sigue aquí; inténtalo de nuevo.',
+  exitTitle: '¿Guardar los cambios antes de salir?',
+  exitBody: 'Los cambios sin guardar siguen en el editor. Guárdalos, descártalos o sigue editando.',
+  exitSave: 'Guardar cambios y continuar',
+  exitDiscard: 'Descartar cambios y continuar',
+  exitCancel: 'Seguir editando',
+  exitSaving: 'Guardando cambios…',
+  exitFailed: 'No se pudieron guardar algunos cambios. Tu trabajo sigue aquí; revisa la sección afectada.',
   realmStaleBody: 'El Realm adjunto ha cambiado. Revisa su conexión actual antes de intentarlo de nuevo.',
   realmReview: 'Revisar conexión actual',
   realmReviewedBody: 'La conexión actual aparece abajo. Confirma antes de aplicarle tu cambio.',

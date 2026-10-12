@@ -7,7 +7,7 @@ import { cn } from '@rezics/ui/utils';
 import { useRef } from 'react';
 import { commandLane, type WriteRound } from '../api/command.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
-import { useZoneEditorDraft, useZoneEditorResource, useZoneEditorRef, useZoneEditorSessionState } from './draft-provider.tsx';
+import { useZoneEditorDraft, useZoneEditorExitActions, useZoneEditorResource, useZoneEditorRef, useZoneEditorSessionState } from './draft-provider.tsx';
 import {
   browserZoneTheme,
   commitCommand,
@@ -63,7 +63,9 @@ function EditableThemeEditor({ zoneId, actingSubject, copy, initial, signInHref,
   api?: ZoneThemeClient;
 }) {
   const [state, setState, draftReady] = useZoneEditorDraft('theme', initial, isThemeDirty, isThemeEditorState);
-  const [busy, setBusy] = useZoneEditorSessionState<null | 'save' | 'review'>('theme-busy', null);
+  const [busy, updateBusy] = useZoneEditorSessionState<null | 'save' | 'review'>('theme-busy', null);
+  const busyRef = useZoneEditorRef('theme-busy-ref', busy);
+  busyRef.current = busy;
   const stateRef = useZoneEditorRef('theme-state', state);
   stateRef.current = state;
   const captured = useZoneEditorRef<ThemeSaveIntent | null>('theme-choice', null);
@@ -71,6 +73,32 @@ function EditableThemeEditor({ zoneId, actingSubject, copy, initial, signInHref,
   const saveLane = useZoneEditorResource('theme:save',
     () => commandLane<ThemeSaveIntent, WriteResult<SavedZoneTheme>>({ ok: false, failure: 'unavailable' }));
   if (!client.current) client.current = api ?? browserZoneTheme();
+  useZoneEditorExitActions('theme', async () => {
+    if (busyRef.current || stateRef.current.needsReview) return false;
+    const choice = captured.current ?? intentFor(stateRef.current);
+    if (!choice) return false;
+    captured.current = choice;
+    setBusy('save');
+    try {
+      const result = await saveLane.submit(choice, applySave);
+      return result.ok && !isThemeDirty(stateRef.current);
+    } finally {
+      setBusy(null);
+    }
+  }, () => {
+    captured.current = null;
+    setState(current => {
+      const next: ThemeEditorState = { ...current, choice: current.saved,
+        initialization: current.initialization === 'draft' ? 'offered' : current.initialization, notice: 'idle' };
+      stateRef.current = next;
+      return next;
+    });
+  }, () => captured.current !== null);
+
+  function setBusy(next: typeof busy) {
+    busyRef.current = next;
+    updateBusy(next);
+  }
 
   function put(event: Parameters<typeof reduceThemeEditor>[1]) {
     setState(current => {
@@ -103,7 +131,8 @@ function EditableThemeEditor({ zoneId, actingSubject, copy, initial, signInHref,
   }
 
   async function save() {
-    if (busy || !draftReady || stateRef.current.needsReview || !isThemeDirty(stateRef.current)) return;
+    if (busyRef.current || !draftReady || stateRef.current.needsReview
+      || (!isThemeDirty(stateRef.current) && !captured.current)) return;
     const choice = captured.current ?? intentFor(stateRef.current);
     if (!choice) return;
     captured.current = choice;
@@ -116,7 +145,7 @@ function EditableThemeEditor({ zoneId, actingSubject, copy, initial, signInHref,
   }
 
   async function reviewLatest() {
-    if (busy || !draftReady || !state.needsReview) return;
+    if (busyRef.current || !draftReady || !stateRef.current.needsReview) return;
     setBusy('review');
     try {
       const current = await client.current!.readConfiguration(zoneId, actingSubject);
@@ -130,7 +159,7 @@ function EditableThemeEditor({ zoneId, actingSubject, copy, initial, signInHref,
     }
   }
 
-  const dirty = isThemeDirty(state);
+  const dirty = isThemeDirty(state) || captured.current !== null;
   if (state.initialization === 'offered') return <section className="grid min-w-0 max-w-3xl gap-3" aria-labelledby="zone-theme-title">
     <h2 id="zone-theme-title" className="font-semibold text-lg tracking-tight sm:text-xl">{copy.themeTitle}</h2>
     <Alert variant="info" role="status">

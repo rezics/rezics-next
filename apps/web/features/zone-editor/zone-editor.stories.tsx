@@ -71,7 +71,7 @@ function opening(document: DocumentSnapshot | null, revisionId: string | null): 
   return model.state;
 }
 
-function clientOf(calls: Call[], mode: 'save' | 'stale' | 'publish-drop'): ZoneAuthoringClient {
+function clientOf(calls: Call[], mode: 'save' | 'stale' | 'publish-drop' | 'publish-unresolved'): ZoneAuthoringClient {
   let saves = 0;
   let publishes = 0;
   return {
@@ -103,6 +103,7 @@ function clientOf(calls: Call[], mode: 'save' | 'stale' | 'publish-drop'): ZoneA
       });
       publishes += 1;
       if (mode === 'publish-drop' && publishes === 1) return { ok: false, failure: 'unavailable' };
+      if (mode === 'publish-unresolved' && publishes <= 2) return { ok: false, failure: 'unavailable' };
       return {
         ok: true,
         data: {
@@ -127,7 +128,7 @@ function Page({
   revisionId,
 }: {
   locale: UiLocale;
-  mode: 'save' | 'stale' | 'publish-drop';
+  mode: 'save' | 'stale' | 'publish-drop' | 'publish-unresolved';
   document: DocumentSnapshot | null;
   revisionId: string | null;
 }) {
@@ -232,6 +233,30 @@ export const StaleSaveKeepsTheText: Story = {
     await expect(canvas.getByRole('textbox', { name: 'Home page' })).toHaveTextContent(
       'A note from the other tab',
     );
+  },
+};
+
+export const CleanHomeRetainsAnUnresolvedPublicationOnExit: Story = {
+  args: { mode: 'publish-unresolved', document: fromPlainText('Saved harbor home', 'blocks'),
+    revisionId: '00000000-0000-4000-8000-000000000311' },
+  render(args) {
+    return <ZoneEditorDraftProvider zoneId={zoneId} actingSubject={actor}><Page {...args} /></ZoneEditorDraftProvider>;
+  },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: /^Publish$/ }));
+    await waitFor(() => expect(current).toHaveLength(2));
+    const unload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(unload);
+    await expect(unload.defaultPrevented).toBe(true);
+    await userEvent.click(canvas.getByRole('link', { name: /^Preview$/ }));
+    const screen = within(document.body);
+    await expect(await screen.findByRole('dialog')).toHaveTextContent('Save your unsaved work before leaving?');
+    await userEvent.click(screen.getByRole('button', { name: 'Keep editing' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Try again' }));
+    await waitFor(() => expect(current).toHaveLength(3));
+    await expect(current[2]).toEqual(current[0]);
+    await expect(await canvas.findByText(/^Published\./)).toBeVisible();
   },
 };
 
@@ -415,7 +440,8 @@ let navCalls: { name: string; key: string; segment?: string }[] = [];
 let navServer: SiteLink[] = [];
 
 type NavigationMode = 'save' | 'stale' | 'stale-removal' | 'partial' | 'incomplete' | 'paths'
-  | 'review-denied' | 'review-unavailable' | 'review-stale';
+  | 'review-denied' | 'review-unavailable' | 'review-stale' | 'publish-unresolved';
+const navigationPublicationCalls: Call[] = [];
 const loadedMounts: SiteLink[] = [
   {
     id: '00000000-0000-4000-8000-000000000351',
@@ -595,7 +621,10 @@ function NavigationPage({ mode }: { mode: NavigationMode }) {
     return found;
   });
   const [api] = useState(() => navigationClient(calls, mode));
-  const [authoring] = useState(() => clientOf([], 'save'));
+  const [authoring] = useState(() => {
+    navigationPublicationCalls.length = 0;
+    return clientOf(navigationPublicationCalls, mode === 'publish-unresolved' ? mode : 'save');
+  });
   const [themeApi] = useState<ZoneThemeClient>(() => ({
     async readConfiguration() {
       return { ok: true, data: { revision: zoneHead, configuration: { presentation: {
@@ -702,6 +731,25 @@ export const DeniedPublicationReviewRemainsVisibleBesideNavigation: Story = {
     await userEvent.click(canvas.getByRole('button', { name: messages.en.refreshAndPublish }));
     await expect(await canvas.findByText(messages.en.deniedBody)).toBeVisible();
     await expect(canvas.getByText(messages.en.navReviewClean)).toBeVisible();
+  },
+};
+
+export const CleanNavigationRetainsAnUnresolvedPublicationOnExit: Story = {
+  render: () => <ZoneEditorDraftProvider zoneId={zoneId} actingSubject={actor}>
+    <NavigationPage mode="publish-unresolved" />
+  </ZoneEditorDraftProvider>,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: /^Publish$/ }));
+    await waitFor(() => expect(navigationPublicationCalls).toHaveLength(2));
+    await userEvent.click(canvas.getByRole('link', { name: /^Preview$/ }));
+    const screen = within(document.body);
+    await expect(await screen.findByRole('dialog')).toHaveTextContent('Save your unsaved work before leaving?');
+    await userEvent.click(screen.getByRole('button', { name: 'Keep editing' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Try again' }));
+    await waitFor(() => expect(navigationPublicationCalls).toHaveLength(3));
+    await expect(navigationPublicationCalls[2]).toEqual(navigationPublicationCalls[0]);
+    await expect(await canvas.findByText(/^Published\./)).toBeVisible();
   },
 };
 

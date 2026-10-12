@@ -3,6 +3,13 @@ import type { ZoneEditorMessages } from '../messages.ts';
 
 const messages: ZoneEditorMessages = {
   realmFailedBody: 'REZICSから応答がありませんでした。接続の選択はここに残っています。もう一度お試しください。',
+  exitTitle: '移動する前に変更を保存しますか？',
+  exitBody: '未保存の変更はエディターに残っています。保存して移動するか、変更を破棄するか、編集を続けてください。',
+  exitSave: '変更を保存して続行',
+  exitDiscard: '変更を破棄して続行',
+  exitCancel: '編集を続ける',
+  exitSaving: '変更を保存中…',
+  exitFailed: '一部の変更を保存できませんでした。内容は残っています。該当するセクションで確認してください。',
   realmStaleBody: '接続されたRealmが変更されました。再試行する前に、現在の接続を確認してください。',
   realmReview: '現在の接続を確認',
   realmReviewedBody: '現在の接続を下に表示しています。変更を適用する前に確認してください。',

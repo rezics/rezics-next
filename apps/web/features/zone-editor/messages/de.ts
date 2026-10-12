@@ -3,6 +3,13 @@ import type { ZoneEditorMessages } from '../messages.ts';
 
 const messages: ZoneEditorMessages = {
   realmFailedBody: 'REZICS hat nicht geantwortet. Ihre Auswahl zur Verknüpfung bleibt erhalten. Versuchen Sie es erneut.',
+  exitTitle: 'Änderungen vor dem Verlassen speichern?',
+  exitBody: 'Nicht gespeicherte Änderungen sind noch im Editor. Speichere sie, verwirf sie oder bearbeite sie weiter.',
+  exitSave: 'Speichern und fortfahren',
+  exitDiscard: 'Verwerfen und fortfahren',
+  exitCancel: 'Weiter bearbeiten',
+  exitSaving: 'Änderungen werden gespeichert…',
+  exitFailed: 'Einige Änderungen konnten nicht gespeichert werden. Deine Arbeit bleibt erhalten. Prüfe den betroffenen Bereich.',
   realmStaleBody: 'Die verknüpfte Realm hat sich geändert. Prüfen Sie die aktuelle Verknüpfung, bevor Sie es erneut versuchen.',
   realmReview: 'Aktuelle Verknüpfung prüfen',
   realmReviewedBody: 'Die aktuelle Verknüpfung wird unten angezeigt. Bestätigen Sie, bevor Sie Ihre Änderung darauf anwenden.',

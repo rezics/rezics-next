@@ -11,6 +11,13 @@ import zhHant from './messages/zh-Hant.ts';
 // Interface copy for writing a Zone's home page. The page the author writes is theirs, never this catalog.
 const en = {
   realmFailedBody: 'REZICS did not answer. Your attachment choice is still here; try again.',
+  exitTitle: 'Save your unsaved work before leaving?',
+  exitBody: 'Unsaved changes are still in this editor. Save them before leaving, discard them, or keep editing.',
+  exitSave: 'Save changes and continue',
+  exitDiscard: 'Discard changes and continue',
+  exitCancel: 'Keep editing',
+  exitSaving: 'Saving changes…',
+  exitFailed: 'Some changes could not be saved. Your work is still here; return to the affected section to review it.',
   realmStaleBody: 'The attached Realm changed. Review its current attachment before trying again.',
   realmReview: 'Review current attachment',
   realmReviewedBody: 'The current attachment is shown below. Confirm before applying your change to it.',

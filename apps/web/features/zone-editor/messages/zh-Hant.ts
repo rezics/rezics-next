@@ -3,6 +3,13 @@ import type { ZoneEditorMessages } from '../messages.ts';
 
 const messages: ZoneEditorMessages = {
   realmFailedBody: 'REZICS 未回應。您的連結選擇仍保留在此處；請重試。',
+  exitTitle: '離開前儲存尚未儲存的修改？',
+  exitBody: '尚未儲存的修改仍在編輯器中。離開前可以儲存、捨棄修改，或繼續編輯。',
+  exitSave: '儲存修改並繼續',
+  exitDiscard: '捨棄修改並繼續',
+  exitCancel: '繼續編輯',
+  exitSaving: '正在儲存修改…',
+  exitFailed: '部分修改無法儲存。內容仍在這裡；請回到對應部分檢查。',
   realmStaleBody: '已連結的 Realm 已變更。請先核對目前的連結，再重試。',
   realmReview: '核對目前的連結',
   realmReviewedBody: '下方顯示目前的連結。請確認後再對其套用您的變更。',

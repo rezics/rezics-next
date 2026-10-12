@@ -6,7 +6,7 @@ import { commandLane } from '../api/command.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { browserZoneRealmAttachment, commitCommand, type ZoneRealmAttachmentClient,
   type ZoneRealmAttachmentSnapshot, type ZoneRealmAttachmentWrite, type ZoneRealmAttachmentWritten } from './api.ts';
-import { useZoneEditorDraft, useZoneEditorRef, useZoneEditorResource, useZoneEditorSessionState } from './draft-provider.tsx';
+import { useZoneEditorDraft, useZoneEditorExitActions, useZoneEditorRef, useZoneEditorResource, useZoneEditorSessionState } from './draft-provider.tsx';
 import type { ZoneEditorMessages } from './messages.ts';
 
 const handlePattern = /^[A-Za-z0-9](?:[A-Za-z0-9_-]{1,28})[A-Za-z0-9]$/;
@@ -71,6 +71,10 @@ export function RealmAttachmentEditor({ zoneId, actingSubject, copy, zoneHead, a
     commandLane<AttachmentChoice, ZoneRealmAttachmentWritten>({ ok: false, failure: 'unavailable' }));
   const reviewing = state.needsReview;
   const disabled = !ready || busy !== null;
+  useZoneEditorExitActions('attachment', async () => {
+    if (!stateRef.current.command || stateRef.current.needsReview || busyRef.current) return false;
+    return await write(stateRef.current.command) && !isDirty(stateRef.current);
+  }, () => setState(value => ({ ...value, handle: '', command: null, needsReview: false, review: null, notice: null })));
 
   async function write(choice: AttachmentChoice) {
     setBusy(choice.body.defaultRealm ? 'attach' : 'remove');
@@ -89,6 +93,7 @@ export function RealmAttachmentEditor({ zoneId, actingSubject, copy, zoneHead, a
           notice: answer.failure === 'sign-in' ? 'sign-in' : answer.failure === 'denied' ? 'denied'
             : 'reason' in answer && answer.reason === 'attachment-limit' ? 'limit' : 'unavailable' };
       });
+      return answer.ok;
     } finally {
       setBusy(null);
     }

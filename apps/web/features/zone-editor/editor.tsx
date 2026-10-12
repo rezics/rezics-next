@@ -4,7 +4,7 @@ import type { DocumentSnapshot } from '@rezics/document';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/alert';
 import { Button, buttonVariants } from '@rezics/ui/button';
 import { cn } from '@rezics/ui/utils';
-import { Children, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Children, useRef, useState, type ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { commandLane, type WriteRound } from '../api/command.ts';
 import { BodyEditor } from '../document-editor/body-editor.tsx';
@@ -12,13 +12,13 @@ import LocalizedLink from '../shell/localized-link.tsx';
 import { browserZoneAuthoring, browserZoneNavigation, browserZoneTheme, choiceWire, commitCommand, type SavedDraft, type WriteResult, type ZoneAuthoringClient, type ZoneNavigationClient, type ZoneThemeClient } from './api.ts';
 import { EditorActions } from './editor-actions.tsx';
 import { ZoneHomeDocument } from './home-document.tsx';
-import { useZoneEditorDraft, useZoneEditorRef, useZoneEditorSessionState } from './draft-provider.tsx';
+import { useZoneEditorDraft, useZoneEditorExitActions, useZoneEditorRef, useZoneEditorSessionState } from './draft-provider.tsx';
 import { confirmPublicationReview, readSavedPublicationSelection, reviewedPublicationChoice, stagePublicationReview,
   type PublicationReview } from './publication-review.ts';
 import { PublicationReviewPanel } from './publication-review-panel.tsx';
 import type { ZoneEditorMessages } from './messages.ts';
 import {
-  canPublish, draftChoice, isDirty, publicationChoice, publicationStatus, reduceEditor,
+  blankDocument, canPublish, draftChoice, isDirty, publicationChoice, publicationStatus, reduceEditor,
   type DraftChoice, type EditorState, type PublicationChoice,
 } from './model.ts';
 
@@ -72,12 +72,21 @@ export function ZoneHomeEditor({ zoneId, zoneIri, actingSubject, locale, copy, i
   if (!saveLane.current) saveLane.current = commandLane({ ok: false, failure: 'unavailable' });
   if (!publishLane.current) publishLane.current = commandLane({ ok: false, failure: 'unavailable' });
   const dirty = isDirty(state) || saveChoice.current !== null;
-  useEffect(() => {
-    if (!dirty) return;
-    const ask = (event: BeforeUnloadEvent) => event.preventDefault();
-    window.addEventListener('beforeunload', ask);
-    return () => window.removeEventListener('beforeunload', ask);
-  }, [dirty]);
+  useZoneEditorExitActions('home', async () => {
+    if (!canEdit || inflight.current || stateRef.current.notice.kind === 'stale') return false;
+    if (publishChoice.current) {
+      const published = await publishLane.current!.submit(publishChoice.current, applyPublish);
+      if (!published.ok) return false;
+    }
+    if (!saveChoice.current && !isDirty(stateRef.current)) return true;
+    saveChoice.current ??= draftChoice(stateRef.current, zoneIri, actingSubject);
+    const result = await saveLane.current!.submit(saveChoice.current, applySave);
+    return result.ok && !isDirty(stateRef.current);
+  }, () => {
+    saveChoice.current = null;
+    publishChoice.current = null;
+    dispatch(current => ({ ...current, value: current.savedValue ?? blankDocument(), notice: { kind: 'idle' } }));
+  }, () => saveChoice.current !== null || publishChoice.current !== null);
 
   function track(kind: 'save' | 'publish' | 'load', work: Promise<unknown>) {
     inflight.current += 1;

@@ -14,7 +14,7 @@ import type { ZoneEditorMessages } from './messages.ts';
 import { initialZoneLifecycleState, reduceZoneLifecycle, zoneLifecycleTarget, type ZoneLifecycleAction,
   type ZoneLifecycleEditorState, type ZoneLifecycleNotice } from './lifecycle.ts';
 import { zoneEditorPath, zoneLifecyclePath } from './routes.ts';
-import { useZoneEditorDraft, useZoneEditorRef, useZoneEditorSessionState } from './draft-provider.tsx';
+import { useZoneEditorDraft, useZoneEditorExit, useZoneEditorExitActions, useZoneEditorRef, useZoneEditorSessionState } from './draft-provider.tsx';
 
 const actionClass = 'h-auto min-h-9 whitespace-normal px-3';
 type LifecycleIntent = { expectedHead: string; action: ZoneLifecycleAction };
@@ -34,14 +34,36 @@ export function ZoneLifecycleEditor({ zoneId, actingSubject, locale, copy, initi
   onRetired?: () => void;
 }) {
   const [state, setState] = useZoneEditorDraft('lifecycle', initialZoneLifecycleState(initial), () => false, isLifecycleEditorState);
-  const [busy, setBusy] = useZoneEditorSessionState<null | 'write' | 'review'>('lifecycle-busy', null);
+  const [busy, updateBusy] = useZoneEditorSessionState<null | 'write' | 'review'>('lifecycle-busy', null);
+  const busyRef = useZoneEditorRef('lifecycle-busy-ref', busy);
+  busyRef.current = busy;
   const stateRef = useZoneEditorRef('lifecycle-state', state);
   stateRef.current = state;
   const captured = useZoneEditorRef<LifecycleIntent | null>('lifecycle-choice', null);
+  const requestExit = useZoneEditorExit();
   const client = useRef<ZoneLifecycleClient | null>(null);
   const lane = useZoneEditorRef<ReturnType<typeof commandLane<LifecycleIntent, WriteResult<SavedZoneLifecycle>>> | null>('lifecycle-lane', null);
   if (!client.current) client.current = api ?? browserZoneLifecycle();
   if (!lane.current) lane.current = commandLane({ ok: false, failure: 'unavailable' });
+  useZoneEditorExitActions('lifecycle', async () => {
+    if (busyRef.current || stateRef.current.needsReview) return false;
+    const intent = captured.current;
+    if (!intent) return true;
+    setBusy('write');
+    try {
+      return (await submitLifecycle(intent)).ok;
+    } finally {
+      setBusy(null);
+    }
+  }, () => {
+    captured.current = null;
+    put({ type: 'cancel' });
+  }, () => captured.current !== null);
+
+  function setBusy(next: typeof busy) {
+    busyRef.current = next;
+    updateBusy(next);
+  }
 
   function put(event: Parameters<typeof reduceZoneLifecycle>[1]) {
     setState(current => {
@@ -52,7 +74,7 @@ export function ZoneLifecycleEditor({ zoneId, actingSubject, locale, copy, initi
   }
 
   async function review() {
-    if (busy) return;
+    if (busyRef.current) return;
     setBusy('review');
     try {
       const result = await client.current!.readConfiguration(zoneId, actingSubject);
@@ -65,25 +87,46 @@ export function ZoneLifecycleEditor({ zoneId, actingSubject, locale, copy, initi
     }
   }
 
-  async function save(action: ZoneLifecycleAction) {
-    if (busy || state.needsReview || state.status === zoneLifecycleTarget(action)) return;
-    setBusy('write');
+  function save(action: ZoneLifecycleAction) {
+    requestExit(() => { void applyLifecycle(action); });
+  }
+
+  async function applyLifecycle(action: ZoneLifecycleAction) {
     const intent = captured.current ?? { expectedHead: stateRef.current.expectedHead, action };
+    if (busyRef.current || stateRef.current.needsReview) return;
+    if (!captured.current && stateRef.current.status === zoneLifecycleTarget(intent.action)) {
+      finishLifecycle(intent.action);
+      return;
+    }
+    setBusy('write');
+    try {
+      const result = await submitLifecycle(intent);
+      if (!result.ok) return;
+      finishLifecycle(intent.action);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function finishLifecycle(action: ZoneLifecycleAction) {
+    if (action === 'retire') {
+      if (onRetired) onRetired();
+      else requestExit(() => window.location.replace(localizedPath(zoneLifecyclePath(zoneId, returnAddress), locale)));
+    } else {
+      requestExit(() => window.location.replace(localizedPath(zoneEditorPath(returnAddress ?? zoneId), locale)));
+    }
+  }
+
+  async function submitLifecycle(intent: LifecycleIntent): Promise<WriteResult<SavedZoneLifecycle>> {
     captured.current = intent;
     const result = await lane.current!.submit(intent, (chosen, round) => apply(chosen, round));
+    if (result.ok || result.failure !== 'unavailable') captured.current = null;
     if (result.ok) {
-      const snapshot = { revision: result.data.revision, status: zoneLifecycleTarget(action) } as const;
-      put({ type: 'saved', action, snapshot, replayed: result.data.replayed });
-      if (action === 'retire') {
-        if (onRetired) onRetired();
-        else window.location.replace(localizedPath(zoneLifecyclePath(zoneId, returnAddress), locale));
-      } else {
-        window.location.replace(localizedPath(zoneEditorPath(returnAddress ?? zoneId), locale));
-      }
+      const snapshot = { revision: result.data.revision, status: zoneLifecycleTarget(intent.action) } as const;
+      put({ type: 'saved', action: intent.action, snapshot, replayed: result.data.replayed });
     } else if (result.failure === 'stale') put({ type: 'stale' });
     else put({ type: 'failed', failure: noticeFailure(result.failure) });
-    if (result.ok || result.failure !== 'unavailable') captured.current = null;
-    setBusy(null);
+    return result;
   }
 
   function apply(intent: LifecycleIntent, round: WriteRound): Promise<WriteResult<SavedZoneLifecycle>> {

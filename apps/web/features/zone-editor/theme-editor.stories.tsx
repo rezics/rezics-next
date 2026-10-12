@@ -1,5 +1,6 @@
 import type { ZoneTokens } from '@rezics/zone-sdk';
 import { direction } from '@rezics/main/language';
+import { Button } from '@rezics/ui/button';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useRef, useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
@@ -7,6 +8,7 @@ import type { ZoneThemeClient } from './api.ts';
 import { ZoneThemeEditor } from './theme-editor.tsx';
 import { initialThemeState, type ZonePresentationBaseline } from './theme.ts';
 import { ZoneEditorFrame } from './frame.tsx';
+import { ZoneEditorDraftProvider, useZoneEditorExit } from './draft-provider.tsx';
 import { messages } from './messages.ts';
 import { messages as manageMessages } from '../manage/messages.ts';
 import { fictionModules, fictionZone } from '../zones/fixtures.ts';
@@ -92,8 +94,8 @@ function NewZoneDefaults() {
         effectivePresentation: { revision: head, presentation: baseline } } };
     },
     async saveConfiguration(_zone, body) {
-      expect(body.expectedHead).toBe(head);
-      expect(body.presentation).toEqual({ ...baseline, tokens: { ...baseline.tokens, density: 'compact', pageSurface: 'cards' } });
+      await expect(body.expectedHead).toBe(head);
+      await expect(body.presentation).toEqual({ ...baseline, tokens: { ...baseline.tokens, density: 'compact', pageSurface: 'cards' } });
       return { ok: true, data: { revision: nextHead, replayed: false } };
     },
   }));
@@ -104,6 +106,57 @@ function NewZoneDefaults() {
       initial={initialThemeState(configuration, head, { revision: head, presentation: baseline })}
       signInHref="/auth/start" api={api} />
   </ZoneEditorFrame>;
+}
+
+type ThemeCommandMode = 'delayed' | 'lost-response';
+const themeCommandCalls: { key: string; body: Parameters<ZoneThemeClient['saveConfiguration']>[1] }[] = [];
+let finishDelayedSave: (() => void) | null = null;
+
+function resetThemeCommands() {
+  themeCommandCalls.length = 0;
+  finishDelayedSave = null;
+  return () => { finishDelayedSave?.(); finishDelayedSave = null; };
+}
+
+function ThemeExitControls({ mode, fixtureZoneId }: { mode: ThemeCommandMode; fixtureZoneId: string }) {
+  const [previewed, setPreviewed] = useState(false);
+  const requestExit = useZoneEditorExit();
+  const [initial] = useState(() => initialThemeState({ ...opening, zone: `https://rezics.com/id/${fixtureZoneId}` }, head));
+  const [api] = useState<ZoneThemeClient>(() => {
+    let attempts = 0;
+    return {
+      async readConfiguration() { return { ok: true, data: { revision: head, configuration: opening } }; },
+      async saveConfiguration(_zone, body, key) {
+        attempts += 1;
+        themeCommandCalls.push({ key, body });
+        if (mode === 'delayed' && attempts === 1) {
+          await new Promise<void>(resolve => { finishDelayedSave = resolve; });
+        }
+        if (mode === 'lost-response' && attempts <= 2) return { ok: false, failure: 'unavailable' };
+        return { ok: true, data: { revision: nextHead, replayed: mode === 'lost-response' && attempts === 3 } };
+      },
+    };
+  });
+  return <div className="grid min-w-0 gap-5">
+    <ZoneThemeEditor zoneId={fixtureZoneId} actingSubject={actor} copy={messages.en} initial={initial}
+      signInHref="/auth/start" api={api} />
+    <Button variant="outline" size="sm" className="justify-self-start"
+      onClick={() => requestExit(() => setPreviewed(true))}>{messages.en.preview}</Button>
+    {previewed ? <p role="status" className="text-sm">Saved preview opened</p> : null}
+  </div>;
+}
+
+function ThemeExitStory({ mode }: { mode: ThemeCommandMode }) {
+  const fixtureZoneId = mode === 'delayed'
+    ? '00000000-0000-4000-8000-000000000417'
+    : '00000000-0000-4000-8000-000000000418';
+  return <ZoneEditorDraftProvider zoneId={fixtureZoneId} actingSubject={actor}>
+    <ZoneEditorFrame name="Harbor notes" editorPath="/manage/z/harbor" agent={agent} locale="en"
+      manageMessages={manageMessages} sectionsLabel={messages.en.sectionsLabel} sectionHome={messages.en.sectionHome}
+      sectionNavigation={messages.en.sectionNavigation} sectionRealm={messages.en.sectionRealm} sectionTheme={messages.en.sectionTheme}>
+      <ThemeExitControls mode={mode} fixtureZoneId={fixtureZoneId} />
+    </ZoneEditorFrame>
+  </ZoneEditorDraftProvider>;
 }
 
 const meta = {
@@ -152,5 +205,59 @@ export const CreateLayoutFromDefaults: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Save layout' }));
     await expect(canvas.getByText('Layout saved.', { exact: true })).toBeVisible();
     await expect(canvas.getByRole('button', { name: 'Save layout' })).toBeDisabled();
+  },
+};
+
+/** An exit save waits for the current write to settle instead of dispatching a second command. */
+export const DelayedSaveRefusesDuplicateExitCommand: Story = {
+  beforeEach: resetThemeCommands,
+  render: () => <ThemeExitStory mode="delayed" />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('radio', { name: messages.en.themeCompact }));
+    await userEvent.click(canvas.getByRole('button', { name: messages.en.themeSave }));
+    await waitFor(() => expect(themeCommandCalls).toHaveLength(1));
+    await expect(canvas.getByRole('button', { name: messages.en.themeSaving })).toBeDisabled();
+    await userEvent.click(canvas.getByRole('button', { name: messages.en.preview }));
+    const dialog = within(await within(document.body).findByRole('dialog'));
+    await userEvent.click(dialog.getByRole('button', { name: messages.en.exitSave }));
+    await waitFor(() => expect(dialog.getByText(messages.en.exitFailed)).toBeVisible());
+    await expect(themeCommandCalls).toHaveLength(1);
+    finishDelayedSave!();
+    await expect(await canvas.findByText(messages.en.themeSaved, { exact: true })).toBeVisible();
+    await userEvent.click(dialog.getByRole('button', { name: messages.en.exitSave }));
+    await expect(await canvas.findByText('Saved preview opened', { exact: true })).toBeVisible();
+    await expect(themeCommandCalls).toHaveLength(1);
+  },
+};
+
+/** Reverting visible choices does not discard a lost response's original body or command key. */
+export const RevertedChoicesRetainUnresolvedExitCommand: Story = {
+  beforeEach: resetThemeCommands,
+  render: () => <ThemeExitStory mode="lost-response" />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('radio', { name: messages.en.themeCompact }));
+    await userEvent.click(canvas.getByRole('button', { name: messages.en.themeSave }));
+    await expect(await canvas.findByText(messages.en.themeUnavailableBody, { exact: true })).toBeVisible();
+    await userEvent.click(canvas.getByRole('radio', { name: messages.en.themeComfortable }));
+    await expect(canvas.getByRole('button', { name: messages.en.themeSave })).toBeEnabled();
+    const unload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(unload);
+    await expect(unload.defaultPrevented).toBe(true);
+    await userEvent.click(canvas.getByRole('button', { name: messages.en.preview }));
+    const dialog = within(await within(document.body).findByRole('dialog'));
+    await userEvent.click(dialog.getByRole('button', { name: messages.en.exitSave }));
+    await expect(await dialog.findByText(messages.en.exitFailed)).toBeVisible();
+    await expect(themeCommandCalls).toHaveLength(3);
+    await expect(themeCommandCalls[1]).toEqual(themeCommandCalls[0]);
+    await expect(themeCommandCalls[2]).toEqual(themeCommandCalls[0]);
+    await userEvent.click(dialog.getByRole('button', { name: messages.en.exitSave }));
+    await expect(await canvas.findByText('Saved preview opened', { exact: true })).toBeVisible();
+    await expect(themeCommandCalls).toHaveLength(4);
+    await expect(themeCommandCalls[3].key).not.toBe(themeCommandCalls[0].key);
+    await expect(themeCommandCalls[3].body.expectedHead).toBe(nextHead);
+    await expect(themeCommandCalls[3].body.presentation.tokens.density).toBe('comfortable');
+    await expect(canvas.getByRole('radio', { name: messages.en.themeComfortable })).toBeChecked();
   },
 };

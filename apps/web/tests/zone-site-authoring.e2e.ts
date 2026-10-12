@@ -463,6 +463,67 @@ async function expectShowcaseHome(page: Page, title: string) {
 
 test.use({ actionTimeout: 15_000 });
 
+for (const storageFailure of ['denied access', 'quota failure'] as const) {
+  test.describe(storageFailure, () => {
+    test('Unavailable storage preserves unsaved Home, Navigation and Theme through preview and lifecycle exits', async ({ page }, info) => {
+      test.setTimeout(600_000);
+      const actor = await startAuthor(page);
+      await createZoneFixture(page, actor, 'Unsaved harbor');
+      const collection = 'https://rezics.com/id/' + randomUUID();
+      await grant('collection:edit:' + collection, 'collection.edit', actor.principalId, actor.actingSubject);
+      await grant('semantic:read:' + collection, 'semantic.read', actor.principalId, actor.actingSubject);
+      await createCollection(page, collection, 'Unsaved charts', actor.actingSubject);
+      const disableStorage = (failure: 'denied access' | 'quota failure') => {
+        Object.defineProperty(window, 'sessionStorage', { configurable: true, get() {
+          if (failure === 'denied access') throw new DOMException('Storage access denied', 'SecurityError');
+          return { getItem: () => null, setItem() { throw new DOMException('Storage is full', 'QuotaExceededError'); },
+            removeItem() {}, clear() {}, key: () => null, length: 0 };
+        } });
+      };
+      await page.evaluate(disableStorage, storageFailure);
+      await page.addInitScript(disableStorage, storageFailure);
+
+      await writeHome(page, morning);
+      await page.getByRole('link', { name: 'Navigation', exact: true }).click();
+      await addNavigationLink(page, collection, 'Unsaved charts');
+      await page.getByRole('link', { name: 'Theme', exact: true }).click();
+      await page.getByRole('button', { name: 'Create layout from defaults' }).click();
+      await selectRadio(page, /Compact/);
+      await selectRadio(page, 'In cards');
+      await page.getByRole('link', { name: 'Preview', exact: true }).click();
+      const guard = page.getByRole('dialog');
+      await expect(guard).toContainText('Save your unsaved work before leaving?');
+      await guard.getByRole('button', { name: 'Keep editing' }).click();
+      await expect(page.getByRole('radio', { name: /Compact/ })).toBeChecked();
+      await expect(page.getByRole('radio', { name: 'In cards' })).toBeChecked();
+
+      await page.getByRole('link', { name: 'Status', exact: true }).click();
+      await page.getByRole('button', { name: 'Retire site' }).click();
+      await page.getByRole('button', { name: 'Confirm', exact: true }).click();
+      await expect(guard).toContainText('Save your unsaved work before leaving?');
+      await shoot(page, 'zone-unsaved-' + storageFailure.replaceAll(' ', '-') + '-lifecycle-guard', info);
+      await guard.getByRole('button', { name: 'Keep editing' }).click();
+      await expect(page.getByText('Before you retire this site', { exact: true })).toBeVisible();
+      await expect(page.getByText('This site is active and its published pages are available to readers.', { exact: true })).toBeVisible();
+
+      const sections = page.getByRole('navigation', { name: 'Site sections' });
+      await sections.getByRole('link', { name: 'Navigation', exact: true }).click();
+      await expect(page.getByRole('list', { name: 'Links' })).toContainText('Unsaved charts');
+      await sections.getByRole('link', { name: 'Theme', exact: true }).click();
+      await expect(page.getByRole('radio', { name: /Compact/ })).toBeChecked();
+      await expect(page.getByRole('radio', { name: 'In cards' })).toBeChecked();
+      await sections.getByRole('link', { name: 'Home', exact: true }).click();
+      await expect(page.getByRole('textbox', { name: 'Home page' })).toContainText(morning);
+      await page.getByRole('link', { name: 'Preview', exact: true }).click();
+      await expect(guard).toBeVisible();
+      await guard.getByRole('button', { name: 'Save changes and continue' }).click();
+      await expect(page.getByRole('heading', { name: 'Draft preview' })).toBeVisible({ timeout: 60_000 });
+      await expectSiteCuts(page, morning, ['Home', 'Unsaved charts'], 'cards', 'compact', true);
+      await shoot(page, 'zone-unsaved-' + storageFailure.replaceAll(' ', '-') + '-saved-preview', info);
+    });
+  });
+}
+
 for (const withRealm of [false, true]) {
   test(`Zone home rendering: a ${withRealm ? 'Realm-backed' : 'Realm-less'} Zone previews a new Showcase and publishes modules with saved presentation navigation`,
     async ({ page, context }, info) => {

@@ -3,8 +3,8 @@ import { useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { commandLane } from '../api/command.ts';
 import { commitCommand, type WriteResult } from './api.ts';
-import { ZoneEditorDraftProvider, useUnsavedZoneEditorSections, useZoneEditorDraft, useZoneEditorRef } from './draft-provider.tsx';
-import type { DraftStorage } from './draft-state.ts';
+import { ZoneEditorDraftProvider, useUnsavedZoneEditorSections, useZoneEditorDraft, useZoneEditorExit, useZoneEditorExitActions, useZoneEditorRef } from './draft-provider.tsx';
+import type { DraftStorage, ZoneEditorSection } from './draft-state.ts';
 
 interface TextDraft {
   value: string;
@@ -197,4 +197,91 @@ export const UnresolvedCommandRetainsItsEnvelopeAcrossSections: Story = {
     await expect(canvas.getByRole('status')).toHaveTextContent('Confirmed body: Original submitted body');
     await expect(canvas.getByRole('textbox', { name: 'Command body' })).toHaveValue('Later local typing');
   },
+};
+
+function ExitDraftField({ section }: { section: ZoneEditorSection }) {
+  const [state, setState, ready] = useZoneEditorDraft(section, { value: '', savedValue: '' }, isDirty, accepts);
+  const current = useZoneEditorRef(`exit-story:${section}`, state);
+  current.current = state;
+  useZoneEditorExitActions(section, async () => {
+    setState(value => ({ ...value, savedValue: value.value }));
+    return true;
+  }, () => setState(value => ({ ...value, value: value.savedValue })));
+  return <label className="grid gap-2">{section} draft
+    <input className={fieldClass} disabled={!ready} value={state.value}
+      onChange={event => setState(value => ({ ...value, value: event.target.value }))} />
+  </label>;
+}
+
+function ExitJourney() {
+  const [section, setSection] = useState<'home' | 'navigation' | 'theme'>('home');
+  const [destination, setDestination] = useState('editor');
+  const unsaved = useUnsavedZoneEditorSections();
+  const requestExit = useZoneEditorExit();
+  return <>
+    <nav className="flex flex-wrap gap-2">{(['home', 'navigation', 'theme'] as const).map(name =>
+      <button key={name} className={buttonClass} onClick={() => { setSection(name); setDestination('editor'); }}>{name}</button>)}</nav>
+    <p role="status">{unsaved.length ? `Unsaved sections: ${unsaved.join(', ')}` : 'All changes saved'}</p>
+    {destination === 'editor' ? <ExitDraftField section={section} /> : <p>{destination}</p>}
+    <div className="flex flex-wrap gap-2">
+      <button className={buttonClass} onClick={() => requestExit(() => setDestination('Saved preview'))}>Preview saved site</button>
+      <button className={buttonClass} onClick={() => requestExit(() => setDestination('Retired site'))}>Confirm lifecycle exit</button>
+    </div>
+  </>;
+}
+
+const checksExitGuard: NonNullable<Story['play']> = async ({ canvasElement }) => {
+  const canvas = within(canvasElement);
+  for (const section of ['home', 'navigation', 'theme']) {
+    await userEvent.click(canvas.getByRole('button', { name: new RegExp(`^${section}$`) }));
+    await userEvent.type(canvas.getByRole('textbox', { name: `${section} draft` }), `Unsaved ${section} choices`);
+  }
+  await userEvent.click(canvas.getByRole('button', { name: 'Preview saved site' }));
+  const screen = within(document.body);
+  await userEvent.click(await screen.findByRole('button', { name: 'Keep editing' }));
+  for (const section of ['home', 'navigation', 'theme']) {
+    await userEvent.click(canvas.getByRole('button', { name: new RegExp(`^${section}$`) }));
+    await expect(canvas.getByRole('textbox', { name: `${section} draft` })).toHaveValue(`Unsaved ${section} choices`);
+  }
+  await userEvent.click(canvas.getByRole('button', { name: 'Confirm lifecycle exit' }));
+  await userEvent.click(await screen.findByRole('button', { name: 'Keep editing' }));
+  await expect(canvas.getByRole('textbox', { name: 'theme draft' })).toHaveValue('Unsaved theme choices');
+  await userEvent.click(canvas.getByRole('button', { name: 'Preview saved site' }));
+  await userEvent.click(await screen.findByRole('button', { name: 'Save changes and continue' }));
+  await expect(await canvas.findByText('Saved preview')).toBeVisible();
+  await expect(canvas.getByRole('status')).toHaveTextContent('All changes saved');
+  await userEvent.click(canvas.getByRole('button', { name: /^home$/ }));
+  await expect(canvas.getByRole('textbox', { name: 'home draft' })).toHaveValue('Unsaved home choices');
+  await expect(storageFailures).toBeGreaterThan(0);
+};
+
+export const UnavailableStorageGuardsEveryDirtySection: Story = {
+  render: () => <main className="mx-auto grid max-w-2xl gap-4 p-6"><h1>Keep work when leaving the editor</h1>
+    <ZoneEditorDraftProvider zoneId="exit-unavailable" actingSubject="author"><ExitJourney /></ZoneEditorDraftProvider></main>,
+  play: checksExitGuard,
+};
+
+export const FullStorageGuardsEveryDirtySection: Story = {
+  ...UnavailableStorageGuardsEveryDirtySection,
+  args: { storageFailure: 'quota' },
+};
+
+export const UnsavedDocumentExitChoices: Story = {
+  ...UnavailableStorageGuardsEveryDirtySection,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.type(await canvas.findByRole('textbox', { name: 'home draft' }), 'Unsaved home choices');
+    await userEvent.click(canvas.getByRole('button', { name: 'Preview saved site' }));
+    const screen = within(document.body);
+    const dialog = await screen.findByRole('dialog', { name: 'Save your unsaved work before leaving?' });
+    await waitFor(() => expect(dialog).toBeVisible());
+    await expect(screen.getByRole('button', { name: 'Save changes and continue' })).toBeVisible();
+    await expect(screen.getByRole('button', { name: 'Discard changes and continue' })).toBeVisible();
+    await expect(screen.getByRole('button', { name: 'Keep editing' })).toBeVisible();
+  },
+};
+
+export const UnsavedDocumentExitChoicesPhone: Story = {
+  ...UnsavedDocumentExitChoices,
+  globals: { viewport: { value: 'phone' } },
 };

@@ -3,6 +3,13 @@ import type { ZoneEditorMessages } from '../messages.ts';
 
 const messages: ZoneEditorMessages = {
   realmFailedBody: 'REZICS 未响应。您的连接选择仍保留在此处；请重试。',
+  exitTitle: '离开前保存未保存的修改？',
+  exitBody: '未保存的修改仍在编辑器中。离开前可以保存、放弃修改，或继续编辑。',
+  exitSave: '保存修改并继续',
+  exitDiscard: '放弃修改并继续',
+  exitCancel: '继续编辑',
+  exitSaving: '正在保存修改…',
+  exitFailed: '部分修改未能保存。内容仍在这里；请回到对应部分检查。',
   realmStaleBody: '已连接的 Realm 已更改。请先核对当前连接，再重试。',
   realmReview: '核对当前连接',
   realmReviewedBody: '下方显示当前连接。请确认后再对其应用您的更改。',

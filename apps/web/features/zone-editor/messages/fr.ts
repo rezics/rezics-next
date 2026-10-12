@@ -3,6 +3,13 @@ import type { ZoneEditorMessages } from '../messages.ts';
 
 const messages: ZoneEditorMessages = {
   realmFailedBody: 'REZICS n’a pas répondu. Votre choix de rattachement est conservé ; réessayez.',
+  exitTitle: 'Enregistrer les modifications avant de quitter ?',
+  exitBody: 'Les modifications non enregistrées sont encore dans l’éditeur. Enregistrez-les, abandonnez-les ou continuez à modifier.',
+  exitSave: 'Enregistrer et continuer',
+  exitDiscard: 'Abandonner et continuer',
+  exitCancel: 'Continuer à modifier',
+  exitSaving: 'Enregistrement des modifications…',
+  exitFailed: 'Certaines modifications n’ont pas pu être enregistrées. Votre travail est toujours là ; vérifiez la section concernée.',
   realmStaleBody: 'Le Realm rattaché a changé. Vérifiez son rattachement actuel avant de réessayer.',
   realmReview: 'Vérifier le rattachement actuel',
   realmReviewedBody: 'Le rattachement actuel est affiché ci-dessous. Confirmez avant de lui appliquer votre modification.',

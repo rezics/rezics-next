@@ -35,7 +35,7 @@ export function ZoneEditorFrame({ name, editorPath, agent, locale, manageMessage
 }) {
   const manage = materializeData(manageMessages, { locale });
   const unsaved = useUnsavedZoneEditorSections();
-  const sectionLabels = { home: sectionHome, navigation: sectionNavigation, theme: sectionTheme };
+  const sectionLabels = { home: sectionHome, navigation: sectionNavigation, theme: sectionTheme, attachment: sectionRealm };
   return <div className="grid min-w-0 grid-cols-1">
     <div className="border-border/60 border-b bg-background/80">
       <div className="mx-auto grid w-full max-w-7xl gap-2 px-4 pt-3 sm:px-6 lg:px-10">
