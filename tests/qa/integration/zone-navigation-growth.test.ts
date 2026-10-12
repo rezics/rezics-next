@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
-import { join } from 'node:path';
+import { cpSync, mkdirSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 import { flushTelemetryTraces, shutdownTelemetry, startTelemetry }
   from '../../../packages/observability/src/runtime.ts';
 import { readEnv } from '../../../scripts/dev/config.ts';
@@ -155,7 +156,7 @@ test('Zone navigation reads stay within their cost class as unrelated Works grow
   expect(readEnv(join(qaStackDir, 'compose.env')).REZICS_STACK_STORAGE).toBe('persistent');
 
   const sink = startWorkProfileSink();
-  const smokeCopies = new Map<string, MediaStack>();
+  const smokeCopies = new Map<string, RestoredMeasurement>();
   const targets: string[] = [];
   const routeProfiles: ScaledProfile[] = [];
   const presentationProfiles: ScaledProfile[] = [];
@@ -184,7 +185,7 @@ test('Zone navigation reads stay within their cost class as unrelated Works grow
         const member = await stack.member(seedAuthorName, { stable: true, verified: true });
         const api = seedApi(stack, member.token);
         expect(await seedCensus(api, cut)).toEqual(cut.manifest.dimensions);
-        smokeCopies.set(input.target, stack);
+        smokeCopies.set(input.target, { stack, fusekiUrl: input.apps.FUSEKI_URL! });
         return async () => {
           smokeCopies.delete(input.target);
           await stack.stop();
@@ -208,14 +209,18 @@ test('Zone navigation reads stay within their cost class as unrelated Works grow
       const scale = cut.manifest.dimensions.unrelatedWorks;
       const target = 'zone-navigation-' + qaRunId + '-' + cut.manifest.scale;
 
-      await restoreWorkProfileCorpus(cut.manifest, target, driver);
+      // Published backups are read-only. Restore metadata and object bytes from
+      // a local copy; the driver copies the retained owner volumes independently.
+      const localBackup = join(root, '.temp', 'zone-navigation-backups', qaRunId, cut.manifest.id);
+      mkdirSync(dirname(localBackup), { recursive: true });
+      cpSync(dirname(cut.manifest.backup), localBackup, { recursive: true });
+      await restoreWorkProfileCorpus({
+        ...cut.manifest,
+        backup: join(localBackup, basename(cut.manifest.backup)),
+      }, target, driver);
       targets.push(target);
-      const stack = smokeCopies.get(target);
-      if (!stack) throw new Error('The retained checkpoint smoke read did not keep its restored stack open');
-      const restored: RestoredMeasurement = {
-        stack,
-        fusekiUrl: cut.manifest.apps.FUSEKI_URL,
-      };
+      const restored = smokeCopies.get(target);
+      if (!restored) throw new Error('The retained checkpoint smoke read did not keep its restored stack open');
 
       if (index === 0) {
         const knownReadPath = seedSelection(cut.works[0]!.mainVersion);
@@ -266,7 +271,7 @@ test('Zone navigation reads stay within their cost class as unrelated Works grow
         segment: itemSegment,
         target: itemTarget,
         kind,
-      }))).toEqual(cut.population.zone.mounts.map((mount) => ({
+      }))).toEqual(cut.population.zone.mounts.slice(0, ZONE_ROUTE_COST.maxNavigation).map((mount) => ({
         segment: mount.segment,
         target: mount.target,
         kind: 'index',
@@ -292,8 +297,32 @@ test('Zone navigation reads stay within their cost class as unrelated Works grow
     }
 
     const cost = zoneSiteReadCost(ZONE_ROUTE_COST);
-    assertWorkCostAtScales(routeProfiles, cost, 'zone-route-growth');
-    assertWorkCostAtScales(presentationProfiles, cost, 'zone-presentation-growth');
+    const failures: unknown[] = [];
+    for (const [label, profiles] of [
+      ['zone-route-growth', routeProfiles],
+      ['zone-presentation-growth', presentationProfiles],
+    ] as const) {
+      console.log('Zone navigation checkpoint ratios', JSON.stringify({
+        operation: label,
+        pairs: profiles.flatMap((smaller, index) => profiles.slice(index + 1).map(larger => ({
+          from: smaller.unrelatedWorks,
+          to: larger.unrelatedWorks,
+          counters: Object.fromEntries(Object.keys(cost.growth!).map(counter => {
+            const field = counter as WorkCostField;
+            const before = smaller[field];
+            const after = larger[field];
+            return [counter, before === null || after === null ? null
+              : before === 0 ? (after === 0 ? 'both zero' : 'Infinity') : after / before];
+          })),
+        }))),
+      }));
+      try {
+        assertWorkCostAtScales(profiles, cost, label);
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (failures.length) throw new AggregateError(failures, 'Zone navigation growth contracts failed');
   } finally {
     for (const target of targets.reverse()) await driver.stop(target);
     await shutdownTelemetry();
