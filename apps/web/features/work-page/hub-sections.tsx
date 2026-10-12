@@ -24,8 +24,8 @@ import { iriOf, workHref, type WorkAt, workRefOf } from './route.ts';
 import type { WorkHeader as Header } from './types.ts';
 import { YourEdition } from './your-edition.tsx';
 
-// The server halves of the hub sections that compose other owners' components (G-837's previews, G-838's controls,
-// G-644's widgets). Each reads on its own under the caller's Suspense, so one failing leaves the rest of the page.
+// The server halves of the hub sections compose other owners' previews, controls and widgets.
+// Each reads on its own under the caller's Suspense, so one failing leaves the rest of the page.
 
 interface Common { locale: UiLocale; messages: WorkPageMessages }
 
@@ -103,8 +103,8 @@ export async function Availability({ workRef, id, locale, messages }: Common & {
 }
 
 /**
- * Parts and connections: the next unfinished part and the reader's series progress first (G-838), then the
- * parts and the typed relations (G-837). The edition choice is made once, in the availability section.
+ * Parts and connections: the next unfinished part and the reader's series progress first, then the
+ * parts and the typed relations. The edition choice is made once, in the availability section.
  * Main discloses structural previews publicly; personal progress still needs an eligible Agent.
  */
 export async function Parts({ workRef, id, locale, messages }: Common & { workRef: WorkAt; id: string }) {
