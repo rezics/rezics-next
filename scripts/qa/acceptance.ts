@@ -252,6 +252,7 @@ export const inputSelectedNativeTests = [
   heldReplayNativeTest,
   'infra/jena/tests/command-module-startup.test.ts',
   'infra/jena/tests/native-visit-profile.test.ts',
+  'infra/jena/tests/occurrence-label-growth.test.ts',
   'infra/jena/tests/prefix-walk-native.test.ts',
   'infra/jena/tests/search-journal-restart.test.ts',
   'services/main/tests/read-snapshot-native.test.ts',

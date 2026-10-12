@@ -126,7 +126,6 @@ test('QA06: failure rerun selects failed names without borrowing prior passes', 
     expect(integrationGateFiles).toContain('services/main/tests/work-activity.integration.test.ts');
     expect(testArgs('integration')).toEqual(['tests/qa/integration', ...integrationGateFiles]);
     expect(testArgs('model')).toEqual(['infra/jena/tests/command.integration.test.ts',
-      'services/main/tests/read-snapshot-native.test.ts',
       'model/compiler/generate.test.ts', 'model/tests/native-equivalence.test.ts', 'model/tests/daily-rating.test.ts',
       'model/tests/experience-rating.test.ts',
       'model/tests/source-reification.test.ts',
@@ -140,6 +139,12 @@ test('QA06: failure rerun selects failed names without borrowing prior passes', 
       'infra/jena/tests/semantic-source-readiness-union.test.ts',
       'infra/jena/tests/work-name-scope-basis.test.ts',
       'services/main/tests/erasure-held-replay-native.test.ts',
+      'infra/jena/tests/command-module-startup.test.ts',
+      'infra/jena/tests/native-visit-profile.test.ts',
+      'infra/jena/tests/occurrence-label-growth.test.ts',
+      'infra/jena/tests/prefix-walk-native.test.ts',
+      'infra/jena/tests/search-journal-restart.test.ts',
+      'services/main/tests/read-snapshot-native.test.ts',
     ]) {
       expect(testArgs('owner')).not.toContain(file);
       expect(testArgs('owner', undefined, { files: [file] })).toEqual([file]);

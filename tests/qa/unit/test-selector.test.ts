@@ -114,6 +114,7 @@ test('QA10/MODEL17: native model matrix selects the isolated strict model tier',
 test('Docker and Maven proof tests require explicit owner selection', () => {
   const proofs = [
     'infra/jena/tests/native-integer-preservation.test.ts',
+    'infra/jena/tests/occurrence-label-growth.test.ts',
     'infra/jena/tests/semantic-source-readiness-union.test.ts',
     'infra/jena/tests/work-name-scope-basis.test.ts',
   ];
