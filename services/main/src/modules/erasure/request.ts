@@ -12,7 +12,7 @@ import { assetNamespace, assetVariant, MediaFenced, MediaStale } from '../media/
 import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry,
   type GraphTerminalProof, type RegisteredAdmission } from '../access/admission.ts';
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
-import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
+import { GRAPHS, RV, iri, hash, type WorkActivationEnvironment } from '../work/activate.ts';
 import { applyContentErasure, assertFreshContentTargets, ContentErasureGraphRequired,
   probeContentErasure, commandCustodyErasureTargets, applyCommandCustodyErasure,
   contentErasureResource, ContentErasureInvalid, ContentErasureStale } from './content.ts';
@@ -251,11 +251,12 @@ async function selectingHomeTargets(graph: WorkActivationEnvironment, resourceId
 
 function validateCompletion(report: ErasureReport, admission: RegisteredAdmission): void {
   const primary = graphRevisionIds(report.targets);
+  if (primary.length > 64) throw new ErasurePreflightUnsupported('erasure closure exceeds the supported preflight bound');
   if (report.kind !== 'revision' || report.authority !== 'access_admission'
     || report.operationId !== `erasure:${admission.id}` || report.admissionId !== admission.id
     || report.principalId !== admission.principalId || report.authorityEpoch !== admission.authorityEpoch
     || report.requestDigest !== admission.requestDigest || !isValidErasureTargetList(report.targets)
-    || !primary.length || primary.length > 64
+    || !primary.length
     || report.targets.some(target => target.owner !== ERASURE_TARGET_OWNERS[target.kind]
       || !(target.kind === 'content_revision' || isGraphErasureKind(target.kind)
         || target.kind === 'content_variant' || target.kind === 'object'))
@@ -300,7 +301,7 @@ async function retainContributionManifests(service: ErasureService, graph: WorkA
     if ((await stat(path)).size > remaining) throw new ErasurePreflightUnsupported('manifest exceeds metadata allowance');
     const bytes = await readFile(path, { signal: budget.signal });
     consumeErasurePreflight(budget, 'metadataBytes', bytes.length);
-    if (sha256(bytes) !== manifest.slice('urn:rezics:sha256:'.length)) throw new ContentErasureStale('manifest digest differs');
+    if (hash(bytes) !== manifest.slice('urn:rezics:sha256:'.length)) throw new ContentErasureStale('manifest digest differs');
     const value = JSON.parse(bytes.toString('utf8')) as { format: string; component: string; payload: string };
     if (value.format !== 'rezics-manifest-v1' || value.component !== revision.resourceId
       || !/^sha256:[0-9a-f]{64}$/.test(value.payload)) throw new ContentErasureStale('manifest reference differs');

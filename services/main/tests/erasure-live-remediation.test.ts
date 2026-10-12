@@ -8,11 +8,13 @@ import { appendContentEvent } from '../../content/src/event-sequencer.ts';
 import { migrateContent } from '../../content/src/migrate.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
+import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
 import { ContentErasureStale } from '../src/modules/erasure/content.ts';
 import { GraphErasureUnavailable } from '../src/modules/erasure/graph.ts';
-import { journalErasure, markErasureBlocked, markErasureSuppressed, readErasure }
+import { journalErasure, markErasureBlocked, markErasureSuppressed, readErasure, ErasurePreflightUnsupported }
   from '../src/modules/erasure/journal.ts';
 import { completePendingContentErasures, ErasureService, OPEN_SOURCE_PROBE,
+  contentErasureDigest,
   remediateErasedContentEntry, remediateErasedContentSources, requestContentErasure,
   SOURCE_REMEDIATION_WINDOW, type SourceRemediationEntry } from '../src/modules/erasure/request.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
@@ -34,7 +36,11 @@ const lineage = { dataEpoch: randomUUID(), routingEpoch: randomUUID() };
 
 class StubGraph extends FusekiClient {
   constructor() { super('http://erasure-live-remediation.invalid'); }
+  override async commandHealth() { return { moduleVersion: 'fixture', instanceId: 'fixture',
+    publicSearchWriteEpoch: 'fixture', publicSearchWriteActive: true,
+    profiles: { 'erasure-graph-v1': profileRegistry['erasure-graph-v1'].sha256 } }; }
   override async query(sparql: string) {
+    if (!sparql.includes('SELECT DISTINCT ?target')) return { results: { bindings: [] } };
     const targets = [...sparql.matchAll(/urn:rezics:content:revision:([0-9a-f-]{36})/g)].map(match => match[1]!);
     const known = targets.length > 0 && targets.every(id => nativeSuppressed.has(id));
     return { results: { bindings: known ? [...new Set(targets)].map(id => ({
@@ -58,7 +64,7 @@ async function database(name: string, legacy: boolean): Promise<Env> {
     content = join(state, `${name}-pre`);
     mkdirSync(content, { recursive: true });
     for (const file of readdirSync(join(root, 'services/content/migrations'))) {
-      if (!/^(1708|1709)_/.test(file)) copyFileSync(join(root, 'services/content/migrations', file), join(content, file));
+      if (Number(file.split('_')[0]) < 1708) copyFileSync(join(root, 'services/content/migrations', file), join(content, file));
     }
   }
   await migrateContent(pool, content);
@@ -128,7 +134,7 @@ async function oldErasure(target: Env, options: Options = {}): Promise<Fixture> 
   const admission = randomUUID();
   const journaled = await journalErasure(service.relay, {
     operationId: options.mismatchedOperation ? `erasure:${randomUUID()}` : `erasure:${admission}`,
-    requestDigest: createHash('sha256').update(randomUUID()).digest('hex'),
+    requestDigest: contentErasureDigest({ actingSubject: resource, resourceId: resource, revisionIds: ids }),
     kind: options.kind ?? 'revision', principalId: randomUUID(), admissionId: admission,
     authorityEpoch: '1', targets: ids.map(ref => ({ kind: options.targetKind ?? 'content_revision', ref })) });
   if (options.stage === 'blocked') await markErasureBlocked(service.relay, journaled.erasureId, 'deferred');
@@ -185,7 +191,8 @@ async function snapshot(fixture: Fixture) {
     journal: (await pool.query(`SELECT id, erasure_epoch, operation_id, request_digest, kind, authority,
       principal_id, admission_id, authority_epoch, suppression_status, suppressed_at
       FROM relay.erasure WHERE id = $1`, [fixture.erasureId])).rows[0],
-    targets: (await pool.query('SELECT * FROM relay.erasure_target WHERE erasure_id = $1 ORDER BY ordinal',
+    targets: (await pool.query(`SELECT erasure_id,ordinal,owner,target_kind,target_ref FROM relay.erasure_target
+      WHERE erasure_id = $1 ORDER BY ordinal`,
       [fixture.erasureId])).rows,
     tombstones: (await pool.query(`SELECT revision_id, erasure_id, erasure_epoch FROM content.revision_erasure
       WHERE erasure_id = $1 ORDER BY revision_id`, [fixture.erasureId])).rows,
@@ -226,8 +233,13 @@ async function expectStillOpen(fixture: Fixture, before: string) {
   expect(await snapshot(fixture)).toBe(before);
 }
 
-const run = (fixture: Fixture, limit = 1) => remediateErasedContentSources(fixture.env.service, graph,
-  { after: String(BigInt(fixture.epoch) - 1n), limit });
+const run = async (fixture: Fixture, limit = 1) => {
+  const before = (await readErasure(fixture.env.service.relay, fixture.erasureId)).targets;
+  const result = await remediateErasedContentSources(fixture.env.service, graph,
+    { after: String(BigInt(fixture.epoch) - 1n), limit });
+  expect((await readErasure(fixture.env.service.relay, fixture.erasureId)).targets).toEqual(before);
+  return result;
+};
 const entryOf = (window: { entries: SourceRemediationEntry[] }, fixture: Fixture) =>
   window.entries.find(entry => entry.erasureId === fixture.erasureId)!;
 
@@ -323,7 +335,7 @@ test('a raw window of at most 100 journal rows plus one look-ahead is consumed i
   const foreign = await oldErasure(env, { kind: 'resource', targetKind: 'object', quotes: false, tombstone: false });
   const blocked = await oldErasure(env, { stage: 'blocked', quotes: false, tombstone: false });
   const pending = await oldErasure(env, { stage: 'requested', quotes: false, tombstone: false });
-  const malformed = await oldErasure(env, { targetKind: 'object', quotes: false, tombstone: false });
+  const malformed = await oldErasure(env, { mismatchedOperation: true, quotes: false, tombstone: false });
   const unrelated = await oldErasure(env, { mismatchedOperation: true, quotes: false });
   env.queries.length = 0;
   const first = await remediateErasedContentSources(env.service, graph, { after: start, limit: 3 });
@@ -466,8 +478,13 @@ test('the 5 second deadline is shared by every operation of one apply, and excee
 
 function replayOf(fixture: Fixture) {
   const access = {
-    register: async () => ({ id: fixture.admission, state: 'sealed', principalId: randomUUID(), replayed: true,
-      authorityEpoch: '1', requestDigest: 'x', scope: `erasure:${fixture.resource}` }),
+    register: async () => {
+      const retained = await readErasure(fixture.env.service.relay, fixture.erasureId);
+      return { id: fixture.admission, state: 'sealed', principalId: retained.principalId!, replayed: true,
+        authorityEpoch: retained.authorityEpoch!, requestDigest: retained.requestDigest, scope: `erasure:${fixture.resource}`,
+        actingSubject: fixture.resource, action: 'erasure.request', dispatchEligible: false,
+        idempotencyKey: 'replay', expiresAt: new Date(Date.now() + 60_000).toISOString() };
+    },
     claim: async () => undefined, recordGraphOutcome: async () => undefined,
     activePrincipalId: async () => randomUUID() };
   const account = { verify: async () => ({}) };
@@ -485,6 +502,9 @@ test('the same-key replay clears an old entry and never reports success while a 
   const replayed = await replayOf(cleared).call();
   expect(replayed.replayed).toBe(true);
   expect(replayed.report.erasureId).toBe(cleared.erasureId);
+  expect(replayed.report.erasureEpoch).toBe(cleared.epoch);
+  expect(replayed.report.targets.every(target => target.completionState === 'completed'
+    && target.completionEvidenceRef && target.completedAt)).toBe(true);
   await expectCleared(cleared, clearedBefore);
 
   const held = await oldErasure(env);
@@ -497,13 +517,22 @@ test('the same-key replay clears an old entry and never reports success while a 
   const malformed = await oldErasure(env, { mismatchedOperation: true });
   const unapplied = await oldErasure(env, { tombstone: false });
   const cases: [Fixture, unknown][] = [
-    [held, ContentErasureStale], [native, GraphErasureUnavailable], [wide, GraphErasureUnavailable],
-    [unapplied, ContentErasureStale]];
+    [held, ContentErasureStale], [native, GraphErasureUnavailable], [wide, ErasurePreflightUnsupported]];
   for (const [fixture, error] of cases) {
     const before = await snapshot(fixture);
     await expect(replayOf(fixture).call()).rejects.toBeInstanceOf(error as never);
     await expectStillOpen(fixture, before);
   }
+  // Source-only remediation never performs a first erasure. Live completion,
+  // however, must finish this exact retained intent after an interrupted clear.
+  const unappliedBefore = await snapshot(unapplied);
+  expect(entryOf(await run(unapplied), unapplied).outcome).toBe('unapplied');
+  await expectStillOpen(unapplied, unappliedBefore);
+  const completed = await replayOf(unapplied).call();
+  expect(completed.report.erasureId).toBe(unapplied.erasureId);
+  expect(completed.report.erasureEpoch).toBe(unapplied.epoch);
+  expect(completed.report.targets.every(target => target.completionState === 'completed')).toBe(true);
+  expect((await sources(unapplied)).open).toEqual([]);
   // A broken retained intent relation cannot even be replayed under its own key.
   const malformedBefore = await snapshot(malformed);
   await expect(replayOf(malformed).call()).rejects.toThrow();

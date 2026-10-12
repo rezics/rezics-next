@@ -162,6 +162,7 @@ export async function authorCreditFixture(
   // A shard's graph retains earlier Context/Work heads. Their immutable bytes
   // must share its lifetime, including manifests read by rating/card hydration.
   const env = {
+    referenceFencePool: pool,
     fuseki,
     addresses: new AliasRegistry(accessPool),
     lineage: { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: apps.MAIN_ROUTING_EPOCH! },

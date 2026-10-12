@@ -60,7 +60,7 @@ async function database(name: string, legacy: boolean): Promise<Env> {
     content = join(state, `${name}-pre`);
     mkdirSync(content, { recursive: true });
     for (const file of readdirSync(join(root, 'services/content/migrations'))) {
-      if (!/^(1708|1709)_/.test(file)) copyFileSync(join(root, 'services/content/migrations', file), join(content, file));
+      if (Number(file.split('_')[0]) < 1708) copyFileSync(join(root, 'services/content/migrations', file), join(content, file));
     }
   }
   await migrateContent(pool, content);
@@ -186,13 +186,20 @@ async function oldErasure(target: Env, options: Options = {}): Promise<Fixture> 
     const graphProof = await readGraphErasureProof(graph.fuseki, lineage,
       journaled.erasureId, journaled.erasureEpoch, ids);
     const contentProofs = await probeContentErasure(pool, journaled.erasureId, ids, journaled.erasureEpoch);
+    const raw = (await pool.query<{ id: string; erasure_id: string; erasure_epoch: string; absent: boolean }>(`SELECT r.id,
+      t.erasure_id,t.erasure_epoch::text,(r.availability='erased' AND r.body IS NULL AND r.serialized_bytes IS NULL) AS absent
+      FROM content.revision r JOIN content.revision_erasure t ON t.revision_id=r.id WHERE r.id=ANY($1::uuid[])`, [ids])).rows;
+    expect(raw).toHaveLength(ids.length);
+    expect(raw.every(row => row.absent && row.erasure_id === journaled.erasureId && row.erasure_epoch === journaled.erasureEpoch)).toBe(true);
     const report = await readErasure(service.relay, journaled.erasureId);
     for (const target of report.targets) {
-      expect(contentProofs.get(target.ref)).toBe('erased');
+      // Historical byte completion predates selector clearing. Today's full
+      // absence probe must still refuse these deliberately retained sources.
+      expect(contentProofs.get(target.ref)).toBe(options.quotes === false ? 'erased' : 'foreign');
       await completeErasureTarget(service.relay, report.erasureId, target.ordinal,
         sha256(JSON.stringify(canonical({ erasureId: report.erasureId, erasureEpoch: report.erasureEpoch,
           target: { ordinal: target.ordinal, owner: target.owner, kind: target.kind, ref: target.ref },
-          graphProof, contentState: contentProofs.get(target.ref) }))));
+          graphProof, historicalContentBytes: 'erased' }))));
     }
   }
   return { erasureId: journaled.erasureId, epoch: journaled.erasureEpoch, admission, resource, revisions: ids,

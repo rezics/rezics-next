@@ -75,7 +75,8 @@ class Objects {
   deletes: string[] = [];
   signals = new Set<AbortSignal>();
   failure = false;
-  beforeDelete: (() => Promise<void>) | undefined;
+  beforeDelete: ((signal?: AbortSignal) => Promise<void>) | undefined;
+  beforeProbe: ((signal?: AbortSignal) => Promise<void>) | undefined;
   namespace = (prefix = ''): ImmutableObjects => ({
     put: async bytes => {
       const digest = hash(bytes);
@@ -89,12 +90,13 @@ class Objects {
     },
     probe: async (digest, signal) => {
       if (signal) { this.signals.add(signal); signal.throwIfAborted(); }
+      await this.beforeProbe?.(signal);
       if (this.failure) throw new ObjectUnavailable('object probe outage');
       if (!this.data.has(`${prefix}sha256/${digest}`)) throw new ObjectNotFound('missing exact key');
     },
     deleteAndVerifyAbsent: async (digest, signal) => {
       if (signal) { this.signals.add(signal); signal.throwIfAborted(); }
-      await this.beforeDelete?.();
+      await this.beforeDelete?.(signal);
       if (this.failure) throw new ObjectUnavailable('object delete outage');
       const key = `${prefix}sha256/${digest}`;
       this.deletes.push(key);
@@ -314,7 +316,8 @@ test('P1 the Contribution editor holds the deletion fence while linking existing
       state: { work, author, language: 'en', body: input.body, publication: 'draft' } })));
     f.graph.commandHealth = async () => ({ moduleVersion: 'fixture', instanceId: 'fixture',
       publicSearchWriteEpoch: 'fixture', publicSearchWriteActive: true,
-      profiles: { 'text-contribution-v1': profileRegistry['text-contribution-v1'].sha256 } });
+      profiles: { 'erasure-graph-v1': profileRegistry['erasure-graph-v1'].sha256,
+        'text-contribution-v1': profileRegistry['text-contribution-v1'].sha256 } });
     f.graph.query = async query => query.includes('SELECT ?work ?author ?language ?head')
       ? { results: { bindings: [{ work: uri(work), author: uri(author), language: lit('en'), head: uri(head) }] } }
       : { boolean: false, results: { bindings: [] } };
@@ -354,6 +357,57 @@ test('P1 a payload reference fence holds through the owner commit and releases o
     } finally { release(); await first; client.release(); }
   });
 });
+
+function delayed(ms: number, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted();
+  return new Promise((resolve, reject) => {
+    const finish = () => { signal?.removeEventListener('abort', abort); resolve(); };
+    const timer = setTimeout(finish, ms);
+    const abort = () => { clearTimeout(timer); signal?.removeEventListener('abort', abort); reject(signal?.reason); };
+    signal?.addEventListener('abort', abort, { once: true });
+  });
+}
+
+for (const phase of ['delete', 'probe'] as const) test(`D3 the shared ten-second deadline includes preflight and multi-target ${phase}`, async () => {
+  await fixture(async f => {
+    const owner = resource(), revision = await f.draft(owner), input = f.input(owner, [revision]);
+    const admitted = await f.access.register({ actingSubject: input.actingSubject, scope: `erasure:${owner}`,
+      action: 'erasure.request', idempotencyKey: input.idempotencyKey, requestDigest: contentErasureDigest(input) });
+    const keys = [hash(Buffer.from('first slow key')), hash(Buffer.from('second slow key'))];
+    const entry = await journalErasure(f.relay, { operationId: `erasure:${admitted.id}`, requestDigest: admitted.requestDigest,
+      kind: 'revision', principalId: admitted.principalId, admissionId: admitted.id, authorityEpoch: admitted.authorityEpoch,
+      targets: [{ kind: 'content_revision', ref: revision }, ...keys.map(digest => ({ kind: 'object' as const, ref: `sha256:${digest}` }))] });
+    if (phase === 'probe') for (let index = 0; index < keys.length; index++)
+      await completeErasureTarget(f.relay, entry.erasureId, index + 2, hash(Buffer.from(keys[index]!)));
+    else for (const [index, digest] of keys.entries()) f.objects.data.set(`sha256/${digest}`,
+      Buffer.from(index === 0 ? 'first slow key' : 'second slow key'));
+    const query = f.graph.query.bind(f.graph);
+    let preflightDelayed = false;
+    f.graph.query = async sql => {
+      if (!preflightDelayed && sql.includes('SELECT DISTINCT ?graph ?unit ?target')) {
+        preflightDelayed = true;
+        await delayed(4_000);
+      }
+      return query(sql);
+    };
+    if (phase === 'delete') f.objects.beforeDelete = signal => delayed(5_000, signal);
+    else f.objects.beforeProbe = signal => delayed(6_000, signal);
+    const started = Date.now();
+    await expect(f.call(input)).rejects.toThrow();
+    expect(Date.now() - started).toBeGreaterThanOrEqual(9_000);
+    expect(Date.now() - started).toBeLessThan(12_500);
+    expect([...f.objects.signals].some(signal => signal.aborted)).toBe(true);
+    const pending = await readErasure(f.relay, entry.erasureId);
+    expect(pending.verifiedAt).toBeNull();
+    expect(pending.targets.some(target => target.completionState !== 'completed')).toBe(true);
+    f.objects.beforeDelete = undefined;
+    f.objects.beforeProbe = undefined;
+    const recovered = await f.call(input);
+    expect(recovered.report.erasureId).toBe(entry.erasureId);
+    expect(recovered.report.erasureEpoch).toBe(entry.erasureEpoch);
+    expect(recovered.report.targets.every(target => target.completionState === 'completed')).toBe(true);
+  });
+}, 30_000);
 
 test('P4 a preservation hold refuses sealed recovery without deleting remaining objects', async () => {
   await fixture(async f => {
@@ -763,7 +817,7 @@ test('P2/P4 the existing ReceiptCustody owner clears a journaled command before 
       return typeof value === 'function' ? value.bind(client) : value;
     } }) as PoolClient;
     try { await new PostgresReceiptCustodyStore(f.accessPool).withReceipt(receipt,
-      session => session.persistObjectReferences(source.objectReferences), observed); }
+      session => session.persistObjectReferences!(source.objectReferences), observed); }
     finally { held.release(); }
     expect(redundantPayloadBytes).toBe(0);
     const exhausted = createErasurePreflightBudget();

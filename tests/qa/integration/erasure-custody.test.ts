@@ -171,14 +171,14 @@ test('OPS10/OPS11/OPS12: Content suppression survives owner handoff failures and
     expect(sealFailure.status).toBe(503);
     expect(await sealFailure.text()).not.toContain('private owner seal diagnostic');
     const sealErasure = await readErasure(relayPool, await journalFor(sealed));
-    expect(sealErasure).toMatchObject({ stage: 'fenced', suppression: 'suppressed', destruction: 'pending' });
+    expect(sealErasure).toMatchObject({ stage: 'deleting', suppression: 'suppressed', destruction: 'pending' });
     expect(await status(sealed)).toBe('erased');
     expect(await graphErasureSuppressed(fuseki, sealErasure.erasureId, sealErasure.erasureEpoch, [sealed])).toBe(true);
     const retried = await call('POST', '/v1/erasures', account.tokenA, body([sealed]), sealKey);
     expect(retried.status).toBe(200);
     const report = await retried.json() as Report;
     expect(report).toMatchObject({ erasureId: sealErasure.erasureId, suppression: 'suppressed',
-      stage: 'inventory_complete', destruction: 'retained', replayed: true });
+      stage: 'reconciling', destruction: 'retained', replayed: true });
     expect(await journalCount()).toBe(1);
 
     // A lost inventory tail is recoverable by the operator without the client.
@@ -188,11 +188,11 @@ test('OPS10/OPS11/OPS12: Content suppression survives owner handoff failures and
     expect(inventoryFailure.status).toBe(503);
     expect(await inventoryFailure.text()).not.toContain('private inventory diagnostic');
     const inventoryErasure = await readErasure(relayPool, await journalFor(inventoried));
-    expect(inventoryErasure).toMatchObject({ stage: 'fenced', suppression: 'suppressed' });
+    expect(inventoryErasure).toMatchObject({ stage: 'deleting', suppression: 'suppressed' });
     expect(await status(inventoried)).toBe('erased');
     expect(await graphErasureSuppressed(fuseki, inventoryErasure.erasureId,
       inventoryErasure.erasureEpoch, [inventoried])).toBe(true);
-    expect(await completePendingContentErasures(service, environment, access)).toEqual({ completed: 1, failed: [] });
+    expect(await completePendingContentErasures(service, environment, access)).toEqual({ completed: 1, failed: [], continuation: false });
     const operatorRetry = await call('POST', '/v1/erasures', account.tokenA, body([inventoried]), inventoryKey);
     expect(operatorRetry.status).toBe(200);
     expect(await operatorRetry.json()).toMatchObject({ erasureId: inventoryErasure.erasureId,
@@ -251,7 +251,7 @@ test('OPS10/OPS11/OPS12: Content suppression survives owner handoff failures and
     }
     const partialRetry = await call('POST', '/v1/erasures', account.tokenA, body([partial]), partialKey);
     expect(partialRetry.status).toBe(200);
-    expect(await partialRetry.json()).toMatchObject({ erasureId: partialErasure, stage: 'inventory_complete',
+    expect(await partialRetry.json()).toMatchObject({ erasureId: partialErasure, stage: 'reconciling',
       suppression: 'suppressed', destruction: 'retained', replayed: true });
     expect(await status(partial)).toBe('erased');
     expect(await dependencies.content.readExactBatch([partial], async ids => new Set(ids)))

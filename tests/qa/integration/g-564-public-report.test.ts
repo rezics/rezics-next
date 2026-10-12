@@ -247,7 +247,7 @@ test('G-564: public API intake, private correspondence, legal deadlines, urgent 
     const pending = await journalErasure(relayPool, { operationId: `erasure:${admission.id}`, requestDigest: digest,
       kind: 'revision', principalId: admission.principalId, admissionId: admission.id,
       authorityEpoch: admission.authorityEpoch, targets: [{ kind: 'content_revision', ref: activated.revision }] });
-    expect(await completePendingContentErasures(deps.erasures, f.env, f.access)).toEqual({ completed: 1, failed: [] });
+    expect(await completePendingContentErasures(deps.erasures, f.env, f.access)).toEqual({ completed: 1, failed: [], continuation: false });
     expect((await readErasure(relayPool, pending.erasureId)).stage).toBe('blocked');
     expect((await f.pool.query('SELECT availability FROM content.revision WHERE id = $1', [activated.revision])).rows)
       .toEqual([{ availability: 'available' }]);

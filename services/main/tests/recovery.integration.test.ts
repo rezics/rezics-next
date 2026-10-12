@@ -756,6 +756,7 @@ recovery_target_action = 'promote'
     const nextLineage = { dataEpoch: Bun.randomUUIDv7(), routingEpoch: '2' };
     let accessFenceGeneration = await engageAccessRecoveryFence(pool);
     const restoredEnv: WorkActivationEnvironment = { ...liveEnv, fuseki,
+      referenceFencePool: contentDatabase.pool,
       lineage: nextLineage, objectDirectory: restoreObjects,
       candidateDirectory: join(state, 'restore', 'candidates') };
     expect((await readExactWorkRevision(restoredEnv, created.workRevision, async () => true)).title).toBe('Backup Work');
