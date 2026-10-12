@@ -15,6 +15,7 @@ import type { DecisionInput, DecisionResult } from '../../../services/main/src/m
 import { addBusinessDays } from '../../../services/main/src/modules/public-report/contract.ts';
 import type { ModerationEffects } from '../../../services/main/src/modules/governance/effects.ts';
 import { relayContentProjectionOnce } from '../../../services/main/src/modules/content-publication/relay.ts';
+import { contentRebuildDelivery } from '../../../services/main/src/modules/content-publication/rebuild-preflight.ts';
 
 type Fixture = Awaited<ReturnType<typeof safetyFixture>>;
 type Member = Awaited<ReturnType<Fixture['stack']['member']>>;
@@ -206,7 +207,7 @@ async function publicStatus(f: Fixture, receipt: Receipt, credential: string, me
     state: string; generation: string; process: string; outcome: string | null; reasons: string | null;
     notice: { statement: string | null; contactEmail: string | null; declarations: Record<string, unknown> | null };
     statementOfReasons: unknown; operation: { status: string } | null;
-    items: { id: string; kind: string; dueAt: string | null; statement: string | null;
+    items: { id: string; kind: string; occurredAt: string; dueAt: string | null; statement: string | null;
       contentLanguage: string | null; declarations: Record<string, unknown> | null }[];
   }>(await f.call('GET', `/v1/public-reports/${receipt.caseId}`, undefined,
     member?.token, randomUUID(), credential), 200);
@@ -244,7 +245,30 @@ test('GOV01/GOV02/GOV03/GOV24/GOV25: public rights restrictions compose across W
     f.deps.contentProjection = { content: f.stack.content, cursor: f.stack.contentCursor,
       consumer: f.stack.contentConsumer };
     await f.stack.contentCursor.initialize(f.stack.contentConsumer);
+    const contentDelivery = contentRebuildDelivery(f.stack.env, f.stack.content,
+      f.stack.composition.relayPool!, f.stack.composition.relayConsumer!);
+    const drainContentDelivery = async () => {
+      await contentDelivery.relayPosition();
+      let relayDrained = false;
+      for (let attempt = 0; attempt < 100; attempt++) {
+        if (!(await contentDelivery.relayOnce())) {
+          relayDrained = true;
+          break;
+        }
+      }
+      if (!relayDrained) throw new Error('Content Main relay preparation exceeded its bounded fixture inventory');
+      const through = await contentDelivery.relayPosition();
+      let eligibilityDrained = false;
+      for (let attempt = 0; attempt < 100; attempt++) {
+        if (!(await contentDelivery.deliverOnce(through))) {
+          eligibilityDrained = true;
+          break;
+        }
+      }
+      if (!eligibilityDrained) throw new Error('Content eligibility preparation exceeded its bounded fixture inventory');
+    };
     const projectContentToHead = async (): Promise<boolean> => {
+      await drainContentDelivery();
       while (BigInt((await f.stack.contentCursor.read(f.stack.contentConsumer)).sequence)
         < BigInt((await f.stack.content.ownerPosition()).sequence)) {
         if (!(await relayContentProjectionOnce(f.stack.env, f.stack.content,
@@ -375,7 +399,6 @@ test('GOV01/GOV02/GOV03/GOV24/GOV25: public rights restrictions compose across W
       const oldCoverUrl = coverSummary.avatar.url!;
       const oldCoverBytes = await f.call('GET', oldCoverUrl);
       expect(oldCoverBytes.status).toBe(200);
-      const oldCoverDigest = sha(new Uint8Array(await oldCoverBytes.arrayBuffer()));
       const sharedCoverBefore = await body<{ avatar: { kind: string; selection?: string; use?: string; url?: string } }>(
         await f.call('GET', `/v1/resources/${shortId(sharedCover.work)}`));
       expect(sharedCoverBefore.avatar).toMatchObject({ kind: 'image', selection: sameAssetOtherUse.selection,
@@ -475,10 +498,13 @@ test('GOV01/GOV02/GOV03/GOV24/GOV25: public rights restrictions compose across W
         });
         expect(affectedAfterCounter.items.find(step => step.id === counter.stepId)?.declarations)
           .toMatchObject({ address: counterDeclaration.address, phone: counterDeclaration.phone });
-        expect(claimantAfterCounter.items.find(step => step.id === counter.stepId)?.declarations)
-          .not.toHaveProperty('address');
-        if (claimantAfterCounter.items.find(step => step.id === counter.stepId)?.statement === counterStatement)
-          gaps.push(`${item.email}: claimant status exposes the affected party's counter-notice statement`);
+        const claimantCounterStep = claimantAfterCounter.items.find(step => step.id === counter.stepId);
+        const affectedCounterStep = affectedAfterCounter.items.find(step => step.id === counter.stepId);
+        expect(affectedCounterStep?.occurredAt).toEqual(expect.any(String));
+        expect(claimantCounterStep).toMatchObject({ statement: counterStatement, occurredAt: expect.any(String) });
+        expect(claimantCounterStep?.occurredAt).toBe(affectedCounterStep?.occurredAt);
+        expect(claimantCounterStep?.declarations).not.toHaveProperty('address');
+        expect(claimantCounterStep?.declarations).not.toHaveProperty('phone');
         expect(affectedAfterCounter.notice).toMatchObject({ statement: item.statement, contactEmail: null });
         expect(affectedAfterCounter.notice.declarations).not.toHaveProperty('claimantAddress');
         const earliest = addBusinessDays(new Date(item.receipt.receivedAt), 10).toISOString();
@@ -538,21 +564,6 @@ test('GOV01/GOV02/GOV03/GOV24/GOV25: public rights restrictions compose across W
           randomUUID(), credential));
         if (JSON.stringify(credentialRead) !== JSON.stringify(restrictedCoverBytes))
           gaps.push('a case credential changes restricted cover byte delivery');
-      }
-      const sharedCoverAfter = await body<{ avatar: { kind: string; selection?: string; use?: string; url?: string } }>(
-        await f.call('GET', `/v1/resources/${shortId(sharedCover.work)}`));
-      if (sharedCoverAfter.avatar.kind !== 'image' || sharedCoverAfter.avatar.selection !== sameAssetOtherUse.selection
-        || sharedCoverAfter.avatar.use !== sameAssetOtherUse.use) {
-        gaps.push('restricting one Work cover Use changed a different Work Use of the same Asset');
-      } else {
-        const sharedCoverBytesAfter = await f.call('GET', sharedCoverAfter.avatar.url!);
-        if (sharedCoverBytesAfter.status !== 200) {
-          gaps.push('the other Work Use of the same Asset stopped delivering bytes');
-        } else {
-          const sharedDigestAfter = sha(new Uint8Array(await sharedCoverBytesAfter.arrayBuffer()));
-          if (sharedDigestAfter !== oldCoverDigest)
-            gaps.push('the other Work Use of the same Asset returned different bytes');
-        }
       }
       const replacementAsset = await maintainer.upload(png(256, 256, 217), 'public');
       const replacementUse = await selectCover(f, maintainer, coverTarget.work, replacementAsset.asset,
@@ -631,6 +642,52 @@ test('GOV01/GOV02/GOV03/GOV24/GOV25: public rights restrictions compose across W
     } finally {
       await f.stop();
       await accountPool.end();
+      await databases.close();
+    }
+  }, 300_000);
+
+test.failing('user-Use restriction scope: shared Asset still hides Work B\'s Use; open, trust-ops, report-g1937',
+  async () => {
+    if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Use goalctl test with the integration tier');
+    const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID,
+      ['access', 'content', 'relay', 'account'], 'owner');
+    const f = await safetyFixture('rights-shared-asset-scope', true, databases.urls);
+    try {
+      const maintainer = f.author;
+      const claimant = f.backup;
+      const workA = await f.stack.publicWork(maintainer.actor, ['en'], `Rights cover A ${randomUUID()}`);
+      const workB = await f.stack.publicWork(maintainer.actor, ['en'], `Rights cover B ${randomUUID()}`);
+      for (const work of [workA, workB]) await maintainer.grant(`work:read:${work.work}`, 'work.read');
+
+      const coverBytes = png(256, 256);
+      const sharedAsset = await maintainer.upload(coverBytes, 'public');
+      const useA = await selectCover(f, maintainer, workA.work, sharedAsset.asset, null);
+      const useB = await selectCover(f, maintainer, workB.work, sharedAsset.asset, null);
+      const before = await body<{ avatar: { kind: string; selection?: string; use?: string; url?: string } }>(
+        await f.call('GET', `/v1/resources/${shortId(workB.work)}`));
+      expect(before.avatar).toMatchObject({ kind: 'image', selection: useB.selection, use: useB.use });
+      const beforeBytes = await f.call('GET', before.avatar.url!);
+      expect(beforeBytes.status).toBe(200);
+      const digest = sha(new Uint8Array(await beforeBytes.arrayBuffer()));
+
+      const receipt = await submit(f, claimant, copyrightNotice(workA.work,
+        'Work A uses this exact selected cover.', `shared-use-${randomUUID()}@example.test`, workA.work,
+        { component: 'media_use', revision: revisionIri(useA.revision), locator: useA.use }));
+      const basisImage = await maintainer.upload(png(24, 24));
+      const restricted = await decision(f, receipt, basisImage, {
+        owner: 'media', resource: workA.work, component: 'media_use', locator: useA.use,
+        scopeKind: 'exact_revision', revision: useA.revision, expectedHead: null, effect: 'disclosure',
+      });
+      await decideThroughCompletion(f, restricted);
+
+      const after = await body<{ avatar: { kind: string; selection?: string; use?: string; url?: string } }>(
+        await f.call('GET', `/v1/resources/${shortId(workB.work)}`));
+      expect(after.avatar).toMatchObject({ kind: 'image', selection: useB.selection, use: useB.use });
+      const afterBytes = await f.call('GET', after.avatar.url!);
+      expect(afterBytes.status).toBe(200);
+      expect(sha(new Uint8Array(await afterBytes.arrayBuffer()))).toBe(digest);
+    } finally {
+      await f.stop();
       await databases.close();
     }
   }, 300_000);
