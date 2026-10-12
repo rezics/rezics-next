@@ -111,12 +111,13 @@ export async function platformAdministratorProof(
   // Resource gates can remain open during platform containment. Hold this
   // platform gate through the proof so closure also fences administrator use.
   const gate = (
-    await client.query<{ open: boolean; dispatch_open: boolean }>(
-      `SELECT open, dispatch_open FROM access.scope_gate WHERE id = $1${lock ? ' FOR SHARE' : ''}`,
+    await client.query<{ id: string }>(
+      `SELECT id FROM access.scope_gate WHERE id = $1${lock ? ' FOR SHARE' : ''}`,
       [PLATFORM_SCOPE],
     )
   ).rows[0];
-  if (gate?.open !== true || gate.dispatch_open !== true) return null;
+  if (!gate) return null;
+  // The shared SQL proof owns open/dispatch eligibility for every consumer.
   const permissions = await readPlatformPermissions(client, principalId);
   const grant = findPlatformPermission(permissions, 'platform:use:platform-admin');
   if (!grant) return null;

@@ -10,7 +10,12 @@ import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { boundedPool } from '../src/infrastructure/pg-pool.ts';
 import { AccessAdmissionRegistry, type RegisteredAdmission } from '../src/modules/access/admission.ts';
 import { ensureFixtureScopeGate, grantFixtureAuthority } from '../src/modules/access/fixture-authority.ts';
-import { AccessPlatformAdministrators, platformAdministratorProof } from '../src/modules/access/platform-administrator.ts';
+import { AccessExposure, PlatformClosed } from '../src/modules/access/exposure.ts';
+import { AccessPlatformGrants, PlatformGrantDenied } from '../src/modules/access/platform-grants.ts';
+import { readPlatformPermissions } from '../src/modules/access/platform-permissions.ts';
+import { PostgresRateLimitStore } from '../src/modules/rate-limit/store.ts';
+import { RATE_LIMIT_V1 } from '../src/modules/rate-limit/budgets.ts';
+import { AccessPlatformAdministrators, platformAdministratorProof, platformAdministratorTargetAllowed } from '../src/modules/access/platform-administrator.ts';
 import { uploadDigest } from '../src/modules/media/commands.ts';
 import { assetIri, DEFAULT_MEDIA_CONTEXT, MediaStore } from '../src/modules/media/store.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
@@ -26,7 +31,7 @@ let baseline: Awaited<ReturnType<typeof prepare>>;
 async function prepare(pool: Pool) {
   const principalId = randomUUID(), actor = assetIri(randomUUID());
   const identity = { issuer: 'https://account.platform-hold.test', subject: randomUUID(), emailVerified: true };
-  await pool.query('INSERT INTO access.principal(id,account_issuer,account_subject) VALUES ($1,$2,$3)',
+  await pool.query(`INSERT INTO access.principal(id,account_issuer,account_subject,first_seen_at) VALUES ($1,$2,$3,clock_timestamp() - interval '8 days')`,
     [principalId, identity.issuer, identity.subject]);
   await pool.query("INSERT INTO access.authority_subject(id,kind) VALUES ($1,'agent')", [actor]);
   await grantFixtureAuthority(pool, { scope: `agent:control:${actor}`, requireDispatch: true,
@@ -111,9 +116,13 @@ function fixture(pool: Pool) {
     }, media: { store, content, objects: () => { throw new Error('field control needs no bytes'); } },
   } as unknown as MainWorkDependencies;
   const app = mediaRoutes(graph, dependencies);
+  const epoch = async () => (await pool.query<{ authority_epoch: string }>(
+    "SELECT authority_epoch FROM access.scope_gate WHERE id='platform:access'",
+  )).rows[0]!.authority_epoch;
   const gate = async (open: boolean, dispatchOpen: boolean) => {
-    await pool.query("UPDATE access.scope_gate SET open=$1,dispatch_open=$2 WHERE id='platform:access'",
-      [open, dispatchOpen]);
+    if (open) await ensureFixtureScopeGate(pool, 'platform:access', { open: true });
+    else if (dispatchOpen) await access.closeScope('platform:access', await epoch());
+    else await access.strongCloseScope('platform:access', await epoch());
   };
   const call = (field: 'labels' | 'conceal', key = randomUUID()) => {
     const path = field === 'labels'
@@ -151,8 +160,10 @@ for (const hold of holds) {
       expect(await f.revisions()).toEqual([]);
       expect((await f.pool.query('SELECT id FROM access.admission')).rows).toEqual([]);
       // Opening the platform gate restores fresh authority without replacing grants.
-      await f.gate(true, true);
-      expect((await f.call(field)).status).toBe(201);
+      if (hold.dispatchOpen) {
+        await f.gate(true, true);
+        expect((await f.call(field)).status).toBe(201);
+      }
     }), 60_000);
 
     test(`public media ${field} protection registered before the ${hold.name} hold cannot claim afterward`, () => isolated(async f => {
@@ -172,6 +183,67 @@ for (const hold of holds) {
     expect(await platformAdministratorProof(f.pool, f.principalId, f.actor, false)).not.toBeNull();
     await f.gate(hold.open, hold.dispatchOpen);
     expect(await platformAdministratorProof(f.pool, f.principalId, f.actor, false)).toBeNull();
+  }), 60_000);
+}
+
+for (const hold of holds) {
+  test(`platform grant page and one reads refuse the ${hold.name} hold`, () => isolated(async f => {
+    const grants = new AccessPlatformGrants(f.pool);
+    const before = await grants.readPage(f.identity, f.actor);
+    expect(before.grants.length).toBeGreaterThan(0);
+    const id = before.grants[0]!.id;
+    const one = await grants.readOne(f.identity, f.actor, id);
+    expect(one).not.toBeNull();
+    await f.gate(hold.open, hold.dispatchOpen);
+    await expect(grants.readPage(f.identity, f.actor)).rejects.toBeInstanceOf(PlatformGrantDenied);
+    await expect(grants.readOne(f.identity, f.actor, id)).rejects.toBeInstanceOf(PlatformGrantDenied);
+    if (hold.dispatchOpen) {
+      await f.gate(true, true);
+      expect((await grants.readPage(f.identity, f.actor)).grants).toEqual(before.grants);
+      expect((await grants.readOne(f.identity, f.actor, id))!.grant).toEqual(one!.grant);
+    }
+  }), 60_000);
+
+  test(`platform rate-limit trust becomes ordinary under the ${hold.name} hold`, () => isolated(async f => {
+    const rate = new PostgresRateLimitStore(f.pool, {
+      secret: 'platform-hold-fixture-secret-at-least-32', serviceClientIds: new Set(),
+      trustedProxyPeers: new Set(), clientIpHeader: 'x-forwarded-for',
+    });
+    expect(await rate.classify(f.identity)).toBe('trusted');
+    await f.gate(hold.open, hold.dispatchOpen);
+    const classification = await rate.classify(f.identity);
+    expect(classification).toBe('member');
+    expect(RATE_LIMIT_V1[classification].write.maximum).toBe(120);
+    if (hold.dispatchOpen) {
+      await f.gate(true, true);
+      expect(await rate.classify(f.identity)).toBe('trusted');
+    }
+  }), 60_000);
+
+  test(`cached exposure and resource permissions refuse the ${hold.name} hold`, () => isolated(async f => {
+    const exposure = new AccessExposure(f.pool, { REZICS_PLATFORM_OPEN_GROUPS: '' });
+    const before = await exposure.summary(f.identity);
+    expect(before.groups).toContain('platform-admin');
+    await exposure.require(f.identity, 'platform:platform-admin', 'administratorOperation');
+    const client = await f.pool.connect();
+    const target = `media:protect:${assetIri(f.representation)}`;
+    try {
+      expect(await platformAdministratorTargetAllowed(client, undefined, f.principalId,
+        f.actor, 'media.labels.protect', target)).toBe(true);
+      await f.gate(hold.open, hold.dispatchOpen);
+      expect(await readPlatformPermissions(client, f.principalId)).toEqual([]);
+      expect(await platformAdministratorTargetAllowed(client, undefined, f.principalId,
+        f.actor, 'media.labels.protect', target)).toBe(false);
+      expect((await exposure.summary(f.identity)).groups).toEqual([]);
+      await expect(exposure.require(f.identity, 'platform:platform-admin', 'administratorOperation'))
+        .rejects.toBeInstanceOf(PlatformClosed);
+      if (hold.dispatchOpen) {
+        await f.gate(true, true);
+        expect((await exposure.summary(f.identity)).groups).toEqual(before.groups);
+        expect(await platformAdministratorTargetAllowed(client, undefined, f.principalId,
+          f.actor, 'media.labels.protect', target)).toBe(true);
+      }
+    } finally { client.release(); }
   }), 60_000);
 }
 
@@ -200,22 +272,43 @@ for (const field of ['labels', 'conceal'] as const) {
   }
 }
 
+test('the gate-aware migration fences consumers that accepted retained permissions before upgrade', () => isolated(async f => {
+  // Reproduce the pre-upgrade authority path in this disposable database, then
+  // prove the forward migration repairs it without replacing any grant episode.
+  const original = readFileSync(join(root, 'services/main/migrations/access/1291_platform_grant_proof.sql'), 'utf8')
+    .split('-- Immutable grant history')[0]!.replace('CREATE FUNCTION', 'CREATE OR REPLACE FUNCTION');
+  await f.pool.query(original);
+  const grants = new AccessPlatformGrants(f.pool);
+  const retained = await grants.readPage(f.identity, f.actor);
+  const id = retained.grants[0]!.id;
+  await f.gate(false, true);
+  expect((await grants.readPage(f.identity, f.actor)).grants).toEqual(retained.grants);
+  expect((await grants.readOne(f.identity, f.actor, id)).grant.id).toBe(id);
+  expect((await readPlatformPermissions(f.pool, f.principalId)).length).toBeGreaterThan(0);
+  await f.pool.query(readFileSync(join(root, 'services/main/migrations/access/1789_platform_permission_gate.sql'), 'utf8'));
+  expect(await readPlatformPermissions(f.pool, f.principalId)).toEqual([]);
+  await expect(grants.readPage(f.identity, f.actor)).rejects.toBeInstanceOf(PlatformGrantDenied);
+  await expect(grants.readOne(f.identity, f.actor, id)).rejects.toBeInstanceOf(PlatformGrantDenied);
+}), 60_000);
+
 test('the shared administrator proof holds the platform gate until its transaction ends', () => isolated(async f => {
   const closerPool = boundedPool({ ...cluster!.connection, database: f.pool.options.database, max: 1 });
-  const proofClient = await f.pool.connect(), closer = await closerPool.connect();
+  const proofClient = await f.pool.connect();
+  const closer = new AccessAdmissionRegistry(closerPool);
+  const epoch = (await f.pool.query<{ authority_epoch: string }>(
+    "SELECT authority_epoch FROM access.scope_gate WHERE id='platform:access'",
+  )).rows[0]!.authority_epoch;
   try {
     await proofClient.query('BEGIN');
     expect(await platformAdministratorProof(proofClient, f.principalId, f.actor)).not.toBeNull();
-    await closer.query("BEGIN; SET LOCAL lock_timeout = '100ms'");
-    await expect(closer.query("UPDATE access.scope_gate SET open=false,dispatch_open=false WHERE id='platform:access'"))
+    await expect(closer.strongCloseScope('platform:access', epoch))
       .rejects.toMatchObject({ code: '55P03' });
-    await closer.query('ROLLBACK');
     await proofClient.query('COMMIT');
-    await proofClient.query("UPDATE access.scope_gate SET open=false,dispatch_open=false WHERE id='platform:access'");
+    await closer.strongCloseScope('platform:access', epoch);
     expect(await platformAdministratorProof(proofClient, f.principalId, f.actor)).toBeNull();
   } finally {
-    await proofClient.query('ROLLBACK'); await closer.query('ROLLBACK');
-    proofClient.release(); closer.release(); await closerPool.end();
+    await proofClient.query('ROLLBACK');
+    proofClient.release(); await closerPool.end();
   }
 }), 60_000);
 
