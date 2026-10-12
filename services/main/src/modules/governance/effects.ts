@@ -62,6 +62,14 @@ const effectIri = (operationId: string, ordinal: number) =>
   `urn:rezics:moderation:${hash(`${operationId}:${ordinal}`)}`;
 const typed = (value: number) => `${lit(String(value))}^^<http://www.w3.org/2001/XMLSchema#integer>`;
 
+function assertGraphOwnerBasis(plan: EffectPlan | undefined, realm: { realm: string; space: string } | null) {
+  if (plan?.realm === undefined) return;
+  const reviewed = plan.realm;
+  if (reviewed === null ? realm !== null
+    : !realm || reviewed.realm !== realm.realm || reviewed.space !== realm.space)
+    throw new GovernanceStale('target changed since review');
+}
+
 /** Bounded affected-Agent keyset; private Account identities never enter the graph. */
 export function graphNoticeParticipants(env: WorkActivationEnvironment): Pick<ModerationEffects, 'participants'> {
   return { async participants(target, after, limit) {
@@ -186,6 +194,7 @@ export function ownerModerationEffects(content: ContentModeration, env: WorkActi
     async apply(operationId, ordinal, target, plan, continuation) {
       if (restrictionOwners[target.effect] === 'access') {
         const realm = target.owner === 'graph' ? await ownerTargetHeads({ graph: env }).realmBasis(target) : null;
+        if (target.owner === 'graph') assertGraphOwnerBasis(plan, realm);
         if (realm && ['body', 'structure'].includes(target.component))
           throw new GovernanceStale('Realm moderation has no body or structure grain');
         return { receipt: `access:governance-enforcement:${operationId}:${ordinal}` };
@@ -265,6 +274,7 @@ export function ownerModerationEffects(content: ContentModeration, env: WorkActi
       };
       if (await observed()) return { receipt };
       const realm = await ownerTargetHeads({ graph: env }).realmBasis(target);
+      assertGraphOwnerBasis(plan, realm);
       if (realm && ['body', 'structure'].includes(target.component))
         throw new GovernanceStale('Realm moderation has no body or structure grain');
       const profile = target.component === 'structure' ? 'structure-composition-v1'
