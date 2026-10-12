@@ -91,8 +91,24 @@ function scopeHasRuntimeSkip(scope: ts.Node): boolean {
   return disabled;
 }
 
+function isTopLevelRegistration(call: ts.CallExpression): boolean {
+  const statement = call.parent;
+  if (!ts.isExpressionStatement(statement) || statement.expression !== call) return false;
+  const scope = statement.parent;
+  if (ts.isSourceFile(scope)) return true;
+  if (!ts.isBlock(scope)) return false;
+  const callback = scope.parent;
+  if ((!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) || callback.body !== scope) return false;
+  const suite = callback.parent;
+  return ts.isCallExpression(suite) && isSuiteDeclaration(suite) && testCallback(suite) === callback &&
+    isTopLevelRegistration(suite);
+}
+
 /**
  * Proof validation is syntactic and deliberately conservative, not execution modelling.
+ * A cited test or journey registration must be a direct expression statement in the
+ * file or a describe callback body, with each enclosing describe registered the same
+ * way. Conditions, loops, other expressions and other functions never count.
  * A test declaration has a string, template or reference title and an inline function
  * body after that title (with optional Playwright options or a Bun timeout). Skipped
  * sibling declarations have their own scopes and never disqualify another proof.
@@ -106,6 +122,7 @@ function scopeHasRuntimeSkip(scope: ts.Node): boolean {
  * False rejections are intentional: cited proofs must have scopes free of skip constructs.
  */
 function proofScopeIsUnskipped(call: ts.CallExpression): boolean {
+  if (!isTopLevelRegistration(call)) return false;
   for (let node: ts.Node | undefined = call; node; node = node.parent) {
     if (ts.isCallExpression(node) && hasSkipModifier(node)) return false;
     if ((ts.isBlock(node) || ts.isSourceFile(node)) && scopeHasRuntimeSkip(node)) return false;
@@ -130,43 +147,7 @@ function namedTestExists(source: string, title: string): boolean {
     ts.forEachChild(node, visit);
   };
   visit(parsed);
-  if (found) return true;
-
-  // A table title is evidence only when that table registers tests through its loop variable.
-  const tables = new Map<string, ts.ArrayLiteralExpression>();
-  for (const statement of parsed.statements) {
-    if (!ts.isVariableStatement(statement) || !(statement.declarationList.flags & ts.NodeFlags.Const)) continue;
-    for (const entry of statement.declarationList.declarations) {
-      if (ts.isIdentifier(entry.name) && entry.initializer && ts.isArrayLiteralExpression(entry.initializer)) {
-        tables.set(entry.name.text, entry.initializer);
-      }
-    }
-  }
-  for (const loop of parsed.statements) {
-    if (!ts.isForOfStatement(loop) || !ts.isIdentifier(loop.expression) ||
-      !ts.isVariableDeclarationList(loop.initializer) || !(loop.initializer.flags & ts.NodeFlags.Const) ||
-      loop.initializer.declarations.length !== 1) continue;
-    const binding = loop.initializer.declarations[0]!.name;
-    const body = ts.isBlock(loop.statement) && loop.statement.statements.length === 1
-      ? loop.statement.statements[0]! : loop.statement;
-    if (!ts.isIdentifier(binding) || !ts.isExpressionStatement(body) || !ts.isCallExpression(body.expression)) continue;
-    const call = body.expression;
-    const argument = call.arguments[0];
-    if (!isTestDeclaration(call) ||
-      !argument || !ts.isPropertyAccessExpression(argument) || !ts.isIdentifier(argument.expression) ||
-      argument.expression.text !== binding.text || argument.name.text !== 'title' ||
-      !proofScopeIsUnskipped(call)) continue;
-    for (const entry of tables.get(loop.expression.text)?.elements ?? []) {
-      if (!ts.isObjectLiteralExpression(entry) || entry.properties.some(property => ts.isSpreadAssignment(property) ||
-        (property.name && ts.isComputedPropertyName(property.name)))) continue;
-      const properties = entry.properties.filter(property => property.name &&
-        (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)) && property.name.text === 'title');
-      const property = properties[0];
-      if (properties.length === 1 && property && ts.isPropertyAssignment(property) && ts.isStringLiteralLike(property.initializer) &&
-        matches(property.initializer.text)) return true;
-    }
-  }
-  return false;
+  return found;
 }
 
 function proofMissing(proof: Proof): proof is Extract<Proof, { missing: string }> {
@@ -198,6 +179,36 @@ function journeyRegistered(wrapper: string, moduleSpecifier: string): boolean {
   };
   visit(parsed);
   return found;
+}
+
+function registrationPlacementFixtures(call: string): { source: string; accepted: boolean }[] {
+  const statement = `${call};`;
+  return [
+    { source: statement, accepted: true },
+    { source: `describe('suite', () => { ${statement} });`, accepted: true },
+    { source: `test.describe('suite', function () { ${statement} });`, accepted: true },
+    { source: `describe('outer', () => { describe('inner', () => { ${statement} }); });`, accepted: true },
+    { source: `if (false) { ${statement} }`, accepted: false },
+    { source: `if (true) { ${statement} }`, accepted: false },
+    { source: `enabled ? ${call} : undefined;`, accepted: false },
+    { source: `false && ${call};`, accepted: false },
+    { source: `true && ${call};`, accepted: false },
+    { source: `enabled || ${call};`, accepted: false },
+    { source: `maybe ?? ${call};`, accepted: false },
+    { source: `(${call});`, accepted: false },
+    { source: `void ${call};`, accepted: false },
+    { source: `const registered = ${call};`, accepted: false },
+    { source: `consume(${call});`, accepted: false },
+    { source: `function unused() { ${statement} }`, accepted: false },
+    { source: `const unused = () => { ${statement} };`, accepted: false },
+    { source: `(() => { ${statement} })();`, accepted: false },
+    { source: `test('another test', () => { ${statement} });`, accepted: false },
+    { source: `function unused() { describe('suite', () => { ${statement} }); }`, accepted: false },
+    { source: `if (false) { describe('suite', () => { ${statement} }); }`, accepted: false },
+    { source: `describe('suite', () => { if (true) { ${statement} } });`, accepted: false },
+    { source: `for (const item of items) { ${statement} }`, accepted: false },
+    { source: `{ ${statement} }`, accepted: false },
+  ];
 }
 
 function rowLabel(row: (typeof launchCoverage)[number]): string {
@@ -427,41 +438,26 @@ test('journey registrations follow the same syntactic scope rule', () => {
   expect(journeyRegistered(`import type { register } from '${moduleSpecifier}'; register();`, moduleSpecifier)).toBe(false);
 });
 
-test('proof titles in a table must be registered by that table’s test loop', () => {
-  const source = `
-    const unused = [{ title: 'an unused journey' }];
-    const journeys = [
-      { title: 'a reader chooses an edition', choices: [{ title: 'a nested choice' }] },
-      { title: 'a reader chooses a format', choices: [] },
-    ];
-    for (const journey of journeys) test(journey.title, async () => {});
-  `;
-  expect(namedTestExists(source, 'a reader chooses an edition')).toBe(true);
-  expect(namedTestExists(source, 'a reader chooses a format')).toBe(true);
-  expect(namedTestExists(source, 'an unused journey')).toBe(false);
-  expect(namedTestExists(source, 'a nested choice')).toBe(false);
-  expect(namedTestExists(source.replace('journey.title', 'journey.label'), 'a reader chooses an edition')).toBe(false);
-  expect(namedTestExists(source.replace('const journey of', 'const other of'), 'a reader chooses an edition')).toBe(false);
-  expect(namedTestExists(source.replace('of journeys', 'of unused'), 'a reader chooses an edition')).toBe(false);
-  expect(namedTestExists(source.replace(', async () => {}', ''), 'a reader chooses an edition')).toBe(false);
-  expect(namedTestExists(source.replace('for (const journey', '// for (const journey'), 'a reader chooses an edition')).toBe(false);
-  expect(namedTestExists(source.replace('choices: [{', "title: 'another title', choices: [{"), 'a reader chooses an edition')).toBe(false);
-  expect(namedTestExists(source.replace('choices: [{', '...unused[0], choices: [{'), 'a reader chooses an edition')).toBe(false);
-  expect(namedTestExists(source.replace('choices: [{', "['title']: 'another title', choices: [{"), 'a reader chooses an edition')).toBe(false);
-  expect(namedTestExists(source.replace('test(journey.title', 'it(journey.title'), 'a reader chooses a format')).toBe(true);
-  expect(namedTestExists(source.replace('async () => {}', 'async () => { test.skip(true); }'), 'a reader chooses a format')).toBe(false);
-  expect(namedTestExists(`test.beforeEach(() => { test.skip(); }); ${source}`, 'a reader chooses a format')).toBe(false);
-  expect(namedTestExists(source.replace('test(journey.title', 'test.skip(journey.title'), 'a reader chooses a format')).toBe(false);
-  expect(namedTestExists(source.replace('async () => {}', "{ tag: '@launch' }, async () => {}"), 'a reader chooses a format')).toBe(true);
-  expect(namedTestExists(source.replace('async () => {}', "{ tag: '@launch' }, async () => { test.fixme(true); }"), 'a reader chooses a format')).toBe(false);
-  expect(namedTestExists(`test.skip(otherTitle, () => {}); ${source}`, 'a reader chooses a format')).toBe(true);
-  for (const modifier of ['skip', 'fixme', 'fail']) {
-    for (const skip of [`test.${modifier}(false);`, `test.${modifier}(() => true);`]) {
-      for (const scope of [skip, `function unused() { ${skip} }`, `if (false) { ${skip} }`,
-        `test.beforeEach(() => { ${skip} });`]) {
-        expect(namedTestExists(`${scope} ${source}`, 'a reader chooses a format'), scope).toBe(false);
-      }
-    }
+test('proof registrations must be direct file or describe statements', () => {
+  const title = 'a reader resumes on another device';
+  for (const { source, accepted } of registrationPlacementFixtures(`test('${title}', () => {})`)) {
+    expect(namedTestExists(source, title), source).toBe(accepted);
+  }
+  const imported = "import { register } from './journeys/reading.ts';";
+  for (const { source, accepted } of registrationPlacementFixtures('register()')) {
+    expect(journeyRegistered(`${imported}\n${source}`, './journeys/reading.ts'), source).toBe(accepted);
+  }
+});
+
+test('table declarations are not direct file or describe statements', () => {
+  const table = "const journeys = [{ title: 'a reader chooses a format' }];";
+  for (const registration of [
+    'for (const journey of journeys) test(journey.title, () => {});',
+    'for (const journey of journeys) { test(journey.title, () => {}); }',
+    'journeys.forEach(journey => { test(journey.title, () => {}); });',
+  ]) {
+    expect(namedTestExists(`${table} ${registration}`, 'a reader chooses a format'), registration).toBe(false);
+    expect(namedTestExists(`${table} describe('suite', () => { ${registration} });`, 'a reader chooses a format'), registration).toBe(false);
   }
 });
 
@@ -488,7 +484,6 @@ test('launch outcomes retain landed proofs, the recipe reading name and all five
     ['recipes', 'Exchange recipes', 'tests/qa/integration/recipe-structure.test.ts', 'apps/web/tests/recipe-exchange.e2e.ts'],
     ['zone', 'Navigation and theme', 'tests/qa/integration/zone-document-home.test.ts', 'apps/web/tests/zone-site-authoring.e2e.ts'],
     ['zone', 'Publish after editor revocation', 'tests/qa/integration/zone-document-home.test.ts', 'apps/web/tests/zone-site-authoring.e2e.ts'],
-    ['zone', 'Home rendering', 'tests/qa/integration/zone-document-home.test.ts', 'apps/web/tests/zone-site-authoring.e2e.ts'],
     ['zone', 'Lifecycle', 'tests/qa/integration/zone-document-home.test.ts', 'apps/web/tests/zone-site-authoring.e2e.ts'],
     ['zone', 'Attach a Realm', 'tests/qa/integration/zone-realm-attachment.test.ts', 'apps/web/tests/zone-realm-attachment.e2e.ts'],
     ['zone', 'List attached Zones', 'tests/qa/integration/zone-realm-attachment.test.ts', 'apps/web/tests/zone-realm-attachment.e2e.ts'],
@@ -505,14 +500,36 @@ test('launch outcomes retain landed proofs, the recipe reading name and all five
     }
   }
 
+  const outsideRegistrationScopes = [
+    ['visual-novels', 'Catalogue browse and search in its Zone'],
+    ['anime', 'Catalogue browse and search in its Zone'],
+    ['manga', 'Catalogue browse and search in its Zone'],
+    ['realm', 'Membership and admission'],
+    ['zone', 'Home rendering'],
+    ['books', 'Choose among ambiguous editions of one Work'],
+    ['books', 'Choose among mixed formats'],
+    ['books', 'Navigate a thousand-chapter inventory'],
+    ['books', 'Continue progress across devices'],
+  ] as const;
+  for (const [kind, capability] of outsideRegistrationScopes) {
+    const matches = rows(kind, capability);
+    expect(matches, `${kind} / ${capability}`).toHaveLength(1);
+    const browserProof = matches[0]!.browser;
+    expect(browserProof).toMatchObject({ missing: 'gap' });
+    if (proofMissing(browserProof)) {
+      expect(browserProof.reason).toContain('outside a direct file or describe statement');
+    }
+  }
+  expect(rows('zone', 'Home rendering')[0]!.api).toMatchObject({ file: 'tests/qa/integration/zone-document-home.test.ts' });
+
   const provedPairs = launchCoverage.filter(row => !proofMissing(row.api) && !proofMissing(row.browser));
   const missingRows = launchCoverage.filter(row => proofMissing(row.api) || proofMissing(row.browser));
   const missingProofs = launchCoverage.flatMap(row => [row.api, row.browser]).filter(proofMissing);
   expect({ rows: launchCoverage.length, provedPairs: provedPairs.length, missingRows: missingRows.length, missingProofs: missingProofs.length })
-    .toEqual({ rows: 55, provedPairs: 39, missingRows: 16, missingProofs: 25 });
+    .toEqual({ rows: 55, provedPairs: 31, missingRows: 24, missingProofs: 34 });
   expect(Object.fromEntries([...missingItems].map(item => [item,
     missingRows.filter(row => missingForRow(row).includes(item)).length,
-  ]))).toEqual({ L10: 1, L11: 1, L12: 2, L13: 0, L17: 0, L19: 0, L20: 0, L21: 10, L26: 0, gap: 2 });
+  ]))).toEqual({ L10: 1, L11: 1, L12: 2, L13: 0, L17: 0, L19: 0, L20: 0, L21: 10, L26: 0, gap: 11 });
 });
 
 test('every launch kind and hard case has a coverage row', () => {
