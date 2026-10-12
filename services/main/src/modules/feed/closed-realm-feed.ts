@@ -11,6 +11,19 @@ type FeedSession = Pick<WorkReadSession, 'deps' | 'viewer'>;
 export type FeedDisclosureOccurrence = Pick<FeedSource, 'id' | 'kind' | 'target' | 'work' | 'realm'
   | 'reply' | 'contentTarget' | 'contentRevision' | 'readerReview'>;
 
+/** Hydration reuses exact-read bytes, so freeze an owned snapshot rather than
+ * keeping caller-owned references to the publication admitted at capture. */
+function snapshot<Source>(source: Source): Source {
+  const freeze = (value: unknown): void => {
+    if (!value || typeof value !== 'object' || Object.isFrozen(value)) return;
+    Object.freeze(value);
+    for (const child of Object.values(value)) freeze(child);
+  };
+  const copy = structuredClone(source);
+  freeze(copy);
+  return copy;
+}
+
 /** The retained activity selects an occurrence, not an alternate placement of
  * the same Work. Its owner must revalidate publication, preparation and approval
  * when resolving and rereading this reference. Context is only a lookup hint. */
@@ -42,8 +55,7 @@ export async function captureClosedRealmFeedSources<Source extends FeedDisclosur
   sources: readonly Source[], channel: 'feed' | 'count' = 'feed') {
   if (sources.length > FEED_COST.refreshItems || new Set(sources.map(source => source.id)).size !== sources.length)
     throw new DisclosureUnavailable('Feed occurrence batch is invalid');
-  sources = sources.map(source => Object.freeze({ ...source,
-    ...(source.readerReview ? { readerReview: Object.freeze({ ...source.readerReview }) } : {}) }));
+  sources = sources.map(source => snapshot(source));
   const env = session.deps.environment, viewer = session.viewer;
   const targets = sources.flatMap(source => [...closedRealmFeedTargets(source)]);
   if (targets.length > DISCLOSURE_COST.batch) throw new DisclosureUnavailable('Feed disclosure budget exceeded');

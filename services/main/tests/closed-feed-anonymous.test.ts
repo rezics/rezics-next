@@ -93,7 +93,7 @@ export function closedFeedOwner(actor: ClosedFeedReader) {
         || target.ancestry?.parents.some(parent => parent.kind === 'realm' && parent.resource === realm))
         || state.workHidden && target.ancestry?.parents.some(parent => parent.resource === work)
         || state.contentHidden && target.owner === 'content' ? 'hidden' as const : 'visible' as const),
-      anonymousNames: [], fenceBasis: { recoveryGeneration: state.generation, enforcementCut: state.enforcementCut } };
+      anonymousNames: [], fenceBases: targets.map(() => ({ recoveryGeneration: state.generation, enforcementCut: state.enforcementCut })) };
     },
   });
   const viewer = disclosureViewer(actor === 'anonymous' ? null : { issuer: 'account.test', subject: actor } as never);
@@ -235,6 +235,21 @@ export function closedFeedCases(actor: ClosedFeedReader) {
     const [safe] = await captured.fence();
     expect(safe?.actor).not.toBe(source.actor);
     expect(safe?.readerReview?.body).toBe('Original review');
+  });
+  test(`closed-feed-${actor}: captured Content bytes and reference survive caller mutation`, async () => {
+    const owner = closedFeedOwner(actor);
+    const source = owner.sources[0]!;
+    source.publishedContent = { status: 'available', body: { content: { text: 'Admitted body' } },
+      reference: { resourceId: source.reply, revisionId: 'revision-0', language: { kind: 'tag', tag: 'en' } } } as unknown as NonNullable<FeedSource['publishedContent']>;
+    const original = structuredClone(source);
+    const captured = await captureClosedRealmFeedSources(owner.session, [source]);
+    (source.publishedContent.body.content as { text: string }).text = 'Changed body';
+    source.publishedContent.reference.resourceId = native(999);
+    expect(captured.sources).toEqual([original]);
+    const delivered = await captured.fence();
+    expect(delivered).toEqual([original]);
+    expect(Object.isFrozen(delivered[0]?.publishedContent?.body.content)).toBe(true);
+    expect(Object.isFrozen(delivered[0]?.publishedContent?.reference)).toBe(true);
   });
   test(`closed-feed-${actor}: a closure that moves the Access cut discards hydration and originals remain on retry`, async () => {
     const owner = closedFeedOwner(actor);
