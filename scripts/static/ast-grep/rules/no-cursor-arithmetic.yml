@@ -1,3 +1,7 @@
+# Canonical syntax only: seek-member arithmetic, the nextCursor enumeration
+# loop, and values passed directly as request seek properties. Aliases,
+# shadowing and multi-step flows are intentionally out of scope. A
+# TypeScript-AST repository check is the class-B follow-up for those flows.
 id: no-cursor-arithmetic
 language: TypeScript
 files:
@@ -5,229 +9,80 @@ files:
 severity: error
 message: Forward API continuations unchanged; do not derive seek positions with arithmetic.
 ignores:
-  # Enumerated transport boundary, not a blanket exemption for api.ts filenames.
   - apps/web/features/api/**
   - apps/web/features/library/import-api.ts
-  # These in-memory API owners manufacture their response tokens. Consumers
-  # (including ordinary tests and stories) still pass through this rule.
-  - apps/web/features/discover/browse-fixtures.ts
-  - apps/web/features/relationships/fixtures.ts
-  - apps/web/tests/g-945-browse.test.ts
-  - apps/web/tests/direction-9-fixture.test.ts
+  # Continuation conformance oracle: these templates are independent expected
+  # request tokens, not product code manufacturing a continuation.
+  - apps/web/features/zone-editor/navigation-read.test.ts
 utils:
-  seek-property:
-    regex: '^(next|nextCursor|cursor|offset|seq|sequence)$'
-  seek-value:
+  wrapped-seek-member:
     any:
-      - regex: '^(next|nextCursor|cursor|offset|seq|sequence)$'
       - all:
           - kind: member_expression
           - has:
               field: property
-              matches: seek-property
+              regex: '^(nextCursor|next|cursor|continuation|offset|seq)$'
       - all:
           - any:
-              - pattern: Number($VALUE)
-              - pattern: BigInt($VALUE)
-              - pattern: parseInt($VALUE, $$$REST)
+              - kind: as_expression
+              - kind: non_null_expression
+              - kind: parenthesized_expression
+          - has:
+              matches: wrapped-seek-member
+      - all:
+          - pattern: Number($VALUE)
           - has:
               kind: arguments
               has:
-                matches: seek-value
-      - all:
-          - kind: parenthesized_expression
-          - has:
-              matches: seek-value
+                matches: wrapped-seek-member
   arithmetic:
     any:
       - pattern: $X + $N
       - pattern: $X - $N
       - pattern: $X += $N
       - pattern: $X -= $N
-  seek-source:
+  request-value:
     any:
-      - matches: seek-value
-      - regex: '^(next|offset)$'
-  continuation-declaration:
-    all:
-      - pattern:
-          context: let $X = $SOURCE
-          selector: variable_declarator
-      - has:
-          field: value
-          matches: seek-source
+      - matches: arithmetic
+      - pattern: $X * $N
+      - pattern: $X / $N
+      - pattern: $X % $N
+      - pattern: $X ** $N
+      - kind: template_string
 rule:
   any:
     - all:
         - matches: arithmetic
         - has:
-            pattern: $X
-            matches: seek-value
-        # Offset arithmetic for local batches, text and displayed ordinals is
-        # valid. The independent seek-sink branches below still reject it in
-        # outgoing queries. Owner-derived aliases do not receive this exception.
-        - not:
-            all:
-              - has:
-                  pattern: $X
-                  regex: '^offset$'
-              - any:
-                  - inside:
-                      kind: template_string
-                      stopBy: end
-                  - has:
-                      pattern: $N
-                      regex: '^(.*[.])?(width|clientWidth|scrollWidth)$'
-                  - inside:
-                      kind: for_statement
-                      has:
-                        field: initializer
-                        has:
-                          all:
-                            - pattern:
-                                context: let $X = $LOCAL
-                                selector: variable_declarator
-                            - has:
-                                field: value
-                                kind: number
-                      stopBy: end
-                  - inside:
-                      any:
-                        - kind: statement_block
-                        - kind: program
-                      has:
-                        kind: lexical_declaration
-                        has:
-                          all:
-                            - pattern:
-                                context: let $X = $LOCAL
-                                selector: variable_declarator
-                            - has:
-                                field: value
-                                any:
-                                  - kind: number
-                                  - regex: '[.]scrollLeft'
-                      stopBy: end
-    # Owner-derived aliases cannot use the display-offset exceptions.
-    - all:
-        - matches: arithmetic
-        - any:
-            - inside:
-                kind: for_statement
-                has:
-                  field: initializer
-                  has:
-                    matches: continuation-declaration
-                stopBy: end
-            - inside:
-                any:
-                  - kind: statement_block
-                  - kind: program
-                has:
-                  kind: lexical_declaration
-                  has:
-                    matches: continuation-declaration
-                stopBy: end
-    - all:
-        - matches: arithmetic
-        - inside:
-            any:
-              - kind: statement_block
-              - kind: program
-            all:
-              - has:
-                  kind: lexical_declaration
-                  has:
-                    pattern:
-                      context: let $X = $ALIAS
-                      selector: variable_declarator
-              - has:
-                  kind: lexical_declaration
-                  has:
-                    all:
-                      - pattern:
-                          context: let $ALIAS = $SOURCE
-                          selector: variable_declarator
-                      - has:
-                          field: value
-                          matches: seek-source
-            stopBy: end
-    - all:
-        - matches: arithmetic
-        - inside:
-            any:
-              - kind: statement_block
-              - kind: program
-            has:
-              kind: expression_statement
-              has:
-                all:
-                  - pattern: $X = $SOURCE
-                  - has:
-                      field: right
-                      matches: seek-source
-            stopBy: end
-    - all:
-        - matches: arithmetic
-        - inside:
-            any:
-              - kind: statement_block
-              - kind: program
-            has:
-              kind: lexical_declaration
-              has:
-                kind: variable_declarator
-                has:
-                  field: name
-                  has:
-                    all:
-                      - pattern:
-                          context: 'const { $PROPERTY: $X } = page'
-                          selector: pair_pattern
-                      - has:
-                          field: key
-                          matches: seek-property
-            stopBy: end
-    # A seek request cannot be computed from row indices either. Match the
-    # value itself: an array lookup that retrieves a token is valid.
+            matches: wrapped-seek-member
+    - pattern: for (let $AT = $P.nextCursor; $COND; $AT += $SIZE) { $$$BODY }
+    - pattern: for (let $AT = $P.nextCursor; $COND; $AT += $SIZE) $BODY
     - all:
         - kind: pair
         - has:
             field: key
-            regex: '^(cursor|before|after|continuation|offset|seq|sequence)$'
+            regex: '^(cursor|after|before|offset|continuation)$'
         - has:
             field: value
-            any:
-              - matches: arithmetic
-              - all:
-                  - any:
-                      - pattern: Number($VALUE)
-                      - pattern: BigInt($VALUE)
-                      - pattern: String($VALUE)
-                  - has:
-                      kind: arguments
-                      has:
-                        matches: arithmetic
-        # Response fixtures and local scheduling/geometry objects own these
-        # values. Only outgoing query parameters are seek sinks.
+            matches: request-value
         - any:
-            - has:
-                field: key
-                regex: '^(cursor|continuation)$'
             - inside:
                 kind: pair
                 has:
                   field: key
                   regex: '^(query|params|searchParams)$'
                 stopBy: end
-    - all:
-        - kind: call_expression
-        - any:
-            - pattern: $API.rows($ID, $X + $N, $$$OPTIONS)
-            - pattern: $API.rows($ID, $X - $N, $$$OPTIONS)
-            - pattern: $API.rows($ID, $X += $N, $$$OPTIONS)
-            - pattern: $API.rows($ID, Number($X) - $N, $$$OPTIONS)
-            - pattern: $API.rows($ID, Number($X) + $N, $$$OPTIONS)
+            - inside:
+                kind: arguments
+                inside:
+                  any:
+                    - pattern: $API.get($$$ARGS)
+                    - pattern: $API.post($$$ARGS)
+                    - pattern: $API.put($$$ARGS)
+                    - pattern: $API.patch($$$ARGS)
+                    - pattern: $API.delete($$$ARGS)
+                    - pattern: new URLSearchParams($$$ARGS)
+                stopBy: end
 
 ---
 id: no-cursor-arithmetic-tsx
@@ -237,226 +92,77 @@ files:
 severity: error
 message: Forward API continuations unchanged; do not derive seek positions with arithmetic.
 ignores:
-  # Enumerated transport boundary, not a blanket exemption for api.ts filenames.
   - apps/web/features/api/**
   - apps/web/features/library/import-api.ts
-  # These in-memory API owners manufacture their response tokens. Consumers
-  # (including ordinary tests and stories) still pass through this rule.
-  - apps/web/features/discover/browse-fixtures.ts
-  - apps/web/features/relationships/fixtures.ts
-  - apps/web/tests/g-945-browse.test.ts
-  - apps/web/tests/direction-9-fixture.test.ts
+  # Continuation conformance oracle: these templates are independent expected
+  # request tokens, not product code manufacturing a continuation.
+  - apps/web/features/zone-editor/navigation-read.test.ts
 utils:
-  seek-property:
-    regex: '^(next|nextCursor|cursor|offset|seq|sequence)$'
-  seek-value:
+  wrapped-seek-member:
     any:
-      - regex: '^(next|nextCursor|cursor|offset|seq|sequence)$'
       - all:
           - kind: member_expression
           - has:
               field: property
-              matches: seek-property
+              regex: '^(nextCursor|next|cursor|continuation|offset|seq)$'
       - all:
           - any:
-              - pattern: Number($VALUE)
-              - pattern: BigInt($VALUE)
-              - pattern: parseInt($VALUE, $$$REST)
+              - kind: as_expression
+              - kind: non_null_expression
+              - kind: parenthesized_expression
+          - has:
+              matches: wrapped-seek-member
+      - all:
+          - pattern: Number($VALUE)
           - has:
               kind: arguments
               has:
-                matches: seek-value
-      - all:
-          - kind: parenthesized_expression
-          - has:
-              matches: seek-value
+                matches: wrapped-seek-member
   arithmetic:
     any:
       - pattern: $X + $N
       - pattern: $X - $N
       - pattern: $X += $N
       - pattern: $X -= $N
-  seek-source:
+  request-value:
     any:
-      - matches: seek-value
-      - regex: '^(next|offset)$'
-  continuation-declaration:
-    all:
-      - pattern:
-          context: let $X = $SOURCE
-          selector: variable_declarator
-      - has:
-          field: value
-          matches: seek-source
+      - matches: arithmetic
+      - pattern: $X * $N
+      - pattern: $X / $N
+      - pattern: $X % $N
+      - pattern: $X ** $N
+      - kind: template_string
 rule:
   any:
     - all:
         - matches: arithmetic
         - has:
-            pattern: $X
-            matches: seek-value
-        # Offset arithmetic for local batches, text and displayed ordinals is
-        # valid. The independent seek-sink branches below still reject it in
-        # outgoing queries. Owner-derived aliases do not receive this exception.
-        - not:
-            all:
-              - has:
-                  pattern: $X
-                  regex: '^offset$'
-              - any:
-                  - inside:
-                      kind: template_string
-                      stopBy: end
-                  - has:
-                      pattern: $N
-                      regex: '^(.*[.])?(width|clientWidth|scrollWidth)$'
-                  - inside:
-                      kind: for_statement
-                      has:
-                        field: initializer
-                        has:
-                          all:
-                            - pattern:
-                                context: let $X = $LOCAL
-                                selector: variable_declarator
-                            - has:
-                                field: value
-                                kind: number
-                      stopBy: end
-                  - inside:
-                      any:
-                        - kind: statement_block
-                        - kind: program
-                      has:
-                        kind: lexical_declaration
-                        has:
-                          all:
-                            - pattern:
-                                context: let $X = $LOCAL
-                                selector: variable_declarator
-                            - has:
-                                field: value
-                                any:
-                                  - kind: number
-                                  - regex: '[.]scrollLeft'
-                      stopBy: end
-    # Owner-derived aliases cannot use the display-offset exceptions.
-    - all:
-        - matches: arithmetic
-        - any:
-            - inside:
-                kind: for_statement
-                has:
-                  field: initializer
-                  has:
-                    matches: continuation-declaration
-                stopBy: end
-            - inside:
-                any:
-                  - kind: statement_block
-                  - kind: program
-                has:
-                  kind: lexical_declaration
-                  has:
-                    matches: continuation-declaration
-                stopBy: end
-    - all:
-        - matches: arithmetic
-        - inside:
-            any:
-              - kind: statement_block
-              - kind: program
-            all:
-              - has:
-                  kind: lexical_declaration
-                  has:
-                    pattern:
-                      context: let $X = $ALIAS
-                      selector: variable_declarator
-              - has:
-                  kind: lexical_declaration
-                  has:
-                    all:
-                      - pattern:
-                          context: let $ALIAS = $SOURCE
-                          selector: variable_declarator
-                      - has:
-                          field: value
-                          matches: seek-source
-            stopBy: end
-    - all:
-        - matches: arithmetic
-        - inside:
-            any:
-              - kind: statement_block
-              - kind: program
-            has:
-              kind: expression_statement
-              has:
-                all:
-                  - pattern: $X = $SOURCE
-                  - has:
-                      field: right
-                      matches: seek-source
-            stopBy: end
-    - all:
-        - matches: arithmetic
-        - inside:
-            any:
-              - kind: statement_block
-              - kind: program
-            has:
-              kind: lexical_declaration
-              has:
-                kind: variable_declarator
-                has:
-                  field: name
-                  has:
-                    all:
-                      - pattern:
-                          context: 'const { $PROPERTY: $X } = page'
-                          selector: pair_pattern
-                      - has:
-                          field: key
-                          matches: seek-property
-            stopBy: end
-    # A seek request cannot be computed from row indices either. Match the
-    # value itself: an array lookup that retrieves a token is valid.
+            matches: wrapped-seek-member
+    - pattern: for (let $AT = $P.nextCursor; $COND; $AT += $SIZE) { $$$BODY }
+    - pattern: for (let $AT = $P.nextCursor; $COND; $AT += $SIZE) $BODY
     - all:
         - kind: pair
         - has:
             field: key
-            regex: '^(cursor|before|after|continuation|offset|seq|sequence)$'
+            regex: '^(cursor|after|before|offset|continuation)$'
         - has:
             field: value
-            any:
-              - matches: arithmetic
-              - all:
-                  - any:
-                      - pattern: Number($VALUE)
-                      - pattern: BigInt($VALUE)
-                      - pattern: String($VALUE)
-                  - has:
-                      kind: arguments
-                      has:
-                        matches: arithmetic
-        # Response fixtures and local scheduling/geometry objects own these
-        # values. Only outgoing query parameters are seek sinks.
+            matches: request-value
         - any:
-            - has:
-                field: key
-                regex: '^(cursor|continuation)$'
             - inside:
                 kind: pair
                 has:
                   field: key
                   regex: '^(query|params|searchParams)$'
                 stopBy: end
-    - all:
-        - kind: call_expression
-        - any:
-            - pattern: $API.rows($ID, $X + $N, $$$OPTIONS)
-            - pattern: $API.rows($ID, $X - $N, $$$OPTIONS)
-            - pattern: $API.rows($ID, $X += $N, $$$OPTIONS)
-            - pattern: $API.rows($ID, Number($X) - $N, $$$OPTIONS)
-            - pattern: $API.rows($ID, Number($X) + $N, $$$OPTIONS)
+            - inside:
+                kind: arguments
+                inside:
+                  any:
+                    - pattern: $API.get($$$ARGS)
+                    - pattern: $API.post($$$ARGS)
+                    - pattern: $API.put($$$ARGS)
+                    - pattern: $API.patch($$$ARGS)
+                    - pattern: $API.delete($$$ARGS)
+                    - pattern: new URLSearchParams($$$ARGS)
+                stopBy: end

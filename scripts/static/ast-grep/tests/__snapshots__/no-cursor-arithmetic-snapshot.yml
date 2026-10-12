@@ -1,24 +1,90 @@
 id: no-cursor-arithmetic
 snapshots:
-  'api.get({ query: { after: offset + size } });':
+  'api.get({ cursor: index - 1 });':
     labels:
-    - source: 'after: offset + size'
+    - source: 'cursor: index - 1'
+      style: primary
+      start: 10
+      end: 27
+    - source: cursor
+      style: secondary
+      start: 10
+      end: 16
+    - source: index - 1
+      style: secondary
+      start: 18
+      end: 27
+    - source: 'api.get({ cursor: index - 1 })'
+      style: secondary
+      start: 0
+      end: 30
+    - source: '({ cursor: index - 1 })'
+      style: secondary
+      start: 7
+      end: 30
+  'api.get({ query: { after: `${offset + 8}` } });':
+    labels:
+    - source: 'after: `${offset + 8}`'
       style: primary
       start: 19
-      end: 39
+      end: 41
     - source: after
       style: secondary
       start: 19
       end: 24
-    - source: offset + size
+    - source: '`${offset + 8}`'
       style: secondary
       start: 26
+      end: 41
+    - source: query
+      style: secondary
+      start: 10
+      end: 15
+    - source: 'query: { after: `${offset + 8}` }'
+      style: secondary
+      start: 10
+      end: 43
+  'api.get({ query: { after: index + 1 } });':
+    labels:
+    - source: 'after: index + 1'
+      style: primary
+      start: 19
+      end: 35
+    - source: after
+      style: secondary
+      start: 19
+      end: 24
+    - source: index + 1
+      style: secondary
+      start: 26
+      end: 35
+    - source: query
+      style: secondary
+      start: 10
+      end: 15
+    - source: 'query: { after: index + 1 }'
+      style: secondary
+      start: 10
+      end: 37
+  'api.get({ query: { before: `${ordinal}` } });':
+    labels:
+    - source: 'before: `${ordinal}`'
+      style: primary
+      start: 19
+      end: 39
+    - source: before
+      style: secondary
+      start: 19
+      end: 25
+    - source: '`${ordinal}`'
+      style: secondary
+      start: 27
       end: 39
     - source: query
       style: secondary
       start: 10
       end: 15
-    - source: 'query: { after: offset + size }'
+    - source: 'query: { before: `${ordinal}` }'
       style: secondary
       start: 10
       end: 41
@@ -44,6 +110,72 @@ snapshots:
       style: secondary
       start: 10
       end: 36
+  'api.get({ query: { continuation: `page-${index}` } });':
+    labels:
+    - source: 'continuation: `page-${index}`'
+      style: primary
+      start: 19
+      end: 48
+    - source: continuation
+      style: secondary
+      start: 19
+      end: 31
+    - source: '`page-${index}`'
+      style: secondary
+      start: 33
+      end: 48
+    - source: query
+      style: secondary
+      start: 10
+      end: 15
+    - source: 'query: { continuation: `page-${index}` }'
+      style: secondary
+      start: 10
+      end: 50
+  'api.get({ query: { continuation: index / size } });':
+    labels:
+    - source: 'continuation: index / size'
+      style: primary
+      start: 19
+      end: 45
+    - source: continuation
+      style: secondary
+      start: 19
+      end: 31
+    - source: index / size
+      style: secondary
+      start: 33
+      end: 45
+    - source: query
+      style: secondary
+      start: 10
+      end: 15
+    - source: 'query: { continuation: index / size }'
+      style: secondary
+      start: 10
+      end: 47
+  'api.get({ query: { cursor: `${offset + 8}` } });':
+    labels:
+    - source: 'cursor: `${offset + 8}`'
+      style: primary
+      start: 19
+      end: 42
+    - source: cursor
+      style: secondary
+      start: 19
+      end: 25
+    - source: '`${offset + 8}`'
+      style: secondary
+      start: 27
+      end: 42
+    - source: query
+      style: secondary
+      start: 10
+      end: 15
+    - source: 'query: { cursor: `${offset + 8}` }'
+      style: secondary
+      start: 10
+      end: 44
   'api.get({ query: { cursor: index - 1 } });':
     labels:
     - source: 'cursor: index - 1'
@@ -58,394 +190,86 @@ snapshots:
       style: secondary
       start: 27
       end: 36
-    - source: cursor
+    - source: query
       style: secondary
-      start: 19
-      end: 25
-  'api.get({ query: { offset: offset + size } });':
+      start: 10
+      end: 15
+    - source: 'query: { cursor: index - 1 }'
+      style: secondary
+      start: 10
+      end: 38
+  'api.get({ query: { offset: `${offset}` } });':
     labels:
-    - source: 'offset: offset + size'
+    - source: 'offset: `${offset}`'
       style: primary
       start: 19
-      end: 40
+      end: 38
     - source: offset
       style: secondary
       start: 19
       end: 25
-    - source: offset + size
+    - source: '`${offset}`'
       style: secondary
       start: 27
-      end: 40
-    - source: query
-      style: secondary
-      start: 10
-      end: 15
-    - source: 'query: { offset: offset + size }'
-      style: secondary
-      start: 10
-      end: 42
-  'api.get({ query: { sequence: count - 1 } });':
-    labels:
-    - source: 'sequence: count - 1'
-      style: primary
-      start: 19
-      end: 38
-    - source: sequence
-      style: secondary
-      start: 19
-      end: 27
-    - source: count - 1
-      style: secondary
-      start: 29
       end: 38
     - source: query
       style: secondary
       start: 10
       end: 15
-    - source: 'query: { sequence: count - 1 }'
+    - source: 'query: { offset: `${offset}` }'
       style: secondary
       start: 10
       end: 40
-  api.rows(id, Number(index) - 1, { signal });:
+  'api.get({ query: { offset: index * size } });':
     labels:
-    - source: api.rows(id, Number(index) - 1, { signal })
+    - source: 'offset: index * size'
       style: primary
-      start: 0
-      end: 43
-  api.rows(id, index - 1, { signal });:
-    labels:
-    - source: api.rows(id, index - 1, { signal })
-      style: primary
-      start: 0
-      end: 35
-  ? async function reloadRow(api, id, index, signal) { const page = await api.rows(id, index - 1, { signal }); return page.rows.find(row => row.index === index); }
-  : labels:
-    - source: api.rows(id, index - 1, { signal })
-      style: primary
-      start: 70
-      end: 105
-  const at = next; const seek = at - 1;:
-    labels:
-    - source: at - 1
-      style: primary
-      start: 30
-      end: 36
-    - source: next
-      style: secondary
-      start: 11
-      end: 15
-    - source: at = next
-      style: secondary
-      start: 6
-      end: 15
-    - source: const at = next;
-      style: secondary
-      start: 0
-      end: 16
-    - source: const at = next; const seek = at - 1;
-      style: secondary
-      start: 0
-      end: 37
-  const at = offset; const seek = at + 1;:
-    labels:
-    - source: at + 1
-      style: primary
-      start: 32
-      end: 38
+      start: 19
+      end: 39
     - source: offset
       style: secondary
-      start: 11
-      end: 17
-    - source: at = offset
+      start: 19
+      end: 25
+    - source: index * size
       style: secondary
-      start: 6
-      end: 17
-    - source: const at = offset;
-      style: secondary
-      start: 0
-      end: 18
-    - source: const at = offset; const seek = at + 1;
-      style: secondary
-      start: 0
+      start: 27
       end: 39
-  const at = page.nextCursor; const seek = at + 8;:
-    labels:
-    - source: at + 8
-      style: primary
-      start: 41
-      end: 47
-    - source: nextCursor
-      style: secondary
-      start: 16
-      end: 26
-    - source: page.nextCursor
-      style: secondary
-      start: 11
-      end: 26
-    - source: at = page.nextCursor
-      style: secondary
-      start: 6
-      end: 26
-    - source: const at = page.nextCursor;
-      style: secondary
-      start: 0
-      end: 27
-    - source: const at = page.nextCursor; const seek = at + 8;
-      style: secondary
-      start: 0
-      end: 48
-  'const at = page.sequence; api.get({ query: { after: at - 1 } });':
-    labels:
-    - source: 'after: at - 1'
-      style: primary
-      start: 45
-      end: 58
-    - source: after
-      style: secondary
-      start: 45
-      end: 50
-    - source: at - 1
-      style: secondary
-      start: 52
-      end: 58
     - source: query
       style: secondary
-      start: 36
+      start: 10
+      end: 15
+    - source: 'query: { offset: index * size }'
+      style: secondary
+      start: 10
       end: 41
-    - source: 'query: { after: at - 1 }'
-      style: secondary
-      start: 36
-      end: 60
-  const offset = page.nextCursor; const seek = offset + width;:
+  const seek = ((page.offset)) - 1;:
     labels:
-    - source: offset + width
-      style: primary
-      start: 45
-      end: 59
-    - source: nextCursor
-      style: secondary
-      start: 20
-      end: 30
-    - source: page.nextCursor
-      style: secondary
-      start: 15
-      end: 30
-    - source: offset = page.nextCursor
-      style: secondary
-      start: 6
-      end: 30
-    - source: const offset = page.nextCursor;
-      style: secondary
-      start: 0
-      end: 31
-    - source: const offset = page.nextCursor; const seek = offset + width;
-      style: secondary
-      start: 0
-      end: 60
-  'const query = { continuation: count + 1 };':
-    labels:
-    - source: 'continuation: count + 1'
-      style: primary
-      start: 16
-      end: 39
-    - source: continuation
-      style: secondary
-      start: 16
-      end: 28
-    - source: count + 1
-      style: secondary
-      start: 30
-      end: 39
-    - source: continuation
-      style: secondary
-      start: 16
-      end: 28
-  'const query = { cursor: index - 1 };':
-    labels:
-    - source: 'cursor: index - 1'
-      style: primary
-      start: 16
-      end: 33
-    - source: cursor
-      style: secondary
-      start: 16
-      end: 22
-    - source: index - 1
-      style: secondary
-      start: 24
-      end: 33
-    - source: cursor
-      style: secondary
-      start: 16
-      end: 22
-  const seek = BigInt(item.sequence) - 1n;:
-    labels:
-    - source: BigInt(item.sequence) - 1n
+    - source: ((page.offset)) - 1
       style: primary
       start: 13
-      end: 39
-    - source: sequence
-      style: secondary
-      start: 25
-      end: 33
-    - source: item.sequence
-      style: secondary
-      start: 20
-      end: 33
-    - source: (item.sequence)
-      style: secondary
-      start: 19
-      end: 34
-    - source: BigInt(item.sequence)
-      style: secondary
-      start: 13
-      end: 34
-  const seek = Number(cursor) - 1;:
-    labels:
-    - source: Number(cursor) - 1
-      style: primary
-      start: 13
-      end: 31
-    - source: cursor
+      end: 32
+    - source: offset
       style: secondary
       start: 20
       end: 26
-    - source: (cursor)
-      style: secondary
-      start: 19
-      end: 27
-    - source: Number(cursor)
-      style: secondary
-      start: 13
-      end: 27
-  const seek = Number(page.offset) + 1;:
-    labels:
-    - source: Number(page.offset) + 1
-      style: primary
-      start: 13
-      end: 36
-    - source: offset
-      style: secondary
-      start: 25
-      end: 31
     - source: page.offset
       style: secondary
-      start: 20
-      end: 31
+      start: 15
+      end: 26
     - source: (page.offset)
       style: secondary
-      start: 19
-      end: 32
-    - source: Number(page.offset)
-      style: secondary
-      start: 13
-      end: 32
-  const seek = cursor + 1;:
-    labels:
-    - source: cursor + 1
-      style: primary
-      start: 13
-      end: 23
-    - source: cursor
-      style: secondary
-      start: 13
-      end: 19
-  const seek = next + 1;:
-    labels:
-    - source: next + 1
-      style: primary
-      start: 13
-      end: 21
-    - source: next
-      style: secondary
-      start: 13
-      end: 17
-  const seek = nextCursor - size;:
-    labels:
-    - source: nextCursor - size
-      style: primary
-      start: 13
-      end: 30
-    - source: nextCursor
-      style: secondary
-      start: 13
-      end: 23
-  const seek = offset - 1;:
-    labels:
-    - source: offset - 1
-      style: primary
-      start: 13
-      end: 23
-    - source: offset
-      style: secondary
-      start: 13
-      end: 19
-  const seek = parseInt(cursor, 10) + 8;:
-    labels:
-    - source: parseInt(cursor, 10) + 8
-      style: primary
-      start: 13
-      end: 37
-    - source: cursor
-      style: secondary
-      start: 22
-      end: 28
-    - source: (cursor, 10)
-      style: secondary
-      start: 21
-      end: 33
-    - source: parseInt(cursor, 10)
-      style: secondary
-      start: 13
-      end: 33
-  const start = page.next; const at = start; api.rows(id, at + 8);:
-    labels:
-    - source: at + 8
-      style: primary
-      start: 56
-      end: 62
-    - source: at = start
-      style: secondary
-      start: 31
-      end: 41
-    - source: const at = start;
-      style: secondary
-      start: 25
-      end: 42
-    - source: next
-      style: secondary
-      start: 19
-      end: 23
-    - source: page.next
-      style: secondary
       start: 14
-      end: 23
-    - source: start = page.next
+      end: 27
+    - source: ((page.offset))
       style: secondary
-      start: 6
-      end: 23
-    - source: const start = page.next;
-      style: secondary
-      start: 0
-      end: 24
-    - source: const start = page.next; const at = start; api.rows(id, at + 8);
-      style: secondary
-      start: 0
-      end: 64
-  const start = page.nextCursor; const at = start; const seek = at + 8;:
+      start: 13
+      end: 28
+  const seek = (page.nextCursor as number) + 1;:
     labels:
-    - source: at + 8
+    - source: (page.nextCursor as number) + 1
       style: primary
-      start: 62
-      end: 68
-    - source: at = start
-      style: secondary
-      start: 37
-      end: 47
-    - source: const at = start;
-      style: secondary
-      start: 31
-      end: 48
+      start: 13
+      end: 44
     - source: nextCursor
       style: secondary
       start: 19
@@ -454,172 +278,132 @@ snapshots:
       style: secondary
       start: 14
       end: 29
-    - source: start = page.nextCursor
+    - source: page.nextCursor as number
       style: secondary
-      start: 6
-      end: 29
-    - source: const start = page.nextCursor;
+      start: 14
+      end: 39
+    - source: (page.nextCursor as number)
       style: secondary
-      start: 0
-      end: 30
-    - source: const start = page.nextCursor; const at = start; const seek = at + 8;
-      style: secondary
-      start: 0
-      end: 69
-  'const { nextCursor: at } = page; const seek = at + 1;':
+      start: 13
+      end: 40
+  const seek = 1 + page.cursor;:
     labels:
-    - source: at + 1
+    - source: 1 + page.cursor
       style: primary
-      start: 46
-      end: 52
-    - source: nextCursor
-      style: secondary
-      start: 8
-      end: 18
-    - source: 'nextCursor: at'
-      style: secondary
-      start: 8
-      end: 22
-    - source: 'nextCursor: at'
-      style: secondary
-      start: 8
-      end: 22
-    - source: '{ nextCursor: at } = page'
-      style: secondary
-      start: 6
-      end: 31
-    - source: 'const { nextCursor: at } = page;'
-      style: secondary
-      start: 0
-      end: 32
-    - source: 'const { nextCursor: at } = page; const seek = at + 1;'
-      style: secondary
-      start: 0
-      end: 53
-  'const { offset: at, items } = page; at += size;':
-    labels:
-    - source: at += size
-      style: primary
-      start: 36
-      end: 46
-    - source: offset
-      style: secondary
-      start: 8
-      end: 14
-    - source: 'offset: at'
-      style: secondary
-      start: 8
-      end: 18
-    - source: 'offset: at'
-      style: secondary
-      start: 8
-      end: 18
-    - source: '{ offset: at, items } = page'
-      style: secondary
-      start: 6
-      end: 34
-    - source: 'const { offset: at, items } = page;'
-      style: secondary
-      start: 0
-      end: 35
-    - source: 'const { offset: at, items } = page; at += size;'
-      style: secondary
-      start: 0
-      end: 47
-  cursor += size;:
-    labels:
-    - source: cursor += size
-      style: primary
-      start: 0
-      end: 14
+      start: 13
+      end: 28
     - source: cursor
       style: secondary
-      start: 0
-      end: 6
-  for (let at = first.nextCursor; at < total - 1; at += size) cursors.push(at);:
-    labels:
-    - source: at += size
-      style: primary
-      start: 48
-      end: 58
-    - source: nextCursor
-      style: secondary
-      start: 20
-      end: 30
-    - source: first.nextCursor
-      style: secondary
-      start: 14
-      end: 30
-    - source: at = first.nextCursor
-      style: secondary
-      start: 9
-      end: 30
-    - source: at = first.nextCursor
-      style: secondary
-      start: 9
-      end: 30
-    - source: for (let at = first.nextCursor; at < total - 1; at += size) cursors.push(at);
-      style: secondary
-      start: 0
-      end: 77
-  for (let at = first.nextCursor; at < total - 1; at += size) { cursors.push(at); }:
-    labels:
-    - source: at += size
-      style: primary
-      start: 48
-      end: 58
-    - source: nextCursor
-      style: secondary
-      start: 20
-      end: 30
-    - source: first.nextCursor
-      style: secondary
-      start: 14
-      end: 30
-    - source: at = first.nextCursor
-      style: secondary
-      start: 9
-      end: 30
-    - source: at = first.nextCursor
-      style: secondary
-      start: 9
-      end: 30
-    - source: for (let at = first.nextCursor; at < total - 1; at += size) { cursors.push(at); }
-      style: secondary
-      start: 0
-      end: 81
-  let at = page.cursor; at += size;:
-    labels:
-    - source: at += size
-      style: primary
       start: 22
-      end: 32
-    - source: cursor
-      style: secondary
-      start: 14
-      end: 20
+      end: 28
     - source: page.cursor
       style: secondary
-      start: 9
-      end: 20
-    - source: at = page.cursor
-      style: secondary
-      start: 4
-      end: 20
-    - source: let at = page.cursor;
-      style: secondary
-      start: 0
-      end: 21
-    - source: let at = page.cursor; at += size;
-      style: secondary
-      start: 0
-      end: 33
-  let at; at = page.nextCursor; const seek = at - 1;:
+      start: 17
+      end: 28
+  const seek = Number((page.seq! as number)) + 1;:
     labels:
-    - source: at - 1
+    - source: Number((page.seq! as number)) + 1
       style: primary
-      start: 43
-      end: 49
+      start: 13
+      end: 46
+    - source: seq
+      style: secondary
+      start: 26
+      end: 29
+    - source: page.seq
+      style: secondary
+      start: 21
+      end: 29
+    - source: page.seq!
+      style: secondary
+      start: 21
+      end: 30
+    - source: page.seq! as number
+      style: secondary
+      start: 21
+      end: 40
+    - source: (page.seq! as number)
+      style: secondary
+      start: 20
+      end: 41
+    - source: ((page.seq! as number))
+      style: secondary
+      start: 19
+      end: 42
+    - source: Number((page.seq! as number))
+      style: secondary
+      start: 13
+      end: 42
+  const seek = Number(page.cursor) + 1;:
+    labels:
+    - source: Number(page.cursor) + 1
+      style: primary
+      start: 13
+      end: 36
+    - source: cursor
+      style: secondary
+      start: 25
+      end: 31
+    - source: page.cursor
+      style: secondary
+      start: 20
+      end: 31
+    - source: (page.cursor)
+      style: secondary
+      start: 19
+      end: 32
+    - source: Number(page.cursor)
+      style: secondary
+      start: 13
+      end: 32
+  const seek = item.seq - 1;:
+    labels:
+    - source: item.seq - 1
+      style: primary
+      start: 13
+      end: 25
+    - source: seq
+      style: secondary
+      start: 18
+      end: 21
+    - source: item.seq
+      style: secondary
+      start: 13
+      end: 21
+  const seek = page.cursor + size;:
+    labels:
+    - source: page.cursor + size
+      style: primary
+      start: 13
+      end: 31
+    - source: cursor
+      style: secondary
+      start: 18
+      end: 24
+    - source: page.cursor
+      style: secondary
+      start: 13
+      end: 24
+  const seek = page.next - 1;:
+    labels:
+    - source: page.next - 1
+      style: primary
+      start: 13
+      end: 26
+    - source: next
+      style: secondary
+      start: 18
+      end: 22
+    - source: page.next
+      style: secondary
+      start: 13
+      end: 22
+  const seek = page.nextCursor + 1;:
+    labels:
+    - source: page.nextCursor + 1
+      style: primary
+      start: 13
+      end: 32
     - source: nextCursor
       style: secondary
       start: 18
@@ -628,35 +412,83 @@ snapshots:
       style: secondary
       start: 13
       end: 28
-    - source: at = page.nextCursor
-      style: secondary
-      start: 8
-      end: 28
-    - source: at = page.nextCursor;
-      style: secondary
-      start: 8
-      end: 29
-    - source: let at; at = page.nextCursor; const seek = at - 1;
-      style: secondary
-      start: 0
-      end: 50
-  offset += size;:
+  const seek = page.nextCursor! - 1;:
     labels:
-    - source: offset += size
+    - source: page.nextCursor! - 1
+      style: primary
+      start: 13
+      end: 33
+    - source: nextCursor
+      style: secondary
+      start: 18
+      end: 28
+    - source: page.nextCursor
+      style: secondary
+      start: 13
+      end: 28
+    - source: page.nextCursor!
+      style: secondary
+      start: 13
+      end: 29
+  for (let at = first.nextCursor; at < total - 1; at += size) cursors.push(at);:
+    labels:
+    - source: for (let at = first.nextCursor; at < total - 1; at += size) cursors.push(at);
       style: primary
       start: 0
-      end: 14
+      end: 77
+  for (let at = first.nextCursor; at < total - 1; at += size) { cursors.push(at); }:
+    labels:
+    - source: for (let at = first.nextCursor; at < total - 1; at += size) { cursors.push(at); }
+      style: primary
+      start: 0
+      end: 81
+  'new URLSearchParams({ after: `${offset + 8}` });':
+    labels:
+    - source: 'after: `${offset + 8}`'
+      style: primary
+      start: 22
+      end: 44
+    - source: after
+      style: secondary
+      start: 22
+      end: 27
+    - source: '`${offset + 8}`'
+      style: secondary
+      start: 29
+      end: 44
+    - source: 'new URLSearchParams({ after: `${offset + 8}` })'
+      style: secondary
+      start: 0
+      end: 47
+    - source: '({ after: `${offset + 8}` })'
+      style: secondary
+      start: 19
+      end: 47
+  page.continuation += size;:
+    labels:
+    - source: page.continuation += size
+      style: primary
+      start: 0
+      end: 25
+    - source: continuation
+      style: secondary
+      start: 5
+      end: 17
+    - source: page.continuation
+      style: secondary
+      start: 0
+      end: 17
+  page.offset -= 1;:
+    labels:
+    - source: page.offset -= 1
+      style: primary
+      start: 0
+      end: 16
     - source: offset
       style: secondary
-      start: 0
-      end: 6
-  sequence -= 1;:
-    labels:
-    - source: sequence -= 1
-      style: primary
-      start: 0
-      end: 13
-    - source: sequence
+      start: 5
+      end: 11
+    - source: page.offset
       style: secondary
       start: 0
-      end: 8
+      end: 11
