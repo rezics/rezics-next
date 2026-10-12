@@ -46,6 +46,7 @@ Inside the window (Program's cuts): eligibility chain (one branch, after the cla
 - [Content projection stop](reports/content-projection-stop-diagnosis.md): the eligibility digest depends on property order; the API-written proof never verifies in the reader.
 - [Pending bulk stage, supported causes](reports/semantic-bulk-pending-supported-causes.md): no supported command was found to leave a bulk stage pending; erasure, retirement and read revocation complete it.
 - [Digest construction inventory](reports/digest-construction-inventory.md): 92 digests over objects assembled in more than one place (3 HIGH, 30 MEDIUM, 59 LOW), with the shape of one canonical serializer and a static guard.
+- [Digest high-row measurement](reports/digest-high-rows-measurement.md): source/native field valueDigest and qualifier-index fingerprint sampled on retained data; no live mismatch, one demonstrated latent order disagreement for object-valued scalar fields.
 
 ## Open
 
