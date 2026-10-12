@@ -3,13 +3,17 @@ import { randomUUID } from 'node:crypto';
 import { fromPlainText } from '@rezics/document';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import type { VerifiedPrincipal } from '../../../services/main/src/modules/access/admission.ts';
+import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import type { DecisionInput, DecisionResult, ReportResult } from '../../../services/main/src/modules/governance/store.ts';
 import type { RoleCommand } from '../../../services/main/src/modules/realm-admin/contract.ts';
 import { initializeRelayCheckpoint, relayMainOutboxOnce } from '../../../services/main/src/modules/outbox/relay.ts';
 import { readZoneConfiguration } from '../../../services/main/src/modules/zone/configuration.ts';
+import { DEFAULT_ZONE_PRESENTATION } from '../../../services/main/src/modules/zone/presentation-format.ts';
+import { MediaScreenStore } from '../../../services/main/src/modules/media-screen/store.ts';
+import { screenVerdict } from '../../../services/main/src/modules/media-screen/policy.ts';
 import { GRAPHS, iri, RV } from '../../../services/main/src/modules/work/activate.ts';
-import { startMediaStack, sha } from './media-support.ts';
+import { startMediaStack, sha, png } from './media-support.ts';
 import { waitForRealmDirectory } from './support/realm-directory.ts';
 import { fixtureReasons } from './g-565-decision-support.ts';
 
@@ -20,8 +24,8 @@ type Stack = Awaited<ReturnType<typeof startMediaStack>>;
 interface Actor { actor: string; token: string; principal: VerifiedPrincipal; principalId: string }
 interface Realm { realm: string; space: string }
 interface Work { work: string; mainVersion: string; workRevision: string }
-interface Reply { reply: string; revisionId: string; revisionDigest: string; placement: string }
-interface Site { zone: string; space: string; navigationRevision: string; homeRevision?: string }
+interface Reply { reply: string; variantId: string; revisionId: string; revisionDigest: string; placement: string; reviewDecisionId: string }
+interface Site { zone: string; space: string; navigationRevision: string; homeRevision?: string; homeDraftStatus?: number }
 interface Observable { status: number; body: string; headers: [string, string][] }
 interface Decision { input: DecisionInput; response: Observable; result: DecisionResult | null; reportId: string }
 interface Page { items: Array<{ id: string; reply?: string }>; nextCursor: string | null;
@@ -42,6 +46,7 @@ let app: ReturnType<typeof createMainApp>;
 let builder: Actor, manager: Actor, member: Actor, party: Actor, platform: Actor;
 let realm: Realm, unaffected: Realm, privateRealm: Realm, unlistedRealm: Realm;
 let work: Work, selection: string, opener: Reply, reply: Reply, restrictedReply: Reply;
+let replyImage: { asset: string; representation: string; use: string; digest: string };
 let sites: Site[];
 let rule: DecisionInput['rule'];
 let closure: Decision, restoration: Decision, searchRestriction: Decision, replyRestriction: Decision;
@@ -65,7 +70,7 @@ function get(path: string, reader: Reader) {
   const actor = actorFor(reader);
   const url = new URL(`http://main.local${path}`);
   if (actor && !url.pathname.includes('/modules/')
-    && !path.startsWith('/v1/zones/') && url.pathname !== '/v1/realms') {
+    && !path.startsWith('/v1/zones/') && !url.pathname.endsWith('/roster') && url.pathname !== '/v1/realms') {
     url.searchParams.set('actingSubject', actor.actor);
   }
   return call('GET', `${url.pathname}${url.search}`, actor);
@@ -135,7 +140,7 @@ async function place(body: string, parent?: Reply): Promise<Reply> {
     { profile: 'realm-reply-placement-v1', realm: realm.realm, reply: id, revisionId: saved.revisionId,
       revisionDigest: saved.revisionDigest, reviewDecisionId: review.decisionId, expectedHead: null,
       actingSubject: manager.actor }), 201);
-  return { reply: id, ...saved, placement: placed.placement };
+  return { reply: id, variantId, ...saved, placement: placed.placement, reviewDecisionId: review.decisionId };
 }
 async function installManager(target: Realm) {
   const policy = (await stack.accessPool.query<{ revision: string; terms_revision: string }>(
@@ -256,7 +261,7 @@ beforeAll(async () => {
   app = createMainApp(stack.fuseki, { ...stack.composition.dependencies,
     account: { verify: async request => {
       const principal = principals.get(request.headers.get('authorization')?.replace(/^Bearer /, '') ?? '');
-      if (!principal) throw new Error('Unknown closure fixture bearer');
+      if (!principal) throw new AccountAssertionDenied('Unknown closure fixture bearer');
       return principal;
     } } });
   // A provisioned organization with explicit fixture authority owns this multi-Space
@@ -292,6 +297,8 @@ beforeAll(async () => {
     actingSubject: builder.actor, expectedGeneration: admin.generation, member: member.actor,
     expectedMembershipGeneration: '0', action: 'add', consent: consent.consentReference,
     durationSeconds: null, reason: 'Admitted closure reader' }), 201);
+  await json(await call('PUT', `/v1/realms/${short(realm.realm)}/roster/listing`, member,
+    { actingSubject: member.actor, expectedMembershipGeneration: '1', listed: true }));
   await grant(manager, 'work:create:root', 'access.membership.consent');
   for (const target of [realm, unaffected, privateRealm, unlistedRealm]) await installManager(target);
   const original = await createWork(); work = original;
@@ -308,6 +315,28 @@ beforeAll(async () => {
   opener = await place('Closure acceptance thread\nApproved public discussion');
   reply = await place('Approved reply retained through restoration', opener);
   restrictedReply = await place('Independently restricted reply', opener);
+  await grant(member, `media:owner:${member.actor}`, 'media.upload');
+  const imageBytes = png(32, 32);
+  const reserved = await json<{ asset: string; upload: string }>(await call('POST', '/v1/media/uploads', member,
+    { profile: 'media-image-upload-v1', asset: null, mediaType: 'image/png', byteLength: imageBytes.length,
+      sha256: sha(imageBytes), disclosure: 'public', actingSubject: member.actor }), 201);
+  const activated = await json<{ representation: string }>(await app.handle(new Request(
+    `http://main.local/v1/media/uploads/${reserved.upload}/bytes`, { method: 'PUT',
+      headers: { authorization: `Bearer ${member.token}`, 'content-type': 'application/octet-stream' },
+      body: new Blob([imageBytes]) })), 201);
+  // Match the media stack's deterministic benign screening fixture.
+  const screens = new MediaScreenStore(stack.contentPool);
+  for (let count = 0; count < 100; count++) {
+    const lease = await screens.leaseNext();
+    if (!lease) break;
+    await screens.settle(lease, screenVerdict({ Drawing: 0.05, Hentai: 0.01, Neutral: 0.9, Porn: 0.01, Sexy: 0.03 }));
+  }
+  await grant(member, `content:publish:${reply.reply}`, 'media.use');
+  const imageUse = await json<{ use: string }>(await call('POST', '/v1/media/uses', member,
+    { target: reply.reply, representation: activated.representation, occurrence: randomUUID(),
+      context: realm.realm, actingSubject: member.actor }), 201);
+  replyImage = { asset: reserved.asset, representation: activated.representation, use: imageUse.use,
+    digest: sha(imageBytes) };
   sites = [];
   const same = { zone: native(), space: realm.space };
   await grant(builder, `zone:edit:${same.zone}`, 'zone.edit');
@@ -322,19 +351,23 @@ beforeAll(async () => {
     await grant(builder, `realm:attach:${realm.realm}`, 'realm.attach');
     await json(await call('PUT', `/v1/zones/${short(site.zone)}/configuration`, builder,
       { expectedHead: (await readZoneConfiguration(stack.env, site.zone)).revision, defaultRealm: realm.realm,
+        presentation: { ...DEFAULT_ZONE_PRESENTATION, modules: [{ id: 'latest', type: 'shelf',
+          title: 'Latest Realm adoptions', source: { kind: 'query-block', block: 'new-adoptions' } }] },
         actingSubject: builder.actor }));
     const mount = await json<{ revision: string }>(await call('POST', `/v1/zones/${short(site.zone)}/mounts`, builder,
       { expectedHead: site.navigationRevision, target: work.work, routeSegment: 'original',
         disclosure: 'public', actingSubject: builder.actor }));
     site.navigationRevision = mount.revision;
-    // The Realm Space's existing Zone API serves a curated home and mounted
-    // documents. A Zone-only Space also publishes its own native home document.
-    if (site.space === realm.space) continue;
     const variantId = `urn:rezics:variant:${randomUUID()}`;
-    const draft = await json<{ revisionId: string; byteDigest: string; sourcePosition: { dataEpoch: string } }>(
-      await call('POST', '/v1/content-drafts', builder, { profile: 'content-text-v1', resourceId: site.zone, variantId,
+    const draftResponse = await call('POST', '/v1/content-drafts', builder,
+      { profile: 'content-text-v1', resourceId: site.zone, variantId,
         expectedHead: null, document: fromPlainText('Independent Zone home document', 'blocks'),
-        language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr', actingSubject: builder.actor }), 201);
+        language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr', actingSubject: builder.actor });
+    site.homeDraftStatus = draftResponse.status;
+    // The same-Space Zone's ordinary editor has no Zone-only Space creation receipt.
+    // Keep that missing Content authority adapter inside the named acceptance case.
+    if (site.space === realm.space && draftResponse.status === 403) continue;
+    const draft = await json<{ revisionId: string; byteDigest: string; sourcePosition: { dataEpoch: string } }>(draftResponse, 201);
     site.homeRevision = draft.revisionId;
     await grant(party, `work:read:${site.zone}`, 'work.read');
     await json(await call('POST', `/v1/zones/${short(site.zone)}/site-publications`, builder,
@@ -360,7 +393,7 @@ beforeAll(async () => {
 
 afterAll(async () => { if (app) await app.stop(); if (stack) await stack.stop(); });
 
-const surfaces = ['home', 'landing', 'works', 'selection', 'threads', 'best', 'top', 'thread', 'reply'] as const;
+const surfaces = ['home', 'landing', 'works', 'selection', 'threads', 'best', 'top', 'thread', 'reply', 'roster', 'zone'] as const;
 function pathFor(surface: typeof surfaces[number], id: string) {
   const root = `/v1/realms/${short(id)}`;
   return surface === 'home' ? root : surface === 'landing' ? `${root}/join-page`
@@ -388,7 +421,10 @@ for (const state of states) describe(state, () => {
   }
   for (const reader of readers) {
     // Realm Governance closure/restoration and direct Realm read gates are missing.
-    for (const surface of surfaces) acceptanceTest(`${state}-${surface}-${reader}`, async () => {
+    for (const surface of surfaces) {
+      // Realm Zone entry selection cannot distinguish the same-Space Zone from cross-Space attachments.
+      const surfaceTest = surface === 'zone' ? test.failing : acceptanceTest;
+      surfaceTest(`${state}-${surface}-${reader}`, async () => {
       ready();
       if (state === 'closed') {
         const actual = await observable(await get(pathFor(surface, realm.realm), reader));
@@ -401,12 +437,66 @@ for (const state of states) describe(state, () => {
         const body = await json<Record<string, unknown>>(response);
         if (surface === 'home') expect(body.name).toMatchObject({ value: 'Platform closure community' });
         if (surface === 'works') expect((body.items as { id: string }[]).map(item => item.id)).toContain(work.work);
+        if (surface === 'roster') expect((body.items as { agent: string }[]).map(item => item.agent)).toContain(member.actor);
+        if (surface === 'zone') expect(body.realm).toBe(realm.realm);
         if (surface === 'threads' || surface === 'best' || surface === 'top') {
           expect((body.items as { reply: string }[]).map(item => item.reply)).toContain(opener.reply);
         }
         if (surface === 'reply') expect(JSON.stringify(body)).toContain('Approved reply retained through restoration');
       }
+      });
+    }
+    // Realm closure gating in the placement and root-count read adapters is missing.
+    for (const surface of ['reply-placement', 'reply-root-count'] as const) {
+      acceptanceTest(`${state}-${surface}-${reader}`, async () => {
+        ready();
+        const route = (id: string) => `/v1/realms/${encodeURIComponent(id)}/${surface === 'reply-placement'
+          ? `replies/${encodeURIComponent(reply.reply)}` : `reply-roots/${encodeURIComponent(work.work)}/count`}`
+          + `?actingSubject=${encodeURIComponent(actorFor(reader)?.actor ?? member.actor)}`;
+        const actual = await call('GET', route(realm.realm), actorFor(reader));
+        if (reader === 'anonymous') {
+          expect(actual.status).toBe(401);
+          expect(await observable(actual)).toEqual(await observable(await call('GET', route(native()))));
+        } else if (state === 'closed') {
+          const absent = await observable(await call('GET', route(native()), actorFor(reader)));
+          expect(absent.status).toBe(404);
+          expect(await observable(actual)).toEqual(absent);
+        } else {
+          const body = await json<{ placement?: string; revisionId?: string; count?: number }>(actual);
+          if (surface === 'reply-placement') expect(body).toMatchObject({ placement: reply.placement, revisionId: reply.revisionId });
+          else expect(body.count).toBeGreaterThanOrEqual(2);
+        }
+      });
+    }
+    // Exact Content revision target resolution for reviewed Realm replies is missing.
+    test.failing(`${state}-reply-exact-Content-revision-${reader}`, async () => {
+      ready();
+      const actual = await get(`/v1/content-revisions/${reply.revisionId}`, reader);
+      if (state === 'closed') {
+        const absent = await observable(await get(`/v1/content-revisions/${randomUUID()}`, reader));
+        expect(absent.status).toBe(404); expect(await observable(actual)).toEqual(absent);
+      } else expect(JSON.stringify(await json(actual))).toContain('Approved reply retained through restoration');
     });
+    // Reply-target media delivery and its current Realm occurrence fence are missing.
+    for (const surface of ['use', 'representation', 'representation-bytes'] as const) {
+      test.failing(`${state}-reply-media-${surface}-${reader}`, async () => {
+        ready();
+        const route = (missing = false) => surface === 'use'
+          ? `/v1/media/uses/${missing ? randomUUID() : replyImage.use}`
+          : `/v1/media/representations/${missing ? randomUUID() : replyImage.representation}`
+            + `${surface === 'representation-bytes' ? '/bytes' : ''}?use=${missing ? randomUUID() : replyImage.use}`;
+        const actual = await get(route(), reader);
+        if (state === 'closed') {
+          const absent = await observable(await get(route(true), reader));
+          expect(absent.status).toBe(404); expect(await observable(actual)).toEqual(absent);
+        } else if (surface === 'representation') {
+          expect(await json(actual)).toMatchObject({ sha256: replyImage.digest });
+        } else {
+          expect(actual.status).toBe(200);
+          expect(sha(new Uint8Array(await actual.arrayBuffer()))).toBe(replyImage.digest);
+        }
+      });
+    }
     // Realm Governance closure and restoration are missing.
     acceptanceTest(`${state}-directory-${reader}`, async () => {
       ready();
@@ -423,15 +513,28 @@ for (const state of states) describe(state, () => {
       expect(search.items.map(item => item.id)).toEqual(state === 'closed' ? [] : [realm.realm]);
     });
     for (const [index, space] of ['same-Space', 'cross-Space'].entries()) {
-      // Realm Governance closure/restoration and mounted Realm occurrence disclosure are missing.
-      acceptanceTest(`${state}-${space}-Zone-discussion-and-own-pages-${reader}`, async () => {
+      // Same-Space Zone Content authority, Realm closure and mounted Realm occurrence disclosure adapters are missing.
+      const zoneTest = index === 0 ? test.failing : acceptanceTest;
+      zoneTest(`${state}-${space}-Zone-discussion-and-own-pages-${reader}`, async () => {
         ready(); const site = sites[index]!;
+        expect(site.homeDraftStatus, `${space} Zone editors must publish their own home document`).toBe(201);
         const routes = await json<{ realm: string | null; page?: unknown }>(await get(
           `/v1/zones/${short(site.zone)}/routes?path=%2F`, reader));
-        const presentation = await json<{ realm: string | null }>(await get(`/v1/zones/${short(site.zone)}/presentation`, reader));
+        const presentation = await json<{ realm: string | null; presentation: { modules: { id: string }[] };
+          moduleData: { id: string; sources: { state: string; source: { kind: string; block: string } }[] }[] }>(
+          await get(`/v1/zones/${short(site.zone)}/presentation`, reader));
         expect(routes.realm).toBe(state === 'closed' ? null : realm.realm);
         expect(presentation.realm).toBe(state === 'closed' ? null : realm.realm);
-        if (site.space !== realm.space) expect(JSON.stringify(routes.page)).toContain('Independent Zone home document');
+        expect(JSON.stringify(routes.page)).toContain('Independent Zone home document');
+        expect(presentation.presentation.modules.map(module => module.id)).toContain('latest');
+        const module = presentation.moduleData.find(module => module.id === 'latest');
+        expect(module).toBeDefined();
+        expect(module!.sources).toContainEqual(expect.objectContaining({
+          state: state === 'closed' ? 'unavailable' : 'public-read',
+          source: { kind: 'query-block', block: 'new-adoptions' } }));
+        const exact = await get(`/v1/content-revisions/${site.homeRevision}`, reader);
+        expect(exact.status).toBe(200);
+        expect(await exact.text()).toContain('Independent Zone home document');
         const ownWork = await json<{ resource: { id: string } }>(await get(
           `/v1/zones/${short(site.zone)}/routes?path=%2Foriginal`, reader));
         expect(ownWork.resource.id).toBe(work.work);
@@ -439,7 +542,9 @@ for (const state of states) describe(state, () => {
         if (state === 'closed') {
           const absent = await observable(await get(`/v1/realms/${short(native())}/modules/new-adoptions`, reader));
           expect(absent.status).toBe(404); expect(await observable(await get(mounted, reader))).toEqual(absent);
-        } else expect((await json<Page>(await get(mounted, reader))).items.map(item => item.id)).toContain(work.work);
+        } else {
+          expect((await json<Page>(await get(mounted, reader))).items.map(item => item.id)).toContain(work.work);
+        }
       });
     }
     // Realm Governance closure and restoration are missing.
@@ -553,16 +658,91 @@ test.failing('whole-Realm restore preserves a narrower search restriction and un
     effect: 'search', state: 'restricted' }));
 });
 
-test('a decision naming a Zone does not close its attached Realm', async () => {
+// Zone record Governance target evidence and public route/presentation disclosure adapters are missing.
+test.failing('a named Zone record decision closes the Zone while its attached Realm and discussion remain available', async () => {
   const site = sites.find(site => site.homeRevision)!;
   expect(site).toBeDefined();
-  const decision = await decide(site.zone, { component: 'body', revision: site.homeRevision! });
-  completed(decision, 'Zone home Content target prerequisite');
+  const decision = await decide(site.zone, { component: 'record' });
+  completed(decision, 'Zone record target prerequisite');
   await settleReadProjections();
-  for (const reader of readers) {
-    expect((await get(`/v1/realms/${short(realm.realm)}`, reader)).status).toBe(200);
-    expect((await get(`/v1/realms/${short(realm.realm)}/threads/${short(opener.reply)}`, reader)).status).toBe(200);
+  try {
+    for (const reader of readers) {
+      expect((await get(`/v1/realms/${short(realm.realm)}`, reader)).status).toBe(200);
+      expect((await get(`/v1/realms/${short(realm.realm)}/threads/${short(opener.reply)}`, reader)).status).toBe(200);
+      for (const path of ['/routes?path=%2F', '/presentation']) {
+        const absent = await observable(await get(`/v1/zones/${short(native())}${path}`, reader));
+        expect(absent.status).toBe(404);
+        expect(await observable(await get(`/v1/zones/${short(site.zone)}${path}`, reader))).toEqual(absent);
+      }
+    }
+  } finally {
+    completed(await restore(decision, site.zone), 'Independent Zone restoration');
   }
+});
+
+// Zone record Governance evidence, Realm closure/restoration and current binding disclosure adapters are missing.
+test.failing('restoration uses current placement, detachment, reassignment and independent Zone restriction bindings', async () => {
+  const removed = await place('Placement removed during closure', opener);
+  const changed = await place('Placement replaced during closure', opener);
+  const restricted = await json<Site>(await call('POST', '/v1/spaces', builder,
+    { profile: 'space-zone-v1', name: 'Independently restricted site', language: 'en', capabilities: ['zone'],
+      visibility: 'public', listing: 'listed', actingSubject: builder.actor }), 201);
+  await grant(builder, `zone:edit:${restricted.zone}`, 'zone.edit');
+  const configure = async (zone: string, defaultRealm: string | null) => json(await call('PUT',
+    `/v1/zones/${short(zone)}/configuration`, builder,
+    { expectedHead: (await readZoneConfiguration(stack.env, zone)).revision, defaultRealm,
+      actingSubject: builder.actor }));
+  await configure(restricted.zone, realm.realm);
+  sites.push({ ...restricted, navigationRevision: (await readZoneConfiguration(stack.env, restricted.zone)).revision });
+  const zoneRestriction = await decide(restricted.zone);
+  completed(zoneRestriction, 'Independent Zone record restriction');
+  const decision = await decide(realm.realm);
+  completed(decision, 'Whole-Realm closure before binding changes');
+  await json(await call('POST', '/v1/realm-reply-reviews', manager,
+    { profile: 'realm-reply-review-v1', realm: realm.realm, reply: removed.reply,
+      revisionId: removed.revisionId, revisionDigest: removed.revisionDigest,
+      expectedGeneration: '1', supersedes: removed.reviewDecisionId, outcome: 'revoked',
+      method: 'human', methodRevision: 'realm-manager-v1', dependencyDigest: sha(work.work),
+      reasonReference: null, actingSubject: manager.actor }), 201);
+  const replacement = await json<{ revisionId: string; revisionDigest: string }>(await call('POST',
+    '/v1/member-reply-drafts', member,
+    { profile: 'member-reply-draft-v1', reply: changed.reply, variantId: changed.variantId,
+      rootTarget: work.work, rootRevision: work.workRevision, originRealm: realm.realm,
+      language: 'en', direction: 'ltr', expectedHead: changed.revisionId,
+      body: 'Current replacement placement', actingSubject: member.actor }), 201);
+  const approval = await json<{ decisionId: string }>(await call('POST', '/v1/realm-reply-reviews', manager,
+    { profile: 'realm-reply-review-v1', realm: realm.realm, reply: changed.reply,
+      revisionId: replacement.revisionId, revisionDigest: replacement.revisionDigest,
+      expectedGeneration: '0', supersedes: null, outcome: 'approved', method: 'human',
+      methodRevision: 'realm-manager-v1', dependencyDigest: sha(work.work), reasonReference: null,
+      actingSubject: manager.actor }), 201);
+  const placement = await json<{ placement: string }>(await call('POST', '/v1/realm-reply-placements', manager,
+    { profile: 'realm-reply-placement-v1', realm: realm.realm, reply: changed.reply,
+      ...replacement, reviewDecisionId: approval.decisionId, expectedHead: changed.placement,
+      actingSubject: manager.actor }), 201);
+  await configure(sites[0]!.zone, null);
+  await grant(builder, `realm:attach:${unaffected.realm}`, 'realm.attach');
+  await configure(sites[1]!.zone, unaffected.realm);
+  completed(await restore(decision, realm.realm), 'Whole-Realm restoration after binding changes');
+  for (const reader of readers) {
+    expect((await get(`/v1/realms/${short(realm.realm)}/threads/${short(removed.reply)}`, reader)).status).toBe(404);
+    const delivered = await json(await get(`/v1/realms/${short(realm.realm)}/threads/${short(changed.reply)}`, reader));
+    expect(JSON.stringify(delivered)).toContain('Current replacement placement');
+    expect(JSON.stringify(delivered)).not.toContain('Placement replaced during closure');
+    if (reader !== 'anonymous') {
+      const current = await json(await get(`/v1/realms/${encodeURIComponent(realm.realm)}/replies/${encodeURIComponent(changed.reply)}`, reader));
+      expect(current).toMatchObject({ revisionId: replacement.revisionId, placement: placement.placement });
+    }
+    for (const [site, currentRealm] of [[sites[0]!, null], [sites[1]!, unaffected.realm]] as const) {
+      expect(await json(await get(`/v1/zones/${short(site.zone)}/routes?path=%2F`, reader)))
+        .toMatchObject({ realm: currentRealm });
+    }
+    expect((await get(`/v1/zones/${short(restricted.zone)}/presentation`, reader)).status).toBe(404);
+  }
+  const fences = await stack.accessPool.query<{ decision_id: string; state: string }>(
+    'SELECT decision_id,state FROM access.governance_enforcement WHERE resource=$1', [restricted.zone]);
+  expect(fences.rows).toContainEqual(expect.objectContaining({ decision_id: zoneRestriction.result!.decisionId,
+    state: 'restricted' }));
 });
 
 test('Realm-local moderation authority cannot decide whole-Realm closure', async () => {
