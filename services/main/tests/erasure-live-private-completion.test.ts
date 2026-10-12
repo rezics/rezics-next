@@ -266,6 +266,37 @@ test('P1/P4 mixed primary and derived targets retain exact intent after SQL clea
   });
 });
 
+test('retained erasure retry preserves a payload newly referenced by a live Contribution revision', async () => {
+  await fixture(async f => {
+    const owner = resource(), contribution = f.contribution(owner);
+    const input = f.input(owner, [contribution.id]);
+    f.objects.failure = true;
+    const first = await f.call(input);
+    expect(first.report.stage).toBe('deleting');
+    expect(first.report.targets.find(target => target.kind === 'object')?.completionState).toBe('failed');
+
+    // A surviving draft edited back to the original body reuses its immutable
+    // manifest and payload. Its new revision is outside the retained closure.
+    const liveRevision = randomUUID();
+    f.graph.revisions.set(liveRevision, { kind: 'text_contribution_draft', owner,
+      manifest: `urn:rezics:sha256:${contribution.digest}` });
+    writeFileSync(join(f.objectDirectory, contribution.payload),
+      f.objects.data.get(`sha256/${contribution.payload}`)!);
+    f.objects.failure = false;
+    try { await f.call(input); }
+    catch (error) { expect(error).toBeInstanceOf(ContentErasureStale); }
+
+    expect(f.objects.data.has(`sha256/${contribution.payload}`)).toBe(true);
+    expect(existsSync(join(f.objectDirectory, contribution.payload))).toBe(true);
+    expect(f.objects.deletes).toEqual([]);
+    const retained = await readErasure(f.relay, first.report.erasureId);
+    expect(retained.erasureEpoch).toBe(first.report.erasureEpoch);
+    expect(retained.targets.find(target => target.kind === 'object')?.completionState).toBe('failed');
+    expect(retained.stage).toBe('deleting');
+    expect(f.graph.suppressed.has(resourceIri(liveRevision))).toBe(false);
+  });
+});
+
 test('P4 a preservation hold refuses sealed recovery without deleting remaining objects', async () => {
   await fixture(async f => {
     const owner = resource(), revision = await f.draft(owner), contribution = f.contribution(owner);
