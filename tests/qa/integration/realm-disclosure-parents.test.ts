@@ -374,6 +374,14 @@ test('Realm disclosure: real Access preserves Work and Realm fences, independent
     expect(await fenceDisclosure(f.env, constrained, ANONYMOUS_VIEWER, 'read')).toEqual(['hidden']);
     await releaseRealm();
     expect(await decisions([body])).toEqual(['tombstone']);
+    // Graph-owned body occurrences may share their Work parent's identity.
+    // Their Content revision cannot replace either exact Work fence basis.
+    const selfWork: DisclosureTarget = {
+      owner: 'graph', resource: work, component: 'body', revision: randomUUID(),
+      work, workRevision: pinnedWorkHead,
+    };
+    targets.push(selfWork);
+    expect(await decisions([selfWork])).toEqual(['tombstone']);
     expect(await decisions([{ ...direct, component: 'title', nameOwnerResolved: true }])).toEqual([
       'tombstone',
     ]);
@@ -403,6 +411,17 @@ test('Realm disclosure: real Access preserves Work and Realm fences, independent
       ).protectedRevision,
     ).toBe(pinnedWorkHead);
     await pinnedRelease();
+
+    const oldNameRelease = await restrict(work, 'name', workHead);
+    const currentName: DisclosureTarget = {
+      owner: 'graph', resource: work, component: 'name', work, nameOwnerResolved: true,
+    };
+    // Choose the name from the owner-established current Work head, rather
+    // than treating a missing request revision as an unknown historical name.
+    targets[targets.indexOf(selfWork)] = currentName;
+    expect(await decisions([currentName])).toEqual(['visible']);
+    await oldNameRelease();
+    targets.splice(targets.indexOf(currentName), 1);
 
     const placed = await capture([body]);
     token = digest('replacement-placement-review-attachment');

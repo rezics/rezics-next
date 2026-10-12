@@ -316,6 +316,11 @@ test('disclosure ancestry: request context and legacy Work hints never substitut
 test('disclosure ancestry: independent publication needs an explicit complete empty proof', async () => {
   const f = fixture([]);
   expect((await captured(f))[0]!.decision).toBe('visible');
+  // Legacy adapters carry null coordinates for resources with no Work parent.
+  const [independent] = await resolveDisclosureSelections(f.env, [
+    { ...target, work: null, workRevision: null },
+  ]);
+  expect(independent!.ancestry.parents).toEqual([]);
   expect(f.headQueries).toHaveLength(0);
   f.setEvidence([{ ...evidence(target), status: 'unavailable' }]);
   await expect(resolveDisclosureSelections(f.env, [target])).rejects.toBeInstanceOf(

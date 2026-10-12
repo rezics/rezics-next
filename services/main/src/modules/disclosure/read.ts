@@ -320,7 +320,6 @@ export class DisclosureStore implements DisclosureReader {
                     SELECT 1 FROM access.governance_enforcement e
                     WHERE e.owner = 'graph' AND e.resource = parent.resource AND e.state = 'restricted'
                     AND e.effect = ANY($2::text[]) AND e.context = ANY(ARRAY[$3::text, wanted.context])
-                    AND (wanted.owner <> 'graph' OR parent.resource <> wanted.resource)
                     AND e.component IN ('title', 'name', 'record', 'publication')
                     AND (e.revision IS NULL OR e.revision = parent.head
                       OR parent."protectedRevision" IS NULL AND EXISTS (SELECT 1
@@ -341,7 +340,11 @@ export class DisclosureStore implements DisclosureReader {
               : "'[]'::jsonb"} AS assessments
           FROM requested wanted CROSS JOIN fence LEFT JOIN name_policy n ON n.agent = wanted."nameOwner"
           ORDER BY wanted.ordinal`, [JSON.stringify(targets.map((target, ordinal) => ({
-          ...target, ordinal, revision: target.revision ?? null, context: target.context ?? GLOBAL_CONTEXT,
+          ...target, ordinal, revision: target.revision ?? (target.owner === 'graph'
+            && ['name', 'title'].includes(target.component)
+            ? target.ancestry?.parents.find(parent => parent.kind === 'work'
+              && parent.resource === target.resource)?.head ?? null : null),
+          context: target.context ?? GLOBAL_CONTEXT,
           // Low-level owner reads retain their legacy Work fence semantics.
           // Public wrappers resolve positive ancestry before reaching this reader.
           resourceKind: target.ancestry?.resourceKind ?? 'other',
@@ -491,7 +494,8 @@ function validateEvidence(env: WorkActivationEnvironment, target: DisclosureTarg
       || evidence.relationshipBasis.revision !== target.occurrence.revision)
     || target.work && !evidence.parents.some(parent => parent.kind === 'work' && parent.resource === target.work
       && (target.workRevision === undefined || parent.protectedRevision === target.workRevision))
-    || target.workRevision !== undefined && !evidence.parents.some(parent => parent.kind === 'work'
+    || target.workRevision !== undefined && (target.work != null || target.workRevision !== null)
+      && !evidence.parents.some(parent => parent.kind === 'work'
       && parent.protectedRevision === target.workRevision)) {
     throw new DisclosureUnavailable('Disclosure ancestry is incomplete');
   }
