@@ -99,19 +99,26 @@ function interruptSql(pool: Pool, needle: string, failure: Error) {
   const connect = pool.connect.bind(pool);
   let hits = 0;
   const restores: (() => void)[] = [];
-  const borrowed = spyOn(pool, 'connect').mockImplementation(async () => {
-    const client = await connect();
+  const install = (client: PoolClient) => {
     const query = client.query.bind(client);
-    const injected = spyOn(client, 'query').mockImplementation(((sql: string, values?: unknown[]) => {
-      if (sql.includes(needle)) {
+    const injected = spyOn(client, 'query').mockImplementation(((...args: unknown[]) => {
+      const sql = args[0];
+      if (typeof sql === 'string' && sql.includes(needle)) {
         hits++;
         throw failure;
       }
-      return query(sql, values);
+      return Reflect.apply(query, client, args);
     }) as typeof client.query);
     restores.push(() => injected.mockRestore());
     return client;
-  });
+  };
+  // pg Pool.query borrows through the callback overload. Forward that contract
+  // too, or a fault helper itself leaves every pool-level read waiting forever.
+  const borrowed = spyOn(pool, 'connect').mockImplementation(((
+    callback?: Parameters<Pool['connect']>[0],
+  ) => callback
+    ? connect((error, client, release) => callback(error, client ? install(client) : client, release))
+    : connect().then(install)) as typeof pool.connect);
   return { get hits() { return hits; }, restore: () => {
     borrowed.mockRestore();
     for (const restore of restores.reverse()) restore();

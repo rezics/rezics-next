@@ -481,13 +481,18 @@ function outerRestore(run: ReturnType<typeof fixture>, borrowedOwners = false, c
   let disposition: string | null = null;
   let durable = false;
   let qualifications = 0;
+  let resumeReads = 0;
   const failures = { resume: undefined as Error | undefined, outcome: undefined as Error | undefined,
     record: undefined as Error | undefined, closure: undefined as Error | undefined };
   const completionSpies = completion ? [
-    spyOn(restoreBinding, 'readBindings').mockImplementation(async () => ({
-      qualification: durable ? 'retained-qualification' : null,
-      release: run.access.open ? 'retained-release' : null,
-    })),
+    spyOn(restoreBinding, 'readBindings').mockImplementation(async () => {
+      if (durable) {
+        resumeReads++;
+        if (failures.resume) throw failures.resume;
+      }
+      return { qualification: durable ? 'retained-qualification' : null,
+        release: run.access.open ? 'retained-release' : null };
+    }),
     spyOn(restoreBinding, 'readErasuresRecord').mockImplementation(async (_client, operation) => {
       if (failures.record) throw failures.record;
       expect(operation).toBe('owner:reconcile:qualified-owner-retry:erasures');
@@ -568,11 +573,11 @@ function outerRestore(run: ReturnType<typeof fixture>, borrowedOwners = false, c
   const attempt = () => {
     run.evidence.qualification = { resume: durable, authenticateResume: async () => {
       expect(qualifications).toBe(1);
-      if (failures.resume) throw failures.resume;
     } };
     return operations.reconcileRestore({ sealedCoverage: run.evidence.sealedCoverage, sealedDeletionSets: [] }, key);
   };
   return { row, attempt, releaseSpy, failures, get qualifications() { return qualifications; },
+    get resumeReads() { return resumeReads; },
     qualify: async () => {
       run.evidence.releaseErasures = async clients => {
         await clients.relayClient.query('SELECT 1 /* retained qualification */');
@@ -650,6 +655,7 @@ for (const phase of completionPhases) {
         await expectRestoreInterrupted(owner.attempt, original);
         expect(owner.row).toMatchObject({ state: 'running', hold_reason: null });
         expect(owner.qualifications).toBe(1);
+        if (phase === 'qualified-resume') expect(owner.resumeReads).toBe(1);
         armed = false;
         for (const spy of spies.splice(0)) spy.mockRestore();
         run.access.queryGate = undefined;

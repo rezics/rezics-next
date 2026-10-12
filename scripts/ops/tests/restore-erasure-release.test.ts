@@ -534,7 +534,8 @@ for (const phase of ['before-LOGIN', 'LOGIN-write', 'LOGIN-readback'] as const) 
         while (cause instanceof Error && cause.cause !== undefined) cause = cause.cause;
         expect(cause).toBe(original);
         recordRestoreFailure(fixture.proof, rejected, () => fixture.events.push('stop-target'));
-        expect(fixture.proof).toMatchObject({ state: 'released', reconcileCompleted: true,
+        expect(fixture.proof).toMatchObject({ state: phase === 'LOGIN-readback' ? 'released' : 'held',
+          reconcileCompleted: true,
           graphReleaseObserved: true, accessReleaseObserved: true,
           loginEnabled: phase === 'LOGIN-readback', servingVerified: false });
         expect(loginEnabled).toBe(phase === 'LOGIN-readback');

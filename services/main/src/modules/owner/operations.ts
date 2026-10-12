@@ -387,9 +387,10 @@ export class OwnerOperations {
           // Classify the entire pass before any permanent hold, including opened
           // completion and the final outcome write. Wrappers retain owner causes.
           if (isRestoreTransientFailure(error) || error instanceof RestoreInterrupted) {
-            const interruption = error instanceof RestoreInterrupted ? error
-              : new RestoreInterrupted('restore owner completion was interrupted', { cause: error });
-            throw new OwnerOperationUnavailable(interruption.message, { cause: interruption });
+            const message = error instanceof RestoreInterrupted ? error.message
+              : 'restore owner completion was interrupted';
+            if (!(error instanceof RestoreInterrupted)) error = new RestoreInterrupted(message, { cause: error });
+            throw new OwnerOperationUnavailable(message, { cause: error });
           }
           if (!(error instanceof RestoreLineageConflict)) throw error;
           await this.settleRestoreOutcome(client, row.id, coverage, generation, error);
