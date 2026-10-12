@@ -121,7 +121,14 @@ function fixture(pool: Pool) {
   )).rows[0]!.authority_epoch;
   const gate = async (open: boolean, dispatchOpen: boolean) => {
     if (open) {
-      if (!dispatchOpen) await access.strongCloseScope('platform:access', await epoch());
+      if (!dispatchOpen) {
+        await access.strongCloseScope('platform:access', await epoch());
+        await expect(ensureFixtureScopeGate(pool, 'platform:access', { open: true }))
+          .rejects.toMatchObject({ code: '23514', constraint: 'scope_gate_dispatch_implies_closed' });
+        // The owner schema forbids this combination. Relax only this disposable
+        // copy so the shared reader's dispatch conjunct is tested independently.
+        await pool.query('ALTER TABLE access.scope_gate DROP CONSTRAINT scope_gate_dispatch_implies_closed');
+      }
       await ensureFixtureScopeGate(pool, 'platform:access', { open: true });
     }
     else if (dispatchOpen) await access.closeScope('platform:access', await epoch());

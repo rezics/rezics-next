@@ -607,6 +607,11 @@ describe('independent platform permission fences', () => {
         if (dispatchOpen) await registry.closeScope('platform:access', currentEpoch);
         else {
           await registry.strongCloseScope('platform:access', currentEpoch);
+          await expect(ensureFixtureScopeGate(owner, 'platform:access', { open: true }))
+            .rejects.toMatchObject({ code: '23514', constraint: 'scope_gate_dispatch_implies_closed' });
+          // Fault-inject only the isolated copy: the owner CHECK forbids this
+          // state, but each shared-reader conjunct must stand on its own.
+          await owner.query('ALTER TABLE access.scope_gate DROP CONSTRAINT scope_gate_dispatch_implies_closed');
           await ensureFixtureScopeGate(owner, 'platform:access', { open: true });
         }
         expect((await owner.query(
