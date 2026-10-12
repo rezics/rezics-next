@@ -60,11 +60,12 @@ test('Realm reads: public home, scoped Works, indexed decisions, privacy and sta
     const root = `/v1/realms/${short(realm.realm)}`;
     const get = (path: string) => stack.call('GET', path);
 
-    const home = await json<{ name: { value: string }; description: null; banner: null; rules: null;
+    const home = await json<{ name: { value: string }; description: null; banner: null; rules: unknown[];
       membership: { count: { kind: string; value: null }; publicMembers: null };
       moderators: { kind: string; items: string[] } }>(await get(root));
+    // b7c6011e2 makes the empty settings document written at Realm creation authoritative.
     expect(home).toMatchObject({ name: { value: 'Public reading Realm' }, description: null,
-      banner: null, rules: null, membership: { count: { kind: 'unknown', value: null },
+      banner: null, rules: [], membership: { count: { kind: 'unknown', value: null },
         publicMembers: null }, moderators: { kind: 'unknown', items: [] } });
     expect((await get(`/v1/realms/${randomUUID()}`)).status).toBe(404);
     expect((await get(`${root}/works`)).status).toBe(200);
