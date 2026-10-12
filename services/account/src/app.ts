@@ -224,8 +224,8 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
           [`account-totp:${session.user.id}`]);
       }
       if (totpUserId) {
-        const factor = await client.query<{ verified: boolean }>('SELECT verified FROM "twoFactor" WHERE "userId" = $1', [totpUserId]);
-        if (factor.rows[0]?.verified === false) await requireStepUp(client, session);
+        const factor = await client.query<{ verified: boolean | null }>('SELECT verified FROM "twoFactor" WHERE "userId" = $1', [totpUserId]);
+        if (factor.rows[0] && factor.rows[0].verified !== true) await requireStepUp(client, session);
         const failure = await authenticationLimit(client);
         if (failure) {
           if (!held) await client.query(failure.status >= 500 ? 'ROLLBACK' : 'COMMIT');

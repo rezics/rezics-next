@@ -43,8 +43,8 @@ function pauseFactorAdmission(userId: string) {
   return { paused, resume: () => resume(), restore: () => interception.mockRestore() };
 }
 
-for (const verified of [false, true]) {
-  test(`TOTP admission observes a concurrently enrolled ${verified ? 'verified' : 'unverified'} factor with budget available`, async () => {
+for (const verified of [false, null, true]) {
+  test(`TOTP admission observes a concurrently enrolled ${verified === null ? 'unverified nullable' : verified ? 'verified' : 'unverified'} factor with budget available`, async () => {
     const f = await accountFixture();
     let admission: ReturnType<typeof pauseFactorAdmission> | undefined;
     try {
@@ -66,6 +66,7 @@ for (const verified of [false, true]) {
       }, freshCookie)).status).toBe(200);
       await f.pool.query('UPDATE "twoFactor" SET secret = $2 WHERE "userId" = $1',
         [member.id, await symmetricEncrypt({ key: f.secret, data: secret })]);
+      if (verified === null) await f.pool.query('UPDATE "twoFactor" SET verified = NULL WHERE "userId" = $1', [member.id]);
       if (verified) {
         expect((await f.request('/api/auth/two-factor/verify-totp', {
           code: await createOTP(secret).totp(),
