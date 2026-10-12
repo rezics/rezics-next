@@ -2,15 +2,16 @@ import { expect, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fromPlainText } from '@rezics/document';
-import { configureDisclosure } from '../src/modules/disclosure/read.ts';
 import { readZoneHomeOwner, readZoneHomeTarget } from '../src/modules/zone/home-target.ts';
 import { ANONYMOUS_VIEWER } from '../src/modules/suitability/policy.ts';
+import { resolveDisclosureSelections } from '../src/modules/disclosure/read.ts';
 import { withDisclosureViewer } from '../src/modules/disclosure/viewer.ts';
 import { ZoneUnavailable } from '../src/modules/zone/configuration.ts';
 import { readZonePublishedHomeContent } from '../src/modules/zone/publication.ts';
 import { RV, prepareComponent } from '../src/modules/work/activate.ts';
 import { ZONE_CONFIG_FORMAT, ZONE_LIMITS, ZONE_PROFILE } from '../src/modules/zone/config-format.ts';
-import { zoneHomeTargetFixture as fixture, zoneHomeTargetId as id, zoneHomeTargetCell as cell } from './support/zone-home-target.ts';
+import { zoneHomeTargetFixture as fixture, zoneHomeTargetId as id, zoneHomeTargetCell as cell,
+  configureZoneHomeDisclosure as configureDisclosure } from './support/zone-home-target.ts';
 
 // Trust condition 1: P and H name only the exact retained multilingual publication.
 test('native home target returns P, H and exactly the receipt selections in every language', async () => {
@@ -25,10 +26,10 @@ test('native home target returns P, H and exactly the receipt selections in ever
   expect(cutQuery).not.toContain('draftHead');
 });
 
-for (const authority of ['zone', 'realm'] as const) {
-  // Disclosure final fence must follow the receipt read and recheck Zone authority.
-  test.failing(`home target withholds ids and digests when ${authority} authority is revoked during the receipt read`, async () => {
-    const h = fixture(), realm = id();
+for (const ancestry of [true, false]) for (const authority of ['zone', 'realm'] as const) {
+  // The disclosure final fence still awaits the owner's production ancestry source.
+  (ancestry ? test : test.failing)(`home target withholds ids and digests when ${authority} authority is revoked during the receipt read (${ancestry ? 'owner cut' : 'production ancestry pending'})`, async () => {
+    const h = fixture({ ancestry }), realm = id();
     h.visibilityRows[0]!.disclosure = cell(`${RV}Private`);
     h.visibilityRows[0]!.zoneDisclosure = cell(`${RV}Private`);
     if (authority === 'realm') h.visibilityRows[0]!.realm = cell(realm);
@@ -39,6 +40,11 @@ for (const authority of ['zone', 'realm'] as const) {
       if (text.includes('SELECT ?zone ?revision ?routesRevision')) readable = false;
       return result;
     };
+    if (!ancestry) {
+      const selections = await resolveDisclosureSelections(h.env, [{ owner: 'graph', resource: h.resource,
+        revision: h.revision, component: 'record' }]);
+      expect(selections[0]!.ancestry.relationshipBasis.kind).toBe('publication');
+    }
     expect(await readZoneHomeTarget(h.env, h.resource, h.revision, {
       zoneReadable: async () => readable,
       realmReadProof: async () => readable ? 'membership' : null,
@@ -124,8 +130,8 @@ test('document restrictions address P and exact H and restoration changes only t
   for (const viewer of [ANONYMOUS_VIEWER, { ...ANONYMOUS_VIEWER, signedIn: true }]) {
     expect(await readZoneHomeTarget(h.env, h.resource, h.revision, {}, viewer)).toBeNull();
   }
-  expect(h.policyTargets).toEqual([[{ owner: 'graph', resource: h.resource, revision: h.revision, component: 'record' }],
-    [{ owner: 'graph', resource: h.resource, revision: h.revision, component: 'record' }]]);
+  expect(h.policyTargets.map(targets => targets.filter(target => target.owner === 'graph'))).toEqual(Array.from({ length: 4 }, () =>
+    [{ owner: 'graph', resource: h.resource, revision: h.revision, component: 'record' }]));
   h.deny(false);
   expect((await readZoneHomeTarget(h.env, h.resource))?.revision).toBe(h.revision);
   expect(h.rows[0]!.navigationRevision).toBeDefined();
@@ -160,7 +166,7 @@ test('restricted and erased homes return absent before Content reads while the s
 });
 
 
-test('a restriction admitted during the exact body read refuses delivery at the final home fence', async () => {
+for (const lateTarget of ['graph', 'content'] as const) test(`a ${lateTarget} restriction after body hydration refuses delivery at the final home fence`, async () => {
   const h = fixture(), page = h.selections[0]!, navigation = id();
   const objectDirectory = mkdtempSync(join(resolve(import.meta.dir, '../../../.temp'), 'zone-home-read-owner-'));
   const manifest = prepareComponent(objectDirectory, h.zone, { configuration: {
@@ -182,15 +188,18 @@ test('a restriction admitted during the exact body read refuses delivery at the 
   };
   let restricted = false, contentReads = 0;
   configureDisclosure(h.env, { read: async targets => targets.map(target =>
-    restricted && target.owner === 'graph' ? 'hidden' : 'visible') });
+    restricted && target.owner === lateTarget ? 'hidden' : 'visible') });
   const state = { zone: h.zone, disclosure: 'public', bundle: { homeDocument: h.resource,
     homeRevision: h.revision, pages: h.selections.map(selection => ({ page: h.resource, ...selection })) } } as unknown as
     Parameters<typeof readZonePublishedHomeContent>[1];
   const work = { environment: h.env, content: { readExactBatch: async () => {
-    contentReads++; restricted = true;
+    contentReads++; if (lateTarget === 'graph') restricted = true;
     return [{ revisionId: page.revisionId, status: 'available', reference: { resourceId: h.resource, ...page },
       body: { document: fromPlainText('Home', 'blocks') } }];
-  } } } as unknown as Parameters<typeof readZonePublishedHomeContent>[0];
+  } }, ...(lateTarget === 'content' ? { contentAuthoring: { readExactMetadataBatch: async () => {
+    restricted = true;
+    return new Map([[page.revisionId, { availability: 'available', byteDigest: page.byteDigest }]]);
+  } } } : {}) } as unknown as Parameters<typeof readZonePublishedHomeContent>[0];
   try {
     expect(await readZonePublishedHomeContent(work, state, ['en'])).toBeNull();
     expect(contentReads).toBe(1);

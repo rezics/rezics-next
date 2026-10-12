@@ -20,6 +20,7 @@ import { disclosureViewer } from '../disclosure/viewer.ts';
 import type { VisibilityReader } from '../space/visibility.ts';
 import { readResourceVisibility } from '../space/visibility.ts';
 import { GRAPHS, RV, iri } from '../work/activate.ts';
+import { captureHomeDisclosureFence } from '../zone/home-disclosure-fence.ts';
 
 /** The publication owner supplies a published cut, never a variant draft head. */
 export interface HomeDocumentEvidenceCut {
@@ -139,7 +140,43 @@ export async function capturePublishedHomeEvidence(env: WorkActivationEnvironmen
   'realmReadProof' | 'canReadSemanticResource'>>, principal: VerifiedPrincipal | null,
   actingSubject: string | undefined, target: EvidenceTarget, resolveCurrent = false,
   observedHomeRevision?: string): Promise<CapturedEvidence | null> {
-  if (!await readZoneHomeOwner(env, target.resource)) return null;
+  if (!await readZoneHomeOwner(env, target.resource)) {
+    if (target.owner !== 'content' || !await legacyZoneContentOwner(env, target.resource)) return null;
+    if (target.component !== 'body' || !target.revision || target.locator !== null) {
+      throw new GovernanceDenied('Target is unavailable');
+    }
+    const reader = homeDocumentVisibilityReader(registry, principal, actingSubject);
+    const visibility = await readResourceVisibility(env, target.resource, reader);
+    if (!visibility?.readable) throw new GovernanceDenied('Target is unavailable');
+    const fence = await captureHomeDisclosureFence(env, [{ resource: target.resource, zone: target.resource,
+      targets: [{ owner: 'content', resource: target.resource, revision: target.revision, component: 'body' }] }],
+    disclosureViewer(principal), 'read');
+    const exact = await core.readExactBatch([target.revision], async ids => new Set(ids))
+      .catch(cause => { throw new GovernanceUnavailable('Content owner is unavailable', { cause }); });
+    const read = exact[0];
+    if (exact.length !== 1 || !read || ['missing', 'unavailable', 'corrupt'].includes(read.status)) {
+      throw new GovernanceUnavailable('Exact legacy home evidence is unavailable');
+    }
+    if (read.status !== 'available') throw new GovernanceDenied('Target is unavailable');
+    if (read.reference.resourceId !== target.resource || read.reference.revisionId !== target.revision) {
+      throw new GovernanceUnavailable('Legacy evidence differs from its owner revision');
+    }
+    if (['media-set-v1', 'member-reply-v1'].includes(read.reference.model)) {
+      throw new GovernanceInvalid('Home evidence does not name a document body');
+    }
+    const evidence: CapturedEvidence = { ...target, state: 'available', representation: read.reference.format,
+      revisionDigest: read.reference.byteDigest, provenance: { capturedBy: 'zone-legacy-exact-revision-v1',
+        zone: target.resource, disclosure: visibility.visibility,
+        ...(visibility.realm ? { realm: visibility.realm } : {}),
+        ...(typeof read.reference.provenance.author === 'string' ? { author: read.reference.provenance.author } : {}) } };
+    const visible = await fence(async () => {
+      const current = await readResourceVisibility(env, target.resource, reader);
+      return new Set(current?.readable && current.visibility === visibility.visibility
+        && current.space === visibility.space && current.realm === visibility.realm ? [target.resource] : []);
+    });
+    if (!visible.has(target.resource)) throw new GovernanceDenied('Target is unavailable');
+    return evidence;
+  }
   if (target.locator !== null || target.owner === 'graph' && target.component !== 'record'
     || target.owner === 'content' && target.component !== 'body'
     || !['graph', 'content'].includes(target.owner)
@@ -148,11 +185,25 @@ export async function capturePublishedHomeEvidence(env: WorkActivationEnvironmen
     target.owner === 'graph' ? target.revision ?? undefined : observedHomeRevision,
     homeDocumentVisibilityReader(registry, principal, actingSubject), disclosureViewer(principal));
   if (!home || target.owner === 'content' && !target.revision) throw new GovernanceDenied('Target is unavailable');
+  const fence = await captureHomeDisclosureFence(env, [{ resource: home.resource, zone: home.zone,
+    targets: [{ owner: 'graph', resource: home.resource, revision: home.revision, component: 'record' },
+      ...home.selections.filter(page => target.owner !== 'content' || page.revisionId === target.revision)
+        .map(page => ({ owner: 'content' as const, resource: home.resource, revision: page.revisionId,
+          component: 'body' as const, occurrence: { owner: 'graph' as const, kind: 'publication' as const,
+            resource: home.resource, revision: home.revision } }))] }],
+  disclosureViewer(principal), 'read');
   const captured = await captureHomeDocumentEvidence(core, { ...home, disclosure: home.disclosure === 'restricted' ? 'private' : 'public',
     pages: home.selections }, target.owner === 'content' ? target.revision! : undefined);
   const current = await readZoneHomeTarget(env, target.resource, home.revision,
     homeDocumentVisibilityReader(registry, principal, actingSubject), disclosureViewer(principal));
   if (!current || !isDeepStrictEqual(current, home)) throw new GovernanceDenied('Target is unavailable');
+  const visible = await fence(async () => {
+    const visibility = await readResourceVisibility(env, home.zone,
+      homeDocumentVisibilityReader(registry, principal, actingSubject));
+    return new Set(visibility?.readable && (visibility.visibility === 'private') === (home.disclosure === 'restricted')
+      && visibility.space === home.space ? [home.zone] : []);
+  });
+  if (!visible.has(home.resource)) throw new GovernanceDenied('Target is unavailable');
   return captured;
 }
 

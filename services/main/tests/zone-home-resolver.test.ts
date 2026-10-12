@@ -6,8 +6,9 @@ import { resolveCommandTarget, resolveTargets, targetSummaries, TargetNotBound, 
 import { WorkReadMoved, WorkReadUnavailable } from '../src/modules/work/read-session.ts';
 import { RV } from '../src/modules/work/activate.ts';
 import { ANONYMOUS_VIEWER } from '../src/modules/suitability/policy.ts';
-import { configureDisclosure } from '../src/modules/disclosure/read.ts';
-import { zoneHomeTargetFixture, zoneHomeTargetCell as cell, zoneHomeTargetId as id } from './support/zone-home-target.ts';
+import { DEFAULT_MEDIA_CONTEXT } from '../src/modules/media/store.ts';
+import { zoneHomeTargetFixture, zoneHomeTargetCell as cell, zoneHomeTargetId as id,
+  configureZoneHomeDisclosure as configureDisclosure } from './support/zone-home-target.ts';
 
 test('home command identity uses the native published P/H grain without Content hydration', async () => {
   const h = zoneHomeTargetFixture();
@@ -100,7 +101,7 @@ test('public home summary remains public for a signed reader and keeps its /e/ a
   const batch = await targetSummaries(h.session, [h.resource]);
   expect(batch.summaries[0]).toMatchObject({ reference: h.resource, status: 'available',
     type: 'resource', base: 'resource', work: null, disclosure: 'public', address: { prefix: '/e/' } });
-  expect(h.policyTargets.flat().filter(target => target.component === 'record')).toHaveLength(3);
+  expect(h.policyTargets.flat().filter(target => target.component === 'record')).toHaveLength(5);
 });
 
 test('an anonymous home probe that observes a new restriction withholds the signed-in summary', async () => {
@@ -111,16 +112,39 @@ test('an anonymous home probe that observes a new restriction withholds the sign
   let probes = 0;
   configureDisclosure(h.env, { read: async targets => {
     probes++;
-    return targets.map(() => probes === 3 ? 'hidden' : 'visible');
+    return targets.map(() => probes >= 4 ? 'hidden' : 'visible');
   } });
   const batch = await targetSummaries(h.session, [h.resource]);
-  expect(probes).toBe(3);
+  expect(probes).toBe(5);
   expect(batch.summaries).toEqual([{ reference: h.resource, status: 'unavailable' }]);
 });
 
-test('64 published homes fit the enclosing 160-call budget through real summary hydration', async () => {
+test('a restriction after the anonymous probe withholds the hydrated home at the final owner fence', async () => {
+  const h = publishedResolver();
+  h.session.viewer = { ...ANONYMOUS_VIEWER, signedIn: true };
+  let probes = 0, restricted = false;
+  configureDisclosure(h.env, { read: async targets => {
+    probes++;
+    const decisions = targets.map(() => restricted ? 'hidden' as const : 'visible' as const);
+    if (probes === 4) restricted = true;
+    return decisions;
+  } });
+  expect((await targetSummaries(h.session, [h.resource])).summaries)
+    .toEqual([{ reference: h.resource, status: 'unavailable' }]);
+  expect(probes).toBe(5);
+});
+
+for (const withAvatars of [false, true]) test(`64 published homes ${withAvatars ? 'with avatars' : 'without avatars'} fit the enclosing 160-call budget through real summary hydration`, async () => {
   const h = publishedResolver();
   const homes = Array.from({ length: 64 }, () => ({ resource: id(), zone: id(), space: id(), revision: id() }));
+  if (withAvatars) h.session.deps.media = { store: { avatarRows: async (resources: readonly string[]) => ({
+    rows: new Map(resources.map(resource => [resource, { target: resource,
+      context: DEFAULT_MEDIA_CONTEXT, selection: id().slice(-36),
+      selectionPosition: '1', use: id().slice(-36), asset: id().slice(-36), representation: id().slice(-36),
+      sha256: 'a'.repeat(64), crop: null, mediaType: 'image/png', byteLength: 100, width: 128, height: 128,
+      availability: 'available', clearance: 'cleared', disclosure: 'public', moderation: 'none', lifecycle: 'active', statePosition: '1' }])),
+    generation: { owner: 'content', dataEpoch: h.env.lineage.dataEpoch, sequence: '1' },
+  }) } } as unknown as NonNullable<TargetReadSession['deps']['media']>;
   let calls = 0, visibilityCalls = 0;
   const original = h.env.fuseki.query.bind(h.env.fuseki);
   h.env.fuseki.query = async (query, bytes) => {
@@ -147,7 +171,7 @@ test('64 published homes fit the enclosing 160-call budget through real summary 
   };
   const batch = await targetSummaries(h.session, homes.map(home => home.resource));
   expect(batch.summaries.filter(summary => summary.status === 'available')).toHaveLength(64);
-  expect(visibilityCalls).toBe(2);
+  expect(visibilityCalls).toBe(3);
   expect(calls).toBeLessThan(160);
 });
 
@@ -175,7 +199,7 @@ test('private home resolves only with live owning Zone read authority and report
     resource: h.resource, base: 'resource', work: null, revision: h.revision,
     disclosure: 'restricted', contentSelections: h.selections,
   });
-  expect(h.authority).toEqual([h.zone, h.zone, h.zone]);
+  expect(h.authority).toEqual([h.zone, h.zone, h.zone, h.zone, h.zone, h.zone]);
 });
 
 test('draft, erased and foreign home cuts never resolve as current published targets', async () => {
@@ -251,6 +275,48 @@ test('home summary refences Zone authority after hydration and hides revocation'
   ]);
   expect(probes).toBe(2);
   expect(hydrated).toBe(1);
+});
+
+test('a later home receipt cannot outlive the disclosure fence of an earlier target in the batch', async () => {
+  const h = publishedResolver(), second = zoneHomeTargetFixture();
+  for (const row of second.rows) row.dataEpoch = cell(h.env.lineage.dataEpoch);
+  const homes = [h, second];
+  let restricted = false;
+  configureDisclosure(h.env, { read: async targets => targets.map(target =>
+    restricted && target.resource === h.resource ? 'hidden' : 'visible') });
+  const original = h.env.fuseki.query.bind(h.env.fuseki);
+  h.env.fuseki.query = async (query, bytes) => {
+    if (query.includes('SELECT ?epoch ?sequence ?hold ?r')) return { results: { bindings: homes.map(home => ({
+      epoch: cell(h.env.lineage.dataEpoch), sequence: cell('9'), r: cell(home.resource), type: cell('resource'),
+      homeZone: cell(home.zone), head: cell(home.revision), public: cell('false'), erased: cell('false'),
+      hasCurrentIdentity: cell('true'), label: { ...cell('Home'), 'xml:lang': 'en' },
+    })) } };
+    if (query.includes('?target ?kind ?space ?realm ?disclosure')) return { results: { bindings: homes.map(home => ({
+      target: cell(home.zone), kind: cell('space'), space: cell(home.space), disclosure: cell(`${RV}Public`),
+      zoneDisclosure: cell(`${RV}Public`),
+    })) } };
+    if (query.includes('SELECT DISTINCT ?zone ?head ?typed')) {
+      const home = homes.find(home => query.includes(`<${home.resource}>`))!;
+      return { results: { bindings: home.ownerRows } };
+    }
+    if (query.includes('SELECT DISTINCT ?receipt ?siteRevision')) {
+      const home = homes.find(home => query.includes(`<${home.resource}>`))!;
+      return { results: { bindings: home.cutRows } };
+    }
+    if (query.includes('SELECT ?zone ?revision ?routesRevision')) {
+      const home = homes.find(home => query.includes(`<${home.cutRows[0]!.receipt!.value}>`))!;
+      if (home === second) restricted = true;
+      return { results: { bindings: home.rows } };
+    }
+    if (query.includes('?kind ?space ?realm ?disclosure')) {
+      const home = homes.find(home => query.includes(`<${home.zone}>`))!;
+      return { results: { bindings: home.visibilityRows } };
+    }
+    return original(query, bytes);
+  };
+  h.session.query = async () => homes.map(home => ({ epoch: cell(h.env.lineage.dataEpoch), sequence: cell('9'),
+    r: cell(home.resource), revision: cell(home.revision), type: cell(`${RV}ZoneHomeDocument`) }));
+  await expect(resolveTargets(h.session, homes.map(home => home.resource), 'report')).rejects.toBeInstanceOf(TargetUnavailable);
 });
 
 // Trust condition 2: a P/H restriction and an absent identity share the summary answer and cost shape.

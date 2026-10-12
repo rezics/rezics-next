@@ -11,7 +11,7 @@ import { currentProfile } from '../realm-profile/schema.ts';
 import { checkedCollectionName } from '../collection/names.ts';
 import { publicWork } from '../work/public-patterns.ts';
 import type { SemanticDisclosure } from '../access/semantic-disclosure.ts';
-import { DISCLOSURE_COST, discloseInventoryWithCost, discloseInventoryWithAnonymousNames, hasDisclosure, type DisclosureChannel, type DisclosureDecision, type DisclosureTarget } from '../disclosure/read.ts';
+import { DISCLOSURE_COST, discloseInventory, discloseInventoryWithCost, discloseInventoryWithAnonymousNames, hasDisclosure, type DisclosureChannel, type DisclosureDecision, type DisclosureTarget } from '../disclosure/read.ts';
 import { ANONYMOUS_VIEWER, type Viewer } from '../suitability/policy.ts';
 import { direction, readerLanguages, selectDisplayName, type DisplayName, type LocalizedText } from '../display-language/select.ts';
 import type { Base } from '../target/contract.ts';
@@ -28,6 +28,7 @@ import type { CanonicalAddress } from '@rezics/model/address';
 import { identityCanonical, canonicalAddresses } from '../address/canonical.ts';
 import { readSummaryPages, SUMMARY_PAGE_COST } from './summary-pages.ts';
 import { readZoneVisibilities } from '../space/visibility.ts';
+import { captureHomeDisclosureFence } from '../zone/home-disclosure-fence.ts';
 
 export { direction } from '../display-language/select.ts';
 
@@ -808,22 +809,31 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
     }
   }
   // Names, covers and the anonymous-name decision, after avatars exist.
-  const final = { decisions: [] as DisclosureDecision[], anonymousNames: [] as DisclosureDecision[], anonymousNameProbes: 0 };
+  const homeEntries = entries.filter(([, row]) => row.homeZone).map(([reference, row]) => ({
+    resource: reference, zone: row.homeZone!, optionalTargets: assetIndexes.has(reference) ? 1 : 0,
+    targets: [targets[nameIndexes.get(reference)!]!,
+      ...(assetIndexes.has(reference) ? [targets[assetIndexes.get(reference)!]!] : [])],
+  }));
+  const homeFence = homeEntries.length ? await captureHomeDisclosureFence(env, homeEntries,
+    reader.viewer ?? ANONYMOUS_VIEWER, input.channel ?? 'summary', client) : undefined;
+  const final = { decisions: [] as DisclosureDecision[], anonymousNames: [] as DisclosureDecision[],
+    anonymousNameProbes: 0, parentHeadQueries: 0 };
   for (let offset = 0; offset < targets.length; offset += DISCLOSURE_COST.batch) {
     const batch = targets.slice(offset, offset + DISCLOSURE_COST.batch);
-    const evaluated = reader.viewer?.signedIn
+    const decision = reader.viewer?.signedIn
       ? await discloseInventoryWithAnonymousNames(env, batch, reader.viewer, input.channel ?? 'summary', client)
       : await discloseInventoryWithCost(env, batch, reader.viewer ?? ANONYMOUS_VIEWER, input.channel ?? 'summary', client);
-    final.decisions.push(...evaluated.decisions);
-    final.anonymousNames.push(...evaluated.anonymousNames);
-    final.anonymousNameProbes += evaluated.anonymousNameProbes;
-    cost.graphQueries += evaluated.parentHeadQueries;
+    final.decisions.push(...decision.decisions);
+    final.anonymousNames.push(...decision.anonymousNames);
+    final.anonymousNameProbes += decision.anonymousNameProbes;
+    final.parentHeadQueries += decision.parentHeadQueries;
   }
   const decisions = final.decisions;
   if (hasDisclosure(env)) cost.accessQueries += Math.ceil(targets.length / MAX_SUMMARY_BATCH);
   noteNameProbe(targets);
   cost.accessQueries += final.anonymousNameProbes;
   cost.graphQueries += final.anonymousNameProbes * DISCLOSURE_COST.nameOwnerQueries;
+  cost.graphQueries += final.parentHeadQueries;
   for (const [reference] of entries) {
     if (decisions[nameIndexes.get(reference)!] !== 'visible') readable.delete(reference);
     const assetIndex = assetIndexes.get(reference);
@@ -873,6 +883,22 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
   const addresses = await canonicalAddresses(env, available, client);
   if (available.some(summary => ['space','realm','zone'].includes(summary.type))) cost.graphQueries++;
   for (const summary of available) summary.address = addresses.get(summary.reference)!;
+  if (homeFence) {
+    const visible = await homeFence(async () => {
+      const current = await readHomeVisibility();
+      return new Set([...current].filter(([zone, isPublic]) => homeVisibility.get(zone) === isPublic).map(([zone]) => zone));
+    });
+    for (const [index, summary] of summaries.entries()) {
+      if (homes.has(summary.reference) && !visible.has(summary.reference)) {
+        summaries[index] = { reference: summary.reference, status: 'unavailable' };
+      } else if (summary.status === 'available' && homes.has(summary.reference)) {
+        const asset = avatars.get(summary.reference)?.asset;
+        if (asset && !visible.has(`https://rezics.com/id/${asset}`)) {
+          summary.avatar = avatar(homes.get(summary.reference)!.type, summary.reference, undefined);
+        }
+      }
+    }
+  }
   return { summaries, generation: { graph: graph.generation, media: mediaGeneration,addresses: addressGeneration(summaries) }, cost,
     workRevisions, redirects: graph.redirects };
 }

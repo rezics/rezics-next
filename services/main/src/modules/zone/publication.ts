@@ -14,7 +14,8 @@ import { readCompositionPage } from '../structure/read.ts';
 import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
 import { ZONE_CAMPAIGN_ART_COST, readZoneCampaignArt, bindZoneCampaignArtVariant } from './campaign-art.ts';
 import { ZONE_ROUTE_COST } from './route-cost.ts';
-import { pageDiscoveryPolicy } from '../space/visibility.ts';
+import { pageDiscoveryPolicy, readZoneVisibilities } from '../space/visibility.ts';
+import { captureHomeDisclosureFence } from './home-disclosure-fence.ts';
 import { identityCanonical } from '../address/canonical.ts';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import { parseDocument } from '@rezics/document';
@@ -170,6 +171,7 @@ export async function readZonePublishedHomeContent(
   const page = variantId !== undefined ? pages.find(page => page.variantId === variantId)
     : pages.find(page => page.revisionId === selected?.value) ?? pages[0];
   if (!page) throw new ZoneUnavailable('Published Zone home is unavailable');
+  const fence = await capturePublicationHomeFence(work.environment, state, page);
   if (!work.content) throw new ZonePublicationUnavailable('Content owner is unavailable');
   if (!await isZonePublishedPageRevision(work.environment, state.zone, page.page, page.revisionId)) {
     if (await erasedHomeCut(work.environment, state)) return null;
@@ -192,7 +194,23 @@ export async function readZonePublishedHomeContent(
       || !await homeCutVisible(work.environment, state))) return null;
     throw error;
   }
-  return { page, document, reference: exact.reference };
+  const home = { page, document, reference: exact.reference };
+  return await fence() ? home : null;
+}
+
+async function capturePublicationHomeFence(env: WorkActivationEnvironment,
+  state: Awaited<ReturnType<typeof readZonePublication>>, page: { page: string; revisionId: string }) {
+  if (!state.bundle?.homeDocument || !state.bundle.homeRevision) return async () => true;
+  const resource = state.bundle.homeDocument;
+  const fence = await captureHomeDisclosureFence(env, [{ resource, zone: state.zone,
+    targets: [{ owner: 'graph', resource, revision: state.bundle.homeRevision, component: 'record' },
+      { owner: 'content', resource: page.page, revision: page.revisionId, component: 'body',
+        occurrence: { owner: 'graph', kind: 'publication', resource, revision: state.bundle.homeRevision } }] }],
+  currentDisclosureViewer(), 'read');
+  return async () => (await fence(async () => {
+    const zones = await readZoneVisibilities(env, [state.zone]);
+    return new Set(zones.get(state.zone)?.readable && zones.get(state.zone)?.visibility === 'public' ? [state.zone] : []);
+  })).has(resource);
 }
 
 async function homeCutVisible(env: WorkActivationEnvironment,
@@ -233,6 +251,7 @@ export async function readZoneHomeDocument(work: MainWorkDependencies, request: 
     readerLanguages(request.headers.get('x-rezics-display-languages'), request.headers.get('accept-language')));
   if (!home) return null;
   const { document, page, reference } = home;
+  const fence = await capturePublicationHomeFence(work.environment, state, page);
   const local = zoneDocumentShowcase(document);
   let localData: Parameters<typeof resolveZonePageDocument>[4];
   if (local) {
@@ -260,7 +279,8 @@ export async function readZoneHomeDocument(work: MainWorkDependencies, request: 
       || !await homeCutVisible(work.environment, state))) return null;
     throw error;
   }
-  return { ...resolved, reference };
+  const result = { ...resolved, reference };
+  return await fence() ? result : null;
 }
 
 /** Public module data resolves only disclosed query definitions, within the Zone's shared budget. */

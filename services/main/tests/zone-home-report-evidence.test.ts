@@ -12,13 +12,14 @@ import { publicReportOwners, reportAddress } from '../src/modules/public-report/
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import type { Pool } from 'pg';
 import { RV } from '../src/modules/work/activate.ts';
+import { resolveDisclosureSelections } from '../src/modules/disclosure/read.ts';
 import { zoneHomeTargetFixture, zoneHomeTargetCell as cell } from './support/zone-home-target.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 const principal = { issuer: 'account', subject: 'reader', emailVerified: true } as VerifiedPrincipal;
 
-function published() {
-  const fixture = zoneHomeTargetFixture(), source = cut();
+function published(options: { ancestry?: boolean } = {}) {
+  const fixture = zoneHomeTargetFixture(options), source = cut();
   source.home.resource = fixture.resource;
   source.home.revision = fixture.revision;
   source.home.zone = fixture.zone;
@@ -244,10 +245,10 @@ test('conditions 1 and 3: erasure, draft cuts and reader revocation give the sam
   }
 });
 
-for (const authority of ['zone', 'realm'] as const) {
-  // Disclosure final fence must recheck authority after the last receipt read.
-  test.failing(`evidence withholds its digest when ${authority} authority is revoked during the final receipt read`, async () => {
-    const h = published(), actor = id(), realm = id();
+for (const ancestry of [true, false]) for (const authority of ['zone', 'realm'] as const) {
+  // The disclosure final fence still awaits the owner's production ancestry source.
+  (ancestry ? test : test.failing)(`evidence withholds its digest when ${authority} authority is revoked during the final receipt read (${ancestry ? 'owner cut' : 'production ancestry pending'})`, async () => {
+    const h = published({ ancestry }), actor = id(), realm = id();
     h.visibilityRows[0]!.disclosure = cell(`${RV}Private`);
     h.visibilityRows[0]!.zoneDisclosure = cell(`${RV}Private`);
     if (authority === 'realm') h.visibilityRows[0]!.realm = cell(realm);
@@ -260,6 +261,11 @@ for (const authority of ['zone', 'realm'] as const) {
       if (text.includes('SELECT ?zone ?revision ?routesRevision') && ++receipts === 2) readable = false;
       return result;
     };
+    if (!ancestry) {
+      const selections = await resolveDisclosureSelections(h.env, [{ owner: 'graph', resource: h.resource,
+        revision: h.revision, component: 'record' }]);
+      expect(selections[0]!.ancestry.relationshipBasis.kind).toBe('publication');
+    }
     await expect(capturePublishedHomeEvidence(h.env, h.core, h.registry, principal, actor,
       { owner: 'graph', resource: h.resource, component: 'record', revision: h.revision, locator: null }))
       .rejects.toBeInstanceOf(GovernanceDenied);

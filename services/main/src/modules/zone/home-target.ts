@@ -1,6 +1,6 @@
 import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { readResourceVisibility, type VisibilityReader } from '../space/visibility.ts';
-import { discloseInventory } from '../disclosure/read.ts';
+import { captureHomeDisclosureFence } from './home-disclosure-fence.ts';
 import { currentDisclosureViewer } from '../disclosure/viewer.ts';
 import type { Viewer } from '../suitability/policy.ts';
 import { readZoneSitePublicationReceipt, ZoneUnavailable } from './configuration.ts';
@@ -82,12 +82,21 @@ export async function readZoneHomeTarget(env: WorkActivationEnvironment, resourc
   if (!receipt || receipt.homeErased || receipt.zone !== owner.zone || receipt.homeDocument !== resource
     || receipt.homeRevision !== cut || receipt.revision !== rows[0].siteRevision.value
     || !receipt.pages.length || receipt.pages.some(page => page.page !== resource || !page.byteDigest)) return null;
-  if ((await discloseInventory(env, [{ owner: 'graph', resource, revision: cut, component: 'record' }],
-    viewer, 'read'))[0] !== 'visible') return null;
-  return { resource, revision: cut, zone: owner.zone,
+  const fence = await captureHomeDisclosureFence(env, [{ resource, zone: owner.zone,
+    targets: [{ owner: 'graph', resource, revision: cut, component: 'record' },
+      ...receipt.pages.map(page => ({ owner: 'content' as const, resource, revision: page.revisionId,
+        component: 'body' as const, occurrence: { owner: 'graph' as const, kind: 'publication' as const, resource, revision: cut } }))],
+  }], viewer, 'read');
+  const target: ZoneHomeTarget = { resource, revision: cut, zone: owner.zone,
     disclosure: visibility.visibility === 'private' ? 'restricted' : 'public',
     space: visibility.space, ...(owner.author ? { author: owner.author } : {}),
     realm: owner.realm ?? visibility.realm,
     selections: receipt.pages.map(page => ({ revisionId: page.revisionId, variantId: page.variantId,
       byteDigest: page.byteDigest!, ...(page.language ? { language: page.language } : {}) })) };
+  const visible = await fence(async () => {
+    const current = await readResourceVisibility(env, owner.zone, reader);
+    return new Set(current?.readable && current.visibility === visibility.visibility
+      && current.space === visibility.space && current.realm === visibility.realm ? [owner.zone] : []);
+  });
+  return visible.has(resource) ? target : null;
 }

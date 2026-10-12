@@ -3,7 +3,9 @@ import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { ContentCore, ExactReadResult } from '../../content/src/core.ts';
 import type { AccessAdmissionRegistry, VerifiedPrincipal } from '../src/modules/access/admission.ts';
-import { governanceContentEvidenceReader, governanceNoticeParticipants } from '../src/modules/governance/composition.ts';
+import { capturePublishedHomeEvidence, governanceContentEvidenceReader, governanceNoticeParticipants } from '../src/modules/governance/composition.ts';
+import { publicReportOwners } from '../src/modules/public-report/owners.ts';
+import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import { ownerEvidenceCapture } from '../src/modules/governance/evidence.ts';
 import { GovernanceDenied, GovernanceUnavailable } from '../src/modules/governance/store.ts';
 import { RV } from '../src/modules/work/activate.ts';
@@ -23,11 +25,13 @@ function legacyEvidence() {
       return { results: { bindings: [] } };
     }
     if (text.includes('SELECT ?legacySpace')) return { results: { bindings: legacyRows } };
+    if (text.includes('SELECT ?epoch ?sequence')) return { results: { bindings: [{ epoch: cell(h.env.lineage.dataEpoch), sequence: cell('9') }] } };
     if (text.includes('SELECT DISTINCT ?author')) return { results: { bindings: [{ author: cell(h.author) }] } };
     return query(text);
   };
   let zoneGrant = false, workGrant = false, realmGrant = false;
   const registry = {
+    assertRecoveryOpen: async () => {},
     realmReadProof: async () => realmGrant ? randomUUID() : null,
     canReadSemanticResource: async (_principal: VerifiedPrincipal | null, _actor: string | null, resource: string) => {
       semanticTargets.push(resource); return zoneGrant && resource === h.zone;
@@ -53,7 +57,7 @@ function legacyEvidence() {
   const capture = ownerEvidenceCapture({ content: { core, canRead } });
   const target = { owner: 'content' as const, resource: h.zone, component: 'body' as const,
     revision, locator: null };
-  return { ...h, legacyRows, queries, semanticTargets, workTargets, reads, target, capture, canRead,
+  return { ...h, legacyRows, queries, semanticTargets, workTargets, reads, target, capture, canRead, core, registry, pool,
     grants: (zone: boolean, work = false, realm = false) => { zoneGrant = zone; workGrant = work; realmGrant = realm; } };
 }
 
@@ -66,6 +70,35 @@ test('retained Z-owned evidence keeps its exact Resource after Z receives a new 
   });
   expect(h.workTargets).toEqual([]);
   expect(h.reads).toEqual([[h.target.revision!]]);
+});
+
+test('public report and copyright intake admit a retained Z body through the same home evidence owner', async () => {
+  for (const category of ['harassment', 'copyright'] as const) {
+    const h = legacyEvidence();
+    const deps = { environment: h.env, access: h.registry } as unknown as MainWorkDependencies;
+    const report = await publicReportOwners(deps, h.pool, h.core as ContentCore).resolve({
+      profile: 'public-report-v1', target: `https://rezics.com/v1/content-revisions/${h.target.revision}`,
+      category, statement: 'Retained home document needs review', contentLanguage: 'en',
+      ...(category === 'copyright' ? { copyright: { signature: 'Rights holder', claimantName: 'Rights holder',
+        claimantAddress: 'Address', claimantPhone: 'Phone', claimedWork: 'Original work', materialLocation: 'Retained home',
+        goodFaith: true as const, accurateAndAuthorizedUnderPerjury: true as const } } : {}),
+    }, new Request('https://rezics.com/v1/public-reports', { method: 'POST' }), null);
+    expect(report.evidence).toMatchObject({ owner: 'content', resource: h.zone, revision: h.target.revision,
+      state: 'available', revisionDigest: 'a'.repeat(64) });
+    expect(h.workTargets).toEqual([]);
+  }
+});
+
+test('retained Z evidence rechecks its Zone grant after the exact Content read', async () => {
+  const h = legacyEvidence();
+  h.visibilityRows[0]!.disclosure = cell(`${RV}Private`);
+  h.visibilityRows[0]!.zoneDisclosure = cell(`${RV}Private`);
+  h.grants(true);
+  const read = h.core.readExactBatch.bind(h.core);
+  h.core.readExactBatch = async (...args) => { const bytes = await read(...args); h.grants(false); return bytes; };
+  await expect(capturePublishedHomeEvidence(h.env, h.core, h.registry, principal, actor, h.target))
+    .rejects.toBeInstanceOf(GovernanceDenied);
+  expect(h.workTargets).toEqual([]);
 });
 
 test('private retained Z-owned evidence uses Zone authority and cannot inherit a Work grant', async () => {

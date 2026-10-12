@@ -3,11 +3,17 @@ import { configureDisclosure, type DisclosureTarget } from '../../src/modules/di
 import { compositionReceiptIri } from '../../src/modules/structure/change.ts';
 import { zonePublishedPageBinding } from '../../src/modules/zone/config-format.ts';
 import { RV, type WorkActivationEnvironment } from '../../src/modules/work/activate.ts';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './disclosure-ancestry.ts';
+import type { DisclosureReader } from '../../src/modules/disclosure/read.ts';
 
 export const zoneHomeTargetId = () => `https://rezics.com/id/${randomUUID()}`;
 export const zoneHomeTargetCell = (value: string) => ({ type: 'literal', value });
-type Row = Record<string, { type: string; value: string } | undefined>;
-export function zoneHomeTargetFixture() {
+type Row = Record<string, { type: string; value: string }>;
+export function configureZoneHomeDisclosure(env: WorkActivationEnvironment, reader: Pick<DisclosureReader, 'read'>) {
+  configureDisclosure(env, fixtureDisclosureReader(reader.read));
+}
+
+export function zoneHomeTargetFixture(options: { ancestry?: boolean } = {}) {
   const resource = zoneHomeTargetId(), zone = zoneHomeTargetId(), revision = zoneHomeTargetId(), siteRevision = zoneHomeTargetId(), space = zoneHomeTargetId(), author = zoneHomeTargetId();
   const epoch = randomUUID(), admission = randomUUID();
   const receipt = compositionReceiptIri(admission, 'zone.edit');
@@ -42,8 +48,10 @@ export function zoneHomeTargetFixture() {
       if (query.includes('ASK')) return { boolean: !query.includes('a rv:ErasedRevision') || query.includes('FILTER NOT EXISTS') };
       throw new Error(`Unexpected owner probe: ${query}`);
     } } } as unknown as WorkActivationEnvironment;
-  configureDisclosure(env, { read: async targets => {
-    policyTargets.push([...targets]); return targets.map(() => denied ? 'hidden' : 'visible');
+  if (options.ancestry !== false) configureFixtureDisclosureAncestry(env, () => undefined);
+  configureZoneHomeDisclosure(env, { read: async targets => {
+    policyTargets.push(targets.map(({ ancestry: _ancestry, ...target }) => target));
+    return targets.map(() => denied ? 'hidden' : 'visible');
   } });
   return { env, resource, zone, revision, siteRevision, space, author, selections, ownerRows, cutRows,
     visibilityRows, rows, queries, policyTargets, deny: (value: boolean) => { denied = value; } };

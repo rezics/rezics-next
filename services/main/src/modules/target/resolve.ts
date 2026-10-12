@@ -13,6 +13,8 @@ import { disclosureViewer } from '../disclosure/viewer.ts';
 import type { Viewer } from '../suitability/policy.ts';
 import { disclosureGraphEnvironment } from '../disclosure/read.ts';
 import { readZoneHomeTarget } from '../zone/home-target.ts';
+import { captureHomeDisclosureFence, type HomeDisclosureEntry } from '../zone/home-disclosure-fence.ts';
+import { readZoneVisibilities } from '../space/visibility.ts';
 import { ZoneUnavailable } from '../zone/configuration.ts';
 
 /** One summary batch and one exact-head query, independent of target count.
@@ -446,6 +448,7 @@ async function resolveSummarizedTargets(session: TargetReadSession, summaries: S
   }
   const targets = new Map<string, ResolvedTarget>();
   if (redirects) collectRedirects(rows, redirects);
+  const homeEntries: HomeDisclosureEntry[] = [];
   for (const summary of available) {
     const exact = byResource.get(summary.reference) ?? [];
     if (!exact.length) {
@@ -470,12 +473,34 @@ async function resolveSummarizedTargets(session: TargetReadSession, summaries: S
           zoneReadable: reader.canReadSemantic }, reader.viewer); }
       catch (error) { if (error instanceof ZoneUnavailable) throw new TargetUnavailable(); throw error; }
       if (!home) throw new TargetUnavailable();
+      homeEntries.push({ resource: home.resource, zone: home.zone, targets: [
+        { owner: 'graph', resource: home.resource, revision: home.revision, component: 'record' },
+        ...home.selections.map(page => ({ owner: 'content' as const, resource: home.resource,
+          revision: page.revisionId, component: 'body' as const, occurrence: { owner: 'graph' as const,
+            kind: 'publication' as const, resource: home.resource, revision: home.revision } })),
+      ] });
       targets.set(summary.reference, { resource: home.resource, base: 'resource', work: null,
         revision: home.revision, types, disclosure: home.disclosure, contentSelections: home.selections });
       continue;
     }
     targets.set(summary.reference, { resource: summary.reference, base: summary.base!,
       work: summary.work, revision: exact[0]!.revision!.value, types, disclosure: summary.disclosure });
+  }
+  if (homeEntries.length) {
+    const reader = targetSummaryReader(session);
+    const expectedVisibility = new Map(homeEntries.map(entry => [entry.zone,
+      targets.get(entry.resource)!.disclosure === 'public' ? 'public' : 'private']));
+    const fence = await captureHomeDisclosureFence(session.deps.environment, homeEntries, reader.viewer!, 'read');
+    const visible = await fence(async () => {
+      const policies = await readZoneVisibilities(session.deps.environment, [...new Set(homeEntries.map(entry => entry.zone))],
+        { realmReadProof: reader.realmReadProof, zoneReadable: reader.canReadSemantic });
+      return new Set([...policies].filter(([zone, policy]) => policy.readable
+        && policy.visibility === expectedVisibility.get(zone)).map(([zone]) => zone));
+    });
+    for (const entry of homeEntries) if (!visible.has(entry.resource)) {
+      if (!inventory) throw new TargetUnavailable();
+      targets.delete(entry.resource);
+    }
   }
   return targets;
 }
