@@ -132,7 +132,8 @@ async function assertRetainedUse(stack: MediaStack, expected: UseRow) {
       u.asset_revision_id::text AS revision,u.asset_id::text AS asset
     FROM media.selection_revision s JOIN media.use u ON u.id=s.use_id WHERE s.id=$1`,
   [expected.selection]);
-  expect(retained.rows).toEqual([expected]);
+  expect(retained.rows).toEqual([{ selection: expected.selection, use: expected.use,
+    asset: expected.asset, revision: expected.revision }]);
 }
 
 async function selectAvatar(stack: MediaStack, owner: Member, work: string, upload: { asset: string; revision: string },
