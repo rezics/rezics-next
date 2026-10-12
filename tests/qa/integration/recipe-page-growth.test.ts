@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { Pool } from 'pg';
 import {
   flushTelemetryTraces,
   shutdownTelemetry,
@@ -158,6 +159,7 @@ test(
     startTelemetry('recipe-page-growth', { ...process.env, ...sink.env });
     const { startMediaStack } = await import('./media-support.ts');
     let source: MediaStack | undefined;
+    let sourceRelay: Pool | undefined;
     let sourceMember: Member | undefined;
     let sourceApi: CorpusApi | undefined;
     let restoreStack: MediaStack | undefined;
@@ -193,8 +195,9 @@ test(
     };
     const openSource = async () => {
       source = await startMediaStack('recipe-page-growth-source', { library: true });
+      sourceRelay = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL });
       await initializeRelayCheckpoint(
-        source.relayPool,
+        sourceRelay,
         Bun.env.MAIN_RELAY_CONSUMER!,
         source.env.lineage.dataEpoch,
       );
@@ -379,10 +382,12 @@ test(
       async quiesce(signal: AbortSignal) {
         signal.throwIfAborted();
         const stopped = source;
+        const relay = sourceRelay;
         source = undefined;
+        sourceRelay = undefined;
         sourceApi = undefined;
         sourceMember = undefined;
-        await stopped?.stop();
+        await Promise.all([stopped?.stop(), relay?.end()]);
         return async () => openSource();
       },
       async smokeRead(input: {
@@ -534,10 +539,12 @@ test(
     } finally {
       for (const target of restoreTargets.toReversed()) await backupDriver.stop(target);
       const stopped = source;
+      const relay = sourceRelay;
       source = undefined;
+      sourceRelay = undefined;
       sourceApi = undefined;
       sourceMember = undefined;
-      await stopped?.stop();
+      await Promise.all([stopped?.stop(), relay?.end()]);
       await shutdownTelemetry();
       await sink.stop();
     }
