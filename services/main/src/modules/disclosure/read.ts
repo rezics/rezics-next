@@ -1,3 +1,42 @@
+/**
+ * Owner-established disclosure contract (internal; never HTTP input).
+ * GraphParentKind = 'work' | 'realm'. OwnerEstablishedGraphParents is a readonly
+ * tuple of zero, one or two OwnerEstablishedGraphParent values: graph owner,
+ * kind, exact native resource, current rv:head, optional Work protectedRevision,
+ * and DisclosureRelationshipBasis. A basis contains owner, relationship kind,
+ * exact resource/revision, targetResource/targetRevision, SHA-256 token and
+ * dataEpoch. Context and legacy work/workRevision fields are lookup hints only.
+ * DisclosureOccurrenceReference { owner, kind, resource, revision } selects an
+ * authoritative receipt/placement/publication; it never proves ancestry.
+ *
+ * configureDisclosureAncestrySource(env, owner, source): void installs a trusted
+ * source with read(targets) and reread(bases), both returning complete evidence
+ * in input order. resolveDisclosureSelections(env, targets) brands and registers
+ * immutable { target, ancestry } selections after bounded validation. Evidence
+ * positively proves resourceKind ('realm'|'work'|'other'), relationshipBasis and
+ * parents, including an independent publication's explicitly empty tuple.
+ * captureDisclosure(env, selections, viewer, channel, client?): Promise<readonly
+ * DisclosureReadCut[]> reads current parent heads and direct/parent policy in one
+ * Access snapshot. A cut holds selection, parents and decision; parent descriptors
+ * add fenceBasis { recoveryGeneration, enforcementCut }, obtained ONLY from Access
+ * recovery_fence and site_moderation_basis(). fenceDisclosure(env, cuts, viewer,
+ * channel, client?): Promise<DisclosureDecision[]> rereads those exact owner bases,
+ * heads and Access policy; stale proof/cut discards hydration as unavailable.
+ * Missing source/reader/evidence is unavailable, never visible. Realm closure is
+ * only platform/global graph/record/null-revision disclosure and always hidden.
+ *
+ * DISCLOSURE_COST: batch=64, graphParents=2, parentEdges=128, parentHeadBatch=64,
+ * ownerStatements=1, recoveryStatements=1 per batch; no descendant traversal.
+ * All adapters must preserve the selected occurrence through capture/hydration/
+ * final fence: threads/replies/counts carry discussed Work plus Realm; Content
+ * carries exact revision and publication/placement; media carries exact use and
+ * attachment; discovery/feed/notifications carry current source provenance;
+ * Realm reads prove identity/pairing even for self-targets. Attached Zone owners
+ * supply Realm ancestry only for mounted Realm parts, never their own pages.
+ * WorkReadSession must register cuts and fence every session before completion,
+ * including movingGraph/non-local sessions. Direct hidden maps to missing;
+ * collection hidden is omitted before selection/counting/ranking.
+ */
 import type { Pool, PoolClient } from 'pg';
 import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import type { GovernanceComponent, GovernanceOwner } from '../governance/store.ts';
