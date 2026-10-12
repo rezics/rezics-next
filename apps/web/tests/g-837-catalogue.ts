@@ -12,6 +12,7 @@ import { seedRelationLexicon } from '../../../scripts/dev/seed/relation-lexicon.
 import { activateMetadataWork, GRAPHS, iri, metadataWorkRequestDigest, RV } from '../../../services/main/src/modules/work/activate.ts';
 import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
 import type { MediaStack } from '../../../tests/qa/integration/media-support.ts';
+import { openActorPlatformGroup } from './g-838-catalogue.ts';
 
 const ID = 'https://rezics.com/id/';
 const id = () => `${ID}${randomUUID()}`;
@@ -39,6 +40,8 @@ export interface Catalogue {
 
 export async function seedCatalogue(stack: MediaStack, reader: SeedReader, scratch: string): Promise<Catalogue> {
   const editor = await stack.member('catalogue');
+  // Lexicon presentations require platform exposure in addition to scoped edit authority.
+  await openActorPlatformGroup(editor.principalId, 'platform-admin');
   const structureObjects = stack.objects('semantic/structure/');
   await structureObjects.initialize();
   Object.assign(stack.env, { structureObjects });
