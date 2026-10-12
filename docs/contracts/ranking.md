@@ -29,7 +29,10 @@ Removal safety comes from the existing owners:
   item, count or continuation hint.
 - A negative Review source event synchronously records a pending removal for its
   Work's global and admitted Realm contexts, each interval's original bucket and
-  following bucket (whose growth depends on the original score). New context
+  following bucket (whose growth depends on the original score). Only effects
+  with a matching admitted score fence a population; a never-admitted Work's
+  failed addition and removal stay pending without closing existing reads.
+  Admitted-row transitions maintain that membership in the source transaction. New context
   admission inherits outstanding removals. Only those Review populations return
   `rankings_incomplete` (503) until the score effect and removal acknowledgement
   commit together. Failed or target-blocked negative replay keeps the fence.

@@ -282,6 +282,33 @@ test('ranking SQL statements and actual executor rows stay constant across three
   } finally { await f.close(); }
 }, 180_000);
 
+test('a failed addition and removal outside the admitted population do not close its Review page', async () => {
+  const f = await fixture();
+  const query = f.stack.env.fuseki.query.bind(f.stack.env.fuseki);
+  try {
+    const author = await f.stack.member('unranked-review-author');
+    const outsider = await f.stack.publicWork(author.actor, ['en'], 'Unprojected Review Work');
+    f.stack.env.fuseki.query = async (...args) => {
+      if (args[0].includes('SELECT DISTINCT ?work ?main ?head ?realm') && args[0].includes(outsider.work)) {
+        throw new Error('Unranked Review target is unavailable');
+      }
+      return query(...args);
+    };
+    await f.stack.accessPool.query('SELECT access.append_reader_review_rank_change($1,clock_timestamp(),1)', [outsider.work]);
+    await f.projection.tick();
+    const reviews = route.replace('metric=reads','metric=reviews');
+    const page = await afterCapture(f.projection, async () => {
+      await f.stack.accessPool.query('SELECT access.append_reader_review_rank_change($1,clock_timestamp(),-1)', [outsider.work]);
+      await f.projection.tick();
+    }, () => f.request(reviews));
+    expect(page.status).toBe(200);
+    expect(page.body.items.every(item => item.id !== outsider.work)).toBe(true);
+    expect((await f.stack.accessPool.query(`SELECT position FROM access.read_ranking_pending
+      WHERE generation=$1 AND source='review' AND target=$2`, [f.checkpoint.generation,outsider.work])).rows).toHaveLength(2);
+    expect((await f.request(reviews)).status).toBe(200);
+  } finally { f.stack.env.fuseki.query = query; await f.close(); }
+}, 180_000);
+
 test('a review removal replayed completely after capture still withholds the earlier score', async () => {
   const f = await fixture();
   try {

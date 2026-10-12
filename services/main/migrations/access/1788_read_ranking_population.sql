@@ -17,12 +17,25 @@ INSERT INTO access.read_ranking_publication
 CREATE FUNCTION access.publish_read_ranking_population() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   IF TG_OP <> 'INSERT' THEN
+    IF OLD.metric='reviews' THEN
+      UPDATE access.read_ranking_removal SET generation=NULL
+        WHERE generation=OLD.generation AND context=OLD.context AND interval=OLD.interval
+          AND bucket=OLD.bucket AND work=OLD.work AND NOT EXISTS (
+            SELECT 1 FROM access.read_ranking_admitted a WHERE a.generation=OLD.generation
+              AND a.context=OLD.context AND a.metric='reviews' AND a.interval=OLD.interval
+              AND a.bucket=OLD.bucket AND a.work=OLD.work);
+    END IF;
     INSERT INTO access.read_ranking_publication(generation,context,metric,interval,bucket,revision) VALUES
       (OLD.generation,OLD.context,OLD.metric,OLD.interval,OLD.bucket,nextval('access.read_ranking_publication_revision'))
     ON CONFLICT(generation,context,metric,interval,bucket)
       DO UPDATE SET revision=EXCLUDED.revision;
   END IF;
   IF TG_OP <> 'DELETE' THEN
+    IF NEW.metric='reviews' THEN
+      UPDATE access.read_ranking_removal SET generation=NEW.generation
+        WHERE context=NEW.context AND interval=NEW.interval AND bucket=NEW.bucket
+          AND work=NEW.work AND generation IS DISTINCT FROM NEW.generation;
+    END IF;
     INSERT INTO access.read_ranking_publication(generation,context,metric,interval,bucket,revision) VALUES
       (NEW.generation,NEW.context,NEW.metric,NEW.interval,NEW.bucket,nextval('access.read_ranking_publication_revision'))
     ON CONFLICT(generation,context,metric,interval,bucket)
@@ -62,24 +75,33 @@ END $$;
 CREATE TABLE access.read_ranking_removal (
   event_id bigint NOT NULL REFERENCES access.reader_review_rank_change(id),
   work text NOT NULL, context text NOT NULL, interval text NOT NULL, bucket date NOT NULL,
+  generation uuid,
   PRIMARY KEY(context,interval,bucket,event_id)
 );
 CREATE INDEX read_ranking_removal_work ON access.read_ranking_removal(work,context);
+CREATE INDEX read_ranking_removal_population ON access.read_ranking_removal
+  (generation,context,interval,bucket,event_id) WHERE generation IS NOT NULL;
 CREATE FUNCTION access.publish_read_ranking_removal() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-  INSERT INTO access.read_ranking_publication(generation,context,metric,interval,bucket,revision,removal_revision)
-    SELECT generation,NEW.context,'reviews',NEW.interval,NEW.bucket,0,
-      nextval('access.read_ranking_publication_revision') FROM access.read_ranking_checkpoint WHERE singleton
-  ON CONFLICT(generation,context,metric,interval,bucket)
-    DO UPDATE SET removal_revision=EXCLUDED.removal_revision;
+  IF NEW.generation IS NOT NULL AND (TG_OP='INSERT' OR NEW.generation IS DISTINCT FROM OLD.generation) THEN
+    INSERT INTO access.read_ranking_publication(generation,context,metric,interval,bucket,revision,removal_revision)
+      VALUES (NEW.generation,NEW.context,'reviews',NEW.interval,NEW.bucket,0,
+        nextval('access.read_ranking_publication_revision'))
+    ON CONFLICT(generation,context,metric,interval,bucket)
+      DO UPDATE SET removal_revision=EXCLUDED.removal_revision;
+  END IF;
   RETURN NULL;
 END $$;
-CREATE TRIGGER publish_read_ranking_removal AFTER INSERT ON access.read_ranking_removal
+CREATE TRIGGER publish_read_ranking_removal AFTER INSERT OR UPDATE OF generation ON access.read_ranking_removal
   FOR EACH ROW EXECUTE FUNCTION access.publish_read_ranking_removal();
 CREATE FUNCTION access.register_read_ranking_removal(_id bigint,_work text,_at timestamptz)
 RETURNS void LANGUAGE sql AS $$
   INSERT INTO access.read_ranking_removal
-    SELECT _id,_work,contexts.context,periods.interval,buckets.bucket
+    SELECT _id,_work,contexts.context,periods.interval,buckets.bucket,
+      CASE WHEN EXISTS (SELECT 1 FROM access.read_ranking_admitted a
+        WHERE a.generation=c.generation AND a.context=contexts.context AND a.metric='reviews'
+          AND a.interval=periods.interval AND a.bucket=buckets.bucket AND a.work=_work)
+        THEN c.generation ELSE NULL END
     FROM (SELECT 'urn:rezics:context:global' AS context UNION
       SELECT context FROM access.read_ranking_admission WHERE work=_work) contexts
     CROSS JOIN (VALUES ('day'),('week'),('month')) periods(interval)
@@ -87,6 +109,7 @@ RETURNS void LANGUAGE sql AS $$
       UNION SELECT (date_trunc(periods.interval,_at AT TIME ZONE 'UTC') +
         CASE periods.interval WHEN 'day' THEN INTERVAL '1 day' WHEN 'week' THEN INTERVAL '1 week'
           ELSE INTERVAL '1 month' END)::date) buckets
+    LEFT JOIN access.read_ranking_checkpoint c ON c.singleton
     ON CONFLICT DO NOTHING;
 $$;
 CREATE FUNCTION access.read_ranking_source_removal() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -100,7 +123,7 @@ CREATE TRIGGER read_ranking_source_removal AFTER INSERT ON access.reader_review_
   FOR EACH ROW EXECUTE FUNCTION access.read_ranking_source_removal();
 CREATE FUNCTION access.read_ranking_removal_context() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-  INSERT INTO access.read_ranking_removal
+  INSERT INTO access.read_ranking_removal(event_id,work,context,interval,bucket)
     SELECT event_id,work,NEW.context,interval,bucket FROM access.read_ranking_removal
       WHERE work=NEW.work AND context='urn:rezics:context:global'
     ON CONFLICT DO NOTHING;

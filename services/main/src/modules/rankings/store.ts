@@ -41,7 +41,7 @@ const checkpointFields = `c.generation,c.content_epoch,c.content_sequence::text,
     WHERE generation=c.generation AND source='review'),c.review_scan_position) AS coverage_intact`;
 const pendingRemoval = `($1='reviews' AND (c.review_scan_position<c.review_rebuild_position
   OR EXISTS (SELECT 1 FROM access.read_ranking_removal
-    WHERE context=$4 AND interval=$2 AND bucket=$3::date))) AS removal_pending`;
+    WHERE generation=c.generation AND context=$4 AND interval=$2 AND bucket=$3::date))) AS removal_pending`;
 
 /** Revision and bounded candidate rows share one PostgreSQL statement snapshot. */
 export async function captureRankingPopulation(access: Pool, population: RankingPopulation,
