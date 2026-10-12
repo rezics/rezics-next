@@ -122,7 +122,7 @@ async function removeController(owner: Principal, subject: string) {
 }
 
 // Fault injection observes the production transaction and statement boundary.
-function measuredPool(observer: (sql: string, result: { rowCount: number | null; rows: Record<string, unknown>[] }) => void,
+function measuredPool(observer: (sql: string) => void,
   before?: (sql: string) => void) {
   if (!cluster) throw new Error('Postgres fixture unavailable');
   const measured = new Pool({ ...cluster.connection, max: 1 });
@@ -135,8 +135,8 @@ function measuredPool(observer: (sql: string, result: { rowCount: number | null;
       if (sql.includes("SET LOCAL statement_timeout = '5s'")) timeoutArmed = true;
       if (sql.includes('account_deletion_classification_step')) expect(timeoutArmed).toBe(true);
       before?.(sql);
-      return Reflect.apply(query, client, args).then((result: { rowCount: number | null; rows: Record<string, unknown>[] }) => {
-        observer(sql, result);
+      return Reflect.apply(query, client, args).then((result: unknown) => {
+        observer(sql);
         return result;
       });
     }) as typeof client.query;
@@ -183,9 +183,10 @@ test('unaffected co-controlled Person chains have identical deletion work at 8, 
       principalId: survivor.id, representative: rootPerson, represented: persons[1]!,
     });
     await addFixtureController(owner, rootPerson);
-    const cost = { statements: 0, rows: 0 };
+    const cost = { statements: 0, plans: 0, rows: 0 };
     const measured = planPool([], (_sql, plans) => {
       cost.statements++;
+      cost.plans += plans.length;
       cost.rows += plans.reduce((sum, plan) => sum + planRows(plan.Plan), 0);
     });
     try {
@@ -337,10 +338,10 @@ function planRows(plan: ReadPlan): number {
 }
 
 function planBuffers(plan: ReadPlan): number {
-  const own = plan['Relation Name'] && plan['Node Type'].endsWith('Scan')
-    ? (plan['Shared Hit Blocks'] ?? 0) + (plan['Shared Read Blocks'] ?? 0)
-      + (plan['Local Hit Blocks'] ?? 0) + (plan['Local Read Blocks'] ?? 0) : 0;
-  return own + (plan.Plans ?? []).reduce((sum, child) => sum + planBuffers(child), 0);
+  // The root includes index-maintenance and FK work as well as scan buffers.
+  // Nested function roots are also counted, conservatively including overlap.
+  return (plan['Shared Hit Blocks'] ?? 0) + (plan['Shared Read Blocks'] ?? 0)
+    + (plan['Local Hit Blocks'] ?? 0) + (plan['Local Read Blocks'] ?? 0);
 }
 
 /** auto_explain logs the executed production statement and every nested SQL
@@ -506,8 +507,11 @@ test('sole-controlled chains at 8, 64 and 512 levels read a fixed budget per per
   const builder = await principal();
   const corpus: string[] = [];
   for (let index = 0; index < 584; index++) corpus.push(await provision(builder, 'person'));
-  const links = [...Array.from({ length: 583 }, (_, index) => index + 1)
-    .filter(index => index % 256 !== 0), 256, 512];
+  // Each isolated chain is admitted by joining halves no larger than 256;
+  // recovery independence checks both ancestors and descendants at admission.
+  const links = [...Array.from({ length: 7 }, (_, index) => index + 1),
+    ...Array.from({ length: 63 }, (_, index) => index + 9),
+    ...Array.from({ length: 511 }, (_, index) => index + 73).filter(index => index !== 328), 328];
   for (const index of links) await grantFixtureControllerEdge(pool, {
     principalId: builder.id, representative: corpus[index - 1]!, represented: corpus[index]!,
   });
@@ -532,7 +536,7 @@ test('sole-controlled chains at 8, 64 and 512 levels read a fixed budget per per
       expect(await new AccessAdmissionRegistry(measured).strongDeactivateAccountSubject(
         owner.verified.issuer, owner.verified.subject)).toMatchObject({ enforcementEpoch: '1' });
     } finally { await measured.end(); }
-    expect(reads.length).toBe(size + (offset + size < corpus.length ? 1 : 0));
+    expect(reads.length).toBe(size);
     expect(Math.max(...reads)).toBeLessThanOrEqual(1024);
     expect(Math.max(...buffers)).toBeLessThanOrEqual(2048);
     expect(reads.reduce((sum, count) => sum + count, 0)).toBeLessThanOrEqual((size + 1) * 1024);

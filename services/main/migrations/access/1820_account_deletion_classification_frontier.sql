@@ -2,6 +2,7 @@
 -- Root mandates and pending Person expansions each have an indexed frontier.
 ALTER TABLE access.account_deletion_progress
     ADD COLUMN root_cursor uuid,
+    ADD COLUMN open_principal_id uuid GENERATED ALWAYS AS (CASE WHEN NOT completed THEN principal_id END) STORED,
     ADD COLUMN expansion_cursor bigint NOT NULL DEFAULT 0,
     ADD COLUMN wake_cursor bigint NOT NULL DEFAULT 0,
     ADD COLUMN orphan_cursor text,
@@ -11,8 +12,8 @@ ALTER TABLE access.account_deletion_progress
     ADD COLUMN orphan_count integer NOT NULL DEFAULT 0,
     ADD COLUMN steps integer NOT NULL DEFAULT 0,
     ADD COLUMN needs_boundary_check boolean NOT NULL DEFAULT false;
-CREATE INDEX account_deletion_progress_open ON access.account_deletion_progress (principal_id, operation_id)
-    WHERE NOT completed;
+CREATE UNIQUE INDEX account_deletion_progress_open ON access.account_deletion_progress (open_principal_id)
+    WHERE open_principal_id IS NOT NULL;
 ALTER TABLE access.account_deletion_progress_agent
     ADD COLUMN expanded boolean NOT NULL DEFAULT false,
     ADD COLUMN expansion_rank bigint GENERATED ALWAYS AS IDENTITY,
@@ -28,10 +29,12 @@ CREATE INDEX account_deletion_foreign_controllers ON access.representation (subj
 CREATE INDEX account_deletion_person_frontier
     ON access.account_deletion_progress_agent (operation_id, expansion_rank)
     WHERE effect = 'end' AND NOT expanded;
+CREATE INDEX account_deletion_ending_inventory
+    ON access.account_deletion_progress_agent (operation_id, effect, agent_id);
 CREATE INDEX account_deletion_effect_pending
     ON access.account_deletion_progress_agent (operation_id, effect, agent_id) WHERE NOT completed;
 CREATE INDEX account_deletion_orphan_preview
-    ON access.account_deletion_progress_agent (operation_id, agent_id) WHERE effect = 'orphan';
+    ON access.account_deletion_progress_agent (operation_id, agent_id) WHERE effect >= 'orphan' AND effect <= 'orphan';
 CREATE TABLE access.account_deletion_classification_frontier (
     wake_rank bigint GENERATED ALWAYS AS IDENTITY,
     operation_id text NOT NULL REFERENCES access.account_deletion_progress(operation_id),
@@ -46,6 +49,8 @@ CREATE INDEX account_deletion_classification_frontier_subject
 -- Index planning is part of the read budget, including when a small relation
 -- would otherwise get a cached sequential scan. Function settings are scoped
 -- to these owner operations and restore the caller's planner settings.
+-- Preserve the leading range key in ORDER BY. Equality would let the planner
+-- drop that key and scan the competing principal/subject index before filtering.
 -- Seek only live mandates, never retained controller history. The owner drains
 -- this index in bounded pages in the same transaction as principal deactivation.
 -- Authority proofs continue to retain the original representation rows.
@@ -86,20 +91,20 @@ RETURNS TABLE (remaining integer)
 LANGUAGE sql STABLE SET enable_seqscan = off AS $$
     WITH below AS MATERIALIZED (
         SELECT principal_id FROM access.live_principal_controller
-        WHERE subject_id = controlled AND principal_id < deleting
-        ORDER BY principal_id, representation_id LIMIT 17
+        WHERE subject_id >= controlled AND (subject_id, principal_id) < (controlled, deleting)
+        ORDER BY subject_id DESC, principal_id DESC, representation_id DESC LIMIT 17
     ), above AS MATERIALIZED (
         SELECT principal_id FROM access.live_principal_controller
-        WHERE subject_id = controlled AND principal_id > deleting
-        ORDER BY principal_id, representation_id LIMIT 17
+        WHERE subject_id <= controlled AND (subject_id, principal_id) > (controlled, deleting)
+        ORDER BY subject_id, principal_id, representation_id LIMIT 17
     ), principals AS MATERIALIZED (
         SELECT principal_id FROM below UNION ALL SELECT principal_id FROM above
     ), edge_page AS MATERIALIZED (
         -- Admission bounds ACTIVE incoming edges to 16, including edges whose
         -- representative has ended. Page before testing representative liveness.
         SELECT representative_subject FROM access.representation_edge
-        WHERE represented_subject = controlled AND action = 'agent.control' AND active
-        ORDER BY id LIMIT 17
+        WHERE represented_subject >= controlled AND represented_subject <= controlled AND action = 'agent.control' AND active
+        ORDER BY represented_subject, id LIMIT 17
     ), agents AS MATERIALIZED (
         SELECT e.representative_subject FROM edge_page e WHERE EXISTS (SELECT 1 FROM access.authority_subject s
             WHERE s.id = e.representative_subject AND s.active LIMIT 1 OFFSET 0)
@@ -114,11 +119,12 @@ CREATE OR REPLACE FUNCTION access.agent_controller_count(controlled text) RETURN
 LANGUAGE sql STABLE SET enable_seqscan = off AS $$
     WITH principals AS MATERIALIZED (
         SELECT representation_id FROM access.live_principal_controller
-        WHERE subject_id = controlled ORDER BY principal_id, representation_id LIMIT 17
+        WHERE subject_id >= controlled AND subject_id <= controlled
+            ORDER BY subject_id, principal_id, representation_id LIMIT 17
     ), edges AS MATERIALIZED (
         SELECT representative_subject FROM access.representation_edge
-        WHERE represented_subject = controlled AND action = 'agent.control' AND active
-        ORDER BY id LIMIT 17
+        WHERE represented_subject >= controlled AND represented_subject <= controlled AND action = 'agent.control' AND active
+        ORDER BY represented_subject, id LIMIT 17
     ) SELECT (SELECT count(*) FROM principals)::integer + (SELECT count(*) FROM edges e WHERE EXISTS (SELECT 1 FROM access.authority_subject s
             WHERE s.id = e.representative_subject AND s.active LIMIT 1 OFFSET 0))::integer
 $$;
@@ -128,17 +134,17 @@ $$;
 CREATE FUNCTION access.queue_account_deletion_candidate(controlled text) RETURNS void
 LANGUAGE sql SET enable_seqscan = off AS $$
     WITH principals AS MATERIALIZED (
-        SELECT principal_id FROM access.live_principal_controller WHERE subject_id = controlled
-            ORDER BY principal_id, representation_id LIMIT 17
+        SELECT principal_id FROM access.live_principal_controller WHERE subject_id >= controlled AND subject_id <= controlled
+            ORDER BY subject_id, principal_id, representation_id LIMIT 17
     ), edges AS MATERIALIZED (
         SELECT representative_subject FROM access.representation_edge
-        WHERE represented_subject = controlled AND action = 'agent.control' AND active
-        ORDER BY id LIMIT 17
+        WHERE represented_subject >= controlled AND represented_subject <= controlled AND action = 'agent.control' AND active
+        ORDER BY represented_subject, id LIMIT 17
     ), relevant AS MATERIALIZED (
         SELECT DISTINCT p.operation_id, p.principal_id FROM (
             SELECT p.operation_id FROM principals r
             CROSS JOIN LATERAL (SELECT operation_id FROM access.account_deletion_progress
-                WHERE principal_id = r.principal_id AND NOT completed LIMIT 1 OFFSET 0) p
+                WHERE open_principal_id = r.principal_id LIMIT 1 OFFSET 0) p
             UNION
             SELECT a.operation_id FROM edges e
             CROSS JOIN LATERAL (SELECT operation_id FROM access.account_deletion_progress_agent
@@ -156,7 +162,9 @@ LANGUAGE sql SET enable_seqscan = off AS $$
         WHERE c.remaining = 0
         ON CONFLICT DO NOTHING RETURNING operation_id
     ) UPDATE access.account_deletion_progress p SET classification_done = false
-        WHERE p.operation_id IN (SELECT operation_id FROM queued)
+        WHERE p.ctid = ANY(ARRAY(SELECT p.ctid FROM queued q
+          CROSS JOIN LATERAL (SELECT ctid FROM access.account_deletion_progress
+            WHERE operation_id = q.operation_id LIMIT 1 OFFSET 0) p))
 $$;
 
 CREATE FUNCTION access.wake_account_deletion_frontier() RETURNS trigger
@@ -166,8 +174,8 @@ BEGIN
     IF TG_TABLE_NAME = 'authority_subject' THEN
         IF NEW.active OR NOT OLD.active THEN RETURN NEW; END IF;
         FOR controlled IN SELECT represented_subject FROM access.representation_edge
-            WHERE representative_subject = NEW.id AND active AND action = 'agent.control'
-                AND valid_until > clock_timestamp() ORDER BY id LIMIT 16
+            WHERE representative_subject >= NEW.id AND representative_subject <= NEW.id AND active AND action = 'agent.control'
+                AND valid_until > clock_timestamp() ORDER BY representative_subject, action, id LIMIT 16
         LOOP PERFORM access.queue_account_deletion_candidate(controlled); END LOOP;
     ELSIF TG_TABLE_NAME = 'representation' THEN
         IF NEW.action = 'agent.control' THEN
@@ -211,9 +219,10 @@ CREATE TRIGGER live_principal_controller_removed AFTER DELETE ON access.live_pri
 CREATE FUNCTION access.retire_principal_controller_page(deleting uuid, budget integer, after_id uuid DEFAULT NULL)
 RETURNS TABLE (removals integer, cursor uuid) LANGUAGE sql SET enable_seqscan = off AS $$
     WITH page AS MATERIALIZED (
-        SELECT representation_id, ctid FROM access.live_principal_controller WHERE principal_id = deleting
-            AND representation_id > coalesce(after_id, '00000000-0000-0000-0000-000000000000'::uuid)
-        ORDER BY representation_id LIMIT least(budget, 256)
+        SELECT representation_id, ctid FROM access.live_principal_controller WHERE principal_id >= deleting AND principal_id <= deleting
+            AND representation_id >= coalesce(after_id, '00000000-0000-0000-0000-000000000000'::uuid)
+            AND (after_id IS NULL OR representation_id > after_id)
+        ORDER BY principal_id, representation_id LIMIT least(budget, 256)
     ), removed AS (
         DELETE FROM access.live_principal_controller
         WHERE ctid = ANY(ARRAY(SELECT ctid FROM page)) RETURNING representation_id
@@ -230,7 +239,8 @@ BEGIN
     IF NEW.active = OLD.active THEN RETURN NEW; END IF;
     IF NOT NEW.active THEN
         SELECT count(*) INTO inventory FROM (SELECT 1 FROM access.live_principal_controller
-            WHERE principal_id = NEW.id ORDER BY representation_id LIMIT 257) bounded;
+            WHERE principal_id >= NEW.id AND principal_id <= NEW.id
+            ORDER BY principal_id, representation_id LIMIT 257) bounded;
         IF inventory > 256 THEN
             RAISE EXCEPTION 'principal controller change requires paged retirement' USING ERRCODE = '54000';
         END IF;
@@ -258,7 +268,7 @@ BEGIN
         -- The owner checks each retiring mandate in its paged retirement. The
         -- final UPDATE reads only this principal's open operation, never others.
         IF NEW.active OR NOT OLD.active THEN RETURN NEW; END IF;
-        IF EXISTS (SELECT 1 FROM access.account_deletion_progress WHERE principal_id = NEW.id AND NOT completed) THEN
+        IF EXISTS (SELECT 1 FROM access.account_deletion_progress WHERE open_principal_id = NEW.id) THEN
             RAISE EXCEPTION 'Account deletion control inventory is fenced' USING ERRCODE = '54000';
         END IF;
         RETURN NEW;
