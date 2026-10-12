@@ -192,13 +192,20 @@ const notModified = (header: string | null, etag: string) => !!header && (header
  * matching validator answers 304 without reading the object. Public targets share the same bytes
  * across readers, including signed-in readers; restricted targets stay in the reader's own cache. */
 async function deliver(request: Request, media: MediaDependencies, basis: { objectNamespace: string; sha256: string;
-  mediaType: string }, publicTarget: boolean): Promise<Response> {
+  mediaType: string }, publicTarget: boolean, finalDisclosure?: () => Promise<boolean | null>): Promise<Response> {
+  const etag = `"${basis.sha256}"`;
+  const unchanged = notModified(request.headers.get('if-none-match'), etag);
+  const bytes = unchanged ? undefined : await media.objects(basis.objectNamespace).get(basis.sha256);
+  if (finalDisclosure) {
+    const current = await finalDisclosure();
+    if (current === null) return unavailable();
+    publicTarget = current;
+  }
   const headers = { etag: `"${basis.sha256}"`, 'x-content-type-options': 'nosniff',
     // Revalidation keeps shared caches from outliving a revoked selection or disclosure.
     'cache-control': publicTarget ? 'public, no-cache' : 'private, no-store' };
-  if (notModified(request.headers.get('if-none-match'), headers.etag)) return new Response(null, { status: 304, headers });
-  const bytes = await media.objects(basis.objectNamespace).get(basis.sha256);
-  return new Response(new Uint8Array(bytes), { headers: { 'content-type': basis.mediaType, ...headers } });
+  if (unchanged) return new Response(null, { status: 304, headers });
+  return new Response(new Uint8Array(bytes!), { headers: { 'content-type': basis.mediaType, ...headers } });
 }
 
 /**
@@ -562,11 +569,14 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           // cannot regain delivery through the generic resource-summary path.
           if (basis.context !== DEFAULT_MEDIA_CONTEXT || agents.length !== 1
             || agents[0]?.avatar?.value !== params.selection) return unavailable();
-          const nameDisclosure = await discloseName();
-          if (nameDisclosure.decisions[0] !== 'visible') return unavailable();
           return await deliver(request, work.media, { objectNamespace: basis.objectNamespace,
-            sha256: basis.sha256!, mediaType: basis.mediaType! }, !reader.viewer?.signedIn
-              || nameDisclosure.anonymousNames[0] === 'visible');
+            sha256: basis.sha256!, mediaType: basis.mediaType! }, false, async () => {
+            // Graph hydration and object retrieval may outlive the opening
+            // name decision. Settle both visibility and cache scope at delivery.
+            const current = await discloseName();
+            if (current.decisions[0] !== 'visible') return null;
+            return !reader.viewer?.signedIn || current.anonymousNames[0] === 'visible';
+          });
         }
         const target = (await readResourceSummaries(work.environment, undefined,
           reader, { resources: [basis.target], context: basis.context!, language: null, channel: 'media' })).summaries[0]!;

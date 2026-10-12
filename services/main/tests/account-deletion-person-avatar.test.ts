@@ -134,27 +134,45 @@ test('controller receives a retained public-graph avatar with private name prefe
   expect(response.status, await response.clone().text()).toBe(200);
   expect(response.headers.get('cache-control')).toBe('private, no-store');
   expect(sha(new Uint8Array(await response.arrayBuffer()))).toBe(privatePerson.digest);
+  const conditional = await mediaStack().main.handle(new Request(`http://main.local${privatePerson.url}`, {
+    headers: { authorization: `Bearer ${privatePerson.member.token}`, 'if-none-match': `"${privatePerson.digest}"` },
+  }));
+  expect(conditional.status).toBe(304);
+  expect(conditional.headers.get('cache-control')).toBe('private, no-store');
 });
 
-for (const change of ['private-name', 'ended-authority'] as const) {
-  test(`avatar hydration rechecks ${change} before returning ${change === 'private-name' ? '304' : 'bytes'}`, async () => {
+for (const boundary of ['graph', 'object'] as const) for (const change of ['private-name', 'ended-authority'] as const) {
+  test(`avatar ${boundary} hydration rechecks ${change} before delivery`, async () => {
     const current = mediaStack(), person = await personAvatar(`Concurrent ${change}`);
     await available(person);
     const query = current.fuseki.query.bind(current.fuseki);
+    const objects = current.media.objects;
     let resume: () => void = () => {}, hydrated: () => void = () => {};
     const paused = new Promise<void>(resolve => { hydrated = resolve; });
     const released = new Promise<void>(resolve => { resume = resolve; });
     let intercepted = false;
     current.fuseki.query = async (...args) => {
-      if (!intercepted && args[0].includes('SELECT ?avatar WHERE') && args[0].includes(person.agent)) {
+      if (boundary === 'graph' && !intercepted && args[0].includes('SELECT ?avatar WHERE') && args[0].includes(person.agent)) {
         intercepted = true;
         hydrated();
         await released;
       }
       return query(...args);
     };
+    current.media.objects = namespace => {
+      const instance = objects(namespace), get = instance.get.bind(instance);
+      instance.get = async digest => {
+        if (boundary === 'object' && !intercepted && digest === person.digest) {
+          intercepted = true;
+          hydrated();
+          await released;
+        }
+        return get(digest);
+      };
+      return instance;
+    };
     const request = current.main.handle(new Request(`http://main.local${person.url}`, {
-      headers: change === 'private-name' ? { 'if-none-match': `"${person.digest}"` } : {},
+      headers: boundary === 'graph' && change === 'private-name' ? { 'if-none-match': `"${person.digest}"` } : {},
     }));
     try {
       await paused;
@@ -167,6 +185,7 @@ for (const change of ['private-name', 'ended-authority'] as const) {
     } finally {
       resume();
       current.fuseki.query = query;
+      current.media.objects = objects;
       await request;
     }
   }, 60_000);
