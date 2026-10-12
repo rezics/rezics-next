@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { startMediaStack, type MediaStack } from '../../../tests/qa/integration/media-support.ts';
 import { backfillCatalogueNames } from '../src/modules/search/names.ts';
 import { GRAPHS, iri, lit } from '../src/modules/work/activate.ts';
+import { prefixWalkRequest } from '../src/modules/search/prefix-walk.ts';
 
 type Member = Awaited<ReturnType<MediaStack['member']>>;
 type Item = { work: string; matchedText: string; authors: Array<{ agent: string; displayName: string }> };
@@ -95,15 +96,15 @@ test('Account deletion with consent ends the Person while its graph and native c
     .toEqual([{ active: false }]);
   expect((await stack.fuseki.query(`ASK { GRAPH ${iri(GRAPHS.current)} {
     ${iri(person)} <http://www.w3.org/2000/01/rdf-schema#label> ${lit(name)} } }`)).boolean).toBe(true);
-  const native = await stack.fuseki.prefixWalk({ prefix: name.toLowerCase(), language: null, pageSize: 10 });
+  const native = await stack.fuseki.prefixWalk(prefixWalkRequest({ prefix: name, language: null, pageSize: 10 }));
   expect(JSON.stringify(native)).toContain(mainVersion);
 }, 60_000);
 
 for (const phase of ['retained', 'refreshed'] as const) {
   test(`${phase} prefix index does not disclose an ended Person to anonymous or signed-in readers`, async () => {
     if (phase === 'refreshed') expect(await backfillCatalogueNames(stack.env)).toBeGreaterThan(0);
-    expect(JSON.stringify(await stack.fuseki.prefixWalk({ prefix: name.toLowerCase(),
-      language: null, pageSize: 10 }))).toContain(mainVersion);
+    expect(JSON.stringify(await stack.fuseki.prefixWalk(prefixWalkRequest({ prefix: name,
+      language: null, pageSize: 10 })))).toContain(mainVersion);
     for (const token of [undefined, reader.token]) {
       const never = await bytes(await suggest(absent, token));
       expect(never.status).toBe(200);
@@ -124,7 +125,8 @@ for (const phase of ['retained', 'refreshed'] as const) {
 test('a surviving Work keeps its live coauthor and supplies only neutral deleted attribution for the ended Person', async () => {
   for (const token of [undefined, reader.token]) {
     const credits = await json<{ items: Array<{ agent: string; identityStatus: string; displayName: string; handle: string | null }> }>(
-      await stack.call('GET', `/v1/works/${work.slice(-36)}/agent-credits`, { token }));
+      await stack.call('GET', `/v1/works/${work.slice(-36)}/agent-credits`
+        + (token ? `?actingSubject=${encodeURIComponent(coauthor)}` : ''), { token }));
     expect(credits.items).toContainEqual(expect.objectContaining({ agent: coauthor,
       identityStatus: 'active', displayName: liveName }));
     expect(credits.items).toContainEqual(expect.objectContaining({ agent: person,

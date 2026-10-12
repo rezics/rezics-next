@@ -44,6 +44,17 @@ function entities(q: string, token?: string) {
   } });
 }
 
+function handle(token?: string) {
+  return stack.call('GET', `/v1/handles/${alias}`
+    + (token ? `?actingSubject=${encodeURIComponent(similar)}` : ''), { token });
+}
+
+function address(token?: string) {
+  return stack.call('POST', '/v1/addresses/resolutions', { token, body: {
+    lookups: [{ scope: 'agent', key: alias }], ...(token ? { actingSubject: similar } : {}),
+  } });
+}
+
 function fields(phrase: string, token?: string, resource = person) {
   return stack.call('POST', '/v1/queries', { token, body: {
     profile: 'public-disclosed-fields-phrase-v1', phrase, resources: [resource],
@@ -100,10 +111,9 @@ test('name, alias, phrase and entity search find the live Person before Account 
   for (const token of [undefined, reader.token]) {
     const results = await json<EntityPage>(await entities(name, token));
     expect(results.result.items.map(item => item.id)).toContain(person);
-    expect(await json(await stack.call('GET', `/v1/handles/${alias}`, { token })))
-      .toMatchObject({ agent: person, displayName: name });
-    expect(await json(await stack.call('POST', '/v1/addresses/resolutions', { token,
-      body: { lookups: [{ scope: 'agent', key: alias }] } })))
+    expect(await json(await handle(token)))
+      .toMatchObject({ id: person, displayName: name });
+    expect(await json(await address(token)))
       .toMatchObject({ results: [{ status: 'resolved', holder: person }] });
     expect(await json(await fields(name, token))).toMatchObject({ total: 1, facets: { names: 1 } });
     expect(await json(await phraseSearch(name, token))).toMatchObject({ results: [expect.objectContaining({ work })] });
@@ -141,10 +151,9 @@ for (const phase of ['retained', 'refreshed'] as const) {
         expect(catalogue.results).toEqual([]);
         expect(catalogue.count.value).toBe(0);
       }
-      expect(await json(await stack.call('GET', `/v1/handles/${alias}`, { token }), 404))
+      expect(await json(await handle(token), 404))
         .toMatchObject({ status: 404 });
-      expect(await json(await stack.call('POST', '/v1/addresses/resolutions', { token,
-        body: { lookups: [{ scope: 'agent', key: alias }] } })))
+      expect(await json(await address(token)))
         .toEqual({ results: [{ scope: 'agent', key: alias, status: 'unavailable' }] });
       const live = await json<EntityPage>(await entities(`Ended${marker}`, token));
       expect(live.result.items.map(item => item.id)).toEqual([similar]);
