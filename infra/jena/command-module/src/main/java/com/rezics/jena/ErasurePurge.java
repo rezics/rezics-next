@@ -212,13 +212,6 @@ public final class ErasurePurge {
         return new PersonAuthorFootprint(entries, units, works);
     }
 
-    private static boolean retainedPrefixAuthor(DatasetGraph input, IndexUnit entry, Set<Node> persons) {
-        var authors = input.find(entry.graph(), entry.subject(), rv("prefixAuthor"), Node.ANY);
-        try { while (authors.hasNext()) if (!persons.contains(authors.next().getObject())) return true; }
-        finally { org.apache.jena.atlas.iterator.Iter.close(authors); }
-        return false;
-    }
-
     private static byte[] readCampaign(Path path) throws Exception {
         try (var input = Files.newInputStream(path)) { return input.readNBytes(8193); }
     }
@@ -326,9 +319,6 @@ public final class ErasurePurge {
                         Set<IndexUnit> textDocuments = textIndexDocuments(input, genericRevisions);
                         Set<IndexUnit> personDocuments = personIndexDocuments(input, personTargets);
                         PersonAuthorFootprint authors = personAuthorFootprint(input, personHeads);
-                        Set<IndexUnit> exclusivePrefixes = new HashSet<>();
-                        for (IndexUnit entry : authors.entries())
-                            if (!retainedPrefixAuthor(input, entry, personHeads)) exclusivePrefixes.add(entry);
                         long retained = 0;
                         long excluded = 0;
                         var quads = input.find();
@@ -343,9 +333,10 @@ public final class ErasurePurge {
                                 && ErasurePolicy.PROFILE_PREDICATES.contains(quad.getPredicate());
                             boolean dropText = textDocuments.contains(new IndexUnit(quad.getGraph(), quad.getSubject()))
                                 || personDocuments.contains(new IndexUnit(quad.getGraph(), quad.getSubject()));
-                            boolean dropPrefix = exclusivePrefixes.contains(new IndexUnit(quad.getGraph(), quad.getSubject()))
-                                || authors.entries().contains(new IndexUnit(quad.getGraph(), quad.getSubject()))
-                                    && quad.getPredicate().equals(rv("prefixAuthor")) && personHeads.contains(quad.getObject());
+                            // Shared valid entries are recreated from surviving
+                            // authors below; malformed detached copies cannot
+                            // retain a name literal or an identifying directory IRI.
+                            boolean dropPrefix = authors.entries().contains(new IndexUnit(quad.getGraph(), quad.getSubject()));
                             if (dropContent || dropRevision || dropPerson || dropText || dropPrefix) excluded++;
                             else { output.add(quad); retained++; }
                         }

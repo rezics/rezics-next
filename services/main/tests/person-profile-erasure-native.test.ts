@@ -130,8 +130,10 @@ async function productionProfileCommands(objectDirectory: string) {
     const operation = /rv:operation <(urn:rezics:operation:agent-profile:[^>]+)>/.exec(commands[1]!.update)![1]!;
     expect(operation).toMatch(/^urn:rezics:operation:agent-profile:[0-9a-f]{64}$/);
     const closure: PersonProfileGraphInventory = { ...inventory, head: provision, profileHead: edited.revision,
-      revisions: [{ revision: provision, manifest: null }, { revision: edited.revision, manifest: null }],
-      units: [], creditedWorks: [], authorUnits: [], objects: [] };
+      revisions: [{ revision: provision, manifest: /rv:manifest <([^>]+)>/.exec(commands[0]!.update)![1]! },
+        { revision: edited.revision, manifest: null }],
+      units: [], creditedWorks: [], authorUnits: [],
+      objects: [/rv:manifest <urn:rezics:([^>]+)>/.exec(commands[0]!.update)![1]!] };
     let completion = '';
     await personProfileGraphErased({ query: async query => { completion = query; return { boolean: false }; } }, proof, closure);
     return { commands, revision: edited.revision, operation,
@@ -163,6 +165,7 @@ test('Person command and completion query execute against retained TDB2 data', a
   cpSync(join(module, 'src/test/resources'), join(build, 'src/test/resources'), { recursive: true });
   cpSync(join(root, 'generated/model'), join(build, 'profiles'), { recursive: true });
   cpSync(join(root, 'infra/jena/fuseki-text.ttl'), join(build, 'text-assembler.ttl'));
+  cpSync(join(root, 'infra/jena/fuseki-text.ttl'), join(build, 'fuseki-text.ttl'));
   mkdirSync(join(build, 'tmp'));
   const objectDirectory = join(build, 'objects');
   writeFileSync(join(build, 'production-profile.json'), JSON.stringify(await productionProfileCommands(objectDirectory)));
@@ -466,6 +469,10 @@ public class PersonProfileCallerContractTest {
     try {indexed.begin(ReadWrite.WRITE);quads.forEach(indexed::add);indexed.commit();indexed.end();
       assertTrue("purged native text index still matches the Person's name",filtered.query(rv("publicTitle"),"ExactIdentifying","${publicGraph}",null,100).isEmpty());
       assertFalse("the surviving Work and coauthor prefix documents remain searchable",filtered.query(rv("publicTitle"),"rezicsprefixdirectory","${publicGraph}",null,100).isEmpty());
+      indexed.begin(ReadWrite.READ);try {
+        assertEquals(0,filtered.prefixWalk("ExactIdentifying",null,10,null,indexed).get("entries").getAsArray().size());
+        assertTrue(filtered.prefixWalk("Exact surviving coauthor",null,10,null,indexed).get("entries").getAsArray().size()>0);
+      }finally{indexed.end();}
     }finally{indexed.close();index.close();}
   }
   @Test public void offlinePersonPurgeRefreshesAuthorPrefixesAndRebuildCannotRestoreTheName() throws Exception {
@@ -482,7 +489,10 @@ public class PersonProfileCallerContractTest {
         graph.add(pub,iri("${prefixEntry}"),rv("prefixAuthor"),a);graph.add(pub,iri("${prefixEntry}"),rv("prefixUnit"),iri("${authorUnit}"));
         graph.add(pub,iri("${prefixEntry}"),rv("publicTitle"),text("ExactIdentifying"));
         graph.add(pub,iri("urn:rezics:search:directory:prefix:detached"),rv("prefixAuthor"),a);
-        graph.add(pub,iri("urn:rezics:search:directory:prefix:detached"),rv("publicTitle"),text("ExactIdentifying"));data.commit();
+        graph.add(pub,iri("urn:rezics:search:directory:prefix:detached"),rv("publicTitle"),text("ExactIdentifying"));
+        Node sharedDetached=iri("urn:rezics:search:directory:prefix:shared-detached");
+        graph.add(pub,sharedDetached,rv("prefixAuthor"),a);graph.add(pub,sharedDetached,rv("prefixAuthor"),b);
+        graph.add(pub,sharedDetached,rv("publicTitle"),text("ExactIdentifying"));data.commit();
       }finally{data.end();}
       var source=TDB2Factory.connectDataset(base.resolve("source").toString());
       try {source.begin(ReadWrite.WRITE);snapshot(data).forEach(source.asDatasetGraph()::add);source.commit();source.end();}finally{source.close();}
@@ -499,6 +509,10 @@ public class PersonProfileCallerContractTest {
       ErasureTextIndexer.main(new String[]{"--desc="+assembler.toAbsolutePath()});
       var rebuilt=DatasetFactory.assemble(assembler.toString());
       try {rebuilt.begin(ReadWrite.READ);
+        DatasetGraph indexed=rebuilt.asDatasetGraph();while(indexed instanceof DatasetGraphWrapper wrapper&&!(indexed instanceof DatasetGraphText))indexed=wrapper.getWrapped();
+        var filtered=(FilteredGraphTextIndex)((DatasetGraphText)indexed).getTextIndex();
+        assertEquals(0,filtered.prefixWalk("ExactIdentifying",null,10,null,indexed).get("entries").getAsArray().size());
+        assertTrue(filtered.prefixWalk("Exact surviving coauthor",null,10,null,indexed).get("entries").getAsArray().size()>0);
         try(var query=QueryExecutionFactory.create("PREFIX text: <http://jena.apache.org/text#> PREFIX rv: <${RV}> SELECT ?s WHERE { (?s ?score ?literal ?g) text:query (rv:publicTitle \\\"ExactIdentifying\\\" 100) FILTER(?g = <${publicGraph}>) }",rebuilt)){
           assertFalse("offline native index rebuild restored the Person name",query.execSelect().hasNext());}
         try(var query=QueryExecutionFactory.create("PREFIX text: <http://jena.apache.org/text#> PREFIX rv: <${RV}> SELECT ?s WHERE { (?s ?score ?literal ?g) text:query (rv:publicTitle \\\"rezicsprefixdirectory\\\" 100) FILTER(?g = <${publicGraph}>) }",rebuilt)){
@@ -571,13 +585,19 @@ public class PersonProfileCallerContractTest {
 }
 `);
   const name = `rezics-person-profile-native-${Date.now()}`;
+  const containerModule = '/build/infra/jena/command-module';
   try {
     const result = spawnSync('docker', ['run', '--rm', '--name', name,
-      '--user', `${process.getuid!()}:${process.getgid!()}`, '--memory', '1g', '--cpus', '2',
-      '--volume', `${build}:/build`, '--volume', `${cache}:/maven-cache`,
+      '--user', `${process.getuid!()}:${process.getgid!()}`, '--memory', fullNativeSuite ? '2g' : '1g', '--cpus', '2',
+      '--volume', `${build}:${containerModule}`, '--volume', `${cache}:/maven-cache`,
+      // Disposable TDB fixtures remain within the builder. Tmpfs avoids the
+      // host bind mount's fsync latency; JVM crash/reopen tests still run.
+      '--tmpfs', `${containerModule}/tmp:rw,size=512m,uid=${process.getuid!()},gid=${process.getgid!()}`,
+      '--tmpfs', `${containerModule}/.temp:rw,size=256m,uid=${process.getuid!()},gid=${process.getgid!()}`,
+      '--tmpfs', `/build/.temp:rw,size=256m,uid=${process.getuid!()},gid=${process.getgid!()}`,
       '--env', 'MAVEN_CONFIG=/maven-cache', '--env', 'MAVEN_OPTS=-Xmx128m',
-      '--workdir', '/build', image, 'mvn', '-B', '-ntp', '-Dmaven.repo.local=/maven-cache',
-      '-Djava.io.tmpdir=/build/tmp', '-DargLine=-Xmx384m',
+      '--workdir', containerModule, image, 'mvn', '-B', '-ntp', '-Dmaven.repo.local=/maven-cache',
+      `-Djava.io.tmpdir=${containerModule}/tmp`, '-DargLine=-Xmx384m',
       ...(fullNativeSuite ? [] : [`-Dtest=PersonProfileCallerContractTest,${nativeProofs.filter(name => name !== 'SlimCommandTest').join(',')}`]), 'test'],
     { cwd: root, encoding: 'utf8', timeout: nativeTimeout, maxBuffer: 16 * 1024 * 1024,
       env: preserveReapEnvironment(process.env) });
