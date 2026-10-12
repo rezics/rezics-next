@@ -1159,12 +1159,13 @@ export class GovernanceStore {
         );
         if (decision.urgent) await this.decider(client, principal, actor,
           decision.authority_scope_id, 'governance.safety.evidence');
-        const saved = (await client.query<DecisionTargetInput & { plan: import('./effects.ts').EffectPlan }>(`
+        const saved = (await client.query<DecisionTargetInput & { state: EffectState; plan: import('./effects.ts').EffectPlan }>(`
           SELECT t.owner,t.resource,t.component,t.locator,t.scope_kind AS "scopeKind",t.revision,
-            t.expected_head AS "expectedHead",t.effect,e.plan
+            t.expected_head AS "expectedHead",t.effect,e.plan,e.state
           FROM access.moderation_decision_target t JOIN access.safety_decision_effect e USING (decision_id,ordinal)
           WHERE t.decision_id = $1 AND t.ordinal = $2`, [decisionId, ordinal])).rows[0];
-        if (saved) await this.assertStoredRealmJurisdiction(decision, saved, saved.plan);
+        if (saved && saved.state !== 'confirmed')
+          await this.assertStoredRealmJurisdiction(decision, saved, saved.plan);
         const op = (
           await client.query<{ cancelled: boolean }>(
             'SELECT cancelled FROM access.safety_decision_operation WHERE decision_id = $1 FOR UPDATE',
@@ -1246,8 +1247,8 @@ export class GovernanceStore {
           effect: row.effect,
           expiresAt: row.expires_at?.toISOString() ?? null,
         };
-        await this.assertStoredRealmJurisdiction(decision, target, row.plan);
         if (row.state === 'confirmed') return true;
+        await this.assertStoredRealmJurisdiction(decision, target, row.plan);
         await client.query('SAVEPOINT effect_dispatch');
         try {
           // Every restricting/releasing writer takes the same target lock before
