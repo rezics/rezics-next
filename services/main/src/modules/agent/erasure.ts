@@ -414,11 +414,11 @@ export async function personProfileGraphErased(fuseki: QueryClient, proof: Perso
       VALUES ?reference { rv:revision rv:contentRevision rv:resource rv:nameResource rv:nameDirectoryResource }
       GRAPH ?graph { ?unit ?reference ?target } }
     ${inventory.authorUnits.filter(unit => unit.startsWith('urn:rezics:search:directory:prefix:')).length ? `FILTER NOT EXISTS {
-      VALUES ?entry { ${inventory.authorUnits.filter(unit => unit.startsWith('urn:rezics:search:directory:prefix:')).map(iri).join(' ')} }
+      VALUES ?entry { ${inventory.authorUnits.filter(unit => unit.startsWith('urn:rezics:search:directory:prefix:')).map(predicateIri).join(' ')} }
       GRAPH ${iri(PUBLIC)} { ?entry ?entryP ?entryO } }` : ''}
     ${inventory.creditedWorks.length && inventory.authorUnits.length ? `FILTER NOT EXISTS {
       VALUES ?work { ${inventory.creditedWorks.map(iri).join(' ')} }
-      VALUES ?authorUnit { ${inventory.authorUnits.map(iri).join(' ')} }
+      VALUES ?authorUnit { ${inventory.authorUnits.map(predicateIri).join(' ')} }
       GRAPH ${iri(PUBLIC)} { ?entry rv:prefixWork ?work ; rv:prefixUnit ?authorUnit ; rv:prefixField "credit" }
       }` : ''}
   }`, 8192);
