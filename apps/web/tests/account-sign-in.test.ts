@@ -9,6 +9,7 @@ const otherWorkPath = resourceHref('/w/', otherWork);
 const aliasPath = resourceHref('/w/', 'named-alias');
 const otherAliasPath = resourceHref('/w/', 'named-alias-extra');
 const at = (path: string) => new URL(path, 'https://web.rezics.test');
+// ast-grep-ignore: web-links-use-address -- These are address-owner prefix fixtures; canonicalHref builds every native URL.
 const canonicalPrefixes = ['/w/', '/e/', '/a/', '/z/', '/r/', '/concepts/'] as const;
 
 describe('sign-in destination matching', () => {

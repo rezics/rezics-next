@@ -164,11 +164,12 @@ export const PreviewLanguagesUnavailableWithReleases: Story = {
 };
 
 export const PreviewReleasesTimeoutWithLanguages: Story = {
-  args: { view: 'preview', releases: { ok: false, failure: 'budget' } },
+  args: { view: 'preview', releases: { ok: false, failure: 'unavailable' } },
   globals: { viewport: { value: 'phone' } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('alert')).toHaveTextContent(copyOf('en').releasesUnavailable);
+    await expect(canvas.getByRole('alert')).toHaveTextContent(pageMessages.en.regionUnavailable);
     await expect(
       within(canvas.getByRole('list', { name: copyOf('en').realizations })).getByText('Japanese'),
     ).toBeVisible();

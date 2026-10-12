@@ -114,10 +114,11 @@ export const NoParts: Story = {
 };
 
 export const PartsTimeoutWithWhole: Story = {
-  args: { parts: { ok: false, failure: 'budget' } },
+  args: { parts: { ok: false, failure: 'unavailable' } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('alert')).toHaveTextContent('Parts could not be loaded.');
+    await expect(canvas.getByRole('alert')).toHaveTextContent(pageMessages.en.regionUnavailable);
     await expect(canvas.getByText('Part of')).toBeVisible();
     await expect(canvas.getByRole('link', { name: 'A Certain Magical Index' })).toBeVisible();
   },

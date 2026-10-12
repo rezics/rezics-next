@@ -117,11 +117,12 @@ export const NoCompositionWithWhole: Story = {
 };
 
 export const PartsTimeoutWithWhole: Story = {
-  args: { parts: { ok: false, failure: 'budget' } },
+  args: { parts: { ok: false, failure: 'unavailable' } },
   globals: { viewport: { value: 'phone' } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('alert')).toHaveTextContent('Parts could not be loaded.');
+    await expect(canvas.getByRole('alert')).toHaveTextContent(messages.en.regionUnavailable);
     await expect(canvas.getByText('Part of')).toBeVisible();
     await expect(
       within(canvas.getByRole('list', { name: copyOf('en').partOfList })).getByRole('link', {
