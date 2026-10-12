@@ -4,6 +4,7 @@ import { profileValidations } from '../../infrastructure/profile.ts';
 import { withPersonProfileErasureAuthority, type EndedPersonProvision,
   type PersonProfileErasureProof } from '../access/person-profile-erasure.ts';
 import { readWorkComponentState, type RevisionReadBudget } from '../work/history.ts';
+import { graphErasureReceipt } from '../erasure/graph.ts';
 import type { ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type GraphLineage } from '../work/activate.ts';
 
@@ -276,7 +277,7 @@ function identity(proof: PersonProfileErasureProof, inventory: PersonProfileGrap
 
 export function personProfileErasureReceipt(erasureId: string, person: string): string {
   if (!UUID.test(erasureId) || !PERSON.test(person)) throw new PersonGraphErasureConflict('invalid Person erasure identity');
-  return `urn:rezics:receipt:erasure-graph:${hash(`person-profile\0${erasureId}\0${person}`)}`;
+  return graphErasureReceipt(erasureId);
 }
 function digest(proof: PersonProfileErasureProof, inventory: PersonProfileGraphInventory): string {
   return hash(JSON.stringify({ family: 'person-profile-erasure-v1', erasureId: proof.erasureId,
@@ -331,7 +332,8 @@ export function personProfileErasureUpdate(lineage: GraphLineage, proof: PersonP
   identity(proof, inventory);
   const receipt = personProfileErasureReceipt(proof.erasureId, proof.person);
   const batch = `urn:rezics:outbox:${hash(`${receipt}\0batch`)}`;
-  const event = `urn:rezics:event:${hash(`${receipt}\0event`)}`;
+  const events = (inventory.creditedWorks.length ? inventory.creditedWorks : [null])
+    .map((work, ordinal) => ({ work, ordinal, id: `urn:rezics:event:${hash(`${receipt}\0event\0${ordinal}`)}` }));
   return `PREFIX rv: <${RV}> PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
   DELETE {
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
@@ -347,13 +349,13 @@ export function personProfileErasureUpdate(lineage: GraphLineage, proof: PersonP
     }
     GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ; rv:requestDigest ${lit(digest(proof, inventory))} ;
       rv:outcome rv:Succeeded ; rv:erasureId ${lit(proof.erasureId)} ; rv:erasureEpoch ${proof.erasureEpoch} ;
-      rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:sequence ?next }
-    GRAPH ${iri(GRAPHS.outbox)} { ${iri(batch)} a rv:OutboxBatch ; rv:dataEpoch ${lit(lineage.dataEpoch)} ;
-      rv:sequence ?next ; rv:eventCount 1 ; rv:event ${iri(event)} .
-      ${iri(event)} a rv:GraphErasureEvent ; rv:ordinal 0 ; rv:action "erasure.graph" ;
-      rv:agent ${iri(proof.person)} ; rv:receipt ${iri(receipt)} ; rv:erasureId ${lit(proof.erasureId)} ;
-      rv:erasureEpoch ${proof.erasureEpoch}
+      rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:sequence ?next
       ${inventory.creditedWorks.length ? `; rv:work ${inventory.creditedWorks.map(iri).join(', ')}` : ''} }
+    GRAPH ${iri(GRAPHS.outbox)} { ${iri(batch)} a rv:OutboxBatch ; rv:dataEpoch ${lit(lineage.dataEpoch)} ;
+      rv:sequence ?next ; rv:eventCount ${events.length} ; rv:event ${events.map(event => iri(event.id)).join(', ')} .
+      ${events.map(event => `${iri(event.id)} a rv:GraphErasureEvent ; rv:ordinal ${event.ordinal} ; rv:action "erasure.graph" ;
+        rv:agent ${iri(proof.person)} ; rv:receipt ${iri(receipt)} ; rv:erasureId ${lit(proof.erasureId)} ;
+        rv:erasureEpoch ${proof.erasureEpoch} ${event.work ? `; rv:work ${iri(event.work)}` : ''} .`).join('\n')} }
   } WHERE {
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(lineage.dataEpoch)} ;
       rv:routingEpoch ${lit(lineage.routingEpoch)} ; rv:sequence ?n }
