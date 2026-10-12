@@ -332182,6 +332182,11 @@
                         "const": "owner-reconciliation-v1",
                         "type": "string"
                       },
+                      "retainedAuthorityCoverage": {
+                        "maxLength": 1000000,
+                        "minLength": 1,
+                        "type": "string"
+                      },
                       "sealedCoverage": {
                         "maxLength": 1000000,
                         "minLength": 1,
@@ -332334,6 +332339,11 @@
                         "const": "owner-reconciliation-v1",
                         "type": "string"
                       },
+                      "retainedAuthorityCoverage": {
+                        "maxLength": 1000000,
+                        "minLength": 1,
+                        "type": "string"
+                      },
                       "sealedCoverage": {
                         "maxLength": 1000000,
                         "minLength": 1,
@@ -332484,6 +332494,11 @@
                       },
                       "profile": {
                         "const": "owner-reconciliation-v1",
+                        "type": "string"
+                      },
+                      "retainedAuthorityCoverage": {
+                        "maxLength": 1000000,
+                        "minLength": 1,
                         "type": "string"
                       },
                       "sealedCoverage": {
