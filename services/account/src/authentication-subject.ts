@@ -1,7 +1,7 @@
 import { decodeJwt } from 'jose';
-import { createHMAC } from '@better-auth/utils/hmac';
 import type { Pool } from 'pg';
 import { authenticationBody } from './recovery-auth.ts';
+import { authenticationCookies, type AuthenticationCookieOptions } from './authentication-cookies.ts';
 
 /** Only providers proving the current session's user may prefer its cookie.
  * Provider-target sign-ins must never inherit an unrelated session owner. */
@@ -16,26 +16,13 @@ export function authenticationSubjectRule(path: string): 'session' | 'registrati
   return 'provider';
 }
 
-async function challengeIdentifier(request: Request, name: string, secret?: string): Promise<string | undefined> {
-  const cookie = request.headers.get('cookie')?.split(';').map(value => value.trim())
-    .find(value => value.startsWith(`${name}=`) || value.startsWith(`__Secure-${name}=`));
-  if (!cookie) return undefined;
-  try {
-    const signed = decodeURIComponent(cookie.slice(cookie.indexOf('=') + 1));
-    const split = signed.lastIndexOf('.');
-    if (split <= 0) return undefined;
-    if (secret && !await createHMAC('SHA-256', 'base64').verify(secret, signed.slice(0, split), signed.slice(split + 1))) return undefined;
-    return signed.slice(0, split);
-  } catch { return undefined; }
-}
-
 type Session = { session: { id: string }; user: { id: string } };
 type Verification = { value: string; createdAt: Date; expiresAt: Date };
 
 /** Shared indexed subject resolution for activity, recovery and admission.
  * Epochs are read before provider consumption and checked under recovery's lock. */
 export async function authenticationSubject(pool: Pool, request: Request,
-  readSession: () => Promise<Session | null>, secret?: string) {
+  readSession: () => Promise<Session | null>, options: AuthenticationCookieOptions) {
   const path = new URL(request.url).pathname;
   const rule = authenticationSubjectRule(path);
   let userId: string | undefined;
@@ -43,6 +30,7 @@ export async function authenticationSubject(pool: Pool, request: Request,
   let verificationCreatedAt: Date | undefined;
   let trustCreatedAt: Date | undefined;
   let target = 'anonymous';
+  const cookies = await authenticationCookies(request.headers, options);
   const verification = async (identifier?: string) => identifier
     ? (await pool.query<Verification>('SELECT value, "createdAt", "expiresAt" FROM public.verification WHERE identifier = $1', [identifier])).rows[0]
     : undefined;
@@ -52,13 +40,13 @@ export async function authenticationSubject(pool: Pool, request: Request,
     else if (path.startsWith('/api/auth/two-factor/verify-')) {
       // Unlike lock selection alone, failure attribution requires a signed,
       // live challenge. No body identity can replace the provider's subject.
-      const identifier = await challengeIdentifier(request, 'better-auth.two_factor', secret);
-      const proof = secret ? await verification(identifier) : undefined;
+      const identifier = await cookies.signed('two_factor');
+      const proof = await verification(identifier);
       if (proof && proof.expiresAt > new Date()) { userId = proof.value; verificationCreatedAt = proof.createdAt; }
       target = identifier ?? 'anonymous';
     }
     if (session && path === '/api/auth/passkey/verify-registration') {
-      verificationCreatedAt = (await verification(await challengeIdentifier(request, 'better-auth.better-auth-passkey', secret)))?.createdAt;
+      verificationCreatedAt = (await verification(await cookies.signed('better-auth-passkey')))?.createdAt;
     }
   } else if (request.method === 'POST' && ['email', 'credential', 'reset-token'].includes(rule)) {
     const body = await authenticationBody(request);
@@ -66,7 +54,7 @@ export async function authenticationSubject(pool: Pool, request: Request,
       target = body.email.toLowerCase();
       userId = (await pool.query<{ id: string }>('SELECT id FROM public."user" WHERE email = $1', [target])).rows[0]?.id;
       if (path === '/api/auth/sign-in/email' && userId) {
-        const identifier = (await challengeIdentifier(request, 'better-auth.trust_device', secret))?.split('!')[1];
+        const identifier = (await cookies.signed('trust_device'))?.split('!')[1];
         const trust = await verification(identifier);
         if (trust?.value === userId) trustCreatedAt = trust.createdAt;
       }

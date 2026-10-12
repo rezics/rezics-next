@@ -1,5 +1,6 @@
 import { authenticationSubject } from './authentication-subject.ts';
 import type { Pool, PoolClient } from 'pg';
+import { authenticationCookies, type AuthenticationCookieOptions } from './authentication-cookies.ts';
 
 const jsonAuthenticationPaths = new Set([
   '/api/auth/sign-in/email', '/api/auth/request-password-reset', '/api/auth/reset-password',
@@ -111,9 +112,9 @@ export async function withRecoveryAuthentication(
   request: Request,
   handle: (db?: PoolClient) => Promise<Response>,
   readSession: () => Promise<{ session: { id: string }; user: { id: string } } | null>,
-  secret?: string,
+  options: AuthenticationCookieOptions,
 ): Promise<Response> {
-  const { userId, sessionId, verificationCreatedAt, trustCreatedAt } = await authenticationSubject(pool, request, readSession, secret);
+  const { userId, sessionId, verificationCreatedAt, trustCreatedAt } = await authenticationSubject(pool, request, readSession, options);
   if (!userId) return handle();
   const db = await pool.connect();
   try {
@@ -148,13 +149,7 @@ export async function withRecoveryAuthentication(
     if (policy.rows[0]?.stale_trust) {
       // A valid new password may sign in, but an old trusted-device artifact
       // cannot bypass the owner's newly enrolled second factor.
-      request.headers.set(
-        'cookie',
-        (request.headers.get('cookie') ?? '')
-          .split(';')
-          .filter((value) => !/^(?:__Secure-)?better-auth\.trust_device=/.test(value.trim()))
-          .join(';'),
-      );
+      (await authenticationCookies(request.headers, options)).remove('trust_device');
     }
     const response = await handle(db);
     // A provider/storage outage did not verify a proof. Roll back admission

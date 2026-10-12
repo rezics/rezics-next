@@ -136,7 +136,7 @@ export async function observeAuthentication(auth: AccountAuth, pool: Pool, reque
   const verifying = path === '/api/auth/verify-email' && request.method === 'GET';
   if (!signingIn && !signingOut && !verifying) return handle();
   const before = await auth.api.getSession({ headers: request.headers });
-  const subject = signingIn ? await authenticationSubject(pool, request, async () => before, String(auth.options.secret)) : undefined;
+  const subject = signingIn ? await authenticationSubject(pool, request, async () => before, auth.options) : undefined;
   const response = await handle();
   if (verifying && response.status === 302) {
     const cookie = response.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');

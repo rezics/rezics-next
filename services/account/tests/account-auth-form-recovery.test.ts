@@ -42,7 +42,9 @@ for (const scheme of ['https', 'http']) for (const reverse of [false, true]) for
         expect((await request('/api/auth/two-factor/enable', { password: member.password }, member.cookie)).status).toBe(200);
         const secret = await symmetricDecrypt({ key: f.secret,
           data: (await f.pool.query('SELECT secret FROM "twoFactor" WHERE "userId" = $1', [member.id])).rows[0].secret });
-        expect((await request('/api/auth/two-factor/verify-totp', { code: await createOTP(secret).totp() }, member.cookie)).status).toBe(200);
+        const verified = await request('/api/auth/two-factor/verify-totp', { code: await createOTP(secret).totp() }, member.cookie);
+        expect(verified.status).toBe(200);
+        member.cookie = cookies(verified);
       }
       const challenge = async (member: typeof a) => {
         const response = await request('/api/auth/sign-in/email', { email: member.email, password: member.password });
@@ -53,16 +55,27 @@ for (const scheme of ['https', 'http']) for (const reverse of [false, true]) for
       const other = exact.startsWith('__Secure-') ? 'better-auth.two_factor' : '__Secure-better-auth.two_factor';
       const aChallenge = (await challenge(a)).replace(exact, other);
       const bChallenge = await challenge(b);
+      const retained = scenario === 'lock' ? await challenge(b) : undefined;
       const pairs = [aChallenge, bChallenge];
       if (reverse) pairs.reverse();
       const both = pairs.join('; ');
       if (scenario === 'attribution') {
+      const sessionName = createCookieGetter(f.auth.options)('session_token').name;
+      const otherSessionName = sessionName.startsWith('__Secure-') ? sessionName.slice('__Secure-'.length) : `__Secure-${sessionName}`;
+      const aSession = a.cookie.split('; ').find(value => value.startsWith(`${sessionName}=`))!;
+      const bSession = b.cookie.split('; ').find(value => value.startsWith(`${sessionName}=`))!;
+      const sessionPairs = [aSession.replace(sessionName, otherSessionName), bSession];
+      if (reverse) sessionPairs.reverse();
+      expect(await (await request('/api/auth/get-session', undefined, sessionPairs.join('; '))).json()).toMatchObject({ user: { id: b.id } });
+      expect(await (await request('/api/auth/get-session', undefined, `${bSession}; ${aSession}`)).json()).toMatchObject({ user: { id: b.id } });
+      expect(await (await request('/api/auth/get-session', undefined, bSession.replace(sessionName, otherSessionName))).json()).toBeNull();
       expect((await request('/api/auth/two-factor/verify-totp', { code: 'invalid' }, both)).status).toBe(401);
       const failures = async () => (await f.pool.query(`SELECT user_id FROM rezics_account_security_event
         WHERE action = 'sign_in_failed' AND user_id IN ($1, $2) ORDER BY occurred_at, id`, [a.id, b.id])).rows;
       expect(await failures()).toEqual([{ user_id: b.id }]);
 
-      // Repeated exact values choose the first even when its signature is bad.
+      // Repeated exact values choose the first, and header joining uses the
+      // same parser as the provider rather than a second interpretation.
       expect((await request('/api/auth/two-factor/verify-totp', { code: 'invalid' }, `invalid=unused; ${bChallenge}; ${aChallenge.replace(other, exact)}`)).status).toBe(401);
       expect(await failures()).toEqual([{ user_id: b.id }, { user_id: b.id }]);
       const repeated = new Headers({ origin: issuer, 'content-type': 'application/json' });
@@ -108,7 +121,7 @@ for (const scheme of ['https', 'http']) for (const reverse of [false, true]) for
       expect(verified.status).toBe(200);
       expect((await recovering).status).toBe(200);
       expect(await (await request('/api/auth/get-session', undefined, cookies(verified))).json()).toBeNull();
-      expect((await request('/api/auth/two-factor/verify-totp', { code: await createOTP(secret).totp() }, both)).status).toBe(403);
+      expect((await request('/api/auth/two-factor/verify-totp', { code: await createOTP(secret).totp() }, `${aChallenge}; ${retained}`)).status).toBe(403);
     } finally {
       resume();
       await Promise.allSettled([pending, recovering]);
@@ -223,7 +236,7 @@ test('strict authentication parsing preserves provider values and binds the same
     expect(providerBody).toEqual(body);
     expect(owners).toEqual([['member-owner', null, null, null]]);
     return Response.json({ status: true });
-  }, async () => null);
+  }, async () => null, { baseURL: 'http://account.test' });
   expect(response.status).toBe(200);
 });
 

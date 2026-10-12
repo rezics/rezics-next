@@ -146,7 +146,7 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
   const guardedAuthHandler = async (request: Request, held?: PoolClient): Promise<Response> => {
     const path = new URL(request.url).pathname;
     const subject = await authenticationSubject(pool, request,
-      () => auth.api.getSession({ headers: request.headers }), String(auth.options.secret));
+      () => auth.api.getSession({ headers: request.headers }), auth.options);
     const totpUserId = subject.signedInBudget ? subject.userId : undefined;
     const authenticationLimit = async (database: Pool | PoolClient): Promise<Response | null> => {
       if (request.method !== 'POST' || !(path === '/api/auth/sign-in/email' || path === '/api/auth/reset-password'
@@ -500,7 +500,7 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
     .cleanup(async () => { await guardPool?.end(); })
     .mount(async (request: Request) => await authenticationMediaTypeFailure(request) ?? observeAuthentication(auth, pool, request,
       () => withRecoveryAuthentication(guard(), request, db => guardedAuthHandler(request, db),
-        () => auth.api.getSession({ headers: request.headers }), String(auth.options.secret))));
+        () => auth.api.getSession({ headers: request.headers }), auth.options)));
   return app.get('/api/account/openapi.json', () => ({ openapi: '3.1.2',
     info: { title: 'REZICS Account API', version: '1' },
     ...toOpenAPISchema(app, { paths: [/^\/api\/auth\//, /^\/health\//, '/api/account/openapi.json'] }),
