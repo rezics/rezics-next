@@ -927,7 +927,7 @@ try {
   );
   const cursor = ((await firstPage.json()) as { nextCursor: string }).nextCursor;
   const voterMember = await home.member('g1034-voter');
-  const voterSubject = await home.provision('G-1034 voter', voterMember.token);
+  const voterSubject = await home.provision('ranking voter', voterMember.token);
   const voter = workProfileCorpusApi('http://main.local', voterMember.token, {
     fetch: ((input, init) => app.handle(new Request(input, init))) as typeof fetch,
   });

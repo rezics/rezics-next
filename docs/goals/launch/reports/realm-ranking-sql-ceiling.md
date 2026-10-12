@@ -58,6 +58,6 @@ cut, sort and temperature, anonymous reads remain 45 and member reads remain
 50. Both counters are exactly constant across 100/400/1600; their unchanged
 absolute ceilings still fail.
 
-The G1034 ceiling owner in launch must decide whether to accept the required
+The Realm ranking ceiling owner in launch must decide whether to accept the required
 statement's budget or obtain a real owner optimization. This worker leaves the
 44/49 ceilings, growth classes and margin unchanged and changes no product code.
