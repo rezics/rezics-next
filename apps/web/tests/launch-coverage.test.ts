@@ -129,7 +129,7 @@ function scopeDisablesTest(scope: ts.Node, includeFunctions = false): boolean {
 
 function activeTest(call: ts.CallExpression): boolean {
   for (let node: ts.Node | undefined = call; node; node = node.parent) {
-    const parent = node.parent;
+    const parent: ts.Node | undefined = node.parent;
     if (ts.isCallExpression(node) && disablesTest(node)) return false;
     if ((ts.isBlock(node) || ts.isSourceFile(node)) && scopeDisablesTest(node)) return false;
     // A declaration hidden behind a runtime condition cannot establish that it runs.
