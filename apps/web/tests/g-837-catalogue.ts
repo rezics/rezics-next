@@ -12,7 +12,8 @@ import { seedRelationLexicon } from '../../../scripts/dev/seed/relation-lexicon.
 import { activateMetadataWork, GRAPHS, iri, metadataWorkRequestDigest, RV } from '../../../services/main/src/modules/work/activate.ts';
 import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
 import type { MediaStack } from '../../../tests/qa/integration/media-support.ts';
-import { openActorPlatformGroup } from './g-838-catalogue.ts';
+import { settled } from '../features/studio/content-api.ts';
+import { openActorPlatformGroup, type CataloguePort } from './g-838-catalogue.ts';
 
 const ID = 'https://rezics.com/id/';
 const id = () => `${ID}${randomUUID()}`;
@@ -27,9 +28,12 @@ interface Written { revision: string }
 
 async function json<T>(response: Response, status = 200): Promise<T> {
   const body = await response.text();
-  if (response.status !== status) throw new Error(`Expected ${status}, got ${response.status}: ${body}`);
+  const replayed = status === 201 && response.status === 200
+    && (JSON.parse(body) as { replayed?: unknown } | null)?.replayed === true;
+  if (response.status !== status && !replayed) throw new Error(`Expected ${status}, got ${response.status}: ${body}`);
   return JSON.parse(body) as T;
 }
+export { json as catalogueCommandResult };
 
 export interface Catalogue {
   sao: { web: Work; bunko: Work; progressive: Work; aggo: Work; volumes: Work[]; collection: string };
@@ -38,8 +42,21 @@ export interface Catalogue {
   volumeOne: { work: Work; release: string; omnibus: string; isbn: string };
 }
 
+export function settledCatalogueSend(send: CataloguePort['send']): CataloguePort['send'] {
+  return async (method, path, body, key = randomUUID()) => {
+    // The product client owns pending observation. Bind the command key once,
+    // outside its polling callback, so a retry observes the original operation.
+    const answer = await settled(async () => {
+      const response = await send(method, path, body, key);
+      return { response, data: response.status === 202 ? await response.clone().json() : null };
+    }, 64);
+    return answer.response;
+  };
+}
+
 export async function seedCatalogue(stack: MediaStack, reader: SeedReader, scratch: string): Promise<Catalogue> {
-  const editor = await stack.member('catalogue');
+  const member = await stack.member('catalogue');
+  const editor = { ...member, send: settledCatalogueSend(member.send) };
   // Lexicon presentations require platform exposure in addition to scoped edit authority.
   await openActorPlatformGroup(editor.principalId, 'platform-admin');
   const structureObjects = stack.objects('semantic/structure/');
