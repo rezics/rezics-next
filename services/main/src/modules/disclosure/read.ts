@@ -204,11 +204,12 @@ export function requireEstablishedAncestry(selection: Pick<DisclosureTarget, 'an
 }
 async function ownerSubmission<T, R>(legacy: boolean, inputs: readonly T[],
   run: (chunk: readonly T[], offset: number) => Promise<{ results: readonly R[]; cost: Readonly<Record<string, number>> }>,
-  requireLegacySubmission: (inputs: readonly T[], results: readonly R[]) => void) {
+  requireLegacySubmission: (inputs: readonly T[], results: readonly R[]) => void,
+  snapshotLegacyInput: (input: T) => T) {
   if (!legacy) return chunkDisclosureSubmission(inputs, run);
-  const accepted = [...inputs], results: R[] = [], cost: Record<string, number> = {};
+  const accepted = Object.freeze(inputs.map(snapshotLegacyInput)), results: R[] = [], cost: Record<string, number> = {};
   for (let offset = 0; offset < accepted.length; offset += DISCLOSURE_COST.batch) {
-    const chunk = accepted.slice(offset, offset + DISCLOSURE_COST.batch);
+    const chunk = Object.freeze(accepted.slice(offset, offset + DISCLOSURE_COST.batch));
     const submission = await run(chunk, offset);
     if (submission.results.length !== chunk.length) throw new DisclosureUnavailable('Disclosure chunk result is incomplete');
     results.push(...submission.results);
@@ -217,6 +218,24 @@ async function ownerSubmission<T, R>(legacy: boolean, inputs: readonly T[],
   // A later chunk can register an owner whose legacy results were already read.
   requireLegacySubmission(accepted, results);
   return { results, cost };
+}
+function snapshotLegacyTarget(target: DisclosureTarget): DisclosureTarget {
+  return Object.freeze({ ...target,
+    ...(target.occurrence ? { occurrence: Object.freeze({ ...target.occurrence }) } : {}) });
+}
+function snapshotLegacyTargets(targets: readonly DisclosureTarget[]): readonly DisclosureTarget[] {
+  return Object.freeze(targets.map(snapshotLegacyTarget));
+}
+function snapshotLegacySelection(env: WorkActivationEnvironment, selection: DisclosureSelection): DisclosureSelection {
+  requireSelections(env, [selection]);
+  // Issued selections already freeze the target and occurrence; retain their brand.
+  return selection;
+}
+function snapshotLegacyCut(env: WorkActivationEnvironment, cut: DisclosureReadCut): DisclosureReadCut {
+  if (!ancestryState(env).cuts.has(cut)) throw new DisclosureUnavailable('Disclosure cut was not captured');
+  snapshotLegacySelection(env, cut.selection);
+  // Captured cuts already freeze the selection, parent descriptors and fence basis.
+  return cut;
 }
 function legacyPolicyTarget(target: DisclosureTarget): boolean {
   return !target.ancestry || isLegacy(target.ancestry);
@@ -292,15 +311,18 @@ export class DisclosureStore implements DisclosureReader {
 
   private async readSubmission(targets: readonly DisclosureTarget[], viewer: Viewer,
     channel: DisclosureChannel, anonymousNames: boolean, client?: PoolClient) {
-    const submission = await ownerSubmission(targets.every(legacyPolicyTarget), targets, async chunk => measuredSubmission(async () => {
+    const legacy = targets.every(legacyPolicyTarget);
+    const submission = await ownerSubmission(legacy, targets, async chunk => measuredSubmission(async () => {
       const evaluated = await this.readDecisions(chunk, viewer, channel, anonymousNames, client);
-      return { results: evaluated.decisions.map((decision, index) => ({ decision,
-        name: evaluated.anonymousNames[index], fenceBasis: evaluated.fenceBases[index]! })), cost: evaluated.cost };
+      return { results: evaluated.decisions.map((decision, index) => {
+        const result = { decision, name: evaluated.anonymousNames[index], fenceBasis: evaluated.fenceBases[index]! };
+        return legacy ? Object.freeze({ ...result, fenceBasis: Object.freeze({ ...result.fenceBasis }) }) : result;
+      }), cost: evaluated.cost };
     }, client), accepted => {
       if (accepted.some(target => !validPolicyTarget(target, this.environment))) {
         throw new DisclosureUnavailable('Disclosure selection was not established by its owner');
       }
-    });
+    }, snapshotLegacyTarget);
     return { decisions: submission.results.map(result => result.decision),
       anonymousNames: anonymousNames ? submission.results.map(result => result.name!) : [],
       fenceBases: submission.results.map(result => result.fenceBasis), cost: submission.cost };
@@ -740,7 +762,7 @@ export async function resolveDisclosureSelections(env: WorkActivationEnvironment
   const submission = await ownerSubmission(targets.every(target => !ownerHasAncestrySource(env, target.owner)), targets, async chunk => measuredSubmission(async () => ({
     results: await resolveDisclosureSelectionChunk(env, chunk),
     cost: { ancestryReads: new Set(chunk.map(target => target.owner)).size },
-  })), (_accepted, results) => requireSelections(env, results));
+  })), (_accepted, results) => requireSelections(env, results), snapshotLegacyTarget);
   return costedResults(submission.results, submission.cost);
 }
 async function resolveDisclosureSelectionChunk(env: WorkActivationEnvironment,
@@ -911,6 +933,10 @@ async function evaluateSelections(env: WorkActivationEnvironment, selections: re
   requireSelections(env, selections);
   const reader = selectionReader(env, selections);
   const selectedTargets = selections.map(selection => ({ ...selection.target, ancestry: selection.ancestry }));
+  if (selections.every(selection => isLegacy(selection.ancestry))) {
+    selectedTargets.forEach(target => Object.freeze(target));
+    Object.freeze(selectedTargets);
+  }
   // Governance still checks the Asset. Its audience comes from the exact Use
   // receipt the ancestry owner issued for this occurrence, never Asset inventory.
   const mediaAllowed = await mediaVisibility(env, selectedTargets, viewer, selections.map(selection => {
@@ -928,8 +954,9 @@ async function evaluateSelections(env: WorkActivationEnvironment, selections: re
     const current = legacySelection(env, legacy.targets[legacyIndex++]!);
     ancestryState(env).selections.set(current.ancestry, current);
     issuedAncestry.set(current.ancestry, { selection: current, environment: env });
-    return { ...current.target, ancestry: current.ancestry };
+    return snapshotLegacyTarget({ ...current.target, ancestry: current.ancestry });
   });
+  if (selections.every(selection => isLegacy(selection.ancestry))) Object.freeze(targets);
   requireSelections(env, selections);
   try {
     const evaluated = reader?.readAtCut
@@ -965,7 +992,7 @@ export async function captureDisclosure(env: WorkActivationEnvironment, selectio
   const submission = await ownerSubmission(selections.every(selection => isLegacy(selection.ancestry)), selections, chunk => measuredSubmission(async () => {
     const results = await captureDisclosureChunk(env, chunk, viewer, channel, client);
     return { results, cost: results.cost! };
-  }, client), accepted => requireSelections(env, accepted));
+  }, client), accepted => requireSelections(env, accepted), selection => snapshotLegacySelection(env, selection));
   return costedResults(submission.results, submission.cost);
 }
 async function captureDisclosureChunk(env: WorkActivationEnvironment, selections: readonly DisclosureSelection[],
@@ -1019,7 +1046,7 @@ export async function fenceDisclosure(env: WorkActivationEnvironment, cuts: read
   const submission = await ownerSubmission(cuts.every(cut => isLegacy(cut.selection.ancestry)), cuts, chunk => measuredSubmission(async () => {
     const results = await fenceDisclosureChunk(env, chunk, viewer, channel, client);
     return { results, cost: results.cost! };
-  }, client), accepted => requireSelections(env, accepted.map(cut => cut.selection)));
+  }, client), accepted => requireSelections(env, accepted.map(cut => cut.selection)), cut => snapshotLegacyCut(env, cut));
   return costedResults(submission.results, submission.cost);
 }
 async function fenceDisclosureChunk(env: WorkActivationEnvironment, cuts: readonly DisclosureReadCut[],
@@ -1099,6 +1126,7 @@ async function readInventory(env: WorkActivationEnvironment, targets: readonly D
 async function readLegacyInventory(env: WorkActivationEnvironment, targets: readonly DisclosureTarget[],
   viewer: Viewer, channel: DisclosureChannel, anonymousNames: boolean, client?: PoolClient):
   Promise<DisclosureWithAnonymousNames & { anonymousNameProbes: number; parentHeadQueries: number }> {
+  targets = snapshotLegacyTargets(targets);
   requireOwnerBatch(env, targets);
   const reader = (env as ComposedEnvironment)[owner];
   if (!reader && targets.every(target => !ownerHasAncestrySource(env, target.owner))) {
@@ -1113,11 +1141,12 @@ async function readLegacyInventory(env: WorkActivationEnvironment, targets: read
     const selections = await resolveDisclosureSelections(env, targets);
     const allowed = await mediaVisibility(env, targets, viewer);
     const current = await legacyTargets(env, selections.map(selection => selection.target));
+    const policyTargets = snapshotLegacyTargets(current.targets);
     requireSelections(env, selections);
     let anonymousNameProbes = 0;
     const evaluated: DisclosureWithAnonymousNames = { decisions: [], anonymousNames: [] };
-    for (let offset = 0; offset < current.targets.length; offset += DISCLOSURE_COST.batch) {
-      const batch = current.targets.slice(offset, offset + DISCLOSURE_COST.batch);
+    for (let offset = 0; offset < policyTargets.length; offset += DISCLOSURE_COST.batch) {
+      const batch = Object.freeze(policyTargets.slice(offset, offset + DISCLOSURE_COST.batch));
       const result = anonymousNames && reader.readWithAnonymousNames
         ? await reader.readWithAnonymousNames(batch, viewer, channel, client)
         : { decisions: await reader.read(batch, viewer, channel, client), anonymousNames: [] as DisclosureDecision[] };

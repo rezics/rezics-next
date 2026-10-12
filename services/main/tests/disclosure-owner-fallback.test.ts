@@ -262,6 +262,96 @@ test('legacy selection resolution rejects registration between chunks for an ear
   await expect(submission).rejects.toBeInstanceOf(DisclosureUnavailable);
 });
 
+for (const entry of ['read', 'readWithAnonymousNames', 'readAtCut', 'capture', 'fence'] as const) {
+  test(`legacy ${entry} rejects original-owner registration after earlier caller identities move`, async () => {
+    const f = fixture(), targets = Array.from({ length: 65 }, (_, index) => ({
+      ...target(index < 64 ? 'content' : 'source'), resource: id(100 + index),
+    }));
+    const selections = await resolveDisclosureSelections(f.env, targets);
+    const cuts = entry === 'fence' ? await captureDisclosure(f.env, selections, ANONYMOUS_VIEWER, 'read') : [];
+    f.requested.length = 0;
+    f.onStatement(() => {
+      if (f.requested.length !== 2) return;
+      targets.slice(0, 64).forEach(target => { target.owner = 'source'; });
+      // Issued records are frozen, but the caller can still replace array entries.
+      if (entry === 'capture') selections.fill(selections[64]!, 0, 64);
+      if (entry === 'fence') cuts.fill(cuts[64]!, 0, 64);
+      configureDisclosureAncestrySource(f.env, 'content', { read: async () => [], reread: async () => [] });
+    });
+    const submission = entry === 'capture' ? captureDisclosure(f.env, selections, ANONYMOUS_VIEWER, 'read')
+      : entry === 'fence' ? fenceDisclosure(f.env, cuts, ANONYMOUS_VIEWER, 'read')
+      : f.reader[entry](targets, ANONYMOUS_VIEWER, 'read');
+    await expect(submission).rejects.toBeInstanceOf(DisclosureUnavailable);
+    expect(targets.every(target => target.owner === 'source')).toBe(true);
+    expect(f.requested.map(batch => batch.length)).toEqual([64, 1]);
+    expect(f.requested[0]!.every(target => target.owner === 'content')).toBe(true);
+  });
+}
+
+for (const entry of ['read', 'readWithAnonymousNames', 'readAtCut'] as const) {
+  test(`legacy ${entry} snapshots later owner, resource, component, revision and occurrence before any chunk`, async () => {
+    const f = fixture(), targets = Array.from({ length: 65 }, (_, index) => ({
+      ...target(index < 64 ? 'content' : 'source'), resource: id(100 + index), revision: 'revision:1',
+      occurrence: { owner: 'content' as const, kind: 'publication' as const, resource: id(300), revision: 'publication:1' },
+    }));
+    const original = { ...targets[64]!, occurrence: { ...targets[64]!.occurrence } };
+    f.onStatement(() => {
+      if (f.requested.length !== 1) return;
+      Object.assign(targets[64]!, { owner: 'content', resource: id(999), component: 'title', revision: 'revision:2' });
+      targets[64]!.occurrence.revision = 'publication:2';
+    });
+    const result = await f.reader[entry](targets, ANONYMOUS_VIEWER, 'read');
+    expect(Array.isArray(result) ? result : result.decisions).toEqual(targets.map(() => 'visible'));
+    expect(f.requested[1]![0]).toMatchObject(original);
+  });
+}
+
+test('legacy resolution snapshots later targets and occurrences before yielding the first chunk', async () => {
+  const f = fixture(), targets = Array.from({ length: 65 }, (_, index) => ({
+    ...target(index < 64 ? 'content' : 'source'), resource: id(100 + index), revision: 'revision:1',
+    occurrence: { owner: 'content' as const, kind: 'publication' as const, resource: id(300), revision: 'publication:1' },
+  }));
+  const original = { ...targets[64]!, occurrence: { ...targets[64]!.occurrence } };
+  const submission = resolveDisclosureSelections(f.env, targets);
+  queueMicrotask(() => {
+    Object.assign(targets[64]!, { owner: 'content', resource: id(999), component: 'title', revision: 'revision:2' });
+    targets[64]!.occurrence.revision = 'publication:2';
+  });
+  const selections = await submission;
+  expect(selections[64]!.target).toEqual(original);
+  expect(Object.isFrozen(selections[64]!.target)).toBe(true);
+  expect(Object.isFrozen(selections[64]!.target.occurrence)).toBe(true);
+});
+
+for (const entry of ['inventory', 'paired inventory', 'capture', 'fence'] as const) {
+  test(`legacy ${entry} freezes policy identities retained by a reader across chunks`, async () => {
+    const f = fixture(), targets = Array.from({ length: 65 }, (_, index) => ({
+      ...target(index < 64 ? 'content' : 'source'), resource: id(100 + index),
+    }));
+    let active = false, statements = 0, earlier: readonly DisclosureTarget[] = [];
+    configureDisclosure(f.env, { read: async batch => {
+      expect(Object.isFrozen(batch)).toBe(true);
+      expect(batch.every(target => Object.isFrozen(target))).toBe(true);
+      if (active && ++statements === 1) earlier = batch;
+      if (active && statements === 2) {
+        expect(Reflect.set(earlier[0]!, 'owner', 'source')).toBe(false);
+        configureDisclosureAncestrySource(f.env, 'content', { read: async () => [], reread: async () => [] });
+      }
+      return batch.map(() => 'visible');
+    } });
+    const selections = await resolveDisclosureSelections(f.env, targets);
+    const cuts = entry === 'fence' ? await captureDisclosure(f.env, selections, ANONYMOUS_VIEWER, 'read') : [];
+    active = true;
+    const submission = entry === 'capture' ? captureDisclosure(f.env, selections, ANONYMOUS_VIEWER, 'read')
+      : entry === 'fence' ? fenceDisclosure(f.env, cuts, ANONYMOUS_VIEWER, 'read')
+      : entry === 'inventory' ? discloseInventory(f.env, targets, ANONYMOUS_VIEWER, 'read')
+      : discloseInventoryWithAnonymousNames(f.env, targets, ANONYMOUS_VIEWER, 'read');
+    await expect(submission).rejects.toBeInstanceOf(DisclosureUnavailable);
+    expect(statements).toBe(2);
+    expect(earlier.every(target => target.owner === 'content')).toBe(true);
+  });
+}
+
 test('P1-2 legacy visible hydration cannot cross an Access recovery-generation change', async () => {
   const f = fixture(), selections = await resolveDisclosureSelections(f.env, [target('content')]);
   const cuts = await captureDisclosure(f.env, selections, ANONYMOUS_VIEWER, 'read');
@@ -271,7 +361,7 @@ test('P1-2 legacy visible hydration cannot cross an Access recovery-generation c
   expect(await fenceDisclosure(f.env, fresh, ANONYMOUS_VIEWER, 'read')).toEqual(['visible']);
 });
 
-test('P1-4 bare target identity cannot move during graph name lookup or policy evaluation', async () => {
+test('bare target snapshots preserve the selected identity during graph name lookup and policy evaluation', async () => {
   for (const field of ['resource', 'owner', 'component', 'revision'] as const) {
     const f = fixture(), input: DisclosureTarget = { owner: 'graph', resource: work, component: 'name' };
     f.hideName();
@@ -284,14 +374,16 @@ test('P1-4 bare target identity cannot move during graph name lookup or policy e
       else input.revision = id(21);
       return rows;
     };
-    await expect(f.reader.read([input], ANONYMOUS_VIEWER, 'read')).rejects.toBeInstanceOf(DisclosureUnavailable);
+    expect(await f.reader.read([input], ANONYMOUS_VIEWER, 'read')).toEqual(['visible']);
+    expect(f.requested.at(-1)![0]).toMatchObject({ owner: 'graph', resource: work, component: 'name' });
     f.env.fuseki.query = query;
     expect(await f.reader.read([{ owner: 'graph', resource: id(20), component: 'name' }], ANONYMOUS_VIEWER, 'read'))
       .toEqual(['hidden']);
   }
   const f = fixture(), input: DisclosureTarget = { owner: 'graph', resource: work, component: 'name', nameOwnerResolved: true };
   f.onStatement(() => { input.resource = id(20); });
-  await expect(f.reader.read([input], ANONYMOUS_VIEWER, 'read')).rejects.toBeInstanceOf(DisclosureUnavailable);
+  expect(await f.reader.read([input], ANONYMOUS_VIEWER, 'read')).toEqual(['visible']);
+  expect(f.requested.at(-1)![0]!.resource).toBe(work);
 });
 
 const contentResult = (): Extract<ExactReadResult, { status: 'available' }> => ({
