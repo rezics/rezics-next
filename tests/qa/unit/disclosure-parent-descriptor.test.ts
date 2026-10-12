@@ -321,6 +321,14 @@ test('disclosure ancestry: independent publication needs an explicit complete em
     { ...target, work: null, workRevision: null },
   ]);
   expect(independent!.ancestry.parents).toEqual([]);
+  const [nonWorkHead] = await resolveDisclosureSelections(f.env, [
+    { ...target, work: null, workRevision: workHead },
+  ]);
+  expect(nonWorkHead!.ancestry.parents).toEqual([]);
+  const workSource = fixture([parent('work')]);
+  await expect(resolveDisclosureSelections(workSource.env, [
+    { ...target, workRevision: workHead },
+  ])).rejects.toBeInstanceOf(DisclosureUnavailable);
   expect(f.headQueries).toHaveLength(0);
   f.setEvidence([{ ...evidence(target), status: 'unavailable' }]);
   await expect(resolveDisclosureSelections(f.env, [target])).rejects.toBeInstanceOf(

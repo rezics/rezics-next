@@ -239,9 +239,9 @@ test('G-542: asset adapters and export manifests discard all denied payload and 
   expect(await item()).toBe(asset);
   expect(await discloseExportPlan(env, plan, ANONYMOUS_VIEWER)).toBe(plan);
   const incomplete = disclosureMedia({ itemDelivery: async () => ({ target: id(1) }) } as unknown as MediaStore, env);
-  expect(await incomplete.itemDelivery(id(12).slice(-36))).toMatchObject({ target: id(1) });
+  await expect(incomplete.itemDelivery(id(12).slice(-36))).rejects.toBeInstanceOf(DisclosureUnavailable);
   s.set({ labels: [] });
-  expect(await incomplete.itemDelivery(id(12).slice(-36))).toMatchObject({ target: id(1) });
+  await expect(incomplete.itemDelivery(id(12).slice(-36))).rejects.toBeInstanceOf(DisclosureUnavailable);
 });
 
 test('G-542: feed tombstones preserve identity/time and erase card, author, counts and reader-state payloads', () => {

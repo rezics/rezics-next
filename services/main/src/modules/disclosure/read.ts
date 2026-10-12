@@ -494,7 +494,8 @@ function validateEvidence(env: WorkActivationEnvironment, target: DisclosureTarg
       || evidence.relationshipBasis.revision !== target.occurrence.revision)
     || target.work && !evidence.parents.some(parent => parent.kind === 'work' && parent.resource === target.work
       && (target.workRevision === undefined || parent.protectedRevision === target.workRevision))
-    || target.workRevision !== undefined && (target.work != null || target.workRevision !== null)
+    || target.workRevision !== undefined && (target.work != null
+      || evidence.parents.some(parent => parent.kind === 'work'))
       && !evidence.parents.some(parent => parent.kind === 'work'
       && parent.protectedRevision === target.workRevision)) {
     throw new DisclosureUnavailable('Disclosure ancestry is incomplete');
