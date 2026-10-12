@@ -167,6 +167,9 @@ async function createV1Concept(objectDirectory: string) {
   };
   graph.query = async (query): Promise<SparqlResult> => {
     if (query.includes('ASK')) return { boolean: !query.includes('rv:rejectionKind rv:InvalidProfile') };
+    // v1 definitions carry no notice participants. Governance still performs
+    // its bounded owner lookup before committing the search restriction.
+    if (query.includes('SELECT DISTINCT ?author')) return { results: { bindings: [] } };
     if (query.includes('?outcome ?digest ?id ?epoch')) {
       const receipt = query.match(/GRAPH <urn:rezics:graph:receipts>\s*\{\s*<([^>]+)>/)?.[1];
       if (!receipt) throw new Error('Expected an exact proposition receipt');
