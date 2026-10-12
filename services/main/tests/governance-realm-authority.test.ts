@@ -428,9 +428,12 @@ for (const transport of transports) {
         await expectNoDecision(f);
       });
     }
-    test(`${transport.name}: ${kind} platform/global Realm decision persists authority before dispatch`, async () => {
+    const restrictionOutcomes: DecisionOutcome[] = kind === 'content_report'
+      ? ['restrict'] : ['interim_restrict', 'final_restrict'];
+    for (const outcome of restrictionOutcomes) {
+    test(`${transport.name}: ${kind} platform/global Realm ${outcome} persists authority before dispatch`, async () => {
       const f = await fixture({ kind });
-      const response = await throughTransport(f, transport);
+      const response = await throughTransport(f, transport, { ...f.input, outcome });
       expect(response.status).toBe(202);
       const result = await response.json() as { decisionId: string; operation: { status: string } };
       expect(result.operation.status).toBe('accepted');
@@ -444,6 +447,38 @@ for (const transport of transports) {
       expect(completed.enforcement).toMatchObject([{ resource: f.realm, state: 'restricted' }]);
       expect(f.applications()).toBe(1);
     });
+    for (const releaseOutcome of ['restore', 'reverse'] as const) {
+      test(`${transport.name}: ${kind} platform/global Realm ${releaseOutcome} releases its ${outcome} restriction`, async () => {
+        const f = await fixture({ kind });
+        const restricted = await f.store.decide(f.principal, { ...f.input, outcome });
+        expect(restricted.operation.status).toBe('completed');
+        await f.store.safety.claim(f.principal, f.actor, f.report.caseId);
+        const response = await throughTransport(f, transport, { ...f.input,
+          outcome: releaseOutcome, expectedGeneration: restricted.caseGeneration,
+          reversesDecisionId: releaseOutcome === 'reverse' ? restricted.decisionId : null,
+          idempotencyKey: randomUUID() });
+        expect(response.status).toBe(202);
+        const accepted = await response.json() as { decisionId: string; operation: { status: string } };
+        expect(accepted.operation.status).toBe('accepted');
+        expect(f.applications()).toBe(1);
+        expect((await pool.query('SELECT plan FROM access.safety_decision_effect WHERE decision_id=$1',
+          [accepted.decisionId])).rows[0]!.plan.restorationRestrictionId).toBe(restricted.decisionId);
+        const released = await f.store.resumeDecision(f.principal, f.actor, accepted.decisionId);
+        expect(released.operation.status).toBe('completed');
+        expect(released.enforcement).toMatchObject([{ resource: f.realm, state: 'released', fenceEpoch: '2' }]);
+        expect(f.applications()).toBe(2);
+        const replay = await throughTransport(f, transport, { ...f.input,
+          outcome: releaseOutcome, expectedGeneration: restricted.caseGeneration,
+          reversesDecisionId: releaseOutcome === 'reverse' ? restricted.decisionId : null,
+          idempotencyKey: (await pool.query<{ idempotency_key: string }>(
+            'SELECT idempotency_key FROM access.moderation_decision WHERE id=$1',
+            [accepted.decisionId])).rows[0]!.idempotency_key });
+        expect(replay.status).toBe(202);
+        expect((await replay.json() as { decisionId: string }).decisionId).toBe(accepted.decisionId);
+        expect(f.applications()).toBe(2);
+      });
+    }
+    }
   }
 }
 
