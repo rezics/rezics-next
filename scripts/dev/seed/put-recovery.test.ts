@@ -120,7 +120,7 @@ test('G-909: progress refresh retains its selected revision and position', async
   expect(recovery?.body).toEqual({ ...body, expectedVersion: 4 });
 });
 
-test('G-909: Realm profile reconciliation checks each profile language and leaves rules to settings', async () => {
+test('Realm profile reconciliation checks each profile language and leaves rules to settings', async () => {
   const publication = { name: label, description: label, count: { kind: 'exact', value: null }, moderators: [id],
     iconSelection: null, bannerSelection: null };
   const body = { ...actor, profile: 'realm-public-profile-v2', expectedHead: null, publication };

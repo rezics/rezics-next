@@ -7,11 +7,14 @@ import { canonicalLanguage, legacyLocalizedText, type LocalizedText } from '../d
 export const REALM_PROFILE = 'https://rezics.com/definition/realm-public-profile-v2';
 export const MAX_RULES = 12;
 export const MAX_MODERATORS = 16;
+const HOME_READ_GRAPH_CALLS = 13;
+const HOME_MEDIA_VISIBILITY_GRAPH_CALLS = 50;
 /** Upper bounds per profile publication, independent of Realm membership size. */
 export const REALM_PROFILE_COST = { moderators: MAX_MODERATORS,
   payloadCharacters: 16_000, graphCalls: 20, mediaPointReads: 2,
-  // Includes current media visibility checks for the selected icon and banner attachments.
-  homeGraphCalls: 64 } as const;
+  homeReadGraphCalls: HOME_READ_GRAPH_CALLS,
+  homeMediaVisibilityGraphCalls: HOME_MEDIA_VISIBILITY_GRAPH_CALLS, // Bounded by the exact-attachment disclosure fix trust-ops is making now.
+  homeGraphCalls: HOME_READ_GRAPH_CALLS + HOME_MEDIA_VISIBILITY_GRAPH_CALLS } as const;
 export const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 export const uuid = /^[0-9a-f-]{36}$/;
 

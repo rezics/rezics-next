@@ -131,7 +131,8 @@ test('Realm public profile: manager admission, CAS, media, moderator choice and 
       icon: { kind: string }; rules: Array<{ id: string; title: { value: string } }>;
       membership: { count: { kind: string; value: number }; publicMembers: null };
       moderators: { kind: string; items: string[] } }>(await stack.call('GET', `${root}?language=zh-CN`), 200);
-    expect(stack.fuseki.queries - beforeHomeCalls).toBeLessThanOrEqual(REALM_PROFILE_COST.homeGraphCalls);
+    const homeGraphCalls = stack.fuseki.queries - beforeHomeCalls;
+    expect(homeGraphCalls).toBeLessThanOrEqual(REALM_PROFILE_COST.homeGraphCalls);
     expect(home).toMatchObject({ profileRevision: published.revision, name: { value: '读者公会' },
       description: { value: '一起阅读。' }, icon: { kind: 'image' },
       banner: { kind: 'image' }, rules: [{ id: 'be-kind', title: { value: '友善' } }],
