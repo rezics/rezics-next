@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, rmSync } from 'node:fs';
+import { appendFileSync, mkdirSync, rmSync } from 'node:fs';
 import { createServer as createHttpServer, type Server as HttpServer } from 'node:http';
 import { createServer as createTcpServer } from 'node:net';
 import { join, resolve } from 'node:path';
@@ -62,9 +62,10 @@ beforeAll(async () => {
   execFileSync('initdb', ['-D', dataDirectory, '-A', 'trust', '--no-instructions'], {
     cwd: stateDirectory, timeout: 30_000,
   });
+  appendFileSync(join(dataDirectory, 'postgresql.conf'), "\nunix_socket_directories = ''\n");
   const port = await closedLocalPort();
   execFileSync('pg_ctl', ['-D', dataDirectory, '-l', join(stateDirectory, 'postgres.log'),
-    '-o', `-h 127.0.0.1 -k ${stateDirectory} -p ${port}`, '-w', 'start'], {
+    '-o', `-h 127.0.0.1 -p ${port}`, '-w', 'start'], {
     cwd: stateDirectory, timeout: 30_000,
   });
   postgresStarted = true;
