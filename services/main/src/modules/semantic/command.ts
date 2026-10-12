@@ -331,9 +331,8 @@ export async function ensureModelGeneration(env: WorkActivationEnvironment): Pro
   const receipt = `urn:rezics:receipt:${hash(`${ACTIVE_GENERATION}\0model-generation`)}`;
   const bootstrapGuard = modelGenerationBootstrapGuard(ACTIVE_GENERATION);
   const assertBootstrapAvailable = async () => {
-    const blocked = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
-      FILTER NOT EXISTS { ${bootstrapGuard} } }`);
-    if (blocked.boolean === true) {
+    const available = await env.fuseki.query(`PREFIX rv: <${RV}> ASK { ${bootstrapGuard} }`);
+    if (available.boolean !== true) {
       // Only an empty model can bootstrap. A populated or partially recorded
       // generation needs explicit model maintenance, not another initial write.
       throw new ModelGenerationChanged('model generation cannot bootstrap over retained state');

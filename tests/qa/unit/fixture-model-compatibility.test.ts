@@ -5,7 +5,7 @@ import { alignFixtureModel } from '../../../scripts/fixture/align-model.ts';
 import { fixtureCorpus } from '../../../scripts/fixture/corpus.ts';
 import { manifestCore, manifestIdentity, restoreCompatibility, type FixtureManifestCore } from '../../../scripts/fixture/manifest.ts';
 import { fixtureModel, fixtureModelInputs, type FixtureModelManifest } from '../../../scripts/fixture/model.ts';
-import { graphOwner } from '../../../scripts/fixture/owners/graph.ts';
+import { graphOwner, graphModelUse } from '../../../scripts/fixture/owners/graph.ts';
 import { fixtureOwners } from '../../../scripts/fixture/owners/index.ts';
 import { fixtureDirectory, PINNED_FIXTURE_IDS } from '../../../scripts/fixture/stack.ts';
 import { fixtureModelAuditActor, localDatasetModelHead, type ModelArtifactEvidence,
@@ -44,20 +44,83 @@ function saveModel(directory: string, model: FixtureModelManifest) {
 test('fixture: model compatibility derives only the loader-declared shapes and vocabulary', async () => {
   await modelRoot((directory, model) => {
     const profiles = graphOwner.modelProfiles!;
-    const inputs = fixtureModelInputs(directory, profiles);
-    expect(Object.keys(inputs).sort()).toEqual(profiles.flatMap(profile => {
-      const id = profile.split('/').at(-1)!;
-      return [`profile:${id}`];
-    }).sort());
+    const use = graphModelUse();
+    const inputs = fixtureModelInputs(directory, use);
+    expect(Object.keys(inputs).sort()).toEqual([
+      ...profiles.map(profile => `profile:${profile.split('/').at(-1)}`),
+      ...new Set(use.records.flatMap(record => record.types).map(type => `validation:${type}`)),
+    ].sort());
     const before = fixtureModel(directory).generation;
     model.profiles.push({ id: 'unrelated-additive-v1', sha256: 'new-shape', file: 'shapes/unrelated-additive-v1.ttl' });
     model.artifacts['contexts/unrelated-additive-v1.jsonld'] = 'new-vocabulary';
     saveModel(directory, model);
-    expect(fixtureModelInputs(directory, profiles)).toEqual(inputs);
+    expect(fixtureModelInputs(directory, use)).toEqual(inputs);
     expect(fixtureModel(directory).generation).not.toBe(before);
     model.profiles = model.profiles.filter(profile => profile.id !== profiles[0]!.split('/').at(-1));
     saveModel(directory, model);
-    expect(() => fixtureModelInputs(directory, profiles)).toThrow('Fixture model profile is absent');
+    expect(() => fixtureModelInputs(directory, use)).toThrow('Fixture model profile is absent');
+  });
+});
+
+test('round 2 finding 2: an added matching canonical route or binding demand for a stored type is stale', async () => {
+  await modelRoot((directory, model) => {
+    const backup = core();
+    const type = 'https://rezics.com/vocab/MainVersion';
+    const id = 'metadata-hosting-route-v1';
+    for (const change of ['route', 'demand']) {
+      const changed = structuredClone(model);
+      changed.profiles.push({ id, file: `shapes/${id}.ttl`, sha256: 'new-shape' });
+      changed.artifacts[`contexts/${id}.jsonld`] = 'new-context';
+      if (change === 'route') changed.canonical.find(entry => entry.type === type)!.routes.unshift({
+        profile: id, shape: `https://rezics.com/definition/${id}/main-version-shape`,
+        when: [{ path: 'https://rezics.com/vocab/hostingPolicy', value: 'https://rezics.com/vocab/MetadataOnly' }],
+      });
+      else changed.bindingDemands.push({ type, profile: id });
+      saveModel(directory, changed);
+      const now = current(backup);
+      now.owners.graph!.inputs = graphOwner.compatibilityInputs(directory);
+      now.modelGeneration = fixtureModel(directory).generation;
+      expect(restoreCompatibility(backup, now)).toMatchObject({ compatible: false,
+        reasons: [`owner graph model input changed: validation:${type}`] });
+    }
+  });
+});
+
+test('round 2 finding 2: an unrelated type or nonmatching hosting route stays additive', async () => {
+  await modelRoot((directory, model) => {
+    const backup = core();
+    const changed = structuredClone(model);
+    const id = 'private-hosting-route-v1';
+    changed.profiles.push({ id, file: `shapes/${id}.ttl`, sha256: 'new-shape' });
+    changed.artifacts[`contexts/${id}.jsonld`] = 'new-context';
+    changed.canonical.find(entry => entry.type === 'https://rezics.com/vocab/MainVersion')!.routes.unshift({
+      profile: id, shape: `https://rezics.com/definition/${id}/main-version-shape`,
+      when: [{ path: 'https://rezics.com/vocab/hostingPolicy', value: 'https://rezics.com/vocab/Private' }],
+    });
+    changed.canonical.push({ type: 'urn:unrelated:type', routes: [{ profile: id, shape: 'urn:unrelated:shape', when: [] }] });
+    changed.bindingDemands.push({ type: 'urn:unrelated:type', profile: id });
+    saveModel(directory, changed);
+    const now = current(backup);
+    now.owners.graph!.inputs = graphOwner.compatibilityInputs(directory);
+    now.modelGeneration = fixtureModel(directory).generation;
+    expect(restoreCompatibility(backup, now)).toMatchObject({ compatible: true, reasons: [], pendingModelAlignment: true });
+  });
+});
+
+test('round 2 finding 2: route matching uses literal lexical forms from emitted records', async () => {
+  await modelRoot((directory, model) => {
+    const backup = core();
+    const id = 'imported-anchor-route-v1';
+    const type = 'https://rezics.com/vocab/RevisionAnchor';
+    model.profiles.push({ id, file: `shapes/${id}.ttl`, sha256: 'new-shape' });
+    model.artifacts[`contexts/${id}.jsonld`] = 'new-context';
+    model.canonical.push({ type, routes: [{ profile: id, shape: `https://rezics.com/definition/${id}/anchor-shape`,
+      when: [{ path: 'https://rezics.com/vocab/sequence', value: '0' }] }] });
+    saveModel(directory, model);
+    const now = current(backup);
+    now.owners.graph!.inputs = graphOwner.compatibilityInputs(directory);
+    expect(restoreCompatibility(backup, now)).toMatchObject({ compatible: false,
+      reasons: [`owner graph model input changed: validation:${type}`] });
   });
 });
 
@@ -148,6 +211,15 @@ test('finding 6: every profile declared by the emitted loader records has a comp
     const inputs = graphOwner.compatibilityInputs(root);
     for (const profile of observed) expect(inputs[`profile:${profile.split('/').at(-1)}`]).toMatch(/^[a-f0-9]{64}$/);
   } finally { await Promise.all([access.end(), content.end()]); }
+});
+
+test('round 2 finding 3: the model inventory is derived from writer records without a separate profile array', () => {
+  const use = graphModelUse();
+  expect(graphOwner.modelProfiles).toEqual(use.profiles);
+  const main = use.records.find(record => record.types.includes('https://rezics.com/vocab/MainVersion'))!;
+  expect(main.values['https://rezics.com/vocab/hostingPolicy']).toEqual(['https://rezics.com/vocab/MetadataOnly']);
+  expect(use.records.some(record => record.types.includes('https://rezics.com/vocab/TextContribution'))).toBe(true);
+  expect(use.records.some(record => record.types.includes('https://rezics.com/vocab/PublicationDecision'))).toBe(true);
 });
 
 const retainedMedium = join(fixtureDirectory(PINNED_FIXTURE_IDS[0]), 'manifest.json');

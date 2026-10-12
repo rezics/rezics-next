@@ -14,10 +14,11 @@ import { SELECTION_POLICY, SPACE_REALM_PROFILE_V1 } from '../../../services/main
 import { CONTRIBUTION_PROFILE } from '../../../services/main/src/modules/contribution/draft.ts';
 import { PUBLICATION_PROFILE } from '../../../services/main/src/modules/contribution/publish.ts';
 import { REALM_SELECTION_PROFILE } from '../../../services/main/src/modules/work/select-realm.ts';
-import { fixtureModelInputs } from '../model.ts';
+import { fixtureModelInputs, type FixtureModelUse } from '../model.ts';
 import {
   type Corpus,
   type FixtureWork,
+  fixtureCorpus,
   IMPORT_SEQUENCE,
   RecordDigest,
   corpusWorks,
@@ -41,25 +42,20 @@ const LUCENE = '/fuseki/databases/rezics/lucene';
 const node = (value: string) => `<${value}>`;
 const text = (value: string) => JSON.stringify(value);
 type GraphKind = keyof typeof GRAPHS | 'public';
-type GraphRecord = [GraphKind, string, string];
+type GraphRecord = [GraphKind, string, { profile: string; subject: string; predicate: string; object: string }];
 const MATCH_UNIT_PROFILE = 'https://rezics.com/definition/content-match-unit-v1';
-
-// These imported records retain their original authored basis, as Work metadata
-// retains v1 even when the live commands admit newer revisions.
-const modelProfiles = [PROFILE, SPACE_REALM_PROFILE_V1, CONTRIBUTION_PROFILE,
-  PUBLICATION_PROFILE, MAIN_SELECTION_PROFILE, REALM_SELECTION_PROFILE,
-  MATCH_UNIT_PROFILE] as const;
 
 /** The current and revision quads activateMetadataWork commits, minus its receipt and outbox. */
 function* workQuads(corpus: Corpus, work: FixtureWork): Generator<GraphRecord> {
   const writer = (graph: keyof typeof GRAPHS, profile: string) => (s: string, p: string, o: string): GraphRecord =>
-    [graph, `${node(s)} ${node(p)} ${o} ${node(GRAPHS[graph])} .`, profile];
+    [graph, `${node(s)} ${node(p)} ${o} ${node(GRAPHS[graph])} .`, { profile, subject: s, predicate: p, object: o }];
   const current = writer('current', PROFILE);
   const contribution = writer('current', CONTRIBUTION_PROFILE);
   const selection = writer('revisions', MAIN_SELECTION_PROFILE);
   const decision = writer('revisions', PUBLICATION_PROFILE);
   const publicQuad = (s: string, p: string, o: string) =>
-    ['public', `${node(s)} ${node(p)} ${o} ${node(PUBLIC_SEARCH_GRAPH)} .`, MATCH_UNIT_PROFILE] as GraphRecord;
+    ['public', `${node(s)} ${node(p)} ${o} ${node(PUBLIC_SEARCH_GRAPH)} .`,
+      { profile: MATCH_UNIT_PROFILE, subject: s, predicate: p, object: o }] as GraphRecord;
   if (work.index === 0) {
     const current = writer('current', SPACE_REALM_PROFILE_V1);
     const slot = writer('current', REALM_SELECTION_PROFILE);
@@ -139,8 +135,8 @@ function* workQuads(corpus: Corpus, work: FixtureWork): Generator<GraphRecord> {
 async function* nquads(corpus: Corpus, recordModelProfile?: (profile: string) => void): AsyncGenerator<string> {
   let chunk = '';
   for (const work of corpusWorks(corpus)) {
-    for (const [, quad, profile] of workQuads(corpus, work)) {
-      recordModelProfile?.(profile);
+    for (const [, quad, declaration] of workQuads(corpus, work)) {
+      recordModelProfile?.(declaration.profile);
       chunk += `${quad}\n`;
     }
     if (chunk.length > 1_048_576) {
@@ -149,6 +145,40 @@ async function* nquads(corpus: Corpus, recordModelProfile?: (profile: string) =>
     }
   }
   if (chunk) yield chunk;
+}
+
+let modelUse: FixtureModelUse | undefined;
+/** The same writers produce stored bytes and their model dependency inventory.
+ * The small corpus spans the loader's types, languages and publication branches. */
+export function graphModelUse(): FixtureModelUse {
+  if (modelUse) return modelUse;
+  const profiles = new Set<string>();
+  const records = new Map<string, { types: Set<string>; values: Map<string, Set<string>> }>();
+  const corpus = fixtureCorpus('small');
+  for (const work of corpusWorks(corpus)) {
+    for (const [graph, , declaration] of workQuads(corpus, work)) {
+      profiles.add(declaration.profile);
+      const key = `${graph}\0${declaration.subject}`;
+      let record = records.get(key);
+      if (!record) { record = { types: new Set(), values: new Map() }; records.set(key, record); }
+      const value = declaration.object.startsWith('<') ? declaration.object.slice(1, -1) : declaration.object;
+      if (declaration.predicate === RDF_TYPE) record.types.add(value);
+      const values = record.values.get(declaration.predicate) ?? new Set<string>();
+      values.add(declaration.object);
+      record.values.set(declaration.predicate, values);
+    }
+  }
+  modelUse = { profiles: [...profiles].sort(), records: [...records.values()].map(record => ({
+    types: [...record.types].sort(), values: Object.fromEntries([...record.values].map(([path, values]) => {
+      // CanonicalPolicy.singleObject admits only one RDF value and compares its
+      // URI or literal lexical form, regardless of datatype or language tag.
+      if (values.size !== 1) return [path, []];
+      const value = [...values][0]!;
+      const literal = /^("(?:[^"\\]|\\.)*")/.exec(value);
+      return [path, [value.startsWith('<') ? value.slice(1, -1) : literal ? JSON.parse(literal[1]!) as string : value]];
+    })),
+  })) };
+  return modelUse;
 }
 
 async function count(fuseki: FusekiClient, graph: string): Promise<number> {
@@ -162,13 +192,13 @@ export const graphOwner: FixtureOwner = {
   name: 'graph',
   generator: 'graph-work-public-search-v4',
   phase: 'offline-graph',
-  modelProfiles,
+  get modelProfiles() { return graphModelUse().profiles; },
   compatibilityInputs(root) {
     const dockerfile = readFileSync(join(root, 'infra/jena/Dockerfile'), 'utf8');
     return {
       jena: /^ARG FUSEKI_VERSION=(\d+\.\d+\.\d+)$/m.exec(dockerfile)?.[1] ?? 'unknown',
       'infra/jena/fuseki-text.ttl': sha256(readFileSync(join(root, 'infra/jena/fuseki-text.ttl'))),
-      ...fixtureModelInputs(root, modelProfiles),
+      ...fixtureModelInputs(root, graphModelUse()),
     };
   },
   summarize(corpus) {

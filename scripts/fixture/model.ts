@@ -10,19 +10,24 @@ export interface FixtureModelManifest {
   artifacts: Record<string, string>;
 }
 
+export interface FixtureModelUse {
+  profiles: readonly string[];
+  records: { types: string[]; values: Record<string, string[]> }[];
+}
+
 export function fixtureModel(root: string): { generation: string; manifest: FixtureModelManifest } {
   const bytes = readFileSync(join(root, 'generated/model/manifest.json'));
   return { generation: `urn:rezics:model-generation:${sha256(bytes)}`,
     manifest: JSON.parse(bytes.toString()) as FixtureModelManifest };
 }
 
-/** Hash the effective generated declaration: shape, bindings, canonical routes
- * and vocabulary mappings. Filter routes by their profile so unrelated additions
- * belong to alignment without changing retained-record compatibility. */
-export function fixtureModelInputs(root: string, profiles: readonly string[]): Record<string, string> {
+/** Writers supply their profile/type/property declarations. Pin owned profiles
+ * and every additional route or binding demand that can validate their records;
+ * unrelated types or nonmatching route predicates remain additive. */
+export function fixtureModelInputs(root: string, use: FixtureModelUse): Record<string, string> {
   const { manifest } = fixtureModel(root);
-  return Object.fromEntries([...new Set(profiles.map(profile => profile.split('/').at(-1)!))].sort()
-    .flatMap(id => {
+  const ids = new Set(use.profiles.map(profile => profile.split('/').at(-1)!));
+  const declaration = (id: string) => {
       const profile = manifest.profiles.find(candidate => candidate.id === id);
       const context = manifest.artifacts[`contexts/${id}.jsonld`];
       if (!profile || !context) throw new Error(`Fixture model profile is absent: ${id}`);
@@ -31,6 +36,19 @@ export function fixtureModelInputs(root: string, profiles: readonly string[]): R
         return routes.length ? [{ type: entry.type, routes }] : [];
       });
       const bindingDemands = manifest.bindingDemands.filter(demand => demand.profile === id);
-      return [[`profile:${id}`, sha256(stable({ profile, canonical, bindingDemands, vocabulary: context }))]];
-    }));
+      return { profile, canonical, bindingDemands, vocabulary: context };
+  };
+  const inputs = Object.fromEntries([...ids].sort().map(id => [`profile:${id}`, sha256(stable(declaration(id)))]));
+  for (const type of [...new Set(use.records.flatMap(record => record.types))].sort()) {
+    const records = use.records.filter(record => record.types.includes(type));
+    const routes = manifest.canonical.filter(entry => entry.type === type).flatMap(entry => entry.routes)
+      .filter(route => !ids.has(route.profile) && records.some(record =>
+        route.when.every(condition => record.values[condition.path]?.length === 1
+          && record.values[condition.path]![0] === condition.value)));
+    const bindingDemands = manifest.bindingDemands.filter(demand => demand.type === type && !ids.has(demand.profile));
+    const dependencies = [...new Set([...routes.map(route => route.profile), ...bindingDemands.map(demand => demand.profile)])]
+      .sort().map(declaration);
+    inputs[`validation:${type}`] = sha256(stable({ routes, bindingDemands, dependencies }));
+  }
+  return inputs;
 }

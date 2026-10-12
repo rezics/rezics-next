@@ -19,6 +19,8 @@ export function modelGenerationBootstrapGuard(generation: string): string {
   const receipt = `urn:rezics:receipt:${hash(`${generation}\0model-generation`)}`;
   return `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(generation)} ?p ?o } }
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(MODEL_COMPONENT)} ?headP ?headO } }
+    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?modelComponent a rv:ModelComponent } }
+    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?retainedGeneration a rv:ModelGeneration } }
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }`;
 }
 

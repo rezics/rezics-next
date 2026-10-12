@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { ensureLocalDatasetModelGeneration, assertLocalModelOwner, type ModelBootstrapRuntime,
-  custodyLocalModelArtifacts, type LocalModelBootstrapResult } from '../../../scripts/datasets/model-bootstrap.ts';
+  custodyLocalModelArtifacts, type LocalModelBootstrapResult, type ModelBootstrapIntent,
+  backfillLocalDatasetModelCustody } from '../../../scripts/datasets/model-bootstrap.ts';
 import { alignFixtureModel } from '../../../scripts/fixture/align-model.ts';
 import { fixtureCorpus } from '../../../scripts/fixture/corpus.ts';
 import { manifestCore, manifestIdentity, type FixtureManifest } from '../../../scripts/fixture/manifest.ts';
@@ -12,23 +13,31 @@ import { ModelAlignmentTimeout, ModelWorkBudget } from '../../../scripts/fixture
 import { fixtureOwners } from '../../../scripts/fixture/owners/index.ts';
 import { restoreFixture, FixtureRestoreFailure, type FixtureRestoreRuntime,
   type FixtureRestoreEvidence } from '../../../scripts/fixture/restore.ts';
-import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
+import { FusekiClient, type SparqlResult, type CommandEnvelope, type CommandResult } from '../../../services/main/src/infrastructure/fuseki.ts';
+import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
+import { COMMAND_MODULE_VERSION } from '../../../services/main/src/infrastructure/profile.ts';
+import { ACTIVE_GENERATION, ensureModelGeneration } from '../../../services/main/src/modules/semantic/command.ts';
+import { readActiveModelGeneration, ModelGenerationChanged, type ActiveModelGeneration } from '../../../services/main/src/modules/semantic/generation-guard.ts';
+import { PROFILES } from '../../../services/main/src/modules/semantic/schema.ts';
+import { hash, RV, prepareWorkComponent } from '../../../services/main/src/modules/work/activate.ts';
+import type { ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const engines = { fuseki: { image: 'fuseki', id: 'fuseki' }, postgres: { image: 'postgres', id: 'postgres' },
   rustfs: { image: 'rustfs', id: 'rustfs' } };
 
-function backup(): FixtureManifest {
-  const core = manifestCore(root, fixtureCorpus('small', undefined, 6), fixtureOwners, engines);
+function backup(seed?: string): FixtureManifest {
+  const core = manifestCore(root, fixtureCorpus('small', seed, 6), fixtureOwners, engines);
   return { ...core, ...manifestIdentity(core), build: { startedAt: 'built', completedAt: 'built', elapsedMs: 1,
     phases: {}, textIndexGeneration: 'index', loads: {} }, backup: { project: 'backup', volumes: {} } };
 }
-function ownerFixture() {
+function ownerFixture(create = true) {
   const project = `rezics-qa-model-${randomUUID().slice(0, 8)}`;
   const stack = join(root, '.temp/stack', project);
-  mkdirSync(stack, { recursive: true });
-  writeFileSync(join(stack, 'compose.env'), 'harness-owned');
+  const configure = () => { mkdirSync(stack, { recursive: true }); writeFileSync(join(stack, 'compose.env'), 'harness-owned'); };
+  if (create) configure();
   const apps = { FUSEKI_URL: 'http://127.0.0.1:3030/rezics', FUSEKI_COMMAND_TOKEN: 'command',
+    ACCOUNT_BASE_URL: 'http://127.0.0.1:3002',
     ACCOUNT_DATABASE_URL: 'postgres://account:password@127.0.0.1:5432/account',
     MAIN_S3_ENDPOINT: 'http://127.0.0.1:9000', MAIN_S3_BUCKET: 'semantic', MAIN_S3_ACCESS_KEY: 'access',
     MAIN_S3_SECRET_KEY: 'secret', MAIN_OBJECT_DIRECTORY: join(stack, 'objects'),
@@ -55,7 +64,7 @@ function ownerFixture() {
   };
   const active = { generation: fixtureModel(root).generation, manifest: `urn:rezics:sha256:${'1'.repeat(64)}`,
     generationNumber: '1', predecessor: null, entailmentProfile: 'NoEntailment' as const, receipt: 'receipt' };
-  return { project, stack, apps, containers, runtime: { docker: inspect, readEnv: () => apps,
+  return { project, stack, apps, containers, configure, runtime: { docker: inspect, readEnv: () => apps,
     assertProfiles: async () => {}, readHead: async () => active } satisfies Partial<ModelBootstrapRuntime>,
   close: () => rmSync(stack, { recursive: true, force: true }) };
 }
@@ -82,6 +91,204 @@ test('finding 1: a fabricated stack and foreign owner volumes are refused before
       expect(writes).toBe(0);
       container.Mounts[0]!.Name = original;
     }
+  } finally { owner.close(); }
+});
+
+class ModelObjects implements ImmutableObjects {
+  readonly data = new Map<string, Uint8Array>();
+  puts = 0;
+  async put(bytes: Uint8Array): Promise<string> {
+    this.puts++;
+    const digest = hash(bytes);
+    this.data.set(digest, new Uint8Array(bytes));
+    return digest;
+  }
+  async get(digest: string): Promise<Uint8Array> {
+    const bytes = this.data.get(digest);
+    if (!bytes) throw new Error('model object absent');
+    return bytes;
+  }
+}
+
+class BootstrapGraph extends FusekiClient {
+  readonly generations = new Map<string, ActiveModelGeneration>();
+  readonly initialCommands: CommandEnvelope[] = [];
+  readonly maintenanceUpdates: string[] = [];
+  head?: string;
+  foreignComponent = false;
+  unknownEmptyRead = false;
+  beforeCommit?: () => void;
+  sequence = 0;
+  constructor(readonly epoch: string, readonly routing: string) { super('http://unused.invalid'); }
+  override async commandHealth() {
+    return { moduleVersion: COMMAND_MODULE_VERSION, instanceId: 'bootstrap-fixture', publicSearchWriteEpoch: '0',
+      publicSearchWriteActive: false, profiles: Object.fromEntries(Object.entries(profileRegistry).map(([id, profile]) => [id, profile.sha256])) };
+  }
+  private emptyGuardHolds(query: string): boolean {
+    const generations = /FILTER NOT EXISTS\s*\{\s*GRAPH <urn:rezics:graph:revisions>\s*\{\s*\?\w+ a rv:ModelGeneration/.test(query);
+    const components = /FILTER NOT EXISTS\s*\{\s*GRAPH <urn:rezics:graph:current>\s*\{\s*\?\w+ a rv:ModelComponent/.test(query);
+    return !this.head && !this.generations.has(ACTIVE_GENERATION)
+      && (!generations || this.generations.size === 0) && (!components || !this.foreignComponent);
+  }
+  override async query(query: string): Promise<SparqlResult> {
+    const term = (value: string) => ({ type: 'uri', value });
+    const rows = (values: Record<string, { type: string; value: string }>[]) => ({ results: { bindings: values } });
+    if (query.includes('SELECT ?generation WHERE')) return rows(this.head ? [{ generation: term(this.head) }] : []);
+    if (query.includes('SELECT ?manifest ?number')) {
+      const active = this.head ? this.generations.get(this.head) : undefined;
+      return rows(active ? [{ manifest: term(active.manifest), number: term(active.generationNumber),
+        entailment: term(`${RV}NoEntailment`), digest: term(hash(JSON.stringify({ family: 'model-generation-v1',
+          manifest: active.generation.slice('urn:rezics:model-generation:'.length) }))),
+        ...(active.predecessor ? { predecessor: term(active.predecessor) } : {}) }] : []);
+    }
+    if (query.includes('SELECT ?epoch ?routing')) return rows([{ epoch: term(this.epoch), routing: term(this.routing), sequence: term(`${this.sequence}`) }]);
+    if (query.includes('SELECT ?sequence')) return rows([{ sequence: term(`${this.sequence}`) }]);
+    if (query.includes('FILTER NOT EXISTS')) {
+      if (this.unknownEmptyRead) return {};
+      const available = this.emptyGuardHolds(query);
+      return { boolean: /ASK\s*\{\s*FILTER NOT EXISTS\s*\{\s*FILTER NOT EXISTS/.test(query) ? !available : available };
+    }
+    if (query.includes('generationHead')) return { boolean: this.head === ACTIVE_GENERATION && this.generations.has(ACTIVE_GENERATION) };
+    if (query.includes(`<${ACTIVE_GENERATION}> ?p ?o`)) return { boolean: this.generations.has(ACTIVE_GENERATION) };
+    throw new Error(`Unexpected model graph query: ${query.slice(0, 100)}`);
+  }
+  override async commandWithReceipt(command: CommandEnvelope): Promise<CommandResult> {
+    this.beforeCommit?.();
+    if (!this.emptyGuardHolds(command.update)) return { status: 'guard-unmatched' };
+    this.initialCommands.push(command);
+    const manifest = /rv:manifest <(urn:rezics:sha256:[a-f0-9]{64})>/.exec(command.update)?.[1];
+    if (!manifest) throw new Error('Initial model command lacks its artifact manifest');
+    this.sequence++;
+    this.head = ACTIVE_GENERATION;
+    this.generations.set(ACTIVE_GENERATION, { generation: ACTIVE_GENERATION, manifest,
+      generationNumber: `${this.generations.size + 1}`, predecessor: null, entailmentProfile: 'NoEntailment', receipt: command.receipt });
+    return { status: 'committed', position: { datasetId: 'product', dataEpoch: this.epoch, sequence: `${this.sequence}` } };
+  }
+  maintain(intent: ModelBootstrapIntent, update: string) {
+    if (this.head !== intent.predecessor.generation || `${this.sequence}` !== intent.observedSequence)
+      throw new Error('Maintenance predecessor/sequence CAS failed');
+    expect(update).toContain(`rv:predecessor <${intent.predecessor.generation}>`);
+    expect(update).toContain('rv:eventCount 0');
+    this.sequence++;
+    this.head = intent.generation;
+    this.generations.set(intent.generation, { generation: intent.generation, manifest: intent.manifest,
+      generationNumber: intent.generationNumber, predecessor: intent.predecessor.generation,
+      entailmentProfile: 'NoEntailment', receipt: intent.receipt });
+    this.maintenanceUpdates.push(update);
+  }
+}
+
+test('round 2 finding 1: real model initialization refuses retained generations, foreign components and an unproven empty read', async () => {
+  for (const state of ['retained-generation', 'foreign-component', 'unknown-read', 'concurrent-generation']) {
+    const graph = new BootstrapGraph('epoch', 'routing');
+    const objects = new ModelObjects();
+    const retained: ActiveModelGeneration = { generation: `urn:rezics:model-generation:${'a'.repeat(64)}`,
+      manifest: `urn:rezics:sha256:${'b'.repeat(64)}`, generationNumber: '1', predecessor: null,
+      entailmentProfile: 'NoEntailment', receipt: 'old-receipt' };
+    if (state === 'retained-generation') graph.generations.set(retained.generation, retained);
+    if (state === 'foreign-component') graph.foreignComponent = true;
+    if (state === 'unknown-read') graph.unknownEmptyRead = true;
+    if (state === 'concurrent-generation') graph.beforeCommit = () => graph.generations.set(retained.generation, retained);
+    await expect(ensureModelGeneration({ fuseki: graph, workObjects: objects, objectDirectory: '.temp/unused',
+      lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } })).rejects.toBeInstanceOf(ModelGenerationChanged);
+    expect(graph.head).toBeUndefined();
+    expect(graph.initialCommands).toHaveLength(0);
+    expect(graph.generations.has(ACTIVE_GENERATION)).toBe(false);
+    if (state !== 'concurrent-generation') expect(objects.puts).toBe(0);
+  }
+});
+
+test('round 2 finding 4: restore drives the real bootstrap from an empty model and an older retained active generation', async () => {
+  const artifactsRoot = mkdtempSync(join(root, '.temp', 'restore-model-transition-'));
+  try {
+    for (const older of [false, true]) {
+      const owner = ownerFixture(false);
+      const manifest = backup(`model-transition-${randomUUID().slice(0, 12)}`);
+      owner.apps.MAIN_DATA_EPOCH = manifest.lineage.dataEpoch;
+      owner.apps.MAIN_ROUTING_EPOCH = manifest.lineage.routingEpoch;
+      const graph = new BootstrapGraph(manifest.lineage.dataEpoch, manifest.lineage.routingEpoch);
+      const objects = new ModelObjects();
+      const oldGeneration = `urn:rezics:model-generation:${'a'.repeat(64)}`;
+      const originalObjectDirectory = owner.apps.MAIN_OBJECT_DIRECTORY;
+      const checkpoint = join(root, '.temp/datasets/model-bootstrap', hash(JSON.stringify([
+        owner.apps.FUSEKI_URL, owner.apps.MAIN_DATA_EPOCH, ACTIVE_GENERATION])));
+      const audits: string[] = [];
+      try {
+        manifest.modelGeneration = oldGeneration;
+        if (older) {
+          const digest = await prepareWorkComponent(objects, oldGeneration,
+            { modelManifestSha256: 'a'.repeat(64), commandModule: COMMAND_MODULE_VERSION, entailment: 'none' }, PROFILES.generation);
+          graph.generations.set(oldGeneration, { generation: oldGeneration, manifest: `urn:rezics:sha256:${digest}`,
+            generationNumber: '1', predecessor: null, entailmentProfile: 'NoEntailment', receipt: 'old-receipt' });
+          graph.head = oldGeneration;
+          graph.sequence = 1;
+        }
+        const events: string[] = [];
+        const inspectServices = owner.runtime.docker;
+        const restore = restoreRuntime(manifest, events, artifactsRoot);
+        restore.readApps = () => owner.apps;
+        restore.runPhase = async <T>(name: string, work: () => T | Promise<T>): Promise<T> => {
+          events.push(name);
+          if (name === 'configure') { owner.configure(); return undefined as T; }
+          if (['copy', 'start', 'ready'].includes(name)) return undefined as T;
+          if (name === 'migrate') return [] as T;
+          if (name === 'smoke') return 6 as T;
+          return work();
+        };
+        const runtime: Partial<ModelBootstrapRuntime> = { readEnv: owner.runtime.readEnv,
+          fuseki: () => graph, readHead: readActiveModelGeneration,
+          initialize: ensureModelGeneration, objects: () => objects,
+          audit: async (_pool, input) => { audits.push(input.targetId); },
+          docker: (args, timeout) => {
+            if (args.includes('shacl.shacl')) return '@prefix sh: <http://www.w3.org/ns/shacl#> . [] sh:conforms true .';
+            if (args.some(arg => arg.includes('tdb2.tdbupdate'))) {
+              const mount = args.find(arg => arg.startsWith('type=bind,src='))!;
+              const directory = /src=([^,]+)/.exec(mount)![1]!;
+              const intent = JSON.parse(readFileSync(join(directory, 'intent.json'), 'utf8')) as ModelBootstrapIntent;
+              graph.maintain(intent, readFileSync(join(directory, 'update.ru'), 'utf8'));
+              return '';
+            }
+            if (args[0] === 'start' || args[0] === 'stop') return '';
+            return inspectServices(args, timeout);
+          },
+        };
+        restore.alignModel = (checkout, stack, apps, stored, options) => alignFixtureModel(checkout, stack, apps, stored,
+          { ...options, runtime });
+        const evidence = await restoreFixture(manifest.id, owner.project.slice('rezics-qa-'.length), fixtureOwners, restore);
+        const active = await readActiveModelGeneration(graph);
+        expect(active.generation).toBe(ACTIVE_GENERATION);
+        expect(active.generationNumber).toBe(older ? '2' : '1');
+        expect(active.predecessor).toBe(older ? oldGeneration : null);
+        expect(evidence.modelAlignment?.currentGeneration).toBe(ACTIVE_GENERATION);
+        expect(evidence.modelAlignment?.backupGeneration).toBe(oldGeneration);
+        expect(graph.initialCommands).toHaveLength(older ? 0 : 1);
+        expect(graph.maintenanceUpdates).toHaveLength(older ? 1 : 0);
+        expect(audits).toEqual(older ? [ACTIVE_GENERATION] : []);
+        if (older) expect(graph.generations.has(oldGeneration)).toBe(true);
+        else expect(graph.initialCommands[0]!.update).toContain('rv:ModelGenerationRecordedEvent');
+        expect(owner.apps.MAIN_OBJECT_DIRECTORY).toBe(originalObjectDirectory);
+      } finally { owner.close(); rmSync(checkpoint, { recursive: true, force: true }); }
+    }
+  } finally { rmSync(artifactsRoot, { recursive: true, force: true }); }
+});
+
+test('round 2 finding 5: both maintenance entries use apps.env for a prepared persistent QA stack', async () => {
+  const owner = ownerFixture();
+  const reads: string[] = [];
+  const objects = new ModelObjects();
+  const dev = { ...owner.apps, ACCOUNT_OPERATOR_USER_IDS: 'operator', WEB_OAUTH_CLIENT_ID: 'web' };
+  const runtime: Partial<ModelBootstrapRuntime> = { ...owner.runtime,
+    readEnv: path => { reads.push(path); return path.endsWith('/dev.env') ? dev : owner.apps; }, objects: () => objects };
+  try {
+    const result = await ensureLocalDatasetModelGeneration(owner.stack, undefined, { runtime });
+    expect(result.state).toBe('current');
+    expect(reads.every(path => path.endsWith('/apps.env'))).toBe(true);
+    reads.length = 0;
+    const reachedGraph = new Error('ownership passed; graph construction reached');
+    await expect(backfillLocalDatasetModelCustody({ buildDirectories: [] }, owner.stack,
+      { ...runtime, fuseki: () => { throw reachedGraph; } })).rejects.toBe(reachedGraph);
+    expect(reads.every(path => path.endsWith('/apps.env'))).toBe(true);
+    expect(reads).toHaveLength(2);
   } finally { owner.close(); }
 });
 

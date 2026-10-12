@@ -104,6 +104,7 @@ class ModelGraph extends FusekiClient {
       return { results: { bindings: generation ? [{ manifest: term(generation[1].manifest),
         commandModule: term(generation[1].commandModule) }] : [] } };
     }
+    if (query.includes('?retainedGeneration')) return { boolean: !this.active && this.generations.size === 0 };
     return { boolean: query.includes('FILTER NOT EXISTS') ? false : this.active };
   }
 
@@ -152,6 +153,7 @@ test('activation custodies the exact manifest and every shape by digest before g
 test('a pinned revision reads its old generation after a later model becomes current', async () => {
   const objects = new MemoryObjects();
   const f = fixture(objects);
+  await ensureModelGeneration(f.env);
   const shape = Buffer.from('@prefix sh: <http://www.w3.org/ns/shacl#> . <urn:old:shape> a sh:NodeShape .\n');
   const oldManifest = Buffer.from(JSON.stringify({ commandModule: '0.5.1', profiles: [
     { id: 'retained-profile-v1', sha256: hash(shape), file: 'shapes/retained-profile-v1.ttl' },
@@ -164,7 +166,6 @@ test('a pinned revision reads its old generation after a later model becomes cur
   f.graph.generations.set(oldGeneration, { manifest: `urn:rezics:sha256:${anchor}`, commandModule: '0.5.1' });
   const revision = `https://rezics.com/id/${Bun.randomUUIDv7()}`;
   f.graph.revisionPins.set(revision, oldGeneration);
-  await ensureModelGeneration(f.env);
   f.graph.queries.length = 0;
   const exact = await readPinnedRevisionModel(f.env, revision);
   expect(exact.generation).toBe(oldGeneration);

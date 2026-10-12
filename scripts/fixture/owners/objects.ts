@@ -49,7 +49,6 @@ export const objectsOwner: FixtureOwner = {
   name: 'objects',
   generator: 'objects-work-components-v1',
   phase: 'online',
-  modelProfiles: [PROFILE],
   compatibilityInputs: () => ({ prefix: WORK_OBJECT_PREFIX, model: PROFILE }),
   summarize(corpus) {
     const digest = new RecordDigest();

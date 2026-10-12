@@ -209,11 +209,15 @@ export interface ModelBootstrapRuntime {
   initialize: typeof ensureModelGeneration;
   custody: typeof custodyModelGenerationArtifacts;
   objects: (env: Record<string, string>, signal: AbortSignal) => ImmutableObjects;
+  fuseki: (env: Record<string, string>, signal?: AbortSignal) => FusekiClient;
+  audit: typeof writeAudit;
 }
 
 const modelBootstrapRuntime: ModelBootstrapRuntime = {
   docker, readEnv, assertProfiles: assertCommandProfiles, readHead: readActiveModelGeneration,
   initialize: ensureModelGeneration, custody: custodyModelGenerationArtifacts,
+  fuseki: (env, signal) => new FusekiClient(env.FUSEKI_URL!, env.FUSEKI_MAINTENANCE_TOKEN, env.FUSEKI_COMMAND_TOKEN, signal),
+  audit: writeAudit,
   objects: (env, signal) => new S3ImmutableObjects({
     endpoint: checkedLocalModelEndpoint(env.MAIN_S3_ENDPOINT!), bucket: env.MAIN_S3_BUCKET!,
     region: env.MAIN_S3_REGION, accessKeyId: env.MAIN_S3_ACCESS_KEY!,
@@ -232,6 +236,11 @@ export interface LocalModelBootstrapResult extends Record<string, unknown> {
   artifacts: ModelArtifactEvidence[]; artifactCount: number;
 }
 
+/** QA storage starts from apps.env; dev.env additionally contains process/UI inputs. */
+export function modelStackEnvironmentFile(stack: string): string {
+  return join(stack, basename(stack).startsWith('rezics-qa-') ? 'apps.env' : 'dev.env');
+}
+
 /** Match saved configuration, Compose labels, named volumes and owner endpoints
  * before every bootstrap, custody and audit write, including current-head paths. */
 export function assertLocalModelOwner(stack: string, env: Record<string, string>,
@@ -241,7 +250,7 @@ export function assertLocalModelOwner(stack: string, env: Record<string, string>
     || basename(dirname(stack)) !== 'stack' || basename(dirname(dirname(stack))) !== '.temp'
     || !existsSync(join(stack, 'compose.env')))
     throw new Error('Model maintenance requires a harness-owned stack configuration');
-  const saved = savedEnvironment(join(stack, project === 'rezics-dev' ? 'dev.env' : 'apps.env'));
+  const saved = savedEnvironment(modelStackEnvironmentFile(stack));
   if (Object.entries(env).some(([key, value]) => saved[key] !== value))
     throw new Error('Model environment differs from the harness-owned stack');
   const contexts = JSON.parse(inspect(['context', 'inspect'])) as { Endpoints: { docker: { Host: string } } }[];
@@ -302,6 +311,7 @@ async function finalizeModelBootstrap(
   directory: string,
   auditActor?: string,
   budget?: ModelWorkBudget,
+  audit: typeof writeAudit = writeAudit,
 ): Promise<Record<string, unknown>> {
   if (
     active.generation !== intent.generation ||
@@ -335,7 +345,7 @@ async function finalizeModelBootstrap(
   const account = new Pool({ connectionString: checkedLocalDatabase(env.ACCOUNT_DATABASE_URL!),
     ...(budget ? { statement_timeout: budget.remaining(), connectionTimeoutMillis: budget.remaining() } : {}) });
   try {
-    await modelWork(budget?.signal, () => writeAudit(account, {
+    await modelWork(budget?.signal, () => audit(account, {
       actorId: actor,
       action: 'local_dataset_model_generation_bootstrapped',
       targetId: intent.generation,
@@ -414,15 +424,10 @@ async function alignLocalDatasetModelGeneration(stack: string, fixture: FixtureM
     return result;
   };
   const auditActor = fixture ? fixtureModelAuditActor(stack, fixture) : undefined;
-  const env = fixture?.apps ?? runtime.readEnv(join(stack, 'dev.env'));
+  const env = fixture?.apps ?? runtime.readEnv(modelStackEnvironmentFile(stack));
   const container = assertLocalModelOwner(stack, env, docker, runtime.readEnv);
   checkedLocalModelEndpoint(env.FUSEKI_URL!);
-  const fuseki = new FusekiClient(
-    env.FUSEKI_URL!,
-    env.FUSEKI_MAINTENANCE_TOKEN,
-    env.FUSEKI_COMMAND_TOKEN,
-    budget.signal,
-  );
+  const fuseki = runtime.fuseki(env, budget.signal);
   await budget.run(() => runtime.assertProfiles(fuseki));
   const bytes = readFileSync(modelFile),
     modelManifestSha256 = sha256(bytes);
@@ -457,6 +462,7 @@ async function alignLocalDatasetModelGeneration(stack: string, fixture: FixtureM
         directory,
         auditActor,
         budget,
+        runtime.audit,
       )), state: 'completed', generation, artifacts, artifactCount: artifacts.length };
     return { state: 'current', generation, generationNumber: predecessor.generationNumber, artifacts, artifactCount: artifacts.length,
       ...(bootstrapped ? { bootstrapped: true, receipt: predecessor.receipt } : {}) };
@@ -641,7 +647,7 @@ sync`,
       active.generation,
       PROFILES.generation,
     ));
-    return { ...await budget.run(() => finalizeModelBootstrap(env, fuseki, intent, active, directory, auditActor, budget)),
+    return { ...await budget.run(() => finalizeModelBootstrap(env, fuseki, intent, active, directory, auditActor, budget, runtime.audit)),
       state: 'completed', generation, artifacts, artifactCount: artifacts.length };
   } finally {
     maintenance.release();
@@ -675,9 +681,11 @@ export function modelCustodyArguments(args: string[]): ModelCustodyArguments {
 /** One read-only graph/object-custody turn through the existing operator entry.
  * Repeating the exact invocation resumes its checkpoint and total deadline. */
 export async function backfillLocalDatasetModelCustody(options: ModelCustodyArguments,
-  stack = process.env.REZICS_DATASET_STACK ?? join(repository, '.temp/stack/rezics-dev')) {
-  const env = readEnv(join(stack, 'dev.env'));
-  assertLocalModelOwner(stack, env);
+  stack = process.env.REZICS_DATASET_STACK ?? join(repository, '.temp/stack/rezics-dev'),
+  dependencies: Partial<ModelBootstrapRuntime> = {}) {
+  const runtime = { ...modelBootstrapRuntime, ...dependencies };
+  const env = runtime.readEnv(modelStackEnvironmentFile(stack));
+  assertLocalModelOwner(stack, env, runtime.docker, runtime.readEnv);
   checkedLocalModelEndpoint(env.FUSEKI_URL!);
   const sourceKey = sha256(JSON.stringify([env.FUSEKI_URL, env.MAIN_S3_ENDPOINT ?? null,
     env.MAIN_S3_BUCKET ?? null, env.MAIN_OBJECT_DIRECTORY]));
@@ -688,7 +696,7 @@ export async function backfillLocalDatasetModelCustody(options: ModelCustodyArgu
   try {
     const checkpoint = existsSync(checkpointPath)
       ? JSON.parse(readFileSync(checkpointPath, 'utf8')) as ModelCustodyBackfillCheckpoint : undefined;
-    const fuseki = new FusekiClient(env.FUSEKI_URL!, env.FUSEKI_MAINTENANCE_TOKEN, env.FUSEKI_COMMAND_TOKEN);
+    const fuseki = runtime.fuseki(env);
     const workObjects = env.MAIN_S3_ENDPOINT ? new S3ImmutableObjects({
       endpoint: checkedLocalModelEndpoint(env.MAIN_S3_ENDPOINT), bucket: env.MAIN_S3_BUCKET!,
       region: env.MAIN_S3_REGION, accessKeyId: env.MAIN_S3_ACCESS_KEY!, secretAccessKey: env.MAIN_S3_SECRET_KEY!,
