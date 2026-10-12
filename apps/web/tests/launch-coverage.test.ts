@@ -38,18 +38,6 @@ const requiredHardCaseRows = [
   { kind: 'anime', hardCase: 'thousand-chapters' },
 ] as const;
 
-function literalCondition(expression: ts.Expression | undefined): boolean | undefined {
-  if (!expression) return undefined;
-  if (ts.isParenthesizedExpression(expression)) return literalCondition(expression.expression);
-  if (expression.kind === ts.SyntaxKind.TrueKeyword) return true;
-  if (expression.kind === ts.SyntaxKind.FalseKeyword) return false;
-  if (ts.isPrefixUnaryExpression(expression) && expression.operator === ts.SyntaxKind.ExclamationToken) {
-    const operand = literalCondition(expression.operand);
-    return operand === undefined ? undefined : !operand;
-  }
-  return undefined;
-}
-
 function testApiPath(expression: ts.Expression): string[] {
   if (ts.isCallExpression(expression)) return testApiPath(expression.expression);
   if (ts.isPropertyAccessExpression(expression)) return [...testApiPath(expression.expression), expression.name.text];
@@ -58,14 +46,18 @@ function testApiPath(expression: ts.Expression): string[] {
 
 function testCallback(call: ts.CallExpression): ts.ArrowFunction | ts.FunctionExpression | undefined {
   // Playwright accepts (title, options, fn); Bun accepts (title, fn, timeout).
-  return call.arguments.findLast((argument): argument is ts.ArrowFunction | ts.FunctionExpression =>
+  // A predicate function in the first argument is not a declaration's body.
+  return call.arguments.slice(1).findLast((argument): argument is ts.ArrowFunction | ts.FunctionExpression =>
     ts.isArrowFunction(argument) || ts.isFunctionExpression(argument));
 }
 
 function isTestDeclaration(call: ts.CallExpression): boolean {
   const [root, ...members] = testApiPath(call.expression);
+  const title = call.arguments[0];
   return (root === 'test' || root === 'it') &&
-    members.every(member => ['only', 'skip', 'skipIf', 'todo', 'fixme', 'if', 'each'].includes(member)) &&
+    members.every(member => ['only', 'skip', 'skipIf', 'todo', 'fixme', 'fail', 'if', 'each'].includes(member)) &&
+    title !== undefined && (ts.isStringLiteralLike(title) || ts.isTemplateExpression(title) ||
+      ts.isIdentifier(title) || ts.isPropertyAccessExpression(title)) &&
     testCallback(call) !== undefined;
 }
 
@@ -74,52 +66,24 @@ function isSuiteDeclaration(call: ts.CallExpression): boolean {
   return ['test', 'describe'].includes(path[0] ?? '') && path.includes('describe') && testCallback(call) !== undefined;
 }
 
-function disablesTest(call: ts.CallExpression): boolean {
-  if (!['test', 'it', 'describe'].includes(testApiPath(call.expression)[0] ?? '')) return false;
-  let expression: ts.Expression = call;
-  while (ts.isPropertyAccessExpression(expression) || ts.isCallExpression(expression)) {
-    if (ts.isCallExpression(expression) && ts.isPropertyAccessExpression(expression.expression)) {
-      const modifier = expression.expression.name.text;
-      const condition = literalCondition(expression.arguments[0]);
-      if (modifier === 'todo' || (['skip', 'skipIf', 'fixme'].includes(modifier) && condition !== false) ||
-        (modifier === 'if' && condition !== true)) return true;
-    }
-    expression = expression.expression;
-  }
-  return false;
+function hasSkipModifier(call: ts.CallExpression): boolean {
+  const [root, ...members] = testApiPath(call.expression);
+  return ['test', 'it', 'describe'].includes(root ?? '') &&
+    members.some(member => ['skip', 'skipIf', 'fixme', 'fail', 'todo', 'if'].includes(member));
 }
 
-function scopeDisablesTest(scope: ts.Node, includeFunctions = false): boolean {
+function scopeHasRuntimeSkip(scope: ts.Node): boolean {
   let disabled = false;
   const visit = (node: ts.Node): void => {
     if (disabled) return;
-    if (ts.isFunctionLike(node)) {
-      if (includeFunctions && 'body' in node && node.body) visit(node.body);
-      return;
-    }
-    if (ts.isIfStatement(node)) {
-      const condition = literalCondition(node.expression);
-      if (condition !== false) visit(node.thenStatement);
-      if (condition !== true && node.elseStatement) visit(node.elseStatement);
-      return;
-    }
-    if (ts.isBinaryExpression(node) && [ts.SyntaxKind.AmpersandAmpersandToken, ts.SyntaxKind.BarBarToken].includes(node.operatorToken.kind)) {
-      visit(node.left);
-      const condition = literalCondition(node.left);
-      if (condition === undefined || condition === (node.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken)) visit(node.right);
-      return;
-    }
     if (ts.isCallExpression(node)) {
       // Sibling declarations and their hooks belong to their own test or suite.
       if (isTestDeclaration(node) || isSuiteDeclaration(node)) return;
       const path = testApiPath(node.expression);
-      if (['beforeEach', 'beforeAll'].includes(path.at(-1) ?? '') &&
-        (path.length === 1 || path[0] === 'test')) {
-        const callback = testCallback(node);
-        if (callback) disabled ||= scopeDisablesTest(callback.body, true);
+      if (['test', 'it'].includes(path[0] ?? '') && ['skip', 'fixme', 'fail'].includes(path.at(-1) ?? '')) {
+        disabled = true;
+        return;
       }
-      // A todo/skip with a title but no body still declares an unrelated sibling.
-      if (!ts.isStringLiteralLike(node.arguments[0] ?? node) && disablesTest(node)) disabled = true;
     }
     ts.forEachChild(node, visit);
   };
@@ -127,21 +91,27 @@ function scopeDisablesTest(scope: ts.Node, includeFunctions = false): boolean {
   return disabled;
 }
 
-function activeTest(call: ts.CallExpression): boolean {
+/**
+ * Proof validation is syntactic and deliberately conservative, not execution modelling.
+ * A test declaration has a string, template or reference title and an inline function
+ * body after that title (with optional Playwright options or a Bun timeout). Skipped
+ * sibling declarations have their own scopes and never disqualify another proof.
+ * A test.skip/fixme/fail call without such a body is a runtime skip; a first-argument
+ * predicate is not a test body. Any runtime skip rejects its enclosing proof, describe
+ * or file scope, including hooks, unused helpers and untaken branches. Conditions are
+ * never evaluated: test.skip(false) still rejects that scope.
+ * Skip/fixme/todo/if/skipIf suite modifiers (including test.describe.skip) reject all
+ * contained tests and journey registrations regardless of their condition's value.
+ * The same scope rule applies to direct tests, table registrations and journey wrappers.
+ * False rejections are intentional: cited proofs must have scopes free of skip constructs.
+ */
+function proofScopeIsUnskipped(call: ts.CallExpression): boolean {
   for (let node: ts.Node | undefined = call; node; node = node.parent) {
-    const parent: ts.Node | undefined = node.parent;
-    if (ts.isCallExpression(node) && disablesTest(node)) return false;
-    if ((ts.isBlock(node) || ts.isSourceFile(node)) && scopeDisablesTest(node)) return false;
-    // A declaration hidden behind a runtime condition cannot establish that it runs.
-    if (parent && ts.isIfStatement(parent) && literalCondition(parent.expression) !== (parent.thenStatement === node)) return false;
-    if (parent && ts.isConditionalExpression(parent) && node !== parent.condition &&
-      literalCondition(parent.condition) !== (parent.whenTrue === node)) return false;
-    if (parent && ts.isBinaryExpression(parent) && parent.right === node &&
-      [ts.SyntaxKind.AmpersandAmpersandToken, ts.SyntaxKind.BarBarToken].includes(parent.operatorToken.kind) &&
-      literalCondition(parent.left) !== (parent.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken)) return false;
+    if (ts.isCallExpression(node) && hasSkipModifier(node)) return false;
+    if ((ts.isBlock(node) || ts.isSourceFile(node)) && scopeHasRuntimeSkip(node)) return false;
   }
   const callback = testCallback(call);
-  return !callback || !scopeDisablesTest(callback.body, true);
+  return !callback || !scopeHasRuntimeSkip(callback.body);
 }
 
 function namedTestExists(source: string, title: string): boolean {
@@ -155,7 +125,7 @@ function namedTestExists(source: string, title: string): boolean {
       const argument = node.arguments[0];
       const candidate = argument && (ts.isStringLiteralLike(argument) ? argument.text
         : ts.isTemplateExpression(argument) ? argument.getText(parsed).slice(1, -1) : undefined);
-      if (candidate !== undefined && matches(candidate) && activeTest(node)) found = true;
+      if (candidate !== undefined && matches(candidate) && proofScopeIsUnskipped(node)) found = true;
     }
     ts.forEachChild(node, visit);
   };
@@ -185,7 +155,7 @@ function namedTestExists(source: string, title: string): boolean {
     if (!isTestDeclaration(call) ||
       !argument || !ts.isPropertyAccessExpression(argument) || !ts.isIdentifier(argument.expression) ||
       argument.expression.text !== binding.text || argument.name.text !== 'title' ||
-      !activeTest(call)) continue;
+      !proofScopeIsUnskipped(call)) continue;
     for (const entry of tables.get(loop.expression.text)?.elements ?? []) {
       if (!ts.isObjectLiteralExpression(entry) || entry.properties.some(property => ts.isSpreadAssignment(property) ||
         (property.name && ts.isComputedPropertyName(property.name)))) continue;
@@ -223,15 +193,7 @@ function journeyRegistered(wrapper: string, moduleSpecifier: string): boolean {
   let found = false;
   const visit = (node: ts.Node): void => {
     if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) &&
-      registrations.has(node.expression.text) && activeTest(node)) {
-      // A call in an unused helper or a test body does not register a journey at collection time.
-      let collected = true;
-      for (let parent: ts.Node | undefined = node.parent; parent; parent = parent.parent) {
-        if (ts.isFunctionLike(parent) &&
-          (!ts.isCallExpression(parent.parent) || !isSuiteDeclaration(parent.parent))) collected = false;
-      }
-      found ||= collected;
-    }
+      registrations.has(node.expression.text) && proofScopeIsUnskipped(node)) found = true;
     ts.forEachChild(node, visit);
   };
   visit(parsed);
@@ -308,10 +270,10 @@ test('launch coverage names existing tests and reports remaining rows', () => {
         }
         const journeySource = readFileSync(journeyPath, 'utf8');
         if (!namedTestExists(journeySource, proof.test)) {
-          errors.push(`${rowLabel(row)}: runnable test not found in journey ${proof.journey}: ${proof.test}`);
+          errors.push(`${rowLabel(row)}: unskipped test declaration not found in journey ${proof.journey}: ${proof.test}`);
         }
       } else if (!namedTestExists(source, proof.test)) {
-        errors.push(`${rowLabel(row)}: runnable test not found in ${proof.file}: ${proof.test}`);
+        errors.push(`${rowLabel(row)}: unskipped test declaration not found in ${proof.file}: ${proof.test}`);
       }
     }
 
@@ -345,109 +307,120 @@ test('proof titles preserve the exact title after a leading task tag', () => {
   expect(namedTestExists("test('a reader saves a choice', () => {});", 'a reader saves a choice')).toBe(true);
 });
 
-test('proof titles require runnable tests rather than skipped declarations or suites', () => {
-  const title = 'a reader resumes on another device';
-  const declaration = `test('${title}', () => {});`;
-  expect(namedTestExists(declaration, title)).toBe(true);
-  for (const disabled of ['skip', 'skipIf', 'fixme']) {
-    expect(namedTestExists(`test.${disabled}('${title}', () => {});`, title)).toBe(false);
-    expect(namedTestExists(`describe.${disabled}(true)('suite', () => { ${declaration} });`, title)).toBe(false);
-    expect(namedTestExists(`test.describe.${disabled}('suite', () => { ${declaration} });`, title)).toBe(false);
-    expect(namedTestExists(`describe.${disabled}('suite', () => { ${declaration} });`, title)).toBe(false);
-    expect(namedTestExists(`test('${title}', () => { test.${disabled}(process.env.PROOF_DISABLED); });`, title)).toBe(false);
-  }
-  expect(namedTestExists(`describe.skipIf(!reviewUrl || !authPath)('shared stack', () => { ${declaration} });`, title)).toBe(false);
-  expect(namedTestExists(`describe('outer', () => { describe.skip('inner', () => { ${declaration} }); });`, title)).toBe(false);
-  expect(namedTestExists(`describe.skipIf(false)('suite', () => { ${declaration} });`, title)).toBe(true);
-  expect(namedTestExists(`test('${title}', () => { test.skip(false); });`, title)).toBe(true);
-  expect(namedTestExists(`test.skip(true); ${declaration}`, title)).toBe(false);
-  expect(namedTestExists(`describe('suite', () => { if (disabled) test.fixme(true); ${declaration} });`, title)).toBe(false);
-  expect(namedTestExists(`test.skip('unrelated journey', () => {}); ${declaration}`, title)).toBe(true);
-  expect(namedTestExists(`test('unrelated journey', () => { test.skip(true); }); ${declaration}`, title)).toBe(true);
-  expect(namedTestExists(`// ${declaration}`, title)).toBe(false);
-  expect(namedTestExists(`const example = ${JSON.stringify(declaration)};`, title)).toBe(false);
-  expect(namedTestExists(`test('${title}');`, title)).toBe(false);
-});
-
-test('proof execution follows hooks, suite conditions and Playwright options', () => {
+test('proof scopes distinguish declarations from runtime skips', () => {
   const title = 'a reader resumes on another device';
   const declaration = `test('${title}', () => {});`;
   const fixtures = [
-    { source: `test.beforeEach(() => { test.skip(); }); ${declaration}`, runnable: false },
-    { source: `beforeEach(() => { test.fixme(true); }); ${declaration}`, runnable: false },
-    { source: `test.beforeAll(() => { test.skip(disabled); }); ${declaration}`, runnable: false },
-    { source: `describe('suite', () => { beforeEach(() => { test.skip(true); }); ${declaration} });`, runnable: false },
-    { source: `describe('outer', () => { test.beforeEach(() => { test.skip(true); }); describe('inner', () => { ${declaration} }); });`, runnable: false },
-    { source: `test.beforeEach(() => { test.skip(false); }); ${declaration}`, runnable: true },
-    { source: `test.beforeEach(() => { if (false) test.skip(true); }); ${declaration}`, runnable: true },
-    { source: `test.beforeEach(async () => { await step(() => { test.skip(true); }); }); ${declaration}`, runnable: false },
-    { source: `describe.todo('suite', () => { ${declaration} });`, runnable: false },
-    { source: `describe.if(false)('suite', () => { ${declaration} });`, runnable: false },
-    { source: `describe.if(enabled)('suite', () => { ${declaration} });`, runnable: false },
-    { source: `describe.if(true)('suite', () => { ${declaration} });`, runnable: true },
-    { source: `describe.skipIf(enabled)('suite', () => { ${declaration} });`, runnable: false },
-    { source: `describe.skipIf(false)('suite', () => { ${declaration} });`, runnable: true },
-    { source: `if (false) { ${declaration} }`, runnable: false },
-    { source: `if (enabled) { ${declaration} }`, runnable: false },
-    { source: `if (true) { ${declaration} }`, runnable: true },
-    { source: `if (false) {} else { ${declaration} }`, runnable: true },
-    { source: `if (true) {} else { ${declaration} }`, runnable: false },
-    { source: `false && test('${title}', () => {});`, runnable: false },
-    { source: `true || test('${title}', () => {});`, runnable: false },
-    { source: `true && test('${title}', () => {});`, runnable: true },
-    { source: `false || test('${title}', () => {});`, runnable: true },
-    { source: `test.beforeEach(() => { false && test.skip(true); }); ${declaration}`, runnable: true },
-    { source: `test.todo('${title}', () => {});`, runnable: false },
-    { source: `test.if(false)('${title}', () => {});`, runnable: false },
-    { source: `test.if(true)('${title}', () => {});`, runnable: true },
-    { source: `test.skipIf(false)('${title}', () => {});`, runnable: true },
-    { source: `test.skipIf(enabled)('${title}', () => {});`, runnable: false },
-    { source: `test('${title}', { tag: '@launch' }, () => {});`, runnable: true },
-    { source: `test('${title}', () => {}, 180_000);`, runnable: true },
-    { source: `test('${title}', () => { test.skip(true); }, 180_000);`, runnable: false },
-    { source: `test('${title}', { tag: '@launch' }, () => { test.skip(true); });`, runnable: false },
-    { source: `test('${title}', { tag: '@launch' }, () => { test.fixme(enabled); });`, runnable: false },
-    { source: `test('${title}', () => { step(() => { test.skip(true); }); });`, runnable: false },
-    { source: `test.todo('another test'); ${declaration}`, runnable: true },
-    { source: `test.skip('another test', { tag: '@launch' }, () => {}); ${declaration}`, runnable: true },
-    { source: `describe.skip('another suite', () => { beforeEach(() => { test.skip(); }); }); ${declaration}`, runnable: true },
-    { source: `describe('another suite', () => { test.beforeEach(() => { test.skip(); }); }); ${declaration}`, runnable: true },
+    { source: declaration, accepted: true },
+    { source: `test('${title}', function () {});`, accepted: true },
+    { source: `test('${title}', { tag: '@launch' }, () => {});`, accepted: true },
+    { source: `test('${title}', () => {}, 180_000);`, accepted: true },
+    { source: `test.skip('${title}', () => {});`, accepted: false },
+    { source: `test.fixme('${title}', () => {});`, accepted: false },
+    { source: `test.todo('${title}', () => {});`, accepted: false },
+    { source: `test.if(true)('${title}', () => {});`, accepted: false },
+    { source: `test.skipIf(false)('${title}', () => {});`, accepted: false },
+    { source: `test.skip('another test', () => {}); ${declaration}`, accepted: true },
+    { source: `test.fixme('another test', () => { test.skip(); }); ${declaration}`, accepted: true },
+    { source: `test.skip('another test', { tag: '@launch' }, () => {}); ${declaration}`, accepted: true },
+    { source: `test.skip(otherTitle, () => {}); ${declaration}`, accepted: true },
+    { source: `test.skip(otherTitle, function () {}); ${declaration}`, accepted: true },
+    { source: `test.fixme(otherTitle, () => { test.fail(); }); ${declaration}`, accepted: true },
+    { source: 'test.skip(`another ${device}`, () => {}); ' + declaration, accepted: true },
+    { source: `test.skip(other.title, () => {}); ${declaration}`, accepted: true },
+    { source: `test('another test', () => { test.skip(); }); ${declaration}`, accepted: true },
+    { source: `describe.skip('another suite', () => { beforeEach(() => { test.skip(); }); }); ${declaration}`, accepted: true },
+    { source: `describe('another suite', () => { test.beforeEach(() => { test.skip(); }); }); ${declaration}`, accepted: true },
+    { source: `// ${declaration}`, accepted: false },
+    { source: `const example = ${JSON.stringify(declaration)};`, accepted: false },
+    { source: `test('${title}');`, accepted: false },
   ];
-  for (const { source, runnable } of fixtures) expect(namedTestExists(source, title), source).toBe(runnable);
+  for (const { source, accepted } of fixtures) expect(namedTestExists(source, title), source).toBe(accepted);
+
+  for (const modifier of ['skip', 'fixme', 'fail']) {
+    for (const argument of ['', 'true', 'false', 'disabled', '() => true', 'function () { return false; }',
+      '({ browserName }) => browserName === "webkit"']) {
+      const skip = `test.${modifier}(${argument});`;
+      const scopes = [
+        `${skip} ${declaration}`,
+        `test('${title}', () => { ${skip} });`,
+        `test('${title}', { tag: '@launch' }, () => { ${skip} });`,
+        `test('${title}', () => { ${skip} }, 180_000);`,
+        `describe('suite', () => { ${skip} ${declaration} });`,
+        `test.beforeEach(() => { ${skip} }); ${declaration}`,
+        `beforeEach(() => { ${skip} }); ${declaration}`,
+        `test.beforeAll(() => { ${skip} }); ${declaration}`,
+        `describe('outer', () => { beforeEach(() => { ${skip} }); describe('inner', () => { ${declaration} }); });`,
+        `function unused() { ${skip} } ${declaration}`,
+        `const unused = () => { ${skip} }; ${declaration}`,
+        `test('${title}', () => { function unused() { ${skip} } });`,
+        `function hook() { ${skip} } beforeEach(hook); ${declaration}`,
+        `if (false) { ${skip} } ${declaration}`,
+        `test('${title}', () => { if (false) { ${skip} } });`,
+        `test.beforeEach(() => { if (false) { ${skip} } }); ${declaration}`,
+        `false && test.${modifier}(${argument}); ${declaration}`,
+        `true || test.${modifier}(${argument}); ${declaration}`,
+        `test('${title}', () => { step(() => { ${skip} }); });`,
+      ];
+      for (const source of scopes) expect(namedTestExists(source, title), source).toBe(false);
+    }
+  }
 });
 
-test('journey imports count only when their registration runs', () => {
+test('suite skip constructs reject contained proofs without evaluating conditions', () => {
+  const title = 'a reader resumes on another device';
+  const declaration = `test('${title}', () => {});`;
+  for (const suite of [
+    'describe.skip', 'describe.fixme', 'describe.todo',
+    'describe.if(true)', 'describe.if(false)', 'describe.if(enabled)',
+    'describe.skipIf(false)', 'describe.skipIf(enabled)',
+    'test.describe.skip', 'test.describe.fixme',
+  ]) {
+    const source = `${suite}('suite', () => { ${declaration} });`;
+    expect(namedTestExists(source, title), source).toBe(false);
+    expect(namedTestExists(`describe('outer', () => { ${source} });`, title), source).toBe(false);
+    expect(namedTestExists(`${suite}('another suite', () => {}); ${declaration}`, title), suite).toBe(true);
+  }
+  expect(namedTestExists(`describe('suite', () => { ${declaration} });`, title)).toBe(true);
+});
+
+test('journey registrations follow the same syntactic scope rule', () => {
   const moduleSpecifier = './journeys/reading.ts';
   const imported = `import { registerReadingJourney as register } from '${moduleSpecifier}';`;
   const fixtures = [
-    { source: 'register();', runnable: true },
-    { source: `describe('suite', () => { register(); });`, runnable: true },
-    { source: `describe.skip('suite', () => { register(); });`, runnable: false },
-    { source: `test.describe.skip('suite', () => { register(); });`, runnable: false },
-    { source: `describe.todo('suite', () => { register(); });`, runnable: false },
-    { source: `describe.if(false)('suite', () => { register(); });`, runnable: false },
-    { source: `describe.if(true)('suite', () => { register(); });`, runnable: true },
-    { source: `describe.skipIf(disabled)('suite', () => { register(); });`, runnable: false },
-    { source: `describe.skipIf(false)('suite', () => { register(); });`, runnable: true },
-    { source: 'test.skip(true); register();', runnable: false },
-    { source: 'test.beforeEach(() => { test.fixme(true); }); register();', runnable: false },
-    { source: `describe('suite', () => { test.beforeEach(() => { test.skip(); }); register(); });`, runnable: false },
-    { source: 'if (false) register();', runnable: false },
-    { source: 'if (enabled) register();', runnable: false },
-    { source: 'if (true) register();', runnable: true },
-    { source: 'false && register();', runnable: false },
-    { source: 'true || register();', runnable: false },
-    { source: 'true && register();', runnable: true },
-    { source: 'false || register();', runnable: true },
-    { source: `describe.skip('another suite', () => {}); register();`, runnable: true },
-    { source: `test('another test', () => { test.skip(true); }); register();`, runnable: true },
-    { source: `test('another test', () => { register(); });`, runnable: false },
-    { source: 'function unused() { register(); }', runnable: false },
-    { source: '// register();', runnable: false },
-    { source: `const example = 'register();';`, runnable: false },
+    { source: 'register();', accepted: true },
+    { source: `describe('suite', () => { register(); });`, accepted: true },
+    { source: `describe.skip('suite', () => { register(); });`, accepted: false },
+    { source: `describe.fixme('suite', () => { register(); });`, accepted: false },
+    { source: `describe.todo('suite', () => { register(); });`, accepted: false },
+    { source: `describe.if(false)('suite', () => { register(); });`, accepted: false },
+    { source: `describe.if(true)('suite', () => { register(); });`, accepted: false },
+    { source: `describe.if(enabled)('suite', () => { register(); });`, accepted: false },
+    { source: `test.describe.skip('suite', () => { register(); });`, accepted: false },
+    { source: `test.describe.fixme('suite', () => { register(); });`, accepted: false },
+    { source: `describe.skipIf(disabled)('suite', () => { register(); });`, accepted: false },
+    { source: `describe.skipIf(false)('suite', () => { register(); });`, accepted: false },
+    { source: `describe.skip('another suite', () => {}); register();`, accepted: true },
+    { source: `test.skip(otherTitle, () => {}); register();`, accepted: true },
+    { source: `test.fixme(otherTitle, () => {}); register();`, accepted: true },
+    { source: `test('another test', () => { test.skip(true); }); register();`, accepted: true },
+    { source: '// register();', accepted: false },
+    { source: `const example = 'register();';`, accepted: false },
   ];
-  for (const { source, runnable } of fixtures) {
-    expect(journeyRegistered(`${imported}\n${source}`, moduleSpecifier), source).toBe(runnable);
+  for (const { source, accepted } of fixtures) {
+    expect(journeyRegistered(`${imported}\n${source}`, moduleSpecifier), source).toBe(accepted);
+  }
+  for (const modifier of ['skip', 'fixme', 'fail']) {
+    for (const argument of ['', 'false', '() => true']) {
+      const skip = `test.${modifier}(${argument});`;
+      for (const source of [
+        `${skip} register();`,
+        `test.beforeEach(() => { ${skip} }); register();`,
+        `describe('suite', () => { test.beforeEach(() => { ${skip} }); register(); });`,
+        `function unused() { ${skip} } register();`,
+        `if (false) { ${skip} } register();`,
+      ]) expect(journeyRegistered(`${imported}\n${source}`, moduleSpecifier), source).toBe(false);
+    }
   }
   expect(journeyRegistered(imported, moduleSpecifier)).toBe(false);
   expect(journeyRegistered(`${imported} register();`, './journeys/other.ts')).toBe(false);
@@ -481,6 +454,15 @@ test('proof titles in a table must be registered by that table’s test loop', (
   expect(namedTestExists(source.replace('test(journey.title', 'test.skip(journey.title'), 'a reader chooses a format')).toBe(false);
   expect(namedTestExists(source.replace('async () => {}', "{ tag: '@launch' }, async () => {}"), 'a reader chooses a format')).toBe(true);
   expect(namedTestExists(source.replace('async () => {}', "{ tag: '@launch' }, async () => { test.fixme(true); }"), 'a reader chooses a format')).toBe(false);
+  expect(namedTestExists(`test.skip(otherTitle, () => {}); ${source}`, 'a reader chooses a format')).toBe(true);
+  for (const modifier of ['skip', 'fixme', 'fail']) {
+    for (const skip of [`test.${modifier}(false);`, `test.${modifier}(() => true);`]) {
+      for (const scope of [skip, `function unused() { ${skip} }`, `if (false) { ${skip} }`,
+        `test.beforeEach(() => { ${skip} });`]) {
+        expect(namedTestExists(`${scope} ${source}`, 'a reader chooses a format'), scope).toBe(false);
+      }
+    }
+  }
 });
 
 test('launch outcomes retain landed proofs, the recipe reading name and all five new Zone rows', () => {
