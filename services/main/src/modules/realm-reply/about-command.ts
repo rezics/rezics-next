@@ -27,11 +27,16 @@ const terminalErrors = {
   'read-missing': WorkReadMissing, 'read-moved': WorkReadMoved, 'read-invalid': WorkReadInvalid,
 } as const;
 /** Outcome table (the locked intent/owner receipt supplies the evidence):
+ * - Invalid input / changed input under a key: 400 / 409 request rejection;
+ *   these do not terminate any retained intent with a different valid input.
+ * - Selected child waiting for its opener: recoverable 202, same operation.
  * - Definite basis/disclosure, draft/identity or admission refusal before
  *   dispatch: terminal only for an allocated, undispatched selection.
- * - No allocated intent, recorded dispatch, missing receipt, transport/owner
- *   outage, admission/receipt conflict or read budget failure: recoverable 503.
- * - Successful graph receipt: recover native settlement, then replay as 200.
+ * - No allocated intent or dispatch without a completed owner outcome,
+ *   missing receipt, transport/owner outage, admission/receipt conflict or
+ *   read budget failure: recoverable 503.
+ * - Successful graph receipt: finish native settlement; fresh post 201,
+ *   exact or concurrent replay 200. This retains terminal success.
  * - Exact cancelled draft + ContentConflict: terminal Content refusal.
  * - Cancelled placement + ContentConflict or other uncertain cleanup failure:
  *   recoverable 503; retry the native owner to finish settlement and sealing.
