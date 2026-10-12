@@ -41,6 +41,9 @@ log_rotation_age=0` });
   for (const file of schemaFiles(root, 'content')) {
     await nativeContent.query(readFileSync(join(root, 'services/content/migrations', file), 'utf8'));
   }
+  for (const file of schemaFiles(root, 'relay')) {
+    await nativeContent.query(readFileSync(join(root, 'services/main/migrations/relay', file), 'utf8'));
+  }
 }, 120_000);
 
 afterAll(async () => {
@@ -51,6 +54,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await nativeContent.query('TRUNCATE content.variant,content.receipt CASCADE');
+  await nativeContent.query('TRUNCATE relay.delivered_event');
   await nativeContent.query('UPDATE content.owner_control SET data_epoch=$1,sequence=7 WHERE singleton', [contentEpoch]);
   await access.query(`TRUNCATE access.realm_thread_reference, access.realm_thread_state,
     access.realm_thread_population, access.realm_thread_dirty, access.feed_item CASCADE`);
@@ -203,7 +207,7 @@ test.each([
   ['content.comment.created', 'comment.create', 'succeeded', 'addition'],
   ['content.publication.active', 'publication.settle', 'succeeded', 'addition'],
   ['content.publication.rejected', 'publication.settle', 'succeeded', 'removal'],
-  ['content.realm-reply.prepared', 'publication.prepare', 'rejected', 'removal'],
+  ['content.realm-reply.prepared', 'publication.prepare', 'rejected', 'none'],
   ['content.unknown', 'publication.prepare', 'succeeded', 'removal'],
 ] as const)('native Content replay classifies %s (%s, %s) as %s', async (eventType, action, outcome, effect) => {
   const realm = native(), item = await reference(realm);
@@ -242,9 +246,9 @@ test.each([
   await expect(new RealmThreadRankingProjection(access, {} as Pool)
     .tick(session, { data_epoch: epoch } as FeedCheckpoint, '3')).resolves.toBe(true);
   expect((await access.query('SELECT effect FROM access.realm_thread_dirty WHERE data_epoch=$1 AND resource=$2',
-    [epoch, item.reply])).rows).toEqual([{ effect }]);
+    [epoch, item.reply])).rows).toEqual(effect === 'none' ? [] : [{ effect }]);
   for (const sort of ['best', 'top'] as const) {
-    if (effect === 'addition') {
+    if (effect !== 'removal') {
       expect(await realmRankPage(access, session, realm, sort, 'all', 20)).toEqual(previous.get(sort)!);
     } else {
       await expect(realmRankPage(access, session, realm, sort, 'all', 20)).rejects.toBeInstanceOf(RealmRankingsIncomplete);
@@ -252,6 +256,31 @@ test.each([
     expect((await realmRankPage(access, session, otherRealm, sort, 'all', 20)).rows.map(row => row.reply)).toEqual([other.reply]);
   }
 });
+
+test.each(['rejected', undefined, 'future-outcome'] as const)(
+  'native Main replay consumes %s receipts without mistaking unknown outcomes for refusals', async outcome => {
+    const realm = native(), item = await reference(realm), otherRealm = native();
+    const other = await reference(otherRealm);
+    await nativeContent.query(`INSERT INTO relay.delivered_event
+      (stream_scope,source,event_id,data_epoch,sequence,envelope) VALUES($1,'realm-ranking', $2,$3,4,$4)`,
+    [MAIN_RELAY_STREAM_SCOPE, randomUUID(), epoch, JSON.stringify({ type: 'com.rezics.realm.reply-placed.v1',
+      data: { receipt: { realm, reply: item.reply, action: 'reply.place', outcome } } })]);
+    const { session } = reader('7', '4');
+    session.deps.realmReplyThreads = new RealmReplyThreadStore(nativeContent, access);
+    session.deps.content = {} as NonNullable<WorkReadSession['deps']['content']>;
+    const previous = await realmRankPage(access, session, realm, 'best', 'all', 20);
+    await expect(new RealmThreadRankingProjection(access, nativeContent)
+      .tick(session, { data_epoch: epoch } as FeedCheckpoint, '4')).resolves.toBe(true);
+    expect((await access.query('SELECT sequence::text FROM access.realm_thread_checkpoint WHERE data_epoch=$1',
+      [epoch])).rows[0]).toEqual({ sequence: '4' });
+    if (outcome === 'rejected') {
+      expect(await realmRankPage(access, session, realm, 'best', 'all', 20)).toEqual(previous);
+      expect((await access.query('SELECT 1 FROM access.realm_thread_dirty WHERE data_epoch=$1', [epoch])).rowCount).toBe(0);
+    } else {
+      await expect(realmRankPage(access, session, realm, 'best', 'all', 20)).rejects.toBeInstanceOf(RealmRankingsIncomplete);
+    }
+    expect((await realmRankPage(access, session, otherRealm, 'best', 'all', 20)).rows.map(row => row.reply)).toEqual([other.reply]);
+  });
 
 test('uninitialized and reset placements never masquerade as a complete empty population', async () => {
   const realm = native();

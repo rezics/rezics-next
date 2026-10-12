@@ -363,9 +363,10 @@ export class RealmThreadRankingProjection {
           resource: string | null;
           realm: string | null;
           effect?: 'addition' | 'removal';
+          has_effect?: boolean;
         }>(
           `
-        SELECT o.sequence::text,p.id AS reply,v.resource_id AS resource,
+        SELECT o.sequence::text,p.id AS reply,v.resource_id AS resource,r.outcome='succeeded' AS has_effect,
           CASE WHEN o.event_type='content.realm-review.decided' THEN o.payload->>'realm' ELSE NULL END AS realm,
           CASE WHEN r.outcome='succeeded' AND (
             o.event_type='content.reply.created' AND r.action='reply.create'
@@ -395,6 +396,8 @@ export class RealmThreadRankingProjection {
       await controlTransaction(this.access, async (client) => {
         await this.lock(client, epoch, position);
         for (const event of events) {
+          // A typed refusal consumes a stream position without changing a placement.
+          if (event.has_effect === false) continue;
           if (event.reply && event.realm) await this.placementDirty(client, epoch, event.realm, event.reply, event.effect);
           else if (event.reply) await this.dirty(client, epoch, 'reply', event.reply, event.effect);
           else if (event.resource) await this.dirty(client, epoch, 'work', event.resource, event.effect);
@@ -415,8 +418,11 @@ export class RealmThreadRankingProjection {
           work: string | null;
           realm: string | null;
           effect?: 'addition' | 'removal';
+          has_effect?: boolean | null;
         }>(
           `SELECT sequence::text,event_id,
+          CASE WHEN envelope#>>'{data,receipt,outcome}' IN ('rejected','refused','cancelled','stale_head') THEN false
+            WHEN envelope#>>'{data,receipt,outcome}'='succeeded' THEN true ELSE NULL END AS has_effect,
           envelope#>>'{data,receipt,reply}' AS reply,
           COALESCE(envelope#>>'{data,receipt,work}',envelope#>>'{data,receipt,rootTarget}',
             envelope#>>'{data,payload,work}',envelope#>>'{data,work}') AS work,
@@ -438,6 +444,7 @@ export class RealmThreadRankingProjection {
       await controlTransaction(this.access, async (client) => {
         await this.lock(client, epoch, position);
         for (const event of events) {
+          if (event.has_effect === false) continue;
           if (event.reply && event.realm) await this.placementDirty(client, epoch, event.realm, event.reply, event.effect);
           else if (event.reply) await this.dirty(client, epoch, 'reply', event.reply, event.effect);
           else if (event.work) await this.dirty(client, epoch, 'work', event.work, event.effect);
