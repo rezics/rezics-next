@@ -99,7 +99,12 @@ function interruptSql(pool: Pool, needle: string, failure: Error) {
   const connect = pool.connect.bind(pool);
   let hits = 0;
   const restores: (() => void)[] = [];
+  const installed = new Set<PoolClient>();
   const install = (client: PoolClient) => {
+    // A pool may lend the same client to its preliminary read and held pass.
+    // Replacing one Bun spy twice would bind its fallback to itself.
+    if (installed.has(client)) return client;
+    installed.add(client);
     const query = client.query.bind(client);
     const injected = spyOn(client, 'query').mockImplementation(((...args: unknown[]) => {
       const sql = args[0];
