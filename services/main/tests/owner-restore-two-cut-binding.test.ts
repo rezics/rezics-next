@@ -4,7 +4,9 @@ import { restoreRequestDigestFromAuthorityDigest, type OwnerRestoreEvidence }
   from '../src/modules/erasure/reconcile.ts';
 import { qualificationRef, requireQualification, type ErasuresRecord }
   from '../src/modules/owner/restore-release-binding.ts';
-import { RestoreLineageConflict, type RestoredGraphReleaseExpectation }
+import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts';
+import { AccountRecoveryProfileMismatch, assertNativeAccessErasureBaseBinding, assertRecoveryCoverage,
+  RestoreLineageConflict, type RecoveryCoverage, type RestoredGraphReleaseExpectation }
   from '../src/modules/work/restore-lineage.ts';
 
 const key = 'ab'.repeat(32);
@@ -24,6 +26,36 @@ const expectation: RestoredGraphReleaseExpectation = {
   effective: { dataEpoch: 'source', graphSequence: '10',
     main: { streamScope: 'main', dataEpoch: 'source', sequence: '8' } },
 };
+
+test('OPS12: signed C0 and C1 Account digests cannot be compared across profiles', () => {
+  const base: RecoveryCoverage = {
+    priorDataEpoch: 'source', priorSequence: '0',
+    accountPg: { systemIdentifier: '1', flushedLsn: '0/1', walFile: '000000010000000000000001' },
+    account: { rowCount: '0', rowDigest: 'a'.repeat(64) },
+    accessOutboxCount: '0', accessOutboxDigest: 'b'.repeat(64),
+    accessStateCount: '0', accessStateDigest: 'c'.repeat(64),
+    relay: { streamScope: MAIN_RELAY_STREAM_SCOPE, consumer: 'consumer', dataEpoch: 'source',
+      sequence: '0', batchCount: '0', batchDigest: 'd'.repeat(64), eventCount: '0', eventDigest: 'e'.repeat(64) },
+    commerce: { version: 1, tables: {} } as RecoveryCoverage['commerce'],
+  };
+  const current = { ...base, account: { ...base.account, profile: 'authority-v1' as const } };
+  for (const legacy of [base, { ...base, account: { ...base.account, profile: 'full-rows' as const } }]) {
+    assertRecoveryCoverage(legacy);
+    assertRecoveryCoverage(current);
+    for (const [c0, c1] of [[legacy, current], [current, legacy]]) {
+      try {
+        assertNativeAccessErasureBaseBinding(c1!, c0!, 'signed-C0');
+        throw new Error('cross-profile binding unexpectedly accepted');
+      } catch (error) {
+        expect(error).toBeInstanceOf(AccountRecoveryProfileMismatch);
+        expect((error as AccountRecoveryProfileMismatch).code).toBe('account-recovery-profile-mismatch');
+      }
+    }
+  }
+  expect(() => assertRecoveryCoverage({ ...base,
+    account: { ...base.account, profile: 'unknown' } } as unknown as RecoveryCoverage))
+    .toThrow('invalid recovery coverage');
+});
 
 test('OPS12: two-cut request identity and qualification authenticate every retained native relation fact', async () => {
   const reference = qualificationRef(key, record, '5', expectation, evidence);

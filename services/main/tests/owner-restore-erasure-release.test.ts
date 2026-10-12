@@ -5,6 +5,7 @@ import { sealRecoveryPayload } from '../../account/src/recovery-envelope.ts';
 import { FusekiClient, type CommandEnvelope, type CommandResult,
   type SparqlResult } from '../src/infrastructure/fuseki.ts';
 import * as commerceCoverage from '../src/modules/commerce/recovery-coverage.ts';
+import * as erasureAuthority from '../src/modules/erasure/authority.ts';
 import * as deletionJournal from '../src/modules/outbox/account-deletion-journal.ts';
 import * as subjectDeletion from '../src/modules/outbox/account-subject-deletion.ts';
 import * as coverageHead from '../src/modules/outbox/recovery-coverage-head.ts';
@@ -1180,6 +1181,90 @@ test('a lost Access commit after durable relay qualification remains resumable w
     expect(run.access.queries.at(-1)?.sql).toBe('ROLLBACK');
   } finally { run.stop(); }
 });
+
+for (const failure of ['connect', 'scan'] as const) {
+  test(`a captured relay ${failure} connection failure after durable qualification resumes and completes`, async () => {
+    const run = fixture();
+    let restoreAuthoritySpy: (() => void) | undefined;
+    if (failure === 'scan') {
+      run.coverage.accessFenceGeneration = '5';
+      run.coverage.erasureJournal = { version: 1, epoch: null, count: '0',
+        digest: hash(JSON.stringify(['relay-erasure-journal-core-v1', null])) };
+      run.seal();
+      // A distinct authenticated C1 with a later WAL floor preserves every
+      // owner fact while selecting the two-cut captured-journal comparison.
+      const current = { ...run.coverage, accountPg: { ...run.coverage.accountPg, flushedLsn: '0/2000' } };
+      run.evidence.retainedAuthorityCoverage = JSON.stringify(sealRecoveryPayload(
+        current, hmacKey, 'graph-recovery-coverage'));
+      const authoritySpy = spyOn(erasureAuthority, 'assertRetainedAuthorityCapture')
+        .mockImplementation(async (client, consumer, evidence) => {
+          expect(client).toBe(run.relay.client);
+          expect(consumer).toBe(run.coverage.relay.consumer);
+          expect(evidence.sealedCoverage).toBe(run.evidence.retainedAuthorityCoverage!);
+          return current;
+        });
+      restoreAuthoritySpy = () => { authoritySpy.mockRestore(); };
+    }
+    run.evidence.qualification = { resume: false };
+    let qualificationCommits = 0;
+    run.evidence.releaseErasures = async clients => {
+      await clients.relayClient.query('SELECT 1 /* qualification record */');
+      await clients.commitQualification();
+      qualificationCommits++;
+      throw new RestoreInterrupted('interrupted after durable qualification');
+    };
+    try {
+      await expect(run.release()).rejects.toBeInstanceOf(RestoreInterrupted);
+      expect(qualificationCommits).toBe(1);
+      expect(run.trace.filter(item => item === 'relay:commit')).toHaveLength(1);
+      expectBothHeld(run);
+
+      run.evidence.qualification = { resume: true };
+      if (failure === 'scan') {
+        run.evidence.qualification.authenticateResume = async clients => {
+          expect(qualificationCommits).toBe(1);
+          expect(clients.relayClient).toBe(run.relay.client);
+          expect(clients.accessClient).toBe(run.access.client);
+          expect(clients.fenceGeneration).toBe('5');
+        };
+      }
+      run.evidence.releaseErasures = async (clients, releaseGraph) => {
+        await releaseGraph();
+        await openAccess(clients);
+      };
+      const unavailable = Object.assign(new Error('captured relay connection lost'), { code: '08006' });
+      if (failure === 'connect') run.capturedRelay.connectFailure = unavailable;
+      else run.capturedRelay.queryGate = async sql => {
+        if (sql === 'SELECT max(erasure_epoch)::text AS epoch FROM relay.erasure') throw unavailable;
+      };
+      await expect(run.release()).rejects.toBeInstanceOf(RestoreInterrupted);
+      if (failure === 'scan') {
+        expect(run.trace.filter(item => item === 'validated:captured-relay')).toHaveLength(2);
+        expect(run.capturedRelay.queries.at(-2)?.sql)
+          .toBe('SELECT max(erasure_epoch)::text AS epoch FROM relay.erasure');
+      }
+      expectBothHeld(run);
+      expect(run.capturedRelay.active).toBe(false);
+      expect(run.capturedRelay.transactionOpen).toBe(false);
+      expect(run.access.active).toBe(false);
+      expect(run.relay.active).toBe(false);
+      expect(qualificationCommits).toBe(1);
+
+      run.capturedRelay.connectFailure = undefined;
+      run.capturedRelay.queryGate = undefined;
+      await run.release();
+      expect(run.fuseki.held).toBe(false);
+      expect(run.fuseki.commands).toHaveLength(1);
+      expect(run.access.open).toBe(true);
+      expect(run.access.generation).toBe('6');
+      expect(qualificationCommits).toBe(1);
+      for (const owner of [run.capturedRelay, run.access, run.relay]) {
+        expect(owner.active).toBe(false);
+        expect(owner.borrowCount).toBe(owner.releaseCount);
+      }
+    } finally { restoreAuthoritySpy?.(); run.stop(); }
+  });
+}
 
 test('a resumed qualification skips the replay-sensitive base comparison and continues from the released graph', async () => {
   const run = fixture();

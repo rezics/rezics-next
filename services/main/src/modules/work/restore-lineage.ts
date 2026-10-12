@@ -42,6 +42,9 @@ import { assertObjectRecoveryCoverage, captureObjectRecoveryCoverage,
   type ObjectRecoveryCoverage, type ObjectRecoveryStore } from '../owner/object-coverage.ts';
 
 export class RestoreLineageConflict extends Error {}
+export class AccountRecoveryProfileMismatch extends RestoreLineageConflict {
+  readonly code = 'account-recovery-profile-mismatch';
+}
 export class RecoveryHold extends Error {}
 
 export { RESTORE_CUTOVER_CRASH_FLAG, RESTORE_CUTOVER_CRASH_POINTS, restoreCutoverCrashArmed,
@@ -376,7 +379,14 @@ function sameCoverage(left: RowCoverage, right: RowCoverage): boolean {
 }
 
 function sameAccountRows(left: AccountRecoveryCoverage, right: AccountRecoveryCoverage): boolean {
+  assertSameAccountRecoveryProfile(left, right);
   return left.rowCount === right.rowCount && left.rowDigest === right.rowDigest;
+}
+
+function assertSameAccountRecoveryProfile(left: AccountRecoveryCoverage, right: AccountRecoveryCoverage): void {
+  if ((left.profile ?? 'full-rows') !== (right.profile ?? 'full-rows')) {
+    throw new AccountRecoveryProfileMismatch('Account recovery profiles differ between signed C0 and current C1');
+  }
 }
 
 function rowCoverage(count: string, digest: string): RowCoverage { return { count, digest }; }
@@ -858,6 +868,7 @@ export function assertNativeAccessErasureBaseBinding(
 ): void {
   assertRecoveryCoverage(current);
   assertRecoveryCoverage(base);
+  assertSameAccountRecoveryProfile(current.account, base.account);
   const reference = current.nativeAccessErasure;
   if (!reference || !base.accessFenceGeneration || !base.erasureJournal
     || reference.baseCoverageDigest !== createHash('sha256').update(baseCoverageEnvelope, 'utf8').digest('hex')
@@ -879,6 +890,8 @@ export function assertRecoveryCoverage(coverage: RecoveryCoverage): void {
     || !/^[0-9A-F]{24}$/i.test(coverage.accountPg?.walFile ?? '')
     || !/^[0-9]+$/.test(coverage.account?.rowCount ?? '')
     || !/^[0-9a-f]{64}$/.test(coverage.account?.rowDigest ?? '')
+    || coverage.account?.profile !== undefined
+      && coverage.account.profile !== 'full-rows' && coverage.account.profile !== 'authority-v1'
     || !/^[0-9]+$/.test(coverage.accessOutboxCount)
     || !/^[0-9a-f]{64}$/.test(coverage.accessOutboxDigest)
     || !/^[0-9]+$/.test(coverage.accessStateCount)
@@ -928,6 +941,7 @@ export async function assertRestoreAuthorityBaseline(relay: PoolClient,
     if (release) throw new RestoreLineageConflict('two-cut release requires a distinct authenticated base');
     return;
   }
+  assertSameAccountRecoveryProfile(current.account, base.account);
   // A later WAL floor alone needs no attachment: all captured owner facts and
   // native Access values must still describe the same cut.
   if (!current.nativeAccessErasure) {
@@ -1070,6 +1084,12 @@ export async function releaseRestoredGraphHold(
   } catch (error) {
     if (capturedClient) {
       try { await capturedClient.query('ROLLBACK'); } catch { /* retain original error */ }
+    }
+    // The durable qualification already owns the retry identity. An unavailable
+    // captured snapshot cannot settle that operation as a permanent refusal.
+    if (evidence.qualification?.resume && !(error instanceof RestoreLineageConflict)
+      && isRelayTransientFailure(error)) {
+      throw new RestoreInterrupted('qualified restore captured relay connection was interrupted', { cause: error });
     }
     throw new RestoreLineageConflict('captured relay handoff is unavailable', { cause: error });
   } finally { capturedClient?.release(); }

@@ -4,6 +4,8 @@ import type { Pool, QueryResult } from 'pg';
 export class AccountRecoveryCoverageConflict extends Error {}
 
 export interface AccountRecoveryCoverage {
+  /** Missing on legacy signed captures, whose digest covers whole rows without a prefix. */
+  profile?: 'full-rows' | 'authority-v1';
   rowCount: string;
   rowDigest: string;
 }
@@ -72,7 +74,12 @@ const KEYS: Record<string, [string, string][]> = {
 };
 
 /** Offline authority coverage of every private Account table at one UTC snapshot. */
-export async function accountRecoveryCoverage(pool: Pool): Promise<AccountRecoveryCoverage> {
+export async function accountRecoveryCoverage(
+  pool: Pool, profile: NonNullable<AccountRecoveryCoverage['profile']> = 'authority-v1',
+): Promise<AccountRecoveryCoverage> {
+  if (profile !== 'full-rows' && profile !== 'authority-v1') {
+    throw new AccountRecoveryCoverageConflict('invalid Account recovery coverage profile');
+  }
   const client = await pool.connect();
   try {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
@@ -91,14 +98,16 @@ export async function accountRecoveryCoverage(pool: Pool): Promise<AccountRecove
         + `unexpected ${JSON.stringify(unexpected)}`);
     }
     const digest = createHash('sha256');
-    digest.update(JSON.stringify(ACCOUNT_RECOVERY_USAGE_EXCLUSIONS));
-    digest.update('\n');
+    if (profile === 'authority-v1') {
+      digest.update(JSON.stringify(ACCOUNT_RECOVERY_USAGE_EXCLUSIONS));
+      digest.update('\n');
+    }
     let count = 0n;
     for (const table of tables) {
       const keys = KEYS[table] ?? [['id', UUID_ID_TABLES.has(table) ? 'uuid' : 'text']];
       const columns = keys.map(([name]) => `"${name}"`).join(', ');
-      const excluded = (ACCOUNT_RECOVERY_USAGE_EXCLUSIONS.columns as
-        Readonly<Record<string, readonly string[]>>)[table] ?? [];
+      const excluded = profile === 'authority-v1' ? (ACCOUNT_RECOVERY_USAGE_EXCLUSIONS.columns as
+        Readonly<Record<string, readonly string[]>>)[table] ?? [] : [];
       const body = excluded.length
         ? `to_jsonb(t) - ARRAY[${excluded.map(name => `'${name}'`).join(', ')}]::text[]`
         : 'to_jsonb(t)';
@@ -119,7 +128,7 @@ export async function accountRecoveryCoverage(pool: Pool): Promise<AccountRecove
       }
     }
     await client.query('COMMIT');
-    return { rowCount: count.toString(), rowDigest: digest.digest('hex') };
+    return { profile, rowCount: count.toString(), rowDigest: digest.digest('hex') };
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch { /* retain original error */ }
     throw error;
@@ -132,10 +141,11 @@ export async function assertAccountRecoveryCoverage(
   pool: Pool, expected: AccountRecoveryCoverage,
 ): Promise<void> {
   if (!/^[0-9]+$/.test(expected?.rowCount ?? '')
-    || !/^[0-9a-f]{64}$/.test(expected?.rowDigest ?? '')) {
+    || !/^[0-9a-f]{64}$/.test(expected?.rowDigest ?? '')
+    || expected.profile !== undefined && expected.profile !== 'full-rows' && expected.profile !== 'authority-v1') {
     throw new AccountRecoveryCoverageConflict('invalid Account recovery coverage');
   }
-  const actual = await accountRecoveryCoverage(pool);
+  const actual = await accountRecoveryCoverage(pool, expected.profile ?? 'full-rows');
   if (actual.rowCount !== expected.rowCount || actual.rowDigest !== expected.rowDigest) {
     throw new AccountRecoveryCoverageConflict('Account rows differ from retained recovery coverage');
   }

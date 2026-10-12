@@ -1,15 +1,47 @@
 import { expect, test } from 'bun:test';
+import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import { Pool } from 'pg';
 import { migrateAccount } from '../../../scripts/ops/migrate.ts';
 import { startPostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
+import { openRecoveryPayload, sealRecoveryPayload } from '../src/recovery-envelope.ts';
 import {
   ACCOUNT_RECOVERY_USAGE_EXCLUSIONS,
   accountRecoveryCoverage,
   assertAccountRecoveryCoverage,
+  type AccountRecoveryCoverage,
 } from '../src/recovery-coverage.ts';
 
 const root = resolve(import.meta.dir, '../../..');
+
+/** The historical digest framing, independently calculated from whole-row SQL output. */
+async function legacyFixtureCoverage(pool: Pool): Promise<AccountRecoveryCoverage> {
+  const digest = createHash('sha256');
+  let count = 0n;
+  const fixturePool = { connect: async () => {
+    const client = await pool.connect();
+    return {
+      query: async (sql: string, values: unknown[]) => {
+        const result = await client.query(sql, values);
+        const table = /FROM public\."([^"]+)" AS t/.exec(sql)?.[1];
+        if (table) {
+          expect(sql).toContain('to_jsonb(t)');
+          expect(sql).not.toContain(' - ARRAY[');
+          for (const row of result.rows) {
+            digest.update(JSON.stringify([table, row.id, row.body]));
+            digest.update('\n');
+            count++;
+          }
+        }
+        return result;
+      },
+      release: () => client.release(),
+    };
+  } } as unknown as Pool;
+  // Use the scanner only for its pinned table/key traversal; do not use its hash.
+  await accountRecoveryCoverage(fixturePool, 'full-rows');
+  return { rowCount: count.toString(), rowDigest: digest.digest('hex') };
+}
 
 test('Account recovery usage exclusions require an explicit profile review', () => {
   expect(ACCOUNT_RECOVERY_USAGE_EXCLUSIONS).toEqual({
@@ -53,13 +85,31 @@ test('Account recovery ignores grant usage while retaining every authority chang
     await pool.query(`INSERT INTO public.rezics_account_rate_limit (key)
       VALUES ('coverage-rate-limit')`);
 
+    const legacy = await legacyFixtureCoverage(pool);
+    const key = 'ab'.repeat(32);
+    const sealedLegacy = JSON.stringify(sealRecoveryPayload({ account: legacy }, key, 'graph-recovery-coverage'));
+    const legacySigned = openRecoveryPayload<{ account: AccountRecoveryCoverage }>(
+      sealedLegacy, key, 'graph-recovery-coverage').account;
+    expect(legacySigned.profile).toBeUndefined();
+    await assertAccountRecoveryCoverage(pool, legacySigned);
+    expect(await accountRecoveryCoverage(pool, 'full-rows')).toEqual({ ...legacy, profile: 'full-rows' });
+
     const retained = await accountRecoveryCoverage(pool);
+    expect(retained.profile).toBe('authority-v1');
+    // A declared profile cannot reinterpret a digest produced by the other algorithm.
+    await expect(assertAccountRecoveryCoverage(pool, { ...legacySigned, profile: 'authority-v1' }))
+      .rejects.toThrow('Account rows differ');
+    await expect(assertAccountRecoveryCoverage(pool, { ...retained, profile: 'full-rows' }))
+      .rejects.toThrow('Account rows differ');
     for (const timestamp of ['2026-01-01T00:00:00Z', '2026-01-01T00:01:00Z', null]) {
       const updated = await pool.query(`UPDATE public.rezics_account_grant SET last_used_at = $1
         WHERE user_id = 'coverage-member' AND client_id = 'coverage-client'`, [timestamp]);
       expect(updated.rowCount).toBe(1);
       expect(await accountRecoveryCoverage(pool)).toEqual(retained);
       await assertAccountRecoveryCoverage(pool, retained);
+      if (timestamp === null) await assertAccountRecoveryCoverage(pool, legacySigned);
+      else await expect(assertAccountRecoveryCoverage(pool, legacySigned))
+        .rejects.toThrow('Account rows differ');
     }
 
     // Each committed mutation starts from its own retained snapshot, so an earlier
