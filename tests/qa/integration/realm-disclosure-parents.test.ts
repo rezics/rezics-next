@@ -114,8 +114,7 @@ async function restriction(
     );
     fenceId = recorded.rows[0]!.id;
     await client.query(
-      `UPDATE access.governance_case SET decision_head=$2,generation=1,
-        state='closed',closed_at=clock_timestamp() WHERE id=$1`,
+      `UPDATE access.governance_case SET decision_head=$2,generation=1 WHERE id=$1`,
       [caseId, decisionId],
     );
     await client.query('COMMIT');
@@ -130,10 +129,6 @@ async function restriction(
       release = await pool.connect();
     try {
       await release.query('BEGIN');
-      await release.query(
-        "UPDATE access.governance_case SET state='open',closed_at=NULL WHERE id=$1",
-        [caseId],
-      );
       await release.query(
         `INSERT INTO access.moderation_decision
         (id,kind,outcome,context,case_id,case_sequence,principal_id,acting_subject,authority_kind,authority_scope_id,
