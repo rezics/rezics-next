@@ -373,6 +373,9 @@ test(`${operation} retires its actual session despite one swallowed provider loo
 
 test('sign-out refuses native retirement failure and succeeds after storage recovers', async () => {
   const f = await issuerFixture('https://issuer.test');
+  // The provider skips origin checks by default in its test environment.
+  // Exercise the production admission rule before making retirement fail.
+  (await f.auth.$context).skipOriginCheck = false;
   try {
     const member = await f.signup('retirement-storage-failure@example.test');
     expect((await f.request('/api/auth/sign-out', {}, member.cookie, { origin: 'https://other.test' })).status).toBe(403);
