@@ -777,12 +777,16 @@ test('production Realm dispatch refuses a competing primary kind introduced afte
 }, 120_000);
 
 test('production Realm moderationTarget receipt refreshes the directory without a publication slot', async () => {
-  const f = await productionRealm('realm-receipt-directory');
+  const label = `realm-receipt-directory-${randomUUID()}`;
+  const f = await productionRealm(label);
   try {
+    // The integration shard retains earlier Realm fixtures, including deliberate
+    // corruptions. Hydrate only this authored profile when observing its projection.
+    const path = `/v1/realms?q=${encodeURIComponent(label)}`;
     const read = async () => {
       const position = (await f.stack.accessPool.query<{ phase: string }>(
         'SELECT phase FROM access.realm_directory_position WHERE singleton')).rows[0]!;
-      return position.phase === 'idle' ? f.stack.call('GET', '/v1/realms') : new Response('', { status: 503 });
+      return position.phase === 'idle' ? f.stack.call('GET', path) : new Response('', { status: 503 });
     };
     await waitForRealmDirectory(f.stack.env, read, page => page.items.some(item => item.id === f.realm));
     expect((await f.stack.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH <${GRAPHS.current}> {
