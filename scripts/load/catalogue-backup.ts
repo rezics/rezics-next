@@ -11,6 +11,7 @@ import {
   freshPorts,
   VOLUME_KINDS,
   root,
+  fixtureRoot,
 } from '../fixture/stack.ts';
 import { appEnvironment, readEnv, replacePrivate } from '../dev/config.ts';
 import { admissionWaitDuration, runQaStartupChildAsync } from '../qa/stack-startup.ts';
@@ -35,6 +36,14 @@ function privateDirectory(path: string) {
   if (local.startsWith('..') || !local.startsWith('.temp/'))
     throw new Error('Catalogue backups must stay in this checkout .temp');
   return directory;
+}
+/** Shared retained inputs are read-only; every destination still uses this checkout. */
+export function corpusBackupSourceDirectory(path: string, checkout = root, fixtures = fixtureRoot): string {
+  const directory = resolve(path);
+  const local = relative(checkout, directory);
+  const shared = relative(resolve(fixtures, '../work-profiles'), directory);
+  if ((!local.startsWith('..') && local.startsWith('.temp/')) || !shared.startsWith('..')) return directory;
+  throw new Error('Catalogue backup source must stay in checkout .temp or the declared shared work-profiles');
 }
 const task = async (args: string[]) => {
   if (args[0] !== 'stack:up') return await stream('task', args, dockerEnvironment(), undefined, 120_000);
@@ -230,6 +239,8 @@ const restoreRuntime = { task, run, copyVolume, projectRunning, dockerEnvironmen
 /** Wall time includes startup admission, storage copy and readiness. */
 export interface CorpusPreparationTiming {
   restoreMs: number;
+  volumeCopyMs?: Record<(typeof VOLUME_KINDS)[number], number>;
+  objectCopyMs?: number;
   startupMs: number;
   readinessMs: number;
   totalMs: number;
@@ -246,7 +257,7 @@ export async function restoreCatalogueBackup(path: string, runId: string,
     retargetGraphRoute, now } = { ...restoreRuntime, ...runtimeDependencies };
   const checkSignal = () => signal?.throwIfAborted();
   const startedAt = now(),
-    directory = privateDirectory(resolve(path, '..'));
+    directory = corpusBackupSourceDirectory(resolve(path, '..'));
   const backup = JSON.parse(
     readFileSync(join(directory, 'backup.json'), 'utf8'),
   ) as CatalogueBackup;
@@ -292,6 +303,7 @@ export async function restoreCatalogueBackup(path: string, runId: string,
     return errors;
   };
   try {
+    const volumeCopyMs = {} as Record<(typeof VOLUME_KINDS)[number], number>;
     const compose = { ...readEnv(join(directory, 'compose.env')), ...(await freshPorts()) };
     if (resourceClass) {
       // Storage lineage is retained; a modest restored corpus can qualify
@@ -312,10 +324,14 @@ export async function restoreCatalogueBackup(path: string, runId: string,
         '--label', `com.docker.compose.project=${project}`,
         '--label', `com.docker.compose.volume=${kind}`,
         destinations[index]!], docker);
+      const copyStarted = now();
       await copyVolume(`${backup.project}_${kind}`, destinations[index]!, docker, signal);
+      volumeCopyMs[kind] = now() - copyStarted;
       checkSignal();
     }
+    const objectCopyStarted = now();
     cpSync(join(directory, 'objects'), apps.MAIN_OBJECT_DIRECTORY!, { recursive: true });
+    const objectCopyMs = now() - objectCopyStarted;
     const copiedAt = now();
     stackAttempted = true;
     let startup: string;
@@ -337,6 +353,8 @@ export async function restoreCatalogueBackup(path: string, runId: string,
     const readyAt = now();
     const preparation: CorpusPreparationTiming = {
       restoreMs: copiedAt - startedAt,
+      volumeCopyMs,
+      objectCopyMs,
       startupMs: startedUpAt - copiedAt,
       readinessMs: readyAt - startedUpAt,
       totalMs: readyAt - startedAt,

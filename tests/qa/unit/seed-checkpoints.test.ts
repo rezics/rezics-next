@@ -8,13 +8,29 @@ import {
   buildSeedCommandCostComparison,
   buildSeedCommandCostReport,
   readRetainedSeed,
+  seedVerificationCuts,
   seedDirectory,
   seedDirectoryForFixtureRoot,
   SEED_BUILD_COMMAND,
   type SeedCommandCostRow,
   type SeedCommandMeasurement,
+  type RetainedSeedCut,
 }
   from '../support/seed-checkpoints.ts';
+import { integrationResourceClass, qaResourceClasses } from '../../../scripts/qa/resource-classes.ts';
+
+test('one-cut verification selects exactly the requested frozen cut and default all preserves isolation coverage', () => {
+  const cuts = (['small', 'medium', 'large'] as const).map(scale => ({ manifest: { scale } }) as RetainedSeedCut);
+  expect(seedVerificationCuts({ cuts })).toEqual([cuts[0]!, ...cuts]);
+  expect(seedVerificationCuts({ cuts }, 'all')).toEqual([cuts[0]!, ...cuts]);
+  for (const [index, scale] of ['small', 'medium', 'large'].entries())
+    expect(seedVerificationCuts({ cuts }, scale)).toEqual([cuts[index]!]);
+  expect(() => seedVerificationCuts({ cuts }, 'typo')).toThrow('REZICS_SEED_VERIFY_CUT');
+  expect(() => seedVerificationCuts({ cuts: [] }, 'small')).toThrow('cut small is absent');
+  const allocation = qaResourceClasses[integrationResourceClass(['tests/qa/integration/work-profile-seed-checkpoints.test.ts'])];
+  expect(allocation.storage).toBe('scale');
+  expect(allocation.budgetMs).toBeGreaterThanOrEqual(600_000 + 120_000);
+});
 
 function commandMeasurement(
   operation: string,

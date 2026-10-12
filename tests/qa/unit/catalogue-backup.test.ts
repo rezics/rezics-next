@@ -1,9 +1,22 @@
 import { expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { restoreCatalogueBackup, retainStoppedOwnerBackup } from '../../../scripts/load/catalogue-backup.ts';
+import { corpusBackupSourceDirectory, restoreCatalogueBackup, retainStoppedOwnerBackup } from '../../../scripts/load/catalogue-backup.ts';
 import { loadCompatibility } from '../../../scripts/load/compatibility.ts';
-import { root, VOLUME_KINDS } from '../../../scripts/fixture/stack.ts';
+import { fixtureRoot, root, VOLUME_KINDS } from '../../../scripts/fixture/stack.ts';
+
+test('shared retained backups are readable from a worktree while backup publication stays local', async () => {
+  const checkout = join(root, '.temp/source-boundary/worktree');
+  const fixtures = join(root, '.temp/source-boundary/shared/fixture');
+  const shared = join(root, '.temp/source-boundary/shared/work-profiles/seed-checkpoints/small');
+  expect(corpusBackupSourceDirectory(shared, checkout, fixtures)).toBe(shared);
+  expect(corpusBackupSourceDirectory(join(checkout, '.temp/backup'), checkout, fixtures)).toBe(join(checkout, '.temp/backup'));
+  expect(() => corpusBackupSourceDirectory(join(shared, '../../../outside'), checkout, fixtures)).toThrow('backup source');
+  const actualShared = join(fixtureRoot, '../work-profiles/seed-checkpoints/never-publish');
+  if (!actualShared.startsWith(`${root}/`))
+    await expect(retainStoppedOwnerBackup('read-only-proof', 'cut', actualShared, Date.now()))
+      .rejects.toThrow('this checkout .temp');
+});
 
 async function restoreScenario(mode: 'copy-failure' | 'volume-create-failure' | 'budget' | 'success' | 'ordinary-allocation' | 'timing' | 'admission-wait' | 'existing-volume' | 'existing-directory' | 'startup-failure' | 'startup-diagnostics' | 'cleanup-failure') {
   const directory = mkdtempSync(join(root, '.temp/catalogue-restore-'));
@@ -87,10 +100,12 @@ async function restoreScenario(mode: 'copy-failure' | 'volume-create-failure' | 
         expect(restored.elapsedMs).toBe(300_000);
         expect(restored.admissionWaitMs).toBe(700_000);
         expect(restored.preparation).toEqual({ restoreMs: 0, startupMs: 1_000_000,
+          volumeCopyMs: { postgres_data: 0, fuseki_data: 0, rustfs_data: 0 }, objectCopyMs: 0,
           readinessMs: 0, totalMs: 1_000_000 });
       }
       if (mode === 'timing') expect(restored.preparation).toEqual({
         restoreMs: 10 + 20 * VOLUME_KINDS.length, startupMs: 100, readinessMs: 50,
+        volumeCopyMs: { postgres_data: 20, fuseki_data: 20, rustfs_data: 20 }, objectCopyMs: 0,
         totalMs: 160 + 20 * VOLUME_KINDS.length,
       });
       expect(running).toBe(true);

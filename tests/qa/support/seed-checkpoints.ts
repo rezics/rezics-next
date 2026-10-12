@@ -30,6 +30,14 @@ export interface RetainedSeed {
   actor: string;
   cuts: RetainedSeedCut[];
 }
+export function seedVerificationCuts(seed: Pick<RetainedSeed, 'cuts'>, selection = 'all'): RetainedSeedCut[] {
+  if (selection === 'all') return [seed.cuts[0]!, ...seed.cuts];
+  if (!['small', 'medium', 'large'].includes(selection))
+    throw new Error('REZICS_SEED_VERIFY_CUT must be small, medium, large or all');
+  const cut = seed.cuts.find(cut => cut.manifest.scale === selection);
+  if (!cut) throw new Error(`Retained seed cut ${selection} is absent`);
+  return [cut];
+}
 export type SeedCommandCostStage = '4' | '16' | '64';
 export interface SeedCommandMeasurement {
   operation: string;

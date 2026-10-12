@@ -27,6 +27,14 @@ export const qaResourceClasses = {
     jvmArgs: '-Xms128m -Xmx1536m -XX:MaxDirectMemorySize=512m',
     budgetMs: 480_000,
   },
+  // One retained cut owns a 600-second restore/readiness ceiling; the case
+  // also closes the unused harness store and drains its restored reader.
+  'seed-cut-restore': {
+    storage: 'scale',
+    memory: '7g',
+    jvmArgs: '-Xms128m -Xmx1536m -XX:MaxDirectMemorySize=512m',
+    budgetMs: 600_000 + 120_000,
+  },
 } as const;
 export type QaResourceClass = keyof typeof qaResourceClasses;
 
@@ -71,12 +79,12 @@ export const integrationResourceClasses: ReadonlyMap<string, QaResourceClass> = 
     'g-1035-catalogue-write',
     'g-1032-catalogue-preparation',
     'profile-corpus-restore',
-    'work-profile-seed-checkpoints',
     'library-growth',
     'recipe-page-growth',
     'zone-navigation-growth',
   ].map((name) => [`tests/qa/integration/${name}.test.ts`, 'catalogue-disk'] as const),
   ['tests/qa/fault-recovery/work-profile-seed-build.test.ts', 'catalogue-disk'],
+  ['tests/qa/integration/work-profile-seed-checkpoints.test.ts', 'seed-cut-restore'],
 ]);
 
 export function integrationResourceClass(files: readonly string[]): QaResourceClass {

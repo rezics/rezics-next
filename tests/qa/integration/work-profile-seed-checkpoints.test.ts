@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { join } from 'node:path';
+import { loadavg } from 'node:os';
 import { writeFileSync } from 'node:fs';
 import { root, VOLUME_KINDS, stream, dockerEnvironment } from '../../../scripts/fixture/stack.ts';
 import { createCorpusBackupDriver, type CorpusRestoreSmokeInput }
@@ -9,6 +10,7 @@ import { restoreWorkProfileCorpus, workProfileDimensions, WORK_PROFILE_DIMENSION
 import { startMediaStack, type MediaStack } from './media-support.ts';
 import { readRetainedSeed, seedAuthorName, seedApi, seedCensus, seedSelection,
   seedDirectory, type RetainedSeedCut } from '../support/seed-checkpoints.ts';
+import { seedVerificationCuts } from '../support/seed-checkpoints.ts';
 
 async function openCopy(input: CorpusRestoreSmokeInput) {
   const env = { ...input.apps, REZICS_QA_RUN_ID: input.runId,
@@ -28,6 +30,9 @@ async function openCopy(input: CorpusRestoreSmokeInput) {
 
 test('retained checkpoints restore exact populations and identities into isolated stores within 600 seconds', async () => {
   const retained = readRetainedSeed();
+  const cuts = seedVerificationCuts(retained, Bun.env.REZICS_SEED_VERIFY_CUT);
+  const isolation = cuts.length > 1;
+  console.log('seed cut verification host load start', Bun.env.REZICS_SEED_VERIFY_CUT ?? 'all', loadavg());
   const fixed = { unrelatedWorks: 0, unrelatedPosts: 0, follows: 0, memberships: 0,
     historyDepth: 0, realmSize: 0, conceptVocabulary: 0 };
   for (const dimension of WORK_PROFILE_DIMENSIONS)
@@ -37,7 +42,7 @@ test('retained checkpoints restore exact populations and identities into isolate
   const qaRunId = Bun.env.REZICS_QA_RUN_ID;
   if (!qaRunId) throw new Error('Run through goalctl integration QA');
   // The harness's empty startup store is unused. Each modest restored copy
-  // runs alone under catalogue-disk, avoiding stacked Docker admission.
+  // runs alone under its declared restore allocation.
   await stream('task', ['stack:down', '--', '--profile', 'qa', '--run-id', qaRunId, '--persistent'], dockerEnvironment());
   let verifying: RetainedSeedCut;
   let copy: { stack: MediaStack; api: CorpusApi; input: CorpusRestoreSmokeInput } | undefined;
@@ -46,7 +51,7 @@ test('retained checkpoints restore exact populations and identities into isolate
   let isolatedWrite = false;
   const targets: string[] = [];
   const driver = createCorpusBackupDriver({ sourceRunId: retained.sourceRunId,
-    directory: seedDirectory, resumeSource: false, restoreResourceClass: 'ordinary',
+    directory: seedDirectory, resumeSource: false, restoreResourceClass: 'seed-cut-restore',
     quiesce: async () => { throw new Error('Routine TEST never builds a checkpoint'); },
     async smokeRead(input) {
       const postgresLog = await stream('docker', ['logs', `rezics-qa-${input.runId}-postgres-1`], dockerEnvironment());
@@ -72,7 +77,7 @@ test('retained checkpoints restore exact populations and identities into isolate
   try {
     // Restore the smallest retained cut twice: the write must not mutate its
     // backup or appear in a second writable copy of that same cut.
-    for (const [index, cut] of [retained.cuts[0]!, ...retained.cuts].entries()) {
+    for (const [index, cut] of cuts.entries()) {
       verifying = cut;
       const target = `seed-${index}-${cut.manifest.scale}-${qaRunId}`;
       targets.push(target);
@@ -82,8 +87,13 @@ test('retained checkpoints restore exact populations and identities into isolate
       expect(timing.totalMs).toBeLessThan(600_000);
       for (const value of [timing.restoreMs, timing.startupMs, timing.readinessMs]) expect(value).toBeGreaterThan(0);
       expect(timing.restoreMs + timing.startupMs + timing.readinessMs).toBeCloseTo(timing.totalMs, 3);
-      evidence.push({ scale: cut.manifest.scale, dimensions: cut.manifest.dimensions, ...timing });
-      if (index === 0) {
+      expect(timing.volumeCopyMs).toBeDefined();
+      evidence.push({ scale: cut.manifest.scale, dimensions: cut.manifest.dimensions,
+        restoreMs: timing.restoreMs, postgresRestoreMs: timing.volumeCopyMs!.postgres_data,
+        fusekiCopyMs: timing.volumeCopyMs!.fuseki_data, rustfsCopyMs: timing.volumeCopyMs!.rustfs_data,
+        objectCopyMs: timing.objectCopyMs, startupMs: timing.startupMs,
+        readinessMs: timing.readinessMs, totalMs: timing.totalMs });
+      if (isolation && index === 0) {
         const state = await copy!.api.command(`checkpoint-isolated-${qaRunId}`, {
           method: 'PUT', path: `/v1/works/${cut.works[0]!.work.slice(-36)}/reader-status`,
           body: { actingSubject: retained.actor, expectedVersion: 1, status: 'want-to-read', startedOn: null, finishedOn: null } });
@@ -94,13 +104,15 @@ test('retained checkpoints restore exact populations and identities into isolate
       }
       await driver.stop(target);
     }
-    const [first, second] = stores;
-    expect(first!.runId).not.toBe(second!.runId);
-    for (const kind of VOLUME_KINDS)
-      expect(`rezics-qa-${first!.runId}_${kind}`).not.toBe(`rezics-qa-${second!.runId}_${kind}`);
-    for (const key of ['ACCESS_DATABASE_URL', 'CONTENT_DATABASE_URL', 'ACCOUNT_RELAY_DATABASE_URL',
-      'FUSEKI_URL', 'MAIN_S3_ENDPOINT', 'MAIN_OBJECT_DIRECTORY'])
-      expect(first!.apps[key]).not.toBe(second!.apps[key]);
+    if (isolation) {
+      const [first, second] = stores;
+      expect(first!.runId).not.toBe(second!.runId);
+      for (const kind of VOLUME_KINDS)
+        expect(`rezics-qa-${first!.runId}_${kind}`).not.toBe(`rezics-qa-${second!.runId}_${kind}`);
+      for (const key of ['ACCESS_DATABASE_URL', 'CONTENT_DATABASE_URL', 'ACCOUNT_RELAY_DATABASE_URL',
+        'FUSEKI_URL', 'MAIN_S3_ENDPOINT', 'MAIN_OBJECT_DIRECTORY'])
+        expect(first!.apps[key]).not.toBe(second!.apps[key]);
+    }
   } finally {
     writeFileSync(join(root, '.temp', `work-profile-seed-restores-${qaRunId}.json`), JSON.stringify(evidence, null, 2) + '\n');
     console.log('seed checkpoint restore seconds', JSON.stringify(evidence.map(item =>
@@ -109,5 +121,6 @@ test('retained checkpoints restore exact populations and identities into isolate
     const errors: unknown[] = [];
     for (const target of targets) { try { await driver.stop(target); } catch (error) { errors.push(error); } }
     if (errors.length) throw new AggregateError(errors, 'Seed restore cleanup failed');
+    console.log('seed cut verification host load end', Bun.env.REZICS_SEED_VERIFY_CUT ?? 'all', loadavg());
   }
 }, 4 * 600_000);
