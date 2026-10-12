@@ -275,7 +275,8 @@ test('cancelled and expired first posts release their reservation while retainin
       WHERE operation_id=$1`, [cleanup.placement_admission_id])).rows).toEqual([{ status: 'pending', pin_active: true }]);
     expect((await a.effects(cleanupPage.about)).threads).toBe(1);
     await a.policy(a.realm.realm, 'open');
-    const replacement = await home.json<Posted>(await a.post(cleanupPage, a.reader,
+    const replacementPage = { ...cleanupPage, routeRevision: (await a.route(cleanupPage.path)).revision };
+    const replacement = await home.json<Posted>(await a.post(replacementPage, a.reader,
       'Fresh opener while old cancellation cleanup is pending', home.reader.token), 201);
     expect(replacement.reply).not.toBe(cleanup.reply);
     const cleanupRetry = await a.post(cleanupPage, a.author, 'Cancelled with unfinished cleanup', home.author.token, cleanupKey);
