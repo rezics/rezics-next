@@ -502,3 +502,13 @@ test('known noncommitted native statuses cannot resolve through an old maintenan
   ).rejects.toThrow('proof is unavailable');
   expect(f.sent).toHaveLength(3);
 });
+
+
+test('held replacement receipts retain their expanded closure digest for Content replay', async () => {
+  const graph = new ProofGraph(), held = basis();
+  const digest = originalDigest(held);
+  held.original = { ...held.original, receipt: graphErasureReceipt(erasureId, digest), closureDigest: digest };
+  graph.proofRows = rows(held, true);
+  expect(await probeHeldGraphErasureProof(graph, erasureId, epoch, held.revisionIds, held)).toEqual(held.original);
+  expect(await readGraphErasureProof(graph, held.cut, erasureId, epoch, held.revisionIds, held)).toEqual(held.original);
+});

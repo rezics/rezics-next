@@ -627,6 +627,25 @@ export async function suppressGraphContentRevisions(
     throw new GraphErasureConflict('graph erasure receipt differs from the exact closure');
   const installed = await profile(fuseki);
   if (await graphErasureSuppressed(fuseki, erasureId, epoch, revisionIds, undefined, receipt)) return;
+  // A replacement receipt proves the entire closure, but native preflight must
+  // never see inserts that reactivate an already erased exact revision.
+  let delta = targets;
+  if (receipt !== graphErasureReceipt(erasureId)) {
+    const result = await fuseki.query(`PREFIX rv: <${RV}> SELECT ?target ?erasedEpoch WHERE {
+      VALUES ?target { ${targets.map(iri).join(' ')} }
+      OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?target a rv:ErasedRevision .
+        OPTIONAL { ?target rv:erasureEpoch ?epoch }
+      } BIND(COALESCE(STR(?epoch), "missing") AS ?erasedEpoch) }
+    }`, 65_536);
+    const rows = result.results?.bindings;
+    if (!rows || rows.length !== targets.length || new Set(rows.map(row => row.target?.value)).size !== targets.length
+      || rows.some(row => row.target?.type !== 'uri' || !targets.includes(row.target.value)
+        || row.erasedEpoch && (row.erasedEpoch.type !== 'literal' || row.erasedEpoch.value !== epoch))) {
+      throw new GraphErasureConflict('expanded erasure tombstones differ from the retained epoch');
+    }
+    delta = rows.filter(row => !row.erasedEpoch).map(row => row.target!.value).sort();
+    if (!delta.length) throw new GraphErasureUnavailable('expanded erasure receipt is unavailable');
+  }
   let lastFailure: unknown;
   for (let attempt = 0; attempt < 3; attempt++) {
     budget?.signal.throwIfAborted();
@@ -638,13 +657,13 @@ export async function suppressGraphContentRevisions(
       const result = await fuseki.commandWithReceipt({
         receipt,
         digest,
-        update: update(lineage, targets, units, erasureId, epoch, receipt, digest),
+        update: update(lineage, delta, units.filter(unit => delta.includes(unit.target)), erasureId, epoch, receipt, digest),
         validations: [
           {
             profile: PROFILE,
             sha256: installed.sha256,
             shape: SHAPE,
-            focus: targets,
+            focus: delta,
             graphs: [GRAPHS.revisions],
           },
         ],
@@ -771,7 +790,11 @@ function checkedHeld(
     receipt: held.original.receipt,
     dataEpoch: held.original.dataEpoch,
     sequence: held.original.sequence,
+    ...(held.original.receipt === graphErasureReceipt(erasureId, originalDigest)
+      ? { closureDigest: originalDigest } : {}),
   };
+  if (held.original.closureDigest !== undefined && held.original.closureDigest !== original.closureDigest)
+    throw new GraphErasureConflict('retained graph closure digest differs');
   if (
     ![original.receipt, original.dataEpoch, original.sequence].every(
       (value) => typeof value === 'string',

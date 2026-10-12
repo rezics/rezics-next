@@ -3,7 +3,9 @@ import { spawnSync } from 'node:child_process';
 import { preserveReapEnvironment } from '../../../scripts/qa/container-reaper.ts';
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { buildHeldGraphErasureCommand, graphErasureReceipt, canonicalErasureTargets } from '../src/modules/erasure/graph.ts';
+import { buildHeldGraphErasureCommand, graphErasureReceipt, canonicalErasureTargets, suppressGraphContentRevisions } from '../src/modules/erasure/graph.ts';
+import { FusekiClient, type CommandEnvelope, type SparqlResult } from '../src/infrastructure/fuseki.ts';
+import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
 import { hash } from '../src/modules/work/activate.ts';
 
 const root = join(import.meta.dir, '../../..');
@@ -11,7 +13,7 @@ const uuid = (n: number) => `00000000-0000-4000-8000-${n.toString().padStart(12,
 
 // Component interoperability only: the committed Java policy consumes the real
 // TypeScript bytes in TDB2, without a fake HTTP handler or unloaned core hooks.
-test('held caller exact bytes pass the lent native policy and keep the real TDB2 restore held at zero', () => {
+test('production erasure commands pass native delta suppression and held replay policies', async () => {
   mkdirSync(join(root, '.temp'), { recursive: true });
   const build = mkdtempSync(join(root, '.temp/held-caller-native-'));
   const cache = join(root, '.temp/erasure-campaign-maven-cache');
@@ -47,6 +49,39 @@ test('held caller exact bytes pass the lent native policy and keep the real TDB2
     '3'.repeat(64),
     new Date(Date.now() + 240_000).toISOString(),
   );
+  const home = `https://rezics.com/id/${uuid(2)}`, addedHome = `https://rezics.com/id/${uuid(3)}`;
+  const content = `urn:rezics:content:revision:${uuid(1)}`;
+  const commands: CommandEnvelope[] = [], suppressed = new Set<string>(), receipts = new Set<string>();
+  class NativeInputGraph extends FusekiClient {
+    constructor() { super('http://native-delta-input.invalid'); }
+    override async commandHealth() { return { moduleVersion: 'fixture', instanceId: 'fixture',
+      publicSearchWriteEpoch: '0', publicSearchWriteActive: false,
+      profiles: { 'erasure-graph-v1': profileRegistry['erasure-graph-v1'].sha256 } }; }
+    override async query(query: string): Promise<SparqlResult> {
+      if (query.includes('SELECT DISTINCT ?graph ?unit')) return { results: { bindings: [] } };
+      const selected = /VALUES \?target \{([^}]+)\}/.exec(query)?.[1] ?? '';
+      const targets = [...selected.matchAll(/<([^>]+)>/g)].map(match => match[1]!);
+      if (query.includes('SELECT ?target ?erasedEpoch')) return { results: { bindings: targets.map(target => ({
+        target: { type: 'uri', value: target }, ...(suppressed.has(target)
+          ? { erasedEpoch: { type: 'literal', value: '7' } } : {}),
+      })) } };
+      return { results: { bindings: [...receipts].some(receipt => query.includes(`<${receipt}>`))
+        ? targets.filter(target => suppressed.has(target)).map(target => ({ target: { type: 'uri', value: target } })) : [] } };
+    }
+    override async commandWithReceipt(envelope: CommandEnvelope) {
+      commands.push(envelope); receipts.add(envelope.receipt);
+      for (const target of envelope.validations.flatMap(validation => validation.focus)) suppressed.add(target);
+      return { status: 'committed' as const, position: { datasetId: 'urn:rezics:dataset:product',
+        dataEpoch: uuid(12), sequence: '7' } };
+    }
+  }
+  const graph = new NativeInputGraph(), original = [uuid(1), home], expandedTargets = [...original, addedHome];
+  await suppressGraphContentRevisions(graph, { dataEpoch: uuid(12), routingEpoch: '2' }, uuid(13), '7', original);
+  const expandedDigest = hash(JSON.stringify({ family: 'erasure-graph-v1', erasureId: uuid(13), epoch: '7',
+    targets: canonicalErasureTargets(expandedTargets) }));
+  await suppressGraphContentRevisions(graph, { dataEpoch: uuid(12), routingEpoch: '2' }, uuid(13), '7',
+    expandedTargets, graphErasureReceipt(uuid(13), expandedDigest));
+  expect(commands).toHaveLength(2);
   cpSync(join(root, 'infra/jena/command-module/pom.xml'), join(build, 'pom.xml'));
   cpSync(join(root, 'infra/jena/command-module/src/main'), join(build, 'src/main'), {
     recursive: true,
@@ -75,6 +110,40 @@ public class ErasureHeldCallerContractTest {
   private static Node rv(String v){return iri("https://rezics.com/vocab/"+v);}
   private static Node text(String v){return NodeFactory.createLiteralString(v);}
   private static Node integer(int v){return NodeFactory.createLiteralByValue(java.math.BigInteger.valueOf(v),org.apache.jena.datatypes.xsd.XSDDatatype.XSDinteger);}
+  @Test public void expandedHomeClosureNeverReactivatesAnErasedRevision() throws Exception {
+    var data=TDB2Factory.connectDataset(Files.createTempDirectory(Path.of(System.getProperty("java.io.tmpdir")),"home-delta-").toString()).asDatasetGraph();
+    data.begin(ReadWrite.WRITE);
+    Node control=iri(CommandPolicy.CONTROL), product=iri("urn:rezics:dataset:product"),revisions=iri(CommandPolicy.REVISIONS);
+    data.add(control,product,rv("dataEpoch"),text("${uuid(12)}"));data.add(control,product,rv("routingEpoch"),text("2"));data.add(control,product,rv("sequence"),integer(0));
+    data.add(revisions,iri("${home}"),RDF.type.asNode(),rv("RevisionAnchor"));
+    data.add(revisions,iri("${home}"),RDF.type.asNode(),rv("ZoneHomeRevision"));
+    data.add(revisions,iri("${home}"),rv("publishedPage"),iri("urn:rezics:page:original"));
+    data.add(revisions,iri("urn:rezics:page:original"),rv("contentRevision"),iri("${content}"));
+    data.commit();data.end();
+    for(String path : List.of("home-original.json", "home-expanded.json")) {
+      if(path.equals("home-expanded.json")) {
+        data.begin(ReadWrite.WRITE);
+        data.add(revisions,iri("${addedHome}"),RDF.type.asNode(),rv("RevisionAnchor"));
+        data.add(revisions,iri("${addedHome}"),RDF.type.asNode(),rv("ZoneHomeRevision"));
+        data.add(revisions,iri("${addedHome}"),rv("publishedPage"),iri("urn:rezics:page:new"));
+        data.add(revisions,iri("urn:rezics:page:new"),rv("contentRevision"),iri("${content}"));
+        data.commit();data.end();
+      }
+      var body=JSON.parse(Files.readString(Path.of(path)));
+      var request=UpdateFactory.create(body.get("update").getAsString().value());
+      var modify=(UpdateModify)request.getOperations().getFirst();
+      Set<String> graphs=new HashSet<>(),targets=new HashSet<>();
+      List<Quad> all=new ArrayList<>(modify.getInsertQuads());all.addAll(modify.getDeleteQuads());
+      for(Quad q:all){graphs.add(q.getGraph().getURI());if(q.getGraph().getURI().equals(CommandPolicy.REVISIONS))targets.add(q.getSubject().getURI());}
+      var plan=new CommandPolicy.Plan(request,graphs,Set.of(),targets,Set.of(),false,false,true);
+      data.begin(ReadWrite.WRITE);
+      assertNull("native erasure must accept the expanded delta",ErasurePolicy.preflight(data,plan,body.get("receipt").getAsString().value()));
+      UpdateAction.execute(request,DatasetFactory.wrap(data));data.commit();data.end();
+    }
+    data.begin(ReadWrite.READ);
+    for(String target : List.of("${content}","${home}","${addedHome}")) assertTrue(data.contains(revisions,iri(target),RDF.type.asNode(),rv("ErasedRevision")));
+    data.end();data.close();
+  }
   @Test public void typeScriptBodyReplaysExactHeldErasureAndPreservesControl() throws Exception {
     for(String path : List.of("command.json", "command-closure.json")) {
     var body=JSON.parse(Files.readString(Path.of(path)));
@@ -149,6 +218,8 @@ public class ErasureHeldCallerContractTest {
     // otherwise valid maintenance fixture before the native policy reads it.
     writeFileSync(join(build, 'command.json'), JSON.stringify(command()));
     writeFileSync(join(build, 'command-closure.json'), JSON.stringify(command(expanded)));
+    writeFileSync(join(build, 'home-original.json'), JSON.stringify(commands[0]));
+    writeFileSync(join(build, 'home-expanded.json'), JSON.stringify(commands[1]));
     const result = run(['surefire:test']);
     mkdirSync(join(root, '.temp/goal'), { recursive: true });
     writeFileSync(
@@ -159,7 +230,7 @@ public class ErasureHeldCallerContractTest {
       throw new Error(`Native caller interoperability failed: ${result.stdout}\n${result.stderr}`
         + `${result.error ? `\n${result.error.message}` : ''}`
         + `${result.signal ? `\nSignal: ${result.signal}` : ''}`);
-    expect(result.stdout).toContain('Tests run: 1, Failures: 0, Errors: 0');
+    expect(result.stdout).toContain('Tests run: 2, Failures: 0, Errors: 0');
   } finally {
     spawnSync('docker', ['rm', '-f', name], { encoding: 'utf8', timeout: 30_000, env: preserveReapEnvironment(process.env) });
     rmSync(build, { recursive: true, force: true });

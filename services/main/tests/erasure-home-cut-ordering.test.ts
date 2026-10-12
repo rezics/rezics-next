@@ -125,6 +125,12 @@ class SelectingHomeGraph extends FusekiClient {
       return { results: { bindings: this.homes.slice(0, limit).map(home => ({ revision: uri(home),
         owner: uri(this.owner), erased: boolean(this.suppressed.has(home)), owned: boolean(this.owned) })) } };
     }
+    if (query.includes('SELECT ?target ?erasedEpoch')) {
+      const selected = /VALUES \?target \{([^}]+)\}/.exec(query)?.[1] ?? '';
+      return { results: { bindings: [...selected.matchAll(/<([^>]+)>/g)].map(match => ({
+        target: uri(match[1]!), ...(this.suppressed.has(match[1]!) ? { erasedEpoch: literal('1') } : {}),
+      })) } };
+    }
     if (query.includes('SELECT DISTINCT ?graph ?unit ?target')) return { results: { bindings: [] } };
     if (query.includes('SELECT DISTINCT ?target')) {
       const selected = /VALUES \?target \{([^}]+)\}/.exec(query)?.[1] ?? '';
@@ -150,8 +156,11 @@ class SelectingHomeGraph extends FusekiClient {
       ? `urn:rezics:content:revision:${target.ref}` : `https://rezics.com/id/${target.ref}`).sort();
     this.commands.push({ held: this.observation.held, targets, retained });
     expect(this.observation.held).toBe(true);
-    expect(targets).toEqual(retained);
-    expect(this.homes.every(home => targets.includes(home))).toBe(true);
+    expect([...new Set([...targets, ...retained.filter(target => this.suppressed.has(target))])].sort()).toEqual(retained);
+    expect(this.homes.every(home => targets.includes(home) || this.suppressed.has(home))).toBe(true);
+    if (targets.some(target => this.suppressed.has(target))) {
+      return { status: 'invalid', report: { reason: 'erased exact revision cannot be reactivated' } };
+    }
     if (this.failCommands) {
       return { status: 'deadline' };
     }
