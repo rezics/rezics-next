@@ -1,8 +1,9 @@
 import { getEndpoints, getSessionFromCtx } from 'better-auth/api';
 import type { AuthContext, BetterAuthOptions } from 'better-auth';
 import type { GenericEndpointContext } from '@better-auth/core';
-import { createInternalContext } from 'better-call';
+import { createInternalContext, type EndpointOptions } from 'better-call';
 import type { AccountAuth } from './http.ts';
+import { AsyncLocalStorage } from 'node:async_hooks';
 
 const jsonAuthenticationPaths = new Set([
   '/api/auth/sign-in/email', '/api/auth/request-password-reset', '/api/auth/reset-password',
@@ -105,7 +106,8 @@ export async function authenticationBody(request: Request): Promise<Record<strin
 }
 
 export type AuthenticationProvider = PreparationProvider & { api?: Pick<AccountAuth['api'], 'getSession'> };
-type PreparationProvider = { options: BetterAuthOptions; $context: Promise<AuthContext> };
+type PreparationProvider = { options: BetterAuthOptions; $context: Promise<Pick<AuthContext,
+  'baseURL' | 'options' | 'createAuthCookie' | 'secret' | 'getPlugin'>> };
 export type AuthenticationSession = NonNullable<Awaited<ReturnType<AccountAuth['api']['getSession']>>>;
 export type PreparedAuthentication = Readonly<{
   kind: 'http' | 'provider-context' | 'session';
@@ -129,7 +131,9 @@ export async function prepareAuthentication(auth: PreparationProvider, source: R
   { kind: 'prepared'; input: PreparedAuthentication } | { kind: 'reject'; response: Response }
 > {
   const provider = await auth.$context;
-  const { api } = getEndpoints(auth.$context, auth.options);
+  // The initialized object is intact. Erase only the provider's invariant
+  // adapter option generic at this public endpoint-discovery boundary.
+  const { api } = getEndpoints(auth.$context as Promise<AuthContext>, auth.options);
   const embedded = !(source instanceof Request);
   const method = embedded ? source.context.method ?? 'POST' : source.method;
   const path = embedded ? `/api/auth${source.context.path}` : new URL(source.url).pathname;
@@ -141,9 +145,13 @@ export async function prepareAuthentication(auth: PreparationProvider, source: R
   });
   const basePath = new URL(provider.baseURL).pathname.replace(/\/+$/, '');
   const providerPath = embedded ? source.context.path : path.slice(basePath.length);
-  const endpoint = Object.values(api).find(endpoint => (embedded || path.startsWith(`${basePath}/`)) && endpoint.path === providerPath
-    && (endpoint.options.method === '*' || (Array.isArray(endpoint.options.method)
-      ? endpoint.options.method.includes(method) : endpoint.options.method === method)));
+  const endpoint = Object.values(api).find(endpoint => {
+    const options: EndpointOptions = endpoint.options;
+    return (embedded || path.startsWith(`${basePath}/`)) && endpoint.path === providerPath
+      && (Array.isArray(options.method)
+        ? options.method.some(value => value === method) : options.method === method);
+  });
+  const endpointOptions: EndpointOptions | undefined = endpoint?.options;
   let body: Record<string, unknown> = embedded ? source.context.body ?? {} : {};
   try {
     if (!embedded) {
@@ -156,8 +164,12 @@ export async function prepareAuthentication(auth: PreparationProvider, source: R
     }
     const validation = await createInternalContext({ body, query, headers, method },
       { options: { method, body: embedded || Object.keys(body).length || jsonAuthenticationPaths.has(path)
-        || path.startsWith('/api/auth/two-factor/verify-') ? endpoint?.options.body : undefined,
-      query: endpoint?.options.query } });
+        || path.startsWith('/api/auth/two-factor/verify-') ? endpointOptions?.body : undefined,
+      query: endpointOptions?.query } });
+    // signInEmail's route schema accepts a string; its handler applies the
+    // provider's email schema before looking up any owner. Reuse that schema.
+    if (endpoint?.path === '/sign-in/email') await createInternalContext({ body: { email: validation.body.email } },
+      { options: { method: 'POST', body: api.sendVerificationEmail.options.body } });
     const sessionOptions = await createInternalContext({ query, headers },
       { options: { method: 'GET', query: api.getSession.options.query } });
     return { kind: 'prepared', input: Object.freeze({ kind: embedded ? 'provider-context' : 'http',
@@ -183,3 +195,26 @@ export async function authenticationSession(auth: AuthenticationProvider, input:
   if (!auth.api) throw new Error('HTTP authentication needs the provider session API');
   return auth.api.getSession({ headers: input.headers, query: input.sessionQuery });
 }
+
+type AuthenticationEvidence = { authenticatedUserIds: Set<string>; issuedTokens: Set<string> };
+const exchanges = new AsyncLocalStorage<AuthenticationEvidence>();
+const proofResponses = new WeakSet<Response>();
+
+/** Provider hooks report their actual computation; this is output evidence,
+ * never another parser or a predicted owner. Embedded calls may report too. */
+export function recordAuthenticatedSubject(userId: string, issuedToken?: string) {
+  const evidence = exchanges.getStore();
+  evidence?.authenticatedUserIds.add(userId);
+  if (issuedToken) evidence?.issuedTokens.add(issuedToken);
+}
+export async function runAuthenticationExchange<T>(work: () => Promise<T>) {
+  const evidence: AuthenticationEvidence = { authenticatedUserIds: new Set(), issuedTokens: new Set() };
+  const result = await exchanges.run(evidence, work);
+  return { result, ...evidence };
+}
+export async function authenticationProviderResponse(auth: Pick<AccountAuth, 'handler'>, request: Request) {
+  const response = await auth.handler(request);
+  proofResponses.add(response);
+  return response;
+}
+export function isAuthenticationProofResponse(response: Response) { return proofResponses.has(response); }

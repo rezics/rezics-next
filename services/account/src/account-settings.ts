@@ -161,7 +161,7 @@ export function accountSettingsApi(auth: AccountAuth, guard: () => Pool) {
             if (!(error instanceof APIError) || error.statusCode >= 500) throw error;
           }
           return proof.verified;
-        });
+        }, { auth, subject });
         return accountJson({ verifiedUntil: new Date(Date.now() + 300_000).toISOString() });
       } catch (error) { return accountFailure(error); }
     });

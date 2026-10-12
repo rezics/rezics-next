@@ -2,6 +2,31 @@ import { resolveAuthenticationSubject, type AuthenticationSubject } from './auth
 import type { Pool, PoolClient } from 'pg';
 import { authenticationCookies } from './authentication-cookies.ts';
 import type { AuthenticationProvider, PreparedAuthentication } from './authentication-input.ts';
+import { runAuthenticationExchange } from './authentication-input.ts';
+import { consumeStepUpAttempt } from './methods.ts';
+import { AccountProblem } from './http.ts';
+import type { AuthContext } from 'better-auth';
+
+/** A successful provider exchange may have changed owner after the last
+ * locked reread. Revoke issued sessions before exposing any response and
+ * persist one failed attempt and one event for each affected immutable user. */
+export async function rejectChangedAuthentication(auth: AuthenticationProvider, database: Pool | PoolClient,
+  subject: AuthenticationSubject, evidence: { authenticatedUserIds: Set<string>; issuedTokens: Set<string> }): Promise<boolean> {
+  if (![...evidence.authenticatedUserIds].some(id => id !== subject.candidateUserId)) return false;
+  const provider = await auth.$context as AuthContext;
+  for (const token of evidence.issuedTokens) await provider.internalAdapter.deleteSession(token);
+  const users = [...new Set([...(subject.candidateUserId ? [subject.candidateUserId] : []),
+    ...evidence.authenticatedUserIds])].sort();
+  for (const userId of users) {
+    if (!(subject.signedInBudget && userId === subject.candidateUserId)) {
+      try { await consumeStepUpAttempt(database, provider.secret, userId); }
+      catch (error) { if (!(error instanceof AccountProblem) || error.code !== 'rate_limited') throw error; }
+    }
+    await database.query(`INSERT INTO rezics_account_security_event (user_id, action, detail)
+      VALUES ($1, 'authentication_subject_changed', $2)`, [userId, JSON.stringify({ reason: 'provider_subject_changed' })]);
+  }
+  return true;
+}
 
 /** Order factor verification and session creation against recovery. A password
  * or passkey read before the claim must not create a session after its cleanup.
@@ -20,7 +45,19 @@ export async function withRecoveryAuthentication(
   const sessionId = subject.session?.session.id;
   const verificationCreatedAt = subject.verification?.createdAt;
   const trustCreatedAt = subject.trust?.createdAt;
-  if (!userId) return handle();
+  const exchange = async (database: Pool | PoolClient, held?: PoolClient) => {
+    const evidence = await runAuthenticationExchange(() => handle(held));
+    const response = evidence.result;
+    if (!['credential', 'reset-token', 'session-proof'].includes(subject.purpose)
+      && input.path !== '/api/auth/sign-in/email') return response;
+    const output = await response.clone().json().catch(() => null) as { user?: { id?: unknown } } | null;
+    if (response.ok && typeof output?.user?.id === 'string') evidence.authenticatedUserIds.add(output.user.id);
+    if (await rejectChangedAuthentication(auth, database, subject, evidence)) {
+      return Response.json({ error: 'stale_request' }, { status: 403, headers: { 'cache-control': 'no-store' } });
+    }
+    return response;
+  };
+  if (!userId) return exchange(pool);
   const db = await pool.connect();
   try {
     await db.query('BEGIN');
@@ -65,7 +102,7 @@ export async function withRecoveryAuthentication(
       // rechecks read the explicitly updated header snapshot.
       (await authenticationCookies(input.headers, await auth.$context)).remove('trust_device');
     }
-    const response = await handle(db);
+    const response = await exchange(db, db);
     await db.query(response.status >= 500 ? 'ROLLBACK' : 'COMMIT');
     return response;
   } catch (error) {

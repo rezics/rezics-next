@@ -7,6 +7,9 @@ import { consumeAccountLimit } from './rate-limit.ts';
 import { accountResponses, methodsView, statusView } from './views.ts';
 import { resolveAuthenticationSubject } from './authentication-subject.ts';
 import { prepareSessionAuthentication } from './authentication-input.ts';
+import { runAuthenticationExchange } from './authentication-input.ts';
+import type { AuthenticationSubject } from './authentication-subject.ts';
+import { rejectChangedAuthentication } from './recovery-auth.ts';
 
 export { sensitiveAuthPaths } from './authentication-subject.ts';
 
@@ -64,20 +67,24 @@ async function mutateMethod<T>(pool: Pool, session: { session: { id: string }; u
  * Charge only inside the acquired transaction, and roll back outages. A
  * refused proof commits its charge without converting infrastructure to 403. */
 export async function reauthenticate(guardPool: Pool, session: { session: { id: string }; user: { id: string } },
-  secret: string, path: string, verify: () => Promise<boolean>) {
+  secret: string, path: string, verify: () => Promise<boolean>, authentication: { auth: AccountAuth; subject: AuthenticationSubject }) {
   if (!['/api/account/reauthenticate', '/api/account/reauthenticate/passkey'].includes(path)) throw new Error('reauthentication must be session-bound');
   const verified = await mutateMethod(guardPool, session, async db => {
     await consumeStepUpAttempt(db, secret, session.user.id);
-    let accepted: boolean;
-    try { accepted = await verify(); }
-    catch (error) {
-      if (!(error instanceof APIError) || error.statusCode >= 500) throw error;
-      accepted = false;
-    }
+    const exchange = await runAuthenticationExchange(async () => {
+      try { return await verify(); }
+      catch (error) {
+        if (!(error instanceof APIError) || error.statusCode >= 500) throw error;
+        return false;
+      }
+    });
+    if (await rejectChangedAuthentication(authentication.auth, db, authentication.subject, exchange)) return 'changed' as const;
+    const accepted = exchange.result;
     if (accepted) await db.query(`INSERT INTO rezics_account_step_up (session_id) VALUES ($1)
       ON CONFLICT (session_id) DO UPDATE SET verified_at = now()`, [session.session.id]);
     return accepted;
   }, path === '/api/account/reauthenticate' ? { totpVerification: true } : {});
+  if (verified === 'changed') throw new AccountProblem('stale_request', 403);
   if (!verified) throw new AccountProblem('forbidden', 403);
 }
 
@@ -137,7 +144,7 @@ export function methodsApi(auth: AccountAuth, pool: Pool, guard: () => Pool) {
             await auth.api.verifyTOTP({ headers: request.headers, body: { code: body.totpCode } });
           }
           return true;
-        });
+        }, { auth, subject });
         return accountJson({ verifiedUntil: new Date(Date.now() + 300_000).toISOString() });
       } catch (error) { return accountFailure(error); }
     })

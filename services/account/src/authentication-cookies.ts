@@ -39,6 +39,18 @@ export async function authenticationCookies(
       }
       return [...new Set(values)];
     },
+    candidateHeaders: async (cookie: AuthenticationCookie) => {
+      const candidates: { value: string; headers: Headers }[] = [];
+      for (const fragment of (headers.get('cookie') ?? '').split(';')) {
+        if (!parseCookies(fragment).has(name(cookie))) continue;
+        const selectedHeaders = new Headers(headers);
+        selectedHeaders.set('cookie', fragment.trim());
+        const reader = await createInternalContext({ headers: selectedHeaders }, { options: { method: 'GET' } });
+        const value = await reader.getSignedCookie(name(cookie), provider.secret);
+        if (typeof value === 'string') candidates.push({ value, headers: selectedHeaders });
+      }
+      return candidates;
+    },
     remove: (cookie: AuthenticationCookie) => {
       // Drop every occurrence of the selected name so an old duplicate cannot
       // become effective. Preserve other names with the same provider parser.

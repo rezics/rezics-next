@@ -8,6 +8,8 @@ import { requireStepUp } from './methods.ts';
 import { sessionBasisActive } from './first-party-session.ts';
 import { consumeAccountLimit } from './rate-limit.ts';
 import { observeAuthentication } from './security-activity.ts';
+import { prepareAuthentication } from './authentication-input.ts';
+import { resolveAuthenticationSubject } from './authentication-subject.ts';
 
 const digest = (token: string) => createHash('sha256').update(token).digest('hex');
 const newToken = () => `ec_${randomBytes(32).toString('base64url')}`;
@@ -101,7 +103,12 @@ export function emailChangeApi(auth: AccountAuth, pool: Pool) {
     .get('/api/auth/verify-email', async ({ request }) => {
       const token = new URL(request.url).searchParams.get('token') ?? '';
       if (!token.startsWith('ec_')) {
-        return observeAuthentication(auth, pool, request, () => auth.handler(request));
+        try {
+          const prepared = await prepareAuthentication(auth, request);
+          if (prepared.kind === 'reject') return prepared.response;
+          const subject = await resolveAuthenticationSubject(auth, pool, prepared.input);
+          return observeAuthentication(auth, pool, request, subject, () => auth.handler(request));
+        } catch (error) { return accountFailure(error); }
       }
       try {
         if (!/^ec_[A-Za-z0-9_-]{43}$/.test(token)) throw new AccountProblem('invalid_request', 400);

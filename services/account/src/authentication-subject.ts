@@ -72,9 +72,27 @@ export async function resolveAuthenticationSubject(auth: AuthenticationProvider,
   if (['session-proof', 'registration', 'session-mutation'].includes(purpose)) {
     session = await authenticationSession(auth, input);
     if (session) { candidateUserId = session.user.id; activityUserId = candidateUserId; target = candidateUserId; }
+    const credentialOwners = new Set<string>(session ? [session.user.id] : []);
+    const selectedSessionToken = await cookies.signed('session_token');
+    for (const candidate of await cookies.candidateHeaders('session_token')) {
+      if (candidate.value === selectedSessionToken) continue;
+      const candidateInput = { ...input, headers: candidate.headers,
+        ...(input.providerContext ? { providerContext: { ...input.providerContext, headers: candidate.headers,
+          context: { ...input.providerContext.context, session: null } } } : {}),
+        ...(input.kind === 'session' ? { kind: 'http' as const, session: undefined } : {}) };
+      const other = await authenticationSession(auth, candidateInput);
+      if (other) credentialOwners.add(other.user.id);
+    }
     if (purpose === 'session-proof' && input.path !== '/api/account/reauthenticate/passkey') {
       const identifier = await cookies.signed('two_factor');
       const row = await proof(identifier);
+      for (const candidate of await cookies.signedCandidates('two_factor')) {
+        const other = candidate === identifier ? row : await proof(candidate);
+        if (other && other.expiresAt > new Date()) {
+          const owner = await liveUser(other.value);
+          if (owner) credentialOwners.add(owner);
+        }
+      }
       if (!session && row && row.expiresAt > new Date()) {
         candidateUserId = await liveUser(row.value);
         activityUserId = candidateUserId;
@@ -86,7 +104,24 @@ export async function resolveAuthenticationSubject(auth: AuthenticationProvider,
       const identifier = await cookies.signed('better-auth-passkey');
       const row = await proof(identifier);
       if (row) verification = { identifier: identifier!, createdAt: row.createdAt, expiresAt: row.expiresAt };
+      for (const candidate of await cookies.signedCandidates('better-auth-passkey')) {
+        const other = candidate === identifier ? row : await proof(candidate);
+        if (!other || other.expiresAt <= new Date()) continue;
+        try {
+          const owner = (JSON.parse(other.value) as { userData?: { id?: unknown } }).userData?.id;
+          if (typeof owner === 'string') credentialOwners.add(owner);
+        } catch { /* malformed provider artifacts cannot prove another owner */ }
+      }
     }
+    if (input.path === '/api/account/reauthenticate/passkey') {
+      const response = input.body.response as { id?: unknown } | undefined;
+      if (typeof response?.id === 'string') {
+        const owner = (await database.query<{ userId: string }>(
+          'SELECT "userId" FROM public.passkey WHERE "credentialID" = $1', [response.id])).rows[0]?.userId;
+        if (owner) credentialOwners.add(owner);
+      }
+    }
+    if (credentialOwners.size > 1) throw new AccountProblem('invalid_request', 400);
   } else if (purpose === 'email' && typeof input.body.email === 'string') {
     target = input.body.email.toLowerCase();
     if (input.path === '/api/auth/send-verification-email') {

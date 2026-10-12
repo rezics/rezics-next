@@ -9,6 +9,7 @@ import { accountResponses, activityView, pageView, sessionView } from './views.t
 import { revokeSessionSelection } from './first-party-session.ts';
 import { APIError } from 'better-auth/api';
 import type { AuthenticationSubject } from './authentication-subject.ts';
+import { isAuthenticationProofResponse } from './authentication-input.ts';
 
 export function deviceLabel(userAgent?: string | null) {
   const ua = userAgent ?? '';
@@ -162,7 +163,7 @@ export async function observeAuthentication(auth: AccountAuth, pool: Pool, reque
     await securityEvent(pool, output.user.id, 'sign_in', { method: path.split('/').at(-1),
       device: deviceLabel(request.headers.get('user-agent')),
       network: coarseNetwork(request.headers.get('x-rezics-client-ip')) });
-  } else if (signingIn && !response.ok) {
+  } else if (signingIn && !response.ok && response.status < 500 && isAuthenticationProofResponse(response)) {
     try {
       const userId = subject.activityUserId;
       if (userId) await securityEvent(pool, userId, 'sign_in_failed', { method: path.split('/').at(-1) });

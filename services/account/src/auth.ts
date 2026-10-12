@@ -31,7 +31,7 @@ import { signupPolicyInput, policyAcceptanceRequired } from './policy-acceptance
 import { SignupPolicyProblem } from './market-policy.ts';
 import type { PolicyVersion } from './policy-versions.ts';
 import { AccountHasOwnedAgents } from '../../main/src/modules/access/admission.ts';
-import { prepareAuthentication } from './authentication-input.ts';
+import { prepareAuthentication, recordAuthenticatedSubject } from './authentication-input.ts';
 import { resolveAuthenticationSubject } from './authentication-subject.ts';
 import { AccountProblem } from './http.ts';
 
@@ -385,6 +385,13 @@ export function accountAuthOptions(config: AccountConfig) {
       }
     }), after: createAuthMiddleware(async ctx => {
       await operatorHooks.after(ctx);
+      if (!(ctx.context.returned instanceof APIError)) {
+        const output = ctx.context.returned as { user?: { id?: unknown } } | undefined;
+        if (typeof output?.user?.id === 'string') recordAuthenticatedSubject(output.user.id);
+        if (ctx.context.newSession) recordAuthenticatedSubject(ctx.context.newSession.user.id,
+          ctx.context.newSession.session.token);
+        if (ctx.path === '/verify-password' && ctx.context.session) recordAuthenticatedSubject(ctx.context.session.user.id);
+      }
       // Embedded discovery calls run endpoint hooks; HTTP discovery is served
       // by the provider's onRequest hook instead.
       if (discoveryEndpoints.has(ctx.path) && ctx.context.returned && !(ctx.context.returned instanceof APIError)) {
@@ -424,6 +431,7 @@ export function accountAuthOptions(config: AccountConfig) {
       minPasswordLength: 12,
       resetPasswordTokenExpiresIn: 1800,
       revokeSessionsOnPasswordReset: true,
+      onPasswordReset: async ({ user }: { user: { id: string } }) => { recordAuthenticatedSubject(user.id); },
       sendResetPassword: async ({ user, url }: { user: EmailUser; url: string }, request?: Request) => {
         if (!config.email) throw new Error('Account email delivery is not configured');
         await config.email.enqueue({ userId: user.id, to: user.email, url,

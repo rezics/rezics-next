@@ -154,8 +154,8 @@ for (const scheme of ['https', 'http'])
               ).rows;
             expect(await failures()).toEqual([{ user_id: b.id }]);
 
-            // Repeated exact values choose the first, and header joining uses the
-            // same parser as the provider rather than a second interpretation.
+            // Provider parsing chooses the first exact value. Account refuses
+            // a second live owner's credential before proof work or attribution.
             expect(
               (
                 await request(
@@ -164,8 +164,8 @@ for (const scheme of ['https', 'http'])
                   `invalid=unused; ${bChallenge}; ${aChallenge.replace(other, exact)}`,
                 )
               ).status,
-            ).toBe(401);
-            expect(await failures()).toEqual([{ user_id: b.id }, { user_id: b.id }]);
+            ).toBe(400);
+            expect(await failures()).toEqual([{ user_id: b.id }]);
             const repeated = new Headers({ origin: issuer, 'content-type': 'application/json' });
             repeated.append('cookie', bChallenge);
             repeated.append('cookie', aChallenge.replace(other, exact));
@@ -188,12 +188,8 @@ for (const scheme of ['https', 'http'])
                   body: '{"code":"invalid"}',
                 })
               ).status,
-            ).toBe(401);
-            expect(await failures()).toEqual([
-              { user_id: b.id },
-              { user_id: b.id },
-              { user_id: b.id },
-            ]);
+            ).toBe(400);
+            expect(await failures()).toEqual([{ user_id: b.id }]);
             return;
           }
 

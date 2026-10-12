@@ -30,7 +30,7 @@ import { mailSuppressionApi } from './mail-suppression.ts';
 import { policyAcceptanceApi } from './policy-acceptance.ts';
 import { accountSchemaReady } from './schema-ready.ts';
 import { withRecoveryAuthentication } from './recovery-auth.ts';
-import { prepareAuthentication } from './authentication-input.ts';
+import { prepareAuthentication, authenticationProviderResponse } from './authentication-input.ts';
 import { resolveAuthenticationSubject, type AuthenticationSubject } from './authentication-subject.ts';
 import { changeGuardianInvitation, readGuardianInvitations, readRecoveryPolicy } from './recovery-guardian.ts';
 import { bootstrapOperators, requireOperator } from './operators.ts';
@@ -174,18 +174,18 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
     const emailPaths = new Set(['/api/auth/sign-up/email', '/api/auth/request-password-reset',
       '/api/auth/send-verification-email']);
     if (request.method === 'POST' && emailPaths.has(path)) {
-      const response = await auth.handler(request);
+      const response = await authenticationProviderResponse(auth, request);
       // Strip the provider's synthetic user too: future plugin fields must not
       // turn sign-up back into a public account-directory oracle.
       return response.ok && path === '/api/auth/sign-up/email'
         && auth.options.emailAndPassword?.requireEmailVerification
         ? Response.json({ status: true }, { headers: { 'cache-control': 'no-store' } }) : response;
     }
-    if (request.method !== 'POST' || !credentialPaths.has(new URL(request.url).pathname)) {
-      return auth.handler(request);
+    if (request.method !== 'POST' || (!credentialPaths.has(path) && !subject.signedInBudget)) {
+      return authenticationProviderResponse(auth, request);
     }
     const session = subject.session;
-    if (!session) return auth.handler(request);
+    if (!session) return authenticationProviderResponse(auth, request);
     // Recovery authentication already owns a guard connection for these
     // routes. Reuse it; nesting a checkout can exhaust the bounded pool.
     const client = held ?? await guard().connect().catch(() => null);
@@ -226,7 +226,7 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
         // factor. Both admission decisions stay under the factor-change lock.
         await consumeStepUpAttempt(client, String(auth.options.secret), totpUserId);
       }
-      const response = await auth.handler(request);
+      const response = await authenticationProviderResponse(auth, request);
       if (!held) await client.query(response.status >= 500 ? 'ROLLBACK' : 'COMMIT');
       return response;
     } catch (error) {

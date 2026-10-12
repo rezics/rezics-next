@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { betterAuth, type BetterAuthOptions } from 'better-auth';
+import { betterAuth, type AuthContext, type BetterAuthOptions } from 'better-auth';
 import { twoFactor } from 'better-auth/plugins';
 import { passkey } from '@better-auth/passkey';
 import type { GenericEndpointContext } from '@better-auth/core';
@@ -8,7 +8,7 @@ import { createInternalContext, serializeSignedCookie } from 'better-call';
 import { readFileSync } from 'node:fs';
 import type { Pool } from 'pg';
 import { authenticationCookies } from '../src/authentication-cookies.ts';
-import { prepareAuthentication } from '../src/authentication-input.ts';
+import { prepareAuthentication, type AuthenticationProvider } from '../src/authentication-input.ts';
 import { resolveAuthenticationSubject } from '../src/authentication-subject.ts';
 import { AccountProblem } from '../src/http.ts';
 import { accountFixture } from './account-fixture.ts';
@@ -73,7 +73,7 @@ function request(path: string, body?: unknown, headers: HeadersInit = {}, method
     ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 }
 
-async function resolve(auth: Awaited<ReturnType<typeof provider>>['auth'], pool: Pool, req: Request) {
+async function resolve(auth: AuthenticationProvider, pool: Pool, req: Request) {
   const prepared = await prepareAuthentication(auth, req);
   if (prepared.kind !== 'prepared') throw new Error(`unexpected admission: ${prepared.response.status}`);
   return resolveAuthenticationSubject(auth, pool, prepared.input);
@@ -92,7 +92,7 @@ for (const scheme of ['http', 'https', 'HTTPS']) {
         const endpoint = await createInternalContext({ headers }, { options: { method: 'GET' } });
         const expected = await endpoint.getSignedCookie(exact, context.secret);
         expect(expected).toBe('challenge-B');
-        expect(await (await authenticationCookies(headers, context)).signed(kind)).toBe(expected);
+        expect(await (await authenticationCookies(headers, context)).signed(kind)).toBe(typeof expected === 'string' ? expected : undefined);
         if (scheme === 'HTTPS') expect(exact.startsWith('__Secure-')).toBe(true);
       });
   test(`P17: initialized ${scheme} stale trust removal removes every exact name`, async () => {
@@ -125,7 +125,7 @@ for (const kind of ['two_factor', 'better-auth-passkey', 'trust_device'] as cons
         : `${exact}=${format === 'empty-first' ? '' : format === 'invalid-first' ? 'invalid' : value}; ${exact}=${value}`);
       const endpoint = await createInternalContext({ headers }, { options: { method: 'GET' } });
       const expected = await endpoint.getSignedCookie(exact, context.secret);
-      expect(await (await authenticationCookies(headers, context)).signed(kind)).toBe(expected ?? undefined);
+      expect(await (await authenticationCookies(headers, context)).signed(kind)).toBe(typeof expected === 'string' ? expected : undefined);
     });
 
 test('P08/P16/P17: initialized cookie overrides and passkey challenge option are honored', async () => {
@@ -217,7 +217,7 @@ test('P11/P12: exact provider session resolution and query coercion stay authori
   const { auth, context } = await provider('HTTPS://issuer.test');
   const exact = context.authCookies.sessionToken.name;
   const opposite = exact.slice('__Secure-'.length);
-  const { api } = getEndpoints(auth.$context, auth.options);
+  const { api } = getEndpoints(auth.$context as unknown as Promise<AuthContext>, auth.options);
   for (const query of ['', 'disableRefresh=true', 'disableCookieCache=false&disableRefresh=false', 'disableRefresh=invalid', 'disableRefresh=true&disableRefresh=false']) {
     const cookie = `${opposite}=${await signed('session-B')}; ${exact}=${await signed('session-A')}`;
     const params: Record<string, string | string[]> = {};
@@ -343,7 +343,7 @@ test('P19: verify-email is provider-owned and unsigned tokens cannot select an o
 
 test('P24: effective provider endpoint methods define the credential purpose matrix', async () => {
   const { auth } = await provider();
-  const { api } = getEndpoints(auth.$context, auth.options);
+  const { api } = getEndpoints(auth.$context as unknown as Promise<AuthContext>, auth.options);
   const cases = [
     ['signInEmail', 'email', { email: 'b@example.test', password: 'wrong' }],
     ['requestPasswordReset', 'email', { email: 'b@example.test' }],
