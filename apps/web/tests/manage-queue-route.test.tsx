@@ -1,8 +1,6 @@
 import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { header, queuePage, realm } from '../features/manage/fixtures.ts';
 import { messages } from '../features/manage/messages.ts';
-import { ManageFailure } from '../features/manage/parts.tsx';
 import { QueueView } from '../features/manage/queue-view.tsx';
 import type { Loaded, MainClient, RealmHeader } from '../features/manage/types.ts';
 
@@ -11,8 +9,8 @@ const reads = { ...await import('../features/manage/read.ts') };
 const queueApi = { ...await import('../features/manage/queue-api.ts') };
 const i18n = { ...await import('../i18n/server.ts') };
 const signInHref = '/auth/sign-in?next=queue';
-const retryHref = '/en/manage/r/books?state=closed';
 let result: Loaded<RealmHeader>;
+let permissions: string[];
 const actingSubject = 'https://rezics.com/id/00000000-0000-4000-8000-000000000002';
 const headerRead = mock(async ({ query }: { query: { language: string; actingSubject?: string } }) => {
   if (query.actingSubject !== actingSubject) return { data: null, error: { status: 403, value: {} } };
@@ -26,10 +24,11 @@ const names = mock(async () => queueApi.noNames);
 beforeEach(() => {
   names.mockClear();
   headerRead.mockClear();
+  permissions = [];
   mock.module('../features/manage/server.ts', () => ({ ...server,
     managedAddress: async () => ({ id: realm, address: 'books' }),
     manager: async () => ({ actingSubject, main, anonymous: {}, signInHref }),
-    permissionsIn: async () => [],
+    permissionsIn: async () => permissions,
   }));
   mock.module('../features/manage/read.ts', () => ({ ...reads,
     readQueue: async () => ({ ok: true, data: queuePage }),
@@ -54,25 +53,21 @@ async function route() {
 }
 
 for (const failure of ['unavailable', 'denied', 'sign-in'] as const) {
-  test(`queue preserves a failed header's ${failure} response instead of treating its rules as empty`, async () => {
+  test(`authorized queue renders without optional header context after its ${failure} response`, async () => {
     result = { ok: false, failure };
     const view = await route();
-    expect(view.type).toBe(ManageFailure);
-    expect(view.props).toMatchObject({ failure, retryHref, signInHref });
-    expect(names).not.toHaveBeenCalled();
+    expect(view.type).toBe(QueueView);
+    expect(view.props).toMatchObject({ initial: queuePage, realmRules: undefined });
+    expect(names).toHaveBeenCalledTimes(1);
   });
 }
 
-test('unreadable rules show the existing unavailable view with a retry, without moderation controls', async () => {
+test('unreadable header rules remain absent context without blocking the authorized queue', async () => {
   result = { ok: true, data: { ...header, rules: null } };
   const view = await route();
-  expect(view.type).toBe(ManageFailure);
-  expect(view.props).toMatchObject({ failure: 'unavailable', retryHref });
-  const html = renderToStaticMarkup(view);
-  expect(html).toContain('Couldn’t load this');
-  expect(html).toContain(`href="${retryHref}"`);
-  expect(html).toContain('Try again');
-  expect(names).not.toHaveBeenCalled();
+  expect(view.type).toBe(QueueView);
+  expect(view.props).toMatchObject({ initial: queuePage, realmRules: undefined });
+  expect(names).toHaveBeenCalledTimes(1);
 });
 
 test('known-empty rules still render the moderation queue', async () => {
@@ -83,11 +78,13 @@ test('known-empty rules still render the moderation queue', async () => {
   expect(names).toHaveBeenCalledTimes(1);
 });
 
-test('a private Realm moderator reads the header as their acting subject and sees the queue', async () => {
-  result = { ok: true, data: { ...header, visibility: 'private', rules: [] } };
+test('a role-only private Realm moderator sees the authorized queue when its header returns 404', async () => {
+  permissions = ['governance.moderate'];
+  result = { ok: false, failure: 'missing' };
   const view = await route();
   expect(headerRead).toHaveBeenCalledWith({ query: { language: 'en', actingSubject } });
   expect(view.type).toBe(QueueView);
-  expect(view.props).toMatchObject({ actingSubject, initial: queuePage, realmRules: [] });
+  expect(view.props).toMatchObject({ actingSubject, initial: queuePage, realmRules: undefined,
+    authority: { decideReports: true, escalate: true }, rulesHref: null });
   expect(names).toHaveBeenCalledTimes(1);
 });
