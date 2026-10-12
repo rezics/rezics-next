@@ -7,6 +7,7 @@ import { messages } from './messages.ts';
 import zhHans from './messages/zh-Hans.ts';
 import { RealmFrame } from './realm-frame.tsx';
 import { chooseOption } from '../stories/choose-option.ts';
+import type { RoleCommand } from './types.ts';
 
 const record: AdminRecord = { members: [], roles: [], settings: [] };
 const roleReads: { search: string; after: string | null; role?: string | null }[] = [];
@@ -191,9 +192,29 @@ export const ChangedMeanwhile: Story = {
 
 /** Giving a role shows exactly who gains what before it can be saved. */
 export const GiveRoleWithImpact: Story = {
+  args: { api: { ...adminApi({ record }), members: async (search, after, role) => {
+    roleReads.push({ search, after, role });
+    const read = await adminApi().members(search, after, role);
+    if (!read.ok) return read;
+    return { ok: true, data: { ...read.data, generation: '13', items: read.data.items.map(member => {
+      const changes = (record.roles as RoleCommand[]).filter(command => command.change.kind === 'assignment'
+        && command.change.member === member.member);
+      return { ...member, roles: [...member.roles, ...changes.flatMap(({ change }) => {
+        if (change.kind !== 'assignment' || !change.assigned) return [];
+        return [{ id: change.roleId, name: roles.find(item => item.id === change.roleId)!.name,
+          validUntil: change.validUntil }];
+      })] };
+    }) } };
+  } } },
   async play({ canvasElement }) {
     reset();
+    roleReads.length = 0;
     const canvas = within(canvasElement);
+    await userEvent.type(canvas.getByRole('searchbox', { name: 'Search members' }), 'sophie');
+    await userEvent.click(canvas.getByRole('button', { name: 'Search', exact: true }));
+    await waitFor(() => expect(within(canvas.getByRole('list', { name: 'Members' })).getAllByRole('listitem')).toHaveLength(1));
+    const row = within(within(canvas.getByRole('list', { name: 'Members' })).getByRole('listitem'));
+    await expect(row.getByText('No role', { exact: true })).toBeVisible();
     await openMenu(canvas, 'Sophie Li 李素菲', 'Give a role…');
     const dialog = await openDialog('Give Sophie Li 李素菲 a role');
     const impact = await dialog.findByRole('region', { name: 'Who this affects' });
@@ -207,6 +228,10 @@ export const GiveRoleWithImpact: Story = {
     await expect(record.roles).toEqual([expect.objectContaining({ digest: 'b'.repeat(64),
       reason: 'Drafting the spoiler policy.', change: expect.objectContaining({ kind: 'assignment', member: people.sophie,
         roleId: roles[1]!.id, assigned: true }) })]);
+    await expect(await row.findByText('Rules editors', { exact: true })).toBeVisible();
+    await expect(row.queryByText('No role', { exact: true })).toBeNull();
+    await expect(roleReads).toEqual([{ search: 'sophie', after: null, role: undefined },
+      { search: 'sophie', after: null, role: undefined }]);
   },
 };
 

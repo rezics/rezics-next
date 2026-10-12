@@ -11,6 +11,7 @@ import { REALM_MEMBER_SEARCH_SQL, REALM_ROLE_MEMBER_SEARCH_SQL } from '../src/mo
 import type { VerifiedPrincipal } from '../src/modules/access/admission.ts';
 import { REALM_ROLE_CAP, REALM_ROLE_HOLDER_PREVIEW, RealmAdminDenied, RealmAdminLimit,
   RealmAdminUnavailable } from '../src/modules/realm-admin/contract.ts';
+import type { RoleCommand } from '../src/modules/realm-admin/contract.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const agent = (n: number) => `https://rezics.com/id/${String(n).padStart(8, '0')}-0000-4000-8000-000000000000`;
@@ -141,6 +142,41 @@ function planNodes(plan: Record<string, unknown>): Record<string, unknown>[] {
   for (const child of (plan.Plans as Record<string, unknown>[] | undefined) ?? []) nodes.push(...planNodes(child));
   return nodes;
 }
+
+test('a committed role assignment is visible in the member read and a fresh owner read', async () => {
+  const manager = await realmWith(['realm.members.manage', 'realm.roles.manage']);
+  await people(manager.realm, 900_001, 1);
+  const member = agent(900_001);
+  const roleId = randomUUID();
+  const admin = new AccessRealmManagement(pool);
+  const apply = async (expectedGeneration: string, change: RoleCommand['change']) => {
+    const command = { actingSubject: manager.actor, expectedGeneration, reason: 'Share moderation', change };
+    const impact = await admin.preview(manager.principal, manager.realm, command);
+    return admin.changeRole(manager.principal, manager.realm, command, randomUUID(), impact.digest);
+  };
+  const created = await apply('0', { kind: 'role', roleId, name: 'Conversation guides',
+    permissions: ['governance.moderate'] });
+  const options = { actingSubject: manager.actor, search: member };
+  expect((await admin.members(manager.principal, manager.realm, options)).items[0]!.roles).toEqual([]);
+  const validUntil = new Date(Date.now() + 86_400_000).toISOString();
+  const assigned = await apply(created.generation, { kind: 'assignment', roleId, member,
+    assigned: true, validUntil });
+  expect((await pool.query(`SELECT member, realm, role_id FROM access.realm_admin_assignment
+    WHERE realm = $1 AND role_id = $2 AND member = $3 AND valid_until > clock_timestamp()`,
+  [manager.realm, roleId, member])).rows).toEqual([{ member, realm: manager.realm, role_id: roleId }]);
+  for (const reader of [admin, new AccessRealmManagement(pool)]) {
+    for (const query of [options, { actingSubject: manager.actor }]) {
+      const page = await reader.members(manager.principal, manager.realm, query);
+      expect(page.generation).toBe(assigned.generation);
+      expect(page.items).toMatchObject([{ member, roles: [{ id: roleId, name: 'Conversation guides' }] }]);
+    }
+  }
+  const removed = await apply(assigned.generation, { kind: 'assignment', roleId, member,
+    assigned: false, validUntil });
+  expect((await admin.members(manager.principal, manager.realm, options))).toMatchObject({
+    generation: removed.generation, items: [{ member, roles: [] }],
+  });
+});
 
 test('role cards and the role filter list the same people the roster shows for that role', async () => {
   const adminSource = watch(pool);
