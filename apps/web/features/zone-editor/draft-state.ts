@@ -1,4 +1,4 @@
-export type ZoneEditorSection = 'home' | 'navigation' | 'theme';
+export type ZoneEditorSection = 'home' | 'navigation' | 'theme' | 'attachment' | 'lifecycle';
 
 export interface DraftStorage {
   getItem(key: string): string | null;
@@ -9,7 +9,28 @@ export interface DraftStorage {
 /** The mounted route owns author choices; browser storage is only a full-page fallback. */
 export function createZoneEditorDraftStore() {
   const values = new Map<string, unknown>();
+  const states = new Map<string, unknown>();
+  const resources = new Map<string, unknown>();
+  const listeners = new Map<string, Set<() => void>>();
   return {
+    current<T>(key: string): T | undefined {
+      return states.get(key) as T | undefined;
+    },
+    retain<T>(key: string, value: T): void {
+      if (states.has(key) && states.get(key) === value) return;
+      states.set(key, value);
+      for (const listener of listeners.get(key) ?? []) listener();
+    },
+    subscribe(key: string, listener: () => void): () => void {
+      const group = listeners.get(key) ?? new Set<() => void>();
+      listeners.set(key, group);
+      group.add(listener);
+      return () => { group.delete(listener); };
+    },
+    resource<T>(key: string, create: () => T): T {
+      if (!resources.has(key)) resources.set(key, create());
+      return resources.get(key) as T;
+    },
     read<T>(storage: DraftStorage | undefined, key: string, accepts: (value: unknown) => value is T): T | null {
       if (values.has(key)) {
         const value = values.get(key);

@@ -105,7 +105,7 @@ export type EditorEvent =
   | { type: 'loaded'; value: string; expectedHead: string | null; basis: DraftBasis | null; embeds?: string[];
       variantId: string; language: ContentLanguage; direction: 'ltr' | 'rtl' | 'none';
       zoneHead: string; navigationRevision: string; publishedRevisionId: string | null }
-  | { type: 'published'; zoneHead: string; replayed: boolean }
+  | { type: 'published'; zoneHead: string; revisionId?: string; replayed: boolean }
   | { type: 'publish-stale' }
   | { type: 'heads'; zoneHead: string; navigationRevision: string }
   | { type: 'failed'; failure: AuthoringFailure };
@@ -167,7 +167,7 @@ export function reduceEditor(state: EditorState, event: EditorEvent): EditorStat
     case 'published':
       return {
         ...state,
-        publishedRevisionId: state.basis?.revisionId ?? state.publishedRevisionId,
+        publishedRevisionId: event.revisionId ?? state.basis?.revisionId ?? state.publishedRevisionId,
         zoneHead: event.zoneHead,
         notice: { kind: 'published', replayed: event.replayed },
       };

@@ -11,6 +11,7 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { AccessRealmManagement } from '../../../services/main/src/modules/access/realm-management.ts';
 import { createAgentGraph } from '../../../services/main/src/modules/agent/graph.ts';
 import { agentProvisionDigest } from '../../../services/main/src/modules/agent/provision.ts';
+import { AccountAssertionInsufficientScope } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { normalizeStoredMembership } from '../../../services/main/src/modules/structure/membership-normalize.ts';
 import { DEFAULT_ZONE_PRESENTATION, type ZonePresentation } from '../../../services/main/src/modules/zone/presentation-format.ts';
 import { ContentDraftUnavailable } from '../../../services/main/src/modules/content-publication/draft.ts';
@@ -18,6 +19,8 @@ import { S3ImmutableObjects, type ImmutableObjects } from '../../../services/mai
 import { readZoneConfiguration, readZoneSitePublicationReceipt, ZoneUnavailable, ZonePublicationUnavailable,
   type ZoneSitePublicationReceipt } from '../../../services/main/src/modules/zone/configuration.ts';
 import { readCompositionReceipt } from '../../../services/main/src/modules/structure/change.ts';
+import { changeAdmittedComposition } from '../../../services/main/src/modules/structure/change-admitted.ts';
+import { CompositionUnavailable } from '../../../services/main/src/modules/structure/graph.ts';
 import { isZonePublishedPageRevision, readZonePublication } from '../../../services/main/src/modules/zone/publication.ts';
 import { ZONE_SITE_PUBLICATION_COST, zonePublishedPageBinding } from '../../../services/main/src/modules/zone/config-format.ts';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
@@ -803,6 +806,80 @@ test('public home resolves published Showcase and unknown placeholders while dra
     expect(historical.body.document).toEqual(document);
     expect(historical.body.document.doc.content!.at(-2)!.attrs!.version).toBe('1');
     expect(boundPages((await readZoneSitePublicationReceipt(f.env, receipt.receipt))!.pages)).toEqual(boundPages([page]));
+  } finally { await f.close(); }
+}, 120_000);
+
+test('sealed Navigation receipts replay every inserted occurrence without dispatching against the later head', async () => {
+  const f = await fixture();
+  try {
+    const collection = nativeId();
+    await f.grant(`collection:edit:${collection}`, 'collection.edit');
+    await f.grant(`semantic:read:${collection}`, 'semantic.read');
+    await f.json(await f.call('POST', '/v1/collections', {
+      collection, name: 'Replay references', disclosure: 'public', actingSubject: f.actor,
+    }), 201);
+    const key = randomUUID();
+    const body = { expectedHead: f.navigationRevision, target: collection, routeSegment: 'library',
+      disclosure: 'public', actingSubject: f.actor };
+    const first = await f.json<{ navigation: string; revision: string; receipt: string;
+      occurrences: string[]; sourcePosition: { dataEpoch: string; sequence: string } }>(
+      await f.call('POST', `${f.path}/mounts`, body, key), 200);
+    expect(first.occurrences).toHaveLength(1);
+    const second = await f.json<{ revision: string; occurrences: string[] }>(await f.call('POST', `${f.path}/mounts`, {
+      expectedHead: first.revision, target: collection, routeSegment: 'highlights',
+      position: { after: first.occurrences[0]! }, disclosure: 'public', actingSubject: f.actor,
+    }), 200);
+    for (let retry = 0; retry < 2; retry++) {
+      const replay = await f.json(await f.call('POST', `${f.path}/mounts`, body, key), 200);
+      expect(replay).toMatchObject({ revision: first.revision, receipt: first.receipt,
+        occurrences: first.occurrences, sourcePosition: first.sourcePosition, replayed: true });
+    }
+    const request = () => new Request('http://main.local', {
+      headers: { authorization: `Bearer ${f.account.tokenA}` },
+    });
+    const batchInput = { structure: first.navigation, profile: 'zone-navigation' as const,
+      expectedHead: second.revision, actingSubject: f.actor, idempotencyKey: randomUUID(),
+      operations: ['guides', 'notes'].map(routeSegment => ({ op: 'insert' as const,
+        parent: first.navigation, position: 'last' as const, role: 'mount' as const, target: collection,
+        qualifier: { type: 'zone-mount' as const, zone: f.zone, routeSegment, key: 'id' as const,
+          disclosure: 'public' as const } })) };
+    const batch = await changeAdmittedComposition(f.env, f.account.verifier, f.access, request(), batchInput);
+    expect(batch.occurrences).toHaveLength(2);
+    const later = await f.json<{ revision: string }>(await f.call('POST',
+      `/v1/compositions/${shortId(first.navigation)}/changes`, {
+        profile: 'zone-navigation', expectedHead: batch.revision, actingSubject: f.actor,
+        operations: [{ op: 'move', occurrence: batch.occurrences![1]!, parent: first.navigation, position: 'first' }],
+      }), 200);
+    let targetReads = 0;
+    const unavailableAccess = new Proxy(f.access, { get(target, property) {
+      if (property === 'canReadSemanticResource') return async () => { targetReads++; return false; };
+      const value = Reflect.get(target, property, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    } });
+    const replay = await changeAdmittedComposition(f.env, f.account.verifier, unavailableAccess,
+      request(), batchInput);
+    expect(replay).toMatchObject({ revision: batch.revision, receipt: batch.receipt,
+      occurrences: batch.occurrences, sequence: batch.sequence, replayed: true });
+    expect(targetReads).toBe(0);
+    await expect(changeAdmittedComposition(f.env, f.account.verifier, unavailableAccess, request(),
+      { ...batchInput, expectedHead: later.revision, idempotencyKey: randomUUID() }))
+      .rejects.toBeInstanceOf(CompositionUnavailable);
+    expect(targetReads).toBe(1);
+    const editOnlyAccount = { verify: (request: Request, scopes: readonly string[]) => {
+      if (scopes.includes('semantic:read')) throw new AccountAssertionInsufficientScope('Target read scope is absent');
+      return f.account.verifier.verify(request, scopes);
+    } };
+    expect((await changeAdmittedComposition(f.env, editOnlyAccount, f.access, request(), batchInput)).occurrences)
+      .toEqual(batch.occurrences);
+    await expect(changeAdmittedComposition(f.env, editOnlyAccount, f.access, request(),
+      { ...batchInput, expectedHead: later.revision, idempotencyKey: randomUUID() }))
+      .rejects.toBeInstanceOf(AccountAssertionInsufficientScope);
+    const current = await f.json<{ revision: string; mounts: Array<{ occurrence: string }> }>(
+      await f.call('GET', `${f.path}?actingSubject=${encodeURIComponent(f.actor)}`), 200);
+    expect(current.revision).toBe(later.revision);
+    expect(current.mounts.map(mount => mount.occurrence)).toEqual([
+      batch.occurrences![1]!, first.occurrences[0]!, second.occurrences[0]!, batch.occurrences![0]!,
+    ]);
   } finally { await f.close(); }
 }, 120_000);
 

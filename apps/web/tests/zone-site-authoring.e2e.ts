@@ -301,6 +301,33 @@ async function saveNavigationDraft(page: Page, actor: AuthorFixture, site: SiteF
   return { charts, tides };
 }
 
+async function saveNavigationAfterLostAcknowledgement(page: Page) {
+  const navigationRequests: Array<{ key: string; body: string; occurrence: string }> = [];
+  await page.route('**/v1/zones/*/mounts', async route => {
+    if (route.request().method() !== 'POST') { await route.continue(); return; }
+    const response = await route.fetch();
+    expect(response.status()).toBe(200);
+    const body = await response.text();
+    const result = JSON.parse(body) as { occurrences: string[] };
+    expect(result.occurrences).toHaveLength(1);
+    navigationRequests.push({ key: route.request().headers()['idempotency-key'] ?? '',
+      body: route.request().postData() ?? '', occurrence: result.occurrences[0]! });
+    if (navigationRequests.length <= 2) await route.abort('failed');
+    else await route.fulfill({ status: response.status(), contentType: 'application/json', body });
+  });
+  await page.getByRole('button', { name: 'Save draft' }).click();
+  await expect(page.getByRole('button', { name: 'Resume saving' })).toBeEnabled({ timeout: 30_000 });
+  await page.getByRole('link', { name: 'Theme', exact: true }).click();
+  await page.getByRole('link', { name: 'Navigation', exact: true }).click();
+  await expect(page.getByRole('list', { name: 'Links' })).toContainText('Harbor tides');
+  await page.getByRole('button', { name: 'Resume saving' }).click();
+  await expect(page.getByText('Draft saved.')).toBeVisible({ timeout: 30_000 });
+  expect(navigationRequests.length).toBeGreaterThanOrEqual(4);
+  expect(navigationRequests.slice(0, 3)).toEqual(Array(3).fill(navigationRequests[0]));
+  expect(navigationRequests[3]!.key).not.toBe(navigationRequests[0]!.key);
+  await page.unroute('**/v1/zones/*/mounts');
+}
+
 async function saveSiteDraft(page: Page, actor: AuthorFixture, site: SiteFixture) {
   await page.goto(site.editorPath);
   await writeHome(page, morning);
@@ -648,8 +675,7 @@ test('Navigation and theme: a Realm-less Zone publishes the saved home, navigati
   await addNavigationLink(page, charts, 'Harbor charts');
   await addNavigationLink(page, tides, 'Harbor tides');
   await page.getByRole('button', { name: 'Move up Harbor tides' }).click();
-  await page.getByRole('button', { name: 'Save draft' }).click();
-  await expect(page.getByText('Draft saved.')).toBeVisible({ timeout: 30_000 });
+  await saveNavigationAfterLostAcknowledgement(page);
 
   await page.getByRole('link', { name: 'Theme', exact: true }).click();
   await page.getByRole('button', { name: 'Create layout from defaults' }).click();

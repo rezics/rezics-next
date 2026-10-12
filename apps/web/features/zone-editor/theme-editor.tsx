@@ -4,10 +4,10 @@ import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/alert';
 import { Button, buttonVariants } from '@rezics/ui/button';
 import { RadioGroup, RadioGroupItem, RadioGroupLabel } from '@rezics/ui/radio-group';
 import { cn } from '@rezics/ui/utils';
-import { useRef, useState } from 'react';
+import { useRef } from 'react';
 import { commandLane, type WriteRound } from '../api/command.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
-import { useZoneEditorDraft, useZoneEditorResource } from './draft-provider.tsx';
+import { useZoneEditorDraft, useZoneEditorResource, useZoneEditorRef, useZoneEditorSessionState } from './draft-provider.tsx';
 import {
   browserZoneTheme,
   commitCommand,
@@ -63,14 +63,21 @@ function EditableThemeEditor({ zoneId, actingSubject, copy, initial, signInHref,
   api?: ZoneThemeClient;
 }) {
   const [state, setState, draftReady] = useZoneEditorDraft('theme', initial, isThemeDirty, isThemeEditorState);
-  const [busy, setBusy] = useState<null | 'save' | 'review'>(null);
+  const [busy, setBusy] = useZoneEditorSessionState<null | 'save' | 'review'>('theme-busy', null);
+  const stateRef = useZoneEditorRef('theme-state', state);
+  stateRef.current = state;
+  const captured = useZoneEditorRef<ThemeSaveIntent | null>('theme-choice', null);
   const client = useRef<ZoneThemeClient | null>(null);
   const saveLane = useZoneEditorResource('theme:save',
     () => commandLane<ThemeSaveIntent, WriteResult<SavedZoneTheme>>({ ok: false, failure: 'unavailable' }));
   if (!client.current) client.current = api ?? browserZoneTheme();
 
   function put(event: Parameters<typeof reduceThemeEditor>[1]) {
-    setState(current => reduceThemeEditor(current, event));
+    setState(current => {
+      const next = reduceThemeEditor(current, event);
+      stateRef.current = next;
+      return next;
+    });
   }
 
   function intentFor(current: ThemeEditorState): ThemeSaveIntent | null {
@@ -90,14 +97,16 @@ function EditableThemeEditor({ zoneId, actingSubject, copy, initial, signInHref,
         revision: result.data.revision, replayed: result.data.replayed });
       else if (result.failure === 'stale') put({ type: 'stale' });
       else put({ type: 'failed', failure: noticeFailure(result.failure) });
+      if (result.ok || result.failure !== 'unavailable') captured.current = null;
       return result;
     });
   }
 
   async function save() {
-    if (busy || !draftReady || state.needsReview || !isThemeDirty(state)) return;
-    const choice = intentFor(state);
+    if (busy || !draftReady || stateRef.current.needsReview || !isThemeDirty(stateRef.current)) return;
+    const choice = captured.current ?? intentFor(stateRef.current);
     if (!choice) return;
+    captured.current = choice;
     setBusy('save');
     try {
       await saveLane.submit(choice, applySave);

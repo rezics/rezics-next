@@ -3,7 +3,7 @@
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/alert';
 import { Button, buttonVariants } from '@rezics/ui/button';
 import { cn } from '@rezics/ui/utils';
-import { useRef, useState } from 'react';
+import { useRef } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { commandLane, type WriteRound } from '../api/command.ts';
@@ -14,6 +14,7 @@ import type { ZoneEditorMessages } from './messages.ts';
 import { initialZoneLifecycleState, reduceZoneLifecycle, zoneLifecycleTarget, type ZoneLifecycleAction,
   type ZoneLifecycleEditorState, type ZoneLifecycleNotice } from './lifecycle.ts';
 import { zoneEditorPath, zoneLifecyclePath } from './routes.ts';
+import { useZoneEditorDraft, useZoneEditorRef, useZoneEditorSessionState } from './draft-provider.tsx';
 
 const actionClass = 'h-auto min-h-9 whitespace-normal px-3';
 type LifecycleIntent = { expectedHead: string; action: ZoneLifecycleAction };
@@ -32,15 +33,22 @@ export function ZoneLifecycleEditor({ zoneId, actingSubject, locale, copy, initi
   /** Stories keep the confirmation on screen instead of navigating away. */
   onRetired?: () => void;
 }) {
-  const [state, setState] = useState(() => initialZoneLifecycleState(initial));
-  const [busy, setBusy] = useState<null | 'write' | 'review'>(null);
+  const [state, setState] = useZoneEditorDraft('lifecycle', initialZoneLifecycleState(initial), () => false, isLifecycleEditorState);
+  const [busy, setBusy] = useZoneEditorSessionState<null | 'write' | 'review'>('lifecycle-busy', null);
+  const stateRef = useZoneEditorRef('lifecycle-state', state);
+  stateRef.current = state;
+  const captured = useZoneEditorRef<LifecycleIntent | null>('lifecycle-choice', null);
   const client = useRef<ZoneLifecycleClient | null>(null);
-  const lane = useRef<ReturnType<typeof commandLane<LifecycleIntent, WriteResult<SavedZoneLifecycle>>> | null>(null);
+  const lane = useZoneEditorRef<ReturnType<typeof commandLane<LifecycleIntent, WriteResult<SavedZoneLifecycle>>> | null>('lifecycle-lane', null);
   if (!client.current) client.current = api ?? browserZoneLifecycle();
   if (!lane.current) lane.current = commandLane({ ok: false, failure: 'unavailable' });
 
   function put(event: Parameters<typeof reduceZoneLifecycle>[1]) {
-    setState(current => reduceZoneLifecycle(current, event));
+    setState(current => {
+      const next = reduceZoneLifecycle(current, event);
+      stateRef.current = next;
+      return next;
+    });
   }
 
   async function review() {
@@ -60,7 +68,8 @@ export function ZoneLifecycleEditor({ zoneId, actingSubject, locale, copy, initi
   async function save(action: ZoneLifecycleAction) {
     if (busy || state.needsReview || state.status === zoneLifecycleTarget(action)) return;
     setBusy('write');
-    const intent = { expectedHead: state.expectedHead, action };
+    const intent = captured.current ?? { expectedHead: stateRef.current.expectedHead, action };
+    captured.current = intent;
     const result = await lane.current!.submit(intent, (chosen, round) => apply(chosen, round));
     if (result.ok) {
       const snapshot = { revision: result.data.revision, status: zoneLifecycleTarget(action) } as const;
@@ -73,6 +82,7 @@ export function ZoneLifecycleEditor({ zoneId, actingSubject, locale, copy, initi
       }
     } else if (result.failure === 'stale') put({ type: 'stale' });
     else put({ type: 'failed', failure: noticeFailure(result.failure) });
+    if (result.ok || result.failure !== 'unavailable') captured.current = null;
     setBusy(null);
   }
 
@@ -129,6 +139,13 @@ export function ZoneLifecycleEditor({ zoneId, actingSubject, locale, copy, initi
       {state.status === 'retired' ? <p className="text-pretty text-muted-foreground text-sm">{copy.lifecycleRecoveredBody}</p> : null}
     </div> : null}
   </section>;
+}
+
+function isLifecycleEditorState(value: unknown): value is ZoneLifecycleEditorState {
+  if (!value || typeof value !== 'object') return false;
+  const state = value as Partial<ZoneLifecycleEditorState>;
+  return typeof state.expectedHead === 'string' && (state.status === 'active' || state.status === 'retired')
+    && typeof state.needsReview === 'boolean' && typeof state.notice === 'string';
 }
 
 function LifecycleNotice({ state, copy, signInHref, busy, onReview }: {

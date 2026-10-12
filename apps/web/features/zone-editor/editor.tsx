@@ -12,7 +12,7 @@ import LocalizedLink from '../shell/localized-link.tsx';
 import { browserZoneAuthoring, browserZoneNavigation, browserZoneTheme, choiceWire, commitCommand, type SavedDraft, type WriteResult, type ZoneAuthoringClient, type ZoneNavigationClient, type ZoneThemeClient } from './api.ts';
 import { EditorActions } from './editor-actions.tsx';
 import { ZoneHomeDocument } from './home-document.tsx';
-import { useZoneEditorDraft } from './draft-provider.tsx';
+import { useZoneEditorDraft, useZoneEditorRef, useZoneEditorSessionState } from './draft-provider.tsx';
 import { confirmPublicationReview, readSavedPublicationSelection, reviewedPublicationChoice, stagePublicationReview,
   type PublicationReview } from './publication-review.ts';
 import { PublicationReviewPanel } from './publication-review-panel.tsx';
@@ -46,12 +46,12 @@ export function ZoneHomeEditor({ zoneId, zoneIri, actingSubject, locale, copy, i
   const [canEdit, setCanEdit] = useState(editable);
   const [reading, setReading] = useState(document);
   const [generation, setGeneration] = useState(0);
-  const [busy, setBusy] = useState<null | 'save' | 'publish' | 'load'>(null);
-  const [intent, setIntent] = useState<null | 'save' | 'publish' | 'load' | 'review'>(null);
-  const [review, setReview] = useState<PublicationReview | null>(null);
-  const stateRef = useRef(state);
+  const [busy, setBusy] = useZoneEditorSessionState<null | 'save' | 'publish' | 'load'>('home-busy', null);
+  const [intent, setIntent] = useZoneEditorSessionState<null | 'save' | 'publish' | 'load' | 'review'>('home-intent', null);
+  const [review, setReview] = useZoneEditorSessionState<PublicationReview | null>('home-review', null);
+  const stateRef = useZoneEditorRef('home-state', state);
   stateRef.current = state;
-  const inflight = useRef(0);
+  const inflight = useZoneEditorRef('home-inflight', 0);
   function put(event: Parameters<typeof reduceEditor>[1]) {
     dispatch(current => {
       const next = reduceEditor(current, event);
@@ -65,11 +65,13 @@ export function ZoneHomeEditor({ zoneId, zoneIri, actingSubject, locale, copy, i
   if (!client.current) client.current = api ?? browserZoneAuthoring();
   if (!navigation.current) navigation.current = browserZoneNavigation();
   if (!theme.current) theme.current = browserZoneTheme();
-  const saveLane = useRef<ReturnType<typeof commandLane<DraftChoice, WriteResult<SavedDraft>>> | null>(null);
-  const publishLane = useRef<ReturnType<typeof commandLane<PublicationChoice, WriteResult<{ zoneHead: string; replayed: boolean }>>> | null>(null);
+  const saveLane = useZoneEditorRef<ReturnType<typeof commandLane<DraftChoice, WriteResult<SavedDraft>>> | null>('home-save-lane', null);
+  const publishLane = useZoneEditorRef<ReturnType<typeof commandLane<PublicationChoice, WriteResult<{ zoneHead: string; replayed: boolean }>>> | null>('home-publish-lane', null);
+  const saveChoice = useZoneEditorRef<DraftChoice | null>('home-save-choice', null);
+  const publishChoice = useZoneEditorRef<PublicationChoice | null>('home-publish-choice', null);
   if (!saveLane.current) saveLane.current = commandLane({ ok: false, failure: 'unavailable' });
   if (!publishLane.current) publishLane.current = commandLane({ ok: false, failure: 'unavailable' });
-  const dirty = isDirty(state);
+  const dirty = isDirty(state) || saveChoice.current !== null;
   useEffect(() => {
     if (!dirty) return;
     const ask = (event: BeforeUnloadEvent) => event.preventDefault();
@@ -91,33 +93,38 @@ export function ZoneHomeEditor({ zoneId, zoneIri, actingSubject, locale, copy, i
     const live = stateRef.current;
     // A double click queued the same text after this tab's own save moved the head. It is already stored.
     if (live.expectedHead !== chosen.expectedHead && live.savedValue === chosen.savedValue && live.basis) {
+      saveChoice.current = null;
       return Promise.resolve({ ok: true as const, data: { ...live.basis, replayed: true } });
     }
     return commitCommand(round, key => client.current!.saveDraft(choiceWire(chosen), key)).then(result => {
       if (result.ok) put({ type: 'saved', captured: chosen.captured, savedValue: chosen.savedValue, basis: result.data, replayed: result.data.replayed });
       else if (result.failure === 'stale') put({ type: 'stale', currentHead: result.currentHead });
       else put({ type: 'failed', failure: result.failure });
+      if (result.ok || result.failure !== 'unavailable') saveChoice.current = null;
       return result;
     });
   }
 
   function applyPublish(chosen: PublicationChoice, round: WriteRound) {
     return commitCommand(round, key => client.current!.publish(chosen, actingSubject, key)).then(result => {
-      if (result.ok) put({ type: 'published', zoneHead: result.data.zoneHead, replayed: result.data.replayed });
+      if (result.ok) put({ type: 'published', zoneHead: result.data.zoneHead, revisionId: chosen.revisionId, replayed: result.data.replayed });
       else if (result.failure === 'stale') { setReview(null); put({ type: 'publish-stale' }); }
       else put({ type: 'failed', failure: result.failure });
+      if (result.ok || result.failure !== 'unavailable') publishChoice.current = null;
       return result;
     });
   }
 
   function save(next: EditorState = stateRef.current) {
     if (!canEdit || busy || !draftReady) return;
-    track('save', saveLane.current!.submit(draftChoice(next, zoneIri, actingSubject), applySave));
+    saveChoice.current ??= draftChoice(next, zoneIri, actingSubject);
+    track('save', saveLane.current!.submit(saveChoice.current, applySave));
   }
 
   function publish(next: EditorState = stateRef.current) {
-    const choice = publicationChoice(next, zoneIri);
+    const choice = publishChoice.current ?? publicationChoice(next, zoneIri);
     if (!choice || busy || !draftReady) return;
+    publishChoice.current = choice;
     track('publish', publishLane.current!.submit(choice, applyPublish));
   }
 
@@ -166,6 +173,7 @@ export function ZoneHomeEditor({ zoneId, zoneIri, actingSubject, locale, copy, i
     setReview(null);
     put({ type: 'heads', zoneHead: review.selection.zoneHead,
       navigationRevision: review.selection.navigationRevision });
+    publishChoice.current = choice;
     track('publish', publishLane.current!.submit(choice, applyPublish));
   }
 
@@ -189,7 +197,7 @@ export function ZoneHomeEditor({ zoneId, zoneIri, actingSubject, locale, copy, i
         <h2 id="zone-home-title" className="font-semibold text-lg tracking-tight sm:text-xl">{copy.homeTitle}</h2>
         <EditorActions copy={copy} canEdit={canEdit} busy={busy}
           saveDisabled={!draftReady || !!busy || !dirty || state.notice.kind === 'stale'}
-          publishDisabled={!draftReady || !!busy || !canPublish(state) || state.notice.kind === 'publish-stale'}
+          publishDisabled={!draftReady || !!busy || saveChoice.current !== null || !canPublish(state) || state.notice.kind === 'publish-stale'}
           onSave={() => save()} onPublish={() => publish()} previewHref={previewHref} siteHref={siteHref} />
       </div>
       <p className="max-w-2xl text-pretty text-muted-foreground text-sm">{copy.homeHelp}</p>

@@ -1,7 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
-import { expect, userEvent, within } from 'storybook/test';
-import { ZoneEditorDraftProvider, useUnsavedZoneEditorSections, useZoneEditorDraft } from './draft-provider.tsx';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { commandLane } from '../api/command.ts';
+import { commitCommand, type WriteResult } from './api.ts';
+import { ZoneEditorDraftProvider, useUnsavedZoneEditorSections, useZoneEditorDraft, useZoneEditorRef } from './draft-provider.tsx';
 import type { DraftStorage } from './draft-state.ts';
 
 interface TextDraft {
@@ -129,4 +131,70 @@ export const SessionStorageUnavailable: Story = { play: verifiesDraftContinuity 
 export const SessionStorageQuotaExhausted: Story = {
   args: { storageFailure: 'quota' },
   play: verifiesDraftContinuity,
+};
+
+const commandCalls: { key: string; body: string }[] = [];
+let commandReplies = 0;
+function CommandFields() {
+  const [state, setState, ready] = useZoneEditorDraft('home', body, isDirty, accepts);
+  const lane = useZoneEditorRef<ReturnType<typeof commandLane<TextDraft, WriteResult<string>>> | null>('story-save-lane', null);
+  const captured = useZoneEditorRef<TextDraft | null>('story-save-choice', null);
+  lane.current ??= commandLane({ ok: false, failure: 'unavailable' });
+  async function save() {
+    captured.current ??= { ...state };
+    await lane.current!.submit(captured.current, (chosen, round) => commitCommand(round, async key => {
+      commandCalls.push({ key, body: chosen.value });
+      commandReplies += 1;
+      if (commandReplies <= 2) return { ok: false, failure: 'unavailable' };
+      setState(current => ({ ...current, savedValue: chosen.value }));
+      captured.current = null;
+      return { ok: true, data: chosen.value };
+    }));
+  }
+  return <div className="grid gap-3">
+    <label className="grid gap-2">Command body
+      <textarea className={fieldClass} value={state.value} disabled={!ready}
+        onChange={event => setState(current => ({ ...current, value: event.target.value }))} />
+    </label>
+    <p role="status">Confirmed body: {state.savedValue}</p>
+    <button className={buttonClass} disabled={!ready} onClick={() => void save()}>Retry saved command</button>
+  </div>;
+}
+
+function CommandSections() {
+  const [section, setSection] = useState('home');
+  return <>
+    <nav className="flex gap-2"><button className={buttonClass} onClick={() => setSection('home')}>Home</button>
+      <button className={buttonClass} onClick={() => setSection('theme')}>Theme</button></nav>
+    {section === 'home' ? <CommandFields /> : <p>Theme section</p>}
+  </>;
+}
+
+export const UnresolvedCommandRetainsItsEnvelopeAcrossSections: Story = {
+  render() {
+    commandCalls.length = 0;
+    commandReplies = 0;
+    return <main className="mx-auto grid max-w-2xl gap-4 p-6">
+      <h1 className="font-semibold text-xl">Retry the original saved command</h1>
+      <ZoneEditorDraftProvider zoneId="command-harbor" actingSubject="author"><CommandSections /></ZoneEditorDraftProvider>
+    </main>;
+  },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const field = await canvas.findByRole('textbox', { name: 'Command body' });
+    await userEvent.clear(field);
+    await userEvent.type(field, 'Original submitted body');
+    await userEvent.click(canvas.getByRole('button', { name: 'Retry saved command' }));
+    await waitFor(() => expect(commandCalls).toHaveLength(2));
+    await userEvent.clear(field);
+    await userEvent.type(field, 'Later local typing');
+    await userEvent.click(canvas.getByRole('button', { name: 'Theme' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Home' }));
+    await expect(canvas.getByRole('textbox', { name: 'Command body' })).toHaveValue('Later local typing');
+    await userEvent.click(canvas.getByRole('button', { name: 'Retry saved command' }));
+    await waitFor(() => expect(commandCalls).toHaveLength(3));
+    await expect(commandCalls[2]).toEqual(commandCalls[0]);
+    await expect(canvas.getByRole('status')).toHaveTextContent('Confirmed body: Original submitted body');
+    await expect(canvas.getByRole('textbox', { name: 'Command body' })).toHaveValue('Later local typing');
+  },
 };

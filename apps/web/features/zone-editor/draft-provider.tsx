@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode, type SetStateAction } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type SetStateAction } from 'react';
 import { createZoneEditorDraftStore, zoneEditorDraftKey, type ZoneEditorSection } from './draft-state.ts';
 
 type DirtySections = Partial<Record<ZoneEditorSection, true>>;
@@ -55,50 +55,73 @@ export function ZoneEditorDraftProvider({ zoneId, actingSubject, children }: {
 export function useZoneEditorDraft<T>(section: ZoneEditorSection, initial: T, isDirty: (value: T) => boolean,
   accepts: (value: unknown) => value is T): [T, (next: SetStateAction<T>) => void, boolean] {
   const scope = useContext(DraftContext);
-  const zoneId = scope?.zoneId;
-  const actingSubject = scope?.actingSubject;
-  const mark = scope?.mark;
-  const drafts = scope?.drafts;
-  const key = zoneId && actingSubject ? zoneEditorDraftKey(zoneId, actingSubject, section) : null;
-  const [local, setLocal] = useState<{ key: string | null; value: T }>(() => ({ key: null, value: initial }));
-  const ready = local.key === key;
-  const state = ready ? local.value : initial;
+  const key = scope ? zoneEditorDraftKey(scope.zoneId, scope.actingSubject, section) : null;
+  const [local, setLocal] = useState(initial);
+  const localRef = useRef(local);
+  localRef.current = local;
+  const snapshot = useSyncExternalStore(
+    useCallback(listener => key && scope ? scope.drafts.subscribe(key, listener) : () => {}, [key, scope?.drafts]),
+    () => key && scope ? scope.drafts.current<T>(key) : undefined,
+    () => undefined,
+  );
+  const ready = !key || snapshot !== undefined;
+  const state = key ? snapshot ?? initial : local;
   const setState = useCallback((next: SetStateAction<T>) => {
-    setLocal(current => {
-      // Ignore an old identity's acknowledgement after this section has changed scope.
-      if (current.key !== key) return current;
-      const value = typeof next === 'function' ? (next as (value: T) => T)(current.value) : next;
-      return current.value === value ? current : { key, value };
-    });
-  }, [key]);
+    const current = key && scope ? scope.drafts.current<T>(key) ?? initial : localRef.current;
+    const value = typeof next === 'function' ? (next as (value: T) => T)(current) : next;
+    if (!scope || !key) { localRef.current = value; setLocal(value); return; }
+    // Settle in the provider even when the section that dispatched the command has unmounted.
+    scope.drafts.retain(key, value);
+    scope.drafts.write(sessionStorageIfAvailable(), key, value, isDirty(value));
+    scope.mark(section, isDirty(value));
+  }, [key, scope?.drafts, scope?.mark, initial, isDirty, section]);
 
   useEffect(() => {
-    if (!drafts || !key) {
-      setLocal(current => current.key === key ? current : { key, value: initial });
-      return;
-    }
-    let storage: Storage | undefined;
-    try { storage = globalThis.sessionStorage; } catch { storage = undefined; }
-    const saved = drafts.read(storage, key, accepts);
-    setLocal(current => {
-      const value = saved ?? (current.key === key ? current.value : initial);
-      return current.key === key && current.value === value ? current : { key, value };
-    });
-  }, [key, drafts, accepts, initial]);
-
-  useEffect(() => {
-    if (!drafts || !mark || !key || !ready) return;
-    const dirty = isDirty(state);
-    let storage: Storage | undefined;
-    try { storage = globalThis.sessionStorage; } catch { storage = undefined; }
-    drafts.write(storage, key, state, dirty);
-    mark(section, dirty);
-  }, [drafts, mark, key, ready, state, isDirty, section]);
+    if (!scope || !key || scope.drafts.current(key) !== undefined) return;
+    const value = scope.drafts.read(sessionStorageIfAvailable(), key, accepts) ?? initial;
+    scope.drafts.retain(key, value);
+    scope.mark(section, isDirty(value));
+  }, [key, scope?.drafts, scope?.mark, accepts, initial, isDirty, section]);
 
   return [state, setState, ready];
 }
 
-export function useUnsavedZoneEditorSections(): readonly ZoneEditorSection[] {
+/** Runtime command lanes and checkpoints live with the Zone and acting subject, not a section. */
+export function useZoneEditorResource<T>(name: string, create: () => T): T {
+  const scope = useContext(DraftContext);
+  const fallback = useRef<{ value: T } | null>(null);
+  if (scope) return scope.drafts.resource(`${zoneEditorDraftKey(scope.zoneId, scope.actingSubject, 'home')}:resource:${name}`, create);
+  fallback.current ??= { value: create() };
+  return fallback.current.value;
+}
+
+export function useZoneEditorRef<T>(name: string, initial: T): { current: T } {
+  return useZoneEditorResource(name, () => ({ current: initial }));
+}
+
+/** Transient command feedback is observable after leaving and returning to a section. */
+export function useZoneEditorSessionState<T>(name: string, initial: T): [T, (next: SetStateAction<T>) => void] {
+  const scope = useContext(DraftContext);
+  const key = scope ? `${zoneEditorDraftKey(scope.zoneId, scope.actingSubject, 'home')}:session:${name}` : null;
+  const [local, setLocal] = useState(initial);
+  const value = useSyncExternalStore(
+    useCallback(listener => scope && key ? scope.drafts.subscribe(key, listener) : () => {}, [scope?.drafts, key]),
+    () => scope && key ? scope.drafts.current<T>(key) : undefined,
+    () => undefined,
+  );
+  const setState = useCallback((next: SetStateAction<T>) => {
+    if (!scope || !key) { setLocal(next); return; }
+    const current = scope.drafts.current<T>(key) ?? initial;
+    scope.drafts.retain(key, typeof next === 'function' ? (next as (value: T) => T)(current) : next);
+  }, [scope?.drafts, key, initial]);
+  return [key ? value ?? initial : local, setState];
+}
+
+function sessionStorageIfAvailable(): Storage | undefined {
+  try { return globalThis.sessionStorage; } catch { return undefined; }
+}
+
+export function useUnsavedZoneEditorSections(): readonly ('home' | 'navigation' | 'theme')[] {
   const scope = useContext(DraftContext);
   if (!scope) return [];
   return (['home', 'navigation', 'theme'] as const).filter(section => scope.dirty[section]);

@@ -21,7 +21,7 @@ import {
 } from './api.ts';
 import { EditorActions } from './editor-actions.tsx';
 import { CollectionPageLookup } from './collection-page-lookup.tsx';
-import { useZoneEditorDraft } from './draft-provider.tsx';
+import { useZoneEditorDraft, useZoneEditorRef, useZoneEditorSessionState } from './draft-provider.tsx';
 import { confirmPublicationReview, readSavedPublicationSelection, reviewedPublicationChoice, stagePublicationReview,
   type PublicationReview } from './publication-review.ts';
 import { PublicationReviewPanel } from './publication-review-panel.tsx';
@@ -86,24 +86,24 @@ export function ZoneNavigationEditor({
 }) {
   const [state, dispatch, draftReady] = useZoneEditorDraft('navigation', initial, isNavigationDirty, isNavigationState);
   const [page, setPage, pageReady] = useZoneEditorDraft('home', home, isDirty, isEditorState);
-  const [busy, setBusy] = useState<null | 'save' | 'publish' | 'load' | 'continue'>(null);
-  const [intent, setIntent] = useState<null | 'save' | 'publish' | 'load' | 'continue' | 'review'>(null);
-  const [review, setReview] = useState<PublicationReview | null>(null);
+  const [busy, setBusy] = useZoneEditorSessionState<null | 'save' | 'publish' | 'load' | 'continue'>('navigation-busy', null);
+  const [intent, setIntent] = useZoneEditorSessionState<null | 'save' | 'publish' | 'load' | 'continue' | 'review'>('navigation-intent', null);
+  const [review, setReview] = useZoneEditorSessionState<PublicationReview | null>('navigation-review', null);
   const [query, setQuery] = useState('');
   const [choices, setChoices] = useState<PageChoice[]>([]);
   const [picked, setPicked] = useState<PageChoice | null>(null);
   const [paths, setPaths] = useState<Record<string, string>>({});
   const [addNotice, setAddNotice] = useState<string | null>(null);
   const [searched, setSearched] = useState<string | null>(null);
-  const [saveCompleted, setSaveCompleted] = useState(0);
-  const saveSession = useRef<{ choice: NavigationState; progress?: NavigationSaveProgress } | null>(
-    null,
+  const [saveCompleted, setSaveCompleted] = useZoneEditorSessionState('navigation-save-completed', 0);
+  const saveSession = useZoneEditorRef<{ choice: NavigationState; progress?: NavigationSaveProgress } | null>(
+    'navigation-save-session', null,
   );
-  const stateRef = useRef(state);
-  const pageRef = useRef(page);
+  const stateRef = useZoneEditorRef('navigation-state', state);
+  const pageRef = useZoneEditorRef('navigation-home-state', page);
   stateRef.current = state;
   pageRef.current = page;
-  const inflight = useRef(0);
+  const inflight = useZoneEditorRef('navigation-inflight', 0);
   function put(event: Parameters<typeof reduceNavigation>[1]) {
     dispatch((current) => {
       const next = reduceNavigation(current, event);
@@ -124,15 +124,16 @@ export function ZoneNavigationEditor({
   if (!client.current) client.current = api ?? browserZoneNavigation();
   if (!pages.current) pages.current = authoring ?? browserZoneAuthoring();
   if (!theme.current) theme.current = browserZoneTheme();
-  const saveLane = useRef<ReturnType<
+  const saveLane = useZoneEditorRef<ReturnType<
     typeof commandLane<
       NavigationState,
       WriteResult<{ head: string; links: SiteLink[]; replayed: boolean }>
     >
-  > | null>(null);
-  const publishLane = useRef<ReturnType<
+  > | null>('navigation-save-lane', null);
+  const publishLane = useZoneEditorRef<ReturnType<
     typeof commandLane<PublicationChoice, WriteResult<{ zoneHead: string; replayed: boolean }>>
-  > | null>(null);
+  > | null>('navigation-publish-lane', null);
+  const publishChoice = useZoneEditorRef<PublicationChoice | null>('navigation-publish-choice', null);
   if (!saveLane.current) saveLane.current = commandLane({ ok: false, failure: 'unavailable' });
   if (!publishLane.current)
     publishLane.current = commandLane({ ok: false, failure: 'unavailable' });
@@ -252,10 +253,12 @@ export function ZoneNavigationEditor({
           putPage({
             type: 'published',
             zoneHead: result.data.zoneHead,
+            revisionId: chosen.revisionId,
             replayed: result.data.replayed,
           });
         else if (result.failure === 'stale') { setReview(null); putPage({ type: 'publish-stale' }); }
         else put({ type: 'failed', failure: result.failure });
+        if (result.ok || result.failure !== 'unavailable') publishChoice.current = null;
         return result;
       },
     );
@@ -296,8 +299,9 @@ export function ZoneNavigationEditor({
   }
 
   function publish() {
-    const choice = siteChoice(stateRef.current.head);
+    const choice = publishChoice.current ?? siteChoice(stateRef.current.head);
     if (!choice || busy || !draftReady || !pageReady) return;
+    publishChoice.current = choice;
     track('publish', publishLane.current!.submit(choice, applyPublish));
   }
 
@@ -395,6 +399,7 @@ export function ZoneNavigationEditor({
     putPage({ type: 'heads', zoneHead: review.selection.zoneHead, navigationRevision: review.selection.navigationRevision });
     put({ type: 'review', links: review.selection.navigation, head: review.selection.navigationRevision,
       navigation: review.selection.navigationId });
+    publishChoice.current = choice;
     track('publish', publishLane.current!.submit(choice, applyPublish));
   }
 

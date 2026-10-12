@@ -96,3 +96,19 @@ test('a stored draft that does not match the section state is ignored', () => {
   storage.setItem(key, JSON.stringify({ title: 'Incomplete' }));
   expect(createZoneEditorDraftStore().read(storage, key, accepts)).toBeNull();
 });
+
+test('command resources and acknowledged state survive a section unmount without crossing identity scope', () => {
+  const drafts = createZoneEditorDraftStore();
+  const lane = { captured: { body: 'Submitted text', expectedHead: 'head' }, key: 'original-key' };
+  expect(drafts.resource(`${key}:command`, () => lane)).toBe(lane);
+  drafts.retain(key, edited);
+  let notifications = 0;
+  const leave = drafts.subscribe(key, () => { notifications += 1; });
+  leave();
+  const acknowledged = { ...edited, savedBody: 'Submitted text', expectedHead: 'acknowledged-head' };
+  drafts.retain(key, acknowledged);
+  expect(notifications).toBe(0);
+  expect(drafts.current<Draft>(key)).toEqual(acknowledged);
+  expect(drafts.resource<typeof lane>(`${key}:command`, () => { throw new Error('new lane after remount'); })).toBe(lane);
+  expect(drafts.current(zoneEditorDraftKey('harbor', 'another-author', 'home'))).toBeUndefined();
+});

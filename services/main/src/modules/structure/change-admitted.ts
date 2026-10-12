@@ -1,5 +1,6 @@
 import { CommandRejected } from '../../infrastructure/fuseki.ts';
-import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
+import { AccountAssertionDenied, AccountAssertionUnavailable,
+  type AccountAssertionVerifier } from '../account/verify-assertion.ts';
 import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry,
   type RegisteredAdmission } from '../access/admission.ts';
 import { IdempotencyConflict, type WorkActivationEnvironment } from '../work/activate.ts';
@@ -14,7 +15,7 @@ import { carriedComposition, changeComposition, chapterCreateDigest, composition
   terminalResult, type CompositionConflict, type CompositionCost, type CompositionOperation,
   type NewChapterPost,
   type CompositionTerminal } from './change.ts';
-import { CompositionCorrupt, CompositionUnavailable, readCompositionHeader } from './graph.ts';
+import { CompositionCorrupt, CompositionUnavailable, derivedId, readCompositionHeader } from './graph.ts';
 import { InvalidCompositionChange } from './change.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable } from './tree.ts';
 import { StructureStageConflict } from './stage.ts';
@@ -37,6 +38,7 @@ export interface AdmittedComposition extends CompositionTerminal {
 const KNOWN = ['StaleCompositionHead', 'CompositionConflict', 'CompositionExists',
   'CompositionTooLarge', 'CompositionCancelled', 'InvalidCompositionChange'];
 const known = (error: unknown) => error instanceof IdempotencyConflict || error instanceof CommandRejected
+  || error instanceof AccountAssertionDenied || error instanceof AccountAssertionUnavailable
   || error instanceof CompositionUnavailable || error instanceof CompositionCorrupt
   || error instanceof InvalidCompositionChange || error instanceof StructureObjectCorrupt
   || error instanceof StructureObjectUnavailable || error instanceof StructureStageConflict
@@ -134,21 +136,30 @@ export async function changeAdmittedComposition(env: WorkActivationEnvironment, 
   const targets = [...new Set(input.operations.flatMap(operation => operation.op === 'insert'
     && operation.target && operation.target !== input.newWork?.work
     && !isCatalogTarget(profile, operation.target) ? [operation.target] : []))];
-  const principal = await account.verify(request, [profile.editPermission,
-    ...(targets.length && profile.targetReadPermission ? [profile.targetReadPermission] : [])]);
-  targetReader ??= operation => targetRead(env, { access, principal, actingSubject: input.actingSubject }, operation);
-  for (const target of targets) {
-    if (!await canReadStructureTarget(profile, { environment: env, access, principal,
-      actingSubject: input.actingSubject, target, targetReader })) {
-      throw new CompositionUnavailable('Structure target is unavailable');
-    }
-  }
-  return admitted(env, account, access, request, { owner: header.owner, profile,
+  const result = await admitted(env, account, access, request, { owner: header.owner, profile,
     actingSubject: input.actingSubject,
     idempotencyKey: input.idempotencyKey, digest },
-  admission => changeComposition(env, { admission, structure: input.structure,
-    expectedHead: input.expectedHead, operations: input.operations,
-    newWork: input.newWork, carried: carried ?? { header } }));
+  async admission => {
+    const principal = await account.verify(request, [profile.editPermission,
+      ...(targets.length && profile.targetReadPermission ? [profile.targetReadPermission] : [])]);
+    const reader: StructureTargetReader = targetReader ?? (operation => targetRead(env,
+      { access, principal, actingSubject: input.actingSubject }, operation));
+    for (const target of targets) {
+      if (!await canReadStructureTarget(profile, { environment: env, access, principal,
+        actingSubject: input.actingSubject, target, targetReader: reader })) {
+        throw new CompositionUnavailable('Structure target is unavailable');
+      }
+    }
+    return changeComposition(env, { admission, structure: input.structure,
+      expectedHead: input.expectedHead, operations: input.operations,
+      newWork: input.newWork, carried: carried ?? { header } });
+  });
+  if (result.occurrences) return result;
+  if (!result.revision) throw new CompositionCorrupt('composition change receipt lacks a revision');
+  // A validated terminal revision fixes the original allocation indices even
+  // when Access has already sealed the command and no dispatch runs on replay.
+  return { ...result, occurrences: input.operations.flatMap((operation, index) => operation.op === 'insert'
+    ? [derivedId(`${result.revision}\0occurrence\0${index}`)] : []) };
 }
 
 export async function changeAdmittedStructureMeasures(env: WorkActivationEnvironment,
