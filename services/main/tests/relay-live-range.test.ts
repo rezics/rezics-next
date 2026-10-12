@@ -37,8 +37,10 @@ function fixture() {
     }
     if (sql.includes('FROM relay.delivered_batch AS batch')) {
       expect(sql).toContain('batch.sequence <= $3');
-      expect(values).toEqual(['epoch', '0', snapshot.acknowledged, 100]);
-      return { rows: snapshot.headers.filter(sequence => BigInt(sequence) <= BigInt(snapshot.acknowledged))
+      expect(values[0]).toBe('epoch');
+      expect(values.slice(2)).toEqual([snapshot.acknowledged, 100]);
+      return { rows: snapshot.headers.filter(sequence => BigInt(sequence) > BigInt(String(values[1]))
+        && BigInt(sequence) <= BigInt(snapshot.acknowledged))
         .map(sequence => ({ sequence, batch_id: `batch-${sequence}`, routing_epoch: 'routing', event_count: 1 })) };
     }
     if (sql.includes('SELECT envelope FROM relay.delivered_event')) {
@@ -71,6 +73,18 @@ test('missing acknowledged headers and events return a typed incomplete handoff'
       .rejects.toMatchObject({ name: 'RelayHandoffIncomplete', dataEpoch: 'epoch', sequence: '2' });
     expect(f.queries.at(-1)).toBe('ROLLBACK');
   }
+});
+
+test('a restored downstream cursor ahead of delivery waits for the relay acknowledgement', async () => {
+  const f = fixture();
+  await expect(verifiedRetainedRelayRange(f.pool, 'relay', '2'))
+    .rejects.toMatchObject({ name: 'RelayHandoffIncomplete', dataEpoch: 'epoch', sequence: '2' });
+  expect(f.queries.at(-1)).toBe('ROLLBACK');
+  f.state.acknowledged = '2';
+  f.state.events.push('2');
+  const caughtUp = await verifiedRetainedRelayRange(f.pool, 'relay', '2');
+  expect(caughtUp.coverage.sequence).toBe('2');
+  expect(caughtUp.batches).toEqual([]);
 });
 
 test('the live Content loop counts incomplete restored coverage as deferred and resumes without a worker fault', async () => {

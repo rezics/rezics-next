@@ -254,7 +254,7 @@ export async function verifiedRetainedRelayRange(pool: Pool, consumer: string,
     await held.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     const { coverage } = await scanRelayCoverage(held, consumer, undefined, undefined, true);
     if (BigInt(coverage.sequence) < BigInt(afterSequence)) {
-      throw new RelayCheckpointConflict('consumer checkpoint exceeds retained relay');
+      throw new RelayHandoffIncomplete(coverage.dataEpoch, afterSequence);
     }
     const rows = await held.query<{ sequence: string; batch_id: string;
       routing_epoch: string; event_count: number }>(
