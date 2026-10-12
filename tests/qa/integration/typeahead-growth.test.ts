@@ -15,7 +15,6 @@ import { publishTextContribution, textPublicationDigest }
   from '../../../services/main/src/modules/contribution/publish.ts';
 import { SEARCH_FIELD_COST } from '../../../services/main/src/modules/search/fields.ts';
 import { prefixWalkExaminedLimit } from '../../../services/main/src/modules/search/prefix-walk.ts';
-import { MAX_SEARCH_REQUEST_MS } from '../../../services/main/src/modules/work/search-readiness.ts';
 import { activateMetadataWork, ID, metadataWorkRequestDigest, type WorkActivationEnvironment }
   from '../../../services/main/src/modules/work/activate.ts';
 import { commitMetadata } from '../../../services/main/src/modules/work/metadata-command.ts';
@@ -30,36 +29,10 @@ interface GrowthRead {
   diagnostics?: FusekiReadDiagnosticSnapshot;
 }
 
-interface DeadlineFailure {
-  errorClass?: string;
-  errorCode?: string;
-  diagnostics?: FusekiReadDiagnosticSnapshot;
-}
-
-/** Capture only the route's bounded timeout evidence, preserving the QA log.
- * The public 503 code covers several refusals; it cannot prove deadline exhaustion. */
 async function growthRequest(app: ReturnType<typeof createMainApp>, prefix: string) {
-  const failure: DeadlineFailure = {};
-  const originalError = console.error;
-  console.error = (...args: unknown[]) => {
-    originalError(...args);
-    if (args.length !== 1 || typeof args[0] !== 'string') return;
-    let event: Record<string, unknown>;
-    try { event = JSON.parse(args[0]) as Record<string, unknown>; }
-    catch { return; }
-    if (!event || typeof event !== 'object' || Array.isArray(event)) return;
-    if (event.event === 'public-search-timeout' && event.route === 'typeahead') {
-      failure.diagnostics = event.diagnostics as FusekiReadDiagnosticSnapshot;
-    } else if (event.event === 'worker_fault' && event['rezics.worker.name'] === 'main.route.search_index_unavailable') {
-      failure.errorClass = event['error.class'] as string;
-      failure.errorCode = event['error.code'] as string;
-    }
-  };
   const started = performance.now();
-  try {
-    const response = await app.handle(new Request(`http://main.local/v1/search/typeahead?prefix=${prefix}`));
-    return { response, text: await response.text(), failure, elapsedMs: Math.round(performance.now() - started) };
-  } finally { console.error = originalError; }
+  const response = await app.handle(new Request(`http://main.local/v1/search/typeahead?prefix=${prefix}`));
+  return { response, text: await response.text(), elapsedMs: Math.round(performance.now() - started) };
 }
 
 function assertBoundedDiagnostics(diagnostics: FusekiReadDiagnosticSnapshot | undefined) {
@@ -81,8 +54,7 @@ function assertBoundedDiagnostics(diagnostics: FusekiReadDiagnosticSnapshot | un
   expect(Buffer.byteLength(JSON.stringify(diagnostics))).toBeLessThanOrEqual(4_096);
 }
 
-/** Observe the real native response, never the ten cards Main retains. Native
- * visit evidence takes precedence once the prefix transport supplies it. */
+/** Observe the real native visit evidence, never the ten cards Main retains. */
 class GrowthFuseki extends FusekiClient {
   read: GrowthRead | undefined;
   private observed = new WeakSet<FusekiReadCallDiagnostic>();
@@ -130,7 +102,7 @@ class GrowthFuseki extends FusekiClient {
   }
 }
 
-test('SEARCH18: public typeahead native work follows population before prefix cutover and the page after it', async () => {
+test('SEARCH18: public typeahead native examination stays bounded at 16/64/256 Works without scanning names', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL || !Bun.env.ACCESS_DATABASE_URL
     || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH) {
     throw new Error('Run through the isolated QA integration tier');
@@ -148,7 +120,7 @@ test('SEARCH18: public typeahead native work follows population before prefix cu
   const actor = ID + randomUUID();
   const works = new Set<string>();
   const readings: Array<GrowthRead & { population: number; prefix: string; examined: number;
-    rowsRead: number; responseStatus: number; failure: DeadlineFailure; elapsedMs: number }> = [];
+    rowsRead: number; responseStatus: number; elapsedMs: number }> = [];
 
   // As in public-search-scale, these are admitted product owner commands. No
   // graph fixture update can bypass publication, selection or name maintenance.
@@ -197,61 +169,38 @@ test('SEARCH18: public typeahead native work follows population before prefix cu
 
   try {
     const { prefixWalkAvailable } = await fuseki.commandHealth();
-    expect(typeof prefixWalkAvailable).toBe('boolean');
+    expect(prefixWalkAvailable).toBe(true);
     for (const population of [16, 64, 256]) {
       while (works.size < population) await addWork(works.size);
       for (const prefix of ['b', 'bo']) {
         fuseki.startRead();
-        const { response, text, failure, elapsedMs } = await growthRequest(app, prefix);
+        const { response, text, elapsedMs } = await growthRequest(app, prefix);
         const read = fuseki.read!;
+        expect(response.status, text).toBe(200);
+        assertBoundedDiagnostics(read.diagnostics);
         expect(read.diagnostics?.history.some(call => call.family === 'query' && call.status === 'complete')).toBe(true);
-        if (response.status === 200) expect(read.diagnostics?.active).toEqual([]);
-        const examined = prefixWalkAvailable
-          ? read.nativeExamined.reduce((total, count) => total + count, 0)
-          : read.fieldRows.reduce((total, count) => total + count, 0);
+        expect(read.diagnostics?.active).toEqual([]);
+        const examined = read.nativeExamined.reduce((total, count) => total + count, 0);
         readings.push({ ...read, population, prefix, examined,
           rowsRead: read.fieldRows.reduce((total, count) => total + count, 0),
-          responseStatus: response.status, failure, elapsedMs });
+          responseStatus: response.status, elapsedMs });
         fuseki.read = undefined;
-        if (prefixWalkAvailable) {
-          // Absence of native visit evidence cannot turn a zero into a pass.
-          expect(read.nativeExamined.length).toBeGreaterThan(0);
-          expect(examined).toBeGreaterThanOrEqual(SEARCH_FIELD_COST.typeaheadItems);
-          expect(examined).toBeLessThanOrEqual(prefixWalkExaminedLimit(SEARCH_FIELD_COST.typeaheadItems));
-        } else {
-          expect(read.fieldRows).toEqual([population * 2]);
-          // Documented before: 16/64/256 Works produce 32/128/512 native rows
-          // although every page contains ten suggestions. These are native
-          // returned candidate rows, not a claim about internal TDB2 visits.
-          // The earlier in-memory fixture hit the 513-row query budget at 257
-          // Works; native runs can also exhaust the wall deadline at 256.
-          expect(examined).toBe(population * 2);
-        }
-        if (prefixWalkAvailable || response.status === 200) {
-          expect(response.status, text).toBe(200);
-          const page = JSON.parse(text) as { items: Array<{ work: string; matchedField: string }>; hasMore: boolean };
-          expect(page.items).toHaveLength(SEARCH_FIELD_COST.typeaheadItems);
-          expect(new Set(page.items.map(item => item.work)).size).toBe(SEARCH_FIELD_COST.typeaheadItems);
-          expect(page.items.every(item => works.has(item.work) && item.matchedField === 'title')).toBe(true);
-          expect(page.hasMore).toBe(true);
-        } else {
-          // This phase characterizes the defect: the completed native field
-          // query above must still expose every candidate. Unavailability is
-          // recorded, never substituted for bounded work or an empty page.
-          expect(response.status, text).toBe(503);
-          expect(JSON.parse(text).code).toBe('search_index_unavailable');
-          expect(population).toBe(256);
-          expect(failure.errorClass).toBe('SearchRequestTimedOut');
-          expect(failure.errorCode).toBe('public_search_request_exceeded_w');
-          expect(elapsedMs).toBeGreaterThanOrEqual(MAX_SEARCH_REQUEST_MS);
-          assertBoundedDiagnostics(failure.diagnostics);
-          expect(failure.diagnostics!.history.some(call => call.family === 'query' && call.status === 'complete')).toBe(true);
-        }
+        expect(read.fieldRows).toEqual([]);
+        // Absence of native visit evidence cannot turn a zero into a pass.
+        expect(read.nativeExamined.length).toBeGreaterThan(0);
+        expect(examined).toBeGreaterThanOrEqual(SEARCH_FIELD_COST.typeaheadItems);
+        expect(examined).toBeLessThanOrEqual(prefixWalkExaminedLimit(SEARCH_FIELD_COST.typeaheadItems));
+        const page = JSON.parse(text) as { items: Array<{ work: string; matchedField: string }>; hasMore: boolean };
+        expect(page.items).toHaveLength(SEARCH_FIELD_COST.typeaheadItems);
+        expect(new Set(page.items.map(item => item.work)).size).toBe(SEARCH_FIELD_COST.typeaheadItems);
+        expect(page.items.every(item => works.has(item.work) && item.matchedField === 'title')).toBe(true);
+        expect(page.hasMore).toBe(true);
       }
     }
     for (const prefix of ['b', 'bo']) {
       const counts = readings.filter(read => read.prefix === prefix).map(read => read.examined);
-      expect(counts).toEqual(prefixWalkAvailable ? [counts[0], counts[0], counts[0]] : [32, 128, 512]);
+      // Adopting named native visit counters in the work-profile verdict is a later step.
+      expect(counts).toEqual([counts[0], counts[0], counts[0]]);
     }
     // Keep the evidence outside the disposable object directory for the QA run.
     await Bun.write(join(resolve(import.meta.dir, '../../..'), '.temp',

@@ -49,6 +49,20 @@ than a page that may skip or repeat hits. The native writer fences every
 text-wrapper commit, including private and metadata writes, because Lucene may
 publish a merge on those commits.
 
+## Public Work typeahead
+
+`public-work-typeahead-v1` walks the native prefix directory for title and
+author-credit candidates, including published source-author names. Each request
+examines at most four directory entries per suggestion slot, advancing past
+rejected or hidden entries. It never scans names, including when the directory
+is unavailable: an unqualified directory produces a typed 503 refusal.
+
+The walk's cursor binds its native reader generation. A generation change
+during matching or card hydration restarts the snapshot read; no mixed-generation
+page is returned. Graph selection, disclosure and presentation retain their
+freshness fences. The optional `language` selects card presentation; candidate
+matching uses the walk's `null` language scope across selected languages.
+
 ## Statement aggregation
 
 The [grouped profile](../../services/main/src/modules/work/search-grouped.ts)

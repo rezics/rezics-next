@@ -60,10 +60,10 @@ export function rankedSearchMatches<T extends { work: string; mainVersion: strin
 export async function querySearchFields(env: WorkActivationEnvironment,
   input: { phrase: string; language: string | null; author?: string;
     context?: { kind: 'realm-local'; id: string } },
-  position: { dataEpoch: string; sequence: string }, owners: SearchFieldOwners = {}, prefix = false) {
+  position: { dataEpoch: string; sequence: string }, owners: SearchFieldOwners = {}) {
   const sourceNames = owners.names;
   const term = normalizedSearchText(input.phrase);
-  const sourceRead = await sourceNames?.search(term, prefix);
+  const sourceRead = await sourceNames?.search(term, false);
   const source = sourceRead?.names ?? new Map();
   const realm = input.context?.id;
   const sourceBranch = source.size ? `UNION {
@@ -144,14 +144,14 @@ export async function querySearchFields(env: WorkActivationEnvironment,
       if (state.originalTitle) values.push({ field: 'title', text: state.originalTitle.value, language: state.originalTitle.language });
       for (const locale of state.localized) {
         if (locale.title) values.push({ field: 'title', text: locale.title, language: locale.language });
-        if (!prefix && locale.tagline) values.push({ field: 'tagline', text: locale.tagline, language: locale.language });
+        if (locale.tagline) values.push({ field: 'tagline', text: locale.tagline, language: locale.language });
       }
     } else {
       const text = row.key ? source.get(row.key.value)?.displayName : row.text?.value;
       if (!text || !['title', 'credit'].includes(row.field?.value ?? '')) throw new PublicQueryUnavailable('Search field is incomplete');
       values.push({ field: row.field!.value as 'title' | 'credit', text, language: row.text?.['xml:lang'] ?? null });
     }
-    for (const value of values.filter(value => matchesSearchText(value.text, term, prefix))) {
+    for (const value of values.filter(value => matchesSearchText(value.text, term, false))) {
       const match: FieldMatch = { work: row.resultWork?.value ?? row.work.value,
         mainVersion: row.resultMain?.value ?? row.main.value, matchUnit: row.unit.value,
         contribution: row.contribution.value, revision: row.revision.value, selection: row.selection.value,
@@ -167,7 +167,7 @@ export async function querySearchFields(env: WorkActivationEnvironment,
   }
   await fenceSearchFields(owners);
   // The route's final uncached fence covers matching, facets and card facts.
-  const disclosed = await discloseSearchMatches(env, [...matches.values()], prefix ? 'typeahead' : 'search');
+  const disclosed = await discloseSearchMatches(env, [...matches.values()], 'search');
   if (knownSearchPosition(env.fuseki, env.lineage)) return rankedSearchMatches(disclosed);
   const after = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?sequence WHERE {
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence .

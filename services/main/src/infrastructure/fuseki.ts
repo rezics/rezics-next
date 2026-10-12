@@ -89,7 +89,8 @@ function beginReadCall(family: FusekiReadCallFamily): number | undefined {
   return id;
 }
 
-function finishReadCall(id: number | undefined, status: Exclude<FusekiReadCallStatus, 'active'>): void {
+function finishReadCall(id: number | undefined, status: Exclude<FusekiReadCallStatus, 'active'>,
+  examined?: number): void {
   if (id === undefined) return;
   const diagnostics = fusekiReadBudget.getStore()?.diagnostics;
   const active = diagnostics?.active.get(id);
@@ -105,6 +106,7 @@ function finishReadCall(id: number | undefined, status: Exclude<FusekiReadCallSt
     attempt: active.attempt,
     phase: active.phase,
     status,
+    ...(examined === undefined ? {} : { examined }),
   });
 }
 
@@ -116,6 +118,8 @@ function searchDiagnosticHeaders(): Record<string, string> {
 }
 
 export class FusekiReadBudgetExceeded extends Error {}
+export class FusekiPrefixWalkUnavailable extends Error {}
+export class FusekiPrefixWalkRestart extends Error {}
 
 function takeReadCall(): void {
   const budget = fusekiReadBudget.getStore();
@@ -369,6 +373,37 @@ function safeIri(value: string): string {
 }
 
 export class FusekiClient {
+  /** Effect-free native directory read; shares the public search call, byte and wall budget. */
+  async prefixWalk(input: { prefix: string; language: string | null; pageSize: number;
+    cursor: string | null }): Promise<unknown> {
+    if (!this.commandCapability?.match(/^[0-9a-f]{64}$/u)) {
+      throw new FusekiPrefixWalkUnavailable('Prefix directory capability is unavailable');
+    }
+    const signal = readSignal(this.preparationSignal);
+    signal.throwIfAborted();
+    takeReadCall();
+    const diagnostic = beginReadCall('query');
+    let status: Exclude<FusekiReadCallStatus, 'active'> = 'failed';
+    let examined: number | undefined;
+    try {
+      const response = await fetch(new URL('command', this.baseUrl), {
+        method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json',
+          authorization: `Bearer ${this.commandCapability}`, ...searchDiagnosticHeaders() },
+        body: JSON.stringify({ prefixWalk: input }), signal,
+      });
+      if (response.status === 409) throw new FusekiPrefixWalkRestart('Prefix directory generation changed');
+      if (!response.ok) throw new FusekiPrefixWalkUnavailable(`Prefix directory returned ${response.status}`);
+      const result = await boundedJson<unknown>(response, 65_536, signal);
+      if (result && typeof result === 'object' && 'examined' in result
+        && typeof result.examined === 'number' && Number.isSafeInteger(result.examined)
+        && result.examined >= 0 && result.examined <= input.pageSize) examined = result.examined;
+      status = 'complete';
+      return result;
+    } catch (error) {
+      if (signal.aborted) status = 'aborted';
+      throw error;
+    } finally { finishReadCall(diagnostic, status, examined); }
+  }
   async sourceAuthorNames(request: SourceAuthorNamesRequest): Promise<SourceAuthorNamesResponse> {
     const id = /^https:\/\/rezics\.com\/id\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/u;
     if (!id.test(request.target) || !/^\/authors\/OL[1-9][0-9]{0,11}A$/u.test(request.sourceKey)

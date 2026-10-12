@@ -1,7 +1,6 @@
 import { CONTENT_TEXT_COST } from '../../../content/src/document-body.ts';
 import { Elysia, t } from 'elysia';
-import { disclosureViewer, currentDisclosureViewer, withDisclosureViewer } from '../modules/disclosure/viewer.ts';
-import { publicLanguageRequest } from '../modules/display-language/public-request.ts';
+import { disclosureViewer, withDisclosureViewer } from '../modules/disclosure/viewer.ts';
 import { websocket } from 'elysia/websocket';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import type { AccessAdmissionRegistry, VerifiedPrincipal } from '../modules/access/admission.ts';
@@ -28,16 +27,16 @@ import type { JudgmentProtectionCheck } from '../modules/judgment/badge.ts';
 import { PublicQueryBudgetExceeded, PublicQueryUnavailable } from '../modules/work/search-budget.ts';
 import { decoratePhraseRelation, phraseWorkTypes } from '../modules/work/search-facets.ts';
 import { enrichSerialSearch } from '../modules/work/summary-serial.ts';
-import { enrichSearchCardPage, searchPageAuthors } from '../modules/search/result-cards.ts';
-import { optionalPreview } from '../modules/query/optional-preview.ts';
+import { enrichSearchCardPage } from '../modules/search/result-cards.ts';
 import { searchCardWindow } from '../modules/search/card-window.ts';
 import { readRankedCatalogue, RANKED_CATALOGUE_COST } from '../modules/search/ranked.ts';
 import { discloseCatalogueMatches } from '../modules/search/catalogue-disclosure.ts';
 import { withSearchGraphSnapshot } from '../modules/search/snapshot.ts';
 import { MAX_SEARCH_RESPONSE_BYTES } from '../modules/work/search-readiness.ts';
 import { assertPublicTextReady } from '../modules/work/search-readiness.ts';
-import { querySearchFields, normalizedSearchText, SEARCH_FIELD_COST, fenceSearchFields } from '../modules/search/fields.ts';
-import { workRead, WorkReadLimit } from '../modules/work/read-session.ts';
+import { normalizedSearchText, fenceSearchFields } from '../modules/search/fields.ts';
+import { readPublicTypeahead } from '../modules/search/typeahead.ts';
+import { WorkReadLimit } from '../modules/work/read-session.ts';
 import { readName, readAvatar } from '../modules/work/read-contract.ts';
 import { discoveryCredit } from '../modules/discovery/contract.ts';
 import { problemResult, phraseMatch, publicPhrasePageRequest, publicPhrasePageResult, publicQueryResult,
@@ -275,44 +274,9 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
         const prefix = normalizedSearchText(query.prefix);
         if (!prefix || /[\u0000-\u001f\u007f]/u.test(prefix)) return problem(400, 'invalid_request', 'Search prefix is invalid');
         const result = await readerSnapshot(request, async () => {
-          const publicFields = fieldOwners();
-          const position = await assertPublicTextReady(fuseki, work.environment.lineage);
           const selection = await presentationSelection(request);
-          const results = await querySearchFields(work.environment, { phrase: prefix,
-            language: null }, position, publicFields, true);
-          const visible = await present(selection, { context: 'main-version-default' as const,
-            sourcePosition: position, total: results.length, results });
-          const page = visible.results.slice(0, SEARCH_FIELD_COST.typeaheadItems);
-          // A suggestion names what the Work is and who wrote it, as a search card does.
-          const types = await phraseWorkTypes(work.environment, page.map(row => ({ work: row.work, language: '' })),
-            position);
-          const items = await workRead(work, publicLanguageRequest(request),
-            { language: query.language, publicViewer: currentDisclosureViewer() }, async session => {
-            if (session.position.dataEpoch !== position.dataEpoch || session.position.sequence !== position.sequence) {
-              throw new SearchSnapshotMoved('Typeahead moved during hydration');
-            }
-            const summaries = await session.summaries(page.map(row => row.work), true);
-            const authors = await optionalPreview(session,
-              () => searchPageAuthors(session, [...new Set(page.map(row => row.work))], true));
-            const after = await session.summaries(page.map(row => row.work), true);
-            if (summaries.some((summary, i) => JSON.stringify({ ...summary, avatar: undefined })
-              !== JSON.stringify({ ...after[i], avatar: undefined }))) {
-              throw new SearchSnapshotMoved('Typeahead disclosure changed during hydration');
-            }
-            return page.flatMap((row, i) => {
-              const summary = summaries[i];
-              const final = after[i];
-              return summary?.status === 'available' && summary.type === 'work' && summary.disclosure === 'public'
-                ? [{ work: row.work, mainVersion: row.mainVersion, title: summary.name,
-                  cover: final?.status === 'available' ? final.avatar : summary.avatar,
-                  types: types.get(row.work) ?? [], authors: authors?.get(row.work) ?? [],
-                  matchedField: row.matchedField as 'title' | 'credit', matchedText: row.matchedText,
-                  matchedLanguage: row.matchedLanguage }] : [];
-            });
-          });
-          await fenceSearchFields(publicFields);
-          return { profile: 'public-work-typeahead-v1', items, hasMore: visible.results.length > page.length,
-            sourcePosition: { dataEpoch: position.dataEpoch, sequence: position.sequence } };
+          return readPublicTypeahead(work, request, { prefix, language: query.language },
+            relation => present(selection, relation));
         });
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
       } catch (error) {
