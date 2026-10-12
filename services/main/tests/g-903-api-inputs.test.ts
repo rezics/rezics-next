@@ -56,7 +56,7 @@ test('G-903 guard traces aliases, helper returns and request URLs while allowing
   expect(result.map(flow => flow.request)).toEqual([3, 3, 3, 8, 19, 21, 23].map(line => `${fileName}:${line}`));
 });
 
-test('G-903 resolves request clients while allowing router and storage declarations', async () => {
+test('SQL request flow guard resolves request clients while allowing router and storage declarations', async () => {
   const root = resolve(import.meta.dir, '../../..');
   const fileName = resolve(root, '.temp/g-903-guard/resolved-clients.ts');
   const result = await flows(root, [fileName], { [fileName]: `
@@ -84,7 +84,7 @@ test('G-903 resolves request clients while allowing router and storage declarati
   expect(result.map(flow => flow.request)).toEqual([6, 7, 10].map(line => `${fileName}:${line}`));
 });
 
-test('G-903 request sink and return origin case table', async () => {
+test('SQL request flow guard request sink and return origin case table', async () => {
   const root = resolve(import.meta.dir, '../../..');
   const select = `(await pool.query('SELECT id FROM content.reply')).rows[0].id`;
   // Each module isolates its symbols; one compiler run checks the entire table.
