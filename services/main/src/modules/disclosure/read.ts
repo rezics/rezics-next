@@ -29,9 +29,9 @@
  * Missing source/reader/evidence is unavailable, never visible. Realm closure is
  * only platform/global graph/record/null-revision disclosure and always hidden.
  *
- * DISCLOSURE_COST: batch=64, graphParents=2, parentEdges=128, parentHeadBatch=64,
+ * DISCLOSURE_COST: submissionLimit=2,048 (512 search matches x 3 descriptors = 1,536), batch=64, graphParents=2, parentEdges=128, parentHeadBatch=64,
  * ownerStatements=1, recoveryStatements=1 per batch; no descendant traversal.
- * Every public submission accepts at most 1,024 targets before owner work and
+ * Every public submission accepts at most 2,048 targets before owner work and
  * processes ceil(N/64) chunks sequentially under the existing snapshot/client
  * rules. One result preserves input order and duplicates; one cost report sums
  * measured chunk costs. Cuts belong to each capture; fences recheck every chunk.
@@ -57,7 +57,7 @@ import { nameOwnerPolicySql } from '../preferences/store.ts';
 import { BASELINE_MEMBER_POLICY } from '../access/baseline.ts';
 import { accessClient } from '../access/topology-control.ts';
 import { namePolicyViewerPrincipal } from './name-policy.ts';
-import { chunkDisclosureSubmission } from './contract-batching.ts';
+import { chunkDisclosureSubmission, DISCLOSURE_SUBMISSION_LIMIT } from './contract-batching.ts';
 import { SCOPED_ENFORCEMENT_BASIS_SQL } from './fence-scope.ts';
 
 export type DisclosureChannel = 'read' | 'summary' | 'thread' | 'feed' | 'search' | 'typeahead'
@@ -167,7 +167,7 @@ export interface DisclosureReader {
     }>;
 }
 export class DisclosureUnavailable extends MediaUnavailable {}
-export const DISCLOSURE_COST = { batch: 64, ownerStatements: 1, recoveryStatements: 1,
+export const DISCLOSURE_COST = { submissionLimit: DISCLOSURE_SUBMISSION_LIMIT, batch: 64, ownerStatements: 1, recoveryStatements: 1,
   graphParents: 2, parentEdges: 128, parentHeadBatch: 64,
   nameOwnerQueries: 1, namePreferenceStatements: 1 } as const;
 function requireBatch(items: readonly unknown[]): void {

@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { chunkDisclosureSubmission, DISCLOSURE_SUBMISSION_LIMIT } from '../src/modules/disclosure/contract-batching.ts';
 import { DISCLOSURE_COST, DisclosureUnavailable, type DisclosureDecision } from '../src/modules/disclosure/read.ts';
 
-for (const size of [0, 1, 64, 65, 501, 512, 1_024]) {
+for (const size of [0, 1, 64, 65, 501, 512, 1_024, 1_536, 2_048]) {
   test(`${size} inputs preserve order, duplicates and measured costs in bounded sequential submissions`, async () => {
     const repeated = { decision: 'hidden' as DisclosureDecision };
     const inputs = Array.from({ length: size }, (_, index) => index % 3 === 0 ? repeated
@@ -34,11 +34,11 @@ for (const size of [0, 1, 64, 65, 501, 512, 1_024]) {
   });
 }
 
-test('the overall cap refuses 1,025 before any callback for every contract result shape', async () => {
-  expect(DISCLOSURE_SUBMISSION_LIMIT).toBe(1_024);
+test('the overall cap refuses 2,049 before any callback for every contract result shape', async () => {
+  expect(DISCLOSURE_SUBMISSION_LIMIT).toBe(2_048);
   let work = 0;
   for (const result of ['decision', 'selection', 'capture', 'fence']) {
-    await expect(chunkDisclosureSubmission(Array(1_025).fill(result), async chunk => {
+    await expect(chunkDisclosureSubmission(Array(2_049).fill(result), async chunk => {
       work++;
       return { results: chunk, cost: {} };
     })).rejects.toBeInstanceOf(DisclosureUnavailable);

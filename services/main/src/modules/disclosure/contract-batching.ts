@@ -1,6 +1,6 @@
 import { DISCLOSURE_COST, DisclosureUnavailable } from './read.ts';
 
-export const DISCLOSURE_SUBMISSION_LIMIT = 1_024;
+export const DISCLOSURE_SUBMISSION_LIMIT = 2_048;
 
 export interface DisclosureSubmission<T> {
   results: readonly T[];
@@ -8,7 +8,7 @@ export interface DisclosureSubmission<T> {
   cost: Readonly<Record<string, number>>;
 }
 
-/** Every contract entry submits at most 1,024 inputs as ceil(N/64) sequential
+/** Every contract entry submits at most 2,048 inputs as ceil(N/64) sequential
  * bounded operations. Preserve order and duplicates; cuts belong to each
  * capture, and the final fence must recheck every captured chunk. The operation
  * retains its snapshot/client rules. No partial result escapes a failed chunk.
@@ -18,7 +18,7 @@ export async function chunkDisclosureSubmission<T, R>(
   run: (chunk: readonly T[], offset: number) => Promise<DisclosureSubmission<R>>,
 ): Promise<DisclosureSubmission<R> & { submissions: number }> {
   if (inputs.length > DISCLOSURE_SUBMISSION_LIMIT) {
-    throw new DisclosureUnavailable('Disclosure submission exceeds 1,024 targets');
+    throw new DisclosureUnavailable('Disclosure submission exceeds 2,048 targets');
   }
   // A callback cannot extend the accepted input after the pre-work limit check.
   const accepted = [...inputs];

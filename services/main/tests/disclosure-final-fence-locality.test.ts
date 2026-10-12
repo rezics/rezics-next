@@ -268,7 +268,7 @@ test('body aliases and exact protected parent revisions belong to the scoped bas
   expect((await scopedEnforcementBasis(pool, [selection])).results).not.toEqual(parent.results);
 });
 
-for (const size of [65, 501, 512, 1_024]) {
+for (const size of [65, 501, 512, 1_024, 1_536, 2_048]) {
   test(`${size} real owner decisions and scoped bases preserve duplicates, chunk counts and all measured statements`, async () => {
     const visible = target(), denied = target();
     await restrict(denied);
@@ -317,7 +317,7 @@ for (const size of [65, 501, 512, 1_024]) {
 
 test('over-cap and empty scoped submissions perform no owner statements', async () => {
   const selection = await select(target()), { client, statements } = measured(pool);
-  await expect(scopedEnforcementBasis(client, Array(1_025).fill(selection))).rejects.toBeInstanceOf(DisclosureUnavailable);
+  await expect(scopedEnforcementBasis(client, Array(DISCLOSURE_SUBMISSION_LIMIT + 1).fill(selection))).rejects.toBeInstanceOf(DisclosureUnavailable);
   expect(await scopedEnforcementBasis(client, [])).toEqual({ results: [], cost: {}, submissions: 0 });
   expect(statements).toHaveLength(0);
 });
@@ -397,4 +397,40 @@ test('assembly submits the whole over-cap content inventory before any policy or
     }))).rejects.toThrow('Disclosure submission exceeds');
     expect(statements).toHaveLength(0);
   } finally { configureDisclosure(environment, reader); }
+});
+
+
+test('a public 512-match body search admits all 1,536 expanded descriptors in 24 owner chunks', async () => {
+  const work = target(), contribution = target('graph', 'body');
+  const matches = Array.from({ length: 512 }, () => ({ work: work.resource,
+    contribution: contribution.resource, revision: work.revision, matchedField: 'body' }));
+  const originalQuery = environment.fuseki.query;
+  environment.fuseki.query = async (query, ...args) => query.includes('SELECT ?work ?head WHERE')
+    ? { results: { bindings: [{ work: { type: 'uri', value: work.resource },
+      head: { type: 'uri', value: work.revision } }] } }
+    : originalQuery.call(environment.fuseki, query, ...args);
+  for (const owner of ['graph', 'content'] as const) configureDisclosureAncestrySource(environment, owner, {
+    read: async inputs => inputs.map(input => {
+      const relationshipBasis = { owner: input.owner as 'graph' | 'content', kind: 'publication' as const,
+        resource: input.resource, revision: input.revision!, targetResource: input.resource,
+        targetRevision: input.revision ?? null, token: 'a'.repeat(64), dataEpoch: 'epoch' };
+      return { resource: input.resource, resourceKind: 'other' as const, status: 'complete' as const,
+        relationshipBasis, parents: [{ owner: 'graph' as const, kind: 'work' as const,
+          resource: work.resource, head: work.revision, protectedRevision: work.revision, relationshipBasis }] };
+    }),
+    reread: async () => [],
+  });
+  const { client, statements } = measured(pool);
+  configureDisclosure(environment, new DisclosureStore(client as unknown as Pool));
+  try {
+    expect(await discloseSearchMatches(environment, matches)).toEqual(matches);
+    expect(statements).toHaveLength(24);
+  } finally {
+    environment.fuseki.query = originalQuery;
+    configureDisclosure(environment, reader);
+    for (const owner of ['graph', 'content'] as const) configureDisclosureAncestrySource(environment, owner, {
+      read: async targets => targets.map(target => evidence.get(target.resource)!),
+      reread: async bases => bases.map(basis => evidence.get(basis.targetResource)!),
+    });
+  }
 });
