@@ -242,25 +242,26 @@ for (const hold of holds) {
     const before = await exposure.summary(f.identity);
     expect(before.groups).toContain('platform-admin');
     await exposure.require(f.identity, 'platform:platform-admin', 'administratorOperation');
-    const client = await f.pool.connect();
     const target = `media:protect:${assetIri(f.representation)}`;
-    try {
-      expect(await platformAdministratorTargetAllowed(client, undefined, f.principalId,
-        f.actor, 'media.labels.protect', target)).toBe(true);
-      await f.gate(hold.open, hold.dispatchOpen);
-      expect(await readPlatformPermissions(client, f.principalId)).toEqual([]);
-      expect(await platformAdministratorTargetAllowed(client, undefined, f.principalId,
-        f.actor, 'media.labels.protect', target)).toBe(false);
-      expect((await exposure.summary(f.identity)).groups).toEqual([]);
-      await expect(exposure.require(f.identity, 'platform:platform-admin', 'administratorOperation'))
-        .rejects.toBeInstanceOf(PlatformClosed);
-      if (hold.dispatchOpen) {
-        await f.gate(true, true);
-        expect((await exposure.summary(f.identity)).groups).toEqual(before.groups);
-        expect(await platformAdministratorTargetAllowed(client, undefined, f.principalId,
-          f.actor, 'media.labels.protect', target)).toBe(true);
-      }
-    } finally { client.release(); }
+    const targetAllowed = async () => {
+      const client = await f.pool.connect();
+      try {
+        return await platformAdministratorTargetAllowed(client, undefined, f.principalId,
+          f.actor, 'media.labels.protect', target);
+      } finally { client.release(); }
+    };
+    expect(await targetAllowed()).toBe(true);
+    await f.gate(hold.open, hold.dispatchOpen);
+    expect(await readPlatformPermissions(f.pool, f.principalId)).toEqual([]);
+    expect(await targetAllowed()).toBe(false);
+    expect((await exposure.summary(f.identity)).groups).toEqual([]);
+    await expect(exposure.require(f.identity, 'platform:platform-admin', 'administratorOperation'))
+      .rejects.toBeInstanceOf(PlatformClosed);
+    if (hold.dispatchOpen) {
+      await f.gate(true, true);
+      expect((await exposure.summary(f.identity)).groups).toEqual(before.groups);
+      expect(await targetAllowed()).toBe(true);
+    }
   }), 60_000);
 }
 
