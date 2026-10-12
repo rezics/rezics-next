@@ -67,7 +67,7 @@ function Menus({ fixture }) {
 }
 window.renderMenus = fixture => root.render(<Menus key={++generation} fixture={fixture} />);
 `);
-    // Only this bundle substitutes Next's router. React, ShellProvider and Ark menus are real.
+    // Only this bundle substitutes Next's navigation boundaries. React, ShellProvider and Ark menus are real.
     const built = await Bun.build({
       entrypoints: [entry], target: 'browser', define: { 'process.env.NODE_ENV': '"development"' },
       plugins: [{ name: 'link-menu-router-boundary', setup(build) {
@@ -76,6 +76,11 @@ window.renderMenus = fixture => root.render(<Menus key={++generation} fixture={f
         }));
         build.onLoad({ filter: /.*/, namespace: 'link-menu-router' }, () => ({
           loader: 'js', contents: 'export function useRouter() { return { push: href => window.navigate(href) }; }',
+        }));
+        // Feed controls also import Link; its unused Next module initializes build-time environment constants.
+        build.onResolve({ filter: /^next\/link$/ }, () => ({ path: 'link', namespace: 'link-menu-link' }));
+        build.onLoad({ filter: /.*/, namespace: 'link-menu-link' }, () => ({
+          loader: 'js', contents: 'import { createElement } from "react"; export default function Link(props) { return createElement("a", props); }',
         }));
       } }],
     });
@@ -89,9 +94,16 @@ window.renderMenus = fixture => root.render(<Menus key={++generation} fixture={f
   });
   beforeEach(async () => {
     page = await browser.newPage();
+    const bundleError = new Promise<never>((_resolve, reject) => page.once('pageerror', error => {
+      reject(new Error(`LinkMenu browser bundle: ${error.message}`, { cause: error }));
+    }));
     await page.setContent('<div id="root"></div>');
+    const ready = Promise.race([page.waitForFunction(() => 'renderMenus' in window), bundleError]);
+    // An injection failure or early pageerror can settle before addScriptTag returns.
+    // Mark it handled now; awaiting the original promise still reports its setup error.
+    void ready.catch(() => {});
     await page.addScriptTag({ type: 'module', content: bundle });
-    await page.waitForFunction(() => 'renderMenus' in window);
+    await ready;
   });
   afterEach(async () => { await page?.close(); });
 
