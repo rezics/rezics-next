@@ -661,8 +661,19 @@ export class NotificationStore {
       if (from !== null && BigInt(from) > BigInt(stream.head_sequence)) throw new NotificationStale('stream cursor is ahead of head');
       const viewPredicate = selection.view === 'saved' ? 'f.saved' : selection.view === 'done' ? 'f.done' : 'NOT f.done';
       const parameters: unknown[] = [principalId, stream.generation, from, limit + 1];
-      const reasonPredicate = selection.reason ? `AND f.reason = $${parameters.push(selection.reason)}::text` : '';
-      const headPredicate = descending ? `AND f.sequence <= $${parameters.push(stream.head_sequence)}::bigint` : '';
+      const reason = selection.reason ? `$${parameters.push(selection.reason)}::text` : null;
+      const head = descending ? `$${parameters.push(stream.head_sequence)}::bigint` : '9223372036854775807::bigint';
+      // Keep reason in the seek's sort keys. Scalar equality lets the planner
+      // prefer a sequence-only index and scan unrelated reasons under skew.
+      const seekPredicate = reason
+        ? descending
+          ? `(f.reason, f.sequence) > (${reason}, 0::bigint)
+            AND (f.reason, f.sequence) <= (${reason}, ${head})
+            AND ($3::bigint IS NULL OR (f.reason, f.sequence) < (${reason}, $3::bigint))`
+          : `(f.reason, f.sequence) > (${reason}, $3::bigint)
+            AND (f.reason, f.sequence) <= (${reason}, ${head})`
+        : `${descending ? '($3::bigint IS NULL OR f.sequence < $3)' : 'f.sequence > $3'}
+          ${descending ? `AND f.sequence <= ${head}` : ''}`;
       const rows = (await client.query<{ id: string; sequence: string; purpose: string; topic: string;
         state: StreamItem['state']; subject_owner: string; subject_ref: string; subject_revision: string | null;
         disclosure_basis: string; kind: NotificationKind | null; actor_agent: string | null;
@@ -686,9 +697,8 @@ export class NotificationStore {
         LEFT JOIN access.notification_item_read r ON r.principal_id = i.principal_id AND r.item_id = i.id
         LEFT JOIN access.notification_display_context c ON c.item_id = i.id
         WHERE f.principal_id = $1 AND i.stream = 'inbox' AND f.generation = $2
-          AND ${descending ? '($3::bigint IS NULL OR f.sequence < $3)' : 'f.sequence > $3'}
-          ${headPredicate} AND ${viewPredicate} ${reasonPredicate}
-        ORDER BY f.sequence ${descending ? 'DESC' : 'ASC'} LIMIT $4`, parameters)).rows;
+          AND ${seekPredicate} AND ${viewPredicate}
+        ORDER BY ${reason ? `f.reason ${descending ? 'DESC' : 'ASC'}, ` : ''}f.sequence ${descending ? 'DESC' : 'ASC'} LIMIT $4`, parameters)).rows;
       const watermark = (await client.query<{ read_through: string }>(`SELECT read_through::text
         FROM access.notification_read_watermark WHERE principal_id = $1 AND stream = 'inbox' AND generation = $2`,
       [principalId, stream.generation])).rows[0];
