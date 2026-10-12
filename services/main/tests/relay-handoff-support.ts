@@ -75,7 +75,10 @@ export function relayHandoffFixture(history = 1) {
     if (sql.includes('SELECT data_epoch, sequence::text FROM access.owner_consumer_checkpoint')) {
       return { rows: [{ data_epoch: state.epoch, sequence: accessPosition.sequence }], rowCount: 1 };
     }
-    if (sql.includes('UPDATE access.owner_consumer_checkpoint')) accessPosition.sequence = String(values[2]);
+    if (sql.includes('UPDATE access.owner_consumer_checkpoint')) {
+      if (!sql.includes('SET sequence = $2') || values.length !== 2) throw new Error('Unexpected product checkpoint update');
+      accessPosition.sequence = String(values[1]);
+    }
     return { rows: [], rowCount: 1 };
   };
   const access = { query: accessQuery, connect: async () => ({ query: accessQuery, release() {} }) } as unknown as Pool;
