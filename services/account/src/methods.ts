@@ -31,17 +31,26 @@ export async function consumeStepUpAttempt(pool: Pool | PoolClient, secret: stri
   }
 }
 
+/** A missing factor has no row to lock. Serialize enrollment and both TOTP
+ * verification entry points by user, after recovery and before session locks. */
+export async function lockTotpFactor(db: PoolClient, userId: string): Promise<void> {
+  await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`account-totp:${userId}`]);
+}
+
 // Recovery owns the policy lock before deleting sessions. Hold the same lock
 // and recheck the session inside local credential writes, so a request admitted
 // before recovery cannot remove the newly recovered user's sign-in methods.
 async function mutateMethod<T>(pool: Pool, session: { session: { id: string }; user: { id: string } },
-  write: (db: PoolClient) => Promise<T>): Promise<T> {
+  write: (db: PoolClient) => Promise<T>, options: { totpVerification?: true } = {}): Promise<T> {
   const db = await pool.connect();
   try {
     await db.query('BEGIN');
     await db.query("SET LOCAL lock_timeout = '2s'");
     await db.query("SET LOCAL statement_timeout = '5s'");
     const policy = await db.query<{ recovered_at: Date | null }>('SELECT recovered_at FROM rezics_account_recovery_policy WHERE id = $1 FOR SHARE', [session.user.id]);
+    // Enrollment verification retires its session using an independent
+    // security UPDATE. Never hold security/session SHARE while waiting for it.
+    if (options.totpVerification) await lockTotpFactor(db, session.user.id);
     await db.query('SELECT 1 FROM rezics_account_security WHERE user_id = $1 FOR SHARE', [session.user.id]);
     const current = await db.query(`SELECT 1 FROM "session" WHERE id = $1 AND "userId" = $2
       AND rezics_generation = (SELECT session_generation FROM rezics_account_security WHERE user_id = $2)
@@ -102,16 +111,18 @@ export function methodsApi(auth: AccountAuth, pool: Pool) {
       try {
         const session = await accountSession(auth, request);
         await consumeStepUpAttempt(pool, String(auth.options.secret), session.user.id);
-        try {
-          await auth.api.verifyPassword({ headers: request.headers, body: { password: body.password } });
-          const twoFactor = await pool.query('SELECT 1 FROM "user" WHERE id = $1 AND "twoFactorEnabled" = true', [session.user.id]);
-          if (twoFactor.rowCount) {
-            if (!body.totpCode) throw new Error('second factor required');
-            await auth.api.verifyTOTP({ headers: request.headers, body: { code: body.totpCode } });
-          }
-        } catch { throw new AccountProblem('forbidden', 403); }
-        await pool.query(`INSERT INTO rezics_account_step_up (session_id) VALUES ($1)
-          ON CONFLICT (session_id) DO UPDATE SET verified_at = now()`, [session.session.id]);
+        await mutateMethod(pool, session, async db => {
+          try {
+            await auth.api.verifyPassword({ headers: request.headers, body: { password: body.password } });
+            const twoFactor = await db.query('SELECT 1 FROM "user" WHERE id = $1 AND "twoFactorEnabled" = true', [session.user.id]);
+            if (twoFactor.rowCount) {
+              if (!body.totpCode) throw new Error('second factor required');
+              await auth.api.verifyTOTP({ headers: request.headers, body: { code: body.totpCode } });
+            }
+          } catch { throw new AccountProblem('forbidden', 403); }
+          await db.query(`INSERT INTO rezics_account_step_up (session_id) VALUES ($1)
+            ON CONFLICT (session_id) DO UPDATE SET verified_at = now()`, [session.session.id]);
+        }, { totpVerification: true });
         return accountJson({ verifiedUntil: new Date(Date.now() + 300_000).toISOString() });
       } catch (error) { return accountFailure(error); }
     })

@@ -12,7 +12,7 @@ import { guardedAuthorizationCodeExchange } from './oauth-code-guard.ts';
 import { guardedRefreshTokenExchange } from './refresh-token-guard.ts';
 import { consumeAccountLimit } from './rate-limit.ts';
 import { consentApi } from './consent.ts';
-import { consumeStepUpAttempt, methodsApi, requireStepUp, sensitiveAuthPaths } from './methods.ts';
+import { consumeStepUpAttempt, lockTotpFactor, methodsApi, requireStepUp, sensitiveAuthPaths } from './methods.ts';
 import { accountFailure, accountSession } from './http.ts';
 import { observeAuthentication, securityActivityApi } from './security-activity.ts';
 import { recordSessionClient } from './sessions.ts';
@@ -220,8 +220,7 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
         // Lock the user, rather than a possibly absent factor row, across all
         // factor changes and the provider's read/verification. The recovery
         // share lock remains first so recovery keeps its existing ordering.
-        await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
-          [`account-totp:${session.user.id}`]);
+        await lockTotpFactor(client, session.user.id);
       }
       if (totpUserId) {
         const factor = await client.query<{ verified: boolean | null }>('SELECT verified FROM "twoFactor" WHERE "userId" = $1', [totpUserId]);

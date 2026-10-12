@@ -163,6 +163,58 @@ for (const state of ['missing', 'unverified', 'verified'] as const) {
   }, 60_000);
 }
 
+test('reauthentication waits for enrollment verification before locking its replaced session', async () => {
+  const f = await accountFixture();
+  let resume = () => {};
+  let interception: ReturnType<typeof spyOn<Client, 'query'>> | undefined;
+  try {
+    const member = await f.signup('totp-reauth-session-race@example.test');
+    expect((await f.request('/api/auth/two-factor/enable', {
+      password: member.password,
+    }, member.cookie)).status).toBe(200);
+    const secret = await symmetricDecrypt({ key: f.secret,
+      data: (await f.pool.query('SELECT secret FROM "twoFactor" WHERE "userId" = $1', [member.id])).rows[0].secret });
+    let entered = () => {};
+    let attempted = () => {};
+    const paused = new Promise<'paused'>(resolve => { entered = () => resolve('paused'); });
+    const contending = new Promise<'locked'>(resolve => { attempted = () => resolve('locked'); });
+    const released = new Promise<void>(resolve => { resume = resolve; });
+    let intercepted = false;
+    const query = Client.prototype.query;
+    interception = spyOn(Client.prototype, 'query').mockImplementation(function(this: Client, ...args: unknown[]) {
+      if (intercepted && typeof args[0] === 'string' && args[0].includes('pg_advisory_xact_lock')
+        && Array.isArray(args[1]) && args[1][0] === `account-totp:${member.id}`) attempted();
+      const result: unknown = Reflect.apply(query, this, args);
+      if (!intercepted && args[0] === 'SELECT verified FROM "twoFactor" WHERE "userId" = $1'
+        && Array.isArray(args[1]) && args[1][0] === member.id && result instanceof Promise) {
+        intercepted = true;
+        return result.then(async value => { entered(); await released; return value; });
+      }
+      return result;
+    } as typeof Client.prototype.query);
+    const pending = f.request('/api/auth/two-factor/verify-totp', {
+      code: await createOTP(secret).totp(),
+    }, member.cookie);
+    expect(await Promise.race([paused, pending.then(() => 'finished' as const)])).toBe('paused');
+    const reauthentication = f.request('/api/account/reauthenticate', {
+      password: member.password,
+    }, member.cookie);
+    expect(await Promise.race([contending, reauthentication.then(() => 'finished' as const)])).toBe('locked');
+    resume();
+    const confirmed = await pending;
+    expect(confirmed.status).toBe(200);
+    const stale = await reauthentication;
+    expect(stale.status).toBe(403);
+    expect(await stale.json()).toEqual({ error: 'stale_request' });
+    expect((await f.pool.query('SELECT verified FROM "twoFactor" WHERE "userId" = $1', [member.id])).rows[0].verified).toBe(true);
+    expect((await f.pool.query('SELECT 1 FROM rezics_account_step_up WHERE session_id IN (SELECT id FROM "session" WHERE "userId" = $1)',
+      [member.id])).rowCount).toBe(0);
+    expect((await f.request('/api/account/reauthenticate', {
+      password: member.password, totpCode: await createOTP(secret).totp(),
+    }, cookies(confirmed))).status).toBe(200);
+  } finally { resume(); interception?.mockRestore(); await f.close(); }
+}, 60_000);
+
 test('signed-in TOTP guesses share the immutable user reauthentication budget', async () => {
   const f = await accountFixture();
   try {
