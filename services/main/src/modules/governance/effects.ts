@@ -126,7 +126,7 @@ async function graphModerationProfile(env: WorkActivationEnvironment, target: De
 async function graphBindingValidations(env: WorkActivationEnvironment, resource: string,
   selected: { profile: string; shape: string }) {
   const definition = manifest.profiles.find(profile => profile.id === selected.profile)?.binding;
-  const graphs = [GRAPHS.current, GRAPHS.revisions, GRAPHS.receipts];
+  const graphs = commandBindingGraphs(selected.profile, GRAPHS);
   if (!definition) return { validations: await profileValidations(env.fuseki, selected.profile as ProfileId,
     [{ shape: selected.shape, focus: [resource], graphs: [GRAPHS.current, GRAPHS.revisions] }]), guard: '' };
   const read = commandBindingRead(selected.profile, definition, selected.shape, graphs, manifest);

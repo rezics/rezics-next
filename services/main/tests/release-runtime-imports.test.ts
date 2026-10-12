@@ -13,12 +13,12 @@ function runtimeImports(file: string): string[] {
       const clause = node.importClause;
       const bindings = clause?.namedBindings;
       if (!clause?.isTypeOnly && (!bindings || !ts.isNamedImports(bindings)
-        || clause?.name || bindings.elements.some(element => !element.isTypeOnly))) {
+        || clause?.name || bindings.elements.length === 0 || bindings.elements.some(element => !element.isTypeOnly))) {
         imports.push((node.moduleSpecifier as ts.StringLiteral).text);
       }
     } else if (ts.isExportDeclaration(node) && node.moduleSpecifier && !node.isTypeOnly
       && (!node.exportClause || !ts.isNamedExports(node.exportClause)
-        || node.exportClause.elements.some(element => !element.isTypeOnly))) {
+        || node.exportClause.elements.length === 0 || node.exportClause.elements.some(element => !element.isTypeOnly))) {
       imports.push((node.moduleSpecifier as ts.StringLiteral).text);
     } else if (ts.isCallExpression(node)
       && (node.expression.kind === ts.SyntaxKind.ImportKeyword
@@ -38,6 +38,8 @@ test('the Main release image copies every transitive runtime import of its serve
   const copies = [...dockerfile.matchAll(/^COPY\s+(?:--\S+\s+)*\/app\/(\S+)\s+\.\/(\S+)\s*$/gm)]
     .map(([, source, destination]) => ({ source: source!, destination: destination! }));
   expect(copies.length).toBeGreaterThan(0);
+  // External package implementations reside in the production dependency tree.
+  expect(copies).toContainEqual({ source: 'node_modules', destination: 'node_modules' });
   const options: ts.CompilerOptions = { moduleResolution: ts.ModuleResolutionKind.Bundler,
     allowImportingTsExtensions: true, resolveJsonModule: true };
   const queue = ['services/main/src/index.ts', 'services/main/src/telemetry.ts', 'infra/release/entrypoint.ts']

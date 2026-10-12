@@ -37,6 +37,10 @@ function graph(kind: string, selectors: Record<string, string> = {}) {
       }
       if (sql.includes('# registry-binding:')) {
         const profile = sql.match(/# registry-binding:([^\s]+)/)![1]!;
+        const admitted = ['translation-link-v1', 'work-derivation-v1',
+          'fixed-native-text-release-v1', 'work-author-credit-v1'].includes(profile);
+        expect(sql.includes(`<${GRAPHS.receipts}>`)).toBe(admitted);
+        expect(sql.includes(`<${GRAPHS.control}>`)).toBe(admitted);
         const binding = manifest.profiles.find(entry => entry.id === profile)!.binding!;
         const selected = selectCommandProfile(manifest, state.kinds,
           path => state.selectors[path] ? [state.selectors[path]!] : []);

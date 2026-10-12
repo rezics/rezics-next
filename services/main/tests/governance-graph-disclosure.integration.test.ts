@@ -159,11 +159,12 @@ test('an ordinary Realm rating-context bundle binds structurally and native SHAC
             GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
             ${retired ? `GRAPH ${iri(GRAPHS.current)} { ${iri(space.realm)} rv:realmState rv:Retired }` : ''}
             GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ; rv:requestDigest ${lit(digest)} ;
-              rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ?epoch ; rv:sequence ?next ; rv:outcome rv:Succeeded }
+              rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(stack.env.lineage.dataEpoch)} ; rv:sequence ?next ; rv:outcome rv:Succeeded }
             GRAPH ${iri(GRAPHS.outbox)} { ${iri(`urn:rezics:outbox:${digest}`)} a rv:OutboxBatch ;
-              rv:dataEpoch ?epoch ; rv:sequence ?next ; rv:eventCount 0 }
+              rv:dataEpoch ${lit(stack.env.lineage.dataEpoch)} ; rv:sequence ?next ; rv:eventCount 0 }
           }
-          WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n ; rv:dataEpoch ?epoch }
+          WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n ;
+              rv:dataEpoch ${lit(stack.env.lineage.dataEpoch)} ; rv:routingEpoch ${lit(stack.env.lineage.routingEpoch)} }
             BIND(?n + 1 AS ?next) FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
           }` });
       expect(result.status, JSON.stringify(result)).toBe(retired ? 'invalid' : 'committed');
