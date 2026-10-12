@@ -18,6 +18,12 @@ import { readRealmThreads, readRealmThread } from '../src/modules/realm-reply/th
 import { RealmReplyThreadStore } from '../src/modules/realm-reply/thread-store.ts';
 import { RealmDirectoryIndex, type DirectoryRow } from '../src/modules/realm-directory/index.ts';
 import { readRealmDirectory } from '../src/modules/realm-directory/read.ts';
+import { discloseNotifications } from '../src/modules/disclosure/notifications.ts';
+import type { NotificationSubjectReader, SubjectResolution } from '../src/modules/notification/dispatcher.ts';
+import { searchGraphSnapshot } from '../src/modules/search/snapshot-state.ts';
+import { queryPublicRealmPhrase, PublicRealmUnavailable } from '../src/modules/work/search-public.ts';
+import { readRankings } from '../src/modules/rankings/read.ts';
+import type { ReadRankingProjection } from '../src/modules/rankings/projection.ts';
 
 const native = (number: number) => `https://rezics.com/id/00000000-0000-4000-8000-${number.toString(16).padStart(12, '0')}`;
 const realm = native(1), space = native(2), head = native(3), work = native(4), selection = native(5), reply = native(6), zone = native(7);
@@ -57,7 +63,9 @@ function ownerSession(actor: Actor = 'anonymous', input: { private?: boolean; re
   let closed = false, proof = 'current-member-proof';
   const calls = { profile: 0, content: 0, thread: 0, policy: 0, summary: 0 };
   let queryRows: (query: string) => ReadRow[] = () => [];
-  const graph = { query: async (query: string) => {
+  const graph = { commandHealth: async () => ({ instanceId: '00000000-0000-4000-8000-0000000000aa',
+    publicSearchWriteEpoch: '0', publicSearchWriteActive: false, publicSearchDeltaAvailable: false }),
+    query: async (query: string) => {
     let rows: ReadRow[];
     if (query.includes('SELECT ?space ?realmRevision')) {
       calls.policy++;
@@ -301,4 +309,120 @@ test('directory-continuation-opacity: native continuation encrypts identity, ran
   expect(decodedBytes).not.toContain(native(5001));
   expect(decodedBytes).not.toContain(position.dataEpoch);
   expect(() => decodeReadCursor(token, ['realm-directory-v3', 'members', 'other', null, null], position)).toThrow(WorkReadInvalid);
+});
+
+for (const sort of ['best', 'top'] as const) {
+  test(`closed-thread-rankings-${sort}: ordinary ranked Realm routes read as missing until restored`, async () => {
+    const owner = ownerSession();
+    expect((await readRealmThreads(owner.session, realm, { sort })).items).toEqual([]);
+    owner.close();
+    await expect(readRealmThreads(owner.session, realm, { sort })).rejects.toBeInstanceOf(WorkReadMissing);
+    owner.restore();
+    expect((await readRealmThreads(owner.session, realm, { sort })).items).toEqual([]);
+  });
+}
+
+for (const order of ['score', 'growth'] as const) {
+  test(`closed-read-rankings-${order}: a retained ranking projection cannot expose a closed Realm scope`, async () => {
+    const owner = ownerSession();
+    // The projected aggregate stays intact: this milestone only filters reads.
+    const checkpoint = { generation: 'one', contentEpoch: 'content', contentSequence: '1',
+      graphEpoch: position.dataEpoch, reviewPosition: '1' };
+    const projection = { current: async () => checkpoint, candidates: async () => [] } as unknown as ReadRankingProjection;
+    const options = { realm, metric: 'reads' as const, interval: 'week' as const, order };
+    expect((await readRankings(owner.session, projection, options)).items).toEqual([]);
+    owner.close();
+    await expect(readRankings(owner.session, projection, options)).rejects.toBeInstanceOf(WorkReadMissing);
+    owner.restore();
+    expect((await readRankings(owner.session, projection, options)).items).toEqual([]);
+  });
+}
+
+function notificationOwner() {
+  const owner = ownerSession();
+  const pool = {} as Pool;
+  configureDisclosurePool(pool, owner.reader);
+  type Input = Parameters<NotificationSubjectReader['resolve']>[0];
+  const queued: { input: Input; result: SubjectResolution }[] = [
+    { input: { principalId: native(20), owner: 'content', ref: reply, revision: native(10),
+      disclosureBasis: 'realm-reply-v1', realm },
+      result: { status: 'available', subject: { private: false,
+        fields: { title: 'Community discussion', body: 'A placed reply', linkTarget: work, linkTitle: 'Independent Work' } } } },
+    { input: { principalId: native(20), owner: 'graph', ref: work, revision: null,
+      disclosureBasis: 'work-publication-v1', realm: null },
+      result: { status: 'available', subject: { private: false,
+        fields: { title: 'Independent publication', linkTarget: work } } } },
+  ];
+  return { ...owner, pool, queued };
+}
+
+for (const channel of ['inbox', 'count', 'digest', 'email', 'push'] as const) {
+  test(`closed-notifications-${channel}: queued Realm content is reclassified at delivery while independent subjects stay available`, async () => {
+    const owner = notificationOwner();
+    const original = owner.queued.map(subject => subject.result);
+    expect(await discloseNotifications(owner.pool, owner.queued, channel)).toEqual(original);
+    owner.close();
+    expect(await discloseNotifications(owner.pool, owner.queued, channel)).toEqual([
+      { status: 'undisclosed' }, original[1],
+    ]);
+    owner.restore();
+    expect(await discloseNotifications(owner.pool, owner.queued, channel)).toEqual(original);
+  });
+}
+
+test('restored-notifications-preserve-reply-fence: Realm restoration cannot release an independent reply restriction', async () => {
+  const owner = notificationOwner();
+  owner.close();
+  owner.reader.decision = target => target.resource === reply ? 'hidden' : 'visible';
+  owner.restore();
+  expect(await discloseNotifications(owner.pool, owner.queued, 'inbox')).toEqual([
+    { status: 'undisclosed' }, owner.queued[1]!.result,
+  ]);
+});
+
+function realmSearchOwner() {
+  const owner = ownerSession();
+  const generation = 'urn:rezics:search-generation:closure-owner';
+  owner.rows(query => {
+    if (query.includes('SELECT ?candidateCount ?epoch ?sequence ?indexGeneration')) return [{
+      candidateCount: binding('1'), epoch: binding(position.dataEpoch), sequence: binding(position.sequence),
+      indexGeneration: binding(generation), unit: binding(native(6001)), score: binding('1'),
+      work: binding(work), main: binding(native(8)), contribution: binding(native(9)),
+      revision: binding(`urn:rezics:content:revision:${native(10).slice(-36)}`), selection: binding(selection),
+      language: binding('en'), reason: binding('realm-adoption'),
+    }];
+    if (query.includes('SELECT ?work ?head WHERE')) return [{ work: binding(work), head: binding(head) }];
+    return [];
+  });
+  const env = owner.session.deps.environment;
+  const read = () => searchGraphSnapshot.run({ clients: new Set([env.fuseki]), lineage: env.lineage,
+    position: { ...position, generation, population: 1, serverInstanceId: '00000000-0000-4000-8000-0000000000aa',
+      publicSearchWriteEpoch: '0' } }, () => queryPublicRealmPhrase(env,
+  { phrase: 'Community discussion', language: 'en', context: { kind: 'realm-local', id: realm } }));
+  return { ...owner, read };
+}
+
+test('closed-realm-search: a live Realm-adopted search occurrence disappears despite retained index rows', async () => {
+  const owner = realmSearchOwner();
+  const initial = await owner.read();
+  expect(initial.results.map(row => row.selection)).toEqual([selection]);
+  owner.close();
+  const closed = await owner.read().catch((error: unknown) => error);
+  if (!(closed instanceof WorkReadMissing) && !(closed instanceof PublicRealmUnavailable)) {
+    expect(closed).toMatchObject({ total: 0, results: [] });
+  }
+  owner.restore();
+  expect((await owner.read()).results).toEqual(initial.results);
+});
+
+test('restored-realm-search: restoring the Realm keeps an independent Work fence and later owner release re-enables the occurrence', async () => {
+  const owner = realmSearchOwner();
+  const initial = await owner.read();
+  expect(initial.total).toBe(1);
+  owner.close();
+  owner.reader.decision = target => target.resource === work || target.work === work ? 'hidden' : 'visible';
+  owner.restore();
+  expect((await owner.read()).results).toEqual([]);
+  owner.reader.decision = () => 'visible';
+  expect((await owner.read()).results).toEqual(initial.results);
 });

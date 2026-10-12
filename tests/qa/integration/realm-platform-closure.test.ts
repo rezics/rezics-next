@@ -113,6 +113,7 @@ async function createWork(): Promise<Work & { contribution: string; publicationD
 }
 async function place(body: string, parent?: Reply): Promise<Reply> {
   const id = native(), variantId = `urn:rezics:variant:${randomUUID()}`;
+  await grant(manager, `content:draft:${id}`, 'content.draft');
   const saved = await json<{ revisionId: string; revisionDigest: string }>(await call('POST',
     '/v1/member-reply-drafts', manager, { profile: 'member-reply-draft-v1', reply: id, variantId,
       rootTarget: work.work, rootRevision: work.workRevision, originRealm: realm.realm,
@@ -288,6 +289,9 @@ beforeAll(async () => {
       { expectedHead: site.navigationRevision, target: work.work, routeSegment: 'original',
         disclosure: 'public', actingSubject: manager.actor }));
     site.navigationRevision = mount.revision;
+    // The Realm Space's existing Zone API serves a curated home and mounted
+    // documents. A Zone-only Space also publishes its own native home document.
+    if (site.space === realm.space) continue;
     const variantId = `urn:rezics:variant:${randomUUID()}`;
     const draft = await json<{ revisionId: string; byteDigest: string; sourcePosition: { dataEpoch: string } }>(
       await call('POST', '/v1/content-drafts', manager, { profile: 'content-text-v1', resourceId: site.zone, variantId,
@@ -303,10 +307,11 @@ beforeAll(async () => {
     await grant(platform, 'governance:platform', action);
   }
   const key = randomUUID();
-  rule = await json(await call('POST', '/v1/governance/rules', platform,
+  const publishedRule = await json<DecisionInput['rule']>(await call('POST', '/v1/governance/rules', platform,
     { profile: 'governance-rule-v1', ref: `urn:rezics:rule:${randomUUID()}`, scopeId: 'governance:platform',
       actingSubject: platform.actor, expectedRevision: null, document: { rule: 'Platform closure acceptance' },
       idempotencyKey: key }, key), 201);
+  rule = { ref: publishedRule.ref, revision: publishedRule.revision, digest: publishedRule.digest };
   replyRestriction = await decide(restrictedReply.reply,
     { component: 'body', revision: restrictedReply.revisionId });
   await settleReadProjections();
@@ -315,10 +320,11 @@ beforeAll(async () => {
 
 afterAll(async () => { if (app) await app.stop(); if (stack) await stack.stop(); });
 
-const surfaces = ['home', 'landing', 'works', 'selection', 'threads', 'thread', 'reply'] as const;
+const surfaces = ['home', 'landing', 'works', 'selection', 'threads', 'best', 'top', 'thread', 'reply'] as const;
 function pathFor(surface: typeof surfaces[number], id: string) {
   const root = `/v1/realms/${short(id)}`;
   return surface === 'home' ? root : surface === 'landing' ? `${root}/join-page`
+    : surface === 'best' || surface === 'top' ? `${root}/threads?sort=${surface}&window=all`
     : surface === 'selection' ? `${root}/decisions/${short(selection)}`
       : surface === 'thread' ? `${root}/threads/${short(opener.reply)}`
         : surface === 'reply' ? `${root}/threads/${short(reply.reply)}` : `${root}/${surface}`;
@@ -353,7 +359,9 @@ for (const state of states) describe(state, () => {
         const body = await json<Record<string, unknown>>(response);
         if (surface === 'home') expect(body.name).toMatchObject({ value: 'Platform closure community' });
         if (surface === 'works') expect((body.items as { id: string }[]).map(item => item.id)).toContain(work.work);
-        if (surface === 'threads') expect((body.items as { reply: string }[]).map(item => item.reply)).toContain(opener.reply);
+        if (surface === 'threads' || surface === 'best' || surface === 'top') {
+          expect((body.items as { reply: string }[]).map(item => item.reply)).toContain(opener.reply);
+        }
         if (surface === 'reply') expect(JSON.stringify(body)).toContain('Approved reply retained through restoration');
       }
     });
@@ -379,7 +387,7 @@ for (const state of states) describe(state, () => {
         const presentation = await json<{ realm: string | null }>(await get(`/v1/zones/${short(site.zone)}/presentation`, reader));
         expect(routes.realm).toBe(state === 'closed' ? null : realm.realm);
         expect(presentation.realm).toBe(state === 'closed' ? null : realm.realm);
-        expect(JSON.stringify(routes.page)).toContain('Independent Zone home document');
+        if (site.space !== realm.space) expect(JSON.stringify(routes.page)).toContain('Independent Zone home document');
         const ownWork = await json<{ resource: { id: string } }>(await get(
           `/v1/zones/${short(site.zone)}/routes?path=%2Foriginal`, reader));
         expect(ownWork.resource.id).toBe(work.work);
@@ -392,6 +400,22 @@ for (const state of states) describe(state, () => {
     }
     test(`${state}-independent-publication-${reader}`, async () => {
       ready(); expect((await get(`/v1/works/${short(work.work)}`, reader)).status).toBe(200);
+    });
+    test(`${state}-feed-${reader}: retained Realm occurrences follow current disclosure`, async () => {
+      ready();
+      // A completed decision is enough for omission; no feed drain runs in the
+      // closed phase. Public originals remain independently eligible.
+      const page = await json<{ items: { id: string; realm: { id: string } | null }[] }>(
+        await get('/v1/feed?scope=all&sort=new&limit=20', reader));
+      if (state === 'closed') {
+        expect(page.items.some(item => item.realm?.id === realm.realm)).toBe(false);
+        const delivered = JSON.stringify(page.items);
+        for (const occurrence of [realm.realm, selection, opener.reply, opener.placement, reply.reply, reply.placement]) {
+          expect(delivered).not.toContain(occurrence);
+        }
+        expect(delivered).not.toContain('Approved public discussion');
+        expect(delivered).not.toContain('Approved reply retained through restoration');
+      } else expect(page.items.some(item => item.realm?.id === realm.realm)).toBe(true);
     });
     test(`${state}-independently-restricted-reply-${reader}`, async () => {
       ready(); completed(replyRestriction, 'Independent reply restriction');
@@ -500,7 +524,8 @@ test('Realm-local moderation authority cannot decide whole-Realm closure', async
   const input: DecisionInput = { caseId: report.caseId, expectedGeneration: report.caseGeneration,
     actingSubject: manager.actor, outcome: 'restrict', targets: [{ owner: 'graph', resource: realm.realm,
       component: 'record', locator: null, scopeKind: 'component', revision: null,
-      expectedHead: await head(realm.realm), effect: 'disclosure' }], rule: localRule,
+      expectedHead: await head(realm.realm), effect: 'disclosure' }],
+    rule: { ref: localRule.ref, revision: localRule.revision, digest: localRule.digest },
     evidenceDigest: report.evidenceDigest, reversesDecisionId: null, answersStepId: null,
     rationale: 'Local grant is insufficient for closure', disclosure: 'parties', reasons: fixtureReasons,
     idempotencyKey: randomUUID() };
