@@ -596,8 +596,9 @@ test('initial retirement includes the minimum admitted mandate UUID', async () =
   fixtures.on('connect', client => {
     const query = client.query.bind(client);
     client.query = ((...args: unknown[]) => {
-      if (typeof args[0] === 'string' && args[0].includes('INSERT INTO access.representation (')
-        && Array.isArray(args[1])) args[1] = [minimum, ...args[1].slice(1)];
+      // Bind the helper's new {id, principal, subject, action} fixture tuple.
+      if (Array.isArray(args[1]) && args[1].length === 4 && args[1][1] === owner.id
+        && args[1][2] === person && args[1][3] === 'agent.control') args[1] = [minimum, ...args[1].slice(1)];
       return Reflect.apply(query, client, args);
     }) as typeof client.query;
   });
