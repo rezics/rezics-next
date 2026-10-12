@@ -3,7 +3,8 @@ import type { FusekiClient, CommandValidation } from '../../infrastructure/fusek
 import { profileValidations } from '../../infrastructure/profile.ts';
 import { withPersonProfileErasureAuthority, type EndedPersonProvision,
   type PersonProfileErasureProof } from '../access/person-profile-erasure.ts';
-import { readComponentState, type RevisionReadBudget } from '../work/history.ts';
+import { readWorkComponentState, type RevisionReadBudget } from '../work/history.ts';
+import type { ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type GraphLineage } from '../work/activate.ts';
 
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
@@ -77,7 +78,8 @@ function checkedPerson(person: Pick<EndedPersonProvision, 'person' | 'provisionI
 
 /** Indexed component inventory, with one lookahead; never treats a Person head as a revision. */
 export async function inventoryPersonProfileGraph(fuseki: QueryClient, objectDirectory: string,
-  person: EndedPersonProvision, budget: PersonProfileInventoryBudget): Promise<PersonProfileGraphInventory> {
+  person: EndedPersonProvision, budget: PersonProfileInventoryBudget,
+  workObjects?: ImmutableObjects): Promise<PersonProfileGraphInventory> {
   checkedPerson(person);
   const current = await fuseki.query(`PREFIX rv: <${RV}> SELECT ?kind ?head ?profileHead WHERE {
     GRAPH ${iri(GRAPHS.current)} { ${iri(person.person)} a rv:Agent ; rv:agentKind ?kind ; rv:head ?head .
@@ -159,18 +161,18 @@ export async function inventoryPersonProfileGraph(fuseki: QueryClient, objectDir
         || !revisions.some(value => value.revision === uri(reference.revision) && value.manifest === manifest))) {
       throw new PersonGraphErasureUnavailable('Person component object is shared outside its exact closure');
     }
-    const captured: string[] = [];
+    const captured = new Set<string>();
     let state: Record<string, unknown>;
     try {
-      state = readComponentState(objectDirectory, manifest, person.person, PROVISION_PROFILE,
-        budget, digest => captured.push(digest));
+      state = await readWorkComponentState({ objectDirectory, workObjects }, manifest, person.person, PROVISION_PROFILE,
+        budget, digest => captured.add(digest));
     } catch {
       throw new PersonGraphErasureUnavailable('Person component manifest or payload is unavailable');
     }
     if (state.kind !== 'person' || typeof state.displayName !== 'string'
       || state.disclosure !== 'public'
       || Object.keys(state).sort().join(',') !== 'disclosure,displayName,kind'
-      || captured.length !== 2 || captured[0] !== manifest.slice(-64)) {
+      || captured.size !== 2 || [...captured][0] !== manifest.slice(-64)) {
       throw new PersonGraphErasureUnavailable('Person component payload is not its provisioning profile');
     }
     for (const digest of captured) objects.add(`sha256:${digest}`);

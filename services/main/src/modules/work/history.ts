@@ -1,7 +1,7 @@
 import { canonicalLanguage } from '../display-language/select.ts';
 import { readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { ObjectIntegrityError, ObjectUnavailable, rememberVerifiedImmutableObject,
+import { ObjectIntegrityError, ObjectReadBudgetExceeded, ObjectUnavailable, rememberVerifiedImmutableObject,
   type ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
 import { DATASET, GRAPHS, PROFILE, hash, iri, normalizeWorkSemanticTypes,
   type WorkActivationEnvironment } from './activate.ts';
@@ -112,13 +112,26 @@ export function readComponentState(
   return state;
 }
 
-async function storedObjectBytes(objects: ImmutableObjects, digest: string): Promise<Buffer> {
+async function storedObjectBytes(objects: ImmutableObjects, digest: string, budget?: RevisionReadBudget,
+  remember?: (digest: string, bytes: Uint8Array) => void): Promise<Buffer> {
   if (!/^[0-9a-f]{64}$/.test(digest)) throw new RevisionCorrupt('invalid immutable object reference');
+  budget?.signal.throwIfAborted();
+  if (budget && (!Number.isSafeInteger(budget.bytesLeft) || budget.bytesLeft < 0)) {
+    throw new RevisionReadBudgetExceeded('revision read exceeds its shared budget');
+  }
   try {
-    const bytes = Buffer.from(await objects.get(digest));
+    const bytes = Buffer.from(await objects.get(digest, budget?.bytesLeft, budget?.signal));
+    budget?.signal.throwIfAborted();
+    if (budget) {
+      if (bytes.length > budget.bytesLeft) throw new RevisionReadBudgetExceeded('revision read exceeds its shared budget');
+      budget.bytesLeft -= bytes.length;
+    }
     if (hash(bytes) !== digest) throw new RevisionCorrupt('immutable object digest differs');
+    remember?.(digest, bytes);
     return bytes;
   } catch (error) {
+    budget?.signal.throwIfAborted();
+    if (error instanceof ObjectReadBudgetExceeded) throw new RevisionReadBudgetExceeded(error.message);
     if (error instanceof ObjectIntegrityError) throw new RevisionCorrupt(error.message, { cause: error });
     if (error instanceof ObjectUnavailable) throw new RevisionUnavailable(error.message, { cause: error });
     throw error;
@@ -127,19 +140,23 @@ async function storedObjectBytes(objects: ImmutableObjects, digest: string): Pro
 
 async function readComponentStateFromObjects(
   objects: ImmutableObjects, manifestIri: string, component: string, profile = PROFILE,
+  budget?: RevisionReadBudget, remember?: (digest: string, bytes: Uint8Array) => void,
 ): Promise<Record<string, unknown>> {
   if (!/^urn:rezics:sha256:[0-9a-f]{64}$/.test(manifestIri)) throw new RevisionCorrupt('invalid manifest reference');
   let manifest: Record<string, unknown>;
-  try { manifest = JSON.parse((await storedObjectBytes(objects, manifestIri.slice(-64))).toString('utf8')); }
-  catch (error) { if (error instanceof RevisionUnavailable || error instanceof RevisionCorrupt) throw error;
-    throw new RevisionCorrupt('manifest is not JSON', { cause: error }); }
+  try { manifest = JSON.parse((await storedObjectBytes(objects, manifestIri.slice(-64), budget, remember)).toString('utf8')); }
+  catch (error) {
+    budget?.signal.throwIfAborted();
+    if (error instanceof RevisionUnavailable || error instanceof RevisionCorrupt || error instanceof RevisionReadBudgetExceeded) throw error;
+    throw new RevisionCorrupt('manifest is not JSON', { cause: error });
+  }
   if (manifest.format !== 'rezics-manifest-v1' || manifest.component !== component
     || manifest.model !== profile || manifest.shape !== profile
     || manifest.mediaType !== 'application/json'
     || typeof manifest.payload !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(manifest.payload)) {
     throw new RevisionCorrupt('manifest does not match revision');
   }
-  const payload = await storedObjectBytes(objects, manifest.payload.slice(7));
+  const payload = await storedObjectBytes(objects, manifest.payload.slice(7), budget, remember);
   if (manifest.payloadBytes !== payload.length) throw new RevisionCorrupt('payload byte count differs');
   let stored: Record<string, unknown>;
   try { stored = JSON.parse(payload.toString('utf8')); }
@@ -159,17 +176,24 @@ async function readComponentStateFromObjects(
  * does not fetch.
  */
 export async function readWorkComponentState(
-  env: WorkActivationEnvironment, manifestIri: string, component: string, profile = PROFILE,
+  env: Pick<WorkActivationEnvironment, 'objectDirectory' | 'workObjects'>,
+  manifestIri: string, component: string, profile = PROFILE,
+  budget?: RevisionReadBudget, remember?: (digest: string, bytes: Uint8Array) => void,
 ): Promise<Record<string, unknown>> {
+  budget?.signal.throwIfAborted();
   if (env.workObjects) {
-    try { return await readComponentStateFromObjects(env.workObjects, manifestIri, component, profile); }
+    try { return await readComponentStateFromObjects(env.workObjects, manifestIri, component, profile, budget, remember); }
     catch (error) {
+      budget?.signal.throwIfAborted();
       if (!(error instanceof RevisionUnavailable) || isOwnerTransientFailure(error)) throw error;
     }
-    return readComponentState(env.objectDirectory, manifestIri, component, profile, undefined,
-      rememberVerifiedImmutableObject);
+    return readComponentState(env.objectDirectory, manifestIri, component, profile, budget,
+      (digest, bytes) => {
+        rememberVerifiedImmutableObject(digest, bytes);
+        remember?.(digest, bytes);
+      });
   }
-  return readComponentState(env.objectDirectory, manifestIri, component, profile);
+  return readComponentState(env.objectDirectory, manifestIri, component, profile, budget, remember);
 }
 
 /** Verify exact retained manifest and payload before offline replay or a read. */
