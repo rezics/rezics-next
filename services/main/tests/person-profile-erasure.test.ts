@@ -464,8 +464,11 @@ async function sealedAliases(proof: PersonProfileErasureProof, limit: number) {
   return inventory;
 }
 
-test('unlanded Person migrations keep the retired Agent handle bridge absent and use the principal index', async () => {
+test('unlanded Person migrations keep the retired Agent handle bridge absent', async () => {
   expect((await access.query("SELECT to_regclass('access.agent_handle') AS bridge")).rows[0]?.bridge).toBeNull();
+});
+
+test('the actual Person sanitation guard lookup uses the principal primary-key index', async () => {
   const { proof } = await endedFixture();
   const definition = (await access.query<{ body: string }>(`SELECT pg_get_functiondef(
     'access.assert_person_profile_erasure(text)'::regprocedure) AS body`)).rows[0]!.body;
@@ -488,7 +491,6 @@ test('a live admitted Space claim cannot take an erased opaque Agent reservation
   const live = await principal();
   const actor = (await provision(live)).person;
   const realm = native();
-  await access.query("INSERT INTO access.authority_subject(id,kind) VALUES ($1,'realm')", [realm]);
   const scope = `governance:realm:${realm}`;
   const action = 'realm.settings.manage';
   await grantFixtureAuthority(access, { scope, requireDispatch: false,
