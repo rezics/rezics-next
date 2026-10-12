@@ -5,10 +5,13 @@ export function isOwnerTransientFailure(error: unknown): boolean {
     seen.add(error);
     const failure = error as {
       code?: unknown;
+      status?: unknown;
       cause?: unknown;
       message?: unknown;
       stack?: unknown;
     };
+    if (typeof failure.status === 'number' && [408, 429, 502, 503, 504].includes(failure.status))
+      return true;
     if (
       typeof failure.code === 'string' &&
       (/^08[0-9A-Z]{3}$/.test(failure.code) ||

@@ -290,6 +290,13 @@ export interface SourceAuthorNamesResponse {
 }
 export class FusekiQueryResponseTooLarge extends Error {}
 
+/** Retain HTTP evidence without making callers parse diagnostic messages. */
+export class FusekiHttpError extends Error {
+  constructor(message: string, readonly status: number, readonly statusText: string) {
+    super(message);
+  }
+}
+
 async function boundedJson<T>(response: Response, maxResponseBytes?: number, signal?: AbortSignal): Promise<T> {
   if (signal?.aborted) await response.body?.cancel(signal.reason);
   signal?.throwIfAborted();
@@ -490,7 +497,8 @@ export class FusekiClient {
         body: sparql,
         signal,
       });
-      if (!response.ok) throw new Error(`Fuseki query returned ${response.status}`);
+      if (!response.ok) throw new FusekiHttpError(`Fuseki query returned ${response.status}`,
+        response.status, response.statusText);
       const result = await boundedJson<SparqlResult>(response, maxResponseBytes, signal);
       status = 'complete';
       return result;
@@ -696,7 +704,8 @@ export class FusekiClient {
         detail = new TextDecoder().decode((await response.arrayBuffer()).slice(0, 2048))
           .replace(/\s+/g, ' ').trim();
       } catch { detail = ''; }
-      throw new Error(`Fuseki update returned ${response.status}${detail ? `: ${detail}` : ''}`);
+      throw new FusekiHttpError(`Fuseki update returned ${response.status}${detail ? `: ${detail}` : ''}`,
+        response.status, response.statusText);
     }
   }
 

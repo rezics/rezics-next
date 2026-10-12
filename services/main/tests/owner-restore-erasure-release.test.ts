@@ -4,7 +4,7 @@ import { Pool as PgPool } from 'pg';
 import * as accountCoverage from '../../account/src/recovery-coverage.ts';
 import * as deletionRecovery from '../../account/src/deletion-recovery-set.ts';
 import { sealRecoveryPayload } from '../../account/src/recovery-envelope.ts';
-import { FusekiClient, type CommandEnvelope, type CommandResult,
+import { FusekiClient, FusekiHttpError, type CommandEnvelope, type CommandResult,
   type SparqlResult } from '../src/infrastructure/fuseki.ts';
 import * as commerceCoverage from '../src/modules/commerce/recovery-coverage.ts';
 import * as erasureAuthority from '../src/modules/erasure/authority.ts';
@@ -559,6 +559,72 @@ const qualifiedSites = [
   'retained-authority', 'retained-reconciliation-content', 'native-graph-release',
   'borrowed-Access-transaction', 'borrowed-relay-transaction',
 ] as const;
+
+for (const status of [503, 400, 404]) {
+  test(`qualified Fuseki HTTP ${status} proof read retains evidence and settles the same key correctly`, async () => {
+    const run = fixture();
+    const owner = outerRestore(run);
+    const readGraph = run.fuseki.query.bind(run.fuseki);
+    let armed = false, failures = 0;
+    const server = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: async request => {
+      const sparql = await request.text();
+      if (armed && sparql.includes('SELECT ?savedMainSequence ?reconciledMainSequence ?savedSequence')) {
+        failures++;
+        return new Response('owner unavailable', { status });
+      }
+      return Response.json(await readGraph(sparql));
+    } });
+    const http = new FusekiClient(server.url.href);
+    const network = spyOn(run.fuseki, 'query').mockImplementation(sparql => http.query(sparql));
+    try {
+      await owner.qualify();
+      const realRelease = run.evidence.releaseErasures;
+      armed = true;
+      if (status === 503) {
+        try { await owner.attempt(); throw new Error('HTTP interruption unexpectedly settled'); }
+        catch (error) {
+          expect(error).toBeInstanceOf(OwnerOperationUnavailable);
+          expect((error as Error).cause).toBeInstanceOf(RestoreInterrupted);
+          let original: unknown = error;
+          while (original instanceof Error && original.cause !== undefined) original = original.cause;
+          expect(original).toBeInstanceOf(FusekiHttpError);
+          expect(original).toMatchObject({ status, statusText: 'Service Unavailable',
+            message: 'Fuseki query returned 503' });
+        }
+        expect(owner.row).toMatchObject({ state: 'running', hold_reason: null });
+      } else {
+        expect(await owner.attempt()).toMatchObject({ state: 'held', replayed: true });
+        expect(owner.row.state).toBe('held');
+      }
+      expect(failures).toBe(1);
+      expectBothHeld(run);
+      armed = false;
+      expect(run.evidence.releaseErasures).toBe(realRelease);
+      expect(await owner.attempt()).toMatchObject({ state: status === 503 ? 'reconciled' : 'held', replayed: true });
+      expect(owner.qualifications).toBe(1);
+      if (status === 503) {
+        expect(run.fuseki.commands).toHaveLength(1);
+        expect(run.access.open).toBe(true);
+        expect(run.access.generation).toBe('6');
+        const releases = owner.releaseSpy.mock.calls.length;
+        expect(await owner.attempt()).toMatchObject({ state: 'reconciled', replayed: true });
+        expect(owner.releaseSpy).toHaveBeenCalledTimes(releases);
+        expect(run.fuseki.commands).toHaveLength(1);
+      } else expectBothHeld(run);
+    } finally {
+      network.mockRestore(); await server.stop(true); owner.stop(); run.stop();
+    }
+  });
+}
+
+for (const status of [408, 429, 502, 503, 504, 400, 404, 500, '503', NaN]) {
+  test(`qualified HTTP classifier uses numeric status evidence: ${status}`, () => {
+    const original = { status };
+    expect(restoreLineage.isRestoreTransientFailure(new RestoreLineageConflict('owner differs', {
+      cause: new Error('adapter failed', { cause: original }),
+    }))).toBe(typeof status === 'number' && [408, 429, 502, 503, 504].includes(status));
+  });
+}
 
 for (const site of qualifiedSites) {
   for (const code of ['ECONNRESET', '57P01', 'integrity'] as const) {

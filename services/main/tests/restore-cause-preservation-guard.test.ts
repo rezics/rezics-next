@@ -14,6 +14,7 @@ const restoreClosureFiles = [
   'services/main/src/modules/owner/operations.ts',
   'services/main/src/modules/owner/restore-release-binding.ts',
   'services/main/src/modules/owner/object-coverage.ts',
+  'services/main/src/modules/access/erasure-recovery.ts',
   'services/main/src/modules/erasure/reconcile.ts',
   'services/main/src/modules/erasure/authority.ts',
   'services/main/src/modules/erasure/custody.ts',

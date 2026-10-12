@@ -610,7 +610,9 @@ export async function importAccessErasureRecoveryAttachment(
 ): Promise<{ imported: string; alreadyPresent: string }> {
   validateExpectation(expected);
   try { await client.query('SAVEPOINT access_erasure_recovery_guard'); }
-  catch { throw new AccessErasureRecoveryConflict('Access erasure import requires an active held transaction'); }
+  catch (error) {
+    throw new AccessErasureRecoveryConflict('Access erasure import requires an active held transaction', { cause: error });
+  }
   try {
   const readOnly = (await client.query<{ read_only: string }>(
     "SELECT current_setting('transaction_read_only') AS read_only")).rows[0]?.read_only;
@@ -758,7 +760,9 @@ export async function importAccessErasureRecoveryAttachment(
     if (!line) throw new AccessErasureRecoveryConflict('native Access attachment contains an empty record');
     let value: unknown;
     try { value = JSON.parse(line); }
-    catch { throw new AccessErasureRecoveryConflict('native Access attachment is not valid JSON'); }
+    catch (error) {
+      throw new AccessErasureRecoveryConflict('native Access attachment is not valid JSON', { cause: error });
+    }
     if (!headerSeen) {
       if (!isObject(value) || value.kind !== 'header' || value.profile !== expected.profile
         || value.version !== expected.version || value.catalogDigest !== expected.catalogDigest

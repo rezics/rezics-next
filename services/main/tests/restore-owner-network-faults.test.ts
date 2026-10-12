@@ -2,7 +2,7 @@ import { expect, spyOn, test } from 'bun:test';
 import { AwsClient } from 'aws4fetch';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { FusekiClient, type SparqlResult } from '../src/infrastructure/fuseki.ts';
+import { FusekiClient, FusekiHttpError, type SparqlResult } from '../src/infrastructure/fuseki.ts';
 import {
   S3ImmutableObjects,
   withoutVerifiedImmutableObjectCache,
@@ -27,6 +27,28 @@ const sites = [
   'model manifest GET',
   'model shape GET',
 ] as const;
+
+for (const operation of ['query', 'update'] as const) {
+  for (const status of [503, 400, 404]) {
+    test(`Fuseki ${operation} HTTP ${status} preserves numeric evidence and its diagnostic message`, async () => {
+      const server = Bun.serve({ hostname: '127.0.0.1', port: 0,
+        fetch: () => new Response('owner unavailable', { status }) });
+      const fuseki = new FusekiClient(server.url.href);
+      try {
+        try {
+          await fuseki[operation](operation === 'query' ? 'ASK {}' : 'INSERT DATA {}');
+          throw new Error('non-ok HTTP response unexpectedly accepted');
+        } catch (error) {
+          expect(error).toBeInstanceOf(FusekiHttpError);
+          expect(error).toMatchObject({ status, statusText: status === 503 ? 'Service Unavailable'
+            : status === 400 ? 'Bad Request' : 'Not Found',
+            message: `Fuseki ${operation} returned ${status}${operation === 'update' ? ': owner unavailable' : ''}` });
+          expect(isRestoreTransientFailure(error)).toBe(status === 503);
+        }
+      } finally { await server.stop(true); }
+    });
+  }
+}
 
 for (const site of sites) {
   for (const code of ['ECONNRESET', '57P01'] as const) {
