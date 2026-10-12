@@ -1,14 +1,29 @@
 /** Only transport evidence can make an owner comparison retryable. */
+// pg gives these uncoded transport errors no code, so their exact messages are
+// the only driver evidence available. Sources: node_modules/pg/lib/client.js:204,
+// node_modules/pg/lib/client.js:170, node_modules/pg/lib/client.js:749,
+// node_modules/pg/lib/client.js:707, node_modules/pg-pool/index.js:224,
+// node_modules/pg-pool/index.js:276. client.js:204 also emits `Connection terminated`
+// for a deliberate client end; that message is excluded.
+export const DRIVER_TRANSPORT_FAILURES = Object.freeze([
+  'Connection terminated unexpectedly',
+  'timeout expired',
+  'Client has encountered a connection error and is not queryable',
+  'Query read timeout',
+  'timeout exceeded when trying to connect',
+  'Connection terminated due to connection timeout',
+] as const);
+
 export function isOwnerTransientFailure(error: unknown): boolean {
   const seen = new Set<object>();
   while (error !== null && typeof error === 'object' && !seen.has(error)) {
     seen.add(error);
     const failure = error as {
       code?: unknown;
+      name?: unknown;
       status?: unknown;
       cause?: unknown;
       message?: unknown;
-      stack?: unknown;
     };
     if (typeof failure.status === 'number' && [408, 429, 502, 503, 504].includes(failure.status))
       return true;
@@ -29,15 +44,11 @@ export function isOwnerTransientFailure(error: unknown): boolean {
         ].includes(failure.code))
     )
       return true;
-    // pg-pool's uncoded checkout timeout has a driver-owned signature. A
-    // domain error mentioning a connection or timeout is never retry evidence.
     if (
-      error instanceof Error &&
+      failure.name === 'Error' &&
       failure.code === undefined &&
-      typeof failure.stack === 'string' &&
-      /\n\s+at [^\n]*[/\\]pg-pool[/\\]index\.js:\d+:\d+/.test(failure.stack) &&
-      (failure.message === 'timeout exceeded when trying to connect' ||
-        failure.message === 'Connection terminated due to connection timeout')
+      typeof failure.message === 'string' &&
+      DRIVER_TRANSPORT_FAILURES.some(message => message === failure.message)
     )
       return true;
     error = failure.cause;

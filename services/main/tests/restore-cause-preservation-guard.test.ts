@@ -2,8 +2,10 @@ import { expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { DRIVER_TRANSPORT_FAILURES } from '../src/infrastructure/owner-failure.ts';
+import { ErasureRestoreHold } from '../src/modules/erasure/reconcile.ts';
 import { isRelayTransientFailure } from '../src/modules/outbox/relay.ts';
-import { isRestoreTransientFailure } from '../src/modules/work/restore-lineage.ts';
+import { isRestoreTransientFailure, RestoreLineageConflict } from '../src/modules/work/restore-lineage.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
@@ -278,9 +280,33 @@ test('restore and relay use one cycle-safe evidence classifier', () => {
   first.cause = second;
   second.cause = first;
   expect(isRelayTransientFailure(first)).toBe(true);
-  const timeout = new Error('timeout exceeded when trying to connect');
-  timeout.stack =
-    'Error: timeout exceeded when trying to connect\n    at /node_modules/pg-pool/index.js:45:11';
-  expect(isRelayTransientFailure(timeout)).toBe(true);
-  expect(isRelayTransientFailure(new Error(timeout.message))).toBe(false);
+});
+
+for (const message of DRIVER_TRANSPORT_FAILURES) {
+  test(`shared classifier recognizes exact uncoded pg transport message: ${message}`, () => {
+    const original = new Error(message);
+    expect(isRelayTransientFailure(original)).toBe(true);
+    expect(isRelayTransientFailure(new RestoreLineageConflict('owner comparison unavailable', {
+      cause: original,
+    }))).toBe(true);
+    expect(isRelayTransientFailure(new ErasureRestoreHold('erasure evidence unavailable', {
+      cause: original,
+    }))).toBe(true);
+  });
+}
+
+test('shared classifier rejects pg message near misses and coded SQL errors', () => {
+  for (const message of [
+    `${DRIVER_TRANSPORT_FAILURES[0]} after timeout`,
+    'Client was closed and is not queryable',
+    'Connection terminated',
+  ]) {
+    expect(isRelayTransientFailure(new Error(message))).toBe(false);
+  }
+  for (const message of DRIVER_TRANSPORT_FAILURES) {
+    expect(isRelayTransientFailure(Object.assign(new Error(message), { code: '23505' }))).toBe(false);
+  }
+  const renamed = new Error(DRIVER_TRANSPORT_FAILURES[0]);
+  renamed.name = 'DriverError';
+  expect(isRelayTransientFailure(renamed)).toBe(false);
 });

@@ -6,6 +6,7 @@ import * as deletionRecovery from '../../account/src/deletion-recovery-set.ts';
 import { sealRecoveryPayload } from '../../account/src/recovery-envelope.ts';
 import { FusekiClient, FusekiHttpError, type CommandEnvelope, type CommandResult,
   type SparqlResult } from '../src/infrastructure/fuseki.ts';
+import { DRIVER_TRANSPORT_FAILURES } from '../src/infrastructure/owner-failure.ts';
 import * as commerceCoverage from '../src/modules/commerce/recovery-coverage.ts';
 import * as erasureAuthority from '../src/modules/erasure/authority.ts';
 import * as deletionJournal from '../src/modules/outbox/account-deletion-journal.ts';
@@ -612,13 +613,15 @@ const completionPhases = ['qualified-resume', 'graph-release', 'Access-release',
   'final-outcome-write', 'opened-graph-reader', 'opened-erasure-record', 'opened-erased-closure'] as const;
 
 for (const phase of completionPhases) {
-  for (const transport of ['Fuseki-503', 'ECONNRESET'] as const) {
+  for (const transport of ['Fuseki-503', 'ECONNRESET', 'pg-client-transport'] as const) {
     test(`durable completion phase ${phase}: ${transport} is interrupted and completes the same key once`, async () => {
       const run = fixture();
       const owner = outerRestore(run, false, true);
       const original = transport === 'Fuseki-503'
         ? new FusekiHttpError('Fuseki query returned 503', 503, 'Service Unavailable')
-        : Object.assign(new Error('owner connection reset'), { code: 'ECONNRESET' });
+        : transport === 'ECONNRESET'
+          ? Object.assign(new Error('owner connection reset'), { code: 'ECONNRESET' })
+          : new Error(DRIVER_TRANSPORT_FAILURES[0]);
       const wrapped = new RestoreLineageConflict('phase evidence is unavailable', { cause: original });
       let armed = true;
       const spies: { mockRestore: () => void }[] = [];
@@ -753,12 +756,17 @@ for (const status of [408, 429, 502, 503, 504, 400, 404, 500, '503', NaN]) {
 }
 
 for (const site of qualifiedSites) {
-  for (const code of ['ECONNRESET', '57P01', 'integrity'] as const) {
+  const failures = site === 'account-rows'
+    ? ['ECONNRESET', '57P01', 'integrity', 'pg-client-transport'] as const
+    : ['ECONNRESET', '57P01', 'integrity'] as const;
+  for (const code of failures) {
     test(`qualified ${site}: ${code} preserves cause and settles the same-key owner operation correctly`, async () => {
       const run = fixture();
       const failure = code === 'integrity'
         ? new RestoreLineageConflict('integrity mismatch: connection timeout ECONNRESET 57P01')
-        : Object.assign(new Error('owner unavailable'), { code });
+        : code === 'pg-client-transport'
+          ? new Error(DRIVER_TRANSPORT_FAILURES[0])
+          : Object.assign(new Error('owner unavailable'), { code });
       let armed = false;
       const extraSpies: { mockRestore: () => void }[] = [];
       if (site === 'captured-journal' || site === 'retained-authority') {
@@ -878,7 +886,7 @@ test('qualified transport classifier refuses message-only integrity errors and c
 test('qualified transport classifier recognizes a real pg-pool checkout timeout through wrappers', async () => {
   const pool = new PgPool({ max: 1, connectionTimeoutMillis: 10 });
   // Occupy the sole slot without opening a network connection. The real pool
-  // owns its pending queue, timer, error construction and promise stack boundary.
+  // owns its pending queue, timer and error construction.
   const clients = (pool as unknown as { _clients: object[] })._clients;
   clients.push({});
   try {
@@ -888,7 +896,7 @@ test('qualified transport classifier recognizes a real pg-pool checkout timeout 
       expect(restoreLineage.isRestoreTransientFailure(new RestoreLineageConflict('owner differs', { cause: error }))).toBe(true);
     }
     const plain = new Error('timeout exceeded when trying to connect');
-    expect(restoreLineage.isRestoreTransientFailure(plain)).toBe(false);
+    expect(restoreLineage.isRestoreTransientFailure(plain)).toBe(true);
   } finally { clients.length = 0; await pool.end(); }
 });
 
