@@ -1,3 +1,4 @@
+import { createWorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 // Staged C6 private original-source probe. It belongs at tests/qa/integration/
 // private-original-source.test.ts (relative imports below assume that place) and
 // runs only inside the isolated QA integration tier. Nothing here changes production.
@@ -32,7 +33,7 @@ const allow = async () => true;
 
 function requireStack(): void {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL
-    || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH) {
+    || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH || !Bun.env.CONTENT_DATABASE_URL) {
     throw new Error('Run through the isolated QA integration tier');
   }
 }
@@ -44,12 +45,14 @@ async function fixture() {
   const directory = join(root, '.temp', `private-original-source-${randomUUID()}`);
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const accessPool = boundedPool({ connectionString: databaseUrl, max: 1 });
+  const contentPool = boundedPool({ connectionString: Bun.env.CONTENT_DATABASE_URL!, max: 2 });
   const access = new AccessAdmissionRegistry(accessPool);
-  const env: WorkActivationEnvironment = Object.assign({
+  const env = createWorkActivationEnvironment(Object.assign({
+    referenceFencePool: contentPool,
     fuseki: new FusekiClient(Bun.env.FUSEKI_URL!),
     lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH!, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH! },
     objectDirectory: join(directory, 'objects'),
-  }, { accessAdmission: access });
+  }, { accessAdmission: access }));
   const creator = ID + randomUUID();
   const editor = ID + randomUUID();
   const admission = (actor: string, scope: string, action: string,
@@ -98,7 +101,7 @@ async function fixture() {
     editAdmission, edited, contribution: first.contribution!, firstTerm, secondTerm,
     cleanup: async () => {
       rmSync(directory, { recursive: true, force: true });
-      await accessPool.end();
+      await Promise.all([accessPool.end(), contentPool.end()]);
     } };
 }
 
@@ -278,10 +281,11 @@ test('FALSIFIER: a selected CREATE head whose create receipt is gone is refused 
   requireStack();
   const directory = join(root, '.temp', `private-original-source-${randomUUID()}`);
   mkdirSync(directory, { recursive: true, mode: 0o700 });
-  const env: WorkActivationEnvironment = {
+  const contentPool = boundedPool({ connectionString: Bun.env.CONTENT_DATABASE_URL!, max: 2 });
+  const env = createWorkActivationEnvironment({ referenceFencePool: contentPool,
     fuseki: new FusekiClient(Bun.env.FUSEKI_URL!),
     lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH!, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH! },
-    objectDirectory: join(directory, 'objects') };
+    objectDirectory: join(directory, 'objects') });
   try {
     const actor = ID + randomUUID();
     const admission = (scope: string, action: string, requestDigest: string): RegisteredAdmission => {
@@ -305,5 +309,5 @@ test('FALSIFIER: a selected CREATE head whose create receipt is gone is refused 
     // original CREATE receipt gone it must not keep treating the head as authentic.
     await expect(readExactContributionDraft(env, first.contribution!, first.draftRevision!, allow))
       .rejects.toBeInstanceOf(RevisionCorrupt);
-  } finally { rmSync(directory, { recursive: true, force: true }); }
+  } finally { await contentPool.end(); rmSync(directory, { recursive: true, force: true }); }
 }, 120_000);

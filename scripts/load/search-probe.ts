@@ -34,8 +34,9 @@ if (!Number.isSafeInteger(expectedPublicUnits) || expectedPublicUnits < 0) {
   throw new Error('fixture public MatchUnit count is invalid');
 }
 const meter = startFusekiMeter(upstream);
+const contentPool = new Pool({ connectionString: required('CONTENT_DATABASE_URL') });
 const environment = workEnvironment(process.env as Record<string, string>,
-  { dataEpoch: required('MAIN_DATA_EPOCH'), routingEpoch: required('MAIN_ROUTING_EPOCH') });
+  { dataEpoch: required('MAIN_DATA_EPOCH'), routingEpoch: required('MAIN_ROUTING_EPOCH') }, contentPool);
 const accessPool = new Pool({ connectionString: required('ACCESS_DATABASE_URL') });
 const mainUrl = `http://127.0.0.1:${required('MAIN_PORT')}`;
 const evidence: Record<string, unknown> = {
@@ -348,7 +349,7 @@ try {
   evidence.failure = failure;
 } finally {
   await stop(main);
-  await accessPool.end();
+  await Promise.all([accessPool.end(), contentPool.end()]);
   evidence.remoteTotal = meter.snapshot();
   evidence.searchProofTotal = meter.searchProofSnapshot();
   await meter.stop();

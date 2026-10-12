@@ -1,3 +1,4 @@
+import { createWorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { ContentCore } from '../../../services/content/src/core.ts';
@@ -153,6 +154,7 @@ export async function seedContent(env: WorkActivationEnvironment, pool: Pool, ac
 /** Fixed corpus structure; all graph and Content writes use product commands. */
 export async function seedLoadCorpus(env: WorkActivationEnvironment, pool: Pool,
   accessPool: Pool): Promise<LoadCorpus> {
+  env = createWorkActivationEnvironment({ ...env, referenceFencePool: pool });
   const spaceInput = { name: 'Load Realm', actingSubject: actor };
   const space = await createRealmSpace(env,
     admission('space:create:root', 'space.create', spaceCreationDigest(spaceInput)), spaceInput);

@@ -1,3 +1,4 @@
+import { createWorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { expect, test } from 'bun:test';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -52,8 +53,8 @@ test('LIVE07/LIVE10/LIVE17/COMP08: owner values and fixed manifests export exact
     const actor = agent();
     const fuseki = new FusekiClient(Bun.env.FUSEKI_URL,
       Bun.env.FUSEKI_MAINTENANCE_TOKEN, Bun.env.FUSEKI_COMMAND_TOKEN);
-    const environment = { fuseki, lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH,
-      routingEpoch: Bun.env.MAIN_ROUTING_EPOCH }, objectDirectory: directory };
+    const environment = createWorkActivationEnvironment({ referenceFencePool: contentPool, fuseki, lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH,
+      routingEpoch: Bun.env.MAIN_ROUTING_EPOCH }, objectDirectory: directory });
     const structureObjects = new S3ImmutableObjects({ endpoint: Bun.env.MAIN_S3_ENDPOINT!,
       bucket: Bun.env.MAIN_S3_BUCKET!, region: Bun.env.MAIN_S3_REGION!,
       accessKeyId: Bun.env.MAIN_S3_ACCESS_KEY!, secretAccessKey: Bun.env.MAIN_S3_SECRET_KEY!,

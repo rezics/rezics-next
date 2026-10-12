@@ -1,3 +1,5 @@
+import { Pool } from 'pg';
+import { createWorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
@@ -12,25 +14,25 @@ import { PRIVATE_SEARCH_GRAPH, privateDraftUnit }
   from '../../../services/main/src/modules/contribution/private-projection.ts';
 import { PrivateSearchUnavailable, queryPrivateContributionPhrase }
   from '../../../services/main/src/modules/contribution/search-private.ts';
-import { activateMetadataWork, ID, metadataWorkRequestDigest, RV,
-  type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
+import { activateMetadataWork, ID, metadataWorkRequestDigest, RV } from '../../../services/main/src/modules/work/activate.ts';
 import { COMMAND_MODULE_VERSION } from '../../../services/main/src/infrastructure/profile.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
 test('SEARCH11/SEARCH12 foundation: native private posting follows one current Contribution head', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL
-    || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH) {
+    || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH || !Bun.env.CONTENT_DATABASE_URL) {
     throw new Error('Run through the isolated QA integration tier');
   }
   const directory = join(root, '.temp', `private-contribution-native-${randomUUID()}`);
   mkdirSync(directory, { recursive: true, mode: 0o700 });
-  const env: WorkActivationEnvironment = {
+  const contentPool = new Pool({ connectionString: Bun.env.CONTENT_DATABASE_URL!, max: 2 });
+  const env = createWorkActivationEnvironment({ referenceFencePool: contentPool,
     fuseki: new FusekiClient(Bun.env.FUSEKI_URL),
     lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH,
       routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
     objectDirectory: join(directory, 'objects'),
-  };
+  });
   const actor = ID + randomUUID();
   const admission = (scope: string, action: string,
     requestDigest: string): RegisteredAdmission => {
@@ -124,6 +126,7 @@ test('SEARCH11/SEARCH12 foundation: native private posting follows one current C
     expect(await privatePosting(privateDraftUnit(edited.draftRevision), secondTerm)).toEqual(current);
     expect(await privatePosting(firstUnit, firstTerm)).toEqual([]);
   } finally {
+    await contentPool.end();
     rmSync(directory, { recursive: true, force: true });
   }
 });

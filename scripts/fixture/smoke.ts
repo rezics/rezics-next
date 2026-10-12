@@ -1,3 +1,4 @@
+import { createWorkActivationEnvironment } from '../../services/main/src/modules/work/activate.ts';
 import type { Pool } from 'pg';
 import { ContentCore } from '../../services/content/src/core.ts';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
@@ -11,12 +12,13 @@ import type { FixtureManifestCore } from './manifest.ts';
 import { WORK_OBJECT_PREFIX } from './owners/objects.ts';
 
 export function workEnvironment(apps: Record<string, string>,
-  lineage: FixtureManifestCore['lineage']): WorkActivationEnvironment & { workObjects: S3ImmutableObjects } {
-  return { fuseki: new FusekiClient(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN, apps.FUSEKI_COMMAND_TOKEN),
+  lineage: FixtureManifestCore['lineage'], referenceFencePool?: Pool): WorkActivationEnvironment & { workObjects: S3ImmutableObjects } {
+  const environment = { fuseki: new FusekiClient(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN, apps.FUSEKI_COMMAND_TOKEN),
     lineage, objectDirectory: apps.MAIN_OBJECT_DIRECTORY!,
     workObjects: new S3ImmutableObjects({ endpoint: apps.MAIN_S3_ENDPOINT!, bucket: apps.MAIN_S3_BUCKET!,
       region: apps.MAIN_S3_REGION!, accessKeyId: apps.MAIN_S3_ACCESS_KEY!,
       secretAccessKey: apps.MAIN_S3_SECRET_KEY!, prefix: WORK_OBJECT_PREFIX }) };
+  return referenceFencePool ? createWorkActivationEnvironment({ ...environment, referenceFencePool }) : environment;
 }
 
 /** Public text readiness through Main's own probe: lineage, control row and Lucene query. */

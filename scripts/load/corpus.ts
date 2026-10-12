@@ -1,3 +1,4 @@
+import { createWorkActivationEnvironment } from '../../services/main/src/modules/work/activate.ts';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { AccessAdmissionRegistry, type ClaimedAdmission, type GraphTerminalProof,
@@ -124,6 +125,7 @@ export async function seedPracticalCorpus(env: WorkActivationEnvironment, conten
   accessPool: Pool, count: number, progress: (completed: number) => void,
   workers = 1, startIndex = 0): Promise<{
     corpus: PracticalCorpus; authority: LoadAuthority }> {
+  env = createWorkActivationEnvironment({ ...env, referenceFencePool: contentPool });
   if (!Number.isInteger(count) || count < 10 || count > 10_000
     || !Number.isInteger(startIndex) || startIndex < 0 || startIndex + count > 10_000) {
     throw new Error('practical corpus requires 10–10000 Works within the load token range');

@@ -1,3 +1,4 @@
+import { createWorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { expect } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
@@ -161,13 +162,13 @@ export async function authorCreditFixture(
   }) as Pool;
   // A shard's graph retains earlier Context/Work heads. Their immutable bytes
   // must share its lifetime, including manifests read by rating/card hydration.
-  const env = {
+  const env = createWorkActivationEnvironment({
     referenceFencePool: pool,
     fuseki,
     addresses: new AliasRegistry(accessPool),
     lineage: { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: apps.MAIN_ROUTING_EPOCH! },
     objectDirectory: apps.MAIN_OBJECT_DIRECTORY ?? objectDirectory,
-  };
+  });
   const templateSeek = new TemplateSeekIndex(accessPool, fuseki);
   await templateSeek.backfill(env.lineage.dataEpoch);
   const access = new AccessAdmissionRegistry(accessPool, apps.FUSEKI_TITLE_ADMISSION_KEY);

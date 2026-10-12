@@ -1,6 +1,7 @@
 import { withPreservationFence, type PreservationFence } from '../public-report/preservation.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
+import { withReferenceFence } from '../erasure/reference-fence.ts';
 import type { ContentCore, ContentPosition } from '../../../../content/src/core.ts';
 import type { ImportedCoverProvenance } from './typed-schema.ts';
 import { coverCreditFromProvenance, type CoverCredit } from './cover-credit.ts';
@@ -742,6 +743,7 @@ export class MediaStore {
           status: previous.outcome === 'succeeded' ? 'activated' : 'rejected', reason: previous.reason,
           replayed: true };
       }
+      if (verdict.status === 'activated') await withReferenceFence(client, verdict.sha256, async () => {});
       // Originals can also advance moderation state. Take the exclusive owner
       // lock up front so concurrent settlements never upgrade shared locks.
       await client.query('SELECT id FROM media.asset WHERE id=$1 FOR UPDATE', [current.asset]);
@@ -839,6 +841,7 @@ export class MediaStore {
       // that outcome; failure to establish it leaves bytes for owner recovery.
       return transaction(this.pool, async client => {
         const previous = await prior(client, operationId, digest, 'media.upload.settle');
+        if (verdict.status === 'activated') await withReferenceFence(client, verdict.sha256, async () => {});
         await client.query('SELECT id FROM media.asset WHERE id=$1 FOR UPDATE', [current.asset]);
         if (previous) {
           const row = (await client.query<{ id: string; byte_digest: string }>(
@@ -899,6 +902,7 @@ export class MediaStore {
     for (;;) {
       // A stale attempt keeps its receipt; each retry uses the next derived operation.
       const receipts = await transaction(this.pool, async client => {
+        await withReferenceFence(client, row.byte_digest, async () => {});
         await transactionFence(client);
         const result = await client.query<{ operation_id: string; outcome: string; revision_id: string | null;
           predecessor: string | null }>(
@@ -924,6 +928,7 @@ export class MediaStore {
         expectedHead: done ? done.predecessor : head?.draft_head ?? null, model: 'media-asset-v1', sourceRevision: null,
         provenance: { kind: 'media-upload-activation-v1', upload, representation: row.id },
         serializedJson: manifest }, async client => {
+          await withReferenceFence(client, row.byte_digest, async () => {});
           await transactionFence(client);
           if (done) {
             const revision = (await client.query<{ availability: string }>(

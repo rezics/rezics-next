@@ -1,3 +1,4 @@
+import { createWorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { qaStartupTestTimeout, runQaAdmissionChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { migrationVersion, schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
@@ -124,9 +125,11 @@ beforeAll(async () => {
   const apps = readEnv(join(stackDirectory(root, stackOptions), 'apps.env'));
   fuseki = new PrivateIndexFuseki(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN!,
     apps.FUSEKI_COMMAND_TOKEN!);
-  env = Object.assign({ fuseki, lineage: { dataEpoch: apps.MAIN_DATA_EPOCH!,
+  if (!apps.CONTENT_DATABASE_URL) throw new Error('Content reference fence database is required');
+  const contentPool = new Pool({ connectionString: apps.CONTENT_DATABASE_URL, max: 2 });
+  env = createWorkActivationEnvironment(Object.assign({ referenceFencePool: contentPool, fuseki, lineage: { dataEpoch: apps.MAIN_DATA_EPOCH!,
     routingEpoch: apps.MAIN_ROUTING_EPOCH! }, objectDirectory: join(state, 'objects') },
-  { accessAdmission: access });
+  { accessAdmission: access }));
   await initializeFreshGraph(fuseki, env.lineage);
   app = createMainApp(fuseki, { environment: env,
     account: { verify: async () => principal }, access });
@@ -146,6 +149,7 @@ beforeAll(async () => {
 }, qaStartupTestTimeout(240_000));
 
 afterAll(async () => {
+  await env?.referenceFencePool?.end();
   await secondPool?.end();
   await pool?.end();
   try {

@@ -83,6 +83,17 @@ export interface WorkActivationEnvironment {
   python?: string;
 }
 
+/** Writer composition validates the shared Content database before any operation.
+ * Read-only graph environments may still omit a database. */
+export function createWorkActivationEnvironment<T extends WorkActivationEnvironment>(environment: T):
+  T & { referenceFencePool: import('pg').Pool } {
+  if (!environment.referenceFencePool || typeof environment.referenceFencePool.connect !== 'function'
+    || typeof environment.referenceFencePool.query !== 'function') {
+    throw new Error('Contribution reference fence pool is required when constructing a writer environment');
+  }
+  return environment as T & { referenceFencePool: import('pg').Pool };
+}
+
 export interface CreateMetadataWorkIntent {
   /** Trusted Access record; never populated from a browser request body. */
   admission: Pick<RegisteredAdmission, 'id' | 'scope' | 'action' | 'idempotencyKey' | 'requestDigest' | 'authorityEpoch' | 'expiresAt'>

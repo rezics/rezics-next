@@ -1,3 +1,4 @@
+import { createWorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { RegisteredAdmission } from '../../../services/main/src/modules/access/admission.ts';
@@ -14,6 +15,7 @@ import { seedContent } from '../load/corpus.ts';
 /** Keep one independent main text unit beside the Content unit for stale-index proofs. */
 export async function seedRecoveryContent(env: WorkActivationEnvironment, contentPool: Pool,
   accessPool: Pool) {
+  env = createWorkActivationEnvironment({ ...env, referenceFencePool: contentPool });
   const actor = ID + randomUUID();
   const admission = (scope: string, action: string, requestDigest: string): RegisteredAdmission => {
     const id = randomUUID();

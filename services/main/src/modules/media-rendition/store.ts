@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
+import { withReferenceFence } from '../erasure/reference-fence.ts';
 import { advanceContentSequence } from '../content-sequence.ts';
 import { MediaInvalid, MediaMissing, MediaStale, MediaUnavailable } from '../media/store.ts';
 import {
@@ -329,7 +330,9 @@ export class MediaRenditionStore {
       output.width > profile.width
     )
       throw new MediaInvalid('invalid rendition output');
+    const outputDigest = sha(output.bytes);
     return this.transaction(async (client) => {
+      await withReferenceFence(client, outputDigest, async () => {});
       const current = (
         await client.query(
           `SELECT p.id FROM media.asset a
@@ -380,7 +383,7 @@ export class MediaRenditionStore {
       ).rows[0];
       if (alive?.transaction_id !== bounds.transaction_id)
         throw new MediaStale('rendition persistence lost its owner transaction');
-      if (digest !== sha(output.bytes)) throw new MediaInvalid('rendition object digest differs');
+      if (digest !== outputDigest) throw new MediaInvalid('rendition object digest differs');
       // Object read-back can consume a lease. A late writer leaves no deliverable
       // representation; retry can reuse immutable bytes under the same asset.
       if (

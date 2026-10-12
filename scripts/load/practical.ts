@@ -1,3 +1,4 @@
+import { createWorkActivationEnvironment } from '../../services/main/src/modules/work/activate.ts';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { runQaStartupChildAsync } from '../qa/stack-startup.ts';
 import { captureFusekiQueryPlan } from './fuseki-plan.ts';
@@ -81,10 +82,11 @@ const needed = (name: string) => {
 const stackRunId = () => process.env.REZICS_LOAD_STACK_RUN_ID ?? needed('REZICS_LOAD_RUN_ID');
 const upstream = needed('FUSEKI_URL');
 const meter = startFusekiMeter(upstream);
-const env: WorkActivationEnvironment = { fuseki: new FusekiClient(upstream),
-  lineage: { dataEpoch: needed('MAIN_DATA_EPOCH'), routingEpoch: needed('MAIN_ROUTING_EPOCH') },
-  objectDirectory: needed('MAIN_OBJECT_DIRECTORY') };
 let contentPool = new Pool({ connectionString: needed('CONTENT_DATABASE_URL') });
+const env: WorkActivationEnvironment = createWorkActivationEnvironment({
+  get referenceFencePool() { return contentPool; }, fuseki: new FusekiClient(upstream),
+  lineage: { dataEpoch: needed('MAIN_DATA_EPOCH'), routingEpoch: needed('MAIN_ROUTING_EPOCH') },
+  objectDirectory: needed('MAIN_OBJECT_DIRECTORY') });
 let accessPool = new Pool({ connectionString: needed('ACCESS_DATABASE_URL') });
 let relayPool = new Pool({ connectionString: needed('ACCOUNT_RELAY_DATABASE_URL') });
 let poolsOpen = true;

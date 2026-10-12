@@ -1,3 +1,4 @@
+import { createWorkActivationEnvironment } from './modules/work/activate.ts';
 import { AccessExposure } from './modules/access/exposure.ts';
 import { PostgresReceiptCustodyStore, ReceiptCustody } from './modules/outbox/receipt-custody.ts';
 import { proofRetirementSender } from './modules/graph/slim-command.ts';
@@ -269,7 +270,7 @@ export async function composeMain(input: ComposeMainInput) {
     secretAccessKey: config.MAIN_S3_SECRET_KEY, prefix: 'semantic/work/',
   }) : undefined;
   if (workObjects) await workObjects.initialize();
-  const environment = {
+  const environment = createWorkActivationEnvironment({
     referenceFencePool: contentPool,
     eventTemporalAccess: pool,
     addresses: new AliasRegistry(pool),
@@ -280,7 +281,7 @@ export async function composeMain(input: ComposeMainInput) {
     ...(workObjects ? { receiptCustody: new ReceiptCustody(new PostgresReceiptCustodyStore(pool),
       workObjects, fuseki, config.FUSEKI_TITLE_ADMISSION_KEY,
       proofRetirementSender(fusekiUrl, config.FUSEKI_COMMAND_TOKEN)) } : {}),
-  };
+  });
   const serialStats = recommendationRelayPool
     ? new SerialStatisticsProjection(pool, recommendationRelayPool, contentPool, environment) : undefined;
   const zoneBrowse = recommendationRelayPool

@@ -21,10 +21,10 @@ import { ERASURE_PREFLIGHT_LIMITS, journalErasure, readErasure, completeErasureT
 import { completePendingContentErasures, contentErasureDigest, ErasureDenied, ErasureService,
   requestContentErasure, type ContentErasureInput } from '../src/modules/erasure/request.ts';
 import { withReferenceFence } from '../src/modules/erasure/reference-fence.ts';
-import { assetIri, assetNamespace, assetVariant, MediaStore } from '../src/modules/media/store.ts';
+import { assetIri, assetNamespace, assetVariant, MediaStore, MediaStale } from '../src/modules/media/store.ts';
 import { MediaErasureUnsupported } from '../src/modules/media/erasure.ts';
 import { PostgresReceiptCustodyStore, ReceiptCustody, type SlimEnvelope } from '../src/modules/outbox/receipt-custody.ts';
-import { GRAPHS, hash, prepareComponent, prepareWorkComponent, type WorkActivationEnvironment }
+import { GRAPHS, hash, prepareComponent, prepareWorkComponent, createWorkActivationEnvironment, type WorkActivationEnvironment }
   from '../src/modules/work/activate.ts';
 import { METADATA_PROFILE, metadataDigest, type MetadataEditionState } from '../src/modules/work/metadata-schema.ts';
 
@@ -182,8 +182,8 @@ async function fixture(run: (f: Awaited<ReturnType<typeof environment>>) => Prom
 
 async function environment(pool: Pool, objectDirectory: string, relay: Pool, accessPool: Pool) {
   const graph = new Graph(), objects = new Objects(), core = new ContentCore(pool);
-  const env: WorkActivationEnvironment = { fuseki: graph, lineage: graph.lineage,
-    referenceFencePool: pool, objectDirectory, workObjects: objects.namespace() };
+  const env = createWorkActivationEnvironment<WorkActivationEnvironment>({ fuseki: graph, lineage: graph.lineage,
+    referenceFencePool: pool, objectDirectory, workObjects: objects.namespace() });
   const service = new ErasureService(relay, pool, accessPool, objects.namespace);
   const admissions = new Map<string, RegisteredAdmission>();
   const outcomes: string[] = [];
@@ -1029,3 +1029,154 @@ test('D3 suppression receives only the remaining shared deadline', async () => {
       .toEqual([{ availability: 'available' }]);
   });
 }, 30_000);
+
+
+function referenceFenceObserver(pool: Pool, digest: string, attempted: () => void): Pool {
+  return new Proxy(pool, { get(target, property) {
+    if (property === 'connect') return async () => {
+      const client = await target.connect();
+      return new Proxy(client, { get(connection, method) {
+        if (method === 'query') return async (sql: string, values?: unknown[]) => {
+          if (sql.includes('rezics-payload-reference:') && values?.[0] === digest) attempted();
+          return connection.query(sql, values);
+        };
+        const value = Reflect.get(connection, method, connection);
+        return typeof value === 'function' ? value.bind(connection) : value;
+      } }) as PoolClient;
+    };
+    const value = Reflect.get(target, property, target);
+    return typeof value === 'function' ? value.bind(target) : value;
+  } }) as Pool;
+}
+
+for (const kind of ['original', 'revision', 'rendition'] as const) for (const stale of [false, true])
+  test(`Media ${kind} writer ${stale ? 'refuses a changed owner after' : 'waits through'} the held deletion fence`, async () => {
+  await fixture(async f => {
+    const image = await sharp({ create: { width: 16, height: 16, channels: 3, background: '#429fde' } }).png().toBuffer();
+    const initial = await media(f, image), { store, upload } = initial;
+    const actor = (await f.pool.query<{ owner: string }>('SELECT owner FROM media.asset WHERE id=$1', [upload.asset])).rows[0]!.owner;
+    const reservation = kind === 'rendition' ? null : await store.reserveUpload({ admissionId: randomUUID(),
+      principalId: randomUUID(), actingSubject: actor, authorityEpoch: '1', requestDigest: sha256(randomUUID()) },
+    { asset: upload.asset, disclosure: 'private', mediaType: 'image/png', byteLength: image.length, sha256: hash(image) });
+    const verdict = { status: 'activated' as const, sha256: hash(image), byteLength: image.length,
+      mediaType: 'image/png' as const, width: 16, height: 16 };
+    if (kind === 'revision') await store.settleUpload(reservation!.upload, verdict,
+      signal => f.objects.namespace(reservation!.objectNamespace).put(image, signal));
+    let lease: Awaited<ReturnType<typeof store.renditions.leaseNext>> = null;
+    const output = { bytes: Buffer.from('exact derived bytes'), type: 'image/webp' as 'image/webp' | 'image/avif', width: 16, height: 16 };
+    if (kind === 'rendition') {
+      const target = resource();
+      const selection = await store.selectAvatar({ admissionId: randomUUID(), principalId: randomUUID(),
+        actingSubject: actor, authorityEpoch: '1', requestDigest: sha256(randomUUID()) },
+      { target, context: 'urn:rezics:media:context:default', expectedSelection: null, asset: upload.asset, crop: null });
+      const use = (await f.pool.query<{ use_id: string }>('SELECT use_id FROM media.selection_revision WHERE id=$1', [selection.id])).rows[0]!.use_id;
+      await store.renditions.queue(await store.renditions.requestBasis(use), { width: 16, height: 16 });
+      lease = await store.renditions.leaseNext();
+      expect(lease).not.toBeNull();
+      output.type = lease!.profile.includes('-avif-') ? 'image/avif' : 'image/webp';
+    }
+    const digest = kind === 'rendition' ? hash(output.bytes) : hash(image);
+    let entered!: () => void, release!: () => void, attempted!: () => void;
+    const ready = new Promise<void>(resolve => { entered = resolve; });
+    const pause = new Promise<void>(resolve => { release = resolve; });
+    const waiting = new Promise<void>(resolve => { attempted = resolve; });
+    const holder = withReferenceFence(f.relay, digest, async () => { entered(); await pause; });
+    await ready;
+    const before = (await f.pool.query('SELECT id,byte_digest FROM media.representation WHERE asset_id=$1 ORDER BY id', [upload.asset])).rows;
+    const observed = referenceFenceObserver(f.pool, digest, attempted);
+    const writerStore = new MediaStore(observed, new ContentCore(observed));
+    let persisted = false;
+    const write = kind === 'original' ? writerStore.settleUpload(reservation!.upload, verdict, async signal => {
+      persisted = true; return f.objects.namespace(reservation!.objectNamespace).put(image, signal);
+    }) : kind === 'revision' ? writerStore.recordAssetRevision(reservation!.upload)
+      : writerStore.renditions.settle(lease!, output, async signal => {
+        persisted = true; return f.objects.namespace(upload.objectNamespace).put(output.bytes, signal);
+      });
+    try {
+      expect(await Promise.race([waiting.then(() => 'waiting'), write.then(() => 'finished')])).toBe('waiting');
+      expect(persisted).toBe(false);
+      expect((await f.accessPool.query('SELECT id,byte_digest FROM media.representation WHERE asset_id=$1 ORDER BY id', [upload.asset])).rows).toEqual(before);
+      expect((await f.accessPool.query('SELECT draft_head FROM content.variant WHERE id=$1', [assetVariant(upload.asset)])).rows)
+        .toEqual([{ draft_head: initial.revision }]);
+      const stateStore = new MediaStore(f.accessPool, new ContentCore(f.accessPool));
+      if (stale) await stateStore.changeState({ admissionId: randomUUID(), principalId: randomUUID(),
+        actingSubject: actor, authorityEpoch: '1', requestDigest: sha256(randomUUID()) },
+      { asset: upload.asset, expectedState: (await stateStore.readAsset(upload.asset))!.state,
+        disclosure: 'private', lifecycle: 'deleted' });
+    } finally { release(); await holder; }
+    if (stale) {
+      if (kind === 'rendition') expect(await write).toBe(false);
+      else await expect(write).rejects.toBeInstanceOf(MediaStale);
+      expect(persisted).toBe(false);
+      expect((await f.accessPool.query('SELECT id,byte_digest FROM media.representation WHERE asset_id=$1 ORDER BY id', [upload.asset])).rows).toEqual(before);
+      return;
+    }
+    const result = await write;
+    if (kind === 'rendition') expect(result).toBe(true);
+    else if (kind === 'original') expect(result).toMatchObject({ status: 'activated' });
+    else expect(result).toMatchObject({ revision: expect.any(String) });
+    expect((await f.pool.query('SELECT 1 FROM media.representation WHERE asset_id=$1 AND byte_digest=$2', [upload.asset, digest])).rowCount).toBeGreaterThan(0);
+  });
+});
+
+test('erasure holds the digest fence while a cooperating Content writer waits for its transaction', async () => {
+  await fixture(async f => {
+    const owner = resource(), contribution = f.contribution(owner);
+    const payload = readFileSync(join(f.objectDirectory, contribution.payload), 'utf8');
+    let attempted!: () => void;
+    const waiting = new Promise<void>(resolve => { attempted = resolve; });
+    let writer: Promise<unknown> | undefined, linked = false;
+    const writerPool = boundedPool({ ...cluster!.connection, database: f.pool.options.database, max: 2 });
+    const observed = referenceFenceObserver(writerPool, contribution.payload, attempted);
+    f.objects.beforeDelete = async () => {
+      expect((await f.accessPool.query<{ locked: boolean }>(
+        "SELECT pg_try_advisory_xact_lock(hashtextextended('rezics-payload-reference:' || $1,0)) AS locked",
+        [contribution.payload])).rows[0]?.locked).toBe(false);
+      writer = withReferenceFence(observed, contribution.payload, async () => {
+        linked = true;
+        return f.core.saveDraft({ operationId: randomUUID(), variant: { id: `urn:rezics:variant:${randomUUID()}`,
+          resourceId: resource(), language: { kind: 'zxx' }, direction: 'none' }, expectedHead: null,
+          model: 'fixture', sourceRevision: null, provenance: {},
+          serializedJson: payload });
+      });
+      await waiting;
+      expect(linked).toBe(false);
+    };
+    try {
+      const erased = await f.call(f.input(owner, [contribution.id]));
+      await writer;
+      expect(linked).toBe(true);
+      expect((await f.pool.query('SELECT 1 FROM content.revision WHERE byte_digest=$1 AND availability=\'available\'',
+        [contribution.payload])).rowCount).toBe(1);
+      expect(erased.report.stage).toBe('reconciling');
+    } finally { await writer?.catch(() => undefined); await writerPool.end(); }
+  });
+});
+
+
+test('a writer environment refuses an unavailable reference fence at construction', async () => {
+  await fixture(async f => {
+    expect(createWorkActivationEnvironment(f.env).referenceFencePool).toBe(f.pool);
+    expect(() => createWorkActivationEnvironment({ ...f.env, referenceFencePool: undefined }))
+      .toThrow('reference fence pool is required when constructing a writer environment');
+    expect(() => createWorkActivationEnvironment({ ...f.env, referenceFencePool: {} as Pool }))
+      .toThrow('reference fence pool is required when constructing a writer environment');
+    expect(f.graph.commands).toEqual([]);
+  });
+});
+
+
+test('a borrowed reference fence remains held until its writer transaction commits', async () => {
+  await fixture(async f => {
+    const client = await f.pool.connect(), digest = sha256('borrowed existing bytes');
+    try {
+      await client.query('BEGIN');
+      await withReferenceFence(client, digest, async borrowed => { expect(borrowed).toBe(client); });
+      const lock = () => f.relay.query<{ held: boolean }>(
+        "SELECT pg_try_advisory_xact_lock(hashtextextended('rezics-payload-reference:' || $1,0)) AS held", [digest]);
+      expect((await lock()).rows[0]?.held).toBe(false);
+      await client.query('COMMIT');
+      expect((await lock()).rows[0]?.held).toBe(true);
+    } finally { await client.query('ROLLBACK'); client.release(); }
+  });
+});

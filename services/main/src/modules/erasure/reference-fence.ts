@@ -5,7 +5,9 @@ import type { Pool, PoolClient } from 'pg';
 export async function withReferenceFence<T>(database: Pool | PoolClient, digest: string,
   write: (client: PoolClient) => Promise<T>): Promise<T> {
   if (!/^[0-9a-f]{64}$/.test(digest)) throw new Error('invalid reference fence digest');
-  const borrowed = !('connect' in database);
+  // PoolClient also exposes Client.connect; release identifies a checked-out
+  // client whose existing transaction must retain the lock through commit.
+  const borrowed = 'release' in database;
   const client = borrowed ? database as PoolClient : await (database as Pool).connect();
   try {
     if (!borrowed) await client.query('BEGIN');
