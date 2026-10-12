@@ -8,7 +8,7 @@ import { restoreWorkProfileCorpus, workProfileDimensions, WORK_PROFILE_DIMENSION
   type CorpusApi, type CorpusDimensions } from '../../../scripts/load/work-profile-corpus.ts';
 import { startMediaStack, type MediaStack } from './media-support.ts';
 import { readRetainedSeed, seedAuthorName, seedApi, seedCensus, seedSelection,
-  type RetainedSeedCut } from '../support/seed-checkpoints.ts';
+  seedDirectory, type RetainedSeedCut } from '../support/seed-checkpoints.ts';
 
 async function openCopy(input: CorpusRestoreSmokeInput) {
   const env = { ...input.apps, REZICS_QA_RUN_ID: input.runId,
@@ -46,7 +46,7 @@ test('retained checkpoints restore exact populations and identities into isolate
   let isolatedWrite = false;
   const targets: string[] = [];
   const driver = createCorpusBackupDriver({ sourceRunId: retained.sourceRunId,
-    directory: join(root, '.temp/work-profiles/seed-checkpoints'), resumeSource: false, restoreResourceClass: 'ordinary',
+    directory: seedDirectory, resumeSource: false, restoreResourceClass: 'ordinary',
     quiesce: async () => { throw new Error('Routine TEST never builds a checkpoint'); },
     async smokeRead(input) {
       const stack = await openCopy(input);

@@ -20,7 +20,7 @@ test('explicit preparation retains one API-built store at three population cuts'
   const { grantFixtureAuthority } = await import('../../../services/main/src/modules/access/fixture-authority.ts');
   const { prepareWorkProfileCorpus, workProfileDimensions, WORK_PROFILE_SCALES }
     = await import('../../../scripts/load/work-profile-corpus.ts');
-  const { seedDirectory, retainedSeedPath, seedAuthorName, seedApi, seedCensus,
+  const { seedDirectory, retainedSeedPath, seedAuthorName, seedApi, seedCensus, acquireSeedBuildLock,
     saveRetainedSeed, readRetainedSeed } = await import('../support/seed-checkpoints.ts');
   const { initializeSeedCheckpointPopulation, growSeedCheckpointPopulation }
     = await import('../support/seed-checkpoint-population.ts');
@@ -35,7 +35,9 @@ test('explicit preparation retains one API-built store at three population cuts'
   if (!sourceRunId) throw new Error('Run the explicit seed BUILD through goalctl');
   let source: Awaited<ReturnType<typeof startMediaStack>> | undefined;
   let sourceStopped = false;
+  let releaseSeedBuildLock: (() => void) | undefined;
   try {
+    releaseSeedBuildLock = acquireSeedBuildLock(sourceRunId);
     if (existsSync(retainedSeedPath)) {
       try {
         const saved = readRetainedSeed();
@@ -146,7 +148,6 @@ test('explicit preparation retains one API-built store at three population cuts'
         backupMs: totalMs - stageStartupMs - stageBuildMs, totalMs };
       retained.actor = actor;
       retained.cuts.push({ manifest, works: structuredClone(works), population: structuredClone(population!), timing });
-      saveRetainedSeed(retained);
       console.log('retained seed stage seconds', scale, JSON.stringify(Object.fromEntries(
         Object.entries(timing).map(([key, value]) => [key.replace(/Ms$/, 'Seconds'), value / 1000]))));
       if (scale === 'medium') {
@@ -180,11 +181,16 @@ test('explicit preparation retains one API-built store at three population cuts'
       }
     }
     expect(works).toHaveLength(64);
+    saveRetainedSeed(retained);
     console.log('largest retained seed build seconds', retained.cuts[2]!.timing.totalMs / 1000,
       'total build workflow seconds', (performance.now() - startedAt) / 1000);
   } finally {
-    if (source && !sourceStopped) await source.stop();
-    await shutdownTelemetry();
-    await sink.stop();
+    try {
+      if (source && !sourceStopped) await source.stop();
+      await shutdownTelemetry();
+      await sink.stop();
+    } finally {
+      releaseSeedBuildLock?.();
+    }
   }
 }, 1_920_000);
