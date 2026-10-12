@@ -5026,6 +5026,11 @@ async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
     if (unbuilt) return unbuilt;
     const generated = regenerateGeneratedOutputs(merge);
     if (generated) return generated;
+    // Again after the regeneration: the pin is derived from the generated model, so a shape change moves it
+    // in that commit and not in the worker's. Checked only before it, a recipe shape change put a pin
+    // without an image on main for fifty minutes on 2026-10-12.
+    const unbuiltAfterRegeneration = missingPinnedImage(merge.worktree, root);
+    if (unbuiltAfterRegeneration) return unbuiltAfterRegeneration;
     const run = () => typecheck(merge).then(refusal => refusal ?? unitGate(merge));
     return skipTypes && skipUnits ? run() : onLane(run);
   };
