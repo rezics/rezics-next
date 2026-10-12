@@ -11,6 +11,7 @@ const root = resolve(import.meta.dir, '../../..');
 // explicit so moving an owner reader requires reviewing its failure boundary.
 const restoreClosureFiles = [
   'services/main/src/infrastructure/owner-failure.ts',
+  'services/main/src/infrastructure/fuseki.ts',
   'services/main/src/modules/owner/operations.ts',
   'services/main/src/modules/owner/restore-release-binding.ts',
   'services/main/src/modules/owner/object-coverage.ts',
@@ -21,12 +22,40 @@ const restoreClosureFiles = [
   'services/main/src/modules/erasure/replay-graph.ts',
   'services/main/src/modules/erasure/replay-objects.ts',
   'services/main/src/modules/erasure/graph.ts',
+  // Completion rereads the journal, Content tombstones/sources, supersessions,
+  // erased credentials and the complete journal digest before final settlement.
+  'services/main/src/modules/erasure/journal.ts',
+  'services/main/src/modules/erasure/content.ts',
+  'services/main/src/modules/erasure/replay-supersessions.ts',
+  'services/main/src/modules/erasure/account.ts',
+  'services/main/src/modules/erasure/core-journal-coverage.ts',
   'services/main/src/modules/outbox/relay.ts',
+  'services/main/src/modules/outbox/account-deletion-journal.ts',
   'services/main/src/modules/outbox/receipt-custody.ts',
   'services/main/src/modules/work/restore-lineage.ts',
   'services/main/src/modules/work/history.ts',
+  'services/main/src/modules/work/access-recovery-coverage.ts',
+  'services/main/src/modules/work/pg-recovery-frontier.ts',
+  'services/main/src/modules/work/content-recovery-coverage.ts',
   'services/main/src/modules/semantic/model-custody.ts',
   'services/main/src/infrastructure/immutable-objects.ts',
+  // Operator completion observes release, prepares membership, then commits
+  // owner LOGIN and confirms it. The API owner does not enable database roles.
+  'services/main/src/modules/structure/membership-normalize.ts',
+  'scripts/ops/restore.ts',
+] as const;
+
+// These modules also contain unrelated publication/authoring wrappers. Audit
+// the completion reader's actual AST range, rather than changing that ownership.
+const scopedRestoreClosure = [
+  {
+    file: 'services/main/src/modules/outbox/recovery-coverage-head.ts',
+    functions: ['assertCurrentRecoveryCoverageHead'],
+  },
+  {
+    file: 'services/content/src/comments.ts',
+    functions: ['revisionsWithOpenCommentSource'],
+  },
 ] as const;
 
 interface AstMatch {
@@ -36,7 +65,7 @@ interface AstMatch {
   metaVariables?: { multi?: { ARGS?: { text: string }[] } };
 }
 
-function astMatches(selector: string[], input?: string): AstMatch[] {
+function rawAstMatches(selector: string[], files: readonly string[], input?: string): AstMatch[] {
   const output = execFileSync(
     'task',
     [
@@ -47,7 +76,7 @@ function astMatches(selector: string[], input?: string): AstMatch[] {
       'typescript',
       '--json=compact',
       ...selector,
-      ...(input === undefined ? restoreClosureFiles : ['--stdin']),
+      ...(input === undefined ? files : ['--stdin']),
     ],
     {
       cwd: root,
@@ -59,6 +88,32 @@ function astMatches(selector: string[], input?: string): AstMatch[] {
     },
   );
   return JSON.parse(output) as AstMatch[];
+}
+
+let completionReaderRanges: AstMatch[] | undefined;
+
+function astMatches(selector: string[], input?: string): AstMatch[] {
+  if (input !== undefined) return rawAstMatches(selector, [], input);
+  const scopedFiles = scopedRestoreClosure.map(({ file }) => file);
+  if (!completionReaderRanges) {
+    const declarations = rawAstMatches(['--kind', 'function_declaration'], scopedFiles);
+    completionReaderRanges = scopedRestoreClosure.flatMap(({ file, functions }) =>
+      functions.map((name) => {
+        const matches = declarations.filter(
+          (declaration) => declaration.file.endsWith(file) &&
+            new RegExp(`\\bfunction\\s+${name}\\b`).test(declaration.text),
+        );
+        expect(matches).toHaveLength(1);
+        return matches[0]!;
+      }),
+    );
+  }
+  return rawAstMatches(selector, [...restoreClosureFiles, ...scopedFiles]).filter(
+    (match) => !scopedFiles.some((file) => match.file.endsWith(file)) ||
+      completionReaderRanges!.some((reader) => reader.file === match.file &&
+        reader.range.byteOffset.start <= match.range.byteOffset.start &&
+        reader.range.byteOffset.end >= match.range.byteOffset.end),
+  );
 }
 
 function wrapperViolations(catches: AstMatch[], throws: AstMatch[]): string[] {
@@ -95,6 +150,52 @@ test('restore closure catch wrappers retain the nearest caught error as cause', 
   expect(catches.length).toBeGreaterThan(0);
   expect(throws.length).toBeGreaterThan(0);
   expect(wrapperViolations(catches, throws)).toEqual([]);
+});
+
+test('one owner completion boundary classifies every phase before permanent settlement', () => {
+  const files = ['services/main/src/modules/owner/operations.ts'];
+  const methods = rawAstMatches(['--kind', 'method_definition'], files);
+  const restore = methods.filter((method) => /\basync\s+reconcileRestore\s*\(/.test(method.text));
+  expect(restore).toHaveLength(1);
+  const method = restore[0]!;
+  const boundaries = rawAstMatches(['--kind', 'try_statement'], files).filter(
+    (statement) => statement.range.byteOffset.start >= method.range.byteOffset.start &&
+      statement.range.byteOffset.end <= method.range.byteOffset.end &&
+      statement.text.includes('this.completeReleasedRestore(') &&
+      statement.text.includes('this.settleRestoreOutcome('),
+  ).sort((a, b) =>
+    (a.range.byteOffset.end - a.range.byteOffset.start) -
+    (b.range.byteOffset.end - b.range.byteOffset.start),
+  );
+  expect(boundaries.length).toBeGreaterThan(0);
+  const boundary = boundaries[0]!;
+  const handlers = rawAstMatches(['--kind', 'catch_clause'], files).filter(
+    (caught) => caught.range.byteOffset.start > boundary.range.byteOffset.start &&
+      caught.range.byteOffset.end <= boundary.range.byteOffset.end,
+  ).sort((a, b) => b.range.byteOffset.start - a.range.byteOffset.start);
+  const handler = handlers[0]!;
+  expect(handler).toBeDefined();
+  const body = Buffer.from(boundary.text).subarray(
+    0, handler.range.byteOffset.start - boundary.range.byteOffset.start,
+  ).toString('utf8');
+  for (const call of [
+    'requireQualification(',
+    'this.releaseRetainedErasures(',
+    'releaseRestoredGraphHold(',
+    'this.completeReleasedRestore(',
+    'this.settleRestoreOutcome(',
+  ]) expect(body).toContain(call);
+  // Moving classification to a lower helper leaves another phase unprotected.
+  expect(rawAstMatches(['--pattern', 'isRestoreTransientFailure($$$ARGS)'], files)).toHaveLength(1);
+  expect(handler.text).toMatch(/if\s*\(isRestoreTransientFailure\(error\)/);
+  expect(handler.text).toContain('throw new OwnerOperationUnavailable(');
+  const classify = handler.text.indexOf('isRestoreTransientFailure(error)');
+  const unavailable = handler.text.indexOf('throw new OwnerOperationUnavailable(');
+  const mismatch = handler.text.indexOf('error instanceof RestoreLineageConflict');
+  const settle = handler.text.indexOf('this.settleRestoreOutcome(');
+  expect(classify).toBeLessThan(unavailable);
+  expect(unavailable).toBeLessThan(mismatch);
+  expect(mismatch).toBeLessThan(settle);
 });
 
 test('the AST guard detects cause loss without matching an outer catch variable', () => {

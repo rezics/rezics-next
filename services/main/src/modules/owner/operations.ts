@@ -343,7 +343,6 @@ export class OwnerOperations {
           'SELECT generation::text FROM relay.recovery_coverage_head WHERE consumer = $1',
           [coverage.relay.consumer]);
         const generation = retained.rows[0]?.generation ?? null;
-        let conflict: RestoreLineageConflict | undefined;
         try {
           if (resources.erasures) await this.assertIndependentRetainedRelay(resources, client);
           const erasures = resources.erasures;
@@ -382,69 +381,83 @@ export class OwnerOperations {
                   coverage, input.sealedCoverage, operationId, row.id, Boolean(bindings?.qualification), clients, releaseGraph) } : {}),
               deletions: { accountPool: resources.accountPool, hmacKey: resources.hmacKey,
                 sealedSets: input.sealedDeletionSets } }, client);
+          await this.settleRestoreOutcome(client, row.id, coverage, generation);
+          return await this.reconciliation(client, row.id, replayed) as RestoreReconciliationView;
         } catch (error) {
-          // The operation stays running; the same key resumes from its durable record.
-          if (error instanceof RestoreInterrupted) throw new OwnerOperationUnavailable(error.message, { cause: error });
-          if (!(error instanceof RestoreLineageConflict)) throw error;
-          conflict = error;
-        }
-        await client.query('BEGIN');
-        try {
-          if (conflict) {
-            const owner = /Account/.test(conflict.message) ? 'account'
-              : /Access/.test(conflict.message) ? 'access'
-              : /Content/.test(conflict.message) ? 'content'
-              : /relay|handoff|coverage head|erasure/i.test(conflict.message) ? 'relay'
-              : /object/i.test(conflict.message) ? 'object' : 'graph';
-            await client.query(`INSERT INTO relay.owner_reconciliation_item
-              (reconciliation_id, ordinal, owner, item_kind, item_ref, disposition)
-              VALUES ($1,1,$2,'receipt','urn:rezics:dataset:product',$3)`,
-            [row.id, owner, /unavailable|missing/i.test(conflict.message) ? 'unavailable'
-              : /corrupt/i.test(conflict.message) ? 'corrupt' : 'conflict']);
-            await client.query(`UPDATE relay.owner_reconciliation SET state = 'held',
-              hold_reason = $2 WHERE id = $1`, [row.id, conflict.message.slice(0, 500)]);
-          } else {
-            const verified = await client.query<{ generation: string }>(
-              'SELECT generation::text FROM relay.recovery_coverage_head WHERE consumer = $1',
-              [coverage.relay.consumer]);
-            if (!generation || verified.rows[0]?.generation !== generation) {
-              throw new OwnerOperationBusy('retained recovery coverage moved during reconciliation');
-            }
-            const cuts = [
-              ['account', null, null, coverage.account.rowDigest,
-                coverage.accountPg.systemIdentifier, coverage.accountPg.flushedLsn],
-              ['access', null, null, coverage.accessStateDigest, null, null],
-              ['content', coverage.content.dataEpoch, coverage.content.sequence,
-                digest(coverage.content), null, null],
-              ['graph', coverage.priorDataEpoch, coverage.priorSequence,
-                digest([coverage.priorDataEpoch, coverage.priorSequence]), null, null],
-              ['object', null, null, coverage.objects.objectDigest, null, null],
-              ['relay', coverage.relay.dataEpoch, coverage.relay.sequence,
-                coverage.relay.batchDigest, null, null],
-            ] as const;
-            for (const [owner, epoch, sequence, coverageDigest, cluster, lsn] of cuts) {
-              await client.query(`INSERT INTO relay.owner_reconciliation_cut
-                (reconciliation_id, owner, data_epoch, sequence, coverage_digest, cluster_id,
-                 wal_lsn, status) VALUES ($1,$2,$3,$4,$5,$6,$7,'matched')`,
-              [row.id, owner, epoch, sequence, coverageDigest, cluster, lsn]);
-            }
-            const outcome = digest(coverage);
-            await client.query(`INSERT INTO relay.owner_reconciliation_item
-              (reconciliation_id, ordinal, owner, item_kind, item_ref, disposition, evidence_digest)
-              VALUES ($1,1,'graph','receipt','urn:rezics:dataset:product','matched',$2)`,
-            [row.id, outcome]);
-            await client.query(`UPDATE relay.owner_reconciliation SET state = 'reconciled',
-              coverage_generation = $2, outcome_digest = $3, completed_at = clock_timestamp()
-              WHERE id = $1`, [row.id, generation, outcome]);
+          // Classify the entire pass before any permanent hold, including opened
+          // completion and the final outcome write. Wrappers retain owner causes.
+          if (isRestoreTransientFailure(error) || error instanceof RestoreInterrupted) {
+            const interruption = error instanceof RestoreInterrupted ? error
+              : new RestoreInterrupted('restore owner completion was interrupted', { cause: error });
+            throw new OwnerOperationUnavailable(interruption.message, { cause: interruption });
           }
-          await client.query('COMMIT');
-        } catch (error) { await client.query('ROLLBACK'); throw error; }
-        return await this.reconciliation(client, row.id, replayed) as RestoreReconciliationView;
+          if (!(error instanceof RestoreLineageConflict)) throw error;
+          await this.settleRestoreOutcome(client, row.id, coverage, generation, error);
+          return await this.reconciliation(client, row.id, replayed) as RestoreReconciliationView;
+        }
       } finally {
         try { if (locked) await this.unlock(client, operationId); }
         finally { client.release(); }
       }
     } finally { await close(); }
+  }
+
+  private async settleRestoreOutcome(client: PoolClient, id: string, coverage: RecoveryCoverage,
+    generation: string | null, conflict?: RestoreLineageConflict): Promise<void> {
+    if (!coverage.content || !coverage.objects) {
+      throw new OwnerOperationInvalid('signed restore coverage lacks owner evidence');
+    }
+    await client.query('BEGIN');
+    try {
+      if (conflict) {
+        const owner = /Account/.test(conflict.message) ? 'account'
+          : /Access/.test(conflict.message) ? 'access'
+          : /Content/.test(conflict.message) ? 'content'
+          : /relay|handoff|coverage head|erasure/i.test(conflict.message) ? 'relay'
+          : /object/i.test(conflict.message) ? 'object' : 'graph';
+        await client.query(`INSERT INTO relay.owner_reconciliation_item
+          (reconciliation_id, ordinal, owner, item_kind, item_ref, disposition)
+          VALUES ($1,1,$2,'receipt','urn:rezics:dataset:product',$3)`,
+        [id, owner, /unavailable|missing/i.test(conflict.message) ? 'unavailable'
+          : /corrupt/i.test(conflict.message) ? 'corrupt' : 'conflict']);
+        await client.query(`UPDATE relay.owner_reconciliation SET state = 'held',
+          hold_reason = $2 WHERE id = $1`, [id, conflict.message.slice(0, 500)]);
+      } else {
+        const verified = await client.query<{ generation: string }>(
+          'SELECT generation::text FROM relay.recovery_coverage_head WHERE consumer = $1',
+          [coverage.relay.consumer]);
+        if (!generation || verified.rows[0]?.generation !== generation) {
+          throw new OwnerOperationBusy('retained recovery coverage moved during reconciliation');
+        }
+        const cuts = [
+          ['account', null, null, coverage.account.rowDigest,
+            coverage.accountPg.systemIdentifier, coverage.accountPg.flushedLsn],
+          ['access', null, null, coverage.accessStateDigest, null, null],
+          ['content', coverage.content.dataEpoch, coverage.content.sequence,
+            digest(coverage.content), null, null],
+          ['graph', coverage.priorDataEpoch, coverage.priorSequence,
+            digest([coverage.priorDataEpoch, coverage.priorSequence]), null, null],
+          ['object', null, null, coverage.objects.objectDigest, null, null],
+          ['relay', coverage.relay.dataEpoch, coverage.relay.sequence,
+            coverage.relay.batchDigest, null, null],
+        ] as const;
+        for (const [owner, epoch, sequence, coverageDigest, cluster, lsn] of cuts) {
+          await client.query(`INSERT INTO relay.owner_reconciliation_cut
+            (reconciliation_id, owner, data_epoch, sequence, coverage_digest, cluster_id,
+             wal_lsn, status) VALUES ($1,$2,$3,$4,$5,$6,$7,'matched')`,
+          [id, owner, epoch, sequence, coverageDigest, cluster, lsn]);
+        }
+        const outcome = digest(coverage);
+        await client.query(`INSERT INTO relay.owner_reconciliation_item
+          (reconciliation_id, ordinal, owner, item_kind, item_ref, disposition, evidence_digest)
+          VALUES ($1,1,'graph','receipt','urn:rezics:dataset:product','matched',$2)`,
+        [id, outcome]);
+        await client.query(`UPDATE relay.owner_reconciliation SET state = 'reconciled',
+          coverage_generation = $2, outcome_digest = $3, completed_at = clock_timestamp()
+          WHERE id = $1`, [id, generation, outcome]);
+      }
+      await client.query('COMMIT');
+    } catch (error) { await client.query('ROLLBACK').catch(() => undefined); throw error; }
   }
 
   /** The restored owners with the held-erasure configuration bound to one captured Access generation. */
@@ -581,9 +594,6 @@ export class OwnerOperations {
     } catch (error) {
       // Once the qualification is durable, only a definitive refusal settles
       // the operation as held; an owner interruption leaves it resumable.
-      if (committed && isRestoreTransientFailure(error)) {
-        throw new RestoreInterrupted('qualified restore owner connection was interrupted', { cause: error });
-      }
       if (!committed || error instanceof RestoreLineageConflict || error instanceof RestoreInterrupted
         || isDefinitiveRefusal(error)) throw error;
       throw new RestoreInterrupted(`restore release interrupted: ${
@@ -636,8 +646,6 @@ export class OwnerOperations {
         await assertReleasedErasuresCurrent(this.relay, restored, record.id, captured, erasures.authority,
           { relayClient: client, accessClient, graphRelease }, outerId);
       } catch (error) {
-        if (isRestoreTransientFailure(error)) throw new RestoreInterrupted(
-          'released restore owner comparison was interrupted', { cause: error });
         if (error instanceof RestoreLineageConflict) throw error;
         if (isDefinitiveRefusal(error)) {
           throw new RestoreLineageConflict(error.message, { cause: error });

@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import type { Pool } from 'pg';
 import type {
   FusekiClient,
@@ -15,6 +15,8 @@ import {
   type RestoreChecks,
 } from '../restore.ts';
 import { RecoveryBudget } from '../recovery-set.ts';
+import { FusekiHttpError } from '../../../services/main/src/infrastructure/fuseki.ts';
+import { isRestoreTransientFailure } from '../../../services/main/src/modules/work/restore-lineage.ts';
 
 const dataEpoch = '00000000-0000-4000-8000-000000000051';
 const routingEpoch = '00000000-0000-4000-8000-000000000052';
@@ -496,6 +498,58 @@ test('a pg_roles query failure preserves the committed LOGIN fact', async () => 
     'stop-target',
   ]);
 });
+
+for (const phase of ['before-LOGIN', 'LOGIN-write', 'LOGIN-readback'] as const) {
+  for (const transport of ['Fuseki-503', 'ECONNRESET'] as const) {
+    test(`operator ${phase}: ${transport} preserves retryable causes and same-key completion enables LOGIN once`, async () => {
+      const fixture = restored({ membership: { statuses: [{ needsPreparation: false }, { needsPreparation: false }] } });
+      const original = transport === 'Fuseki-503'
+        ? new FusekiHttpError('Fuseki query returned 503', 503, 'Service Unavailable')
+        : Object.assign(new Error('owner connection reset'), { code: 'ECONNRESET' });
+      const failure = new Error('owner unavailable during login completion', { cause: original });
+      let armed = true;
+      let loginEnabled = false;
+      let loginEffects = 0;
+      const accountQuery = fixture.context.pools.account.query.bind(fixture.context.pools.account);
+      const contentQuery = fixture.context.pools.content.query.bind(fixture.context.pools.content);
+      const account = spyOn(fixture.context.pools.account, 'query').mockImplementation((async (sql: string) => {
+        const loginWrite = sql.startsWith('ALTER ROLE');
+        if (armed && (phase === 'LOGIN-write' && loginWrite || phase === 'LOGIN-readback' && !loginWrite)) {
+          throw failure;
+        }
+        const result = await accountQuery(sql);
+        if (loginWrite && !loginEnabled) { loginEnabled = true; loginEffects++; }
+        return result;
+      }) as typeof fixture.context.pools.account.query);
+      const content = spyOn(fixture.context.pools.content, 'query').mockImplementation((async (sql: string) => {
+        if (armed && phase === 'before-LOGIN') throw failure;
+        return contentQuery(sql);
+      }) as typeof fixture.context.pools.content.query);
+      try {
+        let rejected: unknown;
+        try { await fixture.finishAndVerify(); } catch (error) { rejected = error; }
+        expect(rejected).toBeInstanceOf(Error);
+        expect(isRestoreTransientFailure(rejected)).toBe(true);
+        let cause = rejected;
+        while (cause instanceof Error && cause.cause !== undefined) cause = cause.cause;
+        expect(cause).toBe(original);
+        recordRestoreFailure(fixture.proof, rejected, () => fixture.events.push('stop-target'));
+        expect(fixture.proof).toMatchObject({ state: 'released', reconcileCompleted: true,
+          graphReleaseObserved: true, accessReleaseObserved: true,
+          loginEnabled: phase === 'LOGIN-readback', servingVerified: false });
+        expect(loginEnabled).toBe(phase === 'LOGIN-readback');
+        armed = false;
+        await fixture.finishAndVerify();
+        expect(fixture.proof).toMatchObject({ state: 'verified', loginEnabled: true, servingVerified: true });
+        expect(loginEffects).toBe(1);
+        expect(fixture.events.filter(event => event === 'authenticated-reconciliation')).toHaveLength(2);
+        expect(fixture.events.filter(event => event === 'graph-release-observation')).toHaveLength(2);
+        expect(fixture.events.filter(event => event === 'access-release-observation')).toHaveLength(2);
+        expect(fixture.events).toContain('observe-owner-logins');
+      } finally { account.mockRestore(); content.mockRestore(); }
+    });
+  }
+}
 
 test('membership preparation failure preserves both observed releases and keeps state held', async () => {
   const fixture = restored({

@@ -2,6 +2,7 @@ import { expect, spyOn, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import type { Pool, PoolClient } from 'pg';
+import { FusekiHttpError } from '../../../services/main/src/infrastructure/fuseki.ts';
 import * as admission from '../../../services/main/src/modules/access/admission.ts';
 import * as contentErasure from '../../../services/main/src/modules/erasure/content.ts';
 import * as accountCoverage from '../../../services/account/src/recovery-coverage.ts';
@@ -24,6 +25,8 @@ import { RestoreLineageConflict } from '../../../services/main/src/modules/work/
 import { readGraphErasureProof } from '../../../services/main/src/modules/erasure/graph.ts';
 import { readErasure } from '../../../services/main/src/modules/erasure/journal.ts';
 import * as binding from '../../../services/main/src/modules/owner/restore-release-binding.ts';
+import * as restoreLineage from '../../../services/main/src/modules/work/restore-lineage.ts';
+import * as erasureReconcile from '../../../services/main/src/modules/erasure/reconcile.ts';
 import { ContentCore } from '../../../services/content/src/core.ts';
 import { finishOperatorRestore } from '../../../scripts/ops/restore.ts';
 import { RecoveryRefusal } from '../../../scripts/ops/recovery-set.ts';
@@ -83,6 +86,38 @@ async function preservedOuter(copy: Copy, key: string) {
 
 type QualificationArgs = Parameters<typeof binding.requireQualification>;
 
+function ownerFailure(code: string): Error {
+  return code === 'integrity'
+    ? new RestoreLineageConflict('integrity mismatch: connection timeout ECONNRESET 57P01')
+    : code === '503'
+      ? new FusekiHttpError('Fuseki query returned 503', 503, 'Service Unavailable')
+      : Object.assign(new Error('owner unavailable'), { code });
+}
+
+/** Fault only SQL executed on clients borrowed by this restore pass. */
+function interruptSql(pool: Pool, needle: string, failure: Error) {
+  const connect = pool.connect.bind(pool);
+  let hits = 0;
+  const restores: (() => void)[] = [];
+  const borrowed = spyOn(pool, 'connect').mockImplementation(async () => {
+    const client = await connect();
+    const query = client.query.bind(client);
+    const injected = spyOn(client, 'query').mockImplementation(((sql: string, values?: unknown[]) => {
+      if (sql.includes(needle)) {
+        hits++;
+        throw failure;
+      }
+      return query(sql, values);
+    }) as typeof client.query);
+    restores.push(() => injected.mockRestore());
+    return client;
+  });
+  return { get hits() { return hits; }, restore: () => {
+    borrowed.mockRestore();
+    for (const restore of restores.reverse()) restore();
+  } };
+}
+
 test(
   'OPS12: later-admission restore refuses partial replay and resumes every durable owner interruption without duplicate effects',
   async () => {
@@ -118,6 +153,7 @@ test(
     };
     const attachment = readFileSync(fixture.nativeAccessAttachment!.path);
     const ciphertextDigest = createHash('sha256').update(attachment).digest('hex');
+    let responseStatus: number | undefined;
     const attempt = async (copy: Copy, key: string, input = body) => {
       const attemptStarted = Date.now();
       let deadline: ReturnType<typeof setTimeout> | undefined;
@@ -126,7 +162,11 @@ test(
           finishOperatorRestore(
             operatorContext(fixture, copy),
             {
-              reconcile: (_context, _body, id) => copy.request(id, undefined, input),
+              reconcile: async (_context, _body, id) => {
+                const response = await copy.request(id, undefined, input);
+                responseStatus = response.status;
+                return response;
+              },
             },
             key,
             () => {},
@@ -435,13 +475,8 @@ test(
           ['native graph release', () => spyOn(qualified.fuseki, 'commandWithReceipt')],
         ] as const;
         for (const [site, install, calls = 1] of qualifiedSites) {
-          for (const code of ['ECONNRESET', '57P01', 'integrity']) {
-            const failure =
-              code === 'integrity'
-                ? new RestoreLineageConflict(
-                    'integrity mismatch: connection timeout ECONNRESET 57P01',
-                  )
-                : Object.assign(new Error('owner unavailable'), { code });
+          for (const code of ['503', 'ECONNRESET', '57P01', 'integrity']) {
+            const failure = ownerFailure(code);
             const injected = install().mockImplementationOnce(async () => {
               throw failure;
             });
@@ -450,7 +485,10 @@ test(
               expect(injected).toHaveBeenCalledTimes(calls);
               const failed = await outerOperation(qualified, key);
               expect(failed.state).toBe(code === 'integrity' ? 'held' : 'running');
-              if (code !== 'integrity') expect(failed.hold_reason).toBeNull();
+              if (code !== 'integrity') {
+                expect(responseStatus).toBe(503);
+                expect(failed.hold_reason).toBeNull();
+              }
               expect(failed.erasures).toEqual(interrupted.erasures);
               expect(failed.qualifications).toEqual(interrupted.qualifications);
               expect(failed.releases).toHaveLength(0);
@@ -485,13 +523,8 @@ test(
           'model state object GET',
         ] as const;
         for (const site of innerSites) {
-          for (const code of ['ECONNRESET', '57P01', 'integrity']) {
-            const failure =
-              code === 'integrity'
-                ? new RestoreLineageConflict(
-                    'integrity mismatch: connection timeout ECONNRESET 57P01',
-                  )
-                : Object.assign(new Error('owner unavailable'), { code });
+          for (const code of ['503', 'ECONNRESET', '57P01', 'integrity']) {
+            const failure = ownerFailure(code);
             let hits = 0;
             const stop: (() => void)[] = [];
             const fail = () => {
@@ -891,6 +924,26 @@ test(
             await restoreOuter();
           }
 
+          // Graph release may commit before Access release is attempted. Both
+          // transport forms must leave this qualified key available for resume.
+          for (const code of ['503', 'ECONNRESET']) {
+            const injected = spyOn(admission, 'releaseAccessRecoveryFence').mockImplementationOnce(
+              async () => { throw ownerFailure(code); },
+            );
+            try {
+              await expect(attempt(qualified, key)).rejects.toBeInstanceOf(RecoveryRefusal);
+              expect(responseStatus).toBe(503);
+              expect(injected).toHaveBeenCalledTimes(1);
+              const failed = await outerOperation(qualified, key);
+              expect(failed).toMatchObject({ state: 'running', hold_reason: null });
+              expect(failed.erasures).toEqual(interrupted.erasures);
+              expect(failed.qualifications).toEqual(interrupted.qualifications);
+              expect(failed.releases).toHaveLength(0);
+              await closed(qualified, true);
+              console.info('restore phase interruption proved', { phase: 'Access release', code });
+            } finally { injected.mockRestore(); }
+          }
+
           // Native release and the relay finding commit, while Access rolls back
           // its CAS to the same exact C1. No D import or replay is needed on retry.
           await failAccessCommit(qualified);
@@ -911,6 +964,36 @@ test(
           expect(requalified).not.toHaveBeenCalled();
           expect(graphCommands).toHaveBeenCalledTimes(1);
           graphCommands.mockClear();
+
+          for (const code of ['503', 'ECONNRESET']) {
+            const injected = interruptSql(qualified.resources.accessPool, 'COMMIT', ownerFailure(code));
+            try {
+              await expect(attempt(qualified, key)).rejects.toBeInstanceOf(RecoveryRefusal);
+              expect(responseStatus).toBe(503);
+              expect(injected.hits).toBe(1);
+            } finally { injected.restore(); }
+            expect(await outerOperation(qualified, key)).toEqual(nativeReleased);
+            await closed(qualified, true);
+            console.info('restore phase interruption proved', { phase: 'Access commit', code });
+          }
+
+          // Both releases now commit, but the outer matched outcome rolls back.
+          // The next attempt enters completeReleasedRestore instead of release.
+          for (const code of ['503', 'ECONNRESET']) {
+            const injected = interruptSql(qualified.retainedRelay,
+              'coverage_generation = $2, outcome_digest = $3', ownerFailure(code));
+            try {
+              await expect(attempt(qualified, key)).rejects.toBeInstanceOf(RecoveryRefusal);
+              expect(responseStatus).toBe(503);
+              expect(injected.hits).toBe(1);
+            } finally { injected.restore(); }
+            expect(await outerOperation(qualified, key)).toMatchObject({ state: 'running', hold_reason: null });
+            expect(await graphReleased(qualified)).toBe(true);
+            expect(await accessFence(qualified)).toEqual([
+              { open: true, generation: (BigInt(fixture.generation) + 1n).toString() },
+            ]);
+            console.info('restore phase interruption proved', { phase: 'final outcome write', code });
+          }
 
           await failOuterOutcome(qualified, key);
           try {
@@ -937,6 +1020,42 @@ test(
           expect(graphCommands).not.toHaveBeenCalled();
           expect(imported).not.toHaveBeenCalled();
           expect(requalified).not.toHaveBeenCalled();
+
+          const completionSites = [
+            'opened graph expectation query',
+            'opened graph release proof',
+            'opened erased closure',
+          ] as const;
+          for (const phase of completionSites) {
+            for (const code of ['503', 'ECONNRESET']) {
+              const failure = ownerFailure(code);
+              let hits = 0;
+              const fail = async () => { hits++; throw failure; };
+              const query = qualified.fuseki.query.bind(qualified.fuseki);
+              const injected = phase === 'opened graph expectation query'
+                ? spyOn(qualified.fuseki, 'query').mockImplementation(sparql =>
+                    sparql.includes('SELECT ?savedMainSequence ?reconciledMainSequence ?savedSequence')
+                      ? fail() : query(sparql))
+                : phase === 'opened graph release proof'
+                  ? spyOn(restoreLineage, 'readRestoredGraphReleaseProof').mockImplementationOnce(fail)
+                  : spyOn(erasureReconcile, 'assertReleasedErasuresCurrent').mockImplementationOnce(
+                      async () => { hits++; throw new RestoreLineageConflict('released owner proof unavailable', { cause: failure }); },
+                    );
+              try {
+                await expect(attempt(qualified, key)).rejects.toBeInstanceOf(RecoveryRefusal);
+                expect(responseStatus).toBe(503);
+                expect(hits).toBe(1);
+                expect(await outerOperation(qualified, key)).toEqual(lost);
+                expect(await graphReleased(qualified)).toBe(true);
+                expect((await ownerLogins(qualified)).every(row => !row.rolcanlogin)).toBe(true);
+                expect(maintenance).not.toHaveBeenCalled();
+                expect(graphCommands).not.toHaveBeenCalled();
+                expect(imported).not.toHaveBeenCalled();
+                expect(requalified).not.toHaveBeenCalled();
+                console.info('restore phase interruption proved', { phase, code });
+              } finally { injected.mockRestore(); }
+            }
+          }
 
           // Completion must authenticate every persisted release member, even
           // while live owners already have their exact opened post-state.
@@ -983,6 +1102,37 @@ test(
             }
           }
 
+          // LOGIN is operator-owned and follows a matched API result. Retrying
+          // its interruption must replay that result, never release owners again.
+          for (const phase of ['LOGIN release', 'LOGIN readback'] as const) {
+            for (const code of ['503', 'ECONNRESET']) {
+              const failure = ownerFailure(code);
+              const injected = interruptSql(qualified.owners.account,
+                phase === 'LOGIN release' ? 'ALTER ROLE account LOGIN' : 'FROM pg_roles', failure);
+              try {
+                let caught: unknown;
+                try { await attempt(qualified, key); } catch (error) { caught = error; }
+                expect(caught).toBeInstanceOf(Error);
+                expect(restoreLineage.isRestoreTransientFailure(caught)).toBe(true);
+                expect(responseStatus).toBe(200);
+                expect(injected.hits).toBe(1);
+              } finally { injected.restore(); }
+              const matched = await outerOperation(qualified, key);
+              expect(matched.state).toBe('reconciled');
+              expect(matched.erasures).toEqual(lost.erasures);
+              expect(matched.qualifications).toEqual(lost.qualifications);
+              expect(matched.releases).toEqual(lost.releases);
+              expect((await ownerLogins(qualified)).every(row => row.rolcanlogin)).toBe(
+                phase === 'LOGIN readback',
+              );
+              expect(maintenance).not.toHaveBeenCalled();
+              expect(graphCommands).not.toHaveBeenCalled();
+              expect(imported).not.toHaveBeenCalled();
+              expect(requalified).not.toHaveBeenCalled();
+              console.info('restore phase interruption proved', { phase, code });
+            }
+          }
+
           const released = spyOn(admission, 'releaseAccessRecoveryFence');
           try {
             await attempt(qualified, key);
@@ -1000,6 +1150,7 @@ test(
           expect(imported).not.toHaveBeenCalled();
           expect(requalified).not.toHaveBeenCalled();
           expect(await liveAccess(qualified)).toEqual(accessAfter);
+          expect((await ownerLogins(qualified)).every(row => row.rolcanlogin)).toBe(true);
         } finally {
           requalified.mockRestore();
           imported.mockRestore();

@@ -20,6 +20,8 @@ import * as accessCoverage from '../src/modules/work/access-recovery-coverage.ts
 import * as contentCoverage from '../src/modules/work/content-recovery-coverage.ts';
 import * as pgCoverage from '../src/modules/work/pg-recovery-frontier.ts';
 import * as restoreLineage from '../src/modules/work/restore-lineage.ts';
+import * as restoreBinding from '../src/modules/owner/restore-release-binding.ts';
+import * as erasureReconciliation from '../src/modules/erasure/reconcile.ts';
 import { OwnerOperations, OwnerOperationUnavailable } from '../src/modules/owner/operations.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { releaseRestoredGraphHold, RestoreInterrupted, RestoreLineageConflict,
@@ -131,6 +133,8 @@ class SingleConnectionOwner {
       return { rows: this.deletionMarkers, rowCount: this.deletionMarkers.length };
     } else if (sql.includes('FROM relay.checkpoint')) {
       return { rows: this.checkpoint ? [this.checkpoint] : [], rowCount: this.checkpoint ? 1 : 0 };
+    } else if (sql.includes('current_database() AS database')) {
+      return { rows: [{ database: this.name, instance: '1' }], rowCount: 1 };
     } else if (!sql.startsWith('SET ') && !sql.startsWith('SELECT ')) {
       throw new Error(`Unexpected ${this.name} SQL: ${sql}`);
     }
@@ -471,12 +475,38 @@ function expectBothHeld(run: ReturnType<typeof fixture>) {
  * existing release fixture supplies the independently held owner transactions.
  * Only the composed erasure callback is a seam; error handling and same-key
  * settlement run through OwnerOperations and the real release helper. */
-function outerRestore(run: ReturnType<typeof fixture>, borrowedOwners = false) {
+function outerRestore(run: ReturnType<typeof fixture>, borrowedOwners = false, completion = false) {
   const row = { id: '', request_digest: '', kind: 'restore', scope: 'product',
     state: 'running', hold_reason: null as string | null };
   let disposition: string | null = null;
   let durable = false;
   let qualifications = 0;
+  const failures = { resume: undefined as Error | undefined, outcome: undefined as Error | undefined,
+    record: undefined as Error | undefined, closure: undefined as Error | undefined };
+  const completionSpies = completion ? [
+    spyOn(restoreBinding, 'readBindings').mockImplementation(async () => ({
+      qualification: durable ? 'retained-qualification' : null,
+      release: run.access.open ? 'retained-release' : null,
+    })),
+    spyOn(restoreBinding, 'readErasuresRecord').mockImplementation(async (_client, operation) => {
+      if (failures.record) throw failures.record;
+      expect(operation).toBe('owner:reconcile:qualified-owner-retry:erasures');
+      return { id: 'retained-erasures', consumer: run.coverage.relay.consumer,
+        requestDigest: digest, outcomeDigest: digest, coverageGeneration: '7',
+        erasureEpoch: null, items: 0, cuts: digest };
+    }),
+    spyOn(erasureReconciliation, 'assertReleasedErasuresCurrent').mockImplementation(
+      async (_relay, owners, record, captured, _authority, clients, outerId) => {
+        if (failures.closure) throw failures.closure;
+        expect(record).toBe('retained-erasures');
+        expect(captured).toBe('5');
+        expect(outerId).toBe(row.id);
+        expect(owners.graph?.heldErasure?.cut.priorSequence).toBe('900');
+        expect(clients.graphRelease.saved.main?.sequence).toBe('4');
+        expect(run.access.open).toBe(true);
+        expect(run.fuseki.held).toBe(false);
+      }),
+  ] : [];
   const query = run.relay.client.query.bind(run.relay.client);
   const relaySpy = spyOn(run.relay.client, 'query').mockImplementation((async (sql: string, values: unknown[] = []) => {
     if (sql.includes('pg_try_advisory_lock')) return { rows: [{ locked: true }], rowCount: 1 };
@@ -489,7 +519,10 @@ function outerRestore(run: ReturnType<typeof fixture>, borrowedOwners = false) {
       disposition = sql.includes("'matched'") ? 'matched' : String(values[2]);
       return { rows: [], rowCount: 1 };
     }
-    if (sql.includes('INSERT INTO relay.owner_reconciliation_cut')) return { rows: [], rowCount: 1 };
+    if (sql.includes('INSERT INTO relay.owner_reconciliation_cut')) {
+      if (failures.outcome) throw failures.outcome;
+      return { rows: [], rowCount: 1 };
+    }
     if (sql.includes('INSERT INTO relay.owner_reconciliation')) {
       row.id = String(values[0]); row.request_digest = String(values[2]);
       return { rows: [], rowCount: 1 };
@@ -525,15 +558,21 @@ function outerRestore(run: ReturnType<typeof fixture>, borrowedOwners = false) {
       accountPool: run.evidence.accountPool, accessPool: run.access.pool,
       contentPool: run.evidence.contentPool!, hmacKey, objectStore: run.evidence.objectStore!,
       restoredRelayPool: run.capturedRelay.pool,
+      ...(completion ? { erasures: {
+        authority: { sealedCoverage: run.evidence.sealedCoverage, hmacKey },
+        signingKey: hmacKey, maintenance: run.fuseki,
+        originalSource: 'retained-native-event' as const,
+      } } : {}),
     });
   const key = 'qualified-owner-retry';
   const attempt = () => {
     run.evidence.qualification = { resume: durable, authenticateResume: async () => {
       expect(qualifications).toBe(1);
+      if (failures.resume) throw failures.resume;
     } };
     return operations.reconcileRestore({ sealedCoverage: run.evidence.sealedCoverage, sealedDeletionSets: [] }, key);
   };
-  return { row, attempt, releaseSpy, get qualifications() { return qualifications; },
+  return { row, attempt, releaseSpy, failures, get qualifications() { return qualifications; },
     qualify: async () => {
       run.evidence.releaseErasures = async clients => {
         await clients.relayClient.query('SELECT 1 /* retained qualification */');
@@ -545,11 +584,92 @@ function outerRestore(run: ReturnType<typeof fixture>, borrowedOwners = false) {
       expect(row).toMatchObject({ state: 'running', hold_reason: null });
       expectBothHeld(run);
       run.evidence.releaseErasures = async (clients, releaseGraph) => {
-        await releaseGraph(); await openAccess(clients);
+        if (run.fuseki.held) await releaseGraph();
+        await openAccess(clients);
       };
     },
-    stop: () => { releaseSpy.mockRestore(); relaySpy.mockRestore(); },
+    stop: () => { releaseSpy.mockRestore(); relaySpy.mockRestore();
+      for (const spy of completionSpies) spy.mockRestore(); },
   };
+}
+
+async function expectRestoreInterrupted(attempt: () => Promise<unknown>, original: Error) {
+  let rejected: unknown;
+  try { await attempt(); } catch (error) { rejected = error; }
+  expect(rejected).toBeInstanceOf(OwnerOperationUnavailable);
+  expect((rejected as Error).cause).toBeInstanceOf(RestoreInterrupted);
+  let cause = rejected;
+  while (cause instanceof Error && cause.cause !== undefined) cause = cause.cause;
+  expect(cause).toBe(original);
+}
+
+const completionPhases = ['qualified-resume', 'graph-release', 'Access-release', 'Access-commit',
+  'final-outcome-write', 'opened-graph-reader', 'opened-erasure-record', 'opened-erased-closure'] as const;
+
+for (const phase of completionPhases) {
+  for (const transport of ['Fuseki-503', 'ECONNRESET'] as const) {
+    test(`durable completion phase ${phase}: ${transport} is interrupted and completes the same key once`, async () => {
+      const run = fixture();
+      const owner = outerRestore(run, false, true);
+      const original = transport === 'Fuseki-503'
+        ? new FusekiHttpError('Fuseki query returned 503', 503, 'Service Unavailable')
+        : Object.assign(new Error('owner connection reset'), { code: 'ECONNRESET' });
+      const wrapped = new RestoreLineageConflict('phase evidence is unavailable', { cause: original });
+      let armed = true;
+      const spies: { mockRestore: () => void }[] = [];
+      try {
+        await owner.qualify();
+        const opened = phase.startsWith('opened-');
+        if (opened) {
+          // Exercise the real lost-outcome branch: both native releases committed,
+          // while the outer operation still has its durable running outcome.
+          owner.failures.outcome = wrapped;
+          await expectRestoreInterrupted(owner.attempt, original);
+          owner.failures.outcome = undefined;
+          expect(run.access.open).toBe(true);
+          expect(run.fuseki.held).toBe(false);
+        }
+        if (phase === 'qualified-resume') owner.failures.resume = wrapped;
+        else if (phase === 'final-outcome-write') owner.failures.outcome = wrapped;
+        else if (phase === 'opened-erasure-record') owner.failures.record = wrapped;
+        else if (phase === 'opened-erased-closure') owner.failures.closure =
+          new erasureReconciliation.ErasureRestoreHold('released erased closure unavailable', { cause: original });
+        else if (phase === 'graph-release') spies.push(
+          spyOn(run.fuseki, 'commandWithReceipt').mockImplementation(async () => { throw wrapped; }));
+        else if (phase === 'opened-graph-reader') {
+          const query = run.fuseki.query.bind(run.fuseki);
+          spies.push(spyOn(run.fuseki, 'query').mockImplementation(async sparql => {
+            if (armed && sparql.includes('SELECT ?savedMainSequence')) throw original;
+            return query(sparql);
+          }));
+        } else run.access.queryGate = async sql => {
+          if (armed && (phase === 'Access-release' && sql.includes('UPDATE access.recovery_fence')
+            || phase === 'Access-commit' && sql === 'COMMIT')) throw wrapped;
+        };
+
+        await expectRestoreInterrupted(owner.attempt, original);
+        expect(owner.row).toMatchObject({ state: 'running', hold_reason: null });
+        expect(owner.qualifications).toBe(1);
+        armed = false;
+        for (const spy of spies.splice(0)) spy.mockRestore();
+        run.access.queryGate = undefined;
+        owner.failures.resume = owner.failures.outcome = owner.failures.record = owner.failures.closure = undefined;
+        expect(await owner.attempt()).toMatchObject({ state: 'reconciled', disposition: 'matched', replayed: true });
+        expect(run.access.open).toBe(true);
+        expect(run.access.generation).toBe('6');
+        expect(run.fuseki.commands).toHaveLength(1);
+        expect(run.trace.filter(event => event === 'graph:release')).toHaveLength(1);
+        const releases = owner.releaseSpy.mock.calls.length;
+        expect(await owner.attempt()).toMatchObject({ state: 'reconciled', replayed: true });
+        expect(owner.releaseSpy).toHaveBeenCalledTimes(releases);
+        expect(run.fuseki.commands).toHaveLength(1);
+        expect(owner.qualifications).toBe(1);
+      } finally {
+        for (const spy of spies) spy.mockRestore();
+        owner.stop(); run.stop();
+      }
+    });
+  }
 }
 
 const qualifiedSites = [
