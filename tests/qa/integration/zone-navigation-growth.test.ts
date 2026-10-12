@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
 import { cpSync, mkdirSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { trace } from '@opentelemetry/api';
@@ -17,6 +18,7 @@ import {
   type WorkProfile,
 } from '../support/work-profile.ts';
 import type { RetainedSeedCut } from '../support/seed-checkpoints.ts';
+import type { CorpusApi, CorpusCommand } from '../../../scripts/load/work-profile-corpus.ts';
 import type { MediaStack } from './media-support.ts';
 
 type ScaledProfile = WorkProfile & { unrelatedWorks: number };
@@ -24,6 +26,9 @@ type ScaledProfile = WorkProfile & { unrelatedWorks: number };
 type RestoredMeasurement = {
   stack: MediaStack;
   fusekiUrl: string;
+  apps: Record<string, string>;
+  api: CorpusApi;
+  member: Awaited<ReturnType<MediaStack['member']>>;
 };
 
 const short = (id: string) => id.slice(-36);
@@ -179,6 +184,101 @@ async function profileRead(
   };
 }
 
+/** Per-statement and per-fetch records of one measured read. Only this artifact keeps them after the run. */
+function profileDump(operation: string, cut: string, path: string, profile: ScaledProfile,
+  apps: Record<string, string>) {
+  const serviceByOrigin = new Map(Object.entries(apps)
+    .filter(([, value]) => /^https?:\/\//.test(value))
+    .map(([name, value]) => [new URL(value).origin, name]));
+  return {
+    operation,
+    cut,
+    path,
+    counters: measuredCounters(profile),
+    postgres: profile.spans.filter(span => span.attributes['db.system.name'] === 'postgresql').map(span => ({
+      spanName: span.name,
+      namespace: String(span.attributes['db.namespace'] ?? ''),
+      server: String(span.attributes['server.address']) + ':' + String(span.attributes['server.port']),
+      durationMs: span.endMs - span.startMs,
+      // This instrumentation records no statement text; a prefix is kept only where a span carries one.
+      textPrefix: typeof span.attributes['db.query.text'] === 'string'
+        ? span.attributes['db.query.text'].slice(0, 80) : null,
+    })),
+    fetches: profile.spans.filter(span => span.kind === 2 && span.attributes['http.request.method']).map(span => {
+      const origin = String(span.attributes['url.scheme'] ?? 'http') + '://'
+        + String(span.attributes['server.address']) + ':' + String(span.attributes['server.port']);
+      const attribute = (name: string) => typeof span.attributes[name] === 'string' ? span.attributes[name] : null;
+      return {
+        spanName: span.name,
+        method: attribute('http.request.method'),
+        origin,
+        service: serviceByOrigin.get(origin) ?? null,
+        peer: attribute('rezics.peer.service'),
+        path: attribute('url.path') ?? attribute('url.full'),
+        durationMs: span.endMs - span.startMs,
+      };
+    }),
+  };
+}
+
+function writeProfileDump(label: string, dump: ReturnType<typeof profileDump>): void {
+  const directory = Bun.env.REZICS_QA_ARTIFACT_DIR;
+  if (!directory) throw new Error('Zone profile dumps need REZICS_QA_ARTIFACT_DIR');
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(join(directory, label + '.json'), JSON.stringify(dump, null, 2) + '\n');
+}
+
+/** Within-cut control: a second Zone built with the small cut's shape through the API, in the restored large stack. */
+async function measureControlZone(
+  sink: ReturnType<typeof startWorkProfileSink>,
+  restored: RestoredMeasurement,
+  cut: RetainedSeedCut,
+  shape: RetainedSeedCut['manifest']['dimensions'],
+  actor: string,
+  scale: number,
+) {
+  const { grantFixtureAuthority } = await import('../../../services/main/src/modules/access/fixture-authority.ts');
+  const { initializeSeedCheckpointPopulation, growSeedCheckpointPopulation }
+    = await import('../support/seed-checkpoint-population.ts');
+  // Command keys are idempotency keys the restored backup already holds, so the control gets its own namespace.
+  const keyspace = 'control:' + randomUUID() + ':';
+  const api: CorpusApi = {
+    command: <T>(key: string, command: CorpusCommand, signal?: AbortSignal) =>
+      restored.api.command<T>(keyspace + key, command, signal),
+    read: <T>(path: `/v1/${string}`, signal?: AbortSignal) => restored.api.read<T>(path, signal),
+  };
+  const population = await initializeSeedCheckpointPopulation(api, { actor,
+    grant: (scope, action) => grantFixtureAuthority(restored.stack.accessPool, { scope, requireDispatch: true,
+      representations: [{ principalId: restored.member.principalId, actor, action, lifetime: '7 days' }],
+      grant: { actor, action, lifetime: '7 days' } }) });
+  // The large cut's works already hold this actor's reader status, so the control adds no shelf entries.
+  // The small cut's manifest always records every other population dimension.
+  await growSeedCheckpointPopulation(api, population, cut.works, {
+    recipeOccurrences: shape.recipeOccurrences!,
+    readerShelfEntries: 0,
+    mountedCollectionResources: shape.mountedCollectionResources!,
+    zoneNavigationEntries: shape.zoneNavigationEntries!,
+  });
+  const zone = short(population.zone.id);
+  const routePath = '/v1/zones/' + zone + '/routes?path=' + encodeURIComponent('/' + population.zone.mounts[0]!.segment);
+  const presentationPath = '/v1/zones/' + zone + '/presentation';
+  const route = await profileRead(sink, restored, routePath, scale);
+  const presentation = await profileRead(sink, restored, presentationPath, scale);
+  console.log('Zone navigation control counters', JSON.stringify({
+    built: {
+      recipeOccurrences: population.recipe.occurrences.length,
+      readerShelfEntries: population.shelfWorks.length,
+      mountedCollectionResources: population.collection.members.length,
+      zoneNavigationEntries: population.zone.mounts.length,
+    },
+    routes: measuredCounters(route.profile),
+    presentation: measuredCounters(presentation.profile),
+  }));
+  writeProfileDump('zone-control-route-profile', profileDump('route', 'control', routePath, route.profile, restored.apps));
+  writeProfileDump('zone-control-presentation-profile',
+    profileDump('presentation', 'control', presentationPath, presentation.profile, restored.apps));
+}
+
 test('Zone navigation reads stay within their cost class as unrelated Works grow', async () => {
   const sink = startWorkProfileSink();
   // pg must load after the SDK installs its instrumentation hooks.
@@ -272,7 +372,7 @@ test('Zone navigation reads stay within their cost class as unrelated Works grow
                 throw new Error('Corpus verification returned HTTP ' + result.status + ' for ' + path + ': ' + result.body);
               // The page lists every Zone navigation entry up to its page limit.
               const pageLimit = Number(new URL(path, 'http://main.local').searchParams.get('limit'));
-              expect(visibleMounts).toBe(Math.min(cut.manifest.dimensions.zoneNavigationEntries, pageLimit));
+              expect(visibleMounts).toBe(Math.min(cut.manifest.dimensions.zoneNavigationEntries!, pageLimit));
               return JSON.parse(result.body) as T;
             } finally {
               stack.access.canReadSemanticResource = original;
@@ -281,7 +381,7 @@ test('Zone navigation reads stay within their cost class as unrelated Works grow
           },
         };
         expect(await seedCensus(censusApi, cut)).toEqual(cut.manifest.dimensions);
-        smokeCopies.set(input.target, { stack, fusekiUrl: input.apps.FUSEKI_URL! });
+        smokeCopies.set(input.target, { stack, fusekiUrl: input.apps.FUSEKI_URL!, apps: input.apps, api, member });
         return async () => {
           smokeCopies.delete(input.target);
           await stack.stop();
@@ -336,18 +436,10 @@ test('Zone navigation reads stay within their cost class as unrelated Works grow
       }
 
       const segment = cut.population.zone.mounts[0]!.segment;
-      const route = await profileRead(
-        sink,
-        restored,
-        '/v1/zones/' + short(cut.population.zone.id) + '/routes?path=' + encodeURIComponent('/' + segment),
-        scale,
-      );
-      const presentation = await profileRead(
-        sink,
-        restored,
-        '/v1/zones/' + short(cut.population.zone.id) + '/presentation',
-        scale,
-      );
+      const routePath = '/v1/zones/' + short(cut.population.zone.id) + '/routes?path=' + encodeURIComponent('/' + segment);
+      const presentationPath = '/v1/zones/' + short(cut.population.zone.id) + '/presentation';
+      const route = await profileRead(sink, restored, routePath, scale);
+      const presentation = await profileRead(sink, restored, presentationPath, scale);
 
       const routePage = route.result as {
         kind: string;
@@ -374,6 +466,13 @@ test('Zone navigation reads stay within their cost class as unrelated Works grow
         kind: 'index',
       })));
 
+      writeProfileDump('zone-route-profile-' + cut.manifest.scale,
+        profileDump('route', cut.manifest.scale, routePath, route.profile, restored.apps));
+      writeProfileDump('zone-presentation-profile-' + cut.manifest.scale,
+        profileDump('presentation', cut.manifest.scale, presentationPath, presentation.profile, restored.apps));
+      // The control runs after the large cut's reads, so its writes cannot change those counters.
+      if (cut.manifest.scale === 'large')
+        await measureControlZone(sink, restored, cut, retained.cuts[0]!.manifest.dimensions, retained.actor, scale);
       routeProfiles.push(route.profile);
       presentationProfiles.push(presentation.profile);
       console.log('Zone navigation checkpoint counters', JSON.stringify({
