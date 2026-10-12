@@ -177,3 +177,140 @@ export function buildCommandRegistry(profiles: readonly ProfileDefinition[],
   const bindingDemands = ordered([...demands].map(([type, profile]) => ({ type, profile })), demandOrder);
   return { canonical, bindingDemands, bindings };
 }
+/** Structural reads for registry bindings. These recover the author's retained
+ * arguments; native BindingPolicy remains the validator of their relationships.
+ * Roles and keys always come from the registry, never a consumer's profile table. */
+export function commandBindingRead(profile: string, binding: RegistryBinding, shape: string,
+  graphs: readonly string[]) {
+  const keys = [...new Set([...binding.roles, ...binding.required, ...binding.optional])];
+  const variables = Object.fromEntries(keys.map((key, index) => [key, `b${index}`]));
+  const variable = (key: string) => {
+    if (!variables[key]) throw new Error(`${profile} has no binding key or role ${key}`);
+    return `?${variables[key]}`;
+  };
+  const role = shapeRole(profile, shape);
+  if (!binding.roles.includes(role)) throw new Error(`${profile} has no bound role ${role}`);
+  const patterns: string[] = [];
+  let graphIndex = 0;
+  const triple = (subject: string, predicate: string, object: string, optional = false) => {
+    const graph = `?bindingGraph${graphIndex++}`;
+    const clause = `VALUES ${graph} { ${graphs.map(value => `<${value}>`).join(' ')} }
+      GRAPH ${graph} { ${variable(subject)} <${predicate.includes('://') ? predicate : `https://rezics.com/vocab/${predicate}`}> ${variable(object)} }`;
+    patterns.push(optional ? `OPTIONAL { ${clause} }` : clause);
+  };
+  const fields = (subject: string, entries: Record<string, string>) => {
+    for (const [key, predicate] of Object.entries(entries)) if (keys.includes(key))
+      triple(subject, predicate, key, binding.optional.includes(key));
+  };
+  const receipt = (subject: string, predicate: string) => {
+    triple('receipt', predicate, subject);
+    fields('receipt', { scope: 'admittedScope', epoch: 'authorityEpoch' });
+  };
+  if (/^classification-proposition-v[12]$/.test(profile)) {
+    triple('concept', 'http://www.w3.org/2004/02/skos/core#inScheme', 'scheme');
+    triple('path', 'terminalConcept', 'concept');
+    triple('expression', 'path', 'path');
+    triple('expression', 'assertedConcept', 'concept');
+    triple('sense', 'path', 'path');
+    triple('sense', 'expression', 'expression');
+  } else if (profile === 'classification-context-v1') {
+    patterns.push(`VALUES ${variable('global')} { <urn:rezics:classification-context:global> }`);
+    triple('realm', 'classificationContext', 'context');
+    triple('context', 'realm', 'realm');
+  } else if (profile === 'classification-direct-decision-v1') {
+    triple('work', 'mainVersion', 'main');
+    triple('main', 'work', 'work');
+    fields('sense', { 'sense-revision': 'head' });
+    fields('application', { main: 'targetMainVersion', sense: 'sense', context: 'classificationContext',
+      slot: 'applicationKey', proposer: 'proposer', decision: 'decisionHead' });
+    fields('decision', { application: 'application', outcome: 'outcome', decider: 'decidedBy', predecessor: 'predecessor' });
+    fields('context', { 'context-kind': 'contextRole', realm: 'realm' });
+    triple('context', 'head', 'context-revision', true);
+    // Global Context has a head too, but its binding admits no context revision.
+    patterns.push(`FILTER(${variable('context-kind')} != <https://rezics.com/vocab/GlobalClassification>
+      || !BOUND(${variable('realm')}))`);
+  } else if (/rating.*-context-/.test(profile)) {
+    if (binding.roles.includes('realm')) {
+      triple('realm', 'ratingContext', 'context');
+      triple('context', 'realm', 'realm');
+    }
+    fields('context', { question: 'question', grain: 'targetGrain',
+      timeZone: 'ratingTimeZone', displayThreshold: 'displayThreshold' });
+    if (keys.includes('language')) patterns.push(`BIND(LANG(${variable('question')}) AS ${variable('language')})`);
+  } else if (/rating.*-observation-/.test(profile)) {
+    if (binding.roles.includes('realm')) {
+      triple('realm', 'ratingContext', 'context');
+      triple('context', 'realm', 'realm');
+    }
+    if (binding.roles.includes('work')) {
+      triple('work', 'mainVersion', 'main');
+      triple('main', 'work', 'work');
+      triple('observation', 'targetMainVersion', 'main');
+    }
+    fields('observation', { context: 'ratingContext', slot: 'ratingSlot', revision: 'observationHead',
+      target: 'ratingTarget', release: 'targetRelease', occasion: 'ratingOccasion',
+      day: 'ratingDay', timeZone: 'ratingTimeZone', periodStart: 'periodStart', periodEnd: 'periodEnd' });
+    fields('revision', { observation: 'observation', availability: 'ratingAvailability',
+      value: 'ratingValue', predecessor: 'predecessor' });
+  } else if (profile === 'rating-aggregate-default-policy-v1') {
+    fields('context', { revision: 'ratingPolicyHead', contextRevision: 'head' });
+    fields('revision', { context: 'component', predecessor: 'predecessor', aggregationPolicy: 'ratingAggregationPolicy' });
+  } else if (profile === 'definition-presentation-v1' || /^rating-question-presentation-v[12]$/.test(profile)) {
+    triple('presentation', profile === 'definition-presentation-v1' ? 'presentationHead' : 'questionPresentationHead', 'revision');
+    triple('revision', 'component', 'presentation');
+    fields('presentation', { definition: 'presentationDefinition', meaningRevision: 'meaningRevision',
+      fromRole: 'fromRole', toRole: 'toRole', context: 'presentationContext', language: 'presentationLanguage' });
+  } else if (profile === 'post-v1') {
+    fields('post', { publisher: 'publisher', revision: 'head' });
+  } else if (profile === 'projection-v1' || profile === 'realization-v1') {
+    const component = binding.roles[0]!;
+    triple(component, profile === 'projection-v1' ? 'projectionHead' : 'head', 'revision');
+    triple('revision', 'component', component);
+  } else if (profile === 'realm-reply-placement-v1') {
+    triple('slot', 'replyPlacementHead', 'placement');
+    fields('placement', { realm: 'realm', reply: 'reply', root: 'rootTarget', revision: 'contentRevision',
+      review: 'reviewDecision', author: 'author', actor: 'decidedBy' });
+    receipt('placement', 'replyPlacement');
+  } else if (profile === 'work-author-credit-v1') {
+    triple('credit', 'creditRevision', 'revision');
+    triple('revision', 'component', 'credit');
+    fields('revision', { work: 'work', 'work-head': 'workRevision', key: 'externalKey',
+      ordinal: 'https://schema.org/position', actor: 'confirmedBy', 'source-role': 'sourceRoleKey' });
+    receipt('revision', 'creditRevision');
+    fields('receipt', { intent: 'sourceIntent' });
+  } else if (profile === 'translation-link-v1' || /^work-derivation(?:-unresolved)?-v[12]$/.test(profile)) {
+    const component = binding.roles[0]!;
+    fields(component, { 'target-work': 'targetWork', 'target-main': 'targetMainVersion',
+      'target-revision': 'targetMainRevision', 'source-work': 'sourceWork', 'source-main': 'sourceMainVersion',
+      'source-revision': 'sourceMainRevision', kind: 'derivationKind', status: 'translationStatus',
+      language: 'contentLanguage', translator: 'translator', publisher: 'publisher', evidence: 'evidence', actor: 'linkedBy' });
+    receipt(component, profile === 'translation-link-v1' ? 'translationLink' : 'workDerivation');
+  } else if (profile === 'fixed-native-text-release-v1') {
+    fields('release', { work: 'work', main: 'mainVersion', revision: 'mainRevision', selection: 'selection',
+      contribution: 'contribution', decision: 'publicationDecision', draft: 'selectedDraft', language: 'language',
+      digest: 'bodyDigest', manifest: 'manifest', actor: 'sealedBy' });
+    receipt('release', 'fixedRelease');
+  } else throw new Error(`${profile} has no structural binding read`);
+  // Catch newly declared roles or required arguments at the owning registry.
+  const pattern = patterns.join('\n');
+  for (const key of [...binding.roles, ...binding.required]) {
+    if (!pattern.includes(variable(key))) throw new Error(`${profile} has no structural read for ${key}`);
+  }
+  return { keys, variables, anchor: variable(role), pattern };
+}
+
+/** Native binding arguments use lexical values, with the historical enum names. */
+export function commandBindingValue(key: string, value: string): string {
+  const enums: Record<string, Record<string, string>> = {
+    availability: { 'https://rezics.com/vocab/Available': 'available', 'https://rezics.com/vocab/Withdrawn': 'withdrawn' },
+    outcome: { 'https://rezics.com/vocab/Accepted': 'accepted', 'https://rezics.com/vocab/Rejected': 'rejected' },
+    'context-kind': { 'https://rezics.com/vocab/GlobalClassification': 'global', 'https://rezics.com/vocab/RealmClassification': 'realm' },
+    status: { 'https://rezics.com/vocab/Official': 'official', 'https://rezics.com/vocab/ThirdParty': 'third-party' },
+    kind: { 'https://rezics.com/vocab/Adaptation': 'adaptation', 'https://rezics.com/vocab/NewRecording': 'new-recording',
+      'https://rezics.com/vocab/SoftwareFork': 'software-fork' },
+    aggregationPolicy: { 'https://rezics.com/definition/rating-latest-per-rater-mean-v1': 'latest-per-rater-mean',
+      'https://rezics.com/definition/rating-mean-per-rater-v1': 'mean-per-rater',
+      'https://rezics.com/definition/rating-pooled-observation-mean-v1': 'pooled-observation-mean' },
+  };
+  return enums[key]?.[value] ?? value;
+}

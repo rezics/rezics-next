@@ -4,6 +4,8 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } f
 import { join, resolve } from 'node:path';
 import type { PoolClient } from 'pg';
 import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
+import manifest from '../../../generated/model/manifest.json';
+import { selectCommandProfile } from '../../../model/compiler/registry.ts';
 import { authoredProfiles } from '../../../model/compiler/generate.ts';
 import { expand } from '../../../model/compiler/outputs.ts';
 import { loadDockerEnvironment } from '../../../scripts/load/docker-env.ts';
@@ -24,7 +26,7 @@ import { grantFixtureAuthority } from '../src/modules/access/fixture-authority.t
 import { resolveRealmProfile } from '../src/modules/space/policy.ts';
 import { SafetyDecisionMail, type SafetyNoticeMail } from '../src/modules/governance/notices-mail.ts';
 import { DECIDE_ACTION, GLOBAL_CONTEXT, type DecisionInput } from '../src/modules/governance/store.ts';
-import { GRAPHS, RV, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
+import { GRAPHS, RV, hash, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 
 /** Raw owner mutations inject corruption and races on the disposable QA graph.
  * Keep this fixture boundary visible to QA's assembler classification. */
@@ -543,6 +545,22 @@ test('emitted Realm commands enforce authored SHACL and atomic guards in native 
   const java = join(build, 'src/test/java/com/rezics/jena');
   mkdirSync(java, { recursive: true });
   writeFileSync(join(build, 'cases.json'), JSON.stringify(cases));
+  const selectorDirectory = join(build, 'selector-registry');
+  mkdirSync(selectorDirectory);
+  const selectorProfiles = manifest.profiles.map(entry => {
+    const shapes = profileRegistry[entry.id as keyof typeof profileRegistry].shapes;
+    const source = shapes.map(shape => `<${shape}> a <http://www.w3.org/ns/shacl#NodeShape> .`).join('\n');
+    writeFileSync(join(selectorDirectory, `${entry.id}.ttl`), source);
+    return { ...entry, file: `${entry.id}.ttl`, sha256: hash(source) };
+  });
+  writeFileSync(join(selectorDirectory, 'manifest.json'), JSON.stringify({ ...manifest, profiles: selectorProfiles }));
+  const selectorCases = [...semanticOwnerTypes].flatMap(kind => {
+    const routes = manifest.canonical.find(entry => entry.type === kind)?.routes ?? [];
+    const cuts = [[], ...routes.map(route => route.when)] as { path: string; value: string }[][];
+    return cuts.map(values => ({ kind, values, selected: selectCommandProfile(manifest, [kind],
+      path => values.filter(value => value.path === path).map(value => value.value)) }));
+  });
+  writeFileSync(join(build, 'selector-cases.json'), JSON.stringify(selectorCases));
   // Execute the emitted bytes through the native policy parser, staged TDB2
   // update, selected SHACL owner and receipt invariant. This is owner
   // interoperability evidence; it makes no HTTP or Access-fence claim.
@@ -567,6 +585,38 @@ public class RealmTargetOwnerContractTest {
     List<String> result = new ArrayList<>();
     for (JsonValue value : values.getAsArray()) result.add(value.getAsString().value());
     return result;
+  }
+  @Test public void everyPrimaryProfileMatchesNativeCanonicalSelection() throws Exception {
+    var registry = ProfileRegistry.load(Path.of("selector-registry"));
+    var data = DatasetFactory.createTxnMem().asDatasetGraph();
+    try { for (JsonValue raw : JSON.parseAny(Files.readString(Path.of("selector-cases.json"))).getAsArray()) {
+      var scenario = raw.getAsObject();
+      String kind = scenario.get("kind").getAsString().value();
+      data.begin(ReadWrite.WRITE);
+      try {
+        data.clear();
+        Node subject = iri("${realm}"), graph = iri("${GRAPHS.current}");
+        data.add(new org.apache.jena.sparql.core.Quad(graph, subject,
+          org.apache.jena.vocabulary.RDF.type.asNode(), iri(kind)));
+        for (JsonValue value : scenario.get("values").getAsArray()) {
+          var term = value.getAsObject();
+          String lexical = term.get("value").getAsString().value();
+          Node object = lexical.startsWith("https://") || lexical.startsWith("http://") || lexical.startsWith("urn:")
+            ? iri(lexical) : NodeFactory.createLiteralString(lexical);
+          data.add(new org.apache.jena.sparql.core.Quad(graph, subject,
+            iri(term.get("path").getAsString().value()), object));
+        }
+        var actual = CanonicalPolicy.select(registry, data, subject.getURI(), false);
+        if (scenario.get("selected").isNull()) assertNull(kind, actual);
+        else {
+          var expected = scenario.get("selected").getAsObject();
+          assertNotNull(kind, actual);
+          assertEquals(kind, expected.get("profile").getAsString().value(), actual.route().profile());
+          assertEquals(kind, expected.get("shape").getAsString().value(), actual.route().shape());
+        }
+        data.abort();
+      } finally { data.end(); }
+    } } finally { data.close(); }
   }
   @Test(timeout = 90_000) public void emittedOwnerBytesValidateAndFenceInTheWritingTransaction() throws Exception {
     phase("profiles-start");
@@ -692,7 +742,7 @@ public class RealmTargetOwnerContractTest {
     mkdirSync(join(root, '.temp/goal'), { recursive: true });
     writeFileSync(log, `Native probe artifacts: ${build}\n${stdout}\n${stderr}`);
     expect(code, `Native Realm owner probe: ${log}`).toBe(0);
-    expect(stdout).toContain('Tests run: 1, Failures: 0, Errors: 0');
+    expect(stdout).toContain('Tests run: 2, Failures: 0, Errors: 0');
     expect(stdout.split('\n').filter((line) => line.startsWith('REALM_NATIVE_CASE '))).toHaveLength(cases.length);
     nativePassed = true;
   } finally {
@@ -934,6 +984,28 @@ test('a public Work with an arbitrary semantic description accepts a title searc
     expect(result.operation.status).toBe('completed');
     expect((await f.stack.accessPool.query(`SELECT 1 FROM access.governance_enforcement
       WHERE resource=$1 AND component='title' AND effect='search'`, [work.work])).rowCount).toBe(1);
+  } finally { await f.stack.stop(); }
+}, 120_000);
+
+test('a native ClassificationSense dispatches the complete five-role registry binding', async () => {
+  const f = await productionRealm('classification-sense-governance');
+  try {
+    await f.grant(f.editor, 'classification:define:global', 'classification.proposition.define');
+    const definitions = await responseJson<{ scheme: string; concept: string; path: string; expression: string; sense: string }>(
+      await f.editor.send('POST', '/v1/classification-propositions', {
+        profile: 'classification-proposition-v1', label: 'Reviewed proposition', actingSubject: f.editor.actor,
+      }), 201);
+    const heads = (await f.stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head WHERE {
+      GRAPH <${GRAPHS.current}> { <${definitions.sense}> rv:head ?head } } LIMIT 2`, 2048)).results!.bindings;
+    expect(heads).toHaveLength(1);
+    const selected = { ...target(), resource: definitions.sense, expectedHead: heads[0]!.head!.value };
+    const effects = ownerModerationEffects({} as ContentModeration, f.stack.env);
+    const operationId = randomUUID();
+    const receipt = await effects.apply(operationId, 1, selected);
+    expect(receipt).toHaveProperty('receipt');
+    expect(await effects.apply(operationId, 1, selected)).toEqual(receipt);
+    expect((await f.stack.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH <${GRAPHS.receipts}> {
+      <${receipt!.receipt}> rv:outcome rv:Succeeded ; rv:moderationTarget <${definitions.sense}> } }`, 2048)).boolean).toBe(true);
   } finally { await f.stack.stop(); }
 }, 120_000);
 

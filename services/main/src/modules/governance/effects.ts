@@ -1,5 +1,5 @@
 import manifest from '../../../../../generated/model/manifest.json';
-import { selectCommandProfile } from '../../../../../model/compiler/registry.ts';
+import { commandBindingRead, commandBindingValue, selectCommandProfile } from '../../../../../model/compiler/registry.ts';
 import { profileValidations, type ProfileId } from '../../infrastructure/profile.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { ContentModeration, ContentModerationConflict, ContentModerationStale }
@@ -13,7 +13,6 @@ import type { ContentCore } from '../../../../content/src/core.ts';
 import { ownerTargetHeads } from './evidence.ts';
 import { semanticOwnerTypes, semanticResourceTypeRole } from '../semantic/change.ts';
 import type { SparqlResult } from '../../infrastructure/fuseki.ts';
-import { currentConceptValidations } from '../classification/vocabulary.ts';
 
 export interface EffectPlan {
   /** Owner-established identity; null is a positively classified non-Realm record. */
@@ -122,6 +121,38 @@ async function graphModerationProfile(env: WorkActivationEnvironment, target: De
   }).join('\n');
   return { ...route, kind, selectorGuard,
     headPredicate: home ? 'rv:homeDocumentHead' : target.component === 'structure' ? 'rv:structureHead' : 'rv:head' };
+}
+
+async function graphBindingValidations(env: WorkActivationEnvironment, resource: string,
+  selected: { profile: string; shape: string }) {
+  const definition = manifest.profiles.find(profile => profile.id === selected.profile)?.binding;
+  const graphs = [GRAPHS.current, GRAPHS.revisions, GRAPHS.receipts];
+  if (!definition) return { validations: await profileValidations(env.fuseki, selected.profile as ProfileId,
+    [{ shape: selected.shape, focus: [resource], graphs: [GRAPHS.current, GRAPHS.revisions] }]), guard: '' };
+  const read = commandBindingRead(selected.profile, definition, selected.shape, graphs);
+  const rows = (await env.fuseki.query(`# registry-binding:${selected.profile}
+    SELECT DISTINCT ${read.keys.map(key => `?${read.variables[key]}`).join(' ')} WHERE {
+      VALUES ${read.anchor} { ${iri(resource)} }
+      ${read.pattern}
+    } LIMIT 2`, 32_768)).results?.bindings ?? [];
+  const row = rows[0];
+  if (rows.length !== 1 || definition.roles.some(role => row?.[read.variables[role]!]?.type !== 'uri')
+    || definition.required.some(key => !row?.[read.variables[key]!]?.value))
+    throw new GovernanceUnavailable('Graph owner binding is unavailable or ambiguous');
+  const binding = Object.fromEntries([...definition.required, ...definition.optional]
+    .filter(key => row![read.variables[key]!])
+    .map(key => [key, commandBindingValue(key, row![read.variables[key]!]!.value)]));
+  if (selected.profile === 'classification-direct-decision-v1' && binding['context-kind'] === 'global')
+    delete binding['context-revision'];
+  const validations = await profileValidations(env.fuseki, selected.profile as ProfileId,
+    definition.roles.map(role => ({ shape: `https://rezics.com/definition/${selected.profile}/${role}-shape`,
+      focus: [row![read.variables[role]!]!.value], graphs })), binding);
+  // Pin the same structural witness in the writing transaction. BindingPolicy
+  // then validates the complete focus/argument bundle against that transaction.
+  const guard = `VALUES (${read.keys.map(key => `?${read.variables[key]}`).join(' ')}) {
+    (${read.keys.map(key => row![read.variables[key]!] ? graphTerm(row![read.variables[key]!]!) : 'UNDEF').join(' ')})
+  } ${read.pattern}`;
+  return { validations, guard };
 }
 
 function assertGraphOwnerBasis(plan: EffectPlan | undefined, realm: { realm: string; space: string } | null) {
@@ -366,9 +397,7 @@ export function ownerModerationEffects(content: ContentModeration, env: WorkActi
         return result;
       }
       if (!target.expectedHead) throw new GovernanceStale('Graph moderation needs an exact owner head');
-      const concept = selected?.kind === 'http://www.w3.org/2004/02/skos/core#Concept'
-        && (selected.profile === 'classification-proposition-v1' || selected.profile === 'classification-proposition-v2')
-        ? await currentConceptValidations(env, target.resource, selected.profile) : null;
+      const bound = selected ? await graphBindingValidations(env, target.resource, selected) : null;
       const realmValidations = realm ? [
         { kind: `${RV}Space`, resource: realm.space }, { kind: `${RV}Realm`, resource: realm.realm },
       ].map(({ kind, resource }) => {
@@ -378,9 +407,7 @@ export function ownerModerationEffects(content: ContentModeration, env: WorkActi
           throw new GovernanceUnavailable('Realm registry profile differs from its owner basis');
         return { shape: route.shape, focus: [resource], graphs: [GRAPHS.current] };
       }) : null;
-      const validations = realm ? await profileValidations(env.fuseki, realm.profileId, realmValidations!) : concept?.validations ?? await profileValidations(env.fuseki, selected!.profile as ProfileId, [{
-        shape: selected!.shape, focus: [target.resource], graphs: [GRAPHS.current, GRAPHS.revisions],
-      }]);
+      const validations = realm ? await profileValidations(env.fuseki, realm.profileId, realmValidations!) : bound!.validations;
       const headPredicate = realm ? 'rv:head' : selected!.headPredicate;
       const profileGuard = selected ? `GRAPH ${iri(GRAPHS.current)} {
         ${iri(target.resource)} a ${graphIri(selected.kind)} .
@@ -441,7 +468,7 @@ export function ownerModerationEffects(content: ContentModeration, env: WorkActi
             GRAPH ${iri(GRAPHS.current)} { ${iri(target.resource)} ${headPredicate} ${iri(target.expectedHead)} }
             ${realmGuard}
             ${profileGuard}
-            ${concept?.guard ?? ''}
+            ${bound?.guard ?? ''}
             FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
             FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
             BIND(?n + 1 AS ?next)

@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
 import manifest from '../../../generated/model/manifest.json';
-import { selectCommandProfile } from '../../../model/compiler/registry.ts';
+import { commandBindingRead, selectCommandProfile } from '../../../model/compiler/registry.ts';
 import type { ContentModeration } from '../../content/src/moderation.ts';
 import type { CommandEnvelope } from '../src/infrastructure/fuseki.ts';
 import { ownerModerationEffects } from '../src/modules/governance/effects.ts';
@@ -33,9 +33,18 @@ function graph(kind: string, selectors: Record<string, string> = {}) {
         return { results: { bindings: saved ? [{ digest: literal(state.digest || saved.digest),
           target: uri(resource), head: uri(saved.head) }] : [] } };
       }
-      if (sql.includes('SELECT ?scheme ?concept ?path ?expression ?sense'))
-        return { results: { bindings: Array.from({ length: state.bindingRows }, () =>
-          Object.fromEntries(Object.entries(definitions).map(([role, value]) => [role, uri(value)]))) } };
+      if (sql.includes('# registry-binding:')) {
+        const profile = sql.match(/# registry-binding:([^\s]+)/)![1]!;
+        const binding = manifest.profiles.find(entry => entry.id === profile)!.binding!;
+        const selected = selectCommandProfile(manifest, state.kinds,
+          path => state.selectors[path] ? [state.selectors[path]!] : []);
+        const shape = selected!.shape;
+        const read = commandBindingRead(profile, binding, shape, ['urn:rezics:graph:current']);
+        const role = shape.split('/').at(-1)!.replace(/-shape$/, '');
+        return { results: { bindings: Array.from({ length: state.bindingRows }, () => Object.fromEntries(
+          read.keys.map(key => [read.variables[key]!, binding.roles.includes(key)
+            ? uri(key === role ? resource : native()) : literal(`reviewed-${key}`)]))) } };
+      }
       if (sql.includes('ASK')) {
         if (state.becomeRealm) state.kinds = [`${RV}Realm`];
         return { boolean: state.kinds.includes(`${RV}ZoneHomeDocument`) };
@@ -51,6 +60,23 @@ function graph(kind: string, selectors: Record<string, string> = {}) {
       .map(([id, definition]) => [id, definition.sha256])) }),
     commandWithReceipt: async (command: CommandEnvelope) => {
       commands.push(command);
+      for (const profile of new Set(command.validations.map(entry => entry.profile))) {
+        const entries = command.validations.filter(entry => entry.profile === profile);
+        const required = manifest.profiles.find(entry => entry.id === profile)?.binding;
+        if (!required) { expect(entries.every(entry => !entry.binding)).toBe(true); continue; }
+        const args = entries[0]!.binding;
+        expect(args, `${profile} needs its native bindings`).toBeDefined();
+        expect(Object.keys(args!).sort()).toEqual(expect.arrayContaining(required.required));
+        expect(Object.keys(args!).every(key => [...required.required, ...required.optional].includes(key))).toBe(true);
+        const roles = entries.map(entry => entry.shape.split('/').at(-1)!.replace(/-shape$/, ''));
+        expect(roles.sort()).toEqual([...required.roles].sort());
+        for (const entry of entries) {
+          expect(entry.binding).toEqual(args);
+          expect(entry.focus).toHaveLength(1);
+          const role = entry.shape.split('/').at(-1)!.replace(/-shape$/, '');
+          if (args![role]) expect(entry.focus).toEqual([args![role]]);
+        }
+      }
       if (state.stale || state.head !== head) return { status: 'guard-unmatched' };
       if (state.status === 'invalid') return { status: 'invalid' };
       receipts.set(command.receipt, { digest: command.digest, head });
@@ -90,7 +116,7 @@ for (const [kind, selectors, profile, shape, component, predicate] of [
     if (kind === `${skos}Concept`) {
       expect(command.validations).toHaveLength(5);
       expect(command.validations?.every(validation => validation.binding?.concept === selected.resource)).toBe(true);
-      expect(command.update).toContain(`rv:terminalConcept <${selected.resource}>`);
+      expect(command.update).toContain('<https://rezics.com/vocab/terminalConcept>');
     }
     expect(command.update).toContain(`<${selected.resource}> rv:${predicate} <${selected.expectedHead}>`);
     expect(command.update).toContain(`<${selected.resource}> a <${kind}>`);
@@ -158,6 +184,7 @@ for (const kind of semanticOwnerTypes) {
     const first = selectCommandProfile(manifest, [kind], path =>
       routes[0]?.when.filter(condition => condition.path === path).map(condition => condition.value) ?? []);
     const f = graph(kind, Object.fromEntries(first?.when.map(condition => [condition.path, condition.value]) ?? []));
+    if (!first) f.target.expectedHead = null;
     const operation = randomUUID();
     const result = await f.effects.apply(operation, 1, f.target);
     if (first) expect(f.commands[0]?.validations).toContainEqual(expect.objectContaining({ profile: first.profile, shape: first.shape }));
@@ -192,7 +219,7 @@ for (const bindingRows of [0, 2]) {
   test(`a Concept with ${bindingRows ? 'ambiguous' : 'missing'} owner bindings cannot confirm a receipt`, async () => {
     const f = graph(`${skos}Concept`);
     f.state.bindingRows = bindingRows;
-    await expect(f.effects.apply(randomUUID(), 1, f.target)).rejects.toThrow('Concept owner binding is unavailable or ambiguous');
+    await expect(f.effects.apply(randomUUID(), 1, f.target)).rejects.toThrow('Graph owner binding is unavailable or ambiguous');
     expect(f.commands).toHaveLength(0);
     expect(f.receipts.size).toBe(0);
   });
@@ -208,4 +235,27 @@ for (const effect of ['disclosure', 'search'] as const) {
     expect(f.commands).toHaveLength(0);
     expect(f.receipts.size).toBe(0);
   });
+}
+
+for (const profile of manifest.profiles.filter(entry => entry.binding)) {
+  for (const role of profile.binding!.roles) {
+    test(`bound registry profile ${profile.id}/${role} constructs every declared role and argument`, async () => {
+      const kind = `https://example.org/BindingProbe-${profile.id}-${role}`;
+      const canonical = { type: kind, routes: [{ profile: profile.id,
+        shape: `https://rezics.com/definition/${profile.id}/${role}-shape`, when: [] }] };
+      manifest.canonical.push(canonical);
+      (CANONICAL_TYPES as Set<string>).add(kind);
+      (semanticOwnerTypes as Set<string>).add(kind);
+      try {
+        const f = graph(kind);
+        await f.effects.apply(randomUUID(), 1, f.target);
+        expect(f.commands).toHaveLength(1);
+        expect(f.commands[0]!.validations).toHaveLength(profile.binding!.roles.length);
+      } finally {
+        manifest.canonical.splice(manifest.canonical.indexOf(canonical), 1);
+        (CANONICAL_TYPES as Set<string>).delete(kind);
+        (semanticOwnerTypes as Set<string>).delete(kind);
+      }
+    });
+  }
 }
