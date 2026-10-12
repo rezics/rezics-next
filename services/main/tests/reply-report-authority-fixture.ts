@@ -18,6 +18,7 @@ import {
   type VerifiedPrincipal,
 } from '../src/modules/access/admission.ts';
 import { changeRealmMember } from '../src/modules/access/realm-management-members.ts';
+import { grantFixtureAuthority, provisionFixturePerson } from '../src/modules/access/fixture-authority.ts';
 import { configureDisclosure, DisclosureStore } from '../src/modules/disclosure/read.ts';
 import { governanceServices } from '../src/modules/governance/composition.ts';
 import { publicReportOwners } from '../src/modules/public-report/owners.ts';
@@ -192,11 +193,7 @@ async function createReplyReportFixture(
       await client.query("INSERT INTO access.authority_subject (id,kind) VALUES ($1,'agent')", [
         actor,
       ]);
-      await client.query(
-        `INSERT INTO access.representation (id,principal_id,subject_id,action,valid_until)
-        VALUES ($1,$2,$3,'agent.control','infinity')`,
-        [randomUUID(), principalId, actor],
-      );
+      await provisionFixturePerson(client, { principalId, actor, dataEpoch: epoch });
     });
     return { principalId, principal, actor, token };
   }
@@ -374,20 +371,9 @@ async function createReplyReportFixture(
     const app = new Elysia().use(reportRoutes(deps)).use(publicReportRoutes(deps));
     async function grant(person: ReplyReporter, scope: string, action: string) {
       await transaction(async (client) => {
-        await client.query(
-          'INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING',
-          [scope],
-        );
-        await client.query(
-          `INSERT INTO access.representation (id,principal_id,subject_id,action,valid_until)
-          VALUES ($1,$2,$3,$4,clock_timestamp()+interval '1 hour')`,
-          [randomUUID(), person.principalId, person.actor, action],
-        );
-        await client.query(
-          `INSERT INTO access.permission_grant
-          (id,issuer_subject,recipient_subject,scope_id,action,valid_until) VALUES ($1,$2,$2,$3,$4,clock_timestamp()+interval '1 hour')`,
-          [randomUUID(), person.actor, scope, action],
-        );
+        await grantFixtureAuthority(client, { scope, requireDispatch: true,
+          representations: [{ principalId: person.principalId, actor: person.actor, action, lifetime: '8 hours' }],
+          grant: { actor: person.actor, action, lifetime: '8 hours' } });
       });
     }
     await transaction(async (client) => {
@@ -451,6 +437,10 @@ async function createReplyReportFixture(
         scope,
         idempotencyKey: randomUUID(),
         requestDigest,
+        ...(action === 'reply.create' ? { baselineSourceRevision: rootRevision } : {}),
+        ...(action === 'content.draft' ? {
+          baselineRelatedWork: work, baselineSourceRevision: rootRevision,
+        } : {}),
       });
       return access.claim(registered.id, requestDigest, person.principal);
     }

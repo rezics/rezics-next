@@ -208,8 +208,11 @@ test('administrator replay and the immutable proof refuse a changed or omitted r
   const { resolvedZonePage: _zone, ...omitted } = input;
   await expect(access.register(omitted)).rejects.toBeInstanceOf(AdmissionConflict);
   await expect(
-    access.register({ ...input, baselineRelatedWork: resource() }),
+    access.register({ ...input, baselineContribution: resource() }),
   ).rejects.toBeInstanceOf(AdmissionConflict);
+  // Partial reply-root metadata is malformed before replay lookup, even for a Zone page.
+  await expect(access.register({ ...input, baselineRelatedWork: resource() }))
+    .rejects.toBeInstanceOf(AdmissionDenied);
   await expect(
     pool.query(
       'UPDATE access.platform_administrator_admission SET resolved_zone_page = $2 WHERE admission_id = $1',

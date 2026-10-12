@@ -146,6 +146,26 @@ export async function grantFixtureAuthority(client: Sql, input: FixtureAuthority
   return { grantId: await ensureGrant(client, input.scope, input.grant), representationIds };
 }
 
+/** Owner fixtures need the same active Person provenance as member authoring,
+ * in addition to an open-ended direct controller. Call inside the fixture transaction. */
+export async function provisionFixturePerson(client: Sql, input: {
+  principalId: string; actor: string; dataEpoch: string;
+}): Promise<void> {
+  const authority = await grantFixtureAuthority(client, {
+    scope: 'work:create:root', requireDispatch: true,
+    representations: [{ principalId: input.principalId, actor: input.actor,
+      action: 'agent.control', lifetime: 'infinity' }],
+    grant: { actor: input.actor, action: 'agent.control', lifetime: 'infinity' },
+  });
+  await client.query(`INSERT INTO access.agent_provision
+    (id,principal_id,idempotency_key,request_digest,agent_id,agent_kind,display_name,
+      principal_epoch,state,graph_data_epoch,graph_sequence,representation_id)
+    SELECT $1,p.id,$2,$3,$4,'person','Fixture Person',p.enforcement_epoch,'active',$5,1,$6
+    FROM access.principal p WHERE p.id = $7 AND p.active`,
+  [randomUUID(), `fixture:${randomUUID()}`, '0'.repeat(64), input.actor, input.dataEpoch,
+    authority.representationIds[0], input.principalId]);
+}
+
 /** Institutional controller edges use the same recovery/scope-checked fixture
  * boundary as mandates. Install before a recovery policy requires approval. */
 export async function grantFixtureControllerEdge(client: Sql, input: {
