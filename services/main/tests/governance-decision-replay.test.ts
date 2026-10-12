@@ -9,7 +9,10 @@ import {
   type PostgresCluster,
 } from '../../../tests/qa/support/postgres-cluster.ts';
 import type { VerifiedPrincipal } from '../src/modules/access/admission.ts';
-import { grantFixtureAuthority } from '../src/modules/access/fixture-authority.ts';
+import {
+  expireFixtureAuthority,
+  grantFixtureAuthority,
+} from '../src/modules/access/fixture-authority.ts';
 import {
   GLOBAL_CONTEXT,
   GovernanceConflict,
@@ -62,7 +65,7 @@ async function fixture() {
     [principalId, principal.issuer, principal.subject],
   );
   await pool.query("INSERT INTO access.authority_subject (id,kind) VALUES ($1,'agent')", [actor]);
-  const authority = await grantFixtureAuthority(pool, {
+  await grantFixtureAuthority(pool, {
     scope: 'governance:platform',
     requireDispatch: true,
     representations: [{ principalId, actor, action: 'governance.moderate', lifetime: 'infinity' }],
@@ -145,7 +148,6 @@ async function fixture() {
     principal,
     actor,
     input,
-    grantId: authority.grantId,
     applications: () => applications,
     overlapNextPair() {
       let arrive = 0;
@@ -264,7 +266,7 @@ test('a new decision key on the advanced generation still requires a fresh platf
 test('the original principal cannot replay after losing decision authority', async () => {
   const f = await fixture();
   const first = await f.store.decide(f.principal, f.input);
-  await pool.query('UPDATE access.permission_grant SET active = false WHERE id = $1', [f.grantId]);
+  await expireFixtureAuthority(pool, f.actor);
   await expect(f.store.decide(f.principal, f.input)).rejects.toBeInstanceOf(GovernanceDenied);
   expect(f.applications()).toBe(1);
   await expectOneDecision(f.input, first.decisionId);
