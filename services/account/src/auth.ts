@@ -330,7 +330,7 @@ export function accountAuthOptions(config: AccountConfig) {
     } },
     hooks: { ...operatorHooks, before: createAuthMiddleware(async ctx => {
       // Validate request consent first, install the retirement fence next,
-      // then settle sign-out and reject stale verification before other hooks.
+      // then settle sign-out before other hooks.
       if (ctx.path === '/delete-user') {
         const leaveOwnedAgentsStanding = (ctx.body as { leaveOwnedAgentsStanding?: unknown } | undefined)
           ?.leaveOwnedAgentsStanding;
@@ -366,32 +366,6 @@ export function accountAuthOptions(config: AccountConfig) {
         await originCheckMiddleware(ctx);
         const token = await ctx.getSignedCookie(ctx.context.authCookies.sessionToken.name, ctx.context.secret);
         if (token) await internal.deleteSession(token);
-      }
-      if (ctx.path === '/verify-email' && typeof ctx.query?.token === 'string') {
-        // Email verification links are stateless JWTs, so deleting verification
-        // rows cannot revoke them. Bind new links to the same recovery generation.
-        const verified = await jwtVerify(ctx.query.token, new TextEncoder().encode(config.secret),
-          { algorithms: ['HS256'] }).catch(() => null);
-        // Let the provider keep its normal invalid/expired-link redirects.
-        const user = typeof verified?.payload.email === 'string'
-          ? (await config.pool.query<{ id: string }>('SELECT id FROM public."user" WHERE email = $1',
-            [verified.payload.email])).rows[0] : undefined;
-        if (user && (verified!.payload[RECOVERY_GENERATION_CLAIM] ?? '0')
-          !== await currentRecoveryGeneration(config.pool, user.id)) {
-          // This hook precedes the provider's origin middleware. Redirect only
-          // to this issuer; never let an invalidated link become an open redirect.
-          if (typeof ctx.query.callbackURL === 'string') {
-            const callback = new URL(ctx.query.callbackURL, config.baseURL);
-            if (callback.origin === new URL(config.baseURL).origin) {
-              callback.searchParams.set('error', 'INVALID_TOKEN');
-              throw ctx.redirect(callback.toString());
-            }
-          }
-          throw new APIError('FORBIDDEN', {
-            code: 'INVALID_TOKEN',
-            message: 'Verification link is unavailable',
-          });
-        }
       }
       await operatorHooks.before(ctx);
       if (ctx.path === '/sign-up/email') {
