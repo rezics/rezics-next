@@ -139,13 +139,14 @@ test('a member cannot read pre-admission history after the owner grant expires d
   expect(reviews).toBe(1);
 });
 
-for (const table of ['principal','representation','authority_subject','permission_grant','scope_gate'] as const) {
+for (const table of ['principal','representation','authority_subject','permission_grant','scope_gate','recovery_fence'] as const) {
   test(`represented grant proofs retain the selected ${table} generation`, async () => {
     const h = await fixture('realm.owner');
     const before = await representedGrantProof(pool,h.principal,h.actor,h.scope,'realm.owner');
     expect(before).not.toBeNull();
     const id = table === 'principal' ? h.principalId : table === 'representation' ? h.representationIds[0]!
-      : table === 'authority_subject' ? h.actor : table === 'permission_grant' ? h.grantId : h.scope;
+      : table === 'authority_subject' ? h.actor : table === 'permission_grant' ? h.grantId
+        : table === 'scope_gate' ? h.scope : 'true';
     await advanceFixtureAuthorityGeneration(pool,table,id);
     const after = await representedGrantProof(pool,h.principal,h.actor,h.scope,'realm.owner');
     expect(after).not.toBeNull();
@@ -164,8 +165,8 @@ test('baseline Realm owner participation retains the selected owner mandate gene
   } finally { client.release(); }
 });
 
-for (const state of ['left','stale'] as const) {
-  test(`managed Realm disclosure refuses a ${state} grant membership during its graph read`, async () => {
+for (const state of ['joined','left','stale'] as const) {
+  test(`managed Realm disclosure rechecks a ${state} grant membership after its graph read`, async () => {
     const realm = `https://rezics.com/id/${randomUUID()}`, scope = `governance:realm:${realm}`;
     const h = await fixtureAuthorityScenario(pool,{ scope,action: 'realm.members.manage',
       mandate: 'realm.members.manage',membership: 'joined' });
@@ -175,12 +176,13 @@ for (const state of ['left','stale'] as const) {
     let graphReads = 0;
     const env = { lineage: { dataEpoch: 'epoch',routingEpoch: '0' },fuseki: { query: async () => {
       graphReads++;
-      await setFixtureMembershipState(pool,membership.membership_id,state);
+      if (state !== 'joined') await setFixtureMembershipState(pool,membership.membership_id,state);
       return { results: { bindings: [{ space: { type: 'uri',value: realm },
         disclosure: { type: 'uri',value: `${RV}Private` } }] } };
     } } } as unknown as WorkActivationEnvironment;
-    await expect(new AccessManagedRealms(pool,env).read(h.principal,h.actor,{},
-      { governance: true,review: false })).rejects.toBeInstanceOf(RealmAdminStale);
+    const read = new AccessManagedRealms(pool,env).read(h.principal,h.actor,{}, { governance: true,review: false });
+    if (state === 'joined') expect(await read).toMatchObject({ items: [{ realm,permissions: ['realm.members.manage'] }] });
+    else await expect(read).rejects.toBeInstanceOf(RealmAdminStale);
     expect(graphReads).toBe(1);
   });
 }
