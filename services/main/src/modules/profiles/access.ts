@@ -1,6 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
+import { AsyncResource } from 'node:async_hooks';
 import type { VerifiedPrincipal } from '../access/admission.ts';
-import { normalizeControlError, requirePrincipal, requireMandate } from '../access/topology-control.ts';
+import { normalizeControlError, requirePrincipal, requireMandate, withAccessClient } from '../access/topology-control.ts';
 import { fusekiReadBudget } from '../../infrastructure/fuseki.ts';
 import { GLOBAL_RATING_POPULATION_OWNER } from '../rating/global.ts';
 import { WorkReadUnavailable } from '../work/read-session.ts';
@@ -25,7 +26,16 @@ export class ProfilesAccess {
   /** `read` callbacks write nothing; see controlRead for their asynchronous commit.
    * `fenceInOperation` means the callback's own statement share-locks the recovery
    * fence and refuses a closed fence, so this wrapper does not issue a second probe. */
-  private async transaction<T>(operation: (client: PoolClient) => Promise<T>, read = false,
+  private transaction<T>(operation: (client: PoolClient) => Promise<T>, read = false,
+    fenceInOperation = false): Promise<T> {
+    // Raw checkout instrumentation must stay inside this invocation: thread
+    // hydration starts independent vote reads alongside its profile fences.
+    const scope = new AsyncResource('profile-access-checkout');
+    return scope.runInAsyncScope(() => this.transactionInScope(operation, read, fenceInOperation))
+      .finally(() => { scope.emitDestroy(); });
+  }
+
+  private async transactionInScope<T>(operation: (client: PoolClient) => Promise<T>, read: boolean,
     fenceInOperation = false): Promise<T> {
     const signal = fusekiReadBudget.getStore()?.signal ?? AbortSignal.timeout(10_000);
     signal.throwIfAborted();
@@ -51,7 +61,7 @@ export class ProfilesAccess {
         const fence = await client.query<{ open: boolean }>('SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
         if (!fence.rows[0]?.open) throw new WorkReadUnavailable('Access recovery hold');
       }
-      const result = await operation(client);
+      const result = await withAccessClient(this.pool, operation, client);
       await client.query('COMMIT');
       signal.throwIfAborted();
       return result;
