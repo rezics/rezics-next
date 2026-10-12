@@ -3,7 +3,12 @@ import { join } from 'node:path';
 import { shutdownTelemetry, startTelemetry } from '../../../packages/observability/src/runtime.ts';
 import { readEnv } from '../../../scripts/dev/config.ts';
 import { root } from '../../../scripts/fixture/stack.ts';
-import { assertWorkCostAtScales, startWorkProfileSink } from '../support/work-profile.ts';
+import {
+  assertWorkCost,
+  startWorkProfileSink,
+  WORK_COST_GROWTH_MARGIN,
+  type WorkCostField,
+} from '../support/work-profile.ts';
 import {
   logWorkCostRatios,
   measureControlZone,
@@ -75,11 +80,25 @@ test('Zone route cost with the same own entries stays constant as unrelated Work
 
     if (!smallRoute || !controlRoute) throw new Error('The small cut and its control were not both measured');
     // The cuts co-grow the Zone's own entries with unrelated Works, so only the control, which keeps the
-    // small cut's 4 own entries among 64 unrelated Works, isolates the unrelated axis for the route.
+    // small cut's 4 own entries among 64 unrelated Works, isolates the unrelated axis for the route. That
+    // is one point beyond the small cut, so the check compares the two profiles directly rather than
+    // through the three-scale growth helper.
     const cost = zoneSiteReadCost(ZONE_ROUTE_COST);
-    const routeAgainstControl = [smallRoute, controlRoute];
-    logWorkCostRatios('zone-route-growth', routeAgainstControl, cost);
-    assertWorkCostAtScales(routeAgainstControl, cost, 'zone-route-growth');
+    const { growth = {}, ...maxima } = cost;
+    logWorkCostRatios('zone-route-growth', [smallRoute, controlRoute], cost);
+    for (const profile of [smallRoute, controlRoute]) assertWorkCost(profile, maxima);
+    // The route's constant-class counters, except otherFetches, which is compared for equality below.
+    const constantCounters = Object.keys(growth).filter(counter => counter !== 'otherFetches') as WorkCostField[];
+    for (const counter of constantCounters) {
+      const base = smallRoute[counter];
+      const observed = controlRoute[counter];
+      if (base === null || observed === null || observed > base * WORK_COST_GROWTH_MARGIN)
+        throw new Error(`Zone route ${counter} grew with unrelated Works: control ${observed} against cut 4 ${base}, `
+          + `allowed ${WORK_COST_GROWTH_MARGIN}x`);
+    }
+    if (controlRoute.otherFetches !== smallRoute.otherFetches)
+      throw new Error(`Zone route otherFetches differ: control ${controlRoute.otherFetches} against cut 4 `
+        + `${smallRoute.otherFetches}`);
   } finally {
     await shutdownTelemetry();
     await sink.stop();
