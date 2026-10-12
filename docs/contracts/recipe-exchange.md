@@ -18,9 +18,8 @@ with an optional UTF-8 charset. It projects only `inLanguage`, ingredients and
 instructions into the import source, after inspecting every field for hostile
 content. No JSON-LD processor, URL fetch or remote context resolution runs.
 
-Plain ingredient strings remain text. A native ingredient with quantity, unit,
-optional status, non-English language or significant surrounding whitespace is a
-`PropertyValue` object with these fields:
+Foreign ingredient strings remain text. Every native ingredient is a
+`PropertyValue` object with these fields, including lines with no parsed facts:
 
 | Field | Meaning |
 | --- | --- |
@@ -29,7 +28,7 @@ optional status, non-English language or significant surrounding whitespace is a
 | `maxValue` | Exact upper endpoint for a range, as a numerator/denominator string. |
 | `amountLexical` | Original quantity wording, independent of the exact value; absent when no wording is stored. |
 | `unitCode` | Registered inert unit IRI, preserved exactly. |
-| `unitText` | Written or unresolved unit text, preserved separately from its IRI. |
+| `unitText` | Written or unresolved unit text, preserved exactly, including whitespace, separately from its IRI. |
 | `optional` | `true` for an optional ingredient; omission means false. |
 | `parseStatus` | Native `parsed`, `partial` or `unparsed` status; prevents an absent amount from being inferred from the text. |
 | `inLanguage` | Ingredient language. |

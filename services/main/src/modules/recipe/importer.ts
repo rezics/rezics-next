@@ -65,7 +65,7 @@ export interface RecipeSourceSupportCandidate {
 
 const textOf = (value: unknown): string | undefined => typeof value === 'string' && value.trim()
   ? value.trim() : undefined;
-const originalTextOf = (value: unknown): string | undefined => typeof value === 'string' && value.trim()
+const originalTextOf = (value: unknown): string | undefined => typeof value === 'string' && value.length
   ? value : undefined;
 const languageOf = (value: unknown, fallback = 'en'): string => typeof value === 'string'
   && /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(value) ? value : fallback;
@@ -173,7 +173,8 @@ function structuredIngredient(value: Record<string, unknown>, sourceKey: string,
     ?? (value.parseStatus === undefined ? parsed?.amountLexical : undefined);
   const code = textOf(value.unitCode);
   const unit = code?.startsWith('https://') ? code : undefined;
-  const unitText = textOf(value.unitText) ?? (unit ? undefined : code);
+  const unitText = (value.parseStatus === undefined ? textOf(value.unitText)
+    : originalTextOf(value.unitText)) ?? (unit ? undefined : code);
   return { sourceKey, qualifier: { type: 'ingredient-line', originalText: { value: original, language },
     ...(amountLexical ? { amountLexical } : {}),
     ...(parsed ? { amount: parsed.amount, ...(upper ?? parsed.amountUpper

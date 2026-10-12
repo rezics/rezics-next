@@ -24,7 +24,7 @@ export function exportRecipe(records: readonly OccurrenceRecord[], structure: st
     throw new RecipeExportLimit(`Recipe export exceeds ${RECIPE_EXPORT_OCCURRENCE_LIMIT} occurrences`);
   }
   const children = new Map<string, OccurrenceRecord[]>();
-  const ingredients: Array<string | Record<string, unknown>> = [];
+  const ingredients: Array<Record<string, unknown>> = [];
   const residuals: Array<{ sourceKey: string | null; text: string; parseStatus: string;
     residual: string | null }> = [];
   const sourceObservations = new Set<string>();
@@ -42,16 +42,15 @@ export function exportRecipe(records: readonly OccurrenceRecord[], structure: st
     if (line.unit && !isRecipeUnitIdentifier(line.unit)) {
       throw new RecipeExportLimit('Recipe unit is not registered for file exchange');
     }
-    ingredients.push(line.amount || line.unit || line.unitText || line.optional
-      || line.originalText.language !== 'en' || line.originalText.value !== line.originalText.value.trim()
-      ? { '@type': 'PropertyValue', text: line.originalText.value,
+    // Native lines carry parse status even without quantities, so import never invents facts.
+    ingredients.push({ '@type': 'PropertyValue', text: line.originalText.value,
       ...(line.amount ? { value: line.amount.denominator === 1 ? String(line.amount.numerator)
         : `${line.amount.numerator}/${line.amount.denominator}` } : {}),
       ...(line.amountUpper ? { maxValue: `${line.amountUpper.numerator}/${line.amountUpper.denominator}` } : {}),
       ...(line.amountLexical ? { amountLexical: line.amountLexical } : {}),
       ...(line.unit ? { unitCode: line.unit } : {}), ...(line.unitText ? { unitText: line.unitText } : {}),
       ...(line.optional ? { optional: true } : {}), parseStatus: line.parseStatus,
-      inLanguage: line.originalText.language } : line.originalText.value);
+      inLanguage: line.originalText.language });
   }
   let instructionOccurrences = 0;
   const instructions = (parent: string, depth: number): Array<Record<string, unknown>> => {

@@ -43,6 +43,12 @@ test('serialized recipe intake preserves ingredient lines, quantities, units, fl
     line(9, '½ cup farine', 'fr', { amount: { numerator: 1, denominator: 3 },
       amountLexical: '½', unitText: 'cup' }),
     line(10, 'une pincée de sel', 'fr', { amount: { numerator: 1, denominator: 8 } }),
+    line(11, '200 g butter', 'en', { parseStatus: 'unparsed' }),
+    line(12, 'water', 'en', { parseStatus: 'parsed' }),
+    line(13, 'salt', 'en', { amountLexical: 'a pinch' }),
+    line(14, '200 g butter', 'en', { unitText: ' g ' }),
+    line(15, 'salt', 'en', { amountLexical: ' ', unitText: '\t' }),
+    line(16, ' \t', 'en', { parseStatus: 'unparsed' }),
   ];
   const { recipe, sourceObservations } = exportRecipe(records, structure);
   const imported = parseRecipeFile(Buffer.from(JSON.stringify(recipe)), 'application/ld+json').preview;
