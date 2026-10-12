@@ -244,7 +244,7 @@ test('Person command and completion query execute against retained TDB2 data', a
   <${authorUnit}> a rv:MatchUnit ; rv:resource <${work}> ; rv:publicTitle "Surviving Work" .
 }
 `);
-  writeFileSync(join(java, 'PersonProfileCallerContractTest.java'), `package com.rezics.jena;
+  writeFileSync(join(java, 'AgentProfileErasureCallerContractTest.java'), `package com.rezics.jena;
 import static org.junit.Assert.*;
 import java.nio.file.*;
 import java.io.ByteArrayOutputStream;
@@ -261,7 +261,7 @@ import org.apache.jena.tdb2.TDB2Factory;
 import org.apache.jena.update.UpdateAction;
 import org.apache.jena.vocabulary.RDF;
 import org.junit.Test;
-public class PersonProfileCallerContractTest {
+public class AgentProfileErasureCallerContractTest {
   private static Node iri(String v){return NodeFactory.createURI(v);}
   private static Node rv(String v){return iri("${RV}"+v);}
   private static Node text(String v){return NodeFactory.createLiteralString(v);}
@@ -600,8 +600,8 @@ public class PersonProfileCallerContractTest {
       '--workdir', containerModule, image, 'mvn', '-B', '-ntp', '-Dmaven.repo.local=/maven-cache',
       `-Djava.io.tmpdir=${containerModule}/tmp`,
       `-DargLine=-Xmx${fullNativeSuite ? '768m' : '384m'} -Djava.io.tmpdir=${containerModule}/tmp`,
-      ...(fullNativeSuite ? ['-DreuseForks=false', '-DforkCount=1'] : []),
-      ...(fullNativeSuite ? [] : [`-Dtest=PersonProfileCallerContractTest,${nativeProofs.filter(name => name !== 'SlimCommandTest').join(',')}`]), 'test'],
+      ...(fullNativeSuite ? ['-DreuseForks=false', '-DforkCount=1', '-Dsurefire.runOrder=alphabetical'] : []),
+      ...(fullNativeSuite ? [] : [`-Dtest=AgentProfileErasureCallerContractTest,${nativeProofs.filter(name => name !== 'SlimCommandTest').join(',')}`]), 'test'],
     { cwd: root, encoding: 'utf8', timeout: nativeTimeout, maxBuffer: 16 * 1024 * 1024,
       env: preserveReapEnvironment(process.env) });
     mkdirSync(join(root, '.temp/goal'), { recursive: true });
