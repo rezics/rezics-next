@@ -128,7 +128,7 @@ export const LateMarkAfterReset: Story = {
 
 async function readLink(canvas: ReturnType<typeof within>) {
   const link = canvas.getByRole('link', { name: 'A correction was revised' });
-  link.addEventListener('click', event => event.preventDefault(), { once: true });
+  link.addEventListener('click', (event: Event) => event.preventDefault(), { once: true });
   await userEvent.click(link);
 }
 

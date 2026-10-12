@@ -37,7 +37,7 @@ afterAll(async () => {
 
 function pendingPoll() {
   let resolve!: (response: Response) => void;
-  globalThis.fetch = (() => new Promise<Response>(done => { resolve = done; })) as typeof fetch;
+  globalThis.fetch = (() => new Promise<Response>(done => { resolve = done; })) as unknown as typeof fetch;
   useUnread(true);
   return async (generation: string, count: number) => {
     resolve(Response.json({ profile: 'notification-unread-count-v1', generation, count, overflow: false }));
