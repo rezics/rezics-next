@@ -286,7 +286,7 @@ export const SeriesPartial: Story = {
 /** The edition preference picker: choosing a language and a release saves against the version read. */
 export const EditionPreference: Story = {
   args: {
-    main: panelMain(fixture.caughtUpSummary, 'en'),
+    main: panelMain({ ...fixture.caughtUpSummary, resource: fixture.saoOne, language: 'en' }),
     work: fixture.saoOne,
     title: fixture.saoOneTitle,
     status: null,

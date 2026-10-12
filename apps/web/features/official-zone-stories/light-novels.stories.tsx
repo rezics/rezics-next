@@ -27,6 +27,8 @@ function memory(locale: UiLocale) {
     summaries: {
       [locale]: {
         ...tracking.indexSummary,
+        resource: seriesWorks[0]!.id,
+        preference: { ...tracking.indexSummary.preference!, work: seriesWorks[0]!.id, language: locale },
         language: locale,
         counts: { completed: 1, required: 3, completedRequired: 1 },
         completedParts: [tracking.indexSummary.completedParts[0]!],
