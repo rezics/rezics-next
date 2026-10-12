@@ -20,6 +20,8 @@ import { readMainOutboxEnvelope, type MainOutboxBatch } from '../src/modules/out
 import { DATASET, GRAPHS, RV, PROFILE, prepareComponent } from '../src/modules/work/activate.ts';
 
 const root = resolve(import.meta.dir, '../../..');
+const fullNativeSuite = process.env.REZICS_PERSON_NATIVE_FULL_SUITE === '1';
+const nativeTimeout = fullNativeSuite ? 1_200_000 : 300_000;
 const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const resource = (n: number) => `https://rezics.com/id/${uuid(n)}`;
 const person = resource(1);
@@ -151,6 +153,7 @@ test('Person command and completion query execute against retained TDB2 data', a
   cpSync(join(module, 'src/main'), join(build, 'src/main'), { recursive: true });
   const java = join(build, 'src/test/java/com/rezics/jena');
   mkdirSync(java, { recursive: true });
+  if (fullNativeSuite) cpSync(join(module, 'src/test'), join(build, 'src/test'), { recursive: true });
   const nativeProofs = ['PersonProfileErasurePolicyTest', 'PersonProfileErasurePurgeTest',
     'ErasurePolicyTest', 'ErasureRevisionTargetTest', 'ErasureRestorePolicyTest',
     'ErasurePurgeCampaignTest', 'ModelMutationPolicyTest', 'SlimCommandTest'];
@@ -574,13 +577,16 @@ public class PersonProfileCallerContractTest {
       '--env', 'MAVEN_CONFIG=/maven-cache', '--env', 'MAVEN_OPTS=-Xmx128m',
       '--workdir', '/build', image, 'mvn', '-B', '-ntp', '-Dmaven.repo.local=/maven-cache',
       '-Djava.io.tmpdir=/build/tmp', '-DargLine=-Xmx384m',
-      `-Dtest=PersonProfileCallerContractTest,${nativeProofs.filter(name => name !== 'SlimCommandTest').join(',')}`, 'test'],
-    { cwd: root, encoding: 'utf8', timeout: 300_000, env: preserveReapEnvironment(process.env) });
+      ...(fullNativeSuite ? [] : [`-Dtest=PersonProfileCallerContractTest,${nativeProofs.filter(name => name !== 'SlimCommandTest').join(',')}`]), 'test'],
+    { cwd: root, encoding: 'utf8', timeout: nativeTimeout, maxBuffer: 16 * 1024 * 1024,
+      env: preserveReapEnvironment(process.env) });
     mkdirSync(join(root, '.temp/goal'), { recursive: true });
     writeFileSync(join(root, '.temp/goal/person-profile-native.log'), `${result.stdout}\n${result.stderr}`);
     if (result.status !== 0) throw new Error(`Native Person RDF proof failed: ${result.stdout}\n${result.stderr}`
       + `${result.error ? `\n${result.error.message}` : ''}`);
     expect(result.stdout).toMatch(/Tests run: [1-9][0-9]*, Failures: 0, Errors: 0/);
+    console.log(`Native Maven ${fullNativeSuite ? 'whole command-module suite' : 'Person focused proofs'}: ${
+      result.stdout.match(/Tests run: [0-9]+, Failures: [0-9]+, Errors: [0-9]+, Skipped: [0-9]+/g)?.at(-1)}`);
     for (const count of [0, 1, 2]) {
       const actual = JSON.parse(readFileSync(join(build, `events-${count}-result.json`), 'utf8')) as {
         batchId: string; eventIds: string[]; events: { id: string; relay: SparqlResult; facts: SparqlResult }[];
@@ -608,4 +614,4 @@ public class PersonProfileCallerContractTest {
       env: preserveReapEnvironment(process.env) });
     rmSync(build, { recursive: true, force: true });
   }
-}, 310_000);
+}, nativeTimeout + 60_000);
