@@ -42,7 +42,7 @@ function fixture(count = 65) {
   const headers = new Set(['5']);
   const headerCounts = new Map<string, number>();
   const delivered = { sequence: '5', epoch: 'epoch' };
-  const acknowledged = { sequence: '3' };
+  const acknowledged = { sequence: '5', epoch: 'epoch' };
   const custody = { value: null as CustodiedOutbox | null, reads: [] as { epoch: string; sequence: string }[] };
   let candidates = new Map<string, Candidate>();
   let transaction: Map<string, Candidate> | undefined;
@@ -89,14 +89,17 @@ function fixture(count = 65) {
       return { rows: [{ minimum_sequence: [...headers].sort((a, b) => Number(BigInt(a) - BigInt(b)))[0] ?? null,
         newest_delivered_sequence: delivered.sequence }] };
     }
+    if (statement.includes('coalesce(max(sequence),0)::text AS sequence')) {
+      expect(statement).toContain('FROM relay.checkpoint');
+      expect(values).toEqual([MAIN_RELAY_STREAM_SCOPE, 'epoch', 'test-relay']);
+      return { rows: [{ stream_scope: MAIN_RELAY_STREAM_SCOPE, data_epoch: acknowledged.epoch, sequence: acknowledged.sequence }] };
+    }
     if (statement.includes('FROM relay.checkpoint')) {
       expect(values).toEqual(['test-relay']);
       return { rows: [{ stream_scope: MAIN_RELAY_STREAM_SCOPE, data_epoch: 'epoch', sequence: acknowledged.sequence }] };
     }
-    if (statement.includes('coalesce(max(sequence),0)::text AS sequence')) {
-      return { rows: [{ stream_scope: MAIN_RELAY_STREAM_SCOPE, data_epoch: delivered.epoch, sequence: delivered.sequence }] };
-    }
     if (statement.includes('FROM relay.delivered_batch AS batch')) {
+      expect(statement).toContain('ORDER BY batch.sequence LIMIT 1');
       const next = [...headers].filter(sequence => BigInt(sequence) > BigInt(String(values[2])))
         .sort((a, b) => Number(BigInt(a) - BigInt(b)))[0];
       return { rows: next ? [{ stream_scope: MAIN_RELAY_STREAM_SCOPE, data_epoch: 'epoch', sequence: next,
@@ -316,16 +319,29 @@ test('a late missing batch below the captured coverage does not interrupt graph 
   expect(await f.instance.tick()).toBe(0);
 });
 
-test('an incomplete retained batch rebuilds from graph instead of waiting for missing events', async () => {
+test('an incomplete restored batch preserves the usable cut, defers without faults and resumes from custody', async () => {
   const f = fixture(1);
   f.headers.add('4');
   f.headerCounts.set('4', 1);
-  await expect(f.instance.tick()).rejects.toThrow('incomplete');
-  expect(f.state.checkpoint.sequence).toBe('3');
-  expect(await f.current()).toBe(false);
-  await f.finish();
-  expect(f.candidates().size).toBe(1);
-  expect(f.state.checkpoint.sequence).toBe('5');
+  f.seed({ ...f.graph.rows[0]!, adopted_order: '7' });
+  const lines: string[] = [];
+  const consoleError = spyOn(console, 'error').mockImplementation(line => { lines.push(String(line)); });
+  try {
+    for (let poll = 0; poll < 4; poll++) {
+      expect(await f.instance.tick()).toBe(0);
+      expect(f.state.checkpoint.sequence).toBe('3');
+      expect(f.state.ready).toBe(true);
+      expect(await f.current()).toBe(false);
+      expect(f.candidates().size).toBe(1);
+    }
+    expect(lines).toEqual([]);
+    f.supplyCustody(slimCustody());
+    expect(await f.instance.tick()).toBe(1);
+    expect(f.state.checkpoint.sequence).toBe('4');
+    expect(await f.instance.tick()).toBe(0);
+    expect(f.state.checkpoint.sequence).toBe('5');
+    expect(await f.current()).toBe(true);
+  } finally { consoleError.mockRestore(); }
 });
 
 test('a later graph mutation and delivery invalidate the cut before checkpoint advancement', async () => {
@@ -337,6 +353,7 @@ test('a later graph mutation and delivery invalidate the cut before checkpoint a
   f.graph.sequence = '101';
   f.graph.relaySequence = '6';
   f.delivered.sequence = '6';
+  f.acknowledged.sequence = '6';
   f.headers.add('6');
   await expect(f.instance.tick()).rejects.toBeInstanceOf(WorkReadUnavailable);
   expect(f.state.checkpoint.sequence).toBe('3');
@@ -352,6 +369,7 @@ test('new delivery coverage at an unchanged authoritative cut requires another f
   await f.gap();
   await f.instance.tick();
   f.delivered.sequence = '6';
+  f.acknowledged.sequence = '6';
   f.headers.add('6');
   await expect(f.instance.tick()).rejects.toThrow('coverage changed');
   expect(f.state.checkpoint.sequence).toBe('3');
@@ -402,9 +420,11 @@ test('a foreign relay epoch and graph page failure cannot make recovery current'
   const f = fixture(1);
   await f.gap();
   f.delivered.epoch = 'restored';
+  f.acknowledged.epoch = 'restored';
   await expect(f.instance.tick()).rejects.toBeInstanceOf(WorkReadUnavailable);
   expect(f.state.checkpoint.sequence).toBe('3');
   f.delivered.epoch = 'epoch';
+  f.acknowledged.epoch = 'epoch';
   f.graph.failPage = true;
   await expect(f.instance.tick()).rejects.toThrow('graph page failed');
   expect(f.state.checkpoint.sequence).toBe('3');

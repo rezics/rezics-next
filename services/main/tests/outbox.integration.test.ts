@@ -1,9 +1,16 @@
-import { test, expect } from 'bun:test';
+import { test, expect, spyOn } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { closeSync, mkdirSync, openSync, readFileSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { startMediaStack } from '../../../tests/qa/integration/media-support.ts';
+import { cloneQaOwnerDatabases } from '../../../tests/qa/support/databases.ts';
+import { createMainApp } from '../src/app.ts';
+import { ContentProjectionWorker } from '../src/content-projection-worker.ts';
+import { deliverRetainedContentEligibilityOnce } from '../src/modules/content-publication/eligibility-delivery.ts';
+import { createRealmSpace, spaceCreationDigest } from '../src/modules/space/create.ts';
+import { ZoneBrowseProjection } from '../src/modules/zone-browse/store.ts';
+import { runMainRelay } from '../src/modules/outbox/worker.ts';
 import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts';
 import { activateMetadataWork, DATASET, initializeFreshGraph, metadataWorkRequestDigest,
   type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
@@ -15,6 +22,163 @@ import { initializeRelayCheckpoint, OutboxEpochChanged, OutboxGap, OutboxIncompl
   relayCoverage, RelayCheckpointConflict, relayMainOutboxOnce } from '../src/modules/outbox/relay.ts';
 
 const root = resolve(import.meta.dir, '../../..');
+
+async function bounded<T>(promise: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([promise, new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error('live handoff boundary did not complete')), 10_000);
+    })]);
+  } finally { clearTimeout(timer); }
+}
+
+test('restored owner cut remains readable with live workers at header, event and acknowledgement boundaries', async () => {
+  const runId = Bun.env.REZICS_QA_RUN_ID;
+  if (!runId) throw new Error('Run through the isolated QA integration tier');
+  const databases = await cloneQaOwnerDatabases(runId, ['access', 'content', 'relay'], 'owner');
+  let source: Awaited<ReturnType<typeof startMediaStack>> | undefined;
+  let restored: Awaited<ReturnType<typeof startMediaStack>> | undefined;
+  let projection: ZoneBrowseProjection | undefined;
+  let contentWorker: ContentProjectionWorker | undefined;
+  let relayTask: Promise<void> | undefined;
+  let running = true;
+  const releaseHeader = Promise.withResolvers<void>(), releaseEvents = Promise.withResolvers<void>();
+  try {
+    source = await startMediaStack('retained-handoff-source', { ownerUrls: databases.urls });
+    const consumer = 'retained-live-handoff';
+    const actor = `https://rezics.com/id/${Bun.randomUUIDv7()}`;
+    const input = { name: 'Retained handoff Realm', actingSubject: actor };
+    const created = await createRealmSpace(source.env, source.admission(actor, 'space:create:root', 'space.create',
+      spaceCreationDigest(input)), input);
+    if (created.outcome !== 'succeeded' || !created.realm) throw new Error('Realm creation failed');
+    // Cross the decimal-width boundary: ordering a projected text sequence
+    // can otherwise report batch 9 missing when batch 10 sorts first.
+    for (let index = 0; index < 11; index++) await source.catalogueWork(actor, `Retained Work ${index}`);
+    await initializeRelayCheckpoint(source.composition.relayPool!, consumer, source.env.lineage.dataEpoch);
+    const sourceProjection = new ZoneBrowseProjection(source.accessPool, source.composition.relayPool!, source.env, consumer);
+    await sourceProjection.backfill();
+    const checkpoint = sourceProjection.recoveryStatus().checkpoint;
+    const lineage = { ...source.env.lineage };
+    // Stop all owners before copying any of them. The fixed graph and immutable
+    // objects receive no writes between this cut and its restored-reader proof.
+    await source.stop();
+    source = undefined;
+    const ownerUrls = {
+      access: await databases.snapshot('access', async () => {}),
+      content: await databases.snapshot('content', async () => {}),
+      relay: await databases.snapshot('relay', async () => {}),
+    };
+    restored = await startMediaStack('retained-handoff-restored', { ownerUrls });
+    expect(restored.env.lineage).toEqual(lineage);
+    const relay = restored.composition.relayPool!;
+    projection = new ZoneBrowseProjection(restored.accessPool, relay, restored.env, consumer);
+    await projection.backfill();
+    expect(projection.recoveryStatus().checkpoint).toEqual(checkpoint);
+    const app = createMainApp(restored.fuseki, { ...restored.composition.dependencies, zoneBrowse: projection });
+    const header = Promise.withResolvers<void>(), events = Promise.withResolvers<void>();
+    const contentPolls = [0, 0], browsePolls = [0, 0];
+    const contentPolled = [Promise.withResolvers<void>(), Promise.withResolvers<void>()];
+    const browsePolled = [Promise.withResolvers<void>(), Promise.withResolvers<void>()];
+    const contentCaughtUp = Promise.withResolvers<void>(), browseCaughtUp = Promise.withResolvers<void>();
+    const finalFrontier = Promise.withResolvers<void>();
+    const statuses: number[] = [], faults: unknown[] = [], logs: string[] = [];
+    let phase = 0, firstHeader = true, firstEvents = true;
+    const boundaryPool = { query: async (sql: string, values?: unknown[]) => {
+      const result = await relay.query(sql, values);
+      if (firstHeader && sql.includes('INSERT INTO relay.delivered_batch')) {
+        firstHeader = false;
+        header.resolve();
+        await releaseHeader.promise;
+      }
+      return result;
+    } } as unknown as Pool;
+    const errorLog = spyOn(console, 'error').mockImplementation(line => { logs.push(String(line)); });
+    const tick = projection.tick.bind(projection);
+    const tickSpy = spyOn(projection, 'tick').mockImplementation(async () => {
+      if (phase === 2) await finalFrontier.promise;
+      const count = await tick();
+      if (phase < 2 && ++browsePolls[phase]! >= 3) browsePolled[phase]!.resolve();
+      if (phase === 2) {
+        const acknowledged = (await relay.query('SELECT sequence::text FROM relay.checkpoint WHERE consumer = $1', [consumer])).rows[0]!.sequence;
+        if (projection!.recoveryStatus().checkpoint.sequence === acknowledged && acknowledged !== '0') browseCaughtUp.resolve();
+      }
+      return count;
+    });
+    const copy = restored;
+    contentWorker = new ContentProjectionWorker(async () => {
+      if (phase === 2) await finalFrontier.promise;
+      await deliverRetainedContentEligibilityOnce(copy.env, copy.content, relay, consumer);
+      const response = await app.handle(new Request(`http://main.local/v1/realms/${created.realm!.slice(-36)}/modules/browse`));
+      statuses.push(response.status);
+      if (response.status !== 200) throw new Error(await response.text());
+      if (phase < 2 && ++contentPolls[phase]! >= 4) contentPolled[phase]!.resolve();
+      if (phase === 2) {
+        const acknowledged = (await relay.query('SELECT sequence::text FROM relay.checkpoint WHERE consumer = $1', [consumer])).rows[0]!.sequence;
+        const progress = await copy.content.readEligibilityDeliveryProgress(MAIN_RELAY_STREAM_SCOPE, lineage.dataEpoch);
+        if (progress.sequence === acknowledged && acknowledged !== '0') contentCaughtUp.resolve();
+      }
+      return null;
+    }, 100, error => { faults.push(error); });
+    try {
+      relayTask = runMainRelay(async () => {
+        const batch = await relayMainOutboxOnce(copy.fuseki, boundaryPool, consumer, {
+          ownerOutbox: copy.env.receiptCustody,
+          afterDelivery: async () => {
+            if (!firstEvents) return;
+            firstEvents = false;
+            events.resolve();
+            await releaseEvents.promise;
+          },
+        });
+        if (!batch) running = false;
+        return batch !== null;
+      }, () => running, 100, { log: line => { logs.push(line); }, consumer });
+      await bounded(header.promise);
+      projection.start();
+      contentWorker.start();
+      await bounded(Promise.all([contentPolled[0]!.promise, browsePolled[0]!.promise]));
+      expect(projection.recoveryStatus().checkpoint).toEqual(checkpoint);
+      expect((await copy.content.readEligibilityDeliveryProgress(MAIN_RELAY_STREAM_SCOPE, lineage.dataEpoch)).sequence).toBe('0');
+      phase = 1;
+      releaseHeader.resolve();
+      await bounded(events.promise);
+      await bounded(Promise.all([contentPolled[1]!.promise, browsePolled[1]!.promise]));
+      expect(projection.recoveryStatus().checkpoint).toEqual(checkpoint);
+      expect((await copy.content.readEligibilityDeliveryProgress(MAIN_RELAY_STREAM_SCOPE, lineage.dataEpoch)).sequence).toBe('0');
+      phase = 2;
+      releaseEvents.resolve();
+      await bounded(relayTask);
+      finalFrontier.resolve();
+      await bounded(Promise.all([contentCaughtUp.promise, browseCaughtUp.promise]));
+      expect(statuses.length).toBeGreaterThanOrEqual(8);
+      expect(statuses.every(status => status === 200)).toBe(true);
+      expect(faults).toEqual([]);
+      expect(logs.filter(line => line.includes('worker_fault') || line.includes('RelayCheckpointConflict'))).toEqual([]);
+      const coverage = await relayCoverage(relay, consumer);
+      expect(BigInt(coverage.sequence)).toBeGreaterThanOrEqual(12n);
+      expect(projection.recoveryStatus().checkpoint.sequence).toBe(coverage.sequence);
+      expect((await copy.content.readEligibilityDeliveryProgress(MAIN_RELAY_STREAM_SCOPE, lineage.dataEpoch)).sequence).toBe(coverage.sequence);
+    } finally {
+      running = false;
+      releaseHeader.resolve(); releaseEvents.resolve();
+      finalFrontier.resolve();
+      await relayTask;
+      await contentWorker.stop();
+      await projection.stop();
+      tickSpy.mockRestore(); errorLog.mockRestore();
+    }
+  } finally {
+    running = false;
+    releaseHeader.resolve(); releaseEvents.resolve();
+    await relayTask;
+    await contentWorker?.stop();
+    await projection?.stop();
+    await source?.stop();
+    await restored?.stop();
+    await databases.close();
+  }
+}, 120_000);
+
 test('SYS04/SYS05/SYS12 partial: retained RDF outbox and durable handoff', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.ACCOUNT_RELAY_DATABASE_URL) {
     throw new Error('Run this destructive source fixture alone through the integration QA tier');

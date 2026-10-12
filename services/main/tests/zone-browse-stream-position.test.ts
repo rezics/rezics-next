@@ -13,12 +13,14 @@ function projection(checkpoint: string, coverage: RelayHandoffPosition, nextBatc
     query: async (sql: string, values?: unknown[]) => {
       queries.push({ sql, values });
       if (sql.includes('coalesce(max(sequence),0)::text AS sequence')) {
+        expect(sql).toContain('FROM relay.checkpoint');
         expect(sql).toContain('stream_scope = $1 AND data_epoch = $2');
-        expect(values).toEqual([MAIN_RELAY_STREAM_SCOPE, 'epoch']);
+        expect(values).toEqual([MAIN_RELAY_STREAM_SCOPE, 'epoch', null]);
         return { rows: [{ stream_scope: coverage.streamScope, data_epoch: coverage.dataEpoch,
           sequence: coverage.sequence }] };
       }
       if (sql.includes('FROM relay.delivered_batch AS batch')) {
+        expect(sql).toContain('ORDER BY batch.sequence LIMIT 1');
         return { rows: nextBatch ? [nextBatch] : [] };
       }
       throw new Error(`unexpected relay query: ${sql}`);

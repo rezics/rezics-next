@@ -241,7 +241,7 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
         complete = candidates.length < ZONE_BROWSE_PROJECTION_COST.batch;
         state.after = candidates.at(-1);
       }
-      // Deliveries below the captured maximum can arrive late without changing
+      // Deliveries below the captured acknowledgement can arrive late without changing
       // it: the validated graph already includes those effects. A new maximum
       // or graph mutation requires another scan, never a checkpoint jump.
       if (complete && compareRelayPositions(state.coverage, await this.mainStreamCoverage(deadline)) !== 0) {
@@ -297,9 +297,10 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
   private async mainStreamCoverage(deadline?: number): Promise<RelayHandoffPosition> {
     const read = async (client: Pool | PoolClient) => (await client.query<{ stream_scope: string; data_epoch: string; sequence: string }>(
       `SELECT stream_scope, data_epoch, coalesce(max(sequence),0)::text AS sequence
-        FROM relay.delivered_batch WHERE stream_scope = $1 AND data_epoch = $2
+        FROM relay.checkpoint WHERE stream_scope = $1 AND data_epoch = $2
+          AND ($3::text IS NULL OR consumer = $3)
         GROUP BY stream_scope, data_epoch`,
-      [MAIN_RELAY_STREAM_SCOPE, this.env.lineage.dataEpoch])).rows[0];
+      [MAIN_RELAY_STREAM_SCOPE, this.env.lineage.dataEpoch, this.relayConsumer ?? null])).rows[0];
     const row = deadline === undefined ? await read(this.relay) : await this.poolPage(this.relay, deadline, read);
     const coverage: RelayHandoffPosition = row
       ? { streamScope: row.stream_scope, dataEpoch: row.data_epoch, sequence: row.sequence }
@@ -418,7 +419,7 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
     let batch = (await this.relay.query<RelayBatch>(`
       SELECT stream_scope, data_epoch, sequence::text, event_count FROM relay.delivered_batch AS batch
       WHERE stream_scope = $1 AND data_epoch = $2 AND sequence > $3::numeric AND sequence <= $4::numeric
-      ORDER BY sequence LIMIT 1`,
+      ORDER BY batch.sequence LIMIT 1`,
     [this.checkpoint.streamScope, this.checkpoint.dataEpoch, this.checkpoint.sequence, coverage.sequence])).rows[0];
     const custody: CustodyLookup = { supplied: Boolean(this.env.receiptCustody), found: false };
     let reconstructed: Awaited<ReturnType<ZoneBrowseProjection['custodiedBatch']>> = null;
@@ -445,8 +446,22 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
       WHERE stream_scope = $1 AND data_epoch = $2 AND sequence = $3::numeric`,
       [batchPosition.streamScope, batchPosition.dataEpoch, batchPosition.sequence])).rows[0];
       if (!counts || counts.actual_count !== String(batch.event_count)) {
+        if (counts && BigInt(counts.actual_count) > BigInt(batch.event_count)) {
+          return this.relayGap('Zone browse Main relay batch has excess events', expected, coverage, custody);
+        }
         reconstructed = await this.custodiedBatch(custody);
-        if (!reconstructed) return this.relayGap('Zone browse Main relay batch is incomplete', expected, coverage, custody);
+        if (!reconstructed) {
+          // A partial restored handoff may heal as delivery resumes. Preserve
+          // the last usable cut and advertise incomplete coverage until then.
+          telemetryLog('worker_run_deferred', 'warn', {
+            'rezics.worker.name': 'main.zone-browse.projection',
+            'error.code': 'main_relay_handoff_incomplete',
+            'rezics.relay.data_epoch': batchPosition.dataEpoch,
+            'rezics.relay.requested_sequence': expected,
+            'rezics.projection.retry_ms': ZONE_BROWSE_PROJECTION_COST.pollMs,
+          });
+          return 0;
+        }
       }
     }
 

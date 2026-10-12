@@ -1,6 +1,7 @@
 import type { ContentProjectionResult } from './modules/content-publication/relay.ts';
 import { withWorkerTelemetry } from '@rezics/observability/runtime';
-import { logWorkerFault } from '@rezics/observability/log';
+import { logWorkerFault, telemetryLog } from '@rezics/observability/log';
+import { RelayHandoffIncomplete } from './modules/outbox/relay.ts';
 import { runWorkerTick } from './worker-tick.ts';
 
 function waitForPoll(intervalMs: number, signal: AbortSignal): Promise<void> {
@@ -30,7 +31,22 @@ export class ContentProjectionWorker {
   }
 
   pollOnce(): Promise<ContentProjectionResult | null> {
-    return runWorkerTick('main.content.projection', () => this.poll());
+    return runWorkerTick('main.content.projection', async () => (await this.pollComplete()).result);
+  }
+
+  private async pollComplete(): Promise<{ result: ContentProjectionResult | null; deferred: boolean }> {
+    try { return { result: await this.poll(), deferred: false }; }
+    catch (error) {
+      if (!(error instanceof RelayHandoffIncomplete)) throw error;
+      telemetryLog('worker_run_deferred', 'warn', {
+        'rezics.worker.name': 'main.content.projection',
+        'error.code': 'main_relay_handoff_incomplete',
+        'rezics.relay.data_epoch': error.dataEpoch,
+        'rezics.relay.requested_sequence': error.sequence,
+        'rezics.projection.retry_ms': this.intervalMs,
+      });
+      return { result: null, deferred: true };
+    }
   }
 
   start(): void {
@@ -46,9 +62,10 @@ export class ContentProjectionWorker {
   private async run(): Promise<void> {
     while (!this.stopSignal.signal.aborted) {
       let idle = false;
-      try { idle = (await withWorkerTelemetry('main.content.projection', () => this.poll(), result => ({
-        outcome: result === null ? 'idle' : 'worked', processed: result === null ? 0 : 1, unit: 'event',
-      }))) === null; }
+      try { idle = (await withWorkerTelemetry('main.content.projection', () => this.pollComplete(), tick => ({
+        outcome: tick.deferred ? 'deferred' : tick.result === null ? 'idle' : 'worked',
+        processed: tick.result === null ? 0 : 1, unit: 'event',
+      }))).result === null; }
       catch (error) { this.onError(error); idle = true; }
       if (idle && !this.stopSignal.signal.aborted) {
         await waitForPoll(this.intervalMs, this.stopSignal.signal);

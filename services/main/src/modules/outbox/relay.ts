@@ -22,6 +22,13 @@ export const eligibleRightsBasis = (basis: string | undefined) =>
 export class OutboxEpochChanged extends Error {}
 export class OutboxRecoveryHold extends Error {}
 export class RelayCheckpointConflict extends Error {}
+/** A restored/live handoff is not yet complete; readers retain their cursor. */
+export class RelayHandoffIncomplete extends Error {
+  readonly name = 'RelayHandoffIncomplete';
+  constructor(readonly dataEpoch: string, readonly sequence: string) {
+    super(`Main relay handoff at ${dataEpoch}/${sequence} is not yet complete`);
+  }
+}
 export class RelayEventBlocked extends OutboxIncomplete {
   constructor(readonly batch: MainOutboxBatch, readonly eventId: string,
     readonly reason: string, options?: ErrorOptions) {
@@ -50,7 +57,7 @@ interface CoverageScan {
 }
 
 async function scanRelayCoverage(client: PoolClient, consumer: string,
-  targetSequence?: string, prefix?: RelayHandoffPosition): Promise<CoverageScan> {
+  targetSequence?: string, prefix?: RelayHandoffPosition, live = false): Promise<CoverageScan> {
   const checkpoint = await client.query<{ stream_scope: string; data_epoch: string; sequence: string }>(
     'SELECT stream_scope, data_epoch, sequence FROM relay.checkpoint WHERE consumer = $1', [consumer]);
   const row = checkpoint.rows[0];
@@ -62,7 +69,7 @@ async function scanRelayCoverage(client: PoolClient, consumer: string,
     throw new RelayCheckpointConflict('retained prefix differs from relay checkpoint');
   }
   const throughSequence = prefix?.sequence ?? row.sequence;
-  if (!prefix) {
+  if (!prefix && !live) {
     const uncheckpointed = await client.query(
       `SELECT 1 FROM relay.delivered_event WHERE stream_scope = '${MAIN_RELAY_STREAM_SCOPE}' AND data_epoch = $1 AND sequence > $2
        UNION ALL SELECT 1 FROM relay.delivered_batch WHERE stream_scope = '${MAIN_RELAY_STREAM_SCOPE}' AND data_epoch = $1 AND sequence > $2 LIMIT 1`,
@@ -85,8 +92,11 @@ async function scanRelayCoverage(client: PoolClient, consumer: string,
        ORDER BY batch.sequence LIMIT 1000`,
       [row.data_epoch, batchCount.toString(), throughSequence]);
     for (const batch of page.rows) {
-      if (BigInt(batch.sequence) !== batchCount + 1n
-        || batch.actual_count !== String(batch.event_count)) {
+      if (live && (BigInt(batch.sequence) !== batchCount + 1n
+        || BigInt(batch.actual_count) < BigInt(batch.event_count))) {
+        throw new RelayHandoffIncomplete(row.data_epoch, (batchCount + 1n).toString());
+      }
+      if (BigInt(batch.sequence) !== batchCount + 1n || batch.actual_count !== String(batch.event_count)) {
         throw new RelayCheckpointConflict('retained batch or event coverage is incomplete');
       }
       batchDigest.update(JSON.stringify([batch.sequence, batch.batch_id,
@@ -101,6 +111,7 @@ async function scanRelayCoverage(client: PoolClient, consumer: string,
     if (page.rows.length < 1000) break;
   }
   if (batchCount !== BigInt(throughSequence)) {
+    if (live) throw new RelayHandoffIncomplete(row.data_epoch, (batchCount + 1n).toString());
     throw new RelayCheckpointConflict('retained batch coverage is incomplete');
   }
   const digest = createHash('sha256');
@@ -225,7 +236,9 @@ function retainedEnvelopePosition(event: MainCloudEvent | DeliveredMainEvent, st
 }
 
 /**
- * One complete, verified page from the product-owned handoff after a broker gap.
+ * One complete, verified page of the acknowledged handoff after a broker gap.
+ * Delivery commits its header/events before its checkpoint. The unacknowledged
+ * tail is retryable work, not captured coverage and not a reader conflict.
  * A passed client must be idle. This opens and commits its own snapshot and
  * leaves that checkout held; a session advisory lock survives the commit.
  */
@@ -239,15 +252,15 @@ export async function verifiedRetainedRelayRange(pool: Pool, consumer: string,
   const held = client ?? await pool.connect();
   try {
     await held.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    const { coverage } = await scanRelayCoverage(held, consumer);
+    const { coverage } = await scanRelayCoverage(held, consumer, undefined, undefined, true);
     if (BigInt(coverage.sequence) < BigInt(afterSequence)) {
       throw new RelayCheckpointConflict('consumer checkpoint exceeds retained relay');
     }
     const rows = await held.query<{ sequence: string; batch_id: string;
       routing_epoch: string; event_count: number }>(
       `SELECT batch.sequence::text, batch_id, routing_epoch, event_count
-       FROM relay.delivered_batch AS batch WHERE stream_scope = '${MAIN_RELAY_STREAM_SCOPE}' AND data_epoch = $1 AND batch.sequence > $2
-       ORDER BY batch.sequence LIMIT $3`, [coverage.dataEpoch, afterSequence, limit]);
+       FROM relay.delivered_batch AS batch WHERE stream_scope = '${MAIN_RELAY_STREAM_SCOPE}' AND data_epoch = $1 AND batch.sequence > $2 AND batch.sequence <= $3
+       ORDER BY batch.sequence LIMIT $4`, [coverage.dataEpoch, afterSequence, coverage.sequence, limit]);
     const batches: RetainedRelayBatch[] = [];
     let next = BigInt(afterSequence) + 1n;
     for (const row of rows.rows) {
