@@ -58,7 +58,7 @@ export const DISCLOSURE_CHANNELS: readonly DisclosureChannel[] = [
 export type GraphParentKind = 'work' | 'realm';
 export interface DisclosureRelationshipBasis {
   owner: 'graph' | 'content' | 'media' | 'review' | 'discovery';
-  kind: 'identity' | 'work-ownership' | 'realm-placement' | 'realm-selection'
+  kind: 'identity' | 'work-ownership' | 'work-in-realm' | 'realm-placement' | 'realm-selection'
     | 'realm-module' | 'publication' | 'media-use';
   resource: string;
   revision: string;
@@ -215,7 +215,7 @@ export class DisclosureStore implements DisclosureReader {
       || targets.some(target => !ownerReference.test(target.resource)
         || !governanceOwners.includes(target.owner) || !governanceComponents.includes(target.component)
         || target.work != null && !native.test(target.work)
-        || target.ancestry !== undefined && !validIssuedTarget(target, this.environment)
+        || !validIssuedTarget(target, this.environment)
         || target.nameOwner !== undefined && !native.test(target.nameOwner)
         || (target.context?.length ?? 0) > 512 || (target.revision?.length ?? 0) > 512)
       || typeof viewer.signedIn !== 'boolean' || !['unknown', 'under-15', '15-17', 'adult'].includes(viewer.age)
@@ -345,11 +345,8 @@ export class DisclosureStore implements DisclosureReader {
             ? target.ancestry?.parents.find(parent => parent.kind === 'work'
               && parent.resource === target.resource)?.head ?? null : null),
           context: target.context ?? GLOBAL_CONTEXT,
-          // Low-level owner reads retain their legacy Work fence semantics.
-          // Public wrappers resolve positive ancestry before reaching this reader.
-          resourceKind: target.ancestry?.resourceKind ?? 'other',
-          parents: target.ancestry?.parents ?? (target.work ? [{ kind: 'work', resource: target.work,
-            head: target.workRevision ?? null, protectedRevision: target.workRevision ?? null }] : []),
+          resourceKind: target.ancestry!.resourceKind,
+          parents: target.ancestry!.parents,
           nameOwner: owners[ordinal] ?? null,
         }))), effects(channel), GLOBAL_CONTEXT, distinct, principal?.issuer ?? null,
         principal?.subject ?? null, BASELINE_MEMBER_POLICY])).rows;
@@ -456,15 +453,19 @@ export function configureDisclosureAncestrySource(env: WorkActivationEnvironment
   }
   ancestryState(env).sources.set(sourceOwner, source);
 }
-const relationshipKinds: readonly DisclosureRelationshipBasis['kind'][] = ['identity', 'work-ownership',
-  'realm-placement', 'realm-selection', 'realm-module', 'publication', 'media-use'];
+/** A relationship cannot prove independence by omitting its required parents. */
+const relationshipParents = {
+  identity: [], 'work-ownership': ['work'], 'work-in-realm': ['work', 'realm'],
+  'realm-placement': ['realm'], 'realm-selection': ['realm'], 'realm-module': ['realm'],
+  publication: [], 'media-use': [],
+} as const satisfies Record<DisclosureRelationshipBasis['kind'], readonly GraphParentKind[]>;
 function validRevision(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= 512;
 }
 function validBasis(basis: DisclosureRelationshipBasis, env: WorkActivationEnvironment,
   target: DisclosureTarget): boolean {
   return !!basis && ['graph', 'content', 'media', 'review', 'discovery'].includes(basis.owner)
-    && relationshipKinds.includes(basis.kind) && ownerReference.test(basis.resource)
+    && Object.hasOwn(relationshipParents, basis.kind) && ownerReference.test(basis.resource)
     && validRevision(basis.revision) && basis.targetResource === target.resource
     && basis.targetRevision === (target.revision ?? null) && /^[0-9a-f]{64}$/.test(basis.token)
     && basis.dataEpoch === env.lineage.dataEpoch;
@@ -480,6 +481,8 @@ function validateEvidence(env: WorkActivationEnvironment, target: DisclosureTarg
     || !['realm', 'work', 'other'].includes(evidence.resourceKind)
     || !validBasis(evidence.relationshipBasis, env, target) || !Array.isArray(evidence.parents)
     || evidence.parents.length > DISCLOSURE_COST.graphParents
+    || !(relationshipParents[evidence.relationshipBasis.kind] as readonly GraphParentKind[])
+      .every(kind => evidence.parents.some(parent => parent.kind === kind))
     || new Set(evidence.parents.map(parent => parent.resource)).size !== evidence.parents.length
     || new Set(evidence.parents.map(parent => parent.kind)).size !== evidence.parents.length
     || evidence.parents.some(parent => !parent || parent.owner !== 'graph'
