@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 import sharp from 'sharp';
 import { Acquisition } from '../../../scripts/datasets/network.ts';
 import { freezeSnapshot } from '../../../scripts/datasets/snapshot.ts';
@@ -39,6 +39,19 @@ type ImportJournal = { native: Record<string, ImportedMapping>; entries: Record<
   result?: { asset?: string; upload?: string; revision?: string };
 }> };
 type NoticeReceipt = Receipt & { replayed?: boolean };
+
+function importJournal(receiptFile: string): ImportJournal {
+  const journal = JSON.parse(readFileSync(receiptFile, 'utf8')) as ImportJournal;
+  // Exact request/response receipts live beside the compact import index.
+  const directory = join(dirname(receiptFile), basename(receiptFile, '.json'), 'requests');
+  for (const file of readdirSync(directory).filter(file => file.endsWith('.json'))) {
+    const saved = JSON.parse(readFileSync(join(directory, file), 'utf8')) as {
+      label: string; entry: ImportJournal['entries'][string];
+    };
+    journal.entries[saved.label] = saved.entry;
+  }
+  return journal;
+}
 
 async function json<T>(response: Response, status = 200): Promise<T> {
   const body = await response.text();
@@ -210,7 +223,7 @@ test('GOV24/GOV25: frozen imported covers keep exact credit and lifecycle fences
       expect(initial.completed).toBe(true);
       expect(initial.coverResults.map(result => result.status)).toEqual(['imported']);
       expect(initial.limitations.some(item => /^cover pending [a-f0-9]{16} \(/.test(item))).toBe(false);
-      const initialJournal = JSON.parse(readFileSync(initial.receiptFile, 'utf8')) as ImportJournal;
+      const initialJournal = importJournal(initial.receiptFile);
       const imported = initialJournal.native[record.key]!;
       const work = imported.id;
       const searchPhrase = `coverlifecycle${randomUUID().replaceAll('-', '')}`;
@@ -574,7 +587,7 @@ test('copyright erasure suppresses identical bytes on another imported cover', a
     const firstImport = await importDataset(root, firstSnapshot, importOptions);
     expect(firstImport.completed).toBe(true);
     expect(firstImport.coverResults.map(result => result.status)).toEqual(['imported']);
-    const firstJournal = JSON.parse(readFileSync(firstImport.receiptFile, 'utf8')) as ImportJournal;
+    const firstJournal = importJournal(firstImport.receiptFile);
     const firstWork = firstJournal.native[firstRecord.key]!.id;
     const mainVersion = firstJournal.native[firstRecord.key]!.receipt.mainVersion;
     const contribution = await stack.contribution(firstWork, owner.actor, 'en',
@@ -597,7 +610,7 @@ test('copyright erasure suppresses identical bytes on another imported cover', a
     const secondImport = await importDataset(root, secondSnapshot, importOptions);
     expect(secondImport.completed).toBe(true);
     expect(secondImport.coverResults.map(result => result.status)).toEqual(['imported']);
-    const secondJournal = JSON.parse(readFileSync(secondImport.receiptFile, 'utf8')) as ImportJournal;
+    const secondJournal = importJournal(secondImport.receiptFile);
     const secondWork = secondJournal.native[secondRecord.key]!.id;
     const secondPage = await json<WorkPage>(await call('GET', `/v1/works/${secondWork.slice(-36)}`));
     expect(secondPage.cover.kind).toBe('image');
