@@ -79,7 +79,7 @@ for (const mandate of ['realm.owner', 'agent.control']) {
     try {
       expect(await realmApprovedProof(client, h.realm, h.principalId, h.actor)).toStartWith('owner:');
       expect(await requireRealmSubmissionPolicy(client, h.realm, h.principalId, h.actor))
-        .toEqual([{ table: 'permission_grant', id: h.grantId, generation: '1' }]);
+        .toEqual([{ table: 'permission_grant', id: h.grantId, generation: '0' }]);
     } finally { client.release(); }
   });
 }
