@@ -1,3 +1,4 @@
+import { direction } from '@rezics/main/language';
 import type { ZoneLinkProps } from '@rezics/zone-sdk';
 import { expect, test } from 'bun:test';
 import { createElement, type ComponentType } from 'react';
@@ -8,6 +9,7 @@ import { installHostZoneAddresses } from '../zones/addresses.ts';
 import { ZoneBrowse } from '../zones/browse.tsx';
 import type { BrowseModel } from '../zones/browse-view.ts';
 import { cataloguePlatformWork, ZoneWorkRow } from '../zones/card.tsx';
+import { profileHref } from '../profile/route.ts';
 import { zoneMessagesFor } from '../zones/fixtures.ts';
 import { catalogueFacts, catalogueWork, catalogueZone } from './catalogue-zone.tsx';
 
@@ -165,8 +167,8 @@ test('the year control sits in the browse column, in the same row as Filters', (
 
 test('a catalogue card does not name the account that created the Work', () => {
   const work = catalogueWork('long', 'Long series', 'ja', 'completed');
-  work.author = { value: 'catalogue-editor', lang: 'en', dir: 'ltr' };
-  work.authorHref = '/@catalogue-editor';
+  work.author = { value: 'catalogue-editor', lang: 'en', dir: direction('en', 'catalogue-editor') };
+  work.authorHref = profileHref('catalogue-editor');
   const row = createElement(ZoneWorkRow, {
     work: cataloguePlatformWork(work), locale: 'en', messages: zoneMessagesFor('en'), whyHere: false,
   });
@@ -201,7 +203,7 @@ test('a reviewed property name labels the count, and the counted phrase stays th
   const anime = draw(createElement(AnimeCataloguePanel, {
     zone: catalogueZone('anime', 'en'), Link, fallback: null, credits: null,
     work: catalogueWork('long', 'Long', 'en', 'completed'),
-    facts: catalogueFacts('TV', [1980], 1155, false, { value: 'Instalments', lang: 'en', dir: 'ltr' }),
+    facts: catalogueFacts('TV', [1980], 1155, false, { value: 'Instalments', lang: 'en', dir: direction('en', 'Instalments') }),
   }));
   expect(anime).toContain('lang="en" dir="ltr">Instalments');
   expect(anime).toContain('1,155 episodes');
@@ -210,7 +212,7 @@ test('a reviewed property name labels the count, and the counted phrase stays th
   const manga = draw(createElement(MangaCataloguePanel, {
     zone: catalogueZone('manga', 'en'), Link, fallback: null, credits: null,
     work: catalogueWork('long', 'Long', 'en', 'completed'),
-    facts: catalogueFacts('Manga', [1995], 21, false, { value: 'Bande', lang: 'de', dir: 'ltr' }),
+    facts: catalogueFacts('Manga', [1995], 21, false, { value: 'Bande', lang: 'de', dir: direction('de', 'Bande') }),
   }));
   expect(manga).toContain('lang="de" dir="ltr">Bande');
   expect(manga).toContain('21 volumes');

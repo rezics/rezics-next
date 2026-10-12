@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { spaceHref } from '../address/path.ts';
+import { profileHref } from '../profile/route.ts';
 import { RealmPageStory } from '../realm/story-page.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { installHostZoneAddresses } from '../zones/addresses.ts';
@@ -40,7 +41,7 @@ export function catalogueWork(name: string, title: string, lang: string, status:
   author: string | null = null): ZoneWork {
   return {
     id: iri(name), href: `/works/${name}`, title: text(title, lang), cover: null, kind: 'book',
-    author: author ? text(author, 'en') : null, authorHref: author ? `/@${author}` : null,
+    author: author ? text(author, 'en') : null, authorHref: author ? profileHref(author) : null,
     tagline: null, status, chapters: null, words: null, updatedAt: null, decision: null,
   };
 }
