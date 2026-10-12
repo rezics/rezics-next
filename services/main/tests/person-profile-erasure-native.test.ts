@@ -83,6 +83,13 @@ test('Person command and completion query execute against retained TDB2 data', a
   cpSync(join(module, 'src/main'), join(build, 'src/main'), { recursive: true });
   const java = join(build, 'src/test/java/com/rezics/jena');
   mkdirSync(java, { recursive: true });
+  const nativeProofs = ['PersonProfileErasurePolicyTest', 'PersonProfileErasurePurgeTest',
+    'ErasurePolicyTest', 'ErasureRevisionTargetTest', 'ErasureRestorePolicyTest',
+    'ErasurePurgeCampaignTest', 'ModelMutationPolicyTest', 'SlimCommandTest'];
+  for (const name of nativeProofs) cpSync(join(module, `src/test/java/com/rezics/jena/${name}.java`),
+    join(java, `${name}.java`));
+  cpSync(join(module, 'src/test/resources'), join(build, 'src/test/resources'), { recursive: true });
+  cpSync(join(root, 'generated/model'), join(build, 'profiles'), { recursive: true });
   mkdirSync(join(build, 'tmp'));
   const objectDirectory = join(build, 'objects');
   const model = 'https://rezics.com/definition/agent-provision-v1';
@@ -234,6 +241,22 @@ public class PersonProfileCallerContractTest {
       assertTrue(quads.contains(new Quad(iri("${publicGraph}"),iri("${foreignUnit}"),rv("publicTitle"),text("Unrelated Work"))));
       assertTrue(quads.contains(new Quad(iri("${publicGraph}"),iri("${authorUnit}"),rv("publicTitle"),text("Surviving Work"))));
     }finally {data.close();}
+  }
+  @Test public void callerTemplatePassesNativeFootprintAndCanonicalTombstoneAdmission() throws Exception {
+    var data=fixture();try {var command=body("complete");String update=command.get("update").getAsString().value();
+      var plan=CommandPolicy.parse(update,"${receiptPlaceholder}");
+      var profiles=ProfileRegistry.load(Path.of("profiles"));
+      data.begin(ReadWrite.WRITE);try {
+        assertNull(ErasurePolicy.preflight(data.asDatasetGraph(),plan,"${receiptPlaceholder}"));
+        var before=ModelMutationPolicy.capture(profiles,data.asDatasetGraph(),plan);
+        var heads=HeadCasPolicy.capture(data.asDatasetGraph(),plan,"${receiptPlaceholder}");assertNull(heads.error());
+        UpdateAction.execute(plan.request(),data);
+        assertNull(ModelMutationPolicy.check(profiles,data.asDatasetGraph(),plan,"${receiptPlaceholder}",before));
+        assertNull(HeadCasPolicy.check(data.asDatasetGraph(),"${receiptPlaceholder}",heads));
+        assertNull(ErasurePolicy.check(data.asDatasetGraph(),plan));
+        data.commit();
+      }finally{data.end();}
+    }finally{data.close();}
   }
   @Test public void creditedWorkPrefixBlocksCompletionUntilItsProjectionIsCleaned() throws Exception {
     var data=fixture();try {var command=body("complete");execute(data,command.get("update").getAsString().value());
@@ -392,13 +415,14 @@ public class PersonProfileCallerContractTest {
       '--volume', `${build}:/build`, '--volume', `${cache}:/maven-cache`,
       '--env', 'MAVEN_CONFIG=/maven-cache', '--env', 'MAVEN_OPTS=-Xmx128m',
       '--workdir', '/build', image, 'mvn', '-B', '-ntp', '-Dmaven.repo.local=/maven-cache',
-      '-Djava.io.tmpdir=/build/tmp', '-DargLine=-Xmx384m', '-Dtest=PersonProfileCallerContractTest', 'test'],
+      '-Djava.io.tmpdir=/build/tmp', '-DargLine=-Xmx384m',
+      `-Dtest=PersonProfileCallerContractTest,${nativeProofs.filter(name => name !== 'SlimCommandTest').join(',')}`, 'test'],
     { cwd: root, encoding: 'utf8', timeout: 300_000, env: preserveReapEnvironment(process.env) });
     mkdirSync(join(root, '.temp/goal'), { recursive: true });
     writeFileSync(join(root, '.temp/goal/person-profile-native.log'), `${result.stdout}\n${result.stderr}`);
     if (result.status !== 0) throw new Error(`Native Person RDF proof failed: ${result.stdout}\n${result.stderr}`
       + `${result.error ? `\n${result.error.message}` : ''}`);
-    expect(result.stdout).toContain('Tests run: 13, Failures: 0, Errors: 0');
+    expect(result.stdout).toMatch(/Tests run: [1-9][0-9]*, Failures: 0, Errors: 0/);
     for (const count of [0, 1, 2]) {
       const actual = JSON.parse(readFileSync(join(build, `events-${count}-result.json`), 'utf8')) as {
         batchId: string; eventIds: string[]; events: { id: string; relay: SparqlResult; facts: SparqlResult }[];

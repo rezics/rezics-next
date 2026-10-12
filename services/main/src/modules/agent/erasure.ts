@@ -337,8 +337,10 @@ export function personProfileErasureUpdate(lineage: GraphLineage, proof: PersonP
   DELETE {
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
     GRAPH ${iri(GRAPHS.current)} { ${iri(proof.person)} ?currentP ?currentO ; a rv:Agent }
-    GRAPH ${iri(GRAPHS.revisions)} { ?revision ?profileP ?profileO }
-    GRAPH ?indexGraph { ?unit ?indexP ?indexO }
+    GRAPH ${iri(GRAPHS.revisions)} {
+      ${inventory.revisions.map((value, index) => `${iri(value.revision)} ?profileP${index} ?profileO${index} .`).join('\n')}
+    }
+    ${inventory.units.map((value, index) => `GRAPH ${iri(value.graph)} { ${iri(value.unit)} ?indexP${index} ?indexO${index} }`).join('\n')}
   } INSERT {
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
     GRAPH ${iri(GRAPHS.current)} { ${iri(proof.person)} a rv:AgentTombstone ; rv:agentKind rv:PersonAgent ;
@@ -371,14 +373,17 @@ export function personProfileErasureUpdate(lineage: GraphLineage, proof: PersonP
       FILTER(?anotherOwner != ${iri(proof.person)}) }
     ${completeOwnedGraph(inventory)}
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
-    OPTIONAL { VALUES ?currentP { ${PROFILE_PREDICATES.map(predicateIri).join(' ')} }
-      GRAPH ${iri(GRAPHS.current)} { ${iri(proof.person)} ?currentP ?currentO } }
-    OPTIONAL { VALUES ?revision { ${inventory.revisions.map(value => iri(value.revision)).join(' ')} }
-      VALUES ?profileP { ${PROFILE_PREDICATES.filter(value => !value.endsWith('/head') && !value.endsWith('/publicProfileHead')).map(predicateIri).join(' ')} }
-      GRAPH ${iri(GRAPHS.revisions)} { ?revision rv:component ${iri(proof.person)} ; ?profileP ?profileO } }
-    ${inventory.units.length ? `OPTIONAL { VALUES (?indexGraph ?unit) {
-      ${inventory.units.map(value => `(${iri(value.graph)} ${iri(value.unit)})`).join('\n')} }
-      GRAPH ?indexGraph { ?unit ?indexP ?indexO } }` : ''}
+    OPTIONAL {
+      { VALUES ?currentP { ${PROFILE_PREDICATES.map(predicateIri).join(' ')} }
+        GRAPH ${iri(GRAPHS.current)} { ${iri(proof.person)} ?currentP ?currentO } }
+      ${inventory.revisions.map((value, index) => `UNION {
+      VALUES ?profileP${index} { ${PROFILE_PREDICATES.filter(value => !value.endsWith('/head') && !value.endsWith('/publicProfileHead')).map(predicateIri).join(' ')} }
+      GRAPH ${iri(GRAPHS.revisions)} { ${iri(value.revision)} rv:component ${iri(proof.person)} ; ?profileP${index} ?profileO${index} }
+    }`).join('\n')}
+      ${inventory.units.map((value, index) => `UNION {
+      GRAPH ${iri(value.graph)} { ${iri(value.unit)} ?indexP${index} ?indexO${index} }
+      }`).join('\n')}
+    }
     BIND(?n + 1 AS ?next)
   }`;
 }
