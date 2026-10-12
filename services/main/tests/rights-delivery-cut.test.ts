@@ -3,10 +3,14 @@ import { randomUUID } from 'node:crypto';
 import { startMediaStack, type MediaStack } from '../../../tests/qa/integration/media-support.ts';
 import { fixtureAuthorityScenario } from '../src/modules/access/fixture-authority-scenario.ts';
 import { releaseFixturePreservationHold } from '../src/modules/access/fixture-preservation.ts';
+import { restrictFixtureDisclosure } from '../src/modules/access/fixture-disclosure.ts';
+import { discloseContent } from '../src/modules/disclosure/assembly.ts';
+import type { DisclosureChannel } from '../src/modules/disclosure/read.ts';
+import { disclosureViewer } from '../src/modules/disclosure/viewer.ts';
 import { withDeliveryCut } from '../src/modules/rights/delivery-cut.ts';
 import { ASSESS_ACTION, ASSESS_SCOPE, PUBLIC_DOMAIN_TEXT_USE, publicDomainWorkMaterial,
   RightsInvalid, RightsUnavailable, type AssessmentInput } from '../src/modules/rights/store.ts';
-import { graphErasedContentRevisions, suppressGraphContentRevisions } from '../src/modules/erasure/graph.ts';
+import { suppressGraphContentRevisions } from '../src/modules/erasure/graph.ts';
 import { GRAPHS, iri } from '../src/modules/work/activate.ts';
 import { problem } from '../src/routes/problems.ts';
 
@@ -62,7 +66,8 @@ async function fixture(identity: { provider: string | null; namespace: string | 
   // The existing route supplies the real Content, Rights and disclosure checks.
   // The final publication read is deliberately after them, as in the Zone route.
   // Re-run graph erasure after that query; it does not move the Rights head.
-  const deliver = async (duringQuery: (attempt: number) => Promise<void> = async () => {}) => {
+  const deliver = async (duringQuery: (attempt: number) => Promise<void> = async () => {},
+    channel: DisclosureChannel = 'read') => {
     const query = stack.fuseki.query.bind(stack.fuseki);
     const interceptor = spyOn(stack.fuseki, 'query').mockImplementation(async (sparql, maxBytes) => {
       const result = await query(sparql, maxBytes);
@@ -76,15 +81,24 @@ async function fixture(identity: { provider: string | null; namespace: string | 
         const response = await member.send('GET',
           `/v1/content-revisions/${revisionId}?actingSubject=${encodeURIComponent(member.actor)}`);
         if (response.status !== 200) return response;
+        const initial = (await discloseContent(stack.env, [exact],
+          disclosureViewer(member.principal, member.actor), channel))[0];
+        if (initial?.status !== 'available') return problem(404, 'revision_unavailable', 'Revision is unavailable');
         const published = await stack.fuseki.query(`# final-publication-delivery
           ASK { GRAPH ${iri(GRAPHS.current)} {
           ${iri(work.work)} a <https://schema.org/CreativeWork> } }`);
         if (published.boolean !== true) return problem(404, 'revision_unavailable', 'Revision is unavailable');
+        return response;
+      }, async response => {
+        if (response.status !== 200) return response;
+        // A new owner statement after the publication query; never reuse its
+        // earlier disclosure decision or a transaction's older snapshot.
         await stack.access.assertRecoveryOpen();
-        const erased = await graphErasedContentRevisions(stack.fuseki, [revisionId]);
+        const final = (await discloseContent(stack.env, [exact],
+          disclosureViewer(member.principal, member.actor), channel))[0];
         await stack.access.assertRecoveryOpen();
-        return erased.has(revisionId)
-          ? problem(404, 'revision_unavailable', 'Revision is unavailable') : response;
+        return final?.status === 'available' ? response
+          : problem(404, 'revision_unavailable', 'Revision is unavailable');
       });
       return cut.status === 'stable' ? cut.value : cut.status === 'denied'
         ? problem(404, 'revision_unavailable', 'Revision is unavailable') : problem(503, 'delivery_cut_unavailable', 'Delivery is unavailable; retry', { 'retry-after': '1' });
@@ -121,7 +135,7 @@ test('authorization precedes holds and owner failures; hidden and nonexistent ta
   const deliver = async (resourceId: string) => {
     const cut = await withDeliveryCut({ ...f.target, resourceId, rights },
       () => stack.access.canReadWork(outsider.principal, outsider.actor, resourceId),
-      async () => { deliveries++; return Response.json({ serializedJson: f.text }); });
+      async () => { deliveries++; return Response.json({ serializedJson: f.text }); }, async value => value);
     return cut.status === 'stable' ? cut.value : cut.status === 'denied'
       ? problem(404, 'comment_unavailable', 'Comment is unavailable')
       : problem(503, 'delivery_cut_unavailable', 'Delivery is unavailable; retry', { 'retry-after': '1' });
@@ -139,10 +153,10 @@ test('authorization precedes holds and owner failures; hidden and nonexistent ta
   expect(deliveries).toBe(0);
   const authorized = await withDeliveryCut(f.target,
     () => stack.access.canReadWork(f.member.principal, f.member.actor, f.target.resourceId),
-    async () => { deliveries++; return f.text; });
+    async () => { deliveries++; return f.text; }, async value => value);
   expect(authorized).toEqual({ status: 'unavailable-retry' });
   expect(deliveries).toBe(0);
-  expect(await withDeliveryCut({ ...f.target, rights: undefined }, async () => false, async () => f.text))
+  expect(await withDeliveryCut({ ...f.target, rights: undefined }, async () => false, async () => f.text, async value => value))
     .toEqual({ status: 'denied' });
 });
 
@@ -157,7 +171,7 @@ test('a replay authorizes again before consulting the target owners or returning
     deliveries++;
     await f.moveRights();
     return f.text;
-  })).toEqual({ status: 'denied' });
+  }, async value => value)).toEqual({ status: 'denied' });
   expect(authorizations).toBe(2);
   expect(reads).toBe(2);
   expect(deliveries).toBe(1);
@@ -197,7 +211,7 @@ test('the none token changes when a first Work/body assessment appears', async (
       material: { ...publicDomainWorkMaterial(work.work), provider: 'gutenberg' },
       expectedAssessment: null, idempotencyKey: randomUUID() });
     return attempts;
-  });
+  }, async value => value);
   expect(result).toEqual({ status: 'stable', value: 2 });
   expect((await target.rights.deliveryCutSnapshot(target.resourceId, null)).assessmentHead).not.toBeNull();
 });
@@ -219,7 +233,7 @@ test('provider/namespace service scopes and other Work components are not body a
   const service = await f.target.rights.assess(f.authority.principal, { ...f.input,
     material: { ...publicDomainWorkMaterial(f.target.resourceId), scopeKind: 'source_provider',
       workId: null, provider: 'gutenberg', namespace: 'ebooks' },
-    expressionKind: 'service', family: 'service_terms', useScope: 'fixture:service',
+    expressionKind: 'service', family: 'service_terms', basis: 'service_terms', useScope: 'fixture:service',
     idempotencyKey: randomUUID() });
   const title = await f.target.rights.assess(f.authority.principal, { ...f.input,
     material: { ...publicDomainWorkMaterial(f.target.resourceId), component: 'title' },
@@ -252,6 +266,31 @@ test('graph erasure during the final query is caught by the existing erasure che
   }), f.text);
   expect(await f.target.rights.deliveryCutSnapshot(f.target.resourceId, f.target.assessmentId)).toEqual(before);
   expect(f.attempts()).toBe(1);
+});
+
+test.each(['disclosure', 'search'] as const)('a fresh final fence catches %s committed during publication with stable cut tokens', async effect => {
+  const f = await fixture();
+  const before = await f.target.rights.deliveryCutSnapshot(f.target.resourceId, f.target.assessmentId);
+  const restrict = () => restrictFixtureDisclosure(stack.accessPool, {
+    resourceId: f.target.resourceId, revisionId: f.revisionId, effect,
+    principalId: f.member.principalId, actingSubject: f.member.actor,
+  });
+  await withheld(await f.deliver(restrict, effect === 'search' ? 'search' : 'read'), f.text);
+  expect(f.attempts()).toBe(1);
+  expect(await f.target.rights.deliveryCutSnapshot(f.target.resourceId, f.target.assessmentId)).toEqual(before);
+});
+
+test('every replay runs its final fence after the query and before returning the fresh value', async () => {
+  const f = await fixture();
+  const order: string[] = [];
+  let attempts = 0;
+  const result = await withDeliveryCut(f.target, async () => { order.push('authorize'); return true; }, async () => {
+    order.push('query');
+    if (++attempts === 1) await f.moveRights();
+    return attempts;
+  }, async value => { order.push('fence'); return value; });
+  expect(result).toEqual({ status: 'stable', value: 2 });
+  expect(order).toEqual(['authorize', 'query', 'fence', 'authorize', 'query', 'fence']);
 });
 
 test('an unrelated hold committed during the query neither replays nor refuses delivery', async () => {
@@ -301,7 +340,7 @@ test('movement on both attempts returns a typed retry outcome without retaining 
     attempts++;
     await f.moveRights();
     return { serializedJson: f.text };
-  });
+  }, async value => value);
   expect(attempts).toBe(2);
   expect(result).toEqual({ status: 'unavailable-retry' });
   expect(JSON.stringify(result)).not.toContain(f.text);
@@ -314,7 +353,7 @@ test('a single head movement replays the full callback and returns only the fres
     attempts++;
     if (attempts === 1) await f.moveRights();
     return attempts;
-  });
+  }, async value => value);
   expect(result).toEqual({ status: 'stable', value: 2 });
   expect(attempts).toBe(2);
 });
@@ -326,7 +365,7 @@ test('token reads cost one indexed statement per store per snapshot, with and wi
   try {
     for (const moving of [false, true]) {
       content.mockClear(); access.mockClear();
-      await withDeliveryCut(f.target, async () => true, async () => { if (moving) await f.moveRights(); return f.text; });
+      await withDeliveryCut(f.target, async () => true, async () => { if (moving) await f.moveRights(); return f.text; }, async value => value);
       const contentReads = content.mock.calls.filter(([query]) => typeof query === 'string'
         && query.includes('AS assessment_head'));
       const accessReads = access.mock.calls.filter(([query]) => typeof query === 'string'
@@ -355,18 +394,18 @@ test('held and missing owners fail closed before the callback; owner failures af
   const f = await fixture();
   let attempts = 0;
   const work = async () => { attempts++; return f.text; };
-  expect(await withDeliveryCut({ resourceId: f.target.resourceId, assessmentId: f.target.assessmentId }, async () => true, work))
+  expect(await withDeliveryCut({ resourceId: f.target.resourceId, assessmentId: f.target.assessmentId }, async () => true, work, async value => value))
     .toEqual({ status: 'unavailable-retry' });
   await f.hold();
-  expect(await withDeliveryCut(f.target, async () => true, work)).toEqual({ status: 'unavailable-retry' });
+  expect(await withDeliveryCut(f.target, async () => true, work, async value => value)).toEqual({ status: 'unavailable-retry' });
   expect(attempts).toBe(0);
   let reads = 0;
   const failure = { ...f.target, rights: { deliveryCutSnapshot: async () => {
     if (++reads === 2) throw new RightsUnavailable('owner read failed');
     return { assessmentHead: null, preservationVersion: '0', held: false };
   } } };
-  expect(await withDeliveryCut(failure, async () => true, work)).toEqual({ status: 'unavailable-retry' });
+  expect(await withDeliveryCut(failure, async () => true, work, async value => value)).toEqual({ status: 'unavailable-retry' });
   expect(attempts).toBe(1);
-  await expect(withDeliveryCut({ ...f.target, resourceId: 'invalid' }, async () => true, work))
+  await expect(withDeliveryCut({ ...f.target, resourceId: 'invalid' }, async () => true, work, async value => value))
     .rejects.toBeInstanceOf(RightsInvalid);
 });

@@ -18,12 +18,14 @@ export type DeliveryCutResult<T> = { status: 'stable'; value: T }
   | { status: 'unavailable-retry' };
 
 /**
- * Replay the complete delivery read, including its Rights, disclosure and final
- * graph-erasure checks. A callback must be read-only: its first result may be
- * discarded. This detects owner movement; it does not lock all three owners.
+ * Authorize before every attempt, then replay the complete read and publication
+ * query. finalFence must evaluate disclosure on a fresh owner snapshot after
+ * that query and retain graph-erasure checks. Both callbacks are read-only:
+ * their first result may be discarded. This does not lock all three owners.
  */
 export async function withDeliveryCut<T>(target: DeliveryCutTarget,
-  authorize: () => Promise<boolean>, work: () => Promise<T>): Promise<DeliveryCutResult<T>> {
+  authorize: () => Promise<boolean>, work: () => Promise<T>,
+  finalFence: (value: T) => Promise<T>): Promise<DeliveryCutResult<T>> {
   const { rights, resourceId, assessmentId } = target;
   for (let attempt = 0; attempt < 2; attempt++) {
     // No owner state, including a hold or outage, may reveal a hidden target.
@@ -36,7 +38,7 @@ export async function withDeliveryCut<T>(target: DeliveryCutTarget,
       return { status: 'unavailable-retry' };
     }
     if (before.held) return { status: 'unavailable-retry' };
-    const value = await work();
+    const value = await finalFence(await work());
     let after: DeliveryCutSnapshot;
     try { after = await rights.deliveryCutSnapshot(resourceId, assessmentId); }
     catch (error) {
