@@ -298,11 +298,11 @@ test('actual forward and descending filtered statements use bounded seeks at thr
         done: withReason ? old.done : view === 'inbox', reason: 'reviewer',
       })));
       inserted = history;
-      await pool.query('ANALYZE access.notification_item');
-      await pool.query('ANALYZE access.notification_item_triage');
-      await pool.query('ANALYZE access.notification_proposal_context');
+      // Measure settled unrelated history, rather than the dead index versions
+      // created when the fixture inserts an Inbox item and then changes its triage.
+      await pool.query('VACUUM (ANALYZE) access.notification_item, access.notification_item_triage, access.notification_proposal_context');
       if ((await pool.query("SELECT to_regclass('access.notification_filter_seek') AS relation")).rows[0]!.relation) {
-        await pool.query('ANALYZE access.notification_filter_seek');
+        await pool.query('VACUUM (ANALYZE) access.notification_filter_seek');
       }
       for (const descending of [false, true]) {
         const page = await f.store.readStream(f.principal, null, 2, selection, descending ? 'latest' : undefined);
