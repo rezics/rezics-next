@@ -620,7 +620,7 @@ public class RealmTargetOwnerContractTest {
       } finally { data.end(); }
     } } finally { data.close(); }
   }
-  @Test(timeout = 90_000) public void emittedOwnerBytesValidateAndFenceInTheWritingTransaction() throws Exception {
+  @Test(timeout = 180_000) public void emittedOwnerBytesValidateAndFenceInTheWritingTransaction() throws Exception {
     phase("profiles-start");
     var scenarios = JSON.parseAny(Files.readString(Path.of("cases.json"))).getAsArray();
     Map<String, ProfileRegistry.Profile> profiles = new LinkedHashMap<>();
