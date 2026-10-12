@@ -295,6 +295,7 @@ async function resolveTargetChains<Session extends TargetReadSession>(session: S
   const current = new Map(iris.map(resource => [resource, resource]));
   const seen = new Map(iris.map(resource => [resource, new Set<string>()]));
   const resolved = new Map<string, ResolvedTarget>();
+  const requested = new Map<string, ResolvedTarget>();
   const unavailable = new Set<string>();
   for (let hop = 0; hop <= TARGET_RESOLVE_COST.redirectHops; hop++) {
     const active = [...current].filter(([source]) => !resolved.has(source) && !unavailable.has(source));
@@ -305,11 +306,14 @@ async function resolveTargetChains<Session extends TargetReadSession>(session: S
     for (const [source, resource] of active) {
       const target = byResource.get(resource);
       if (!target) { unavailable.add(source); continue; }
+      if (inventory && hop === 0) requested.set(source, target);
       const path = seen.get(source)!;
       if (path.has(resource)) throw new WorkReadUnavailable('Target redirect is cyclic');
       path.add(resource);
       const next = redirects.get(resource);
-      if (!next) resolved.set(source, target);
+      // Merge traversal decides admission; inventory projections retain the
+      // requested target's identity, revision, ownership and grain.
+      if (!next) resolved.set(source, inventory ? requested.get(source)! : target);
       else {
         if (!Value.Check(targetRef, next) || path.has(next)) throw new WorkReadUnavailable('Target redirect is cyclic or invalid');
         current.set(source, next);
@@ -372,8 +376,8 @@ export async function resolveVisibleTargets(session: TargetReadSession, resource
   });
 }
 
-/** Preserve the requested identity alongside its admitted survivor. Page
- * filtering grants visibility to the source only after its whole chain passes. */
+/** Requested targets admitted by the shared merge-chain decision. Survivors
+ * decide visibility; they never replace an inventory's retained identities. */
 export async function resolveVisibleTargetSources(session: TargetReadSession, resources: readonly string[],
   capability: Capability): Promise<ReadonlyMap<string, ResolvedTarget>> {
   session.checkDeadline();

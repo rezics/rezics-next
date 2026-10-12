@@ -4,10 +4,93 @@ import {
   aggregateMeasurement,
   rollupMeasurement,
   ratingAnnotation,
+  readProjectionResource,
+  readPersonalProjectionResources,
 } from '../src/modules/export/scoped.ts';
 import type { queryTargetRatingAggregate } from '../src/modules/rating/target-aggregate.ts';
 import type { queryRatingRollup } from '../src/modules/rating/rollup-read.ts';
 import { canonicalExport } from '../src/modules/export/planner.ts';
+import { FusekiClient, type SparqlResult } from '../src/infrastructure/fuseki.ts';
+import { derivedId } from '../src/modules/structure/graph.ts';
+import { resolveTargets, resolveVisibleTargets } from '../src/modules/target/resolve.ts';
+import { WorkReadSession } from '../src/modules/work/read-session.ts';
+import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
+
+/** Real summary, capability admission and export readers; the retained
+ * projection still frames its source Work after that Work is merged. */
+function mergedProjectionFixture(currentUsesSurvivor = false) {
+  const id = (name: string) => derivedId(`projection-export-merge:${name}`);
+  const source = id('source'), survivor = id('survivor'), subject = id('subject'), projection = id('projection');
+  const revision = (resource: string) => id(`revision:${resource}`), retained = id('retained-revision');
+  const value = (text: string) => ({ type: 'literal' as const, value: text });
+  const uri = (text: string) => ({ type: 'uri' as const, value: text });
+  const currentFrame = currentUsesSurvivor ? survivor : source;
+  const position = { epoch: value('epoch'), sequence: value('1') };
+  const graph = new FusekiClient('http://graph.invalid');
+  type Row = NonNullable<SparqlResult['results']>['bindings'][number];
+  const resourcesIn = (query: string) => [...new Set([...query.matchAll(/VALUES \?r \{([^}]+)\}/g)]
+    .flatMap(match => [...match[1]!.matchAll(/<([^>]+)>/g)].map(reference => reference[1]!)))];
+  graph.query = async query => {
+    const resources = resourcesIn(query);
+    if (query.includes('SELECT ?epoch ?sequence ?hold')) {
+      const bindings = resources.flatMap((resource): Row[] => {
+        if (resource === projection) return [{ ...position, r: uri(resource), type: value('projection'),
+          public: value('false'), erased: value('false'), projectionSubject: uri(subject), projectionFrame: uri(currentFrame) }];
+        if (![source, survivor, subject].includes(resource)) return [];
+        return [{ ...position, r: uri(resource), type: value('work'), work: uri(resource), head: uri(revision(resource)),
+          public: value('true'), erased: value('false'), label: { ...value(resource), 'xml:lang': 'en' } }];
+      });
+      return { results: { bindings: bindings.length ? bindings : [position] } };
+    }
+    if (query.includes('SELECT ?epoch ?sequence ?r ?revision ?type')) return { results: { bindings: resources.map(resource => ({
+      ...position, r: uri(resource), revision: uri(revision(resource)),
+      type: uri(resource === projection ? 'https://rezics.com/vocab/Projection' : 'https://schema.org/CreativeWork'),
+      ...(resource === source ? { mergedInto: uri(survivor) } : {}),
+    })) } };
+    if (query.includes('SELECT ?resource ?revision ?subject ?frame')) return { results: { bindings: [{
+      ...position, resource: uri(projection), revision: uri(revision(projection)), subject: uri(subject), frame: uri(currentFrame),
+    }] } };
+    if (query.includes('SELECT ?subject ?frame ?epoch ?sequence')) {
+      expect(query).toContain(`<${retained}> a rv:ProjectionRevision`);
+      return { results: { bindings: [{ ...position, subject: uri(subject), frame: uri(source) }] } };
+    }
+    throw new Error(`Unexpected projection export query: ${query}`);
+  };
+  const deps = { environment: { fuseki: graph, objectDirectory: '.temp/projection-export-merge',
+    lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } }, access: {}, account: {} } as unknown as MainWorkDependencies;
+  const session = new WorkReadSession(deps, new Request('http://main.test/v1/exports'), {},
+    { dataEpoch: 'epoch', sequence: '1' });
+  return { session, source, survivor, subject, projection, revision, retained };
+}
+
+test('inventory admission preserves requested fields while explicit resolution returns the readable merge survivor', async () => {
+  const f = mergedProjectionFixture();
+  expect((await resolveTargets(f.session, [f.source], 'report'))[0]!.resource).toBe(f.survivor);
+  const requested = { resource: f.source, base: 'work' as const, work: f.source, revision: f.revision(f.source),
+    types: ['https://schema.org/CreativeWork'], disclosure: 'public' as const };
+  expect(await resolveVisibleTargets(f.session, [f.source, f.source], 'report')).toEqual([requested, requested]);
+});
+
+test('retained projection export keeps a frame naming the requested Work after its readable merge', async () => {
+  const f = mergedProjectionFixture(true);
+  const result = await readProjectionResource(f.session, f.projection, f.retained);
+  expect(result.representation).toMatchObject({
+    id: f.projection, 'rv:projectionRevision': { id: f.retained }, 'prov:specializationOf': { id: f.subject },
+    'rv:frame': [{ 'rv:coordinate': { id: f.source }, 'rv:dimension': 'work' }],
+  });
+  expect(canonicalExport(result.representation)).not.toContain(f.survivor);
+});
+
+test('personal projection export retains projections whose parts name a Work merged into a readable survivor', async () => {
+  const f = mergedProjectionFixture();
+  const result = await readPersonalProjectionResources(f.session, [f.projection]);
+  expect([...result.keys()]).toEqual([f.projection]);
+  expect(result.get(f.projection)).toMatchObject({
+    id: f.projection, 'rv:projectionRevision': { id: f.revision(f.projection) },
+    'prov:specializationOf': { id: f.subject },
+    'rv:frame': [{ 'rv:coordinate': { id: f.source }, 'rv:dimension': 'work' }],
+  });
+});
 
 type Aggregate = Awaited<ReturnType<typeof queryTargetRatingAggregate>>;
 const aggregate: Aggregate = {

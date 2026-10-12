@@ -21,6 +21,7 @@ function visibleTargetBatchReader(session: WorkReadSession, worksOnly: boolean) 
       session.checkDeadline();
       for (const [source, target] of await resolveVisibleTargetSources(session,
         resources.slice(at, at + TARGET_RESOLVE_COST.batch), 'collection-member')) {
+        // Both identity and grain belong to the requested occurrence target.
         if (!worksOnly || target.base === 'work') visible.add(source);
       }
     }
