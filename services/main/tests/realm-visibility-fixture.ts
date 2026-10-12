@@ -28,7 +28,7 @@ export async function realmVisibilityFixture() {
     const url = new URL(`http://main.local${path}`);
     if (method === 'GET' && actor) url.searchParams.set('actingSubject', actor);
     const response = await app.handle(new Request(url, { method, headers: {
-      ...(actor ? { authorization: `Bearer ${h.token}` } : {}),
+      ...(actor ? { authorization: `Bearer ${await h.currentToken()}` } : {}),
       'content-type': 'application/json', 'idempotency-key': key }, body: body ? JSON.stringify(body) : undefined }));
     return { status: response.status, headers: response.headers, body: await response.json() as Record<string, any> };
   };

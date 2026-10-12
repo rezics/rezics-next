@@ -28,7 +28,7 @@ async function freePort(): Promise<number> {
 }
 
 export async function agentProvisionHarness(scopes: readonly string[] = ['agent:create', 'work:create'],
-  options: { contentEvidence?: boolean } = {}) {
+  options: { contentEvidence?: boolean; offlineAccess?: boolean } = {}) {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL || !Bun.env.ACCOUNT_DATABASE_URL
     || !Bun.env.ACCESS_DATABASE_URL || !Bun.env.ACCOUNT_MAIN_RESOURCE
     || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH) {
@@ -78,7 +78,7 @@ export async function agentProvisionHarness(scopes: readonly string[] = ['agent:
   const client = await auth.api.adminCreateOAuthClient({ headers, body: {
     client_name: 'Agent provision native client', application_type: 'native',
     redirect_uris: [redirectUri], token_endpoint_auth_method: 'none',
-    grant_types: ['authorization_code'], scope: `openid ${scopes.join(' ')}`,
+    grant_types: ['authorization_code'], scope: `openid ${options.offlineAccess ? 'offline_access ' : ''}${scopes.join(' ')}`,
     skip_consent: true, require_pkce: true } });
 
   async function tokenFor(user: { email: string; password: string }, scope: string) {

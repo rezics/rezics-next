@@ -5,8 +5,9 @@ const account = 'http://127.0.0.1:4404';
 const redirectUri = 'http://127.0.0.1:4400/auth/callback';
 const granted = 'openid work:read';
 
-function issuer(consent: boolean, changeScope = false): { client: LocalOAuthClient; calls: string[] } {
+function issuer(consent: boolean, changeScope = false, expiresIn = 30): { client: LocalOAuthClient; calls: string[] } {
   const calls: string[] = [];
+  let refreshes = 0;
   const client: LocalOAuthClient = {
     account, clientId: consent ? 'consent-client' : 'trusted-client', redirectUri, scope: granted,
     resource: 'https://main.rezics.test',
@@ -35,13 +36,15 @@ function issuer(consent: boolean, changeScope = false): { client: LocalOAuthClie
         expect(form.get('code_verifier')!.length).toBeGreaterThan(30);
         expect(form.get('redirect_uri')).toBe(redirectUri);
         return Response.json({ access_token: `${client.clientId}-access`, refresh_token: `${client.clientId}-refresh`,
-          expires_in: 30, scope: granted, token_type: 'Bearer' });
+          expires_in: expiresIn, scope: granted, token_type: 'Bearer' });
       }
       expect(form.get('grant_type')).toBe('refresh_token');
       expect(form.get('scope')).toBe(granted);
-      expect(form.get('refresh_token')).toBe(`${client.clientId}-refresh`);
-      return Response.json({ access_token: `${client.clientId}-renewed`, refresh_token: `${client.clientId}-refresh-2`,
-        expires_in: 30, scope: changeScope ? 'openid' : granted, token_type: 'Bearer' });
+      expect(form.get('refresh_token')).toBe(`${client.clientId}-refresh${refreshes === 0 ? '' : `-${refreshes + 1}`}`);
+      expect(form.get('resource')).toBe(client.resource!);
+      refreshes++;
+      return Response.json({ access_token: `${client.clientId}-renewed${refreshes === 1 ? '' : `-${refreshes}`}`, refresh_token: `${client.clientId}-refresh-${refreshes + 1}`,
+        expires_in: expiresIn, scope: changeScope ? 'openid' : granted, token_type: 'Bearer' });
     },
   };
   return { client, calls };
@@ -65,4 +68,37 @@ test('refresh refuses a token whose scopes differ from the grant', async () => {
   const { client } = issuer(false, true);
   const session = await signIn(client, 'session=local', { now: () => 0 });
   await expect(session.current(60_000)).rejects.toThrow('Refresh changed the granted scopes');
+});
+
+test('a request validity window refreshes before expiry and shares one rotating grant across concurrent callers', async () => {
+  const { client, calls } = issuer(false, false, 300);
+  const session = await signIn(client, 'session=local', { now: () => 1_000 });
+  expect(await session.current(270_999, 30_000)).toBe(`${client.clientId}-access`);
+  expect(calls.filter(call => call === 'POST /api/auth/oauth2/token')).toHaveLength(1);
+  expect(await Promise.all([session.current(271_000, 30_000), session.current(271_000, 30_000)]))
+    .toEqual([`${client.clientId}-renewed`, `${client.clientId}-renewed`]);
+  expect(calls.filter(call => call === 'POST /api/auth/oauth2/token')).toHaveLength(2);
+  expect(await session.current(540_999, 30_000)).toBe(`${client.clientId}-renewed`);
+  expect(await session.current(541_000, 30_000)).toBe(`${client.clientId}-renewed-2`);
+  expect(session.refreshToken).toBe(`${client.clientId}-refresh-3`);
+  expect(session.scope).toBe(granted);
+  expect(calls.filter(call => call === 'POST /api/auth/oauth2/token')).toHaveLength(3);
+});
+
+test('concurrent early refresh failures propagate without replacing the grant and allow a later retry', async () => {
+  const { client, calls } = issuer(false, true, 300);
+  const session = await signIn(client, 'session=local', { now: () => 1_000 });
+  const refresh = () => session.current(271_000, 30_000);
+  const outcomes = await Promise.allSettled([refresh(), refresh()]);
+  for (const outcome of outcomes) {
+    expect(outcome.status).toBe('rejected');
+    if (outcome.status === 'rejected') expect(outcome.reason.message).toBe('Refresh changed the granted scopes');
+  }
+  expect(session.accessToken).toBe(`${client.clientId}-access`);
+  expect(session.refreshToken).toBe(`${client.clientId}-refresh`);
+  expect(calls.filter(call => call === 'POST /api/auth/oauth2/token')).toHaveLength(2);
+  // Retry the same original grant after a rejected response, rather than using
+  // its unaccepted token or silently signing the fixture in again.
+  client.fetch = async () => Response.json({ error: 'invalid_grant' }, { status: 400 });
+  await expect(refresh()).rejects.toThrow('refresh: HTTP 400');
 });

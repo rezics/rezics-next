@@ -183,12 +183,12 @@ async function completeOwnerFixture() {
     }), fuseki, accessPool, contentPool });
     const app = composition.app;
     const call = async (method: string, path: string, body?: object, actor: string | null = fx.actor,
-      key = randomUUID(), traceHeaders?: Headers) => {
+      key = randomUUID(), traceHeaders?: Headers, preparedBearer?: string) => {
       const url = new URL(`http://main.local${path}`);
       if (method === 'GET' && actor) url.searchParams.set('actingSubject', actor);
       const response = await app.handle(new Request(url, { method, headers: {
         ...Object.fromEntries(traceHeaders ?? []),
-        ...(actor ? { authorization: `Bearer ${fx.token}` } : {}),
+        ...(actor ? { authorization: `Bearer ${preparedBearer ?? await fx.currentToken()}` } : {}),
         'content-type': 'application/json', 'idempotency-key': key,
       }, body: body ? JSON.stringify(body) : undefined }));
       return { status: response.status, headers: response.headers,
@@ -250,9 +250,15 @@ test('one reply costs the same per command and owner at 100 and 1,000 threads', 
       const input = fx.draftInput();
       const commands = {} as ReplyCost['commands'];
       const step = async (name: Command, path: string, body: object) => {
+        // OAuth rotation is fixture preparation, before both the counter reset
+        // and the request trace. The measured command retains its live checks.
+        const previousToken = fx.oauth.accessToken;
+        const bearer = await fx.currentToken();
+        if (fx.oauth.accessToken !== previousToken)
+          console.log(JSON.stringify({ realmReplyFixtureOAuthRefresh: { beforeCommand: name, minimumValidityMs: 30_000 } }));
         reset();
         const { result: response, profile } = await profileRequest(sink!, headers =>
-          fx.call('POST', path, body, fx.actor, randomUUID(), headers), { flush: flushTelemetryTraces });
+          fx.call('POST', path, body, fx.actor, randomUUID(), headers, bearer), { flush: flushTelemetryTraces });
         const callbacks = { content: fx.callbacks.content.read(), access: fx.callbacks.access.read(), account: fx.callbacks.account.read() };
         const counted = read();
         commands[name] = { ...counted, ms: profile.totalLatencyMs, timings: ownerTiming(profile, accessDatabase), callbacks };
@@ -317,6 +323,7 @@ test('one reply costs the same per command and owner at 100 and 1,000 threads', 
     await growRealmThreads(() => postReply(), 99, { keyPrefix: 'realm-reply-cost' });
     await postReply();
     const at100 = (await postReply(true)).cost;
+    console.log(JSON.stringify({ realmReplyWriteCostCheckpoint: { cut: 100, cost: at100 } }));
     await growRealmThreads(() => postReply(), 899, { keyPrefix: 'realm-reply-cost', startIndex: 99 });
     await postReply();
     const at1000 = (await postReply(true)).cost;

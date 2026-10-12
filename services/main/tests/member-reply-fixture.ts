@@ -24,8 +24,8 @@ export async function memberFixture(options: { liveContentEvidence?: boolean } =
   Bun.env.ACCOUNT_DATABASE_URL = databases.urls.account;
   Bun.env.ACCESS_DATABASE_URL = databases.urls.access;
   let h: Awaited<ReturnType<typeof agentProvisionHarness>>;
-  try { h = await agentProvisionHarness(scopes,
-    options.liveContentEvidence ? { contentEvidence: true } : {}); }
+  try { h = await agentProvisionHarness(scopes, { offlineAccess: true,
+    ...(options.liveContentEvidence ? { contentEvidence: true } : {}) }); }
   catch (error) { await databases.close(); throw error; }
   finally { Bun.env.ACCOUNT_DATABASE_URL = prior.account; Bun.env.ACCESS_DATABASE_URL = prior.access; }
   const contentPool = new Pool({ connectionString: Bun.env.CONTENT_DATABASE_URL });
@@ -46,12 +46,17 @@ export async function memberFixture(options: { liveContentEvidence?: boolean } =
     headers: { 'content-type': 'application/json', origin: h.base },
     body: JSON.stringify({ email: h.user.email, password: h.user.password }) });
   expect(signedIn.status).toBe(200);
-  const token = (await signIn({
+  const oauth = await signIn({
     account: h.base, clientId: h.client.client_id, redirectUri: h.redirectUri,
-    scope: `openid ${scopes.join(' ')}`, resource: Bun.env.ACCOUNT_MAIN_RESOURCE!,
-  }, signedIn.headers.get('set-cookie')!)).accessToken;
+    scope: `openid offline_access ${scopes.join(' ')}`, resource: Bun.env.ACCOUNT_MAIN_RESOURCE!,
+  }, signedIn.headers.get('set-cookie')!);
+  expect(oauth.refreshToken).toBeString();
+  // Account's five-minute lifetime is unchanged; long command fixtures retain
+  // the rotating grant and renew with enough time for the next request.
+  const currentToken = () => oauth.current(Date.now(), 30_000);
+  const token = oauth.accessToken;
   async function agent(name: string, kind: 'person' | 'organization' = 'person') {
-    const response = await h.call(h.main(), token, randomUUID(), {
+    const response = await h.call(h.main(), await currentToken(), randomUUID(), {
       profile: 'agent-provision-v1', kind, displayName: name });
     expect(response.status).toBe(201);
     return (await response.json() as { agent: string }).agent;
@@ -60,13 +65,13 @@ export async function memberFixture(options: { liveContentEvidence?: boolean } =
   const pen = await agent('Pen name');
   async function post(path: string, body: object, key = randomUUID()) {
     const response = await app.handle(new Request(`http://main.local${path}`, { method: 'POST',
-      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', 'idempotency-key': key },
+      headers: { authorization: `Bearer ${await currentToken()}`, 'content-type': 'application/json', 'idempotency-key': key },
       body: JSON.stringify(body) }));
     return { status: response.status, body: await response.json() as Record<string, any> };
   }
   async function get(path: string) {
     const response = await app.handle(new Request(`http://main.local${path}`, {
-      headers: { authorization: `Bearer ${token}` } }));
+      headers: { authorization: `Bearer ${await currentToken()}` } }));
     return { status: response.status, body: await response.json() as Record<string, any> };
   }
   const workBody = { profile: 'metadata-only-v1', authoring: 'own-work', language: 'en', title: `Member Work ${randomUUID()}`, actingSubject: actor };
@@ -89,8 +94,8 @@ export async function memberFixture(options: { liveContentEvidence?: boolean } =
   const selection = { profile: 'main-default-selection-v1', context: { kind: 'main-version-default', id: work.mainVersion },
     work: work.work, contribution: first.contribution, publicationDecision: first.publicationDecision,
     expectedSelectionHead: null, selectionBasis: 'main-maintainer', actingSubject: actor };
-  return { ...h, contentPool, content, access, owner, replies, maintainers, app, token, actor, pen,
+  return { ...h, contentPool, content, access, owner, replies, maintainers, app, token, oauth, currentToken, actor, pen,
     ...(suitability ? { suitability } : {}), post, get, work, first, selection, contribution, workBody, workKey, agent,
-    principal: () => h.verifier.verify(new Request('http://main.local', { headers: { authorization: `Bearer ${token}` } }), ['work:edit']),
+    principal: async () => h.verifier.verify(new Request('http://main.local', { headers: { authorization: `Bearer ${await currentToken()}` } }), ['work:edit']),
     close: async () => { await contentPool.end(); await h.close(); await databases.close(); } };
 }

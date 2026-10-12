@@ -60,13 +60,22 @@ export async function refreshGrant(c: LocalOAuthClient, refreshToken: string, sc
   const grant = await readGrant(await postToken(c, fieldsOf(c, { grant_type: 'refresh_token', refresh_token: refreshToken, scope })), 'refresh', scope);
   if (scopeSet(grant.scope) !== scopeSet(scope)) throw new Error('Refresh changed the granted scopes'); return { ...grant, scope }; }
 export class LocalOAuthSession {
+  private refreshing?: Promise<string>;
   constructor(readonly client: LocalOAuthClient, private grant: OAuthGrant, private expiresAt: number) {}
   get accessToken() { return this.grant.access_token; } get refreshToken() { return this.grant.refresh_token; } get scope() { return this.grant.scope; }
-  async current(now = Date.now()) {
-    if (now < this.expiresAt) return this.grant.access_token; if (!this.grant.refresh_token) throw new Error('Expired token has no refresh token');
-    const next = await refreshGrant(this.client, this.grant.refresh_token, this.grant.scope);
-    this.grant = { ...next, scope: this.grant.scope }; this.expiresAt = next.expires_in === undefined ? Number.POSITIVE_INFINITY : now + next.expires_in * 1000;
-    return this.grant.access_token; } }
+  /** A validity window lets command fixtures renew before a request can outlive its bearer. */
+  async current(now = Date.now(), minimumValidityMs = 0) {
+    if (this.refreshing) return this.refreshing;
+    if (now + minimumValidityMs < this.expiresAt) return this.grant.access_token;
+    const refreshToken = this.grant.refresh_token, scope = this.grant.scope;
+    if (!refreshToken) throw new Error('Expired token has no refresh token');
+    this.refreshing = (async () => {
+      const next = await refreshGrant(this.client, refreshToken, scope);
+      this.grant = { ...next, scope }; this.expiresAt = next.expires_in === undefined ? Number.POSITIVE_INFINITY : now + next.expires_in * 1000;
+      return this.grant.access_token;
+    })();
+    try { return await this.refreshing; }
+    finally { this.refreshing = undefined; } } }
 export async function signIn(c: LocalOAuthClient, cookie: string, o: AuthorizeOptions & { now?: () => number } = {}) {
   const authorized = await authorize(c, cookie, o); if (!authorized.ok) throw new OAuthClientError('authorize', authorized.response.status, (await authorized.response.text()).slice(0, 500));
   const grant = await exchangeCode(c, authorized, authorized.scope), now = (o.now ?? Date.now)();
