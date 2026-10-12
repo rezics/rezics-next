@@ -111,6 +111,7 @@ test('a member cannot read pre-admission history after the owner grant expires d
       history: { type: 'literal', value: 'from-admission' } }] } };
     // The reply predates sequence 10, so a history-cut ASK must refuse it.
     if (sql.includes('ASK')) return { boolean: false };
+    if (sql.includes('SELECT ?epoch ?prior')) return { results: { bindings: [] } };
     return { results: { bindings: [{ reply: uri(reply), placement: uri(`https://rezics.com/id/${randomUUID()}`),
       revision: uri(`urn:rezics:content:revision:${randomUUID()}`), review: uri(`urn:rezics:realm-review:${randomUUID()}`),
       root: uri(reply), rootRevision: uri(reply), author: uri(h.actor), preparation: uri('fixture-reply') }] } };
