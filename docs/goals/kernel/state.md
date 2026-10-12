@@ -43,6 +43,7 @@ Inside the window (Program's cuts): eligibility chain (one branch, after the cla
 - [Rights notice path](reports/G-1803-specification.md): two API gaps and eight A slices; slices 6 to 8 wait on Trust-ops' erasure chain; the public decision read is B.
 - [Pinned catalogue import cost](reports/catalogue-import-cost.md): recipe and bounded Bangumi import measurements, including the refused native episode batch.
 - [Bangumi episode reference refusal](reports/anime-episode-reference-refusal.md): the missing Person provisioning prerequisite in the measurement fixture, proven by a two-episode import.
+- [Content projection stop](reports/content-projection-stop-diagnosis.md): the eligibility digest depends on property order; the API-written proof never verifies in the reader.
 
 ## Open
 
