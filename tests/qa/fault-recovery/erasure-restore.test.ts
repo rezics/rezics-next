@@ -8,7 +8,7 @@ import { ErasureRestoreHold, reconcileRestoredErasures, releaseErasureRestoreHol
 import { MAIN_RELAY_STREAM_SCOPE } from '../../../services/main/src/modules/outbox/relay-position.ts';
 import { withRetainedErasureRestoreScenario, constructRetainedErasureCandidatesInOrder } from './retained-erasure-recovery-fixture.ts';
 
-test('OPS11/OPS12/IAM11/SEARCH20: retained erasure restores refuse stale authority, partial replay and stale journals', async () => {
+test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and credentials offline until the retained erasure journal reconciles', async () => {
   await withRetainedErasureRestoreScenario(async scenario => {
     const {
       runId, account, access, contentPool, relay, issuer, erased, operator, actor, work,
