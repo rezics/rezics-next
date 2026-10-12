@@ -540,15 +540,15 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         const basis = await withDisclosureViewer(reader.viewer ?? ANONYMOUS_VIEWER,
           () => work.media!.store.avatarDelivery(params.selection));
         if (!basis || !avatarImageEligible(basis)) return unavailable();
-        // Agent avatars return before summary hydration. Settle the same final
-        // name-owner disclosure first so a retained profile cannot bypass it.
+        // Agent avatars return before summary hydration. A retained profile
+        // must pass the live name owner both before and after graph hydration.
         const names: DisclosureTarget[] = [{ owner: 'graph', resource: basis.target, component: 'name',
           context: basis.context === DEFAULT_MEDIA_CONTEXT ? undefined : basis.context! }];
-        const nameDisclosure = reader.viewer?.signedIn
+        const discloseName = async () => reader.viewer?.signedIn
           ? await discloseInventoryWithAnonymousNames(work.environment, names, reader.viewer, 'media')
           : { decisions: await discloseInventory(work.environment, names,
             reader.viewer ?? ANONYMOUS_VIEWER, 'media'), anonymousNames: [] };
-        if (nameDisclosure.decisions[0] !== 'visible') return unavailable();
+        if ((await discloseName()).decisions[0] !== 'visible') return unavailable();
         const agents = (await fuseki.query(`PREFIX rv: <${RV}>
           PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
           SELECT ?avatar WHERE {
@@ -562,6 +562,8 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           // cannot regain delivery through the generic resource-summary path.
           if (basis.context !== DEFAULT_MEDIA_CONTEXT || agents.length !== 1
             || agents[0]?.avatar?.value !== params.selection) return unavailable();
+          const nameDisclosure = await discloseName();
+          if (nameDisclosure.decisions[0] !== 'visible') return unavailable();
           return await deliver(request, work.media, { objectNamespace: basis.objectNamespace,
             sha256: basis.sha256!, mediaType: basis.mediaType! }, !reader.viewer?.signedIn
               || nameDisclosure.anonymousNames[0] === 'visible');

@@ -135,6 +135,42 @@ test('controller receives a retained public-graph avatar with private name prefe
   expect(sha(new Uint8Array(await response.arrayBuffer()))).toBe(privatePerson.digest);
 });
 
+for (const change of ['private-name', 'ended-authority'] as const) {
+  test(`avatar hydration rechecks ${change} before returning ${change === 'private-name' ? '304' : 'bytes'}`, async () => {
+    const current = mediaStack(), person = await personAvatar(`Concurrent ${change}`);
+    await available(person);
+    const query = current.fuseki.query.bind(current.fuseki);
+    let resume: () => void = () => {}, hydrated: () => void = () => {};
+    const paused = new Promise<void>(resolve => { hydrated = resolve; });
+    const released = new Promise<void>(resolve => { resume = resolve; });
+    let intercepted = false;
+    current.fuseki.query = async (...args) => {
+      if (!intercepted && args[0].includes('SELECT ?avatar WHERE') && args[0].includes(person.agent)) {
+        intercepted = true;
+        hydrated();
+        await released;
+      }
+      return query(...args);
+    };
+    const request = current.main.handle(new Request(`http://main.local${person.url}`, {
+      headers: change === 'private-name' ? { 'if-none-match': `"${person.digest}"` } : {},
+    }));
+    try {
+      await paused;
+      if (change === 'private-name') await privateName(person);
+      else await current.access.strongDeactivateAccountSubject(person.member.principal.issuer, person.member.principal.subject);
+      resume();
+      const response = await request;
+      expect(await json(response, 404)).toMatchObject({ code: 'media_unavailable' });
+      expect(response.headers.get('cache-control')).not.toContain('public');
+    } finally {
+      resume();
+      current.fuseki.query = query;
+      await request;
+    }
+  }, 60_000);
+}
+
 test('Account deletion ends its Person and refuses retained avatar URLs without affecting another Person', async () => {
   const current = mediaStack();
   // This is the real Account deletion fence, not a fixture-only subject edit.
