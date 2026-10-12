@@ -56,9 +56,8 @@ async function restriction(
   revision: string | null = null,
   effect: 'disclosure' | 'search' = 'disclosure',
 ) {
-  const caseId = randomUUID(),
-    decisionId = randomUUID(),
-    fenceId = randomUUID();
+  const caseId = randomUUID(), decisionId = randomUUID();
+  let fenceId = randomUUID();
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -104,12 +103,16 @@ async function restriction(
         effect,
       ],
     );
-    await client.query(
-      `INSERT INTO access.governance_enforcement
+    const recorded = await client.query<{ id: string }>(
+      `INSERT INTO access.governance_enforcement AS current
       (id,authority_scope_id,context,owner,resource,component,revision,effect,decision_id,decision_ordinal,state,fence_epoch)
-      VALUES ($1,'governance:platform','urn:rezics:context:global','graph',$2,$3,$4,$5,$6,1,'restricted',1)`,
+      VALUES ($1,'governance:platform','urn:rezics:context:global','graph',$2,$3,$4,$5,$6,1,'restricted',1)
+      ON CONFLICT (owner,resource,component,revision,effect,context,authority_scope_id)
+      DO UPDATE SET state='restricted',decision_id=EXCLUDED.decision_id,
+        decision_ordinal=EXCLUDED.decision_ordinal,fence_epoch=current.fence_epoch+1 RETURNING id`,
       [fenceId, resource, component, revision, effect, decisionId],
     );
+    fenceId = recorded.rows[0]!.id;
     await client.query(
       `UPDATE access.governance_case SET decision_head=$2,generation=1,
         state='closed',closed_at=clock_timestamp() WHERE id=$1`,

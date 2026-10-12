@@ -281,19 +281,28 @@ export class DisclosureStore implements DisclosureReader {
             UNION ALL SELECT ordinal,resource FROM parent_edges WHERE kind = 'realm'),
           name_policy AS MATERIALIZED (${nameOwnerPolicySql(4, 5, 6, 7)})
           SELECT wanted.ordinal, fence.open, fence.generation AS "recoveryGeneration", fence.cut AS "enforcementCut",
-            EXISTS (SELECT 1 FROM realm_candidates realm JOIN access.governance_enforcement e
-              ON e.owner = 'graph' AND e.resource = realm.resource
+            EXISTS (SELECT 1 FROM realm_candidates realm CROSS JOIN LATERAL (
+              SELECT 1 FROM access.governance_enforcement e
               JOIN access.moderation_decision d ON d.id = e.decision_id
-              WHERE realm.ordinal = wanted.ordinal AND e.state = 'restricted' AND e.component = 'record'
+              WHERE e.owner = 'graph' AND e.resource = realm.resource
+                AND e.state = 'restricted' AND e.component = 'record'
                 AND e.revision IS NULL AND e.effect = 'disclosure' AND e.context = $3::text
                 AND e.authority_scope_id = 'governance:platform' AND d.authority_kind = 'platform'
-                AND d.authority_scope_id = 'governance:platform' AND d.context = $3::text) AS "realmClosed",
+                AND d.authority_scope_id = 'governance:platform' AND d.context = $3::text
+              LIMIT 1) matched WHERE realm.ordinal = wanted.ordinal) AS "realmClosed",
             CASE WHEN wanted."nameOwner" IS NULL THEN true
               ELSE COALESCE(n.visible AND n.open, false) END AS "nameVisible",
             CASE WHEN wanted."nameOwner" IS NULL THEN true
               ELSE COALESCE(n."publicVisible" AND n.open, false) END AS "publicNameVisible",
-            EXISTS (SELECT 1 FROM access.governance_enforcement e
-              WHERE e.state = 'restricted' AND e.effect = ANY($2::text[])
+            EXISTS (SELECT 1 FROM (
+              SELECT DISTINCT resource, owner FROM unnest(ARRAY[wanted.resource, right(wanted.resource, 36)]) resource
+              CROSS JOIN unnest(ARRAY[wanted.owner, CASE
+                WHEN wanted.component = 'body' AND wanted.owner = 'graph' THEN 'content'
+                WHEN wanted.component = 'body' AND wanted.owner = 'content' THEN 'graph'
+                ELSE wanted.owner END]) owner
+              ) direct CROSS JOIN LATERAL (SELECT 1 FROM access.governance_enforcement e
+              WHERE e.owner = direct.owner AND e.resource = direct.resource
+                AND e.state = 'restricted' AND e.effect = ANY($2::text[])
                 AND e.context = ANY(ARRAY[$3::text, wanted.context])
                 AND ((e.resource = wanted.resource OR e.owner IN ('media', 'review')
                     AND e.resource = right(wanted.resource, 36)) AND (e.owner = wanted.owner
@@ -305,10 +314,11 @@ export class DisclosureStore implements DisclosureReader {
                   AND (e.revision IS NULL OR wanted.revision IS NULL OR e.revision = wanted.revision
                     OR wanted.component = 'body' AND e.owner IN ('graph', 'content')
                       AND replace(e.revision, 'urn:rezics:content:revision:', '')
-                        = replace(wanted.revision, 'urn:rezics:content:revision:', ''))))
-              OR EXISTS (SELECT 1 FROM parent_edges parent JOIN access.governance_enforcement e
-                    ON e.owner = 'graph' AND e.resource = parent.resource
-                    WHERE parent.ordinal = wanted.ordinal AND parent.kind = 'work' AND e.state = 'restricted'
+                        = replace(wanted.revision, 'urn:rezics:content:revision:', '')))
+                LIMIT 1) matched)
+              OR EXISTS (SELECT 1 FROM parent_edges parent CROSS JOIN LATERAL (
+                    SELECT 1 FROM access.governance_enforcement e
+                    WHERE e.owner = 'graph' AND e.resource = parent.resource AND e.state = 'restricted'
                     AND e.effect = ANY($2::text[]) AND e.context = ANY(ARRAY[$3::text, wanted.context])
                     AND (wanted.owner <> 'graph' OR parent.resource <> wanted.resource)
                     AND e.component IN ('title', 'name', 'record', 'publication')
@@ -316,12 +326,13 @@ export class DisclosureStore implements DisclosureReader {
                       OR parent."protectedRevision" IS NULL AND EXISTS (SELECT 1
                         FROM jsonb_array_elements(wanted.parents) p WHERE p->>'resource' = parent.resource
                           AND p ? 'protectedRevision')
-                      OR e.revision = parent."protectedRevision"))
-              OR EXISTS (SELECT 1 FROM access.scope_gate gate
-                WHERE NOT gate.open AND ((wanted."resourceKind" = 'work' AND gate.id = 'work:read:' || wanted.resource)
-                  OR EXISTS (SELECT 1 FROM parent_edges parent
-                  WHERE parent.ordinal = wanted.ordinal AND parent.kind = 'work'
-                    AND gate.id = 'work:read:' || parent.resource))) AS restricted,
+                      OR e.revision = parent."protectedRevision") LIMIT 1) matched
+                    WHERE parent.ordinal = wanted.ordinal AND parent.kind = 'work')
+              OR EXISTS (SELECT 1 FROM (
+                SELECT wanted.resource WHERE wanted."resourceKind" = 'work'
+                UNION SELECT resource FROM parent_edges WHERE ordinal = wanted.ordinal AND kind = 'work'
+                ) work_ref CROSS JOIN LATERAL (SELECT 1 FROM access.scope_gate gate
+                  WHERE gate.id = 'work:read:' || work_ref.resource AND NOT gate.open LIMIT 1) matched) AS restricted,
             ${suitabilityDefault ? `COALESCE((SELECT jsonb_agg(head.labels) FROM
               (SELECT wanted.resource AS ref UNION SELECT resource FROM parent_edges
                 WHERE ordinal = wanted.ordinal) refs
