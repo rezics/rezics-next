@@ -10,7 +10,7 @@ import { addressKey } from '../address/path.ts';
 import type { ResolvedAddress } from '../address/client.ts';
 import { cookies, headers } from 'next/headers';
 import { ACCESS_COOKIE } from '../auth/cookies.ts';
-import { sessionAgentState } from '../auth/session.ts';
+import { sessionAgentState, sessionReadSubject } from '../auth/session.ts';
 import { displayLanguages } from '../../i18n/display-languages.ts';
 import { readSpacePage } from '../address/space-read.ts';
 import type { JoinPage } from '../manage/settings-api.ts';
@@ -42,11 +42,16 @@ import {
   type ZoneWorkPage,
 } from './types.ts';
 
-// Public headers and module reads are anonymous and cached per request.
-// A denied header can use Main’s authenticated admission or its limited join
-// page; that exception never substitutes private module data for a public read.
+// Published modules use the public viewer. Member-readable Realm and Zone
+// reads carry the eligible saved Agent; every cache is scoped to this request.
 
 const main = () => mainApiWithToken(undefined);
+
+const readerMain = cache(async () => {
+  const token = (await cookies()).get(ACCESS_COOKIE)?.value;
+  const actingSubject = sessionReadSubject(token ? await sessionAgentState() : null) ?? undefined;
+  return { main: mainApiWithToken(actingSubject ? token : undefined), actingSubject };
+});
 
 type Answer<T> = {
   data: T | null;
@@ -181,7 +186,10 @@ const readPrivateRealm = cache(async (ref: string, locale: UiLocale, address?: R
 });
 
 export const readPresentation = cache(async (zone: string, after?: string): Promise<Loaded<ZonePresentationRead>> =>
-  settle(() => main().v1.zones({ id: zone }).presentation.get({ query: { after } }), after),
+  settle(async () => {
+    const { main, actingSubject } = await readerMain();
+    return main.v1.zones({ id: zone }).presentation.get({ query: { actingSubject, after } });
+  }, after),
 );
 
 export const readCompletePresentation = cache(async (zone: string): Promise<Loaded<ZonePresentationRead>> =>
@@ -189,27 +197,39 @@ export const readCompletePresentation = cache(async (zone: string): Promise<Load
 );
 
 /**
- * The page Main resolves for a path under a Zone. Like every Realm read it is public and answers the same for
- * everyone; a non-member, private and unknown path share one `missing`.
+ * The page Main resolves for a path under a Zone. Main conceals a private
+ * Space from readers without its live membership or Zone read authority.
  */
 export const readZoneRoute = cache(
   async (zone: string, path: string, cursor?: string): Promise<Loaded<ZoneRouteRead>> =>
-    settle(() => main().v1.zones({ id: zone }).routes.get({ query: { path, cursor } }), cursor),
+    settle(async () => {
+      const { main, actingSubject } = await readerMain();
+      return main.v1.zones({ id: zone }).routes.get({ query: { actingSubject, path, cursor } });
+    }, cursor),
 );
 
 export const readRealmWorks = cache(
   async (realm: string, _locale: UiLocale, cursor?: string): Promise<Loaded<RealmWorksPage>> =>
-    settle(() => main().v1.realms({ realm }).works.get({ query: { cursor } }), cursor),
+    settle(async () => {
+      const { main, actingSubject } = await readerMain();
+      return main.v1.realms({ realm }).works.get({ query: { actingSubject, cursor } });
+    }, cursor),
 );
 
 export const readRealmDecisions = cache(
   async (realm: string, cursor?: string): Promise<Loaded<RealmDecisionsPage>> =>
-    settle(() => main().v1.realms({ realm }).decisions.get({ query: { cursor } }), cursor),
+    settle(async () => {
+      const { main, actingSubject } = await readerMain();
+      return main.v1.realms({ realm }).decisions.get({ query: { actingSubject, cursor } });
+    }, cursor),
 );
 
 export const readRealmDecision = cache(
   async (realm: string, decision: string): Promise<Loaded<RealmDecisionRead>> =>
-    settle(() => main().v1.realms({ realm }).decisions({ decision }).get({ query: {} })),
+    settle(async () => {
+      const { main, actingSubject } = await readerMain();
+      return main.v1.realms({ realm }).decisions({ decision }).get({ query: { actingSubject } });
+    }),
 );
 
 export const readNewAdoptions = cache(
