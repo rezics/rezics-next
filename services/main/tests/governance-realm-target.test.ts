@@ -20,6 +20,12 @@ import { SafetyDecisionMail, type SafetyNoticeMail } from '../src/modules/govern
 import { DECIDE_ACTION, GLOBAL_CONTEXT, type DecisionInput } from '../src/modules/governance/store.ts';
 import { GRAPHS, RV, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 
+/** Raw owner mutations inject corruption and races on the disposable QA graph.
+ * Keep this fixture boundary visible to QA's assembler classification. */
+async function mutateOwnerFixture(env: WorkActivationEnvironment, sparql: string) {
+  await env.fuseki.update(sparql);
+}
+
 const realm = 'https://rezics.com/id/00000000-0000-4000-8000-000000000101';
 const space = 'https://rezics.com/id/00000000-0000-4000-8000-000000000102';
 const owner = 'https://rezics.com/id/00000000-0000-4000-8000-000000000103';
@@ -675,7 +681,7 @@ test('production Realm ownership rejects an extra nonreciprocal Space before dis
   try {
     const stranger = await f.stack.member('realm-unrelated-space-owner');
     const unrelatedSpace = `https://rezics.com/id/${randomUUID()}`;
-    await f.stack.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA { GRAPH <${GRAPHS.current}> {
+    await mutateOwnerFixture(f.stack.env, `PREFIX rv: <${RV}> INSERT DATA { GRAPH <${GRAPHS.current}> {
       <${f.realm}> rv:space <${unrelatedSpace}> .
       <${unrelatedSpace}> a rv:Space ; rv:owner <${stranger.actor}> .
     } }`);
@@ -756,7 +762,7 @@ test('production Realm dispatch refuses a competing primary kind introduced afte
     f.stack.fuseki.commandWithReceipt = async command => {
       if (command.update.includes('a rv:ModerationEffect') && command.update.includes(`<${f.realm}>`)) {
         raced = true;
-        await f.stack.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA { GRAPH <${GRAPHS.current}> {
+        await mutateOwnerFixture(f.stack.env, `PREFIX rv: <${RV}> INSERT DATA { GRAPH <${GRAPHS.current}> {
           <${f.realm}> a rv:Agent } }`);
       }
       return original.call(f.stack.fuseki, command);
@@ -793,7 +799,7 @@ test('production Realm moderationTarget receipt refreshes the directory without 
       ?slot a rv:RealmPublicationSlot ; rv:realm <${f.realm}> } }`, 1024)).boolean).toBe(false);
     // A source-only fixture change has no receipt of its own. The real owner
     // decision below must identify this exact Realm to incremental discovery.
-    await f.stack.fuseki.update(`PREFIX rv: <${RV}> DELETE { GRAPH <${GRAPHS.current}> {
+    await mutateOwnerFixture(f.stack.env, `PREFIX rv: <${RV}> DELETE { GRAPH <${GRAPHS.current}> {
       <${f.space}> rv:listing ?listing } } INSERT { GRAPH <${GRAPHS.current}> {
       <${f.space}> rv:listing "unlisted" } } WHERE { GRAPH <${GRAPHS.current}> {
       <${f.space}> rv:listing ?listing } }`);
