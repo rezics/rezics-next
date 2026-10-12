@@ -25,7 +25,8 @@ import { pinAdmittedZonePageContent } from '../content-publication/publish-admit
 import { ContentPublicationConflict, settleZonePageContentPublication,
   rejectZonePageContentPublication } from '../content-publication/publish.ts';
 import { RevisionNotFound } from '../work/history.ts';
-import { checkZoneSitePublishSelection, type ZoneSitePublishSelection } from './config-format.ts';
+import { checkZoneSitePublishSelection, ZoneSitePublishSelection } from './config-format.ts';
+import { Value } from 'typebox/value';
 import { readZoneThemeExecution, type ZoneThemeSelection } from '../presentation/zone-theme.ts';
 import { zoneDocumentShowcase, zonePagePresentation, resolveZonePageDocument } from '../presentation/zone-document.ts';
 import { WorkReadLimit } from '../work/read-session.ts';
@@ -95,12 +96,14 @@ interface ZoneHead {
   attachment?: { by: string; realm: string };
   defaultContext?: { context: string; semanticRevision: string };
   publicationRevision: string | null;
+  homeDocument: string | null;
+  homeRevision: string | null;
   documentSite: boolean;
 }
 
 async function zoneHead(env: WorkActivationEnvironment, zone: string): Promise<ZoneHead> {
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?space ?navigation ?head
-    ?manifest ?state ?disclosure ?realm ?presentation ?context ?contextRevision ?official ?spaceDisclosure ?listing ?publication ?spaceProfile ?attachedBy WHERE {
+    ?manifest ?state ?disclosure ?realm ?presentation ?context ?contextRevision ?official ?spaceDisclosure ?listing ?publication ?spaceProfile ?attachedBy ?homeDocument ?homeRevision WHERE {
       GRAPH ${iri(GRAPHS.current)} { ${iri(zone)} a rv:Zone ; rv:space ?space ;
         rv:navigation ?navigation ; rv:zoneHead ?head ; rv:zoneState ?state .
         OPTIONAL { ${iri(zone)} rv:disclosure ?disclosure }
@@ -112,6 +115,8 @@ async function zoneHead(env: WorkActivationEnvironment, zone: string): Promise<Z
         OPTIONAL { ${iri(zone)} rv:presentation ?presentation }
         OPTIONAL { ${iri(zone)} rv:official ?official }
         OPTIONAL { ${iri(zone)} rv:sitePublicationHead ?publication }
+        OPTIONAL { ${iri(zone)} rv:homeDocument ?homeDocument .
+          OPTIONAL { ?homeDocument rv:homeDocumentHead ?homeRevision } }
         OPTIONAL { ${iri(zone)} rv:defaultContext ?context }
         OPTIONAL { ${iri(zone)} rv:defaultContextRevision ?contextRevision } }
       GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:ZoneRevision ;
@@ -135,6 +140,8 @@ async function zoneHead(env: WorkActivationEnvironment, zone: string): Promise<Z
   const disclosure = row.spaceDisclosure.value === `${RV}Public` ? 'public' as const : 'private' as const;
   return { zone, space: row.space.value, navigation: row.navigation.value,
     publicationRevision: row.publication?.value ?? null,
+    homeDocument: row.homeDocument?.value ?? null,
+    homeRevision: row.homeRevision?.value ?? null,
     documentSite: row.spaceProfile?.value === 'https://rezics.com/definition/space-zone-v1',
     revision: row.head.value, manifest: row.manifest.value,
     state: row.state.value === `${RV}Retired` ? 'retired' : 'active',
@@ -165,6 +172,7 @@ export async function readZoneConfiguration(env: WorkActivationEnvironment, zone
   // The stored manifest may still name the disclosure copied at creation. The Space is current.
   const live = { ...config, disclosure: head.disclosure };
   if (live.zone !== zone || live.space !== head.space || live.navigation !== head.navigation
+    || (live.homeDocument ?? null) !== head.homeDocument
     || live.state !== head.state
     || JSON.stringify(live.defaultContext ?? null) !== JSON.stringify(head.defaultContext ?? null)
     || JSON.stringify(live.official ?? null) !== JSON.stringify(head.official ?? null)
@@ -237,7 +245,7 @@ export interface ZoneRevisionInput {
   zone: string; expectedHead: string; actingSubject: string; idempotencyKey: string;
   operation: 'configure' | 'retire' | 'recover' | 'publish';
   publication?: ZoneSitePublishSelection;
-  patch?: { name?: string; language?: string;
+  patch?: { name?: string; language?: string; prepareHomeDocument?: true;
     defaultRealm?: string | null; official?: Record<string, never> | null;
     presentation?: ZonePresentation | null;
     defaultContext?: ZoneConfiguration['defaultContext'] | null;
@@ -253,45 +261,69 @@ export interface ZoneSitePublicationReceipt extends ZoneSitePublicationSelection
   Pick<CompositionTerminal, 'receipt' | 'admissionId' | 'requestDigest' | 'authorityEpoch'
     | 'scope' | 'dataEpoch' | 'sequence'> {
   outcome: 'succeeded'; zone: string; revision: string; themeRevision: string;
+  homeDocument?: string; homeRevision?: string; homeErased?: boolean;
   publishedThemeRevision?: string; publishedThemeActivation?: string;
 }
 
 /** Exact historical proof for Content settlement, independent of later republishing
  * or retirement. O(pages), one bounded receipt lookup, no Content body reads. */
 export async function readZoneSitePublicationReceipt(env: WorkActivationEnvironment,
-  receipt: string): Promise<ZoneSitePublicationReceipt | null> {
+  receipt: string, allowErasedHome = false): Promise<ZoneSitePublicationReceipt | null> {
   const result = await env.fuseki.query(`PREFIX rv: <${RV}>
     SELECT ?zone ?revision ?routesRevision ?navigationRevision ?themeRevision ?count
       ?admissionId ?digest ?authorityEpoch ?scope ?dataEpoch ?sequence ?binding ?page ?variant ?contentRevision ?language
-      ?publishedThemeRevision ?publishedThemeActivation WHERE {
+      ?publishedThemeRevision ?publishedThemeActivation ?homeDocument ?homeRevision ?byteDigest ?homeErased WHERE {
       GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ;
         rv:outcome rv:Succeeded ; rv:structureOwner ?zone ; rv:structureRevision ?revision ;
         rv:sitePublicationRevision ?revision ; rv:routesRevision ?routesRevision ;
         rv:navigationRevision ?navigationRevision ; rv:themeRevision ?themeRevision ;
-        rv:publishedPageCount ?count ; rv:publishedPage ?binding ;
+        rv:publishedPageCount ?count ;
         rv:admissionId ?admissionId ; rv:requestDigest ?digest ; rv:authorityEpoch ?authorityEpoch ;
         rv:admittedScope ?scope ; rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ?dataEpoch ; rv:sequence ?sequence .
         OPTIONAL { ${iri(receipt)} rv:publishedThemeRevision ?publishedThemeRevision }
-        OPTIONAL { ${iri(receipt)} rv:publishedThemeActivation ?publishedThemeActivation } }
+        OPTIONAL { ${iri(receipt)} rv:publishedThemeActivation ?publishedThemeActivation }
+        OPTIONAL { ${iri(receipt)} rv:homeDocument ?homeDocument }
+        OPTIONAL { ${iri(receipt)} rv:homeRevision ?homeRevision } }
       GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:ZoneRevision ; rv:component ?zone ;
         rv:predecessor ?themeRevision ; rv:sitePublicationReceipt ${iri(receipt)} ;
-        rv:dataEpoch ?dataEpoch ; rv:sequence ?sequence .
+        rv:dataEpoch ?dataEpoch ; rv:sequence ?sequence . }
+      BIND(BOUND(?homeRevision) && EXISTS { GRAPH ${iri(GRAPHS.revisions)} {
+        ?homeRevision a rv:ErasedRevision } } AS ?homeErased)
+      {
+        GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} rv:publishedPage ?binding }
+        GRAPH ${iri(GRAPHS.revisions)} {
         ?binding rv:sitePublicationRevision ?revision ; rv:page ?page ;
-          rv:variant ?variant ; rv:contentRevision ?contentRevision .
+          rv:variant ?variant ; rv:contentRevision ?contentRevision ; rv:byteDigest ?byteDigest .
         OPTIONAL { ?binding rv:contentLanguage ?language } }
+        BIND(false AS ?selectionSuppressed) }
+      UNION { BIND(true AS ?selectionSuppressed) }
+      FILTER((!?homeErased && !?selectionSuppressed) || (?homeErased && ?selectionSuppressed && ${allowErasedHome}))
+      FILTER(!BOUND(?homeRevision) || ?homeErased || EXISTS { GRAPH ${iri(GRAPHS.revisions)} {
+        ?revision rv:homeDocument ?homeDocument ; rv:homeRevision ?homeRevision .
+        ?homeRevision a rv:ZoneHomeRevision, rv:RevisionAnchor ; rv:component ?homeDocument ;
+          rv:publishedPageCount ?count ; rv:publishedPage ?binding .
+        FILTER NOT EXISTS { ?homeRevision rv:publishedPage ?foreignBinding .
+          FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} rv:publishedPage ?foreignBinding } } }
+        } })
     } ORDER BY STR(?binding) LIMIT ${ZONE_SITE_PUBLICATION_COST.receiptRows}`, ZONE_SITE_PUBLICATION_COST.receiptResponseBytes);
   const rows = result.results?.bindings ?? [];
   if (!rows.length) return null;
   const first = rows[0]!;
   const get = (key: string) => first[key]?.value;
+  const homeErased = allowErasedHome && get('homeErased') === 'true';
   const metadata = ['zone', 'revision', 'routesRevision', 'navigationRevision', 'themeRevision',
     'count', 'admissionId', 'digest', 'authorityEpoch', 'scope', 'dataEpoch', 'sequence'];
   if (rows.length > ZONE_SITE_PUBLICATION_COST.maxPages
     || metadata.some(key => !get(key) || rows.some(row => row[key]?.value !== get(key)))
-    || get('count') !== String(rows.length)
+    || (homeErased ? rows.length !== 1 || !/^(?:[1-9]|[12][0-9]|3[0-2])$/.test(get('count') ?? '')
+      : get('count') !== String(rows.length))
     || get('scope') !== `zone:edit:${get('zone')}`
     || !!get('publishedThemeRevision') !== !!get('publishedThemeActivation')
     || ['publishedThemeRevision', 'publishedThemeActivation'].some(key => rows.some(row => row[key]?.value !== get(key)))
+    || !!get('homeDocument') !== !!get('homeRevision')
+    || ['homeDocument', 'homeRevision'].some(key => rows.some(row => row[key]?.value !== get(key)))
+    || !homeErased && rows.some(row => !/^[0-9a-f]{64}$/.test(row.byteDigest?.value ?? '')
+      || get('homeDocument') && row.page?.value !== get('homeDocument'))
     || get('dataEpoch') !== env.lineage.dataEpoch
     || !/^[1-9][0-9]*$/.test(get('sequence') ?? '')
     || !/^[0-9a-f]{64}$/.test(get('digest') ?? '')
@@ -300,20 +332,30 @@ export async function readZoneSitePublicationReceipt(env: WorkActivationEnvironm
   }
   let selection: ZoneSitePublicationSelection;
   try {
-    selection = checkZoneSitePublication({ routesRevision: get('routesRevision'),
+    const selected = { routesRevision: get('routesRevision')!, navigationRevision: get('navigationRevision')! };
+    if (homeErased) {
+      if (!Value.Check(ZoneSitePublishSelection.properties.routesRevision, selected.routesRevision)
+        || !Value.Check(ZoneSitePublishSelection.properties.navigationRevision, selected.navigationRevision)) {
+        throw new Error('Suppressed bundle cuts differ');
+      }
+      selection = { ...selected, pages: [] };
+    } else selection = checkZoneSitePublication({ routesRevision: get('routesRevision'),
       navigationRevision: get('navigationRevision'), pages: rows.map(row => ({
         page: row.page?.value, variantId: row.variant?.value,
+        byteDigest: row.byteDigest?.value,
         revisionId: row.contentRevision?.value.startsWith('urn:rezics:content:revision:')
           ? row.contentRevision.value.slice('urn:rezics:content:revision:'.length) : undefined,
         ...(row.language?.value ? { language: row.language.value } : {}),
       })) });
-    if (rows.some((row, index) => row.binding?.value !== zonePublishedPageBinding(
+    if (!homeErased && rows.some((row, index) => row.binding?.value !== zonePublishedPageBinding(
       get('revision')!, selection.pages[index]!.page, selection.pages[index]!.revisionId))) {
       throw new Error('Page binding differs');
     }
   } catch { throw new ZoneUnavailable('Site publication page bindings differ'); }
   return { ...selection, outcome: 'succeeded', receipt, zone: get('zone')!, revision: get('revision')!,
     themeRevision: get('themeRevision')!, admissionId: get('admissionId')!, requestDigest: get('digest')!,
+    ...(get('homeDocument') ? { homeDocument: get('homeDocument')!, homeRevision: get('homeRevision')! } : {}),
+    ...(homeErased ? { homeErased: true } : {}),
     authorityEpoch: get('authorityEpoch')!, scope: get('scope')!, dataEpoch: get('dataEpoch')!, sequence: get('sequence')!,
     ...(get('publishedThemeRevision') ? { publishedThemeRevision: get('publishedThemeRevision')!,
       publishedThemeActivation: get('publishedThemeActivation')! } : {}) };
@@ -355,7 +397,7 @@ async function rejectCancelledSitePins(env: WorkActivationEnvironment, content: 
       await rejectZonePageContentPublication(env, content,
         zonePagePreparationId(terminal.admissionId, page.revisionId), {
           receipt: terminal.receipt, admissionId: terminal.admissionId,
-          requestDigest: terminal.requestDigest, zone: input.zone, variantId: page.variantId,
+          requestDigest: terminal.requestDigest, zone: input.zone, resourceId: page.page, variantId: page.variantId,
           revisionId: page.revisionId, byteDigest: page.byteDigest, contentEpoch: page.contentEpoch,
         });
     }
@@ -373,9 +415,6 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
     checkZoneSitePublishSelection(input.publication);
     if (input.patch !== undefined) throw new InvalidZoneConfiguration('Site publication cannot patch configuration');
     if (!content) throw new ZonePublicationUnavailable('Content owner is unavailable');
-    if (input.publication!.pages.some(page => page.page !== input.zone)) {
-      throw new InvalidZoneConfiguration('Every home page variant must belong to this Zone');
-    }
   } else if (input.publication !== undefined) {
     throw new InvalidZoneConfiguration('Only site publication may select page revisions');
   }
@@ -410,6 +449,10 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
       await access.recordGraphOutcome(admission.id,
         (await readCompositionReceipt(env, admission.id, admission.action))!);
       throw new ZoneStale('Zone head changed');
+    }
+    if (input.publication && (!head.homeDocument
+      || input.publication.pages.some(page => page.page !== head.homeDocument))) {
+      return invalid(new InvalidZoneConfiguration('Every home variant must belong to the Zone home document'));
     }
     if (input.operation === 'retire' && head.state !== 'active'
       || input.operation === 'recover' && head.state !== 'retired'
@@ -460,7 +503,7 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
       // comes from the claimed Zone admission; foreign bytes never enter this path.
       for (const page of input.publication.pages) {
         if (page.contentEpoch !== owner.dataEpoch) throw new ContentPublicationConflict('Content owner epoch changed');
-        if (await content.owningResourceForRevision(page.revisionId) !== input.zone) {
+        if (await content.owningResourceForRevision(page.revisionId) !== head.homeDocument) {
           throw new RevisionNotFound('Content revision is unavailable');
         }
         const exact = (await content.readExactBatch([page.revisionId], async ids => new Set(ids)))[0];
@@ -526,6 +569,7 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
     try { config = checkZoneConfiguration(Buffer.from(JSON.stringify({ ...prior,
       state: input.operation === 'retire' ? 'retired'
         : input.operation === 'recover' ? 'active' : prior.state,
+      ...(patch?.prepareHomeDocument ? { homeDocument: prior.homeDocument ?? `https://rezics.com/id/${Bun.randomUUIDv7()}` } : {}),
       ...(patch?.defaultRealm !== undefined
         ? patch.defaultRealm === null ? { defaultRealm: undefined } : { defaultRealm: patch.defaultRealm } : {}),
       ...(patch?.official !== undefined ? { official: patch.official ?? undefined } : {}),
@@ -595,6 +639,11 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
     const batch = `urn:rezics:outbox:${hash(receipt)}`;
     const event = `urn:rezics:event:${hash(operation)}`;
     const publication = input.publication;
+    const homeRevision = publication ? `https://rezics.com/id/${Bun.randomUUIDv7()}` : null;
+    const homeManifest = publication ? prepareComponent(env.objectDirectory, config.homeDocument!, {
+      zone: input.zone, pages: publication.pages.map(page => ({ ...page,
+        language: contentLanguages.get(page.revisionId)! })), predecessor: head.homeRevision,
+    }, ZONE_PROFILE) : null;
     // The manifest holds the draft name. Public readers derive both the name
     // and address suffix from this label, so only a bundle switch promotes it
     // after the first publication. Unpublished Zones retain their live label.
@@ -604,6 +653,7 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
     if (publication && selectedTheme) themeSelection = (await readZoneThemeExecution(env, selectedTheme, input.zone)).selection;
     const publicationFields = publication ? `
       ${iri(receipt)} rv:sitePublicationRevision ${iri(revision)} ;
+        rv:homeDocument ${iri(config.homeDocument!)} ; rv:homeRevision ${iri(homeRevision!)} ;
         rv:routesRevision ${iri(publication.routesRevision)} ;
         rv:navigationRevision ${iri(publication.navigationRevision)} ;
         rv:themeRevision ${iri(input.expectedHead)} ; rv:publishedPageCount ${publication.pages.length} .
@@ -644,12 +694,15 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
           rv:presentation ?oldPresentation ;
           rv:defaultContext ?oldContext ; rv:defaultContextRevision ?oldContextRevision .
           ${publication ? `${iri(input.zone)} rv:sitePublicationHead ?oldPublication .` : ''}
+          ${publication && head.homeRevision ? `${iri(config.homeDocument!)} rv:homeDocumentHead ${iri(head.homeRevision)} .` : ''}
           ${promotePublicName ? `${iri(input.zone)} <http://www.w3.org/2000/01/rdf-schema#label> ?oldName .` : ''} } }
       INSERT {
         GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
         GRAPH ${iri(GRAPHS.current)} { ${iri(input.zone)} rv:zoneHead ${iri(revision)} ;
           rv:zoneState rv:${config.state === 'active' ? 'Active' : 'Retired'} .
           ${publication ? `${iri(input.zone)} rv:sitePublicationHead ${iri(revision)} .` : ''}
+          ${config.homeDocument ? `${iri(input.zone)} rv:homeDocument ${iri(config.homeDocument)} .` : ''}
+          ${publication ? `${iri(config.homeDocument!)} a rv:ZoneHomeDocument ; rv:homeDocumentHead ${iri(homeRevision!)} .` : ''}
           ${promotePublicName && name.name !== null ? `${iri(input.zone)} <http://www.w3.org/2000/01/rdf-schema#label> ${lit(name.name)}@${name.language} .` : ''}
           ${config.defaultRealm ? `${iri(input.zone)} rv:defaultRealm ${iri(config.defaultRealm)} .` : ''}
           ${attach ? `${iri(input.zone)} rv:realmAttachedBy ${iri(input.actingSubject)} ;
@@ -665,7 +718,17 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
           rv:manifest ${iri(`urn:rezics:sha256:${manifest}`)} ;
           rv:modelRevision ${iri(ZONE_PROFILE)} ; rv:shapeRevision ${iri(ZONE_PROFILE)} ;
           rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .
-          ${publication ? `${iri(revision)} rv:sitePublicationReceipt ${iri(receipt)} .` : ''}
+          ${publication ? `${iri(revision)} rv:sitePublicationReceipt ${iri(receipt)} ;
+            rv:homeDocument ${iri(config.homeDocument!)} ; rv:homeRevision ${iri(homeRevision!)} .
+            ${iri(homeRevision!)} a rv:ZoneHomeRevision, rv:RevisionAnchor ;
+              rv:component ${iri(config.homeDocument!)} ; rv:operation ${iri(operation)} ;
+              rv:manifest ${iri(`urn:rezics:sha256:${homeManifest}`)} ;
+              rv:publishedPageCount ${publication.pages.length} ;
+              rv:modelRevision ${iri(ZONE_PROFILE)} ; rv:shapeRevision ${iri(ZONE_PROFILE)} ;
+              rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .
+            ${head.homeRevision ? `${iri(homeRevision!)} rv:predecessor ${iri(head.homeRevision)} .` : ''}
+            ${publication.pages.map(page => `${iri(homeRevision!)}
+              rv:publishedPage ${iri(zonePublishedPageBinding(revision, page.page, page.revisionId))} .`).join('\n')}` : ''}
           ${publicationPageTriples} }
         GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ;
           rv:operation ${iri(operation)} ; rv:requestDigest ${lit(digest)} ;
@@ -693,6 +756,9 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
           OPTIONAL { ${iri(input.zone)} rv:defaultContext ?oldContext }
           OPTIONAL { ${iri(input.zone)} rv:defaultContextRevision ?oldContextRevision }
           ${publication ? `OPTIONAL { ${iri(input.zone)} rv:sitePublicationHead ?oldPublication }
+            ${iri(input.zone)} rv:homeDocument ${iri(config.homeDocument!)} .
+            ${head.homeRevision ? `${iri(config.homeDocument!)} rv:homeDocumentHead ${iri(head.homeRevision)} .`
+              : `FILTER NOT EXISTS { ${iri(config.homeDocument!)} ?homePredicate ?homeValue }`}
             ${iri(head.navigation)} a rv:Structure ; rv:structureOf ${iri(input.zone)} ;
               rv:structureHead ${iri(publication.navigationRevision)} .` : ''}
           ${promotePublicName ? `OPTIONAL { ${iri(input.zone)} <http://www.w3.org/2000/01/rdf-schema#label> ?oldName }` : ''} }
@@ -712,6 +778,10 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
         graphs: [GRAPHS.current, GRAPHS.revisions] },
       { shape: `${ZONE_PROFILE}/revision-shape`, focus: [revision],
         graphs: [GRAPHS.current, GRAPHS.revisions] },
+      ...(publication ? [
+        { shape: `${ZONE_PROFILE}/home-document-shape`, focus: [config.homeDocument!], graphs: [GRAPHS.current, GRAPHS.revisions] },
+        { shape: `${ZONE_PROFILE}/home-revision-shape`, focus: [homeRevision!], graphs: [GRAPHS.current, GRAPHS.revisions] },
+      ] : []),
     ]);
     try {
       const commit = () => validatedCommand(env, { receipt, digest, update, validations,

@@ -7,7 +7,7 @@ import type { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { ContentErasureInvalid } from '../src/modules/erasure/content.ts';
 import { canonicalErasureTargets } from '../src/modules/erasure/graph.ts';
 import { ERASURE_REVISION_RESOURCES, GRAPH_ERASURE_KINDS, graphRevisionIds, resolveErasureRevisions,
-  type ResolvedErasureRevision } from '../src/modules/erasure/revision-kind.ts';
+  inventoryZoneHomeRevisionTargets, type ResolvedErasureRevision } from '../src/modules/erasure/revision-kind.ts';
 
 const uuid = (ordinal: number) => `00000000-0000-4000-8000-${String(ordinal).padStart(12, '0')}`;
 const resource = (ordinal: number) => `https://rezics.com/id/${uuid(ordinal)}`;
@@ -37,6 +37,7 @@ const kinds = [
   ['release_revision', 'ReleaseRevision', 'release'],
   ['work_head', 'CreativeWork', 'work'],
   ['composition_revision', 'StructureRevision', 'structure'],
+  ['home_document_revision', 'ZoneHomeRevision', 'home-document'],
 ] as const;
 
 test('each graph revision kind resolves to its owner resource', async () => {
@@ -54,7 +55,7 @@ test('each graph revision kind resolves to its owner resource', async () => {
   }
 });
 
-test('a content revision resolves from its variant owner without a graph read', async () => {
+test('a content revision resolves from its variant owner and inventories selecting home cuts', async () => {
   const seen: string[] = [];
   const owner = resource(3);
   const resolved = await resolveErasureRevisions(content([{ id: uuid(4), resource_id: owner,
@@ -63,7 +64,8 @@ test('a content revision resolves from its variant owner without a graph read', 
     graphIri: `urn:rezics:content:revision:${uuid(4)}`, erased: false,
     content: { availability: 'available', pendingPin: false, activePin: false,
       erasureId: null, erasureEpoch: null } }]);
-  expect(seen).toEqual([]);
+  expect(seen).toHaveLength(1);
+  expect(seen[0]).toContain('rv:ZoneHomeRevision');
   expect(ERASURE_REVISION_RESOURCES.content_revision).toBe('work');
 });
 
@@ -111,6 +113,68 @@ test('one request can name a Content revision and its Work head', async () => {
   expect(resolved.every(item => item.resourceId === owner && !item.erased)).toBe(true);
 });
 
+function homeInventory(rows: { revision: string; owner: string; contentRevision: string;
+  page?: string; owned?: boolean; erased?: boolean }[], seen: string[] = []) {
+  return { query: async (sparql: string) => {
+    seen.push(sparql);
+    const uri = (value: string) => ({ type: 'uri', value });
+    const bool = (value: boolean) => ({ type: 'literal', value: String(value), datatype: XSD_BOOLEAN });
+    const unique = [...new Map(rows.map(row => [JSON.stringify([row.revision, row.owner,
+      row.owned ?? true, row.erased ?? false]), row])).values()];
+    return { results: { bindings: unique.map(row => ({ revision: uri(row.revision), owner: uri(row.owner),
+      owned: bool(row.owned ?? true), erased: bool(row.erased ?? false) })) } };
+  } } as unknown as Pick<FusekiClient, 'query'>;
+}
+
+const contentTarget = (owner = resource(40)): ResolvedErasureRevision => ({ kind: 'content_revision',
+  ref: uuid(41), resourceId: owner, graphIri: `urn:rezics:content:revision:${uuid(41)}`, erased: false });
+
+test('home erasure inventory includes one anchor per retained publication cut and deduplicates it', async () => {
+  const target = contentTarget();
+  const rows = [42, 43, 42].map(n => ({ revision: resource(n), owner: target.resourceId,
+    contentRevision: target.graphIri }));
+  const homes = await inventoryZoneHomeRevisionTargets(homeInventory(rows), [target]);
+  expect(homes.map(home => home.graphIri)).toEqual([resource(42), resource(43)]);
+  expect(homes.every(home => home.kind === 'home_document_revision' && home.resourceId === target.resourceId)).toBe(true);
+});
+
+test('multilingual selections bound the closure by cuts rather than their language combinations', async () => {
+  const revisions = Array.from({ length: 32 }, (_, n) => ({ ...contentTarget(), ref: uuid(200 + n),
+    graphIri: `urn:rezics:content:revision:${uuid(200 + n)}` }));
+  const rows = [42, 43, 44].flatMap(n => revisions.map(target => ({ revision: resource(n),
+    owner: target.resourceId, contentRevision: target.graphIri })));
+  const seen: string[] = [];
+  expect((await inventoryZoneHomeRevisionTargets(homeInventory(rows, seen), revisions)).map(home => home.graphIri))
+    .toEqual([resource(42), resource(43), resource(44)]);
+  expect(seen[0]).toContain('SELECT DISTINCT ?revision ?owner ?erased ?owned');
+});
+
+test('legacy Zone-owned revisions keep erasure resolution through publication-owned document identity', async () => {
+  const zone = resource(44), page = resource(45), target = contentTarget(zone), seen: string[] = [];
+  const homes = await inventoryZoneHomeRevisionTargets(homeInventory([{ revision: resource(46),
+    owner: page, page: zone, contentRevision: target.graphIri }], seen), [target]);
+  expect(homes[0]?.resourceId).toBe(page);
+  expect(seen[0]).toContain('?requestedOwner a rv:Zone ; rv:homeDocument ?owner');
+});
+
+test('home inventory refuses wrong ownership, missing query coverage and oversized native closures', async () => {
+  const target = contentTarget();
+  await expect(inventoryZoneHomeRevisionTargets(homeInventory([{ revision: resource(42),
+    owner: resource(47), contentRevision: target.graphIri, owned: false }]), [target]))
+    .rejects.toBeInstanceOf(ContentErasureInvalid);
+  await expect(inventoryZoneHomeRevisionTargets({ query: async () => ({}) } as unknown as Pick<FusekiClient, 'query'>,
+    [target])).rejects.toBeInstanceOf(ContentErasureInvalid);
+  const rows = Array.from({ length: 64 }, (_, n) => ({ revision: resource(100 + n), owner: target.resourceId,
+    contentRevision: target.graphIri }));
+  await expect(inventoryZoneHomeRevisionTargets(homeInventory(rows), [target])).rejects.toBeInstanceOf(ContentErasureInvalid);
+});
+
+test('a multilingual cut already suppressed by another revision retains its earlier tombstone', async () => {
+  const target = contentTarget();
+  expect(await inventoryZoneHomeRevisionTargets(homeInventory([{ revision: resource(42),
+    owner: target.resourceId, contentRevision: target.graphIri, erased: true }]), [target])).toEqual([]);
+});
+
 test('tombstone digests keep Content revision URNs and accept graph revision IRIs', () => {
   const first = uuid(20);
   const second = uuid(21);
@@ -123,7 +187,7 @@ test('tombstone digests keep Content revision URNs and accept graph revision IRI
 });
 
 /** Classes the identity query erases. Every other rv:*Revision class is closed below. */
-const ERASABLE_REVISION_CLASSES = ['ReleaseRevision', 'SemanticRevision', 'StructureRevision'] as const;
+const ERASABLE_REVISION_CLASSES = ['ReleaseRevision', 'SemanticRevision', 'StructureRevision', 'ZoneHomeRevision'] as const;
 
 /** A new rv:*Revision class fails until it is erasable or listed here with a reason. */
 const CLOSED_REVISION_CLASSES: Record<string, string> = {
@@ -200,7 +264,8 @@ test('the native revision-class constant equals the model set', () => {
   expect(generatedNames('PRIOR')).toEqual(priorRevisionTypes(names));
   // The compiler does not read this service file, so it is checked here: every
   // type identity resolution looks for is a *Revision class or a named extra.
-  const resolved = [...source.matchAll(/\ba rv:([A-Z][A-Za-z0-9]+)/g)].map(match => match[1]!)
+  const identity = source.slice(source.indexOf('function identityQuery'), source.indexOf('function refuse'));
+  const resolved = [...identity.matchAll(/\ba rv:([A-Z][A-Za-z0-9]+)/g)].map(match => match[1]!)
     .filter(name => name !== 'ErasedRevision');
   const known = new Set<string>([...names, ...IDENTITY_RESOLUTION_TYPES]);
   expect(resolved.filter(name => !known.has(name))).toEqual([]);

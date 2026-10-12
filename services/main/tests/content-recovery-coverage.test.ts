@@ -6,7 +6,7 @@ import { GRAPHS, RV } from '../src/modules/work/activate.ts';
 import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts';
 import { graphErasureReceipt } from '../src/modules/erasure/graph.ts';
 import { openRecoveryPayload, sealRecoveryPayload } from '../../account/src/recovery-envelope.ts';
-import { assertContentRecoveryCoverage, captureContentRecoveryCoverage,
+import { assertContentRecoveryCoverage, captureContentRecoveryCoverage, assertZoneHomeContentReferences,
   type ContentRecoveryCoverage, type ContentRecoveryProofContext, type GraphContentReference } from '../src/modules/work/content-recovery-coverage.ts';
 
 const revisionId = '2d31cde1-6f5d-4f0f-8f6b-6901446c42d3';
@@ -94,6 +94,7 @@ function retainedCut() {
     graphQueries.push(sql);
     const binding = (value: string) => ({ type: 'uri', value });
     if (sql.includes('SELECT ?graph WHERE')) return { results: { bindings: [{ graph: binding(reference.graph) }] } };
+    if (sql.includes('SELECT ?home ?resource')) return { results: { bindings: [] } };
     if (sql.includes('SELECT ?graph ?subject')) return { results: { bindings: [{
       graph: binding(reference.graph), subject: binding(reference.subject), predicate: binding(reference.predicate),
       object: binding(reference.object), ...(reference.byteDigest ? { digest: binding(reference.byteDigest) } : {}),
@@ -195,4 +196,36 @@ test('Content erased-pin source fails closed when missing, ambiguous, malformed 
   cut.state.byteDigest = hash(Buffer.from('{"body":"retained before erasure"}'));
   cut.state.erased = false;
   await expect(assertContentRecoveryCoverage(cut.pool, cut.fuseki, c1, cut.proof)).rejects.toThrow('Content owner differs');
+});
+
+test('home anchors recover through exact retained binding pins; removing or tampering a selection is refused', async () => {
+  const cell = (value: string) => ({ value });
+  const native = (last: string) => `https://rezics.com/id/00000000-0000-4000-8000-0000000000${last}`;
+  const values = { home: native('01'), resource: native('02'), count: '2',
+    binding: 'urn:rezics:zone-published-page:first', page: native('02'),
+    variant: 'urn:rezics:variant:00000000-0000-4000-8000-000000000003',
+    contentRevision: `urn:rezics:content:revision:${revisionId}`, digest: 'a'.repeat(64),
+    publication: native('04'), publicationResource: native('02') };
+  const row = (fields: Record<string, string>) => Object.fromEntries(Object.entries(fields).map(([key, value]) => [key, cell(value)]));
+  const selection = [row(values), row({ ...values, binding: 'urn:rezics:zone-published-page:second',
+    variant: 'urn:rezics:variant:00000000-0000-4000-8000-000000000005',
+    contentRevision: `urn:rezics:content:revision:${otherRevision}`, digest: 'b'.repeat(64) })];
+  const scan = (rows: typeof selection) => assertZoneHomeContentReferences({
+    query: async () => ({ results: { bindings: rows } }),
+  } as unknown as FusekiClient);
+  await scan(selection);
+  await expect(scan(selection.slice(0, 1))).rejects.toThrow('selection is incomplete');
+  await expect(scan([selection[0]!, selection[0]!])).rejects.toThrow('selection is ambiguous');
+  for (const field of ['resource', 'publication', 'digest', 'variant', 'contentRevision', 'publicationResource']) {
+    const tampered = structuredClone(selection);
+    delete tampered[0]![field];
+    await expect(scan(tampered)).rejects.toThrow('reference shape differs');
+  }
+  await expect(scan([row({ ...values, count: '1', page: native('06') })]))
+    .rejects.toThrow('reference shape differs');
+  // Exact Content pin coverage independently rejects a well-formed but wrong
+  // retained digest; anchor linking cannot substitute for the owner's bytes.
+  const cut = retainedCut();
+  cut.reference.byteDigest = 'f'.repeat(64);
+  await expect(cut.capture()).rejects.toThrow();
 });

@@ -431,6 +431,13 @@ function update(
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?target a rv:ErasedRevision } }
+    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} {
+      ?homeCut a rv:ZoneHomeRevision ; rv:publishedPage ?homeBinding .
+      ?homeBinding rv:contentRevision ?homeContent .
+      VALUES ?homeContent { ${targets.filter(target => target.startsWith('urn:rezics:content:revision:')).map(iri).join(' ')} }
+      FILTER(?homeCut NOT IN (${targets.map(iri).join(', ')}))
+      FILTER NOT EXISTS { ?homeCut a rv:ErasedRevision }
+    } }
     BIND(?n + 1 AS ?next)
   }`;
 }

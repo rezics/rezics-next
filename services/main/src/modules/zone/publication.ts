@@ -48,7 +48,7 @@ export async function readZonePublication(env: WorkActivationEnvironment, zone: 
         rv:component ${iri(zone)} ; rv:sitePublicationReceipt ?receipt . }
     } LIMIT 2`, 4096)).results?.bindings ?? [];
     if (rows.length !== 1 || !rows[0]?.receipt?.value) throw new ZoneUnavailable('Published Zone bundle is unavailable');
-    bundle = await readZoneSitePublicationReceipt(env, rows[0].receipt.value);
+    bundle = await readZoneSitePublicationReceipt(env, rows[0].receipt.value, true);
     if (!bundle || bundle.zone !== zone || bundle.revision !== state.publicationRevision) {
       throw new ZoneUnavailable('Published Zone bundle differs from its selected head');
     }
@@ -141,7 +141,9 @@ export async function isZonePublishedPageRevision(env: WorkActivationEnvironment
     GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:ZoneRevision ;
       rv:component ${iri(zone)} ; rv:sitePublicationReceipt ?receipt .
       ${iri(binding)} rv:sitePublicationRevision ${iri(revision)} ;
-        rv:page ${iri(page)} ; rv:contentRevision ${iri(`urn:rezics:content:revision:${revisionId}`)} . }
+        rv:page ${iri(page)} ; rv:contentRevision ${iri(`urn:rezics:content:revision:${revisionId}`)} .
+      FILTER NOT EXISTS { ${iri(`urn:rezics:content:revision:${revisionId}`)} a rv:ErasedRevision }
+      FILTER NOT EXISTS { ${iri(revision)} rv:homeRevision ?homeCut . ?homeCut a rv:ErasedRevision } }
     GRAPH ${iri(GRAPHS.receipts)} { ?receipt a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
       rv:structureOwner ${iri(zone)} ; rv:sitePublicationRevision ${iri(revision)} ;
       rv:admittedScope ${lit(`zone:edit:${zone}`)} ; rv:publishedPage ${iri(binding)} . }
@@ -159,7 +161,8 @@ export async function readZonePublishedHomeContent(
   if (variantId !== undefined && (!Value.Check(ZonePublishedPage.properties.variantId, variantId)
     || !state.bundle)) throw new ZoneUnavailable('Published Zone home is unavailable');
   if (!state.bundle || state.disclosure !== 'public') return null;
-  const pages = state.bundle.pages.filter(page => page.page === state.zone);
+  if (state.bundle.homeErased) return null;
+  const pages = state.bundle.pages.filter(page => page.page === (state.bundle!.homeDocument ?? state.zone));
   const selected = selectDisplayName(new Map(pages.map(page => [page.language ?? 'und', page.revisionId])),
     languages);
   const page = variantId !== undefined ? pages.find(page => page.variantId === variantId)
@@ -167,20 +170,34 @@ export async function readZonePublishedHomeContent(
   if (!page) throw new ZoneUnavailable('Published Zone home is unavailable');
   if (!work.content) throw new ZonePublicationUnavailable('Content owner is unavailable');
   if (!await isZonePublishedPageRevision(work.environment, state.zone, page.page, page.revisionId)) {
+    if (await erasedHomeCut(work.environment, state)) return null;
     throw new ZoneUnavailable('Published Zone home is unavailable');
   }
   const viewer = disclosureViewer(null);
   const results = await withDisclosureViewer(viewer, () => work.content!.readExactBatch([page.revisionId],
     async ids => new Set(ids)));
   const exact = (await discloseContent(work.environment, results, viewer))[0];
+  if (exact?.status === 'erased') return null;
   if (exact?.status !== 'available' || exact.reference.resourceId !== page.page
     || exact.reference.variantId !== page.variantId || exact.body.document === undefined) {
     throw new ZoneUnavailable('Published Zone home is unavailable');
   }
   const document = parseDocument(exact.body.document);
   if (document.profile !== 'blocks') throw new ZoneUnavailable('Published Zone home is not a Blocks document');
-  await assertZoneHomeContentCurrent(work, state, page, exact.reference.byteDigest);
+  try { await assertZoneHomeContentCurrent(work, state, page, exact.reference.byteDigest); }
+  catch (error) {
+    if (error instanceof ZoneUnavailable && await erasedHomeCut(work.environment, state)) return null;
+    throw error;
+  }
   return { page, document, reference: exact.reference };
+}
+
+async function erasedHomeCut(env: WorkActivationEnvironment,
+  state: Awaited<ReturnType<typeof readZonePublication>>): Promise<boolean> {
+  if (!state.bundle?.homeRevision) return false;
+  return (await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+    GRAPH ${iri(GRAPHS.revisions)} { ${iri(state.bundle.homeRevision)} a rv:ErasedRevision }
+  }`, 1024)).boolean === true;
 }
 
 export async function assertZoneHomeContentCurrent(
@@ -226,7 +243,11 @@ export async function readZoneHomeDocument(work: MainWorkDependencies, request: 
     slideMedia ? bindZoneCampaignArtVariant(slideMedia, state.zone, page.variantId)
       : await readZoneCampaignArt(work.media?.store, state.realm, state.presentation.slides,
         { environment: work.environment, zone: state.zone, variantId: page.variantId }), localData);
-  await assertZoneHomeContentCurrent(work, state, page, reference.byteDigest);
+  try { await assertZoneHomeContentCurrent(work, state, page, reference.byteDigest); }
+  catch (error) {
+    if (error instanceof ZoneUnavailable && await erasedHomeCut(work.environment, state)) return null;
+    throw error;
+  }
   return { ...resolved, reference };
 }
 

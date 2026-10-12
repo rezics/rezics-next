@@ -53,6 +53,7 @@ export const ERASURE_TARGET_OWNERS = {
   release_revision: 'graph',
   work_head: 'graph',
   composition_revision: 'graph',
+  home_document_revision: 'graph',
 } as const;
 export type ErasureTargetKind = keyof typeof ERASURE_TARGET_OWNERS;
 export const ERASURE_TARGET_COMPLETION_STATES = ['pending', 'failed', 'completed', 'legacy'] as const;

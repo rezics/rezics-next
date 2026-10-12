@@ -70,6 +70,7 @@ function contentTypeTerm(type: string): string {
 // independent of the descriptive type catalogue's creation choices.
 const admittedContentTypes = () => [...new Set([
   ...admittedTypes.map(entry => entry.type), nativePostType, 'https://schema.org/Organization',
+  'https://rezics.com/vocab/ZoneHomeDocument',
 ])];
 
 function contentTargetStateGuard(resourceId: string): string {
@@ -83,6 +84,17 @@ function contentTargetStateGuard(resourceId: string): string {
 
 /** Target state and owner identity must still hold in the dispatch snapshot. */
 export function contentTargetGuard(resourceId: string, target?: ContentTarget): string {
+  if (target?.type === 'https://rezics.com/vocab/ZoneHomeDocument') {
+    if (!target.zone || target.zone === resourceId) throw new ContentDraftUnavailable('Content target identity differs from its owner');
+    return `${iri(target.zone)} a <https://rezics.com/vocab/Zone> ;
+      <https://rezics.com/vocab/homeDocument> ${iri(resourceId)} ;
+      <https://rezics.com/vocab/zoneState> <https://rezics.com/vocab/Active> ;
+      <https://rezics.com/vocab/space> ?homeSpace ; <https://rezics.com/vocab/zoneHead> ?homeZoneHead .
+      FILTER NOT EXISTS { ?otherZone <https://rezics.com/vocab/homeDocument> ${iri(resourceId)} .
+        FILTER(?otherZone != ${iri(target.zone)}) }
+      FILTER NOT EXISTS { ${iri(resourceId)} a ?foreignOwner .
+        FILTER(?foreignOwner != <https://rezics.com/vocab/ZoneHomeDocument>) }`;
+  }
   if (target && (!admittedContentTypes().includes(target.type)
     || (target.type === 'https://rezics.com/vocab/Zone' ? target.zone !== resourceId : target.zone !== null))) {
     throw new ContentDraftUnavailable('Content target identity differs from its owner');
@@ -104,13 +116,18 @@ export function contentTargetGuard(resourceId: string, target?: ContentTarget): 
 export async function resolveContentTarget(env: WorkActivationEnvironment,
   resourceId: string): Promise<ContentTarget> {
   const rows = (await env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
-    SELECT DISTINCT ?type WHERE {
+    SELECT DISTINCT ?type ?zone WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
         rv:routingEpoch ${lit(env.lineage.routingEpoch)} .
         FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
-      GRAPH ${iri(GRAPHS.current)} { ${iri(resourceId)} a ?type .
+      GRAPH ${iri(GRAPHS.current)} { { ${iri(resourceId)} a ?type .
         VALUES ?type { ${admittedContentTypes().map(contentTypeTerm).join(' ')} }
+        FILTER(?type != rv:ZoneHomeDocument)
         ${contentTargetStateGuard(resourceId)} }
+        UNION { ?zone a rv:Zone ; rv:homeDocument ${iri(resourceId)} ;
+          rv:zoneState rv:Active ; rv:space ?homeSpace ; rv:zoneHead ?homeZoneHead .
+          FILTER NOT EXISTS { ${iri(resourceId)} a ?foreignOwner . FILTER(?foreignOwner != rv:ZoneHomeDocument) }
+          BIND(rv:ZoneHomeDocument AS ?type) } }
     } LIMIT ${CONTENT_TARGET_COST.types + 1}`, CONTENT_TARGET_COST.graphBytes)).results?.bindings ?? [];
   const types = [...new Set(rows.flatMap(row => row.type ? [row.type.value] : []))];
   if (!types.length || rows.length > CONTENT_TARGET_COST.types
@@ -118,6 +135,13 @@ export async function resolveContentTarget(env: WorkActivationEnvironment,
     throw new ContentDraftUnavailable('Content target is unavailable');
   }
   const zone = types.includes('https://rezics.com/vocab/Zone');
+  if (types.includes('https://rezics.com/vocab/ZoneHomeDocument')) {
+    const owners = [...new Set(rows.flatMap(row => row.zone ? [row.zone.value] : []))];
+    if (types.length !== 1 || owners.length !== 1 || owners[0] === resourceId) {
+      throw new ContentDraftUnavailable('Content target owner is ambiguous');
+    }
+    return { type: 'https://rezics.com/vocab/ZoneHomeDocument', zone: owners[0]! };
+  }
   if (zone && types.some(type => workContentTypes().includes(type)
     || type === 'https://schema.org/Organization')) {
     throw new ContentDraftUnavailable('Content target owner is ambiguous');

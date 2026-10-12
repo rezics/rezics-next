@@ -114,12 +114,14 @@ export const RESERVED_OWNER_TYPES: ReadonlySet<string> = new Set([
   `${RV}DefinitionRevision`, `${RV}ModelGeneration`, `${RV}ModelComponent`, `${RV}ExternalReference`,
   `${RV}DefinitionPresentation`, `${RV}PresentationRevision`,
   `${RV}Space`, `${RV}Realm`, `${RV}ClassificationContext`, `${RV}Decision`,
+  `${RV}ZoneHomeDocument`, `${RV}ZoneHomeRevision`,
   `${RV}CatalogueVerification`,
 ]);
 
 /** Predicates that another component owns on a shared Resource. */
 export const RESERVED_OWNER_PREDICATES: ReadonlySet<string> = new Set([
   `${RV}head`, `${RV}semanticHead`, `${RV}mainVersion`, `${RV}work`, `${RV}continuityProfile`,
+  `${RV}homeDocument`, `${RV}homeDocumentHead`, `${RV}homeRevision`,
   `${RV}scalarValue`, `${RV}hostingPolicy`, `${RV}definitionHead`, `${RV}occurrenceHead`,
   `${RV}participation`, `${RV}generationHead`, 'http://www.w3.org/2000/01/rdf-schema#label',
   `${RV}presentationHead`, `${RV}presentationDefinition`, `${RV}meaningRevision`,

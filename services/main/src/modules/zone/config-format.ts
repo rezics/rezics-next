@@ -32,7 +32,8 @@ export const ZONE_SITE_PUBLICATION_COST = { maxPages: 32, receiptRows: 33,
 export const ZonePublishedPage = Type.Object({ page: nativeId,
   variantId: Type.String({ pattern: '^urn:rezics:variant:[0-9a-f-]{36}$' }),
   revisionId: contentRevisionId,
-  language: Type.Optional(Type.String({ maxLength: 100 })) }, { additionalProperties: false });
+  language: Type.Optional(Type.String({ maxLength: 100 })),
+  byteDigest: Type.Optional(Type.String({ pattern: '^[0-9a-f]{64}$' })) }, { additionalProperties: false });
 export type ZonePublishedPage = Static<typeof ZonePublishedPage>;
 export const ZoneSitePublicationSelection = Type.Object({
   routesRevision: nativeId, navigationRevision: nativeId,
@@ -97,6 +98,8 @@ export const ZoneConfiguration = Type.Object({
   zone: nativeId,
   space: nativeId,
   navigation: nativeId,
+  /** Reserved lazily by the Zone owner; publication activates the document. */
+  homeDocument: Type.Optional(nativeId),
   state: Type.Union([Type.Literal('active'), Type.Literal('retired')]),
   disclosure: Type.Union([Type.Literal('public'), Type.Literal('private')]),
   defaultRealm: Type.Optional(nativeId),

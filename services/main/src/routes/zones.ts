@@ -153,6 +153,7 @@ const realmAttachmentWithdrawalWrite = t.Object({ zone: ref, realm: ref, receipt
   replayed: t.Boolean(), sourcePosition });
 const sitePublicationWrite = t.Object({ ...ZoneSitePublicationSelection.properties,
   outcome: t.Literal('succeeded'), zone: ref, revision: ref, themeRevision: ref,
+  homeDocument: t.Optional(ref), homeRevision: t.Optional(ref),
   publishedThemeRevision: t.Optional(ref), publishedThemeActivation: t.Optional(ref),
   receipt: t.String(), admissionId: t.String(), requestDigest: t.String(), authorityEpoch: t.String(),
   scope: t.String(), dataEpoch: t.String(), sequence: t.String(), replayed: t.Boolean() });
@@ -426,18 +427,19 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
             return fusekiReadBudget.run(budget, async () => {
               signal.throwIfAborted();
               const publication = await readZonePublication(work.environment, zone);
-              const publishedPage = publication.bundle?.pages.find(page => page.page === zone) ?? null;
-              const variant = publishedPage ? null : (await content.listVariantHeads(zone, '', 1)).items[0];
-              const hex = hash(`rezics:zone:showcase-variant:v1\0${zone}`).slice(0, 32);
+              const homeDocument = state.homeDocument ?? zone;
+              const publishedPage = publication.bundle?.pages.find(page => page.page === homeDocument) ?? null;
+              const variant = publishedPage ? null : (await content.listVariantHeads(homeDocument, '', 1)).items[0];
+              const hex = hash(`rezics:zone:showcase-variant:v1\0${homeDocument}`).slice(0, 32);
               const variantBits = ((Number.parseInt(hex[16]!, 16) & 3) | 8).toString(16);
               const variantId = publishedPage?.variantId ?? variant?.id
                 ?? `urn:rezics:variant:${hex.slice(0, 8)}-${hex.slice(8, 12)}-8${hex.slice(13, 16)}-${variantBits}${hex.slice(17, 20)}-${hex.slice(20)}`;
-              const head = await content.readDraftHead(zone, variantId);
+              const head = await content.readDraftHead(homeDocument, variantId);
               const viewer = disclosureViewer(principal, query.actingSubject);
               const exact = head && (await discloseContent(work.environment,
                 await withDisclosureViewer(viewer, () => content.readExactBatch([head.revisionId],
                   async ids => new Set(ids))), viewer))[0];
-              if (head && (exact?.status !== 'available' || exact.reference.resourceId !== zone
+              if (head && (exact?.status !== 'available' || exact.reference.resourceId !== homeDocument
                 || exact.reference.variantId !== variantId || exact.revisionId !== head.revisionId
                 || exact.reference.revisionId !== head.revisionId || exact.body.document === undefined)) {
                 throw new ZoneUnavailable('Content draft is unavailable');
@@ -698,6 +700,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     .put('/v1/zones/:id/configuration', { params: t.Object({ id: groupUuid }),
       body: t.Object({ expectedHead: ref, actingSubject: ref,
         name: t.Optional(t.String({ minLength: 1, maxLength: 300 })), language: t.Optional(languageTag),
+        prepareHomeDocument: t.Optional(t.Literal(true)),
         defaultRealm: t.Optional(t.Union([ref, t.Null()])),
         official: t.Optional(t.Union([t.Object({}, { additionalProperties: false }), t.Null()])),
         defaultContext: t.Optional(t.Union([t.Object({ context: ref, semanticRevision: ref },
@@ -717,6 +720,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
             expectedHead: body.expectedHead, actingSubject: body.actingSubject,
             idempotencyKey, operation: 'configure', patch: {
               ...(body.name !== undefined ? { name: body.name } : {}),
+              ...(body.prepareHomeDocument ? { prepareHomeDocument: true as const } : {}),
               ...(body.language !== undefined ? { language: body.language } : {}),
               ...(body.defaultRealm !== undefined ? { defaultRealm: body.defaultRealm } : {}),
               ...(body.official !== undefined ? { official: body.official === null ? null : {} } : {}),

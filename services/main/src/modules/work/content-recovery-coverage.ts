@@ -122,6 +122,7 @@ export async function graphContentReferences(fuseki: FusekiClient): Promise<Grap
     return row.graph.value;
   }));
   const references: GraphContentReference[] = [];
+  if (graphs.has(GRAPHS.revisions)) await assertZoneHomeContentReferences(fuseki);
   for (const graph of graphs) {
     const result = await fuseki.query(`PREFIX rv: <${RV}>
     SELECT ?graph ?subject ?predicate ?object ?digest ?preparation ?epoch ?sequence WHERE {
@@ -151,6 +152,56 @@ export async function graphContentReferences(fuseki: FusekiClient): Promise<Grap
     }
   }
   return sorted(references);
+}
+
+/** A multilingual anchor selects the existing one-revision pin nodes. Keeping
+ * digests on those nodes avoids a revision × digest Cartesian product. Recovery
+ * must also prove their bounded, complete association with the native anchor. */
+export async function assertZoneHomeContentReferences(fuseki: Pick<FusekiClient, 'query'>): Promise<void> {
+  const result = await fuseki.query(`PREFIX rv: <${RV}>
+    SELECT ?home ?resource ?count ?binding ?page ?variant ?contentRevision ?digest ?publication ?publicationResource WHERE {
+      GRAPH ${iri(GRAPHS.revisions)} {
+        ?home a rv:ZoneHomeRevision .
+        FILTER NOT EXISTS { ?home a rv:ErasedRevision }
+        OPTIONAL { ?home rv:component ?resource }
+        OPTIONAL { ?home rv:publishedPageCount ?count }
+        OPTIONAL { ?home rv:publishedPage ?binding .
+          OPTIONAL { ?binding rv:page ?page }
+          OPTIONAL { ?binding rv:variant ?variant }
+          OPTIONAL { ?binding rv:contentRevision ?contentRevision }
+          OPTIONAL { ?binding rv:byteDigest ?digest }
+          OPTIONAL { ?binding rv:sitePublicationRevision ?publication .
+            ?publication rv:homeRevision ?home ; rv:homeDocument ?publicationResource }
+        }
+      }
+    } ORDER BY STR(?home) STR(?binding)`);
+  const rows = result.results?.bindings;
+  if (!rows) throw new ContentRecoveryConflict('Zone home reference inventory is incomplete');
+  const homes = new Map<string, { resource: string; count: number; bindings: Set<string>; variants: Set<string>; revisions: Set<string>; publication: string }>();
+  for (const row of rows) {
+    const home = row.home?.value, resource = row.resource?.value, count = Number(row.count?.value);
+    const binding = row.binding?.value, variant = row.variant?.value, revision = row.contentRevision?.value;
+    const publication = row.publication?.value;
+    if (!home || !resource || row.page?.value !== resource || row.publicationResource?.value !== resource
+      || !binding || !variant || !revision || !publication
+      || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(home)
+      || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(resource)
+      || !/^urn:rezics:variant:[0-9a-f-]{36}$/.test(variant)
+      || !revision.startsWith(REVISION) || !UUID.test(revision.slice(REVISION.length))
+      || !SHA.test(row.digest?.value ?? '') || !Number.isInteger(count) || count < 1 || count > 32) {
+      throw new ContentRecoveryConflict('Zone home reference shape differs');
+    }
+    const state = homes.get(home) ?? { resource, count, publication, bindings: new Set<string>(), variants: new Set<string>(), revisions: new Set<string>() };
+    if (state.resource !== resource || state.count !== count || state.publication !== publication
+      || state.bindings.has(binding) || state.variants.has(variant) || state.revisions.has(revision)) {
+      throw new ContentRecoveryConflict('Zone home reference selection is ambiguous');
+    }
+    state.bindings.add(binding); state.variants.add(variant); state.revisions.add(revision);
+    homes.set(home, state);
+  }
+  if ([...homes.values()].some(home => home.bindings.size !== home.count)) {
+    throw new ContentRecoveryConflict('Zone home reference selection is incomplete');
+  }
 }
 
 interface OwnedReferences {

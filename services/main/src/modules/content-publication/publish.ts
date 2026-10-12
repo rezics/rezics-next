@@ -557,9 +557,10 @@ export async function settleZonePageContentPublication(env: WorkActivationEnviro
   if (!preparation) throw new ContentPublicationConflict('Content page pin is absent');
   const publication = await readZoneSitePublicationReceipt(env, siteReceipt);
   const ref = preparation.reference;
-  if (!publication || publication.zone !== ref.resourceId
+  if (!publication
     || !publication.pages.some(page => page.page === ref.resourceId
-      && page.variantId === ref.variantId && page.revisionId === ref.revisionId)) {
+      && page.variantId === ref.variantId && page.revisionId === ref.revisionId
+      && page.byteDigest === ref.byteDigest)) {
     throw new ContentPublicationConflict('Site receipt does not select the pinned exact page');
   }
   if ((await content.ownerPosition()).dataEpoch !== preparation.position.dataEpoch) {
@@ -575,7 +576,7 @@ export async function settleZonePageContentPublication(env: WorkActivationEnviro
  * are released. The operation key binds the pin to that exact admission and page. */
 export async function rejectZonePageContentPublication(env: WorkActivationEnvironment,
   content: ContentCore, preparationId: string, cancellation: {
-    receipt: string; admissionId: string; requestDigest: string; zone: string;
+    receipt: string; admissionId: string; requestDigest: string; zone: string; resourceId?: string;
     variantId: string; revisionId: string; byteDigest: string; contentEpoch: string;
   }): Promise<Awaited<ReturnType<ContentCore['settlePublication']>> | null> {
   const { compositionReceiptIri, readCompositionReceipt } = await import('../structure/change.ts');
@@ -595,7 +596,7 @@ export async function rejectZonePageContentPublication(env: WorkActivationEnviro
   const preparation = await content.readPublicationPreparation(preparationId);
   if (!preparation) return null;
   const ref = preparation.reference;
-  if (ref.resourceId !== cancellation.zone || ref.variantId !== cancellation.variantId
+  if (ref.resourceId !== (cancellation.resourceId ?? cancellation.zone) || ref.variantId !== cancellation.variantId
     || ref.revisionId !== cancellation.revisionId || ref.byteDigest !== cancellation.byteDigest
     || preparation.position.dataEpoch !== cancellation.contentEpoch) {
     throw new ContentPublicationConflict('Site cancellation names another Content pin');

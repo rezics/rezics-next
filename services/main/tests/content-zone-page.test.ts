@@ -489,6 +489,7 @@ function siteProof(h: ReturnType<typeof pinHarness>) {
     page: h.input.resourceId,
     variant: h.input.variantId,
     contentRevision: `urn:rezics:content:revision:${h.input.revisionId}`,
+    byteDigest: h.input.expectedDigest,
   };
   const row = Object.fromEntries(Object.entries(values).map(([key, value]) => [key, { value }]));
   env.fuseki = environment([zoneType], [row]).env.fuseki;

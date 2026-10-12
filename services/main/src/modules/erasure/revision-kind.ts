@@ -14,7 +14,7 @@ const XSD_BOOLEAN = 'http://www.w3.org/2001/XMLSchema#boolean';
  * the purge campaign removes. A class that identity resolution does not name stays closed.
  */
 export const GRAPH_ERASURE_KINDS = ['text_contribution_draft', 'semantic_revision', 'release_revision',
-  'work_head', 'composition_revision'] as const;
+  'work_head', 'composition_revision', 'home_document_revision'] as const;
 export type GraphErasureKind = typeof GRAPH_ERASURE_KINDS[number];
 
 export function isGraphErasureKind(kind: string): kind is GraphErasureKind {
@@ -39,6 +39,7 @@ export const ERASURE_REVISION_RESOURCES = {
   release_revision: 'release',
   work_head: 'work',
   composition_revision: 'structure',
+  home_document_revision: 'home-document',
 } as const;
 
 export interface ResolvedErasureRevision {
@@ -71,7 +72,7 @@ export function graphRevisionIds(targets: readonly { kind: string; ref: string }
 }
 
 const SPECIFIC = ['ReleaseRevision', 'StructureRevision', 'SemanticRevision', 'DefinitionRevision',
-  'RealizationRevision', 'EditorialControlRevision', 'FixedRelease']
+  'RealizationRevision', 'EditorialControlRevision', 'FixedRelease', 'ZoneHomeRevision']
   .map(name => `rv:${name}`).join(' ');
 
 function identityQuery(revisions: readonly string[]): string {
@@ -93,6 +94,9 @@ function identityQuery(revisions: readonly string[]): string {
       UNION { GRAPH ${iri(GRAPHS.revisions)} {
           ?revision a rv:SemanticRevision ; rv:component ?owner . }
         BIND("semantic_revision" AS ?kind) }
+      UNION { GRAPH ${iri(GRAPHS.revisions)} {
+          ?revision a rv:ZoneHomeRevision, rv:RevisionAnchor ; rv:component ?owner . }
+        BIND("home_document_revision" AS ?kind) }
       UNION { ${anchor}
         GRAPH ${iri(GRAPHS.current)} { ?owner a schema:CreativeWork . }
         BIND("work_head" AS ?kind) }
@@ -106,6 +110,56 @@ function identityQuery(revisions: readonly string[]): string {
 
 function refuse(message: string): never {
   throw new ContentErasureInvalid(message);
+}
+
+/** Every retained cut selecting an exact Content revision is suppressed with it.
+ * One H per publication cut; the existing graph command admits at most 64 total
+ * targets, so an oversized closure is refused before the journal is written.
+ * Legacy Zone-owned variants remain valid through their publication-owned Z→P
+ * association until the next save creates a P-owned variant. */
+export async function inventoryZoneHomeRevisionTargets(fuseki: Pick<FusekiClient, 'query'>,
+  revisions: readonly ResolvedErasureRevision[]): Promise<ResolvedErasureRevision[]> {
+  const content = revisions.filter(revision => revision.kind === 'content_revision');
+  if (!content.length) return [];
+  const values = content.map(revision => `(${iri(revision.graphIri)} ${iri(revision.resourceId)})`).join(' ');
+  const result = await fuseki.query(`PREFIX rv: <${RV}>
+    SELECT DISTINCT ?revision ?owner ?erased ?owned WHERE {
+      VALUES (?contentRevision ?requestedOwner) { ${values} }
+      GRAPH ${iri(GRAPHS.revisions)} {
+        ?revision a rv:ZoneHomeRevision, rv:RevisionAnchor ; rv:component ?owner ; rv:publishedPage ?binding .
+        ?binding rv:contentRevision ?contentRevision ; rv:page ?page . }
+      BIND((sameTerm(?owner, ?requestedOwner) && sameTerm(?page, ?owner)) ||
+        (sameTerm(?page, ?requestedOwner) && EXISTS { GRAPH ${iri(GRAPHS.current)} {
+          ?requestedOwner a rv:Zone ; rv:homeDocument ?owner . } }) AS ?owned)
+      BIND(EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:ErasedRevision } } AS ?erased)
+      FILTER(!?erased)
+    } ORDER BY ?revision LIMIT ${MAX_CONTENT_ERASURE_TARGETS + 1}`, 65_536);
+  const rows = result.results?.bindings;
+  if (!rows || rows.length > MAX_CONTENT_ERASURE_TARGETS) refuse('Home revision erasure inventory exceeds 64 references');
+  const targets = new Map<string, ResolvedErasureRevision>();
+  for (const row of rows) {
+    const revision = row.revision?.value ?? '', owner = row.owner?.value ?? '';
+    const bool = (key: string): boolean | null => {
+      const term = row[key];
+      return term?.type === 'literal' && term.datatype === XSD_BOOLEAN
+        && ['true', 'false'].includes(term.value) ? term.value === 'true' : null;
+    };
+    if (row.revision?.type !== 'uri' || !RESOURCE.test(revision)
+      || row.owner?.type !== 'uri' || !RESOURCE.test(owner)
+      || bool('owned') !== true || bool('erased') === null) {
+      refuse('Home revision erasure inventory is ambiguous');
+    }
+    // A different selected language may already have suppressed this whole cut.
+    // Its retained tombstone belongs to that earlier erasure, never to this one.
+    if (bool('erased') === true) continue;
+    const prior = targets.get(revision);
+    if (prior && prior.resourceId !== owner) refuse('Home revision erasure identity is ambiguous');
+    targets.set(revision, { kind: 'home_document_revision', ref: revision.slice(ID.length),
+      graphIri: revision, resourceId: owner, erased: bool('erased') === true });
+  }
+  if (new Set([...revisions.map(revision => revision.graphIri), ...targets.keys()]).size
+    > MAX_CONTENT_ERASURE_TARGETS) refuse('Home revision erasure closure exceeds 64 targets');
+  return [...targets.values()];
 }
 
 /**
@@ -165,7 +219,7 @@ export async function resolveErasureRevisions(content: Queryable,
       graphById.set(ref, { ...resolved, erased: Boolean(prior?.erased) || resolved.erased });
     }
   }
-  return revisionIds.map(ref => {
+  const resolved = revisionIds.map(ref => {
     const row = contentById.get(ref);
     if (row) {
       return { kind: 'content_revision' as const, ref, resourceId: row.resource_id,
@@ -179,4 +233,7 @@ export async function resolveErasureRevisions(content: Queryable,
     if (resolved.resourceId !== resourceId) refuse('Erasure revision belongs to another owner');
     return resolved;
   });
+  const homes = await inventoryZoneHomeRevisionTargets(fuseki, resolved);
+  const ids = new Set(resolved.map(revision => revision.graphIri));
+  return [...resolved, ...homes.filter(revision => !ids.has(revision.graphIri))];
 }
