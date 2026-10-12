@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { foregroundCounted } from '../../../tests/qa/integration/support/query-cost-meter.ts';
 import { startMediaStack, type MediaStack } from '../../../tests/qa/integration/media-support.ts';
+import { grantFixtureAuthority } from '../src/modules/access/fixture-authority.ts';
 import { shareClassificationContext, recordClassifiedStatement, statementDecisionBody,
   discloseClassificationConcept, acceptClassifiedStatement, classificationContextBody, type ClassificationPost } from '../../../scripts/dev/seed/classified-statement.ts';
 import { GRAPHS, RV, iri } from '../src/modules/work/activate.ts';
@@ -318,17 +319,23 @@ test('Statement classification disclosure hides judgments, private meaning, with
         target: { kind: 'statement', statement: judged.statement },
       }, editor.token, `disclosure-exact-${acceptance.kind}`);
     }
-    // Membership is owner fixture data, exactly as in the judgment API integration fixture.
-    await stack.accessPool.query(`INSERT INTO access.authority_subject (id,kind) VALUES ($1,'agent') ON CONFLICT DO NOTHING`, [realm.realm]);
-    await stack.accessPool.query(`INSERT INTO access.membership_policy (kind,owner_subject,revision,terms_revision)
-      VALUES ('realm',$1,1,'disclosure-terms')`, [realm.realm]);
+    // Realm creation owns the membership policy. Read its current revision and terms through
+    // the joining API so this private member fixture stays bound to the live policy.
+    await grantFixtureAuthority(stack.accessPool, { scope: 'work:create:root', requireDispatch: true,
+      representations: [{ principalId: editor.principalId, actor: editor.actor,
+        action: 'access.membership.consent', lifetime: '8 hours' }],
+      grant: { actor: editor.actor, action: 'access.membership.consent', lifetime: '8 hours' } });
+    const membershipPolicy = await json<{ policyRevision: string; termsRevision: string }>(
+      await editor.read(`/v1/realms/${short(realm.realm)}/joining`));
     const consent = randomUUID();
     await stack.accessPool.query(`INSERT INTO access.private_membership_consent
       (id,principal_id,principal_epoch,kind,owner_subject,policy_revision,terms_revision,next_generation,expires_at)
-      VALUES ($1,$2,0,'realm',$3,1,'disclosure-terms',1,now()+interval '5 minutes')`, [consent, editor.principalId, realm.realm]);
+      VALUES ($1,$2,0,'realm',$3,$4,$5,1,now()+interval '5 minutes')`,
+    [consent, editor.principalId, realm.realm, membershipPolicy.policyRevision, membershipPolicy.termsRevision]);
     await stack.accessPool.query(`INSERT INTO access.private_membership
       (id,kind,owner_subject,principal_id,state,generation,policy_revision,terms_revision,consent_reference)
-      VALUES ($1,'realm',$2,$3,'joined',1,1,'disclosure-terms',$4)`, [randomUUID(), realm.realm, editor.principalId, consent]);
+      VALUES ($1,'realm',$2,$3,'joined',1,$4,$5,$6)`,
+    [randomUUID(), realm.realm, editor.principalId, membershipPolicy.policyRevision, membershipPolicy.termsRevision, consent]);
     for (const context of [{ kind: 'global' } as const, { kind: 'realm', realm: realm.realm } as const]) {
       await post(`/v1/statements/${short(judged.statement)}/judgments`, {
         profile: 'statement-judgment-v1', context, dimension: 'spoiler', value: 2, expectedRevision: '0',
