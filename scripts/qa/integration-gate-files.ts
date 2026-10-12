@@ -2,6 +2,9 @@
 // integration tier. Parallel Goal branches append one path per line and git's
 // union merge driver keeps both sides (see .gitattributes), so never reorder.
 export const integrationGateFiles = [
+  'services/main/tests/governance-realm-target.test.ts',
+  'services/main/tests/governance-realm-authority.test.ts',
+  'services/main/tests/governance-realm-restoration.test.ts',
   'services/main/tests/structure-group-root-owner.integration.test.ts',
   'services/main/tests/edit.integration.test.ts',
   'services/main/tests/outbox.integration.test.ts',
