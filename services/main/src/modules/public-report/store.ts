@@ -9,7 +9,7 @@ import { GovernanceConflict, GovernanceDenied, GovernanceInvalid, GovernanceUnav
   normalizeGovernanceError, sha256, type CapturedEvidence } from '../governance/store.ts';
 import { categoryProcesses, correspondenceInput, PLATFORM_SCOPE, PUBLIC_REPORT_COST,
   publicReportInput, validContentLanguage, type CorrespondenceInput, type PublicReportInput } from './contract.ts';
-import { lockPreservationTarget } from './preservation.ts';
+import { lockPreservationNeighborhood } from './preservation.ts';
 import { partyDeclarations, recordCounterNotice } from '../rights/counter-notice.ts';
 
 export interface ReportTarget {
@@ -96,19 +96,20 @@ export class PublicReports {
     const digest = sha256(canonical(input));
     const replay = await this.transaction(async client => this.replay(client, receiptHash, digest));
     if (replay) return replay;
-    let target = await this.owners.resolve(input, request, principal);
+    const target = await this.owners.resolve(input, request, principal);
     if (input.realm && target.realm !== input.realm) throw new GovernanceInvalid('Target is outside the reported Realm');
     return this.transaction(async client => {
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 564))', [receiptHash]);
       const prior = await this.replay(client, receiptHash, digest);
       if (prior) return prior;
+      let heldPrincipal: string | null = null;
       if (input.category === 'child_exploitation') {
-        await lockPreservationTarget(client, target.evidence.resource);
+        heldPrincipal = await lockPreservationNeighborhood(client, target.author, target.evidence.resource);
         // Erasure may have won while the first owner read was in flight. Re-admit
         // under its fence before committing a hold on material that no longer exists.
         const current = await this.owners.resolve(input, request, principal);
-        if (current.evidence.resource !== target.evidence.resource) throw new GovernanceConflict('Report target moved');
-        target = current;
+        if (canonical(current) !== canonical(target)) throw new GovernanceConflict('Report target changed');
+        if (current.evidence.state === 'erased') throw new GovernanceDenied('Reported material is erased');
       }
       if (principal) await client.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
         VALUES ($1, $2, $3) ON CONFLICT (account_issuer, account_subject) DO NOTHING`,
@@ -164,10 +165,9 @@ export class PublicReports {
           SELECT $1, $2, $3, $4, p.account_issuer, p.account_subject, 'child_exploitation'
           FROM (SELECT 1) seed LEFT JOIN LATERAL (
             SELECT p.account_issuer, p.account_subject FROM access.principal p
-            WHERE p.id = COALESCE((SELECT principal_id FROM access.agent_provision WHERE agent_id = $4),
-              (SELECT principal_id FROM access.representation WHERE subject_id = $4 ORDER BY id LIMIT 1))
+            WHERE p.id = $5
           ) p ON true ON CONFLICT DO NOTHING`,
-        [randomUUID(), caseId, e.resource, target.author]);
+        [randomUUID(), caseId, e.resource, target.author, heldPrincipal]);
       }
       return { reportId, caseId, receivedAt: receivedAt.toISOString(),
         credential: await mintPartyCredential(client, caseId, reportId, 'reporter'), replayed: false };

@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import { GovernanceConflict } from '../governance/store.ts';
 
 declare const fenceBrand: unique symbol;
 /** A live target lock, minted only while its transaction is open. */
@@ -9,6 +10,36 @@ const activeFences = new WeakSet<PreservationFence>();
 /** Intake and erasure serialize on the same target across owner databases. */
 export async function lockPreservationTarget(client: PoolClient, resource: string): Promise<void> {
   await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 931))', [resource]);
+}
+
+/** Recovery is already shared by intake. Match the Person owner's order:
+ * author advisory, principal, authority, provision, then the material advisory.
+ * The principal write lock also fences erasure of other Persons of this Account. */
+export async function lockPreservationNeighborhood(client: PoolClient, author: string | null,
+  resource: string): Promise<string | null> {
+  if (!author) { await lockPreservationTarget(client, resource); return null; }
+  await lockPreservationTarget(client, author);
+  const owner = (await client.query<{ principal_id: string; provision_id: string | null;
+    representation_id: string | null }>(`SELECT p.principal_id, p.id AS provision_id,
+      NULL::uuid AS representation_id FROM access.agent_provision p WHERE p.agent_id = $1
+    UNION ALL SELECT r.principal_id, NULL::uuid, r.id FROM access.representation r
+      WHERE r.subject_id = $1 AND NOT EXISTS (
+        SELECT 1 FROM access.agent_provision WHERE agent_id = $1)
+    ORDER BY representation_id LIMIT 1`, [author])).rows[0];
+  if (owner) await client.query('SELECT id FROM access.principal WHERE id = $1 FOR UPDATE', [owner.principal_id]);
+  await client.query('SELECT id FROM access.authority_subject WHERE id = $1 FOR SHARE', [author]);
+  if (owner) {
+    const retained = owner.provision_id
+      ? await client.query(`SELECT id FROM access.agent_provision
+          WHERE id = $1 AND agent_id = $2 AND principal_id = $3 FOR UPDATE`,
+        [owner.provision_id, author, owner.principal_id])
+      : await client.query(`SELECT id FROM access.representation
+          WHERE id = $1 AND subject_id = $2 AND principal_id = $3 FOR SHARE`,
+        [owner.representation_id, author, owner.principal_id]);
+    if (!retained.rowCount) throw new GovernanceConflict('Report author ownership changed');
+  }
+  if (resource !== author) await lockPreservationTarget(client, resource);
+  return owner?.principal_id ?? null;
 }
 
 export async function withPreservationFence<T>(access: PreservationAccess, resource: string, operationId: string,
