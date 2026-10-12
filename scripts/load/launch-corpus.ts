@@ -15,6 +15,8 @@ import { initializeRelayCheckpoint } from '../../services/main/src/modules/outbo
 import { seedCatalogueProfileWorks } from './catalogue-work.ts';
 import { compatibleLoadStorage, loadCompatibility, type LoadCompatibility } from './compatibility.ts';
 import { createCorpusBackupDriver, type CorpusRestoreSmokeInput } from './corpus-backup-driver.ts';
+import { restoreCatalogueBackup } from './catalogue-backup.ts';
+import { pollUntilDeadline } from '../qa/readiness.ts';
 import { workProfileCorpusApi, type CorpusApi, type CorpusBackupDriver } from './work-profile-corpus.ts';
 import type { MediaStack } from '../../tests/qa/integration/media-support.ts';
 
@@ -691,6 +693,82 @@ async function buildRecipesApiBackup() {
   return corpus;
 }
 
+/** Repair an interrupted retained PostgreSQL cut without issuing recipe commands. */
+async function recoverRecipesApiBackup() {
+  const corpus = loadLaunchRecipesCorpus();
+  const directory = join(root, '.temp/launch-corpus/recipes/consistent-backups');
+  const manifestPath = join(root, '.temp/launch-corpus/recipes/manifests', `${corpus.id}.json`);
+  if (relative(directory, corpus.backup) === join(corpus.id, 'backup.json')) {
+    console.log(JSON.stringify({ launchCorpus: corpus.id, consistentBackup: true, reused: true }));
+    return;
+  }
+  const runId = `recipes-recover-${Date.now().toString(36)}`;
+  const target = `launch-recipes-${runId}`;
+  const signal = AbortSignal.timeout(budgetMs);
+  let recovered: CorpusRestoreSmokeInput | undefined;
+  const started = performance.now();
+  const driver = createCorpusBackupDriver({ sourceRunId: runId, directory, resumeSource: false,
+    restoreResourceClass: 'ordinary',
+    async quiesce() { throw new Error('The recovery restorer does not capture its empty source'); },
+    async smokeRead(copy) {
+      copy.signal.throwIfAborted();
+      const pool = new Pool({ connectionString: copy.apps.ACCESS_DATABASE_URL, max: 1,
+        connectionTimeoutMillis: 5_000, query_timeout: 5_000 });
+      try {
+        const state = await pool.query<{ recovering: boolean }>('SELECT pg_is_in_recovery() AS recovering');
+        if (state.rows[0]?.recovering !== false) throw new Error('Retained PostgreSQL recovery is incomplete');
+      } finally { await pool.end(); }
+      recovered = copy;
+    },
+  }, {
+    restoreCatalogueBackup: (backup, copyRunId, options) => restoreCatalogueBackup(backup, copyRunId, {
+      ...options,
+      async task(args) {
+        if (args[0] !== 'stack:up') return await stream('task', args, dockerEnvironment(), undefined, budgetMs, signal);
+        const startup = await runQaStartupChildAsync(root, args.filter(arg => arg !== '--'), 180_000,
+          { ...dockerEnvironment(), REZICS_STACK_PROFILE: 'qa' });
+        if (startup.ok) return startup.output;
+        signal.throwIfAborted();
+        // This one-time repair keeps the interrupted copy running until crash recovery finishes.
+        if (!startup.output.includes('postgres') || !startup.output.includes('unhealthy'))
+          throw new Error(`Retained recovery startup failed: ${startup.output.slice(-2000)}`);
+        const apps = readEnv(join(root, '.temp/stack', `rezics-qa-${copyRunId}`, 'apps.env'));
+        const pool = new Pool({ connectionString: apps.ACCESS_DATABASE_URL, max: 1,
+          connectionTimeoutMillis: 2_000, query_timeout: 2_000 });
+        try {
+          const ready = await pollUntilDeadline(async () => {
+            signal.throwIfAborted();
+            try {
+              const state = await pool.query<{ recovering: boolean }>('SELECT pg_is_in_recovery() AS recovering');
+              return state.rows[0]?.recovering === false;
+            } catch { return false; }
+          }, Date.now() + Math.max(1, budgetMs - (performance.now() - started)), 1000);
+          if (!ready) throw new Error('Retained PostgreSQL recovery exceeded 600 seconds');
+        } finally { await pool.end(); }
+        console.log(JSON.stringify({ stage: 'retained-postgres-recovery-complete', copyRunId,
+          elapsedMs: Math.round(performance.now() - started) }));
+        return startup.output;
+      },
+    }),
+  });
+  try {
+    await driver.restore(corpus.backup, target, signal);
+    if (!recovered) throw new Error('Retained recovery copy did not become ready');
+    const capture = createCorpusBackupDriver({ sourceRunId: recovered.runId, directory, resumeSource: false,
+      async quiesce() { signal.throwIfAborted(); },
+      async smokeRead() { throw new Error('The recovery capture does not start another copy'); },
+    });
+    const backup = await capture.backup(corpus.id, signal);
+    const saved = { ...corpus, backup };
+    const recovery = { launchCorpus: corpus.id, previousBackup: corpus.backup, backup,
+      preparation: driver.preparation(target), totalMs: Math.round(performance.now() - started) };
+    writeFileSync(join(directory, `${corpus.id}-recovery.json`), JSON.stringify(recovery, null, 2) + '\n', { mode: 0o600 });
+    writeFileSync(`${manifestPath}.tmp`, JSON.stringify(saved, null, 2) + '\n', { mode: 0o600 });
+    renameSync(`${manifestPath}.tmp`, manifestPath);
+    console.log(JSON.stringify(recovery));
+  } finally { await driver.stop(target); }
+}
+
 /** Browser and API proofs restore the same retained command-built owner stores. */
 export async function restoreBrowserRecipes(input: { runId: string; webOrigin: string; accountsPort: string }) {
   const { runId } = input;
@@ -837,5 +915,6 @@ if (import.meta.main) {
   if (command === '--browser-prepare') await prepareBrowserBooks();
   else if (command === '--browser-recipes-prepare') await prepareBrowserRecipes();
   else if (command === '--recipes-build') await buildRecipesApiBackup();
-  else throw new Error('Use --recipes-build, --browser-prepare or --browser-recipes-prepare');
+  else if (command === '--recipes-recover') await recoverRecipesApiBackup();
+  else throw new Error('Use --recipes-build, --recipes-recover, --browser-prepare or --browser-recipes-prepare');
 }
