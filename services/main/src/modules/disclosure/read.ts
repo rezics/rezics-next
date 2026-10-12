@@ -241,7 +241,10 @@ export class DisclosureStore implements DisclosureReader {
         const rows = (await this.environment.fuseki.query(`PREFIX rv: <${RV}>
           SELECT ?work ?head ?nameOwner WHERE {
             VALUES ?work { ${resources.map(iri).join(' ')} }
-            OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?work rv:head ?head } }
+            OPTIONAL { GRAPH ${iri(GRAPHS.current)} {
+              { ?work rv:head ?head }
+              UNION { ?work a rv:ZoneHomeDocument ; rv:homeDocumentHead ?head }
+            } }
             OPTIONAL { VALUES ?work { ${resources.map(iri).join(' ')} }
               GRAPH ${iri(GRAPHS.current)} { ?work a rv:Agent }
               BIND(?work AS ?nameOwner) }
@@ -346,8 +349,7 @@ export class DisclosureStore implements DisclosureReader {
           ORDER BY wanted.ordinal`, [JSON.stringify(targets.map((target, ordinal) => ({
           ...target, ordinal, revision: target.revision ?? (target.owner === 'graph'
             && ['name', 'title'].includes(target.component)
-            ? target.ancestry?.parents.find(parent => parent.kind === 'work'
-              && parent.resource === target.resource)?.head ?? null : null),
+            ? currentNameHead(target) : null),
           context: target.context ?? GLOBAL_CONTEXT,
           resourceKind: target.ancestry!.resourceKind,
           parents: target.ancestry!.parents,
@@ -527,6 +529,13 @@ function validFenceBasis(basis: DisclosureFenceBasis): boolean {
   return typeof basis.recoveryGeneration === 'string' && /^\d+$/.test(basis.recoveryGeneration)
     && typeof basis.enforcementCut === 'string' && /^[0-9a-f]{64}$/.test(basis.enforcementCut);
 }
+function currentNameHead(target: DisclosureTarget): string | null {
+  const ancestry = target.ancestry!;
+  return ancestry.resourceKind !== 'other' && ancestry.relationshipBasis.kind === 'identity'
+    && ancestry.relationshipBasis.resource === target.resource
+    ? ancestry.relationshipBasis.revision
+    : ancestry.parents.find(parent => parent.kind === 'work' && parent.resource === target.resource)?.head ?? null;
+}
 function requireReader(env: WorkActivationEnvironment): DisclosureReader & Required<Pick<DisclosureReader, 'readAtCut'>> {
   const reader = (env as ComposedEnvironment)[owner];
   if (!reader?.readAtCut) throw new DisclosureUnavailable('Disclosure cut reader is unavailable');
@@ -591,7 +600,10 @@ async function currentHeads(env: WorkActivationEnvironment, selections: readonly
           GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
             rv:routingEpoch ${lit(env.lineage.routingEpoch)} . }
           FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
-          GRAPH ${iri(GRAPHS.current)} { ?resource rv:head ?head }
+          GRAPH ${iri(GRAPHS.current)} {
+            { ?resource rv:head ?head }
+            UNION { ?resource a rv:ZoneHomeDocument ; rv:homeDocumentHead ?head }
+          }
         } LIMIT ${batch.length + 1}`, 131_072)).results?.bindings ?? [];
       if (rows.length !== batch.length || new Set(rows.map(row => row.resource?.value)).size !== batch.length
         || rows.some(row => !row.resource || !batch.includes(row.resource.value) || !validRevision(row.head?.value))) {
