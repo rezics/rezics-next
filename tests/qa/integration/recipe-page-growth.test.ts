@@ -26,6 +26,18 @@ type RecipePage = {
 if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
   const { expect } = await import('bun:test');
   const sink = startWorkProfileSink({ settleMs: 25 });
+  const { trace } = await import('@opentelemetry/api');
+  const fetchBeforeEvidence = globalThis.fetch;
+  // Enrich the meter's existing client spans beneath instrumentFetch. Record
+  // paths only: signed object-store query strings must never enter artifacts.
+  globalThis.fetch = Object.assign(async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    if (url.origin !== sink.url) trace.getActiveSpan()?.setAttributes({
+      'rezics.qa.fetch.origin': url.origin,
+      'rezics.qa.fetch.path': url.pathname,
+    });
+    return fetchBeforeEvidence(input, init);
+  }, fetchBeforeEvidence);
   startTelemetry('main', { ...Bun.env, ...sink.env, OTEL_SERVICE_NAME: 'main' });
   const { cpSync, mkdirSync, writeFileSync } = await import('node:fs');
   const { dirname, join } = await import('node:path');
@@ -83,6 +95,7 @@ if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
   let copy: {
     stack: Awaited<ReturnType<typeof startMediaStack>>;
     token: string;
+    ownerOrigins: Record<string, string>;
   } | undefined;
   let meterQualified = false;
   let phase = 'restore';
@@ -97,6 +110,34 @@ if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
     otherFetches: profile.otherFetches,
     unclassifiedFetches: profile.unclassifiedFetches,
   });
+  const fetchInventory = (profile: WorkProfile) => {
+    const grouped = new Map<string, {
+      peer: string; origin: string; path: string; method: string; count: number;
+    }>();
+    for (const span of profile.spans) {
+      if (span.kind !== 2 || !span.attributes['http.request.method']) continue;
+      const tag = span.attributes['rezics.peer.service'];
+      const peer = typeof tag === 'string' && ['fuseki', 'account', 'main', 'other'].includes(tag)
+        ? tag : 'unclassified';
+      const origin = span.attributes['rezics.qa.fetch.origin'];
+      const path = span.attributes['rezics.qa.fetch.path'];
+      expect(typeof origin).toBe('string');
+      expect(typeof path).toBe('string');
+      const entry = { peer, origin: String(origin), path: String(path),
+        method: String(span.attributes['http.request.method']), count: 0 };
+      const key = JSON.stringify([entry.peer, entry.origin, entry.path, entry.method]);
+      const existing = grouped.get(key) ?? entry;
+      existing.count++;
+      grouped.set(key, existing);
+    }
+    const inventory = [...grouped.values()].sort((left, right) =>
+      left.peer.localeCompare(right.peer) || left.origin.localeCompare(right.origin) || left.path.localeCompare(right.path));
+    expect(inventory.filter(item => item.peer === 'other').reduce((sum, item) => sum + item.count, 0))
+      .toBe(profile.otherFetches);
+    expect(inventory.filter(item => item.peer === 'unclassified').reduce((sum, item) => sum + item.count, 0))
+      .toBe(profile.unclassifiedFetches);
+    return inventory;
+  };
   const measuredRead = async <T>(path: string) => {
     if (!copy) throw new Error('Restored Recipe fixture is unavailable');
     const { stack, token } = copy;
@@ -142,7 +183,10 @@ if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
         // The seed provisions a separate corpus Agent; this login principal
         // retains its representation of that Agent in the restored Access store.
         const work = verifying.works[0]!;
-        copy = { stack, token: member.token };
+        copy = { stack, token: member.token,
+          ownerOrigins: Object.fromEntries(['MAIN_S3_ENDPOINT', 'FUSEKI_URL', 'ACCOUNT_ORIGIN',
+            'ACCOUNT_JWKS_URL', 'ACCOUNT_INTROSPECT_URL', 'MAIN_ORIGIN', 'CONTENT_ORIGIN']
+            .filter(key => input.apps[key]).map(key => [key, new URL(input.apps[key]!).origin])) };
         // A known selected-text page qualifies the restored-stack meter independently
         // of Recipe traversal and must produce nonzero SQL, Fuseki and byte costs.
         if (!meterQualified) {
@@ -150,7 +194,7 @@ if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
           const known = await measuredRead(seedSelection(work.mainVersion));
           expect(known.result).toMatchObject({ work: work.work, mainVersion: work.mainVersion,
             body: 'Checkpoint selected text 0' });
-          evidence.push({ meterQualification: counters(known.profile) });
+          evidence.push({ meterQualification: counters(known.profile), fetches: fetchInventory(known.profile) });
           console.log('recipe-page-growth-meter', JSON.stringify(counters(known.profile)));
           meterQualified = true;
         } else {
@@ -186,7 +230,8 @@ if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
       expect(first.result.occurrences.every(item => item.role === 'ingredient')).toBe(true);
       const row: Record<string, unknown> = {
         scale: cut.manifest.scale, cut: cut.manifest.id, dimensions: cut.manifest.dimensions, preparationMs,
-        firstPage: { counters: counters(first.profile), cost: first.result.cost },
+        ownerOrigins: copy!.ownerOrigins,
+        firstPage: { counters: counters(first.profile), cost: first.result.cost, fetches: fetchInventory(first.profile) },
         continuation: null,
         sectionDepth: { measured: false, reason: 'Published Recipe contains only root ingredient lines' },
       };
@@ -205,7 +250,7 @@ if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
           .toBe(RECIPE_WORK_PAGE_OCCURRENCES * 2);
         // Keep absolute caps; two available continuations cannot provide the
         // existing verdict's required three scales. Do not invent a third cursor.
-        row.continuation = { counters: counters(next.profile), cost: next.result.cost };
+        row.continuation = { counters: counters(next.profile), cost: next.result.cost, fetches: fetchInventory(next.profile) };
         continuationProfiles.push({ scale: cut.manifest.scale,
           unrelatedWorks: cut.manifest.dimensions.unrelatedWorks, profile: next.profile });
       } else {
@@ -260,6 +305,7 @@ if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
       for (const target of targets.toReversed()) await driver.stop(target);
     } finally {
       await shutdownTelemetry();
+      globalThis.fetch = fetchBeforeEvidence;
       await sink.stop();
     }
   }
