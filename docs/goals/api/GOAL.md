@@ -59,7 +59,7 @@ has no seam there.
 - No row's surface, no browser test, no story: that is the [web](../web/GOAL.md) Goal.
 - No physical erasure proof, restore drill or deployment step: that is
   [operations](../operations/GOAL.md).
-- A defect that no row's persona meets goes to `later.md` in this directory.
+- A defect that no row's persona meets goes to the [later list](later.md).
 - Nothing is built for one source or one vertical that the engine could carry
   as configuration ([decisions](../../product/decisions.md)).
 

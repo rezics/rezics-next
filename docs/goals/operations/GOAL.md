@@ -40,6 +40,7 @@ and the attempt cap.
 - [External conditions](../../operations/external-conditions.md) (hosts, names,
   providers, registrations, legal facts) are the maintainer's list. No task
   solves, prepares for or works around an item on it.
+- A finding no drill meets goes to the [later list](later.md).
 
 ## Completion
 

@@ -44,7 +44,7 @@ Visual quality is judged by eye, from screenshots, as before.
 
 - No change under `services/`, `model/` or a migration.
 - No row whose API outcome is not proved.
-- A defect no row's persona meets goes to `later.md` in this directory.
+- A defect that no row's persona meets goes to the [later list](later.md).
 
 ## Completion
 
