@@ -174,8 +174,8 @@ async function importAliasRows(
         const imported = (
           await client.query<AliasRow>(
             `INSERT INTO access.alias_registry(scope,key,skeleton,holder,controller,state,revision,successor)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(scope,key) DO UPDATE SET key = EXCLUDED.key
-        WHERE access.alias_registry.holder = EXCLUDED.holder RETURNING *`,
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(scope,key_digest) DO UPDATE SET key = EXCLUDED.key
+        WHERE access.alias_registry.holder = EXCLUDED.holder AND access.alias_registry.profile_erasure_id IS NULL RETURNING *`,
             [
               scope,
               alias.key,
@@ -214,7 +214,8 @@ async function importAliasRows(
         await client.query(
           `UPDATE access.alias_graph_import_report SET legacy_alias = $3,
           attempted_at = clock_timestamp(),repaired_at = clock_timestamp(),reason = 'Imported retained alias'
-          WHERE data_epoch = $1 AND source = $2 AND repaired_at IS NULL`,
+          WHERE data_epoch = $1 AND source_digest = access.alias_digest($2) AND repaired_at IS NULL
+            AND profile_erasure_id IS NULL`,
           [env.lineage.dataEpoch, row.source.value, JSON.stringify(row)],
         );
         await client.query('RELEASE SAVEPOINT import_name');
@@ -236,8 +237,9 @@ async function importAliasRows(
         logWorkerFault('main.address.alias-import.skip', error);
         await client.query(
           `INSERT INTO access.alias_graph_import_report(data_epoch,source,reason,legacy_alias,attempted_at)
-          VALUES ($1,$2,$3,$4,clock_timestamp()) ON CONFLICT(data_epoch,source) DO UPDATE SET
-            reason = EXCLUDED.reason,legacy_alias = EXCLUDED.legacy_alias,attempted_at = EXCLUDED.attempted_at`,
+          VALUES ($1,$2,$3,$4,clock_timestamp()) ON CONFLICT(data_epoch,source_digest) DO UPDATE SET
+            reason = EXCLUDED.reason,legacy_alias = EXCLUDED.legacy_alias,attempted_at = EXCLUDED.attempted_at
+          WHERE access.alias_graph_import_report.profile_erasure_id IS NULL`,
           [env.lineage.dataEpoch, row.source!.value, reason, JSON.stringify(row)],
         );
       }
@@ -316,7 +318,8 @@ async function repairSkippedAliases(env: WorkActivationEnvironment, deadline: nu
     const reports = (
       await registry.pool.query<{ source: string; legacy_alias: LegacyAlias | null }>(
         `SELECT source,legacy_alias FROM access.alias_graph_import_report
-      WHERE data_epoch = $1 AND repaired_at IS NULL AND source > $2 ORDER BY source LIMIT ${ALIAS_IMPORT_COST.page}`,
+      WHERE data_epoch = $1 AND repaired_at IS NULL AND profile_erasure_id IS NULL
+        AND source > $2 ORDER BY source LIMIT ${ALIAS_IMPORT_COST.page}`,
         [env.lineage.dataEpoch, after],
       )
     ).rows;
@@ -329,7 +332,8 @@ async function repairSkippedAliases(env: WorkActivationEnvironment, deadline: nu
         await registry.pool.query(
           `UPDATE access.alias_graph_import_report
         SET attempted_at = clock_timestamp(),reason = 'Retained alias evidence is unavailable'
-        WHERE data_epoch = $1 AND source = $2 AND repaired_at IS NULL`,
+        WHERE data_epoch = $1 AND source_digest = access.alias_digest($2) AND repaired_at IS NULL
+          AND profile_erasure_id IS NULL`,
           [env.lineage.dataEpoch, report.source],
         );
     }

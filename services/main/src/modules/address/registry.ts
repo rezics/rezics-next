@@ -142,7 +142,7 @@ export class AliasRegistry {
     return (
       (
         await (accessClient(this.pool) ?? this.pool).query<AliasRow>(
-          'SELECT * FROM access.alias_registry WHERE scope = $1 AND key = $2',
+          'SELECT * FROM access.alias_registry WHERE scope = $1 AND key = $2 AND profile_erasure_id IS NULL',
           [scope, key],
         )
       ).rows[0] ?? null
@@ -189,14 +189,19 @@ export class AliasRegistry {
     }
     if (await this.isReserved(scope, alias.key))
       return { available: false, reason: 'reserved' as const };
-    const row = await this.lookup(scope, alias.key);
+    const row = (
+      await (accessClient(this.pool) ?? this.pool).query<{ state: AliasState }>(
+        'SELECT state FROM access.alias_registry WHERE scope = $1 AND key_digest = access.alias_digest($2)',
+        [scope, alias.key],
+      )
+    ).rows[0];
     if (row)
       return {
         available: false,
         reason: row.state === 'current' ? ('claimed' as const) : ('retained' as const),
       };
     const confusable = await (accessClient(this.pool) ?? this.pool).query(
-      `SELECT 1 FROM access.alias_registry WHERE skeleton = $1
+      `SELECT 1 FROM access.alias_registry WHERE skeleton_digest = access.alias_digest($1)
       AND (scope = $2 OR $2 IN ('agent','space') AND scope IN ('agent','space')) LIMIT 1`,
       [alias.skeleton, scope],
     );
@@ -227,8 +232,8 @@ export class AliasRegistry {
         AS wanted(key text, skeleton text, ordinal int)
       WHERE NOT EXISTS (SELECT 1 FROM access.alias_reserved_word WHERE word = wanted.key
         AND CASE WHEN $2 IN ('agent','space') THEN handles ELSE titles END)
-        AND NOT EXISTS (SELECT 1 FROM access.alias_registry WHERE scope = $2 AND key = wanted.key)
-        AND NOT EXISTS (SELECT 1 FROM access.alias_registry WHERE skeleton = wanted.skeleton
+        AND NOT EXISTS (SELECT 1 FROM access.alias_registry WHERE scope = $2 AND key_digest = access.alias_digest(wanted.key))
+        AND NOT EXISTS (SELECT 1 FROM access.alias_registry WHERE skeleton_digest = access.alias_digest(wanted.skeleton)
           AND (scope = $2 OR $2 IN ('agent','space') AND scope IN ('agent','space')))
       ORDER BY wanted.ordinal LIMIT 1`,
         [JSON.stringify(aliases), scope],
@@ -244,6 +249,7 @@ export class AliasRegistry {
       `SELECT head.*
       FROM unnest($1::text[],$2::text[]) AS wanted(scope,holder) CROSS JOIN LATERAL (
         SELECT * FROM access.alias_registry n WHERE n.scope = wanted.scope AND n.holder = wanted.holder
+        AND n.profile_erasure_id IS NULL
         ORDER BY (state = 'current') DESC,changed_at DESC,revision DESC LIMIT 1) head`,
       [scopes, holders],
     );
@@ -345,21 +351,21 @@ export class AliasRegistry {
         // Two indexed ranges skip a holder's retained aliases rather than
         // filtering an ever-growing alias inventory with holder <> $3.
         `SELECT 1 FROM (
-          (SELECT 1 FROM access.alias_registry WHERE scope = $2 AND skeleton = $1 AND holder < $3
+          (SELECT 1 FROM access.alias_registry WHERE scope = $2 AND skeleton_digest = access.alias_digest($1) AND holder < $3
             AND NOT (scope = 'space' AND controller = $4 AND state = 'retired' AND EXISTS (
               SELECT 1 FROM access.admission a WHERE a.id = creation_admission AND a.state = 'sealed'
               AND a.graph_outcome = 'cancelled')) LIMIT 1)
           UNION ALL
-          (SELECT 1 FROM access.alias_registry WHERE scope = $2 AND skeleton = $1 AND holder > $3
+          (SELECT 1 FROM access.alias_registry WHERE scope = $2 AND skeleton_digest = access.alias_digest($1) AND holder > $3
             AND NOT (scope = 'space' AND controller = $4 AND state = 'retired' AND EXISTS (
               SELECT 1 FROM access.admission a WHERE a.id = creation_admission AND a.state = 'sealed'
               AND a.graph_outcome = 'cancelled')) LIMIT 1)
           UNION ALL
           (SELECT 1 FROM access.alias_registry WHERE $5 AND scope IN ('agent','space')
-            AND skeleton = $1 AND controller < $4 LIMIT 1)
+            AND skeleton_digest = access.alias_digest($1) AND controller < $4 LIMIT 1)
           UNION ALL
           (SELECT 1 FROM access.alias_registry WHERE $5 AND scope IN ('agent','space')
-            AND skeleton = $1 AND controller > $4 LIMIT 1)
+            AND skeleton_digest = access.alias_digest($1) AND controller > $4 LIMIT 1)
         ) collisions LIMIT 1`,
         [alias.skeleton, input.scope, input.holder, controller, crossHandle],
       );
@@ -384,15 +390,15 @@ export class AliasRegistry {
     if (alias) {
       const row = await client.query<AliasRow>(
         `INSERT INTO access.alias_registry(scope,key,skeleton,holder,controller,state,creation_admission)
-        VALUES ($1,$2,$3,$4,$5,'current',$6) ON CONFLICT(scope,key) DO UPDATE SET state = 'current',
+        VALUES ($1,$2,$3,$4,$5,'current',$6) ON CONFLICT(scope,key_digest) DO UPDATE SET state = 'current',
         holder = EXCLUDED.holder,creation_admission = EXCLUDED.creation_admission,
         controller = EXCLUDED.controller,successor = NULL,
         revision = gen_random_uuid(),changed_at = clock_timestamp()
-        WHERE access.alias_registry.holder = EXCLUDED.holder OR
+        WHERE access.alias_registry.profile_erasure_id IS NULL AND (access.alias_registry.holder = EXCLUDED.holder OR
           (access.alias_registry.scope = 'space' AND access.alias_registry.controller = EXCLUDED.controller
             AND access.alias_registry.state = 'retired' AND EXISTS (
               SELECT 1 FROM access.admission a WHERE a.id = access.alias_registry.creation_admission
-              AND a.state = 'sealed' AND a.graph_outcome = 'cancelled')) RETURNING *`,
+              AND a.state = 'sealed' AND a.graph_outcome = 'cancelled'))) RETURNING *`,
         [input.scope, alias.key, alias.skeleton, input.holder, controller, creationAdmission],
       );
       if (!row.rowCount) throw new AliasConflict('Alias is permanently retained');

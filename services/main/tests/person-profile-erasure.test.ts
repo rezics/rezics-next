@@ -1,0 +1,426 @@
+import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { createHash, randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { Pool, type PoolClient } from 'pg';
+import { normalizeAddressAlias } from '@rezics/model/address/aliases';
+import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
+import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
+import { AccessAdmissionRegistry, engageAccessRecoveryFence, releaseAccessRecoveryFence } from '../src/modules/access/admission.ts';
+import { grantFixtureAuthority } from '../src/modules/access/fixture-authority.ts';
+import {
+  erasePersonProvisionProfile, listEndedPersonProvisions, personProvisionProfileErased,
+  PersonProfileErasureDenied, PersonProfileErasureStale, PersonProfileErasureUnavailable,
+  type PersonProfileErasureProof,
+} from '../src/modules/access/person-profile-erasure.ts';
+import { erasePersonProfileAliases, listPersonProfileAliases, personProfileAliasesErased } from '../src/modules/address/person-profile-erasure.ts';
+import { AliasRegistry } from '../src/modules/address/registry.ts';
+
+const root = resolve(import.meta.dir, '../../..');
+const native = () => `https://rezics.com/id/${randomUUID()}`;
+const digest = (value: string) => createHash('sha256').update(value).digest('hex');
+let cluster: PostgresCluster | undefined;
+let access: Pool;
+let relay: Pool;
+
+beforeAll(async () => {
+  cluster = await startPostgresCluster();
+  access = new Pool({ ...cluster.connection, max: 6 });
+  relay = new Pool({ ...cluster.connection, max: 2 });
+  const client = await access.connect();
+  try {
+    await client.query('BEGIN');
+    for (const file of schemaFiles(root, 'access')) {
+      await client.query(readFileSync(join(root, 'services/main/migrations/access', file), 'utf8'));
+    }
+    // Session B owns the production journal link. This isolated owner fixture
+    // models its sealed identity, without replacing or loosening that migration.
+    await client.query(`CREATE SCHEMA relay;
+      CREATE TABLE relay.erasure (
+        id uuid PRIMARY KEY, erasure_epoch bigint NOT NULL, account_erasure_id uuid,
+        kind text NOT NULL, authority text NOT NULL, operation_id text,
+        suppression_status text NOT NULL, stage text NOT NULL,
+        deleted_principal_id uuid, account_issuer text, account_subject text
+      );
+      CREATE TABLE relay.account_deletion_intent (
+        principal_id uuid PRIMARY KEY, outbox_id uuid NOT NULL, authority_epoch bigint NOT NULL
+      );
+      CREATE TABLE relay.erasure_target (
+        erasure_id uuid NOT NULL, owner text NOT NULL, target_kind text NOT NULL, target_ref text NOT NULL
+      );`);
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally { client.release(); }
+}, 60_000);
+
+afterAll(async () => {
+  await relay?.end();
+  await access?.end();
+  cluster?.remove();
+});
+
+async function principal() {
+  const id = randomUUID();
+  const issuer = 'https://account.rezics.test';
+  const subject = randomUUID();
+  await access.query('INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1,$2,$3)',
+    [id, issuer, subject]);
+  return { id, issuer, subject };
+}
+
+type Principal = Awaited<ReturnType<typeof principal>>;
+async function provision(owner: Principal, kind: 'person' | 'organization' = 'person') {
+  const person = native();
+  const id = randomUUID();
+  const displayName = `Private ${kind} name ${id}`;
+  await access.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')", [person]);
+  const authority = await grantFixtureAuthority(access, {
+    scope: 'work:create:root', requireDispatch: true,
+    representations: [{ principalId: owner.id, actor: person, action: 'agent.control', lifetime: 'infinity' }],
+    grant: { actor: person, action: 'agent.control', lifetime: 'infinity' },
+  });
+  await access.query(`INSERT INTO access.agent_provision
+    (id, principal_id, idempotency_key, request_digest, agent_id, agent_kind, display_name,
+     principal_epoch, state, graph_data_epoch, graph_sequence, representation_id)
+    VALUES ($1::uuid,$2,$1::text,$3,$4,$5,$6,0,'active','person-erasure-fixture',7,$7)`,
+  [id, owner.id, digest(id), person, kind, displayName, authority.representationIds[0]]);
+  return { id, person, displayName };
+}
+
+async function endedFixture(options: { principalActive?: boolean; subjectActive?: boolean; kind?: 'person' | 'organization' } = {}) {
+  const owner = await principal();
+  const profile = await provision(owner, options.kind);
+  const deletionIntentId = randomUUID();
+  await access.query('UPDATE access.principal SET active = $2, enforcement_epoch = 1 WHERE id = $1',
+    [owner.id, options.principalActive ?? false]);
+  await access.query('UPDATE access.authority_subject SET active = $2, generation = 1 WHERE id = $1',
+    [profile.person, options.subjectActive ?? false]);
+  await access.query(`INSERT INTO access.outbox (id, kind, principal_id, authority_epoch)
+    VALUES ($1,'account.deletion_fenced',$2,1)`, [deletionIntentId, owner.id]);
+  const proof: PersonProfileErasureProof = {
+    erasureId: randomUUID(), erasureEpoch: '1', accountErasureId: randomUUID(),
+    principalId: owner.id, person: profile.person, provisionId: profile.id,
+    deletionIntentId, deletionEnforcementEpoch: '1', subjectEpoch: '1',
+  };
+  await sealFixtureJournal(owner, proof);
+  return { owner, profile, proof };
+}
+
+async function sealFixtureJournal(owner: Principal, proof: PersonProfileErasureProof) {
+  await relay.query(`INSERT INTO relay.erasure
+    (id, erasure_epoch, kind, authority, suppression_status, stage, deleted_principal_id, account_issuer, account_subject)
+    VALUES ($1,1,'account','account_deletion','suppressed','inventory_complete',$2,$3,$4)`,
+  [proof.accountErasureId, owner.id, owner.issuer, owner.subject]);
+  await relay.query(`INSERT INTO relay.erasure
+    (id, erasure_epoch, account_erasure_id, kind, authority, operation_id, suppression_status, stage)
+    VALUES ($1,$2,$3,'resource','account_deletion',$4,'suppressed','inventory_complete')`,
+  [proof.erasureId, proof.erasureEpoch, proof.accountErasureId, `account-profile-erasure:${proof.accountErasureId}`]);
+  await relay.query('INSERT INTO relay.account_deletion_intent (principal_id,outbox_id,authority_epoch) VALUES ($1,$2,$3)',
+    [owner.id, proof.deletionIntentId, proof.deletionEnforcementEpoch]);
+  await relay.query(`INSERT INTO relay.erasure_target (erasure_id,owner,target_kind,target_ref)
+    VALUES ($1,'access','principal',$2),($1,'graph','person_head',$3)`,
+  [proof.erasureId, owner.id, proof.person]);
+}
+
+async function provisionRow(id: string) {
+  return (await access.query<Record<string, unknown>>('SELECT * FROM access.agent_provision WHERE id = $1', [id])).rows[0]!;
+}
+
+test('sole-controller Account deletion ends the retained Person authority before profile inventory', async () => {
+  const owner = await principal();
+  const profile = await provision(owner);
+  const fence = await new AccessAdmissionRegistry(access).strongDeactivateAccountSubject(owner.issuer, owner.subject);
+  expect(fence).toMatchObject({ principalId: owner.id, enforcementEpoch: '1' });
+  // This is the real integration dependency on Account Person-authority ending.
+  // Other owner cases use explicit ended fixture state, so this gap is isolated.
+  expect((await access.query<{ active: boolean }>('SELECT active FROM access.authority_subject WHERE id = $1',
+    [profile.person])).rows[0]?.active).toBe(false);
+  expect(await listEndedPersonProvisions(access, owner.id, 1)).toEqual([
+    expect.objectContaining({ provisionId: profile.id, person: profile.person, principalId: owner.id }),
+  ]);
+});
+
+test('Account deletion preserves a Person controlled by another live principal', async () => {
+  const owner = await principal();
+  const profile = await provision(owner);
+  const otherController = await principal();
+  await grantFixtureAuthority(access, {
+    scope: 'work:create:root', requireDispatch: true,
+    representations: [{ principalId: otherController.id, actor: profile.person, action: 'agent.control', lifetime: 'infinity' }],
+    grant: { actor: profile.person, action: 'agent.control', lifetime: 'infinity' },
+  });
+  const before = await provisionRow(profile.id);
+  const fence = await new AccessAdmissionRegistry(access).strongDeactivateAccountSubject(owner.issuer, owner.subject);
+  expect(fence).toMatchObject({ principalId: owner.id, enforcementEpoch: '1' });
+  expect((await access.query<{ active: boolean }>('SELECT active FROM access.authority_subject WHERE id = $1',
+    [profile.person])).rows[0]?.active).toBe(true);
+  expect(await listEndedPersonProvisions(access, owner.id, 1)).toEqual([]);
+  expect(await provisionRow(profile.id)).toEqual(before);
+});
+
+test('exact retained Person name disappears while opaque identity and unrelated rows remain', async () => {
+  const fixture = await endedFixture();
+  const unrelated = await endedFixture();
+  const organization = await provision(await principal(), 'organization');
+  const before = await provisionRow(fixture.profile.id);
+  const unrelatedBefore = await provisionRow(unrelated.profile.id);
+  const organizationBefore = await provisionRow(organization.id);
+  expect(await personProvisionProfileErased(access, fixture.proof)).toBe(false);
+  await erasePersonProvisionProfile(access, relay, fixture.proof);
+  expect(await personProvisionProfileErased(access, fixture.proof)).toBe(true);
+  const after = await provisionRow(fixture.profile.id);
+  expect(after).toMatchObject({ display_name: null, profile_erasure_id: fixture.proof.erasureId,
+    account_erasure_id: fixture.proof.accountErasureId, state: 'active' });
+  for (const field of ['id', 'principal_id', 'agent_id', 'request_digest', 'representation_id',
+    'graph_data_epoch', 'graph_sequence', 'created_at']) expect(after[field]).toEqual(before[field]);
+  expect(JSON.stringify(after)).not.toContain(fixture.profile.displayName);
+  expect(await provisionRow(unrelated.profile.id)).toEqual(unrelatedBefore);
+  expect(await provisionRow(organization.id)).toEqual(organizationBefore);
+  const first = await provisionRow(fixture.profile.id);
+  await erasePersonProvisionProfile(access, relay, fixture.proof);
+  expect(await provisionRow(fixture.profile.id)).toEqual(first);
+});
+
+test('ordinary terminal provision writes cannot sanitize or restore a name', async () => {
+  const { proof, profile } = await endedFixture();
+  await expect(access.query('UPDATE access.agent_provision SET display_name = NULL WHERE id = $1', [profile.id]))
+    .rejects.toMatchObject({ code: '23514' });
+  await erasePersonProvisionProfile(access, relay, proof);
+  await expect(access.query('UPDATE access.agent_provision SET display_name = $2 WHERE id = $1', [profile.id, profile.displayName]))
+    .rejects.toMatchObject({ code: '23514' });
+  await expect(access.query('DELETE FROM access.agent_provision WHERE id = $1', [profile.id]))
+    .rejects.toMatchObject({ code: '23514' });
+});
+
+test('active principal, active Person and Organization sanitation are denied without mutation', async () => {
+  for (const options of [{ principalActive: true }, { subjectActive: true }, { kind: 'organization' as const }]) {
+    const { proof, profile } = await endedFixture(options);
+    const before = await provisionRow(profile.id);
+    await expect(erasePersonProvisionProfile(access, relay, proof)).rejects.toBeInstanceOf(PersonProfileErasureDenied);
+    expect(await provisionRow(profile.id)).toEqual(before);
+  }
+});
+
+test('another Account parent, Person target or unsealed child cannot authorize sanitation', async () => {
+  const { proof, profile } = await endedFixture();
+  const other = await endedFixture();
+  const before = await provisionRow(profile.id);
+  for (const changed of [{ accountErasureId: other.proof.accountErasureId }, { person: other.profile.person },
+    { provisionId: other.profile.id }, { erasureEpoch: '2' }]) {
+    await expect(erasePersonProvisionProfile(access, relay, { ...proof, ...changed }))
+      .rejects.toBeInstanceOf(PersonProfileErasureDenied);
+  }
+  await relay.query("UPDATE relay.erasure SET stage = 'requested' WHERE id = $1", [proof.erasureId]);
+  await expect(erasePersonProvisionProfile(access, relay, proof)).rejects.toBeInstanceOf(PersonProfileErasureDenied);
+  expect(await provisionRow(profile.id)).toEqual(before);
+});
+
+test('changed enforcement and Person generations refuse stale sealed owner proofs', async () => {
+  for (const owner of ['principal', 'subject'] as const) {
+    const { proof, profile } = await endedFixture();
+    if (owner === 'principal') await access.query('UPDATE access.principal SET enforcement_epoch = 2 WHERE id = $1', [proof.principalId]);
+    else await access.query('UPDATE access.authority_subject SET generation = 2 WHERE id = $1', [proof.person]);
+    await expect(erasePersonProvisionProfile(access, relay, proof)).rejects.toBeInstanceOf(PersonProfileErasureStale);
+    expect((await provisionRow(profile.id)).display_name).toBe(profile.displayName);
+  }
+});
+
+test('closed recovery fence refuses sanitation; recovery resumes the same sealed proof', async () => {
+  const { proof, profile } = await endedFixture();
+  const generation = await engageAccessRecoveryFence(access);
+  try {
+    await expect(erasePersonProvisionProfile(access, relay, proof)).rejects.toBeInstanceOf(PersonProfileErasureUnavailable);
+    expect((await provisionRow(profile.id)).display_name).toBe(profile.displayName);
+  } finally { await releaseAccessRecoveryFence(access, generation); }
+  await erasePersonProvisionProfile(access, relay, proof);
+  expect(await personProvisionProfileErased(access, proof)).toBe(true);
+});
+
+test('unavailable Account-child journal schema fails closed without touching the provision', async () => {
+  const { proof, profile } = await endedFixture();
+  const journal = await relay.connect();
+  try {
+    await journal.query('BEGIN');
+    await journal.query('ALTER TABLE relay.erasure DROP COLUMN account_erasure_id');
+    await expect(erasePersonProvisionProfile(access, journal, proof)).rejects.toBeInstanceOf(PersonProfileErasureUnavailable);
+    expect((await provisionRow(profile.id)).display_name).toBe(profile.displayName);
+  } finally {
+    await journal.query('ROLLBACK');
+    journal.release();
+  }
+});
+
+test('concurrent sanitation of the same proof converges and another proof remains stale', async () => {
+  const { proof, owner } = await endedFixture();
+  await Promise.all([erasePersonProvisionProfile(access, relay, proof), erasePersonProvisionProfile(access, relay, proof)]);
+  expect(await personProvisionProfileErased(access, proof)).toBe(true);
+  const next = { ...proof, erasureId: randomUUID() };
+  await relay.query(`INSERT INTO relay.erasure (id,erasure_epoch,account_erasure_id,kind,authority,operation_id,suppression_status,stage)
+    VALUES ($1,1,$2,'resource','account_deletion',$3,'suppressed','inventory_complete')`,
+  [next.erasureId, next.accountErasureId, `account-profile-erasure:${next.accountErasureId}`]);
+  await relay.query(`INSERT INTO relay.erasure_target (erasure_id,owner,target_kind,target_ref)
+    VALUES ($1,'access','principal',$2),($1,'graph','person_head',$3)`, [next.erasureId, owner.id, next.person]);
+  await expect(erasePersonProvisionProfile(access, relay, next)).rejects.toBeInstanceOf(PersonProfileErasureStale);
+  expect(await personProvisionProfileErased(access, next)).toBe(false);
+});
+
+test('locked owner provision refuses a concurrent attempt and recovers after rollback', async () => {
+  const { proof, profile } = await endedFixture();
+  const blocker: PoolClient = await access.connect();
+  try {
+    await blocker.query('BEGIN');
+    await blocker.query('SELECT id FROM access.agent_provision WHERE id = $1 FOR UPDATE', [profile.id]);
+    await expect(erasePersonProvisionProfile(access, relay, proof)).rejects.toBeInstanceOf(PersonProfileErasureStale);
+  } finally {
+    await blocker.query('ROLLBACK');
+    blocker.release();
+  }
+  expect((await provisionRow(profile.id)).display_name).toBe(profile.displayName);
+  await erasePersonProvisionProfile(access, relay, proof);
+  expect(await personProvisionProfileErased(access, proof)).toBe(true);
+}, 10_000);
+
+test('retained Person lookup is bounded and cannot silently truncate the closure', async () => {
+  const { proof, profile } = await endedFixture();
+  expect(await listEndedPersonProvisions(access, proof.principalId, 1)).toEqual([
+    expect.objectContaining({ provisionId: profile.id, person: profile.person, subjectEpoch: '1' }),
+  ]);
+  await expect(listEndedPersonProvisions(access, proof.principalId, 0)).rejects.toBeInstanceOf(PersonProfileErasureDenied);
+  await expect(listEndedPersonProvisions(access, proof.principalId, 257)).rejects.toBeInstanceOf(PersonProfileErasureDenied);
+});
+
+async function aliasCopies(owner: Principal, person: string, receiptOwner = owner) {
+  const key = `privateperson${randomUUID().slice(0, 8)}`;
+  const previousKey = `formerperson${randomUUID().slice(0, 8)}`;
+  const idempotencyKey = `alias:${randomUUID()}`;
+  for (const [alias, state] of [[key, 'current'], [previousKey, 'redirect']] as const) {
+    const revision = randomUUID();
+    const skeleton = normalizeAddressAlias(alias, 'ascii-handle').skeleton;
+    await access.query(`INSERT INTO access.alias_registry
+      (scope,key,skeleton,holder,controller,state,revision)
+      VALUES ('agent',$1,$5,$2,$2,$3,$4)`, [alias, person, state, revision, skeleton]);
+    await access.query(`INSERT INTO access.alias_history (revision,scope,key,holder,state)
+      VALUES ($1,'agent',$2,$3,$4)`, [revision, alias, person, state]);
+  }
+  await access.query(`INSERT INTO access.alias_receipt (principal_id,idempotency_key,request_digest,result)
+    VALUES ($1,$2,$3,$4)`, [receiptOwner.id, idempotencyKey, digest(idempotencyKey), JSON.stringify({
+    profile: 'alias-write-v1', scope: 'agent', holder: person, key, previousKey,
+    state: 'current', revision: randomUUID(), changedAt: new Date().toISOString(), replayed: false,
+  })]);
+  await access.query(`INSERT INTO access.alias_graph_import_report (data_epoch,source,reason,legacy_alias)
+    VALUES ('person-erasure-fixture',$1,$2,$3)`, [
+    `${person}#${key}`, `Skipped legacy alias ${key}`, JSON.stringify({ holder: { value: person }, key: { value: key } }),
+  ]);
+  return { key, previousKey, idempotencyKey, receiptPrincipal: receiptOwner.id };
+}
+
+async function aliasRows(person: string) {
+  return {
+    registry: (await access.query('SELECT * FROM access.alias_registry WHERE holder = $1 ORDER BY key_digest', [person])).rows,
+    history: (await access.query('SELECT * FROM access.alias_history WHERE holder = $1 ORDER BY revision', [person])).rows,
+    receipts: (await access.query("SELECT * FROM access.alias_receipt WHERE result->>'holder' = $1 ORDER BY idempotency_key", [person])).rows,
+    imports: (await access.query('SELECT * FROM access.alias_graph_import_report WHERE holder = $1 ORDER BY source_digest', [person])).rows,
+  };
+}
+
+test('Person alias copies erase by exact holder across delegated receipts; permanent digests survive', async () => {
+  const { owner, profile, proof } = await endedFixture();
+  const copies = await aliasCopies(owner, profile.person, await principal());
+  const unrelated = await endedFixture();
+  await aliasCopies(unrelated.owner, unrelated.profile.person);
+  const organization = await provision(await principal(), 'organization');
+  // The same deleted principal can retain a receipt for an unrelated holder.
+  await aliasCopies(owner, organization.person);
+  const before = await aliasRows(profile.person);
+  const unrelatedBefore = await aliasRows(unrelated.profile.person);
+  const organizationBefore = await aliasRows(organization.person);
+  const inventory = await listPersonProfileAliases(access, relay, proof, 6);
+  expect(inventory.entries).toHaveLength(6);
+  expect(new Set(inventory.entries.map(entry => entry.owner))).toEqual(new Set(['registry', 'history', 'receipt', 'import']));
+  expect(JSON.stringify(inventory)).not.toContain(copies.key);
+  expect(JSON.stringify(inventory)).not.toContain(copies.previousKey);
+  expect(await personProfileAliasesErased(access, proof)).toBe(false);
+  await erasePersonProfileAliases(access, relay, proof, inventory);
+  await erasePersonProvisionProfile(access, relay, proof);
+  expect(await personProfileAliasesErased(access, proof)).toBe(true);
+  const after = await aliasRows(profile.person);
+  expect(JSON.stringify(after)).not.toContain(copies.key);
+  expect(JSON.stringify(after)).not.toContain(copies.previousKey);
+  expect(after.registry.map(row => row.key_digest)).toEqual(before.registry.map(row => row.key_digest));
+  expect(after.registry.map(row => row.skeleton_digest)).toEqual(before.registry.map(row => row.skeleton_digest));
+  expect(after.history.map(row => row.key_digest)).toEqual(before.history.map(row => row.key_digest));
+  expect(after.imports.map(row => row.source_digest)).toEqual(before.imports.map(row => row.source_digest));
+  expect(after.receipts[0]?.principal_id).toBe(copies.receiptPrincipal);
+  expect(await aliasRows(unrelated.profile.person)).toEqual(unrelatedBefore);
+  expect(await aliasRows(organization.person)).toEqual(organizationBefore);
+  const registry = new AliasRegistry(access);
+  expect(await registry.lookup('agent', copies.key)).toBeNull();
+  expect((await registry.currents([profile.person])).size).toBe(0);
+  expect((await registry.heads(['agent'], [profile.person])).size).toBe(0);
+  expect(await registry.availability('agent', copies.key)).toEqual({ available: false, reason: 'retained' });
+  expect(await registry.availability('space', copies.key)).toEqual({ available: false, reason: 'confusable' });
+  expect(await registry.firstAvailable('agent', [copies.key, copies.previousKey])).toBeNull();
+  expect(await registry.firstAvailable('space', [copies.key])).toBeNull();
+  await erasePersonProfileAliases(access, relay, proof, inventory);
+  expect(await aliasRows(profile.person)).toEqual(after);
+});
+
+test('changed alias receipt inventory refuses partial sanitation and can be resealed for recovery', async () => {
+  const { owner, profile, proof } = await endedFixture();
+  const copies = await aliasCopies(owner, profile.person);
+  const inventory = await listPersonProfileAliases(access, relay, proof, 6);
+  await access.query(`UPDATE access.alias_receipt SET result = result || '{"changedAt":"changed"}'::jsonb
+    WHERE principal_id = $1 AND idempotency_key = $2`, [copies.receiptPrincipal, copies.idempotencyKey]);
+  const changed = await aliasRows(profile.person);
+  await expect(erasePersonProfileAliases(access, relay, proof, inventory)).rejects.toBeInstanceOf(PersonProfileErasureStale);
+  expect(await aliasRows(profile.person)).toEqual(changed);
+  const recovered = await listPersonProfileAliases(access, relay, proof, 6);
+  await erasePersonProfileAliases(access, relay, proof, recovered);
+  expect(await personProfileAliasesErased(access, proof)).toBe(true);
+});
+
+test('alias sanitation rejects forged fingerprints, bypass stamps and replanted names', async () => {
+  const { owner, profile, proof } = await endedFixture();
+  const copies = await aliasCopies(owner, profile.person);
+  const inventory = await listPersonProfileAliases(access, relay, proof, 6);
+  const entries = inventory.entries.map(entry => ({ ...entry, fingerprint: digest('forged') }));
+  await expect(erasePersonProfileAliases(access, relay, proof, { entries, digest: digest(JSON.stringify(entries)) }))
+    .rejects.toBeInstanceOf(PersonProfileErasureStale);
+  await expect(access.query(`UPDATE access.alias_registry SET key = NULL,skeleton = NULL,state = 'retired',
+    profile_erasure_id = $2,profile_erasure_epoch = 1 WHERE holder = $1`, [profile.person, proof.erasureId]))
+    .rejects.toMatchObject({ code: '23514' });
+  await expect(access.query('DELETE FROM access.alias_history WHERE holder = $1', [profile.person]))
+    .rejects.toMatchObject({ code: '23514' });
+  await erasePersonProfileAliases(access, relay, proof, inventory);
+  // Alias-owner terminal evidence closes replanting before the next owner has
+  // sanitized the provision display-name copy.
+  expect((await provisionRow(profile.id)).display_name).toBe(profile.displayName);
+  await expect(access.query(`INSERT INTO access.alias_registry (scope,key,skeleton,holder,controller,state)
+    VALUES ('agent','replantedperson','replantedperson',$1,$1,'current')`, [profile.person]))
+    .rejects.toMatchObject({ code: '23514' });
+  await expect(access.query(`INSERT INTO access.alias_receipt (principal_id,idempotency_key,request_digest,result)
+    VALUES ($1,'replanted-alias',$2,$3)`, [owner.id, digest('replanted-alias'), JSON.stringify({
+    profile: 'alias-write-v1', scope: 'agent', holder: profile.person, key: 'replantedperson',
+  })])).rejects.toMatchObject({ code: '23514' });
+  await expect(access.query(`INSERT INTO access.alias_graph_import_report (data_epoch,source,reason,legacy_alias)
+    VALUES ('person-erasure-fixture',$1,'replanted alias',$2)`, [
+    `${profile.person}#replantedperson`, JSON.stringify({ holder: { value: profile.person }, key: { value: 'replantedperson' } }),
+  ])).rejects.toMatchObject({ code: '23514' });
+  await erasePersonProvisionProfile(access, relay, proof);
+  await expect(access.query(`UPDATE access.alias_registry SET key = $2,skeleton = $2
+    WHERE holder = $1 AND key_digest = access.alias_digest($2)`, [profile.person, copies.key]))
+    .rejects.toMatchObject({ code: '23514' });
+  await expect(access.query(`INSERT INTO access.alias_registry (scope,key,skeleton,holder,controller,state)
+    VALUES ('agent','replantedperson','replantedperson',$1,$1,'current')`, [profile.person]))
+    .rejects.toMatchObject({ code: '23514' });
+});
+
+test('alias inventory budget refuses overflow without changing any owner copy', async () => {
+  const { owner, profile, proof } = await endedFixture();
+  await aliasCopies(owner, profile.person);
+  const before = await aliasRows(profile.person);
+  await expect(listPersonProfileAliases(access, relay, proof, 5)).rejects.toBeInstanceOf(PersonProfileErasureDenied);
+  expect(await aliasRows(profile.person)).toEqual(before);
+});

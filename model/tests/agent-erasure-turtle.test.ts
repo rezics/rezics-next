@@ -8,6 +8,7 @@ import { buildModelOutputs } from '../compiler/outputs.ts';
 import { buildCommandRegistry } from '../compiler/registry.ts';
 import { profileSource } from '../compiler/shacl.ts';
 import { agentErasureProfile } from '../definitions/agent-erasure-v1.ts';
+import { agentProvisionProfile } from '../definitions/agent-provision-v1.ts';
 
 const rv = 'https://rezics.com/vocab/';
 const shape = 'https://rezics.com/definition/agent-erasure-v1/tombstone-shape';
@@ -29,9 +30,9 @@ const tombstone = () => ({
 
 test('authored Person tombstone is discovered and carried unchanged in the native manifest', () => {
   expect(authoredProfiles.some(profile => profile.id === agentErasureProfile.id)).toBe(true);
-  const native = commandProfiles(authoredProfiles);
+  const native = commandProfiles([agentErasureProfile, agentProvisionProfile]);
   expect(native.shapes.get('shapes/agent-erasure-v1.ttl')).toBe(profileSource(agentErasureProfile));
-  const registry = buildCommandRegistry(authoredProfiles);
+  const registry = buildCommandRegistry([agentErasureProfile, agentProvisionProfile]);
   const route = registry.canonical.find(entry => entry.type === `${rv}AgentTombstone`)!;
   expect(route.routes.map(entry => entry.profile)).toEqual(['agent-erasure-v1', 'agent-provision-v1']);
   expect(route.routes[0]!.when).toEqual([{ path: `${rv}agentKind`, value: `${rv}PersonAgent` }]);
