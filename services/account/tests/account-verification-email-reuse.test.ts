@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { createEmailVerificationToken } from 'better-auth/api';
+import { bootstrapOperators } from '../src/operators.ts';
 import { accountFixture } from './account-fixture.ts';
 import { cookies, recoveryProof } from './recovery-fixture.ts';
 
@@ -23,6 +24,7 @@ for (const issuer of ['signup', 'operator'] as const) {
     try {
       const operator = await f.signup('operator@example.test');
       f.operators.add(operator.id);
+      await bootstrapOperators(f.pool, f.operators);
       const original = { email: 'reused@example.test', name: 'Original', password: 'original sufficiently long password' };
       expect((await f.request('/api/auth/sign-up/email', original)).status).toBe(200);
       await f.email.drain();
@@ -110,6 +112,7 @@ test('operator verification uses the current recovery generation and rejects its
     const guardian = await f.signup('guardian@example.test');
     const operator = await f.signup('operator@example.test');
     f.operators.add(operator.id);
+    await bootstrapOperators(f.pool, f.operators);
     const recovery = await recoveryProof(f, member, guardian);
     await f.pool.query('UPDATE "user" SET "emailVerified" = false WHERE id = $1', [member.id]);
     const stale = await resendByOperator(f, member.id, operator.cookie);
