@@ -73,6 +73,8 @@ export async function readClosedRealmMedia<T>(
 /** A route may need a first owner lookup to locate the Asset behind a mutable
  * selection. Capture its ancestry, then reread that exact owner basis before
  * hydration: a successor must not authorize bytes selected by its predecessor.
+ * Hydrate the isolated captured basis: the shared reread can change again while
+ * hydration awaits, but the final fence only covers that captured selection.
  * A missing owner row has the same null result as a hidden row. */
 export async function readClosedRealmMediaSelection<Selection, Result>(
   env: WorkActivationEnvironment,
@@ -89,6 +91,6 @@ export async function readClosedRealmMediaSelection<Selection, Result>(
     if (fresh === null || !isDeepStrictEqual(basis, fresh)) {
       throw new DisclosureUnavailable('Media delivery selection moved');
     }
-    return hydrate(fresh);
+    return hydrate(basis);
   }, viewer);
 }

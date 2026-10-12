@@ -12,13 +12,19 @@ import { fixtureDisclosureCut } from './support/disclosure-ancestry.ts';
 const ref = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${n.toString(16).padStart(12, '0')}`;
 const asset = ref(1), representation = ref(2), use = ref(3), realm = ref(4);
 
-function fixture() {
+type DisclosureAwait = 'ancestry' | 'capture-relationship' | 'capture-head' | 'capture-decision'
+  | 'fence-relationship' | 'fence-head' | 'fence-decision';
+
+function fixture(duringAwait: (phase: DisclosureAwait) => Promise<void> = async () => {}) {
   const state = { closed: false, independent: false, attachmentPresent: true,
     directHidden: null as string | null, failReread: false };
-  const calls = { hydrate: 0, targets: [] as DisclosureTarget[], rereads: 0 };
+  const calls = { hydrate: 0, targets: [] as DisclosureTarget[], rereads: 0, heads: 0, decisions: 0 };
   const selected = new Map<string, DisclosureTarget>();
   const env = { lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' },
-    fuseki: { query: async () => ({ results: { bindings: [{ resource: { value: realm }, head: { value: 'realm:1' } }] } }) },
+    fuseki: { query: async () => {
+      await duringAwait(++calls.heads === 1 ? 'capture-head' : 'fence-head');
+      return { results: { bindings: [{ resource: { value: realm }, head: { value: 'realm:1' } }] } };
+    } },
   } as unknown as WorkActivationEnvironment;
   const evidence = (target: DisclosureTarget): DisclosureAncestryEvidence => {
     const relationshipBasis = { owner: 'media' as const,
@@ -33,19 +39,26 @@ function fixture() {
       status: state.attachmentPresent ? 'complete' : 'unavailable' };
   };
   configureDisclosureAncestrySource(env, 'media', {
-    read: async targets => { calls.targets.push(...targets); return targets.map(evidence); },
+    read: async targets => {
+      calls.targets.push(...targets);
+      await duringAwait('ancestry');
+      return targets.map(evidence);
+    },
     reread: async bases => {
-      calls.rereads++;
+      await duringAwait(++calls.rereads === 1 ? 'capture-relationship' : 'fence-relationship');
       if (state.failReread) throw new Error('Media evidence owner is offline');
       return bases.map(basis => evidence(selected.get(basis.token)!));
     },
   });
   configureDisclosure(env, {
     read: async () => { throw new Error('Expected fresh disclosure cut'); },
-    readAtCut: async targets => ({ decisions: targets.map(target =>
-      target.resource === state.directHidden || state.closed && target.ancestry!.parents.some(parent =>
-        parent.kind === 'realm' && parent.resource === realm) ? 'hidden' as const : 'visible' as const),
-    anonymousNames: [], fenceBasis: fixtureDisclosureCut }),
+    readAtCut: async targets => {
+      await duringAwait(++calls.decisions === 1 ? 'capture-decision' : 'fence-decision');
+      return { decisions: targets.map(target =>
+        target.resource === state.directHidden || state.closed && target.ancestry!.parents.some(parent =>
+          parent.kind === 'realm' && parent.resource === realm) ? 'hidden' as const : 'visible' as const),
+      anonymousNames: [], fenceBasis: fixtureDisclosureCut };
+    },
   });
   const read = (withUse: boolean, duringHydration?: () => void) => readClosedRealmMedia(env,
     { asset, representation, ...(withUse ? { use } : {}) }, async () => {
@@ -143,5 +156,57 @@ for (const change of ['asset', 'representation', 'use', 'digest', 'removed', 'mu
       return { ...selected, [change]: change === 'digest' ? 'b'.repeat(64) : ref(99) };
     }, row => row, async row => { hydrations++; return row; })).rejects.toBeInstanceOf(DisclosureUnavailable);
     expect(hydrations).toBe(0);
+  });
+}
+
+// Shared owner A -> closed B: before capture => ABSENT; capture/reread =>
+// UNAVAILABLE; after the equality check => captured A bytes and metadata only.
+const selectionAwaits = ['initial-owner', 'ancestry', 'capture-relationship', 'capture-head',
+  'capture-decision', 'fresh-owner', 'hydration', 'fence-relationship', 'fence-head', 'fence-decision'] as const;
+
+for (const phase of selectionAwaits) {
+  test(`a shared owner mutation during ${phase} never hydrates its closed successor`, async () => {
+    const original = { asset, representation, use,
+      metadata: { sha256: 'a'.repeat(64), width: 100 }, bytes: new Uint8Array([1, 2, 3]) };
+    const selected = structuredClone(original);
+    const successor = { asset: ref(11), representation: ref(12), use: ref(13),
+      metadata: { sha256: 'b'.repeat(64), width: 200 }, bytes: new Uint8Array([4, 5, 6]) };
+    const events: string[] = [];
+    const mutateDuring = async (current: string) => {
+      events.push(current);
+      // Suspend the owner/hydrator so the mutation occurs inside its await.
+      await Promise.resolve();
+      if (current === phase) {
+        selected.asset = successor.asset;
+        selected.representation = successor.representation;
+        selected.use = successor.use;
+        Object.assign(selected.metadata, successor.metadata);
+        selected.bytes.set(successor.bytes);
+      }
+    };
+    const f = fixture(mutateDuring);
+    f.state.directHidden = successor.asset;
+    let ownerReads = 0, hydrations = 0;
+    const result = readClosedRealmMediaSelection(f.env, async () => {
+      await mutateDuring(++ownerReads === 1 ? 'initial-owner' : 'fresh-owner');
+      return selected;
+    }, row => row, async row => {
+      hydrations++;
+      await mutateDuring('hydration');
+      return structuredClone(row);
+    });
+    if (phase === 'initial-owner') {
+      expect(await result).toBeNull();
+      expect(hydrations).toBe(0);
+    } else if (['ancestry', 'capture-relationship', 'capture-head', 'capture-decision', 'fresh-owner'].includes(phase)) {
+      await expect(result).rejects.toBeInstanceOf(DisclosureUnavailable);
+      expect(hydrations).toBe(0);
+    } else {
+      expect(await result).toEqual(original);
+      expect(hydrations).toBe(1);
+      expect(f.calls.targets.map(target => target.resource)).toEqual([asset, representation, use]);
+    }
+    expect(events).toContain(phase);
+    expect(selected).toEqual(successor);
   });
 }
