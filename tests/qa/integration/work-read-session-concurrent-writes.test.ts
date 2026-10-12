@@ -60,6 +60,10 @@ async function concurrentReadProfiles() {
   const { MediaScreenStore } = await import('../../../services/main/src/modules/media-screen/store.ts');
   const { screenVerdict } = await import('../../../services/main/src/modules/media-screen/policy.ts');
   const home = await startHomeStack('work-read-concurrent-writes', { projectionStart: 'current' });
+  const { AccessRealmManagement } = await import('../../../services/main/src/modules/access/realm-management.ts');
+  const realmAdmin = new AccessRealmManagement(home.stack.accessPool);
+  realmAdmin.configureFollowGraph(home.stack.fuseki);
+  Object.assign(home.deps, { realmAdmin });
   const actor = await home.provision('Concurrent read author', home.author.token);
   const started = performance.now();
   const evidence: unknown[] = [];
@@ -161,12 +165,13 @@ async function concurrentReadProfiles() {
   };
   try {
     const grant = async (scope: string, action: string) => {
+      const lifetime = action === 'agent.control' ? 'infinity' : '8 hours';
       const client = await home.stack.accessPool.connect();
       try {
         await client.query('BEGIN');
         await grantFixtureAuthority(client, { scope, requireDispatch: true,
-          representations: [{ principalId: home.author.principalId, actor, action, lifetime: '8 hours' }],
-          grant: { actor, action, lifetime: '8 hours' } });
+          representations: [{ principalId: home.author.principalId, actor, action, lifetime }],
+          grant: { actor, action, lifetime } });
         await client.query('COMMIT');
       } catch (error) { await client.query('ROLLBACK'); throw error; }
       finally { client.release(); }
@@ -621,7 +626,7 @@ async function concurrentReadProfiles() {
 
     await grant(`agent:control:${actor}`, 'agent.control');
     const settings = await home.json<{ generation: string; settings: object }>(await home.call('GET',
-      `/v1/spaces/${short(space.space)}/settings`, undefined, home.author.token));
+      `/v1/spaces/${short(space.space)}/settings?actingSubject=${encodeURIComponent(actor)}`, undefined, home.author.token));
     const realmSummary = { resources: [space.realm], phase: 'closing-position' as const };
     const realmBaseline = await measure('/v1/resources/summaries', undefined, undefined, undefined, realmSummary);
     assert.equal(realmBaseline.result.status, 200, JSON.stringify(realmBaseline.result.body));
