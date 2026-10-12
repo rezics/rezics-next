@@ -11,7 +11,7 @@ import { AgentProvisioning } from '../../../services/main/src/modules/agent/prov
 import { disclosureViewer, namePolicyPrincipal } from '../../../services/main/src/modules/disclosure/viewer.ts';
 import { ownerModerationEffects } from '../../../services/main/src/modules/governance/effects.ts';
 import { ownerEvidenceCapture, ownerTargetHeads } from '../../../services/main/src/modules/governance/evidence.ts';
-import { GovernanceInvalid, GovernanceStore, type DecisionInput } from '../../../services/main/src/modules/governance/store.ts';
+import { GovernanceInvalid, GovernanceStale, GovernanceStore, type DecisionInput } from '../../../services/main/src/modules/governance/store.ts';
 import { createAdmittedRealmSpace } from '../../../services/main/src/modules/space/create-admitted.ts';
 import { createAdmittedMetadataWork } from '../../../services/main/src/modules/work/create-admitted.ts';
 import { editAdmittedMetadataWork } from '../../../services/main/src/modules/work/edit-admitted.ts';
@@ -72,6 +72,8 @@ async function restriction(
     context?: string;
     locator?: string | null;
     scopeKind?: 'component' | 'exact_revision';
+    evidenceRevision?: string | null;
+    beforeDecision?: () => Promise<void>;
   } = {},
 ) {
   const principal = { issuer: f.account.issuer, subject: f.account.a.id };
@@ -93,7 +95,9 @@ async function restriction(
     kind: 'content_report', actingSubject: f.actor, authority: { kind: authority, scopeId: scope },
     context: narrower.context ?? 'urn:rezics:context:global',
     target: { owner: 'graph', resource, component }, disclosure: 'private', reasonCode: 'disclosure',
-    statement: 'Review the exact owner-established disclosure grain', evidence: [target], idempotencyKey: randomUUID(),
+    statement: 'Review the exact owner-established disclosure grain',
+    evidence: [{ ...target, revision: narrower.evidenceRevision === undefined ? revision ?? expectedHead : narrower.evidenceRevision }],
+    idempotencyKey: randomUUID(),
   });
   const claim = async () => {
     if (authority !== 'platform') return;
@@ -108,6 +112,7 @@ async function restriction(
     evidenceDigest: report.evidenceDigest, reversesDecisionId: null, answersStepId: null,
     rationale: 'Reviewed fixture evidence', disclosure: 'private', reasons: fixtureReasons, idempotencyKey: randomUUID(),
   };
+  await narrower.beforeDecision?.();
   const accepted = await store.decide(principal, input, true);
   expect(accepted.operation.status).not.toBe('completed');
   const confirmed = await store.resumeDecision(principal, f.actor, accepted.decisionId);
@@ -121,7 +126,7 @@ async function restriction(
     })));
     const restored = await store.decide(principal, { ...input, outcome: 'restore',
       targets,
-      expectedGeneration: confirmed.caseGeneration, reversesDecisionId: accepted.decisionId,
+      expectedGeneration: confirmed.caseGeneration, reversesDecisionId: null,
       idempotencyKey: randomUUID() }, true);
     const released = await store.resumeDecision(principal, f.actor, restored.decisionId);
     expect(released.operation.status, JSON.stringify(released.operation)).toBe('completed');
@@ -362,8 +367,27 @@ test('Realm disclosure: real Access preserves Work and Realm fences, independent
     expect(await decisions()).toEqual(['visible', 'visible', 'visible', 'visible']);
 
     const viewers = await realmViewers(f, realm);
-    await expect(restriction(f, realm, 'record', null, 'disclosure', { scopeKind: 'exact_revision' }))
+    const governanceBasis = async () => (await f.accessPool.query<{ cut: string; count: number }>(
+      `SELECT access.site_moderation_basis() AS cut,(SELECT count(*)::int FROM access.site_moderation_change) AS count`,
+    )).rows[0]!;
+    const decisionsAndFences = async () => (await f.accessPool.query<{ decisions: number; fences: number }>(
+      `SELECT (SELECT count(*)::int FROM access.moderation_decision_target WHERE resource = $1) AS decisions,
+        (SELECT count(*)::int FROM access.governance_enforcement WHERE resource = $1) AS fences`, [realm],
+    )).rows[0]!;
+    const malformedEvidenceBasis = await governanceBasis(), noDecisionsOrFences = await decisionsAndFences();
+    // Available evidence without an exact revision is refused at report custody.
+    await expect(restriction(f, realm, 'record', null, 'disclosure', { evidenceRevision: null }))
+      .rejects.toBeInstanceOf(GovernanceStale);
+    expect(await governanceBasis()).toEqual(malformedEvidenceBasis);
+    expect(await decisionsAndFences()).toEqual(noDecisionsOrFences);
+    let invalidDecisionBasis: Awaited<ReturnType<typeof governanceBasis>> | undefined;
+    await expect(restriction(f, realm, 'record', null, 'disclosure', {
+      scopeKind: 'exact_revision', beforeDecision: async () => { invalidDecisionBasis = await governanceBasis(); },
+    }))
       .rejects.toBeInstanceOf(GovernanceInvalid);
+    expect(invalidDecisionBasis).toBeDefined();
+    expect(await governanceBasis()).toEqual(invalidDecisionBasis!);
+    expect(await decisionsAndFences()).toEqual(noDecisionsOrFences);
     expect(await decisions([body, media, independent])).toEqual(['visible', 'visible', 'visible']);
 
     const snapshotObserver = new Pool({ connectionString: f.accessPool.options.connectionString, max: 4 });

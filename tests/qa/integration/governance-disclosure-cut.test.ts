@@ -56,7 +56,8 @@ async function transaction<T>(work: (client: PoolClient) => Promise<T>): Promise
   finally { client.release(); }
 }
 
-type Staged = { id: string; caseId: string; resources: string[]; input: DecisionInput };
+type Staged = { id: string; caseId: string; resources: string[]; input: DecisionInput;
+  preAcceptanceBasis: string; preAcceptanceCount: number };
 
 /** Source disclosure is Access-local. Evidence, acceptance and acknowledgement
  * use production boundaries; Governance itself supplies the owner receipt. */
@@ -82,11 +83,12 @@ async function stage(resources: string[], outcome: 'restrict' | 'restore' = 'res
     evidenceDigest: report.evidenceDigest, reversesDecisionId: null, answersStepId: null,
     rationale: 'Reviewed fixture evidence', disclosure: 'private', reasons: fixtureReasons, idempotencyKey: randomUUID(),
   };
+  const preAcceptanceBasis = await basis(), preAcceptanceCount = await signalCount();
   const accepted = await store.decide(principal, input, true);
   expect(accepted.operation.status).not.toBe('completed');
   expect((await access.query('SELECT state,receipt FROM access.safety_decision_effect WHERE decision_id = $1 ORDER BY ordinal',
     [accepted.decisionId])).rows).toEqual(resources.map(() => ({ state: 'pending', receipt: null })));
-  return { id: accepted.decisionId, caseId: accepted.caseId, resources, input };
+  return { id: accepted.decisionId, caseId: accepted.caseId, resources, input, preAcceptanceBasis, preAcceptanceCount };
 }
 
 /** Savepoints hold real Governance transactions inside a controlled outer
@@ -123,11 +125,10 @@ const basis = async () => (await access.query<{ basis: string }>('SELECT access.
 const signalCount = async () => (await access.query<{ count: number }>('SELECT count(*)::int AS count FROM access.site_moderation_change')).rows[0]!.count;
 
 test('accepted pending decisions, acknowledgement and restoration advance the cut; accepted and completed replays preserve it', async () => {
-  const preceding = await basis(), precedingCount = await signalCount();
   const decision = await stage([native()]);
   const pending = await basis(), count = await signalCount();
-  expect(pending).not.toBe(preceding);
-  expect(count).toBe(precedingCount + 1);
+  expect(pending).not.toBe(decision.preAcceptanceBasis);
+  expect(count).toBe(decision.preAcceptanceCount + 1);
   const fence = await transaction(client => confirm(client, decision));
   expect(await basis()).not.toBe(pending);
   expect(await signalCount()).toBe(count + 1);
@@ -144,11 +145,10 @@ test('accepted pending decisions, acknowledgement and restoration advance the cu
   }
   expect((await access.query('SELECT receipt FROM access.safety_decision_effect WHERE decision_id = $1', [decision.id])).rows)
     .toEqual([{ receipt: `access:governance-enforcement:${decision.id}:1` }]);
-  const precedingRestore = await basis(), precedingRestoreCount = await signalCount();
   const restore = await stage(decision.resources, 'restore', decision.caseId);
   const pendingRestore = await basis();
-  expect(pendingRestore).not.toBe(precedingRestore);
-  expect(await signalCount()).toBe(precedingRestoreCount + 1);
+  expect(pendingRestore).not.toBe(restore.preAcceptanceBasis);
+  expect(await signalCount()).toBe(restore.preAcceptanceCount + 1);
   await transaction(client => confirm(client, restore));
   expect(await basis()).not.toBe(pendingRestore);
   expect((await access.query('SELECT state,fence_epoch::text FROM access.governance_enforcement WHERE id = $1', [fence])).rows)
@@ -196,16 +196,22 @@ test('partial acknowledgement recovery and batch confirmation record one signal 
   try { expect(held).not.toBe(partial); }
   // Recovery holds ordinary writers. Resume only after the owner reopens it.
   finally { await releaseAccessRecoveryFence(access, generation); }
+  const reopened = (await access.query<{ generation: string; open: boolean }>(
+    'SELECT generation::text,open FROM access.recovery_fence WHERE id',
+  )).rows[0]!;
+  expect(reopened).toEqual({ generation: (BigInt(generation) + 1n).toString(), open: true });
+  const beforeRecoveredAcknowledgement = await basis();
+  expect(beforeRecoveredAcknowledgement).not.toBe(held);
   const xid = await transaction(async client => {
     const row = (await client.query<{ xid: string }>('SELECT pg_current_xact_id()::text AS xid')).rows[0]!;
     await confirm(client, decision);
     await client.query('SELECT access.record_site_moderation_change()');
     return row.xid;
   });
-  expect(await basis()).not.toBe(held);
+  expect(await basis()).not.toBe(beforeRecoveredAcknowledgement);
   expect(await signalCount()).toBe(count + 2);
   expect((await access.query('SELECT epoch::text FROM access.site_moderation_change WHERE xid = $1::xid8', [xid])).rows)
-    .toEqual([{ epoch: generation }]);
+    .toEqual([{ epoch: reopened.generation }]);
   expect((await access.query('SELECT state FROM access.safety_decision_effect WHERE decision_id = $1 ORDER BY ordinal', [decision.id])).rows)
     .toEqual([{ state: 'confirmed' }, { state: 'confirmed' }, { state: 'confirmed' }]);
 });
