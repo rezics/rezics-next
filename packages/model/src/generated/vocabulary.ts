@@ -473,6 +473,7 @@ export const iri = {
   "rv:equivalenceHead": "https://rezics.com/vocab/equivalenceHead",
   "rv:ErasedRevision": "https://rezics.com/vocab/ErasedRevision",
   "rv:erasureEpoch": "https://rezics.com/vocab/erasureEpoch",
+  "rv:erasureId": "https://rezics.com/vocab/erasureId",
   "rv:evaluatedAt": "https://rezics.com/vocab/evaluatedAt",
   "rv:evaluationContext": "https://rezics.com/vocab/evaluationContext",
   "rv:evaluationReference": "https://rezics.com/vocab/evaluationReference",

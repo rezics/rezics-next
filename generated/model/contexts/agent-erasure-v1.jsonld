@@ -1,0 +1,35 @@
+{
+  "@context": {
+    "rdf": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+      "@prefix": true
+    },
+    "sh": {
+      "@id": "http://www.w3.org/ns/shacl#",
+      "@prefix": true
+    },
+    "rv": {
+      "@id": "https://rezics.com/vocab/",
+      "@prefix": true
+    },
+    "xsd": {
+      "@id": "http://www.w3.org/2001/XMLSchema#",
+      "@prefix": true
+    },
+    "rdf:type": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "@type": "@id"
+    },
+    "rv:agentKind": {
+      "@id": "https://rezics.com/vocab/agentKind",
+      "@type": "@id"
+    },
+    "rv:erasureEpoch": {
+      "@id": "https://rezics.com/vocab/erasureEpoch",
+      "@type": "xsd:integer"
+    },
+    "rv:erasureId": {
+      "@id": "https://rezics.com/vocab/erasureId"
+    }
+  }
+}

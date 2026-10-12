@@ -1,0 +1,15 @@
+# Account deletion retains only the Person's opaque native identity and exact
+# journal identity. Incoming author credits remain on their owning subjects.
+# Provision compensation is a separate meaning and supplies no erasure proof.
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rv: <https://rezics.com/vocab/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<https://rezics.com/definition/agent-erasure-v1/tombstone-shape>
+    a sh:NodeShape ;
+    sh:closed true ;
+    sh:property [ sh:path rdf:type ; sh:minCount 1 ; sh:maxCount 1 ; sh:hasValue rv:AgentTombstone ] ;
+    sh:property [ sh:path rv:agentKind ; sh:minCount 1 ; sh:maxCount 1 ; sh:hasValue rv:PersonAgent ] ;
+    sh:property [ sh:path rv:erasureId ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" ] ;
+    sh:property [ sh:path rv:erasureEpoch ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ] .

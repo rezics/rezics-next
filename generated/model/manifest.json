@@ -2,6 +2,11 @@
   "commandModule": "0.5.39",
   "profiles": [
     {
+      "id": "agent-erasure-v1",
+      "sha256": "cc23519d124b9f0565b9d1ae443f1f63d4802bd140d0f06bb89553eb578cfaff",
+      "file": "shapes/agent-erasure-v1.ttl"
+    },
+    {
       "id": "agent-profile-address-v1",
       "sha256": "4fafde7ef02e94ffff6bd3b961d4feeb206e30405843a42b376c605bbac21547",
       "file": "shapes/agent-profile-address-v1.ttl"
@@ -2056,6 +2061,16 @@
       "type": "https://rezics.com/vocab/AgentTombstone",
       "routes": [
         {
+          "profile": "agent-erasure-v1",
+          "shape": "https://rezics.com/definition/agent-erasure-v1/tombstone-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/agentKind",
+              "value": "https://rezics.com/vocab/PersonAgent"
+            }
+          ]
+        },
+        {
           "profile": "agent-provision-v1",
           "shape": "https://rezics.com/definition/agent-provision-v1/tombstone-shape",
           "when": []
@@ -3921,6 +3936,7 @@
     }
   ],
   "artifacts": {
+    "contexts/agent-erasure-v1.jsonld": "519de1e9311c30244aabcb2577af7a6d7ce258303f057811ef698a9815991515",
     "contexts/agent-profile-address-v1.jsonld": "abc02086e82c967f320fb9f053d71e3021250cb4660cbe53593e415e77ed496d",
     "contexts/agent-profile-v1.jsonld": "835586193a661d61e69b42dfafd4fe9bf105d23d836afb9e785a7684c21c53ce",
     "contexts/agent-profile-v2.jsonld": "7df6a015f58224c2cd521bf032487a93cc9a88f3397c0c9d75727a43381bc2a5",
@@ -4056,6 +4072,7 @@
     "contexts/zone-capability-v1.jsonld": "918ed682bbaa40f583bc57118f90e22edbb0d58da211387e5a7b6887847e2d58",
     "contexts/zone-presentation-v1.jsonld": "4ddfab60aeda8dd3b43f27db9fb7f3cad3b59fc654d36f1a7b35078effacc428",
     "contexts/zone-presentation-v2.jsonld": "4ddfab60aeda8dd3b43f27db9fb7f3cad3b59fc654d36f1a7b35078effacc428",
+    "shapes/agent-erasure-v1.ttl": "cc23519d124b9f0565b9d1ae443f1f63d4802bd140d0f06bb89553eb578cfaff",
     "shapes/agent-profile-address-v1.ttl": "4fafde7ef02e94ffff6bd3b961d4feeb206e30405843a42b376c605bbac21547",
     "shapes/agent-profile-v1.ttl": "d91dccf08288f5c516f4d02de93c9b722869432d75b6d4bdeb6409003fb47c56",
     "shapes/agent-profile-v2.ttl": "c4b8bb40f451f742d13887220ac6ed3288a192301f4295097ac85a1f94fb5e27",
@@ -4191,8 +4208,8 @@
     "shapes/zone-capability-v1.ttl": "a7296e09f052999c0578caa2894ebdbd272cedd04357e4f291e2506e73eed611",
     "shapes/zone-presentation-v1.ttl": "6aecbd83013a8a9f9e2dc712d26b6450df29554f2f2c7d6174c2897b418bece7",
     "shapes/zone-presentation-v2.ttl": "e331efea63e2bfb3ce883fb4d005ab63d7dd976973e43fd1599f655eef3ea730",
-    "packages/model/src/generated/profiles.ts": "1e26e4753b40ecc1562240ff75199f3924c92f500eec8879770a003cb18f62aa",
-    "packages/model/src/generated/schemas.ts": "6f77e604a1f3b36e0cf4caf2d3e782b0b5ffae16a862bc012dec3456143205b2",
-    "packages/model/src/generated/vocabulary.ts": "c11c6992cc8663af43f3fac3c2334dbc86bfdc8411f264e2c873e77af86925c1"
+    "packages/model/src/generated/profiles.ts": "31982c0ddde430f0b9365824b5085b478e033e9487546049868241c6f5528aa3",
+    "packages/model/src/generated/schemas.ts": "2ee4248308a6c9f47d1795206e6db877a91b9121cef4d58ace504afa13e2365e",
+    "packages/model/src/generated/vocabulary.ts": "92fe49757a31d8cb8374ba20b8ddc4acaa2019be29b0d6b555844427a9c3b5d1"
   }
 }
