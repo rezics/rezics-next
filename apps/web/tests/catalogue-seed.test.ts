@@ -1,11 +1,133 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import { appendCatalogueParts, createCatalogueWork } from './g-838-catalogue.ts';
-import { catalogueCommandResult, settledCatalogueSend } from './g-837-catalogue.ts';
+import {
+  catalogueCommandResult,
+  reviewedCatalogueLexicon,
+  settledCatalogueSend,
+} from './g-837-catalogue.ts';
+import { seedRelationLexicon } from '../../../scripts/dev/seed/relation-lexicon.ts';
+import { relationLexiconSeed } from '../../../scripts/dev/seed/relation-lexicon-data.ts';
+import { presentationAction } from '../../../services/main/src/modules/lexicon/schema.ts';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 
 const structure = 'https://rezics.com/id/00000000-0000-7000-8000-000000000001';
 const actor = 'https://rezics.com/id/00000000-0000-7000-8000-000000000002';
 const parts = [{ work: 'https://rezics.com/id/00000000-0000-7000-8000-000000000003', label: '1' }];
 const conflict = (code = 'read_basis_changed') => Response.json({ code }, { status: 409 });
+
+describe('catalogue labels follow Main presentation review', () => {
+  const definition = relationLexiconSeed.find((item) => item.key === 'sequel')!;
+  const receipt = { component: actor, revision: structure };
+
+  test('seeds reviewed labels in every language and direction after obtaining exact definition review authority', async () => {
+    const directory = mkdtempSync(resolve('.temp/catalogue-review-'));
+    const events: string[] = [];
+    const presentations: {
+      state: {
+        reviewStatus: 'draft' | 'reviewed';
+        definition: string;
+        language: string;
+        fromRole: string;
+        toRole: string;
+        noun: string;
+        heading: string;
+        licence: string;
+      };
+    }[] = [];
+    const client = reviewedCatalogueLexicon(
+      {
+        post: async <T>(path: string, body: object) => {
+          events.push(path);
+          if (path === '/v1/lexicon/presentations')
+            presentations.push(body as (typeof presentations)[number]);
+          return receipt as T;
+        },
+        authorizeDefinition: async (current) => {
+          events.push(`read:${current.component}`);
+        },
+      },
+      async (reference) => {
+        events.push(`review:${reference}`);
+      },
+    );
+    try {
+      await seedRelationLexicon(
+        client,
+        actor,
+        'catalogue-review',
+        [definition],
+        join(directory, 'map.json'),
+      );
+      expect(events.indexOf(`read:${actor}`)).toBeLessThan(events.indexOf(`review:${actor}`));
+      expect(events.indexOf(`review:${actor}`)).toBeLessThan(
+        events.indexOf('/v1/lexicon/presentations'),
+      );
+      expect(presentations).toHaveLength(definition.labels.length * 2);
+      for (const [
+        index,
+        [language, noun, heading, inverseNoun, inverseHeading],
+      ] of definition.labels.entries()) {
+        expect(presentations[index * 2]!.state).toMatchObject({
+          definition: actor,
+          language,
+          noun,
+          heading,
+          fromRole: definition.roles[0],
+          toRole: definition.roles[1],
+          reviewStatus: 'reviewed',
+        });
+        expect(presentations[index * 2 + 1]!.state).toMatchObject({
+          definition: actor,
+          language,
+          noun: inverseNoun,
+          heading: inverseHeading,
+          fromRole: definition.roles[1],
+          toRole: definition.roles[0],
+          reviewStatus: 'reviewed',
+        });
+      }
+      expect(
+        presentations.every(
+          (item) => presentationAction(item.state) === 'lexicon.presentation.review',
+        ),
+      ).toBe(true);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  test('a refused review grant prevents every presentation write', async () => {
+    const directory = mkdtempSync(resolve('.temp/catalogue-review-denied-'));
+    const paths: string[] = [];
+    const client = reviewedCatalogueLexicon(
+      {
+        post: async <T>(path: string) => {
+          paths.push(path);
+          return receipt as T;
+        },
+        authorizeDefinition: async () => {},
+      },
+      async () => {
+        throw new Error('fixture scope is closed');
+      },
+    );
+    try {
+      await expect(
+        seedRelationLexicon(
+          client,
+          actor,
+          'catalogue-review-denied',
+          [definition],
+          join(directory, 'map.json'),
+        ),
+      ).rejects.toThrow('fixture scope is closed');
+      expect(paths).toEqual(['/v1/semantic/changes']);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+});
 
 describe('catalogue seed pending commands', () => {
   test('accepts the replayed creation receipt after observing its pending operation', async () => {

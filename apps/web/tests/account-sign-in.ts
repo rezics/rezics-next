@@ -1,5 +1,31 @@
 import { expect, type Page } from '@playwright/test';
 import { i18n, matchUiLocaleTag } from '../../accounts/i18n/locale.ts';
+import { parseAddressSegment } from '../features/address/path.ts';
+import { pathLocale, withoutLocale } from '../i18n/locale.ts';
+
+export function signInDestinationMatches(url: URL, next: string, onboard = false): boolean {
+  const target = next.split(/[?#]/)[0] ?? next;
+  if (url.pathname === target || (onboard && url.pathname === '/en/onboarding')) return true;
+  if (pathLocale(url.pathname) !== pathLocale(target)) return false;
+  const actual = /^\/w\/([^/]+)(\/.*)?$/.exec(withoutLocale(url.pathname));
+  const expected = /^\/w\/([^/]+)(\/.*)?$/.exec(withoutLocale(target));
+  if (!actual || !expected || actual[2] !== expected[2]) return false;
+  try {
+    // Main decorates the Work identity before its subroute. Only that segment
+    // may change; the locale and the complete route tail still identify the destination.
+    const actualAddress = parseAddressSegment(decodeURIComponent(actual[1]!));
+    const expectedAddress = parseAddressSegment(decodeURIComponent(expected[1]!));
+    return (
+      actualAddress !== null &&
+      actualAddress.kind !== 'alias' &&
+      expectedAddress !== null &&
+      expectedAddress.kind !== 'alias' &&
+      actualAddress.id === expectedAddress.id
+    );
+  } catch {
+    return false;
+  }
+}
 
 /** Complete the browser redirect on the public Accounts origin. */
 export async function signInAtAccounts(
@@ -8,11 +34,7 @@ export async function signInAtAccounts(
   member: { email: string; password: string },
   onboard = false,
 ): Promise<void> {
-  const target = next.split(/[?#]/)[0] ?? next;
-  // A canonical Work address keeps the id and appends -{title}. That is the same destination.
-  const finished = (url: URL) =>
-    url.pathname === target || url.pathname.startsWith(`${target}-`)
-    || (onboard && url.pathname === '/en/onboarding');
+  const finished = (url: URL) => signInDestinationMatches(url, next, onboard);
   // Dispose an auth/start document reached by an expired-session navigation
   // before its mount effect can compete with this sign-in.
   await page.goto('about:blank');
@@ -36,7 +58,8 @@ export async function signInAtAccounts(
     throw new Error('Account sign-in failed');
   if (finished(new URL(page.url()))) return;
   await page.locator('html[data-hydrated]').waitFor({ timeout: 60_000 });
-  const locale = matchUiLocaleTag(await page.locator('html').getAttribute('lang') ?? undefined) ?? 'en';
+  const locale =
+    matchUiLocaleTag((await page.locator('html').getAttribute('lang')) ?? undefined) ?? 'en';
   const { t: auth } = await i18n.getTranslation('auth', [locale]);
   const email = page.getByRole('textbox', { name: auth.emailLabel, exact: true });
   await email.fill('');

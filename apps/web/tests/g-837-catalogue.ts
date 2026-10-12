@@ -8,7 +8,8 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { relationLexiconSeed } from '../../../scripts/dev/seed/relation-lexicon-data.ts';
-import { seedRelationLexicon } from '../../../scripts/dev/seed/relation-lexicon.ts';
+import { seedRelationLexicon, type SeedLexiconClient } from '../../../scripts/dev/seed/relation-lexicon.ts';
+import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import { activateMetadataWork, GRAPHS, iri, metadataWorkRequestDigest, RV } from '../../../services/main/src/modules/work/activate.ts';
 import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
 import type { MediaStack } from '../../../tests/qa/integration/media-support.ts';
@@ -51,6 +52,23 @@ export function settledCatalogueSend(send: CataloguePort['send']): CataloguePort
       return { response, data: response.status === 202 ? await response.clone().json() : null };
     }, 64);
     return answer.response;
+  };
+}
+
+export function reviewedCatalogueLexicon(client: SeedLexiconClient,
+  authorizeReview: (definition: string) => Promise<void>): SeedLexiconClient {
+  return {
+    ...client,
+    authorizeDefinition: async receipt => {
+      await client.authorizeDefinition(receipt);
+      await authorizeReview(receipt.component);
+    },
+    post: async <T>(path: string, body: object, key: string) => {
+      if (path !== '/v1/lexicon/presentations') return client.post<T>(path, body, key);
+      const presentation = body as { state: Record<string, unknown> };
+      return client.post<T>(path, { ...body,
+        state: { ...presentation.state, reviewStatus: 'reviewed' } }, key);
+    },
   };
 }
 
@@ -106,13 +124,25 @@ export async function seedCatalogue(stack: MediaStack, reader: SeedReader, scrat
   const kinds = new Set(['rewrite', 'reboot', 'spin-off', 'sequel', 'adaptation']);
   await editor.grant('semantic:create:root', 'semantic.change');
   mkdirSync(scratch, { recursive: true });
-  const definitions = new Map((await seedRelationLexicon({
+  const definitions = new Map((await seedRelationLexicon(reviewedCatalogueLexicon({
     post: async <T>(path: string, body: object, key: string) => json<T>(await editor.send('POST', path, body, key), 201),
     authorizeDefinition: async receipt => {
       await editor.grant(`semantic:read:${receipt.component}`, 'semantic.read');
-      await editor.grant(`semantic:edit:${receipt.component}`, 'lexicon.presentation.change');
       await grantReader(`semantic:read:${receipt.component}`, 'semantic.read');
-    } }, editor.actor, `g837-${randomUUID()}`, relationLexiconSeed.filter(item => kinds.has(item.key)),
+    } }, async definition => {
+      const client = await stack.accessPool.connect();
+      try {
+        await client.query('BEGIN');
+        await grantFixtureAuthority(client, {
+          scope: `semantic:edit:${definition}`, requireDispatch: true,
+          representations: [{ principalId: editor.principalId, actor: editor.actor,
+            action: 'lexicon.presentation.review', lifetime: '8 hours' }],
+          grant: { actor: editor.actor, action: 'lexicon.presentation.review', lifetime: '8 hours' },
+        });
+        await client.query('COMMIT');
+      } catch (error) { await client.query('ROLLBACK'); throw error; }
+      finally { client.release(); }
+    }), editor.actor, `g837-${randomUUID()}`, relationLexiconSeed.filter(item => kinds.has(item.key)),
   resolve(scratch, 'lexicon.json'))).map(item => [item.key, item]));
 
   /** A Main Version's head now: selecting its text moved it past the one its creation returned. */
