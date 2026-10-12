@@ -3,8 +3,6 @@ import { fromPlainText } from '@rezics/document';
 import { direction } from '@rezics/main/language';
 import { cloneElement, createElement, isValidElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import * as reads from '../realm/read.ts';
-import * as modules from '../realm/modules.ts';
 import type { RealmView } from '../realm/realm-page.tsx';
 import type { ZonePresentationRead } from '../realm/types.ts';
 import { messages } from '../realm/messages.ts';
@@ -22,6 +20,11 @@ void mock.module('next/headers', () => ({
   cookies: async () => ({ get: () => undefined }),
   headers: async () => new Headers(),
 }));
+// The route renders supplied packages; Vite's installed-package glob is not part of this Bun fixture.
+void mock.module('../../zones/official/index.ts', () => ({
+  installedDigest: async () => null,
+  loadPackage: async () => null,
+}));
 void mock.module('../../i18n/server.ts', () => ({
   getMessages: async (namespace: string) => namespace === 'realm' ? messages : zoneMessages,
   getTranslation: async () => ({ t: {} }),
@@ -33,11 +36,13 @@ void mock.module('./about-discussion-entry.tsx', () => ({
   },
 }));
 void mock.module('../zone-editor/edit-link.tsx', () => ({ ZoneEditLink: () => null }));
+const reads = await import('../realm/read.ts');
 void mock.module('../realm/read.ts', () => ({ ...reads,
   resolveSite: async () => ({ kind: 'site', zone, realm: attached ? zone : null, address: { canonical } }),
   readCompletePresentation: async () => ({ ok: true, data: publication }),
   readZoneBrowse: async () => ({ ok: false, failure: 'unavailable' }),
 }));
+const modules = await import('../realm/modules.ts');
 void mock.module('../realm/modules.ts', () => ({ ...modules,
   loadHomeModules: async () => ({ modules: [], images: [] }),
 }));
