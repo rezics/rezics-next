@@ -1,3 +1,5 @@
+import { configureDisclosure } from '../src/modules/disclosure/read.ts';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
 import { expect, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { Value } from 'typebox/value';
@@ -29,6 +31,12 @@ function fixture(records: Array<{ resource: string; type: ResourceType; work?: s
   const queries: string[] = [];
   const graph = new FusekiClient('http://graph.invalid');
   graph.query = async (query: string) => {
+    if (query.includes('SELECT ?resource ?head') || query.includes('SELECT ?work ?head')) {
+      const variable = query.includes('SELECT ?resource ?head') ? 'resource' : 'work';
+      const refs = [...(/VALUES \?\w+ \{([^}]*)\}/.exec(query)?.[1] ?? '').matchAll(/<([^>]+)>/g)]
+        .map(match => match[1]!);
+      return { results: { bindings: refs.map(resource => ({ [variable]: uri(resource), head: uri(id(100)) })) } };
+    }
     queries.push(query);
     if (query.includes('SELECT ?epoch ?sequence ?hold')) return { results: { bindings: records.map(record => ({
       epoch: literal('epoch'), sequence: literal(options.summarySequence ?? '1'), r: uri(record.resource),
@@ -54,6 +62,9 @@ function fixture(records: Array<{ resource: string; type: ResourceType; work?: s
   mediaAccess: { canReadWorks: (_principal, _actor, resources) => allowed(resources),
     canReadSemantics: (_principal, _actor, resources) => allowed(resources),
     canReadPrivateContexts: (_principal, _actor, resources) => allowed(resources) } };
+  configureFixtureDisclosureAncestry(deps.environment, target => target.work
+    ? { resource: target.work, head: id(100), protectedRevision: target.workRevision } : undefined);
+  configureDisclosure(deps.environment, fixtureDisclosureReader(async targets => targets.map(() => 'visible')));
   const session = new WorkReadSession(deps, new Request('http://main.test/v1/resources'),
     { actingSubject: id(999) }, { dataEpoch: 'epoch', sequence: '1' });
   session.principal = { issuer: 'https://account.test', subject: 'reader' };

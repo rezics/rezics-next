@@ -1,3 +1,5 @@
+import { configureDisclosure } from '../src/modules/disclosure/read.ts';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
 import { afterAll, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { Value } from 'typebox/value';
@@ -31,6 +33,12 @@ function fixture(type: 'work' | 'release' | 'occurrence' | 'character' | 'realiz
     types: [`${RV}Character`], properties: [{ predicate: 'https://schema.org/name',
       value: { kind: 'language-string', lexical: 'Kirito', language: 'en' } }] }, PROFILES.resource);
   graph.query = async query => {
+    if (query.includes('SELECT ?resource ?head') || query.includes('SELECT ?work ?head')) {
+      const variable = query.includes('SELECT ?resource ?head') ? 'resource' : 'work';
+      const refs = [...(/VALUES \?\w+ \{([^}]*)\}/.exec(query)?.[1] ?? '').matchAll(/<([^>]+)>/g)]
+        .map(match => match[1]!);
+      return { results: { bindings: refs.map(resource => ({ [variable]: uri(resource), head: uri(id(2)) })) } };
+    }
     queries.push(query);
     let rows: Row[];
     if (query.includes('SELECT ?epoch ?sequence ?hold')) rows = [{ epoch: literal('epoch'),
@@ -58,6 +66,9 @@ function fixture(type: 'work' | 'release' | 'occurrence' | 'character' | 'realiz
     lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } }, account: {} as never,
     access: { canReadWork: async () => options.allowed ?? false,
       canReadSemanticResource: async () => options.allowed ?? false } as never };
+  configureFixtureDisclosureAncestry(deps.environment, target => target.work
+    ? { resource: target.work, head: id(2), protectedRevision: target.workRevision } : undefined);
+  configureDisclosure(deps.environment, fixtureDisclosureReader(async targets => targets.map(() => 'visible')));
   const session = new WorkReadSession(deps, new Request('http://main.local/v1/resources'),
     { actingSubject: id(99) }, { dataEpoch: 'epoch', sequence: '1' });
   session.principal = { issuer: 'https://account.test', subject: 'reader' };

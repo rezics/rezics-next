@@ -26,7 +26,7 @@ import { readWorkHeader } from '../src/modules/work/read-header.ts';
 import { readRealmThreads } from '../src/modules/realm-reply/thread-read.ts';
 import { configureDisclosure } from '../src/modules/disclosure/read.ts';
 import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
-import { realm as threadRealm, world as threadWorld } from './realm-reply-threads.test.ts';
+import { realm as threadRealm, world as threadWorld } from './support/realm-thread-world.ts';
 
 const id = (number: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(number).padStart(12, '0')}`;
 const work = id(1), realm = id(2), actor = id(3);

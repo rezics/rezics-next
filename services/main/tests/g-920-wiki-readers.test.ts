@@ -28,6 +28,7 @@ import type { StatementSeekCandidate, StatementSeekOrder } from '../src/modules/
 import type { StatementPublicationBasis } from '../src/modules/statement/publication-seek.ts';
 import { CLASSIFICATION_INHERIT_POLICY, GLOBAL_CLASSIFICATION_CONTEXT }
   from '../src/modules/classification/context.ts';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
 import { configureDisclosure } from '../src/modules/disclosure/read.ts';
 import { RV, prepareComponent } from '../src/modules/work/activate.ts';
 import { WorkReadMissing, WorkReadMoved, type ReadRow } from '../src/modules/work/read-session.ts';
@@ -204,6 +205,13 @@ test('G-920: claim disclosure batches source Works, preserves private grants and
   let graphBatches = 0,
     claimBatches = 0;
   graph.query = async (query) => {
+    if (query.includes('SELECT ?resource ?head') || query.includes('SELECT ?work ?head')) {
+      const variable = query.includes('SELECT ?resource ?head') ? 'resource' : 'work';
+      const refs = [...(/VALUES \?\w+ \{([^}]*)\}/.exec(query)?.[1] ?? '').matchAll(/<([^>]+)>/g)]
+        .map(match => match[1]!);
+      return { results: { bindings: refs.map(resource => ({ [variable]: { type: 'uri', value: resource },
+        head: { type: 'uri', value: id(8) } })) } };
+    }
     graphBatches++;
     expect(query).toContain(`<${id(1)}>`);
     expect(query).toContain(`<${id(2)}>`);
@@ -247,6 +255,9 @@ test('G-920: claim disclosure batches source Works, preserves private grants and
     access: { canReadWork: async () => granted },
     account: {},
   } as unknown as MainWorkDependencies;
+  configureFixtureDisclosureAncestry(deps.environment, target => target.work
+    ? { resource: target.work, head: id(8), protectedRevision: target.workRevision } : undefined);
+  configureDisclosure(deps.environment, fixtureDisclosureReader(async targets => targets.map(() => 'visible')));
   const boundary = {
     visible: async (records: readonly string[]) =>
       new Set(records.filter((record) => record !== id(5))),
@@ -333,6 +344,8 @@ function subjectReader(candidates: StatementSeekCandidate[], evidence: WikiEvide
     return [...selected.matchAll(/<([^>]+)>/gu)].map(match => match[1]!);
   };
   graph.query = async query => {
+    if (query.includes('SELECT ?resource ?head')) return { results: { bindings: values(query, 'resource')
+      .map(resource => ({ resource: iriTerm(resource), head: iriTerm(subjectId(80)) })) } };
     if (query.includes('?neighbourScore')) {
       return { results: { bindings: graphInventory.map(row => ({
         statement: iriTerm(row.statementId), predicate: iriTerm(row.predicate), key: iriTerm(row.meaningKey),
@@ -402,14 +415,20 @@ function subjectReader(candidates: StatementSeekCandidate[], evidence: WikiEvide
   };
   const environment = { fuseki: graph, objectDirectory: '.temp/g-920',
     lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } };
-  configureDisclosure(environment, { read: async targets => targets.map(target => {
-    const boundWork = target.work !== subjectId(2) || sourceBound;
-    if (target.work) expect(target.workRevision).toBe(boundWork ? subjectId(80) : undefined);
+  configureFixtureDisclosureAncestry(environment, target => target.work
+    ? { resource: target.work, head: subjectId(80), protectedRevision: target.workRevision } : undefined);
+  configureDisclosure(environment, fixtureDisclosureReader(async targets => targets.map(target => {
+    const parent = target.ancestry?.parents.find(parent => parent.kind === 'work');
+    const boundWork = parent?.resource !== subjectId(2) || sourceBound;
+    if (parent) {
+      expect(parent.head).toBe(subjectId(80));
+      expect(parent.protectedRevision).toBe(boundWork && target.component !== 'record' ? subjectId(80) : undefined);
+    }
     if (target.owner === 'graph' && ['name', 'title'].includes(target.component))
-      expect(target.revision).toBe(target.resource === subjectId(2) && !sourceBound ? undefined : subjectId(80));
+      expect(target.revision).toBe(target.resource === subjectId(2) && !sourceBound ? null : subjectId(80));
     return !boundWork || target.component === 'record' && !claimVisible || hiddenReferences.has(target.resource)
       ? 'hidden' : 'visible';
-  }) });
+  })));
   const deps = {
     environment,
     access: { canReadWork: async () => privateGrant },

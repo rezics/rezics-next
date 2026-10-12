@@ -1,3 +1,5 @@
+import { configureDisclosure } from '../src/modules/disclosure/read.ts';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
@@ -31,6 +33,12 @@ function fixture(input: { spacePrivate: boolean; zonePrivate: boolean; member: b
   let proofs = 0;
   const work = { environment: { objectDirectory: directory, lineage: { dataEpoch: 'epoch', routingEpoch: 'route' },
     fuseki: { query: async (query: string) => {
+      if (query.includes('SELECT ?resource ?head') || query.includes('SELECT ?work ?head')) {
+        const variable = query.includes('SELECT ?resource ?head') ? 'resource' : 'work';
+        const refs = [...(/VALUES \?\w+ \{([^}]*)\}/.exec(query)?.[1] ?? '').matchAll(/<([^>]+)>/g)]
+          .map(match => match[1]!);
+        return rows(refs.map(resource => ({ [variable]: resource, head })));
+      }
       queries.push(query);
       if (query.includes('ASK')) return { boolean: true };
       if (query.includes('SELECT ?spaceDisclosure')) return rows([{ spaceDisclosure: RV + (input.spacePrivate ? 'Private' : 'Public') }]);
@@ -62,6 +70,9 @@ function fixture(input: { spacePrivate: boolean; zonePrivate: boolean; member: b
         return input.grant && !(input.revoke === 'grant' && grants.length > 1);
       } }, homePersonal: { read: async () => ({ revision: '1', preferences: defaultPreferences, exclusions: [] }), fence: async () => ({ revision: '1' }) },
   } as unknown as MainWorkDependencies;
+  configureFixtureDisclosureAncestry(work.environment, target => target.work
+    ? { resource: target.work, head, protectedRevision: target.workRevision } : undefined);
+  configureDisclosure(work.environment, fixtureDisclosureReader(async targets => targets.map(() => 'visible')));
   const request = new Request('http://main.local/v1/zones/test/routes');
   const session = (authenticated: boolean) => {
     const value = new WorkReadSession(work, request, authenticated ? { actingSubject: actor } : {},

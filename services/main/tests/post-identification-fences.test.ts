@@ -1,3 +1,5 @@
+import { configureDisclosure } from '../src/modules/disclosure/read.ts';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
 import { afterAll, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { FusekiClient, type SparqlResult } from '../src/infrastructure/fuseki.ts';
@@ -35,6 +37,11 @@ function fixture() {
   const graph = new FusekiClient('http://graph.invalid/post-identification');
   graph.commandHealth = async () => ({ profiles: { 'work-metadata-v1': 'a'.repeat(64) } }) as never;
   graph.query = async body => {
+    if (body.includes('SELECT ?resource ?head') || body.includes('SELECT ?work ?head')) {
+      const variable = body.includes('SELECT ?resource ?head') ? 'resource' : 'work';
+      return result(works.filter(work => body.includes(`<${work}>`))
+        .map(work => ({ [variable]: uri(work), head: uri(id(40 + works.indexOf(work))) })));
+    }
     if (body.includes('SELECT ?head ?manifest WHERE')) return result([{ head: uri(state.head),
       manifest: uri(`urn:rezics:sha256:${prepareComponent(directory, relation, occurrence(), PROFILES.relation)}`) }]);
     if (body.includes('SELECT ?p ?o WHERE')) return result([
@@ -73,6 +80,9 @@ function fixture() {
     lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } }, access: {
     assertRecoveryOpen: async () => { state.recoveryChecks++; },
   } } as unknown as MainWorkDependencies;
+  configureFixtureDisclosureAncestry(deps.environment, target => target.work
+    ? { resource: target.work, head: id(40 + works.indexOf(target.work)), protectedRevision: target.workRevision } : undefined);
+  configureDisclosure(deps.environment, fixtureDisclosureReader(async targets => targets.map(() => 'visible')));
   const request = new Request(`http://main.test/v1/post-identifications/${relation.slice(-36)}`);
   return { state, deps, request };
 }

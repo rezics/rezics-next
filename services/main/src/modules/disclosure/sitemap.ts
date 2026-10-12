@@ -1,7 +1,7 @@
 import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { publicWork } from '../work/public-patterns.ts';
 import { ANONYMOUS_VIEWER } from '../suitability/policy.ts';
-import { discloseInventory, DisclosureUnavailable } from './read.ts';
+import { discloseInventory, DISCLOSURE_COST, DisclosureUnavailable, type DisclosureDecision } from './read.ts';
 import { admittedPage, ADMITTED_PAGE_COST } from './admitted-page.ts';
 import type { ReadRow } from '../work/read-session.ts';
 
@@ -16,19 +16,22 @@ export async function assembleSitemapEntries(
 ) {
   if (rows.length > SITEMAP_COST.page + 1)
     throw new DisclosureUnavailable('Sitemap assembly exceeds its bound');
-  const decisions = await discloseInventory(
-    env,
-    rows.map((row) => ({
-      owner: 'graph' as const,
-      resource: row.reference,
-      component: 'name' as const,
-      revision: row.revision,
-      work: row.reference,
-      workRevision: row.revision,
-    })),
-    ANONYMOUS_VIEWER,
-    'sitemap',
-  );
+  const decisions: DisclosureDecision[] = [];
+  for (let offset = 0; offset < rows.length; offset += DISCLOSURE_COST.batch) {
+    decisions.push(...await discloseInventory(
+      env,
+      rows.slice(offset, offset + DISCLOSURE_COST.batch).map((row) => ({
+        owner: 'graph' as const,
+        resource: row.reference,
+        component: 'name' as const,
+        revision: row.revision,
+        work: row.reference,
+        workRevision: row.revision,
+      })),
+      ANONYMOUS_VIEWER,
+      'sitemap',
+    ));
+  }
   return rows.flatMap((row, index) =>
     decisions[index] === 'visible'
       ? [{ reference: row.reference, preview: `/v1/public-previews/${row.reference.slice(-36)}` }]

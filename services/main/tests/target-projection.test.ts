@@ -1,3 +1,5 @@
+import { configureDisclosure } from '../src/modules/disclosure/read.ts';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
 import { expect, test } from 'bun:test';
 import type { MainWorkDependencies } from '../src/app.ts';
 import { FusekiClient, type SparqlResult } from '../src/infrastructure/fuseki.ts';
@@ -17,10 +19,18 @@ interface Projection { resource: string; subject: string; frames: string[] }
 function fixture(works: Work[], projections: Projection[], options: {
   hidden?: string[]; movedAfter?: number; projectionRevision?: string } = {}) {
   const queries: string[] = [];
+  const parentQueries: string[] = [];
   const graph = new FusekiClient('http://graph.invalid');
   let summaryReads = 0;
   const requested = (query: string) => [...(/VALUES \?[rp] \{([^}]*)\}/.exec(query)?.[1] ?? '').matchAll(/<([^>]+)>/g)].map(match => match[1]!);
   graph.query = async (query: string) => {
+    if (query.includes('SELECT ?resource ?head') || query.includes('SELECT ?work ?head')) {
+      parentQueries.push(query);
+      const variable = query.includes('SELECT ?resource ?head') ? 'resource' : 'work';
+      const refs = [...(/VALUES \?\w+ \{([^}]*)\}/.exec(query)?.[1] ?? '').matchAll(/<([^>]+)>/g)]
+        .map(match => match[1]!);
+      return { results: { bindings: refs.map(resource => ({ [variable]: uri(resource), head: uri(id(900)) })) } };
+    }
     queries.push(query);
     if (query.includes('SELECT ?epoch ?sequence ?hold')) {
       const sequence = options.movedAfter !== undefined && summaryReads++ >= options.movedAfter ? '2' : '1';
@@ -55,11 +65,14 @@ function fixture(works: Work[], projections: Projection[], options: {
   mediaAccess: { canReadWorks: (_principal, _actor, resources) => allowed(resources),
     canReadSemantics: (_principal, _actor, resources) => allowed(resources),
     canReadPrivateContexts: (_principal, _actor, resources) => allowed(resources) } };
+  configureFixtureDisclosureAncestry(deps.environment, target => target.work
+    ? { resource: target.work, head: id(900), protectedRevision: target.workRevision } : undefined);
+  configureDisclosure(deps.environment, fixtureDisclosureReader(async targets => targets.map(() => 'visible')));
   const session = new WorkReadSession(deps, new Request('http://main.test/v1/projections'),
     { actingSubject: id(999) }, { dataEpoch: 'epoch', sequence: '1' });
   session.principal = { issuer: 'https://account.test', subject: 'reader' };
   const summaryQueries = () => queries.filter(query => query.includes('SELECT ?epoch ?sequence ?hold')).length;
-  return { session, queries, summaryQueries };
+  return { session, queries, summaryQueries, parentQueries };
 }
 
 const [misaka, railgun, season, episode] = [id(1), id(2), id(3), id(4)];
@@ -108,11 +121,13 @@ test('there are no projections of projections: a projection used as a subject or
 test('a batch of projections costs one summary page and one page of parts, shared by every projection', async () => {
   const projections = [{ resource: one, subject: misaka, frames: [railgun, season] },
     { resource: two, subject: misaka, frames: [railgun] }, { resource: three, subject: railgun, frames: [season] }];
-  const { session, summaryQueries } = fixture(works, projections);
+  const { session, summaryQueries, parentQueries } = fixture(works, projections);
   const { summaries, cost } = await targetSummaries(session, [one, two, three]);
   expect(summaries.every(summary => summary.status === 'available')).toBe(true);
   expect(summaryQueries()).toBe(2);
-  expect(cost.graphQueries).toBe(2);
+  expect(parentQueries).toHaveLength(2);
+  expect(cost.graphQueries - parentQueries.length).toBe(2);
+  expect(cost.graphQueries).toBe(4);
   const views = await readProjectionViews(session, [three, one]);
   expect(views.map(view => [view.id, view.subject, view.frames, view.disclosure])).toEqual([
     [three, railgun, [season], 'public'], [one, misaka, [railgun, season].sort(), 'public']]);

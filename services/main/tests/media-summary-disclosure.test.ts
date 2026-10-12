@@ -209,8 +209,7 @@ test('Final summary classification observes a public-to-private change while ret
   expect(f.ownerCalls).toHaveLength(2);
 });
 
-// Fails until the summary reader counts the disclosure parent-head probes.
-test.failing('A full summary batch spends the same graph calls signed in and anonymous, with bounded parent and name probes', async () => {
+test('A full summary batch spends the same graph calls signed in and anonymous, with bounded parent and name probes', async () => {
   for (const viewer of [ANONYMOUS_VIEWER, disclosureViewer(principal)]) {
     const f = fixture(MAX_SUMMARY_BATCH);
     for (let pass = 0; pass < 2; pass++) {
@@ -234,8 +233,7 @@ test('Owner adapters without an Access cut fail closed before summary hydration'
   expect(f.ownerCalls).toHaveLength(0);
 });
 
-// Fails until the summary reader submits the expanded inventory in two bounded 64-target statements.
-test.failing('A full summary batch with covers preserves name indexes across two bounded final owner statements', async () => {
+test('A full summary batch with covers preserves name indexes across two bounded final owner statements', async () => {
   const f = fixture(MAX_SUMMARY_BATCH);
   f.restrict(target => target.owner === 'media');
   const result = await readResourceSummaries(f.environment, media(),

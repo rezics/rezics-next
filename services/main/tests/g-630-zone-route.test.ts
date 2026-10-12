@@ -1,3 +1,5 @@
+import { configureDisclosure } from '../src/modules/disclosure/read.ts';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
@@ -47,6 +49,12 @@ function fixture(input: { member: boolean; readable: boolean; adopted?: boolean;
     Object.fromEntries(Object.entries(value).map(([key, text]) => [key, { type: 'literal', value: text }]))) } });
   const work = { environment: { objectDirectory: directory, lineage: { dataEpoch: 'epoch', routingEpoch: '1' },
     fuseki: { query: async (query: string) => {
+      if (query.includes('SELECT ?resource ?head') || query.includes('SELECT ?work ?head')) {
+        const variable = query.includes('SELECT ?resource ?head') ? 'resource' : 'work';
+        const refs = [...(/VALUES \?\w+ \{([^}]*)\}/.exec(query)?.[1] ?? '').matchAll(/<([^>]+)>/g)]
+          .map(match => match[1]!);
+        return rows(refs.map(resource => ({ [variable]: resource, head })));
+      }
       queries.push(query);
       if (query.includes('SELECT ?spaceDisclosure')) return rows([{ spaceDisclosure: `${RV}Public` }]);
       if (query.includes('SELECT ?epoch ?sequence ?hold ?r ?type')) {
@@ -110,6 +118,9 @@ function fixture(input: { member: boolean; readable: boolean; adopted?: boolean;
       canReadWork: async () => input.granted === true,
       canReadSemanticResource: async () => input.granted === true
         && (!input.revoked || ++semanticChecks === 1) } } as unknown as MainWorkDependencies;
+  configureFixtureDisclosureAncestry(work.environment, target => target.work
+    ? { resource: target.work, head, protectedRevision: target.workRevision } : undefined);
+  configureDisclosure(work.environment, fixtureDisclosureReader(async targets => targets.map(() => 'visible')));
   const request = new Request('http://main.local/v1/zones/test/routes');
   return { work, request, zone, resource, collection, queries, scopes, directory,
     close: () => rmSync(directory, { recursive: true, force: true }) };

@@ -1,3 +1,5 @@
+import { configureDisclosure } from '../src/modules/disclosure/read.ts';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
 import { afterAll, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { FusekiClient, fusekiReadBudget, type SparqlResult } from '../src/infrastructure/fuseki.ts';
@@ -39,12 +41,24 @@ const principal = { issuer: 'account', subject: 'reader', emailVerified: true };
 
 function ownerFixture(read: (query: string) => SparqlResult | undefined) {
   const state = { sequence: 1, epoch: 'epoch', calls: 0, hold: false, active: true, recovery: true };
+  const heads = new Map<string, string>();
   const graph = new FusekiClient('http://graph.invalid/selected-owners');
   graph.query = async query => {
     state.calls++;
     if (query.includes('ASK')) return { boolean: !state.hold };
     const selected = read(query);
-    if (selected) return selected;
+    if (selected) {
+      for (const row of selected.results?.bindings ?? [])
+        if (row.work && row.head) heads.set(row.work.value, row.head.value);
+      return selected;
+    }
+    if (query.includes('SELECT ?resource ?head') || query.includes('SELECT ?work ?head')) {
+      const variable = query.includes('SELECT ?resource ?head') ? 'resource' : 'work';
+      const refs = [...(/VALUES \?\w+ \{([^}]*)\}/.exec(query)?.[1] ?? '').matchAll(/<([^>]+)>/g)]
+        .map(match => match[1]!);
+      return result(refs.map(resource => ({ [variable]: term(resource, 'uri'),
+        head: term(heads.get(resource) ?? id(10), 'uri') })));
+    }
     if (query.includes('SELECT ?epoch ?sequence')) return result(state.hold ? [] : [{
       epoch: term(state.epoch), sequence: term(String(state.sequence)),
     }]);
@@ -55,6 +69,13 @@ function ownerFixture(read: (query: string) => SparqlResult | undefined) {
     access: { activePrincipalId: async () => state.active ? 'reader' : null,
       assertRecoveryOpen: async () => { if (!state.recovery) throw new WorkReadUnavailable('Recovery hold'); } },
   } as unknown as MainWorkDependencies;
+  configureFixtureDisclosureAncestry(deps.environment, target => {
+    if (!target.work) return undefined;
+    const head = heads.get(target.work) ?? target.workRevision ?? id(10);
+    heads.set(target.work, head);
+    return { resource: target.work, head, protectedRevision: target.workRevision };
+  });
+  configureDisclosure(deps.environment, fixtureDisclosureReader(async targets => targets.map(() => 'visible')));
   const request = new Request('http://main.test/v1/selected-owners');
   return { state, graph, deps, request,
     session: () => new WorkReadSession(deps, request, {}, { dataEpoch: 'epoch', sequence: '1' }) };
