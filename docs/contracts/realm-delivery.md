@@ -45,12 +45,8 @@ the year as well as the other query inputs. A request budget can produce an
 empty page with a continuation, never a fixed member-population cap. Counts
 remain lower bounds until traversal finishes with a current projection.
 
-Anime and Manga pass their selected year to this read. Their all-years view
-uses `1-9999`; both views keep the API continuation and counts. The directory
-retains `publicationYearOrder=descending`: its existing order is publication
-year rather than adoption time. The native publication-year
-directory supplies bounded candidate pages; Main applies Realm membership,
-other Conditions and kernel's Statement acceptance to those pages. Multiple
-recorded years order a Work by its newest matching year without repeating it.
-Applying the year here keeps eligible Works reachable beyond the client’s
-former limit on separately paged member and year lists.
+Anime and Manga pass their selected year to this read and keep its continuation
+and counts. This keeps eligible Works reachable beyond the former client limit
+on separately paged member and year lists. The all-years directory retains its
+previous `work-publication-years` template, newest-year-first ordering and
+continuation; it is not changed by the selected-year filter.
