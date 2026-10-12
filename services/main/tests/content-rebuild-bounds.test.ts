@@ -208,14 +208,25 @@ test('rebuild verification pages variants and binds each receipt join', async ()
     && query.includes(`LIMIT ${CONTENT_REBUILD_PAGE}`))).toBe(true);
   expect(publicationProofs).toHaveLength(2);
   expect(eligibilityProofs).toHaveLength(2);
-  for (const [proofs, variable, receiptJoin] of [
-    [publicationProofs, 'publication', '?receipt rv:publicationDecision ?publication'],
-    [eligibilityProofs, 'eligibility', '?receipt rv:eligibilityDecision ?eligibility'],
+  for (const [proofs, variable, receiptPredicate] of [
+    [publicationProofs, 'publication', 'publicationDecision'],
+    [eligibilityProofs, 'eligibility', 'eligibilityDecision'],
   ] as const) {
     expect(proofs.map(query => valuesIds(query, variable).length)).toEqual([CONTENT_REBUILD_PAGE, 1]);
     for (const query of proofs) {
       expect(query).toContain(`VALUES ?${variable}`);
-      expect(query).toContain(receiptJoin);
+      // A publication receipt uses a predicate list to exclude eligibility
+      // receipts that also name the publication. Check the shared subject's
+      // binding inside the receipt graph, independent of triple shorthand.
+      const receiptBinding = query.match(/OPTIONAL \{ GRAPH <urn:rezics:graph:receipts> \{ \?receipt ([^}]*)\} \}/)?.[1];
+      expect(receiptBinding).toBeDefined();
+      expect(receiptBinding).toMatch(new RegExp(`(?:^|;\\s*)rv:${receiptPredicate} \\?${variable}(?:\\s*[;.]|\\s*$)`));
+      if (variable === 'publication') {
+        expect(receiptBinding).toContain('a rv:OperationReceipt');
+        expect(receiptBinding).toContain('rv:outcome rv:Succeeded');
+        expect(receiptBinding).toContain('rv:contentRevision ?publicationRevision');
+      }
+      expect(query).toContain('FILTER(BOUND(?receipt))');
       expect(query).not.toContain(`LIMIT ${50_001}`);
     }
   }

@@ -6,7 +6,8 @@ import { Pool, type PoolClient } from 'pg';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { startPostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { ReceiptCustodyErasureConflict, PostgresReceiptCustodyStore,
-  type CustodyPayloadErasure, type ReceiptCustodySession } from '../src/modules/outbox/receipt-custody.ts';
+  type CustodiedReceipt, type CustodyPayloadErasure, type ReceiptCustodySession }
+  from '../src/modules/outbox/receipt-custody.ts';
 
 const hash = (value: Uint8Array | string) => createHash('sha256').update(value).digest('hex');
 
@@ -248,17 +249,21 @@ test('P2 command custody erasure preserves receipt facts and serializes exact re
       }
     }
 
-    const terminal = { receipt, outcome: 'succeeded', requestDigest, revision,
+    const terminal: CustodiedReceipt = { receipt, outcome: 'succeeded', requestDigest, revision,
+      admissionId: randomUUID(), authorityEpoch: '1', scope: 'custody-erasure',
+      work: `https://rezics.com/id/${randomUUID()}`, component: `https://rezics.com/id/${randomUUID()}`,
       dataEpoch: 'custody-test-epoch', sequence: '7', streamSequence: '21' };
-    const outbox = { batchId: `custody-${randomUUID()}`, events: [] };
-    await pool.query(`INSERT INTO access.command_custody
-      (receipt, request_digest, payload_sha256, payload, revision, terminal, outbox,
-       reconciled_at, data_epoch, stream_sequence)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,clock_timestamp(),'custody-test-epoch',21)`,
-    [receipt, requestDigest, payloadSha256, payload, revision, terminal, outbox]);
+    const outbox = { batchId: `custody-${randomUUID()}`, graphSequence: terminal.sequence, events: [] };
+    await store.withReceipt(receipt, async session => {
+      await session.prepare({ receipt, requestDigest, payloadSha256, payload, revision,
+        terminal: null, outbox: null, reconciled: false, retired: false });
+      await session.reconcile(terminal, outbox);
+    });
     const before = (await pool.query(`SELECT receipt,request_digest,payload_sha256,revision,terminal,outbox,
-      reconciled_at,retired_at,data_epoch,stream_sequence::text AS stream_sequence
+      reconciled_at,retired_at,data_epoch,stream_sequence::text AS stream_sequence,
+      graph_sequence::text AS graph_sequence
       FROM access.command_custody WHERE receipt=$1`, [receipt])).rows[0];
+    expect(before.graph_sequence).toBe(terminal.sequence);
     expect(before.outbox.custodyObjectReferences).toBeUndefined();
 
     const client = await pool.connect();
@@ -511,12 +516,13 @@ test('P2 command custody erasure preserves receipt facts and serializes exact re
         erasureId: randomUUID(), erasureEpoch: '13' };
       const committedTerminal = { ...terminal, receipt: committedReceipt, revision: committedRevision,
         sequence: '8', streamSequence: '22' };
-      await client.query(`INSERT INTO access.command_custody
-        (receipt, request_digest, payload_sha256, payload, revision, terminal, outbox,
-         reconciled_at, data_epoch, stream_sequence)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,clock_timestamp(),'custody-test-epoch',22)`,
-      [committedReceipt, requestDigest, committedErasure.payloadSha256, committedPayload, committedRevision,
-        committedTerminal, { batchId: `custody-${randomUUID()}`, events: [] }]);
+      await store.withReceipt(committedReceipt, async session => {
+        await session.prepare({ receipt: committedReceipt, requestDigest,
+          payloadSha256: committedErasure.payloadSha256, payload: committedPayload, revision: committedRevision,
+          terminal: null, outbox: null, reconciled: false, retired: false });
+        await session.reconcile(committedTerminal, { batchId: `custody-${randomUUID()}`,
+          graphSequence: committedTerminal.sequence, events: [] });
+      }, client);
       await client.query('BEGIN');
       try {
         await client.query("INSERT INTO custody_caller_transaction_probe VALUES ('committed caller write')");
@@ -647,6 +653,7 @@ test('P2 command custody erasure preserves receipt facts and serializes exact re
 
     const after = (await pool.query(`SELECT receipt,request_digest,payload_sha256,payload,revision,terminal,outbox,
       reconciled_at,retired_at,data_epoch,stream_sequence::text AS stream_sequence,
+      graph_sequence::text AS graph_sequence,
       payload_erasure_id,payload_erasure_epoch::text AS payload_erasure_epoch
       FROM access.command_custody WHERE receipt=$1`, [receipt])).rows[0];
     expect(after).toMatchObject({ ...before, outbox: { ...before.outbox,
