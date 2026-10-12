@@ -9,6 +9,7 @@ import { createMainApp } from '../src/app.ts';
 import { ContentProjectionWorker } from '../src/content-projection-worker.ts';
 import { deliverRetainedContentEligibilityOnce } from '../src/modules/content-publication/eligibility-delivery.ts';
 import { createRealmSpace, spaceCreationDigest } from '../src/modules/space/create.ts';
+import { selectRealmLocal, realmSelectionDigest } from '../src/modules/work/select-realm.ts';
 import { ZoneBrowseProjection } from '../src/modules/zone-browse/store.ts';
 import { runMainRelay } from '../src/modules/outbox/worker.ts';
 import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts';
@@ -45,7 +46,8 @@ test('restored owner cut remains readable with live workers at header, event and
   const releaseHeader = Promise.withResolvers<void>(), releaseEvents = Promise.withResolvers<void>();
   try {
     source = await startMediaStack('retained-handoff-source', { ownerUrls: databases.urls });
-    const consumer = 'retained-live-handoff';
+    const consumer = source.composition.relayConsumer;
+    if (!consumer) throw new Error('The restored proof requires the configured Main relay consumer');
     const actor = `https://rezics.com/id/${Bun.randomUUIDv7()}`;
     const input = { name: 'Retained handoff Realm', actingSubject: actor };
     const created = await createRealmSpace(source.env, source.admission(actor, 'space:create:root', 'space.create',
@@ -54,6 +56,13 @@ test('restored owner cut remains readable with live workers at header, event and
     // Cross the decimal-width boundary: ordering a projected text sequence
     // can otherwise report batch 9 missing when batch 10 sorts first.
     for (let index = 0; index < 11; index++) await source.catalogueWork(actor, `Retained Work ${index}`);
+    const work = await source.publicWork(actor, ['en'], 'Retained visible Work');
+    const adoption = { context: { kind: 'realm-local' as const, id: created.realm },
+      work: work.work, mainVersion: work.mainVersion, contribution: work.variants[0]!.contribution,
+      publicationDecision: work.variants[0]!.decision, expectedSelectionHead: null,
+      selectionBasis: 'realm-manager-review' as const, actingSubject: actor };
+    expect((await selectRealmLocal(source.env, source.admission(actor, `publication:adopt:${created.realm}`,
+      'publication.adopt', realmSelectionDigest(adoption)), adoption)).outcome).toBe('succeeded');
     await initializeRelayCheckpoint(source.composition.relayPool!, consumer, source.env.lineage.dataEpoch);
     const sourceProjection = new ZoneBrowseProjection(source.accessPool, source.composition.relayPool!, source.env, consumer);
     await sourceProjection.backfill();
@@ -111,6 +120,7 @@ test('restored owner cut remains readable with live workers at header, event and
       const response = await app.handle(new Request(`http://main.local/v1/realms/${created.realm!.slice(-36)}/modules/browse`));
       statuses.push(response.status);
       if (response.status !== 200) throw new Error(await response.text());
+      expect((await response.json() as { items: { id: string }[] }).items.map(item => item.id)).toEqual([work.work]);
       if (phase < 2 && ++contentPolls[phase]! >= 4) contentPolled[phase]!.resolve();
       if (phase === 2) {
         const acknowledged = (await relay.query('SELECT sequence::text FROM relay.checkpoint WHERE consumer = $1', [consumer])).rows[0]!.sequence;
