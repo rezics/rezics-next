@@ -2,6 +2,9 @@
 -- Root mandates and pending Person expansions each have an indexed frontier.
 ALTER TABLE access.account_deletion_progress
     ADD COLUMN root_cursor uuid,
+    ADD COLUMN expansion_cursor bigint NOT NULL DEFAULT 0,
+    ADD COLUMN wake_cursor bigint NOT NULL DEFAULT 0,
+    ADD COLUMN orphan_cursor text,
     ADD COLUMN roots_done boolean NOT NULL DEFAULT false,
     ADD COLUMN classification_done boolean NOT NULL DEFAULT false,
     ADD COLUMN consent boolean NOT NULL DEFAULT false,
@@ -12,6 +15,7 @@ CREATE INDEX account_deletion_progress_open ON access.account_deletion_progress 
     WHERE NOT completed;
 ALTER TABLE access.account_deletion_progress_agent
     ADD COLUMN expanded boolean NOT NULL DEFAULT false,
+    ADD COLUMN expansion_rank bigint GENERATED ALWAYS AS IDENTITY,
     ADD COLUMN fenced boolean NOT NULL DEFAULT false;
 UPDATE access.account_deletion_progress_agent a SET fenced = true
     FROM access.account_deletion_progress p WHERE p.operation_id = a.operation_id AND NOT p.completed;
@@ -22,17 +26,20 @@ CREATE INDEX account_deletion_root_frontier ON access.representation (principal_
 CREATE INDEX account_deletion_foreign_controllers ON access.representation (subject_id, principal_id, id)
     WHERE active AND action = 'agent.control';
 CREATE INDEX account_deletion_person_frontier
-    ON access.account_deletion_progress_agent (operation_id, agent_id)
+    ON access.account_deletion_progress_agent (operation_id, expansion_rank)
     WHERE effect = 'end' AND NOT expanded;
 CREATE INDEX account_deletion_effect_pending
     ON access.account_deletion_progress_agent (operation_id, effect, agent_id) WHERE NOT completed;
 CREATE INDEX account_deletion_orphan_preview
     ON access.account_deletion_progress_agent (operation_id, agent_id) WHERE effect = 'orphan';
 CREATE TABLE access.account_deletion_classification_frontier (
+    wake_rank bigint GENERATED ALWAYS AS IDENTITY,
     operation_id text NOT NULL REFERENCES access.account_deletion_progress(operation_id),
     agent_id text NOT NULL REFERENCES access.authority_subject(id),
     PRIMARY KEY (operation_id, agent_id)
 );
+CREATE INDEX account_deletion_classification_wake_page
+    ON access.account_deletion_classification_frontier (operation_id, wake_rank);
 CREATE INDEX account_deletion_classification_frontier_subject
     ON access.account_deletion_classification_frontier (agent_id);
 
@@ -100,7 +107,7 @@ LANGUAGE sql STABLE SET enable_seqscan = off AS $$
         + (SELECT count(*) FROM agents e WHERE NOT EXISTS (
             SELECT 1 FROM access.account_deletion_progress_agent a
             WHERE a.operation_id = operation AND a.agent_id = e.representative_subject
-                AND a.effect = 'end')))::integer,
+                AND a.effect = 'end' LIMIT 1 OFFSET 0)))::integer,
         ((SELECT count(*) FROM principals) + (SELECT count(*) FROM edge_page))::integer
 $$;
 
@@ -141,7 +148,7 @@ LANGUAGE sql SET enable_seqscan = off AS $$
             FROM access.account_deletion_progress WHERE operation_id = connected.operation_id LIMIT 1 OFFSET 0) p
         WHERE NOT p.completed AND EXISTS (SELECT 1 FROM access.authority_subject s WHERE s.id = controlled AND s.active)
             AND NOT EXISTS (SELECT 1 FROM access.account_deletion_progress_agent a
-                WHERE a.operation_id = p.operation_id AND a.agent_id = controlled)
+                WHERE a.operation_id = p.operation_id AND a.agent_id = controlled LIMIT 1 OFFSET 0)
     ), queued AS (
         INSERT INTO access.account_deletion_classification_frontier (operation_id, agent_id)
         SELECT r.operation_id, controlled FROM relevant r
@@ -184,7 +191,8 @@ CREATE TRIGGER authority_subject_wake_account_deletion_frontier AFTER UPDATE OF 
 CREATE FUNCTION access.guard_removed_principal_controller() RETURNS trigger LANGUAGE plpgsql SET enable_seqscan = off AS $$
 BEGIN
     IF EXISTS (SELECT 1 FROM access.account_deletion_progress_agent a
-        JOIN access.account_deletion_progress p ON p.operation_id = a.operation_id
+        CROSS JOIN LATERAL (SELECT principal_id FROM access.account_deletion_progress
+            WHERE operation_id = a.operation_id LIMIT 1 OFFSET 0) p
         WHERE a.agent_id = OLD.subject_id AND a.fenced AND p.principal_id <> OLD.principal_id) THEN
         RAISE EXCEPTION 'Account deletion control inventory is fenced' USING ERRCODE = '54000';
     END IF;
@@ -201,15 +209,17 @@ END $$;
 CREATE TRIGGER live_principal_controller_removed AFTER DELETE ON access.live_principal_controller
     FOR EACH ROW EXECUTE FUNCTION access.wake_removed_principal_controller();
 
-CREATE FUNCTION access.retire_principal_controller_page(deleting uuid, budget integer)
-RETURNS integer LANGUAGE sql SET enable_seqscan = off AS $$
+CREATE FUNCTION access.retire_principal_controller_page(deleting uuid, budget integer, after_id uuid DEFAULT NULL)
+RETURNS TABLE (removals integer, cursor uuid) LANGUAGE sql SET enable_seqscan = off AS $$
     WITH page AS MATERIALIZED (
         SELECT representation_id, ctid FROM access.live_principal_controller WHERE principal_id = deleting
+            AND representation_id > coalesce(after_id, '00000000-0000-0000-0000-000000000000'::uuid)
         ORDER BY representation_id LIMIT least(budget, 256)
     ), removed AS (
         DELETE FROM access.live_principal_controller
         WHERE ctid = ANY(ARRAY(SELECT ctid FROM page)) RETURNING representation_id
-    ) SELECT count(*)::integer FROM removed
+    ) SELECT (SELECT count(*)::integer FROM removed),
+        (SELECT representation_id FROM page ORDER BY representation_id DESC LIMIT 1)
 $$;
 
 -- Ordinary fences already have a 256-subject owner budget. The large deletion

@@ -451,7 +451,7 @@ test('interruption beyond 256 retains active Access until atomic Person terminat
       const query = client.query.bind(client);
       client.query = ((...args: unknown[]) => {
         const sql = args[0];
-        if (typeof sql === 'string' && sql.includes('UPDATE access.authority_subject s SET active = false')
+        if (typeof sql === 'string' && sql.includes('account_deletion_person_effect_step')
           && ++personPages === 2) throw personInterruption;
         return Reflect.apply(query, client, args);
       }) as typeof client.query;

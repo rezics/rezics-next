@@ -50,6 +50,7 @@ interface DeletionProgress {
   classification_done: boolean;
   consent: boolean;
   orphan_count: number;
+  orphan_cursor: string | null;
   steps: number;
   needs_boundary_check: boolean;
 }
@@ -64,7 +65,7 @@ export async function collectAccountDeletionAgents(client: PoolClient, principal
       WHERE principal_id = $1 AND action = 'agent.control' AND active)
       OR EXISTS (SELECT 1 FROM access.account_deletion_progress WHERE principal_id = $1 AND NOT completed)
     ON CONFLICT (principal_id) DO UPDATE SET consent = access.account_deletion_progress.consent OR excluded.consent
-    RETURNING operation_id, classification_done, consent, orphan_count, steps, needs_boundary_check`,
+    RETURNING operation_id, classification_done, consent, orphan_count, orphan_cursor, steps, needs_boundary_check`,
   [principal, operationId, options.leaveOwnedAgentsStanding === true])).rows[0];
 }
 
@@ -85,14 +86,14 @@ async function classifyAccountDeletionStep(client: PoolClient, principal: string
         AND (p.root_cursor IS NULL OR r.id > p.root_cursor)
       ORDER BY r.id LIMIT ${ACCOUNT_DELETION_CLASSIFICATION_COST.subjectsPerStep}
     ), awakened AS MATERIALIZED (
-      SELECT f.agent_id, f.ctid FROM access.account_deletion_classification_frontier f, state p
-      WHERE p.roots_done AND f.operation_id = $2 ORDER BY f.agent_id
+      SELECT f.agent_id, f.ctid, f.wake_rank FROM access.account_deletion_classification_frontier f, state p
+      WHERE p.roots_done AND f.operation_id = $2 AND f.wake_rank > p.wake_cursor ORDER BY f.wake_rank
       LIMIT ${ACCOUNT_DELETION_CLASSIFICATION_COST.subjectsPerStep}
     ), parent AS MATERIALIZED (
-      SELECT a.agent_id FROM access.account_deletion_progress_agent a, state p
+      SELECT a.agent_id, a.ctid, a.expansion_rank FROM access.account_deletion_progress_agent a, state p
       WHERE p.roots_done AND NOT EXISTS (SELECT 1 FROM awakened)
         AND a.operation_id = $2 AND a.effect = 'end' AND NOT a.expanded
-      ORDER BY a.agent_id LIMIT 1
+        AND a.expansion_rank > p.expansion_cursor ORDER BY a.expansion_rank LIMIT 1
     ), children AS MATERIALIZED (
       SELECT e.represented_subject AS subject_id FROM parent p
       CROSS JOIN LATERAL (SELECT represented_subject FROM access.representation_edge
@@ -108,7 +109,7 @@ async function classifyAccountDeletionStep(client: PoolClient, principal: string
         WHERE agent_id = c.subject_id LIMIT 1 OFFSET 0) p ON true
       CROSS JOIN LATERAL access.account_deletion_remaining_controllers(c.subject_id, $1, $2) n
       WHERE NOT EXISTS (SELECT 1 FROM access.account_deletion_progress_agent a
-        WHERE a.operation_id = $2 AND a.agent_id = c.subject_id)
+        WHERE a.operation_id = $2 AND a.agent_id = c.subject_id LIMIT 1 OFFSET 0)
     ), locks AS MATERIALIZED (
       SELECT pg_advisory_xact_lock(hashtextextended('controller-continuity:' || subject_id, 0))
       FROM (SELECT subject_id FROM effects WHERE remaining = 0 ORDER BY subject_id) affected
@@ -122,7 +123,7 @@ async function classifyAccountDeletionStep(client: PoolClient, principal: string
       RETURNING effect, expanded
     ), expanded AS (
       UPDATE access.account_deletion_progress_agent SET expanded = true
-      WHERE operation_id = $2 AND agent_id IN (SELECT agent_id FROM parent)
+      WHERE ctid = ANY(ARRAY(SELECT ctid FROM parent))
     ), consumed AS (
       DELETE FROM access.account_deletion_classification_frontier
       WHERE ctid = ANY(ARRAY(SELECT ctid FROM awakened))
@@ -130,20 +131,24 @@ async function classifyAccountDeletionStep(client: PoolClient, principal: string
       SELECT p.roots_done OR (SELECT count(*) FROM roots) < $3 AS roots_done,
         NOT EXISTS (SELECT 1 FROM access.account_deletion_progress_agent a
           WHERE a.operation_id = $2 AND a.effect = 'end' AND NOT a.expanded
-            AND a.agent_id NOT IN (SELECT agent_id FROM parent))
+            AND a.expansion_rank > coalesce((SELECT expansion_rank FROM parent), p.expansion_cursor)
+          ORDER BY a.expansion_rank LIMIT 1)
         AND NOT EXISTS (SELECT 1 FROM inserted WHERE effect = 'end' AND NOT expanded)
         AND NOT EXISTS (SELECT 1 FROM access.account_deletion_classification_frontier f
-          WHERE f.operation_id = $2 AND f.agent_id NOT IN (SELECT agent_id FROM awakened)) AS frontier_done
+          WHERE f.operation_id = $2 AND f.wake_rank > coalesce((SELECT max(wake_rank) FROM awakened), p.wake_cursor)
+          ORDER BY f.wake_rank LIMIT 1) AS frontier_done
       FROM state p
     ), advanced AS (
       UPDATE access.account_deletion_progress p
       SET root_cursor = coalesce((SELECT id FROM roots ORDER BY id DESC LIMIT 1), p.root_cursor),
+        expansion_cursor = coalesce((SELECT expansion_rank FROM parent), p.expansion_cursor),
+        wake_cursor = coalesce((SELECT max(wake_rank) FROM awakened), p.wake_cursor),
         roots_done = n.roots_done, classification_done = n.roots_done AND n.frontier_done,
         orphan_count = p.orphan_count + (SELECT count(*) FROM inserted WHERE effect = 'orphan'),
         steps = p.steps + 1,
         needs_boundary_check = p.needs_boundary_check OR EXISTS (SELECT 1 FROM effects WHERE remaining > 0)
       FROM next n WHERE p.operation_id = $2
-      RETURNING p.operation_id, p.classification_done, p.consent, p.orphan_count, p.steps, p.needs_boundary_check
+      RETURNING p.operation_id, p.classification_done, p.consent, p.orphan_count, p.orphan_cursor, p.steps, p.needs_boundary_check
     ) SELECT a.*, (SELECT count(*)::integer FROM effects) AS examined,
       (SELECT coalesce(sum(controller_rows), 0)::integer FROM effects) AS controller_rows,
       EXISTS (SELECT 1 FROM effects e
@@ -176,12 +181,18 @@ export async function applyAccountDeletionAgents(client: PoolClient, principal: 
     // A refusal releases classification fences. No effect has been applied;
     // a later consent must classify fresh against then-current authority.
     for (const table of ['account_deletion_classification_frontier', 'account_deletion_progress_agent'] as const) {
+      let cursor = '';
       let removed: number;
       do {
-        removed = (await client.query(`WITH page AS MATERIALIZED (
-          SELECT ctid FROM access.${table} WHERE operation_id = $1 ORDER BY agent_id LIMIT 16
-        ) DELETE FROM access.${table} WHERE ctid = ANY(ARRAY(SELECT ctid FROM page))`,
-        [operationId])).rowCount ?? 0;
+        const page = (await client.query<{ count: number; cursor: string | null }>(`WITH page AS MATERIALIZED (
+          SELECT ctid, agent_id FROM access.${table}
+          WHERE operation_id = $1 AND agent_id > $2 ORDER BY agent_id LIMIT 16
+        ), removed AS (
+          DELETE FROM access.${table} WHERE ctid = ANY(ARRAY(SELECT ctid FROM page)) RETURNING agent_id
+        ) SELECT (SELECT count(*)::integer FROM removed) AS count, (SELECT max(agent_id) FROM page) AS cursor`,
+        [operationId, cursor])).rows[0]!;
+        removed = page.count;
+        cursor = page.cursor ?? cursor;
       } while (removed === 16);
     }
     await client.query('DELETE FROM access.account_deletion_progress WHERE operation_id = $1', [operationId]);
@@ -191,25 +202,33 @@ export async function applyAccountDeletionAgents(client: PoolClient, principal: 
   if (progress.orphan_count > 0) {
     const batch = await client.query(`CREATE TEMP TABLE account_deletion_batch ON COMMIT DROP AS
       SELECT agent_id, ctid AS progress_tid FROM access.account_deletion_progress_agent
-      WHERE operation_id = $1 AND effect = 'orphan' AND NOT completed
-      ORDER BY agent_id LIMIT $2`, [operationId, CONTROLLER_CONTINUITY_COST.maxSubjects]);
+      WHERE operation_id = $1 AND effect = 'orphan' AND NOT completed AND agent_id > coalesce($3, '')
+      ORDER BY agent_id LIMIT $2`, [operationId, CONTROLLER_CONTINUITY_COST.maxSubjects, progress.orphan_cursor]);
     await client.query(`SELECT pg_advisory_xact_lock(hashtextextended('controller-continuity:' || agent_id, 0))
       FROM (SELECT agent_id FROM account_deletion_batch ORDER BY agent_id) locked`);
     await client.query(`WITH orphaned AS (
       INSERT INTO access.account_deletion_orphan_agent (agent_id, deleted_principal_id, deleted_at, operation_id)
       SELECT agent_id, $1, clock_timestamp(), $2 FROM account_deletion_batch
       ON CONFLICT (agent_id) DO NOTHING
-    ) UPDATE access.account_deletion_progress_agent SET completed = true
-      WHERE ctid = ANY(ARRAY(SELECT progress_tid FROM account_deletion_batch))`, [principal, operationId]);
+    ), completed AS (
+      UPDATE access.account_deletion_progress_agent SET completed = true
+      WHERE ctid = ANY(ARRAY(SELECT progress_tid FROM account_deletion_batch))
+    ) UPDATE access.account_deletion_progress SET orphan_cursor = coalesce(
+      (SELECT max(agent_id) FROM account_deletion_batch), orphan_cursor) WHERE operation_id = $2`, [principal, operationId]);
     if ((batch.rowCount ?? 0) === CONTROLLER_CONTINUITY_COST.maxSubjects) return { pending: true, checkBoundary };
   }
+  // Tuple-id mutation and seek cursors prevent both full-target joins and
+  // rescans of this transaction's already-completed/deleted index entries.
   // This loop deliberately does not commit. Its per-statement inventory stays
   // bounded, while every Person effect and principal deactivation remain atomic.
+  let endCursor = '';
+  let releaseCursor = '';
+  let retirementCursor: string | null = null;
   let more: boolean;
   do {
-    const result = (await client.query<{ count: string; retired: number; released: number }>(`/* account_deletion_person_effect_step */ WITH batch AS MATERIALIZED (
+    const result = (await client.query<{ count: string; retired: number; released: number; end_cursor: string | null; release_cursor: string | null; retirement_cursor: string | null }>(`/* account_deletion_person_effect_step */ WITH batch AS MATERIALIZED (
       SELECT agent_id, ctid FROM access.account_deletion_progress_agent
-      WHERE operation_id = $1 AND effect = 'end' AND NOT completed ORDER BY agent_id LIMIT $2
+      WHERE operation_id = $1 AND effect = 'end' AND NOT completed AND agent_id > $4 ORDER BY agent_id LIMIT $2
     ), locks AS MATERIALIZED (
       SELECT pg_advisory_xact_lock(hashtextextended('controller-continuity:' || agent_id, 0))
       FROM (SELECT agent_id FROM batch ORDER BY agent_id) locked
@@ -224,19 +243,25 @@ export async function applyAccountDeletionAgents(client: PoolClient, principal: 
       WHERE ctid = ANY(ARRAY(SELECT ctid FROM batch))
     ), orphan_fences AS MATERIALIZED (
       SELECT agent_id, ctid FROM access.account_deletion_progress_agent
-      WHERE operation_id = $1 AND effect = 'orphan' AND fenced ORDER BY agent_id LIMIT $2
+      WHERE operation_id = $1 AND effect = 'orphan' AND fenced AND agent_id > $5 ORDER BY agent_id LIMIT $2
     ), released AS (
       UPDATE access.account_deletion_progress_agent SET fenced = false
       WHERE ctid = ANY(ARRAY(SELECT ctid FROM orphan_fences)) RETURNING agent_id
     ), retired AS MATERIALIZED (
-      SELECT access.retire_principal_controller_page($3, 16) AS count
+      SELECT removals AS count, cursor FROM access.retire_principal_controller_page($3, 16, $6)
     ), finished AS (
       UPDATE access.account_deletion_progress SET completed = true
       WHERE operation_id = $1 AND (SELECT count(*) FROM batch) < $2
         AND (SELECT count(*) FROM released) < $2 AND (SELECT count FROM retired) < 16
     ) SELECT count(*)::text AS count, (SELECT count FROM retired) AS retired,
-      (SELECT count(*)::integer FROM released) AS released FROM batch`,
-    [operationId, CONTROLLER_CONTINUITY_COST.maxSubjects, principal])).rows[0]!;
+      (SELECT count(*)::integer FROM released) AS released,
+      (SELECT max(agent_id) FROM batch) AS end_cursor,
+      (SELECT max(agent_id) FROM orphan_fences) AS release_cursor,
+      (SELECT cursor FROM retired) AS retirement_cursor FROM batch`,
+    [operationId, CONTROLLER_CONTINUITY_COST.maxSubjects, principal, endCursor, releaseCursor, retirementCursor])).rows[0]!;
+    endCursor = result.end_cursor ?? endCursor;
+    releaseCursor = result.release_cursor ?? releaseCursor;
+    retirementCursor = result.retirement_cursor ?? retirementCursor;
     more = Number(result.count) === CONTROLLER_CONTINUITY_COST.maxSubjects || result.retired === 16
       || result.released === CONTROLLER_CONTINUITY_COST.maxSubjects;
   } while (more);
@@ -286,7 +311,7 @@ export async function assertAccountDeletionContinuity(client: PoolClient, princi
 /** Compatibility for operations whose principal was fenced by an older release. */
 export async function continueAccountDeletionAgents(client: PoolClient, principal: string):
   Promise<{ operationId: string; pending: boolean } | null> {
-  const progress = (await client.query<DeletionProgress>(`SELECT operation_id, classification_done, consent, orphan_count, steps, needs_boundary_check
+  const progress = (await client.query<DeletionProgress>(`SELECT operation_id, classification_done, consent, orphan_count, orphan_cursor, steps, needs_boundary_check
     FROM access.account_deletion_progress WHERE principal_id = $1 AND NOT completed FOR UPDATE`, [principal])).rows[0];
   if (!progress) return null;
   return { operationId: progress.operation_id, pending: (await applyAccountDeletionAgents(client, principal, progress)).pending };

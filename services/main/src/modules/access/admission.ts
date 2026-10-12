@@ -2028,7 +2028,7 @@ export class AccessAdmissionRegistry {
       // The read budget requires indexed seeks even when small-table cost
       // estimates would favor scanning retained authority or other erasures.
       await client.query(accountDeletion
-        ? "SET LOCAL statement_timeout = '5s'; SET LOCAL enable_seqscan = off"
+        ? "SET LOCAL statement_timeout = '5s'; SET LOCAL enable_seqscan = off; SET LOCAL jit = off"
         : "SET LOCAL statement_timeout = '5s'");
       await requireRecoveryOpen(client);
       // Principal fences also remove controller authority. Serialize them with
@@ -2131,7 +2131,7 @@ export class AccessAdmissionRegistry {
     try {
       await client.query('BEGIN');
       await client.query("SET LOCAL lock_timeout = '2s'");
-      await client.query("SET LOCAL statement_timeout = '5s'");
+      await client.query("SET LOCAL statement_timeout = '5s'; SET LOCAL enable_seqscan = off; SET LOCAL jit = off");
       await requireRecoveryOpen(client);
       const result = await client.query<{ id: string; enforcement_epoch: string }>(
         `SELECT id, enforcement_epoch FROM access.principal
