@@ -245,7 +245,7 @@ async function works(session: WorkReadSession, heads: readonly Head[]) {
   for (let start = 0; start < unique.length; start += TARGET_RESOLVE_COST.batch) {
     const batch = unique.slice(start, start + TARGET_RESOLVE_COST.batch);
     const result = await targetSummaries(session, batch);
-    if (session.options.localBasis
+    if (session.fencesSelectedUnits
       ? !result.generation.graph.startsWith(`${session.position.dataEpoch}:`)
       : result.generation.graph !== `${session.position.dataEpoch}:${session.position.sequence}`) {
       throw new WorkReadMoved('Thread roots changed');

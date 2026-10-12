@@ -45,7 +45,7 @@ test('Work routes are exposed on the web app MainApp Eden contract', () => {
   expect(gets).toContain('/v1/works/:id/classifications');
 });
 
-test('Work read envelope meters actual HTTP attempts/bytes and rejects mixed graph positions', async () => {
+test('Work read envelope meters actual HTTP attempts/bytes and ignores unrelated dataset writes', async () => {
   let calls = 0;
   let sequence = '12';
   let oversized = false;
@@ -78,7 +78,7 @@ test('Work read envelope meters actual HTTP attempts/bytes and rejects mixed gra
       attempts++;
       sequence = '13';
       return session.position;
-    })).toEqual({ dataEpoch: 'one', sequence: '13' });
-    expect(attempts).toBe(2);
+    })).toEqual({ dataEpoch: 'one', sequence: '12' });
+    expect(attempts).toBe(1);
   } finally { await server.stop(true); }
 });

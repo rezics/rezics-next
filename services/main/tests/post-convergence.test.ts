@@ -5,7 +5,7 @@ import {
 } from '../src/modules/structure/post-book-placements.ts';
 import { workHeader } from '../src/modules/work/read-contract.ts';
 import { readWorkHeader } from '../src/modules/work/read-header.ts';
-import { WorkReadMissing, type WorkReadSession } from '../src/modules/work/read-session.ts';
+import { WorkReadMissing, readDependencyToken, type WorkReadSession } from '../src/modules/work/read-session.ts';
 
 const binding = (value: string) => ({ type: 'uri', value });
 
@@ -37,6 +37,7 @@ test('Work header hydration stays a Work read and rejects a Post without a Work 
     summaries: async () => [
       { status: 'available', type: 'work', name: { value: 'Book', language: 'en' }, avatar: null },
     ],
+    observeDependency: (_name: string, value: unknown) => readDependencyToken(value),
   } as unknown as WorkReadSession;
   const header = await readWorkHeader(session, work);
   expect(header).toMatchObject({ profile: 'work-read-v1', id: work, title: { value: 'Book' },

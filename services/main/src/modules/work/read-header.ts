@@ -108,7 +108,7 @@ export async function readWorkBasis(session: WorkReadSession, work: string): Pro
   try { source = await readPublication(); }
   catch (error) { throw new WorkReadUnavailable('Work publication state is unavailable', { cause: error }); }
   const structuredPublicationCandidate = source !== null;
-  if (session.options.localBasis) {
+  if (session.fencesSelectedUnits) {
     session.observeDependency(`structured-work-publication:${work}`, source, readPublication);
   }
   if (source) {
@@ -126,11 +126,11 @@ export async function readWorkBasis(session: WorkReadSession, work: string): Pro
   const readHeads = async () => isPublic ? (await readMainLanguageHeads(session.deps.environment,
     row.main!.value, true)).sort((a, b) => a.language.localeCompare(b.language)) : [];
   const heads = await readHeads();
-  const languageToken = session.options.localBasis
+  const languageToken = session.fencesSelectedUnits
     ? session.observeDependency(`language-heads:${row.main.value}`, heads, readHeads)
     : readDependencyToken(heads);
   const selected = isPublic ? chooseMainLanguage(heads, session.options.language) : null;
-  const profiles = session.options.localBasis ? await session.dependency('work-profiles', async () => {
+  const profiles = session.fencesSelectedUnits ? await session.dependency('work-profiles', async () => {
     const health = await session.deps.environment.fuseki.commandHealth();
     return [...new Set(['work-metadata-v1', ...(row.metadataHead ? ['work-metadata-details-v1'] : []),
       ...(session.options.localProfiles ?? [])])]
@@ -142,8 +142,9 @@ export async function readWorkBasis(session: WorkReadSession, work: string): Pro
   if (summary?.status !== 'available' || summary.type !== 'work') throw new WorkReadMissing('Work is unavailable');
   const metadata = await readMetadataHeader(session, work, row.metadataHead?.value ?? null);
   const selectedMetadataValue = selectedMetadata(metadata, session.options.language);
-  const stats = (await session.deps?.serialStats?.batch([work],
-    session.options.localBasis ? undefined : session.position.sequence))?.get(work);
+  const readStats = async () => (await session.deps.serialStats?.batch([work]))?.get(work) ?? null;
+  const stats = await readStats();
+  session.observeDependency(`serial-statistics:${work}`, stats, readStats);
   return { card: { id: work, revision: row.head.value, mainVersion: row.main.value,
     ...(row.provisional ? { verification: row.provisional.value === 'true' ? 'unverified' as const : 'verified' as const } : {}),
     title: summary.name, cover: summary.avatar, types: [...new Set(rows.flatMap(item => item.type ? [item.type.value] : []))].sort(),

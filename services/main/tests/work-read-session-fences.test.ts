@@ -23,6 +23,9 @@ import { withSearchGraphSnapshot } from '../src/modules/search/snapshot.ts';
 import { SearchIndexUnavailable, SearchSnapshotMoved } from '../src/modules/work/search-readiness.ts';
 import type { Pool } from 'pg';
 import { DEFAULT_MEDIA_CONTEXT, type AvatarRow } from '../src/modules/media/store.ts';
+import { readWorkHeader } from '../src/modules/work/read-header.ts';
+import { readRealmThreads } from '../src/modules/realm-reply/thread-read.ts';
+import { realm as threadRealm, world as threadWorld } from './realm-reply-threads.test.ts';
 
 const id = (number: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(number).padStart(12, '0')}`;
 const work = id(1), realm = id(2), actor = id(3);
@@ -65,6 +68,110 @@ function fixture() {
   } as unknown as MainWorkDependencies;
   return { state, graph, deps, request: new Request('http://main.test/v1/resources/' + work.slice(-36) + '/page') };
 }
+
+function headerFixture() {
+  const f = fixture();
+  const header = { published: false, selection: null as string | null,
+    profile: 'a'.repeat(64), otherProfile: 'b'.repeat(64),
+    stats: { chapterCount: 2, wordCount: 200, lastUpdatedAt: null as string | null },
+    unrelatedStats: { chapterCount: 1, wordCount: 20, lastUpdatedAt: null as string | null } };
+  const originalQuery = f.graph.query.bind(f.graph);
+  f.graph.query = async body => {
+    if (body.includes('SELECT ?head ?main ?mainHead')) {
+      f.state.calls++;
+      return result([{ head: term(f.state.head, 'uri'), main: term(f.state.main, 'uri'),
+        mainHead: term(id(19), 'uri'), public: term('true') }]);
+    }
+    if (body.includes('SELECT ?selection ?language')) {
+      f.state.calls++;
+      return result(header.selection ? [{ selection: term(header.selection, 'uri'), language: term('en') }] : []);
+    }
+    if (body.includes('SELECT ?structuredDecision ?structuredSource')) {
+      f.state.calls++;
+      return result(header.published ? [{ structuredDecision: term(f.state.publication, 'uri'),
+        structuredSource: term('urn:rezics:work-source:publication', 'uri'),
+        structuredStructure: term(f.state.structure, 'uri'),
+        structuredProfile: term(`${RV}RecipeComposition`, 'uri'),
+        structuredRevision: term(id(15), 'uri'), structuredGeneration: term(id(16), 'uri'),
+        structuredRoot: term(`urn:rezics:sha256:${'c'.repeat(64)}`, 'uri') }] : []);
+    }
+    if (body.includes('SELECT ?work ?parent')) {
+      f.state.calls++;
+      return result([{ work: term(work, 'uri') }]);
+    }
+    return originalQuery(body);
+  };
+  f.graph.commandHealth = async () => {
+    f.state.calls++;
+    return { profiles: { 'work-metadata-v1': header.profile, 'unselected-profile': header.otherProfile } } as never;
+  };
+  f.deps.serialStats = { batch: async () => new Map([
+    [work, { ...header.stats }], [id(200), { ...header.unrelatedStats }],
+  ]) } as unknown as SerialStatisticsProjection;
+  return { ...f, header };
+}
+
+test('ordinary Work header dependencies ignore unrelated writes and keep a constant owner fence cost', async () => {
+  const costs: number[] = [];
+  for (const count of [0, 8, 32]) {
+    const f = headerFixture(); let attempts = 0;
+    const page = await workRead(f.deps, f.request, {}, async session => {
+      attempts++;
+      const page = await readWorkHeader(session, work);
+      f.state.sequence += count;
+      f.state.mediaSequence += count;
+      f.header.otherProfile = 'd'.repeat(64);
+      f.header.unrelatedStats.wordCount += count;
+      return page;
+    });
+    expect(attempts).toBe(1);
+    expect(page).toMatchObject({ publicationState: 'unpublished', selectedLanguage: null,
+      chapterCount: 2, wordCount: 200, sourcePosition: { dataEpoch: 'epoch', sequence: '1' } });
+    expect(page.sourcePosition).not.toHaveProperty('dependencyToken');
+    costs.push(f.state.calls);
+  }
+  expect(new Set(costs).size).toBe(1);
+});
+
+for (const changed of ['publication', 'language', 'profile', 'statistics'] as const) {
+  test(`ordinary Work headers replay a selected ${changed} owner dependency without opting into a local cursor basis`, async () => {
+    const f = headerFixture(); let attempts = 0;
+    const page = await workRead(f.deps, f.request, {}, async session => {
+      attempts++;
+      const page = await readWorkHeader(session, work);
+      if (attempts === 1) {
+        if (changed === 'publication') f.header.published = true;
+        else if (changed === 'language') f.header.selection = id(40);
+        else if (changed === 'profile') f.header.profile = 'e'.repeat(64);
+        else f.header.stats.wordCount = 500;
+      }
+      return page;
+    });
+    expect(attempts).toBe(2);
+    expect(f.state.recoveryChecks).toBe(2);
+    if (changed === 'publication') expect(page.publicationState).toBe('published');
+    if (changed === 'language') expect(page.selectedLanguage).toBe('en');
+    if (changed === 'statistics') expect(page.wordCount).toBe(500);
+  });
+}
+
+test('a nonempty Realm thread inventory consumes selected root summaries through an ordinary session', async () => {
+  const threaded = threadWorld([{ id: 1, author: 1 }]);
+  const baseline = threaded.session;
+  const originalSummaryQuery = baseline.deps.environment.fuseki.query.bind(baseline.deps.environment.fuseki);
+  const graph = new FusekiClient('http://graph.invalid/thread');
+  graph.query = async body => body.includes('SELECT ?epoch ?sequence ?hold')
+    ? originalSummaryQuery(body) : result(await baseline.query(body, 512));
+  const session = new WorkReadSession({ ...baseline.deps,
+    environment: { ...baseline.deps.environment, fuseki: graph } }, baseline.request,
+  baseline.options, baseline.position);
+  session.realm = baseline.realm.bind(baseline);
+  const page = await readRealmThreads(session, threadRealm, { sort: 'new' });
+  expect(session.fencesSelectedUnits).toBe(true);
+  expect(page.items).toHaveLength(1);
+  expect(page.items[0]?.work.title.value).toBe('Rainy Night Bookshop');
+  await session.fenceDependencies();
+});
 
 test('ordinary reads retain their opening position and a constant fence cost under 0, 8 and 32 unrelated writes', async () => {
   const costs: number[] = [];
