@@ -154,6 +154,10 @@ async function classifyAccountDeletionStep(client: PoolClient, principal: string
         wake_cursor = coalesce((SELECT max(wake_rank) FROM awakened), p.wake_cursor),
         roots_done = n.roots_done, classification_done = n.roots_done AND n.frontier_done,
         orphan_count = p.orphan_count + (SELECT count(*) FROM inserted WHERE effect = 'orphan'),
+        -- New discoveries can precede a committed UUID seek. The pending-effect
+        -- index excludes completed pages, so restarting reads only new work.
+        orphan_cursor = CASE WHEN EXISTS (SELECT 1 FROM inserted WHERE effect = 'orphan')
+          THEN NULL ELSE p.orphan_cursor END,
         steps = p.steps + 1,
         needs_boundary_check = p.needs_boundary_check OR EXISTS (SELECT 1 FROM effects WHERE remaining > 0)
       FROM next n WHERE p.operation_id = $2
@@ -252,13 +256,15 @@ export async function applyAccountDeletionAgents(client: PoolClient, principal: 
     ), completed AS (
       UPDATE access.account_deletion_progress_agent SET completed = true, fenced = false
       WHERE ctid = ANY(ARRAY(SELECT ctid FROM batch))
-    ), orphan_fences AS MATERIALIZED (
+    ), remaining_fences AS MATERIALIZED (
+      -- The ending batch clears its own fences; disjoint rows avoid updating
+      -- the same tuple twice in this data-modifying statement.
       SELECT agent_id, ctid FROM access.account_deletion_progress_agent
-      WHERE operation_id >= $1 AND operation_id <= $1 AND effect >= 'orphan' AND effect <= 'orphan'
-        AND fenced AND agent_id > $5 ORDER BY operation_id, effect, agent_id LIMIT $2
+      WHERE operation_id >= $1 AND operation_id <= $1 AND fenced AND (effect <> 'end' OR completed)
+        AND agent_id > $5 ORDER BY operation_id, agent_id LIMIT $2
     ), released AS (
       UPDATE access.account_deletion_progress_agent SET fenced = false
-      WHERE ctid = ANY(ARRAY(SELECT ctid FROM orphan_fences)) RETURNING agent_id
+      WHERE ctid = ANY(ARRAY(SELECT ctid FROM remaining_fences)) RETURNING agent_id
     ), retired AS MATERIALIZED (
       SELECT removals AS count, cursor FROM access.retire_principal_controller_page($3, 16, $6)
     ), finished AS (
@@ -268,7 +274,7 @@ export async function applyAccountDeletionAgents(client: PoolClient, principal: 
     ) SELECT count(*)::text AS count, (SELECT count FROM retired) AS retired,
       (SELECT count(*)::integer FROM released) AS released,
       (SELECT max(agent_id) FROM batch) AS end_cursor,
-      (SELECT max(agent_id) FROM orphan_fences) AS release_cursor,
+      (SELECT max(agent_id) FROM remaining_fences) AS release_cursor,
       (SELECT cursor FROM retired) AS retirement_cursor FROM batch`,
     [operationId, CONTROLLER_CONTINUITY_COST.maxSubjects, principal, endCursor, releaseCursor, retirementCursor])).rows[0]!;
     endCursor = result.end_cursor ?? endCursor;

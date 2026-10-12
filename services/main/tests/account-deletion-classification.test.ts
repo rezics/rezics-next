@@ -10,9 +10,9 @@ import type { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import {
   AccessAdmissionRegistry, AccountHasOwnedAgents, type VerifiedPrincipal,
 } from '../src/modules/access/admission.ts';
-import { collectAccountDeletionAgents, lockAccountDeletionTopology } from '../src/modules/access/account-deletion-agents.ts';
+import { ACCOUNT_DELETION_CLASSIFICATION_COST, collectAccountDeletionAgents, lockAccountDeletionTopology } from '../src/modules/access/account-deletion-agents.ts';
 import { AccessAgentControl } from '../src/modules/access/agent-control.ts';
-import { grantFixtureAuthority, grantFixtureControllerEdge, deactivateFixtureController } from '../src/modules/access/fixture-authority.ts';
+import { grantFixtureAuthority, grantFixtureControllerEdge, deactivateFixtureController, registerFixtureIdentity } from '../src/modules/access/fixture-authority.ts';
 import { AgentProvisioning, agentProvisionDigest } from '../src/modules/agent/provision.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -293,6 +293,162 @@ test('controller loss at an unfenced cut wakes only that frontier target', async
     [progress.operation_id])).rows).toEqual([{ agent_id: cut }]);
 }, 60_000);
 
+test('newly affected orphans below a committed cursor are recorded on retry', async () => {
+  const owner = await principal();
+  const survivor = await principal();
+  const organizations: string[] = [];
+  for (let index = 0; index < 258; index++) organizations.push(await provision(owner, 'organization'));
+  organizations.sort();
+  const cut = organizations[0]!;
+  await addFixtureController(survivor, cut);
+  const interruption = new Error('first orphan page committed');
+  let orphanPage = false;
+  const measured = measuredPool(sql => {
+    if (sql.includes('CREATE TEMP TABLE account_deletion_batch')) orphanPage = true;
+    if (sql === 'COMMIT' && orphanPage) throw interruption;
+  });
+  try {
+    await expect(new AccessAdmissionRegistry(measured).strongDeactivateAccountSubject(
+      owner.verified.issuer, owner.verified.subject, { leaveOwnedAgentsStanding: true })).rejects.toBe(interruption);
+  } finally { await measured.end(); }
+  const progress = (await pool.query<{ operation_id: string; orphan_cursor: string }>(`SELECT operation_id,orphan_cursor
+    FROM access.account_deletion_progress WHERE principal_id = $1`, [owner.id])).rows[0]!;
+  expect(cut < progress.orphan_cursor).toBe(true);
+  expect((await pool.query('SELECT agent_id FROM access.account_deletion_orphan_agent WHERE operation_id = $1',
+    [progress.operation_id])).rows).toHaveLength(256);
+  await removeController(survivor, cut);
+  expect((await pool.query(`SELECT agent_id FROM access.account_deletion_classification_frontier
+    WHERE operation_id = $1`, [progress.operation_id])).rows).toEqual([{ agent_id: cut }]);
+  const access = new AccessAdmissionRegistry(pool);
+  await expect(access.strongDeactivateAccountSubject(owner.verified.issuer, owner.verified.subject))
+    .resolves.toMatchObject({ enforcementEpoch: '1' });
+  expect((await pool.query(`SELECT agent_id FROM access.account_deletion_orphan_agent
+    WHERE operation_id = $1 ORDER BY agent_id`, [progress.operation_id])).rows.map(row => row.agent_id)).toEqual(organizations);
+  expect((await pool.query(`SELECT agent_id FROM access.account_deletion_progress_agent
+    WHERE operation_id = $1 AND (fenced OR NOT completed)`, [progress.operation_id])).rows).toEqual([]);
+  await expect(access.strongDeactivateAccountSubject(owner.verified.issuer, owner.verified.subject))
+    .resolves.toMatchObject({ enforcementEpoch: '1' });
+}, 120_000);
+
+test('legacy keep inventory releases every fence before the survivor changes control or deletes', async () => {
+  const owner = await principal();
+  const survivor = await principal();
+  const replacement = await principal();
+  const organization = await provision(owner, 'organization');
+  await addFixtureController(survivor, organization);
+  const access = new AccessAdmissionRegistry(pool);
+  await access.strongDeactivatePrincipal(owner.id, '0');
+  const operation = randomUUID();
+  // The frontier migration preserves a fence-first operation with keep rows.
+  await pool.query(`INSERT INTO access.account_deletion_progress
+    (operation_id,principal_id,roots_done,classification_done,consent) VALUES ($1,$2,true,true,true)`, [operation, owner.id]);
+  await pool.query(`INSERT INTO access.account_deletion_progress_agent (operation_id,agent_id,effect,expanded,fenced)
+    VALUES ($1,$2,'keep',true,true)`, [operation, organization]);
+  await expect(access.strongDeactivateAccountSubject(owner.verified.issuer, owner.verified.subject))
+    .resolves.toMatchObject({ enforcementEpoch: '1' });
+  expect((await pool.query(`SELECT fenced FROM access.account_deletion_progress_agent
+    WHERE operation_id = $1`, [operation])).rows).toEqual([{ fenced: false }]);
+  await addFixtureController(replacement, organization);
+  await removeController(replacement, organization);
+  await expect(access.strongDeactivateAccountSubject(survivor.verified.issuer, survivor.verified.subject,
+    { leaveOwnedAgentsStanding: true })).resolves.toMatchObject({ enforcementEpoch: '1' });
+});
+
+test('legacy fence completion migration repairs stranded rows while preserving open operation fences', async () => {
+  const legacyCluster = await startPostgresCluster();
+  const legacyPool = new Pool({ ...legacyCluster.connection, max: 1 });
+  const client = await legacyPool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const file of schemaFiles(root, 'access')) {
+      if (file === '2060_account_deletion_fence_completion.sql') break;
+      await client.query(readFileSync(join(root, 'services/main/migrations/access', file), 'utf8'));
+    }
+    const inventories: { operation: string; agent: string; representation: string; completed: boolean }[] = [];
+    for (const [effect, completed] of [['keep', true], ['end', true], ['orphan', true], ['keep', false]] as const) {
+      const owner = randomUUID();
+      const agent = `https://rezics.com/id/${randomUUID()}`;
+      const operation = randomUUID();
+      await registerFixtureIdentity(client, { principalId: owner, issuer: 'https://account.rezics.test', subject: owner, actor: agent });
+      const authority = await grantFixtureAuthority(client, {
+        scope: 'work:create:root', requireDispatch: true,
+        representations: [{ principalId: owner, actor: agent, action: 'agent.control', lifetime: 'infinity' }],
+        grant: { actor: agent, action: 'agent.control', lifetime: 'infinity' },
+      });
+      await client.query(`INSERT INTO access.account_deletion_progress
+        (operation_id,principal_id,completed,orphan_cursor) VALUES ($1,$2,$3,$4)`, [operation, owner, completed, agent]);
+      await client.query(`INSERT INTO access.account_deletion_progress_agent (operation_id,agent_id,effect,fenced)
+        VALUES ($1,$2,$3,true)`, [operation, agent, effect]);
+      inventories.push({ operation, agent, representation: authority.representationIds[0]!, completed });
+    }
+    await client.query(readFileSync(join(root, 'services/main/migrations/access/2060_account_deletion_fence_completion.sql'), 'utf8'));
+    for (const inventory of inventories) {
+      expect((await client.query('SELECT fenced FROM access.account_deletion_progress_agent WHERE operation_id = $1',
+        [inventory.operation])).rows).toEqual([{ fenced: !inventory.completed }]);
+      expect((await client.query('SELECT orphan_cursor FROM access.account_deletion_progress WHERE operation_id = $1',
+        [inventory.operation])).rows).toEqual([{ orphan_cursor: inventory.completed ? inventory.agent : null }]);
+      // The real fence predicate permits changes to the repaired row only.
+      await client.query('SAVEPOINT controller_change');
+      const change = deactivateFixtureController(client, inventory.representation);
+      if (inventory.completed) {
+        await expect(change).resolves.toBeUndefined();
+        expect((await client.query('SELECT active FROM access.representation WHERE id = $1',
+          [inventory.representation])).rows).toEqual([{ active: false }]);
+      }
+      else await expect(change).rejects.toMatchObject({ code: '54000' });
+      await client.query('ROLLBACK TO SAVEPOINT controller_change');
+    }
+    await client.query('COMMIT');
+  } finally {
+    await client.query('ROLLBACK');
+    client.release();
+    await legacyPool.end();
+    legacyCluster.remove();
+  }
+}, 60_000);
+
+test('ordinary principal fencing counts 129 distinct Agents with two mandates each', async () => {
+  const owner = await principal();
+  const survivor = await principal();
+  const organizations: string[] = [];
+  const fixtures = new Pool({ ...cluster!.connection, max: 1 });
+  fixtures.on('connect', client => {
+    const query = client.query.bind(client);
+    client.query = ((...args: unknown[]) => {
+      // Admit a second valid mandate through the fixture owner, bypassing only
+      // its reuse lookup so the production trigger sees both real mandates.
+      if (typeof args[0] === 'string' && args[0].includes('SELECT id FROM access.representation')) {
+        args[0] = args[0].replace('FOR SHARE', 'AND false FOR SHARE');
+      }
+      return Reflect.apply(query, client, args);
+    }) as typeof client.query;
+  });
+  try {
+    for (let index = 0; index < 129; index++) {
+      const organization = await provision(owner, 'organization');
+      organizations.push(organization);
+      await addFixtureController(survivor, organization);
+      await grantFixtureAuthority(fixtures, {
+        scope: 'work:create:root', requireDispatch: true,
+        representations: [{ principalId: owner.id, actor: organization, action: 'agent.control', lifetime: 'infinity' }],
+        grant: { actor: organization, action: 'agent.control', lifetime: 'infinity' },
+      });
+    }
+  } finally { await fixtures.end(); }
+  expect((await pool.query('SELECT representation_id FROM access.live_principal_controller WHERE principal_id = $1',
+    [owner.id])).rows).toHaveLength(258);
+  await expect(new AccessAdmissionRegistry(pool).strongDeactivatePrincipal(owner.id, '0'))
+    .resolves.toMatchObject({ enforcementEpoch: '1' });
+  expect((await pool.query('SELECT representation_id FROM access.live_principal_controller WHERE principal_id = $1',
+    [owner.id])).rows).toEqual([]);
+  for (const organization of organizations) expect(await subjectState(organization)).toEqual({ active: true, controllers: 1 });
+  // The same subject budget governs restoration, including every mandate.
+  await pool.query('UPDATE access.principal SET active = true WHERE id = $1', [owner.id]);
+  expect((await pool.query('SELECT representation_id FROM access.live_principal_controller WHERE principal_id = $1',
+    [owner.id])).rows).toHaveLength(258);
+  for (const organization of organizations) expect(await subjectState(organization)).toEqual({ active: true, controllers: 3 });
+}, 120_000);
+
 
 test('bounded production pool releases classification and orphan handoffs in throw and log modes', async () => {
   const previous = nestedPoolCheckoutMode();
@@ -334,10 +490,10 @@ type ReadPlan = {
   'Shared Hit Blocks'?: number; 'Shared Read Blocks'?: number; 'Local Hit Blocks'?: number; 'Local Read Blocks'?: number; Plans?: ReadPlan[];
 };
 type RecordedPlan = { 'Query Text': string; Plan: ReadPlan; Statement: string; StatementInstance: number };
-function planRows(plan: ReadPlan): number {
-  const own = plan['Relation Name'] && plan['Node Type'].endsWith('Scan') ? (plan['Actual Rows'] + (plan['Rows Removed by Filter'] ?? 0)
+function planRows(plan: ReadPlan, relation?: string): number {
+  const own = plan['Relation Name'] && (!relation || plan['Relation Name'] === relation) && plan['Node Type'].endsWith('Scan') ? (plan['Actual Rows'] + (plan['Rows Removed by Filter'] ?? 0)
     + (plan['Rows Removed by Index Recheck'] ?? 0)) * plan['Actual Loops'] : 0;
-  return own + (plan.Plans ?? []).reduce((sum, child) => sum + planRows(child), 0);
+  return own + (plan.Plans ?? []).reduce((sum, child) => sum + planRows(child, relation), 0);
 }
 
 function planBuffers(plan: ReadPlan): number {
@@ -509,9 +665,9 @@ test('owned refusal cleans a persisted long closure in bounded statements and re
   expect(deletes.size).toBeGreaterThanOrEqual(3);
   for (const plans of deletes.values()) {
     const reads = plans.reduce((sum, plan) => sum + planRows(plan.Plan), 0);
-    if (reads > 32) console.info('Refusal cleanup scans', plans.map(plan => ({
+    if (reads > 32) console.info('Refusal cleanup scans', JSON.stringify(plans.map(plan => ({
       query: plan['Query Text'].slice(0, 200), scans: readScans(plan.Plan),
-    })));
+    }))));
     expect(reads).toBeLessThanOrEqual(32);
   }
   expect((await pool.query('SELECT operation_id FROM access.account_deletion_progress WHERE principal_id = $1',
@@ -550,7 +706,7 @@ test('sole-controlled chains at 8, 64 and 512 levels read a fixed budget per per
     await setup.query('ROLLBACK');
     throw error;
   } finally { setup.release(); }
-  const samples: { size: number; steps: number; maxReads: number; maxBuffers: number }[] = [];
+  const samples: { size: number; steps: number; maxReads: number; maxInventoryReads: number; totalReads: number; maxBuffers: number }[] = [];
   for (const [offset, size] of [[0, 8], [8, 64], [72, 512]] as const) {
     const owner = await principal();
     const rootPerson = corpus[offset]!;
@@ -558,11 +714,13 @@ test('sole-controlled chains at 8, 64 and 512 levels read a fixed budget per per
     await removeController(builder, rootPerson);
     console.info('Long-chain deletion started', size);
     const reads: number[] = [];
+    const inventoryReads: number[] = [];
     const buffers: number[] = [];
     const measured = planPool([], (sql, plans) => {
       if (!sql.includes('account_deletion_classification_step')) return;
       if (reads.length % 64 === 0) console.info('Long-chain classification step', size, reads.length);
       reads.push(plans.reduce((sum, plan) => sum + planRows(plan.Plan), 0));
+      inventoryReads.push(plans.reduce((sum, plan) => sum + planRows(plan.Plan, 'account_deletion_progress_agent'), 0));
       buffers.push(plans.reduce((sum, plan) => sum + planBuffers(plan.Plan), 0));
     });
     try {
@@ -571,6 +729,9 @@ test('sole-controlled chains at 8, 64 and 512 levels read a fixed budget per per
     } finally { await measured.end(); }
     console.info('Long-chain deletion completed', size);
     expect(reads.length).toBe(size);
+    // A step can seek its new candidates and parent, but cannot reread the
+    // growing classified inventory. A 512-row rescan fits the broad SQL budget.
+    expect(Math.max(...inventoryReads)).toBeLessThanOrEqual(ACCOUNT_DELETION_CLASSIFICATION_COST.subjectsPerStep * 4 + 8);
     expect(Math.max(...reads)).toBeLessThanOrEqual(1024);
     expect(Math.max(...buffers)).toBeLessThanOrEqual(2048);
     expect(reads.reduce((sum, count) => sum + count, 0)).toBeLessThanOrEqual((size + 1) * 1024);
@@ -582,7 +743,8 @@ test('sole-controlled chains at 8, 64 and 512 levels read a fixed budget per per
       expect(await subjectState(person)).toEqual({ active: false, controllers: 0 });
     }
     if (offset + size < corpus.length) expect((await subjectState(corpus[offset + size]!))?.active).toBe(true);
-    samples.push({ size, steps: reads.length, maxReads: Math.max(...reads), maxBuffers: Math.max(...buffers) });
+    samples.push({ size, steps: reads.length, maxReads: Math.max(...reads), maxInventoryReads: Math.max(...inventoryReads),
+      totalReads: reads.reduce((sum, count) => sum + count, 0), maxBuffers: Math.max(...buffers) });
   }
   console.info('Account deletion chain read budgets', samples);
 }, 300_000);

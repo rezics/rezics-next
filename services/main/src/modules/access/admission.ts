@@ -2027,8 +2027,9 @@ export class AccessAdmissionRegistry {
       await client.query("SET LOCAL lock_timeout = '2s'");
       // The read budget requires indexed seeks even when small-table cost
       // estimates would favor scanning retained authority or other erasures.
+      // Bitmap scans gather an entire matching range before a page's LIMIT.
       await client.query(accountDeletion
-        ? "SET LOCAL statement_timeout = '5s'; SET LOCAL enable_seqscan = off; SET LOCAL jit = off"
+        ? "SET LOCAL statement_timeout = '5s'; SET LOCAL enable_seqscan = off; SET LOCAL enable_bitmapscan = off; SET LOCAL jit = off"
         : "SET LOCAL statement_timeout = '5s'");
       await requireRecoveryOpen(client);
       // Principal fences also remove controller authority. Serialize them with
