@@ -39,6 +39,8 @@ function reader(options: { bindings?: Binding[]; publicRefs?: string[] } = {}) {
       statements.push({ sql, values });
       const rows = sql.includes('access.recovery_fence')
         ? [{ open: true, generation: '0' }]
+        : sql.includes('FROM access.scope_gate')
+          ? [{ open: true, dispatch_open: true }]
         : sql.startsWith('SELECT id FROM access.principal')
           ? [{ id: principalId }]
           : sql.includes('access.read_platform_permissions')

@@ -21,7 +21,7 @@ function pool(resource: boolean) {
     if (sql.includes('FROM access.policy')) return rows([]);
     if (sql.includes("id = 'work:create:root'")) return rows([{ open: true, dispatch_open: true, authority_epoch: '0' }]);
     if (sql.includes('access:representation-topology')) return rows([]);
-    if (sql.includes('FROM access.scope_gate')) return rows([{ id: 'platform:access' }]);
+    if (sql.includes('FROM access.scope_gate')) return rows([{ id: 'platform:access', open: true, dispatch_open: true }]);
     if (sql.includes('account_issuer')) return rows([{ id: 'principal' }]);
     if (sql.includes('read_platform_permissions')) return rows(resource ? [useGrant, resourceGrant] : [useGrant]);
     if (sql.includes('AS receipt')) return rows([{ receipt: 'urn:rezics:access-receipt:preview',

@@ -59,7 +59,8 @@ function harness() {
       if (query.includes('access.policy')) return { rows: [], rowCount: 0 };
       if (query.includes('access.agent_provision'))
         return { rows: state.provision ? [controller] : [], rowCount: state.provision ? 1 : 0 };
-      if (query.includes('access.scope_gate')) return { rows: [], rowCount: 0 };
+      if (query.includes('access.scope_gate'))
+        return { rows: [{ open: true, dispatch_open: true }], rowCount: 1 };
       if (query.includes('SELECT $3::text AS receipt'))
         return {
           rows: state.control
