@@ -13,7 +13,7 @@ export const NATIVE_RECIPE_UNIT_IRIS: ReadonlySet<string> = new Set([
 
 /** Native definition identities and the finite external registry are inert only in unitCode. */
 export function isRecipeUnitIdentifier(value: string): boolean {
-  return NATIVE_ID.test(value) || NATIVE_RECIPE_UNIT_IRIS.has(value);
+  return (value === value.trim() && NATIVE_ID.test(value)) || NATIVE_RECIPE_UNIT_IRIS.has(value);
 }
 
 export class RecipeExportLimit extends Error {}

@@ -196,6 +196,7 @@ test('native unit definition identities remain confined to ingredient unitCode',
   expect(parseRecipeFile(asBytes({ ...recipe, recipeIngredient: [ingredient] }), 'application/json')
     .preview.ingredients[0]?.qualifier.unit).toBe(unitCode);
   for (const altered of [`${unitCode}?a=1`, `${unitCode}#unit`, `${unitCode}/`,
+    ` ${unitCode}`, `${unitCode} `, `${unitCode}\n`, `${unitCode}\r\n`,
     unitCode.replace('rezics.com', 'rezics.com.attacker.example')]) {
     expect(() => parseRecipeFile(asBytes({ ...recipe,
       recipeIngredient: [{ ...ingredient, unitCode: altered }] }), 'application/json'))

@@ -61,6 +61,7 @@ test('complete ingredient names never receive a duplicated quantity or unit', ()
   for (const [name, value, unitText] of [
     ['200 g butter', '200', 'g'], ['200g butter', 200, 'g'],
     ['1.5 cups cream', 1.5, 'cups'], ['½–¾ cup flour', '½–¾', 'cup'],
+    ['1.50 cups cream', 1.5, 'cups'], ['1.50cups cream', '1.5', 'cups'],
   ] as const) {
     const imported = importRecipe({ recipeIngredient: [{ name, value, unitText }] }, 'recipe');
     expect(imported.ingredients[0]?.qualifier.originalText.value).toBe(name);

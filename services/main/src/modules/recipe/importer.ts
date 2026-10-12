@@ -159,6 +159,7 @@ function structuredIngredient(value: Record<string, unknown>, sourceKey: string,
     ? String(value.value) : textOf(value.value);
   // A provider may put a complete ingredient line in name instead of text.
   const nameHasAmount = name && (exactStructuredAmount(name)
+    || /^\d+\.\d+(?=\s|[\p{L}]|$)/u.test(name)
     || rawValue && name.startsWith(rawValue)
       && /^(?:\s|[\p{L}])/u.test(name.slice(rawValue.length)));
   const original = originalTextOf(value.text) ?? (nameHasAmount ? name
