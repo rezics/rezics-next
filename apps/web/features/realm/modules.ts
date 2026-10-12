@@ -260,9 +260,10 @@ export async function enrichShowcaseModules(modules: PlacedModule[], context: Ad
 }
 
 /** A mounted Collection shelf uses the same public, visibility-filtered index read as its full catalogue. */
-async function shelfWorks(
+export async function shelfWorks(
   source: ModuleSource,
   context: AdaptContext,
+  read = readZoneRoute,
 ): Promise<HomeWindow<ZoneWork>> {
   if (source.kind !== 'collection') {
     const feed = feedOf(source);
@@ -270,13 +271,14 @@ async function shelfWorks(
   }
   const mount = context.mounts?.get(source.collection);
   if (!context.zone || !mount) return { ok: false, failure: 'missing' };
-  const page = await readZoneRoute(context.zone, `/${mount}`);
+  const page = await read(context.zone, `/${mount}`);
   if (!page.ok) return page;
   if (page.data.kind !== 'index' || page.data.collection !== source.collection) {
     return { ok: false, failure: 'unavailable' };
   }
   return {
     ok: true,
+    nextCursor: page.data.nextCursor,
     data: page.data.items.flatMap((item) =>
       'title' in item ? [zoneWork(item, context, null, mount)] : [],
     ),
