@@ -525,11 +525,19 @@ for (const transport of transports) {
         const f = await fixture({ kind });
         const restricted = await f.store.decide(f.principal, { ...f.input, outcome });
         expect(restricted.operation.status).toBe('completed');
+        const answersStepId = kind === 'rights_complaint' && releaseOutcome === 'restore'
+          ? (await f.store.recordStep(f.principal, { caseId: f.report.caseId,
+            decisionId: restricted.decisionId, actingSubject: f.actor,
+            process: 'ordinary_dispute', step: 'appeal', partySubject: null,
+            statement: 'Reconsider the original Realm restriction.', documentDigest: null,
+            occurredAt: '2026-10-01T14:37:12Z', dueAt: null, idempotencyKey: randomUUID() })).stepId
+          : null;
         await f.store.safety.claim(f.principal, f.actor, f.report.caseId);
-        const response = await throughTransport(f, transport, { ...f.input,
+        const releaseInput = { ...f.input,
           outcome: releaseOutcome, expectedGeneration: restricted.caseGeneration,
           reversesDecisionId: releaseOutcome === 'reverse' ? restricted.decisionId : null,
-          idempotencyKey: randomUUID() });
+          answersStepId, idempotencyKey: randomUUID() };
+        const response = await throughTransport(f, transport, releaseInput);
         expect(response.status).toBe(202);
         const accepted = await response.json() as { decisionId: string; operation: { status: string } };
         expect(accepted.operation.status).toBe('accepted');
@@ -540,14 +548,10 @@ for (const transport of transports) {
         expect(released.operation.status).toBe('completed');
         expect(released.enforcement).toMatchObject([{ resource: f.realm, state: 'released', fenceEpoch: '2' }]);
         expect(f.applications()).toBe(2);
-        const replay = await throughTransport(f, transport, { ...f.input,
-          outcome: releaseOutcome, expectedGeneration: restricted.caseGeneration,
-          reversesDecisionId: releaseOutcome === 'reverse' ? restricted.decisionId : null,
-          idempotencyKey: (await pool.query<{ idempotency_key: string }>(
-            'SELECT idempotency_key FROM access.moderation_decision WHERE id=$1',
-            [accepted.decisionId])).rows[0]!.idempotency_key });
-        expect(replay.status).toBe(202);
-        expect((await replay.json() as { decisionId: string }).decisionId).toBe(accepted.decisionId);
+        const replay = await throughTransport(f, transport, releaseInput);
+        expect(replay.status).toBe(200);
+        expect(await replay.json()).toMatchObject({ decisionId: accepted.decisionId,
+          operation: { status: 'completed' }, replayed: true });
         expect(f.applications()).toBe(2);
       });
     }
