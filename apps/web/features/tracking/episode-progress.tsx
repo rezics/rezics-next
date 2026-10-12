@@ -4,7 +4,6 @@ import { Alert, AlertDescription } from '@rezics/ui/alert';
 import { Button } from '@rezics/ui/button';
 import { Field, FieldLabel } from '@rezics/ui/field';
 import { Input } from '@rezics/ui/input';
-import { CheckIcon } from 'lucide-react';
 import { useEffect, useId, useState } from 'react';
 import type { EpisodeApi, EpisodeProgress as Mark } from './episode-api.ts';
 import { type Episode, type Standing, markPosition, reach, standingOf } from './episodes.ts';

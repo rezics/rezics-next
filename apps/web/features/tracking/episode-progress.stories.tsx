@@ -1,196 +1,138 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { useState } from 'react';
-import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { expect, userEvent, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
-import { ReaderActionsProvider } from '../catalogue/reader-actions.tsx';
 import { PageContainer } from '../shell/page.tsx';
-import { createMemoryEpisodes, type MemoryEpisodes } from './episode-memory.ts';
-import { MAX_COMPLETION_READS } from './episodes.ts';
+import type { EpisodeApi } from './episode-api.ts';
+import { createMemoryEpisodes, memoryEpisodeApi } from './episode-memory.ts';
+import { EpisodeProgress } from './episode-progress.tsx';
 import { episodeSeries, saoOne } from './fixtures.ts';
-import { createMemoryMain, type MemoryMain, memoryReader } from './memory.ts';
-import { SeriesProgressPanel } from './series-progress-panel.tsx';
+import { copyOf } from './messages.ts';
 
-interface Args { locale: UiLocale; main: MemoryMain }
-
-/** One device acting on the shared in-memory Main. */
-function Device({ locale, main }: Args) {
-  const [actions] = useState(() => memoryReader(main));
-  return <ReaderActionsProvider signedIn signInHref="/auth/start" actions={actions}>
-    <PageContainer className="grid max-w-md gap-6"><SeriesProgressPanel work={saoOne} locale={locale} /></PageContainer>
-  </ReaderActionsProvider>;
+function fixture(count = 12, done: number[] = []) {
+  const memory = createMemoryEpisodes(episodeSeries({ mains: count, specials: 2 }));
+  for (const number of done) memory.progress.set(memory.mains[number - 1]!.occurrence,
+    { completed: true, position: `episode:${number}`, version: 1 });
+  return memoryEpisodeApi(memory);
 }
 
-const withEpisodes = (episodes: MemoryEpisodes) => createMemoryMain({ episodes });
-const finishedThrough = (episodes: MemoryEpisodes, count: number) => {
-  for (const [index, item] of episodes.mains.slice(0, count).entries()) {
-    episodes.progress.set(item.occurrence, { completed: true, position: `episode:${index + 1}`, version: 1 });
-  }
-  return episodes;
-};
-
+interface Args { api: EpisodeApi; locale: UiLocale; refresh?: () => void }
+function Sheet({ api, locale }: Args) {
+  return <PageContainer className="grid max-w-md gap-6"><EpisodeProgress work={saoOne} api={api} t={copyOf(locale)} /></PageContainer>;
+}
 const meta = {
-  title: 'Tracking/Episode progress',
-  component: Device,
-  parameters: { docs: { description: { component:
-    'A series that places its episodes as Structure occurrences: where the reader is, the next one to mark in a tap, a jump by number, and specials kept apart from the main run.' } } },
-  args: { locale: 'en', main: withEpisodes(createMemoryEpisodes(episodeSeries({ mains: 12, specials: 2 }))) },
+  title: 'Tracking/Episode progress', component: Sheet,
+  args: { api: fixture(), locale: 'en' },
   globals: { viewport: { value: 'mobile1' } },
 } satisfies Meta<Args>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-const panel = (canvasElement: HTMLElement) => within(canvasElement);
+const jump = async (canvasElement: HTMLElement, number: string) => {
+  const view = within(canvasElement);
+  await userEvent.clear(view.getByLabelText('Go to episode number'));
+  await userEvent.type(view.getByLabelText('Go to episode number'), number);
+  await userEvent.click(view.getByRole('button', { name: 'Go' }));
+};
+const unknownCoverage = async (canvasElement: HTMLElement) => {
+  const view = within(canvasElement);
+  await expect(view.queryByRole('progressbar')).toBeNull();
+  await expect(canvasElement.querySelector('[data-caught-up]')).toBeNull();
+  await expect(canvasElement.querySelector('[data-next]')).toBeNull();
+  await expect(canvasElement.querySelector('[data-through]')).toBeNull();
+};
 
-/** Marks the next episode seven times, then a special: the special leaves the main count where it was. */
-export const MarkNextAndSpecial: Story = {
-  args: { main: withEpisodes(createMemoryEpisodes(episodeSeries({ mains: 12, specials: 2 }))) },
+export const MarkEpisodeAndSpecial: Story = {
   async play({ canvasElement }) {
-    const view = panel(canvasElement);
+    const view = within(canvasElement);
     await view.findByText('No episode watched yet');
-    for (let number = 1; number <= 7; number++) {
-      await userEvent.click(await view.findByRole('button', { name: `Mark episode ${number} watched` }));
-      await view.findByText(`Watched through episode ${number} of 12`);
-    }
-    await expect(view.getByText('Continue from episode 8')).toBeVisible();
-
+    await jump(canvasElement, '1');
+    await userEvent.click(await view.findByRole('button', { name: 'Mark watched' }));
+    await view.findByText('Last watched: Episode 1');
     await userEvent.click(view.getByRole('button', { name: 'Special 1' }));
     await userEvent.click(await view.findByRole('button', { name: 'Mark watched' }));
-    await waitFor(() => expect(canvasElement.querySelector('[data-selected="special"] [data-state="done"]')).not.toBeNull());
-    await view.findByText('Watched through episode 7 of 12');
-    await expect(view.getByText('Continue from episode 8')).toBeVisible();
-    await expect(view.getByRole('button', { name: 'Mark episode 8 watched' })).toBeVisible();
+    await view.findByText('Last watched: Episode 1');
+    await unknownCoverage(canvasElement);
   },
 };
 
-/** Another device marked seven episodes: this one, loaded fresh, shows the same place. */
-export const ResumesOnAnotherDevice: Story = {
-  args: { main: withEpisodes(finishedThrough(createMemoryEpisodes(episodeSeries({ mains: 12, specials: 2 })), 7)) },
-  async play({ canvasElement }) {
-    const view = panel(canvasElement);
-    await view.findByText('Watched through episode 7 of 12');
-    await expect(view.getByText('Continue from episode 8')).toBeVisible();
-    await expect(view.getByRole('progressbar')).toBeVisible();
-  },
-};
-
-/** Jump to any episode by number and mark it; one past the run marks itself and leaves the count where it was. */
-export const JumpByNumber: Story = {
-  async play({ canvasElement }) {
-    const view = panel(canvasElement);
-    await view.findByText('No episode watched yet');
-    await userEvent.click(await view.findByRole('button', { name: 'Mark episode 1 watched' }));
-    await view.findByText('Watched through episode 1 of 12');
-    const go = async (number: string) => {
-      await userEvent.clear(view.getByLabelText('Go to episode number'));
-      await userEvent.type(view.getByLabelText('Go to episode number'), number);
-      await userEvent.click(view.getByRole('button', { name: 'Go' }));
-    };
-    await go('2');
-    await userEvent.click(await view.findByRole('button', { name: 'Mark watched' }));
-    await view.findByText('Watched through episode 2 of 12');
-    await expect(view.getByText('Continue from episode 3')).toBeVisible();
-    await go('9');
-    await userEvent.click(await view.findByRole('button', { name: 'Mark watched' }));
-    await waitFor(() => expect(canvasElement.querySelector('[data-selected="main"] [data-state="done"]')).not.toBeNull());
-    await expect(view.getByText('Watched through episode 2 of 12')).toBeVisible();
-    await go('40');
-    await expect(await view.findByText('There is no episode 40 in this series.')).toBeVisible();
-  },
-};
-
-/** A hundred and fifty watched, across two pages: the run is found without reading every episode. */
-export const ResumesBeyondTheFirstPage: Story = {
-  args: { main: withEpisodes(finishedThrough(createMemoryEpisodes(episodeSeries({ mains: 400 })), 150)) },
-  async play({ canvasElement }) {
-    const view = panel(canvasElement);
-    await view.findByText('Watched through episode 150');
-    await expect(view.getByText('Continue from episode 151')).toBeVisible();
-  },
-};
-
-/** A thousand episodes, a hundred to a page: episode 1000 is reached by its number. */
-export const ThousandEpisodes: Story = {
-  args: { main: withEpisodes(createMemoryEpisodes(episodeSeries({ mains: 1000 }))) },
-  async play({ canvasElement }) {
-    const view = panel(canvasElement);
-    await view.findByText('No episode watched yet');
-    await userEvent.type(view.getByLabelText('Go to episode number'), '1000');
-    await userEvent.click(view.getByRole('button', { name: 'Go' }));
-    await expect(await view.findByText('Episode 1000')).toBeVisible();
-    await userEvent.click(await view.findByRole('button', { name: 'Mark watched' }));
-    await waitFor(() => expect(canvasElement.querySelector('[data-selected="main"] [data-state="done"]')).not.toBeNull());
-    await userEvent.clear(view.getByLabelText('Go to episode number'));
-    await userEvent.type(view.getByLabelText('Go to episode number'), '1001');
-    await userEvent.click(view.getByRole('button', { name: 'Go' }));
-    await expect(await view.findByText('There is no episode 1001 in this series.')).toBeVisible();
-  },
-};
-
-/** Only a late episode watched: the summary names that episode, not "nothing watched". */
-export const SparseLastWatched: Story = {
-  args: { main: withEpisodes((() => {
-    const episodes = createMemoryEpisodes({ ...episodeSeries({ mains: 1002 }), page: 20 });
-    const item = episodes.mains[1000]!;
-    episodes.progress.set(item.occurrence, { completed: true, position: 'episode:1001', version: 1 });
-    return episodes;
-  })()) },
-  async play({ canvasElement }) {
-    const view = panel(canvasElement);
-    await view.findByText('Last watched: Episode 1001');
-    await expect(view.getByText('Continue from episode 1002')).toBeVisible();
-    await expect(view.queryByRole('progressbar')).toBeNull();
-  },
-};
-
-/** Completing the final episode resumes at the end but does not complete the missing episodes. */
 export const SparseFinalEpisode: Story = {
-  args: { main: withEpisodes((() => {
-    const episodes = finishedThrough(createMemoryEpisodes({ ...episodeSeries({ mains: 12 }), page: 3 }), 1);
-    const last = episodes.mains[11]!;
-    episodes.progress.set(last.occurrence, { completed: true, position: 'episode:12', version: 1 });
-    return episodes;
-  })()) },
+  args: { api: fixture(12, [1, 12]) },
   async play({ canvasElement }) {
-    const view = panel(canvasElement);
-    await view.findByText('Watched through episode 1 of 12');
-    await expect(view.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '8');
-    await expect(canvasElement.querySelector('[data-caught-up]')).toBeNull();
-    await expect(canvasElement.querySelector('[data-next]')).toBeNull();
+    await within(canvasElement).findByText('Last watched: Episode 12');
+    await unknownCoverage(canvasElement);
+  },
+};
+export const SparseMiddleEpisode: Story = {
+  args: { api: fixture(12, [1, 6]) },
+  async play({ canvasElement }) {
+    await within(canvasElement).findByText('Last watched: Episode 6');
+    await unknownCoverage(canvasElement);
+  },
+};
+export const SelectedRevisionCompletion: Story = {
+  args: { api: (() => {
+    const api = fixture(2, [1]);
+    api.resume = async () => ({ ok: true, data: { occurrence: 'https://example.test/episode-2', label: 'Episode 2' } });
+    return api;
+  })() },
+  async play({ canvasElement }) {
+    await within(canvasElement).findByText('Last watched: Episode 2');
+    await unknownCoverage(canvasElement);
+  },
+};
+export const ResumeReadFailed: Story = {
+  args: { api: (() => {
+    const api = fixture(201, Array.from({ length: 201 }, (_, index) => index + 1));
+    api.resume = async () => ({ ok: false, failure: 'unavailable' });
+    return api;
+  })() },
+  async play({ canvasElement }) {
+    const view = within(canvasElement);
+    await view.findByRole('alert');
+    await expect(view.queryByText('No episode watched yet')).toBeNull();
+    await unknownCoverage(canvasElement);
+  },
+};
+export const ResumeBeyondInventoryBudget: Story = {
+  args: { api: fixture(2020, [2019]) },
+  async play({ canvasElement }) {
+    await within(canvasElement).findByText('Last watched: Episode 2019');
+    await unknownCoverage(canvasElement);
   },
 };
 
-export const UnmarkEarlierEpisode: Story = {
-  args: { main: withEpisodes(finishedThrough(createMemoryEpisodes(episodeSeries({ mains: 12 })), 12)) },
-  async play({ canvasElement }) {
-    const view = panel(canvasElement);
-    await view.findByText('Watched through episode 12 of 12');
-    await userEvent.type(view.getByLabelText('Go to episode number'), '2');
-    await userEvent.click(view.getByRole('button', { name: 'Go' }));
+function pendingUnmark(): Args {
+  const api = fixture(12, Array.from({ length: 12 }, (_, index) => index + 1));
+  let blocked = false;
+  let refresh!: () => void;
+  const pending = new Promise<void>(resolve => { refresh = resolve; });
+  const resume = api.resume;
+  const mark = api.mark;
+  api.mark = async (...input) => { const written = await mark(...input); blocked = written.ok; return written; };
+  api.resume = async work => { if (blocked) await pending; return resume(work); };
+  return { api, locale: 'en', refresh };
+}
+export const UnmarkPendingRefresh: Story = {
+  args: pendingUnmark(),
+  async play({ canvasElement, args }) {
+    const view = within(canvasElement);
+    await view.findByText('Last watched: Episode 12');
+    await jump(canvasElement, '2');
     await userEvent.click(await view.findByRole('button', { name: 'Mark not watched' }));
-    await view.findByText('Watched through episode 1 of 12');
-    await expect(view.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '8');
-    await expect(canvasElement.querySelector('[data-caught-up]')).toBeNull();
+    await view.findByText('Unknown');
+    await expect(view.queryByText('Last watched: Episode 12')).toBeNull();
+    await unknownCoverage(canvasElement);
+    args.refresh!();
+    await view.findByText('Last watched: Episode 12');
+    await expect(await view.findByRole('button', { name: 'Mark watched' })).toBeVisible();
+    await unknownCoverage(canvasElement);
   },
 };
-
-export const AlmostComplete: Story = {
-  args: { main: withEpisodes(finishedThrough(createMemoryEpisodes({ ...episodeSeries({ mains: 200 }), page: 200 }), 199)) },
+export const PendingResume: Story = {
+  args: { api: { ...fixture(), resume: () => new Promise(() => {}) } },
   async play({ canvasElement }) {
-    const view = panel(canvasElement);
-    await view.findByText('Watched through episode 199 of 200');
-    await expect(view.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '99');
-    await expect(canvasElement.querySelector('[data-caught-up]')).toBeNull();
+    await within(canvasElement).findByText('Unknown');
+    await unknownCoverage(canvasElement);
   },
 };
-
-export const BoundedCompletionProof: Story = {
-  args: { main: withEpisodes(finishedThrough(createMemoryEpisodes(episodeSeries({ mains: MAX_COMPLETION_READS + 1 })), MAX_COMPLETION_READS + 1)) },
-  async play({ canvasElement }) {
-    const view = panel(canvasElement);
-    await view.findByText(`Last watched: Episode ${MAX_COMPLETION_READS + 1}`);
-    await expect(view.queryByRole('progressbar')).toBeNull();
-    await expect(canvasElement.querySelector('[data-caught-up]')).toBeNull();
-  },
-};
-
 export const Desktop: Story = { globals: { viewport: { value: 'desktop' } } };
