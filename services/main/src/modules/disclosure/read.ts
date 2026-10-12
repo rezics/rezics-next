@@ -21,12 +21,15 @@
  * add fenceBasis { recoveryGeneration, enforcementCut }, obtained ONLY from Access
  * recovery_fence and site_moderation_basis(). fenceDisclosure(env, cuts, viewer,
  * channel, client?): Promise<DisclosureDecision[]> rereads those exact owner bases,
- * heads and Access policy; stale proof/cut discards hydration as unavailable.
+ * heads and Access policy on a fresh statement snapshot; a lent snapshot-isolated
+ * transaction is refused. Stale proof/cut discards hydration as unavailable.
  * Missing source/reader/evidence is unavailable, never visible. Realm closure is
  * only platform/global graph/record/null-revision disclosure and always hidden.
  *
  * DISCLOSURE_COST: batch=64, graphParents=2, parentEdges=128, parentHeadBatch=64,
  * ownerStatements=1, recoveryStatements=1 per batch; no descendant traversal.
+ * Every public entry bounds input before owner work. Inventory cost includes
+ * the actual parentHeadQueries; expanded adapters submit separate bounded batches.
  * All adapters must preserve the selected occurrence through capture/hydration/
  * final fence: threads/replies/counts carry discussed Work plus Realm; Content
  * carries exact revision and publication/placement; media carries exact use and
