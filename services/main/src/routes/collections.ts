@@ -7,12 +7,11 @@ import { CompositionConflict, InvalidCompositionChange, StaleCompositionHead }
 import { CompositionCorrupt, CompositionUnavailable, readCompositionHeader }
   from '../modules/structure/graph.ts';
 import { readVisibleCompositionPage } from '../modules/collection/visible-page.ts';
-import { collectionTargetBatchReader } from '../modules/composition/visible-targets.ts';
 import { CollectionNameInvalid, CollectionNameStale, CollectionNameUnavailable,
   publishCollectionName, readCollectionName } from '../modules/collection/names.ts';
 import type { LocalizedText } from '../modules/display-language/select.ts';
 import { structureProfileFor } from '../modules/structure/profiles.ts';
-import { canReadCompositionResource, compositionTargetReader } from '../modules/composition/disclosure-read.ts';
+import { canReadCompositionResource, compositionTargetBatchReader } from '../modules/composition/disclosure-read.ts';
 import { workRead } from '../modules/work/read-session.ts';
 import { readingBoundary } from '../modules/reading-position/boundary.ts';
 import { readingPositionQuery } from './reading-positions.ts';
@@ -154,13 +153,13 @@ async function page(fuseki: FusekiClient, work: MainWorkDependencies, request: R
     if (!header || header.profile !== 'collection-membership' || header.owner !== collection) {
       throw new CompositionUnavailable('Collection is unavailable');
     }
+    const canReadTargets = compositionTargetBatchReader(session, structureProfileFor(header.profile));
     const result = await readVisibleCompositionPage(work.environment, { structure, header,
       ...(input.revision ? { revision: input.revision } : {}),
       ...(input.parent ? { parent: input.parent } : {}), ...(input.after ? { after: input.after } : {}),
       limit: input.limit ?? 50, visible: item => item.role !== 'member' || !!item.target,
       readingBoundary: boundary,
-      canReadTargets: collectionTargetBatchReader(session),
-      canReadTarget: compositionTargetReader(session, structureProfileFor(header.profile)) });
+      canReadTargets });
     // The shared page retains hidden uses for exact owner history. This projection
     // returns only disclosed members and has no hidden count or timing counters.
     return { collection, structure, revision: result.revision, predecessor: result.predecessor,

@@ -10,7 +10,8 @@ import { cancelCompositionStage, CompositionConflict, CompositionExists, Composi
   InvalidCompositionChange, StaleCompositionHead, StructureSummaryRepairRequired, type CompositionOperation } from '../modules/structure/change.ts';
 import { CompositionCorrupt, CompositionUnavailable, readCompositionHeader, derivedId }
   from '../modules/structure/graph.ts';
-import { readCompositionPage, type CompositionPage } from '../modules/structure/read.ts';
+import type { CompositionPage } from '../modules/structure/read.ts';
+import { readVisibleCompositionPage } from '../modules/collection/visible-page.ts';
 import { readCompositionSeal } from '../modules/structure/seal-read.ts';
 import { canReadStructureTarget, structureProfileFor } from '../modules/structure/profiles.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable } from '../modules/structure/tree.ts';
@@ -604,11 +605,10 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
         const structure = `https://rezics.com/id/${params.id}`;
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
         const page = await disclosedComposition(work, request, structure, query.actingSubject, {},
-          (session, header, revision) => readCompositionPage(work.environment, { structure, revision,
+          (session, header, revision) => readVisibleCompositionPage(work.environment, { structure, revision,
           ...(query.parent ? { parent: query.parent } : {}), ...(query.after ? { after: query.after } : {}),
           limit: query.limit ?? 50,
           visible: item => !structureProfileFor(header.profile).targetRoles.includes(item.role) || !!item.target,
-          canReadTarget: compositionTargetReader(session, structureProfileFor(header.profile)),
           canReadTargets: compositionTargetBatchReader(session, structureProfileFor(header.profile)) }));
         return Response.json(disclosedPage(page), { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return compositionError(error); }
@@ -625,11 +625,10 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
         const page = await disclosedComposition(work, request, structure, query.actingSubject,
           { revision: `https://rezics.com/id/${params.revision}` },
-          (session, header, revision) => readCompositionPage(work.environment, { structure, revision,
+          (session, header, revision) => readVisibleCompositionPage(work.environment, { structure, revision,
           ...(query.parent ? { parent: query.parent } : {}), ...(query.after ? { after: query.after } : {}),
           limit: query.limit ?? 50,
           visible: item => !structureProfileFor(header.profile).targetRoles.includes(item.role) || !!item.target,
-          canReadTarget: compositionTargetReader(session, structureProfileFor(header.profile)),
           canReadTargets: compositionTargetBatchReader(session, structureProfileFor(header.profile)) }));
         return Response.json(disclosedPage(page), { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return compositionError(error); }
@@ -663,11 +662,10 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
         const page = await disclosedComposition(work, request, structure, query.actingSubject,
           { ...(query.revision ? { revision: query.revision } : {}) },
-          (session, header, revision) => readCompositionPage(work.environment, { structure, revision,
+          (session, header, revision) => readVisibleCompositionPage(work.environment, { structure, revision,
           occurrence: `https://rezics.com/id/${params.occurrence}`,
           limit: 1,
           visible: item => !structureProfileFor(header.profile).targetRoles.includes(item.role) || !!item.target,
-          canReadTarget: compositionTargetReader(session, structureProfileFor(header.profile)),
           canReadTargets: compositionTargetBatchReader(session, structureProfileFor(header.profile)) }));
         return Response.json(disclosedPage(page), { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return compositionError(error); }

@@ -16,7 +16,7 @@ export interface StructureTargetAuthority {
   /** Owner policies can distinguish the target's current structural type. */
   environment?: WorkActivationEnvironment;
   access: Pick<AccessAdmissionRegistry, 'canReadWork'>
-    & Partial<Pick<AccessAdmissionRegistry, 'canReadSemanticResource'>>;
+    & Partial<Pick<AccessAdmissionRegistry, 'canReadWorks' | 'canReadSemanticResource'>>;
   principal: VerifiedPrincipal;
   actingSubject: string;
   target: string;
@@ -257,15 +257,34 @@ export function isCatalogTarget(profile: StructureProfile | StructureProfileRegi
 /** Every non-catalog target needs its owner's current disclosure decision. */
 export async function canReadStructureTarget(profile: StructureProfileRegistration,
   authority: StructureTargetAuthority): Promise<boolean> {
-  if (isCatalogTarget(profile, authority.target)) return true;
-  if (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(authority.target)) return false;
-  try {
-    return profile.authorizeTarget
-      ? await profile.authorizeTarget(authority)
-      : await authority.access.canReadWork(authority.principal, authority.actingSubject, authority.target);
-  } catch (error) {
-    const { WorkReadMissing } = await import('../work/read-session.ts');
-    if (error instanceof WorkReadMissing) return false;
-    throw error;
+  return (await canReadStructureTargets(profile, authority, [authority.target])).has(authority.target);
+}
+
+/** Owner hooks remain the decision for their distinct targets; the default
+ * Work decision uses Access's batch, whose scalar entry is a batch of one. */
+export async function canReadStructureTargets(profile: StructureProfileRegistration,
+  authority: Omit<StructureTargetAuthority, 'target'>, targets: readonly string[]): Promise<ReadonlySet<string>> {
+  const distinct = [...new Set(targets)];
+  const readable = new Set(distinct.filter(target => isCatalogTarget(profile, target)));
+  const native = distinct.filter(target => !readable.has(target)
+    && /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(target));
+  if (!native.length) return readable;
+  if (!profile.authorizeTarget && authority.access.canReadWorks) {
+    const allowed = await authority.access.canReadWorks(authority.principal, authority.actingSubject, native);
+    for (const target of native) if (allowed.has(target)) readable.add(target);
+    return readable;
   }
+  const { WorkReadMissing } = await import('../work/read-session.ts');
+  for (const target of native) {
+    try {
+      if (profile.authorizeTarget
+        ? await profile.authorizeTarget({ ...authority, target })
+        : await authority.access.canReadWork(authority.principal, authority.actingSubject, target)) {
+        readable.add(target);
+      }
+    } catch (error) {
+      if (!(error instanceof WorkReadMissing)) throw error;
+    }
+  }
+  return readable;
 }

@@ -1,9 +1,9 @@
 import { GRAPHS, iri } from '../work/activate.ts';
-import { publicWork, unerased, WorkReadMissing, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
-import { targetSummaryReader, resolveTargets } from '../target/resolve.ts';
+import { publicWork, unerased, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
+import { targetSummaryReader, TARGET_RESOLVE_COST } from '../target/resolve.ts';
 import { readResourceSummaries } from '../media/summary.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
-import { canReadStructureTarget, isCatalogTarget, type StructureProfileRegistration } from '../structure/profiles.ts';
+import { canReadStructureTargets, isCatalogTarget, type StructureProfileRegistration } from '../structure/profiles.ts';
 import { admittedPublicWorks, publishedStructuredWorkSourceFromRows, structuredPublicationRead }
   from '../work/public-patterns.ts';
 import { collectionTargetBatchReader } from './visible-targets.ts';
@@ -49,44 +49,46 @@ export function compositionSummaryReader(session: WorkReadSession) {
 }
 
 export async function canReadCompositionResource(session: WorkReadSession, resource: string) {
-  const result = await readResourceSummaries(session.deps.environment, session.deps.media?.store,
-    compositionSummaryReader(session), { resources: [resource], context: DEFAULT_MEDIA_CONTEXT,
-      language: null, languages: session.displayLanguages, includeCollections: true });
-  return result.summaries[0]?.status === 'available';
+  return (await canReadCompositionResources(session, [resource])).has(resource);
+}
+
+async function canReadCompositionResources(session: WorkReadSession, resources: readonly string[]) {
+  const readable = new Set<string>();
+  for (let at = 0; at < resources.length; at += TARGET_RESOLVE_COST.batch) {
+    session.checkDeadline();
+    const batch = resources.slice(at, at + TARGET_RESOLVE_COST.batch);
+    const result = await readResourceSummaries(session.deps.environment, session.deps.media?.store,
+      compositionSummaryReader(session), { resources: [...batch], context: DEFAULT_MEDIA_CONTEXT,
+        language: null, languages: session.displayLanguages, includeCollections: true });
+    for (const summary of result.summaries) if (summary.status === 'available') readable.add(summary.reference);
+  }
+  return readable;
 }
 
 /** Read projections use public baselines; command authority keeps using the
  * profile's existing authorization hook. Mixed Collection members still pass
  * through the capability resolver so this adds no new admitted target grain. */
 export function compositionTargetReader(session: WorkReadSession, profile: StructureProfileRegistration) {
-  return (target: string) => {
-    if (isCatalogTarget(profile, target)) return Promise.resolve(true);
-    const disclosure = profile.targetDisclosure ?? 'structure-target';
-    // Studio chapters are Posts; their public/granted disclosure and erasure
-    // belong to the resource reader, without a CreativeWork/MainVersion gate.
-    if (disclosure === 'resource') return canReadCompositionResource(session, target);
-    if (disclosure === 'work') {
-      return resolveTargets(session, [target], 'collection-member').then(() => true).catch((error: unknown) => {
-        if (error instanceof WorkReadMissing) return false;
-        throw error;
-      });
-    }
-    if (!session.principal || !session.options.actingSubject) return Promise.resolve(false);
-    return canReadStructureTarget(profile, { environment: session.deps.environment,
-      access: session.deps.access, principal: session.principal,
-      actingSubject: session.options.actingSubject, target,
-      targetReader: operation => operation(session) });
-  };
+  const read = compositionTargetBatchReader(session, profile);
+  return async (target: string) => (await read([target])).has(target);
 }
 
-/** Match the scalar profile policy while hydrating a candidate range once.
+/** The single profile decision for both scalar probes and candidate ranges.
  * Catalog identifiers have no native revision and retain their profile proof. */
 export function compositionTargetBatchReader(session: WorkReadSession, profile: StructureProfileRegistration) {
-  if ((profile.targetDisclosure ?? 'structure-target') !== 'work') return undefined;
   const read = collectionTargetBatchReader(session);
   return async (targets: readonly string[]): Promise<ReadonlySet<string>> => {
-    const catalog = targets.filter(target => isCatalogTarget(profile, target));
-    const native = targets.filter(target => !isCatalogTarget(profile, target));
-    return new Set([...catalog, ...await read(native)]);
+    const distinct = [...new Set(targets)];
+    const catalog = distinct.filter(target => isCatalogTarget(profile, target));
+    const native = distinct.filter(target => !isCatalogTarget(profile, target));
+    const disclosure = profile.targetDisclosure ?? 'structure-target';
+    let readable: ReadonlySet<string>;
+    if (disclosure === 'work') readable = await read(native);
+    else if (disclosure === 'resource') readable = await canReadCompositionResources(session, native);
+    else if (!session.principal || !session.options.actingSubject) readable = new Set();
+    else readable = await canReadStructureTargets(profile, { environment: session.deps.environment,
+      access: session.deps.access, principal: session.principal,
+      actingSubject: session.options.actingSubject, targetReader: operation => operation(session) }, native);
+    return new Set([...catalog, ...readable]);
   };
 }

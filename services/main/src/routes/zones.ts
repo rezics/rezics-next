@@ -14,7 +14,7 @@ import { resolveZoneRoute, readZonePresentation, zoneRouteViewer, ZoneRouteMissi
 import { WorkReadInvalid, WorkReadMoved, WorkReadUnavailable, WorkReadLimit, encodeReadCursor, decodeReadCursor }
   from '../modules/work/read-session.ts';
 import { readName, workCard, readPosition } from '../modules/work/read-contract.ts';
-import { canReadStructureTarget, structureProfileFor } from '../modules/structure/profiles.ts';
+import { canReadStructureTarget, canReadStructureTargets, structureProfileFor } from '../modules/structure/profiles.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable } from '../modules/structure/tree.ts';
 import { createAdmittedOwner } from '../modules/zone/owner-create.ts';
 import { ZoneName, readZoneName } from '../modules/zone/read-name.ts';
@@ -478,9 +478,11 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
                   ...(cursor ? { after: cursor.after } : {}), limit: ZONE_ROUTE_COST.maxNavigation,
                   visible: item => item.role === 'mount' && !!item.target
                     && item.qualifier?.type === 'zone-mount' && item.qualifier.zone === zone,
-                  canReadTarget: target => canReadStructureTarget(structureProfileFor(header.profile), {
-                    environment: work.environment, access: work.access, principal,
-                    actingSubject: query.actingSubject, target }),
+                  canReadTargets: work.access.canReadZoneNavigationTargets
+                    ? targets => work.access.canReadZoneNavigationTargets!(principal, principal, query.actingSubject, targets)
+                    : targets => canReadStructureTargets(structureProfileFor(header.profile), {
+                      environment: work.environment, access: work.access, principal,
+                      actingSubject: query.actingSubject }, targets),
                 });
                 const current = await readCompositionHeader(work.environment, header.structure);
                 if (current?.head !== header.head) throw new WorkReadMoved('Zone draft navigation changed');

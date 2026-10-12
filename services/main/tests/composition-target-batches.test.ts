@@ -197,7 +197,9 @@ test('Composition profile batching preserves catalog targets and leaves other pr
   expect(new Set(await read([...catalog, f.input[0]!.resource]))).toEqual(new Set([...catalog, f.input[0]!.resource]));
   expect(f.hydration).toEqual([[f.input[0]!.resource]]);
   for (const profile of ['book-composition', 'recipe-composition', 'zone-navigation']) {
-    expect(compositionTargetBatchReader(f.session(), structureProfileFor(profile))).toBeUndefined();
+    const readTargets = compositionTargetBatchReader(f.session(), structureProfileFor(profile));
+    expect(await readTargets([f.input[0]!.resource])).toEqual(new Set(
+      profile === 'book-composition' ? [f.input[0]!.resource] : []));
   }
 });
 
