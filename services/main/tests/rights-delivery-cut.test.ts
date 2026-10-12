@@ -14,7 +14,9 @@ let stack: MediaStack;
 beforeAll(async () => { stack = await startMediaStack('rights-delivery-cut'); }, 120_000);
 afterAll(async () => { await stack?.stop(); }, 60_000);
 
-async function fixture() {
+async function fixture(identity: { provider: string | null; namespace: string | null } = {
+  provider: null, namespace: null,
+}) {
   const member = await stack.member(`delivery-${randomUUID()}`);
   const work = await stack.publicWork(member.actor, ['en'], 'Delivery target');
   await member.grant(`work:read:${work.work}`, 'work.read');
@@ -22,7 +24,7 @@ async function fixture() {
     { scope: ASSESS_SCOPE, action: ASSESS_ACTION, mandate: ASSESS_ACTION });
   const rights = stack.composition.dependencies.rights!.store;
   const input: AssessmentInput = { actingSubject: authority.actor,
-    material: publicDomainWorkMaterial(work.work), ...PUBLIC_DOMAIN_TEXT_USE,
+    material: { ...publicDomainWorkMaterial(work.work), ...identity }, ...PUBLIC_DOMAIN_TEXT_USE,
     expressionKind: 'expression', basis: 'public_domain', outcome: 'supported',
     licenseInstrument: null, exceptionKind: null, rationale: 'Public-domain delivery fixture',
     extent: {}, evidence: {}, obligations: [], expectedAssessment: null, idempotencyKey: randomUUID() };
@@ -43,7 +45,7 @@ async function fixture() {
   const exact = (await stack.content.readExactBatch([revisionId], async ids => new Set(ids)))[0];
   if (exact?.status !== 'available') throw new Error('Delivery fixture draft bytes are unavailable');
   const serializedJson = exact.serializedJson;
-  const target = { resourceId: work.work, rights };
+  const target = { resourceId: work.work, assessmentId: head.assessmentId, rights };
   const moveRights = async (outcome: 'supported' | 'not_supported' = 'supported') => {
     head = await rights.assess(authority.principal, { ...input, outcome,
       expectedAssessment: head.assessmentId, idempotencyKey: randomUUID() });
@@ -86,7 +88,8 @@ async function fixture() {
         : problem(503, 'delivery_cut_unavailable', 'Delivery is unavailable; retry', { 'retry-after': '1' });
     } finally { interceptor.mockRestore(); }
   };
-  return { target, text, serializedJson, revisionId, hold, moveRights, deliver, attempts: () => attempts };
+  return { target, text, serializedJson, revisionId, hold, moveRights, deliver, input, authority,
+    attempts: () => attempts };
 }
 
 async function withheld(response: Response, text: string) {
@@ -110,6 +113,71 @@ test('a not_supported assessment committed during the final query discards the b
   expect(f.attempts()).toBe(2);
 });
 
+test.each([
+  { provider: null, namespace: null },
+  { provider: 'gutenberg', namespace: null },
+  { provider: null, namespace: 'ebooks' },
+])('the delivered assessment identity governs every admitted Work/body shape: %j', async identity => {
+  const f = await fixture(identity);
+  expect(await f.target.rights.currentPublicDomainAssessment(f.target.resourceId, f.target.assessmentId)).toBe(true);
+  expect(await f.target.rights.currentPublicDomainAssessments([
+    { work: f.target.resourceId, assessmentId: f.target.assessmentId },
+  ])).toContain(`${f.target.resourceId}\0${f.target.assessmentId}`);
+  expect((await f.deliver()).status).toBe(200);
+  await withheld(await f.deliver(async () => { await f.moveRights('not_supported'); }), f.text);
+  expect(f.attempts()).toBe(3);
+});
+
+test('the none token changes when a first Work/body assessment appears', async () => {
+  const member = await stack.member(`unassessed-${randomUUID()}`);
+  const work = await stack.publicWork(member.actor, ['en'], 'Unassessed delivery');
+  const f = await fixture();
+  const target = { ...f.target, resourceId: work.work, assessmentId: null };
+  const before = await target.rights.deliveryCutSnapshot(target.resourceId, null);
+  expect(before.assessmentHead).toBeNull();
+  let attempts = 0;
+  const result = await withDeliveryCut(target, async () => {
+    if (++attempts === 1) await target.rights.assess(f.authority.principal, { ...f.input,
+      material: { ...publicDomainWorkMaterial(work.work), provider: 'gutenberg' },
+      expectedAssessment: null, idempotencyKey: randomUUID() });
+    return attempts;
+  });
+  expect(result).toEqual({ status: 'stable', value: 2 });
+  expect((await target.rights.deliveryCutSnapshot(target.resourceId, null)).assessmentHead).not.toBeNull();
+});
+
+test('the cut follows the exact material rather than another head on the same Work', async () => {
+  const f = await fixture({ provider: 'gutenberg', namespace: null });
+  await f.target.rights.assess(f.authority.principal, { ...f.input,
+    material: publicDomainWorkMaterial(f.target.resourceId), idempotencyKey: randomUUID() });
+  const before = await f.target.rights.deliveryCutSnapshot(f.target.resourceId, f.target.assessmentId);
+  expect(before.assessmentHead).toBe(f.target.assessmentId);
+  await f.moveRights('not_supported');
+  expect((await f.target.rights.deliveryCutSnapshot(f.target.resourceId, f.target.assessmentId)).assessmentHead)
+    .not.toBe(before.assessmentHead);
+  expect(await f.target.rights.currentPublicDomainAssessment(f.target.resourceId, f.target.assessmentId)).toBe(false);
+});
+
+test('provider/namespace service scopes and other Work components are not body assessments', async () => {
+  const f = await fixture();
+  const service = await f.target.rights.assess(f.authority.principal, { ...f.input,
+    material: { ...publicDomainWorkMaterial(f.target.resourceId), scopeKind: 'source_provider',
+      workId: null, provider: 'gutenberg', namespace: 'ebooks' },
+    expressionKind: 'service', family: 'service_terms', useScope: 'fixture:service',
+    idempotencyKey: randomUUID() });
+  const title = await f.target.rights.assess(f.authority.principal, { ...f.input,
+    material: { ...publicDomainWorkMaterial(f.target.resourceId), component: 'title' },
+    idempotencyKey: randomUUID() });
+  for (const assessment of [service, title]) {
+    expect(await f.target.rights.currentPublicDomainAssessment(f.target.resourceId, assessment.assessmentId)).toBe(false);
+    expect((await f.target.rights.deliveryCutSnapshot(f.target.resourceId, assessment.assessmentId)).assessmentHead)
+      .toBeNull();
+  }
+  await expect(f.target.rights.assess(f.authority.principal, { ...f.input,
+    material: { ...publicDomainWorkMaterial(f.target.resourceId), provider: 'gutenberg', namespace: 'ebooks' },
+    idempotencyKey: randomUUID() })).rejects.toBeInstanceOf(RightsInvalid);
+});
+
 test('a preservation hold committed during the final query discards the bytes', async () => {
   const f = await fixture();
   const response = await f.deliver(async () => { await f.hold(); });
@@ -121,29 +189,29 @@ test('a preservation hold committed during the final query discards the bytes', 
 
 test('graph erasure during the final query is caught by the existing erasure check inside the cut', async () => {
   const f = await fixture();
-  const before = await f.target.rights.deliveryCutSnapshot(f.target.resourceId);
+  const before = await f.target.rights.deliveryCutSnapshot(f.target.resourceId, f.target.assessmentId);
   await withheld(await f.deliver(async () => {
     await suppressGraphContentRevisions(stack.fuseki, stack.env.lineage,
       randomUUID(), '1', [f.revisionId]);
   }), f.text);
-  expect(await f.target.rights.deliveryCutSnapshot(f.target.resourceId)).toEqual(before);
+  expect(await f.target.rights.deliveryCutSnapshot(f.target.resourceId, f.target.assessmentId)).toEqual(before);
   expect(f.attempts()).toBe(1);
 });
 
 test('an unrelated hold committed during the query neither replays nor refuses delivery', async () => {
   const f = await fixture();
   const other = await stack.publicWork((await stack.member('unrelated')).actor, ['en'], 'Unrelated target');
-  const before = await f.target.rights.deliveryCutSnapshot(f.target.resourceId);
+  const before = await f.target.rights.deliveryCutSnapshot(f.target.resourceId, f.target.assessmentId);
   const response = await f.deliver(async () => { await f.hold(other.work); });
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({ serializedJson: f.serializedJson });
-  expect(await f.target.rights.deliveryCutSnapshot(f.target.resourceId)).toEqual(before);
+  expect(await f.target.rights.deliveryCutSnapshot(f.target.resourceId, f.target.assessmentId)).toEqual(before);
   expect(f.attempts()).toBe(1);
 });
 
 test('a hold added and released during the query still advances its own token and replays', async () => {
   const f = await fixture();
-  const before = await f.target.rights.deliveryCutSnapshot(f.target.resourceId);
+  const before = await f.target.rights.deliveryCutSnapshot(f.target.resourceId, f.target.assessmentId);
   const response = await f.deliver(async attempt => {
     if (attempt !== 1) return;
     const receipt = await f.hold();
@@ -151,7 +219,7 @@ test('a hold added and released during the query still advances its own token an
   });
   expect(response.status).toBe(200);
   expect(f.attempts()).toBe(2);
-  const after = await f.target.rights.deliveryCutSnapshot(f.target.resourceId);
+  const after = await f.target.rights.deliveryCutSnapshot(f.target.resourceId, f.target.assessmentId);
   expect(after.held).toBe(false);
   expect(BigInt(after.preservationVersion)).toBeGreaterThan(BigInt(before.preservationVersion));
 });
@@ -160,11 +228,11 @@ test('concurrent intake for one case counts its hold once and release restores d
   const f = await fixture();
   const [first, second] = await Promise.all([f.hold(), f.hold()]);
   expect(second.caseId).toBe(first.caseId);
-  expect(await f.target.rights.deliveryCutSnapshot(f.target.resourceId)).toMatchObject({
+  expect(await f.target.rights.deliveryCutSnapshot(f.target.resourceId, f.target.assessmentId)).toMatchObject({
     preservationVersion: '1', held: true,
   });
   await releaseFixturePreservationHold(stack.accessPool, f.target.resourceId, first.caseId);
-  expect(await f.target.rights.deliveryCutSnapshot(f.target.resourceId)).toMatchObject({
+  expect(await f.target.rights.deliveryCutSnapshot(f.target.resourceId, f.target.assessmentId)).toMatchObject({
     preservationVersion: '2', held: false,
   });
   expect((await f.deliver()).status).toBe(200);
@@ -212,7 +280,8 @@ test('token reads cost one indexed statement per store per snapshot, with and wi
       for (const [query, actualParameters] of [...contentReads, ...accessReads]) {
         if (typeof query !== 'string') throw new Error('Expected a delivery-cut SQL statement');
         expect(query).not.toMatch(/\b(COUNT|SUM|ORDER BY)\b/i);
-        const parameters = [f.target.resourceId];
+        const parameters = query.includes('AS assessment_head')
+          ? [f.target.resourceId, f.target.assessmentId] : [f.target.resourceId];
         expect<unknown>(actualParameters).toEqual(parameters);
         const client = await (query.includes('AS assessment_head') ? stack.contentPool : stack.accessPool).connect();
         try {
@@ -230,7 +299,7 @@ test('held and missing owners fail closed before the callback; owner failures af
   const f = await fixture();
   let attempts = 0;
   const work = async () => { attempts++; return f.text; };
-  expect(await withDeliveryCut({ resourceId: f.target.resourceId }, work))
+  expect(await withDeliveryCut({ resourceId: f.target.resourceId, assessmentId: f.target.assessmentId }, work))
     .toEqual({ status: 'unavailable-retry' });
   await f.hold();
   expect(await withDeliveryCut(f.target, work)).toEqual({ status: 'unavailable-retry' });

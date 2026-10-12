@@ -8,6 +8,8 @@ export interface DeliveryCutSnapshot {
 
 export interface DeliveryCutTarget {
   resourceId: string;
+  /** Assessment carried by the delivered revision, or null for unassessed material. */
+  assessmentId: string | null;
   rights?: Pick<RightsStore, 'deliveryCutSnapshot'>;
 }
 
@@ -21,11 +23,11 @@ export type DeliveryCutResult<T> = { status: 'stable'; value: T }
  */
 export async function withDeliveryCut<T>(target: DeliveryCutTarget,
   work: () => Promise<T>): Promise<DeliveryCutResult<T>> {
-  const { rights, resourceId } = target;
+  const { rights, resourceId, assessmentId } = target;
   if (!rights) return { status: 'unavailable-retry' };
   for (let attempt = 0; attempt < 2; attempt++) {
     let before: DeliveryCutSnapshot;
-    try { before = await rights.deliveryCutSnapshot(resourceId); }
+    try { before = await rights.deliveryCutSnapshot(resourceId, assessmentId); }
     catch (error) {
       if (!(error instanceof RightsUnavailable)) throw error;
       return { status: 'unavailable-retry' };
@@ -33,7 +35,7 @@ export async function withDeliveryCut<T>(target: DeliveryCutTarget,
     if (before.held) return { status: 'unavailable-retry' };
     const value = await work();
     let after: DeliveryCutSnapshot;
-    try { after = await rights.deliveryCutSnapshot(resourceId); }
+    try { after = await rights.deliveryCutSnapshot(resourceId, assessmentId); }
     catch (error) {
       if (!(error instanceof RightsUnavailable)) throw error;
       return { status: 'unavailable-retry' };

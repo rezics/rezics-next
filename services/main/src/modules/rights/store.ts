@@ -161,6 +161,27 @@ function validMaterial(material: MaterialScope): boolean {
     && (material.scopeKind !== 'wiki_evidence' || agentPattern.test(material.wikiEvidenceId ?? ''));
 }
 
+/** Admission and delivery follow the same exact material/use identity. A null
+ * reference probes for the first assessment so absence cannot hide new policy. */
+function publicDomainAssessmentSelection(work = '$1', assessment = '$2'): string {
+  return `SELECT h.assessment_id::text AS assessment_head, a.basis, a.outcome
+    FROM rights.material m
+    JOIN rights.use_assessment_head h ON h.material_id = m.id
+      AND h.family = 'data_rights' AND h.use_kind = 'redistribution'
+      AND h.use_scope = 'rezics:public-text'
+    JOIN rights.use_assessment a ON a.id = h.assessment_id
+    WHERE m.scope_kind = 'work' AND m.work_id = ${work}
+      AND m.component = 'body' AND m.expression_kind = 'expression'
+      AND (${assessment}::uuid IS NULL OR m.id = (
+        SELECT material_id FROM rights.use_assessment WHERE id = ${assessment}::uuid))
+    LIMIT 1`;
+}
+
+function supportedPublicDomainHead(row: { assessment_head: string; basis: string; outcome: string },
+  assessmentId: string): boolean {
+  return row.assessment_head === assessmentId && row.basis === 'public_domain' && row.outcome === 'supported';
+}
+
 /**
  * Content-database rights basis owner. Assessments are immutable per exact
  * material, family, use and use scope; a changed use is a different key and
@@ -171,19 +192,14 @@ export class RightsStore {
   constructor(private readonly content: Pool, private readonly access: Pool) {}
 
   /** Fresh autocommit snapshots: one indexed statement per owner, no hold scan. */
-  async deliveryCutSnapshot(resourceId: string): Promise<DeliveryCutSnapshot> {
-    if (!agentPattern.test(resourceId)) throw new RightsInvalid('invalid delivery target');
+  async deliveryCutSnapshot(resourceId: string, assessmentId: string | null): Promise<DeliveryCutSnapshot> {
+    if (!agentPattern.test(resourceId) || (assessmentId !== null && !/^[0-9a-f-]{36}$/i.test(assessmentId))) {
+      throw new RightsInvalid('invalid delivery target');
+    }
     try {
       const [assessment, preservation] = await Promise.all([
-        this.content.query<{ assessment_head: string | null }>(`SELECT h.assessment_id::text AS assessment_head
-          FROM rights.material m
-          LEFT JOIN rights.use_assessment_head h ON h.material_id = m.id
-            AND h.family = 'data_rights' AND h.use_kind = 'redistribution'
-            AND h.use_scope = 'rezics:public-text'
-          WHERE m.scope_kind = 'work' AND m.work_id = $1 AND m.component = 'body'
-            AND m.provider IS NULL AND m.namespace IS NULL AND m.source_record_id IS NULL
-            AND m.content_variant_id IS NULL AND m.media_asset IS NULL AND m.wiki_evidence_id IS NULL`,
-        [resourceId]),
+        this.content.query<{ assessment_head: string }>(publicDomainAssessmentSelection(),
+          [resourceId, assessmentId]),
         this.access.query<{ version: string; held: boolean }>(`SELECT version::text,
           active_holds > 0 AS held FROM access.governance_preservation_delivery_head
           WHERE target_resource = $1`, [resourceId]),
@@ -200,15 +216,9 @@ export class RightsStore {
       throw new RightsInvalid('invalid public-domain assessment reference');
     }
     try {
-      const result = await this.content.query(`SELECT 1 FROM rights.use_assessment a
-        JOIN rights.use_assessment_head h ON h.assessment_id = a.id
-        JOIN rights.material m ON m.id = a.material_id
-        WHERE a.id = $1 AND m.scope_kind = 'work' AND m.work_id = $2
-          AND m.component = 'body' AND m.expression_kind = 'expression'
-          AND a.family = 'data_rights' AND a.use_kind = 'redistribution'
-          AND a.use_scope = 'rezics:public-text' AND a.basis = 'public_domain'
-          AND a.outcome = 'supported' LIMIT 1`, [assessmentId, work]);
-      return result.rowCount === 1;
+      const result = await this.content.query<{ assessment_head: string; basis: string; outcome: string }>(
+        publicDomainAssessmentSelection(), [work, assessmentId]);
+      return result.rows.some(row => supportedPublicDomainHead(row, assessmentId));
     } catch { throw new RightsUnavailable('current public-domain assessment is unavailable'); }
   }
 
@@ -220,16 +230,14 @@ export class RightsStore {
     }
     if (!refs.length) return new Set();
     try {
-      const result = await this.content.query<{ work_id: string; id: string }>(`SELECT m.work_id, a.id
+      const result = await this.content.query<{
+        work_id: string; assessment_id: string; assessment_head: string; basis: string; outcome: string;
+      }>(`SELECT requested.work_id, requested.assessment_id, selected.*
         FROM unnest($1::text[], $2::uuid[]) AS requested(work_id, assessment_id)
-        JOIN rights.use_assessment a ON a.id = requested.assessment_id
-        JOIN rights.use_assessment_head h ON h.assessment_id = a.id
-        JOIN rights.material m ON m.id = a.material_id AND m.work_id = requested.work_id
-        WHERE m.scope_kind = 'work' AND m.component = 'body' AND m.expression_kind = 'expression'
-          AND a.family = 'data_rights' AND a.use_kind = 'redistribution'
-          AND a.use_scope = 'rezics:public-text' AND a.basis = 'public_domain'
-          AND a.outcome = 'supported'`, [refs.map(ref => ref.work), refs.map(ref => ref.assessmentId)]);
-      return new Set(result.rows.map(row => `${row.work_id}\0${row.id}`));
+        CROSS JOIN LATERAL (${publicDomainAssessmentSelection('requested.work_id', 'requested.assessment_id')}) selected`,
+      [refs.map(ref => ref.work), refs.map(ref => ref.assessmentId)]);
+      return new Set(result.rows.filter(row => supportedPublicDomainHead(row, row.assessment_id))
+        .map(row => `${row.work_id}\0${row.assessment_id}`));
     } catch { throw new RightsUnavailable('current public-domain search rights are unavailable'); }
   }
 
