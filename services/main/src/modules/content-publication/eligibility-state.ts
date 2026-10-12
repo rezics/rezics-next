@@ -204,9 +204,11 @@ function aggregateFields(fields: readonly FieldSpec[]): string {
     `(COUNT(DISTINCT ?${variable}) AS ?${variable}Count) (SAMPLE(?${variable}) AS ?${variable})`).join('\n');
 }
 
-function optionalFields(graph: string, subject: string, fields: readonly FieldSpec[], guard?: string): string {
-  return fields.map(({ variable, predicate }) => `OPTIONAL { ${guard ? `FILTER(BOUND(?${guard}))` : ''}
-    GRAPH ${iri(graph)} { ${subject} ${predicate} ?${variable} } }`).join('\n');
+function optionalFields(graph: string, subject: string, fields: readonly FieldSpec[],
+  decision?: 'publication' | 'eligibility'): string {
+  return fields.map(({ variable, predicate }) => `OPTIONAL {
+    GRAPH ${iri(graph)} { ${subject} ${decision ? `rv:${decision}Decision ?${decision} ;` : ''}
+      ${predicate} ?${variable} } }`).join('\n');
 }
 
 const publicationDecisionFields: readonly FieldSpec[] = [
@@ -352,9 +354,9 @@ function publicationProofQuery(ids: readonly string[]): string {
         rv:ownerSequence ?publicationOwnerSequence ; rv:expectedHead ?publicationExpectedHead ;
         rv:datasetId ?publicationDataset ; rv:dataEpoch ?publicationGraphEpoch ;
         rv:sequence ?publicationGraphSequence . } }
-      OPTIONAL { FILTER(BOUND(?receipt)) GRAPH ${iri(GRAPHS.receipts)} { ?receipt a rv:OperationReceipt }
+      OPTIONAL { GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:publicationDecision ?publication ; a rv:OperationReceipt }
         BIND(1 AS ?receiptType) }
-      ${optionalFields(GRAPHS.receipts, '?receipt', publicationReceiptFields, 'receipt')}
+      ${optionalFields(GRAPHS.receipts, '?receipt', publicationReceiptFields, 'publication')}
     } GROUP BY ?publication`;
 }
 
@@ -373,9 +375,9 @@ function eligibilityProofQuery(ids: readonly string[]): string {
         BIND(1 AS ?anchorType) }
       ${optionalFields(GRAPHS.revisions, '?eligibility', eligibilityDecisionFields)}
       OPTIONAL { GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:eligibilityDecision ?eligibility } }
-      OPTIONAL { FILTER(BOUND(?receipt)) GRAPH ${iri(GRAPHS.receipts)} { ?receipt a rv:OperationReceipt }
+      OPTIONAL { GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:eligibilityDecision ?eligibility ; a rv:OperationReceipt }
         BIND(1 AS ?receiptType) }
-      ${optionalFields(GRAPHS.receipts, '?receipt', eligibilityReceiptFields, 'receipt')}
+      ${optionalFields(GRAPHS.receipts, '?receipt', eligibilityReceiptFields, 'eligibility')}
     } GROUP BY ?eligibility`;
 }
 
