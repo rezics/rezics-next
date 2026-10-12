@@ -207,7 +207,8 @@ async function productionJson<T>(response: Response, status = 201): Promise<T> {
 
 /** All heads, evidence, rules, plans and receipts come from Main's composition. */
 async function productionFixture(kind: 'content_report' | 'rights_complaint' = 'content_report',
-  resourceKind: 'Realm' | 'Space' | 'Agent' | 'Concept' = 'Realm') {
+  resourceKind: 'Realm' | 'Space' | 'Agent' | 'Concept' = 'Realm',
+  authority: 'platform' | 'realm' = 'platform') {
   const stack = await production();
   const member = await stack.member(`authority-${randomUUID()}`);
   const grant = (scope: string, action: string) => grantFixtureAuthority(stack.accessPool, {
@@ -243,6 +244,7 @@ async function productionFixture(kind: 'content_report' | 'rights_complaint' = '
       category: kind === 'rights_complaint' ? 'copyright' : 'spam_or_manipulation',
       statement: 'Please review this public record.', contentLanguage: 'en',
       actingSubject: member.actor,
+      ...(authority === 'realm' ? { realm: created.realm } : {}),
       ...(kind === 'rights_complaint' ? { contactEmail: 'claimant@authority.test', copyright: {
         signature: 'Claimant', claimantName: 'Claimant', claimantAddress: 'Claimant address',
         claimantPhone: '+1 555 555 5555', claimedWork: 'Original authored work', materialLocation: resource,
@@ -252,14 +254,15 @@ async function productionFixture(kind: 'content_report' | 'rights_complaint' = '
   const basis = (await stack.accessPool.query<{ generation: string; evidence_digest: string }>(
     `SELECT c.generation::text,r.evidence_digest FROM access.governance_case c
      JOIN access.governance_report r ON r.case_id=c.id WHERE r.id=$1`, [report.reportId])).rows[0]!;
-  await grant('governance:platform', DECIDE_ACTION[kind]);
-  await grant('governance:platform', RULE_PUBLISH_ACTION);
+  const scope = authority === 'realm' ? `governance:realm:${created.realm}` : 'governance:platform';
+  await grant(scope, DECIDE_ACTION[kind]);
+  await grant(scope, RULE_PUBLISH_ACTION);
   const governance = stack.composition.dependencies.governance!;
   const currentRule = await governance.rules!.publish(member.principal, {
-    ref: `urn:rule:authority:${randomUUID()}`, scopeId: 'governance:platform', actingSubject: member.actor,
+    ref: `urn:rule:authority:${randomUUID()}`, scopeId: scope, actingSubject: member.actor,
     expectedRevision: null, document: { reason: 'Protect the public record' }, idempotencyKey: randomUUID(),
   });
-  await governance.store.safety.claim(member.principal, member.actor, report.caseId);
+  if (authority === 'platform') await governance.store.safety.claim(member.principal, member.actor, report.caseId);
   const input: DecisionInput = {
     caseId: report.caseId, expectedGeneration: basis.generation, actingSubject: member.actor,
     outcome: kind === 'rights_complaint' ? 'final_restrict' : 'restrict',
@@ -274,6 +277,30 @@ async function productionFixture(kind: 'content_report' | 'rights_complaint' = '
   };
   return { stack, member, grant, store: governance.store, rules: governance.rules!, input, report,
     realm: created.realm, space: created.space, head, publicProfileHead: published.revision, resource };
+}
+
+test('production Realm authority can restrict exact-revision record disclosure without closing the Realm', async () => {
+  const f = await productionFixture('content_report', 'Realm', 'realm');
+  const result = await f.store.decide(f.member.principal, { ...f.input,
+    targets: [{ ...f.input.targets[0]!, scopeKind: 'exact_revision', revision: f.publicProfileHead }] });
+  expect(result.operation.status).toBe('completed');
+  expect(result.enforcement).toMatchObject([{ resource: f.realm,
+    revision: f.publicProfileHead, effect: 'disclosure', state: 'restricted' }]);
+  expect((await f.stack.accessPool.query(`SELECT 1 FROM access.governance_enforcement
+    WHERE resource=$1 AND scope_kind='component' AND revision IS NULL AND effect='disclosure'`,
+  [f.realm])).rowCount).toBe(0);
+});
+
+for (const authority of ['resource_owner', 'realm'] as const) {
+  test(`${authority} authority can restrict exact-revision Realm record disclosure`, async () => {
+    const f = await fixture({ authority });
+    const result = await f.store.decide(f.principal, { ...f.input,
+      targets: [{ ...f.input.targets[0]!, scopeKind: 'exact_revision', revision: f.head }] });
+    expect(result.operation.status).toBe('completed');
+    expect(result.enforcement).toMatchObject([{ resource: f.realm,
+      revision: f.head, effect: 'disclosure', state: 'restricted' }]);
+    expect(f.applications()).toBe(1);
+  });
 }
 
 test('production Realm public evidence is retained at publicProfileHead while closure CAS uses rv:head', async () => {
