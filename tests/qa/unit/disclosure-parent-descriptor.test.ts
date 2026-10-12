@@ -56,6 +56,8 @@ function basis(input: DisclosureTarget = target, token = 'current'): DisclosureR
     kind: input.owner === 'media' ? 'media-use' : 'realm-placement',
     resource: 'urn:rezics:placement:fixture',
     revision: 'urn:rezics:placement:revision:fixture',
+    ...(input.occurrence ? { owner: input.occurrence.owner, kind: input.occurrence.kind,
+      resource: input.occurrence.resource, revision: input.occurrence.revision } : {}),
     targetResource: input.resource,
     targetRevision: input.revision ?? null,
     token: hash(token),

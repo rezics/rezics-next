@@ -25,7 +25,7 @@ export function configureCampaignFixtureAncestry(env: WorkActivationEnvironment,
   };
   configureDisclosureAncestrySource(env, 'media', {
     read: async targets => targets.map((target, index) => evidence(target,
-      target.component === 'cover' ? targets[index + 1]!.resource : target.resource)),
+      target.occurrence?.resource ?? (target.component === 'cover' ? targets[index + 1]!.resource : target.resource))),
     reread: async bases => bases.map(basis => selected.get(`${basis.token}\0${basis.targetResource}`)!),
   });
 }

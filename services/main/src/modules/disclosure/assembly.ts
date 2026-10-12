@@ -69,10 +69,12 @@ export function disclosureContent<T extends Pick<ContentCore, 'readExactBatch'>>
 export function disclosureMedia(store: MediaStore, env: WorkActivationEnvironment): MediaStore {
   const itemTargets = (use: string, row: NonNullable<Awaited<ReturnType<MediaStore['itemDelivery']>>>): DisclosureTarget[] => {
     const context = row.context ?? undefined;
+    const occurrence = { owner: 'media' as const, kind: 'media-use' as const,
+      resource: `https://rezics.com/id/${use}`, revision: `https://rezics.com/id/${use}` };
     return [
-      { owner: 'media', resource: `https://rezics.com/id/${row.asset}`, component: 'cover', context },
-      { owner: 'media', resource: `https://rezics.com/id/${use}`, component: 'media_use', context },
-      { owner: 'media', resource: row.target, component: 'media_use', context },
+      { owner: 'media', resource: `https://rezics.com/id/${row.asset}`, component: 'cover', context, occurrence },
+      { owner: 'media', resource: `https://rezics.com/id/${use}`, component: 'media_use', context, occurrence },
+      { owner: 'media', resource: row.target, component: 'media_use', context, occurrence },
       { owner: 'graph', resource: row.target, component: 'name', context },
     ];
   };
@@ -82,11 +84,13 @@ export function disclosureMedia(store: MediaStore, env: WorkActivationEnvironmen
       if (!row?.asset) return null;
       const viewer = currentDisclosureViewer();
       const context = row.context ?? undefined;
+      const occurrence = row.use ? { owner: 'media' as const, kind: 'media-use' as const,
+        resource: `https://rezics.com/id/${row.use}`, revision: `https://rezics.com/id/${row.use}` } : undefined;
       const { decisions } = await finalDisclosure(env, [
-        { owner: 'media', resource: `https://rezics.com/id/${args[0]}`, component: 'media_use', context },
-        { owner: 'media', resource: `https://rezics.com/id/${row.asset}`, component: 'cover', context },
+        { owner: 'media', resource: `https://rezics.com/id/${args[0]}`, component: 'media_use', context, occurrence },
+        { owner: 'media', resource: `https://rezics.com/id/${row.asset}`, component: 'cover', context, occurrence },
         ...(row.use ? [{ owner: 'media' as const, resource: `https://rezics.com/id/${row.use}`,
-          component: 'media_use' as const, context }] : []),
+          component: 'media_use' as const, context, occurrence }] : []),
         { owner: 'graph', resource: row.target, component: 'name', context },
       ], viewer, 'media', rereadDelivery(row, () => target.avatarDelivery(...args)));
       return decisions.every(decision => decision === 'visible') ? row : null;

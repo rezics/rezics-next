@@ -10,6 +10,7 @@ import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { boundedPool } from '../src/infrastructure/pg-pool.ts';
 import { grantFixtureAuthority } from '../src/modules/access/fixture-authority.ts';
 import { configureDisclosure, DisclosureStore } from '../src/modules/disclosure/read.ts';
+import { disclosureMedia } from '../src/modules/disclosure/assembly.ts';
 import { MediaStore, type MediaAdmission } from '../src/modules/media/store.ts';
 import { configureMediaVisibility } from '../src/modules/media/visibility.ts';
 import { readZoneCampaignArt } from '../src/modules/zone/campaign-art.ts';
@@ -144,4 +145,30 @@ for (const entry of [{ public: false }, { public: true, hidden: true }]) {
       expect(f.probes).toEqual([ownTarget, ownTarget]);
     });
   });
+}
+
+for (const method of ['item', 'batch', 'avatar'] as const) {
+  for (const ownPublic of [true, false]) {
+    test(`${method} delivery scopes the image to its ${ownPublic ? 'public' : 'restricted'} Use despite the other Asset attachment`, async () => {
+      await isolated(async f => {
+        await f.attach({ public: true, hidden: ownPublic });
+        f.entries.set(ownTarget, { public: true, hidden: !ownPublic });
+        const row = await f.store.itemDelivery(ownUse);
+        expect(row).not.toBeNull();
+        // Avatar hydration selects the same exact Use; this fixture exercises
+        // the public adapter while the owner attachment contract stays real.
+        const selected = { ...row!, use: ownUse, selection: randomUUID() };
+        const store = disclosureMedia(method === 'avatar' ? new Proxy(f.store, { get(target, property) {
+          if (property === 'avatarDelivery') return async () => selected;
+          const value: unknown = Reflect.get(target, property, target);
+          return typeof value === 'function' ? value.bind(target) : value;
+        } }) : f.store, f.environment);
+        const result = method === 'item' ? await store.itemDelivery(ownUse)
+          : method === 'batch' ? (await store.itemDeliveryBatch([ownUse])).get(ownUse) ?? null
+            : await store.avatarDelivery(selected.selection);
+        expect(result).toEqual(ownPublic ? method === 'avatar' ? selected : row : null);
+        expect(f.probes).toEqual([ownTarget, ownTarget]);
+      });
+    });
+  }
 }
