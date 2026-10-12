@@ -312,6 +312,81 @@ test(`post-provider subject replacement retires issuance with ${retirementLookup
   }
 }, 60_000);
 
+for (const operation of ['sign-out', 'enroll-totp', 'disable-totp', 'password-challenge'] as const)
+test(`${operation} retires its actual session despite one swallowed provider lookup failure`, async () => {
+  const f = await issuerFixture('https://issuer.test');
+  const context = await f.auth.$context;
+  const findMany = context.adapter.findMany;
+  const createSession = context.internalAdapter.createSession;
+  let failedLookups = 0;
+  const issued: { token: string }[] = [];
+  try {
+    const member = await f.signup('native-retirement@example.test');
+    let totpSecret: string | undefined;
+    if (operation === 'disable-totp' || operation === 'password-challenge') await enroll(f, member);
+    if (operation === 'enroll-totp') {
+      expect((await f.request('/api/auth/two-factor/enable', { password: member.password }, member.cookie)).status).toBe(200);
+      totpSecret = await symmetricDecrypt({ key: f.secret,
+        data: (await f.pool.query('SELECT secret FROM "twoFactor" WHERE "userId" = $1', [member.id])).rows[0].secret });
+    }
+    const previous = await f.auth.api.getSession({ headers: new Headers({ cookie: member.cookie }) });
+    expect(previous).not.toBeNull();
+    context.adapter.findMany = async (...args) => {
+      const [query] = args;
+      if (!failedLookups && query.model === 'session' && query.limit === 1
+        && query.where?.some(field => field.field === 'token')) {
+        failedLookups++;
+        throw new Error('provider session lookup unavailable');
+      }
+      return findMany(...args);
+    };
+    context.internalAdapter.createSession = async (...args) => {
+      const session = await createSession(...args);
+      if (session) issued.push(session);
+      return session;
+    };
+    const response = operation === 'sign-out'
+      ? await f.request('/api/auth/sign-out', {}, member.cookie)
+      : operation === 'enroll-totp'
+        ? await f.request('/api/auth/two-factor/verify-totp', { code: await createOTP(totpSecret!).totp() }, member.cookie)
+        : operation === 'disable-totp'
+          ? await f.request('/api/auth/two-factor/disable', { password: member.password }, member.cookie)
+          : await f.request('/api/auth/sign-in/email', { email: member.email, password: member.password });
+    expect(response.status).toBe(200);
+    expect(failedLookups).toBe(1);
+    const retiredToken = operation === 'password-challenge' ? issued[0]!.token : previous!.session.token;
+    expect((await f.pool.query('SELECT rezics_generation FROM "session" WHERE token = $1',
+      [retiredToken])).rows).toEqual([{ rezics_generation: null }]);
+    const retiredCookie = await serializeSignedCookie(context.authCookies.sessionToken.name, retiredToken, context.secret);
+    expect(await (await f.request('/api/auth/get-session', undefined, retiredCookie)).json()).toBeNull();
+    if (operation === 'password-challenge') expect(await response.json()).toMatchObject({ twoFactorRedirect: true });
+    else if (operation !== 'sign-out') {
+      expect(issued).toHaveLength(1);
+      expect(await f.auth.api.getSession({ headers: new Headers({ cookie: cookies(response) }) })).not.toBeNull();
+    }
+  } finally {
+    context.adapter.findMany = findMany;
+    context.internalAdapter.createSession = createSession;
+    await f.close();
+  }
+}, 60_000);
+
+test('sign-out refuses native retirement failure and succeeds after storage recovers', async () => {
+  const f = await issuerFixture('https://issuer.test');
+  try {
+    const member = await f.signup('retirement-storage-failure@example.test');
+    await f.pool.query(`CREATE FUNCTION refuse_session_retirement() RETURNS trigger LANGUAGE plpgsql AS
+      $$ BEGIN RAISE EXCEPTION 'retirement unavailable'; END $$;
+      CREATE TRIGGER refuse_session_retirement BEFORE UPDATE OF rezics_generation ON "session"
+      FOR EACH ROW WHEN (NEW.rezics_generation IS NULL) EXECUTE FUNCTION refuse_session_retirement()`);
+    expect((await f.request('/api/auth/sign-out', {}, member.cookie)).status).toBe(503);
+    expect(await f.auth.api.getSession({ headers: new Headers({ cookie: member.cookie }) })).not.toBeNull();
+    await f.pool.query('DROP TRIGGER refuse_session_retirement ON "session"');
+    expect((await f.request('/api/auth/sign-out', {}, member.cookie)).status).toBe(200);
+    expect(await f.auth.api.getSession({ headers: new Headers({ cookie: member.cookie }) })).toBeNull();
+  } finally { await f.close(); }
+}, 60_000);
+
 for (const completion of ['provider-error', 'handler-error'] as const)
 test(`post-provider creation evidence survives ${completion} and retires its actual session`, async () => {
   const f = await issuerFixture('HTTPS://issuer.test');

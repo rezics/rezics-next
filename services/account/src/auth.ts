@@ -138,6 +138,29 @@ function accountVerification(config: AccountConfig, owners: SessionOwners) {
   } };
 }
 
+/** A provider lookup failure can skip its deletion hooks. Own the terminal
+ * stamp before asking the provider to clean up, including provisional and
+ * replaced sessions. Reuse the provider's transaction when it owns one. */
+async function retireProviderSession(db: Kysely<unknown>, token: string): Promise<void> {
+  const retire = async (owner: Kysely<unknown>) => {
+    await sql`SET LOCAL lock_timeout = '2s'`.execute(owner);
+    await sql`SET LOCAL statement_timeout = '5s'`.execute(owner);
+    const session = (await sql<{ id: string; user_id: string }>`SELECT id, "userId" AS user_id
+      FROM "session" WHERE token = ${token}`.execute(owner)).rows[0];
+    if (!session) return;
+    await sql`SELECT 1 FROM rezics_account_security WHERE user_id = ${session.user_id} FOR UPDATE`.execute(owner);
+    const marked = await sql`UPDATE "session" SET rezics_generation = NULL
+      WHERE id = ${session.id} AND rezics_generation IS NOT NULL RETURNING id`.execute(owner);
+    if (!marked.rows.length) return;
+    await sql`UPDATE rezics_account_security SET session_cleanup_pending = true
+      WHERE user_id = ${session.user_id}`.execute(owner);
+    await sql`INSERT INTO rezics_account_security_event (user_id, action, detail)
+      VALUES (${session.user_id}, 'session_revoked', ${JSON.stringify({ sessionId: session.id, phase: 'logical' })}::jsonb)`.execute(owner);
+  };
+  if (db.isTransaction) await retire(db);
+  else await db.transaction().execute(retire);
+}
+
 /** Re-read the actual session terminal stamp and owner epoch in one bounded
  * statement. A provider-held transaction sees its own signup/admission rows
  * without borrowing another client or mixing epochs across statements. */
@@ -279,6 +302,7 @@ export function accountAuthOptions(config: AccountConfig) {
   const db = new Kysely<unknown>({ dialect: new PostgresDialect({ pool: config.pool }) });
   const sessionOwners: SessionOwners = new WeakMap();
   const deletionConsent = defineRequestState(() => false);
+  const sessionDeletionFences = new WeakSet<object>();
   const agentScopes = agentRegistrationScopes();
   const operatorHooks = operatorAuthHooks(config.pool, config.operatorUserIds);
   const requireEmailVerification = config.requireEmailVerification ?? !!config.email;
@@ -303,6 +327,8 @@ export function accountAuthOptions(config: AccountConfig) {
         fieldName: 'rezics_generation', required: false, input: false, returned: false } as const,
     } },
     hooks: { ...operatorHooks, before: createAuthMiddleware(async ctx => {
+      // Validate request consent first, install the retirement fence next,
+      // then settle sign-out and reject stale verification before other hooks.
       if (ctx.path === '/delete-user') {
         const leaveOwnedAgentsStanding = (ctx.body as { leaveOwnedAgentsStanding?: unknown } | undefined)
           ?.leaveOwnedAgentsStanding;
@@ -313,6 +339,52 @@ export function accountAuthOptions(config: AccountConfig) {
         // The provider strips extra body fields. Retain validated consent in
         // its request state so HTTP and embedded calls share the same hook.
         await deletionConsent.set(leaveOwnedAgentsStanding ?? false);
+      }
+      // Plugin initialization rebuilds internalAdapter. Install on the final
+      // adapter at endpoint admission, for HTTP and embedded provider calls.
+      const internal = ctx.context.internalAdapter;
+      if (!sessionDeletionFences.has(internal)) {
+        const deleteSession = internal.deleteSession;
+        internal.deleteSession = async token => {
+          const adapter = await getCurrentAdapter(ctx.context.adapter);
+          const owner = sessionOwners.get(adapter);
+          if (!owner) throw new APIError('SERVICE_UNAVAILABLE', { message: 'Account session owner is unavailable' });
+          await retireProviderSession(owner, token);
+          return deleteSession(token);
+        };
+        sessionDeletionFences.add(internal);
+      }
+      if (ctx.path === '/sign-out') {
+        // The provider also catches deletion errors inside sign-out. Persist
+        // retirement at admission so that failure cannot become success.
+        const session = await getAuthoritativeSessionFromCtx(ctx);
+        if (session) await internal.deleteSession(session.session.token);
+      }
+      if (ctx.path === '/verify-email' && typeof ctx.query?.token === 'string') {
+        // Email verification links are stateless JWTs, so deleting verification
+        // rows cannot revoke them. Bind new links to the same recovery generation.
+        const verified = await jwtVerify(ctx.query.token, new TextEncoder().encode(config.secret),
+          { algorithms: ['HS256'] }).catch(() => null);
+        // Let the provider keep its normal invalid/expired-link redirects.
+        const user = typeof verified?.payload.email === 'string'
+          ? (await config.pool.query<{ id: string }>('SELECT id FROM public."user" WHERE email = $1',
+            [verified.payload.email])).rows[0] : undefined;
+        if (user && (verified!.payload[RECOVERY_GENERATION_CLAIM] ?? '0')
+          !== await currentRecoveryGeneration(config.pool, user.id)) {
+          // This hook precedes the provider's origin middleware. Redirect only
+          // to this issuer; never let an invalidated link become an open redirect.
+          if (typeof ctx.query.callbackURL === 'string') {
+            const callback = new URL(ctx.query.callbackURL, config.baseURL);
+            if (callback.origin === new URL(config.baseURL).origin) {
+              callback.searchParams.set('error', 'INVALID_TOKEN');
+              throw ctx.redirect(callback.toString());
+            }
+          }
+          throw new APIError('FORBIDDEN', {
+            code: 'INVALID_TOKEN',
+            message: 'Verification link is unavailable',
+          });
+        }
       }
       await operatorHooks.before(ctx);
       if (ctx.path === '/sign-up/email') {
