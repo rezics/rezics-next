@@ -110,7 +110,7 @@ function Target(props: { item: RelationItem; t: Copy; hrefFor?: SummaryHref; peo
 /** The mark a derivation carries when its source's Main Version is not pinned: the link is known, its version is not. */
 function Unresolved({ item, t }: { item: RelationItem; t: Copy }) {
   return item.unresolvedSource
-    ? <Badge variant="outline" title={t.unresolvedHint}><Link documentNavigationIcon aria-hidden="true" />{t.unresolvedSource}</Badge> : null;
+    ? <Badge variant="outline" title={t.unresolvedHint}><LinkIcon aria-hidden="true" />{t.unresolvedSource}</Badge> : null;
 }
 
 /** Main's label, in its own language and direction, with a quiet note when it is not in the language asked for. */
