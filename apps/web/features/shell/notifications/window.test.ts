@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import type { MainClient } from '../../feed/types.ts';
 import { readLatest, readWindow, type NotificationSelection, type StreamItem } from './window.ts';
 
-type Query = { after?: string; limit: number; view?: 'saved' | 'done'; reason?: string };
+type Query = { before?: string; limit: number; view?: 'saved' | 'done'; reason?: string };
 
 function sparseStream(selection: NotificationSelection, count = 123) {
   const matches = Array.from({ length: count }, (_, index) => ({
@@ -10,18 +10,21 @@ function sparseStream(selection: NotificationSelection, count = 123) {
     saved: selection.view === 'saved', done: selection.view === 'done', reason: selection.reason,
   } as StreamItem));
   const calls: Query[] = [];
+  const cursors = new Map<string, bigint>();
   const main = { v1: { me: { notifications: {
     hint: { get: async () => ({ data: { generation: '7', head: '20000' }, error: null }) },
     get: async ({ query }: { query: Query }) => {
       calls.push(query);
-      const after = BigInt(query.after?.split(':')[1] ?? '0');
-      const remaining = matches.filter(item => BigInt(item.sequence) > after
+      const before = query.before && query.before !== 'latest' ? cursors.get(query.before)! : 20001n;
+      const remaining = [...matches].reverse().filter(item => BigInt(item.sequence) < before
         && (query.view === 'saved' ? item.saved : query.view === 'done' ? item.done : !item.done)
         && (!query.reason || item.reason === query.reason));
       const items = remaining.slice(0, query.limit);
+      const next = remaining.length > query.limit ? `page-before-${items.at(-1)!.id}` : null;
+      if (next) cursors.set(next, BigInt(items.at(-1)!.sequence));
       return { error: null, data: { profile: 'notification-stream-page-v1', generation: '7', head: '20000',
         reset: false, readThrough: '0', items, groups: [],
-        next: remaining.length > query.limit ? `7:${items.at(-1)!.sequence}` : null } };
+        next } };
     },
   } } } } as unknown as MainClient;
   return { main, matches, calls };
@@ -32,13 +35,18 @@ describe('filtered notification continuation', () => {
     { view: 'saved', reason: null }, { view: 'done', reason: null },
     { view: 'inbox', reason: 'reviewer' }, { view: 'saved', reason: 'manual' },
   ] as const) {
-    test(`${selection.view}/${selection.reason ?? 'all'} shows sparse matches exactly once`, async () => {
+    test(`${selection.view}/${selection.reason ?? 'all'} opens newest and pages every older sparse match exactly once`, async () => {
       const { main, matches, calls } = sparseStream(selection);
       let result = await readLatest(main, selection);
       const seen: string[] = [];
+      const pageSizes: number[] = [];
+      const newestFirst = [...matches].reverse();
       for (let pages = 0; pages < 4; pages++) {
         expect(result.ok).toBe(true);
         if (!result.ok) throw new Error('Expected a notification page');
+        expect(result.data.items.map(item => item.id)).toEqual(
+          newestFirst.slice(pages * 50, (pages + 1) * 50).map(item => item.id));
+        pageSizes.push(result.data.items.length);
         seen.push(...result.data.items.map(item => item.id));
         if (result.data.next === null) break;
         // The server cursor advances over matches, even across thousands of unrelated sequences.
@@ -46,12 +54,15 @@ describe('filtered notification continuation', () => {
       }
       expect(seen).toHaveLength(matches.length);
       expect(new Set(seen).size).toBe(matches.length);
-      expect([...seen].sort()).toEqual(matches.map(item => item.id).sort());
+      expect(seen).toEqual(newestFirst.map(item => item.id));
+      expect(pageSizes).toEqual([50, 50, 23]);
+      expect(result.ok && result.data.next).toBeNull();
+      expect(seen.at(-1)).toBe(matches[0]!.id);
       const filters = { ...(selection.view === 'inbox' ? {} : { view: selection.view }),
         ...(selection.reason ? { reason: selection.reason } : {}) };
       expect(calls).toEqual([
-        { limit: 50, ...filters }, { after: '7:6850', limit: 50, ...filters },
-        { after: '7:13700', limit: 50, ...filters },
+        { before: 'latest', limit: 50, ...filters }, { before: 'page-before-notice-73', limit: 50, ...filters },
+        { before: 'page-before-notice-23', limit: 50, ...filters },
       ]);
     });
   }
@@ -60,6 +71,6 @@ describe('filtered notification continuation', () => {
     const selection = { view: 'saved', reason: null } as const;
     const { main, calls } = sparseStream(selection, 0);
     expect(await readLatest(main, selection)).toMatchObject({ ok: true, data: { items: [], next: null } });
-    expect(calls).toEqual([{ limit: 50, view: 'saved' }]);
+    expect(calls).toEqual([{ before: 'latest', limit: 50, view: 'saved' }]);
   });
 });
