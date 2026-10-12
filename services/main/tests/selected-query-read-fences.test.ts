@@ -69,7 +69,9 @@ function realmFixture() {
     body.includes('SELECT DISTINCT ?work ?head ?main') ? f.rows.map(row => ({ ...row }))
       : body.includes('SELECT ?work ?head ?nameOwner') || body.includes('SELECT ?work ?head ?owningWork')
         ? f.rows.filter(row => body.includes(`<${row.work!.value}>`))
-          .map(row => ({ work: row.work!, head: row.head! })) : [] } });
+          .map(row => ({ work: row.work!, head: row.head! }))
+        : body.includes('SELECT ?work ?head') ? f.rows.filter(row => body.includes(`<${row.work!.value}>`))
+          .map(row => ({ work: row.work! })) : [] } });
   const pool = { query: async (sql: string, args?: unknown[]) => ({ rows: sql.includes('jsonb_to_recordset')
     ? (JSON.parse(String(args![0])) as Array<{ ordinal: number }>).map(target => ({
       open: true, ordinal: target.ordinal, restricted: false, assessments: [],
