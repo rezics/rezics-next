@@ -17,16 +17,22 @@ async function fixtureAuthority(h: VisibilityFixture, actor: string, scope: stri
     grant: { actor, action, lifetime: '8 hours' } });
 }
 
+async function penMembership(h: VisibilityFixture) {
+  const roster = await h.call('GET', `${h.root}/members`);
+  expect(roster.status, JSON.stringify(roster.body)).toBe(200);
+  expect(roster.body.nextCursor).toBeNull();
+  return (roster.body.items as { member: string; state: string; membershipGeneration: string }[])
+    .find(member => member.member === h.pen);
+}
+
 async function joinPen(h: VisibilityFixture) {
   const authority = await h.accessPool.query(`SELECT 1 FROM access.permission_grant
     WHERE recipient_subject = $1 AND scope_id = 'work:create:root'
       AND action = 'access.membership.consent' AND active AND valid_until > clock_timestamp()`, [h.pen]);
   if (!authority.rowCount) await h.grant(h.pen, 'work:create:root', 'access.membership.consent');
 
-  const member = (await h.accessPool.query<{ generation: string; state: string }>(`SELECT generation::text, state
-    FROM access.membership WHERE kind = 'realm' AND owner_subject = $1 AND member_subject = $2`,
-  [h.realm, h.pen])).rows[0];
-  const expectedGeneration = member?.generation ?? '0';
+  const member = await penMembership(h);
+  const expectedGeneration = member?.membershipGeneration ?? '0';
   expect(member?.state).not.toBe('joined');
   const membershipPolicy = (await h.accessPool.query<{ revision: string; terms_revision: string }>(`SELECT
     revision::text, terms_revision FROM access.membership_policy WHERE kind = 'realm' AND owner_subject = $1`,
@@ -46,15 +52,13 @@ async function joinPen(h: VisibilityFixture) {
 }
 
 async function leavePen(h: VisibilityFixture) {
-  const member = (await h.accessPool.query<{ generation: string; state: string }>(`SELECT generation::text, state
-    FROM access.membership WHERE kind = 'realm' AND owner_subject = $1 AND member_subject = $2`,
-  [h.realm, h.pen])).rows[0]!;
+  const member = (await penMembership(h))!;
   expect(member.state).toBe('joined');
   const settings = await h.call('GET', `${h.root}/settings`);
   expect(settings.status, JSON.stringify(settings.body)).toBe(200);
   const removed = await h.call('POST', `${h.root}/members`, { actingSubject: h.actor, member: h.pen,
     action: 'remove', expectedGeneration: settings.body.generation,
-    expectedMembershipGeneration: member.generation, reason: 'Leave the Realm conversation',
+    expectedMembershipGeneration: member.membershipGeneration, reason: 'Leave the Realm conversation',
     consent: null, durationSeconds: null });
   expect(removed.status, JSON.stringify(removed.body)).toBe(201);
 }
