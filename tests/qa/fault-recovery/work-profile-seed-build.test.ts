@@ -1,11 +1,13 @@
 import { expect, test } from 'bun:test';
 import { join } from 'node:path';
+import { loadavg } from 'node:os';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { profileRequest, startWorkProfileSink } from '../support/work-profile.ts';
 import { startTelemetry, flushTelemetryTraces, shutdownTelemetry }
   from '../../../packages/observability/src/runtime.ts';
 
 test('explicit preparation retains one API-built store at three population cuts', async () => {
+  console.log('seed BUILD host load start', loadavg());
   // Instrument PostgreSQL before any application/driver import, as in the
   // existing request-profile workers. These are the existing meters.
   const sink = startWorkProfileSink({ settleMs: 25 });
@@ -188,6 +190,7 @@ test('explicit preparation retains one API-built store at three population cuts'
       await sink.stop();
     } finally {
       releaseSeedBuildLock?.();
+      console.log('seed BUILD host load end', loadavg());
     }
   }
 }, 1_920_000);

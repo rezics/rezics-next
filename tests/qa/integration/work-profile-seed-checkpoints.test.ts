@@ -49,6 +49,10 @@ test('retained checkpoints restore exact populations and identities into isolate
     directory: seedDirectory, resumeSource: false, restoreResourceClass: 'ordinary',
     quiesce: async () => { throw new Error('Routine TEST never builds a checkpoint'); },
     async smokeRead(input) {
+      const postgresLog = await stream('docker', ['logs', `rezics-qa-${input.runId}-postgres-1`], dockerEnvironment());
+      writeFileSync(join(root, '.temp', `seed-checkpoint-postgres-${input.runId}.log`), postgresLog);
+      expect(postgresLog).toContain('database system is ready to accept connections');
+      expect(postgresLog).not.toContain('database system shutdown was interrupted');
       const stack = await openCopy(input);
       try {
         const client = seedApi(stack, (await stack.member(seedAuthorName, { stable: true, verified: true })).token);
