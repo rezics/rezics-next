@@ -7,6 +7,7 @@ import { ANONYMOUS_VIEWER, eligible, validLabels, type Labels, type Viewer } fro
 import { mediaVisibility } from '../media/visibility.ts';
 import { nameOwnerPolicySql } from '../preferences/store.ts';
 import { BASELINE_MEMBER_POLICY } from '../access/baseline.ts';
+import { accessClient } from '../access/topology-control.ts';
 import { namePolicyViewerPrincipal } from './name-policy.ts';
 
 export type DisclosureChannel = 'read' | 'summary' | 'thread' | 'feed' | 'search' | 'typeahead'
@@ -106,7 +107,7 @@ export class DisclosureStore implements DisclosureReader {
     }
     if (!targets.length) return { decisions: [], anonymousNames: [] };
     const suitabilityDefault = usesSuitabilityDefault(channel);
-    const source = client ?? this.pool;
+    const source = client ?? accessClient(this.pool) ?? this.pool;
     try {
       const nameOwners = new Map<string, string>();
       const resources = [...new Set(targets.filter(target => target.owner === 'graph'
