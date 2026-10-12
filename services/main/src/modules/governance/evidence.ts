@@ -26,18 +26,26 @@ const primaryGraphTypes = new Set([...CANONICAL_TYPES, ...RESERVED_OWNER_TYPES]
   .filter(type => !graphTypeEnvelopes.has(type)));
 
 /** Read only rdf:type literals from the generated model, not property values. */
+function graphTypeLiterals(schema: unknown): string[] {
+  if (!schema || typeof schema !== 'object') return [];
+  const node = schema as { const?: unknown };
+  return typeof node.const === 'string' ? [node.const]
+    : Object.values(node).flatMap(graphTypeLiterals);
+}
+
 function declaredGraphTypes(schema: unknown): string[] {
   if (!schema || typeof schema !== 'object') return [];
-  const node = schema as { const?: unknown; properties?: Record<string, unknown> };
-  return typeof node.const === 'string' ? [node.const]
-    : Object.values(node).flatMap(declaredGraphTypes);
+  // Some authored shapes lower to disjunctions or refinements rather than a
+  // top-level Object. Find their rdf:type properties through those wrappers.
+  return Object.entries(schema).flatMap(([key, value]) => key === 'rdf:type'
+    ? graphTypeLiterals(value) : declaredGraphTypes(value));
 }
 
 /** Canonical routing and semantic admission define ownership. All other declared
  * types describe their resource; the table also covers catalogue-only types. */
 export const governanceGraphTypes: readonly { type: string; role: 'PRIMARY' | 'DESCRIPTIVE' }[] =
   [...new Set([...primaryGraphTypes, ...graphTypeEnvelopes, ...Object.keys(typeRegistry),
-    ...Object.values(shapeSchemas).flatMap(schema => declaredGraphTypes(schema.properties['rdf:type'])),
+    ...Object.values(shapeSchemas).flatMap(declaredGraphTypes),
   ])].sort().map(type => ({ type, role: primaryGraphTypes.has(type) ? 'PRIMARY' : 'DESCRIPTIVE' }));
 export const governanceGraphTargetKinds: readonly string[] = governanceGraphTypes
   .filter(entry => entry.role === 'PRIMARY').map(entry => entry.type);
