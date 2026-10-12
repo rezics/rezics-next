@@ -5,8 +5,10 @@ import { FusekiClient, type SparqlResult } from '../src/infrastructure/fuseki.ts
 import { WorkReadSession } from '../src/modules/work/read-session.ts';
 import { canReadCompositionWork } from '../src/modules/composition/disclosure-read.ts';
 import { readWorkWholes } from '../src/modules/composition/read.ts';
+import { configureDisclosure } from '../src/modules/disclosure/read.ts';
 import { openApiOperations as lexiconOperations } from '../src/routes/lexicon.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 const value = (value: string) => ({ type: 'literal', value });
@@ -44,13 +46,20 @@ test('G-829: wholes scan beyond a hidden batch and never expose trailing private
   const rows = Array.from({ length: 104 }, (_, index) => ({ whole: uri(index === 102 ? visible : id()),
     main: uri(id()), structure: uri(id()), occurrence: uri(id()), segment: value('01'), order: value('01') }));
   const revisions = new Map(rows.map(row => [row.whole.value, id()]));
+  revisions.set(resource, id());
   const graph = new FusekiClient('http://graph.invalid');
   const summaryBatches: string[][] = [], exactBatches: string[][] = [], hydrated: string[][] = [];
   const publicationSourceBatches: string[][] = [];
   let scans = 0, scalarProbes = 0, privateGrantProbes = 0;
   graph.query = async query => {
     let bindings: NonNullable<SparqlResult['results']>['bindings'];
-    if (query.includes('SELECT ?main ?public')) {
+    if (query.includes('SELECT ?resource ?head')) {
+      const resources = [...(query.match(/VALUES \?resource \{([^}]+)\}/)?.[1] ?? '')
+        .matchAll(/<([^>]+)>/g)].map(match => match[1]!);
+      expect(resources.length).toBeGreaterThan(0);
+      expect(resources.length).toBeLessThanOrEqual(64);
+      bindings = resources.map(resource => ({ resource: uri(resource), head: uri(revisions.get(resource)!) }));
+    } else if (query.includes('SELECT ?main ?public')) {
       scalarProbes++;
       // Only the contained Work uses the scalar header proof. Candidate Works
       // must pass the actual summary and exact-head resolver below.
@@ -99,6 +108,12 @@ test('G-829: wholes scan beyond a hidden batch and never expose trailing private
       return { rows: new Map(), generation: { dataEpoch: 'media', sequence: '1' } };
     } } },
   } as unknown as MainWorkDependencies;
+  configureDisclosure(deps.environment, fixtureDisclosureReader(async targets => targets.map(() => 'visible')));
+  configureFixtureDisclosureAncestry(deps.environment, target => {
+    const work = target.work ?? target.resource;
+    return { resource: work, head: revisions.get(work)!, ...(target.workRevision !== undefined
+      ? { protectedRevision: target.workRevision } : {}) };
+  });
   const session = new WorkReadSession(deps, new Request('http://main.local/v1/works'), {},
     { dataEpoch: 'one', sequence: '1' });
   const page = await readWorkWholes(session, resource, { limit: 1 });
