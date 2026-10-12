@@ -60,6 +60,9 @@ const overflows = (page: Page) =>
 
 /** One screenshot per viewport in light and dark, none with horizontal overflow. */
 async function shoot(page: Page, path: string, name: string, info: TestInfo, content: string) {
+  // Viewport and system-theme changes update this document in place. Reopening
+  // the same streamed hub for every image repeats Main reads without adding coverage.
+  await page.goto(path);
   for (const theme of ['light', 'dark'] as const) {
     // A signed-in page takes the member's saved theme ("system"), which follows the browser's preference.
     await page.emulateMedia({ colorScheme: theme });
@@ -68,7 +71,6 @@ async function shoot(page: Page, path: string, name: string, info: TestInfo, con
       ['phone', phone],
     ] as const) {
       await page.setViewportSize(viewport);
-      await page.goto(path);
       await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
       // The delivered content, not the loading skeleton: the named section has rendered and nothing is still busy.
       await expect(page.locator(content).first()).toBeVisible();
