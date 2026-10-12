@@ -27,6 +27,7 @@ import { GLOBAL_CLASSIFICATION_CONTEXT, CLASSIFICATION_ISOLATE_POLICY } from './
 import { ensureGlobalClassificationContext } from './global.ts';
 import {
   CLASSIFICATION_PROPOSITION_PROFILE,
+  ClassificationDefinitionUnavailable,
   classificationPropositionReceiptIri,
   readClassificationPropositionReceipt,
   sealClassificationPropositionAdmission,
@@ -68,6 +69,36 @@ export interface DefineVocabularyConceptInput {
 export interface VocabularyReceipt extends ClassificationPropositionReceipt {
   schemeHead?: string;
   conceptHead?: string;
+}
+
+/** Structural owner validation also serves restoration while audience reads are fenced. */
+export async function currentConceptValidations(env: WorkActivationEnvironment, concept: string,
+  profile: 'classification-proposition-v1' | 'classification-proposition-v2') {
+  if (!native.test(concept)) throw new InvalidVocabularyInput('invalid Concept identity');
+  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX skos: <${SKOS}>
+    SELECT ?scheme ?concept ?path ?expression ?sense WHERE { GRAPH ${iri(GRAPHS.current)} {
+      BIND(${iri(concept)} AS ?concept)
+      ?concept a skos:Concept ; skos:inScheme ?scheme .
+      ?path a rv:ConceptPath ; rv:terminalConcept ?concept .
+      ?expression a rv:ClassificationExpression ; rv:path ?path ; rv:assertedConcept ?concept .
+      ?sense a rv:ClassificationSense ; rv:path ?path ; rv:expression ?expression .
+    } } LIMIT 2`, 4096)).results?.bindings ?? [];
+  const row = rows[0];
+  const roles = ['scheme', 'concept', 'path', 'expression', 'sense'] as const;
+  if (rows.length !== 1 || roles.some(role => row?.[role]?.type !== 'uri' || !native.test(row[role]!.value)))
+    throw new ClassificationDefinitionUnavailable('Concept owner binding is unavailable or ambiguous');
+  const definitions = Object.fromEntries(roles.map(role => [role, row![role]!.value])) as unknown as PropositionDefinitions;
+  const validations = await profileValidations(env.fuseki, profile, roles.map(role => ({
+    shape: `https://rezics.com/definition/${profile}/${role}-shape`,
+    focus: [definitions[role]], graphs: [GRAPHS.current],
+  })), { ...definitions });
+  const guard = `GRAPH ${iri(GRAPHS.current)} {
+    ${iri(concept)} skos:inScheme ${iri(definitions.scheme)} .
+    ${iri(definitions.path)} rv:terminalConcept ${iri(concept)} .
+    ${iri(definitions.expression)} rv:path ${iri(definitions.path)} ; rv:assertedConcept ${iri(concept)} .
+    ${iri(definitions.sense)} rv:path ${iri(definitions.path)} ; rv:expression ${iri(definitions.expression)} .
+  }`;
+  return { validations, guard };
 }
 
 function checked(input: DefineVocabularyConceptInput) {

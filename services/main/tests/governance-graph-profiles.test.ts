@@ -16,6 +16,7 @@ const skos = 'http://www.w3.org/2004/02/skos/core#';
 
 function graph(kind: string, selectors: Record<string, string> = {}) {
   const resource = native(), head = native();
+  const definitions = { scheme: native(), concept: resource, path: native(), expression: native(), sense: native() };
   const target: DecisionTargetInput = { owner: 'graph', resource, component: 'record', locator: null,
     scopeKind: 'component', revision: null, expectedHead: head, effect: 'disclosure' };
   const state = { head, selectors, kinds: [kind], loseResponse: false, stale: false,
@@ -31,6 +32,8 @@ function graph(kind: string, selectors: Record<string, string> = {}) {
         return { results: { bindings: saved ? [{ digest: literal(state.digest || saved.digest),
           target: uri(resource), head: uri(saved.head) }] : [] } };
       }
+      if (sql.includes('SELECT ?scheme ?concept ?path ?expression ?sense'))
+        return { results: { bindings: [Object.fromEntries(Object.entries(definitions).map(([role, value]) => [role, uri(value)]))] } };
       if (sql.includes('ASK')) {
         if (state.becomeRealm) state.kinds = [`${RV}Realm`];
         return { boolean: state.kinds.includes(`${RV}ZoneHomeDocument`) };
@@ -79,8 +82,13 @@ for (const [kind, selectors, profile, shape, component, predicate] of [
     const result = await f.effects.apply(randomUUID(), 1, selected);
     expect(result).toHaveProperty('receipt');
     const command = f.commands[0]!;
-    expect(command.validations).toMatchObject([{ profile, shape: `https://rezics.com/definition/${profile}/${shape}-shape`,
-      focus: [selected.resource] }]);
+    expect(command.validations).toContainEqual(expect.objectContaining({ profile,
+      shape: `https://rezics.com/definition/${profile}/${shape}-shape`, focus: [selected.resource] }));
+    if (kind === `${skos}Concept`) {
+      expect(command.validations).toHaveLength(5);
+      expect(command.validations?.every(validation => validation.binding?.concept === selected.resource)).toBe(true);
+      expect(command.update).toContain(`rv:terminalConcept <${selected.resource}>`);
+    }
     expect(command.update).toContain(`<${selected.resource}> rv:${predicate} <${selected.expectedHead}>`);
     expect(command.update).toContain(`<${selected.resource}> a <${kind}>`);
     for (const [path, value] of Object.entries(selectors)) {
@@ -148,7 +156,7 @@ for (const kind of semanticOwnerTypes) {
     const f = graph(kind, Object.fromEntries(first?.when.map(condition => [condition.path, condition.value]) ?? []));
     const operation = randomUUID();
     const result = await f.effects.apply(operation, 1, f.target);
-    if (first) expect(f.commands[0]?.validations).toMatchObject([{ profile: first.profile, shape: first.shape }]);
+    if (first) expect(f.commands[0]?.validations).toContainEqual(expect.objectContaining({ profile: first.profile, shape: first.shape }));
     else {
       expect(result).toEqual({ receipt: `access:governance-enforcement:${operation}:1` });
       expect(f.commands).toHaveLength(0);

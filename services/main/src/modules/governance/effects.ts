@@ -12,6 +12,7 @@ import type { ContentCore } from '../../../../content/src/core.ts';
 import { ownerTargetHeads } from './evidence.ts';
 import { semanticOwnerTypes, semanticResourceTypeRole } from '../semantic/change.ts';
 import type { SparqlResult } from '../../infrastructure/fuseki.ts';
+import { currentConceptValidations } from '../classification/vocabulary.ts';
 
 export interface EffectPlan {
   /** Owner-established identity; null is a positively classified non-Realm record. */
@@ -356,10 +357,13 @@ export function ownerModerationEffects(content: ContentModeration, env: WorkActi
       if (!realm && !selected)
         return { receipt: `access:governance-enforcement:${operationId}:${ordinal}` };
       if (!target.expectedHead) throw new GovernanceStale('Graph moderation needs an exact owner head');
+      const concept = selected?.kind === 'http://www.w3.org/2004/02/skos/core#Concept'
+        && (selected.profile === 'classification-proposition-v1' || selected.profile === 'classification-proposition-v2')
+        ? await currentConceptValidations(env, target.resource, selected.profile) : null;
       const validations = realm ? await profileValidations(env.fuseki, realm.profileId, [
         { shape: `${realm.profile}/space-shape`, focus: [realm.space], graphs: [GRAPHS.current] },
         { shape: `${realm.profile}/realm-shape`, focus: [realm.realm], graphs: [GRAPHS.current] },
-      ]) : await profileValidations(env.fuseki, selected!.profile as ProfileId, [{
+      ]) : concept?.validations ?? await profileValidations(env.fuseki, selected!.profile as ProfileId, [{
         shape: selected!.shape, focus: [target.resource], graphs: [GRAPHS.current, GRAPHS.revisions],
       }]);
       const headPredicate = realm ? 'rv:head' : selected!.headPredicate;
@@ -394,6 +398,7 @@ export function ownerModerationEffects(content: ContentModeration, env: WorkActi
       let cause: unknown;
       try { result = await env.fuseki.commandWithReceipt({ receipt, digest: requestDigest,
         validations, deadlineMs: 10_000, update: `PREFIX rv: <${RV}>
+          PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
           PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
           DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
           INSERT {
@@ -421,6 +426,7 @@ export function ownerModerationEffects(content: ContentModeration, env: WorkActi
             GRAPH ${iri(GRAPHS.current)} { ${iri(target.resource)} ${headPredicate} ${iri(target.expectedHead)} }
             ${realmGuard}
             ${profileGuard}
+            ${concept?.guard ?? ''}
             FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
             FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
             BIND(?n + 1 AS ?next)
