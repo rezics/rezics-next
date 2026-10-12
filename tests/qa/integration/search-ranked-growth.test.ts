@@ -19,7 +19,7 @@ const requestCounters = [
 ] as const satisfies readonly WorkCostField[];
 const counters = [...requestCounters, ...commandCounters];
 type MeasuredProfile = WorkProfile & Record<(typeof commandCounters)[number], number>;
-type Page = { complete?: boolean; relationComplete?: boolean; population: number; total: number;
+type Page = { httpStatus: number; complete?: boolean; relationComplete?: boolean; population: number; total: number;
   results: { work: string; mainVersion: string }[]; next: SearchContinuation | null };
 type Evidence = { matchingWorks: number; restoreMs: number;
   first: MeasuredProfile; continuation: MeasuredProfile };
@@ -56,6 +56,7 @@ async function profileRankedSearch() {
   const { restoreWorkProfileCorpus } = await import('../../../scripts/load/work-profile-corpus.ts');
   const { root, stream, dockerEnvironment } = await import('../../../scripts/fixture/stack.ts');
   const { readRetainedSeed } = await import('../support/seed-checkpoints.ts');
+  const { assertPublicContentSearchReady } = await import('../../../services/main/src/modules/content-publication/search.ts');
   const retained = readRetainedSeed();
   expect(retained.cuts.map(cut => cut.works.length)).toEqual([4, 16, 64]);
   const qaRunId = process.env.REZICS_QA_RUN_ID;
@@ -67,15 +68,18 @@ async function profileRankedSearch() {
   let copy: MediaStack | undefined;
   const targets: string[] = [];
   const evidence: Evidence[] = [];
+  const attempts: { matchingWorks: number; page: string; profile: WorkProfile }[] = [];
   let blind: { matchingWorks: number; first: WorkProfile; continuation: WorkProfile } | undefined;
-  const request = async (stack: MediaStack, path: string, body: object, headers = new Headers()) => {
+  const request = async (stack: MediaStack, path: string, body: object, headers = new Headers(), captureFailure = false) => {
     headers.set('content-type', 'application/json');
     const response = await stack.main.handle(new Request(`http://main.local${path}`, {
       method: 'POST', headers, body: JSON.stringify(body),
     }));
     const value = await response.json() as Page;
-    expect(response.status, JSON.stringify(value)).toBe(200);
-    return value;
+    if (captureFailure) expect([200, 503]).toContain(response.status);
+    else expect(response.status, JSON.stringify(value)).toBe(200);
+    if (response.status === 503) expect(value).toMatchObject({ status: 503, code: 'search_index_unavailable' });
+    return { ...value, httpStatus: response.status };
   };
   const backups = createCorpusBackupDriver({
     sourceRunId: retained.sourceRunId,
@@ -110,14 +114,16 @@ async function profileRankedSearch() {
           if (!await stack.composition.contentProjectionWorker.pollOnce())
             throw new Error('Restored Content projection cannot cover its retained source');
         }
-        const result = await request(stack, '/v1/queries', {
-          profile: 'public-main-phrase-v1', phrase, language: 'en',
-        });
-        expect(result.complete).toBe(true);
-        expect(result.total).toBe(verifying.works.length);
-        expect(new Set(result.results.map(row => row.work))).toEqual(
-          new Set(verifying.works.map(row => row.work)),
-        );
+        await assertPublicContentSearchReady(stack.env, projection.content, projection.cursor, projection.consumer);
+        // Verify the matching source bodies without executing the complete
+        // search outside its profile (which could itself exhaust the deadline).
+        for (const [index, work] of verifying.works.entries()) {
+          const response = await stack.main.handle(new Request(
+            `http://main.local/v1/main-versions/${work.mainVersion.slice(-36)}/selection?language=en`));
+          expect(response.status).toBe(200);
+          expect(await response.json()).toMatchObject({ work: work.work,
+            selectedDraft: work.draftRevision, body: `${phrase} ${index}` });
+        }
         copy = stack;
         return async () => { copy = undefined; await stack.stop(); };
       } catch (error) { await stack.stop(); throw error; }
@@ -138,17 +144,21 @@ async function profileRankedSearch() {
       try {
         const count = cut.works.length;
         const body = { profile: 'public-main-phrase-page-v1', phrase, language: 'en', pageSize };
-        const first = await profileRequest(sink, headers => request(copy!, '/v1/queries/page', body, headers),
+        const first = await profileRequest(sink, headers => request(copy!, '/v1/queries/page', body, headers, true),
           { flush: flushTelemetryTraces });
+        attempts.push({ matchingWorks: count, page: 'first', profile: first.profile });
+        if (first.result.httpStatus !== 200) continue;
         expect(first.result.next).not.toBeNull();
         const continuation = await profileRequest(sink, headers => request(copy!, '/v1/queries/page', {
           ...body, continuation: first.result.next,
-        }, headers), { flush: flushTelemetryTraces });
+        }, headers, true), { flush: flushTelemetryTraces });
+        attempts.push({ matchingWorks: count, page: 'continuation', profile: continuation.profile });
         if ([first.profile, continuation.profile].some(profile => profile.postgresStatements === 0
           || profile.fusekiRequests === 0)) {
           blind = { matchingWorks: count, first: first.profile, continuation: continuation.profile };
           throw new Error(`meter blind at ${count} matching Works`);
         }
+        if (continuation.result.httpStatus !== 200) continue;
         for (const result of [first.result, continuation.result]) {
           expect(result.relationComplete).toBe(true);
           expect(result.results).toHaveLength(pageSize);
@@ -163,7 +173,7 @@ async function profileRankedSearch() {
     }
   } finally {
     mkdirSync(dirname(process.env.REZICS_WORK_PROFILE_RESULT!), { recursive: true });
-    writeFileSync(process.env.REZICS_WORK_PROFILE_RESULT!, JSON.stringify({ evidence, blind }, null, 2));
+    writeFileSync(process.env.REZICS_WORK_PROFILE_RESULT!, JSON.stringify({ evidence, attempts, blind }, null, 2));
     const errors: unknown[] = [];
     for (const target of targets) {
       try { await backups.stop(target); } catch (error) { errors.push(error); }
@@ -179,12 +189,16 @@ if (process.env.REZICS_RANKED_SEARCH_PROFILE_CHILD === '1') {
 } else {
   const { PUBLIC_SEARCH_PAGE_COST } = await import('../../../services/main/src/modules/work/search-continuation.ts');
   let evidence: Evidence[];
+  let attempts: { matchingWorks: number; page: string; profile: WorkProfile }[];
   beforeAll(async () => {
     const measured = await runWorkProfileChild('tests/qa/integration/search-ranked-growth.test.ts', {
       env: { REZICS_RANKED_SEARCH_PROFILE_CHILD: '1' }, timeoutMs: 450_000,
     });
-    evidence = (JSON.parse(readFileSync(measured.resultPath, 'utf8')) as { evidence: Evidence[] }).evidence;
+    ({ evidence, attempts } = JSON.parse(readFileSync(measured.resultPath, 'utf8')) as {
+      evidence: Evidence[]; attempts: typeof attempts });
     console.log(`Ranked search work profiles: ${measured.resultPath}`);
+    console.log(JSON.stringify(attempts.map(row => ({ works: row.matchingWorks, page: row.page,
+      status: row.profile.request.status, fuseki: row.profile.fusekiRequests, sql: row.profile.postgresStatements })), null, 2));
     console.log(JSON.stringify(evidence.map(row => ({ matchingWorks: row.matchingWorks, restoreMs: row.restoreMs,
       ...Object.fromEntries(['first', 'continuation'].map(page => [page,
         Object.fromEntries(counters.map(counter => [counter, row[page as 'first' | 'continuation'][counter]]))])),
@@ -192,6 +206,7 @@ if (process.env.REZICS_RANKED_SEARCH_PROFILE_CHILD === '1') {
   }, 460_000);
 
   test('SEARCH18/SEARCH16: ranked first and continuation pages cover restored 4/16/64 matching Works', () => {
+    for (const attempt of attempts) expect(attempt.profile.request.status).toBe(200);
     expect(evidence.map(row => row.matchingWorks)).toEqual([4, 16, 64]);
     for (const row of evidence) for (const profile of [row.first, row.continuation]) {
       expect(profile.request.route).toBe('/v1/queries/page');
