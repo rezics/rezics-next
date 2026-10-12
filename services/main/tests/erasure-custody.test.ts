@@ -10,6 +10,7 @@ import { clearVerifiedImmutableObjectCache, ObjectIntegrityError, ObjectUnavaila
 import { restoredCustodyDigests, type RestoredGraphCustody } from '../src/modules/erasure/custody.ts';
 import { discloseContent } from '../src/modules/disclosure/assembly.ts';
 import { configureDisclosure, type DisclosureReader } from '../src/modules/disclosure/read.ts';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
 import { graphErasedContentRevisions, GraphErasureConflict, GraphErasureUnavailable } from
   '../src/modules/erasure/graph.ts';
 import { ObjectErasureConflict, replayObjectErasure } from '../src/modules/erasure/replay-objects.ts';
@@ -624,19 +625,26 @@ test('public Content cannot deliver bytes suppressed while its disclosure owner 
     if (query.includes('SELECT ?work ?head')) return { results: { bindings: [{
       work: { type: 'uri', value: work }, head: { type: 'uri', value: `https://rezics.com/id/${revisionId(3)}` },
     }] } };
+    if (query.includes('SELECT ?resource ?head')) return { results: { bindings: [{
+      resource: { type: 'uri', value: work }, head: { type: 'uri', value: `https://rezics.com/id/${revisionId(3)}` },
+    }] } };
     throw new Error('unexpected public Content fixture query');
   };
   let enterPolicy!: () => void, releasePolicy!: () => void;
   const policyEntered = new Promise<void>(resolve => { enterPolicy = resolve; });
   const policyReleased = new Promise<void>(resolve => { releasePolicy = resolve; });
-  const reader: DisclosureReader = { read: async targets => {
+  const reader: DisclosureReader = fixtureDisclosureReader(async targets => {
+    expect(targets.every(target => target.ancestry?.parents.some(parent => parent.resource === work))).toBe(true);
     enterPolicy();
     await policyReleased;
     return targets.map(() => 'visible');
-  } };
+  });
   const env = { fuseki: graph, objectDirectory: '.temp/erasure-custody-tests',
     lineage: { dataEpoch: 'epoch', routingEpoch: '1' } };
   configureDisclosure(env, reader);
+  configureFixtureDisclosureAncestry(env, () => ({
+    resource: work, head: `https://rezics.com/id/${revisionId(3)}`,
+  }));
   const serializedJson = JSON.stringify({ body: 'original bytes retained by the retrying Content owner' });
   const original: ExactReadResult = { revisionId: revision, status: 'available', serializedJson,
     body: JSON.parse(serializedJson), reference: { owner: 'content', resourceId: work,
@@ -645,7 +653,8 @@ test('public Content cannot deliver bytes suppressed while its disclosure owner 
       language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr',
       sourceRevision: null, predecessor: null, provenance: {} } };
   const pending = discloseContent(env, [original]);
-  await policyEntered;
+  // A rejected owner read must fail this test instead of leaving the entry gate pending.
+  await Promise.race([policyEntered, pending]);
   tombstones.add(revision);
   releasePolicy();
   expect(await pending).toEqual([{ revisionId: revision, status: 'erased' }]);

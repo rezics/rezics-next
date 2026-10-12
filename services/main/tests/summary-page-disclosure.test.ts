@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureCut } from './support/disclosure-ancestry.ts';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { configureDisclosure, type DisclosureDecision, type DisclosureTarget } from '../src/modules/disclosure/read.ts';
 import { readFeed } from '../src/modules/feed/read.ts';
@@ -36,6 +37,7 @@ function avatar(target: string): AvatarRow {
 function page(kind: Case) {
   const evaluated: Array<{ paired: boolean; targets: DisclosureTarget[] }> = [];
   const decide = (targets: readonly DisclosureTarget[], paired: boolean) => {
+    expect(targets.every(target => target.ancestry !== undefined)).toBe(true);
     evaluated.push({ paired, targets: [...targets] });
     const decisions = targets.map((target): DisclosureDecision =>
       kind === 'cover' && target.owner === 'media' ? 'hidden' : 'visible');
@@ -73,6 +75,7 @@ function page(kind: Case) {
       return { results: { bindings: [{ work: uri(work), main: uri(id(11)), head: uri(head) }] } };
     }
     if (query.includes('rv:descriptiveMetadataHead')) return { results: { bindings: [{ work: uri(work) }] } };
+    if (query.includes('SELECT ?resource ?head')) return { results: { bindings: [{ resource: uri(work), head: uri(head) }] } };
     if (query.includes('SELECT ?work ?head ?owningWork')) {
       unexpected.push('disclosure head probe');
       throw new Error('Disclosure probed a work head the summary already read');
@@ -89,7 +92,14 @@ function page(kind: Case) {
   configureDisclosure(environment, {
     read: async targets => decide(targets, false).decisions,
     readWithAnonymousNames: async targets => decide(targets, true),
+    readAtCut: async (targets, _viewer, _channel, _client, anonymousNames) => ({
+      ...decide(targets, anonymousNames === true), fenceBasis: fixtureDisclosureCut,
+    }),
   });
+  configureFixtureDisclosureAncestry(environment, target => target.work || target.resource === work
+    ? { resource: target.work ?? work, head,
+      ...(target.workRevision !== undefined ? { protectedRevision: target.workRevision } : {}) }
+    : undefined);
   const session = new WorkReadSession({
     environment,
     follows: {},

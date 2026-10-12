@@ -171,8 +171,9 @@ test('A full summary batch spends the same graph calls signed in and anonymous, 
       const result = await readResourceSummaries(f.environment, undefined, { viewer }, f.input);
       expect(result.summaries).toHaveLength(MAX_SUMMARY_BATCH);
       expect(result.summaries.every(summary => summary.status === 'available' && summary.disclosure === 'public')).toBe(true);
-      expect(result.cost).toMatchObject({ graphQueries: 3, accessQueries: 2 });
+      expect(result.cost).toMatchObject({ graphQueries: 5, accessQueries: 2 });
       expect(f.graphCalls).toHaveLength((pass + 1) * 5);
+      expect(result.cost.graphQueries).toBe(f.graphCalls.length / (pass + 1));
       expect(f.ownerCalls).toHaveLength((pass + 1) * 2);
       expect(f.ownerCalls.at(-1)!.targets).toHaveLength(MAX_SUMMARY_BATCH);
     }
@@ -197,7 +198,8 @@ test('A full summary batch with covers preserves name indexes across two bounded
     && summary.disclosure === 'public' && summary.avatar.kind === 'fallback')).toBe(true);
   expect(f.ownerCalls.map(call => call.targets.length)).toEqual([64, 64, 64]);
   expect(f.graphCalls).toHaveLength(7);
-  expect(result.cost).toMatchObject({ graphQueries: 4, accessQueries: 3, mediaQueries: 1 });
+  expect(result.cost).toMatchObject({ graphQueries: 7, accessQueries: 3, mediaQueries: 1 });
+  expect(result.cost.graphQueries).toBe(f.graphCalls.length);
 });
 
 test('Release summaries carry the current owning Work and exact parent head into both disclosure passes', async () => {
