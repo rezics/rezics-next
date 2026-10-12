@@ -264,8 +264,11 @@ export class RightsStore {
       JOIN access.permission_grant g ON g.recipient_subject = r.subject_id
       JOIN access.scope_gate s ON s.id = g.scope_id
       WHERE p.account_issuer = $1 AND p.account_subject = $2 AND p.active AND r.subject_id = $3 AND r.active
+        AND r.action IN ($5,'agent.control')
         AND r.valid_until > clock_timestamp() AND a.active AND g.scope_id = $4 AND g.action = $5 AND g.active
-        AND g.valid_until > clock_timestamp() AND s.open AND s.dispatch_open
+        AND g.valid_until > clock_timestamp() AND (g.membership_id IS NULL OR EXISTS (
+          SELECT 1 FROM access.membership m WHERE m.id = g.membership_id AND m.state = 'joined'
+            AND m.generation = g.membership_generation)) AND s.open AND s.dispatch_open
         AND (SELECT open FROM access.recovery_fence WHERE id = true)
       LIMIT 1`, [principal.issuer, principal.subject, actingSubject, ASSESS_SCOPE, ASSESS_ACTION]).catch(() => {
       throw new RightsUnavailable('Access is unavailable');
