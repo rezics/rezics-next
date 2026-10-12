@@ -20,7 +20,7 @@ function graph(kind: string, selectors: Record<string, string> = {}) {
   const target: DecisionTargetInput = { owner: 'graph', resource, component: 'record', locator: null,
     scopeKind: 'component', revision: null, expectedHead: head, effect: 'disclosure' };
   const state = { head, selectors, kinds: [kind], loseResponse: false, stale: false,
-    status: 'committed' as 'committed' | 'invalid', digest: '', becomeRealm: false };
+    status: 'committed' as 'committed' | 'invalid', digest: '', becomeRealm: false, bindingRows: 1 };
   const receipts = new Map<string, { digest: string; head: string }>();
   const commands: CommandEnvelope[] = [];
   const reads: string[] = [];
@@ -33,7 +33,8 @@ function graph(kind: string, selectors: Record<string, string> = {}) {
           target: uri(resource), head: uri(saved.head) }] : [] } };
       }
       if (sql.includes('SELECT ?scheme ?concept ?path ?expression ?sense'))
-        return { results: { bindings: [Object.fromEntries(Object.entries(definitions).map(([role, value]) => [role, uri(value)]))] } };
+        return { results: { bindings: Array.from({ length: state.bindingRows }, () =>
+          Object.fromEntries(Object.entries(definitions).map(([role, value]) => [role, uri(value)]))) } };
       if (sql.includes('ASK')) {
         if (state.becomeRealm) state.kinds = [`${RV}Realm`];
         return { boolean: state.kinds.includes(`${RV}ZoneHomeDocument`) };
@@ -183,3 +184,13 @@ test('a non-Realm record becoming a Realm between classification and profile sel
   await expect(f.effects.apply(randomUUID(), 1, f.target, { realm: null })).rejects.toBeInstanceOf(GovernanceStale);
   expect(f.commands).toHaveLength(0);
 });
+
+for (const bindingRows of [0, 2]) {
+  test(`a Concept with ${bindingRows ? 'ambiguous' : 'missing'} owner bindings cannot confirm a receipt`, async () => {
+    const f = graph(`${skos}Concept`);
+    f.state.bindingRows = bindingRows;
+    await expect(f.effects.apply(randomUUID(), 1, f.target)).rejects.toThrow('Concept owner binding is unavailable or ambiguous');
+    expect(f.commands).toHaveLength(0);
+    expect(f.receipts.size).toBe(0);
+  });
+}
