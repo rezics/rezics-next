@@ -259,7 +259,8 @@ test('pre-dispatch refusal serializes with dispatch and fences an admission whos
   const refused = (await identify(await about.reserve(intent()))).operation;
   const lostAdmission = admission(refused, 'reply.place', `reply:place:${refused.realm}`);
   expect(await about.refuseBeforeDispatch(refused.id, refusal)).toMatchObject({ kind: 'refused', operation: { terminalOutcome: refusal } });
-  await expect(about.recordDispatch(refused.id, lostAdmission.id, basis)).rejects.toBeInstanceOf(RealmReplyStale);
+  expect(await about.recordDispatch(refused.id, lostAdmission.id, basis)).toMatchObject({
+    terminalOutcome: refusal, placementAdmissionId: null, dispatchBasis: null });
   const dispatched = (await identify(await about.reserve(intent()))).operation;
   const dispatchAdmission = admission(dispatched, 'reply.place', `reply:place:${dispatched.realm}`);
   await about.recordDispatch(dispatched.id, dispatchAdmission.id, basis);
@@ -275,8 +276,9 @@ test('pre-dispatch refusal serializes with dispatch and fences an admission whos
   const row = (await pool.query(`SELECT terminal_refusal,placement_admission_id
     FROM content.realm_about_post_operation WHERE id=$1`, [racing.id])).rows[0];
   if (release.value.kind === 'refused') {
-    expect(dispatch.status).toBe('rejected');
-    if (dispatch.status === 'rejected') expect(dispatch.reason).toBeInstanceOf(RealmReplyStale);
+    expect(dispatch.status).toBe('fulfilled');
+    if (dispatch.status === 'fulfilled') expect(dispatch.value).toMatchObject({
+      terminalOutcome: refusal, placementAdmissionId: null, dispatchBasis: null });
     expect(row).toEqual({ terminal_refusal: true, placement_admission_id: null });
     expect(await about.readThread(racing.realm, racing.about)).toBeNull();
   } else {
