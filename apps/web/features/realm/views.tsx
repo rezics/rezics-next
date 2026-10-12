@@ -145,7 +145,7 @@ export function RealmAbout({ realmName, description, rules, moderators, members,
   /** Null when the Realm does not publish its moderators. */
   moderators: readonly AboutPerson[] | null; members: string | null;
   /** Members who chose to be listed; null when the roster is not public. */
-  listed: { people: readonly AboutPerson[]; more: boolean } | null;
+  listed: { people: readonly AboutPerson[] } | null;
   /** Other communities to look at, from the Realm directory. */
   others: readonly { href: string; name: { value: string; lang: string }; members: string | null }[];
   locale: UiLocale; messages: RealmMessages;
@@ -196,7 +196,10 @@ export function RealmAbout({ realmName, description, rules, moderators, members,
         bg-(--zone-panel) p-(--zone-panel-pad)">
         <ModuleHeading id="realm-members">{messages.membersTitle}</ModuleHeading>
         {listed.people.length ? <>
-          <p className="text-muted-foreground text-xs">{listed.more ? members : t.membersListed(listed.people.length)}</p>
+          {/* The roster response has no total: the count is of the rows shown, and the Realm's own membership,
+              read separately, is labelled as that. */}
+          <p className="text-muted-foreground text-xs">{t.membersShown(listed.people.length)}
+            {only === 'members' && members ? <> · {t.membersInCommunity({ members })}</> : null}</p>
           <ul className="grid grid-cols-1">
             {listed.people.map(person => <li key={person.id}>
               <PersonRow person={person} note={person.featured ? messages.featured : undefined} /></li>)}

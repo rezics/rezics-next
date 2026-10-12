@@ -112,7 +112,7 @@ function TabPage({ tab, locale }: { tab: Tab; locale: UiLocale }) {
         only={tab === 'rules' || tab === 'members' ? tab : undefined}
         members={locale === 'zh-Hans' ? '12,408 位成员' : '12,408 members'}
         moderators={moderators}
-        listed={{ more: true, people: listed }}
+        listed={{ people: listed }}
         others={[
           {
             href: realmHref(locale, 'classics'),
@@ -235,6 +235,9 @@ export const Members: Story = {
     await expect(canvas.getByRole('heading', { name: 'Members' })).toBeVisible();
     await expect(canvas.queryByRole('heading', { name: 'Community rules' })).toBeNull();
     await expect(canvas.queryByRole('heading', { name: 'Moderators' })).toBeNull();
+    // The header's membership is labelled as the community's, never as the roster's length.
+    await expect(canvas.getByText('Showing 4 listed members · 12,408 members in the community, listed or not'))
+      .toBeVisible();
     await captureSection('members');
   },
 };
@@ -276,7 +279,9 @@ export const About: Story = {
     );
     const members = canvas.getByRole('region', { name: 'Members' });
     await expect(within(members).getAllByRole('listitem')[0]).toHaveTextContent('北岛听风Featured');
-    await expect(within(members).getByText('12,408 members')).toBeVisible();
+    // The roster says what it shows; the Realm's membership stays in the About section above.
+    await expect(within(members).getByText('Showing 4 listed members')).toBeVisible();
+    await expect(within(members).queryByText(/12,408/)).toBeNull();
     await expect(canvas.getByRole('link', { name: /Classic Literature/ })).toHaveAttribute(
       'href',
       localizedPath(spaceHref('classics', 'community'), 'en'),

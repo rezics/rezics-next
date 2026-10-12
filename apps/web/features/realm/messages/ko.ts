@@ -71,8 +71,9 @@ export default {
   // The About tab's people.
   moderatorsNone: '아직 공개된 운영진이 없어요.',
   membersTitle: '회원',
-  membersListed: plural({ one: insert('회원 {{count}}명이 공개 목록에 표시되도록 선택했어요'),
-    other: insert('회원 {{count}}명이 공개 목록에 표시되도록 선택했어요') }, { count: asValue(number()) }),
+  membersShown: plural({ one: insert('공개 목록 회원 {{count}}명 표시 중'),
+    other: insert('공개 목록 회원 {{count}}명 표시 중') }, { count: asValue(number()) }),
+  membersInCommunity: insert('공개 목록 여부와 관계없이 커뮤니티 전체 {{members}}', { members: String }),
   membersNone: '아직 공개 목록에 표시하기로 선택한 회원이 없어요.',
   featured: '추천',
   createPost: '게시물 작성',

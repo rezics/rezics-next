@@ -71,8 +71,9 @@ export default {
   // The About tab's people.
   moderatorsNone: 'Noch kein Moderationsteam gelistet.',
   membersTitle: 'Mitglieder',
-  membersListed: plural({ one: insert('{{count}} Mitglied möchte gelistet werden'),
-    other: insert('{{count}} Mitglieder möchten gelistet werden') }, { count: asValue(number()) }),
+  membersShown: plural({ one: insert('{{count}} gelistetes Mitglied angezeigt'),
+    other: insert('{{count}} gelistete Mitglieder angezeigt') }, { count: asValue(number()) }),
+  membersInCommunity: insert('{{members}} in der Gemeinschaft, gelistet oder nicht', { members: String }),
   membersNone: 'Noch niemand hat sich für einen Eintrag in der Liste entschieden.',
   featured: 'Empfohlen',
   createPost: "Beitrag erstellen",

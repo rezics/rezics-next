@@ -71,8 +71,9 @@ export default {
   // The About tab's people.
   moderatorsNone: 'Aucun modérateur n’est encore répertorié.',
   membersTitle: 'Membres',
-  membersListed: plural({ one: insert('{{count}} membre a choisi d’apparaître dans la liste'),
-    other: insert('{{count}} membres ont choisi d’apparaître dans la liste') }, { count: asValue(number()) }),
+  membersShown: plural({ one: insert('{{count}} membre de la liste affiché'),
+    other: insert('{{count}} membres de la liste affichés') }, { count: asValue(number()) }),
+  membersInCommunity: insert('{{members}} dans la communauté, listés ou non', { members: String }),
   membersNone: 'Aucun membre n’a choisi d’apparaître dans la liste pour le moment.',
   featured: 'À la une',
   createPost: "Créer une publication",

@@ -483,7 +483,6 @@ export function RealmAboutRoute(props: RealmRouteProps) {
         listed={
           roster.ok
             ? {
-                more: roster.data.nextCursor !== null,
                 people: [...roster.data.items]
                   .sort((a, b) => Number(b.featured) - Number(a.featured))
                   .flatMap((item) =>
@@ -570,7 +569,7 @@ export function RealmMembersRoute(props: RealmRouteProps) {
         members={membersText(view.realm.header.membership.count, locale, view.messages)}
         rules={null}
         others={[]}
-        listed={{ people, more: roster.data.nextCursor !== null }}
+        listed={{ people }}
         locale={locale}
         messages={view.messages}
       >

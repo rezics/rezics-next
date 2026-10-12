@@ -71,8 +71,9 @@ export default {
   // The About tab's people.
   moderatorsNone: 'Aún no hay moderadores en la lista.',
   membersTitle: 'Miembros',
-  membersListed: plural({ one: insert('{{count}} miembro eligió aparecer en la lista'),
-    other: insert('{{count}} miembros eligieron aparecer en la lista') }, { count: asValue(number()) }),
+  membersShown: plural({ one: insert('Se muestra {{count}} miembro de la lista'),
+    other: insert('Se muestran {{count}} miembros de la lista') }, { count: asValue(number()) }),
+  membersInCommunity: insert('{{members}} en la comunidad, estén en la lista o no', { members: String }),
   membersNone: 'Aún no hay miembros que hayan elegido aparecer en la lista.',
   featured: 'Destacado',
   createPost: "Crear publicación",

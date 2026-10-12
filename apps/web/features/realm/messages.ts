@@ -72,8 +72,9 @@ export const messages = {
   // The About tab's people.
   moderatorsNone: 'No moderators are listed yet.',
   membersTitle: 'Members',
-  membersListed: plural({ one: insert('{{count}} member chose to be listed'),
-    other: insert('{{count}} members chose to be listed') }, { count: asValue(number()) }),
+  membersShown: plural({ one: insert('Showing {{count}} listed member'),
+    other: insert('Showing {{count}} listed members') }, { count: asValue(number()) }),
+  membersInCommunity: insert('{{members}} in the community, listed or not', { members: String }),
   membersNone: 'No members have chosen to be listed yet.',
   featured: 'Featured',
   // A Zone's own site: its mounted pages, and the pages this host cannot show yet.

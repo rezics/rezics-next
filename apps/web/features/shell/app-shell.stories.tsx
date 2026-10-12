@@ -286,7 +286,8 @@ export const Communities: Story = {
     await expect(realms.compareDocumentPosition(manage) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     await expect(within(canvasElement.querySelector('header')!).getByRole('link', { name: 'Notifications, 3 unread' }))
       .toHaveAttribute('href', '/en/notifications');
-    await expect(within(nav).getByRole('link', { name: /^Notifications/ })).toHaveTextContent('3');
+    // The number is the reader's unread notifications; the navigation's name says so.
+    await expect(within(nav).getByRole('link', { name: 'Notifications, 3 unread' })).toHaveTextContent('3');
   },
 };
 

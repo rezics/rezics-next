@@ -114,6 +114,8 @@ export const SparseSavedPagination: Story = {
   async play({ canvasElement, args }) {
     const canvas = within(canvasElement);
     await expect(canvas.getAllByRole('listitem')).toHaveLength(2);
+    // The shell's unread count is the whole inbox's; a filtered list never carries it as its own total.
+    await expect(canvas.queryByText(/\d+\s+unread/i)).toBeNull();
     await expect(canvas.getAllByRole('link', { name: 'A correction was revised' }).map(link => link.getAttribute('href')))
       .toEqual([953, 952].map(proposal => `/en/proposals/${streamId(proposal)}?revision=2`));
     await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
