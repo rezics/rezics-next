@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { slideIsCurrent, ZONE_SHOWCASE_DISCLOSURE_COST } from '../src/modules/zone/showcase-disclosure.ts';
 import { bindZoneCampaignArtVariant, readZoneCampaignArt, requestNewZoneCampaignRenditions } from '../src/modules/zone/campaign-art.ts';
-import { configureDisclosure } from '../src/modules/disclosure/read.ts';
+import { configureDisclosure, type DisclosureTarget } from '../src/modules/disclosure/read.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import type { MediaStore } from '../src/modules/media/store.ts';
 import type { MediaDependencies } from '../src/modules/media/commands.ts';
@@ -74,6 +74,40 @@ test('campaign art checks Asset and Use fences at the same policy cut', async ()
   expect(policyReads).toBe(1);
   expect(candidateReads).toBe(0);
 });
+
+for (const restrictedHead of ['historical', 'current'] as const) {
+  test(`campaign art applies a Realm restriction only to its exact ${restrictedHead} parent revision`, async () => {
+    const realm = ref(), zone = ref(), asset = randomUUID(), use = randomUUID(), representation = randomUUID();
+    const historical = ref(), current = ref();
+    const restricted = restrictedHead === 'historical' ? historical : current;
+    const checked: DisclosureTarget[] = [];
+    const environment = { fuseki: { query: async (query: string) => {
+      expect(query).toContain(`VALUES ?work { <${realm}> }`);
+      return { results: { bindings: [{ work: { type: 'uri', value: realm },
+        head: { type: 'uri', value: current } }] } };
+    } } } as unknown as WorkActivationEnvironment;
+    configureDisclosure(environment, { read: async targets => {
+      checked.push(...targets);
+      // The owner's unknown-parent rule fails closed for a revision fence.
+      return targets.map(target => target.work === realm
+        && (target.workRevision == null || target.workRevision === restricted) ? 'hidden' : 'visible');
+    } });
+    let candidateReads = 0;
+    const store = { itemDeliveryBatch: async () => new Map([[use, { asset, representation, target: realm,
+      availability: 'available', disclosure: 'public', moderation: 'none', lifecycle: 'active',
+      width: 1280, height: 720, mediaType: 'image/png' }]]),
+    renditions: { candidatesBatch: async () => { candidateReads++; return new Map(); } } } as unknown as MediaStore;
+    const result = await readZoneCampaignArt(store, realm,
+      [{ id: 'campaign', href: '/launch', art: { landscape: { use: `https://rezics.com/id/${use}` } } }],
+      { environment, zone });
+    if (restrictedHead === 'historical') expect(result[0]!.art.landscape?.url)
+      .toBe(`/v1/media/representations/${representation}/bytes?use=${use}`);
+    else expect(result[0]!.art.landscape).toBeNull();
+    expect(checked).toHaveLength(2);
+    for (const target of checked) expect(target).toMatchObject({ work: realm, workRevision: current });
+    expect(candidateReads).toBe(restrictedHead === 'historical' ? 1 : 0);
+  });
+}
 
 test('a full campaign Use batch keeps each image policy together and filters the last held Use', async () => {
   const realm = ref(), zone = ref();
