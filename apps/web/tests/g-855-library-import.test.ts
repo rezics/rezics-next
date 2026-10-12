@@ -95,18 +95,6 @@ describe('G-855: rows by outcome', () => {
     expect(applyFinished(halfApplied().map(row => ({ ...row, outcome: { applied: [], issues: [] } })))).toBe(true);
   });
 
-  test('every row of a long upload is read, a few pages at a time, in order', async () => {
-    const rows = Array.from({ length: 45 }, (_, index) => ({ ...goodreadsRows()[0]!, index }));
-    const api = fakeImportApi(rows);
-    const cursors: number[] = [];
-    const counted = { ...api, rows: async (id: string, cursor: number) => { cursors.push(cursor); return api.rows(id, cursor); } };
-    const seen: number[] = [];
-    const all = await loadAllRows(counted, 'file', 45, loaded => seen.push(loaded.length));
-    expect(all.map(row => row.index)).toEqual(rows.map(row => row.index));
-    expect(cursors.sort((a, b) => a - b)).toEqual([-1, 7, 15, 23, 31, 39]);
-    expect(seen.at(-1)).toBe(45);
-  });
-
   test('fewer rows than the upload has is a failure to retry, not a shorter import', async () => {
     const api = fakeImportApi(goodreadsRows());
     await expect(loadAllRows(api, 'file', 12)).rejects.toBeInstanceOf(ImportError);

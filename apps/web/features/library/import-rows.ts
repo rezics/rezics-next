@@ -1,4 +1,4 @@
-import { type ImportApi, ImportError, type ImportRow } from './import-api.ts';
+import { ImportError, type ImportRequestOptions, type ImportRow } from './import-api.ts';
 
 /** Where a row stands for the reader: Main's match, or the choice made on it. */
 export type RowGroup = 'matched' | 'ambiguous' | 'not-found' | 'private';
@@ -30,36 +30,46 @@ export function replaceRow(rows: readonly ImportRow[], row: ImportRow): ImportRo
   return rows.map(item => item.index === row.index ? row : item);
 }
 
-/** Rows are read this many pages at a time; Main matches the rows of each page it reads. */
-export const PARALLEL_PAGES = 3;
+interface RowPage<Cursor> { rows: ImportRow[]; nextCursor: Cursor | null }
+/** The start sentinel belongs to ImportApi; every subsequent position belongs to Main. */
+interface RowsApi<Cursor> {
+  rows: (id: string, cursor: Cursor | -1, options?: ImportRequestOptions) => Promise<RowPage<Cursor>>;
+}
 
-/**
- * Every row of an upload. The first page shows how many rows a page holds and the cursors that follow are
- * its multiples, so the rest are read in parallel; `onRows` gets the rows so far, in order.
- */
-export async function loadAllRows(api: ImportApi, id: string, total: number, onRows: (rows: ImportRow[]) => void = () => {},
+async function* rowPages<Cursor>(api: RowsApi<Cursor>, id: string, active: () => boolean, signal?: AbortSignal) {
+  let cursor: Cursor | -1 | null = -1;
+  const visited = new Set<Cursor | -1>();
+  while (cursor !== null && active()) {
+    signal?.throwIfAborted();
+    if (visited.has(cursor)) throw new ImportError('invalid', 'Main repeated an import row continuation');
+    visited.add(cursor);
+    const page = await api.rows(id, cursor, { signal });
+    signal?.throwIfAborted();
+    if (!active()) return;
+    yield page;
+    cursor = page.nextCursor;
+  }
+}
+
+/** Every row of an upload, following Main's continuation; `onRows` receives progress in row order. */
+export async function loadAllRows<Cursor>(api: RowsApi<Cursor>, id: string, total: number, onRows: (rows: ImportRow[]) => void = () => {},
   active: () => boolean = () => true, signal?: AbortSignal): Promise<ImportRow[]> {
-  const first = await api.rows(id, -1, { signal });
-  const found = new Map<number, ImportRow>(first.rows.map(row => [row.index, row]));
+  const found = new Map<number, ImportRow>();
   const ordered = () => [...found.values()].sort((a, b) => a.index - b.index);
-  onRows(ordered());
-  const size = first.rows.length;
-  const cursors: number[] = [];
-  if (first.nextCursor !== null && size) for (let at = first.nextCursor; at < total - 1; at += size) cursors.push(at);
-  await Promise.all(Array.from({ length: PARALLEL_PAGES }, async () => {
-    while (cursors.length && active()) {
-      const page = await api.rows(id, cursors.shift()!, { signal });
-      for (const row of page.rows) found.set(row.index, row);
-      onRows(ordered());
-    }
-  }));
+  for await (const page of rowPages(api, id, active, signal)) {
+    for (const row of page.rows) found.set(row.index, row);
+    onRows(ordered());
+  }
   const rows = ordered();
   if (active() && rows.length !== total) throw new ImportError('invalid', 'Main answered fewer rows than the upload has');
   return rows;
 }
 
 /** The row Main now holds at `index`, after a choice or a conflict. */
-export async function reloadRow(api: ImportApi, id: string, index: number, signal?: AbortSignal): Promise<ImportRow | undefined> {
-  const page = await api.rows(id, index - 1, { signal });
-  return page.rows.find(row => row.index === index);
+export async function reloadRow<Cursor>(api: RowsApi<Cursor>, id: string, index: number, signal?: AbortSignal): Promise<ImportRow | undefined> {
+  for await (const page of rowPages(api, id, () => true, signal)) {
+    const row = page.rows.find(row => row.index === index);
+    if (row) return row;
+  }
+  return undefined;
 }
