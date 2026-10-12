@@ -14,7 +14,7 @@ described backend phase 1, which finished on 2026-09-27 (history on
 | --- | --- |
 | Scope | The active [Goals](../../GOAL.md): production readiness (M4–M8), restarted on 2026-09-30 after the documentation discussion that settled decisions 39–50, and since 2026-10-04 addresses, relationships and discovery as a Goal of its own. |
 | Goals | Each Goal keeps its checkpoint in its own `state.md` (`docs/goals/<goal>/state.md`); live tasks: `task goal -- status`. |
-| Model allocation | Standing direction 5 in the [manager charter](../goals/manager.md#standing-directions): Sonnet 5.5 frontend, GPT-6.1 Sol backend, Grok 4.7 simple bounded tasks, Opus 5.5 and Sol first-of-kind design, Opus review. |
+| Model allocation | The [manager charter](../goals/manager.md#resources) says which engine does what; Claude is for managers only (maintainer, 2026-10-12). |
 | Baseline | Backend phase 1 passed all 276 retained backend acceptance IDs on 2026-09-27 (run `20260927t101230-1616d8`, tag `goal/backend-phase1`). The frontend-centred Goal paused after M3 at `59a85a96`. |
 
 ## Task reading routes

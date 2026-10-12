@@ -1,19 +1,24 @@
 # REZICS Goals
 
-Several Goals may run at once, one manager each. Each Goal's directory states
-its outcome, its areas (the paths other Goals' briefs may not claim) and its
-state; the [Goal program](docs/goals/README.md) describes how they run and close.
-The numbered product [decisions](docs/product/decisions.md) and the
-[goal page](docs/product/goal.md) outlive every Goal.
+No Goal is running. The maintainer stopped the run of 2026-10-07 to 2026-10-12
+on 2026-10-12 and had the way of working redesigned; the Goals below are written
+and not started. He starts the program's manager himself, from its `GOAL.md`.
 
-| Goal | Outcome | Manager |
+Each Goal's directory states its outcome, its areas (the paths other Goals'
+briefs may not claim) and its state. The [method](docs/goals/method.md) says how
+work is defined, proved and landed; the [Goal program](docs/goals/README.md)
+describes the tool. The numbered product [decisions](docs/product/decisions.md),
+the [goal page](docs/product/goal.md) and the
+[target architecture](docs/architecture/target-architecture.md) outlive every Goal.
+
+| Goal | Outcome | Starts |
 | --- | --- | --- |
-| [Program](docs/goals/program/GOAL.md) | Supermanager: contracts board, main-wide regression, shared resources, manager survival | tmux `goal-program` |
-| [Kernel](docs/goals/kernel/GOAL.md) | Core contracts of the target architecture: one model source, local consistency, bounded template reads, one representation per meaning | tmux `goal-kernel` |
-| [Trust and operations](docs/goals/trust-ops/GOAL.md) | Common admission, platform gates for gradual opening, accounts, safety, erasure, deployment preparation | tmux `goal-trust-ops` |
-| [Launch](docs/goals/launch/GOAL.md) | The first public scope: book library, recipes, VNDB-like and Bangumi-like catalogues, most Realm and Zone capabilities | tmux `goal-launch` |
+| [Program](docs/goals/program/GOAL.md) | Supermanager: the scope, the method and the tool that enforces it, the shared host | When the maintainer starts it |
+| [API](docs/goals/api/GOAL.md) | Every row of the first public scope is proved through the API, for each persona | After the program's first three tasks |
+| [Web](docs/goals/web/GOAL.md) | Every proved row has its surface | When the first vertical's rows are proved |
+| [Operations](docs/goals/operations/GOAL.md) | Erasure and restore proved on physical fixtures; deployment prepared | When the erasure and recovery contracts are stable |
 
 `task goal -- status` shows each running Goal's manager session and live tasks.
-
-Main-wide regression ([practice](docs/goals/README.md#several-goals)): held by
-the program Goal since 2026-10-07; it no longer rotates between managers.
+The kernel, trust-ops and launch Goals of 2026-10-06 are archived on the local
+branch `archive/goals`; what they left unfinished is listed in the new Goals'
+`state.md` files.

@@ -8,6 +8,11 @@ and other documents. Documents record practice; the code is the truth.
 
 ## Finish the work
 
+Begin with the brief's failing outcome tests and the files most likely to
+change. Read further only when the evidence requires it, make the smallest
+change that satisfies the outcome, avoid unrelated cleanup, run the checks
+below, and stop when the outcome's tests pass.
+
 Deliver the brief's outcome completely before you stop. Make reasonable
 assumptions, state them in the handoff, and keep going; do not stop to ask. If
 the brief is wrong for the code or the need, take the better course within your
@@ -60,9 +65,13 @@ makes, stop and report that instead of building it.
 
 Fixtures grant access through `grantFixtureAuthority`; the guard refuses a new direct write.
 
-Write tests with the code; backend tests cover the denied, stale, concurrent,
-partial and recovery outcomes the behaviour has. Prove your own work, nothing
-wider:
+An outcome test states what one kind of person gets from the public API of a
+real stack; it mocks none of our own modules. If your task writes outcome
+tests, write one for each persona the brief names and show that each fails on
+`main` for the stated reason. If your task implements, make those tests pass
+and do not edit them: a test that asks for the wrong thing goes back to the
+manager with the reason. Other tests go with the code they cover, at the lowest
+tier that proves it. Prove your own work, nothing wider:
 
 ```sh
 task goal -- test <your test files>        # one QA slot, including files from several tiers; never --heavy for your own files
@@ -111,13 +120,13 @@ of all worker input on 2026-10-11 was such polls.
 
 ## After a review
 
-A finding names one site of a defect. When you are resumed with findings, name
-the class of each, search your whole change for every other site of that class,
-fix them all and hold the class with a test. Then read the diff of your own fix
-as a reviewer would, before you hand off. Of the findings that later review
-rounds returned on 2026-10-11, 44% were defects in the fix itself and 38% the
-same class at another site. Say in the handoff which classes you closed and
-where you looked.
+A finding that blocks arrives with a test that fails on your branch. Make it
+pass, name the class of the defect, search your whole change for every other
+site of that class and fix them all. Then read the diff of your own fix as a
+reviewer would before you hand off: of the findings later rounds returned on
+2026-10-11, 44% were defects in the fix itself and 38% the same class at
+another site. A task gets two fix rounds; say plainly when the second cannot
+close it.
 
 ## Handoff
 

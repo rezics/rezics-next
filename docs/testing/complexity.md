@@ -116,7 +116,7 @@ retained manifests also check the existing load model/schema/engine compatibilit
 Stable entity ids belong to the retained backup: restoring that checkpoint
 preserves them, while a fresh API build generates new ids. The
 [seed owner contract](../../scripts/load/README.md) distinguishes those identities.
-The [retained seed command cost report](../goals/kernel/reports/seed-build-command-cost.md) records the existing request meters for the 16-Work cut; it measures preparation cost without changing owner operations.
+The [retained seed command cost report](seed-build-command-cost.md) records the existing request meters for the 16-Work cut; it measures preparation cost without changing owner operations.
 Preparation verifies all dimensions before retaining a stopped backup; later
 runs restore distinct writable copies. Bind the backup driver to the existing
 fixture/load backup and restore workflow, never copy live storage. Include

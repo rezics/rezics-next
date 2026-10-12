@@ -30,7 +30,7 @@ it must never resolve to replacement bytes.
 
 ## Live copies and retained recovery copies
 
-The [trust-ops retention policy](../goals/trust-ops/GOAL.md) requires immediate
+The retention policy the [operations Goal](../goals/operations/GOAL.md) proves requires immediate
 suppression and deletion from active stores within 30 days. Live erasure must remove
 raw payload bytes from the affected owner rows and exact objects, including
 media originals, derived objects and quarantine copies. Preserve historical

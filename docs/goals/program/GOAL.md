@@ -1,12 +1,15 @@
 ---
 # Coarse areas other Goals' briefs may not claim (goalctl reads them at every dispatch).
-# The program owns the Goal tooling and the shared QA harness; inventories other
-# Goals append to (integration lists, coverage declarations) stay unowned.
+# The program owns the Goal tooling, the method, the scope registry and the shared QA
+# harness; inventories other Goals append to (integration lists, coverage declarations)
+# stay unowned.
 areas:
   - scripts/goal/**
   - docs/goals/README.md
   - docs/goals/manager.md
   - docs/goals/worker.md
+  - docs/goals/method.md
+  - scripts/qa/cases/launch-coverage.ts
   - scripts/qa/affected.ts
   - scripts/qa/acceptance.ts
   - scripts/qa/cli.ts
@@ -23,126 +26,100 @@ areas:
 
 # Program
 
-Status: designed on 2026-10-07 by the architecture session at the maintainer's
-request ("你負責設計我們之後的運行架構"); [state.md](state.md) records where the
-work stands.
+Status: redesigned on 2026-10-12 and not started. The maintainer stopped the run
+of 2026-10-07 to 2026-10-12 because its efficiency was not acceptable, asked for
+the way of working to be redesigned, and starts this Goal's manager himself.
+[state.md](state.md) records where everything stands.
 
-The program's manager is the **supermanager**: it runs no product work and
-reviews no other Goal's diffs. It makes three delivery Goals faster and safer by
-owning what none of them can own alone.
+The program's manager is the **supermanager**. It runs no product work. It owns
+what decides whether the delivery Goals are efficient: the scope, the
+[method](../method.md) and the tool that enforces it, and the shared host.
 
-| Goal | Outcome |
-| --- | --- |
-| [kernel](../kernel/GOAL.md) | Core contracts of the target architecture |
-| [trust-ops](../trust-ops/GOAL.md) | Authority, platform gates, safety, erasure, deployment preparation |
-| [launch](../launch/GOAL.md) | The first public scope through the API and the browser |
+| Goal | Outcome | Starts |
+| --- | --- | --- |
+| [api](../api/GOAL.md) | Every row of the first public scope is proved through the API, for each persona | When the program's first three tasks have landed |
+| [web](../web/GOAL.md) | Every proved row has its surface | When the first vertical's rows are proved |
+| [operations](../operations/GOAL.md) | Erasure and restore are proved on physical fixtures; deployment is prepared | When the api Goal no longer changes the erasure and recovery contracts |
 
-## Design record
+The product direction is settled and is not this Goal's subject: the
+[target architecture](../../architecture/target-architecture.md), the
+[decisions](../../product/decisions.md) and the [goal page](../../product/goal.md)
+hold it. Implementation questions are researched when a row needs them.
 
-The target architecture (v0.2, Traditional Chinese) is the shared design record:
-`/home/edge/projects/rezics/rezics-next/.temp/arch-review-2/target-architecture.md`.
-Its evidence is in `.temp/arch-review*/` and `.temp/goal-design/` (D1 QA
-and operations, D2 work decomposition) under the same root. Workers in
-worktrees read it by that absolute path. As each decision settles in code or an
-owner document, the program folds it out of the record (the record's last
-paragraph lists the owners) and the record is retired at the end.
+## What went wrong, in one paragraph
 
-Its criteria bind every Goal:
-
-- **Asymptotic scale.** A slow engine is acceptable; a design whose
-  per-operation cost grows with total data or population is not. Every read,
-  write, validation, authorization, inference and erasure touches a bounded
-  neighbourhood, and cross-partition effects propagate asynchronously. v1 stays
-  single-node Jena; it adopts no form a partitioned future must tear out.
-- **Architecture, not API count.** One meaning has one representation, queries
-  and constraints are standard data, and a new view or vertical adds a query, a
-  shape and a fixture, not a handler.
-- **Gradual opening.** Unpolished capabilities stay closed behind platform
-  permissions and open one group at a time ([trust-ops](../trust-ops/GOAL.md)).
-- The cut lines in the record's §12 hold in every brief.
+Ten hours on 2026-10-12 with about 25 workers closed 77 tasks and moved the scope
+registry by nothing after noon. Seven percent of worker output was first-attempt
+work; the rest was the same tasks returning from a review that had no limit and
+asked about tests and hypothetical interleavings instead of what each person gets
+from the API. The [method](../method.md) has the figures and what replaces that.
 
 ## Duties
 
-1. **Contracts board.** Cross-Goal dependencies are named contracts, not task
-   IDs (archived tasks leave the live ledger): C0 current definitions and
-   custody boundary, C1 common admission and exposure, C2 bounded SHACL and
-   Blocks, C3 local basis, stream and cursor, C4 Statement, acceptance and
-   classification, C5 template reads and page facade, C6 component history and
-   receipt custody. [state.md](state.md) records each contract's owner, the
-   commit it landed in and the acceptance that proved it. A Goal builds on a
-   contract only after it lands there.
-2. **Main-wide regression.** The program holds it permanently (it no longer
-   rotates between Goal managers). See [QA tiers](#qa-tiers).
-3. **Shared resources.** Host memory, the QA slots and the heavy lock, the
-   live-worker cap, and each account's spending before its reset. It raises the
-   cap from 5 to 8 once P1 and P2 land and host memory stays above 10 GiB
-   available, and to 12 after 12–20 waves show no new OOM and 20–40% fewer heavy
-   test-project-hours per merged task (D1).
-4. **Manager survival.** Four managers share one Claude account. The program
-   watches the 5-hour projection, asks managers to shorten turns or lower
-   effort before Claude dispatch would stop, and restarts a manager that
-   died (its tmux session `goal-<goal>`, the start message in
-   [manager.md](../manager.md#starting-a-manager)).
-5. **Launch operation matrix.** trust-ops proposes which operations and groups
-   are public at launch (with launch's input); the program approves it. The
-   foundation that must stay public to avoid a lockout (sign-in, sessions,
-   recovery, public reads of public resources, health) is listed explicitly.
-6. **Retire production-readiness.** Every item of its GOAL.md and state.md now
-   has an owner below or in another Goal. After checking that each one landed
-   in a brief, the program removes its row from the root GOAL.md and runs
-   `task goal -- goal close production-readiness`. The salvage branches
-   (`goal/g-403`, `g-418`, `g-422`, `g-432`, `g-433`, `g-435`) are material
-   for their new owners, never whole cherry-picks: `g-403` (shared dev
-   storage under QA memory pressure) for P4, `g-432` (chapter author notes)
-   for kernel's C2, the rest as the delivery briefs name them. The audit of
-   2026-10-07 (`.temp/goal-program/pr-retire-audit.md`) routed the items no
-   brief carried to their owners.
-7. **Closing gate.** A delivery Goal closes only when, besides its own
-   completion, the `product-audit` skill (`.agents/skills/product-audit`)
-   finds no open P0 or P1 class in its areas, as the production-readiness
-   milestones required.
-
-## QA tiers
-
-Maintainer, 2026-10-07: QA, not writing code, takes most of the resources; the
-supermanager runs the full tests so others run fewer of them. D1 measured why.
-Integration plus fault/recovery were about 97% of recorded tier time (22.9 h and
-3.4 h in three days). `--affected` often selects most of the backend (837 files
-from 5 changed paths). Heavy runs collided three times in one day (OOM).
-
-| Tier | Runs | When |
-| --- | --- | --- |
-| Worker | Its own unit tests and types; an integration test it adds or fixes; the smallest API counterexample for authority or transaction work | Before handoff |
-| Goal wave | Affected unit, owner static checks, the wave's necessary cross-module integration files, changed stories and journeys, and a populated-state rehearsal for migrations | Each short wave, on a pinned wave commit |
-| Program | Batched heavy affected sets across Goals; the full unit, model, integration, fault/recovery, web and Accounts Storybook and browser journeys; confirmation, attribution, routing | About every 4 hours or 12 waves, earlier after a major contract or security change; only one pending snapshot while one runs |
-
-Goal managers no longer run whole tiers. A failure found by the program goes to
-the owning manager with its evidence, and does not hold the program's other
-work. Authority, erasure and transaction counterexamples stay wave gates; the
-periodic run adds breadth, not the first line of defence.
+1. **Scope.** The registry (`scripts/qa/cases/launch-coverage.ts`) is the scope
+   and the supermanager owns it. A delivery Goal works on rows it was given. A
+   finding becomes scope only when a row's stated outcome fails for one of its
+   personas; everything else goes to that Goal's later list. The supermanager
+   reports one progress figure to the maintainer: rows proved of rows in scope.
+2. **Method in code.** Each rule of the [method](../method.md) becomes a check in
+   `goalctl` (first tasks below). A rule that lives only in a document is not
+   kept: "stop after three attempts" was written on 2026-10-11 and broken the
+   next day in every Goal, by the supermanager too.
+3. **Measures.** At every checkpoint read the method's measures. When the
+   first-attempt share of a Goal falls under half, stop its dispatch and find the
+   cause before any further spending.
+4. **Shared host and allowance.** Host memory, QA slots, gate lanes, the shared
+   development stack and its refresh, and each account's allowance. See
+   [state.md](state.md) for the engines the maintainer allows.
+5. **Main-wide regression.** `task goal -- regress` on a pinned commit each
+   night, with one browser journey for each vertical. No other browser run is
+   routine.
+6. **Managers.** Start each delivery Goal's manager when its row in the table
+   above says so, enrol it with the coordinator, and restart one that dies.
+   Managers bring the supermanager only what the method cannot decide: a scope
+   promotion, a design note for a shared mechanism, a stop at the attempt cap.
+7. **Mechanism design notes.** Read every design note for a shared mechanism
+   before its code is written, and refuse one that names a mechanism to build
+   instead of an observable outcome.
 
 ## First tasks
 
-| Task | Outcome | Engine |
-| --- | --- | --- |
-| P1 | Safe stop and shared-branch merge: stopping one task never kills a sharer or its stack; a shared branch's merge marks every delivered task merged; import de-duplication keeps type and value imports apart. **Blocks shared worktrees.** | `codex` high |
-| P2 | QA leases and selection: no stack starts without a slot, failed restores clean up, front-end changes never silently drop out of `--affected`, `resume` re-checks the usage gate as `dispatch` does | `codex-1` high |
-| P3 | `task goal -- regress`: pin `main` to one SHA in its own worktree, run the complete manifest (gates and subdirectories included) in batches that take and release the heavy lock, record a merge event `{before, after, goal, taskIds}` at every merge, bisect a failure over merge events (at most 8 probes, `unavailable`/`inherited`/`inconclusive` instead of a guess), write results to `.temp/goal-orchestration/inbox/<goal>.jsonl`, and classify infrastructure, order-dependent and flaky failures apart from regressions. About 650–1,000 lines with tests; no daemon, database or second runner (D1 §7) | `codex-1` xhigh |
-| P4 | Storybook only once per run (a selected journey no longer drags the whole web Storybook), Accounts Storybook and journeys in the harness, memory caps for the QA stack's PostgreSQL, RustFS and child stacks | `cursor` high, Claude review |
-| P5 | Fix the five order-dependent tests inherited from write-concurrency and the fault injectors that count background work, using the fresh-state list | `grok` high |
+They make the method checkable. The api Goal starts after the first three.
+
+| Task | Outcome |
+| --- | --- |
+| P1 | A registry row carries an outcome for each persona (a named test, `not applicable` with its reason, or `missing`). Existing proofs are filed under the persona they exercise and the rest are `missing`, so the registry says what is proved. `status` prints rows proved of rows in scope |
+| P2 | A persona harness in `tests/qa/support`: one call gives an outcome test the six personas' sessions on a real stack through the public API. A guard refuses an outcome test that imports from a service's `src` |
+| P3 | Briefs declare `kind: outcome \| implementation \| surface \| mechanism \| tooling`. `dispatch` refuses an implementation brief whose outcome tests do not exist or do not fail on `main`, and a mechanism brief without a design note |
+| P4 | `land` follows the method: one review pass, only for implementation tasks in authority, disclosure, rights, erasure or Account code; a finding blocks only when the test it supplies fails on the branch; `resume` refuses a third fix round without a dated decision in the brief |
+| P5 | The surface gate: types, unit tests and the changed stories, no review; stories take responses recorded from outcome tests |
+| P6 | `status` and `usage` report the method's measures from the ledger and the session logs |
+| P7 | Every manager runs under the coordinator; what the shell waiter did (keep a wait on each running task, land `land: auto` tasks, tell the manager when a landing stops) is `goalctl` behaviour; mail carries a deadline and a sender |
+| P8 | The nightly regression runs one browser journey for each vertical and nothing else in a browser |
+
+P1, P2 and P4 decide the efficiency and come first. The others follow while the
+api Goal runs.
+
+## Starting
+
+The maintainer starts the supermanager from the repository root:
+
+```sh
+tmux new -s goal-program
+GOAL_ID=program claude --model <model> --effort xhigh --dangerously-skip-permissions
+```
+
+and sends: `You are the REZICS manager of Goal program. Read
+docs/goals/program/GOAL.md, its state.md, docs/goals/method.md and
+docs/goals/manager.md, register with task goal -- goal start program --manager
+<session name>, and run the Goal.`
+
+[state.md](state.md) lists what to do first after a cold start of the host.
 
 ## Completion
 
-**Finish line (maintainer, 2026-10-11).** "所有这些约束都列出来，不在goal考虑解决方案，goal应当进行功能完善，就是功能上做到完整的能够上线."
-The delivery Goals close on a functionally complete first public scope: each
-function works end to end and its checks prove it. What going live needs from
-outside the repository (hosts, hostnames, providers, registrations, legal facts,
-named people) is a list the maintainer holds:
-[external conditions](../../operations/external-conditions.md). It is not Goal work: no brief solves, prepares for or works
-around an item on it, and no Goal's completion waits for one.
-
-The program ends after the three delivery Goals close: it folds the remaining
-design record into owner documents, removes its row from the root GOAL.md and
-closes itself. Capacity qualification at 300 million and 500 million business
-entities is not a closing condition of this round; it starts as its own Goal once
-the maintainer sets the hardware and the population census (record §13).
+The program ends when the three delivery Goals have closed: every row in scope is
+proved, has its surface, and erasure and restore are proved on physical
+fixtures. What going live needs from outside the repository stays a list the
+maintainer holds ([external conditions](../../operations/external-conditions.md));
+no Goal solves or waits for an item on it.

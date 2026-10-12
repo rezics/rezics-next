@@ -29,6 +29,8 @@ The maintainer may update any documentation at any time with any tool. Treat
 those updates as authoritative: detect them, adapt, never revert them silently;
 refine them only in a separate, explained commit.
 
-`GOAL.md` lists the active Goals; each runs from its own directory under
-`docs/goals/` with one manager. Managers follow `docs/goals/manager.md`, and
-their worker processes follow `docs/goals/worker.md`.
+`GOAL.md` lists the Goals; each runs from its own directory under
+`docs/goals/` with one manager. `docs/goals/method.md` says how work is defined,
+proved and landed: a row of the scope is proved by what each kind of person gets
+from the API, before its implementation and before its surface. Managers follow
+`docs/goals/manager.md`, and their worker processes follow `docs/goals/worker.md`.
