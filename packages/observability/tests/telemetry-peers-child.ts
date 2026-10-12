@@ -1,16 +1,22 @@
 import { context, trace } from '@opentelemetry/api';
-import { registerTelemetryPeers, shutdownTelemetry, startTelemetry, withTelemetrySpan } from '../src/runtime.ts';
+import { registerTelemetryPeers, shutdownTelemetry, startTelemetry, TelemetryPeerConflictError, withTelemetrySpan } from '../src/runtime.ts';
 
 const services = ['fuseki', 'account', 'main', 'other', 'baseline', 'trusted'] as const;
-const servers = Object.fromEntries(services.map(service => [service, Bun.serve({
-  hostname: '127.0.0.1', port: 0,
-  fetch: request => Response.json({ traceparent: request.headers.get('traceparent') },
-    { headers: { 'server-timing': 'jena;dur=7.5' } }),
-})]));
+const servers = Object.fromEntries(services.map((service, index) => [service, {
+  url: new URL(`http://127.0.0.1:${41000 + index}`), port: 41000 + index,
+}]));
 // Disabled telemetry must not install fetch instrumentation or retain a registration.
 const originalFetch = globalThis.fetch;
 registerTelemetryPeers({ FUSEKI_URL: servers.fuseki!.url.origin })();
 const disabledUnchanged = originalFetch === globalThis.fetch;
+// Peer responses are injected. Only the parent's OTLP receiver owns a listener.
+globalThis.fetch = Object.assign(async (input: string | URL | Request, init?: RequestInit) => {
+  const request = new Request(input, init);
+  if (new URL(request.url).origin === new URL(process.env.OTEL_EXPORTER_OTLP_ENDPOINT!).origin)
+    return originalFetch(input, init);
+  return Response.json({ traceparent: request.headers.get('traceparent') },
+    { headers: { 'server-timing': 'jena;dur=7.5' } });
+}, originalFetch);
 startTelemetry('telemetry-peers', {
   ...process.env,
   FUSEKI_URL: `${servers.baseline!.url.origin}/rezics/`,
@@ -38,6 +44,12 @@ async function sample(phase: string, selected: readonly typeof services[number][
   });
 }
 let conflictRejected = false, invalidRejected = false;
+const conflicts: { origin: string; existingService: string; incomingService: string; message: string }[] = [];
+function conflict(error: unknown) {
+  if (!(error instanceof TelemetryPeerConflictError)) throw error;
+  const { origin, existingService, incomingService, message } = error;
+  conflicts.push({ origin, existingService, incomingService, message });
+}
 try {
   await sample('before');
   const undoFirst = registerTelemetryPeers(env);
@@ -47,13 +59,21 @@ try {
   await sample('overlap');
   try {
     registerTelemetryPeers({ FUSEKI_URL: servers.other!.url.origin, MAIN_ORIGIN: servers.fuseki!.url.origin });
-  } catch { conflictRejected = true; }
+  } catch (error) { conflict(error); conflictRejected = true; }
   try {
     registerTelemetryPeers({ FUSEKI_URL: servers.other!.url.origin, ACCOUNT_ORIGIN: 'invalid-url' });
   } catch { invalidRejected = true; }
   await sample('rejected', ['other', 'fuseki']);
   undoSecond(); undoSecond();
   await sample('removed');
+  for (const key of ['ACCOUNT_ORIGIN', 'MAIN_ORIGIN']) {
+    try {
+      registerTelemetryPeers({ FUSEKI_URL: `${servers.other!.url.origin}/dataset/`,
+        [key]: `${servers.other!.url.origin}/auth/` });
+      throw new Error('Conflicting incoming services were accepted');
+    } catch (error) { conflict(error); }
+    await sample(`incoming-${key}`, ['other']);
+  }
   for (const key of ['ACCOUNT_ORIGIN', 'ACCOUNT_JWKS_URL', 'ACCOUNT_INTROSPECT_URL']) {
     const undo = registerTelemetryPeers({ [key]: `${servers.account!.url.origin}/auth` });
     await sample(key, ['account']);
@@ -63,8 +83,8 @@ try {
   const undoTrusted = registerTelemetryPeers({ MAIN_ORIGIN: servers.trusted!.url.origin });
   undoBaseline(); undoTrusted();
   await sample('preserved', ['baseline', 'trusted']);
-  console.log(JSON.stringify({ samples, disabledUnchanged, conflictRejected, invalidRejected }));
+  console.log(JSON.stringify({ samples, disabledUnchanged, conflictRejected, invalidRejected, conflicts }));
 } finally {
   await shutdownTelemetry();
-  await Promise.all(Object.values(servers).map(server => server.stop(true)));
+  globalThis.fetch = originalFetch;
 }

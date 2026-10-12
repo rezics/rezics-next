@@ -1,7 +1,13 @@
 import { expect, test } from 'bun:test';
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { attributes, decode } from './otlp.ts';
 
-test('stack peers join live classification and propagation until their last registration is undone', async () => {
+test('finding 1 and finding 5: telemetry peer qualification owns no inherited QA stack or storage mode', () => {
+  expect(existsSync(resolve(import.meta.dir, '../../../tests/qa/integration/telemetry-restored-peers.test.ts'))).toBe(false);
+});
+
+test('finding 4: stack peer classification, propagation, undo and overlap preserve atomic conflict rejection', async () => {
   const traces: Record<string, any>[] = [];
   const sink = Bun.serve({
     hostname: '127.0.0.1', port: 0,
@@ -24,14 +30,23 @@ test('stack peers join live classification and propagation until their last regi
     expect(exit).toBe(0);
     const result = JSON.parse(stdout.trim()) as {
       disabledUnchanged: boolean; conflictRejected: boolean; invalidRejected: boolean;
+      conflicts: { origin: string; existingService: string; incomingService: string; message: string }[];
       samples: { phase: string; service: string; port: number; traceId: string; traceparent: string | null }[];
     };
     expect(result.disabledUnchanged).toBe(true);
     expect(result.conflictRejected).toBe(true);
     expect(result.invalidRejected).toBe(true);
+    expect(result.conflicts).toEqual([
+      { origin: 'http://127.0.0.1:41000', existingService: 'fuseki', incomingService: 'main',
+        message: 'Telemetry origin http://127.0.0.1:41000 conflicts between fuseki and main' },
+      { origin: 'http://127.0.0.1:41003', existingService: 'fuseki', incomingService: 'account',
+        message: 'Telemetry origin http://127.0.0.1:41003 conflicts between fuseki and account' },
+      { origin: 'http://127.0.0.1:41003', existingService: 'fuseki', incomingService: 'main',
+        message: 'Telemetry origin http://127.0.0.1:41003 conflicts between fuseki and main' },
+    ]);
     const spans = traces.flatMap(batch => batch.resourceSpans)
       .flatMap(resource => resource.scopeSpans).flatMap(scope => scope.spans);
-    expect(result.samples).toHaveLength(31);
+    expect(result.samples).toHaveLength(33);
     for (const sample of result.samples) {
       const parent = spans.find(span => span.name === sample.phase);
       expect(parent).toBeDefined();

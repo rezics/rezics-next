@@ -80,7 +80,6 @@ export async function startMediaStack(label: string, options: { contentProjectio
   const directory = join(root, '.temp', `${label}-${randomUUID()}`);
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const fuseki = new CountingFuseki(Bun.env.FUSEKI_URL);
-  const unregisterTelemetryPeers = registerTelemetryPeers(Bun.env);
   attributeDirectoryRefreshQueries();
   // The graph is shared by the shard, so immutable manifests must survive this
   // fixture too. The runner removes both owners when it resets the QA stack.
@@ -310,13 +309,24 @@ export async function startMediaStack(label: string, options: { contentProjectio
     return { ...created, variants };
   };
 
+  let unregisterTelemetryPeers = () => {};
   const stop = async () => {
-    await templateSeek.stopRecovery();
-    await main.stop();
-    await Promise.all([accessPool.end(), contentPool.end(), relayPool.end()]);
-    rmSync(directory, { recursive: true, force: true });
-    unregisterTelemetryPeers();
+    const failures: unknown[] = [];
+    try {
+      for (const close of [() => templateSeek.stopRecovery(), () => main.stop(),
+        () => Promise.all([accessPool.end(), contentPool.end(), relayPool.end()]),
+        () => rmSync(directory, { recursive: true, force: true })]) {
+        try { await close(); } catch (error) { failures.push(error); }
+      }
+    } finally { unregisterTelemetryPeers(); }
+    if (failures.length) throw new AggregateError(failures, 'Media stack cleanup failed');
   };
+  try { unregisterTelemetryPeers = registerTelemetryPeers(Bun.env); }
+  catch (error) {
+    try { await stop(); }
+    catch (cleanup) { throw new AggregateError([error, cleanup], 'Media stack registration and cleanup failed'); }
+    throw error;
+  }
   return { env, fuseki, main, composition, call, member, stableAdmission, access, mediaAccess, accessPool, contentPool, content,
     statementSeek, templateSeek,
     contentCursor, contentConsumer, store, objects,

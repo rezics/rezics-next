@@ -268,6 +268,16 @@ let stopPromise: Promise<void> | undefined;
 let restoreFetch: (() => void) | undefined;
 let traceProcessor: BatchSpanProcessor | undefined;
 type TelemetryPeer = 'fuseki' | 'account' | 'main';
+export class TelemetryPeerConflictError extends Error {
+  constructor(
+    public readonly origin: string,
+    public readonly existingService: TelemetryPeer,
+    public readonly incomingService: TelemetryPeer,
+  ) {
+    super(`Telemetry origin ${origin} conflicts between ${existingService} and ${incomingService}`);
+    this.name = 'TelemetryPeerConflictError';
+  }
+}
 let telemetryPeers: {
   origins: Set<string>;
   configuredOrigins: ReadonlySet<string>;
@@ -290,12 +300,19 @@ export function registerTelemetryPeers(env: Record<string, string | undefined>):
     ['ACCOUNT_ORIGIN', 'account'],
     ['MAIN_ORIGIN', 'main'],
   ] as const) {
-    if (env[name]) added.set(new URL(env[name]!).origin, service);
+    if (env[name]) {
+      const origin = new URL(env[name]!).origin;
+      const existing = added.get(origin);
+      if (existing && existing !== service)
+        throw new TelemetryPeerConflictError(origin, existing, service);
+      added.set(origin, service);
+    }
   }
   // Refuse conflicting owners before mutating either classification or propagation.
   for (const [origin, service] of added) {
     const existing = active.peers.get(origin);
-    if (existing && existing !== service) throw new Error('Telemetry origin already has a different peer service');
+    if (existing && existing !== service)
+      throw new TelemetryPeerConflictError(origin, existing, service);
   }
   for (const [origin, service] of added) {
     active.peers.set(origin, service);

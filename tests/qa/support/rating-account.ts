@@ -49,9 +49,14 @@ export async function ratingAccount(apps: Record<string, string>,
   await installConsentRefreshFence(pool);
   const auth = createAccountAuth(config);
   const account = createAccountApp(auth, pool).listen({ hostname: '127.0.0.1', port });
-  const unregisterTelemetryPeers = registerTelemetryPeers({ ...apps, ACCOUNT_ORIGIN: base,
-    ACCOUNT_JWKS_URL: `${base}/api/auth/jwks`, ACCOUNT_INTROSPECT_URL: `${base}/api/auth/oauth2/introspect` });
+  let unregisterTelemetryPeers = () => {};
+  let stopped = false;
+  const stop = async () => { if (!stopped) { stopped = true;
+    try { await account.stop(true); } finally { unregisterTelemetryPeers(); } } };
+  const closePool = async () => { releasePool = true; await endPool(); };
   try {
+    unregisterTelemetryPeers = registerTelemetryPeers({ ...apps, ACCOUNT_ORIGIN: base,
+      ACCOUNT_JWKS_URL: `${base}/api/auth/jwks`, ACCOUNT_INTROSPECT_URL: `${base}/api/auth/oauth2/introspect` });
     async function signUp(name: string) {
       const email = `rating-${name}-${randomUUID()}@example.test`;
       const password = randomBytes(24).toString('base64url');
@@ -93,10 +98,6 @@ export async function ratingAccount(apps: Record<string, string>,
     }
 
     const a = await signUp('a'), b = await signUp('b');
-    let stopped = false;
-    const stop = async () => { if (!stopped) { stopped = true;
-      try { await account.stop(true); } finally { unregisterTelemetryPeers(); } } };
-    const closePool = async () => { releasePool = true; await endPool(); };
     return { issuer: `${base}/api/auth`, a, b, tokenFor,
       expireSessions: async (id: string) => { await pool.query('DELETE FROM session WHERE "userId" = $1', [id]); },
       stop,
@@ -105,6 +106,6 @@ export async function ratingAccount(apps: Record<string, string>,
         audience: apps.ACCOUNT_MAIN_RESOURCE!, jwksUrl: `${base}/api/auth/jwks`,
         introspectUrl: `${base}/api/auth/oauth2/introspect`,
         clientId: verifierClient.client_id, clientSecret: verifierClient.client_secret! }),
-      close: async () => { await stop(); await closePool(); } };
-  } catch (error) { unregisterTelemetryPeers(); await account.stop(true); releasePool = true; await endPool(); throw error; }
+      close: async () => { try { await stop(); } finally { await closePool(); } } };
+  } catch (error) { try { await stop(); } finally { await closePool(); } throw error; }
 }
