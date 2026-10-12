@@ -11,6 +11,7 @@ import { expect, test } from 'bun:test';
 import {
   captureDisclosure, configureDisclosure, configureDisclosureAncestrySource, DisclosureUnavailable,
   resolveDisclosureSelections, type DisclosureAncestryEvidence, type DisclosureRelationshipBasis, type DisclosureTarget,
+  type OwnerEstablishedGraphParent,
 } from '../src/modules/disclosure/read.ts';
 import { disclosureViewer } from '../src/modules/disclosure/viewer.ts';
 import {
@@ -83,12 +84,13 @@ export function closedFeedOwner(actor: ClosedFeedReader) {
       dataEpoch: env.lineage.dataEpoch,
     };
     selected.set(basis.token, target);
+    const workParent: OwnerEstablishedGraphParent = { owner: 'graph', kind: 'work', resource: work, head, relationshipBasis: basis };
+    const realmParent: OwnerEstablishedGraphParent = { owner: 'graph', kind: 'realm', resource: state.ancestryRealm, head, relationshipBasis: basis };
     return { resource: target.resource, resourceKind: direct ? 'realm' : 'other', relationshipBasis: basis,
       status: state.ancestry && (!source?.realm || state.approval && state.preparation) ? 'complete' : 'unavailable',
       parents: direct ? [] : source?.realm && state.realmParent
-        ? [...(state.reviewGrain === 'resource' ? [] : [{ owner: 'graph' as const, kind: 'work' as const, resource: work, head, relationshipBasis: basis }]),
-          { owner: 'graph', kind: 'realm', resource: state.ancestryRealm, head, relationshipBasis: basis }]
-        : [{ owner: 'graph', kind: 'work', resource: work, head, relationshipBasis: basis }],
+        ? state.reviewGrain === 'resource' ? [realmParent] : [workParent, realmParent]
+        : [workParent],
     };
   };
   const ancestry = { read: async (targets: readonly DisclosureTarget[]) => targets.map(evidence),
@@ -222,8 +224,8 @@ export function closedFeedCases(actor: ClosedFeedReader) {
       const captured = await captureClosedRealmFeedSources(owner.session, [owner.sources[0]!]);
       if (change === 'revoked') owner.state.member = false;
       else owner.state.proof = 'membership:2';
-      await expect(scoped()).rejects.toBeInstanceOf(Error);
-      await expect(captured.fence()).rejects.toBeInstanceOf(Error);
+      await expect(scoped()).rejects.toBeInstanceOf(WorkReadMissing);
+      await expect(captured.fence()).rejects.toBeInstanceOf(WorkReadMissing);
     }
   });
   test(`closed-feed-${actor}: missing ancestry, approval and preparation cannot expose a retained event`, async () => {
