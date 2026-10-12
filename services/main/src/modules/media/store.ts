@@ -543,7 +543,14 @@ export class MediaStore {
         s.lifecycle <> 'active' OR s.moderation <> 'none' OR EXISTS (
           SELECT 1 FROM media.transform_job j WHERE j.asset_id=a.id AND j.profile=$3
             AND j.status='failed') AS blocked,
-        COALESCE(to_jsonb(attachment.items[1:64]),'[]'::jsonb) AS attachments,
+        CASE WHEN requested_use.id IS NOT NULL THEN
+          CASE WHEN requested_use.role <> 'avatar' AND requested_use.role NOT LIKE 'showcase-%' OR EXISTS (
+            SELECT 1 FROM media.selection_slot slot JOIN media.selection_revision r ON r.id=slot.head
+            WHERE (slot.target,slot.context,slot.role)=(requested_use.target,requested_use.context,requested_use.role)
+              AND r.use_id=requested_use.id)
+          THEN jsonb_build_array(jsonb_build_object('target',requested_use.target,'context',requested_use.context))
+          ELSE '[]'::jsonb END
+        ELSE COALESCE(to_jsonb(attachment.items[1:64]),'[]'::jsonb) END AS attachments,
         COALESCE(cardinality(attachment.items)>64,false) AS attachment_overflow
       FROM requested q LEFT JOIN media.use requested_use ON requested_use.id=q.id
       JOIN media.asset a ON a.id=COALESCE(requested_use.asset_id,q.id)
@@ -551,7 +558,7 @@ export class MediaStore {
       LEFT JOIN LATERAL (
         SELECT array_agg(jsonb_build_object('target',u.target,'context',u.context)) AS items
         FROM (SELECT u.target,u.context FROM media.use u
-          WHERE u.asset_id=a.id AND (requested_use.id IS NULL OR u.id=requested_use.id) AND
+          WHERE requested_use.id IS NULL AND u.asset_id=a.id AND
             (u.role NOT IN ('avatar') AND u.role NOT LIKE 'showcase-%' OR EXISTS (
               SELECT 1 FROM media.selection_slot slot JOIN media.selection_revision r ON r.id=slot.head
               WHERE slot.target=u.target AND slot.context=u.context AND slot.role=u.role AND r.use_id=u.id))

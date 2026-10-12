@@ -65,6 +65,24 @@ afterAll(async () => {
 });
 
 type Entry = { public: boolean; hidden?: boolean };
+type Plan = {
+  'Node Type': string;
+  'Relation Name'?: string;
+  'Index Name'?: string;
+  'Index Cond'?: string;
+  'Actual Rows': number;
+  'Actual Loops': number;
+  'Rows Removed by Filter'?: number;
+  'Rows Removed by Index Recheck'?: number;
+  Plans?: Plan[];
+};
+const planNodes = (plan: Plan): Plan[] => [plan, ...(plan.Plans ?? []).flatMap(planNodes)];
+const examinedRows = (plan: Plan) => planNodes(plan)
+  .filter(node => ['use', 'selection_slot', 'selection_revision'].includes(node['Relation Name'] ?? '')
+    && node['Node Type'] !== 'Bitmap Index Scan')
+  .reduce((sum, node) => sum + (node['Actual Rows'] + (node['Rows Removed by Filter'] ?? 0)
+    + (node['Rows Removed by Index Recheck'] ?? 0)) * node['Actual Loops'], 0);
+
 function fixture(pool: Pool) {
   const entries = new Map<string, Entry>([[ownTarget, { public: true }]]);
   const authority = { manage: true, baseline: false };
@@ -113,7 +131,21 @@ function fixture(pool: Pool) {
   const reset = () => { fuseki.reset(); contentPool.reset(); probes.length = 0; };
   const cost = () => ({ graphQueries: fuseki.queries, graphBytes: fuseki.bytes,
     ownerQueries: contentPool.queries, ownerBytes: contentPool.bytes, probes: [...probes] });
-  return { pool, entries, authority, store, attach, read, reset, cost, probes };
+  const visibilityPlan = async (reference: string): Promise<Plan> => {
+    let plan: Plan | undefined;
+    // Capture and explain the actual store statement rather than a copied query.
+    const explaining = new Proxy(pool, { get(target, property) {
+      if (property === 'query') return async (sql: string, values: unknown[]) => {
+        plan = (await pool.query<{ 'QUERY PLAN': { Plan: Plan }[] }>(
+          `EXPLAIN (ANALYZE, TIMING OFF, FORMAT JSON) ${sql}`, values)).rows[0]!['QUERY PLAN'][0]!.Plan;
+        return { rows: [] };
+      };
+      return Reflect.get(target, property, target);
+    } });
+    await new MediaStore(explaining, new ContentCore(pool)).visibilityFacts([reference]);
+    return plan!;
+  };
+  return { pool, entries, authority, store, attach, read, reset, cost, probes, visibilityPlan };
 }
 
 async function isolated(run: (f: ReturnType<typeof fixture>) => Promise<void>) {
@@ -138,6 +170,22 @@ test('exact Use disclosure has identical summary probes and bytes at 1, 16, 64 a
       if (baseline) expect(cost).toEqual(baseline);
       else baseline = cost;
     }
+  });
+}, 60_000);
+
+test('exact Use database work does not grow with unrelated Uses', async () => {
+  await isolated(async f => {
+    let count = 1;
+    const samples: number[] = [];
+    for (const size of [256, 1024]) {
+      while (count < size) { await f.attach(); count++; }
+      await f.pool.query('ANALYZE media.use');
+      const plan = await f.visibilityPlan(iri(ownUse));
+      expect(planNodes(plan).some(node => node['Index Name'] === 'use_pkey'
+        && node['Index Cond']?.includes('id ='))).toBe(true);
+      samples.push(examinedRows(plan));
+    }
+    expect(samples).toEqual([1, 1]);
   });
 }, 60_000);
 
