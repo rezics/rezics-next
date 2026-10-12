@@ -186,6 +186,7 @@ public class PersonProfileCallerContractTest {
       execute(data,command.get("update").getAsString().value());assertTrue(complete(data,command));
       var quads=snapshot(data);
       assertTrue(quads.contains(new Quad(iri("${GRAPHS.current}"),iri("${person}"),RDF.type.asNode(),rv("AgentTombstone"))));
+      assertFalse("Person erasure must not introduce the compensation profile",quads.stream().anyMatch(q->q.getPredicate().equals(rv("compensatedFrom"))));
       for(String revision:List.of("${provision}","${older}","${head}"))
         assertTrue(quads.contains(new Quad(iri("${GRAPHS.revisions}"),iri(revision),RDF.type.asNode(),rv("ErasedRevision"))));
       for(Quad q:quads) assertFalse("identifying literal survives: "+q,q.getObject().isLiteral()
@@ -212,6 +213,15 @@ public class PersonProfileCallerContractTest {
       execute(data,"PREFIX rv: <${RV}> INSERT DATA { GRAPH <${publicGraph}> { <urn:rezics:search:directory:prefix:RXhhY3Q:*:1fresh> rv:prefixWork <${work}> ; rv:prefixUnit <${resource(16)}> ; rv:prefixField \\\"credit\\\" ; rv:publicTitle \\\"rezicsprefixdirectory\\\" . <${resource(16)}> a rv:MatchUnit ; rv:resource <${work}> ; rv:publicTitle \\\"Surviving Work\\\" } }");
       assertFalse("a new Work unit outside the sealed author-unit list still carries an identifying prefix",complete(data,command));
       execute(data,"DELETE WHERE { GRAPH <${publicGraph}> { <urn:rezics:search:directory:prefix:RXhhY3Q:*:1fresh> ?p ?o } }");
+      assertTrue(complete(data,command));
+    }finally{data.close();}
+  }
+  @Test public void unsealedManifestRevisionBlocksCompletionReplay() throws Exception {
+    var data=fixture();try {var command=body("complete");execute(data,command.get("update").getAsString().value());
+      assertTrue(complete(data,command));
+      execute(data,"PREFIX rv: <${RV}> INSERT DATA { GRAPH <${GRAPHS.revisions}> { <${resource(17)}> a rv:RevisionAnchor ; rv:component <${person}> ; rv:manifest <urn:rezics:sha256:${'c'.repeat(64)}> } }");
+      assertFalse("an unsealed manifest revision may retain identifying object bytes without RDF profile literals",complete(data,command));
+      execute(data,"DELETE WHERE { GRAPH <${GRAPHS.revisions}> { <${resource(17)}> ?p ?o } }");
       assertTrue(complete(data,command));
     }finally{data.close();}
   }
@@ -260,7 +270,7 @@ public class PersonProfileCallerContractTest {
     writeFileSync(join(root, '.temp/goal/person-profile-native.log'), `${result.stdout}\n${result.stderr}`);
     if (result.status !== 0) throw new Error(`Native Person RDF proof failed: ${result.stdout}\n${result.stderr}`
       + `${result.error ? `\n${result.error.message}` : ''}`);
-    expect(result.stdout).toContain('Tests run: 9, Failures: 0, Errors: 0');
+    expect(result.stdout).toContain('Tests run: 10, Failures: 0, Errors: 0');
     for (const count of [0, 1, 2]) {
       const actual = JSON.parse(readFileSync(join(build, `events-${count}-result.json`), 'utf8')) as {
         batchId: string; eventIds: string[]; events: { id: string; relay: SparqlResult; facts: SparqlResult }[];
