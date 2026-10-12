@@ -77,6 +77,7 @@ if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
   });
   const targets: string[] = [];
   const firstProfiles: WorkProfile[] = [];
+  const continuationProfiles: Array<{ scale: string; unrelatedWorks: number; profile: WorkProfile }> = [];
   const evidence: Array<Record<string, unknown>> = [];
   let verifying = cuts[0]!;
   let copy: {
@@ -189,6 +190,9 @@ if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
         continuation: null,
         sectionDepth: { measured: false, reason: 'Published Recipe contains only root ingredient lines' },
       };
+      // Retain every cut before assertions that can stop the run. A failed
+      // cost contract must not discard the page that demonstrated the failure.
+      evidence.push(row);
       firstProfiles.push({ ...first.profile, mainCalls: cut.manifest.dimensions.unrelatedWorks });
       if (first.result.next) {
         phase = `${cut.manifest.scale} continuation`;
@@ -201,18 +205,18 @@ if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
           .toBe(RECIPE_WORK_PAGE_OCCURRENCES * 2);
         // Keep absolute caps; two available continuations cannot provide the
         // existing verdict's required three scales. Do not invent a third cursor.
-        assertWorkCost(next.profile, absoluteCaps);
         row.continuation = { counters: counters(next.profile), cost: next.result.cost };
+        continuationProfiles.push({ scale: cut.manifest.scale,
+          unrelatedWorks: cut.manifest.dimensions.unrelatedWorks, profile: next.profile });
       } else {
         expect(expectedOccurrences).toBe(RECIPE_WORK_PAGE_OCCURRENCES);
         row.continuationMissingReason = 'Small cut ends on its first 100-occurrence page';
       }
-      evidence.push(row);
       console.log('recipe-page-growth-checkpoint', JSON.stringify(row));
       await driver.stop(target);
     }
     expect(meterQualified).toBe(true);
-    const ratios = firstProfiles.flatMap((smaller, index) => firstProfiles.slice(index + 1).map(larger => ({
+    const ratiosFor = (profiles: WorkProfile[]) => profiles.flatMap((smaller, index) => profiles.slice(index + 1).map(larger => ({
       scales: [smaller.mainCalls, larger.mainCalls],
       counters: Object.fromEntries(Object.keys(growth!).map(key => {
         const field = key as keyof typeof absoluteCaps;
@@ -221,16 +225,31 @@ if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
           : before === 0 ? after === 0 ? 1 : 'Infinity' : after / before];
       })),
     })));
-    evidence.push({ firstPageRatios: ratios });
+    const ratios = { firstPage: ratiosFor(firstProfiles),
+      continuation: ratiosFor(continuationProfiles.map(item => ({ ...item.profile, mainCalls: item.unrelatedWorks }))) };
+    evidence.push({ ratios });
     console.log('recipe-page-growth-ratios', JSON.stringify(ratios));
     // This is the only growth verdict: the shared checker owns ratios and margin.
     phase = 'growth verdict';
-    assertWorkCostAtScales(firstProfiles, recipePageCost, 'recipe-work-page-unrelated-works-first-page');
+    const failures: Error[] = [];
+    const check = (read: string, assertion: () => void) => {
+      try { assertion(); }
+      catch (error) {
+        evidence.push({ verdict: 'fail', read, error: String(error),
+          owner: 'kernel: services/main/src/modules/recipe/work-page.ts readRecipeWorkPage; services/main/src/modules/structure/read.ts' });
+        failures.push(new Error(`${read}: ${String(error)}`, { cause: error }));
+      }
+    };
+    check('GET /v1/recipes/works/:id first page', () =>
+      assertWorkCostAtScales(firstProfiles, recipePageCost, 'recipe-work-page-unrelated-works-first-page'));
+    for (const continuation of continuationProfiles)
+      check(`GET /v1/recipes/works/:id ${continuation.scale} continuation`, () =>
+        assertWorkCost(continuation.profile, absoluteCaps));
+    if (failures.length) throw new AggregateError(failures, 'Recipe page cost contracts failed');
     evidence.push({ verdict: 'pass', coverage: 'first page at three cuts; continuation at medium/large; no nested sections' });
   } catch (error) {
     evidence.push({ verdict: phase === 'growth verdict' ? 'fail' : 'unavailable', phase, error: String(error),
       ...(phase === 'growth verdict' ? {
-        read: 'GET /v1/recipes/works/:id first page',
         owner: 'kernel: services/main/src/modules/recipe/work-page.ts readRecipeWorkPage; services/main/src/modules/structure/read.ts',
       } : {}) });
     throw error;
