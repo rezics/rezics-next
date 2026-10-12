@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { runWorkProfileChild } from '../support/work-profile-child.ts';
+import { realmRankingOwnerEndpoint } from '../../../services/main/tests/realm-ranking-corpus.ts';
 import { integrationOrderPrelude } from '../support/integration-order.ts';
 import { assertWorkCostAtScales, type WorkProfile } from '../support/work-profile.ts';
 
@@ -21,6 +22,7 @@ test('G1034: complete Realm Best/Top and fixed header work at 100/400/1600 real 
   });
   const measured = JSON.parse(readFileSync(resultPath, 'utf8')) as {
     ownerDatabases: Record<string, string>;
+    ownerDatabaseEndpoints: Record<string, ReturnType<typeof realmRankingOwnerEndpoint>>;
     profiles: {
       size: number;
       operation: string;
@@ -35,14 +37,16 @@ test('G1034: complete Realm Best/Top and fixed header work at 100/400/1600 real 
       fusekiQueryCalls: number;
     }[];
   };
-  // The immutable administrator and recovery fence must never use shard owners.
+  // The immutable administrator and recovery fence must stay on restored owners.
+  // Separate QA servers use the same canonical database names, so compare endpoints.
   for (const [owner, url] of [
     ['access', process.env.ACCESS_DATABASE_URL],
     ['content', process.env.CONTENT_DATABASE_URL],
     ['relay', process.env.ACCOUNT_RELAY_DATABASE_URL],
   ] as const) {
     expect(measured.ownerDatabases[owner]).toBeString();
-    expect(measured.ownerDatabases[owner]).not.toBe(new URL(url!).pathname.slice(1));
+    expect(measured.ownerDatabaseEndpoints[owner].database).toBe(measured.ownerDatabases[owner]);
+    expect(measured.ownerDatabaseEndpoints[owner]).not.toEqual(realmRankingOwnerEndpoint(url!));
   }
   expect(measured.profiles).toHaveLength(24);
   // Three geometric cuts make the growth class observable between endpoints;

@@ -70,6 +70,20 @@ export type RealmRankingScale = (typeof REALM_RANKING_SCALES)[number];
 export const REALM_RANKING_FILLERS = 1_598;
 export const REALM_RANKING_BUILD_RUN = `realmrank-${realmRankingCorpusKey().slice(-16)}`;
 
+/** Isolated PostgreSQL servers reuse database names; compare their endpoints
+ * without persisting credentials. The observed database can come from a probe. */
+export function realmRankingOwnerEndpoint(connectionString: string, database?: string) {
+  const url = new URL(connectionString);
+  const host = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
+    ? 'loopback'
+    : url.hostname;
+  return {
+    host,
+    port: url.port || '5432',
+    database: database ?? decodeURIComponent(url.pathname.slice(1)),
+  };
+}
+
 export interface RealmRankingReplyIdentity {
   reply: string;
   revision: string;

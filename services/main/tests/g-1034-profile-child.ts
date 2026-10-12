@@ -34,6 +34,7 @@ const {
   restoreRealmRankingCorpus,
   REALM_RANKING_SCALES,
   timeRealmRankingStage,
+  realmRankingOwnerEndpoint,
 } = await import('./realm-ranking-corpus.ts');
 
 const corpus = readRealmRankingCorpus();
@@ -109,6 +110,7 @@ const profileForegroundRequest = async <T>(request: (headers: Headers) => Promis
 };
 const evidence: Record<string, unknown>[] = [];
 const ownerDatabases: Record<string, string> = {};
+const ownerDatabaseEndpoints: Record<string, ReturnType<typeof realmRankingOwnerEndpoint>> = {};
 const profiles: {
   size: number;
   operation: string;
@@ -130,10 +132,16 @@ try {
     ['access', stack.accessPool],
     ['content', stack.contentPool],
     ['relay', home.relay],
-  ] as const)
+  ] as const) {
+    assert(pool.options.connectionString, `Restored ${owner} pool has no connection string`);
     ownerDatabases[owner] = (
       await pool.query<{ database: string }>('SELECT current_database() AS database')
     ).rows[0]!.database;
+    ownerDatabaseEndpoints[owner] = realmRankingOwnerEndpoint(
+      pool.options.connectionString,
+      ownerDatabases[owner],
+    );
+  }
   const rules = new GovernanceRules(stack.accessPool);
   const realmAdmin = new AccessRealmManagement(stack.accessPool);
   let app = createMainApp(stack.fuseki, {
@@ -1128,7 +1136,11 @@ try {
   mkdirSync('.temp/work-profiles', { recursive: true });
   writeFileSync(
     process.env.REZICS_WORK_PROFILE_RESULT ?? '.temp/work-profiles/g-1034.json',
-    JSON.stringify({ evidence, profiles, replyWrites, ownerDatabases }, null, 2) + '\n',
+    JSON.stringify(
+      { evidence, profiles, replyWrites, ownerDatabases, ownerDatabaseEndpoints },
+      null,
+      2,
+    ) + '\n',
   );
   try {
     await timeRealmRankingStage('profile-cleanup', () => restored.close());
