@@ -14,7 +14,7 @@ import { GovernanceUnavailable } from '../src/modules/governance/store.ts';
 import { AccountAssertionDenied } from '../src/modules/account/verify-assertion.ts';
 import { workRead } from '../src/modules/work/read-session.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
-import { grantFixtureAuthority } from '../src/modules/access/fixture-authority.ts';
+import { ensureFixtureScopeGate, grantFixtureAuthority } from '../src/modules/access/fixture-authority.ts';
 import { accessClient, controlRead, controlTransaction, ControlConflict, ControlUnavailable } from '../src/modules/access/topology-control.ts';
 import { AliasRegistry } from '../src/modules/address/registry.ts';
 import { TemplateSeekIndex } from '../src/modules/query/seek-index.ts';
@@ -79,7 +79,7 @@ test('Alias-held WorkRead identity, recovery, Rules and count/admin leaves obser
       expect(await workRead(deps, anonymous, {}, async session => session.principal)).toBeNull();
       const document = { profile: 'realm-settings-rules-v2', public: false, rules: [{ id: 'kind',
         title: { original: 'en', labels: { en: 'Be kind' } }, body: { original: 'en', labels: { en: 'Read kindly' } }, governanceRule: null }] };
-      await client.query('INSERT INTO access.scope_gate(id) VALUES ($1)', [`governance:realm:${realm}`]);
+      await ensureFixtureScopeGate(client, `governance:realm:${realm}`, { open: true });
       await client.query(`INSERT INTO access.governance_rule_head(ref,scope_id,revision,digest) VALUES ($1,$2,1,$3)`,
         [realmRulesRef(realm), `governance:realm:${realm}`, 'a'.repeat(64)]);
       await client.query(`INSERT INTO access.governance_rule_revision
