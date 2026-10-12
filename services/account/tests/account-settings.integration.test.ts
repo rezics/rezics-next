@@ -296,8 +296,11 @@ test('SR-5: concurrent passkey step-ups preserve the highest counter; cloned reg
     const waiting = async (count: number) => {
       const deadline = Date.now() + 2000;
       while (Date.now() < deadline) {
+        // Refundable admission holds the user budget until its proof finishes:
+        // the second proof waits there while the first waits on its counter.
         const rows = await f.pool.query(`SELECT 1 FROM pg_stat_activity WHERE wait_event_type = 'Lock'
-          AND query LIKE 'UPDATE passkey SET counter%'`);
+          AND (query LIKE 'UPDATE passkey SET counter%'
+            OR query LIKE 'INSERT INTO rezics_account_rate_limit AS r%')`);
         if (rows.rowCount === count) return;
         await Bun.sleep(10);
       }

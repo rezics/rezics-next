@@ -83,8 +83,8 @@ for (const path of ['/api/account/reauthenticate', '/api/auth/two-factor/verify-
           if (mode === 'exception') throw new Error('injected provider outage');
           throw new APIError('SERVICE_UNAVAILABLE', { message: 'injected provider 503' });
         };
-        const interception = path === '/api/account/reauthenticate' ? spyOn(f.auth.api, 'verifyPassword').mockImplementationOnce(unavailable as typeof f.auth.api.verifyPassword)
-          : path.endsWith('/passkey') ? spyOn(f.auth.api, 'verifyPasskeyAuthentication').mockImplementationOnce(unavailable as typeof f.auth.api.verifyPasskeyAuthentication)
+        const interception = path === '/api/account/reauthenticate' ? spyOn(f.auth.api, 'verifyPassword').mockImplementationOnce(Object.assign(unavailable, { options: f.auth.api.verifyPassword.options, path: f.auth.api.verifyPassword.path }))
+          : path.endsWith('/passkey') ? spyOn(f.auth.api, 'verifyPasskeyAuthentication').mockImplementationOnce(Object.assign(unavailable, { options: f.auth.api.verifyPasskeyAuthentication.options, path: f.auth.api.verifyPasskeyAuthentication.path }))
           : spyOn(f.auth, 'handler').mockImplementationOnce(async () => {
             if (mode === '503') return Response.json({ error: 'temporarily_unavailable' }, { status: 503 });
             return unavailable();

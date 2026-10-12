@@ -1,9 +1,11 @@
 import { Elysia, t } from 'elysia';
 import type { Pool, PoolClient } from 'pg';
 import { getAuthenticatorName } from '@better-auth/passkey';
+import { APIError } from 'better-auth/api';
 import { accountFailure, accountJson, AccountProblem, accountSession, type AccountAuth } from './http.ts';
 import { consumeAccountLimit } from './rate-limit.ts';
 import { accountResponses, methodsView, statusView } from './views.ts';
+import { authenticationSubjectRule } from './authentication-subject.ts';
 
 export const sensitiveAuthPaths = new Set([
   '/api/auth/change-password', '/api/auth/set-password', '/api/auth/change-email', '/api/auth/delete-user',
@@ -64,6 +66,27 @@ async function mutateMethod<T>(pool: Pool, session: { session: { id: string }; u
   finally { db.release(); }
 }
 
+/** The guard pool holds admission locks; Better Auth uses the owner pool.
+ * Charge only inside the acquired transaction, and roll back outages. A
+ * refused proof commits its charge without converting infrastructure to 403. */
+export async function reauthenticate(guardPool: Pool, session: { session: { id: string }; user: { id: string } },
+  secret: string, path: string, verify: () => Promise<boolean>) {
+  if (authenticationSubjectRule(path) !== 'session') throw new Error('reauthentication must be session-bound');
+  const verified = await mutateMethod(guardPool, session, async db => {
+    await consumeStepUpAttempt(db, secret, session.user.id);
+    let accepted: boolean;
+    try { accepted = await verify(); }
+    catch (error) {
+      if (!(error instanceof APIError) || error.statusCode >= 500) throw error;
+      accepted = false;
+    }
+    if (accepted) await db.query(`INSERT INTO rezics_account_step_up (session_id) VALUES ($1)
+      ON CONFLICT (session_id) DO UPDATE SET verified_at = now()`, [session.session.id]);
+    return accepted;
+  }, path === '/api/account/reauthenticate' ? { totpVerification: true } : {});
+  if (!verified) throw new AccountProblem('forbidden', 403);
+}
+
 /** Bounded by method caps (32 passkeys, one password and one TOTP). Never
  * returns public keys, credential IDs, TOTP secrets or stored backup codes;
  * a passkey's provider is named from its authenticator model (AAGUID). */
@@ -83,7 +106,7 @@ export async function readMethods(pool: Pool, userId: string) {
     totp: totp.rows[0] ?? null };
 }
 
-export function methodsApi(auth: AccountAuth, pool: Pool) {
+export function methodsApi(auth: AccountAuth, pool: Pool, guard: () => Pool) {
   return new Elysia()
     .post('/api/auth/passkey/delete-passkey', { body: t.Object({ id: t.String({ minLength: 1, maxLength: 128 }) }) },
       async ({ request, body }) => {
@@ -110,19 +133,15 @@ export function methodsApi(auth: AccountAuth, pool: Pool) {
     }) }, async ({ request, body }) => {
       try {
         const session = await accountSession(auth, request);
-        await consumeStepUpAttempt(pool, String(auth.options.secret), session.user.id);
-        await mutateMethod(pool, session, async db => {
-          try {
-            await auth.api.verifyPassword({ headers: request.headers, body: { password: body.password } });
-            const twoFactor = await db.query('SELECT 1 FROM "user" WHERE id = $1 AND "twoFactorEnabled" = true', [session.user.id]);
-            if (twoFactor.rowCount) {
-              if (!body.totpCode) throw new Error('second factor required');
-              await auth.api.verifyTOTP({ headers: request.headers, body: { code: body.totpCode } });
-            }
-          } catch { throw new AccountProblem('forbidden', 403); }
-          await db.query(`INSERT INTO rezics_account_step_up (session_id) VALUES ($1)
-            ON CONFLICT (session_id) DO UPDATE SET verified_at = now()`, [session.session.id]);
-        }, { totpVerification: true });
+        await reauthenticate(guard(), session, String(auth.options.secret), new URL(request.url).pathname, async () => {
+          await auth.api.verifyPassword({ headers: request.headers, body: { password: body.password } });
+          const twoFactor = await pool.query('SELECT 1 FROM "user" WHERE id = $1 AND "twoFactorEnabled" = true', [session.user.id]);
+          if (twoFactor.rowCount) {
+            if (!body.totpCode) return false;
+            await auth.api.verifyTOTP({ headers: request.headers, body: { code: body.totpCode } });
+          }
+          return true;
+        });
         return accountJson({ verifiedUntil: new Date(Date.now() + 300_000).toISOString() });
       } catch (error) { return accountFailure(error); }
     })
