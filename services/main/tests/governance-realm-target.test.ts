@@ -874,7 +874,7 @@ test('a public Work with an owner-attached Character description still accepts a
     await responseJson(await f.editor.send('POST', '/v1/semantic/changes', {
       profile: 'semantic-change-v1', target: work.work, expectedHead: workHead, actingSubject: f.editor.actor,
       state: { component: 'resource', types: [`${RV}Character`], properties: [], lifecycle: 'active' },
-    }), 201);
+    }), 200);
     const selected = { owner: 'graph' as const, resource: work.work, component: 'record' as const,
       locator: null, revision: workHead };
     expect(await ownerTargetHeads({ graph: f.stack.env }).realmBasis(selected)).toBeNull();
