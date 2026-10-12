@@ -3,8 +3,8 @@ import { Elysia, t } from 'elysia';
 import { APIError } from 'better-auth/api';
 import type { Pool } from 'pg';
 import { accountLocale, type AccountLocale } from './email.ts';
-import { accountFailure, accountJson, accountSession, type AccountAuth } from './http.ts';
-import { reauthenticate } from './methods.ts';
+import { accountFailure, accountJson, AccountProblem, accountSession, type AccountAuth } from './http.ts';
+import { consumeAccountLimit } from './rate-limit.ts';
 import { accountResponses } from './views.ts';
 
 /** Interface languages an account can choose. The Accounts site shows its pages
@@ -130,7 +130,7 @@ const assertionJson = t.Object({ id: base64url(1024), rawId: base64url(1024), ty
   clientExtensionResults: t.Record(t.String(), t.Unknown()),
   authenticatorAttachment: t.Optional(t.Union([t.Literal('platform'), t.Literal('cross-platform')])) });
 
-export function accountSettingsApi(auth: AccountAuth, guard: () => Pool) {
+export function accountSettingsApi(auth: AccountAuth, pool: Pool) {
   const secret = String(auth.options.secret);
   return new Elysia()
     // The same five-per-five-minutes budget as password step-up. The challenge
@@ -142,16 +142,15 @@ export function accountSettingsApi(auth: AccountAuth, guard: () => Pool) {
     }, async ({ request, body }) => {
       try {
         const session = await accountSession(auth, request);
-        await reauthenticate(guard(), session, secret, new URL(request.url).pathname, async () => {
-          const proof = { userId: session.user.id, verified: false };
-          try {
-            await stepUpProof.run(proof, () => auth.api.verifyPasskeyAuthentication({
-              headers: request.headers, body: { response: body.response } }));
-          } catch (error) {
-            if (!(error instanceof APIError) || error.statusCode >= 500) throw error;
-          }
-          return proof.verified;
-        });
+        if (!await consumeAccountLimit(pool, secret, `reauth:${session.user.id}`, 5, 300)) {
+          throw new AccountProblem('rate_limited', 429);
+        }
+        const proof = { userId: session.user.id, verified: false };
+        await stepUpProof.run(proof, () => auth.api.verifyPasskeyAuthentication({
+          headers: request.headers, body: { response: body.response } })).catch(() => undefined);
+        if (!proof.verified) throw new AccountProblem('forbidden', 403);
+        await pool.query(`INSERT INTO rezics_account_step_up (session_id) VALUES ($1)
+          ON CONFLICT (session_id) DO UPDATE SET verified_at = now()`, [session.session.id]);
         return accountJson({ verifiedUntil: new Date(Date.now() + 300_000).toISOString() });
       } catch (error) { return accountFailure(error); }
     });

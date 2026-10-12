@@ -1,5 +1,7 @@
 import { isIP } from 'node:net';
 import { Elysia, t } from 'elysia';
+import { parseCookies } from 'better-call';
+import { createHMAC } from '@better-auth/utils/hmac';
 import { createHmac } from 'node:crypto';
 import type { Pool } from 'pg';
 import { accountFailure, accountJson, accountSession, type AccountAuth } from './http.ts';
@@ -8,7 +10,6 @@ import { requireStepUp } from './methods.ts';
 import { accountResponses, activityView, pageView, sessionView } from './views.ts';
 import { revokeSessionSelection } from './first-party-session.ts';
 import { APIError } from 'better-auth/api';
-import { authenticationSubject } from './authentication-subject.ts';
 
 export function deviceLabel(userAgent?: string | null) {
   const ua = userAgent ?? '';
@@ -135,8 +136,22 @@ export async function observeAuthentication(auth: AccountAuth, pool: Pool, reque
   const signingOut = path === '/api/auth/sign-out';
   const verifying = path === '/api/auth/verify-email' && request.method === 'GET';
   if (!signingIn && !signingOut && !verifying) return handle();
+  const input = await request.clone().json().catch(() => ({})) as { email?: string; response?: { id?: string } };
   const before = await auth.api.getSession({ headers: request.headers });
-  const subject = signingIn ? await authenticationSubject(pool, request, async () => before, String(auth.options.secret)) : undefined;
+  let challengeUser: string | undefined;
+  if (!before && path.startsWith('/api/auth/two-factor/')) {
+    try {
+      // Read the signed challenge before the provider consumes it (including
+      // its final failed attempt). Never attribute arbitrary cookie contents.
+      const context = await auth.$context;
+      const signed = parseCookies(request.headers.get('cookie') ?? '').get(context.createAuthCookie('two_factor').name);
+      const split = signed?.lastIndexOf('.') ?? -1;
+      if (signed && split > 0 && await createHMAC('SHA-256', 'base64').verify(context.secret, signed.slice(0, split), signed.slice(split + 1))) {
+        const proof = await context.internalAdapter.findVerificationValue(signed.slice(0, split));
+        if (proof && proof.expiresAt > new Date()) challengeUser = proof.value;
+      }
+    } catch { console.error('Account authentication activity unavailable'); }
+  }
   const response = await handle();
   if (verifying && response.status === 302) {
     const cookie = response.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
@@ -164,7 +179,15 @@ export async function observeAuthentication(auth: AccountAuth, pool: Pool, reque
       network: coarseNetwork(request.headers.get('x-rezics-client-ip')) });
   } else if (signingIn && !response.ok) {
     try {
-      const userId = subject?.userId;
+      // A session or signed challenge identifies the person the factor
+      // provider checks. Ignore unrelated identity fields on those requests;
+      // unsigned sign-ins use only the identifier their provider consumes.
+      let userId = before?.user.id ?? challengeUser;
+      if (!userId && path === '/api/auth/sign-in/email' && typeof input.email === 'string') {
+        userId = (await pool.query<{ id: string }>('SELECT id FROM "user" WHERE email = $1', [input.email.toLowerCase()])).rows[0]?.id;
+      } else if (!userId && path === '/api/auth/passkey/verify-authentication' && typeof input.response?.id === 'string') {
+        userId = (await pool.query<{ id: string }>('SELECT "userId" AS id FROM passkey WHERE "credentialID" = $1', [input.response.id])).rows[0]?.id;
+      }
       if (userId) await securityEvent(pool, userId, 'sign_in_failed', { method: path.split('/').at(-1) });
     } catch {
       // Failure logging must not turn a storage fault into an address oracle.
