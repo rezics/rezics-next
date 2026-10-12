@@ -36,13 +36,20 @@ export const CANONICAL_TYPES: ReadonlySet<string> = new Set((JSON.parse(readFile
 /** Shared admission policy: descriptive assertions cannot select another owner. */
 export function semanticChangeTypeOutcome(type: string): TermOutcome {
   const outcome = semanticTypeOutcome(type);
-  return outcome === 'admitted' && CANONICAL_TYPES.has(type) ? 'reserved-owner' : outcome;
+  return outcome === 'admitted' && semanticResourceTypeRole(type) === 'PRIMARY' ? 'reserved-owner' : outcome;
 }
 
-/** The semantic owner's complete reserved registry. Schema envelopes such as
- * rdfs:Resource retain their schema outcome even when they have a routed shape. */
+/** Resource is the envelope this component supplies, rather than a competing
+ * command owner. All other canonical kinds retain their owner's identity even
+ * when schema policy also forbids callers from asserting them generically. */
+export function semanticResourceTypeRole(type: string): 'PRIMARY' | 'DESCRIPTIVE' {
+  return type !== RDFS_RESOURCE && (CANONICAL_TYPES.has(type) || semanticTypeOutcome(type) === 'reserved-owner')
+    ? 'PRIMARY' : 'DESCRIPTIVE';
+}
+
+/** The semantic owner's complete reserved registry, excluding its Resource envelope. */
 export const semanticOwnerTypes: ReadonlySet<string> = new Set([...CANONICAL_TYPES, ...RESERVED_OWNER_TYPES]
-  .filter(type => semanticChangeTypeOutcome(type) === 'reserved-owner'));
+  .filter(type => semanticResourceTypeRole(type) === 'PRIMARY'));
 
 export interface SemanticProperty { predicate: string; value: SemanticValue }
 /** A stored assertion keeps its identified value node so history resolves exactly. */

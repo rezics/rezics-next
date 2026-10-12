@@ -12,7 +12,7 @@ import type { CommandEnvelope } from '../src/infrastructure/fuseki.ts';
 import { graphNoticeParticipants, ownerModerationEffects, restrictionOwners } from '../src/modules/governance/effects.ts';
 import { ownerEvidenceCapture, ownerTargetHeads }
   from '../src/modules/governance/evidence.ts';
-import { CANONICAL_TYPES, semanticOwnerTypes, semanticChangeTypeOutcome }
+import { CANONICAL_TYPES, semanticOwnerTypes, semanticChangeTypeOutcome, semanticResourceTypeRole }
   from '../src/modules/semantic/change.ts';
 import { RESERVED_OWNER_TYPES } from '../src/modules/semantic/schema.ts';
 import { prepareDecisionNotices, unrecordedReasons } from '../src/modules/governance/notices.ts';
@@ -48,7 +48,11 @@ const target = (expectedHead = head): DecisionTargetInput => ({
 
 test('Governance derives primary ownership from the semantic admission policy for every model class', async () => {
   expect([...semanticOwnerTypes].sort()).toEqual([...new Set([...CANONICAL_TYPES, ...RESERVED_OWNER_TYPES])]
-    .filter(type => semanticChangeTypeOutcome(type) === 'reserved-owner').sort());
+    .filter(type => semanticResourceTypeRole(type) === 'PRIMARY').sort());
+  expect(semanticResourceTypeRole('http://www.w3.org/2000/01/rdf-schema#Resource')).toBe('DESCRIPTIVE');
+  for (const kind of ['CompoundLiteral', 'Statement']) {
+    expect(semanticResourceTypeRole(`http://www.w3.org/1999/02/22-rdf-syntax-ns#${kind}`)).toBe('PRIMARY');
+  }
   const types = new Set([...semanticOwnerTypes, `${RV}Character`, `${RV}Role`,
     'http://www.w3.org/2000/01/rdf-schema#Resource', 'https://example.org/Genre']);
   for (const definition of authoredProfiles) {
@@ -66,7 +70,7 @@ test('Governance derives primary ownership from the semantic admission policy fo
     const f = graph();
     if (type !== `${RV}Realm`) f.state.extraKinds.push(type);
     const classified = ownerTargetHeads({ graph: f.env }).realmBasis(target());
-    if (type !== `${RV}Realm` && semanticChangeTypeOutcome(type) === 'reserved-owner') {
+    if (type !== `${RV}Realm` && semanticResourceTypeRole(type) === 'PRIMARY') {
       await expect(classified).rejects.toBeInstanceOf(GovernanceUnavailable);
     } else expect((await classified)?.realm).toBe(realm);
   }
@@ -496,7 +500,7 @@ test('emitted Realm commands enforce authored SHACL and atomic guards in native 
   // Each mutation is applied after ownerTargetHeads supplied the command basis.
   // Exercise the emitted atomic guard against every canonical resource kind.
   for (const kind of [...semanticOwnerTypes].filter(kind => kind !== `${RV}Realm`
-    && semanticChangeTypeOutcome(kind) === 'reserved-owner')) {
+    && semanticResourceTypeRole(kind) === 'PRIMARY')) {
     cases.push({ name: `competing-primary-kind-${kind}`, command: declaredCommand,
       seed: seed(3, true), mutation: change('', `<${realm}> a <${kind}> .`), expected: 'guard-unmatched' });
   }

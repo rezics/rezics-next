@@ -9,7 +9,7 @@ import { resolveRealmProfile } from '../space/policy.ts';
 import { readExactMainRevision, readExactWorkRevision, RevisionNotFound } from '../work/history.ts';
 import { CompositionCorrupt, CompositionUnavailable, readCompositionHeader } from '../structure/graph.ts';
 import { readCompositionPage } from '../structure/read.ts';
-import { semanticChangeTypeOutcome } from '../semantic/change.ts';
+import { semanticResourceTypeRole } from '../semantic/change.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable } from '../structure/tree.ts';
 import { type CapturedEvidence, type EvidenceCapture, type EvidenceTarget, GovernanceDenied, GovernanceInvalid,
   GovernanceUnavailable, sha256, type TargetHeads } from './store.ts';
@@ -334,7 +334,7 @@ export function ownerTargetHeads(owners: { graph?: WorkActivationEnvironment; co
         if (rows.length >= 65 || rows.some(row => row.kind?.type !== 'uri')) {
           throw new GovernanceUnavailable('Graph target kind or head is unavailable or ambiguous');
         }
-        const primary = rows.filter(row => semanticChangeTypeOutcome(row.kind!.value) === 'reserved-owner');
+        const primary = rows.filter(row => semanticResourceTypeRole(row.kind!.value) === 'PRIMARY');
         if (primary.length > 1) {
           throw new GovernanceUnavailable('Graph target kind or head is unavailable or ambiguous');
         }

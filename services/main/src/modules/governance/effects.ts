@@ -9,7 +9,7 @@ import { MediaStore, MediaStale, copySuppressionId,
   type CopySuppression, type CopySuppressionLift, type CopySuppressionScope } from '../media/store.ts';
 import type { ContentCore } from '../../../../content/src/core.ts';
 import { ownerTargetHeads } from './evidence.ts';
-import { semanticOwnerTypes, semanticChangeTypeOutcome } from '../semantic/change.ts';
+import { semanticOwnerTypes, semanticResourceTypeRole } from '../semantic/change.ts';
 
 export interface EffectPlan {
   /** Owner-established identity; null is a positively classified non-Realm record. */
@@ -300,7 +300,7 @@ export function ownerModerationEffects(content: ContentModeration, env: WorkActi
         FILTER NOT EXISTS {
           ${iri(realm.realm)} a ?otherKind .
           FILTER(?otherKind IN (${[...semanticOwnerTypes].filter(kind => kind !== `${RV}Realm`
-            && semanticChangeTypeOutcome(kind) === 'reserved-owner').map(kind => `<${kind}>`).join(', ')}))
+            && semanticResourceTypeRole(kind) === 'PRIMARY').map(kind => `<${kind}>`).join(', ')}))
         }
         FILTER NOT EXISTS { ${iri(realm.realm)} rv:space ?otherSpace . FILTER(?otherSpace != ${iri(realm.space)}) }
         FILTER NOT EXISTS { ?otherSpace rv:realmCapability ${iri(realm.realm)} . FILTER(?otherSpace != ${iri(realm.space)}) }
