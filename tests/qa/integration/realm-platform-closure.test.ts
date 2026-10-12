@@ -95,10 +95,12 @@ async function createWork(): Promise<Work & { contribution: string; publicationD
   const created = await json<Work>(await call('POST', '/v1/works', manager, {
     profile: 'metadata-only-v1', title: 'Independent original', language: 'en', authoring: 'own-work',
     actingSubject: manager.actor }), 201);
+  await grant(manager, `work:read:${created.work}`, 'work.read');
   await grant(manager, `contribution:create:${created.work}`, 'contribution.create');
   const draft = await json<{ contribution: string; draftRevision: string }>(await call('POST',
     '/v1/contributions', manager, { profile: 'text-contribution-v1', work: created.work, language: 'en',
       body: 'Independent public original', actingSubject: manager.actor }), 201);
+  await grant(manager, `contribution:read:${draft.contribution}`, 'contribution.read');
   await grant(manager, `contribution:publish:${draft.contribution}`, 'contribution.publish');
   const published = await json<{ publicationDecision: string }>(await call('POST', '/v1/contribution-publications',
     manager, { profile: 'text-publication-v1', contribution: draft.contribution,
