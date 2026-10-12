@@ -147,19 +147,19 @@ export function LibraryImport({ agent, context, locale, messages, api, shelf = b
     finally { if (live()) setUploading(false); }
   }
 
-  async function showRow(id: string, index: number, signal: AbortSignal) {
+  async function showRow(id: string, row: ImportRow, signal: AbortSignal) {
     signal.throwIfAborted();
-    const fresh = await reloadRow(client, id, index, signal);
+    const fresh = await reloadRow(client, id, row, signal);
     if (fresh && !signal.aborted) setActive(current => current?.entry.id === id ? { ...current, rows: replaceRow(current.rows, fresh) } : current);
   }
   async function resolveRow(id: string, row: ImportRow, choice: RowResolution, signal = session().signal) {
     signal.throwIfAborted();
     try { await client.resolve(id, row, choice, { signal }); } catch (failure) {
       // The row changed elsewhere: show Main's version, so the next choice is made on it, then say so.
-      if (failure instanceof ImportError && failure.failure === 'conflict') await showRow(id, row.index, signal).catch(() => undefined);
+      if (failure instanceof ImportError && failure.failure === 'conflict') await showRow(id, row, signal).catch(() => undefined);
       throw failure;
     }
-    await showRow(id, row.index, signal);
+    await showRow(id, row, signal);
   }
   async function adoptRow(id: string, row: ImportRow, workId: string) {
     const { signal } = session();

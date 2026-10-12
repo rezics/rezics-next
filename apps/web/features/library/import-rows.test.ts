@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { type ImportRequestOptions, type ImportRow } from './import-api.ts';
 import { goodreadsRows } from './import-fixtures.ts';
-import { loadAllRows, reloadRow } from './import-rows.ts';
+import { loadAllRows, reloadRow, replaceRow } from './import-rows.ts';
 
 const row = (index: number, version = 0): ImportRow => ({ ...goodreadsRows()[0]!, index, version });
 type Page = { rows: ImportRow[]; nextCursor: string | null };
@@ -34,24 +34,63 @@ describe('import row continuations', () => {
     expect(calls).toEqual(([-1, 'review/b+?', 'cut:empty', 'last/token'] as const).map(cursor => ({ id: 'upload', cursor, signal })));
   });
 
-  test('reload follows continuations and finds the requested identity, without reading later pages', async () => {
-    const fresh = row(40, 3);
-    const { api, calls } = opaqueRows(new Map<string | -1, Page>([
-      [-1, { rows: [row(10)], nextCursor: 'empty-page' }],
-      ['empty-page', { rows: [], nextCursor: 'chosen-row-page' }],
-      ['chosen-row-page', { rows: [row(30), fresh], nextCursor: 'unneeded-page' }],
-    ]));
+  test('reloading row 4999 of 5000 reads only its retained page even when every other page fails', async () => {
+    const pages = new Map<string | -1, Page>();
+    for (let start = 0; start < 5000; start += 8) {
+      pages.set(start === 0 ? -1 : `owner/page-${start}`, {
+        rows: Array.from({ length: 8 }, (_, offset) => row(start + offset)),
+        nextCursor: start + 8 < 5000 ? `owner/page-${start + 8}` : null,
+      });
+    }
+    const { api, calls } = opaqueRows(pages);
+    const loaded = await loadAllRows(api, 'upload', 5000);
+    const fresh = row(4999, 3);
+    pages.clear();
+    pages.set('owner/page-4992', { rows: [row(4992), fresh], nextCursor: 'unneeded-page' });
+    calls.length = 0;
     const signal = new AbortController().signal;
-    expect(await reloadRow(api, 'upload', 40, signal)).toEqual(fresh);
-    expect(calls).toEqual(([-1, 'empty-page', 'chosen-row-page'] as const).map(cursor => ({ id: 'upload', cursor, signal })));
+    expect(await reloadRow(api, 'upload', loaded[4999]!, signal)).toEqual(fresh);
+    expect(calls).toEqual([{ id: 'upload', cursor: 'owner/page-4992', signal }]);
+    calls.length = 0;
+    expect(await reloadRow(api, 'upload', fresh)).toEqual(fresh);
+    expect(calls.map(call => call.cursor)).toEqual(['owner/page-4992']);
   });
 
-  test('reload returns undefined only after the terminal page omits the requested identity', async () => {
-    const { api, calls } = opaqueRows(new Map<string | -1, Page>([
+  test('first-page positions survive a local replacement and reload uses the start sentinel once', async () => {
+    const pages = new Map<string | -1, Page>([[-1, { rows: [row(10)], nextCursor: null }]]);
+    const { api, calls } = opaqueRows(pages);
+    const loaded = await loadAllRows(api, 'upload', 1);
+    const kept = { ...loaded[0]!, resolution: { choice: 'private' as const } };
+    const replaced = replaceRow(loaded, kept);
+    const fresh = row(10, 2);
+    pages.set(-1, { rows: [fresh], nextCursor: 'unneeded-page' });
+    calls.length = 0;
+    expect(await reloadRow(api, 'upload', replaced[0]!)).toEqual(fresh);
+    expect(calls.map(call => call.cursor)).toEqual([-1]);
+  });
+
+  test('reload returns undefined when its retained page omits the identity without following next', async () => {
+    const pages = new Map<string | -1, Page>([
       [-1, { rows: [], nextCursor: 'end' }], ['end', { rows: [row(10)], nextCursor: null }],
-    ]));
-    expect(await reloadRow(api, 'upload', 40)).toBeUndefined();
-    expect(calls.map(call => call.cursor)).toEqual([-1, 'end']);
+    ]);
+    const { api, calls } = opaqueRows(pages);
+    const loaded = await loadAllRows(api, 'upload', 1);
+    pages.clear(); pages.set('end', { rows: [row(20)], nextCursor: 'unneeded-page' });
+    calls.length = 0;
+    expect(await reloadRow(api, 'upload', loaded[0]!)).toBeUndefined();
+    expect(calls.map(call => call.cursor)).toEqual(['end']);
+  });
+
+  test('a row without a position from this API and upload fails without guessing a page', async () => {
+    const { api, calls } = opaqueRows(new Map([[-1, { rows: [row(10)], nextCursor: null }]]));
+    const loaded = await loadAllRows(api, 'upload', 1);
+    const other = opaqueRows(new Map());
+    calls.length = 0;
+    await expect(reloadRow(api, 'other-upload', loaded[0]!)).rejects.toMatchObject({ failure: 'invalid' });
+    await expect(reloadRow(other.api, 'upload', loaded[0]!)).rejects.toMatchObject({ failure: 'invalid' });
+    await expect(reloadRow(api, 'upload', row(10))).rejects.toMatchObject({ failure: 'invalid' });
+    expect(calls).toEqual([]);
+    expect(other.calls).toEqual([]);
   });
 
   test('total is checked at the terminal page, even when the expected count was already reached', async () => {
@@ -72,12 +111,11 @@ describe('import row continuations', () => {
     expect(await loadAllRows(api, 'upload', 0)).toEqual([]);
   });
 
-  test.each(['load', 'reload'] as const)('%s refuses a repeated continuation instead of looping', async operation => {
+  test('load refuses a repeated continuation instead of looping', async () => {
     const { api, calls } = opaqueRows(new Map<string | -1, Page>([
       [-1, { rows: [], nextCursor: 'repeat' }], ['repeat', { rows: [], nextCursor: 'repeat' }],
     ]));
-    await expect(operation === 'load' ? loadAllRows(api, 'upload', 1) : reloadRow(api, 'upload', 10))
-      .rejects.toMatchObject({ failure: 'invalid' });
+    await expect(loadAllRows(api, 'upload', 1)).rejects.toMatchObject({ failure: 'invalid' });
     expect(calls.map(call => call.cursor)).toEqual([-1, 'repeat']);
   });
 
@@ -96,14 +134,19 @@ describe('import row continuations', () => {
     expect(progress).toEqual([]);
   });
 
-  test.each(['load', 'reload'] as const)('%s stops when the signal aborts between pages', async operation => {
+  test.each(['load', 'reload'] as const)('%s stops when the signal aborts during a read', async operation => {
     const controller = new AbortController();
     let calls = 0;
+    let abortOnRead = false;
     const api = { rows: async () => {
-      calls += 1; controller.abort(); return { rows: [], nextCursor: 'more' };
+      calls += 1;
+      if (abortOnRead) controller.abort();
+      return { rows: [row(10)], nextCursor: null };
     } };
+    const loaded = await loadAllRows(api, 'upload', 1);
+    calls = 0; abortOnRead = true;
     await expect(operation === 'load' ? loadAllRows(api, 'upload', 1, undefined, undefined, controller.signal)
-      : reloadRow(api, 'upload', 10, controller.signal)).rejects.toMatchObject({ name: 'AbortError' });
+      : reloadRow(api, 'upload', loaded[0]!, controller.signal)).rejects.toMatchObject({ name: 'AbortError' });
     expect(calls).toBe(1);
   });
 });

@@ -26,8 +26,17 @@ export function countGroups(rows: readonly ImportRow[]): Record<RowGroup, number
 export const applyStarted = (rows: readonly ImportRow[]) => rows.some(row => row.outcome !== null);
 export const applyFinished = (rows: readonly ImportRow[]) => rows.length > 0 && rows.every(row => row.outcome !== null);
 
+// Positions belong to the loaded row and its API/upload, never to its ordinal.
+// Weak keys let closed reviews release their rows and retained tokens together.
+const rowPositions = new WeakMap<ImportRow, { api: object; id: string; cursor: unknown }>();
+
 export function replaceRow(rows: readonly ImportRow[], row: ImportRow): ImportRow[] {
-  return rows.map(item => item.index === row.index ? row : item);
+  return rows.map(item => {
+    if (item.index !== row.index) return item;
+    const position = rowPositions.get(item);
+    if (position && !rowPositions.has(row)) rowPositions.set(row, position);
+    return row;
+  });
 }
 
 interface RowPage<Cursor> { rows: ImportRow[]; nextCursor: Cursor | null }
@@ -46,7 +55,7 @@ async function* rowPages<Cursor>(api: RowsApi<Cursor>, id: string, active: () =>
     const page = await api.rows(id, cursor, { signal });
     signal?.throwIfAborted();
     if (!active()) return;
-    yield page;
+    yield { page, position: cursor === -1 ? null : cursor };
     cursor = page.nextCursor;
   }
 }
@@ -56,8 +65,11 @@ export async function loadAllRows<Cursor>(api: RowsApi<Cursor>, id: string, tota
   active: () => boolean = () => true, signal?: AbortSignal): Promise<ImportRow[]> {
   const found = new Map<number, ImportRow>();
   const ordered = () => [...found.values()].sort((a, b) => a.index - b.index);
-  for await (const page of rowPages(api, id, active, signal)) {
-    for (const row of page.rows) found.set(row.index, row);
+  for await (const { page, position } of rowPages(api, id, active, signal)) {
+    for (const row of page.rows) {
+      rowPositions.set(row, { api, id, cursor: position });
+      found.set(row.index, row);
+    }
     onRows(ordered());
   }
   const rows = ordered();
@@ -65,11 +77,16 @@ export async function loadAllRows<Cursor>(api: RowsApi<Cursor>, id: string, tota
   return rows;
 }
 
-/** The row Main now holds at `index`, after a choice or a conflict. */
-export async function reloadRow<Cursor>(api: RowsApi<Cursor>, id: string, index: number, signal?: AbortSignal): Promise<ImportRow | undefined> {
-  for await (const page of rowPages(api, id, () => true, signal)) {
-    const row = page.rows.find(row => row.index === index);
-    if (row) return row;
-  }
-  return undefined;
+/** One read of the page that held this row, followed by its API identity. */
+export async function reloadRow<Cursor>(api: RowsApi<Cursor>, id: string, row: ImportRow, signal?: AbortSignal): Promise<ImportRow | undefined> {
+  signal?.throwIfAborted();
+  const position = rowPositions.get(row);
+  if (!position || position.api !== api || position.id !== id) throw new ImportError('invalid', 'The import row has no retained page position');
+  // API identity above binds this erased token to the adapter that supplied it.
+  const cursor = position.cursor === null ? -1 : position.cursor as Cursor;
+  const page = await api.rows(id, cursor, { signal });
+  signal?.throwIfAborted();
+  const fresh = page.rows.find(item => item.index === row.index);
+  if (fresh) rowPositions.set(fresh, position);
+  return fresh;
 }
