@@ -7,7 +7,7 @@ import * as navigation from 'next/navigation';
 import type { RealmView } from '../realm/realm-page.tsx';
 import type { ZonePresentationRead } from '../realm/types.ts';
 import { messages } from '../realm/messages.ts';
-import { siteHref } from '../realm/route.ts';
+import { siteHref, spaceHref } from '../realm/route.ts';
 import { fictionZone, zoneMessagesFor } from './fixtures.ts';
 import { metadataOnlyWork } from '../work-page/fixtures.ts';
 import { messages as workMessages } from '../work-page/messages.ts';
@@ -203,7 +203,7 @@ for (const kind of ['work', 'resource', 'document'] as const) {
     expect(html).toContain('aria-label="Discussion"');
     expect(discussionCalls).toBe(1);
     expect(discussionAddresses).toEqual([expect.objectContaining({
-      path: '/guide/harbor-field-guide', href: siteHref('en', currentView.context.ref, path),
+      path: '/guide/harbor-field-guide', href: spaceHref(currentView.context.ref, 'site', path),
     })]);
   });
 }
