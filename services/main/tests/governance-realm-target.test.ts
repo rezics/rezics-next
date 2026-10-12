@@ -747,6 +747,34 @@ test('production Realm decision creates owner-controller notices and replays one
   } finally { await f.stack.stop(); }
 }, 120_000);
 
+test('production Realm dispatch refuses a competing primary kind introduced after its owner basis read', async () => {
+  const f = await productionRealm('realm-primary-kind-race');
+  const original = f.stack.fuseki.commandWithReceipt;
+  let raced = false;
+  try {
+    f.stack.fuseki.commandWithReceipt = async command => {
+      if (command.update.includes('a rv:ModerationEffect') && command.update.includes(`<${f.realm}>`)) {
+        raced = true;
+        await f.stack.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA { GRAPH <${GRAPHS.current}> {
+          <${f.realm}> a rv:Agent } }`);
+      }
+      return original.call(f.stack.fuseki, command);
+    };
+    const result = await f.governance.store.decide(f.staff.principal, f.input);
+    expect(raced).toBe(true);
+    expect(result.operation.status).not.toBe('completed');
+    expect((await f.stack.accessPool.query<{ state: string }>(
+      'SELECT state FROM access.safety_decision_effect WHERE decision_id=$1', [result.decisionId])).rows)
+      .toEqual([{ state: 'failed' }]);
+    expect((await f.stack.accessPool.query('SELECT 1 FROM access.governance_enforcement WHERE resource=$1',
+      [f.realm])).rowCount).toBe(0);
+    expect((await f.stack.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH <${GRAPHS.receipts}> {
+      ?receipt rv:moderationTarget <${f.realm}> } }`, 1024)).boolean).toBe(false);
+    expect((await f.stack.accessPool.query("SELECT 1 FROM access.outbox WHERE kind='moderation.decided' AND moderation_decision_id=$1",
+      [result.decisionId])).rowCount).toBe(0);
+  } finally { f.stack.fuseki.commandWithReceipt = original; await f.stack.stop(); }
+}, 120_000);
+
 test('production Realm moderationTarget receipt refreshes the directory without a publication slot', async () => {
   const f = await productionRealm('realm-receipt-directory');
   try {
