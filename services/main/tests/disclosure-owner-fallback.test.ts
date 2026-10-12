@@ -1,5 +1,10 @@
-import { expect, test } from 'bun:test';
-import type { Pool } from 'pg';
+import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { Pool } from 'pg';
+import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
+import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import {
   captureDisclosure, configureDisclosure, configureDisclosureAncestrySource, disclose,
   discloseInventory, discloseInventoryWithAnonymousNames, discloseInventoryWithCost, DisclosureStore, DisclosureUnavailable,
@@ -9,11 +14,19 @@ import {
 import { governanceOwners } from '../src/modules/governance/schema.ts';
 import { ANONYMOUS_VIEWER } from '../src/modules/suitability/policy.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
+import { discloseContent, disclosureMedia } from '../src/modules/disclosure/assembly.ts';
+import type { ExactReadResult } from '../../content/src/core.ts';
+import type { MediaStore } from '../src/modules/media/store.ts';
+import { ensureFixtureScopeGate } from '../src/modules/access/fixture-authority.ts';
+import { configureMediaVisibility } from '../src/modules/media/visibility.ts';
+import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 
 const id = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const work = id(1), head = id(2);
 function fixture() {
   let open = true, restricted = false, nameVisible = true, cut = 'a'.repeat(64), liveHead = head;
+  let recoveryGeneration = '1';
+  let restrictedTarget = (_target: DisclosureTarget) => false;
   let complete = true, onStatement = () => {};
   const requested: DisclosureTarget[][] = [];
   const pool = { query: async (sql: string, args: unknown[]) => {
@@ -27,14 +40,16 @@ function fixture() {
     }
     requested.push(targets);
     onStatement();
-    return { rows: complete ? targets.map(target => ({ ordinal: target.ordinal, open, restricted,
+    return { rows: complete ? targets.map(target => ({ ordinal: target.ordinal, open,
+      restricted: restricted || restrictedTarget(target),
       realmClosed: false, nameVisible, publicNameVisible: nameVisible, assessments: [],
-      recoveryGeneration: '1', enforcementCut: cut })) : [] };
+      recoveryGeneration, enforcementCut: cut })) : [] };
   } } as unknown as Pool;
   const env = { lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' }, fuseki: {
     query: async (query: string) => ({ results: { bindings:
       [...(query.match(/VALUES \?work \{([^}]+)\}/)?.[1] ?? '').matchAll(/<([^>]+)>/g)]
         .map(match => ({ work: { value: match[1]! }, head: { value: liveHead },
+          ...(match[1] === id(20) ? { nameOwner: { value: id(20) } } : {}),
           ...(match[1] === work ? { owningWork: { value: work }, owningHead: { value: liveHead } } : {}) })) } }),
   } } as unknown as WorkActivationEnvironment;
   const reader = new DisclosureStore(pool);
@@ -45,6 +60,8 @@ function fixture() {
     hideName: () => { nameVisible = false; },
     partial: () => { complete = false; }, complete: () => { complete = true; },
     onStatement: (hook: () => void) => { onStatement = hook; },
+    restrictTargets: (policy: typeof restrictedTarget) => { restrictedTarget = policy; },
+    moveRecovery: () => { recoveryGeneration = '2'; },
     moveCut: () => { cut = 'b'.repeat(64); }, moveHead: () => { liveHead = id(3); } };
 }
 const target = (owner: DisclosureTarget['owner']): DisclosureTarget => ({
@@ -90,18 +107,21 @@ for (const owner of governanceOwners) {
   });
 }
 
-test('mixed registered and legacy owners preserve input order through resolution, inventory, capture and fence', async () => {
+test('P2-2 mixed registered and legacy owners pair visible, hidden, visible decisions with their original targets', async () => {
   const f = fixture(), strict = { owner: 'graph' as const, resource: id(11), component: 'record' as const };
   const proof = evidence(f.env, strict);
   configureDisclosureAncestrySource(f.env, 'graph', { read: async () => [proof], reread: async () => [proof] });
+  f.restrictTargets(input => input.resource === strict.resource);
   const inputs = [target('content'), strict, target('source')];
   const selections = await resolveDisclosureSelections(f.env, inputs);
   expect(selections.map(selection => selection.target.owner)).toEqual(['content', 'graph', 'source']);
   expect('kind' in selections[0]!.ancestry).toBe(true);
   expect('kind' in selections[1]!.ancestry).toBe(false);
-  expect(await discloseInventory(f.env, inputs, ANONYMOUS_VIEWER, 'search')).toEqual(['visible', 'visible', 'visible']);
-  const cuts = await captureDisclosure(f.env, selections, ANONYMOUS_VIEWER, 'read');
-  expect(await fenceDisclosure(f.env, cuts, ANONYMOUS_VIEWER, 'read')).toEqual(['visible', 'visible', 'visible']);
+  expect(await discloseInventory(f.env, inputs, ANONYMOUS_VIEWER, 'search')).toEqual(['visible', 'hidden', 'visible']);
+  expect(f.requested.at(-1)!.map(input => input.ancestry && 'kind' in input.ancestry)).toEqual([true, false, true]);
+  const cuts = await captureDisclosure(f.env, selections, ANONYMOUS_VIEWER, 'search');
+  expect(await fenceDisclosure(f.env, cuts, ANONYMOUS_VIEWER, 'search')).toEqual(['visible', 'hidden', 'visible']);
+  expect(f.requested.at(-1)!.map(input => input.ancestry && 'kind' in input.ancestry)).toEqual([true, false, true]);
   expect(f.requested.at(-1)!.map(input => input.owner)).toEqual(['content', 'graph', 'source']);
 });
 
@@ -169,3 +189,168 @@ test('registering an owner source during a legacy policy statement invalidates t
   await expect(discloseInventory(f.env, [target('content')], ANONYMOUS_VIEWER, 'read'))
     .rejects.toBeInstanceOf(DisclosureUnavailable);
 });
+
+test('P1-2 legacy visible hydration cannot cross an Access recovery-generation change', async () => {
+  const f = fixture(), selections = await resolveDisclosureSelections(f.env, [target('content')]);
+  const cuts = await captureDisclosure(f.env, selections, ANONYMOUS_VIEWER, 'read');
+  f.moveRecovery();
+  await expect(fenceDisclosure(f.env, cuts, ANONYMOUS_VIEWER, 'read')).rejects.toBeInstanceOf(DisclosureUnavailable);
+  const fresh = await captureDisclosure(f.env, selections, ANONYMOUS_VIEWER, 'read');
+  expect(await fenceDisclosure(f.env, fresh, ANONYMOUS_VIEWER, 'read')).toEqual(['visible']);
+});
+
+test('P1-4 bare target identity cannot move during graph name lookup or policy evaluation', async () => {
+  for (const field of ['resource', 'owner', 'component', 'revision'] as const) {
+    const f = fixture(), input: DisclosureTarget = { owner: 'graph', resource: work, component: 'name' };
+    f.hideName();
+    const query = f.env.fuseki.query.bind(f.env.fuseki);
+    f.env.fuseki.query = async (...args) => {
+      const rows = await query(...args);
+      if (field === 'resource') input.resource = id(20);
+      else if (field === 'owner') input.owner = 'content';
+      else if (field === 'component') input.component = 'body';
+      else input.revision = id(21);
+      return rows;
+    };
+    await expect(f.reader.read([input], ANONYMOUS_VIEWER, 'read')).rejects.toBeInstanceOf(DisclosureUnavailable);
+    f.env.fuseki.query = query;
+    expect(await f.reader.read([{ owner: 'graph', resource: id(20), component: 'name' }], ANONYMOUS_VIEWER, 'read'))
+      .toEqual(['hidden']);
+  }
+  const f = fixture(), input: DisclosureTarget = { owner: 'graph', resource: work, component: 'name', nameOwnerResolved: true };
+  f.onStatement(() => { input.resource = id(20); });
+  await expect(f.reader.read([input], ANONYMOUS_VIEWER, 'read')).rejects.toBeInstanceOf(DisclosureUnavailable);
+});
+
+const contentResult = (): Extract<ExactReadResult, { status: 'available' }> => ({
+  status: 'available', revisionId: id(30).slice(-36), serializedJson: '{}', body: {},
+  reference: { owner: 'content', resourceId: work, variantId: id(31).slice(-36), revisionId: id(30).slice(-36),
+    format: 'rezics-content-json-v1', model: 'fixture-model', byteDigest: 'a'.repeat(64), byteLength: 2,
+    language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr',
+    sourceRevision: null, predecessor: null, provenance: {} },
+});
+const mediaBytes = () => ({ sha256: 'a'.repeat(64), availability: 'available', mediaType: 'image/png',
+  byteLength: 100, clearance: 'cleared', owner: work, uploader: 'fixture', disclosure: 'public',
+  moderation: 'clear', lifecycle: 'active', objectNamespace: 'media/' } as const);
+
+test('P2-1 missing-reader Content and media retain legacy delivery, erasure suppression and audience gates', async () => {
+  const f = fixture();
+  configureDisclosure(f.env, null);
+  const result = contentResult();
+  expect(await discloseContent(f.env, [result])).toEqual([result]);
+  const bytes = mediaBytes();
+  const row = { ...bytes, asset: id(40).slice(-36), target: work, use: id(41).slice(-36),
+    context: 'urn:rezics:context:global', selection: id(42).slice(-36), selectionPosition: '1',
+    representation: id(43).slice(-36), crop: null, width: 128, height: 128, statePosition: '1',
+    role: 'publication-item', focalArea: null, anchor: null };
+  const store = disclosureMedia({ avatarDelivery: async () => row, itemDelivery: async () => row,
+    itemDeliveryBatch: async () => new Map([[row.use, row]]), assetDelivery: async () => bytes } as unknown as MediaStore, f.env);
+  expect(await store.avatarDelivery(id(42).slice(-36))).toEqual(row);
+  expect(await store.itemDelivery(row.use)).toEqual(row);
+  expect(await store.itemDeliveryBatch([row.use])).toEqual(new Map([[row.use, row]]));
+  expect(await store.assetDelivery(row.asset, work)).toEqual(bytes);
+  configureMediaVisibility({ environment: f.env, media: { store: {
+    visibilityFacts: async (references: readonly string[]) => new Map(references.map(reference => [reference, {
+      owner: work, pending: false, disclosure: 'public', attachments: [], attachmentOverflow: false, blocked: true,
+    }])),
+  } }, access: {} } as unknown as MainWorkDependencies);
+  expect(await store.avatarDelivery(id(42).slice(-36))).toBeNull();
+  expect(await store.itemDelivery(row.use)).toBeNull();
+  expect(await store.itemDeliveryBatch([row.use])).toEqual(new Map());
+  expect(await store.assetDelivery(row.asset, work)).toBeNull();
+  const query = f.env.fuseki.query.bind(f.env.fuseki);
+  f.env.fuseki.query = async (...args) => args[0].includes('SELECT ?target WHERE')
+    ? { results: { bindings: [{ target: { type: 'uri', value: `urn:rezics:content:revision:${result.revisionId}` } }] } }
+    : query(...args);
+  expect(await discloseContent(f.env, [result])).toEqual([{ revisionId: result.revisionId, status: 'erased' }]);
+  f.env.fuseki.query = query;
+  configureDisclosure(f.env, { read: async targets => targets.map(() => 'hidden') });
+  expect(await discloseContent(f.env, [result])).toEqual([{ revisionId: result.revisionId, status: 'denied' }]);
+});
+
+let cluster: PostgresCluster | undefined;
+let policyPool: Pool;
+beforeAll(async () => {
+  cluster = await startPostgresCluster();
+  policyPool = new Pool(cluster.connection);
+  const root = resolve(import.meta.dir, '../../..');
+  for (const file of schemaFiles(root, 'access')) {
+    await policyPool.query(readFileSync(join(root, 'services/main/migrations/access', file), 'utf8'));
+  }
+}, 60_000);
+afterAll(async () => { if (policyPool) await policyPool.end(); cluster?.remove(); });
+
+function policyEnvironment() {
+  const f = fixture();
+  configureDisclosure(f.env, new DisclosureStore(policyPool));
+  return f.env;
+}
+
+test('P1-1 legacy final policy refuses a repeatable-read snapshot after a committed Work gate closure', async () => {
+  const env = policyEnvironment();
+  await ensureFixtureScopeGate(policyPool, `work:read:${work}`, { open: true });
+  const selections = await resolveDisclosureSelections(env, [target('content')]);
+  const cuts = await captureDisclosure(env, selections, ANONYMOUS_VIEWER, 'read');
+  const stale = await policyPool.connect();
+  try {
+    await stale.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+    await stale.query('SELECT open FROM access.recovery_fence WHERE id');
+    await ensureFixtureScopeGate(policyPool, `work:read:${work}`, { open: false });
+    await expect(fenceDisclosure(env, cuts, ANONYMOUS_VIEWER, 'read', stale))
+      .rejects.toThrow('fresh Access snapshot');
+    expect(await fenceDisclosure(env, cuts, ANONYMOUS_VIEWER, 'read')).toEqual(['tombstone']);
+  } finally {
+    await stale.query('ROLLBACK'); stale.release();
+    await ensureFixtureScopeGate(policyPool, `work:read:${work}`, { open: true });
+  }
+});
+
+test('P1-3 legacy Content restores its historical Work gate and media keeps its attached target gate', async () => {
+  const env = policyEnvironment(), result = contentResult();
+  await ensureFixtureScopeGate(policyPool, `work:read:${work}`, { open: true });
+  expect(await discloseContent(env, [result])).toEqual([result]);
+  const bytes = mediaBytes();
+  const store = disclosureMedia({ assetDelivery: async () => bytes } as unknown as MediaStore, env);
+  expect(await store.assetDelivery(id(40).slice(-36), work)).toEqual(bytes);
+  await ensureFixtureScopeGate(policyPool, `work:read:${work}`, { open: false });
+  expect(await discloseContent(env, [result])).toEqual([{ revisionId: result.revisionId, status: 'denied' }]);
+  expect(await store.assetDelivery(id(40).slice(-36), work)).toBeNull();
+  await ensureFixtureScopeGate(policyPool, `work:read:${work}`, { open: true });
+});
+
+test('P2-3 real legacy policy distinguishes Work revisions and includes owning-Work suitability labels', async () => {
+  const env = policyEnvironment(), principal = randomUUID(), actor = id(50), caseId = randomUUID(), decision = randomUUID();
+  const scope = 'governance:platform';
+  await ensureFixtureScopeGate(policyPool, scope, { open: true });
+  await policyPool.query('INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1,$2,$3)',
+    [principal, 'https://disclosure-policy.test', principal]);
+  await policyPool.query("INSERT INTO access.authority_subject (id,kind) VALUES ($1,'agent')", [actor]);
+  await policyPool.query(`INSERT INTO access.governance_case (id,kind,authority_kind,authority_scope_id,context,
+    target_owner,target_resource,target_component,disclosure) VALUES ($1,'content_report','platform',$2,
+    'urn:rezics:context:global','graph',$3,'title','parties')`, [caseId, scope, work]);
+  await policyPool.query(`INSERT INTO access.moderation_decision (id,kind,outcome,context,case_id,case_sequence,
+    principal_id,acting_subject,authority_kind,authority_scope_id,authority_epoch,authority_proof_digest,
+    idempotency_key,request_digest,rule_ref,rule_revision,rule_digest,evidence_digest,disclosure,statement_of_reasons)
+    VALUES ($1,'content_moderation','restrict','urn:rezics:context:global',$2,1,$3,$4,'platform',$5,0,
+    $6,'legacy-revision-policy',$6,$4,'rule:1',$6,$6,'parties',$7)`,
+  [decision, caseId, principal, actor, scope, 'a'.repeat(64), { facts: 'Fixture evidence', scope: 'Exact Work title',
+    duration: 'Until restored', automation: false, appealRoute: '/v1/public-reports/fixture/correspondence', contentLanguage: 'en' }]);
+  await policyPool.query(`INSERT INTO access.moderation_decision_target
+    (decision_id,ordinal,owner,resource,component,scope_kind,revision,effect)
+    VALUES ($1,1,'graph',$2,'title','exact_revision',$3,'disclosure')`, [decision, work, head]);
+  await policyPool.query('UPDATE access.governance_case SET decision_head=$2,generation=1 WHERE id=$1', [caseId, decision]);
+  const enforcement = randomUUID();
+  await policyPool.query(`INSERT INTO access.governance_enforcement (id,authority_scope_id,context,owner,resource,
+    component,revision,effect,decision_id,decision_ordinal,state,fence_epoch)
+    VALUES ($1,$2,'urn:rezics:context:global','graph',$3,'title',$4,'disclosure',$5,1,'restricted',1)`,
+  [enforcement, scope, work, head, decision]);
+  const current = { ...target('content'), workRevision: head }, previous = { ...current, workRevision: id(3) };
+  expect(await discloseInventory(env, [current, previous], ANONYMOUS_VIEWER, 'read')).toEqual(['tombstone', 'visible']);
+  expect(await discloseInventory(env, [current, previous], ANONYMOUS_VIEWER, 'search')).toEqual(['hidden', 'visible']);
+  await policyPool.query(`INSERT INTO access.suitability_assessment (id,target,labels,basis,assessor,principal_id,
+    revision_number,authority_proof,idempotency_key,request_digest) VALUES ($1,$2,'{r18}','author',$3,$4,1,
+    '{}','legacy-parent-suitability',$5)`, [randomUUID(), work, actor, principal, 'b'.repeat(64)]);
+  expect(await discloseInventory(env, [previous], ANONYMOUS_VIEWER, 'read')).toEqual(['visible']);
+  expect(await discloseInventory(env, [previous], ANONYMOUS_VIEWER, 'email')).toEqual(['hidden']);
+  expect(await discloseInventory(env, [previous], ANONYMOUS_VIEWER, 'sitemap')).toEqual(['hidden']);
+}, 30_000);
