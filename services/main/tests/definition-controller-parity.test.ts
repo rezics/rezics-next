@@ -37,6 +37,8 @@ function reader(options: { bindings?: Binding[]; publicRefs?: string[] } = {}) {
     release() {},
     async query(sql: string, values: unknown[] = []) {
       statements.push({ sql, values });
+      if (sql.startsWith('SELECT id FROM access.scope_gate'))
+        return { rows: [{ id: 'platform:access' }], rowCount: 1 };
       if (sql.startsWith('SELECT open, dispatch_open FROM access.scope_gate'))
         return { rows: [{ open: true, dispatch_open: true }], rowCount: 1 };
       const rows = sql.includes('access.recovery_fence')
