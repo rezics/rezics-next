@@ -176,6 +176,9 @@ export interface WorkProfile {
   fusekiSentBytes: number | null;
   fusekiReceivedBytes: number | null;
   fusekiEngineMs: number | null;
+  /** Allowlisted native counters summed across this request's Fuseki calls. */
+  nativeVisits: Record<string, number>;
+  nativeVisitTotal: number;
   postgresStatements: number | null;
   accountCalls: number | null;
   otherFetches: number | null;
@@ -303,6 +306,26 @@ export function summarizeWorkProfile(
     const value = span.attributes[field];
     return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
   };
+  const nativeVisits: Record<string, number> = {};
+  const counters = new Set<string>(commandCounters);
+  const timers = new Set(['engine_ms', ...commandPhases.map((name) => `${name}_ms`)]);
+  let nativeVisitTotal = 0;
+  for (const span of fuseki) {
+    for (const [attribute, value] of Object.entries(span.attributes)) {
+      if (!attribute.startsWith('rezics.fuseki.')) continue;
+      const name = attribute.slice('rezics.fuseki.'.length);
+      if (timers.has(name)) continue;
+      if (!counters.has(name))
+        throw new Error(`Work profile native counter is not allowlisted: ${name}`);
+      if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0)
+        throw new Error(`Work profile native counter is invalid: ${name}`);
+      const sum = (nativeVisits[name] ?? 0) + value;
+      nativeVisitTotal += value;
+      if (!Number.isSafeInteger(sum) || !Number.isSafeInteger(nativeVisitTotal))
+        throw new Error(`Work profile native counter sum exceeds safe integer bounds: ${name}`);
+      nativeVisits[name] = sum;
+    }
+  }
   return {
     traceId,
     request: {
@@ -317,6 +340,8 @@ export function summarizeWorkProfile(
     fusekiSentBytes: sum('http.request.body.size'),
     fusekiReceivedBytes: sum('http.response.body.size', true),
     fusekiEngineMs: sum('rezics.fuseki.engine_ms'),
+    nativeVisits,
+    nativeVisitTotal,
     postgresStatements:
       unclassifiedFetches || unobserved.some((gap) => gap.endsWith('SQL descendants'))
         ? null
@@ -392,20 +417,35 @@ export async function profileRequest<T>(
   return { result, profile };
 }
 
-export type WorkCostField = {
-  [K in keyof WorkProfile]: WorkProfile[K] extends number | null ? K : never;
-}[keyof WorkProfile];
+type NativeWorkCostField = `nativeVisits.${(typeof commandCounters)[number]}` | 'nativeVisitTotal';
+export type WorkCostField =
+  | NativeWorkCostField
+  | {
+      [K in keyof WorkProfile]: WorkProfile[K] extends number | null ? K : never;
+    }[keyof WorkProfile];
 export type WorkCostGrowthClass = 'constant' | 'logarithmic' | 'linear' | 'linearithmic';
 type WorkCostGrowthDimension = WorkCostField | 'threads';
-type WorkCostGrowthDeclaration = { class: WorkCostGrowthClass; dimension: WorkCostGrowthDimension };
+export type WorkCostGrowthDeclaration = {
+  class: WorkCostGrowthClass;
+  dimension: WorkCostGrowthDimension;
+  reason?: string;
+};
+type NativeWorkCostGrowthDeclaration = WorkCostGrowthDeclaration &
+  ({ class: 'constant' } | { class: Exclude<WorkCostGrowthClass, 'constant'>; reason: string });
+export type WorkMinimumObserved = Partial<Record<'postgresStatements' | 'fusekiRequests', number>>;
 export type WorkCostContract = Partial<Record<WorkCostField, number>> & {
-  growth?: Partial<Record<WorkCostField, WorkCostGrowthDeclaration>>;
+  growth?: {
+    [K in WorkCostField]?: K extends NativeWorkCostField
+      ? NativeWorkCostGrowthDeclaration
+      : WorkCostGrowthDeclaration;
+  };
+  minimumObserved?: WorkMinimumObserved;
 };
 export const WORK_COST_GROWTH_MARGIN = 1.2;
 
 type WorkCostGrowthBreach = {
   counter: WorkCostField;
-  dimension: WorkCostGrowthDimension;
+  dimension: WorkCostGrowthDimension | 'profileIndex';
   growthClass: WorkCostGrowthClass;
   smallerScale: number;
   largerScale: number;
@@ -414,6 +454,58 @@ type WorkCostGrowthBreach = {
   allowedRatio: number;
   observedRatio: number | 'Infinity';
 };
+
+function workCostValue(profile: WorkProfile, field: WorkCostField): number | null | undefined {
+  return field.startsWith('nativeVisits.')
+    ? profile.nativeVisits[field.slice('nativeVisits.'.length)]
+    : profile[field as Exclude<WorkCostField, `nativeVisits.${string}`>];
+}
+
+export class WorkMeterBlindError extends Error {
+  readonly code = 'WORK_PROFILE_METER_BLIND';
+  constructor(
+    readonly traceId: string,
+    detail: string,
+  ) {
+    super(`Work cost meter is blind: ${detail} (trace ${traceId})`);
+    this.name = 'WorkMeterBlindError';
+  }
+}
+
+/** The same attribution proof serves a single restored read and each growth scale. */
+export function assertWorkMeterObserved(
+  profile: WorkProfile,
+  minimumObserved?: WorkMinimumObserved,
+): void {
+  for (const [field, minimum] of Object.entries(minimumObserved ?? {})) {
+    if (!Number.isSafeInteger(minimum) || minimum < 1)
+      throw new Error(`Invalid minimum observed cost: ${field}`);
+  }
+  if (
+    (profile.postgresStatements === 0 || profile.postgresStatements === null) &&
+    (profile.fusekiRequests === 0 || profile.fusekiRequests === null) &&
+    ((profile.otherFetches ?? 0) > 0 || profile.unclassifiedFetches > 0)
+  )
+    throw new WorkMeterBlindError(
+      profile.traceId,
+      'fetches observed without SQL or Fuseki attribution',
+    );
+  if (profile.request.status !== 200 || minimumObserved === undefined) return;
+  if (
+    profile.postgresStatements === 0 &&
+    profile.fusekiRequests === 0 &&
+    profile.otherFetches === 0
+  )
+    throw new WorkMeterBlindError(profile.traceId, 'successful read has no observed calls');
+  for (const [field, minimum] of Object.entries(minimumObserved)) {
+    const observed = profile[field as keyof WorkMinimumObserved];
+    if (observed === null || observed < minimum)
+      throw new WorkMeterBlindError(
+        profile.traceId,
+        `${field}: ${observed ?? 'unobserved'} < ${minimum}`,
+      );
+  }
+}
 
 function writeWorkCostGrowthArtifact(label: string, facts: WorkCostGrowthBreach): void {
   const directory = process.env.REZICS_QA_ARTIFACT_DIR;
@@ -439,7 +531,7 @@ export function assertWorkCost(
     failures.push(`request status: ${status ?? 'unobserved'}`);
   for (const [field, maximum] of Object.entries(contract)) {
     if (!Number.isFinite(maximum) || maximum < 0) throw new Error(`Invalid cost maximum: ${field}`);
-    const observed = profile[field as WorkCostField];
+    const observed = workCostValue(profile, field as WorkCostField);
     if (
       profile.unclassifiedFetches &&
       !['serverLatencyMs', 'totalLatencyMs', 'unclassifiedFetches'].includes(field)
@@ -450,7 +542,12 @@ export function assertWorkCost(
       profile.unobserved.some((gap) => gap.endsWith('SQL descendants'))
     )
       failures.push(`${field}: unobserved owner SQL descendants`);
-    if (observed === null || !Number.isFinite(observed) || observed > maximum)
+    if (
+      observed === null ||
+      observed === undefined ||
+      !Number.isFinite(observed) ||
+      observed > maximum
+    )
       failures.push(`${field}: ${observed ?? 'unobserved'} > ${maximum}`);
   }
   if (failures.length) throw new Error(`Request cost contract failed: ${failures.join('; ')}`);
@@ -463,7 +560,20 @@ export function assertWorkCostAtScales(
   label = 'work-cost',
 ): void {
   if (profiles.length < 3) throw new Error('Cost growth checks require at least three scales');
-  const { growth = {}, ...maxima } = contract;
+  const { growth = {}, minimumObserved, ...maxima } = contract;
+  for (const profile of profiles) assertWorkMeterObserved(profile, minimumObserved);
+  const nativeFields = new Set<NativeWorkCostField>(['nativeVisitTotal']);
+  for (const profile of profiles) {
+    for (const name of Object.keys(profile.nativeVisits)) {
+      if (!(commandCounters as readonly string[]).includes(name))
+        throw new Error(`Work profile native counter is not allowlisted: ${name}`);
+      nativeFields.add(`nativeVisits.${name}` as NativeWorkCostField);
+    }
+  }
+  for (const field of nativeFields) {
+    if (profiles.some((profile) => workCostValue(profile, field) === undefined))
+      throw new Error(`Cost growth contract failed: ${field} is absent at a scale`);
+  }
   for (const profile of profiles) assertWorkCost(profile, maxima);
 
   const factor = (growthClass: WorkCostGrowthClass, n: number) => {
@@ -480,14 +590,28 @@ export function assertWorkCostAtScales(
     }
   };
 
-  for (const [counter, declaration] of Object.entries(growth)) {
-    if (!declaration) continue;
-    const field = counter as WorkCostField;
+  const fields = new Set<WorkCostField>([
+    ...(Object.keys(growth) as WorkCostField[]),
+    ...nativeFields,
+  ]);
+  for (const field of fields) {
+    const declaration = growth[field];
+    if (!declaration && !nativeFields.has(field as NativeWorkCostField)) continue;
+    const growthClass = declaration?.class ?? 'constant';
+    const dimension = declaration?.dimension ?? 'profileIndex';
+    if (
+      nativeFields.has(field as NativeWorkCostField) &&
+      growthClass !== 'constant' &&
+      !declaration?.reason?.trim()
+    )
+      throw new Error(`Native cost growth allowance requires a reason: ${field}`);
     const scales = profiles.map((profile, index) => {
       const observed =
-        declaration.dimension === 'threads'
-          ? profile.dimensions?.threads
-          : profile[declaration.dimension];
+        dimension === 'profileIndex'
+          ? index + 1
+          : dimension === 'threads'
+            ? profile.dimensions?.threads
+            : workCostValue(profile, dimension);
       if (
         observed === null ||
         observed === undefined ||
@@ -495,11 +619,11 @@ export function assertWorkCostAtScales(
         observed <= 0
       )
         throw new Error(
-          `Cost growth contract requires an observed positive ${declaration.dimension} scale at profile ${index}`,
+          `Cost growth contract requires an observed positive ${dimension} scale at profile ${index}`,
         );
       return observed;
     });
-    const values = profiles.map((profile) => profile[field]);
+    const values = profiles.map((profile) => workCostValue(profile, field));
 
     for (let i = 0; i < profiles.length; i++) {
       for (let j = i + 1; j < profiles.length; j++) {
@@ -508,6 +632,8 @@ export function assertWorkCostAtScales(
         if (
           smallerValue === null ||
           largerValue === null ||
+          smallerValue === undefined ||
+          largerValue === undefined ||
           !Number.isFinite(smallerValue) ||
           !Number.isFinite(largerValue)
         )
@@ -520,18 +646,16 @@ export function assertWorkCostAtScales(
         const largerScale = scales[j]!;
         const allowedRatio =
           WORK_COST_GROWTH_MARGIN *
-          (factor(declaration.class, largerScale) / factor(declaration.class, smallerScale));
+          (factor(growthClass, largerScale) / factor(growthClass, smallerScale));
         if (!Number.isFinite(allowedRatio) || allowedRatio < 0)
-          throw new Error(
-            `Cost growth contract requires finite growth factors for ${declaration.dimension}`,
-          );
+          throw new Error(`Cost growth contract requires finite growth factors for ${dimension}`);
         const rawObservedRatio = smallerValue === 0 ? Infinity : largerValue / smallerValue;
         if (rawObservedRatio <= allowedRatio) continue;
 
         const facts: WorkCostGrowthBreach = {
           counter: field,
-          dimension: declaration.dimension,
-          growthClass: declaration.class,
+          dimension,
+          growthClass,
           smallerScale,
           largerScale,
           smallerValue,
@@ -541,7 +665,7 @@ export function assertWorkCostAtScales(
         };
         writeWorkCostGrowthArtifact(label, facts);
         throw new Error(
-          `Cost growth contract failed: ${field} (${declaration.class}) by ${declaration.dimension} ` +
+          `Cost growth contract failed: ${field} (${growthClass}) by ${dimension} ` +
             `at scales ${smallerScale} and ${largerScale}, values ${smallerValue} and ${largerValue}; ` +
             `allowed ratio ${allowedRatio}, observed ratio ${facts.observedRatio}`,
         );
