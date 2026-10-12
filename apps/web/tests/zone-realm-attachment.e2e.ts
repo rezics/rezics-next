@@ -13,7 +13,6 @@ import { grantPlatformUse, platformAdministratorSession } from '../../../tests/q
 
 // An editor attaches a Realm from another Space and publishes a routable Work page.
 // Two directly controlled Persons race first posts and recover retained browser intents.
-// The steward's original list/withdrawal journey remains; the Realm keeps its thread afterward.
 
 const phone = { width: 390, height: 844 };
 const desktop = { width: 1280, height: 900 };
@@ -217,15 +216,13 @@ async function recover(page: Page, body: string) {
 
 test.use({ actionTimeout: 15_000 });
 
-async function settledZonePosts(page: Page, browser: Browser, info: TestInfo) {
+async function attachRealm(page: Page, info: TestInfo) {
   const { member, principalId, actingSubject } = fixture<{
     member: { email: string; password: string }; principalId: string; actingSubject: string;
   }>('REZICS_WEB_AUTH_PRIVATE_PATH');
   await signInAtAccounts(page, '/en/manage', member);
   await page.setViewportSize(desktop);
   await grant('space:create:root', 'space.create', principalId, actingSubject);
-  const administrator = await platformAdministratorSession();
-  await grantPlatformUse(administrator, principalId, 'realm-reply');
 
   const zoneName = 'Harbor annex';
   const realmName = 'North realm';
@@ -263,6 +260,14 @@ async function settledZonePosts(page: Page, browser: Browser, info: TestInfo) {
   await expect(page.getByText('Attached. This Zone shows that Realm.')).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText(realmName).or(page.getByText(handle))).toBeVisible();
   await shoot(page, 'zone-realm-attached', info);
+
+  return { member, principalId, zoneSpace, realmSpace, actingSubject, zoneName, editor, zones };
+}
+
+async function settledZonePosts(page: Page, browser: Browser, info: TestInfo) {
+  const { member, principalId, zoneSpace, realmSpace, actingSubject } = await attachRealm(page, info);
+  const administrator = await platformAdministratorSession();
+  await grantPlatformUse(administrator, principalId, 'realm-reply');
 
   const about = await publishedWorkPage(page, zoneSpace.zone!, actingSubject, principalId);
   const zoneUrl = localizedPath(zoneMemberHref(uuidOf(zoneSpace.space!), 'guide', about), 'en');
@@ -384,11 +389,37 @@ async function settledZonePosts(page: Page, browser: Browser, info: TestInfo) {
       }
     }
     expect(browserWrites.every(path => path.endsWith('/about-posts'))).toBe(true);
-    return { zoneUrl, realmSpace, about, actingSubject, secondPerson, firstBody, secondBody, zones, zoneName, editor };
+    return { zoneUrl, zoneSpace, realmSpace, about, actingSubject, secondPerson, firstBody, secondBody };
   } finally {
     await secondContext.close();
   }
 }
+
+test('a Realm steward can attach, list, and withdraw a Zone', async ({ page }, info) => {
+  test.setTimeout(600_000);
+  const { zoneName, zones, editor } = await attachRealm(page, info);
+
+  await page.setViewportSize(phone);
+  await expect(async () => {
+    await page.goto(zones);
+    await expect(page.getByRole('heading', { name: 'Attached Zones' })).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText(zoneName)).toBeVisible({ timeout: 5_000 });
+  }).toPass({ timeout: 90_000 });
+  await expect(page.getByRole('button', { name: 'Withdraw' })).toHaveAttribute('data-hydrated', 'true', { timeout: 30_000 });
+  await shoot(page, 'realm-zone-list', info);
+
+  await page.getByRole('button', { name: 'Withdraw' }).click();
+  await expect(page.getByText('Withdrawn. That Zone no longer shows this Realm.')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(zoneName)).toHaveCount(0);
+  await fits(page, 'withdrawn at 390px');
+  await page.setViewportSize(desktop);
+  await fits(page, 'withdrawn at 1280px');
+
+  await page.goto(editor);
+  await expect(page.getByText('No Realm is attached.')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText('This Zone shows this Realm.')).toHaveCount(0);
+  await shoot(page, 'zone-realm-removed', info);
+});
 
 test('two Persons recover and settle concurrent Zone-page discussion posts', async ({ page, browser }, info) => {
   test.setTimeout(600_000);
@@ -398,7 +429,7 @@ test('two Persons recover and settle concurrent Zone-page discussion posts', asy
 // The epoch-wide thread admission gate refuses reopening while reply and ranking projections are incomplete.
 test.fixme('a Zone page reopens its discussion and keeps the thread after Realm withdrawal', async ({ page, browser }, info) => {
   test.setTimeout(600_000);
-  const { zoneUrl, realmSpace, about, actingSubject, secondPerson, firstBody, secondBody, zones, zoneName, editor }
+  const { zoneUrl, zoneSpace, realmSpace, about, actingSubject, secondPerson, firstBody, secondBody }
     = await settledZonePosts(page, browser, info);
   await page.goto(zoneUrl);
   const area = discussion(page);
@@ -438,28 +469,9 @@ test.fixme('a Zone page reopens its discussion and keeps the thread after Realm 
   await expect(discussion(page).locator('article').filter({ hasText: firstBody })).toContainText(items.find(item => written(item) === firstBody)!.author!.name);
   // Return navigation is outside this slice: reopening the Zone URL restores its frame.
 
-  await page.setViewportSize(phone);
-  await expect(async () => {
-    await page.goto(zones);
-    await expect(page.getByRole('heading', { name: 'Attached Zones' })).toBeVisible({ timeout: 5_000 });
-    await expect(page.getByText(zoneName)).toBeVisible({ timeout: 5_000 });
-  }).toPass({ timeout: 90_000 });
-  await expect(page.getByRole('button', { name: 'Withdraw' })).toHaveAttribute('data-hydrated', 'true', { timeout: 30_000 });
-  await shoot(page, 'realm-zone-list', info);
-
-  await page.setViewportSize(phone);
-  await page.getByRole('button', { name: 'Withdraw' }).click();
-  await expect(page.getByText('Withdrawn. That Zone no longer shows this Realm.')).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByText(zoneName)).toHaveCount(0);
-  await fits(page, 'withdrawn at 390px');
-  await page.setViewportSize(desktop);
-  await fits(page, 'withdrawn at 1280px');
-
-  await page.setViewportSize(desktop);
-  await page.goto(editor);
-  await expect(page.getByText('No Realm is attached.')).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByText('This Zone shows this Realm.')).toHaveCount(0);
-  await shoot(page, 'zone-realm-removed', info);
+  await command(page, `zones/${uuidOf(zoneSpace.zone!)}/realm-attachment-withdrawals`, {
+    realm: realmSpace.realm, actingSubject,
+  });
   await page.goto(zoneUrl);
   await expect(discussion(page)).toHaveCount(0, { timeout: 30_000 });
   await expect(page.getByRole('link', { name: 'Open the full discussion' })).toHaveCount(0);
