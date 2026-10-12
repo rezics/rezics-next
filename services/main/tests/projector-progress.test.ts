@@ -9,6 +9,7 @@ import type { DiscoveryProjection } from '../src/modules/discovery/store.ts';
 import { RealmDirectoryIndex } from '../src/modules/realm-directory/index.ts';
 import { RealmDirectoryWorker } from '../src/modules/realm-directory/worker.ts';
 import { WorkReadMoved } from '../src/modules/work/read-session.ts';
+import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 
 /** One publish of the pin already read, the mirror steps, and the pass that
@@ -45,12 +46,12 @@ function positionAnswer(source: MovingSource, changeEpochOnSecondRead = false) {
 }
 
 function workDeps(source: MovingSource, query: (sparql: string) => { results: { bindings: object[] } },
-  extra: Partial<MainWorkDependencies> = {}): MainWorkDependencies {
+  extra: Partial<MainWorkDependencies> = {}, changeEpochOnSecondRead = false): MainWorkDependencies {
   return {
     environment: {
       lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' },
       fuseki: { query: async (sparql: string) => sparql.includes('routingEpoch')
-        ? positionAnswer(source) : query(sparql) },
+        ? positionAnswer(source, changeEpochOnSecondRead) : query(sparql) },
     },
     access: { assertRecoveryOpen: async () => {} },
     ...extra,
@@ -294,6 +295,7 @@ function catalogHarness(options: { hold?: boolean; changeEpoch?: boolean } = {})
   source.hold = options.hold === true;
   const resources = Array.from({ length: CATALOG_RESOURCES }, (_, index) => realm(index + 1)).sort();
   const done: Array<[string, string]> = [];
+  const pages: string[] = [];
   let checkpoint = '';
   const store = {
     purge: async () => {},
@@ -305,26 +307,17 @@ function catalogHarness(options: { hold?: boolean; changeEpoch?: boolean } = {})
   const deps = workDeps(source, sparql => {
     const match = sparql.match(/STR\(\?resource\) > ("(?:[^"\\]|\\.)*")/);
     const after = match ? JSON.parse(match[1]!) as string : '';
+    pages.push(after);
     const page = resources.filter(id => id > after).slice(0, DISCOVERY_REFRESH_COST.catalogSize + 1);
     return { results: { bindings: page.map(id => ({ resource: { value: id }, scope: { value: 'realm' },
       realm: { value: id } })) } };
   }, {
-    relayPosition: { read: async () => ({ dataEpoch: source.epoch, sequence: (source.frozen
-      ? source.head : source.head - 1n).toString() }) },
-  } as Partial<MainWorkDependencies>);
-  if (options.changeEpoch) {
-    const fuseki = deps.environment.fuseki;
-    deps.environment.fuseki = { query: async (sparql: string) => {
-      if (!sparql.includes('routingEpoch')) return fuseki.query(sparql);
-      source.reads += 1;
-      const sequence = source.head;
-      if (!source.frozen) source.head += 1n;
-      const epoch = source.reads === 2 ? 'restored' : 'epoch';
-      return { results: { bindings: [{ epoch: { value: epoch }, sequence: { value: sequence.toString() } }] } };
-    } } as never;
-  }
+    relayPosition: { read: async () => ({ streamScope: MAIN_RELAY_STREAM_SCOPE,
+      dataEpoch: source.epoch, sequence: (source.frozen
+        ? source.head : source.head - 1n).toString() }) },
+  }, options.changeEpoch);
   const worker = new DiscoveryRefreshWorker(deps, store as never, {} as DiscoveryProjection);
-  return { source, done, checkpoint: () => checkpoint, worker };
+  return { source, done, pages, checkpoint: () => checkpoint, worker };
 }
 
 test('discovery catalog commits each keyset page while the graph moves and finishes within its bound', async () => {
@@ -343,13 +336,16 @@ test('discovery catalog commits each keyset page while the graph moves and finis
   expect(run.checkpoint()).toBe('');
   expect(calls).toBe(CATALOG_BOUND);
   expect(run.done[1]![1]).toBe('');
+  expect(run.pages).toEqual(['', page[DISCOVERY_REFRESH_COST.catalogSize - 1]!]);
 });
 
 test('discovery catalog does not advance while the graph is held or its epoch changes', async () => {
   const held = catalogHarness({ hold: true });
   expect(await held.worker.tick()).toBe('idle');
   expect(held.done).toEqual([]);
+  expect(held.pages).toEqual([]);
   const restored = catalogHarness({ changeEpoch: true });
   await expect(restored.worker.tick()).rejects.toBeInstanceOf(WorkReadMoved);
   expect(restored.done).toEqual([]);
+  expect(restored.pages).toEqual(['']);
 });
