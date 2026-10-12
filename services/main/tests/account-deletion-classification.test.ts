@@ -510,6 +510,7 @@ test('sole-controlled chains at 8, 64 and 512 levels read a fixed budget per per
   const builder = await principal();
   const corpus: string[] = [];
   for (let index = 0; index < 584; index++) corpus.push(await provision(builder, 'person'));
+  console.info('Long-chain fixture provisioned');
   // Each isolated chain is admitted by joining halves no larger than 256;
   // recovery independence checks both ancestors and descendants at admission.
   const links = [...Array.from({ length: 7 }, (_, index) => index + 1),
@@ -521,6 +522,7 @@ test('sole-controlled chains at 8, 64 and 512 levels read a fixed budget per per
     for (const index of links) await grantFixtureControllerEdge(setup, {
       principalId: builder.id, representative: corpus[index - 1]!, represented: corpus[index]!,
     });
+    console.info('Long-chain fixture linked');
     const anchors = new Set([0, 8, 72]);
     const mandates = (await setup.query<{ id: string; subject_id: string }>(`SELECT id, subject_id
       FROM access.representation WHERE principal_id = $1 AND action = 'agent.control' AND active`, [builder.id])).rows;
@@ -529,6 +531,7 @@ test('sole-controlled chains at 8, 64 and 512 levels read a fixed budget per per
       if (!roots.has(mandate.subject_id)) await deactivateFixtureController(setup, mandate.id);
     }
     await setup.query('COMMIT');
+    console.info('Long-chain fixture committed');
   } catch (error) {
     await setup.query('ROLLBACK');
     throw error;
@@ -539,10 +542,12 @@ test('sole-controlled chains at 8, 64 and 512 levels read a fixed budget per per
     const rootPerson = corpus[offset]!;
     await addFixtureController(owner, rootPerson);
     await removeController(builder, rootPerson);
+    console.info('Long-chain deletion started', size);
     const reads: number[] = [];
     const buffers: number[] = [];
     const measured = planPool([], (sql, plans) => {
       if (!sql.includes('account_deletion_classification_step')) return;
+      if (reads.length % 64 === 0) console.info('Long-chain classification step', size, reads.length);
       reads.push(plans.reduce((sum, plan) => sum + planRows(plan.Plan), 0));
       buffers.push(plans.reduce((sum, plan) => sum + planBuffers(plan.Plan), 0));
     });
@@ -550,6 +555,7 @@ test('sole-controlled chains at 8, 64 and 512 levels read a fixed budget per per
       expect(await new AccessAdmissionRegistry(measured).strongDeactivateAccountSubject(
         owner.verified.issuer, owner.verified.subject)).toMatchObject({ enforcementEpoch: '1' });
     } finally { await measured.end(); }
+    console.info('Long-chain deletion completed', size);
     expect(reads.length).toBe(size);
     expect(Math.max(...reads)).toBeLessThanOrEqual(1024);
     expect(Math.max(...buffers)).toBeLessThanOrEqual(2048);
