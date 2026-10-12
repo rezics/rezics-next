@@ -36,7 +36,7 @@ run by a manager from the main checkout with `GOAL_ID` set to its Goal:
 | `task goal -- regress [--at <rev>] [--resume <run-id>]` | Pins `main` (or the selected revision) in a detached worktree, checks committed generated artifacts and runs the harness manifest. Pinned checkouts default to verified disk storage under `~/.cache/rezics-r/<repo-key>/`; `GOAL_REGRESS_CHECKOUT_ROOT` selects another short disk path. Memory-backed checkout and report roots are refused, and child commands use a separate disk-backed `TMPDIR` in each checkout. Owner and fault/recovery batches contain at most 15 files; integration batches contain at most 5 files to fit the active-work deadline under concurrent load. They run concurrently up to `GOAL_QA_SLOTS` (default 3), with checkout-local state isolated per batch and harness memory admission; only browser journeys and Storybook take the heavy lock. The default selection excludes e2e and Storybook; a nightly full run uses `--only unit,owner,model,integration,fault/recovery,e2e,accounts:storybook`. `REZICS_QA_SHARDS` defaults to 1. Reports and checkpoints live under `.temp/goal-orchestration/regress/<run-id>/`; resume keeps the SHA and skips finished batches. `--only unit,model --integration-batches 2` runs a restricted check, which cannot certify a complete pass. `GOAL_REGRESS_STATE_DIR` keeps smoke-run reports in a writable worktree. Restricted selections are partial reports; the default certifies the selected nonbrowser tiers. |
 | `task goal -- inbox [--ack <n>]` | Lists the caller Goal's regression inbox (`GOAL_ID`, default `program`) and acknowledges the displayed line number. Verified merge boundaries route deterministic failures to their Goal; uncertain ownership, inherited, flaky and order-dependent failures go to `program`. Infrastructure results are void and re-queued. |
 
-Engines are `claude`, `sonnet`, `fable`, `codex`, `codex-1`, `luna`, `grok` and `cursor`; the
+Engines are `claude`, `sonnet`, `haiku`, `fable`, `codex`, `codex-1`, `luna`, `grok` and `cursor`; the
 [charter](manager.md#resources) lists their models and accounts; the
 [`goalctl` launcher](../../scripts/goal/goalctl.ts) owns their executable commands.
 A brief without `engine` runs on `claude` (`GOAL_ENGINE` changes the default).
@@ -57,7 +57,7 @@ short. The frontmatter is machine-checked:
 ---
 id: G-101
 title: Accounts admin user search
-engine: claude                        # claude | sonnet | codex | codex-1 | luna | grok | cursor
+engine: claude                        # claude | sonnet | haiku | codex | codex-1 | luna | grok | cursor
 effort: xhigh
 cases: []                             # acceptance IDs such as IAM02, when the task has them
 paths: [apps/accounts/**, packages/ui/src/data-table/**]   # name new files by capability, never g-NNN

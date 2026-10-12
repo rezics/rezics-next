@@ -30,7 +30,7 @@ import { GoalCoordinator, claudeConfigHome, claudeNativeSession, claudeWakeArgs,
 export { typecheckWorkspaces, TYPECHECK_WORKSPACES };
 
 export type State = 'running' | 'exited' | 'conflict' | 'merged' | 'stopped' | 'verified' | 'cancelled';
-export type Engine = 'claude' | 'sonnet' | 'fable' | 'codex' | 'codex-1' | 'luna' | 'grok' | 'cursor';
+export type Engine = 'claude' | 'sonnet' | 'haiku' | 'fable' | 'codex' | 'codex-1' | 'luna' | 'grok' | 'cursor';
 export interface Brief {
   id: string; title: string; effort: string; engine?: Engine; cases: string[]; paths: string[];
   migrations: string[]; shared: string[]; depends: string[];
@@ -107,6 +107,9 @@ export const FABLE_MODEL = 'claude-fable-5-1';
 // Sonnet runs through Claude Code on the same subscription, so the Claude usage gate applies to it too.
 // Claude Code 2.1.284 is the first release here that accepts claude-sonnet-5-5 (2.1.283 rejected it).
 export const SONNET_MODEL = process.env.GOAL_SONNET_MODEL ?? 'claude-sonnet-5-5';
+// Haiku 5.5 takes bounded mechanical work (what Luna took) on the Claude subscription, so that work does not
+// spend a Codex account. Tried on 2026-10-12 with --effort high and max.
+export const HAIKU_MODEL = process.env.GOAL_HAIKU_MODEL ?? 'claude-haiku-5-5';
 // GPT-6.1 Sol replaced GPT-6 Sol and GPT-6 Astra on 2026-09-30 (maintainer).
 export const CODEX_MODEL = 'gpt-6.1-sol';
 export const LUNA_MODEL = 'gpt-6-luna';
@@ -116,6 +119,7 @@ const cursorModel = (effort: string): string => process.env.GOAL_CURSOR_MODEL ??
 const ENGINE_EFFORTS: Record<Engine, string[]> = {
   claude: ['low', 'medium', 'high', 'xhigh', 'max'],
   sonnet: ['low', 'medium', 'high', 'xhigh', 'max'],
+  haiku: ['low', 'medium', 'high', 'xhigh', 'max'],
   fable: ['low', 'medium', 'high', 'xhigh', 'max'],
   codex: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
   'codex-1': ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
@@ -141,13 +145,13 @@ export const DEFAULT_ENGINE: Engine = (process.env.GOAL_ENGINE as Engine | undef
 export const CODEX_HOME = process.env.GOAL_CODEX_HOME ?? join(homedir(), '.codex');
 export const CODEX_1_HOME = process.env.GOAL_CODEX_1_HOME ?? join(homedir(), '.codex-1');
 const engineOf = (item: { engine?: Engine }): Engine => item.engine ?? 'claude';
-const MODELS: Record<Engine, string> = { claude: MODEL, sonnet: SONNET_MODEL, fable: FABLE_MODEL, codex: CODEX_MODEL, 'codex-1': CODEX_MODEL, luna: LUNA_MODEL,
+const MODELS: Record<Engine, string> = { claude: MODEL, sonnet: SONNET_MODEL, haiku: HAIKU_MODEL, fable: FABLE_MODEL, codex: CODEX_MODEL, 'codex-1': CODEX_MODEL, luna: LUNA_MODEL,
   grok: GROK_MODEL, cursor: `${process.env.GOAL_CURSOR_MODEL ?? GROK_MODEL} (Cursor)` };
 const modelOf = (engine: Engine): string => MODELS[engine];
 const effortsOf = (engine: Engine): string[] => ENGINE_EFFORTS[engine] ?? [];
 const isCodex = (engine: Engine): boolean =>
   engine === 'codex' || engine === 'codex-1' || engine === 'luna';
-const isClaudeCode = (engine: Engine): boolean => engine === 'claude' || engine === 'sonnet' || engine === 'fable';
+const isClaudeCode = (engine: Engine): boolean => engine === 'claude' || engine === 'sonnet' || engine === 'haiku' || engine === 'fable';
 // Process name that /proc/<pid>/cmdline carries for a live worker of each engine.
 const programOf = (engine: Engine): string =>
   isCodex(engine) ? 'codex' : engine === 'cursor' ? 'cursor-agent' : isClaudeCode(engine) ? 'claude' : engine;

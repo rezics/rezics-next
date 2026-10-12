@@ -148,6 +148,7 @@ Maintainer directions of 2026-09-27, revised 2026-09-29, 2026-09-30 and
 | --- | --- | --- | --- |
 | `claude` | Claude Opus 5.5 | Claude subscription shared with managers on Claude; 5-hour and 7-day windows from the status line (`goalctl usage`) | `low`–`max` |
 | `sonnet` | Claude Sonnet 5.5 | Same subscription and gate as `claude`; measure its draw on both windows in the first two hours | `low`–`max` |
+| `haiku` | Claude Haiku 5.5 | Same subscription and gate as `claude`. Added 2026-10-12 at the maintainer's word for the bounded mechanical work Luna took (a fixture fix, a registry row, a document step, a one-file test from an exact rule), so that work does not spend a Codex account. Not for chain steps, hostile-input or review-prone work | `low`–`max` |
 | `fable` | Claude Fable 5.1 | Not used (maintainer, 2026-09-28): it shares the Claude 5-hour session limit with Opus (both hit it together) and does less than Opus 5.5 | `low`–`max` |
 | `codex` | GPT-6.1 Sol | Default Codex account in `~/.codex`; weekly window from its session rollouts | `low`–`ultra` |
 | `codex-1` | GPT-6.1 Sol | Second Codex account in `~/.codex-1` (the `codex-1` wrapper); weekly window | `low`–`ultra` |

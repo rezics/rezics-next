@@ -1937,10 +1937,17 @@ console.log(JSON.stringify(await usageReport({ cacheFile: ${JSON.stringify(join(
     } finally { rmSync(directory, { recursive: true, force: true }); }
   });
 
+  test('the haiku engine runs Claude Code with the Haiku model', () => {
+    const [program, args] = launchCommand({ id: 'G-041', effort: 'high', session: 's', prompt: 'p', engine: 'haiku', resume: false });
+    expect(program).toBe('claude');
+    expect(args.slice(0, 5)).toEqual(['-p', '--model', 'claude-haiku-5-5', '--effort', 'high']);
+    expect(validateBrief(parseBrief('---\nid: G-041\ntitle: t\nengine: haiku\neffort: max\n---\n'))).toEqual([]);
+  });
+
   test('a prompt that starts like an option stays a prompt (brief frontmatter) on every engine', () => {
     const prompt = '---\nid: G-041\n---';
     for (const resume of [false, true]) {
-      for (const engine of ['claude', 'sonnet', 'codex', 'luna', 'cursor'] as const) {
+      for (const engine of ['claude', 'sonnet', 'haiku', 'codex', 'luna', 'cursor'] as const) {
         const [, args] = launchCommand({ id: 'G-041', effort: 'high', session: 's', prompt, engine, resume });
         expect(args.slice(-2)).toEqual(['--', prompt]);
         expect(args.filter(arg => arg === prompt)).toHaveLength(1);
