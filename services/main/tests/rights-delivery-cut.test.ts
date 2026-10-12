@@ -192,7 +192,7 @@ test('token reads cost one indexed statement per store per snapshot, with and wi
         if (typeof query !== 'string') throw new Error('Expected a delivery-cut SQL statement');
         expect(query).not.toMatch(/\b(COUNT|SUM|ORDER BY)\b/i);
         const parameters = [f.target.resourceId];
-        expect(actualParameters).toEqual(parameters);
+        expect<unknown>(actualParameters).toEqual(parameters);
         const client = await (query.includes('AS assessment_head') ? stack.contentPool : stack.accessPool).connect();
         try {
           await client.query('BEGIN');
