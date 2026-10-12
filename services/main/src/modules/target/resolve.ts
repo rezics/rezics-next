@@ -12,6 +12,8 @@ import { capabilityBases, MAX_TARGET_TYPES, resolvedTarget, targetRef, type Base
 import { disclosureViewer } from '../disclosure/viewer.ts';
 import type { Viewer } from '../suitability/policy.ts';
 import { disclosureGraphEnvironment } from '../disclosure/read.ts';
+import { readZoneHomeTarget } from '../zone/home-target.ts';
+import { ZoneUnavailable } from '../zone/configuration.ts';
 
 /** One summary batch and one exact-head query, independent of target count.
  * Owner-specific summary probes remain in the summary's reported cost. */
@@ -127,8 +129,16 @@ const revisionPatterns = {
     ?placement a rv:OccurrencePlacement ; rv:generation ?generation ; rv:occurrence ?r .
     FILTER NOT EXISTS { ?placement rv:removedBy ?removedBy } }`,
   resource: `{ GRAPH ${iri(GRAPHS.current)} { ?r a rv:Post ; rv:head ?revision } }
+    UNION { GRAPH ${iri(GRAPHS.current)} { ?r a rv:ZoneHomeDocument ; rv:homeDocumentHead ?revision .
+      ?homeZone a rv:Zone ; rv:zoneState rv:Active ; rv:homeDocument ?r ; rv:sitePublicationHead ?homeSite .
+      FILTER NOT EXISTS { ?otherHomeZone rv:homeDocument ?r . FILTER(?otherHomeZone != ?homeZone) } }
+      GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:ZoneHomeRevision, rv:RevisionAnchor ; rv:component ?r .
+        ?homeSite a rv:ZoneRevision ; rv:component ?homeZone ; rv:homeDocument ?r ;
+          rv:homeRevision ?revision ; rv:sitePublicationReceipt ?homeReceipt . }
+      GRAPH ${iri(GRAPHS.receipts)} { ?homeReceipt a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
+        rv:structureOwner ?homeZone ; rv:homeDocument ?r ; rv:homeRevision ?revision . } }
     UNION { GRAPH ${iri(GRAPHS.current)} { ?r rv:semanticHead ?revision .
-      FILTER NOT EXISTS { ?r a rv:Post } } }`,
+      FILTER NOT EXISTS { ?r a rv:Post } FILTER NOT EXISTS { ?r a rv:ZoneHomeDocument } } }`,
   projection: `GRAPH ${iri(GRAPHS.current)} { ?r a rv:Projection ; rv:projectionHead ?revision }
     GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:ProjectionRevision ; rv:component ?r }`,
 } satisfies Record<Base, string>;
@@ -451,6 +461,19 @@ async function resolveSummarizedTargets(session: TargetReadSession, summaries: S
       throw new TargetNotBound();
     }
     if (types.length > TARGET_RESOLVE_COST.typesPerTarget) throw new WorkReadUnavailable('Target types exceed their bound');
+    if (types.includes('https://rezics.com/vocab/ZoneHomeDocument')) {
+      if (!['report', 'suitability'].includes(capability)) throw new TargetNotBound();
+      const reader = targetSummaryReader(session);
+      let home;
+      try { home = await readZoneHomeTarget(session.deps.environment, summary.reference,
+        exact[0]!.revision!.value, { realmReadProof: reader.realmReadProof,
+          zoneReadable: reader.canReadSemantic }, reader.viewer); }
+      catch (error) { if (error instanceof ZoneUnavailable) throw new TargetUnavailable(); throw error; }
+      if (!home) throw new TargetUnavailable();
+      targets.set(summary.reference, { resource: home.resource, base: 'resource', work: null,
+        revision: home.revision, types, disclosure: home.disclosure, contentSelections: home.selections });
+      continue;
+    }
     targets.set(summary.reference, { resource: summary.reference, base: summary.base!,
       work: summary.work, revision: exact[0]!.revision!.value, types, disclosure: summary.disclosure });
   }

@@ -1,18 +1,21 @@
 import type { Pool } from 'pg';
+import { identityKeyUuid } from '@rezics/model/address/sid';
 import type { ContentCore } from '../../../../content/src/core.ts';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import { readMergedIdentity } from '../identity-merge/resolution.ts';
 import { captureReplyEvidence, ownerEvidenceCapture } from '../governance/evidence.ts';
+import { capturePublishedHomeEvidence } from '../governance/composition.ts';
 import { GovernanceDenied, GovernanceInvalid, GovernanceUnavailable, type EvidenceTarget } from '../governance/store.ts';
 import { AccountAssertionDenied } from '../account/verify-assertion.ts';
 import { resolveTargets, type ReportTargets } from '../target/resolve.ts';
 import type { ResolvedTarget } from '../target/contract.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
-import { workRead, type WorkReadSession } from '../work/read-session.ts';
+import { workRead, WorkReadMissing, type WorkReadSession } from '../work/read-session.ts';
 import { RealmReplyContentStore } from '../realm-reply/content-store.ts';
 import { RealmReplyStore } from '../realm-reply/store.ts';
 import { avatarImageEligible, DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
 import type { PublicReportOwners } from './store.ts';
+import { readZoneHomeOwner } from '../zone/home-target.ts';
 
 const ID = 'https://rezics.com/id/';
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -32,15 +35,45 @@ function contentRevisionAddress(value: string): string | null {
 }
 
 /** Resolve service-owned URLs locally. Never fetch a caller's URL. */
-export async function reportAddress(deps: MainWorkDependencies, value: string): Promise<string> {
-  if (native.test(value)) return value;
+async function resolvedReportAddress(deps: MainWorkDependencies, value: string):
+  Promise<{ resource: string; homeRevision?: string }> {
+  if (native.test(value)) return { resource: value };
   let url: URL;
   try { url = new URL(value); } catch { throw new GovernanceInvalid('Invalid target URL'); }
   if (url.origin !== 'https://rezics.com' || url.username || url.password || url.search || url.hash) {
     throw new GovernanceInvalid('Target URL must name a REZICS resource');
   }
   const id = /^\/(?:v1\/)?(?:resources|works|agents|realms|media\/assets|posts|replies)\/([0-9a-f-]{36})$/.exec(url.pathname);
-  if (id) return ID + id[1];
+  if (id) return { resource: ID + id[1] };
+  const entity = /^\/e\/([^/]+)$/.exec(url.pathname);
+  if (entity) {
+    let segment: string;
+    try { segment = decodeURIComponent(entity[1]!); } catch { throw new GovernanceInvalid('Invalid REZICS resource address'); }
+    const uuid = identityKeyUuid(segment);
+    if (!uuid) throw new GovernanceInvalid('Invalid REZICS resource address');
+    return { resource: ID + uuid };
+  }
+  const site = /^\/z\/([^/]+)$/.exec(url.pathname);
+  if (site) {
+    let segment: string;
+    try { segment = decodeURIComponent(site[1]!); } catch { throw new GovernanceInvalid('Invalid Zone address'); }
+    const uuid = identityKeyUuid(segment);
+    const address = uuid ? null : await deps.environment.addresses?.identify('space', segment);
+    const space = uuid ? ID + uuid : address?.alias?.state === 'retired' ? null : address?.holder;
+    if (!space) throw new GovernanceDenied('Target is unavailable');
+    const rows = (await deps.environment.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+      SELECT DISTINCT ?resource ?revision WHERE {
+        GRAPH ${iri(GRAPHS.current)} { ?zone a rv:Zone ; rv:zoneState rv:Active ;
+          rv:space ${iri(space)} ; rv:homeDocument ?resource .
+          ?resource a rv:ZoneHomeDocument ; rv:homeDocumentHead ?revision }
+        GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:ZoneHomeRevision ; rv:component ?resource .
+          FILTER NOT EXISTS { ?revision a rv:ErasedRevision } }
+      } LIMIT 2`, 8192)).results?.bindings ?? [];
+    if (rows.length !== 1 || !rows[0]?.resource?.value || !rows[0]?.revision?.value) {
+      throw new GovernanceDenied('Target is unavailable');
+    }
+    return { resource: rows[0].resource.value, homeRevision: rows[0].revision.value };
+  }
   const segment = /^\/(?:w|work)\/([^/]+)$/.exec(url.pathname);
   if (!segment) throw new GovernanceInvalid('Unsupported REZICS target URL');
   const address = await deps.environment.addresses?.identify('work',decodeURIComponent(segment[1]!));
@@ -48,7 +81,12 @@ export async function reportAddress(deps: MainWorkDependencies, value: string): 
   // Reporting's reader and evidence owners admit private Works below. URL
   // identification must not impose the public resolver's anonymous disclosure.
   const resolution = await readMergedIdentity(deps.environment,address.holder,async () => true);
-  return resolution?.survivor ?? address.holder;
+  return { resource: resolution?.survivor ?? address.holder };
+}
+
+/** The string form remains useful to callers that do not capture evidence. */
+export async function reportAddress(deps: MainWorkDependencies, value: string): Promise<string> {
+  return (await resolvedReportAddress(deps, value)).resource;
 }
 
 /** One bounded Content batch and one graph batch supplement G-506's summary
@@ -165,13 +203,15 @@ export function publicReportOwners(deps: MainWorkDependencies, contentPool: Pool
       const selectedRevision = revisionAddress ?? (input.selection?.component === 'body'
         ? selectedSelectionRevision : null);
       const selectedMediaRevision = input.selection?.component === 'media_use' ? selectedSelectionRevision : null;
-      const requestedResource = revisionAddress ? null : await reportAddress(deps, input.target);
+      const addressed = revisionAddress ? null : await resolvedReportAddress(deps, input.target);
+      const requestedResource = addressed?.resource ?? null;
       let contentResource: string | null = null;
       if (selectedRevision) {
         contentResource = await core.owningResourceForRevision(selectedRevision)
           .catch(() => { throw new GovernanceUnavailable('Content owner is unavailable'); });
-        if (!contentResource) throw new GovernanceDenied('Content revision is unavailable');
+        if (!contentResource) throw new GovernanceDenied('Target is unavailable');
         if (requestedResource && requestedResource !== contentResource) {
+          if (await readZoneHomeOwner(deps.environment, contentResource)) throw new GovernanceDenied('Target is unavailable');
           throw new GovernanceInvalid('Content revision belongs to another resource');
         }
       }
@@ -182,6 +222,16 @@ export function publicReportOwners(deps: MainWorkDependencies, contentPool: Pool
       if (!principal || !input.actingSubject) headers.delete('authorization');
       const reading = new Request(request.url, { method: 'POST', headers });
       const resolve = async (session: WorkReadSession) => {
+          const homeEvidence = await capturePublishedHomeEvidence(deps.environment, core, deps.access,
+            session.principal, session.options.actingSubject, { owner: selectedMediaRevision ? 'media'
+              : selectedRevision ? 'content' : 'graph', resource,
+            component: selectedMediaRevision ? 'media_use' : selectedRevision ? 'body' : 'record',
+            revision: selectedRevision ?? addressed?.homeRevision ?? null,
+            locator: input.selection?.locator ?? null }, true, addressed?.homeRevision);
+          if (homeEvidence) {
+            return { evidence: homeEvidence, author: homeEvidence.provenance.author ?? null,
+              realm: homeEvidence.provenance.realm ?? null };
+          }
           if (selectedMediaRevision && input.selection?.component === 'media_use') {
             const [target] = await resolveTargets(session, [resource], 'report', undefined, reportOwnerTargets(contentPool));
             if (!target) throw new GovernanceDenied('Media target is unavailable');
@@ -257,9 +307,11 @@ export function publicReportOwners(deps: MainWorkDependencies, contentPool: Pool
       try {
         return await workRead(deps, reading, principal && input.actingSubject ? { actingSubject: input.actingSubject } : {}, resolve);
       } catch (error) {
+        if (error instanceof WorkReadMissing) throw new GovernanceDenied('Target is unavailable');
         if (!(error instanceof AccountAssertionDenied)) throw error;
         headers.delete('authorization');
-        return workRead(deps, new Request(request.url, { method: 'POST', headers }), {}, resolve);
+        return workRead(deps, new Request(request.url, { method: 'POST', headers }), {}, resolve)
+          .catch(error => { if (error instanceof WorkReadMissing) throw new GovernanceDenied('Target is unavailable'); throw error; });
       }
     },
   };

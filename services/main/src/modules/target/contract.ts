@@ -15,7 +15,12 @@ export const targetRevision = t.String({ pattern: '^https://rezics\\.com/id/[0-9
 
 export const resolvedTarget = t.Object({ resource: targetRef, base: targetBase,
   types: t.Array(t.String(), { maxItems: MAX_TARGET_TYPES, uniqueItems: true }), work: t.Nullable(readId),
-  revision: targetRevision, disclosure: t.Union([t.Literal('public'), t.Literal('restricted')]) },
+  revision: targetRevision, disclosure: t.Union([t.Literal('public'), t.Literal('restricted')]),
+  contentSelections: t.Optional(t.Array(t.Object({
+    revisionId: t.String({ pattern: '^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$' }),
+    variantId: t.String({ pattern: '^urn:rezics:variant:[0-9a-f-]{36}$' }),
+    byteDigest: t.String({ pattern: '^[0-9a-f]{64}$' }), language: t.Optional(t.String()),
+  }, { additionalProperties: false }), { minItems: 1, maxItems: 32 })) },
 { additionalProperties: false });
 export type ResolvedTarget = Static<typeof resolvedTarget>;
 

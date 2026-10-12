@@ -23,7 +23,8 @@ import { exactContentRevision } from '../../api-responses.ts';
 import { ZonePageDocument, resolveZonePageDocument, zoneDocumentShowcase } from '../presentation/zone-document.ts';
 import { readerLanguages, selectDisplayName } from '../display-language/select.ts';
 import { discloseContent } from '../disclosure/assembly.ts';
-import { disclosureViewer, withDisclosureViewer } from '../disclosure/viewer.ts';
+import { currentDisclosureViewer, withDisclosureViewer } from '../disclosure/viewer.ts';
+import { discloseInventory } from '../disclosure/read.ts';
 import { ZonePublicationUnavailable } from './configuration.ts';
 
 export const ZonePublicPage = Type.Object({ ...ZonePageDocument.properties,
@@ -161,7 +162,8 @@ export async function readZonePublishedHomeContent(
   if (variantId !== undefined && (!Value.Check(ZonePublishedPage.properties.variantId, variantId)
     || !state.bundle)) throw new ZoneUnavailable('Published Zone home is unavailable');
   if (!state.bundle || state.disclosure !== 'public') return null;
-  if (state.bundle.homeErased) return null;
+  const visible = await homeCutVisible(work.environment, state);
+  if (state.bundle.homeErased || !visible) return null;
   const pages = state.bundle.pages.filter(page => page.page === (state.bundle!.homeDocument ?? state.zone));
   const selected = selectDisplayName(new Map(pages.map(page => [page.language ?? 'und', page.revisionId])),
     languages);
@@ -173,11 +175,11 @@ export async function readZonePublishedHomeContent(
     if (await erasedHomeCut(work.environment, state)) return null;
     throw new ZoneUnavailable('Published Zone home is unavailable');
   }
-  const viewer = disclosureViewer(null);
+  const viewer = currentDisclosureViewer();
   const results = await withDisclosureViewer(viewer, () => work.content!.readExactBatch([page.revisionId],
     async ids => new Set(ids)));
   const exact = (await discloseContent(work.environment, results, viewer))[0];
-  if (exact?.status === 'erased') return null;
+  if (exact?.status === 'erased' || exact?.status === 'denied') return null;
   if (exact?.status !== 'available' || exact.reference.resourceId !== page.page
     || exact.reference.variantId !== page.variantId || exact.body.document === undefined) {
     throw new ZoneUnavailable('Published Zone home is unavailable');
@@ -186,10 +188,18 @@ export async function readZonePublishedHomeContent(
   if (document.profile !== 'blocks') throw new ZoneUnavailable('Published Zone home is not a Blocks document');
   try { await assertZoneHomeContentCurrent(work, state, page, exact.reference.byteDigest); }
   catch (error) {
-    if (error instanceof ZoneUnavailable && await erasedHomeCut(work.environment, state)) return null;
+    if (error instanceof ZoneUnavailable && (await erasedHomeCut(work.environment, state)
+      || !await homeCutVisible(work.environment, state))) return null;
     throw error;
   }
   return { page, document, reference: exact.reference };
+}
+
+async function homeCutVisible(env: WorkActivationEnvironment,
+  state: Awaited<ReturnType<typeof readZonePublication>>): Promise<boolean> {
+  if (!state.bundle?.homeDocument || !state.bundle.homeRevision) return true;
+  return (await discloseInventory(env, [{ owner: 'graph', resource: state.bundle.homeDocument,
+    revision: state.bundle.homeRevision, component: 'record' }], currentDisclosureViewer(), 'read'))[0] === 'visible';
 }
 
 async function erasedHomeCut(env: WorkActivationEnvironment,
@@ -208,7 +218,8 @@ export async function assertZoneHomeContentCurrent(
     async ids => new Set(ids));
   if (metadata && (metadata.get(page.revisionId)?.availability !== 'available'
     || metadata.get(page.revisionId)?.byteDigest !== byteDigest)
-    || !await isZonePublishedPageRevision(work.environment, state.zone, page.page, page.revisionId)) {
+    || !await isZonePublishedPageRevision(work.environment, state.zone, page.page, page.revisionId)
+    || !await homeCutVisible(work.environment, state)) {
     throw new ZoneUnavailable('Published Zone home changed during the read');
   }
 }
@@ -245,7 +256,8 @@ export async function readZoneHomeDocument(work: MainWorkDependencies, request: 
         { environment: work.environment, zone: state.zone, variantId: page.variantId }), localData);
   try { await assertZoneHomeContentCurrent(work, state, page, reference.byteDigest); }
   catch (error) {
-    if (error instanceof ZoneUnavailable && await erasedHomeCut(work.environment, state)) return null;
+    if (error instanceof ZoneUnavailable && (await erasedHomeCut(work.environment, state)
+      || !await homeCutVisible(work.environment, state))) return null;
     throw error;
   }
   return { ...resolved, reference };
