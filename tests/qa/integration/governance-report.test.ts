@@ -10,6 +10,7 @@ import { createMainApp, type MainWorkDependencies } from '../../../services/main
 import { readMainOutboxEnvelope } from '../../../services/main/src/modules/outbox/relay.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
+import { boundedPool } from '../../../services/main/src/infrastructure/pg-pool.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import { ownerEvidenceCapture, ownerTargetHeads } from '../../../services/main/src/modules/governance/evidence.ts';
 import { ownerModerationEffects } from '../../../services/main/src/modules/governance/effects.ts';
@@ -36,7 +37,7 @@ async function governanceStack(name: string) {
   mkdirSync(directory, { recursive: true });
   const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access', 'content'], 'owner');
   const pool = new Pool({ connectionString: databases.urls.access, max: 8 });
-  const contentPool = new Pool({ connectionString: databases.urls.content, max: 4 });
+  const contentPool = boundedPool({ connectionString: databases.urls.content, max: 4 });
   await migrateContent(contentPool);
   const account = await ratingAccount({ ...Bun.env, ACCOUNT_DATABASE_URL: databases.urls.account } as
     Record<string, string>, 'openid work:read work:create work:edit governance:report governance:decide');
