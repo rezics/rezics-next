@@ -81,6 +81,8 @@ function key(request: Request): string | null {
 }
 
 export const openApiOperations = {
+  // Posting and recovery share this command; its platform gate runs before
+  // either can reserve an intent. Lookup and existing thread reads stay public.
   '/v1/realms/{realm}/about-posts': { post: { exposure: 'platform:realm-reply', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
   '/v1/realm-replies': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
   '/v1/realm-reply-reviews': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },

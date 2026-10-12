@@ -10,6 +10,7 @@ const actingSubject = 'https://rezics.com/id/00000000-0000-4000-8000-00000000000
 const about = 'https://rezics.com/id/00000000-0000-4000-8000-000000000003';
 const revision = 'https://rezics.com/id/00000000-0000-4000-8000-000000000006';
 let lookupFailure = true;
+let postingOpen = true;
 const projections: Array<[string, string | undefined]> = [];
 let target: Awaited<ReturnType<AboutDiscussionTargetReader>>;
 
@@ -18,7 +19,7 @@ void mock.module('../work-page/read.ts', () => ({
   reader: async () => ({ main: {}, signedIn: true, actingSubject }),
 }));
 void mock.module('../api/main.ts', () => ({ ...mainApi, readPlatformAccess: async () => ({}) }));
-void mock.module('../api/platform-access.ts', () => ({ ...platformAccess, operationOpen: () => true }));
+void mock.module('../api/platform-access.ts', () => ({ ...platformAccess, gateFor: () => () => postingOpen }));
 void mock.module('../entity-page/read.ts', () => ({
   readEntityProjection: async (resource: string, position?: string) => {
     projections.push([resource, position]);
@@ -35,9 +36,9 @@ void mock.module('./about-discussion-api.ts', () => ({
 }));
 void mock.module('./about-discussion.tsx', () => ({
   AboutDiscussion: ({ read, recoveryScope }: {
-    read: { kind: string }; recoveryScope?: { actingSubject: string | null };
+    read: { kind: string }; recoveryScope?: { actingSubject: string | null; postingOpen: boolean };
   }) => <aside data-zone-discussion-entry data-discussion-state={read.kind}
-    data-acting-subject={recoveryScope?.actingSubject} />,
+    data-acting-subject={recoveryScope?.actingSubject} data-posting-open={recoveryScope?.postingOpen} />,
 }));
 
 const { ZoneAboutDiscussion } = await import('./about-discussion-entry.tsx');
@@ -66,4 +67,17 @@ test('the discussion shares the entity frame reader with an explicit current pos
     expect(projections).toEqual([[about.slice(-36), undefined]]);
     expect(target).toEqual({ resource: about, revision });
   } finally { lookupFailure = true; }
+});
+
+test('a failed discussion lookup keeps the closed posting gate in its recovery scope', async () => {
+  postingOpen = false;
+  try {
+    const discussion = await ZoneAboutDiscussion({
+      zone: '00000000-0000-4000-8000-000000000001', path: '/guide/harbor-field-guide',
+      href: '/guide/harbor-field-guide', locale: 'en',
+    });
+    const page = renderToStaticMarkup(discussion!);
+    expect(page).toContain('data-discussion-state="unavailable"');
+    expect(page).toContain('data-posting-open="false"');
+  } finally { postingOpen = true; }
 });

@@ -1,5 +1,6 @@
 import { direction } from '@rezics/main/language';
 import { browserMainApi } from '../api/browser.ts';
+import { platformClosed } from '../api/platform-access.ts';
 import type { MainClient } from '../discover/types.ts';
 import type { ThreadRead } from '../feed/thread.ts';
 
@@ -23,6 +24,7 @@ export type AboutPostOutcome =
   | { kind: 'posted'; reply: string }
   | { kind: 'pending' }
   | { kind: 'recovery' }
+  | { kind: 'closed' }
   | { kind: 'refused' }
   | { kind: 'stale' };
 export interface AboutDiscussionApi {
@@ -43,6 +45,9 @@ export function mainAboutDiscussionApi(main: () => MainClient = browserMainApi):
       // 202 carries no receipt: a successful transport is not a settled post.
       if (answer.response.status === 202) return { kind: 'pending' };
       if (answer.error) {
+        // The grant gate runs before the intent owner. Its refusal cannot
+        // establish the outcome of a previous attempt under this key.
+        if (platformClosed(answer.error.status, answer.error.value)) return { kind: 'closed' };
         if (answer.error.status === 409) return { kind: 'stale' };
         // Expired authentication does not establish the previous attempt's
         // outcome. Keep its key for recovery after signing in again.

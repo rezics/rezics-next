@@ -422,6 +422,96 @@ export const ReloadRecoveryKeepsOriginalBasis: Story = {
   },
 };
 
+const closed = retainedFixture('/__storybook__/about-discussion/closed');
+const closedApi = memoryApi({ kind: 'closed' }, posted);
+export const ClosedGrantKeepsRetainedIntent: Story = {
+  args: { retain: true, api: closedApi, read: { ...ready, basis: closed.saved.basis, thread: storyQuietThread } },
+  beforeEach: () => closed.prepare(closedApi),
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('status')).toHaveTextContent(t.recovery);
+    await assertLocked(canvas, closed.saved.body);
+    await userEvent.click(canvas.getByRole('button', { name: t.retry }));
+    await expect(await canvas.findByRole('status')).toHaveTextContent(t.postingUnavailable);
+    await expect(canvas.queryByRole('textbox')).toBeNull();
+    await expect(canvas.queryByRole('button', { name: t.retry })).toBeNull();
+    await expect(canvas.queryByRole('button', { name: t.reply })).toBeNull();
+    await expect(canvas.getAllByRole('article')).toHaveLength(1);
+    await expect(canvas.getByRole('link', { name: t.continueThread })).toBeVisible();
+    await expect(closedApi.post).toHaveBeenCalledTimes(1);
+    await expect(JSON.parse(localStorage.getItem(closed.key)!)).toEqual(closed.saved);
+  },
+};
+
+function RefreshedGrantComposer(args: React.ComponentProps<typeof AboutDiscussion>) {
+  const [read, setRead] = useState(args.read);
+  const [refreshed, setRefreshed] = useState(false);
+  return <div className="mx-auto w-full max-w-[640px] px-5 py-6">
+    <AboutDiscussion {...args} read={read} />
+    {!refreshed ? <button type="button" onClick={() => {
+      setRead({ ...ready, basis: reopened.saved.basis });
+      setRefreshed(true);
+    }}>Refresh platform access</button> : null}
+  </div>;
+}
+
+const reopened = retainedFixture('/__storybook__/about-discussion/reopened');
+const reopenedApi = memoryApi({ kind: 'closed' }, posted);
+export const ReopenedGrantRecoversRetainedIntent: Story = {
+  args: { retain: true, api: reopenedApi, read: { ...ready, basis: reopened.saved.basis } },
+  beforeEach: () => reopened.prepare(reopenedApi),
+  render: args => <RefreshedGrantComposer {...args} />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('status')).toHaveTextContent(t.recovery);
+    await userEvent.click(canvas.getByRole('button', { name: t.retry }));
+    await expect(await canvas.findByRole('status')).toHaveTextContent(t.postingUnavailable);
+    await expect(canvas.queryByRole('textbox')).toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: 'Refresh platform access' }));
+    await expect(await canvas.findByRole('status')).toHaveTextContent(t.recovery);
+    await assertLocked(canvas, reopened.saved.body);
+    await userEvent.click(canvas.getByRole('button', { name: t.retry }));
+    await expect(await canvas.findByText(t.posted)).toBeVisible();
+    await expect(reopenedApi.post.mock.calls.map(([intent]) => intent)).toEqual([reopened.saved, reopened.saved]);
+    await expect(localStorage.getItem(reopened.key)).toBeNull();
+  },
+};
+
+const closedRead = retainedFixture('/__storybook__/about-discussion/closed-read');
+const closedReadApi = memoryApi(posted);
+export const ClosedPostingWithRetainedIntent: Story = {
+  args: { retain: true, api: closedReadApi,
+    read: { ...ready, basis: closedRead.saved.basis, thread: storyQuietThread, mode: 'closed' } },
+  beforeEach: () => closedRead.prepare(closedReadApi),
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('status')).toHaveTextContent(t.postingUnavailable);
+    await expect(canvas.queryByRole('textbox')).toBeNull();
+    await expect(canvas.queryByRole('button')).toBeNull();
+    await expect(canvas.getAllByRole('article')).toHaveLength(1);
+    await expect(canvas.getByRole('link', { name: t.continueThread })).toBeVisible();
+    await expect(closedReadApi.post).not.toHaveBeenCalled();
+    await expect(JSON.parse(localStorage.getItem(closedRead.key)!)).toEqual(closedRead.saved);
+  },
+};
+
+const closedLookup = retainedFixture('/__storybook__/about-discussion/closed-lookup');
+const closedLookupApi = memoryApi(posted);
+export const ClosedLookupRecoveryKeepsRetainedIntent: Story = {
+  args: { read: { kind: 'unavailable' }, retain: true, api: closedLookupApi,
+    recoveryScope: { zone: basis.zone, path: closedLookup.saved.basis.path,
+      actingSubject: closedLookup.saved.actingSubject, signedIn: true, personal: true, postingOpen: false } },
+  beforeEach: () => closedLookup.prepare(closedLookupApi),
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await waitFor(() => expect(canvas.getByRole('status')).toHaveTextContent(t.postingUnavailable));
+    await expect(canvas.queryByRole('textbox')).toBeNull();
+    await expect(canvas.queryByRole('button')).toBeNull();
+    await expect(closedLookupApi.post).not.toHaveBeenCalled();
+    await expect(JSON.parse(localStorage.getItem(closedLookup.key)!)).toEqual(closedLookup.saved);
+  },
+};
+
 const refused = retainedFixture('/__storybook__/about-discussion/refused');
 const refusedApi = memoryApi({ kind: 'refused' });
 export const TerminalRefusalClearsDeviceIntent: Story = {
@@ -446,7 +536,7 @@ const detachedApi = memoryApi(posted);
 export const WithdrawnAttachmentRecovery: Story = {
   args: { read: { kind: 'none' }, retain: true, api: detachedApi,
     recoveryScope: { zone: basis.zone, path: detached.saved.basis.path,
-      actingSubject: detached.saved.actingSubject, signedIn: true, personal: true } },
+      actingSubject: detached.saved.actingSubject, signedIn: true, personal: true, postingOpen: true } },
   beforeEach: () => detached.prepare(detachedApi),
   async play({ canvasElement }) {
     const canvas = within(canvasElement);

@@ -26,8 +26,8 @@ export interface AboutDiscussionProps {
   api?: AboutDiscussionApi;
   /** Disable device retention for an embedded preview. Real pages retain unresolved intents. */
   retain?: boolean;
-  /** Recovery remains available after the live attachment or route is withdrawn. */
-  recoveryScope?: { zone: string; path: string; actingSubject: string | null; signedIn: boolean; personal: boolean };
+  /** Recovery survives attachment withdrawal while the posting grant is open. */
+  recoveryScope?: { zone: string; path: string; actingSubject: string | null; signedIn: boolean; personal: boolean; postingOpen: boolean };
 }
 
 export function AboutDiscussion(props: AboutDiscussionProps) {
@@ -71,6 +71,15 @@ function AboutDiscussionEntry({ read, locale, href, api, retain = true, recovery
     setHydrated(true);
   }, [storageKey, actor, zone, path]);
 
+  useEffect(() => {
+    // A fresh server read can reopen access without remounting this route.
+    // Keep the original intent and key when replacing its gate refusal.
+    if (recoveryScope?.postingOpen !== false
+      && (read.kind === 'ready' ? read.mode !== 'closed' : recoveryScope?.postingOpen === true)) {
+      setOutcome(previous => previous?.kind === 'closed' ? { kind: 'recovery' } : previous);
+    }
+  }, [read, recoveryScope?.postingOpen]);
+
   if (read.kind === 'none' && !intent.current) return outcome?.kind === 'posted' ? <p role="status">{t.posted}</p> : null;
   if (read.kind === 'unavailable' && !intent.current) return <section aria-label={t.title} className="grid gap-3 border-t border-border py-6">
     <h2 className="font-semibold text-lg">{t.title}</h2><p role="status">{t.unavailable}</p>
@@ -79,14 +88,16 @@ function AboutDiscussionEntry({ read, locale, href, api, retain = true, recovery
   const ready = read.kind === 'ready' ? read : {
     basis: intent.current!.basis, actingSubject: actor, thread: null,
     mode: !recoveryScope?.signedIn ? 'sign-in' as const
+      : !recoveryScope.postingOpen ? 'closed' as const
       : !recoveryScope.personal ? 'identity' as const : 'unavailable' as const,
   };
   const { basis, actingSubject, mode, thread } = ready;
   const retained = intent.current !== null;
   const locked = busy || retained;
   const tooLong = new TextEncoder().encode(body).length > 8192;
-  const canRecover = retained && Boolean(actingSubject) && mode !== 'sign-in' && mode !== 'identity';
-  const canWrite = read.kind === 'ready' && mode === 'open' && Boolean(actingSubject);
+  const postingOpen = mode !== 'closed' && recoveryScope?.postingOpen !== false && outcome?.kind !== 'closed';
+  const canRecover = postingOpen && retained && Boolean(actingSubject) && mode !== 'sign-in' && mode !== 'identity';
+  const canWrite = postingOpen && read.kind === 'ready' && mode === 'open' && Boolean(actingSubject);
   const post = async () => {
     if (dispatching.current || !hydrated || (!canWrite && !canRecover) || !actingSubject) return;
     if (!intent.current) {
@@ -146,8 +157,8 @@ function AboutDiscussionEntry({ read, locale, href, api, retain = true, recovery
       : mode === 'identity' ? <LocalizedLink href={`/identity?next=${encodeURIComponent(localizedPath(href, locale))}`}>{t.chooseIdentity}</LocalizedLink>
       : mode === 'join' && !retained ? <LocalizedLink href={realmPath}>{t.join}</LocalizedLink>
       : mode === 'reviewed' && !retained ? <p role="status">{t.reviewed}</p>
-      : (mode === 'unavailable' || mode === 'closed') && !retained ? <p role="status">{t.postingUnavailable}</p> : null}
-    {outcome ? <p role={outcome.kind === 'refused' || outcome.kind === 'stale' ? 'alert' : 'status'}>
+      : !postingOpen || (mode === 'unavailable' && !retained) ? <p role="status">{t.postingUnavailable}</p> : null}
+    {postingOpen && outcome ? <p role={outcome.kind === 'refused' || outcome.kind === 'stale' ? 'alert' : 'status'}>
       {outcome.kind === 'stale' ? t.reload : t[outcome.kind]}</p> : null}
     {canWrite || canRecover ? opened ? <form onSubmit={event => { event.preventDefault(); void post(); }} className="grid gap-3">
       <label htmlFor={`${id}-body`} className="font-medium text-sm">{t.body}</label>

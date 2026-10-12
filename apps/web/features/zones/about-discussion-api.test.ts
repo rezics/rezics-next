@@ -72,6 +72,19 @@ test('pending is not posted and every response keeps one posting request per att
   expect(transport.calls.every(call => JSON.stringify(call.body) === JSON.stringify(transport.calls[0]!.body))).toBe(true);
 });
 
+test('a closed platform grant preserves the complete intent for recovery when it reopens', async () => {
+  const transport = client(() => transport.calls.length === 1
+    ? Response.json({ code: 'platform_closed' }, { status: 403 })
+    : Response.json(posted, { status: 200 }));
+  const api = mainAboutDiscussionApi(() => transport.main);
+  const saved = structuredClone(intent);
+  expect(await api.post(saved)).toEqual({ kind: 'closed' });
+  expect(saved).toEqual(intent);
+  expect(await api.post(saved)).toEqual({ kind: 'posted', reply });
+  expect(transport.calls.map(call => ({ key: call.key, body: call.body })))
+    .toEqual(Array(2).fill({ key: intent.key, body: transport.calls[0]!.body }));
+});
+
 const visibleThread: ThreadRead = { ...storyQuietThread, realm, thread: reply, focus: reply,
   work: { ...storyQuietThread.work, id: about }, rootRevision: targetRevision,
   items: [{ ...storyQuietThread.items[0]!, reply, placement: reference(9), parent: null, revisionId: local(reference(8)),
@@ -109,6 +122,15 @@ function reader(options: ReadOptions = {}) {
   });
 }
 const readInput = { zone, path: '/chapter-one', signedIn: true, actingSubject: actor, personal: true };
+
+test('a closed posting grant keeps the discussion lookup and existing thread readable', async () => {
+  const transport = reader({ thread: visibleThread });
+  expect(await readAboutDiscussion(transport.main, { ...readInput, postingOpen: false }))
+    .toMatchObject({ kind: 'ready', mode: 'closed', thread: visibleThread, basis: { realm, about } });
+  expect(transport.calls.every(call => call.method === 'GET')).toBe(true);
+  expect(transport.calls.some(call => call.url.pathname.endsWith('/about-thread'))).toBe(true);
+  expect(transport.calls.some(call => call.url.pathname.endsWith(`/threads/${local(reply)}`))).toBe(true);
+});
 
 test('a withdrawn live route or an index never performs about-thread lookup', async () => {
   for (const options of [{ attachedRealm: null }, { routeKind: 'index' as const }]) {
