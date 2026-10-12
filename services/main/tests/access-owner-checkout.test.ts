@@ -2,19 +2,24 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import type { Pool, PoolClient } from 'pg';
+import { Pool, type PoolClient } from 'pg';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { FusekiClient, type CommandEnvelope, type TemplateIndexDelta } from '../src/infrastructure/fuseki.ts';
 import { boundedPool, NestedPoolCheckoutError, nestedPoolCheckoutMode, setNestedPoolCheckoutMode } from '../src/infrastructure/pg-pool.ts';
-import { AccessAdmissionRegistry, AdmissionDenied, type VerifiedPrincipal } from '../src/modules/access/admission.ts';
+import { AccessAdmissionRegistry, AdmissionDenied, AdmissionUnavailable, type VerifiedPrincipal } from '../src/modules/access/admission.ts';
 import { grantFixtureAuthority, ensureFixtureScopeGate } from '../src/modules/access/fixture-authority.ts';
 import { AccessRealmRoster } from '../src/modules/access/roster.ts';
 import { settleRealmPolicy } from '../src/modules/access/realm-management-recovery.ts';
+import { realmTransaction } from '../src/modules/access/realm-management-authority.ts';
+import { inAccessTransaction } from '../src/modules/access/policy-transaction.ts';
+import { PolicyUnavailable } from '../src/modules/access/policy-errors.ts';
+import { RealmAdminUnavailable } from '../src/modules/realm-admin/contract.ts';
 import { withWorkEditAuthorityInTransaction } from '../src/modules/access/work-edit-authority.ts';
-import { accessClient, controlTransaction } from '../src/modules/access/topology-control.ts';
+import { accessClient, ControlUnavailable, controlTransaction } from '../src/modules/access/topology-control.ts';
 import { TemplateSeekIndex } from '../src/modules/query/seek-index.ts';
-import { GovernanceStore, GovernanceConflict, GovernanceStale, GLOBAL_CONTEXT, type DecisionInput } from '../src/modules/governance/store.ts';
+import { GovernanceStore, GovernanceConflict, GovernanceStale, GovernanceUnavailable, GLOBAL_CONTEXT, type DecisionInput } from '../src/modules/governance/store.ts';
+import { graphErasureReceipt, suppressGraphContentRevisions } from '../src/modules/erasure/graph.ts';
 import { ReviewReportOwner } from '../src/modules/governance/report-review.ts';
 import { PublicReports } from '../src/modules/public-report/store.ts';
 import { withPreservationFence } from '../src/modules/public-report/preservation.ts';
@@ -432,4 +437,269 @@ for (const kind of ['review', 'graph'] as const) {
       expect(accessClient(pool)).toBeUndefined();
     } finally { await graph.stop(); }
   }, 30_000);
+}
+
+const recoveryOwners = [
+  'policy transaction', 'policy snapshot transaction', 'Realm management read', 'Realm management write',
+  'Realm roster', 'Realm placement permit', 'Realm policy recovery', 'Work edit authority',
+  'Agent owner authority', 'Realm owner authority', 'command owner authority',
+  'Governance decision head', 'Governance graph effect', 'publication fence',
+  'PublicReports anonymous', 'PublicReports signed', 'recommendation eligibility',
+  'preservation semantic revision erasure',
+] as const;
+type RecoveryOwner = typeof recoveryOwners[number];
+type RecoveryFixture = {
+  run: (callback: () => Promise<void>) => Promise<unknown>;
+  unavailable: typeof ControlUnavailable;
+};
+
+/** Exercise real public owners; only external graph responses are deterministic.
+ * Each owner gets its usual authority and its usual callback boundary. */
+async function recoveryOwner(owner: RecoveryOwner, graph: ReturnType<typeof indexedGraph>): Promise<RecoveryFixture> {
+  const f = await identity();
+  await ensureFixtureScopeGate(pool, `governance:realm:${f.realm}`);
+  if (owner === 'policy transaction' || owner === 'policy snapshot transaction') return {
+    unavailable: PolicyUnavailable,
+    run: callback => inAccessTransaction(pool, owner === 'policy transaction' ? 'read committed' : 'repeatable read', callback),
+  };
+  if (owner === 'Realm management read' || owner === 'Realm management write') return {
+    unavailable: RealmAdminUnavailable,
+    run: callback => realmTransaction(pool, f.realm, owner === 'Realm management write', callback),
+  };
+  if (owner === 'Realm roster') {
+    let callback: () => Promise<void>;
+    let called = false;
+    const policyGraph = { query: async () => {
+      if (!called) { called = true; await callback(); }
+      return { results: { bindings: [{ space: { type: 'uri', value: f.work },
+        disclosure: { type: 'uri', value: 'https://rezics.com/vocab/Public' } }] } };
+    } } as unknown as FusekiClient;
+    const roster = new AccessRealmRoster(pool, { ...graph.env, fuseki: policyGraph });
+    return { unavailable: RealmAdminUnavailable, run: work => { callback = work; return roster.read(f.realm, {}); } };
+  }
+  if (owner === 'Realm placement permit') {
+    await f.grant('realm.owner', `governance:realm:${f.realm}`);
+    return { unavailable: AdmissionUnavailable,
+      run: callback => f.access.withRealmPolicy(f.principal, f.actor, f.realm, 'reply', callback) };
+  }
+  if (owner === 'Work edit authority') {
+    await f.grant('work.edit', `work:edit:${f.work}`);
+    return { unavailable: AdmissionUnavailable,
+      run: callback => f.access.withWorkEditAuthority(f.principal, f.actor, f.work, callback) };
+  }
+  if (owner === 'Agent owner authority' || owner === 'Realm owner authority' || owner === 'command owner authority') {
+    const action = owner === 'Agent owner authority' ? 'agent.control'
+      : owner === 'Realm owner authority' ? 'realm.settings.manage' : 'work.create';
+    const scope = owner === 'Agent owner authority' ? `agent:control:${f.actor}`
+      : owner === 'Realm owner authority' ? `governance:realm:${f.realm}` : 'work:create:root';
+    await f.grant(action, scope);
+    return { unavailable: AdmissionUnavailable, run: callback => f.access.withOwnerAuthority({
+      principal: f.principal, actingSubject: f.actor, action, scope,
+    }, callback) };
+  }
+  if (owner === 'publication fence') return { unavailable: GovernanceUnavailable,
+    run: callback => publicationStore().withPublicationFence([f.work], async allowed => {
+      expect(allowed).toBe(true); await callback();
+    }) };
+  if (owner === 'recommendation eligibility') {
+    await f.grant('publication.adopt', `publication:adopt:${f.realm}`);
+    const store = new RealmVariantRecommendationStore(pool);
+    return { unavailable: AdmissionUnavailable, run: callback => store.set(f.principal, {
+      realm: f.realm, mainVersion: native(), contribution: native(), expectedRevision: null,
+      actingSubject: f.actor, idempotencyKey: randomUUID(),
+    }, async () => { await callback(); return true; }) };
+  }
+  if (owner === 'PublicReports signed' || owner === 'PublicReports anonymous') {
+    const signed = owner === 'PublicReports signed';
+    let callback: () => Promise<void>;
+    const reports = new PublicReports(pool, { resolve: async () => {
+      // The first lookup precedes intake; the preservation re-admission is the
+      // callback whose disclosure/index accesses must use the fenced holding.
+      if (accessClient(pool)) await callback();
+      return { evidence: { owner: 'content', resource: f.work, component: 'body', locator: null,
+        revision: randomUUID(), state: 'available', representation: 'content-body-v1',
+        revisionDigest: 'b'.repeat(64), provenance: {} }, author: f.actor, realm: null };
+    } });
+    return { unavailable: GovernanceUnavailable, run: work => {
+      callback = work;
+      return reports.submit({ profile: 'public-report-v1', category: 'child_exploitation', target: f.work,
+        statement: 'Preserve reported material.', contentLanguage: 'en' }, randomUUID(),
+      new Request('http://main.test/v1/public-reports'), signed ? f.principal : null);
+    } };
+  }
+  if (owner === 'preservation semantic revision erasure') {
+    const revision = native(), erasureId = randomUUID();
+    graph.graph.query = async query => ({ results: { bindings:
+      query.includes('SELECT DISTINCT ?target') && graph.committed.has(graphErasureReceipt(erasureId))
+        ? [{ target: { type: 'uri', value: revision } }] : [],
+    } });
+    return { unavailable: ControlUnavailable, run: callback => withPreservationFence(pool, f.work, erasureId, async () => {
+      await callback();
+      // Kernel's erasure callback reaches the actual attached TemplateSeekIndex
+      // through FusekiClient.commandWithReceipt and controlTransaction.
+      await suppressGraphContentRevisions(graph.graph, graph.env.lineage, erasureId, '1', [revision]);
+      expect(graph.envelopes.at(-1)?.update).toContain('ErasedRevision');
+    }) };
+  }
+  if (owner === 'Realm policy recovery') {
+    const receipt = randomUUID();
+    await controlTransaction(pool, async client => {
+      await client.query(`INSERT INTO access.realm_admin_receipt
+        (id,realm,principal_id,acting_subject,idempotency_key,request_digest,action,reason,result)
+        VALUES ($1,$2,$3,$4,$5,$6,'realm.settings','Publish policy','{}')`,
+      [receipt, f.realm, f.principalId, f.actor, randomUUID(), 'a'.repeat(64)]);
+      await client.query(`INSERT INTO access.realm_policy_delivery(realm,receipt_id,generation,visibility,review_mode)
+        VALUES ($1,$2,1,'public','open')`, [f.realm, receipt]);
+    });
+    let callback: () => Promise<void>;
+    let published = false;
+    graph.graph.query = async query => query.includes('ASK') ? { boolean: published }
+      : { results: { bindings: [{ space: { type: 'uri', value: f.work } }] } };
+    const command = graph.graph.command.bind(graph.graph);
+    graph.graph.command = async envelope => {
+      await callback();
+      const result = await command(envelope);
+      published = true;
+      return result;
+    };
+    return { unavailable: RealmAdminUnavailable,
+      run: work => { callback = work; return settleRealmPolicy(pool, f.realm, graph.env); } };
+  }
+  // Governance decisions probe exact heads before planning and dispatch graph
+  // effects under separate owner transactions. Both are raw callback owners.
+  await f.grant('governance.moderate', 'governance:platform');
+  const revision = native();
+  const target = { owner: 'graph' as const, resource: f.work, component: 'title' as const, revision, locator: null };
+  const rule = { ref: 'urn:rule:recovery-owner', revision: '1', digest: 'a'.repeat(64) };
+  let callback: (() => Promise<void>) | undefined;
+  const store = new GovernanceStore(pool, { capture: async (_principal, _actor, evidence) => ({ ...evidence,
+    state: 'available', representation: 'Retained evidence', revisionDigest: 'b'.repeat(64), provenance: {} }) },
+  { current: async () => {
+    if (owner === 'Governance decision head' && callback && accessClient(pool)) {
+      const work = callback; callback = undefined; await work();
+    }
+    return revision;
+  } }, { current: async () => rule }, { participants: async () => [], apply: async () => {
+    if (owner === 'Governance graph effect' && callback) { const work = callback; callback = undefined; await work(); }
+    return { receipt: await graph.command() };
+  } });
+  const report = await store.submitReport(f.principal, { kind: 'content_report', actingSubject: f.actor,
+    authority: { kind: 'platform', scopeId: 'governance:platform' }, context: GLOBAL_CONTEXT,
+    target, disclosure: 'private', reasonCode: 'spam', statement: 'Review exact material.', evidence: [target],
+    idempotencyKey: randomUUID() });
+  await store.safety.claim(f.principal, f.actor, report.caseId);
+  const input: DecisionInput = { caseId: report.caseId, expectedGeneration: report.caseGeneration,
+    actingSubject: f.actor, outcome: 'restrict', targets: [{ ...target, scopeKind: 'exact_revision',
+      expectedHead: revision, effect: 'disclosure' }], rule, evidenceDigest: report.evidenceDigest,
+    reversesDecisionId: null, answersStepId: null, rationale: null, disclosure: 'private', idempotencyKey: randomUUID(),
+    reasons: { facts: 'Staff reviewed exact evidence.', scope: 'One retained revision.', duration: 'Until reconsidered.',
+      automation: false, contentLanguage: 'en', appealRoute: '/v1/public-reports/{caseId}/correspondence' } };
+  return { unavailable: GovernanceUnavailable, run: work => { callback = work; return store.decide(f.principal, input); } };
+}
+
+async function recoveryDomainRows() {
+  return (await pool.query(`SELECT
+    (SELECT count(*) FROM access.governance_report)::text AS reports,
+    (SELECT count(*) FROM access.moderation_decision)::text AS decisions,
+    (SELECT count(*) FROM access.governance_erasure_postponement)::text AS postponements,
+    (SELECT count(*) FROM access.realm_native_variant_recommendation_receipt)::text AS recommendations,
+    (SELECT count(*) FROM access.realm_policy_delivery WHERE delivered)::text AS deliveries,
+    (SELECT count(*) FROM access.template_seek_pending)::text AS pending`)).rows[0];
+}
+
+test('contributor admission refuses a closed recovery fence on the borrowed publication client', async () => {
+  const f = await identity();
+  await f.grant('work.create', 'work:create:root');
+  const admission = await f.access.register({ principal: f.principal, actingSubject: f.actor,
+    action: 'work.create', scope: 'work:create:root', idempotencyKey: randomUUID(), requestDigest: 'a'.repeat(64) });
+  await expect(publicationStore().withPublicationFence([f.work], async () => {
+    const { client, id } = await heldTransaction();
+    // The owner can change its own fenced row in its transaction. A borrowed
+    // admission statement must still reject that closed cut before returning
+    // a contributor, and the refused publication rolls the close back.
+    await client.query('UPDATE access.recovery_fence SET open=false WHERE id');
+    await sameTransaction(client, id);
+    return f.access.admittedActingSubject(admission.id);
+  })).rejects.toBeInstanceOf(AdmissionUnavailable);
+  expect((await pool.query('SELECT open FROM access.recovery_fence WHERE id')).rows[0]!.open).toBe(true);
+  expect(await f.access.admittedActingSubject(admission.id)).toBe(f.actor);
+  expect(accessClient(pool)).toBeUndefined();
+}, 30_000);
+
+for (const owner of recoveryOwners) {
+  for (const recovery of ['closed', 'closing during callback', 'open'] as const) {
+    test(`${owner}: recovery ${recovery} gates callback disclosure/index and retains one checkout through commit`, async () => {
+      const graph = indexedGraph();
+      // A separate pool is the recovery owner, never a nested checkout of the
+      // application's max:1 pool. Both pools deliberately have only one client.
+      const closer = new Pool({ ...cluster!.connection, max: 1, connectionTimeoutMillis: 1_000 });
+      let closing: Promise<unknown> | undefined;
+      try {
+        const fixture = await recoveryOwner(owner, graph);
+        const before = await recoveryDomainRows();
+        const marker = randomUUID();
+        let callbacks = 0, closeFinished = false;
+        if (recovery === 'closed') await closer.query('UPDATE access.recovery_fence SET open=false WHERE id');
+        const run = fixture.run(async () => {
+          callbacks++;
+          const { client, id } = await heldTransaction();
+          if (recovery === 'closing during callback') {
+            const recoveryClient = await closer.connect();
+            const closerPid = (await recoveryClient.query('SELECT pg_backend_pid() AS pid')).rows[0]!.pid;
+            const ownerPid = (await client.query('SELECT pg_backend_pid() AS pid')).rows[0]!.pid;
+            closing = recoveryClient.query('UPDATE access.recovery_fence SET open=false WHERE id')
+              .then(() => { closeFinished = true; }).finally(() => recoveryClient.release());
+            let blocked = false;
+            const deadline = Date.now() + 1_000;
+            while (!blocked && Date.now() < deadline) {
+              blocked = (await client.query<{ blocked: boolean }>('SELECT $2::int = ANY(pg_blocking_pids($1)) AS blocked',
+                [closerPid, ownerPid])).rows[0]!.blocked;
+              if (!blocked) await Bun.sleep(5);
+            }
+            expect(blocked).toBe(true);
+            expect(closeFinished).toBe(false);
+          }
+          const reader = new DisclosureStore(pool);
+          expect(await reader.read([{ owner: 'content', resource: native(), component: 'body' }],
+            ANONYMOUS_VIEWER, 'thread')).toEqual(['visible']);
+          // The Realm delivery wrapper itself is graph.command: invoking the
+          // fixture command there would recurse into that wrapper. Use its
+          // genuinely attached index directly for this variant's callback.
+          if (owner === 'Realm policy recovery') await graph.index.apply({
+            position: { dataEpoch: graph.epoch, sequence: '1' }, bases: [], entities: [],
+          });
+          else await graph.command();
+          await client.query('INSERT INTO access.template_seek_pending(epoch,sequence,id,delta) VALUES ($1,1,$2,$3)',
+            [marker, 'owner-commit', { bases: [] }]);
+          await sameTransaction(client, id);
+          if (recovery === 'closing during callback') expect(closeFinished).toBe(false);
+        });
+        if (recovery === 'closed') {
+          await expect(run).rejects.toBeInstanceOf(fixture.unavailable);
+          expect(callbacks).toBe(0);
+          expect(graph.envelopes).toHaveLength(0);
+          expect(await recoveryDomainRows()).toEqual(before);
+        } else {
+          // Governance may need another fenced owner transaction after the
+          // callback commits. A close winning that later boundary must refuse.
+          try { await run; } catch (error) {
+            if (recovery !== 'closing during callback' || !owner.startsWith('Governance ')) throw error;
+            expect(error).toBeInstanceOf(GovernanceUnavailable);
+          }
+          expect(callbacks).toBe(1);
+          await closing;
+          expect((await pool.query('SELECT 1 FROM access.template_seek_pending WHERE epoch=$1', [marker])).rowCount).toBe(1);
+          expect((await pool.query('SELECT open FROM access.recovery_fence WHERE id')).rows[0]!.open)
+            .toBe(recovery === 'open');
+          expect(graph.envelopes.length).toBeGreaterThan(0);
+        }
+        expect(accessClient(pool)).toBeUndefined();
+      } finally {
+        await closing;
+        await closer.query('UPDATE access.recovery_fence SET open=true WHERE id');
+        await closer.end();
+        await graph.stop();
+      }
+    }, 30_000);
+  }
 }
