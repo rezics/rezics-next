@@ -1,12 +1,17 @@
 import { expect, test } from 'bun:test';
 import { configureDisclosure, DISCLOSURE_COST, type DisclosureReader, type DisclosureTarget }
   from '../src/modules/disclosure/read.ts';
-import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
+import { GRAPHS, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { admittedPublicWorks, PublishedStructureSourceUnavailable, readPublishedStructuredWorkSource,
   readPublishedStructuredWorkSources, readWorkPublicationParents,
   type PublishedStructuredWorkSource } from '../src/modules/work/public-patterns.ts';
 import { structureRevisionDisclosureVisible } from '../src/modules/work/read-header.ts';
-import { structuredWorkPublicationAnswer, structuredWorkSourceRow } from './structured-work-publication-fixture.ts';
+import { WorkReadSession, WorkReadUnavailable } from '../src/modules/work/read-session.ts';
+import { canReadCompositionWork } from '../src/modules/composition/disclosure-read.ts';
+import { compositionReadRoutes } from '../src/routes/composition-reads.ts';
+import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
+import { evaluatePublicationQueries, structuredWorkPublicationAnswer, structuredWorkSourceRow }
+  from './structured-work-publication-fixture.ts';
 
 const work = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
 const main = 'https://rezics.com/id/00000000-0000-4000-8000-000000000002';
@@ -27,6 +32,107 @@ function env(query: (text: string, maxBytes?: number) => Promise<unknown>) {
   return { fuseki: { query }, lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' },
     objectDirectory: '.temp/structured-work-publication-read' } as unknown as WorkActivationEnvironment;
 }
+
+function publicationDataset(roots: readonly string[], options: {
+  catalogue?: boolean; hidden?: boolean; absent?: boolean; ordinary?: boolean; manifests?: readonly string[];
+} = {}): string {
+  if (options.absent) return '';
+  const values = (roots: readonly string[]) => roots.map(root => `<${root}>`).join(', ');
+  return `@prefix rv: <https://rezics.com/vocab/> . @prefix schema: <https://schema.org/> .
+    <${GRAPHS.current}> {
+      <${work}> a schema:CreativeWork ; rv:mainVersion <${main}> .
+      <${main}> a rv:MainVersion ; rv:work <${work}> .
+      ${options.catalogue ? `<${work}> rv:catalogueVisible true .` : ''}
+      ${options.ordinary ? '' : `<${work}> rv:workStructurePublicationHead <${decision}> .`}
+      <${structure}> a rv:Structure ; rv:structureOf <${main}> ; rv:structureProfile <${source.structureProfile}> .
+      <${generation}> a rv:StructureGeneration ; rv:structure <${structure}> .
+    }
+    ${options.ordinary ? '' : `<${GRAPHS.revisions}> {
+      <${decision}> a rv:WorkStructurePublicationDecision ; rv:component <${work}> ;
+        rv:publicationOutcome rv:Published ; rv:publicSource <${source.source}> ;
+        rv:disclosure rv:${options.hidden ? 'Private' : 'Public'} ; rv:rightsBasis rv:OriginalContribution .
+      <${source.source}> a rv:WorkStructurePublicSource ; rv:work <${work}> ; rv:component <${main}> ;
+        rv:structureProfile <${source.structureProfile}> ; rv:structure <${structure}> ;
+        rv:structureRevision <${revision}> ; rv:selectedGeneration <${generation}> .
+      ${roots.length ? `<${source.source}> rv:sourceRoot ${values(roots)} .` : ''}
+      <${revision}> a rv:StructureRevision ; rv:component <${structure}> ; rv:generation <${generation}> ;
+        rv:manifest ${values(options.manifests ?? [root])} .
+    }`}`;
+}
+
+test('WORK10/VIEW03: evaluated exact-source queries preserve malformed roots and private Composition equality', async () => {
+  const queries: string[] = [];
+  const captured = env(async query => { queries.push(query); return { results: { bindings: [] } }; });
+  await readPublishedStructuredWorkSource(captured, work, main);
+  await readPublishedStructuredWorkSources(captured, [work]);
+  const dependencies = (environment: WorkActivationEnvironment, grant = async () => false) => ({ environment,
+    access: { canReadWork: grant, assertRecoveryOpen: async () => undefined }, account: {},
+  }) as unknown as MainWorkDependencies;
+  const session = (deps: MainWorkDependencies) => new WorkReadSession(deps,
+    new Request('http://main.test/v1/resources/example/parts'), {}, { dataEpoch: 'epoch', sequence: '1' });
+  await canReadCompositionWork(session(dependencies(captured)), work);
+  expect(queries).toHaveLength(3);
+  const malformed = 'urn:rezics:sha256:malformed';
+  const other = `urn:rezics:sha256:${'b'.repeat(64)}`;
+  const cases = [
+    { label: 'valid', dataset: publicationDataset([root]), result: 'valid', private: false },
+    { label: 'malformed', dataset: publicationDataset([malformed], { catalogue: true }), result: 'incomplete', private: false },
+    { label: 'valid beside malformed', dataset: publicationDataset([root, malformed]), result: 'ambiguous', private: false },
+    { label: 'duplicate roots', dataset: publicationDataset([root, other], { manifests: [root, other] }), result: 'ambiguous', private: false },
+    { label: 'absent', dataset: publicationDataset([], { absent: true }), result: 'absent', private: true },
+    { label: 'ordinary private', dataset: publicationDataset([], { ordinary: true }), result: 'absent', private: true },
+    { label: 'private zero roots', dataset: publicationDataset([]), result: 'incomplete', private: true },
+    { label: 'private one malformed root', dataset: publicationDataset([malformed]), result: 'incomplete', private: true },
+    { label: 'private two malformed roots', dataset: publicationDataset([malformed, `${malformed}-second`]), result: 'ambiguous', private: true },
+    { label: 'hidden malformed root', dataset: publicationDataset([malformed], { hidden: true }), result: 'incomplete', private: true },
+  ];
+  const results = evaluatePublicationQueries(cases.flatMap(({ dataset }) => queries.map(query => ({ dataset, query }))));
+  const responses = new Map<string, { status: number; headers: [string, string][]; body: string }>();
+  for (const [index, item] of cases.entries()) {
+    const environment = env(async query => {
+      // The route's dataset fence is fixed; every publication and candidate
+      // binding below comes from evaluating its generated SPARQL in Jena.
+      if (query.includes('SELECT ?epoch ?sequence WHERE')) {
+        return { results: { bindings: [{ epoch: term('epoch'), sequence: term('1') }] } };
+      }
+      const queryIndex = queries.indexOf(query);
+      if (queryIndex < 0) throw new Error(`Unexpected semantic query: ${query}`);
+      return results[index * queries.length + queryIndex]!;
+    });
+    if (item.result === 'valid') {
+      expect(await readPublishedStructuredWorkSource(environment, work, main)).toEqual(source);
+      expect(await readPublishedStructuredWorkSources(environment, [work])).toEqual(new Map([[work, source]]));
+    } else if (item.result === 'absent') {
+      expect(await readPublishedStructuredWorkSource(environment, work, main)).toBeNull();
+      expect(await readPublishedStructuredWorkSources(environment, [work])).toEqual(new Map());
+    } else {
+      await expect(readPublishedStructuredWorkSource(environment, work, main)).rejects.toMatchObject({ reason: item.result });
+      await expect(readPublishedStructuredWorkSources(environment, [work])).rejects.toMatchObject({ reason: item.result });
+    }
+    if (!item.private) continue;
+    const deps = dependencies(environment, async () => { throw new Error('Anonymous reads must not seek a grant'); });
+    const app = compositionReadRoutes(deps);
+    for (const operation of ['parts', 'wholes']) {
+      const response = await app.handle(new Request(`http://main.test/v1/resources/${work.slice(-36)}/${operation}`));
+      const observed = { status: response.status, headers: [...response.headers], body: await response.text() };
+      expect(observed.status).toBe(404);
+      if (item.label === 'absent') responses.set(operation, observed);
+      else expect(observed).toEqual(responses.get(operation)!);
+    }
+    if (item.result !== 'absent') {
+      let grants = 0;
+      for (const allowed of [false, true]) {
+        const authorized = session(dependencies(environment, async () => { grants++; return allowed; }));
+        authorized.principal = { issuer: 'account', subject: 'reader' };
+        authorized.options.actingSubject = parent;
+        if (!allowed) expect(await canReadCompositionWork(authorized, work)).toBe(false);
+        else await expect(canReadCompositionWork(authorized, work)).rejects.toBeInstanceOf(
+          item.result === 'ambiguous' ? WorkReadUnavailable : PublishedStructureSourceUnavailable);
+      }
+      expect(grants).toBe(2);
+    }
+  }
+}, 120_000);
 
 test('WORK10/COMP08: public Work reads resolve only the exact admitted Structure root', async () => {
   let queryText = '';

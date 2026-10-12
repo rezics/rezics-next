@@ -1,5 +1,8 @@
 import type { SparqlResult } from '../src/infrastructure/fuseki.ts';
 import type { PublishedStructuredWorkSource } from '../src/modules/work/public-patterns.ts';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { runJava } from '../../../infra/jena/tests/tdb2-integrity/support.ts';
 
 const uri = (value: string) => ({ type: 'uri' as const, value });
 
@@ -29,4 +32,18 @@ export function structuredWorkPublicationAnswer(query: string,
       && query.includes(`<${source.mainVersion}>`)).map(source => structuredWorkSourceRow(source)) } };
   }
   return undefined;
+}
+
+/** Batch real SPARQL evaluations into one pinned Jena turn; no server or
+ * persistent graph is needed for the owner read's semantic proof. */
+export function evaluatePublicationQueries(cases: readonly { dataset: string; query: string }[]): SparqlResult[] {
+  const parent = resolve('.temp/structured-work-publication-query');
+  mkdirSync(parent, { recursive: true });
+  const directory = mkdtempSync(join(parent, 'run-'));
+  try {
+    writeFileSync(join(directory, 'queries.json'), JSON.stringify(cases));
+    const result = runJava('QueryDataset', ['/database/queries.json'], directory, '256m');
+    if (result.status !== 0) throw new Error(`Publication query evaluation failed:\n${result.stdout}\n${result.stderr}`);
+    return JSON.parse(result.stdout) as SparqlResult[];
+  } finally { rmSync(directory, { recursive: true, force: true }); }
 }

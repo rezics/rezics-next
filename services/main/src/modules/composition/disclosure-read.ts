@@ -22,10 +22,12 @@ export async function canReadCompositionWork(session: WorkReadSession, work: str
     OPTIONAL { ${structuredPublicationRead(iri(work), '?main')} }
   } LIMIT 2`, 2);
   if (!rows.length) return false;
-  if (rows.length !== 1 || !rows[0]?.public) throw new WorkReadUnavailable('Work disclosure is ambiguous');
-  const readable = rows[0].public.value === 'true' || !!session.principal && !!session.options.actingSubject
+  // Publication joins can multiply even private Work rows. Establish audience
+  // admission before reporting their shape, so private and absent stay equal.
+  const readable = rows.some(row => row.public?.value === 'true') || !!session.principal && !!session.options.actingSubject
     && await session.deps.access.canReadWork(session.principal, session.options.actingSubject, work);
   if (!readable) return false;
+  if (rows.length !== 1 || !rows[0]?.public) throw new WorkReadUnavailable('Work disclosure is ambiguous');
   // Reuse the exact source at this Work probe's cut; a separate source query
   // would add a scalar round trip to every parts/wholes admission.
   const source = publishedStructuredWorkSourceFromRows(rows, work, rows[0]!.main?.value ?? '');
