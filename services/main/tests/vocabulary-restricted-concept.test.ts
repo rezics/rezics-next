@@ -1,13 +1,17 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { DataFactory, Parser, Store } from 'n3';
 import { Pool } from 'pg';
+import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import type { ContentModeration } from '../../content/src/moderation.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
-import type { VerifiedPrincipal } from '../src/modules/access/admission.ts';
+import { AccessAdmissionRegistry, type VerifiedPrincipal } from '../src/modules/access/admission.ts';
+import { FusekiClient, type SparqlResult } from '../src/infrastructure/fuseki.ts';
+import { classificationRoutes } from '../src/routes/classification.ts';
 import { grantFixtureAuthority } from '../src/modules/access/fixture-authority.ts';
 import { AgentProvisioning, agentProvisionDigest } from '../src/modules/agent/provision.ts';
 import { configureDisclosure, DisclosureUnavailable, DISCLOSURE_COST } from '../src/modules/disclosure/read.ts';
@@ -15,7 +19,7 @@ import { ownerModerationEffects } from '../src/modules/governance/effects.ts';
 import { GLOBAL_CONTEXT, GovernanceStore, type DecisionInput } from '../src/modules/governance/store.ts';
 import { readRealmDirectory } from '../src/modules/realm-directory/read.ts';
 import { readSharedVocabulary } from '../src/modules/realm-directory/vocabulary.ts';
-import { type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
+import { DATASET, GRAPHS, RV, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { WorkReadInvalid, WorkReadUnavailable, WorkReadSession, type ReadRow } from '../src/modules/work/read-session.ts';
 import { ANONYMOUS_VIEWER } from '../src/modules/suitability/policy.ts';
 
@@ -63,6 +67,9 @@ beforeAll(async () => {
   await grantFixtureAuthority(pool, { scope: 'governance:platform', requireDispatch: true,
     representations: [{ principalId, actor, action: 'governance.moderate', lifetime: 'infinity' }],
     grant: { actor, action: 'governance.moderate', lifetime: 'infinity' } });
+  await grantFixtureAuthority(pool, { scope: 'classification:define:global', requireDispatch: true,
+    representations: [{ principalId, actor, action: 'classification.proposition.define', lifetime: 'infinity' }],
+    grant: { actor, action: 'classification.proposition.define', lifetime: 'infinity' } });
 }, 60_000);
 
 afterAll(async () => {
@@ -73,7 +80,7 @@ afterAll(async () => {
 interface Concept { id: string; head: string; label: string }
 const concept = (label: string): Concept => ({ id: native(), head: native(), label });
 
-function fixture(concepts: Concept[]) {
+function fixture(concepts: Concept[], ownerGraph?: FusekiClient) {
   // Only the graph projection is substituted. Restrictions below are committed
   // by GovernanceStore and classified by the real PostgreSQL disclosure owner.
   const graph = { query: async (query: string) => {
@@ -83,7 +90,7 @@ function fixture(concepts: Concept[]) {
         .map(value => ({ work: binding(value.id), head: binding(value.head) }));
     } else if (query.includes('skos:prefLabel')) {
       expect(query).toMatch(/SELECT[^{}]*\?head/);
-      expect(query).toContain('rv:head ?head');
+      expect(query).toContain('COALESCE(?conceptHead, ?senseHead) AS ?head');
       const exact = concepts.filter(value => query.includes(`<${value.id}>`));
       const selected = /<https:\/\/rezics\.com\/id\/[0-9a-f-]{36}>/.test(query)
         || query.includes('VALUES') ? exact : concepts;
@@ -95,7 +102,7 @@ function fixture(concepts: Concept[]) {
     }
     return { results: { bindings: rows } };
   } };
-  const environment = { fuseki: graph, lineage: { dataEpoch: position.dataEpoch, routingEpoch: 'routing' },
+  const environment = { fuseki: ownerGraph ?? graph, lineage: { dataEpoch: position.dataEpoch, routingEpoch: 'routing' },
     objectDirectory: join(root, '.temp/vocabulary-owner') } as unknown as WorkActivationEnvironment;
   const governance = new GovernanceStore(pool,
     { capture: async (_principal, _actor, target) => ({ ...target, state: 'available',
@@ -140,6 +147,125 @@ function fixture(concepts: Concept[]) {
   }
   return { session, restrict, reader: governance.disclosure };
 }
+
+/** Keep the real propositions API, Access admission and INSERT graph shape.
+ * The graph transport projects only the bounded reads this journey needs. */
+async function createV1Concept(objectDirectory: string) {
+  const skos = 'http://www.w3.org/2004/02/skos/core#';
+  const rdfType = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type';
+  const store = new Store();
+  const graph = new FusekiClient('http://unused.test');
+  graph.commandHealth = async () => ({ moduleVersion: 'fixture', instanceId: 'fixture',
+    publicSearchWriteEpoch: '0', publicSearchWriteActive: false,
+    profiles: Object.fromEntries(Object.entries(profileRegistry).map(([name, profile]) => [name, profile.sha256])) });
+  graph.commandWithReceipt = async command => {
+    const insert = command.update.match(/INSERT\s*\{([\s\S]*?)\}\s*WHERE\s*\{/);
+    if (!insert) throw new Error('Expected a bounded proposition INSERT');
+    store.addQuads(new Parser({ format: 'TriG' }).parse(
+      `@prefix rv: <${RV}> . @prefix skos: <${skos}> . ${insert[1]!.replaceAll('?next', position.sequence)}`));
+    return { status: 'committed', position: { datasetId: DATASET, ...position } };
+  };
+  graph.query = async (query): Promise<SparqlResult> => {
+    if (query.includes('ASK')) return { boolean: !query.includes('rv:rejectionKind rv:InvalidProfile') };
+    if (query.includes('?outcome ?digest ?id ?epoch')) {
+      const receipt = query.match(/GRAPH <urn:rezics:graph:receipts>\s*\{\s*<([^>]+)>/)?.[1];
+      if (!receipt) throw new Error('Expected an exact proposition receipt');
+      const fields = { outcome: 'outcome', digest: 'requestDigest', id: 'admissionId',
+        epoch: 'authorityEpoch', scope: 'admittedScope', dataEpoch: 'dataEpoch', sequence: 'sequence',
+        scheme: 'scheme', concept: 'concept', path: 'path', expression: 'expression', sense: 'sense',
+        revision: 'definitionRevision' };
+      const row: ReadRow = {};
+      for (const [field, predicate] of Object.entries(fields)) {
+        const value = store.getObjects(receipt, RV + predicate, GRAPHS.receipts)[0];
+        if (value) row[field] = { type: value.termType === 'NamedNode' ? 'uri' : 'literal', value: value.value };
+      }
+      return { results: { bindings: row.outcome ? [row] : [] } };
+    }
+    const concepts = store.getSubjects(rdfType, skos + 'Concept', GRAPHS.current);
+    if (query.includes('SELECT ?work ?head')) return { results: { bindings: concepts
+      .filter(value => query.includes(`<${value.value}>`)).map(value => {
+        const head = store.getObjects(value, RV + 'head', GRAPHS.current)[0];
+        return { work: binding(value.value), ...(head ? { head: binding(head.value) } : {}) };
+      }) } };
+    if (!query.includes('skos:prefLabel')) throw new Error(`Unexpected proposition read: ${query}`);
+    expect(query).toMatch(/OPTIONAL\s*\{\s*(?:\?concept|<[^>]+>) rv:head \?conceptHead/);
+    expect(query).toContain('rv:assertedConcept');
+    expect(query).toContain('COALESCE(?conceptHead, ?senseHead) AS ?head');
+    expect(query).not.toContain('skos:ConceptScheme, rv:VocabularyDefinition');
+    const selected = /<https:\/\/rezics\.com\/id\/[0-9a-f-]{36}>/.test(query)
+      ? concepts.filter(value => query.includes(`<${value.value}>`)) : concepts;
+    return { results: { bindings: selected.flatMap(value => {
+      const ownHead = store.getObjects(value, RV + 'head', GRAPHS.current)[0];
+      const expression = store.getSubjects(RV + 'assertedConcept', value, GRAPHS.current)[0];
+      const sense = expression && store.getSubjects(RV + 'expression', expression, GRAPHS.current)[0];
+      const senseHead = sense && store.getObjects(sense, RV + 'head', GRAPHS.current)[0];
+      const head = ownHead ?? senseHead;
+      return store.getObjects(value, skos + 'prefLabel', GRAPHS.current).map(label => ({
+        concept: binding(value.value), ...(head ? { head: binding(head.value) } : {}),
+        label: { type: 'literal', value: label.value,
+          'xml:lang': label.termType === 'Literal' ? label.language : '' },
+      }));
+    }) } };
+  };
+  const environment = { fuseki: graph, objectDirectory,
+    lineage: { dataEpoch: position.dataEpoch, routingEpoch: 'routing' } };
+  const app = classificationRoutes(graph, { environment, account: { verify: async () => principal },
+    access: new AccessAdmissionRegistry(pool) } as unknown as MainWorkDependencies).compile();
+  const label = 'Concept created through the v1 propositions API';
+  const response = await app.handle(new Request('http://main.test/v1/classification-propositions', {
+    method: 'POST', headers: { 'content-type': 'application/json', 'idempotency-key': randomUUID() },
+    body: JSON.stringify({ profile: 'classification-proposition-v1', label, actingSubject: actor }),
+  }));
+  expect(response.status).toBe(201);
+  const result = await response.json() as { concept: string; sense: string; scheme: string; definitionRevision: string };
+  expect(store.getObjects(result.concept, RV + 'head', GRAPHS.current)).toEqual([]);
+  expect(store.getObjects(result.scheme, rdfType, GRAPHS.current).map(value => value.value)).toEqual([skos + 'ConceptScheme']);
+  expect(store.getObjects(result.sense, RV + 'head', GRAPHS.current).map(value => value.value)).toEqual([result.definitionRevision]);
+  return { graph, store, value: { id: result.concept, head: result.definitionRevision, label } };
+}
+
+for (const component of ['record', 'name'] as const) {
+  test(`v1-concept-${component}-restriction: propositions API Concepts use their Sense revision in both public resolvers`, async () => {
+    const objectDirectory = mkdtempSync(join(root, '.temp/vocabulary-proposition-'));
+    try {
+      const { graph, store, value } = await createV1Concept(objectDirectory);
+      const f = fixture([value], graph);
+      expect(await readSharedVocabulary(f.session, value.label)).toEqual({
+        profile: 'shared-vocabulary-v1', items: [{ id: value.id, label: value.label }], hasMore: false });
+      const directory = await readRealmDirectory(f.session, { sort: 'newest', topic: value.id });
+      expect(directory.topic?.id).toBe(value.id);
+      expect(directory.topic?.label.value).toBe(value.label);
+      await f.restrict(value, component);
+      expect(await readSharedVocabulary(f.session, value.label)).toEqual({
+        profile: 'shared-vocabulary-v1', items: [], hasMore: false });
+      expect(await topicFailure(f.session, value.id)).toEqual({
+        error: 'WorkReadInvalid', message: 'Topic is unavailable' });
+
+      // A later Concept head takes precedence over the restricted legacy
+      // Sense revision without broadening that exact-revision restriction.
+      value.head = native();
+      store.addQuad(DataFactory.namedNode(value.id), DataFactory.namedNode(RV + 'head'),
+        DataFactory.namedNode(value.head), DataFactory.namedNode(GRAPHS.current));
+      expect((await readSharedVocabulary(f.session, value.label)).items).toEqual([{ id: value.id, label: value.label }]);
+      expect((await readRealmDirectory(f.session, { sort: 'newest', topic: value.id })).topic?.label.value).toBe(value.label);
+      await f.restrict(value, component);
+      expect((await readSharedVocabulary(f.session, value.label)).items).toEqual([]);
+      expect(await topicFailure(f.session, value.id)).toEqual({
+        error: 'WorkReadInvalid', message: 'Topic is unavailable' });
+    } finally { rmSync(objectDirectory, { recursive: true, force: true }); }
+  });
+}
+
+test('v1-concept-missing-revision: a Concept with neither its own nor its Sense head is unavailable in both resolvers', async () => {
+  const objectDirectory = mkdtempSync(join(root, '.temp/vocabulary-proposition-'));
+  try {
+    const { graph, store, value } = await createV1Concept(objectDirectory);
+    store.removeQuads(store.getQuads(null, RV + 'head', null, GRAPHS.current));
+    const f = fixture([value], graph);
+    await expect(readSharedVocabulary(f.session)).rejects.toBeInstanceOf(WorkReadUnavailable);
+    await expect(readRealmDirectory(f.session, { sort: 'newest', topic: value.id })).rejects.toBeInstanceOf(WorkReadUnavailable);
+  } finally { rmSync(objectDirectory, { recursive: true, force: true }); }
+});
 
 test('restricted-concept-unique-label: anonymous vocabulary search omits a committed graph record search fence', async () => {
   const hidden = concept('Unique restricted vocabulary label');

@@ -3,8 +3,20 @@ import { selectDisplayName } from '../display-language/select.ts';
 import { WorkReadInvalid, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 import { DisclosureUnavailable, hasDisclosure } from '../disclosure/read.ts';
 
-/** One bounded scan of active shared vocabulary labels, independent of legacy propositions. */
+/** One bounded scan of active shared vocabulary labels and their definition heads. */
 export const SHARED_VOCABULARY_COST = { concepts: 256, labels: 2048, page: 20 } as const;
+
+/** v1 propositions keep the definition revision on their Sense. Prefer a
+ * Concept's own head so a historical Sense cannot override a newer definition. */
+export function sharedConceptHeadPattern(concept: string) {
+  return `OPTIONAL { ${concept} rv:head ?conceptHead }
+    OPTIONAL {
+      ?sense a rv:ClassificationSense ; rv:expression ?expression ; rv:head ?senseHead .
+      ?expression rv:assertedConcept ${concept} .
+      FILTER NOT EXISTS { ${concept} rv:head ?directHead }
+    }
+    BIND(COALESCE(?conceptHead, ?senseHead) AS ?head)`;
+}
 
 /** Callers already selected active shared Concepts through their graph owner.
  * A label's ordinary availability does not authorize its public discovery. */
@@ -36,9 +48,10 @@ export async function readSharedVocabulary(session: WorkReadSession, query?: str
   if (query !== undefined && !search) throw new WorkReadInvalid('Topic search is empty');
   const rows = await session.query(`PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
     SELECT ?concept ?head ?label WHERE { GRAPH ${iri(GRAPHS.current)} {
-      ?scheme a skos:ConceptScheme, rv:VocabularyDefinition ; rv:schemeState rv:Active .
+      ?scheme a skos:ConceptScheme ; rv:schemeState rv:Active .
       ?concept a skos:Concept ; skos:inScheme ?scheme ; skos:prefLabel ?label ;
-        rv:conceptState rv:Active ; rv:head ?head .
+        rv:conceptState rv:Active .
+      ${sharedConceptHeadPattern('?concept')}
       FILTER NOT EXISTS { ?concept rv:conceptRealm ?realm }
       FILTER NOT EXISTS { ?concept rv:protectionHead ?protection }
     } } LIMIT ${SHARED_VOCABULARY_COST.labels + 1}`, SHARED_VOCABULARY_COST.labels + 1);

@@ -9,7 +9,7 @@ import { realmDirectoryItem } from './contract.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
 import { DisclosureUnavailable, hasDisclosure } from '../disclosure/read.ts';
 import type { RealmDirectorySort } from './index.ts';
-import { visibleSharedConcepts } from './vocabulary.ts';
+import { sharedConceptHeadPattern, visibleSharedConcepts } from './vocabulary.ts';
 export type { RealmDirectorySort } from './index.ts';
 export { searchText } from './source.ts';
 
@@ -31,7 +31,8 @@ export async function readRealmDirectory(session: WorkReadSession,
   if (input.topic) {
     const labels = await session.query(`PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
       SELECT ?head ?label WHERE { GRAPH ${iri(GRAPHS.current)} {
-        ${iri(input.topic)} a skos:Concept ; skos:prefLabel ?label ; rv:head ?head .
+        ${iri(input.topic)} a skos:Concept ; skos:prefLabel ?label .
+        ${sharedConceptHeadPattern(iri(input.topic))}
         FILTER NOT EXISTS { ${iri(input.topic)} rv:conceptRealm ?realm }
         FILTER NOT EXISTS { ${iri(input.topic)} rv:conceptState rv:Retired }
         FILTER NOT EXISTS { ${iri(input.topic)} rv:protectionHead ?protection }

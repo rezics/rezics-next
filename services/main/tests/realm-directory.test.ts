@@ -158,8 +158,8 @@ test('community topics use the current shared vocabulary and match both language
   configureDisclosure(environment, reader);
   const session = { deps: { environment }, displayLanguages: ['zh-CN'],
     disclosure: reader.read, query: async (sparql: string) => {
-    expect(sparql).toContain('rv:VocabularyDefinition');
-    expect(sparql).toContain('rv:head ?head');
+    expect(sparql).toContain('skos:ConceptScheme');
+    expect(sparql).toContain('COALESCE(?conceptHead, ?senseHead) AS ?head');
     return [{ concept: { value: id }, head: { value: head }, label: { value: 'Mystery', 'xml:lang': 'en' } },
       { concept: { value: id }, head: { value: head }, label: { value: '悬疑', 'xml:lang': 'zh-Hans' } }];
   } } as never;
