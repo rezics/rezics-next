@@ -15,6 +15,81 @@ async function expireUserBudget(f: Awaited<ReturnType<typeof accountFixture>>, u
     [userBudgetKey(f.secret, userId)]);
 }
 
+// The unfenced implementation pauses after its stale read. Once verification
+// is serialized, pause before admission so enrollment can finish first.
+function pauseFactorAdmission(userId: string) {
+  let resume = () => {};
+  let entered = () => {};
+  const paused = new Promise<'paused'>(resolve => { entered = () => resolve('paused'); });
+  const released = new Promise<void>(resolve => { resume = resolve; });
+  let intercepted = false;
+  const query = Client.prototype.query;
+  const interception = spyOn(Client.prototype, 'query').mockImplementation(function(this: Client, ...args: unknown[]) {
+    const text = args[0];
+    if (!intercepted && typeof text === 'string' && text.includes('pg_advisory_xact_lock')
+      && Array.isArray(args[1]) && args[1][0] === `account-totp:${userId}`) {
+      intercepted = true;
+      entered();
+      return released.then(() => Reflect.apply(query, this, args));
+    }
+    const result: unknown = Reflect.apply(query, this, args);
+    if (!intercepted && text === 'SELECT verified FROM "twoFactor" WHERE "userId" = $1'
+      && Array.isArray(args[1]) && args[1][0] === userId && result instanceof Promise) {
+      intercepted = true;
+      return result.then(async value => { entered(); await released; return value; });
+    }
+    return result;
+  } as typeof Client.prototype.query);
+  return { paused, resume: () => resume(), restore: () => interception.mockRestore() };
+}
+
+for (const verified of [false, true]) {
+  test(`TOTP admission observes a concurrently enrolled ${verified ? 'verified' : 'unverified'} factor with budget available`, async () => {
+    const f = await accountFixture();
+    let admission: ReturnType<typeof pauseFactorAdmission> | undefined;
+    try {
+      const member = await f.signup(`totp-factor-race-${verified}@example.test`);
+      await f.pool.query('UPDATE "session" SET "createdAt" = now() - interval \'10 minutes\' WHERE "userId" = $1', [member.id]);
+      const otherSession = await f.request('/api/auth/sign-in/email', {
+        email: member.email, password: member.password,
+      });
+      expect(otherSession.status).toBe(200);
+      const freshCookie = cookies(otherSession);
+      const secret = 'deterministic-enrollment-race-secret';
+      admission = pauseFactorAdmission(member.id);
+      const pending = f.request('/api/auth/two-factor/verify-totp', {
+        code: await createOTP(secret).totp(),
+      }, member.cookie);
+      expect(await Promise.race([admission.paused, pending.then(() => 'finished' as const)])).toBe('paused');
+      expect((await f.request('/api/auth/two-factor/enable', {
+        password: member.password,
+      }, freshCookie)).status).toBe(200);
+      await f.pool.query('UPDATE "twoFactor" SET secret = $2 WHERE "userId" = $1',
+        [member.id, await symmetricEncrypt({ key: f.secret, data: secret })]);
+      if (verified) {
+        expect((await f.request('/api/auth/two-factor/verify-totp', {
+          code: await createOTP(secret).totp(),
+        }, freshCookie)).status).toBe(200);
+        await expireUserBudget(f, member.id);
+      }
+      const provider = spyOn(f.auth, 'handler');
+      try {
+        admission.resume();
+        const response = await pending;
+        expect(response.status).toBe(verified ? 200 : 403);
+        if (!verified) {
+          expect(await response.json()).toEqual({ error: 'step_up_required' });
+          expect(provider).not.toHaveBeenCalled();
+        }
+      } finally { provider.mockRestore(); }
+      expect((await f.pool.query('SELECT verified FROM "twoFactor" WHERE "userId" = $1', [member.id])).rows[0].verified).toBe(verified);
+      const budget = await f.pool.query('SELECT count FROM rezics_account_rate_limit WHERE key = $1',
+        [userBudgetKey(f.secret, member.id)]);
+      expect(verified ? budget.rows[0].count : budget.rowCount).toBe(verified ? 1 : 0);
+    } finally { admission?.resume(); admission?.restore(); await f.close(); }
+  }, 60_000);
+}
+
 test('signed-in TOTP guesses share the immutable user reauthentication budget', async () => {
   const f = await accountFixture();
   try {
@@ -178,8 +253,7 @@ test('pending TOTP sign-in exhausts both challenge and account attempt limits', 
 
 test('TOTP verification charges the user budget after a no-factor snapshot races enrollment', async () => {
   const f = await accountFixture();
-  let resume = () => {};
-  let interception: ReturnType<typeof spyOn<Client, 'query'>> | undefined;
+  let admission: ReturnType<typeof pauseFactorAdmission> | undefined;
   try {
     const member = await f.signup('totp-enrollment-race@example.test');
     const otherSession = await f.request('/api/auth/sign-in/email', {
@@ -187,30 +261,11 @@ test('TOTP verification charges the user budget after a no-factor snapshot races
     });
     expect(otherSession.status).toBe(200);
     const secret = 'deterministic-enrollment-race-secret';
-    let entered = () => {};
-    const paused = new Promise<'paused'>(resolve => { entered = () => resolve('paused'); });
-    const released = new Promise<void>(resolve => { resume = resolve; });
-    let intercepted = false;
-    const query = Client.prototype.query;
-    interception = spyOn(Client.prototype, 'query').mockImplementation(function(this: Client, ...args: unknown[]) {
-      const result: unknown = Reflect.apply(query, this, args);
-      if (!intercepted && args[0] === 'SELECT verified FROM "twoFactor" WHERE "userId" = $1'
-        && Array.isArray(args[1]) && args[1][0] === member.id && result instanceof Promise) {
-        intercepted = true;
-        return result.then(async value => {
-          // The query has returned no factor. Keep that result pending while
-          // another authenticated session changes the factor and budget.
-          entered();
-          await released;
-          return value;
-        });
-      }
-      return result;
-    } as typeof Client.prototype.query);
+    admission = pauseFactorAdmission(member.id);
     const pending = f.request('/api/auth/two-factor/verify-totp', {
       code: await createOTP(secret).totp(),
     }, member.cookie);
-    expect(await Promise.race([paused, pending.then(() => 'finished' as const)])).toBe('paused');
+    expect(await Promise.race([admission.paused, pending.then(() => 'finished' as const)])).toBe('paused');
     const otherCookie = cookies(otherSession);
     expect((await f.request('/api/auth/two-factor/enable', {
       password: member.password,
@@ -232,11 +287,11 @@ test('TOTP verification charges the user budget after a no-factor snapshot races
     const count = (await f.pool.query('SELECT count FROM rezics_account_rate_limit WHERE key = $1',
       [userBudgetKey(f.secret, member.id)])).rows[0].count;
     expect(count).toBe(5);
-    resume();
+    admission.resume();
     const response = await pending;
     expect(response.status).toBe(429);
     expect(await response.json()).toEqual({ error: 'rate_limited' });
-  } finally { resume(); interception?.mockRestore(); await f.close(); }
+  } finally { admission?.resume(); admission?.restore(); await f.close(); }
 }, 60_000);
 
 test('TOTP infrastructure failures roll back attempts before a later proof can use them', async () => {
