@@ -273,8 +273,6 @@ public class PersonProfileCallerContractTest {
   }
   private void coauthorProjection(Dataset data) {
     data.begin(ReadWrite.WRITE);try {var graph=data.asDatasetGraph();
-      graph.add(iri("${publicGraph}"),iri("urn:rezics:search:name:policy-state"),rv("complete"),
-        NodeFactory.createLiteralByValue(true,org.apache.jena.datatypes.xsd.XSDDatatype.XSDboolean));
       Node current=iri("${GRAPHS.current}"),revisions=iri("${GRAPHS.revisions}"),pub=iri("${publicGraph}"),work=iri("${work}"),
         main=iri("${main}"),selection=iri("${selection}"),contribution=iri("${contribution}"),decision=iri("${decision}"),draft=iri("${draft}"),unit=iri("${authorUnit}");
       graph.add(current,work,rv("mainVersion"),main);
@@ -307,7 +305,7 @@ public class PersonProfileCallerContractTest {
         graph.add(revisions,revision,RDF.type.asNode(),rv("NativeAgentCreditRevision"));
         graph.add(revisions,revision,rv("component"),credit);graph.add(revisions,revision,rv("agent"),author);
       }
-      PublicNameProjection.refreshPrefixUnit(graph,unit);
+      PublicNameProjection.rebuildPrefix(graph);assertTrue(PublicNameProjection.prefixWalkAvailable(graph));
       graph.deleteAny(current,iri("${person}"),rv("head"),Node.ANY);graph.add(current,iri("${person}"),rv("head"),iri("${head}"));
       data.commit();
     }finally{data.end();}
