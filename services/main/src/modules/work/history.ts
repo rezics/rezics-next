@@ -9,7 +9,7 @@ import { checkedWorkScalarValue, InvalidWorkScalarValue,
   type WorkScalarValue } from './scalar-value.ts';
 import { readMergedIdentity, type MergedIdentity } from '../identity-merge/resolution.ts';
 import { MergeUnavailable } from '../identity-merge/contract.ts';
-import { isRelayTransientFailure } from '../outbox/relay.ts';
+import { isOwnerTransientFailure } from '../../infrastructure/owner-failure.ts';
 
 export class RevisionNotFound extends Error {}
 export class RevisionUnavailable extends Error {}
@@ -164,7 +164,7 @@ export async function readWorkComponentState(
   if (env.workObjects) {
     try { return await readComponentStateFromObjects(env.workObjects, manifestIri, component, profile); }
     catch (error) {
-      if (!(error instanceof RevisionUnavailable) || isRelayTransientFailure(error)) throw error;
+      if (!(error instanceof RevisionUnavailable) || isOwnerTransientFailure(error)) throw error;
     }
     return readComponentState(env.objectDirectory, manifestIri, component, profile, undefined,
       rememberVerifiedImmutableObject);

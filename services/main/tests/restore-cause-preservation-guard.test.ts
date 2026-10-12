@@ -10,6 +10,7 @@ const root = resolve(import.meta.dir, '../../..');
 // Release and released-comparison readers share this closure. Keep the list
 // explicit so moving an owner reader requires reviewing its failure boundary.
 const restoreClosureFiles = [
+  'services/main/src/infrastructure/owner-failure.ts',
   'services/main/src/modules/owner/operations.ts',
   'services/main/src/modules/owner/restore-release-binding.ts',
   'services/main/src/modules/owner/object-coverage.ts',
@@ -122,8 +123,8 @@ test('graph proof catches propagate transport failures before returning a confli
   );
   expect(graphCatches.length).toBeGreaterThan(0);
   for (const caught of graphCatches) {
-    expect(caught.text).toMatch(/if\s*\(isRelayTransientFailure\(error\)\)\s*throw error\s*;/);
-    expect(caught.text.indexOf('isRelayTransientFailure(error)')).toBeLessThan(
+    expect(caught.text).toMatch(/if\s*\(isOwnerTransientFailure\(error\)\)\s*throw error\s*;/);
+    expect(caught.text.indexOf('isOwnerTransientFailure(error)')).toBeLessThan(
       caught.text.search(/\breturn\s+(?:false|['"]conflict['"])\s*;/),
     );
   }
@@ -136,14 +137,18 @@ test('unavailable object fallbacks cannot hide owner transport failures', () => 
     'utf8',
   );
   expect(history).toMatch(
-    /if\s*\(\s*!\(error instanceof RevisionUnavailable\)\s*\|\|\s*isRelayTransientFailure\(error\)\s*\)\s*throw error\s*;/,
+    /if\s*\(\s*!\(error instanceof RevisionUnavailable\)\s*\|\|\s*isOwnerTransientFailure\(error\)\s*\)\s*throw error\s*;/,
   );
   expect(objects).toMatch(
-    /if\s*\(\s*!\(error instanceof ObjectUnavailable\)\s*\|\|\s*isRelayTransientFailure\(error\)\s*\)\s*throw error\s*;/,
+    /if\s*\(\s*!\(error instanceof ObjectUnavailable\)\s*\|\|\s*isOwnerTransientFailure\(error\)\s*\)\s*throw error\s*;/,
   );
 });
 
 test('restore and relay use one cycle-safe evidence classifier', () => {
+  const classifier = readFileSync(resolve(root, 'services/main/src/infrastructure/owner-failure.ts'), 'utf8');
+  // This helper is called by low-level readers; importing domain owners here
+  // would reintroduce their initialization cycle before a restore can start.
+  expect(classifier).not.toMatch(/\bimport\b|\bfrom\s*['"]/);
   expect(isRestoreTransientFailure).toBe(isRelayTransientFailure);
   for (const code of ['ECONNRESET', '57P01', '08006']) {
     expect(

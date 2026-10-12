@@ -17,7 +17,7 @@ import { readComponentState, RevisionCorrupt, RevisionReadBudgetExceeded, Revisi
   type RevisionReadBudget } from '../work/history.ts';
 import type { ResolvedErasureRevision } from './revision-kind.ts';
 import { isValidErasureTargetList } from './journal.ts';
-import { isRelayTransientFailure } from '../outbox/relay.ts';
+import { isOwnerTransientFailure } from '../../infrastructure/owner-failure.ts';
 
 const PUBLIC = 'urn:rezics:search:public';
 const PRIVATE = 'urn:rezics:search:private';
@@ -447,7 +447,7 @@ export async function graphRevisionSuppressed(
         null
       );
     } catch (error) {
-      if (isRelayTransientFailure(error)) throw error;
+      if (isOwnerTransientFailure(error)) throw error;
       return false;
     }
   }

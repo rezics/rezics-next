@@ -46,7 +46,11 @@ for (const site of sites) {
         JSON.stringify({
           commandModule: COMMAND_MODULE_VERSION,
           profiles: [
-            { id: 'retained-profile-v1', sha256: shapeDigest, file: 'shapes/retained.ttl' },
+            {
+              id: 'retained-profile-v1',
+              sha256: shapeDigest,
+              file: 'shapes/retained-profile-v1.ttl',
+            },
           ],
         }),
       );

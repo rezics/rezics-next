@@ -11,7 +11,7 @@ import {
 } from '../../infrastructure/immutable-objects.ts';
 import { GRAPHS, RV } from '../work/activate.ts';
 import { RevisionCorrupt } from '../work/history.ts';
-import { isRelayTransientFailure } from '../outbox/relay.ts';
+import { isOwnerTransientFailure } from '../../infrastructure/owner-failure.ts';
 import { visitModelGenerationArtifacts } from '../semantic/model-custody.ts';
 import { MODEL_COMPONENT, PROFILES } from '../semantic/schema.ts';
 import {
@@ -245,7 +245,7 @@ async function exactBytes(
     } catch (error) {
       if (error instanceof ObjectIntegrityError)
         throw new ObjectRecoveryConflict('immutable object is corrupt', 'corrupt', { cause: error });
-      if (!(error instanceof ObjectUnavailable) || isRelayTransientFailure(error)) throw error;
+      if (!(error instanceof ObjectUnavailable) || isOwnerTransientFailure(error)) throw error;
     }
   }
   let bytes: Buffer;

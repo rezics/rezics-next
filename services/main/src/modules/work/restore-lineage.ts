@@ -1,3 +1,4 @@
+import { isOwnerTransientFailure as isRestoreTransientFailure } from '../../infrastructure/owner-failure.ts';
 import { assertRetainedAuthorityCapture } from '../erasure/authority.ts';
 import type { OwnerRestoreEvidence } from '../erasure/reconcile.ts';
 import { readRetainedNativeGraphSuppressionProof } from '../erasure/custody.ts';
@@ -18,7 +19,7 @@ import { exportAccessErasureRecoveryAttachment,
 import { assertErasureJournalCoreCoverage, createPublicRevisionJournalDeltaVerifier,
   captureErasureJournalCoreCoverage,
   type ErasureJournalCoreCoverage } from '../erasure/core-journal-coverage.ts';
-import { isRelayTransientFailure as isRestoreTransientFailure, relayCoverage, relayCoverageOnClient, relayPrefixCoverageOnClient, type RelayCoverage } from '../outbox/relay.ts';
+import { relayCoverage, relayCoverageOnClient, relayPrefixCoverageOnClient, type RelayCoverage } from '../outbox/relay.ts';
 import { MAIN_RELAY_STREAM_SCOPE, type RelayHandoffPosition } from '../outbox/relay-position.ts';
 import { assertAccountDeletionJournalCoverage } from
   '../outbox/account-deletion-journal.ts';
@@ -335,7 +336,7 @@ export interface RestoredReleaseClients {
 export class RestoreInterrupted extends Error {}
 
 // Restore and relay interpret the same owner transport evidence.
-export { isRelayTransientFailure as isRestoreTransientFailure } from "../outbox/relay.ts";
+export { isOwnerTransientFailure as isRestoreTransientFailure } from '../../infrastructure/owner-failure.ts';
 
 export { accessOutboxCoverage, accessStateCoverage } from './access-recovery-coverage.ts';
 

@@ -1,7 +1,7 @@
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { DATASET, GRAPHS, RV, iri, lit, type GraphLineage } from '../work/activate.ts';
 import { readRestoredGraphReleaseProof, type RestoredGraphReleaseExpectation } from '../work/restore-lineage.ts';
-import { isRelayTransientFailure } from '../outbox/relay.ts';
+import { isOwnerTransientFailure } from '../../infrastructure/owner-failure.ts';
 import {
   graphErasureSuppressed,
   heldGraphLineageSequence,
@@ -75,27 +75,27 @@ export async function replayGraphErasure(
       await suppressHeldGraphContentRevisions(fuseki, erasureId, epoch, revisionIds, held);
       return 'replayed';
     } catch (error) {
-      if (isRelayTransientFailure(error)) throw error;
+      if (isOwnerTransientFailure(error)) throw error;
       return 'conflict';
     }
   }
   try {
     if ((await graphLineageSequence(fuseki, lineage)) === null) return 'conflict';
   } catch (error) {
-    if (isRelayTransientFailure(error)) throw error;
+    if (isOwnerTransientFailure(error)) throw error;
     return 'conflict';
   }
   try {
     if (await graphErasureSuppressed(fuseki, erasureId, epoch, revisionIds)) return 'erased';
   } catch (error) {
-    if (isRelayTransientFailure(error)) throw error;
+    if (isOwnerTransientFailure(error)) throw error;
     return 'conflict';
   }
   if (!replay) return 'conflict';
   try {
     await suppressGraphContentRevisions(fuseki, lineage, erasureId, epoch, revisionIds);
   } catch (error) {
-    if (isRelayTransientFailure(error)) throw error;
+    if (isOwnerTransientFailure(error)) throw error;
     return 'conflict';
   }
   try {
@@ -103,7 +103,7 @@ export async function replayGraphErasure(
       ? 'replayed'
       : 'conflict';
   } catch (error) {
-    if (isRelayTransientFailure(error)) throw error;
+    if (isOwnerTransientFailure(error)) throw error;
     return 'conflict';
   }
 }
@@ -121,7 +121,7 @@ export async function assertGraphErasure(
       await readGraphErasureProof(fuseki, lineage, erasureId, epoch, revisionIds, held);
       return true;
     } catch (error) {
-      if (isRelayTransientFailure(error)) throw error;
+      if (isOwnerTransientFailure(error)) throw error;
       return false;
     }
   }
@@ -140,7 +140,7 @@ export async function assertGraphErasure(
         (await probeHeldGraphErasureProof(fuseki, erasureId, epoch, revisionIds, held)) !== null
       );
     } catch (error) {
-      if (isRelayTransientFailure(error)) throw error;
+      if (isOwnerTransientFailure(error)) throw error;
       return false;
     }
   }
