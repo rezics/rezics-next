@@ -157,6 +157,11 @@ test('Boston cookbook pin parses 46 leading fractions and both ranges; its embed
     const isRange = tokens[1] === 'to' || tokens[1] === 'or';
     expect(qualifier.amountLexical).toBe(expected ? (isRange ? tokens.slice(0, 3).join(' ') : tokens[0]) : undefined);
     expect(qualifier.amount).toEqual(expected);
+    if (expected) {
+      expect(qualifier.textParts).toBeDefined();
+      expect(qualifier.originalText.value.slice(qualifier.textParts!.amount.start, qualifier.textParts!.amount.end))
+        .toBe(qualifier.amountLexical!);
+    } else expect(qualifier.textParts).toBeUndefined();
     expect(qualifier.parseStatus).toBe(expected ? 'partial' : 'unparsed');
     expect(qualifier.amountUpper).toEqual(isRange ? amount(Number(tokens[2])) : undefined);
     const writtenUnit = expected ? tokens[isRange ? 3 : 1] : undefined;

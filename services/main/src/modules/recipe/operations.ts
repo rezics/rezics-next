@@ -6,12 +6,14 @@ export interface ScaledIngredient {
   occurrence: string;
   originalText: string;
   sourceLexical?: string;
+  /** Scaled structured amount, independent of whether a food name can be composed. */
   amount?: ExactRational;
   amountUpper?: ExactRational;
+  /** Registered unit-code label, or the supplied written unit when no code is known. */
   unitText?: string;
   scaled: boolean;
   reason?: 'unparsed' | 'non-linear' | 'not-scalable';
-  /** Full ingredient in the written unit system, with a kitchen-friendly amount. */
+  /** Composed from a supplied name/spans; otherwise the unchanged source line. */
   line: string;
   alternateLine?: string;
   alternateSystem?: 'us' | 'metric';
@@ -38,11 +40,10 @@ export function scaleIngredients(records: readonly OccurrenceRecord[], factor: E
     const line = record.qualifier;
     const sourceAmount = line.amount ? rational(line.amount) : undefined;
     const sourceUpper = line.amountUpper ? rational(line.amountUpper) : undefined;
-    const storedDisplay = line.name === undefined && line.textParts === undefined;
-    const unitText = line.unitText ?? (!storedDisplay && line.unit ? RECIPE_UNIT_DEFINITIONS.get(line.unit) : undefined);
-    const unit = recognizeUnit(unitText, storedDisplay);
+    const unitText = (line.unit ? RECIPE_UNIT_DEFINITIONS.get(line.unit) : undefined) ?? line.unitText;
+    const unit = recognizeUnit(unitText);
     const name = ingredientName(line);
-    const judgment = judgmentOf(name);
+    const judgment = judgmentOf(name ?? line.originalText.value);
     const countOverride = line.scaling === 'not-scalable' && unit?.kind === 'count'
       && line.parseStatus !== 'unparsed' && sourceAmount !== undefined;
     const holdJudgment = Boolean(judgment) && line.scaling === 'linear' && line.parseStatus !== 'unparsed'
@@ -63,7 +64,6 @@ export function scaleIngredients(records: readonly OccurrenceRecord[], factor: E
       ...(reason ? { reason } : {}),
       ...presentQuantity({ original: line.originalText.value, name, ...(unitText ? { unitText } : {}),
         ...(unit ? { unit } : {}), ...(amount ? { amount } : {}), ...(amountUpper ? { amountUpper } : {}),
-        preserveUnitText: !storedDisplay,
         changed: apply && checkedFactor.numerator !== checkedFactor.denominator,
         ...(holdJudgment && judgment ? { judgment } : {}) }) }];
   });

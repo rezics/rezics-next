@@ -1,4 +1,6 @@
 import { expect, spyOn, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import ts from 'typescript-6';
 import * as display from '../src/modules/recipe/display.ts';
 import { exportRecipe } from '../src/modules/recipe/export.ts';
 import * as exchange from '../src/modules/recipe/export.ts';
@@ -17,7 +19,7 @@ interface IngredientCase {
   upper?: Amount;
   unit?: string;
   iri?: string;
-  name: string;
+  name?: string;
   lexical?: string;
   shown: string;
   doubled: string;
@@ -27,8 +29,8 @@ const corpus: readonly IngredientCase[] = [
   { input: '200 克 牛奶', amount: [200, 1], unit: '克', name: '牛奶', lexical: '200', shown: '200 克 牛奶', doubled: '400 克 牛奶' },
   { input: '2 fluid ounces milk', amount: [2, 1], unit: 'fluid ounces', name: 'milk', lexical: '2', shown: '2 fluid ounces milk', doubled: '4 fluid ounces milk' },
   { input: { name: '2 fluid ounces milk', value: 2, unitText: 'fluid ounces' }, amount: [2, 1], unit: 'fluid ounces', name: '2 fluid ounces milk', shown: '2 fluid ounces 2 fluid ounces milk', doubled: '4 fluid ounces 2 fluid ounces milk' },
-  { input: '7up soda', name: '7up soda', shown: '7up soda', doubled: '7up soda' },
-  { input: '3M tape', name: '3M tape', shown: '3M tape', doubled: '3M tape' },
+  { input: '7up soda', shown: '7up soda', doubled: '7up soda' },
+  { input: '3M tape', shown: '3M tape', doubled: '3M tape' },
   { input: { name: '5 spice powder', value: '2', unitText: 'g' }, amount: [2, 1], unit: 'g', name: '5 spice powder', shown: '2 g 5 spice powder', doubled: '4 g 5 spice powder' },
   { input: { name: '½cup flour', value: '1/2', unitText: 'cup' }, amount: [1, 2], unit: 'cup', name: '½cup flour', shown: '½ cup ½cup flour', doubled: '1 cup ½cup flour' },
   { input: { name: '1.5–2 cups cream', value: 1.5, maxValue: 2, unitText: 'cups' }, amount: [3, 2], upper: [2, 1], unit: 'cups', name: '1.5–2 cups cream', shown: '1 ½–2 cups 1.5–2 cups cream', doubled: '3–4 cups 1.5–2 cups cream' },
@@ -37,8 +39,8 @@ const corpus: readonly IngredientCase[] = [
   { input: { name: 'butter', value: '200', unitCode: 'https://qudt.org/vocab/unit/GM' }, amount: [200, 1], iri: 'https://qudt.org/vocab/unit/GM', name: 'butter', shown: '200 g butter', doubled: '400 g butter' },
   { input: { name: '200 g butter', value: 200, unitText: 'g' }, amount: [200, 1], unit: 'g', name: '200 g butter', shown: '200 g 200 g butter', doubled: '400 g 200 g butter' },
   { input: { name: '200g butter', value: 200, unitText: 'g' }, amount: [200, 1], unit: 'g', name: '200g butter', shown: '200 g 200g butter', doubled: '400 g 200g butter' },
-  { input: '200g butter', name: '200g butter', shown: '200g butter', doubled: '200g butter' },
-  { input: '½cup flour', name: '½cup flour', shown: '½cup flour', doubled: '½cup flour' },
+  { input: '200g butter', shown: '200g butter', doubled: '200g butter' },
+  { input: '½cup flour', shown: '½cup flour', doubled: '½cup flour' },
   { input: '½ cup flour', amount: [1, 2], unit: 'cup', name: 'flour', lexical: '½', shown: '½ cup flour', doubled: '1 cup flour' },
   { input: '⅓ cup flour', amount: [1, 3], unit: 'cup', name: 'flour', lexical: '⅓', shown: '⅓ cup flour', doubled: '⅔ cup flour' },
   { input: '¼ cup flour', amount: [1, 4], unit: 'cup', name: 'flour', lexical: '¼', shown: '¼ cup flour', doubled: '½ cup flour' },
@@ -55,11 +57,11 @@ const corpus: readonly IngredientCase[] = [
   { input: '1 升 牛奶', amount: [1, 1], unit: '升', name: '牛奶', lexical: '1', shown: '1 升 牛奶', doubled: '2 升 牛奶' },
   { input: '2 fl oz milk', amount: [2, 1], unit: 'fl oz', name: 'milk', lexical: '2', shown: '2 fl oz milk', doubled: '4 fl oz milk' },
   { input: '1 fluid ounce milk', amount: [1, 1], unit: 'fluid ounce', name: 'milk', lexical: '1', shown: '1 fluid ounce milk', doubled: '2 fluid ounces milk' },
-  { input: 'salt to taste', name: 'salt to taste', shown: 'salt to taste', doubled: 'salt to taste' },
-  { input: 'a handful of herbs', name: 'a handful of herbs', shown: 'a handful of herbs', doubled: 'a handful of herbs' },
-  { input: '  salt to taste\t', name: 'salt to taste', shown: '  salt to taste\t', doubled: '  salt to taste\t' },
-  { input: '3 to 2 cups flour', name: '3 to 2 cups flour', shown: '3 to 2 cups flour', doubled: '3 to 2 cups flour' },
-  { input: '1/0 cup flour', name: '1/0 cup flour', shown: '1/0 cup flour', doubled: '1/0 cup flour' },
+  { input: 'salt to taste', shown: 'salt to taste', doubled: 'salt to taste' },
+  { input: 'a handful of herbs', shown: 'a handful of herbs', doubled: 'a handful of herbs' },
+  { input: '  salt to taste\t', shown: '  salt to taste\t', doubled: '  salt to taste\t' },
+  { input: '3 to 2 cups flour', shown: '3 to 2 cups flour', doubled: '3 to 2 cups flour' },
+  { input: '1/0 cup flour', shown: '1/0 cup flour', doubled: '1/0 cup flour' },
   { input: '200 克糖', amount: [200, 1], name: '克糖', lexical: '200', shown: '200 克糖', doubled: '400 克糖' },
   { input: '200 克́糖', amount: [200, 1], name: '克́糖', lexical: '200', shown: '200 克́糖', doubled: '400 克́糖' },
   { input: '2 fluid ouncesmilk', amount: [2, 1], name: 'fluid ouncesmilk', lexical: '2', shown: '2 fluid ouncesmilk', doubled: '4 fluid ouncesmilk' },
@@ -73,17 +75,6 @@ const corpus: readonly IngredientCase[] = [
   { input: { name: '½–¾ cup flour', value: '½–¾', unitText: 'cup' }, amount: [1, 2], upper: [3, 4], unit: 'cup', name: '½–¾ cup flour', shown: '½–¾ cup ½–¾ cup flour', doubled: '1–1 ½ cups ½–¾ cup flour' },
   { input: { name: '1.50 cups cream', value: 1.5, unitText: 'cups' }, amount: [3, 2], unit: 'cups', name: '1.50 cups cream', shown: '1 ½ cups 1.50 cups cream', doubled: '3 cups 1.50 cups cream' },
   { input: { name: '1.50cups cream', value: '1.5', unitText: 'cups' }, amount: [3, 2], unit: 'cups', name: '1.50cups cream', shown: '1 ½ cups 1.50cups cream', doubled: '3 cups 1.50cups cream' },
-  { input: { text: 'about half cup flour', value: '1/2', amountLexical: 'about half', unitText: 'cup' }, amount: [1, 2], lexical: 'about half', unit: 'cup', name: 'flour', shown: '½ cup flour', doubled: '1 cup flour' },
-  { input: { text: 'flour', value: '1/2', amountLexical: 'about half', unitText: 'cup' }, amount: [1, 2], lexical: 'about half', unit: 'cup', name: 'flour', shown: '½ cup flour', doubled: '1 cup flour' },
-  { input: { text: '200 g butter', value: 200, amountLexical: '200', unitText: 'g' }, amount: [200, 1], lexical: '200', unit: 'g', name: 'butter', shown: '200 g butter', doubled: '400 g butter' },
-  { input: { text: '1 tbsp butter', value: 1, amountLexical: '1', unitText: 'tbsp' }, amount: [1, 1], lexical: '1', unit: 'tbsp', name: 'butter', shown: '1 tablespoon butter', doubled: '2 tablespoons butter' },
-  { input: { text: '1 splash vanilla', value: 1, amountLexical: '1', unitText: 'splash' }, amount: [1, 1], lexical: '1', unit: 'splash', name: 'vanilla', shown: '1 splash vanilla', doubled: '2 splash vanilla' },
-  { input: { text: '1 cup of flour', value: 1, amountLexical: '1', unitText: 'cup' }, amount: [1, 1], lexical: '1', unit: 'cup', name: 'flour', shown: '1 cup flour', doubled: '2 cups flour' },
-  { input: { text: '1½ cups flour', value: '3/2', amountLexical: '1½ cups flour', unitText: 'cups' }, amount: [3, 2], lexical: '1½ cups flour', unit: 'cups', name: 'flour', shown: '1 ½ cups flour', doubled: '3 cups flour' },
-  { input: { text: '1.50 cups cream', value: '3/2', amountLexical: '1.50 cups cream', unitText: 'cups' }, amount: [3, 2], lexical: '1.50 cups cream', unit: 'cups', name: '1.50 cups cream', shown: '1 ½ cups 1.50 cups cream', doubled: '3 cups 1.50 cups cream' },
-  { input: { text: '200 克 牛奶', value: 200, amountLexical: '200', unitText: '克' }, amount: [200, 1], lexical: '200', unit: '克', name: '克 牛奶', shown: '200 克 克 牛奶', doubled: '400 克 克 牛奶' },
-  { input: { text: '200 g butter', value: 200, amountLexical: '200', unitCode: 'https://qudt.org/vocab/unit/GM' }, amount: [200, 1], lexical: '200', iri: 'https://qudt.org/vocab/unit/GM', name: 'g butter', shown: '200 g butter', doubled: '400 g butter' },
-  { input: { text: '200 g butter', value: 200, unitCode: 'https://qudt.org/vocab/unit/GM' }, amount: [200, 1], iri: 'https://qudt.org/vocab/unit/GM', name: '200 g butter', shown: '200 200 g butter', doubled: '400 200 g butter' },
 ];
 const root = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
 const exact = (amount: Amount | undefined) => amount ? { numerator: amount[0], denominator: amount[1] } : undefined;
@@ -100,6 +91,7 @@ function assertCorpus() {
     expect(display.ingredientName(qualifier)).toBe(row.name);
     if (qualifier.textParts) {
       if (row.lexical === undefined) throw new Error('A parsed corpus row must name its exact quantity substring');
+      if (row.name === undefined) throw new Error('A parsed corpus row must record a food name');
       const { amount, name } = qualifier.textParts;
       expect(qualifier.originalText.value.slice(amount.start, amount.end)).toBe(row.lexical);
       expect(qualifier.originalText.value.slice(name.start, name.end)).toBe(row.name);
@@ -119,18 +111,6 @@ function assertCorpus() {
 test('ingredient corpus preserves source names and quantity spans through display, doubling and exchange', () => {
   expect(corpus.length).toBeGreaterThanOrEqual(40);
   assertCorpus();
-});
-
-test('the ingredient corpus kills reintroduced lexical and ASCII word-boundary name stripping', () => {
-  assertCorpus();
-  const mutation = spyOn(display, 'ingredientName').mockImplementation(line => {
-    let name = line.originalText.value;
-    if (line.amountLexical && name.startsWith(line.amountLexical)) name = name.slice(line.amountLexical.length).trim();
-    if (line.unitText) name = name.replace(new RegExp(`^${line.unitText}\\b\\s*`, 'u'), '');
-    return name;
-  });
-  try { expect(assertCorpus).toThrow(); }
-  finally { mutation.mockRestore(); }
 });
 
 test('native projection and hydration retain text spans and empty structured names', async () => {
@@ -185,16 +165,12 @@ function assertIndependentFields() {
     expect(doubled.sourceLexical).toBe(qualifier.amountLexical);
     expect(doubled.amount).toEqual(qualifier.amount ? { numerator: 400n, denominator: 1n } : undefined);
     expect(doubled.amountUpper).toEqual(qualifier.amountUpper ? { numerator: 600n, denominator: 1n } : undefined);
-    // Literal previous-Main display outcomes for every old-shape subset; an IRI alone
-    // did not supply a display label, while written unit text did. Do not recalculate
-    // these expectations with the current locator or presenter.
-    const previousLines = [
-      '200 g butter', '200 g butter', '400–600 200 g butter', '400–600 g butter',
-      '200 g butter', '200 g butter', '400–600 200 g butter', '400–600 g butter',
-      '200 g butter', '200 g butter', '400–600 g 200 g butter', '400–600 g butter',
-      '200 g butter', '200 g butter', '400–600 g 200 g butter', '400–600 g butter',
-    ];
-    if (mask < previousLines.length) expect(doubled.line).toBe(previousLines[mask]!);
+    expect(doubled.originalText).toBe(qualifier.originalText.value);
+    expect(doubled.unitText).toBe(qualifier.unit || qualifier.unitText ? 'g' : undefined);
+    if (qualifier.name === undefined && qualifier.textParts === undefined) {
+      expect(doubled.line).toBe(qualifier.originalText.value);
+      expect(doubled.alternateLine).toBeUndefined();
+    }
   }
 }
 
@@ -214,7 +190,7 @@ test('the independent field table kills an exporter that gates lexical wording o
   finally { mutation.mockRestore(); }
 });
 
-test('a literal qualifier written by previous Main keeps its display and exact exchange fields', () => {
+test('a literal qualifier written by previous Main returns source and scaled facts separately', () => {
   // Generated by importRecipe({ recipeIngredient: ['200 g butter'] }, 'previous-main') from
   // Main 952e290702fc6718f15a4bfe574846b34015b917, before source spans were introduced.
   // This JSON is deliberately not rebuilt with the current importer or a new-shape factory.
@@ -231,10 +207,123 @@ test('a literal qualifier written by previous Main keeps its display and exact e
   }`) as IngredientLine;
   const record = storedLine(qualifier);
   expect(scaleIngredients([record], { numerator: 1n, denominator: 1n })[0]?.line).toBe('200 g butter');
-  expect(scaleIngredients([record], { numerator: 2n, denominator: 1n })[0]?.line).toBe('400 g butter');
+  expect(scaleIngredients([record], { numerator: 2n, denominator: 1n })[0]).toMatchObject({
+    line: '200 g butter', originalText: '200 g butter', amount: { numerator: 400n, denominator: 1n }, unitText: 'g',
+  });
   const recipe = exportRecipe([record], root).recipe;
   expect(recipe.recipeIngredient[0]).toMatchObject({ text: '200 g butter', amountLexical: '200', value: '200', unitText: 'g' });
   expect(recipe.recipeIngredient[0]).not.toHaveProperty('textParts');
   expect(parseRecipeFile(Buffer.from(JSON.stringify(recipe)), 'application/ld+json').preview.ingredients[0]?.qualifier)
     .toEqual(qualifier);
+});
+
+test('ingredient views keep quantity fields separate from source text in both supported shapes', () => {
+  const cases: readonly { source: Record<string, unknown> & { text: string }; amount: Amount;
+    unit: string; composed: string; doubled: string; name?: string }[] = [
+    { source: { text: '1.50 cups cream', value: 1.5, amountLexical: '1.5', unitText: 'cups' },
+      amount: [3, 2], unit: 'cups', composed: '1 ½ cups cream', doubled: '3 cups cream' },
+    { source: { text: '200 克 牛奶', value: 200, amountLexical: '200', unitText: '克' },
+      amount: [200, 1], unit: '克', composed: '200 克 牛奶', doubled: '400 克 牛奶' },
+    { source: { text: 'butter', value: 200, unitCode: 'https://qudt.org/vocab/unit/GM' },
+      amount: [200, 1], unit: 'g', name: 'butter', composed: '200 g butter', doubled: '400 g butter' },
+    { source: { text: '100 毫升 牛奶', value: 100, unitText: '毫升' },
+      amount: [100, 1], unit: '毫升', composed: '100 毫升 牛奶', doubled: '200 毫升 牛奶' },
+    { source: { text: '2.0 cups cream', value: 2, amountLexical: '2', unitText: 'cups' },
+      amount: [2, 1], unit: 'cups', composed: '2 cups cream', doubled: '4 cups cream' },
+    { source: { text: '0.50 cup flour', value: 0.5, amountLexical: '0.5', unitText: 'cup' },
+      amount: [1, 2], unit: 'cup', composed: '½ cup flour', doubled: '1 cup flour' },
+    { source: { text: '7up soda', value: 2, amountLexical: '7', unitText: 'cups' },
+      amount: [2, 1], unit: 'cups', name: '7up soda', composed: '2 cups 7up soda', doubled: '4 cups 7up soda' },
+    { source: { text: '', value: 200, unitCode: 'https://qudt.org/vocab/unit/GM' },
+      amount: [200, 1], unit: 'g', name: '', composed: '200 g', doubled: '400 g' },
+    { source: { text: 'about half cup flour', value: '1/2', amountLexical: 'about half', unitText: 'cup' },
+      amount: [1, 2], unit: 'cup', name: 'flour', composed: '½ cup flour', doubled: '1 cup flour' },
+    { source: { text: 'butter', value: 200, unitCode: 'https://qudt.org/vocab/unit/GM', unitText: 'cups' },
+      amount: [200, 1], unit: 'g', name: 'butter', composed: '200 g butter', doubled: '400 g butter' },
+  ];
+  for (const row of cases) {
+    const sourceOnly = importRecipe({ recipeIngredient: [row.source] }, root).ingredients[0]!.qualifier;
+    const parts = row.name === undefined
+      ? importRecipe({ recipeIngredient: [row.source.text] }, root).ingredients[0]!.qualifier.textParts : undefined;
+    const composed: IngredientLine = { ...sourceOnly,
+      ...(row.name !== undefined ? { name: row.name } : { textParts: parts }) };
+    expect(composed.name !== undefined || composed.textParts !== undefined).toBe(true);
+    for (const [index, qualifier] of [sourceOnly, composed].entries()) {
+      checkOccurrenceQualifier(qualifier);
+      const record = storedLine(qualifier);
+      const recipe = exportRecipe([record], root).recipe;
+      const after = parseRecipeFile(Buffer.from(JSON.stringify(recipe)), 'application/ld+json').preview.ingredients[0]!.qualifier;
+      expect(after).toEqual(qualifier);
+      for (const factor of [1n, 2n]) {
+        const view = scaleIngredients([record], { numerator: factor, denominator: 1n })[0]!;
+        expect(view.originalText).toBe(row.source.text);
+        expect(view.amount).toBeDefined();
+        expect(view.amount!.numerator * BigInt(row.amount[1]))
+          .toBe(BigInt(row.amount[0]) * factor * view.amount!.denominator);
+        expect(view.unitText).toBe(row.unit);
+        expect(view.sourceLexical).toBe(qualifier.amountLexical);
+        expect(view.line).toBe(index === 0 ? row.source.text : factor === 1n ? row.composed : row.doubled);
+        if (index === 0) expect(view.alternateLine).toBeUndefined();
+        expect(scaleIngredients([storedLine(after)], { numerator: factor, denominator: 1n })[0]).toEqual(view);
+      }
+    }
+  }
+});
+
+function assertNoOriginalTextSurgery(source: string) {
+  const file = ts.createSourceFile('recipe-view.ts', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const aliases = new Set(['originalText', 'original', 'source']);
+  const isOriginal = (node: ts.Expression): boolean => {
+    if (ts.isIdentifier(node)) return aliases.has(node.text);
+    if (ts.isParenthesizedExpression(node) || ts.isAsExpression(node) || ts.isNonNullExpression(node)) return isOriginal(node.expression);
+    if (ts.isCallExpression(node)) return isOriginal(node.expression) || node.arguments.some(isOriginal);
+    if (ts.isPropertyAccessExpression(node)) return node.name.text === 'originalText'
+      || node.name.text === 'original' || isOriginal(node.expression);
+    if (ts.isElementAccessExpression(node)) return ts.isStringLiteral(node.argumentExpression)
+      && ['originalText', 'original'].includes(node.argumentExpression.text) || isOriginal(node.expression);
+    return false;
+  };
+  const gather = (node: ts.Node) => {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer && isOriginal(node.initializer)) {
+      aliases.add(node.name.text);
+    }
+    ts.forEachChild(node, gather);
+  };
+  gather(file);
+  const visit = (node: ts.Node, functionName?: string) => {
+    if (ts.isFunctionDeclaration(node)) functionName = node.name?.text;
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)
+      && ['startsWith', 'replace', 'replaceAll', 'slice', 'substring', 'substr', 'split'].includes(node.expression.name.text)
+      && isOriginal(node.expression.expression)) {
+      const allowed = functionName === 'ingredientNameFromSpans' && node.expression.name.text === 'slice'
+        && node.expression.expression.getText(file) === 'originalText'
+        && node.arguments.length === 2 && node.arguments[0]!.getText(file) === 'span.start'
+        && node.arguments[1]!.getText(file) === 'span.end';
+      if (!allowed) throw new Error(`Original text surgery: ${node.getText(file)}`);
+    }
+    ts.forEachChild(node, child => visit(child, functionName));
+  };
+  visit(file);
+}
+
+test('display and scaling allow only the named recorded-span slice of original text', () => {
+  for (const module of ['display', 'operations']) {
+    assertNoOriginalTextSurgery(readFileSync(new URL(`../src/modules/recipe/${module}.ts`, import.meta.url), 'utf8'));
+  }
+  for (const expression of [
+    'line.originalText.value.startsWith(line.amountLexical)',
+    'line.originalText.value.slice(line.amountLexical.length)',
+    "line.originalText.value.replace(/^200\\b/, '')",
+    "original.replace(/^克\\b/, '')",
+    'source.slice(1)',
+    'source.toLowerCase().startsWith(line.amountLexical)',
+  ]) {
+    expect(() => assertNoOriginalTextSurgery(`function read(line) {
+      const original = line.originalText.value; const source = original; return ${expression};
+    }`)).toThrow('Original text surgery');
+  }
+  expect(() => assertNoOriginalTextSurgery('function ingredientNameFromSpans(originalText, span) { return originalText.slice(span.start, span.end); }'))
+    .not.toThrow();
+  expect(() => assertNoOriginalTextSurgery('function ingredientNameFromSpans(originalText, span) { return originalText.slice(1); }'))
+    .toThrow('Original text surgery');
 });

@@ -53,13 +53,13 @@ The subsequent review made field independence explicit:
 
 | Qualifier field | Stored when | Export | Intake | Display and scaling use |
 | --- | --- | --- | --- | --- |
-| `amountLexical` | Supplied or parsed | Emit whenever stored, regardless of spans | Keep supplied wording | Locate its source substring when spans are absent |
+| `amountLexical` | Supplied or parsed | Emit whenever stored, regardless of spans | Keep supplied wording | Expose source wording; never use it to infer or strip food text |
 | `amount`, `amountUpper` | Supplied or parsed | Emit exact values | One scalar/range validator | Derive the scaled amount |
 | `unitCode`, `unitText` | Supplied or parsed | Emit; registry determines inert unit importability | Validate the unit | Use its display label |
 | `name` | Structured name supplied verbatim | Emit when present, including empty | Keep verbatim | Use as the food name when present |
 | `textParts` | Recorded when parsing retained text | Emit when present | Keep when valid for source text | Use the recorded food-name remainder |
 
-Spans are an optimization, not a prerequisite for any other field. Qualifier
+Spans are recorded facts, not a prerequisite for any other field. Qualifier
 validation permits valid spans without lexical, amount or unit fields, and a
 verbatim name can coexist with them. Supplied fields are neither manufactured
 from spans nor silently omitted because spans are absent.
@@ -86,20 +86,34 @@ into retained text. Opening an unparsed line exposes the whole food text; a
 no-op save preserves it, and editing the quantity does not remove food text.
 
 Native qualifier storage and exchange preserve `name` and `textParts`; Structure
-validates span bounds and their correspondence to source lexical and unit text.
+validates span bounds and ordering against the retained source text. Quantity
+wording and unit annotations remain independent of the recorded source spans.
 The Recipe projection retains these as `rv:ingredientName` and the bounded
-`rv:ingredientTextParts` JSON literal. One source locator produces spans at parse
-time and derives offsets for older stored lines when recorded spans are absent:
-locate the stored lexical, then the written unit. When they cannot be located,
-the same locator retains the previous stored-line name derivation. It never
-rewrites retained text or a supplied structured name. Inference retains the
-old stored-line prefix, unit-alias and fallback semantics, including its former
-whitespace grammar for a lexical containing the whole line. Older qualifiers
-also retain their existing unit-label display, rather than acquiring a different
-label just because new registry aliases were added. Thus `200 g butter` with
-lexical `200` and unit `g`, but no name/spans, doubles to `400 g butter`;
-`about half cup flour` with lexical `about half` retains that exact wording
-through exchange while displaying `½ cup flour` and doubling to `1 cup flour`.
+`rv:ingredientTextParts` JSON literal.
+
+The final Program decision replaces the spanless inference design entirely.
+Display never locates wording, strips a prefix, or reparses retained text. Its
+only source slice is the named `ingredientNameFromSpans` helper, using the
+recorded food-name offsets. It composes a line only from that food name or an
+explicit structured name, the numeric amount and the unit label. A registered
+`unitCode` always supplies its registry label; otherwise the written `unitText`
+supplies the label. Neither depends on optional name/spans.
+
+For an old qualifier with neither a name nor spans, the existing view fields
+remain separate: `originalText` and `line` both retain the unchanged original
+line, `amount`/`amountUpper` carry exact scaled values, `unitText` carries the
+resolved label, and `sourceLexical` carries stored wording. Thus doubling old
+`1.50 cups cream` returns that unchanged line plus amount `3` and unit `cups`;
+doubling old `200 克 牛奶` returns that line plus amount `400` and unit `克`.
+`text: "butter", value: 200, unitCode: "https://qudt.org/vocab/unit/GM"` returns
+the unchanged line `butter` plus scaled amount `400` and label `g`. A renderer
+shows the separate fields; it must not manufacture a food name from the line.
+The API field names stay stable for the separate Launch editor adoption.
+
+There is no production data requiring a compatibility reader or migration.
+Retained recipe corpora, including the thirty Gutenberg recipes, are re-imported
+with the importer that records spans. Unrecognized quantities remain untouched
+source lines with no invented amount or food-name span.
 
 The exporter returns `{ recipe, residuals, sourceObservations, importability }`; the file is
 `recipe`. Residuals and original source observation identifiers are sidecar

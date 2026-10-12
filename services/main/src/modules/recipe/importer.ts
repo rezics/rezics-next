@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { OccurrenceRecord } from '../structure/format.ts';
 import { isStructureUnitReference, checkOccurrenceQualifier, checkIngredientTextParts } from '../structure/format.ts';
-import { deriveIngredientTextParts, type RecipeUnitImportability } from './display.ts';
+import { matchRecipeUnit, type RecipeUnitImportability } from './display.ts';
 
 export interface ImportedIngredient {
   sourceKey: string;
@@ -122,9 +122,6 @@ const amountToken = String.raw`(?:${fractionToken}|\d+\.\d+|\d+)`;
 const amountEnd = String.raw`(?=$|[^\p{L}\p{N}])`;
 const amountPrefix = new RegExp(String.raw`^(\s*)(${amountToken})${amountEnd}`, 'u');
 const rangePrefix = new RegExp(String.raw`^(\s*)(${amountToken})(?:\s+(?:to|or)\s+|\s*[-–]\s*)(${amountToken})${amountEnd}`, 'u');
-const storedToken = String.raw`(?:${fractionToken}|\d+)`;
-const storedAmountPrefix = new RegExp(String.raw`^(\s*)(${storedToken})(?=\s|$)`, 'u');
-const storedRangePrefix = new RegExp(String.raw`^(\s*)(${storedToken})(?:\s+(?:to|or)\s+|\s*[-–]\s*)(${storedToken})(?=\s|$)`, 'u');
 
 interface ExactAmount { numerator: number; denominator: number }
 interface ParsedAmount {
@@ -161,8 +158,8 @@ function exactAmount(lexical: string): ExactAmount | undefined {
   return { numerator: Number(numerator / divisor), denominator: Number(denominator / divisor) };
 }
 
-function ingredientAmount(lexical: string, storedWholeLine = false): ParsedAmount | undefined {
-  const range = (storedWholeLine ? storedRangePrefix : rangePrefix).exec(lexical);
+function ingredientAmount(lexical: string): ParsedAmount | undefined {
+  const range = rangePrefix.exec(lexical);
   if (range) {
     const amount = exactAmount(range[2]!);
     const amountUpper = exactAmount(range[3]!);
@@ -172,7 +169,7 @@ function ingredientAmount(lexical: string, storedWholeLine = false): ParsedAmoun
     return { amount, amountUpper, span, amountLexical: lexical.slice(span.start, span.end),
       remainder: lexical.slice(span.end) };
   }
-  const match = (storedWholeLine ? storedAmountPrefix : amountPrefix).exec(lexical);
+  const match = amountPrefix.exec(lexical);
   if (!match) return undefined;
   // A failed range must not fall back to its lower endpoint as a scalar amount.
   const remainder = lexical.slice(match[0].length);
@@ -182,15 +179,15 @@ function ingredientAmount(lexical: string, storedWholeLine = false): ParsedAmoun
   return amount ? { amount, span, amountLexical: lexical.slice(span.start, span.end), remainder } : undefined;
 }
 
-/** Locate a quantity in old whole-line lexicals using the owner's former whitespace grammar. */
-export function ingredientAmountLexical(value: string): string | undefined {
-  return ingredientAmount(value, true)?.amountLexical;
-}
-
 function ingredient(value: string, sourceKey: string): ImportedIngredient {
   const parsed = ingredientAmount(value);
-  const located = parsed ? deriveIngredientTextParts(value, parsed.amountLexical, undefined, parsed.span) : undefined;
-  const textParts = located?.textParts;
+  const afterSpace = (start: number) => {
+    while (start < value.length && /\s/u.test(value[start]!)) start++;
+    return start;
+  };
+  const unitSpan = parsed ? matchRecipeUnit(value, afterSpace(parsed.span.end)) : undefined;
+  const textParts = parsed ? { amount: parsed.span, ...(unitSpan ? { unit: unitSpan } : {}),
+    name: { start: afterSpace(unitSpan?.end ?? parsed.span.end), end: value.length } } : undefined;
   const unitText = textParts?.unit ? value.slice(textParts.unit.start, textParts.unit.end) : undefined;
   return { sourceKey, qualifier: { type: 'ingredient-line', originalText: { value, language: 'en' },
     ...(parsed ? { amountLexical: parsed.amountLexical, textParts } : {}),
