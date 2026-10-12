@@ -50,7 +50,13 @@ export async function settleChangedAuthentication(auth: AuthenticationProvider, 
     await db.query('COMMIT');
   } catch (error) { await db.query('ROLLBACK'); throw error; }
   finally { if (!held) db.release(); }
-  for (const token of evidence.issuedTokens) await provider.internalAdapter.deleteSession(token);
+  for (const token of evidence.issuedTokens) {
+    try { await provider.internalAdapter.deleteSession(token); }
+    catch {
+      // Native retirement and the pending marker have committed. Maintenance
+      // owns the remaining cleanup; its outage cannot change the settled denial.
+    }
+  }
 }
 
 /** Order factor verification and session creation against recovery. A password

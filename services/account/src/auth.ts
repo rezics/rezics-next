@@ -97,6 +97,8 @@ function accountVerification(config: AccountConfig, owners: SessionOwners) {
         if (!ownerDb?.isTransaction) throw new APIError('SERVICE_UNAVAILABLE');
         await sql`SET LOCAL lock_timeout = '2s'`.execute(ownerDb);
         await sql`SET LOCAL statement_timeout = '5s'`.execute(ownerDb);
+        // The inherited deletion fence resolves this ambient adapter, so any
+        // replaced session's terminal stamp and event share this transaction.
         const internalAdapter = { ...ctx.context.internalAdapter,
           findUserByEmail: async (...args: Parameters<typeof ctx.context.internalAdapter.findUserByEmail>) => {
             const selected = await ctx.context.internalAdapter.findUserByEmail(...args);

@@ -200,7 +200,7 @@ for (const issuer of ['http://issuer.test', 'https://issuer.test', 'HTTPS://issu
   }, 60_000);
 }
 
-for (const retirementLookup of ['available', 'failed-once'] as const)
+for (const retirementLookup of ['available', 'failed-once', 'pool-exhausted'] as const)
 test(`post-provider subject replacement retires issuance with ${retirementLookup} provider lookup and records both failures`, async () => {
   const f = await issuerFixture('https://issuer.test');
   const admission = pause();
@@ -211,6 +211,7 @@ test(`post-provider subject replacement retires issuance with ${retirementLookup
   let providerIssuedCookie = '';
   let providerIssuedToken: string | undefined;
   let failedLookups = 0;
+  let cleanupFailures = 0;
   let retirementBeforeCleanup: unknown[] = [];
   let failuresBeforeCleanup: unknown[] = [];
   let pending: Promise<Response> | undefined;
@@ -231,6 +232,7 @@ test(`post-provider subject replacement retires issuance with ${retirementLookup
     const sessionsBefore = await liveSessions();
     const signInsBefore = (await f.pool.query(`SELECT id FROM rezics_account_security_event
       WHERE user_id IN ($1, $2) AND action = 'sign_in' ORDER BY id`, [a.id, b.id])).rows;
+    const fencedDeleteSession = context.internalAdapter.deleteSession;
     const handler = f.auth.handler;
     provider = spyOn(f.auth, 'handler').mockImplementation(async request => {
       if (new URL(request.url).pathname === '/api/auth/two-factor/verify-totp') {
@@ -268,6 +270,25 @@ test(`post-provider subject replacement retires issuance with ${retirementLookup
           WHERE user_id IN ($1, $2) AND action = 'sign_in_failed'
             AND detail->>'reason' = 'provider_subject_changed' ORDER BY user_id`,
         [a.id, b.id])).rows;
+        if (retirementLookup === 'pool-exhausted') {
+          // Native retirement has committed on the request's held client.
+          // Exhaust the real owner pool before cleanup borrows another one.
+          const maximum = f.pool.options.max;
+          const timeout = f.pool.options.connectionTimeoutMillis;
+          f.pool.options.max = f.pool.totalCount;
+          f.pool.options.connectionTimeoutMillis = 250;
+          const blockers = [];
+          try {
+            while (f.pool.idleCount > 0) blockers.push(await f.pool.connect());
+            expect(f.pool.waitingCount).toBe(0);
+            try { return await fencedDeleteSession(token); }
+            catch (error) { cleanupFailures++; throw error; }
+          } finally {
+            for (const blocker of blockers) blocker.release();
+            f.pool.options.max = maximum;
+            f.pool.options.connectionTimeoutMillis = timeout;
+          }
+        }
       }
       return deleteSession(token);
     };
@@ -290,6 +311,7 @@ test(`post-provider subject replacement retires issuance with ${retirementLookup
     expect(await f.auth.api.getSession({ headers: new Headers({ cookie: providerIssuedCookie }) })).toBeNull();
     expect(await (await f.request('/api/auth/get-session', undefined, providerIssuedCookie)).json()).toBeNull();
     expect(failedLookups).toBe(retirementLookup === 'failed-once' ? 1 : 0);
+    expect(cleanupFailures).toBe(retirementLookup === 'pool-exhausted' ? 1 : 0);
     expect(retirementBeforeCleanup).toEqual([{ rezics_generation: null }]);
     expect(failuresBeforeCleanup).toEqual([a.id, b.id].sort().map(user_id => ({ user_id })));
     expect((await f.pool.query('SELECT session_cleanup_pending FROM rezics_account_security WHERE user_id = $1',
