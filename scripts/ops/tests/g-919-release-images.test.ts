@@ -98,6 +98,9 @@ function fixture() {
     'generated/openapi/main/public.json',
     'generated/query/templates.ts',
     'generated/model/manifest.json',
+    'model/compiler/registry.ts',
+    'model/compiler/outputs.ts',
+    'model/compiler/ir.ts',
     'yarn.lock',
     '.yarnrc.yml',
     'infra/release/Dockerfile',
@@ -182,6 +185,8 @@ test('G-919 production context follows transitive, optional, peer and cyclic wor
   expect(existsSync(join(options.context, 'apps/frontend/package.json'))).toBe(true);
   expect(existsSync(join(options.context, 'generated/openapi/main/public.json'))).toBe(true);
   expect(existsSync(join(options.context, 'generated/query/templates.ts'))).toBe(true);
+  for (const path of ['model/compiler/registry.ts', 'model/compiler/outputs.ts', 'model/compiler/ir.ts'])
+    expect(existsSync(join(options.context, path))).toBe(true);
   expect(existsSync(join(options.context, 'scripts/lib/migration-order.ts'))).toBe(true);
   expect(existsSync(join(options.context, 'scripts/lib/concurrent-index.ts'))).toBe(true);
   expect(existsSync(join(options.context, 'scripts/ops/postgres-preflight.ts'))).toBe(true);

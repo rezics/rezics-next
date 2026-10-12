@@ -47,6 +47,9 @@ const runtimeWorkspaceRoots = [
   'packages/zone-sdk',
 ];
 export const runtimeArtifacts = [
+  'model/compiler/registry.ts',
+  'model/compiler/outputs.ts',
+  'model/compiler/ir.ts',
   'scripts/ops/migrate.ts',
   'scripts/ops/postgres-preflight.ts',
   'scripts/ops/production-env.ts',
