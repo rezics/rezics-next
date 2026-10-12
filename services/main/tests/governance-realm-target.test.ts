@@ -4,11 +4,14 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } f
 import { join, resolve } from 'node:path';
 import type { PoolClient } from 'pg';
 import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
+import { authoredProfiles } from '../../../model/compiler/generate.ts';
+import { expand } from '../../../model/compiler/outputs.ts';
 import { loadDockerEnvironment } from '../../../scripts/load/docker-env.ts';
 import type { ContentModeration } from '../../content/src/moderation.ts';
 import type { CommandEnvelope } from '../src/infrastructure/fuseki.ts';
 import { graphNoticeParticipants, ownerModerationEffects, restrictionOwners } from '../src/modules/governance/effects.ts';
-import { ownerEvidenceCapture, ownerTargetHeads } from '../src/modules/governance/evidence.ts';
+import { governanceGraphTypes, governanceGraphTargetKinds, ownerEvidenceCapture, ownerTargetHeads }
+  from '../src/modules/governance/evidence.ts';
 import { prepareDecisionNotices, unrecordedReasons } from '../src/modules/governance/notices.ts';
 import { GovernanceConflict, GovernanceStale, GovernanceUnavailable,
   type DecisionTargetInput } from '../src/modules/governance/store.ts';
@@ -38,6 +41,26 @@ const literal = (value: string) => ({ type: 'literal' as const, value });
 const target = (expectedHead = head): DecisionTargetInput => ({
   owner: 'graph', resource: realm, component: 'record', locator: null,
   scopeKind: 'component', revision: null, expectedHead, effect: 'disclosure',
+});
+
+test('every authored model class and canonical owner has a Governance type role', () => {
+  const table = new Map(governanceGraphTypes.map(entry => [entry.type, entry.role]));
+  expect(table.size).toBe(governanceGraphTypes.length);
+  for (const definition of authoredProfiles) {
+    const prefixes = new Map(definition.prefixes);
+    for (const shape of definition.shapes) {
+      const declared = [...shape.canonical?.types ?? [],
+        ...[shape.properties, ...shape.or ?? []].flatMap(properties => properties
+          .filter(property => property.path === 'rdf:type')
+          .flatMap(property => [...property.in ?? [], ...property.hasValue ? [property.hasValue] : []])),
+      ];
+      for (const type of declared) expect(table.has(expand(type, prefixes))).toBe(true);
+    }
+  }
+  expect(table.get('https://schema.org/CreativeWork')).toBe('PRIMARY');
+  expect(table.get('http://www.w3.org/2004/02/skos/core#ConceptScheme')).toBe('PRIMARY');
+  expect(table.get(`${RV}Character`)).toBe('DESCRIPTIVE');
+  expect(table.get(`${RV}Role`)).toBe('DESCRIPTIVE');
 });
 
 /** The owner simulator retains committed receipts independently of response delivery.
@@ -234,6 +257,27 @@ for (const kind of ['https://schema.org/CreativeWork', `${RV}Agent`, `${RV}Zone`
   });
 }
 
+for (const description of [`${RV}Character`, `${RV}Role`, 'http://www.w3.org/2000/01/rdf-schema#Resource']) {
+  test(`Work ownership ignores the attached descriptive type ${description}`, async () => {
+    const f = graph();
+    f.state.kind = 'https://schema.org/CreativeWork';
+    f.state.extraKinds.push(description);
+    expect(await ownerTargetHeads({ graph: f.env }).realmBasis(target())).toBeNull();
+  });
+  test(`Realm ownership ignores the attached descriptive type ${description}`, async () => {
+    const f = graph();
+    f.state.extraKinds.push(description);
+    expect((await ownerTargetHeads({ graph: f.env }).realmBasis(target()))?.realm).toBe(realm);
+  });
+}
+
+test('unknown graph types refuse classification instead of disappearing from discovery', async () => {
+  const f = graph();
+  f.state.extraKinds.push('https://example.org/UnknownOwner');
+  await expect(ownerTargetHeads({ graph: f.env }).realmBasis(target()))
+    .rejects.toBeInstanceOf(GovernanceUnavailable);
+});
+
 for (const [name, mutate] of [
   ['head advance', (f: ReturnType<typeof graph>) => { f.state.head = laterHead; }],
   ['retirement', (f: ReturnType<typeof graph>) => { f.state.active = false; }],
@@ -304,7 +348,8 @@ test('Realm profile and type discovery remain within the bounded owner read budg
   const f = graph();
   await ownerTargetHeads({ graph: f.env }).realmBasis!(target());
   expect(f.reads).toHaveLength(2);
-  expect(f.reads.every(({ sql, maximum }) => sql.includes('LIMIT 2') && maximum === 2048)).toBe(true);
+  expect(f.reads[0]).toMatchObject({ sql: expect.stringContaining('LIMIT 65'), maximum: 16_384 });
+  expect(f.reads[1]).toMatchObject({ sql: expect.stringContaining('LIMIT 2'), maximum: 2048 });
 });
 
 test('Realm Space owner notice discovery resumes over fifty controllers without reminting credentials', async () => {
@@ -409,7 +454,6 @@ test('emitted Realm commands enforce authored SHACL and atomic guards in native 
     ['duplicate-head', change('', `<${realm}> rv:head <${laterHead}> .`)],
     ['retired', change(`<${realm}> rv:realmState rv:Active .`, `<${realm}> rv:realmState rv:Retired .`)],
     ['wrong-kind', change(`<${realm}> a rv:Realm .`, `<${realm}> a rv:Agent .`)],
-    ['competing-primary-kind', change('', `<${realm}> a rv:Agent .`)],
     ['nonreciprocal', change(`<${space}> rv:realmCapability <${realm}> .`)],
     ['duplicate-space', change('', `<${realm}> rv:space <${space}-other> .`)],
     ['duplicate-reciprocal-space', change('', `<${space}-other> rv:realmCapability <${realm}> .`)],
@@ -419,6 +463,18 @@ test('emitted Realm commands enforce authored SHACL and atomic guards in native 
     ['missing-space-profile', change(`<${space}> rv:definitionProfile <${profile(3)}> .`)],
   ]) cases.push({ name, command: declaredCommand, seed: seed(3, true), mutation,
     expected: 'guard-unmatched' });
+  // Each mutation is applied after ownerTargetHeads supplied the command basis.
+  // Exercise the emitted atomic guard against every canonical resource kind.
+  for (const kind of governanceGraphTargetKinds.filter(kind => kind !== `${RV}Realm`)) {
+    cases.push({ name: `competing-primary-kind-${kind}`, command: declaredCommand,
+      seed: seed(3, true), mutation: change('', `<${realm}> a <${kind}> .`), expected: 'guard-unmatched' });
+  }
+  for (const kind of [`${RV}Character`, `${RV}Role`, 'http://www.w3.org/2000/01/rdf-schema#Resource']) {
+    cases.push({ name: `descriptive-type-${kind}`, command: declaredCommand,
+      seed: seed(3, true), mutation: change('', `<${realm}> a <${kind}> .`), expected: 'committed' });
+  }
+  cases.push({ name: 'unknown-type', command: declaredCommand, seed: seed(3, true),
+    mutation: change('', `<${realm}> a <https://example.org/UnknownOwner> .`), expected: 'guard-unmatched' });
   for (const both of [false, true]) cases.push({ name: `legacy-${both ? 'both' : 'one'}-profile-appears`,
     command: legacyCommand, seed: seed(1, false), expected: 'guard-unmatched',
     mutation: change('', `<${realm}> rv:definitionProfile <${profile(1)}> .
@@ -754,7 +810,7 @@ test('production Realm decision creates owner-controller notices and replays one
   } finally { await f.stack.stop(); }
 }, 120_000);
 
-test('production Realm dispatch refuses a competing primary kind introduced after its owner basis read', async () => {
+test('production Realm dispatch refuses ConceptScheme introduced after its owner basis read', async () => {
   const f = await productionRealm('realm-primary-kind-race');
   const original = f.stack.fuseki.commandWithReceipt;
   let raced = false;
@@ -763,7 +819,7 @@ test('production Realm dispatch refuses a competing primary kind introduced afte
       if (command.update.includes('a rv:ModerationEffect') && command.update.includes(`<${f.realm}>`)) {
         raced = true;
         await mutateOwnerFixture(f.stack.env, `PREFIX rv: <${RV}> INSERT DATA { GRAPH <${GRAPHS.current}> {
-          <${f.realm}> a rv:Agent } }`);
+          <${f.realm}> a <http://www.w3.org/2004/02/skos/core#ConceptScheme> } }`);
       }
       return original.call(f.stack.fuseki, command);
     };
@@ -780,6 +836,68 @@ test('production Realm dispatch refuses a competing primary kind introduced afte
     expect((await f.stack.accessPool.query("SELECT 1 FROM access.outbox WHERE kind='moderation.decided' AND moderation_decision_id=$1",
       [result.decisionId])).rowCount).toBe(0);
   } finally { f.stack.fuseki.commandWithReceipt = original; await f.stack.stop(); }
+}, 120_000);
+
+test('production Realm dispatch commits a Character description introduced after its owner basis read', async () => {
+  const f = await productionRealm('realm-descriptive-kind-race');
+  const original = f.stack.fuseki.commandWithReceipt;
+  let raced = false;
+  try {
+    f.stack.fuseki.commandWithReceipt = async command => {
+      if (command.update.includes('a rv:ModerationEffect') && command.update.includes(`<${f.realm}>`)) {
+        raced = true;
+        await mutateOwnerFixture(f.stack.env, `PREFIX rv: <${RV}> INSERT DATA { GRAPH <${GRAPHS.current}> {
+          <${f.realm}> a rv:Character } }`);
+      }
+      return original.call(f.stack.fuseki, command);
+    };
+    const result = await f.governance.store.decide(f.staff.principal, f.input);
+    expect(raced).toBe(true);
+    expect(result.operation.status).toBe('completed');
+    expect((await f.stack.accessPool.query('SELECT 1 FROM access.governance_enforcement WHERE resource=$1',
+      [f.realm])).rowCount).toBe(1);
+  } finally { f.stack.fuseki.commandWithReceipt = original; await f.stack.stop(); }
+}, 120_000);
+
+test('a public Work with an owner-attached Character description still accepts a record search decision', async () => {
+  const f = await productionRealm('work-descriptive-governance');
+  try {
+    const work = await f.stack.publicWork(f.editor.actor, ['en'], 'Described Work');
+    const workHead = (await f.stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head WHERE {
+      GRAPH <${GRAPHS.current}> { <${work.work}> rv:head ?head } } LIMIT 2`, 4096))
+      .results!.bindings[0]!.head!.value;
+    await f.grant(f.editor, `semantic:edit:${work.work}`, 'semantic.change');
+    await responseJson(await f.editor.send('POST', '/v1/semantic/changes', {
+      profile: 'semantic-change-v1', target: work.work, expectedHead: workHead, actingSubject: f.editor.actor,
+      state: { component: 'resource', types: [`${RV}Character`], properties: [], lifecycle: 'active' },
+    }), 201);
+    const selected = { owner: 'graph' as const, resource: work.work, component: 'record' as const,
+      locator: null, revision: workHead };
+    expect(await ownerTargetHeads({ graph: f.stack.env }).realmBasis(selected)).toBeNull();
+    // Authenticated Work intake ordinarily retains titles. This record fixture
+    // retains the same exact native anchor through the admitted evidence owner.
+    const evidence = Reflect.get(f.governance.store, 'evidence');
+    const capture = ownerEvidenceCapture({ graph: { env: f.stack.env, canReadWork: async () => true } });
+    Object.assign(f.governance.store, { evidence: { capture: async () => capture.admitted(selected) } });
+    let report: Awaited<ReturnType<typeof f.governance.store.submitReport>>;
+    try {
+      report = await f.governance.store.submitReport(f.staff.principal, {
+        kind: 'content_report', actingSubject: f.staff.actor,
+        authority: { kind: 'platform', scopeId: 'governance:platform' }, context: GLOBAL_CONTEXT,
+        target: selected, evidence: [selected], disclosure: 'private', reasonCode: 'spam',
+        statement: 'Review this retained Work record.', idempotencyKey: randomUUID(),
+      });
+    } finally { Object.assign(f.governance.store, { evidence }); }
+    await f.governance.store.safety.claim(f.staff.principal, f.staff.actor, report.caseId);
+    const result = await f.governance.store.decide(f.staff.principal, { ...f.input,
+      caseId: report.caseId, expectedGeneration: report.caseGeneration, evidenceDigest: report.evidenceDigest,
+      idempotencyKey: randomUUID(), targets: [{ ...selected, revision: null, scopeKind: 'component',
+        expectedHead: workHead, effect: 'search' }],
+    });
+    expect(result.operation.status).toBe('completed');
+    expect((await f.stack.accessPool.query(`SELECT 1 FROM access.governance_enforcement
+      WHERE resource=$1 AND component='record' AND effect='search'`, [work.work])).rowCount).toBe(1);
+  } finally { await f.stack.stop(); }
 }, 120_000);
 
 test('production Realm moderationTarget receipt refreshes the directory without a publication slot', async () => {

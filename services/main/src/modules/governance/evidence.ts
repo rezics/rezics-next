@@ -9,6 +9,10 @@ import { resolveRealmProfile } from '../space/policy.ts';
 import { readExactMainRevision, readExactWorkRevision, RevisionNotFound } from '../work/history.ts';
 import { CompositionCorrupt, CompositionUnavailable, readCompositionHeader } from '../structure/graph.ts';
 import { readCompositionPage } from '../structure/read.ts';
+import { shapeSchemas } from '../../../../../packages/model/src/generated/schemas.ts';
+import { typeRegistry } from '../../../../../packages/model/src/generated/types.ts';
+import { CANONICAL_TYPES } from '../semantic/change.ts';
+import { RESERVED_OWNER_TYPES } from '../semantic/schema.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable } from '../structure/tree.ts';
 import { type CapturedEvidence, type EvidenceCapture, type EvidenceTarget, GovernanceDenied, GovernanceInvalid,
   GovernanceUnavailable, sha256, type TargetHeads } from './store.ts';
@@ -16,33 +20,30 @@ import { type CapturedEvidence, type EvidenceCapture, type EvidenceTarget, Gover
 const agent = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const graphAnchor = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}(?:-agent-revision)?$/;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-/** Primary kinds admitted by graph report/summary owners. Descriptive Work
- * types refine CreativeWork and do not introduce another owner. Kinds without
- * a target command profile keep their Access-owned restriction behaviour. */
-export const governanceGraphKinds = {
-  Work: 'https://schema.org/CreativeWork',
-  LegacyWork: `${RV}Work`,
-  Occurrence: 'https://schema.org/ListItem',
-  Concept: 'http://www.w3.org/2004/02/skos/core#Concept',
-  Realm: `${RV}Realm`,
-  MainVersion: `${RV}MainVersion`,
-  Agent: `${RV}Agent`,
-  Space: `${RV}Space`,
-  Zone: `${RV}Zone`,
-  Structure: `${RV}Structure`,
-  Release: `${RV}Release`,
-  FixedRelease: `${RV}FixedRelease`,
-  TextContribution: `${RV}TextContribution`,
-  Realization: `${RV}Realization`,
-  Collection: `${RV}Collection`,
-  SemanticContext: `${RV}SemanticContext`,
-  Character: `${RV}Character`,
-  Role: `${RV}Role`,
-  SemanticDefinition: `${RV}SemanticDefinition`,
-  Projection: `${RV}Projection`,
-  Post: `${RV}Post`,
-} as const;
-export const governanceGraphTargetKinds: readonly string[] = Object.values(governanceGraphKinds);
+/** Shared envelopes accompany owner types and never compete for ownership. */
+const graphTypeEnvelopes = new Set(['http://www.w3.org/2000/01/rdf-schema#Resource', `${RV}RevisionAnchor`]);
+const primaryGraphTypes = new Set([...CANONICAL_TYPES, ...RESERVED_OWNER_TYPES]
+  .filter(type => !graphTypeEnvelopes.has(type)));
+
+/** Read only rdf:type literals from the generated model, not property values. */
+function declaredGraphTypes(schema: unknown): string[] {
+  if (!schema || typeof schema !== 'object') return [];
+  const node = schema as { const?: unknown; properties?: Record<string, unknown> };
+  return typeof node.const === 'string' ? [node.const]
+    : Object.values(node).flatMap(declaredGraphTypes);
+}
+
+/** Canonical routing and semantic admission define ownership. All other declared
+ * types describe their resource; the table also covers catalogue-only types. */
+export const governanceGraphTypes: readonly { type: string; role: 'PRIMARY' | 'DESCRIPTIVE' }[] =
+  [...new Set([...primaryGraphTypes, ...graphTypeEnvelopes, ...Object.keys(typeRegistry),
+    ...Object.values(shapeSchemas).flatMap(schema => declaredGraphTypes(schema.properties['rdf:type'])),
+  ])].sort().map(type => ({ type, role: primaryGraphTypes.has(type) ? 'PRIMARY' : 'DESCRIPTIVE' }));
+export const governanceGraphTargetKinds: readonly string[] = governanceGraphTypes
+  .filter(entry => entry.role === 'PRIMARY').map(entry => entry.type);
+export const governanceGraphDescriptiveTypes: readonly string[] = governanceGraphTypes
+  .filter(entry => entry.role === 'DESCRIPTIVE').map(entry => entry.type);
+const graphTypeRoles = new Map(governanceGraphTypes.map(entry => [entry.type, entry.role]));
 const sourceId = (value: string): string | null => {
   const id = value.startsWith('https://rezics.com/id/') ? value.slice('https://rezics.com/id/'.length) : value;
   return uuid.test(id) ? id : null;
@@ -350,22 +351,22 @@ export function ownerTargetHeads(owners: { graph?: WorkActivationEnvironment; co
       if (!agent.test(target.resource)) throw new GovernanceInvalid('Graph target identity is invalid');
       if (!owners.graph) throw new GovernanceUnavailable('Graph target classification is unavailable');
       try {
-        // Work semantic types refine CreativeWork; only primary owner kinds
-        // classify the resource. Missing or competing kinds cannot admit a fallback.
+        // Read every asserted type so an unknown class cannot disappear behind
+        // a VALUES filter. Descriptions never introduce a competing owner.
         const rows = (await owners.graph.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
           SELECT DISTINCT ?kind ?head WHERE { GRAPH ${iri(GRAPHS.current)} {
-            VALUES ?kind { ${governanceGraphTargetKinds.map(kind => `<${kind}>`).join(' ')} }
             ${iri(target.resource)} a ?kind .
             OPTIONAL { FILTER(?kind = rv:Realm) ${iri(target.resource)} rv:head ?head }
-          } } LIMIT 2`, 2048)).results?.bindings ?? [];
-        // The successful query also looked for Realm. An unprofiled semantic
-        // resource has no Realm owner basis and retains its Access-only path.
-        if (!rows.length) return null;
-        if (rows.length !== 1 || rows[0]?.kind?.type !== 'uri'
-          || !governanceGraphTargetKinds.includes(rows[0].kind.value)) {
+          } } LIMIT 65`, 16_384)).results?.bindings ?? [];
+        if (rows.length >= 65 || rows.some(row => row.kind?.type !== 'uri'
+          || !graphTypeRoles.has(row.kind.value))) {
           throw new GovernanceUnavailable('Graph target kind or head is unavailable or ambiguous');
         }
-        const row = rows[0]!;
+        const primary = rows.filter(row => graphTypeRoles.get(row.kind!.value) === 'PRIMARY');
+        if (primary.length !== 1) {
+          throw new GovernanceUnavailable('Graph target kind or head is unavailable or ambiguous');
+        }
+        const row = primary[0]!;
         if (row.kind!.value !== `${RV}Realm`) return null;
         if (row.head?.type !== 'uri' || !row.head.value) {
           throw new GovernanceUnavailable('Realm current head is unavailable');
