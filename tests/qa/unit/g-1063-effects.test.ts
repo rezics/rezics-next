@@ -6,6 +6,7 @@ import {
 import { discoverOutboxEventHandlers } from '../../../services/main/src/modules/outbox/event-handlers.ts';
 import { DiscoveryRefreshInputs } from '../../../services/main/src/modules/discovery/source.ts';
 import { standingRatingSlotIri } from '../../../services/main/src/modules/rating/observation.ts';
+import { MAIN_RELAY_STREAM_SCOPE } from '../../../services/main/src/modules/outbox/relay-position.ts';
 import type { Pool } from 'pg';
 
 const work = 'https://rezics.com/id/00000000-1063-4000-8000-000000000001';
@@ -13,6 +14,14 @@ const context = 'https://rezics.com/id/00000000-1063-4000-8000-000000000002';
 const mainVersion = 'https://rezics.com/id/00000000-1063-4000-8000-000000000003';
 const owner = '00000000-1063-4000-8000-000000000004';
 const base = { scope: 'global' as const, realm: null, context: null, owner: null };
+
+test('structured publication and withdrawal refresh their Work only after success', () => {
+  for (const action of ['work.publish', 'work.withdraw-publication']) {
+    expect(discoveryEventEffect({ action, work, outcome: 'succeeded' }, base)).toBe('work');
+    for (const outcome of ['cancelled', 'stale', 'denied'])
+      expect(discoveryEventEffect({ action, work, outcome }, base)).toBe('irrelevant');
+  }
+});
 
 test('G1063: every owner relay action has an explicit discovery/rating effect', async () => {
   const handlers = await discoverOutboxEventHandlers();
@@ -56,6 +65,14 @@ test('G1063: ratings affect their Context and Mine slot; unrelated owner command
 
 test('G1063: complete relay coverage accepts Work-free events and fails closed on gaps, ordinals and unknown actions', async () => {
   const row = (sequence: string, action: string, ordinal = 0, target?: string) => ({
+    after_sequence: '10',
+    coverage_stream_scope: MAIN_RELAY_STREAM_SCOPE,
+    coverage_data_epoch: 'epoch',
+    coverage_sequence: '12',
+    coverage_unresolved: false,
+    boundary_valid: true,
+    stream_scope: MAIN_RELAY_STREAM_SCOPE,
+    data_epoch: 'epoch',
     sequence,
     batch_id: `batch-${sequence}`,
     routing_epoch: 'route',
@@ -69,7 +86,7 @@ test('G1063: complete relay coverage accepts Work-free events and fails closed o
         batchId: `batch-${sequence}`,
         routingEpoch: 'route',
         ordinal,
-        sourcePosition: { dataEpoch: 'epoch', sequence },
+        sourcePosition: { datasetId: 'product', dataEpoch: 'epoch', sequence },
         receipt: { action, outcome: 'succeeded', work: target },
       },
     },
@@ -79,14 +96,19 @@ test('G1063: complete relay coverage accepts Work-free events and fails closed o
     { query: async () => ({ rows }) } as unknown as Pick<Pool, 'query'>,
     'consumer',
   );
-  const position = { dataEpoch: 'epoch', sequence: '12' };
-  expect(await inputs.read(position, '10', base)).toEqual({ works: [work], created: [] });
+  const position = { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: 'epoch', sequence: '12' };
+  const afterGraph = { dataEpoch: 'epoch', sequence: '10' };
+  expect(await inputs.read(position, afterGraph, base)).toEqual({ works: [work], created: [] });
   rows = [row('11', 'structure.membership.normalize'), row('12', 'theme.activate')];
-  expect(await inputs.read(position, '10', base)).toEqual({ works: [], created: [] });
+  expect(await inputs.read(position, afterGraph, base)).toEqual({ works: [], created: [] });
+  for (const action of ['work.publish', 'work.withdraw-publication']) {
+    rows = [row('11', 'relation.change'), row('12', action, 0, work)];
+    expect(await inputs.read(position, afterGraph, base)).toEqual({ works: [work], created: [] });
+  }
   rows = [row('12', 'work.edit', 0, work)];
-  expect(await inputs.read(position, '10', base)).toBeNull();
+  expect(await inputs.read(position, afterGraph, base)).toBeNull();
   rows = [row('11', 'relation.change'), row('12', 'work.edit', 1, work)];
-  expect(await inputs.read(position, '10', base)).toBeNull();
+  expect(await inputs.read(position, afterGraph, base)).toBeNull();
   rows = [row('11', 'relation.change'), row('12', 'future.command')];
-  expect(await inputs.read(position, '10', base)).toBeNull();
+  expect(await inputs.read(position, afterGraph, base)).toBeNull();
 });

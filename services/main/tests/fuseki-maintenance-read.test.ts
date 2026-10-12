@@ -15,12 +15,15 @@ const template: TemplateQueryEnvelope = {
   query: 'SELECT ?id WHERE { GRAPH <urn:rezics:graph:current> { ?id <urn:label> ?label } }',
   bindings: {}, tables: [], limit: 1,
 };
+const coldHealth = { moduleVersion: '0.5.37', instanceId: '00000000-0000-4000-8000-000000000001', publicSearchWriteEpoch: '0', publicSearchWriteActive: false, prefixWalkAvailable: false, profiles: {} };
 const reads = [
   { name: 'query', call: (fuseki: FusekiClient) => fuseki.query('ASK {}'), result: { boolean: true } },
   { name: 'template', call: (fuseki: FusekiClient) => fuseki.templateQuery(template), result: { results: { bindings: [] } } },
   { name: 'index', call: (fuseki: FusekiClient) => fuseki.templateIndex({ operation: 'basis', keys: [] }), result: { bases: [], position: { dataEpoch: 'epoch', sequence: '1' } } },
   { name: 'membership status', call: (fuseki: FusekiClient) => fuseki.membershipPreparationStatus(), result: { needsPreparation: false } },
-  { name: 'health', call: (fuseki: FusekiClient) => fuseki.commandHealth(), result: { moduleVersion: '0.5.37', instanceId: '00000000-0000-4000-8000-000000000001', publicSearchWriteEpoch: '0', publicSearchWriteActive: false, prefixWalkAvailable: false, profiles: {} } },
+  // A cold stub advertises neither consistent capture nor the exact-unit probe.
+  { name: 'health', call: (fuseki: FusekiClient) => fuseki.commandHealth(), result: coldHealth,
+    expected: { ...coldHealth, consistentCaptureAvailable: false, exactUnitProbeAvailable: false } },
   { name: 'delta', call: (fuseki: FusekiClient) => fuseki.searchDeltaSince('-1'), result: { available: false } },
 ];
 
@@ -67,7 +70,7 @@ test('sequential cold maintenance reads share one finite deadline instead of ren
   });
   for (const read of reads) {
     active = read;
-    expect(await read.call(fuseki)).toEqual(read.result);
+    expect(await read.call(fuseki)).toEqual(read.expected ?? read.result);
   }
   expect(signals.every(signal => signal === preparation)).toBe(true);
   expect(clock.timers.map(timer => timer.duration)).toEqual([540_000]);

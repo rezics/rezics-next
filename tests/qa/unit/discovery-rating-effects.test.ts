@@ -8,6 +8,7 @@ import { DiscoveryRefreshInputs } from '../../../services/main/src/modules/disco
 import { standingRatingSlotIri } from '../../../services/main/src/modules/rating/observation.ts';
 import type { WorkReadSession } from '../../../services/main/src/modules/work/read-session.ts';
 import { WorkReadLimit } from '../../../services/main/src/modules/work/read-session.ts';
+import { MAIN_RELAY_STREAM_SCOPE } from '../../../services/main/src/modules/outbox/relay-position.ts';
 
 const native = (n: number) =>
   `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -64,6 +65,14 @@ test('Relay target-only receipts resolve exact MainVersion ownership in one boun
     query: async () => ({
       rows: [
         {
+          after_sequence: '10',
+          coverage_stream_scope: MAIN_RELAY_STREAM_SCOPE,
+          coverage_data_epoch: 'epoch',
+          coverage_sequence: '11',
+          coverage_unresolved: false,
+          boundary_valid: true,
+          stream_scope: MAIN_RELAY_STREAM_SCOPE,
+          data_epoch: 'epoch',
           sequence: '11',
           batch_id: 'batch',
           routing_epoch: 'route',
@@ -77,7 +86,7 @@ test('Relay target-only receipts resolve exact MainVersion ownership in one boun
               batchId: 'batch',
               routingEpoch: 'route',
               ordinal: 0,
-              sourcePosition: { dataEpoch: 'epoch', sequence: '11' },
+              sourcePosition: { datasetId: 'product', dataEpoch: 'epoch', sequence: '11' },
               receipt,
             },
           },
@@ -86,7 +95,8 @@ test('Relay target-only receipts resolve exact MainVersion ownership in one boun
     }),
   } as unknown as Pick<Pool, 'query'>;
   const inputs = new DiscoveryRefreshInputs(pool, 'consumer');
-  const position = { dataEpoch: 'epoch', sequence: '11' };
+  const position = { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: 'epoch', sequence: '11' };
+  const afterGraph = { dataEpoch: 'epoch', sequence: '10' };
   let queries = 0;
   const session = {
     query: async (query: string, limit: number) => {
@@ -97,29 +107,29 @@ test('Relay target-only receipts resolve exact MainVersion ownership in one boun
       return [{ target: { type: 'uri', value: mainVersion }, work: { type: 'uri', value: work } }];
     },
   } as Pick<WorkReadSession, 'query'>;
-  expect(await inputs.read(position, '10', rated, session)).toEqual({ works: [work], created: [] });
+  expect(await inputs.read(position, afterGraph, rated, session)).toEqual({ works: [work], created: [] });
   expect(queries).toBe(1);
   receipt = { ...receipt, work: target };
-  expect(await inputs.read(position, '10', rated, session)).toBeNull();
+  expect(await inputs.read(position, afterGraph, rated, session)).toBeNull();
   const oversized = {
     query: async () => {
       throw new WorkReadLimit('Ambiguous target ownership');
     },
   } as Pick<WorkReadSession, 'query'>;
-  expect(await inputs.read(position, '10', rated, oversized)).toBeNull();
+  expect(await inputs.read(position, afterGraph, rated, oversized)).toBeNull();
   receipt = { ...receipt, work: undefined };
-  expect(await inputs.read(position, '10', rated)).toBeNull();
-  expect(await inputs.read(position, '10', base, session)).toEqual({ works: [], created: [] });
+  expect(await inputs.read(position, afterGraph, rated)).toBeNull();
+  expect(await inputs.read(position, afterGraph, base, session)).toEqual({ works: [], created: [] });
   expect(queries).toBe(2);
   const irrelevantSession = { query: async () => [] } as Pick<WorkReadSession, 'query'>;
   receipt = { ...receipt, target };
-  expect(await inputs.read(position, '10', rated, irrelevantSession)).toEqual({
+  expect(await inputs.read(position, afterGraph, rated, irrelevantSession)).toEqual({
     works: [],
     created: [],
   });
   receipt = { ...receipt, work, mainVersion };
-  expect(await inputs.read(position, '10', rated, session)).toEqual({ works: [], created: [] });
+  expect(await inputs.read(position, afterGraph, rated, session)).toEqual({ works: [], created: [] });
   expect(queries).toBe(2);
   receipt = { ...receipt, action: 'future.rating' };
-  expect(await inputs.read(position, '10', rated, session)).toBeNull();
+  expect(await inputs.read(position, afterGraph, rated, session)).toBeNull();
 });

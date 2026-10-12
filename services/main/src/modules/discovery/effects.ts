@@ -10,6 +10,8 @@ export const DISCOVERY_EFFECTS: Readonly<Record<string, DiscoveryEffect>> = {
   'work.create': 'work',
   'work.edit': 'work',
   'work.derive': 'work',
+  'work.publish': 'work',
+  'work.withdraw-publication': 'work',
   'work.title.apply': 'work',
   'work.title.return': 'work',
   'contribution.create': 'work',

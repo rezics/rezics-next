@@ -7,11 +7,12 @@ test('native counter export retains known visits and rejects unknown names and u
   const headers = new Headers({
     'x-rezics-command-work': 'rank_group_candidates_visited=13,PRIVATE_ID=7,unknown_visited=8,'
       + 'public_name_labels_visited=9007199254740992,rank_live_witnesses_visited=-1,'
-      + 'realm_owner_qualification_visits=9007199254740991,current_adds=0',
+      + 'realm_owner_qualification_visits=9007199254740991,current_adds=0,exact_unit_rdf_rows_visited=21',
   });
   expect(fusekiCommandWork(headers)).toEqual({
     'rezics.fuseki.current_adds': 0,
     'rezics.fuseki.rank_group_candidates_visited': 13,
+    'rezics.fuseki.exact_unit_rdf_rows_visited': 21,
     'rezics.fuseki.realm_owner_qualification_visits': Number.MAX_SAFE_INTEGER,
   });
 });
