@@ -57,8 +57,9 @@ function relayFixture(status: number) {
       const responseStatus = envelopeStatuses.length === 0 ? status : 200;
       envelopeStatuses.push(responseStatus);
       if (responseStatus !== 200) return new Response('owner unavailable', { status: responseStatus,
-        statusText: responseStatus === 503 ? 'Service Unavailable'
-          : responseStatus === 400 ? 'Bad Request' : 'Not Found' });
+        statusText: responseStatus === 500 ? 'Internal Server Error'
+          : responseStatus === 503 ? 'Service Unavailable'
+            : responseStatus === 400 ? 'Bad Request' : 'Not Found' });
       // A terminal cancelled admission needs no revision or secondary owner reads.
       return Response.json(bindings({ kind: `${RV}AdmissionCancelledEvent`, ordinal: '0',
         action: 'work.create', receipt: receiptId, outcome: `${RV}Cancelled`,
@@ -71,48 +72,51 @@ function relayFixture(status: number) {
     envelopeStatuses, retainedEvents, sequence: () => sequence, retainedBatches: () => retainedBatches };
 }
 
-test('relay retries a real Fuseki 503 event-envelope read and delivers after HTTP recovery', async () => {
-  const fixture = relayFixture(503);
-  const errors: unknown[] = [], delays: number[] = [], logs: string[] = [];
-  let running = true;
-  let delivered = false;
-  try {
-    await runMainRelay(async () => {
-      try {
-        const batch = await relayMainOutboxOnce(fixture.graph, fixture.pool, 'http-relay');
-        delivered = batch?.sequence === '1';
-        running = false;
-        return batch !== null;
-      } catch (error) { errors.push(error); throw error; }
-    }, () => running, 100, { random: () => 0, log: line => { logs.push(line); },
-      sleep: async delay => {
-        delays.push(delay);
-        expect(fixture.sequence()).toBe('0');
-        expect(fixture.retainedBatches()).toBe(0);
-        expect(fixture.retainedEvents).toEqual([]);
-        // Bound a broken retry path so its assertion fails without hanging QA.
-        if (delays.length > 1) running = false;
-      } });
-    expect(delivered).toBe(true);
-    expect(errors).toHaveLength(1);
-    expect(errors[0]).toBeInstanceOf(FusekiHttpError);
-    expect(errors[0]).not.toBeInstanceOf(RelayEventBlocked);
-    expect((errors[0] as FusekiHttpError).status).toBe(503);
-    expect((errors[0] as FusekiHttpError).statusText).toBe('Service Unavailable');
-    expect((errors[0] as Error).message).toBe('Fuseki query returned 503');
-    expect(fixture.envelopeStatuses).toEqual([503, 200]);
-    expect(delays).toEqual([250]);
-    expect(logs.map(line => JSON.parse(line).event)).toEqual(['main_relay_retry']);
-    expect(fixture.sequence()).toBe('1');
-    expect(fixture.retainedBatches()).toBe(1);
-    expect(fixture.retainedEvents).toHaveLength(1);
-    const envelope = JSON.parse(fixture.retainedEvents[0]!);
-    expect(envelope.id).toBe(eventId);
-    expect(envelope.data.receipt.id).toBe(receiptId);
-    expect(envelope.data.relayPosition).toEqual({ streamScope: MAIN_RELAY_STREAM_SCOPE,
-      dataEpoch: epoch, sequence: '1' });
-  } finally { await fixture.server.stop(true); }
-});
+for (const status of [500, 503]) {
+  test(`relay retries a real Fuseki ${status} event-envelope read and delivers after HTTP recovery`, async () => {
+    const fixture = relayFixture(status);
+    const errors: unknown[] = [], delays: number[] = [], logs: string[] = [];
+    let running = true;
+    let delivered = false;
+    try {
+      await runMainRelay(async () => {
+        try {
+          const batch = await relayMainOutboxOnce(fixture.graph, fixture.pool, 'http-relay');
+          delivered = batch?.sequence === '1';
+          running = false;
+          return batch !== null;
+        } catch (error) { errors.push(error); throw error; }
+      }, () => running, 100, { random: () => 0, log: line => { logs.push(line); },
+        sleep: async delay => {
+          delays.push(delay);
+          expect(fixture.sequence()).toBe('0');
+          expect(fixture.retainedBatches()).toBe(0);
+          expect(fixture.retainedEvents).toEqual([]);
+          // Bound a broken retry path so its assertion fails without hanging QA.
+          if (delays.length > 1) running = false;
+        } });
+      expect(delivered).toBe(true);
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toBeInstanceOf(FusekiHttpError);
+      expect(errors[0]).not.toBeInstanceOf(RelayEventBlocked);
+      expect((errors[0] as FusekiHttpError).status).toBe(status);
+      expect((errors[0] as FusekiHttpError).statusText)
+        .toBe(status === 500 ? 'Internal Server Error' : 'Service Unavailable');
+      expect((errors[0] as Error).message).toBe(`Fuseki query returned ${status}`);
+      expect(fixture.envelopeStatuses).toEqual([status, 200]);
+      expect(delays).toEqual([250]);
+      expect(logs.map(line => JSON.parse(line).event)).toEqual(['main_relay_retry']);
+      expect(fixture.sequence()).toBe('1');
+      expect(fixture.retainedBatches()).toBe(1);
+      expect(fixture.retainedEvents).toHaveLength(1);
+      const envelope = JSON.parse(fixture.retainedEvents[0]!);
+      expect(envelope.id).toBe(eventId);
+      expect(envelope.data.receipt.id).toBe(receiptId);
+      expect(envelope.data.relayPosition).toEqual({ streamScope: MAIN_RELAY_STREAM_SCOPE,
+        dataEpoch: epoch, sequence: '1' });
+    } finally { await fixture.server.stop(true); }
+  });
+}
 
 for (const status of [400, 404]) {
   test(`relay blocks a real Fuseki ${status} event-envelope failure with its HTTP cause`, async () => {

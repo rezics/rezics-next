@@ -5,7 +5,8 @@ import { createServer as createHttpServer, type Server as HttpServer } from 'nod
 import { createServer as createTcpServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
-import { FusekiClient, FusekiHttpError } from '../src/infrastructure/fuseki.ts';
+import { CommandOutcomeUnknown, FusekiClient, FusekiHttpError, type CommandEnvelope,
+  type CommandResult, type SparqlResult } from '../src/infrastructure/fuseki.ts';
 import { isOwnerTransientFailure } from '../src/infrastructure/owner-failure.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -141,6 +142,39 @@ test('a real FusekiClient keeps a structured 400 response non-transient', async 
     expect(failure).toMatchObject({ status: 400, message: 'Fuseki query returned 400' });
     expect(isOwnerTransientFailure(failure)).toBe(false);
   } finally { await server.stop(true); }
+});
+
+test('a real FusekiClient keeps HTTP 500 as structured transient transport evidence', async () => {
+  const server = Bun.serve({ hostname: '127.0.0.1', port: 0,
+    fetch: () => new Response('temporarily unavailable', { status: 500 }) });
+  try {
+    const failure = await failureFrom(new FusekiClient(`${server.url.href}rezics/`).query('ASK {}'));
+    expect(failure).toBeInstanceOf(FusekiHttpError);
+    expect(failure).toMatchObject({ status: 500, message: 'Fuseki query returned 500' });
+    expect(isOwnerTransientFailure(failure)).toBe(true);
+  } finally { await server.stop(true); }
+});
+
+test('a real FusekiClient preserves CommandOutcomeUnknown through an absent receipt lookup', async () => {
+  const timeout = new Error('command request timed out');
+  const commandFailure = new CommandOutcomeUnknown('Fuseki command transport outcome unknown', { cause: timeout });
+  class ReceiptLookupFuseki extends FusekiClient {
+    receiptQueries = 0;
+    override async command(_envelope: CommandEnvelope): Promise<CommandResult> { throw commandFailure; }
+    override async query(_sparql: string): Promise<SparqlResult> {
+      this.receiptQueries++;
+      return { results: { bindings: [] } };
+    }
+  }
+  const client = new ReceiptLookupFuseki('http://localhost:1/rezics');
+  const envelope: CommandEnvelope = { receipt: 'urn:rezics:receipt:owner-failure-timeout',
+    digest: 'a'.repeat(64), update: 'INSERT DATA {}', validations: [], deadlineMs: 1_000 };
+  const failure = await failureFrom(client.commandWithReceipt(envelope));
+  expect(failure).toBeInstanceOf(CommandOutcomeUnknown);
+  expect((failure as Error).cause).toBe(commandFailure);
+  expect(commandFailure.cause).toBe(timeout);
+  expect(client.receiptQueries).toBe(1);
+  expect(isOwnerTransientFailure(failure)).toBe(true);
 });
 
 test('a real pg Pool observes PostgreSQL terminating an idle-in-transaction backend as transient', async () => {

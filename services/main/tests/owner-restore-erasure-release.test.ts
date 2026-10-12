@@ -4,9 +4,11 @@ import { Pool as PgPool } from 'pg';
 import * as accountCoverage from '../../account/src/recovery-coverage.ts';
 import * as deletionRecovery from '../../account/src/deletion-recovery-set.ts';
 import { sealRecoveryPayload } from '../../account/src/recovery-envelope.ts';
-import { FusekiClient, FusekiHttpError, type CommandEnvelope, type CommandResult,
+import { CommandOutcomeUnknown, FusekiClient, FusekiHttpError, type CommandEnvelope, type CommandResult,
   type SparqlResult } from '../src/infrastructure/fuseki.ts';
+import { ObjectUnavailable, S3ImmutableObjects } from '../src/infrastructure/immutable-objects.ts';
 import { DRIVER_TRANSPORT_FAILURES } from '../src/infrastructure/owner-failure.ts';
+import { COMMAND_MODULE_VERSION } from '../src/infrastructure/profile.ts';
 import * as commerceCoverage from '../src/modules/commerce/recovery-coverage.ts';
 import * as erasureAuthority from '../src/modules/erasure/authority.ts';
 import * as deletionJournal from '../src/modules/outbox/account-deletion-journal.ts';
@@ -24,6 +26,8 @@ import * as restoreLineage from '../src/modules/work/restore-lineage.ts';
 import * as restoreBinding from '../src/modules/owner/restore-release-binding.ts';
 import * as erasureReconciliation from '../src/modules/erasure/reconcile.ts';
 import { OwnerOperations, OwnerOperationUnavailable } from '../src/modules/owner/operations.ts';
+import { readExactModelGeneration } from '../src/modules/semantic/model-custody.ts';
+import { MODEL_COMPONENT, PROFILES } from '../src/modules/semantic/schema.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { releaseRestoredGraphHold, RestoreInterrupted, RestoreLineageConflict,
   type AuthenticatedRecoveryCoverage, type RecoveryCoverage } from '../src/modules/work/restore-lineage.ts';
@@ -243,22 +247,41 @@ class HeldRestoreGraph extends FusekiClient {
   cutMatches = true;
   interruptRelease = false;
   loseReleaseResponse = false;
+  receiptAwareRelease = false;
+  commandFailure?: CommandOutcomeUnknown;
   denyAdmission = false;
   priorSequence = '900';
   savedMainSequence: string | undefined = '4';
   reconciledMainSequence?: string;
   mainCutRows?: NonNullable<SparqlResult['results']>['bindings'];
   releaseReceipt: { receipt: string; digest: string; priorMainSequence?: string; streamScope?: string } | null = null;
+  receiptLookups = 0;
+  releaseEffects = 0;
   readonly commands: CommandEnvelope[] = [];
   readonly queries: string[] = [];
 
   constructor(private readonly trace: string[]) { super('http://localhost:1/product'); }
 
+  override async command(envelope: CommandEnvelope): Promise<CommandResult> {
+    return this.applyReleaseCommand(envelope);
+  }
+
   override async commandWithReceipt(envelope: CommandEnvelope): Promise<CommandResult> {
+    if (this.receiptAwareRelease) return super.commandWithReceipt(envelope);
+    return this.applyReleaseCommand(envelope);
+  }
+
+  private async applyReleaseCommand(envelope: CommandEnvelope): Promise<CommandResult> {
     this.commands.push(envelope);
     if (this.interruptRelease) throw new Error('interrupted before graph release');
+    if (this.commandFailure) {
+      const failure = this.commandFailure;
+      this.commandFailure = undefined;
+      throw failure;
+    }
     if (!this.cutMatches || !this.cutGuardsMatch(envelope.update)) return { status: 'guard-unmatched' };
     this.held = false;
+    this.releaseEffects++;
     this.releaseReceipt = { receipt: envelope.receipt, digest: envelope.digest,
       priorMainSequence: /rv:priorMainSequence ([0-9]+)/.exec(envelope.update)?.[1],
       streamScope: /rv:streamScope "([^"]+)"/.exec(envelope.update)?.[1] };
@@ -269,6 +292,10 @@ class HeldRestoreGraph extends FusekiClient {
 
   override async query(sparql: string): Promise<SparqlResult> {
     this.queries.push(sparql);
+    if (sparql.includes('SELECT ?digest ?dataset ?epoch ?sequence')) {
+      this.receiptLookups++;
+      return { results: { bindings: [] } };
+    }
     if (sparql.includes('SELECT ?savedMainSequence ?reconciledMainSequence ?savedSequence')) {
       if (!this.cutMatches) return { results: { bindings: [] } };
       const row: Record<string, { type: 'literal'; value: string }> = {
@@ -342,7 +369,8 @@ function fixture(options: { actualCapturedRelay?: boolean } = {}) {
   const state = { failAt: undefined as OwnerCheck | undefined, failError: undefined as Error | undefined, callbackCalls: 0,
     historicalRoot: 'retired-model-root', historicalDigest: digest,
     journalGeneration: '11', authorityGeneration: '7', interruptEvidence: false,
-    advanceJournalAfterChecks: false, advanceAuthorityAfterChecks: false };
+    advanceJournalAfterChecks: false, advanceAuthorityAfterChecks: false,
+    verifyReleasedCustody: undefined as undefined | (() => Promise<void>) };
   const validate = async (check: OwnerCheck, client?: PoolClient) => {
     if (client) await client.query(`SELECT 1 /* signed restore coverage: ${check} */`);
     trace.push(`validated:${check}`);
@@ -464,6 +492,33 @@ function fixture(options: { actualCapturedRelay?: boolean } = {}) {
     stop: () => { for (const spy of spies) spy.mockRestore(); } };
 }
 
+function seedRetainedModelCustody(objects: Map<string, Uint8Array>, store: S3ImmutableObjects, custodyId: string) {
+  const shape = Buffer.from(`@prefix rv: <https://rezics.com/vocab/> .\n# ${custodyId}\n`);
+  const shapeDigest = hash(shape);
+  const manifest = Buffer.from(JSON.stringify({ commandModule: COMMAND_MODULE_VERSION,
+    profiles: [{ id: 'owner-test', sha256: shapeDigest, file: 'shapes/owner-test.ttl' }] }));
+  const manifestDigest = hash(manifest);
+  const generation = `urn:rezics:model-generation:${manifestDigest}`;
+  const payload = Buffer.from(JSON.stringify({ format: 'rezics-component-v1', component: MODEL_COMPONENT,
+    state: { modelManifestSha256: manifestDigest, commandModule: COMMAND_MODULE_VERSION, entailment: 'none' } }));
+  const payloadDigest = hash(payload);
+  const componentManifest = Buffer.from(JSON.stringify({ format: 'rezics-manifest-v1', component: MODEL_COMPONENT,
+    payload: `sha256:${payloadDigest}`, payloadBytes: payload.length, mediaType: 'application/json',
+    model: PROFILES.generation, shape: PROFILES.generation }));
+  const componentManifestDigest = hash(componentManifest);
+  objects.set(shapeDigest, shape);
+  objects.set(manifestDigest, manifest);
+  objects.set(payloadDigest, payload);
+  objects.set(componentManifestDigest, componentManifest);
+  const graph = { async query(): Promise<SparqlResult> { return { results: { bindings: [{
+    manifest: { type: 'literal', value: `urn:rezics:sha256:${componentManifestDigest}` },
+    commandModule: { type: 'literal', value: COMMAND_MODULE_VERSION },
+  }] } }; } } as unknown as FusekiClient;
+  const environment: WorkActivationEnvironment = { fuseki: graph, lineage,
+    objectDirectory: '/nonexistent-retained-model-custody', workObjects: store };
+  return { environment, generation, manifestDigest };
+}
+
 function expectBothHeld(run: ReturnType<typeof fixture>) {
   expect(run.fuseki.held).toBe(true);
   expect(run.access.open).toBe(false);
@@ -504,6 +559,7 @@ function outerRestore(run: ReturnType<typeof fixture>, borrowedOwners = false, c
     spyOn(erasureReconciliation, 'assertReleasedErasuresCurrent').mockImplementation(
       async (_relay, owners, record, captured, _authority, clients, outerId) => {
         if (failures.closure) throw failures.closure;
+        await run.state.verifyReleasedCustody?.();
         expect(record).toBe('retained-erasures');
         expect(captured).toBe('5');
         expect(outerId).toBe(row.id);
@@ -804,12 +860,137 @@ test('qualified restore expectation-read TimeoutError leaves the same key resuma
   }
 }, 10_000);
 
-for (const status of [408, 429, 502, 503, 504, 400, 404, 500, '503', NaN]) {
+test('qualified graph release preserves an absent-receipt command timeout and safely resends the same key', async () => {
+  const run = fixture();
+  const owner = outerRestore(run, false, true);
+  const timeout = new Error('command request timed out');
+  const commandFailure = new CommandOutcomeUnknown('Fuseki command transport outcome unknown', { cause: timeout });
+  try {
+    await owner.qualify();
+    run.fuseki.receiptAwareRelease = true;
+    run.fuseki.commandFailure = commandFailure;
+
+    let interrupted: unknown;
+    try { await owner.attempt(); }
+    catch (error) { interrupted = error; }
+    expect(interrupted).toBeInstanceOf(OwnerOperationUnavailable);
+    expect((interrupted as Error).cause).toBeInstanceOf(RestoreInterrupted);
+    const causeChain: unknown[] = [];
+    let cause: unknown = interrupted;
+    while (cause instanceof Error) {
+      causeChain.push(cause);
+      if (cause.cause === undefined) break;
+      cause = cause.cause;
+    }
+    expect(causeChain).toContain(commandFailure);
+    expect(causeChain.at(-1)).toBe(timeout);
+    expect(causeChain.some(cause => cause instanceof CommandOutcomeUnknown
+      && cause.message === 'Fuseki command outcome unknown; receipt absent')).toBe(true);
+    expect(run.fuseki.receiptLookups).toBe(1);
+    expect(owner.row).toMatchObject({ state: 'running', hold_reason: null });
+    expectBothHeld(run);
+
+    expect(await owner.attempt()).toMatchObject({ state: 'reconciled', disposition: 'matched', replayed: true });
+    expect(run.fuseki.commands).toHaveLength(2);
+    expect(run.fuseki.commands[1]).toMatchObject({ receipt: run.fuseki.commands[0]!.receipt,
+      digest: run.fuseki.commands[0]!.digest });
+    expect(run.fuseki.releaseEffects).toBe(1);
+    expect(run.trace.filter(event => event === 'graph:release')).toHaveLength(1);
+    expect(run.access.open).toBe(true);
+    const commandCount = run.fuseki.commands.length;
+    expect(await owner.attempt()).toMatchObject({ state: 'reconciled', replayed: true });
+    expect(run.fuseki.commands).toHaveLength(commandCount);
+    expect(run.fuseki.releaseEffects).toBe(1);
+    expect(owner.qualifications).toBe(1);
+  } finally { owner.stop(); run.stop(); }
+});
+
+for (const method of ['GET', 'HEAD'] as const) {
+  for (const status of [503, 404, 403] as const) {
+    test(`qualified model custody resume preserves S3 ${method} ${status} status semantics`, async () => {
+      const run = fixture();
+      const objects = new Map<string, Uint8Array>();
+      let armed = false, failedRequests = 0;
+      const server = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch(request) {
+        const key = new URL(request.url).pathname.split('/').at(-1) ?? '';
+        if (armed && request.method === method) {
+          failedRequests++;
+          return new Response('object service unavailable', { status });
+        }
+        const bytes = objects.get(key);
+        if (request.method === 'HEAD') return new Response(null, { status: bytes ? 200 : 404 });
+        if (request.method === 'GET') return bytes
+          ? new Response(Buffer.from(bytes), { status: 200 }) : new Response(null, { status: 404 });
+        return new Response(null, { status: 405 });
+      } });
+      const store = new S3ImmutableObjects({ endpoint: `http://127.0.0.1:${server.port}`,
+        bucket: 'rezics-semantic', accessKeyId: 'restore-test-key', secretAccessKey: 'restore-test-secret',
+        prefix: 'semantic/model/' });
+      const model = seedRetainedModelCustody(objects, store, `${method}-${status}`);
+      run.evidence.objectStore = { directory: '/nonexistent-retained-model-custody', workObjects: store };
+      const owner = outerRestore(run, false, true);
+      try {
+        await owner.qualify();
+        run.state.verifyReleasedCustody = async () => {
+          try {
+            const retained = await readExactModelGeneration(model.environment, model.generation);
+            expect(retained.manifestSha256).toBe(model.manifestDigest);
+            await store.probe(model.manifestDigest);
+          } catch (error) {
+            if (restoreLineage.isRestoreTransientFailure(error)) throw error;
+            throw new erasureReconciliation.ErasureRestoreHold(
+              'restored command or model custody is unavailable or divergent', { cause: error });
+          }
+        };
+        armed = true;
+
+        if (status === 503) {
+          let interrupted: unknown;
+          try { await owner.attempt(); }
+          catch (error) { interrupted = error; }
+          expect(interrupted).toBeInstanceOf(OwnerOperationUnavailable);
+          expect((interrupted as Error).cause).toBeInstanceOf(RestoreInterrupted);
+          let cause: unknown = interrupted;
+          while (cause instanceof Error && cause.cause !== undefined) cause = cause.cause;
+          expect(cause).toBeInstanceOf(ObjectUnavailable);
+          expect((cause as ObjectUnavailable).status).toBe(503);
+          expect(owner.row).toMatchObject({ state: 'running', hold_reason: null });
+          expect(run.fuseki.held).toBe(false);
+          expect(run.access.open).toBe(true);
+          expect(run.access.generation).toBe('6');
+          expect(run.fuseki.releaseEffects).toBe(1);
+
+          armed = false;
+          expect(await owner.attempt()).toMatchObject({ state: 'reconciled', disposition: 'matched', replayed: true });
+          expect(run.fuseki.commands).toHaveLength(1);
+          expect(run.fuseki.releaseEffects).toBe(1);
+          expect(owner.qualifications).toBe(1);
+        } else {
+          expect(await owner.attempt()).toMatchObject({ state: 'held', replayed: true });
+          expect(owner.row.state).toBe('held');
+          expect(run.fuseki.held).toBe(false);
+          expect(run.access.open).toBe(true);
+          expect(run.fuseki.releaseEffects).toBe(1);
+          const commandCount = run.fuseki.commands.length;
+          expect(await owner.attempt()).toMatchObject({ state: 'held', replayed: true });
+          expect(run.fuseki.commands).toHaveLength(commandCount);
+        }
+        expect(failedRequests).toBe(1);
+      } finally {
+        armed = false;
+        owner.stop(); run.stop(); await server.stop(true);
+      }
+    });
+  }
+}
+
+for (const status of [408, 429, 499, 500, 502, 503, 504, 599, 600, 400, 404, 500.5, '503', NaN]) {
   test(`qualified HTTP classifier uses numeric status evidence: ${status}`, () => {
     const original = { status };
     expect(restoreLineage.isRestoreTransientFailure(new RestoreLineageConflict('owner differs', {
       cause: new Error('adapter failed', { cause: original }),
-    }))).toBe(typeof status === 'number' && [408, 429, 502, 503, 504].includes(status));
+    }))).toBe(typeof status === 'number' && (status === 408 || status === 429
+      || Number.isInteger(status) && status >= 500 && status <= 599));
   });
 }
 

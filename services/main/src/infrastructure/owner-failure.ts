@@ -22,11 +22,14 @@ export function isOwnerTransientFailure(error: unknown): boolean {
       code?: unknown;
       name?: unknown;
       status?: unknown;
+      constructor?: { name?: unknown };
       cause?: unknown;
       message?: unknown;
     };
     if (failure.name === 'TimeoutError') return true;
-    if (typeof failure.status === 'number' && [408, 429, 502, 503, 504].includes(failure.status))
+    if (failure.constructor?.name === 'CommandOutcomeUnknown') return true;
+    if (typeof failure.status === 'number' && (failure.status === 408 || failure.status === 429
+      || Number.isInteger(failure.status) && failure.status >= 500 && failure.status <= 599))
       return true;
     if (
       typeof failure.code === 'string' &&

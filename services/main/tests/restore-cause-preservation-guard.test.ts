@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { CommandOutcomeUnknown } from '../src/infrastructure/fuseki.ts';
 import { DRIVER_TRANSPORT_FAILURES } from '../src/infrastructure/owner-failure.ts';
 import { ErasureRestoreHold } from '../src/modules/erasure/reconcile.ts';
 import { isRelayTransientFailure } from '../src/modules/outbox/relay.ts';
@@ -154,6 +155,16 @@ test('restore closure catch wrappers retain the nearest caught error as cause', 
   expect(wrapperViolations(catches, throws)).toEqual([]);
 });
 
+test('Fuseki receipt reconciliation keeps the original uncertain command as cause', () => {
+  const methods = rawAstMatches(['--kind', 'method_definition'], ['services/main/src/infrastructure/fuseki.ts']);
+  const method = methods.find(candidate => /\basync commandWithReceipt\s*\(/.test(candidate.text));
+  expect(method).toBeDefined();
+  expect(method!.text).toMatch(/let commandFailure:\s*CommandOutcomeUnknown\s*\|\s*undefined/);
+  expect(method!.text).toContain('cause: commandFailure');
+  const timeout = new CommandOutcomeUnknown('command outcome unknown', { cause: new Error('socket timed out') });
+  expect(timeout.cause).toMatchObject({ message: 'socket timed out' });
+});
+
 test('one owner completion boundary classifies every phase before permanent settlement', () => {
   const files = ['services/main/src/modules/owner/operations.ts'];
   const methods = rawAstMatches(['--kind', 'method_definition'], files);
@@ -280,6 +291,11 @@ test('restore and relay use one cycle-safe evidence classifier', () => {
   first.cause = second;
   second.cause = first;
   expect(isRelayTransientFailure(first)).toBe(true);
+  const unknown = new CommandOutcomeUnknown('receipt absent', { cause: new Error('uncoded command timeout') });
+  expect(isRelayTransientFailure(unknown)).toBe(true);
+  expect(isRelayTransientFailure(new RestoreLineageConflict('restore interrupted', {
+    cause: new Error('owner read failed', { cause: unknown }),
+  }))).toBe(true);
 });
 
 for (const message of DRIVER_TRANSPORT_FAILURES) {

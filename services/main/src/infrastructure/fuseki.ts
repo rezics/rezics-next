@@ -961,8 +961,12 @@ export class FusekiClient {
   /** Resolve this command's receipt, never the dataset head, after an uncertain response. */
   async commandWithReceipt(envelope: CommandEnvelope): Promise<CommandResult> {
     let result: CommandResult | undefined;
+    let commandFailure: CommandOutcomeUnknown | undefined;
     try { result = await this.command(envelope); }
-    catch (error) { if (!(error instanceof CommandOutcomeUnknown)) throw error; }
+    catch (error) {
+      if (!(error instanceof CommandOutcomeUnknown)) throw error;
+      commandFailure = error;
+    }
     if (result?.status === 'committed' || result?.status === 'invalid'
       || result?.status === 'unknown-profile') return result;
     const receipt = await this.query(`PREFIX rv: <${RV}> SELECT ?digest ?dataset ?epoch ?sequence WHERE {
@@ -970,20 +974,24 @@ export class FusekiClient {
         rv:datasetId ?dataset ; rv:dataEpoch ?epoch ; rv:sequence ?sequence . }
     }`);
     const rows = receipt.results?.bindings ?? [];
-    if (rows.length > 1) throw new Error('command receipt cardinality violation');
+    if (rows.length > 1) throw new Error('command receipt cardinality violation',
+      commandFailure ? { cause: commandFailure } : undefined);
     if (rows.length === 1) {
       const row = rows[0]!;
       if (row.digest?.value !== envelope.digest) return { status: 'conflict' };
-      if (!row.dataset || !row.epoch || !row.sequence) throw new Error('incomplete command receipt');
+      if (!row.dataset || !row.epoch || !row.sequence) throw new Error('incomplete command receipt',
+        commandFailure ? { cause: commandFailure } : undefined);
       if (this.templateIndexWriter) return this.command(envelope);
       return { status: 'committed', position: {
         datasetId: row.dataset.value, dataEpoch: row.epoch.value, sequence: row.sequence.value,
       } };
     }
     if (result?.status === 'deadline') {
-      throw new CommandOutcomeUnknown('Fuseki command deadline; receipt absent');
+      throw new CommandOutcomeUnknown('Fuseki command deadline; receipt absent',
+        commandFailure ? { cause: commandFailure } : undefined);
     }
     if (result) return result;
-    throw new CommandOutcomeUnknown('Fuseki command outcome unknown; receipt absent');
+    throw new CommandOutcomeUnknown('Fuseki command outcome unknown; receipt absent',
+      commandFailure ? { cause: commandFailure } : undefined);
   }
 }

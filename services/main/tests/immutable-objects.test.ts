@@ -92,6 +92,28 @@ test('only an exact 404 proves an immutable object is missing', async () => {
   }
 });
 
+test('non-ok immutable GET and HEAD responses retain numeric status without changing messages', async () => {
+  const objectDigest = digest(Buffer.from('status-bearing immutable object'));
+  for (const status of [403, 503]) {
+    const unavailable = fakeS3({ getStatus: status, headStatus: status });
+    const getError = await unavailable.store.get(objectDigest).then(() => undefined, error => error);
+    expect(getError).toBeInstanceOf(ObjectUnavailable);
+    expect(getError).toMatchObject({ status, message: `committed immutable object is unavailable (${status})` });
+    const headError = await unavailable.store.probe(objectDigest).then(() => undefined, error => error);
+    expect(headError).toBeInstanceOf(ObjectUnavailable);
+    expect(headError).toMatchObject({ status,
+      message: `committed immutable object probe is unavailable (${status})` });
+  }
+
+  const absent = fakeS3({ getStatus: 404, headStatus: 404 });
+  const getError = await absent.store.get(objectDigest).then(() => undefined, error => error);
+  expect(getError).toBeInstanceOf(ObjectNotFound);
+  expect(getError).toMatchObject({ status: 404, message: 'committed immutable object was not found (404)' });
+  const headError = await absent.store.probe(objectDigest).then(() => undefined, error => error);
+  expect(headError).toBeInstanceOf(ObjectNotFound);
+  expect(headError).toMatchObject({ status: 404, message: 'committed immutable object was not found (404)' });
+});
+
 test('a timed out immutable read is unavailable rather than absent', async () => {
   let requestStarted!: () => void;
   const started = new Promise<void>(resolve => { requestStarted = resolve; });
