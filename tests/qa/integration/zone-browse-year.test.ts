@@ -19,7 +19,7 @@ type Page = {
   window: { complete: boolean };
 };
 
-test('Zone year browse reaches member 300, qualified-fact support, and descending directory years', async () => {
+test('Zone year browse reaches member 300 through qualified-fact support and rejects a keyless unaccepted date', async () => {
   const stack = await startMediaStack('zone-browse-year');
   try {
     const actor = id(),
@@ -70,7 +70,7 @@ test('Zone year browse reaches member 300, qualified-fact support, and descendin
               ? ''
               : `${iri(row.statement)} a rdf:Statement ; rdf:subject ${iri(row.work)} ;
             rdf:predicate schema:datePublished ; rdf:object "${row.index < 300 ? '2001' : '1995'}"^^xsd:${row.index === 349 ? 'string' : 'gYear'} ;
-            rv:meaningKey ${iri(row.meaningKey)} ;
+            ${row.index === 345 ? '' : `rv:meaningKey ${iri(row.meaningKey)} ;`}
             rv:statementState rv:${row.index === 346 ? 'Withdrawn' : 'Active'} ; rv:head ${iri(row.statementHead)} .
           ${iri(row.yearSlot)} a rv:DecisionSlot ; rv:decisionTarget ${iri(row.index === 300 ? row.meaningKey : row.statement)} ;
             rv:targetKind rv:${row.index === 300 ? 'QualifiedFactTarget' : 'StatementTarget'} ;
@@ -100,23 +100,11 @@ test('Zone year browse reaches member 300, qualified-fact support, and descendin
       PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
       INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
         ${iri(duplicateStatement)} a rdf:Statement ; rdf:subject ${iri(duplicate.work)} ; rdf:predicate schema:datePublished ;
-          rdf:object "1995-06-01"^^xsd:date ; rv:statementState rv:Active ; rv:head ${iri(id())} .
+          rdf:object "1995-06-01"^^xsd:date ; rv:meaningKey <urn:rezics:meaning:${'e'.repeat(64)}> ;
+          rv:statementState rv:Active ; rv:head ${iri(id())} .
         ${iri(duplicateSlot)} a rv:DecisionSlot ; rv:decisionTarget ${iri(duplicateStatement)} ; rv:targetKind rv:StatementTarget ;
           rv:acceptanceContext <urn:rezics:classification-context:global> ; rv:decisionHead ${iri(duplicateDecision)} . }
       GRAPH ${iri(GRAPHS.revisions)} { ${iri(duplicateDecision)} a rv:StatementDecision ; rv:component ${iri(duplicateSlot)} ; rv:outcome rv:Accepted . } }`);
-    const older = works[345]!,
-      recentStatement = id(),
-      recentSlot = id(),
-      recentDecision = id();
-    await stack.fuseki.update(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
-      PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
-      INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
-        ${iri(recentStatement)} a rdf:Statement ; rdf:subject ${iri(older.work)} ; rdf:predicate schema:datePublished ;
-          rdf:object "2024"^^xsd:gYear ; rv:statementState rv:Active ; rv:head ${iri(id())} .
-        ${iri(recentSlot)} a rv:DecisionSlot ; rv:decisionTarget ${iri(recentStatement)} ; rv:targetKind rv:StatementTarget ;
-          rv:acceptanceContext <urn:rezics:classification-context:global> ; rv:decisionHead ${iri(recentDecision)} . }
-      GRAPH ${iri(GRAPHS.revisions)} { ${iri(recentDecision)} a rv:StatementDecision ; rv:component ${iri(recentSlot)} ; rv:outcome rv:Accepted . } }`);
-    await stack.templateSeek.backfill(stack.env.lineage.dataEpoch, true);
     const entries = works.map((row) => ({
       work: row.work,
       adoptedOrder: String(350 - row.index),
@@ -148,15 +136,10 @@ test('Zone year browse reaches member 300, qualified-fact support, and descendin
         : undefined;
     });
     const path = `http://main.local/v1/realms/${realm.slice(-36)}/modules/browse`;
-    const read = async (
-      publicationYear: string,
-      cursor?: string,
-      publicationYearOrder?: 'descending',
-    ) => {
+    const read = async (publicationYear: string, cursor?: string) => {
       const query = new URLSearchParams({
         publicationYear,
         ...(cursor ? { cursor } : {}),
-        ...(publicationYearOrder ? { publicationYearOrder } : {}),
       });
       const response = await app.handle(new Request(`${path}?${query}`));
       if (response.status !== 200) throw new Error(`${response.status}: ${await response.text()}`);
@@ -184,9 +167,11 @@ test('Zone year browse reaches member 300, qualified-fact support, and descendin
     expect(last.facets.type).toEqual([{ value: 'https://schema.org/Book', count: 5 }]);
     expect(last.nextCursor).toBeNull();
     expect(last.window.complete).toBe(true);
-    const directory = await read('1-9999', undefined, 'descending');
-    expect(directory.items[0]!.id).toBe(older.work);
-    expect(directory.items[0]!.id).not.toBe(works[300]!.work);
+    // Row 345 has an active date but no meaningKey and no acceptance. Row 300's
+    // unrelated qualified-fact decision must not bind a key on its behalf.
+    expect([...second.items, ...third.items, ...last.items].map((item) => item.id)).not.toContain(
+      works[345]!.work,
+    );
     const changed = await app.handle(
       new Request(
         `${path}?${new URLSearchParams({

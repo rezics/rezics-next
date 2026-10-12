@@ -142,7 +142,6 @@ function browseSession(count = 310, firstMatch = 300, cursor?: string) {
         return [...new Set(ids)]
           .filter((work) => Number(work.slice(-12)) >= firstMatch)
           .map((work) => {
-            const year = sparql.match(new RegExp(`\\(<${work}> (\\d+)\\)`))?.[1];
             return {
               work: term(work),
               head: term(reference(991)),
@@ -150,7 +149,6 @@ function browseSession(count = 310, firstMatch = 300, cursor?: string) {
               evidence: term(reference(993)),
               revisionEpoch: term('epoch'),
               sequence: term('1'),
-              ...(year ? { directoryYear: term(year) } : {}),
             };
           });
       if (sparql.includes('SELECT ?work ?type'))
@@ -200,23 +198,11 @@ test('a year match beyond member 300 remains reachable after an empty bounded pa
   expect(second.nextCursor).toBeNull();
 });
 
-test('the all-years browse follows publication-year keys rather than adoption order', async () => {
-  const { session } = browseSession(10, 0);
-  session.deps.templateSeek = {
-    keys: async () => [],
-    candidates: async () => ({
-      more: false,
-      rows: [
-        { id: reference(5), key: '7976' },
-        { id: reference(4), key: '8005' },
-      ],
-    }),
-  } as never;
-  const page = await readZoneBrowse(session, realm, {
-    publicationYear: '1-9999',
-    publicationYearOrder: 'descending',
-  });
-  expect(page.items.map((item) => item.id)).toEqual([reference(5), reference(4)]);
-  expect(page.matches).toEqual({ value: 2, kind: 'exact' });
-  expect(page.query.publicationYearOrder).toBe('descending');
+test('the fallback removes the new all-years directory control from Main admission', () => {
+  expect(() =>
+    compileZoneBrowse(realm, {
+      publicationYear: '1-9999',
+      publicationYearOrder: 'descending',
+    } as never),
+  ).toThrow(QueryRejected);
 });

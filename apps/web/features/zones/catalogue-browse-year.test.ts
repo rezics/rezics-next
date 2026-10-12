@@ -93,6 +93,8 @@ await mock.module('../../zones/official/index.ts', () => ({
 const mainExports = { ...(await import('../api/main.ts')) };
 const calls: { realm: string; query: Record<string, unknown> }[] = [];
 let transport: (query: Record<string, unknown>) => unknown;
+const directoryCalls: Record<string, unknown>[] = [];
+let directoryTransport: (body: Record<string, unknown>) => unknown;
 await mock.module('../api/main.ts', () => ({
   ...mainExports,
   mainApiWithToken: () => ({
@@ -108,6 +110,12 @@ await mock.module('../api/main.ts', () => ({
         },
       }),
       facets: { get: async () => ({ data: { facets: [] }, error: null }) },
+      query: {
+        post: async (body: Record<string, unknown>) => {
+          directoryCalls.push(body);
+          return { data: { result: directoryTransport(body) }, error: null };
+        },
+      },
     },
   }),
 }));
@@ -205,22 +213,34 @@ test('the real route sends year on both API reads and preserves Next on an empty
   ]);
 });
 
-test('the real all-years route requests descending publication years rather than adoption order', async () => {
+test('the real all-years route retains the previous publication-year template and ordering', async () => {
   calls.length = 0;
+  directoryCalls.length = 0;
   const newestAdoption = rawWork(1995),
     olderAdoption = rawWork(2024);
-  transport = (query) =>
-    apiPage(
-      query.publicationYearOrder === 'descending'
-        ? [olderAdoption, newestAdoption]
-        : [newestAdoption, olderAdoption],
-      2,
-      null,
-    );
+  transport = () => apiPage([newestAdoption, olderAdoption], 2, null);
+  directoryTransport = () => ({
+    profile: 'template-result-v1',
+    query: 'https://rezics.com/query/work-publication-years',
+    items: [
+      { id: olderAdoption.id, year: 2024, statement: native(801) },
+      { id: newestAdoption.id, year: 1995, statement: native(802) },
+    ],
+    nextCursor: null,
+  });
   const model = await routeModel({ years: '1' });
   expect(model.items.map((item) => item.id)).toEqual([olderAdoption.id, newestAdoption.id]);
-  expect(calls[0]!.query).toEqual({
-    publicationYear: '1-9999',
-    publicationYearOrder: 'descending',
-  });
+  expect(calls).toEqual([
+    { realm: native(999), query: {} },
+    { realm: native(999), query: {} },
+  ]);
+  expect(directoryCalls).toEqual([
+    {
+      profile: 'template-query-v1',
+      query: 'https://rezics.com/query/work-publication-years',
+      revision: 1,
+      parameters: {},
+      limit: 20,
+    },
+  ]);
 });

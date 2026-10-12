@@ -34,8 +34,7 @@ type SearchRequest = { profile: string; phrase?: string; titleTerm?: string; bod
 type ZoneRequest = { q?: string; sort: 'relevance' | 'newest' | 'updated'; type?: string[];
   concept?: string[]; excludeConcept?: string[];
   status?: SerialStatus[]; excludeStatus?: SerialStatus[];
-  length?: string; publicationYear?: string; publicationYearOrder?: 'descending';
-  language?: string; limit: number; cursor?: string };
+  length?: string; publicationYear?: string; language?: string; limit: number; cursor?: string };
 type ConceptSelection = { operator: 'include' | 'exclude'; value: string; revision?: string };
 
 export type CompiledQuery =

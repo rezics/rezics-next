@@ -72,8 +72,6 @@ export const zoneBrowseQuery = t.Object({ language: pageQuery.language, limit: p
   sort: t.Optional(sortValue),
   /** An accepted first-publication calendar year, or an inclusive bounded range. */
   publicationYear: t.Optional(t.String({ pattern: '^[1-9][0-9]{0,3}(-[1-9][0-9]{0,3})?$' })),
-  /** The all-years directory follows the existing newest-year-first directory. */
-  publicationYearOrder: t.Optional(t.Literal('descending')),
   type: t.Optional(t.Array(workType, many)), concept: t.Optional(t.Array(readId, many)),
   excludeConcept: t.Optional(t.Array(readId, many)),
   status: t.Optional(t.Array(status, many)),
@@ -92,7 +90,6 @@ export const zoneBrowsePage = t.Object({ profile: t.Literal('zone-browse-v1'), r
   /** The Query as Main applied it: text, sort and the Filter in FilterDocument form. */
   query: t.Object({ text: t.Nullable(t.String()), sort: sortValue,
     publicationYear: t.Optional(t.String()),
-    publicationYearOrder: t.Optional(t.Literal('descending')),
     /** Title matching falls back to adoption order for requested relevance. */
     appliedSort: t.Union([t.Literal('newest'), t.Literal('updated')]),
     textMatch: t.Union([t.Literal('title'), t.Literal('none')]),
