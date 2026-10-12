@@ -1,6 +1,9 @@
 import { expect, test } from 'bun:test';
 import { rawSparqlIntegrationFiles, rawSparqlIntegrationScan } from './isolated-integration-files.ts';
 
+/** The scan parses every test file's imports: about five seconds alone, more beside other guards. */
+const SCAN_TIMEOUT_MS = 60_000;
+
 /** The initial ceiling unions the existing list with the callers missed in regression run 9,
  * including the 24 direct callers and roots that reach update helpers. It only shrinks as files
  * migrate their raw writes to commands; raw update blocks Work-name admission. */
@@ -179,7 +182,7 @@ const ceiling = new Set<string>([
 test('raw SPARQL integration files only shrink', () => {
   const added = [...rawSparqlIntegrationFiles()].filter(file => !ceiling.has(file)).sort();
   expect(added).toEqual([]);
-});
+}, SCAN_TIMEOUT_MS);
 
 test('discovery replay inherits raw-fixture classification from its imported tests', () => {
   const wrapper = 'tests/qa/integration/discovery-read-isolation.test.ts';
@@ -193,4 +196,4 @@ test('discovery replay inherits raw-fixture classification from its imported tes
   ]) {
     expect(sites.some(site => site.startsWith(`${source}:`))).toBe(true);
   }
-});
+}, SCAN_TIMEOUT_MS);
