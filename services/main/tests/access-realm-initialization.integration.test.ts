@@ -316,10 +316,12 @@ async function fixture(sealed = true) {
 }
 
 async function grantSettingsMandate(h: Awaited<ReturnType<typeof fixture>>) {
-  await grantFixtureAuthority(pool, { scope: `governance:realm:${h.realm}`, requireDispatch: true,
-    representations: [{ principalId: h.principalId, actor: h.actor,
-      action: 'realm.settings.manage', lifetime: '8 hours' }],
-    grant: { actor: h.actor, action: 'realm.settings.manage', lifetime: '8 hours' } });
+  // A settings write also publishes the Realm's rules.
+  for (const action of ['realm.settings.manage', 'governance.rule.publish']) {
+    await grantFixtureAuthority(pool, { scope: `governance:realm:${h.realm}`, requireDispatch: true,
+      representations: [{ principalId: h.principalId, actor: h.actor, action, lifetime: '8 hours' }],
+      grant: { actor: h.actor, action, lifetime: '8 hours' } });
+  }
 }
 
 test('Created Realm initialization is atomic, creation-bound, replayable and bounded on host PostgreSQL', async () => {
