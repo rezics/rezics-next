@@ -84,10 +84,11 @@ export class CorpusCommandError extends Error {
   constructor(readonly key: string, readonly operation: string, readonly stage: WorkProfileScale | undefined,
     readonly status: number, detail: string) {
     const body = Buffer.from(detail).subarray(0, 300).toString('utf8');
-    let typed: { code?: unknown; status?: unknown } | null = null;
-    try { typed = JSON.parse(detail) as typeof typed; } catch { /* Non-JSON errors still carry their body. */ }
-    const code = typeof typed?.code === 'string' ? typed.code : undefined;
-    const responseStatus = typeof typed?.status === 'string' || typeof typed?.status === 'number' ? typed.status : undefined;
+    let parsed: unknown;
+    try { parsed = JSON.parse(detail); } catch { /* Non-JSON errors still carry their body. */ }
+    const typed = parsed !== null && typeof parsed === 'object' ? parsed as { code?: unknown; status?: unknown } : {};
+    const code = typeof typed.code === 'string' ? typed.code : undefined;
+    const responseStatus = typeof typed.status === 'string' || typeof typed.status === 'number' ? typed.status : undefined;
     super(`Corpus command ${key} (${operation}, stage ${stage ?? 'unspecified'}) returned HTTP ${status}`
       + ` code=${code ?? 'unspecified'} status=${responseStatus ?? 'unspecified'}: ${body}`);
     this.name = 'CorpusCommandError';
