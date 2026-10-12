@@ -140,6 +140,9 @@ test('64 published homes fit the enclosing 160-call budget through real summary 
       visibilityCalls++;
       return { results: { bindings: [{ kind: cell('space'), space: cell(h.space), disclosure: cell(`${RV}Public`) }] } };
     }
+    if (query.includes('SELECT ?work ?head ?owningWork ?owningHead')) {
+      return { results: { bindings: homes.map(home => ({ work: cell(home.resource) })) } };
+    }
     return original(query, bytes);
   };
   const batch = await targetSummaries(h.session, homes.map(home => home.resource));
