@@ -1,5 +1,5 @@
 import { assertControllerContinuity, lockControllerContinuity, principalControllerSubjects } from './controller-continuity.ts';
-import { applyAccountDeletionAgents, continueAccountDeletionAgents, collectAccountDeletionAgents, lockAccountDeletionTopology,
+import { applyAccountDeletionAgents, continueAccountDeletionAgents, collectAccountDeletionAgents, assertAccountDeletionContinuity, lockAccountDeletionTopology,
   type AccountDeletionOptions } from './account-deletion-agents.ts';
 import { captureAuthorityWitness, authorityWitnessCurrent, authorityWitnessDeadline,
   type AuthoritySource, type AuthorityWitness } from './authority-witness.ts';
@@ -2040,16 +2040,27 @@ export class AccessAdmissionRegistry {
       let deletionPending = false;
       if (principal.active) {
         const controlled = accountDeletion ? [] : await principalControllerSubjects(client, principalId);
-        const hasDeletionAgents = accountDeletion && await collectAccountDeletionAgents(client, principalId);
         if (!accountDeletion) await lockControllerContinuity(client, controlled);
         if (enforcementEpoch !== expectedEpoch) throw new AdmissionConflict('principal epoch changed');
+        if (accountDeletion) {
+          const progress = await collectAccountDeletionAgents(client, principalId, deletionOperationId, options);
+          if (progress) {
+            deletionOperationId = progress.operation_id;
+            deletionPending = await applyAccountDeletionAgents(client, principalId, progress);
+          }
+          if (deletionPending) {
+            await client.query('COMMIT');
+            // Classification and orphan pages retain active Access. Release
+            // transaction locks and resume the durable frontier on the next step.
+            return this.deactivatePrincipal(principalId, enforcementEpoch, true, options);
+          }
+        }
         const changed = await client.query<{ enforcement_epoch: string }>(
           `UPDATE access.principal SET active = false,
              enforcement_epoch = enforcement_epoch + 1 WHERE id = $1
            RETURNING enforcement_epoch`, [principalId]);
-        if (hasDeletionAgents) deletionPending = await applyAccountDeletionAgents(
-          client, principalId, deletionOperationId, options);
-        if (!accountDeletion) await assertControllerContinuity(client, controlled);
+        if (accountDeletion) await assertAccountDeletionContinuity(client, principalId, deletionOperationId);
+        else await assertControllerContinuity(client, controlled);
         enforcementEpoch = changed.rows[0]!.enforcement_epoch;
         await client.query(
           `INSERT INTO access.outbox (id, kind, principal_id, authority_epoch)
@@ -2065,9 +2076,7 @@ export class AccessAdmissionRegistry {
       }
       if (deletionPending) {
         await client.query('COMMIT');
-        // Release every transaction lock between bounded steps. A crash or a
-        // held recovery fence leaves the operation resumable, with no erasure
-        // completion marker and with the principal still fenced.
+        // Resume a pre-frontier operation already fenced by an older release.
         return this.deactivatePrincipal(principalId, enforcementEpoch, true, options);
       }
       if (accountDeletion) {
