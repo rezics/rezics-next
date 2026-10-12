@@ -941,8 +941,17 @@ for (const narrow of ['title', 'search', 'publication', 'exact_revision'] as con
   test(`production Realm ${narrow} restriction leaves its ordinary Works route available`, async () => {
     const f = await productionRealm(`realm-narrow-${narrow}`);
     try {
+      const content = await f.stack.publicWork(f.editor.actor, ['en'], `Realm preservation ${narrow}`);
+      await f.grant(f.editor, `publication:adopt:${f.realm}`, 'publication.adopt');
+      await responseJson(await f.editor.send('POST', '/v1/publication-selections', {
+        profile: 'realm-local-selection-v1', context: { kind: 'realm-local', id: f.realm },
+        work: content.work, mainVersion: content.mainVersion, contribution: content.variants[0]!.contribution,
+        publicationDecision: content.variants[0]!.decision, expectedSelectionHead: null,
+        selectionBasis: 'realm-manager-review', actingSubject: f.editor.actor,
+      }), 201);
       const ordinary = () => f.stack.call('GET', `/v1/realms/${f.realm.slice(-36)}/works`);
-      const before = await responseJson<{ items: unknown[] }>(await ordinary(), 200);
+      const before = await responseJson<{ items: { id: string }[] }>(await ordinary(), 200);
+      expect(before.items.map(item => item.id)).toEqual([content.work]);
       const candidate = { ...f.input.targets[0]!,
         ...(narrow === 'title' ? { component: 'title' as const } : {}),
         ...(narrow === 'search' ? { effect: 'search' as const } : {}),
@@ -978,7 +987,8 @@ for (const narrow of ['title', 'search', 'publication', 'exact_revision'] as con
       }
       const confirmed = await f.governance.store.decide(f.staff.principal, { ...input, targets: [candidate] });
       expect(confirmed.operation.status).toBe('completed');
-      const after = await responseJson<{ items: unknown[] }>(await ordinary(), 200);
+      const after = await responseJson<{ items: { id: string }[] }>(await ordinary(), 200);
+      expect(after.items.map(item => item.id)).toEqual([content.work]);
       expect(after.items).toEqual(before.items);
       expect((await f.stack.accessPool.query(`SELECT 1 FROM access.governance_enforcement
         WHERE resource=$1 AND component='record' AND effect='disclosure' AND revision IS NULL`,
