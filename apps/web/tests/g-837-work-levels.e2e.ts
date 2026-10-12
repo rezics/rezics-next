@@ -107,11 +107,21 @@ test('parts, connections and editions read from Main for the franchise records',
     'href',
     localizedPath(resourceHref('/w/', uuid(index.overall.work)), 'en'),
   );
-  // The sequel relation reads as a row with Main's label.
+  // Main discloses the counterpart even when the visitor cannot read its typed label.
+  await expect(
+    page.getByRole('region', { name: 'Connections' }).getByRole('link', {
+      name: 'A Certain Magical Index: Genesis Testament',
+      exact: true,
+    }),
+  ).toHaveAttribute(
+    'href',
+    localizedPath(resourceHref('/w/', uuid(index.genesisTestament.work)), 'en'),
+  );
+  await signInAtAccounts(page, at(index.newTestament, 'connections'), member);
+  // The member's semantic read authority also discloses the sequel label.
   await expect(page.locator('[data-relation-row]').filter({ hasText: 'Sequel' })).toContainText(
     'Genesis Testament',
   );
-  await signInAtAccounts(page, at(index.newTestament, 'connections'), member);
 
   // Genesis Testament restarts at 1.
   await page.goto(at(index.genesisTestament, 'connections'));
