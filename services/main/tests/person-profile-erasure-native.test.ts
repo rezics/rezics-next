@@ -597,7 +597,7 @@ public class PersonProfileCallerContractTest {
       '--tmpfs', `/build/.temp:rw,size=256m,uid=${process.getuid!()},gid=${process.getgid!()}`,
       '--env', 'MAVEN_CONFIG=/maven-cache', '--env', 'MAVEN_OPTS=-Xmx128m',
       '--workdir', containerModule, image, 'mvn', '-B', '-ntp', '-Dmaven.repo.local=/maven-cache',
-      `-Djava.io.tmpdir=${containerModule}/tmp`, '-DargLine=-Xmx384m',
+      `-Djava.io.tmpdir=${containerModule}/tmp`, `-DargLine=-Xmx384m -Djava.io.tmpdir=${containerModule}/tmp`,
       ...(fullNativeSuite ? [] : [`-Dtest=PersonProfileCallerContractTest,${nativeProofs.filter(name => name !== 'SlimCommandTest').join(',')}`]), 'test'],
     { cwd: root, encoding: 'utf8', timeout: nativeTimeout, maxBuffer: 16 * 1024 * 1024,
       env: preserveReapEnvironment(process.env) });
