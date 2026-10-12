@@ -102,18 +102,20 @@ export class PublicReports {
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 564))', [receiptHash]);
       const prior = await this.replay(client, receiptHash, digest);
       if (prior) return prior;
+      if (principal) await client.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
+        VALUES ($1, $2, $3) ON CONFLICT (account_issuer, account_subject) DO NOTHING`,
+      [randomUUID(), principal.issuer, principal.subject]);
       let heldPrincipal: string | null = null;
       if (input.category === 'child_exploitation') {
-        heldPrincipal = await lockPreservationNeighborhood(client, target.author, target.evidence.resource);
+        const reporterId = principal ? (await client.query<{ id: string }>(`SELECT id FROM access.principal
+          WHERE account_issuer = $1 AND account_subject = $2`, [principal.issuer, principal.subject])).rows[0]?.id ?? null : null;
+        heldPrincipal = await lockPreservationNeighborhood(client, target.author, target.evidence.resource, reporterId);
         // Erasure may have won while the first owner read was in flight. Re-admit
         // under its fence before committing a hold on material that no longer exists.
         const current = await this.owners.resolve(input, request, principal);
         if (canonical(current) !== canonical(target)) throw new GovernanceConflict('Report target changed');
         if (current.evidence.state === 'erased') throw new GovernanceDenied('Reported material is erased');
       }
-      if (principal) await client.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
-        VALUES ($1, $2, $3) ON CONFLICT (account_issuer, account_subject) DO NOTHING`,
-      [randomUUID(), principal.issuer, principal.subject]);
       const reporter = principal ? (await client.query<{ id: string }>(`SELECT id FROM access.principal
         WHERE account_issuer = $1 AND account_subject = $2 AND active FOR SHARE`,
       [principal.issuer, principal.subject])).rows[0]?.id ?? null : null;

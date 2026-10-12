@@ -632,3 +632,36 @@ test('safety intake refuses an already erased target and changed author, revisio
     target.evidence.resource)).rejects.toBeInstanceOf(GovernanceDenied);
   expect(await materialHolds(target.evidence.resource)).toEqual([]);
 });
+
+test('authenticated Accounts reporting each others Works both commit without a principal lock cycle', async () => {
+  const a = await principal();
+  const b = await principal();
+  const authorA = await provision(a);
+  const authorB = await provision(b);
+  const targets = [preservedTarget(authorB.person), preservedTarget(authorA.person)];
+  let release!: () => void;
+  const initialReads = new Promise<void>(resolve => { release = resolve; });
+  let ready = 0;
+  const reports = targets.map(target => {
+    let reads = 0;
+    return new PublicReports(access, { resolve: async () => {
+      if (++reads === 1) {
+        if (++ready === 2) release();
+        await initialReads;
+      } else {
+        // Both intakes overlap their owner read while any principal locks remain held.
+        await new Promise<void>(resolve => { setImmediate(resolve); });
+      }
+      return target;
+    } });
+  });
+  const outcomes = await Promise.allSettled(reports.map((report, index) => report.submit({
+    profile: 'public-report-v1', category: 'child_exploitation', target: targets[index]!.evidence.resource,
+    statement: 'Preserve reported material.', contentLanguage: 'en',
+  }, randomUUID(), new Request('http://main.test/v1/public-reports'), index === 0 ? a : b)));
+  expect(outcomes.map(outcome => outcome.status)).toEqual(['fulfilled', 'fulfilled']);
+  expect(await materialHolds(targets[0]!.evidence.resource)).toEqual([{ author_subject: authorB.person,
+    account_issuer: b.issuer, account_subject: b.subject }]);
+  expect(await materialHolds(targets[1]!.evidence.resource)).toEqual([{ author_subject: authorA.person,
+    account_issuer: a.issuer, account_subject: a.subject }]);
+});

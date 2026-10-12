@@ -13,10 +13,10 @@ export async function lockPreservationTarget(client: PoolClient, resource: strin
 }
 
 /** Recovery is already shared by intake. Match the Person owner's order:
- * author advisory, principal, authority, provision, deletion intent, then material.
- * The principal write lock also fences erasure of other Persons of this Account. */
+ * author advisory, sorted principals, authority, provision, intent, then material.
+ * Principal write locks fence sibling Persons and reciprocal authenticated reports. */
 export async function lockPreservationNeighborhood(client: PoolClient, author: string | null,
-  resource: string): Promise<string | null> {
+  resource: string, reporter: string | null): Promise<string | null> {
   if (!author) { await lockPreservationTarget(client, resource); return null; }
   await lockPreservationTarget(client, author);
   const owner = (await client.query<{ principal_id: string; provision_id: string | null;
@@ -26,7 +26,8 @@ export async function lockPreservationNeighborhood(client: PoolClient, author: s
       WHERE r.subject_id = $1 AND NOT EXISTS (
         SELECT 1 FROM access.agent_provision WHERE agent_id = $1)
     ORDER BY representation_id LIMIT 1`, [author])).rows[0];
-  if (owner) await client.query('SELECT id FROM access.principal WHERE id = $1 FOR UPDATE', [owner.principal_id]);
+  await client.query(`SELECT id FROM access.principal WHERE id = ANY($1::uuid[])
+    ORDER BY id FOR UPDATE`, [[...new Set([owner?.principal_id, reporter].filter((id): id is string => !!id))]]);
   await client.query('SELECT id FROM access.authority_subject WHERE id = $1 FOR SHARE', [author]);
   if (owner) {
     const retained = owner.provision_id
