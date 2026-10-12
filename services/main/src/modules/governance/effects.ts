@@ -98,6 +98,13 @@ export function ownerModerationEffects(content: ContentModeration, env: WorkActi
   media?: { pool: Pool; core: ContentCore },
 ): ModerationEffects {
   const store = media ? new MediaStore(media.pool, media.core) : undefined;
+  const validateGraphTarget = async (target: DecisionTargetInput, plan?: EffectPlan) => {
+    const realm = target.owner === 'graph' ? await ownerTargetHeads({ graph: env }).realmBasis(target) : null;
+    if (target.owner === 'graph') assertGraphOwnerBasis(plan, realm);
+    if (realm && ['body', 'structure'].includes(target.component))
+      throw new GovernanceStale('Realm moderation has no body or structure grain');
+    return realm;
+  };
   return {
     ...graphNoticeParticipants(env),
     async plan(target, outcome, context) {
@@ -193,13 +200,11 @@ export function ownerModerationEffects(content: ContentModeration, env: WorkActi
     },
     async apply(operationId, ordinal, target, plan, continuation) {
       if (restrictionOwners[target.effect] === 'access') {
-        const realm = target.owner === 'graph' ? await ownerTargetHeads({ graph: env }).realmBasis(target) : null;
-        if (target.owner === 'graph') assertGraphOwnerBasis(plan, realm);
-        if (realm && ['body', 'structure'].includes(target.component))
-          throw new GovernanceStale('Realm moderation has no body or structure grain');
+        await validateGraphTarget(target, plan);
         return { receipt: `access:governance-enforcement:${operationId}:${ordinal}` };
       }
       if (plan?.media && store) {
+        await validateGraphTarget(target, plan);
         const receipt = `${operationId}:${ordinal}`;
         const restricted = !['restore', 'reverse'].includes(plan.outcome ?? 'restrict');
         try {
@@ -273,10 +278,7 @@ export function ownerModerationEffects(content: ContentModeration, env: WorkActi
         return true;
       };
       if (await observed()) return { receipt };
-      const realm = await ownerTargetHeads({ graph: env }).realmBasis(target);
-      assertGraphOwnerBasis(plan, realm);
-      if (realm && ['body', 'structure'].includes(target.component))
-        throw new GovernanceStale('Realm moderation has no body or structure grain');
+      const realm = await validateGraphTarget(target, plan);
       const profile = target.component === 'structure' ? 'structure-composition-v1'
         : 'work-metadata-v1';
       const shape = target.component === 'structure'
