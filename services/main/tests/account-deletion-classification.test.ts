@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
-import { readFileSync, statSync } from 'node:fs';
+import { readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
@@ -121,7 +121,7 @@ async function removeController(owner: Principal, subject: string) {
   });
 }
 
-// Counting SQL results makes the budget independent of host scheduling.
+// Fault injection observes the production transaction and statement boundary.
 function measuredPool(observer: (sql: string, result: { rowCount: number | null; rows: Record<string, unknown>[] }) => void,
   before?: (sql: string) => void) {
   if (!cluster) throw new Error('Postgres fixture unavailable');
@@ -151,8 +151,9 @@ async function appendPerson(owner: Principal, parent: string) {
   return person;
 }
 
-test('unaffected co-controlled Person chains have identical deletion work at 8, 64 and 512 Agents', async () => {
-  const costs: { statements: number; rows: number; classified: number; controllers: number }[] = [];
+let unaffectedCorpus: { survivor: Principal; persons: string[] } | undefined;
+async function unaffectedChain() {
+  if (unaffectedCorpus) return unaffectedCorpus;
   const survivor = await principal();
   const corpus: string[] = [];
   for (let index = 0; index < 512; index++) corpus.push(await provision(survivor, 'person'));
@@ -167,6 +168,13 @@ test('unaffected co-controlled Person chains have identical deletion work at 8, 
     });
     await removeController(survivor, corpus[index]!);
   }
+  unaffectedCorpus = { survivor, persons: corpus };
+  return unaffectedCorpus;
+}
+
+test('unaffected co-controlled Person chains have identical deletion work at 8, 64 and 512 Agents', async () => {
+  const costs: { statements: number; rows: number }[] = [];
+  const { survivor, persons: corpus } = await unaffectedChain();
   for (const size of [8, 64, 512]) {
     const owner = await principal();
     const rootPerson = size === 512 ? corpus[0]! : await provision(survivor, 'person');
@@ -175,14 +183,10 @@ test('unaffected co-controlled Person chains have identical deletion work at 8, 
       principalId: survivor.id, representative: rootPerson, represented: persons[1]!,
     });
     await addFixtureController(owner, rootPerson);
-    const cost = { statements: 0, rows: 0, classified: 0, controllers: 0 };
-    const measured = measuredPool((sql, result) => {
+    const cost = { statements: 0, rows: 0 };
+    const measured = planPool([], (_sql, plans) => {
       cost.statements++;
-      cost.rows += result.rowCount ?? 0;
-      if (sql.includes('account_deletion_classification_step')) {
-        cost.classified += Number(result.rows[0]?.examined ?? 0);
-        cost.controllers += Number(result.rows[0]?.controller_rows ?? 0);
-      }
+      cost.rows += plans.reduce((sum, plan) => sum + planRows(plan.Plan), 0);
     });
     try {
       expect(await new AccessAdmissionRegistry(measured).strongDeactivateAccountSubject(
@@ -210,14 +214,14 @@ test('long sole-controlled Person chains classify in bounded persisted steps and
   const interruption = new Error('classification statement interrupted');
   let steps = 0;
   const counts: number[] = [];
-  const measured = measuredPool((sql, result) => {
-    if (sql.includes('CREATE TEMP TABLE account_deletion_candidates') || sql.includes('account_deletion_classification_step')) {
-      const examined = Number(result.rows[0]?.examined ?? result.rowCount ?? 0);
-      expect(examined).toBeLessThanOrEqual(16);
-      expect(Number(result.rows[0]?.controller_rows ?? 0)).toBeLessThanOrEqual(1024);
-      counts.push(examined);
-    }
-  }, sql => {
+  const observeStep = (sql: string, plans: RecordedPlan[]) => {
+    if (!sql.includes('account_deletion_classification_step')) return;
+    const reads = plans.reduce((sum, plan) => sum + planRows(plan.Plan), 0);
+    expect(reads).toBeLessThanOrEqual(1024);
+    expect(plans.reduce((sum, plan) => sum + planBuffers(plan.Plan), 0)).toBeLessThanOrEqual(2048);
+    counts.push(reads);
+  };
+  const measured = planPool([], observeStep, sql => {
     if (sql.includes('account_deletion_classification_step') && ++steps === 5) throw interruption;
   });
   try {
@@ -231,20 +235,15 @@ test('long sole-controlled Person chains classify in bounded persisted steps and
   const retained = await pool.query(`SELECT agent_id FROM access.account_deletion_progress_agent
     WHERE operation_id = $1`, [progress!.operation_id]);
   expect(retained.rows).toHaveLength(4);
-  const resumed = measuredPool((sql, result) => {
-    if (sql.includes('account_deletion_classification_step')) {
-      const examined = Number(result.rows[0]?.examined ?? 0);
-      expect(examined).toBeLessThanOrEqual(16);
-      expect(Number(result.rows[0]?.controller_rows ?? 0)).toBeLessThanOrEqual(1024);
-      counts.push(examined);
-    }
-  });
+  const resumed = planPool([], observeStep);
   try {
     expect(await new AccessAdmissionRegistry(resumed).strongDeactivateAccountSubject(
       owner.verified.issuer, owner.verified.subject)).toMatchObject({ enforcementEpoch: '1' });
   } finally { await resumed.end(); }
   expect(counts).toHaveLength(persons.length);
-  expect(counts.reduce((sum, count) => sum + count, 0)).toBe(persons.length);
+  expect(counts.reduce((sum, count) => sum + count, 0)).toBeLessThanOrEqual(persons.length * 1024);
+  expect((await pool.query(`SELECT agent_id FROM access.account_deletion_progress_agent
+    WHERE operation_id = $1 AND effect = 'end'`, [progress!.operation_id])).rows).toHaveLength(persons.length);
   for (const subject of persons) expect(await subjectState(subject)).toEqual({ active: false, controllers: 0 });
   expect((await pool.query(`SELECT id FROM access.outbox WHERE principal_id = $1
     AND kind = 'account.deletion_fenced'`, [owner.id])).rows).toEqual([{ id: progress!.operation_id }]);
@@ -327,24 +326,33 @@ test('bounded production pool releases classification and orphan handoffs in thr
 
 type ReadPlan = {
   'Node Type': string; 'Relation Name'?: string; 'Actual Rows': number; 'Actual Loops': number;
-  'Rows Removed by Filter'?: number; 'Rows Removed by Index Recheck'?: number;
-  'Shared Hit Blocks'?: number; 'Shared Read Blocks'?: number; Plans?: ReadPlan[];
+  'Index Name'?: string; 'Index Cond'?: string; 'Filter'?: string; 'Rows Removed by Filter'?: number; 'Rows Removed by Index Recheck'?: number;
+  'Shared Hit Blocks'?: number; 'Shared Read Blocks'?: number; 'Local Hit Blocks'?: number; 'Local Read Blocks'?: number; Plans?: ReadPlan[];
 };
 type RecordedPlan = { 'Query Text': string; Plan: ReadPlan; Statement: string; StatementInstance: number };
 function planRows(plan: ReadPlan): number {
-  const own = plan['Relation Name'] ? (plan['Actual Rows'] + (plan['Rows Removed by Filter'] ?? 0)
+  const own = plan['Relation Name'] && plan['Node Type'].endsWith('Scan') ? (plan['Actual Rows'] + (plan['Rows Removed by Filter'] ?? 0)
     + (plan['Rows Removed by Index Recheck'] ?? 0)) * plan['Actual Loops'] : 0;
   return own + (plan.Plans ?? []).reduce((sum, child) => sum + planRows(child), 0);
 }
 
+function planBuffers(plan: ReadPlan): number {
+  const own = plan['Relation Name'] && plan['Node Type'].endsWith('Scan')
+    ? (plan['Shared Hit Blocks'] ?? 0) + (plan['Shared Read Blocks'] ?? 0)
+      + (plan['Local Hit Blocks'] ?? 0) + (plan['Local Read Blocks'] ?? 0) : 0;
+  return own + (plan.Plans ?? []).reduce((sum, child) => sum + planBuffers(child), 0);
+}
+
 /** auto_explain logs the executed production statement and every nested SQL
  * function/trigger plan. Result cardinality cannot hide discarded history. */
-function planPool(plans: RecordedPlan[]) {
+function planPool(plans: RecordedPlan[], observe?: (sql: string, plans: RecordedPlan[]) => void,
+  before?: (sql: string) => void) {
   const measured = new Pool({ ...cluster!.connection, max: 1 });
   let instance = 0;
   measured.on('connect', client => {
     const query = client.query.bind(client);
     let armed = false;
+    let timeoutArmed = false;
     client.query = ((...args: unknown[]) => {
       const callback = typeof args.at(-1) === 'function' ? args.pop() as (error: unknown, result?: unknown) => void : undefined;
       const pending = (async () => {
@@ -353,7 +361,12 @@ function planPool(plans: RecordedPlan[]) {
           armed = true;
         }
         const statement = typeof args[0] === 'string' ? args[0] : '';
+        if (statement === 'BEGIN') timeoutArmed = false;
+        if (statement.includes("SET LOCAL statement_timeout = '5s'")) timeoutArmed = true;
+        if (statement.includes('account_deletion_classification_step')) expect(timeoutArmed).toBe(true);
+        before?.(statement);
         const statementInstance = ++instance;
+        const executed: RecordedPlan[] = [];
         const path = join(cluster!.directory, 'postgres.log');
         const offset = statSync(path).size;
         const result = await Reflect.apply(query, client, args);
@@ -362,9 +375,11 @@ function planPool(plans: RecordedPlan[]) {
         const log = readFileSync(path).subarray(offset).toString();
         for (const match of log.matchAll(/plan:\n\t(\{[\s\S]*?\n\t\})/g)) {
           const plan = JSON.parse(match[1]!) as RecordedPlan;
-          if (!plan['Query Text'].includes('plan_log_flush')) plans.push({ ...plan,
+          if (!plan['Query Text'].includes('plan_log_flush')) executed.push({ ...plan,
             Statement: statement, StatementInstance: statementInstance });
         }
+        plans.push(...executed);
+        observe?.(statement, executed);
         return result;
       })();
       if (callback) {
@@ -385,11 +400,19 @@ async function measuredWork(work: (measured: Pool) => Promise<void>) {
   return { rows: plans.reduce((sum, plan) => sum + planRows(plan.Plan), 0), plans };
 }
 
+function readScans(plan: ReadPlan): unknown[] {
+  return [...(plan['Relation Name'] && plan['Node Type'].endsWith('Scan') ? [{
+    relation: plan['Relation Name'], index: plan['Index Name'], condition: plan['Index Cond'], filter: plan.Filter,
+    rows: plan['Actual Rows'], removed: plan['Rows Removed by Filter'], loops: plan['Actual Loops'],
+  }] : []), ...(plan.Plans ?? []).flatMap(readScans)];
+}
+
 test('classification and wake-up read budgets exclude inactive history and unrelated open deletions', async () => {
   const survivor = await principal();
   const target = await provision(survivor, 'organization');
   const unrelated = await provision(survivor, 'organization');
   const inactiveCosts: number[] = [];
+  const samples: unknown[] = [];
   const wakeCosts: number[] = [];
   let size = 0;
   for (const next of [8, 64, 512]) {
@@ -417,11 +440,16 @@ test('classification and wake-up read budgets exclude inactive history and unrel
         deleting.verified.issuer, deleting.verified.subject);
     });
     inactiveCosts.push(classified.rows);
+    samples.push({ size: next, rows: classified.rows, plans: classified.plans.map(plan => ({
+      statement: plan.Statement.slice(0, 100), query: plan['Query Text'].slice(0, 300), scans: readScans(plan.Plan),
+    })) });
+    writeFileSync('.temp/deletion-read-samples.json', JSON.stringify(samples, null, 2));
     const waking = await measuredWork(async measured => {
       await measured.query('SELECT access.queue_account_deletion_candidate($1)', [target]);
     });
     wakeCosts.push(waking.rows);
   }
+  console.info('Account deletion reads at 8/64/512', { deletion: inactiveCosts, wake: wakeCosts });
   expect(inactiveCosts[1]).toBe(inactiveCosts[0]);
   expect(inactiveCosts[2]).toBe(inactiveCosts[0]);
   expect(wakeCosts[1]).toBe(wakeCosts[0]);
@@ -429,11 +457,10 @@ test('classification and wake-up read budgets exclude inactive history and unrel
 }, 300_000);
 
 test('final principal UPDATE excludes retained mandates and unrelated open erasures', async () => {
-  const survivor = await principal();
-  const target = await provision(survivor, 'organization');
+  const { persons } = await unaffectedChain();
   for (const size of [8, 64, 512]) {
     const owner = await principal();
-    for (let index = 0; index < size; index++) await addFixtureController(owner, target);
+    for (const person of persons.slice(0, size)) await addFixtureController(owner, person);
     const cost = await measuredWork(async measured => {
       await new AccessAdmissionRegistry(measured).strongDeactivateAccountSubject(
         owner.verified.issuer, owner.verified.subject);
@@ -441,6 +468,7 @@ test('final principal UPDATE excludes retained mandates and unrelated open erasu
     const update = cost.plans.filter(plan => /^\s*UPDATE access\.principal SET active = false/.test(plan.Statement));
     expect(update.length).toBeGreaterThan(0);
     expect(update.reduce((sum, plan) => sum + planRows(plan.Plan), 0)).toBeLessThanOrEqual(64);
+    expect((await pool.query('SELECT id FROM access.representation WHERE principal_id = $1 AND active AND action = \'agent.control\'', [owner.id])).rows).toHaveLength(size);
     expect(await principalState(owner)).toEqual({ active: false, enforcement_epoch: '1' });
   }
 }, 300_000);
@@ -473,3 +501,79 @@ test('owned refusal cleans a persisted long closure in bounded statements and re
   expect(await principalState(owner)).toEqual({ active: true, enforcement_epoch: '0' });
   for (const person of persons) expect(await subjectState(person)).toEqual({ active: true, controllers: 1 });
 }, 60_000);
+
+test('sole-controlled chains at 8, 64 and 512 levels read a fixed budget per persisted step', async () => {
+  const builder = await principal();
+  const corpus: string[] = [];
+  for (let index = 0; index < 584; index++) corpus.push(await provision(builder, 'person'));
+  const links = [...Array.from({ length: 583 }, (_, index) => index + 1)
+    .filter(index => index % 256 !== 0), 256, 512];
+  for (const index of links) await grantFixtureControllerEdge(pool, {
+    principalId: builder.id, representative: corpus[index - 1]!, represented: corpus[index]!,
+  });
+  const anchors = new Set([0, 8, 72]);
+  for (let index = 1; index < corpus.length; index++) {
+    if (!anchors.has(index)) await removeController(builder, corpus[index]!);
+  }
+  const samples: { size: number; steps: number; maxReads: number; maxBuffers: number }[] = [];
+  for (const [offset, size] of [[0, 8], [8, 64], [72, 512]] as const) {
+    const owner = await principal();
+    const rootPerson = corpus[offset]!;
+    await addFixtureController(owner, rootPerson);
+    await removeController(builder, rootPerson);
+    const reads: number[] = [];
+    const buffers: number[] = [];
+    const measured = planPool([], (sql, plans) => {
+      if (!sql.includes('account_deletion_classification_step')) return;
+      reads.push(plans.reduce((sum, plan) => sum + planRows(plan.Plan), 0));
+      buffers.push(plans.reduce((sum, plan) => sum + planBuffers(plan.Plan), 0));
+    });
+    try {
+      expect(await new AccessAdmissionRegistry(measured).strongDeactivateAccountSubject(
+        owner.verified.issuer, owner.verified.subject)).toMatchObject({ enforcementEpoch: '1' });
+    } finally { await measured.end(); }
+    expect(reads.length).toBe(size + (offset + size < corpus.length ? 1 : 0));
+    expect(Math.max(...reads)).toBeLessThanOrEqual(1024);
+    expect(Math.max(...buffers)).toBeLessThanOrEqual(2048);
+    expect(reads.reduce((sum, count) => sum + count, 0)).toBeLessThanOrEqual((size + 1) * 1024);
+    const inventory = (await pool.query(`SELECT a.agent_id FROM access.account_deletion_progress_agent a
+      JOIN access.account_deletion_progress p USING (operation_id)
+      WHERE p.principal_id = $1 AND a.effect = 'end'`, [owner.id])).rows;
+    expect(inventory).toHaveLength(size);
+    for (const person of corpus.slice(offset, offset + size)) {
+      expect(await subjectState(person)).toEqual({ active: false, controllers: 0 });
+    }
+    if (offset + size < corpus.length) expect((await subjectState(corpus[offset + size]!))?.active).toBe(true);
+    samples.push({ size, steps: reads.length, maxReads: Math.max(...reads), maxBuffers: Math.max(...buffers) });
+  }
+  console.info('Account deletion chain read budgets', samples);
+}, 300_000);
+
+test('initial retirement includes the minimum admitted mandate UUID', async () => {
+  const owner = await principal();
+  const builder = await principal();
+  const person = await provision(builder, 'person');
+  const minimum = '00000000-0000-0000-0000-000000000000';
+  const fixtures = new Pool({ ...cluster!.connection, max: 1 });
+  fixtures.on('connect', client => {
+    const query = client.query.bind(client);
+    client.query = ((...args: unknown[]) => {
+      if (typeof args[0] === 'string' && args[0].includes('INSERT INTO access.representation (')
+        && Array.isArray(args[1])) args[1] = [minimum, ...args[1].slice(1)];
+      return Reflect.apply(query, client, args);
+    }) as typeof client.query;
+  });
+  try { await grantFixtureAuthority(fixtures, {
+    scope: 'work:create:root', requireDispatch: true,
+    representations: [{ principalId: owner.id, actor: person, action: 'agent.control', lifetime: 'infinity' }],
+    grant: { actor: person, action: 'agent.control', lifetime: 'infinity' },
+  }); } finally { await fixtures.end(); }
+  await removeController(builder, person);
+  expect((await pool.query('SELECT representation_id FROM access.live_principal_controller WHERE principal_id = $1',
+    [owner.id])).rows).toEqual([{ representation_id: minimum }]);
+  expect(await new AccessAdmissionRegistry(pool).strongDeactivateAccountSubject(owner.verified.issuer, owner.verified.subject))
+    .toMatchObject({ enforcementEpoch: '1' });
+  expect(await subjectState(person)).toEqual({ active: false, controllers: 0 });
+  expect((await pool.query('SELECT representation_id FROM access.live_principal_controller WHERE principal_id = $1',
+    [owner.id])).rows).toEqual([]);
+});

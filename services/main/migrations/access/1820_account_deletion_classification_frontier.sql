@@ -82,7 +82,7 @@ CREATE INDEX account_deletion_continuity_recovery ON access.protected_change_act
 
 CREATE FUNCTION access.account_deletion_remaining_controllers(
     controlled text, deleting uuid, operation text)
-RETURNS TABLE (remaining integer, controller_rows integer)
+RETURNS TABLE (remaining integer)
 LANGUAGE sql STABLE SET enable_seqscan = off AS $$
     WITH below AS MATERIALIZED (
         SELECT principal_id FROM access.live_principal_controller
@@ -107,8 +107,7 @@ LANGUAGE sql STABLE SET enable_seqscan = off AS $$
         + (SELECT count(*) FROM agents e WHERE NOT EXISTS (
             SELECT 1 FROM access.account_deletion_progress_agent a
             WHERE a.operation_id = operation AND a.agent_id = e.representative_subject
-                AND a.effect = 'end' LIMIT 1 OFFSET 0)))::integer,
-        ((SELECT count(*) FROM principals) + (SELECT count(*) FROM edge_page))::integer
+                AND a.effect = 'end' LIMIT 1 OFFSET 0)))::integer
 $$;
 
 CREATE OR REPLACE FUNCTION access.agent_controller_count(controlled text) RETURNS integer

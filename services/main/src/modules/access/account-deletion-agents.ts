@@ -102,7 +102,7 @@ async function classifyAccountDeletionStep(client: PoolClient, principal: string
     ), candidates AS MATERIALIZED (
       SELECT subject_id FROM roots UNION SELECT agent_id FROM awakened UNION SELECT subject_id FROM children
     ), effects AS MATERIALIZED (
-      SELECT c.subject_id, coalesce(p.agent_kind, 'agent') AS kind, n.remaining, n.controller_rows
+      SELECT c.subject_id, coalesce(p.agent_kind, 'agent') AS kind, n.remaining
       FROM candidates c CROSS JOIN LATERAL (SELECT id FROM access.authority_subject
         WHERE id = c.subject_id AND active LIMIT 1 OFFSET 0) s
       LEFT JOIN LATERAL (SELECT agent_kind FROM access.agent_provision
@@ -149,9 +149,7 @@ async function classifyAccountDeletionStep(client: PoolClient, principal: string
         needs_boundary_check = p.needs_boundary_check OR EXISTS (SELECT 1 FROM effects WHERE remaining > 0)
       FROM next n WHERE p.operation_id = $2
       RETURNING p.operation_id, p.classification_done, p.consent, p.orphan_count, p.orphan_cursor, p.steps, p.needs_boundary_check
-    ) SELECT a.*, (SELECT count(*)::integer FROM effects) AS examined,
-      (SELECT coalesce(sum(controller_rows), 0)::integer FROM effects) AS controller_rows,
-      EXISTS (SELECT 1 FROM effects e
+    ) SELECT a.*, EXISTS (SELECT 1 FROM effects e
         CROSS JOIN LATERAL (SELECT operation_id FROM access.account_deletion_progress_agent
           WHERE agent_id = e.subject_id AND fenced LIMIT 1 OFFSET 0) a
         WHERE e.remaining = 0 AND a.operation_id <> $2) AS fenced
