@@ -215,15 +215,24 @@ export class PublicReports {
         AND ($2::uuid IS NULL OR id > $2) ORDER BY id LIMIT $3`,
       [credential.report_id, after ?? null, limit + 1, credential.party, caseId])).rows;
       const page = steps.slice(0, limit);
+      // A reporter's capability covers only their retained evidence. Affected
+      // credentials currently bind a report, not the recipient's target; that
+      // report may contain evidence about other parties, so it grants no progress.
       const effects =
-        row.decision_head && row.cancelled !== null
+        credential.party === 'reporter' && row.decision_head && row.cancelled !== null
           ? (
               await client.query<OperationItem>(
                 `SELECT
         e.ordinal,t.resource AS target,e.state,e.receipt,e.continuation,e.error FROM access.safety_decision_effect e
         JOIN access.moderation_decision_target t USING (decision_id,ordinal)
-        WHERE e.decision_id = $1 ORDER BY ordinal`,
-                [row.decision_head],
+        WHERE e.decision_id = $1 AND EXISTS (
+          SELECT 1 FROM access.governance_evidence entitled
+          WHERE entitled.report_id = $2 AND entitled.owner = t.owner
+            AND entitled.resource = t.resource AND entitled.component = t.component
+            AND entitled.locator IS NOT DISTINCT FROM t.locator
+            AND (t.scope_kind = 'component' OR entitled.revision IS NOT DISTINCT FROM t.revision)
+        ) ORDER BY ordinal`,
+                [row.decision_head, credential.report_id],
               )
             ).rows
           : null;
@@ -234,8 +243,9 @@ export class PublicReports {
           contactEmail: row.contact_email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.contact_email) ? row.contact_email : null,
           declarations: partyDeclarations('intake', row.declarations, credential.party === 'reporter') },
         statementOfReasons: row.statement_of_reasons,
-        operation: effects
-          ? operationOutcome(row.decision_head!, effects, row.cancelled ?? false)
+        operation: effects?.length
+          // Ordinal gaps would disclose the position and count of hidden effects.
+          ? operationOutcome(row.decision_head!, effects.map((effect, index) => ({ ...effect, ordinal: index + 1 })), row.cancelled ?? false)
           : null,
         items: page.map((step) => ({ id: step.id, kind: step.step, occurredAt: step.occurred_at.toISOString(),
           dueAt: step.due_at?.toISOString() ?? null, statement: step.statement, contentLanguage: step.content_language,
