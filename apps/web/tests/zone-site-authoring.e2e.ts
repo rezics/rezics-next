@@ -830,6 +830,8 @@ test('Navigation and theme: a Realm-backed Zone previews and publishes the same 
   test.setTimeout(600_000);
   const actor = await startAuthor(page);
   const site = await createZoneFixture(page, actor, 'Harbor readers', true);
+  await page.goto(localizedPath(`/manage/z/${site.zoneId}`, 'en'));
+  await expect(page.getByRole('textbox', { name: 'Home page' })).toBeVisible();
   await saveSiteDraft(page, actor, site);
 
   await page.goto(site.previewHref);
@@ -877,7 +879,12 @@ test('Zone lifecycle: a populated site retires and recovers the same published c
     await expectSiteCuts(reader, morning, ['Home', 'Harbor tides', 'Harbor charts'], 'cards', 'compact');
     await shoot(reader, 'zone-lifecycle-before-retirement', info);
 
-    await page.goto(site.editorPath + '/lifecycle');
+    const uuidEditor = localizedPath(`/manage/z/${site.zoneId}`, 'en');
+    await page.goto(uuidEditor);
+    await expect(page.getByRole('textbox', { name: 'Home page' })).toBeVisible();
+    const statusHref = await page.getByRole('link', { name: 'Status', exact: true }).getAttribute('href');
+    expect(new URL(statusHref!, 'http://localhost').searchParams.get('address')).toBe(site.zoneId);
+    await page.getByRole('link', { name: 'Status', exact: true }).click();
     await expect(page.getByRole('heading', { level: 2, name: 'Site status' })).toBeVisible();
     await competingEditor.goto(site.editorPath + '/theme');
     await page.getByRole('button', { name: 'Retire site' }).click();
@@ -898,6 +905,8 @@ test('Zone lifecycle: a populated site retires and recovers the same published c
     await expect(page.getByText('This site is retired and unavailable to readers.', { exact: true }))
       .toBeVisible({ timeout: 30_000 });
     await expect(page.getByRole('button', { name: 'Recover site' })).toBeVisible();
+    await page.getByRole('link', { name: 'Status', exact: true }).click();
+    expect(new URL(page.url()).searchParams.get('address')).toBe(site.zoneId);
     await reader.goto(site.siteHref);
     await expect(reader.locator('[data-zone-site-home-surface]')).toHaveCount(0);
     await expect(reader.getByText(morning)).toHaveCount(0);
@@ -911,6 +920,7 @@ test('Zone lifecycle: a populated site retires and recovers the same published c
     await expect(page.getByText('Recover this site?', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Confirm', exact: true }).click();
     await expect(page.getByRole('textbox', { name: 'Home page' })).toBeVisible({ timeout: 30_000 });
+    await expect(page).toHaveURL(new RegExp(`/manage/z/${site.zoneId}$`));
 
     await page.goto(site.editorPath + '/lifecycle');
     await expect(page.getByText('This site is active and its published pages are available to readers.', { exact: true }))

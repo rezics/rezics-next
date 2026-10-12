@@ -20,7 +20,6 @@
   "apps/web/tests/scoped-subjects-journey-zone.ts",
   "apps/web/tests/showcase-acceptance-seed.ts",
   "apps/web/tests/work-page-seed.ts",
-  "apps/web/tests/zone-realm-attachment.e2e.ts",
   "apps/web/tests/zone-site-authoring.e2e.ts",
   "scripts/dev/seed/franchises-step.test.ts",
   "scripts/dev/web-auth-bootstrap.test.ts",

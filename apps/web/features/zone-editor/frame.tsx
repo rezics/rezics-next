@@ -16,7 +16,7 @@ import { useUnsavedZoneEditorSections } from './draft-provider.tsx';
  * Authors can move between home, navigation, Realm and structural theme settings.
  */
 export function ZoneEditorFrame({ name, editorPath, agent, locale, manageMessages, sectionsLabel, sectionHome, sectionNavigation,
-  sectionRealm, sectionTheme, sectionLifecycle, lifecycleOnly = false, unsavedWork, children }: {
+  sectionRealm, sectionTheme, sectionLifecycle, lifecycleOnly = false, lifecycleAddress, unsavedWork, children }: {
   name: string;
   editorPath: string;
   agent: AgentOption;
@@ -29,6 +29,7 @@ export function ZoneEditorFrame({ name, editorPath, agent, locale, manageMessage
   sectionTheme: string;
   sectionLifecycle?: string;
   lifecycleOnly?: boolean;
+  lifecycleAddress?: { zoneId: string; spaceId: string; returnAddress: string };
   unsavedWork?: string;
   children: ReactNode;
 }) {
@@ -53,7 +54,7 @@ export function ZoneEditorFrame({ name, editorPath, agent, locale, manageMessage
         </p> : null}
         <ZoneEditorSections editorPath={editorPath} sectionsLabel={sectionsLabel} sectionHome={sectionHome}
           sectionNavigation={sectionNavigation} sectionRealm={sectionRealm} sectionTheme={sectionTheme}
-          sectionLifecycle={sectionLifecycle} lifecycleOnly={lifecycleOnly} />
+          sectionLifecycle={sectionLifecycle} lifecycleOnly={lifecycleOnly} lifecycleAddress={lifecycleAddress} />
       </div>
     </div>
     <div className="mx-auto w-full min-w-0 max-w-7xl px-4 py-3 sm:px-6 sm:py-6 lg:px-10">{children}</div>

@@ -5,6 +5,9 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { acting, header, iri, now, realm } from './fixtures.ts';
 import { messages } from './messages.ts';
 import { realmEditSite } from './realm-site.ts';
+import { resolveZoneManagementAddress } from '../zone-editor/management-address.ts';
+import type { SiteResolution } from '../realm/read.ts';
+import { targetKey } from '../address/path.ts';
 
 // The frame's tabs read the path. Stories and this render have no router.
 // Keep the real exports: a later file in the same run still imports notFound.
@@ -79,4 +82,29 @@ test('a managed Realm card shows no Edit site', () => {
   }));
   expect(html).toContain('Open queue');
   expect(html).not.toContain('Edit site');
+});
+
+test('a nonofficial Realm UUID editor entry follows its Zone to the bound Space', async () => {
+  const spaceId = '00000000-0000-4000-8000-0000000000ab';
+  const spaceIri = `https://rezics.com/id/${spaceId}`;
+  const href = await realmEditSite({
+    zone: async () => ({ ok: true, data: { zone: zoneIri, routeSegment: null } }),
+    editor: async () => ({ ok: true, data: {} }),
+  });
+  expect(href).toBe(`/manage/z/${zoneId}`);
+  const admitted: Extract<SiteResolution, { kind: 'site' }> = {
+    kind: 'site', zone: zoneId, realm,
+    address: { profile: 'address-resolution-v1', status: 'resolved', scope: 'space', key: spaceId,
+      state: 'current', holder: spaceIri, canonical: { prefix: '/z/', key: targetKey(spaceId), suffixSource: 'Harbor notes' },
+      capabilities: { zone: zoneIri } },
+  };
+  const opened = await resolveZoneManagementAddress(href!.split('/').at(-1)!, 'en', {
+    configuration: async id => {
+      expect(id).toBe(zoneId);
+      return { ok: true, data: { revision: iri(94), name: 'Harbor notes',
+        configuration: { zone: zoneIri, space: spaceIri, state: 'active' } } };
+    },
+    site: async id => { expect(id).toBe(spaceId); return admitted; },
+  });
+  expect(opened.kind).toBe('site');
 });

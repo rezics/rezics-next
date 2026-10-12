@@ -77,8 +77,8 @@ export function ZoneLifecycleEditor({ zoneId, actingSubject, locale, copy, initi
       if (action === 'retire') {
         if (onRetired) onRetired();
         else window.location.replace(localizedPath(zoneLifecyclePath(zoneId, returnAddress), locale));
-      } else if (returnAddress) {
-        window.location.replace(localizedPath(zoneEditorPath(returnAddress), locale));
+      } else {
+        window.location.replace(localizedPath(zoneEditorPath(returnAddress ?? zoneId), locale));
       }
     } else if (result.failure === 'stale') put({ type: 'stale' });
     else put({ type: 'failed', failure: noticeFailure(result.failure) });

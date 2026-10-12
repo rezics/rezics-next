@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { expect, type Page, test, type TestInfo } from '@playwright/test';
 import { Pool } from 'pg';
+import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import { localizedPath } from '../i18n/locale.ts';
 import { signInAtAccounts } from './account-sign-in.ts';
 
@@ -24,24 +25,9 @@ async function grant(scope: string, action: string, principalId: string, actingS
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    await client.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING', [scope]);
-    const gate = await client.query<{ open: boolean; dispatch_open: boolean }>(
-      'SELECT open, dispatch_open FROM access.scope_gate WHERE id = $1', [scope]);
-    if (gate.rows[0]?.open !== true || gate.rows[0]?.dispatch_open !== true) throw new Error(`${scope} is closed`);
-    await client.query(
-      "INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent') ON CONFLICT DO NOTHING", [actingSubject]);
-    const represented = await client.query(`SELECT id FROM access.representation
-      WHERE principal_id = $1 AND subject_id = $2 AND action = $3 AND active AND valid_until > now()`,
-    [principalId, actingSubject, action]);
-    if (!represented.rowCount) await client.query(`INSERT INTO access.representation
-      (id, principal_id, subject_id, action, valid_until)
-      VALUES ($1, $2, $3, $4, now() + interval '8 hours')`, [randomUUID(), principalId, actingSubject, action]);
-    const allowed = await client.query(`SELECT id FROM access.permission_grant
-      WHERE recipient_subject = $1 AND scope_id = $2 AND action = $3 AND active AND valid_until > now()`,
-    [actingSubject, scope, action]);
-    if (!allowed.rowCount) await client.query(`INSERT INTO access.permission_grant
-      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
-      VALUES ($1, $2, $2, $3, $4, now() + interval '8 hours')`, [randomUUID(), actingSubject, scope, action]);
+    await grantFixtureAuthority(client, { scope, requireDispatch: true,
+      representations: [{ principalId, actor: actingSubject, action, lifetime: '8 hours' }],
+      grant: { actor: actingSubject, action, lifetime: '8 hours' } });
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');

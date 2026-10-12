@@ -1,12 +1,14 @@
 'use client';
 
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { withoutLocale } from '../../i18n/locale.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
+import { zoneManagementReturnAddress } from './management-address.ts';
+import { zoneLifecycleSectionPath } from './routes.ts';
 
 /** Home, Navigation, Realm, Theme and lifecycle controls. The preview stays with Home. */
 export function ZoneEditorSections({ editorPath, sectionsLabel, sectionHome, sectionNavigation, sectionRealm, sectionTheme,
-  sectionLifecycle, lifecycleOnly = false }: {
+  sectionLifecycle, lifecycleOnly = false, lifecycleAddress }: {
   editorPath: string;
   sectionsLabel: string;
   sectionHome: string;
@@ -15,12 +17,18 @@ export function ZoneEditorSections({ editorPath, sectionsLabel, sectionHome, sec
   sectionTheme: string;
   sectionLifecycle?: string;
   lifecycleOnly?: boolean;
+  lifecycleAddress?: { zoneId: string; spaceId: string; returnAddress: string };
 }) {
   const path = withoutLocale(usePathname() ?? '');
+  const searchParams = useSearchParams();
   const navigationPath = `${editorPath}/navigation`;
   const realmPath = `${editorPath}/realm`;
   const themePath = `${editorPath}/theme`;
   const lifecyclePath = `${editorPath}/lifecycle`;
+  const returnAddress = lifecycleAddress ? zoneManagementReturnAddress(
+    searchParams?.get('address') ?? lifecycleAddress.returnAddress, lifecycleAddress,
+    { address: lifecycleAddress.returnAddress, space: `https://rezics.com/id/${lifecycleAddress.spaceId}` },
+  ) : undefined;
   const onNavigation = path === navigationPath || path.startsWith(`${navigationPath}/`);
   const onRealm = path === realmPath || path.startsWith(`${realmPath}/`);
   const onTheme = path === themePath || path.startsWith(`${themePath}/`);
@@ -33,7 +41,7 @@ export function ZoneEditorSections({ editorPath, sectionsLabel, sectionHome, sec
       <LocalizedLink href={realmPath} aria-current={onRealm ? 'page' : undefined} className={item}>{sectionRealm}</LocalizedLink>
       <LocalizedLink href={themePath} aria-current={onTheme ? 'page' : undefined} className={item}>{sectionTheme}</LocalizedLink>
     </>}
-    {sectionLifecycle ? <LocalizedLink href={lifecyclePath} aria-current={onLifecycle ? 'page' : undefined}
+    {sectionLifecycle ? <LocalizedLink href={zoneLifecycleSectionPath(editorPath, returnAddress)} aria-current={onLifecycle ? 'page' : undefined}
       className={item}>{sectionLifecycle}</LocalizedLink> : null}
   </nav>;
 }

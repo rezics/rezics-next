@@ -19,5 +19,6 @@ export async function realmEditSite(read: {
   const allowed = await read.editor(id);
   if (!allowed.ok) return null;
   const segment = zone.data.routeSegment;
+  // The UUID fallback names the Zone capability; its editor resolves the authorized Space binding.
   return zoneEditorPath(segment && !isUuid(segment) ? segment : id);
 }

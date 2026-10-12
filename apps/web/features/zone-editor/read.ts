@@ -1,13 +1,13 @@
 import { cache } from 'react';
 import type { ZoneText } from '@rezics/zone-sdk';
-import { addressKey, spaceHref } from '../address/path.ts';
+import { addressKey, parseAddressSegment, spaceHref } from '../address/path.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import { settle } from '../manage/read.ts';
-import { isUuid, type MainClient, type ReadFailure } from '../manage/types.ts';
+import { type MainClient, type ReadFailure } from '../manage/types.ts';
 import { resolveSite, type SiteResolution } from '../realm/read.ts';
-import type { ReadFailure as SiteReadFailure } from '../realm/types.ts';
 import { authoringModel, type ZoneAuthoringModel } from './model.ts';
-import { readZoneLifecycleSnapshot } from './lifecycle.ts';
+import { resolveZoneManagementAddress, zoneManagementBinding, zoneManagementReturnAddress,
+  type ZoneManagementBinding } from './management-address.ts';
 import { zoneEditorPath, zonePreviewPath } from './routes.ts';
 
 type EditorRead = NonNullable<Awaited<ReturnType<ReturnType<MainClient['v1']['zones']>['showcase-editor']['get']>>['data']>;
@@ -23,7 +23,8 @@ export type ZoneAuthoringLoad =
 export type ZoneLifecycleLoad =
   | { kind: 'missing' }
   | { kind: 'failure'; failure: ReadFailure }
-  | { kind: 'ready'; zoneId: string; revision: string; status: 'active' | 'retired'; name: string };
+  | { kind: 'ready'; zoneId: string; spaceId: string; revision: string; status: 'active' | 'retired'; name: string;
+    returnAddress: string };
 
 /** Recovery can outlive a cached retired address. Revalidate with the same admission owner. */
 export async function readZoneAuthoringSite(space: string, locale: UiLocale,
@@ -35,6 +36,13 @@ export async function readZoneAuthoringSite(space: string, locale: UiLocale,
 
 export const resolveZoneAuthoringSite = cache(readZoneAuthoringSite);
 
+const resolveManagementAddress = cache((main: MainClient, space: string, locale: UiLocale, actingSubject: string) =>
+  resolveZoneManagementAddress(space, locale, {
+    configuration: zoneId => settle(() => main.v1.zones({ id: zoneId }).configuration.get({ query: { actingSubject } }),
+      { management: true }),
+    site: resolveZoneAuthoringSite,
+  }));
+
 /**
  * The home draft and the two heads a publish names. Shared by the editor and its preview
  * for one request. An editor who cannot read the draft is refused here, never shown the public page.
@@ -42,9 +50,10 @@ export const resolveZoneAuthoringSite = cache(readZoneAuthoringSite);
 export const loadZoneAuthoring = cache(async (
   main: MainClient, space: string, locale: UiLocale, actingSubject: string,
 ): Promise<ZoneAuthoringLoad> => {
-  const site = await resolveZoneAuthoringSite(space, locale);
-  if (site.kind === 'missing' || site.kind === 'join') return { kind: 'missing' };
-  if (site.kind !== 'site') return { kind: 'failure', failure: authoringReadFailure(site.failure) };
+  const address = await resolveManagementAddress(main, space, locale, actingSubject);
+  if (address.kind === 'missing' || address.kind === 'lifecycle') return { kind: 'missing' };
+  if (address.kind === 'failure') return address;
+  const { site } = address;
   const [editor, zone] = await Promise.all([
     settle(() => main.v1.zones({ id: site.zone })['showcase-editor'].get({ query: { actingSubject } }), { management: true }),
     settle(() => main.v1.zones({ id: site.zone }).get({ query: { actingSubject } }), { management: true }),
@@ -72,27 +81,33 @@ export const loadZoneAuthoring = cache(async (
 export const loadZoneLifecycle = cache(async (
   main: MainClient, space: string, locale: UiLocale, actingSubject: string,
 ): Promise<ZoneLifecycleLoad> => {
-  let zoneId: string;
-  if (isUuid(space)) zoneId = space;
-  else {
-    const site = await resolveZoneAuthoringSite(space, locale);
-    if (site.kind === 'missing' || site.kind === 'join') return { kind: 'missing' };
-    if (site.kind !== 'site') return { kind: 'failure', failure: authoringReadFailure(site.failure) };
-    zoneId = site.zone;
+  const address = await resolveManagementAddress(main, space, locale, actingSubject);
+  if (address.kind === 'missing' || address.kind === 'failure') return address;
+  let binding = address.binding;
+  if (!binding && address.kind === 'site') {
+    const loaded = await settle(() => main.v1.zones({ id: address.site.zone }).configuration.get({ query: { actingSubject } }),
+      { management: true });
+    if (!loaded.ok) return { kind: 'failure', failure: loaded.failure };
+    binding = zoneManagementBinding(address.site.zone, loaded.data);
   }
-
-  const loaded = await settle(() => main.v1.zones({ id: zoneId }).configuration.get({ query: { actingSubject } }),
-    { management: true });
-  if (!loaded.ok) return { kind: 'failure', failure: loaded.failure };
-  const row = loaded.data as { revision?: unknown; configuration?: unknown; name?: unknown };
-  const snapshot = readZoneLifecycleSnapshot(row.revision, row.configuration);
-  if (!snapshot) return { kind: 'failure', failure: 'unavailable' };
-  return { kind: 'ready', zoneId, revision: snapshot.revision, status: snapshot.status,
-    name: typeof row.name === 'string' && row.name.trim() ? row.name : space };
+  if (!binding) return { kind: 'failure', failure: 'unavailable' };
+  return { kind: 'ready', zoneId: binding.zoneId, spaceId: binding.spaceId, revision: binding.revision,
+    status: binding.status, name: binding.name ?? space,
+    returnAddress: zoneManagementReturnAddress(space, binding, address.kind === 'site'
+      ? { address: space, space: address.site.address.holder } : undefined) };
 });
 
-/** Address resolution uses the public reader's failures. A closed or offline lookup is the same unreachable page here. */
-function authoringReadFailure(failure: SiteReadFailure | undefined): ReadFailure {
-  if (failure === 'missing' || failure === 'moved' || failure === 'invalid' || failure === 'budget') return failure;
-  return 'unavailable';
+/** Validate aliases with the address owner; a retired or unavailable alias falls back to the bound Space. */
+export async function loadZoneRecoveryReturnAddress(main: MainClient, candidate: unknown,
+  binding: Pick<ZoneManagementBinding, 'zoneId' | 'spaceId'>, actingSubject: string,
+): Promise<string> {
+  const fallback = zoneManagementReturnAddress(candidate, binding);
+  if (typeof candidate !== 'string' || candidate === fallback) return fallback;
+  const parsed = parseAddressSegment(candidate);
+  if (parsed?.kind !== 'alias') return fallback;
+  const admitted = await settle(() => main.v1.addresses.resolve.get({ query: {
+    scope: 'space', key: candidate, actingSubject,
+  } }));
+  return zoneManagementReturnAddress(candidate, binding, admitted.ok && admitted.data.status === 'resolved'
+    ? { address: candidate, space: admitted.data.holder } : undefined);
 }
