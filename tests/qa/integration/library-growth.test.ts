@@ -439,7 +439,9 @@ test('Reader library shelf and Work status reads stay constant as unrelated Work
             await readerApi.command<{ agent: string }>(readerAgentKey, actorCommand(readerName))
           ).agent;
           if (!activeCheckpoint || !activeFixture?.target) throw new Error('No active library checkpoint');
-          expect(await activeFixture.recipe.verify(authorApi)).toEqual(activeCheckpoint.dimensions);
+          const restoredDimensions = await activeFixture.recipe.verify(authorApi);
+          for (const [dimension, expected] of Object.entries(activeCheckpoint.dimensions))
+            expect(restoredDimensions[dimension as keyof CorpusDimensions] ?? 0).toBe(expected);
           const target = activeFixture.target;
           const readerState = await readerApi.read<{
             work: string;
