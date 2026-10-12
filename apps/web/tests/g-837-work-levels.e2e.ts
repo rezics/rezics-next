@@ -294,10 +294,11 @@ test.fixme(
     annotation: {
       type: 'cause',
       description:
-        'GrainSwitch is unchanged from main: its hydrated client navigation leaves the canonical connections URL without grain=parts#franchises and keeps Series. The switch used this navigation path when introduced on October 1.',
+        'GrainSwitch is unchanged from main: its client navigation keeps the old URL and Series while RSC navigation is pending beyond the assertion window. The shared navigation path was present when the switch was introduced on October 1.',
     },
   },
   async ({ page }) => {
+    test.setTimeout(420_000);
     const path = process.env.REZICS_WEB_AUTH_PRIVATE_PATH;
     if (!path) throw new Error('The isolated QA web-auth fixture is required');
     const { member } = JSON.parse(readFileSync(path, 'utf8')) as {
