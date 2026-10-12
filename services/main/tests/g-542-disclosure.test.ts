@@ -281,7 +281,7 @@ test('G-542: feed tombstones preserve identity/time and erase card, author, coun
 test('G-542: each composed channel has a final shared gate; optional legacy fences cannot replace it', () => {
   const source = (path: string) => readFileSync(new URL(`../src/${path}`, import.meta.url), 'utf8');
   for (const [path, call] of [
-    ['modules/media/summary.ts', 'await discloseInventory('],
+    ['modules/media/summary.ts', 'await discloseInventoryWithCost('],
     ['modules/disclosure/assembly.ts', 'discloseContent(env, await target.readExactBatch('],
     ['modules/feed/read.ts', "session.disclosure(fenceTargets, 'feed')"],
     ['modules/realm-reply/thread-read.ts', "() => discloseInventory(session.deps.environment, targets, disclosureViewer(session.principal), 'thread')"],
