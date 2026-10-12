@@ -3,7 +3,7 @@ import { httpTelemetry } from '@rezics/observability/elysia';
 import { logWorkerFault } from '@rezics/observability/log';
 import { isIP } from 'node:net';
 import { toOpenAPISchema } from '@elysia/openapi';
-import { Pool } from 'pg';
+import { Pool, type PoolClient } from 'pg';
 import type { createAccountAuth } from './auth.ts';
 import { currentInstallationIn, installClient, InstallationConflict, InstallationInvalid,
   InstallationNotFound, readInstallation, revokeInstallation } from './installations.ts';
@@ -29,7 +29,7 @@ import { safetyCorrespondenceApi } from './email-safety.ts';
 import { mailSuppressionApi } from './mail-suppression.ts';
 import { policyAcceptanceApi } from './policy-acceptance.ts';
 import { accountSchemaReady } from './schema-ready.ts';
-import { authenticationMediaTypeFailure, withRecoveryAuthentication } from './recovery-auth.ts';
+import { authenticationBody, authenticationMediaTypeFailure, withRecoveryAuthentication } from './recovery-auth.ts';
 import { changeGuardianInvitation, readGuardianInvitations, readRecoveryPolicy } from './recovery-guardian.ts';
 import { bootstrapOperators, requireOperator } from './operators.ts';
 import { AccountRecoveryConflict, AccountRecoveryDenied, AccountRecoveryStale, AccountRecoveryRateLimited,
@@ -141,34 +141,33 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
   const credentialPaths = new Set([...sensitiveAuthPaths].filter(path => path !== '/api/auth/delete-user'));
   credentialPaths.add('/api/auth/update-user');
   credentialPaths.add('/api/auth/two-factor/verify-totp');
-  const guardedAuthHandler = async (request: Request): Promise<Response> => {
+  const guardedAuthHandler = async (request: Request, held?: PoolClient): Promise<Response> => {
     const path = new URL(request.url).pathname;
     let totpUserId: string | undefined;
     if (request.method === 'POST' && path === '/api/auth/two-factor/verify-totp') {
       const session = await auth.api.getSession({ headers: request.headers });
       if (session) {
         totpUserId = session.user.id;
-        const factor = await pool.query<{ verified: boolean }>('SELECT verified FROM "twoFactor" WHERE "userId" = $1', [session.user.id]);
-        try {
-          if (factor.rows[0]?.verified === false) await requireStepUp(pool, session);
-          else if (factor.rows[0]?.verified === true) {
-            await consumeStepUpAttempt(pool, String(auth.options.secret), session.user.id);
-          }
-        } catch (error) { return accountFailure(error); }
       }
     }
-    if (request.method === 'POST' && (path === '/api/auth/sign-in/email' || path === '/api/auth/reset-password'
-      || path === '/api/auth/passkey/verify-authentication' || path.startsWith('/api/auth/two-factor/verify-'))) {
+    const authenticationLimit = async (database: Pool | PoolClient): Promise<Response | null> => {
+      if (request.method !== 'POST' || !(path === '/api/auth/sign-in/email' || path === '/api/auth/reset-password'
+        || path === '/api/auth/passkey/verify-authentication' || path.startsWith('/api/auth/two-factor/verify-'))) return null;
       try {
-        const body = await request.clone().json().catch(() => ({})) as { email?: unknown; token?: unknown; response?: { id?: unknown } };
+        const body = await authenticationBody(request) as { email?: unknown; token?: unknown; response?: { id?: unknown } };
         const target = totpUserId ?? (typeof body.email === 'string' ? body.email.toLowerCase()
           : typeof body.token === 'string' ? body.token
           : typeof body.response?.id === 'string' ? body.response.id
           : request.headers.get('cookie')?.split(';').find(value => value.includes('two_factor='))?.trim() ?? 'anonymous');
-        if (!await consumeAccountLimit(pool, String(auth.options.secret), `authenticate:${path}:${target}`, 20, 300)) {
+        if (!await consumeAccountLimit(database, String(auth.options.secret), `authenticate:${path}:${target}`, 20, 300)) {
           return Response.json({ error: 'rate_limited' }, { status: 429, headers: { 'retry-after': '300' } });
         }
       } catch (error) { return accountFailure(error); }
+      return null;
+    };
+    if (!totpUserId) {
+      const failure = await authenticationLimit(held ?? pool);
+      if (failure) return failure;
     }
     if (sensitiveAuthPaths.has(path)) {
       try {
@@ -195,12 +194,16 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
     try { session = await auth.api.getSession({ headers: request.headers }); }
     catch { return Response.json({ error: 'temporarily_unavailable' }, { status: 503 }); }
     if (!session) return auth.handler(request);
-    const client = await guard().connect().catch(() => null);
+    // Recovery authentication already owns a guard connection for these
+    // routes. Reuse it; nesting a checkout can exhaust the bounded pool.
+    const client = held ?? await guard().connect().catch(() => null);
     if (!client) return Response.json({ error: 'temporarily_unavailable' }, { status: 503 });
     try {
-      await client.query('BEGIN');
-      await client.query("SET LOCAL lock_timeout = '2s'");
-      await client.query("SET LOCAL statement_timeout = '5s'");
+      if (!held) {
+        await client.query('BEGIN');
+        await client.query("SET LOCAL lock_timeout = '2s'");
+        await client.query("SET LOCAL statement_timeout = '5s'");
+      }
       const current = await client.query<{ recovered_at: Date | null }>(`SELECT recovered_at
         FROM public.rezics_account_recovery_policy WHERE id = $1 FOR SHARE`, [session.user.id]);
       const existing = await client.query(`SELECT 1 FROM public."session"
@@ -209,16 +212,29 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
           AND ($3::timestamptz IS NULL OR "createdAt" > $3)`,
       [session.session.id, session.user.id, current.rows[0]?.recovered_at ?? null]);
       if (!existing.rowCount) {
-        await client.query('ROLLBACK');
+        if (!held) await client.query('ROLLBACK');
         return Response.json({ error: 'stale_credential_session' }, { status: 403 });
       }
+      if (totpUserId) {
+        const factor = await client.query<{ verified: boolean }>('SELECT verified FROM "twoFactor" WHERE "userId" = $1', [totpUserId]);
+        if (factor.rows[0]?.verified === false) await requireStepUp(client, session);
+        const failure = await authenticationLimit(client);
+        if (failure) return failure;
+        // The provider rereads the factor. A concurrent enrollment after an
+        // empty snapshot must still spend this authenticated user's budget.
+        await consumeStepUpAttempt(client, String(auth.options.secret), totpUserId);
+      }
       const response = await auth.handler(request);
-      await client.query('COMMIT');
+      if (!held) await client.query(response.status >= 500 ? 'ROLLBACK' : 'COMMIT');
       return response;
-    } catch {
-      try { await client.query('ROLLBACK'); } catch { /* preserve unavailability */ }
-      return Response.json({ error: 'temporarily_unavailable' }, { status: 503 });
-    } finally { client.release(); }
+    } catch (error) {
+      // The outer recovery transaction owns rollback when its connection is
+      // reused, including charges made before an infrastructure failure.
+      if (!held) {
+        try { await client.query('ROLLBACK'); } catch { /* preserve unavailability */ }
+      }
+      return accountFailure(error);
+    } finally { if (!held) client.release(); }
   };
   const app = new Elysia({ introspect: true })
     .use(httpTelemetry())
@@ -478,8 +494,8 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
       catch (error) { return recoveryError(error); }
     })
     .cleanup(async () => { await guardPool?.end(); })
-    .mount((request: Request) => authenticationMediaTypeFailure(request) ?? observeAuthentication(auth, pool, request,
-      () => withRecoveryAuthentication(guard(), request, () => guardedAuthHandler(request),
+    .mount(async (request: Request) => await authenticationMediaTypeFailure(request) ?? observeAuthentication(auth, pool, request,
+      () => withRecoveryAuthentication(guard(), request, db => guardedAuthHandler(request, db),
         () => auth.api.getSession({ headers: request.headers }))));
   return app.get('/api/account/openapi.json', () => ({ openapi: '3.1.2',
     info: { title: 'REZICS Account API', version: '1' },

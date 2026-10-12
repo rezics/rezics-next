@@ -25,7 +25,7 @@ export async function requireStepUp(pool: Pool | PoolClient, session: { session:
 
 /** Raw signed-in TOTP and reauthentication prove the same factor, so they
  * spend one atomic user budget even across sessions and ignored body fields. */
-export async function consumeStepUpAttempt(pool: Pool, secret: string, userId: string): Promise<void> {
+export async function consumeStepUpAttempt(pool: Pool | PoolClient, secret: string, userId: string): Promise<void> {
   if (!await consumeAccountLimit(pool, secret, `reauth:${userId}`, 5, 300)) {
     throw new AccountProblem('rate_limited', 429);
   }
