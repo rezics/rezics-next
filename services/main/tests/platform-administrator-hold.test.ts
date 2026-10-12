@@ -159,10 +159,14 @@ for (const hold of holds) {
       expect(await response.json()).toMatchObject({ code: 'authority_denied' });
       expect(await f.revisions()).toEqual([]);
       expect((await f.pool.query('SELECT id FROM access.admission')).rows).toEqual([]);
-      // Opening the platform gate restores fresh authority without replacing grants.
       if (hold.dispatchOpen) {
+        // Ordinary closure can reopen through the fixture owner without replacing grants.
         await f.gate(true, true);
         expect((await f.call(field)).status).toBe(201);
+      } else {
+        // Access has no strong-fence reopening operation. An open copy of the
+        // same retained authority still admits the identical fresh request.
+        await isolated(async open => { expect((await open.call(field)).status).toBe(201); });
       }
     }), 60_000);
 
