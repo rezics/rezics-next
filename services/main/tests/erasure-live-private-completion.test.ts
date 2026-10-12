@@ -488,6 +488,37 @@ test('P4 pending recovery finishes sealing and inventory after all target flags 
   });
 });
 
+test('a stale seal callback cannot clear a newer failed live-completion attempt', async () => {
+  await fixture(async f => {
+    const owner = resource(), revision = await f.draft(owner), contribution = f.contribution(owner);
+    const input = f.input(owner, [revision, contribution.id]);
+    const initial = await f.call(input);
+    let entered!: () => void, release!: () => void;
+    const sealing = new Promise<void>(resolve => { entered = resolve; });
+    const resume = new Promise<void>(resolve => { release = resolve; });
+    const record = f.access.recordGraphOutcome;
+    let calls = 0;
+    f.access.recordGraphOutcome = async (id, terminal) => {
+      if (++calls === 1) { entered(); await resume; }
+      return record(id, terminal);
+    };
+    const firstReplay = f.call(input);
+    await sealing;
+    f.objects.data.set(`sha256/${contribution.payload}`, Buffer.from('replanted exact key'));
+    f.objects.beforeDelete = async () => { throw new ObjectUnavailable('repair outage'); };
+    try {
+      await expect(f.call(input)).rejects.toThrow('completed object erasure differs from live storage');
+    } finally { release(); }
+    await firstReplay;
+    expect((await f.pool.query('SELECT live_completion_pending FROM relay.erasure WHERE id=$1',
+      [initial.report.erasureId])).rows).toEqual([{ live_completion_pending: true }]);
+    f.objects.beforeDelete = undefined;
+    expect(await completePendingContentErasures(f.service, f.env, f.access as never))
+      .toEqual({ completed: 1, failed: [], continuation: false });
+    expect(f.objects.data.has(`sha256/${contribution.payload}`)).toBe(false);
+  });
+});
+
 test('P4 one pending tick attempts sixteen objects, includes deleting entries and reports continuation', async () => {
   await fixture(async f => {
     const owner = resource(), revision = await f.draft(owner), input = f.input(owner, [revision]);

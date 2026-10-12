@@ -106,9 +106,11 @@ async function completeFencedContentErasure(service: ErasureService, graph: Work
     return () => access.recordGraphOutcome(admission.id, proof(admission, 'succeeded', journaled.erasureEpoch));
   }
   validateCompletion(journaled, admission);
-  await service.relay.query(`UPDATE relay.erasure SET live_completion_pending=true
-    WHERE id=$1 AND NOT live_completion_pending
-      AND stage IN ('requested','fenced','inventory_complete','deleting','reconciling')`, [erasureId]);
+  const attempt = (await service.relay.query<{ token: string }>(`UPDATE relay.erasure
+    SET live_completion_pending=true, live_completion_attempt=live_completion_attempt+1
+    WHERE id=$1 AND stage IN ('requested','fenced','inventory_complete','deleting','reconciling')
+    RETURNING live_completion_attempt::text AS token`, [erasureId])).rows[0]?.token;
+  if (!attempt) throw new ErasureStale('live completion attempt is unavailable');
   const resourceId = admission.scope.slice('erasure:'.length);
   const plan = preflight ?? { budget: createErasurePreflightBudget(), custodyReadReservation: 0 };
   const { budget } = plan;
@@ -204,7 +206,8 @@ async function completeFencedContentErasure(service: ErasureService, graph: Work
     // Target flags can commit before sealing or inventory. Only this last marker
     // lets the bounded pending worker skip a fully completed live transaction.
     if (guarded.value) await service.relay.query(`UPDATE relay.erasure SET stage = 'reconciling', live_completion_pending=false
-      WHERE id = $1 AND stage IN ('fenced', 'inventory_complete', 'deleting', 'reconciling')`, [erasureId]);
+      WHERE id = $1 AND live_completion_attempt=$2
+        AND stage IN ('fenced', 'inventory_complete', 'deleting', 'reconciling')`, [erasureId, attempt]);
   };
 }
 
