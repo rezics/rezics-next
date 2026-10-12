@@ -128,7 +128,9 @@ function fixture(parents: OwnerEstablishedGraphParents = [parent('work'), parent
     },
     reread: async bases => {
       if (unavailable) throw new Error('owner source offline');
-      return bases.flatMap(basis => rows.filter(row => row.relationshipBasis.token === basis.token));
+      return bases.flatMap(basis => rows.filter(row => row.relationshipBasis.token === basis.token
+        && row.relationshipBasis.targetResource === basis.targetResource
+        && row.relationshipBasis.targetRevision === basis.targetRevision));
     },
   };
   const reader: DisclosureReader = {
@@ -850,7 +852,7 @@ test('disclosure assembly: nonexistent media and nonavailable Content preserve o
   expect(f.headQueries).toHaveLength(0);
 });
 
-test('disclosure ancestry: changed Access cut discards visible hydration but current hidden policy stays hidden', async () => {
+test('disclosure ancestry: changed Access cut discards visible hydration even when current policy becomes hidden', async () => {
   for (const change of [
     { recoveryGeneration: '2', enforcementCut: hash('fixture-cut-1') },
     { recoveryGeneration: '1', enforcementCut: hash('fixture-cut-2') },
@@ -862,7 +864,7 @@ test('disclosure ancestry: changed Access cut discards visible hydration but cur
       DisclosureUnavailable,
     );
     f.setDecisions(['hidden']);
-    expect(await fenceDisclosure(f.env, cuts, ANONYMOUS_VIEWER, 'read')).toEqual(['hidden']);
+    await expect(fenceDisclosure(f.env, cuts, ANONYMOUS_VIEWER, 'read')).rejects.toBeInstanceOf(DisclosureUnavailable);
   }
 });
 
