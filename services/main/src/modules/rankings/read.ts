@@ -42,13 +42,12 @@ export async function readRankingPage(
     options.interval,
     options.order,
     bucket,
-    checkpoint.generation,
     session.options.language ?? null,
   ];
   // Ranking continuation follows its published population, while the graph
   // epoch remains a recovery fence. The graph's global sequence is diagnostic.
   const cursorPosition = { ...session.position,
-    dependencyToken: readDependencyToken([binding, capture.revision]) };
+    dependencyToken: readDependencyToken([binding, checkpoint.generation, capture.revision]) };
   const cursor = decodeReadCursor(session.options.cursor, binding, cursorPosition);
   type Candidate = typeof capture.rows[number];
   const heads = new Map<string, ReadRow>();

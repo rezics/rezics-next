@@ -20,6 +20,7 @@ import { allocateAgentHandle } from '../src/modules/agent/handle.ts';
 import { readReleasesByIdentifier } from '../src/modules/release/read.ts';
 import { readResourceRelations } from '../src/modules/relation/traversal.ts';
 import { SerialStatisticsProjection } from '../src/modules/work/serial-projection.ts';
+import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts';
 import { withDisclosureViewer } from '../src/modules/disclosure/viewer.ts';
 import { WorkReadSession, type ReadRow } from '../src/modules/work/read-session.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
@@ -500,9 +501,11 @@ test('G-904: serial counts fence current child restrictions without a relay even
           ],
     }),
   } as unknown as Pool;
+  let relaySequence = '1';
   const projection = new SerialStatisticsProjection(
     access,
-    { query: async () => ({ rows: [{ sequence: '1' }] }) } as unknown as Pool,
+    { query: async () => ({ rows: [{ stream_scope: MAIN_RELAY_STREAM_SCOPE,
+      data_epoch: 'epoch', sequence: relaySequence }] }) } as unknown as Pool,
     {} as Pool,
     f.environment,
   );
@@ -518,7 +521,9 @@ test('G-904: serial counts fence current child restrictions without a relay even
   expect((await projection.batch([work], '1')).get(work)?.chapterCount).toBeNull();
   f.restricted.clear();
   expect((await projection.batch([work], '1')).get(work)?.chapterCount).toBe(1);
-  expect(await projection.batch([work], '2')).toEqual(new Map());
+  relaySequence = '2';
+  expect(await projection.batch([work], '1')).toEqual(new Map());
+  relaySequence = '1';
   f.fail();
   await expect(projection.batch([work], '1')).rejects.toThrow('Disclosure owner is unavailable');
 });

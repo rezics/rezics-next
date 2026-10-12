@@ -94,16 +94,26 @@ if (process.env.REZICS_TRENDING_PROFILE_CHILD === '1') {
     assert.ok(ranked.every(row => row.growth === '1' && row.score === '1'));
     assert.ok(performance.now() - prepared < 600_000, 'Fixture preparation exceeded ten minutes');
 
-    let measured: { limits: number[]; examined: number } | undefined;
-    const candidates = projection.candidates.bind(projection);
-    projection.candidates = async (...args) => {
-      const rows = await candidates(...args);
+    let measured: { limits: number[]; examined: number;
+      previousAfter?: { value: string; work: string } | null; previousExamined: number } | undefined;
+    const capture = projection.capture.bind(projection);
+    projection.capture = async (...args) => {
+      const cut = await capture(...args);
       if (measured) {
-        measured.limits.push(args[6]);
+        const after = args[4], limit = args[5];
+        // A continuation's preceding null seek only captures its revision;
+        // its rows do not enter admission or hydration.
+        if (after && measured.previousAfter === null) {
+          measured.limits.pop();
+          measured.examined -= measured.previousExamined;
+        }
+        measured.limits.push(limit);
         // The extra row is only the continuation witness, never examined.
-        measured.examined += Math.min(rows.length, args[6] - 1);
+        measured.previousExamined = Math.min(cut.rows.length, limit - 1);
+        measured.examined += measured.previousExamined;
+        measured.previousAfter = after;
       }
-      return rows;
+      return cut;
     };
     const app = createMainApp(home.stack.fuseki, { ...home.deps, readRankings: projection,
       homeTrending: new RankingHomeTrendingReader(projection) });
@@ -115,7 +125,7 @@ if (process.env.REZICS_TRENDING_PROFILE_CHILD === '1') {
         }, home.reader.token));
       }
       for (let sample = 0; sample < 3; sample++) {
-        measured = { limits: [], examined: 0 };
+        measured = { limits: [], examined: 0, previousExamined: 0 };
         const read = measured;
         const { profile, result: responseBytes } = await profileRequest(sink, async headers => {
           headers.set('authorization', `Bearer ${home.reader.token}`);

@@ -2,13 +2,14 @@ import { expect, test } from 'bun:test';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { configureDisclosure, type DisclosureDecision, type DisclosureTarget } from '../src/modules/disclosure/read.ts';
 import { readFeed } from '../src/modules/feed/read.ts';
+import { mainFeedPosition } from '../src/modules/feed/frame.ts';
 import type { FeedRow } from '../src/modules/feed/store.ts';
 import { DEFAULT_MEDIA_CONTEXT, type AvatarRow } from '../src/modules/media/store.ts';
 import type { ResourceSummary } from '../src/modules/media/summary.ts';
 import { readRankings } from '../src/modules/rankings/read.ts';
 import type { ReadRankingProjection } from '../src/modules/rankings/projection.ts';
 import { RV } from '../src/modules/work/activate.ts';
-import { WorkReadMoved, WorkReadSession, type ReadRow } from '../src/modules/work/read-session.ts';
+import { WorkReadSession, type ReadRow } from '../src/modules/work/read-session.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 
 const id = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -94,6 +95,7 @@ function page(kind: Case) {
     follows: {},
     personPreferences: {},
     profiles: {},
+    relayPosition: { read: async () => mainFeedPosition('epoch', '7') },
     media: { store: { avatarRows: async (resources: readonly string[]) => ({
       rows: new Map(resources.map(reference => [reference, avatar(reference)])),
       generation: { owner: 'content' as const, dataEpoch: 'media', sequence: '1' },
@@ -177,14 +179,17 @@ test('ranking withholds a cover the viewer may not see', async () => {
 
 test('ranking does not label a signed-in-only name public', async () => {
   const f = page('name');
-  await expect(readRankings(f.session, {
+  const ranking = await readRankings(f.session, {
     capture: async (...args: Parameters<ReadRankingProjection['capture']>) => ({
       checkpoint: { generation: id(90).slice(-36), contentEpoch: 'epoch', contentSequence: '1',
         graphEpoch: 'epoch', reviewPosition: '1' }, revision: '1', removalRevision: '0', rows: [{ work, score: '3', growth: '1' }],
       population: { metric: args[0], interval: args[1], bucket: args[2],
         context: args[6] ?? 'urn:rezics:context:global' } }),
     fence: async () => true,
-  } as unknown as ReadRankingProjection, { realm: null, metric: 'reads', interval: 'day', order: 'score' })).rejects.toBeInstanceOf(WorkReadMoved);
+  } as unknown as ReadRankingProjection, { realm: null, metric: 'reads', interval: 'day', order: 'score' });
+  expect(ranking.items).toEqual([]);
+  expect(ranking.count).toEqual({ value: 0, kind: 'exact-page', total: null });
+  expect(ranking.nextCursor).toBeNull();
   const summaries = delivered(f.captured);
   expect(summaries.some(summary => summary.disclosure === 'restricted' && summary.name.value === title)).toBe(true);
   expect(summaries.every(summary => summary.disclosure !== 'public')).toBe(true);

@@ -158,6 +158,12 @@ test('ranking continuation expires only when its own published population revisi
     [f.checkpoint.generation, f.second.work, f.bucket]);
     const next = await f.request(`${route}&cursor=${encodeURIComponent(first.body.nextCursor!)}`);
     expect(next.status).toBe(409);
+    const refreshed = await f.request();
+    expect(refreshed.status).toBe(200);
+    expect(refreshed.body.nextCursor).toBeString();
+    await f.stack.accessPool.query('UPDATE access.read_ranking_checkpoint SET generation=$1 WHERE singleton', [randomUUID()]);
+    const replacement = await f.request(`${route}&cursor=${encodeURIComponent(refreshed.body.nextCursor!)}`);
+    expect(replacement.status).toBe(409);
   } finally { await f.close(); }
 }, 180_000);
 
@@ -225,10 +231,12 @@ test('a review removal after capture makes only its affected ranking population 
 
 test('ranking SQL statements and actual executor rows stay constant across three unrelated inventories', async () => {
   const f = await fixture();
-  const evidence: Array<{ inventory: number; sql: number; executorRows: number }> = [];
+  const evidence: Array<{ inventory: number; pending: number; sql: number; executorRows: number }> = [];
   const profiles: WorkProfile[] = [];
   try {
-    for (const inventory of [8, 64, 512]) {
+    // Measure the indexed path at meaningful inventories. Tiny tables can
+    // legitimately use cheaper sequential scans; never force planner settings.
+    for (const [inventory,pending] of [[1024,64],[8192,512],[65536,4096]] as const) {
       await f.stack.accessPool.query(`DELETE FROM access.read_ranking_admitted
         WHERE generation=$1 AND context LIKE 'urn:rezics:context:unrelated:%'`, [f.checkpoint.generation]);
       await f.stack.accessPool.query(`INSERT INTO access.read_ranking_admitted
@@ -236,13 +244,14 @@ test('ranking SQL statements and actual executor rows stay constant across three
         SELECT $1,'reads','day',$2,'urn:rezics:context:unrelated:'||n,
           'https://rezics.com/id/'||md5($3||n::text)::uuid::text,100,100
         FROM generate_series(1,$4::integer) n`, [f.checkpoint.generation, f.bucket, randomUUID(), inventory]);
-      await f.pendingAdditions(inventory);
+      await f.pendingAdditions(pending);
       await f.stack.accessPool.query(`SELECT access.append_reader_review_rank_change(
         'https://rezics.com/id/'||md5($1||n::text)::uuid::text,'2020-01-01'::timestamptz,-1)
-        FROM generate_series(1,$2::integer) n`, [randomUUID(), inventory]);
+        FROM generate_series(1,$2::integer) n`, [randomUUID(), pending]);
       await f.stack.accessPool.query('ANALYZE access.read_ranking_admitted');
       await f.stack.accessPool.query('ANALYZE access.read_ranking_pending');
       await f.stack.accessPool.query('ANALYZE access.read_ranking_removal');
+      await f.stack.accessPool.query('ANALYZE access.read_ranking_publication');
       f.meter.statements.length = 0;
       const response = await f.request();
       expect(response.status).toBe(200);
@@ -257,7 +266,7 @@ test('ranking SQL statements and actual executor rows stay constant across three
           + (node['Rows Removed by Filter'] ?? 0) + (node['Rows Removed by Index Recheck'] ?? 0))
           * node['Actual Loops'], 0);
       }
-      evidence.push({ inventory, sql: statements.length, executorRows });
+      evidence.push({ inventory,pending,sql: statements.length,executorRows });
       // Only projection-owner SQL is observed here; all other work remains unknown.
       profiles.push({ traceId: '', request: { service: 'main', route, status: response.status },
         postgresStatements: statements.length, mainCalls: null, fusekiRequests: null,
@@ -265,11 +274,11 @@ test('ranking SQL statements and actual executor rows stay constant across three
         accountCalls: null, otherFetches: null, unclassifiedFetches: 0,
         serverLatencyMs: 0, totalLatencyMs: 0, fusekiCalls: [], postgres: [], unobserved: [], spans: [] });
     }
+    console.info(JSON.stringify({ capability: 'ranking-population-cut', evidence }));
     assertWorkCostAtScales(profiles, { postgresStatements: 4 }, 'ranking-population-cut-sql');
     expect(new Set(evidence.map(row => row.sql)).size).toBe(1);
     expect(new Set(evidence.map(row => row.executorRows)).size).toBe(1);
     expect(evidence.every(row => row.executorRows > 0 && row.executorRows <= 32)).toBe(true);
-    console.info(JSON.stringify({ capability: 'ranking-population-cut', evidence }));
   } finally { await f.close(); }
 }, 180_000);
 
