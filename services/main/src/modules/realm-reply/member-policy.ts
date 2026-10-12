@@ -38,5 +38,7 @@ export async function realmApprovedProof(client: PoolClient, realm: string,
   if (banned.rowCount) return null;
   const owner = await representedGrantProof(client, principal, actor,
     `governance:realm:${realm}`, 'realm.owner', { lock: true, directOnly: true });
-  return owner ? `owner:${owner.grantId}:${owner.grantGeneration}` : null;
+  // Keep the source prefix used by admission witnesses and pin the full owner
+  // branch so a different or changed mandate cannot revive a saved episode.
+  return owner ? `owner:${owner.grantId}:${owner.grantGeneration}:${JSON.stringify(owner)}` : null;
 }
