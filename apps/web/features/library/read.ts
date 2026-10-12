@@ -9,7 +9,7 @@ import { shellReader } from '../shell/communities-read.ts';
 import { workHref } from '../work-page/route.ts';
 import { dayText, momentText } from './format.ts';
 import { type LibraryState, statusShelves } from './state.ts';
-import type { ContinueItem, CustomShelf, FollowedAuthors, LibraryItem, LibraryOverview, LibraryRow, Loaded,
+import type { CustomShelf, FollowedAuthors, LibraryItem, LibraryOverview, LibraryRow, Loaded,
   PrivateImportReview, ReaderStateItem, ReadingProgress, ReadingYear, Review, ShelfStatus, StatusShelfItem,
   YearlyGoal } from './types.ts';
 
@@ -160,24 +160,23 @@ const readWork = cache(async (work: string, _locale: UiLocale) => {
     actingSubject: reader.actingSubject } })) : { ok: false as const, failure: 'sign-in' as const };
 });
 
-/** Works in progress with their next unread chapter, from Main's Continue read. */
-const readContinue = cache(async (): Promise<Map<string, ContinueItem>> => {
+/** One Work's resume, independent of Home ranking and exclusions. */
+const readResume = cache(async (work: string) => {
   const reader = await libraryReader();
-  if (!reader) return new Map();
-  const read = await settle(() => reader.main.v1.me.continue.get({ query: { actingSubject: reader.actingSubject,
-    limit: 6 } }));
-  return new Map((read.ok ? read.data.items : []).map(item => [item.work, item]));
+  return reader ? settle(() => reader.main.v1.me.continue({ work: work.slice(-36) }).get({ query: {
+    actingSubject: reader.actingSubject } })) : { ok: false as const, failure: 'sign-in' as const };
 });
 
 /**
- * How far the reader is in each Work on Currently reading: Continue's next
+ * How far the reader is in each Work on Currently reading: its own next
  * chapter and what is left, and chapters read of all when Main counts both exactly.
  */
 async function readProgress(rows: readonly LibraryItem[], locale: UiLocale):
   Promise<Map<string, ReadingProgress>> {
-  const continued = await readContinue();
   const reading = rows.filter(row => row.status === 'reading');
-  const totals = await pooled(reading.filter(row => continued.get(row.work.id)?.unreadCount.kind === 'exact'),
+  const resumes = await pooled(reading, async row => [row.work.id, await readResume(row.work.id)] as const);
+  const continued = new Map(resumes.flatMap(([work, read]) => read.ok ? [[work, read.data] as const] : []));
+  const totals = await pooled(reading.filter(row => continued.get(row.work.id)?.unreadCount?.kind === 'exact'),
     async row => [row.work.id, await readWork(row.work.id, locale)] as const);
   const chapters = new Map(totals.flatMap(([work, read]) => (read.ok && read.data.chapterCount !== null
     ? [[work, read.data.chapterCount]] : [])));
@@ -185,7 +184,7 @@ async function readProgress(rows: readonly LibraryItem[], locale: UiLocale):
     const item = continued.get(row.work.id);
     const total = chapters.get(row.work.id);
     const left = item?.unreadCount ?? null;
-    return [row.work.id, { next: item ? { title: item.nextUnread.title, href: item.nextUnread.href } : null, left,
+    return [row.work.id, { next: item?.nextUnread ? { title: item.nextUnread.title, href: item.nextUnread.href } : null, left,
       chapters: total !== undefined && left?.kind === 'exact' && left.value <= total
         ? { read: total - left.value, total } : null }];
   }));

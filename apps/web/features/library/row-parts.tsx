@@ -29,7 +29,8 @@ import type { LibraryRow, Review } from './types.ts';
 /**
  * Where a Work in progress stands, as StoryGraph shows it: a bar when Main
  * counts the chapters exactly, what comes next, and Continue to the next
- * unread chapter. A Work Continue did not answer for opens its page instead.
+ * unread chapter. A Work whose own resume has no readable next chapter opens
+ * its page instead.
  */
 export function ReadingProgress({ row, locale, messages, className }: {
   row: LibraryRow; locale: UiLocale; messages: LibraryMessages; className?: string;

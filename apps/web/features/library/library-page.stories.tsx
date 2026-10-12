@@ -27,6 +27,31 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+const eightReadingWorks = libraryItems.slice(0, 8).map((row, index) => ({ ...row,
+  status: 'reading' as const, review: undefined, privateReview: undefined,
+  progress: { next: { title: `Chapter ${index + 2}`,
+    href: `${row.work.href}/read/chapter-${index + 2}?language=en` },
+  left: { value: 8 - index, kind: 'exact' as const }, chapters: { read: index + 2, total: 10 } },
+}));
+const readingShelf = libraryState({ shelf: 'reading' });
+
+/** Every reading Work has its own resume, including those beyond Home's six-item preview. */
+export const EightReadingWorks: Story = {
+  args: { state: readingShelf, overview: { ok: true, data: storyOverview(eightReadingWorks) },
+    view: { ok: true, data: storyView(readingShelf, eightReadingWorks) }, reading: [],
+    readerActions: storyReaderActions(eightReadingWorks) },
+  parameters: { route: { pathname: '/en/library', search: '?shelf=reading' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const links = canvas.getAllByRole('link', { name: /^Continue/ });
+    await expect(links).toHaveLength(8);
+    for (const [index, link] of links.entries()) {
+      await expect(link).toHaveAttribute('href', localizedPath('en', eightReadingWorks[index]!.progress.next.href));
+    }
+    await expect(canvas.queryByRole('link', { name: /^Open Work/ })).toBeNull();
+  },
+};
+
 const page = () => within(document.body);
 
 /**
