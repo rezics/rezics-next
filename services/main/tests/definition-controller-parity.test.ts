@@ -37,10 +37,10 @@ function reader(options: { bindings?: Binding[]; publicRefs?: string[] } = {}) {
     release() {},
     async query(sql: string, values: unknown[] = []) {
       statements.push({ sql, values });
+      if (sql.startsWith('SELECT open, dispatch_open FROM access.scope_gate'))
+        return { rows: [{ open: true, dispatch_open: true }], rowCount: 1 };
       const rows = sql.includes('access.recovery_fence')
         ? [{ open: true, generation: '0' }]
-        : sql.includes('FROM access.scope_gate')
-          ? [{ open: true, dispatch_open: true }]
         : sql.startsWith('SELECT id FROM access.principal')
           ? [{ id: principalId }]
           : sql.includes('access.read_platform_permissions')

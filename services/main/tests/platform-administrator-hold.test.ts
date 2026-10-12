@@ -211,7 +211,7 @@ test('the shared administrator proof holds the platform gate until its transacti
       .rejects.toMatchObject({ code: '55P03' });
     await closer.query('ROLLBACK');
     await proofClient.query('COMMIT');
-    await f.gate(false, false);
+    await proofClient.query("UPDATE access.scope_gate SET open=false,dispatch_open=false WHERE id='platform:access'");
     expect(await platformAdministratorProof(proofClient, f.principalId, f.actor)).toBeNull();
   } finally {
     await proofClient.query('ROLLBACK'); await closer.query('ROLLBACK');
