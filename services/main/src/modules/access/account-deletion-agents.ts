@@ -141,11 +141,13 @@ async function classifyAccountDeletionStep(client: PoolClient, principal: string
         NOT EXISTS (SELECT 1 FROM access.account_deletion_progress_agent a
           WHERE a.operation_id = $2 AND a.effect = 'end' AND NOT a.expanded
             AND a.expansion_rank > coalesce((SELECT expansion_rank FROM parent), p.expansion_cursor)
-          ORDER BY a.expansion_rank LIMIT 1)
+          -- EXISTS can discard ORDER BY/LIMIT and choose an inventory rescan.
+          -- OFFSET preserves the ordered, bounded frontier seek.
+          ORDER BY a.expansion_rank LIMIT 1 OFFSET 0)
         AND NOT EXISTS (SELECT 1 FROM inserted WHERE effect = 'end' AND NOT expanded)
         AND NOT EXISTS (SELECT 1 FROM access.account_deletion_classification_frontier f
           WHERE f.operation_id = $2 AND f.wake_rank > coalesce((SELECT max(wake_rank) FROM awakened), p.wake_cursor)
-          ORDER BY f.wake_rank LIMIT 1) AS frontier_done
+          ORDER BY f.wake_rank LIMIT 1 OFFSET 0) AS frontier_done
       FROM state p
     ), advanced AS (
       UPDATE access.account_deletion_progress p

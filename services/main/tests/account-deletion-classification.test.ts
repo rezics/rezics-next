@@ -566,7 +566,7 @@ async function measuredWork(work: (measured: Pool) => Promise<void>) {
 
 function readScans(plan: ReadPlan): unknown[] {
   return [...(plan['Relation Name'] && plan['Node Type'].endsWith('Scan') ? [{
-    relation: plan['Relation Name'], index: plan['Index Name'], condition: plan['Index Cond'], filter: plan.Filter,
+    node: plan['Node Type'], relation: plan['Relation Name'], index: plan['Index Name'], condition: plan['Index Cond'], filter: plan.Filter,
     rows: plan['Actual Rows'], removed: plan['Rows Removed by Filter'], loops: plan['Actual Loops'],
   }] : []), ...(plan.Plans ?? []).flatMap(readScans)];
 }
@@ -721,6 +721,10 @@ test('sole-controlled chains at 8, 64 and 512 levels read a fixed budget per per
       if (reads.length % 64 === 0) console.info('Long-chain classification step', size, reads.length);
       reads.push(plans.reduce((sum, plan) => sum + planRows(plan.Plan), 0));
       inventoryReads.push(plans.reduce((sum, plan) => sum + planRows(plan.Plan, 'account_deletion_progress_agent'), 0));
+      if (inventoryReads.at(-1)! > ACCOUNT_DELETION_CLASSIFICATION_COST.subjectsPerStep * 4 + 8) {
+        console.info('Classification inventory rescan', JSON.stringify({ size, step: reads.length,
+          plans: plans.map(plan => ({ query: plan['Query Text'].slice(0, 200), scans: readScans(plan.Plan) })) }));
+      }
       buffers.push(plans.reduce((sum, plan) => sum + planBuffers(plan.Plan), 0));
     });
     try {
