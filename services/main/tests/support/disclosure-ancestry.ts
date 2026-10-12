@@ -32,7 +32,7 @@ export function configureFixtureDisclosureAncestry(env: WorkActivationEnvironmen
     return { resource: target.resource, resourceKind: 'other', relationshipBasis,
       parents: parent ? [{ ...parent, owner: 'graph', kind: 'work', relationshipBasis }] : [], status: 'complete' };
   };
-  for (const owner of ['graph', 'content', 'media', 'review', 'discovery'] as const)
+  for (const owner of ['graph', 'content', 'media', 'review'] as const)
     configureDisclosureAncestrySource(env, owner, {
       read: async targets => targets.map(evidence),
       reread: async bases => bases.map(basis => evidence(selected.get(basis.token)!)),
