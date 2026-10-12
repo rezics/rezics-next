@@ -1,11 +1,7 @@
-import { expect, mock, test } from 'bun:test';
+import { expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { RealmView } from '../realm/realm-page.tsx';
-
-void mock.module('./about-discussion-entry.tsx', () => ({
-  ZoneAboutDiscussion: () => <aside data-zone-discussion-entry />,
-}));
 
 const { ZoneSiteHome } = await import('./site-home.tsx');
 
@@ -27,4 +23,6 @@ test('a package-rendered Zone home has no attached Realm discussion entry', asyn
   const html = renderToStaticMarkup(await ZoneSiteHome({ view, search: {} }));
   expect(html).toContain('Zone home');
   expect(html).not.toContain('data-zone-discussion-entry');
+  expect(html).not.toContain('aria-label="Discussion"');
+  expect(html).not.toContain('Couldn’t load the discussion.');
 });
