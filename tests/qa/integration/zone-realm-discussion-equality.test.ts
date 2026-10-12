@@ -127,8 +127,10 @@ test('hidden and absent openers give ordinary own-post responses with equal owne
     const hiddenTarget = await a.post({ ...absentPage, about: privateWork.work }, a.reader, text, home.reader.token);
     const absentTarget = await a.post({ ...absentPage, about: missing }, a.reader, text, home.reader.token);
     const hiddenText = await hiddenTarget.text(), absentText = await absentTarget.text();
-    expect(hiddenTarget.status, hiddenText).toBe(404);
-    expect(absentTarget.status, absentText).toBe(404);
+    // Neither key has an allocated intent to retain a terminal disclosure
+    // refusal. Both stay recoverable without disclosing the target's existence.
+    expect(hiddenTarget.status, hiddenText).toBe(503);
+    expect(absentTarget.status, absentText).toBe(503);
     expect(comparableBody(hiddenText, privateWork.work)).toBe(comparableBody(absentText, missing));
     const noEffects = { threads: 0, operations: 0, replies: 0, revisions: 0 };
     expect(await a.effects(privateWork.work)).toEqual(noEffects);

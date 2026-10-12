@@ -228,15 +228,17 @@ test('stale page bases, policy refusal and ended attachments create no discussio
       profile: 'agent-provision-v1', kind: 'organization', displayName: 'Discussion organization',
     }, home.author.token), 201);
     const organizationPost = await a.post(page, organization.agent, 'Organization post', home.author.token);
-    expect(organizationPost.status, await organizationPost.text()).toBe(403);
+    // No intent exists to fence a concurrent admitted request. Such refusals
+    // retain the key as recoverable, while creating no owner effects.
+    expect(organizationPost.status, await organizationPost.text()).toBe(503);
     expect(await a.effects(page.about)).toEqual(unchanged);
     const refused = async (input: Page, status: number) => {
       const response = await a.post(input, a.reader, 'Refused contribution', home.reader.token);
       expect(response.status, await response.text()).toBe(status);
       expect(await a.effects(page.about)).toEqual(unchanged);
     };
-    await refused({ ...page, routeRevision: `https://rezics.com/id/${randomUUID()}` }, 409);
-    await refused({ ...page, targetRevision: `https://rezics.com/id/${randomUUID()}` }, 409);
+    await refused({ ...page, routeRevision: `https://rezics.com/id/${randomUUID()}` }, 503);
+    await refused({ ...page, targetRevision: `https://rezics.com/id/${randomUUID()}` }, 503);
     const limit = home.deps.rateLimit;
     if (!limit) throw new Error('Discussion fixture requires the real Main rate limiter');
     const originalConsume = limit.store.consume;
@@ -248,16 +250,16 @@ test('stale page bases, policy refusal and ended attachments create no discussio
       expect(writeDebits).toBe(3);
     } finally { limit.store.consume = originalConsume; }
     await a.policy(a.realm.realm, 'mandatory');
-    await refused(page, 403);
+    await refused(page, 503);
     await a.policy(a.realm.realm, 'open');
 
     const other = await a.realmFor();
     await a.policy(other.realm, 'open');
     await a.configure({ defaultRealm: other.realm });
-    await refused(page, 409);
+    await refused(page, 503);
     await a.publish();
     expect((await a.route(page.path)).realm).toBe(other.realm);
-    await refused(page, 409);
+    await refused(page, 503);
 
     await a.configure({ defaultRealm: a.realm.realm });
     await a.publish();
@@ -266,6 +268,6 @@ test('stale page bases, policy refusal and ended attachments create no discussio
       realm: a.realm.realm, actingSubject: a.author,
     }, home.author.token));
     expect((await a.route(page.path)).realm).toBeNull();
-    await refused(current, 409);
+    await refused(current, 503);
   } finally { await home.stop(); }
 }, 300_000);

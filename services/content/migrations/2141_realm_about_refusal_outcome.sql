@@ -17,10 +17,11 @@ END $$;
 CREATE OR REPLACE FUNCTION content.guard_realm_about_post_operation() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE canonical content.realm_about_thread;
 BEGIN
-    -- Refusal response retention changes no selection or owner effect. The
+    -- Refusal retention changes no selection or owner effect. The
     -- historical canonical key may already have been released or replaced.
     IF TG_OP = 'UPDATE' AND
-        (to_jsonb(NEW) - 'terminal_outcome') IS NOT DISTINCT FROM (to_jsonb(OLD) - 'terminal_outcome')
+        (to_jsonb(NEW) - ARRAY['terminal_outcome','terminal_refusal']) IS NOT DISTINCT FROM
+        (to_jsonb(OLD) - ARRAY['terminal_outcome','terminal_refusal'])
     THEN RETURN NEW; END IF;
     IF TG_OP = 'DELETE' THEN
         RAISE EXCEPTION 'discussion intent progress is retained' USING ERRCODE = '23514';

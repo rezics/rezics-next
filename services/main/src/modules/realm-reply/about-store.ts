@@ -230,11 +230,13 @@ export class RealmAboutThreadStore {
     const canonical = (await client.query<{ opener_reply: string }>(
       'SELECT opener_reply FROM content.realm_about_thread WHERE realm=$1 AND about=$2 FOR UPDATE',
       [row.realm, row.about])).rows[0];
-    if (!canonical || canonical.opener_reply !== row.opener_reply) {
-      return { kind: 'recoverable', operation: operation(row, true) };
-    }
+    // An undispatched selection from a replaced canonical key is fenced by
+    // its immutable opener, so it can never dispatch. Retain that stale result
+    // instead of allowing a newer target/policy cut to redefine its refusal.
+    const retainedOutcome = !canonical || canonical.opener_reply !== row.opener_reply
+      ? { kind: 'reply-stale' as const, message: 'Discussion reservation was released' } : outcome;
     const refused = (await client.query<OperationRow>(`UPDATE content.realm_about_post_operation
-      SET terminal_refusal=true,terminal_outcome=$2 WHERE id=$1 RETURNING *`, [row.id, outcome])).rows[0]!;
+      SET terminal_refusal=true,terminal_outcome=$2 WHERE id=$1 RETURNING *`, [row.id, retainedOutcome])).rows[0]!;
     // A failed child retains the active opener. Only this selected opener
     // can relinquish an unactivated reservation.
     await client.query(`DELETE FROM content.realm_about_thread
@@ -351,12 +353,17 @@ export class RealmAboutThreadStore {
     const rows = (await this.pool.query<{ operation_id: string; revision_id: string; byte_digest: string }>(`
       SELECT c.operation_id,c.revision_id::text,r.byte_digest FROM content.receipt c
       JOIN content.revision r ON r.id=c.revision_id AND r.variant_id=c.variant_id
-      WHERE c.variant_id=$1 AND c.action='draft.save' AND c.outcome='succeeded' LIMIT 2`,
-    [selected.variantId])).rows;
+      WHERE c.variant_id=$1 AND c.action='draft.save' AND c.outcome='succeeded'
+        AND ($2::text IS NULL OR c.operation_id=$2) LIMIT 2`,
+    [selected.variantId, selected.draftOperationId])).rows;
     if (rows.length > 1) throw new RealmReplyUnavailable('discussion draft receipt is ambiguous');
     const row = rows[0];
     if (!row) return null;
-    await this.recordDraft(selected.id, row.operation_id);
+    if (selected.draftOperationId) {
+      if (row.revision_id !== selected.revisionId) throw new RealmReplyUnavailable('discussion draft receipt differs');
+      // A recorded receipt is immutable. Recover native cancellation cleanup
+      // even after another intent has replaced the released canonical key.
+    } else await this.recordDraft(selected.id, row.operation_id);
     return { revisionId: row.revision_id, revisionDigest: row.byte_digest };
   }
 

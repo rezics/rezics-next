@@ -26,7 +26,23 @@ const terminalErrors = {
   'content-conflict': ContentConflict, 'target-not-bound': TargetNotBound,
   'read-missing': WorkReadMissing, 'read-moved': WorkReadMoved, 'read-invalid': WorkReadInvalid,
 } as const;
-function terminalOutcome(error: unknown): AboutTerminalOutcome | null {
+/** Outcome table (the locked intent/owner receipt supplies the evidence):
+ * - Definite basis/disclosure, draft/identity or admission refusal before
+ *   dispatch: terminal only for an allocated, undispatched selection.
+ * - No allocated intent, recorded dispatch, missing receipt, transport/owner
+ *   outage, admission/receipt conflict or read budget failure: recoverable 503.
+ * - Successful graph receipt: recover native settlement, then replay as 200.
+ * - Exact cancelled draft + ContentConflict: terminal Content refusal.
+ * - Cancelled placement + ContentConflict or other uncertain cleanup failure:
+ *   recoverable 503; retry the native owner to finish settlement and sealing.
+ * - Cancelled placement + native denied/invalid/stale/expired refusal after
+ *   cleanup: terminal; preserve that owner error, with expiry normalized stale.
+ * - Replaced selection without dispatch: terminal stale, retained regardless
+ *   of newer target/policy reads. Retained terminal outcomes replay unchanged.
+ */
+function terminalOutcome(error: unknown, phase: 'pre-dispatch' | 'placement'): AboutTerminalOutcome | null {
+  if (phase === 'placement' && !(error instanceof RealmReplyDenied || error instanceof RealmReplyInvalid
+    || error instanceof RealmReplyStale || error instanceof AdmissionDenied || error instanceof AdmissionExpired)) return null;
   if (error instanceof AdmissionExpired) return { kind: 'reply-stale', message: 'Discussion admission expired' };
   for (const [kind, constructor] of Object.entries(terminalErrors)) {
     if (error instanceof constructor) return { kind: kind as AboutTerminalOutcome['kind'], message: error.message };
@@ -158,7 +174,7 @@ export class RealmAboutPostCommand {
         } catch (error) {
           const terminal = await readReplyGraphReceipt(this.work.environment, admission);
           if (terminal?.outcome === 'cancelled') {
-            const outcome = terminalOutcome(error);
+            const outcome = terminalOutcome(error, 'placement');
             if (!outcome) throw new RealmReplyUnavailable('Discussion cancellation recovery is pending');
             selected = await this.store.recordCancellation(selected!.id, terminal, outcome);
             throw terminalError(selected.terminalOutcome!);
@@ -180,18 +196,11 @@ export class RealmAboutPostCommand {
       // target or route checks. Recover settlement under the same admission; a
       // cancellation also stays terminal. No fresh key or opener is allocated.
       if (selected?.placementAdmissionId && selected.dispatchBasis) {
-        const receipt = await readReplyGraphReceipt(this.work.environment,
-          { id: selected.placementAdmissionId, action: 'reply.place' });
-        if (receipt?.outcome === 'cancelled') {
-          selected = await this.store.recordCancellation(selected.id, receipt,
-            { kind: 'reply-stale', message: 'Discussion placement was cancelled' });
-          throw terminalError(selected.terminalOutcome!);
-        }
         const draft = await this.store.savedDraft(selected);
         if (!draft) throw new RealmReplyUnavailable('Discussion draft receipt is unavailable');
-        // Even before a graph receipt exists, the recorded dispatch belongs to
-        // the native placement owner. It decides cancellation versus a winner
-        // on this retained basis; a newer route must not strand the admission.
+        // The native placement owner consumes success or cancellation and
+        // finishes settlement/sealing before emitting a terminal response.
+        // A graph cancellation alone does not prove cleanup has finished.
         return await place(draft, selected.dispatchBasis, true);
       }
       try {
@@ -304,7 +313,7 @@ export class RealmAboutPostCommand {
         ? await this.store.draftWasCancelled(draftAdmission.id, draftAdmission.requestDigest) : false;
       const basisRefusal = error instanceof WorkReadMoved || error instanceof WorkReadMissing
         || error instanceof WorkReadInvalid || error instanceof TargetNotBound;
-      const terminal = cancelledDraft
+      const terminal = cancelledDraft || error instanceof RealmReplyStale
         || ['basis', 'draft', 'identity'].includes(failedStage) && basisRefusal
         || failedStage === 'basis' && (error instanceof RealmReplyDenied || error instanceof AdmissionDenied || error instanceof AdmissionExpired)
         || failedStage === 'draft' && (error instanceof ContentDraftDenied || error instanceof ContentDraftStale
@@ -313,13 +322,16 @@ export class RealmAboutPostCommand {
           || error instanceof RealmReplyStale || error instanceof AdmissionDenied || error instanceof AdmissionExpired)
         || failedStage === 'admission' && (error instanceof AdmissionDenied || error instanceof AdmissionExpired);
       if (terminal) {
-        const outcome = terminalOutcome(error);
+        const outcome = terminalOutcome(error, 'pre-dispatch');
         if (!outcome) throw new RealmReplyUnavailable('Discussion refusal recovery is pending');
         const current = await this.store.refuseIntent(principalKey, key, digest, outcome);
         if (current.kind === 'posted') return { status: 200 as const, body: await this.posted(current.operation) };
-        if (current.kind === 'recoverable') throw new RealmReplyUnavailable('Discussion dispatch recovery is pending');
+        if (current.kind === 'recoverable' || current.kind === 'absent') {
+          // An absent row cannot fence a request already past its authority
+          // probes. Keep the same key recoverable rather than returning denial.
+          throw new RealmReplyUnavailable('Discussion dispatch recovery is pending');
+        }
         if (current.kind === 'refused') throw terminalError(current.operation.terminalOutcome!);
-        throw terminalError(outcome);
       }
       if (selected && (error instanceof ContentConflict && !cancelledDraft
         || error instanceof WorkReadLimit || error instanceof AdmissionConflict

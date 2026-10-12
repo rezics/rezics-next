@@ -245,6 +245,50 @@ test('cancelled and expired first posts release their reservation while retainin
       'Expired prepared contribution', home.author.token, expiredKey), 409)).toEqual(expiredRefusal);
     expect((await a.effects(expiredPage.about)).threads).toBe(1);
 
+    const cleanupPage = await a.page('cancelled-settlement-conflict'), cleanupKey = randomUUID();
+    const preparationFault = interruptAfter(home, 'preparation');
+    try {
+      const response = await a.post(cleanupPage, a.author, 'Cancelled with unfinished cleanup', home.author.token, cleanupKey);
+      expect(response.status, await response.text()).toBe(503);
+      expect(preparationFault.fired()).toBe(true);
+    } finally { preparationFault.restore(); }
+    const cleanup = await operation(home, a.realm.realm, cleanupPage.about);
+    await a.policy(a.realm.realm, 'mandatory');
+    const content = home.stack.content, originalSettle = content.settlePublication;
+    let cleanupFault = false;
+    content.settlePublication = async function (...args) {
+      if (!cleanupFault && args[2].outcome === 'rejected') {
+        cleanupFault = true;
+        throw new ContentConflict('Rejected settlement conflict');
+      }
+      return originalSettle.apply(this, args);
+    };
+    try {
+      const response = await a.post(cleanupPage, a.author, 'Cancelled with unfinished cleanup', home.author.token, cleanupKey);
+      expect(response.status, await response.text()).toBe(503);
+      expect(cleanupFault).toBe(true);
+    } finally { content.settlePublication = originalSettle; }
+    const retainedCleanup = (await home.stack.contentPool.query(`SELECT terminal_outcome,terminal_refusal
+      FROM content.realm_about_post_operation WHERE id=$1`, [cleanup.id])).rows[0];
+    expect(retainedCleanup).toEqual({ terminal_outcome: null, terminal_refusal: false });
+    expect((await home.stack.contentPool.query(`SELECT status,pin_active FROM content.publication_preparation
+      WHERE operation_id=$1`, [cleanup.placement_admission_id])).rows).toEqual([{ status: 'pending', pin_active: true }]);
+    expect((await a.effects(cleanupPage.about)).threads).toBe(1);
+    await a.policy(a.realm.realm, 'open');
+    const replacement = await home.json<Posted>(await a.post(cleanupPage, a.reader,
+      'Fresh opener while old cancellation cleanup is pending', home.reader.token), 201);
+    expect(replacement.reply).not.toBe(cleanup.reply);
+    const cleanupRetry = await a.post(cleanupPage, a.author, 'Cancelled with unfinished cleanup', home.author.token, cleanupKey);
+    const cleanupRefusal = await refusal(cleanupRetry, 409);
+    expect((await home.stack.contentPool.query(`SELECT status,pin_active FROM content.publication_preparation
+      WHERE operation_id=$1`, [cleanup.placement_admission_id])).rows).toEqual([{ status: 'rejected', pin_active: false }]);
+    expect((await home.stack.accessPool.query('SELECT state,graph_outcome FROM access.admission WHERE id=$1',
+      [cleanup.placement_admission_id])).rows).toEqual([{ state: 'sealed', graph_outcome: 'cancelled' }]);
+    expect((await a.effects(cleanupPage.about)).threads).toBe(1);
+    expect(await refusal(await a.post(cleanupPage, a.author, 'Cancelled with unfinished cleanup',
+      home.author.token, cleanupKey), 409)).toEqual(cleanupRefusal);
+    await noOrphanPublicReply(home, a.realm.realm, cleanup.reply);
+
     const page = await a.page('withdrawn-dispatch'), key = randomUUID();
     const graph = home.stack.fuseki, originalCommand = graph.commandWithReceipt;
     let withdrawn = false;
