@@ -26,6 +26,7 @@ void mock.module('../../zones/official/index.ts', () => ({
   loadPackage: async () => null,
 }));
 void mock.module('../../i18n/server.ts', () => ({
+  requestLocale: async () => 'en',
   getMessages: async (namespace: string) => namespace === 'realm' ? messages : zoneMessages,
   getTranslation: async () => ({ t: {} }),
 }));
