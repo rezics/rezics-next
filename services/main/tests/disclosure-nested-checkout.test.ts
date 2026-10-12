@@ -8,6 +8,7 @@ import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { boundedPool, NestedPoolCheckoutError, nestedPoolCheckoutMode, setNestedPoolCheckoutMode } from '../src/infrastructure/pg-pool.ts';
+import { ensureFixtureScopeGate } from '../src/modules/access/fixture-authority.ts';
 import { accessClient, controlRead, controlTransaction, withAccessClient } from '../src/modules/access/topology-control.ts';
 import { configureDisclosure, DISCLOSURE_COST, discloseInventory, discloseInventoryWithAnonymousNames,
   DisclosureStore, DisclosureUnavailable, type DisclosureDecision, type DisclosureTarget } from '../src/modules/disclosure/read.ts';
@@ -42,7 +43,7 @@ beforeAll(async () => {
   }
   await pool.query("INSERT INTO access.authority_subject(id,kind,active) VALUES ($1,'agent',true),($2,'agent',false)",
     [publicAgent, inactiveAgent]);
-  await pool.query('INSERT INTO access.scope_gate(id,open) VALUES ($1,false)', [gate]);
+  await ensureFixtureScopeGate(pool, gate, { open: false });
   // Content bodies already carry their parent descriptors. Exact graph name
   // probes return one row per requested resource, without a second SQL owner.
   graph.query = async sql => ({ results: { bindings: [publicAgent, inactiveAgent]
@@ -98,7 +99,7 @@ test('disclosure keeps caller policy changes and rollback in the held transactio
   expect(await reader.read([restricted], ANONYMOUS_VIEWER, 'thread')).toEqual(['tombstone']);
   await expect(controlTransaction(pool, async client => {
     const id = (await client.query('SELECT txid_current()::text AS id')).rows[0]!.id;
-    await client.query('UPDATE access.scope_gate SET open=true WHERE id=$1', [gate]);
+    await ensureFixtureScopeGate(client, gate, { open: true });
     expect(await discloseInventory(environment, [restricted], ANONYMOUS_VIEWER, 'thread')).toEqual(['visible']);
     expect((await client.query('SELECT txid_current()::text AS id')).rows[0]!.id).toBe(id);
     throw new Error('caller rolls back');
@@ -109,7 +110,7 @@ test('disclosure keeps caller policy changes and rollback in the held transactio
 test('explicit disclosure clients win over the same pool held context', async () => {
   await controlRead(pool, async held => {
     await expect(controlTransaction(other, async explicit => {
-      await explicit.query('UPDATE access.scope_gate SET open=true WHERE id=$1', [gate]);
+      await ensureFixtureScopeGate(explicit, gate, { open: true });
       expect(await reader.read([restricted], ANONYMOUS_VIEWER, 'thread')).toEqual(['tombstone']);
       expect(await discloseInventory(environment, [restricted], ANONYMOUS_VIEWER, 'thread', explicit)).toEqual(['visible']);
       expect(accessClient(pool)).toBe(held);
