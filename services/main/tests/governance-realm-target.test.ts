@@ -627,7 +627,8 @@ async function productionRealm(label: string) {
     const published = await responseJson<{ revision: string }>(await editor.send('PUT',
       `/v1/realms/${created.realm.slice(-36)}/profile`, { profile: 'realm-public-profile-v2',
         expectedHead: null, actingSubject: editor.actor, publication: {
-          name: { original: 'en', labels: { en: label } }, description: null,
+          name: { original: 'en', labels: { en: label } },
+          description: { original: 'en', labels: { en: 'A community Realm for governance review.' } },
           iconSelection: null, bannerSelection: null, rules: [], moderators: [],
           count: { kind: 'unknown', value: null },
         } }), 201);

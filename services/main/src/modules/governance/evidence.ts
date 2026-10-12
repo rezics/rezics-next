@@ -21,10 +21,11 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
  * a target command profile keep their Access-owned restriction behaviour. */
 export const governanceGraphKinds = {
   Work: 'https://schema.org/CreativeWork',
+  LegacyWork: `${RV}Work`,
   Occurrence: 'https://schema.org/ListItem',
   Concept: 'http://www.w3.org/2004/02/skos/core#Concept',
   ...Object.fromEntries([
-    'Realm', 'Work', 'MainVersion', 'Agent', 'Space', 'Zone', 'Structure', 'Release', 'FixedRelease',
+    'Realm', 'MainVersion', 'Agent', 'Space', 'Zone', 'Structure', 'Release', 'FixedRelease',
     'TextContribution', 'Realization', 'Collection', 'SemanticContext', 'Character', 'Role',
     'SemanticDefinition', 'Projection', 'Post',
   ].map(kind => [kind, `${RV}${kind}`])),

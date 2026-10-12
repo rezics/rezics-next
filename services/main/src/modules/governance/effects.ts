@@ -286,7 +286,7 @@ export function ownerModerationEffects(content: ContentModeration, env: WorkActi
         ${iri(realm.space)} a rv:Space ; rv:realmCapability ${iri(realm.realm)} .
         FILTER NOT EXISTS {
           ${iri(realm.realm)} a ?otherKind .
-          VALUES ?otherKind { ${governanceGraphTargetKinds.filter(kind => kind !== `${RV}Realm`).map(iri).join(' ')} }
+          VALUES ?otherKind { ${governanceGraphTargetKinds.filter(kind => kind !== `${RV}Realm`).map(kind => `<${kind}>`).join(' ')} }
         }
         FILTER NOT EXISTS { ${iri(realm.realm)} rv:space ?otherSpace . FILTER(?otherSpace != ${iri(realm.space)}) }
         FILTER NOT EXISTS { ?otherSpace rv:realmCapability ${iri(realm.realm)} . FILTER(?otherSpace != ${iri(realm.space)}) }
