@@ -153,7 +153,7 @@ for (const phase of ['retained', 'refreshed'] as const) {
       }
       expect(await json(await handle(token), 404))
         .toMatchObject({ status: 404 });
-      expect(await json(await address(token)))
+      expect(await json<{ results: Array<{ scope: string; key: string; status: string }> }>(await address(token)))
         .toEqual({ results: [{ scope: 'agent', key: alias, status: 'unavailable' }] });
       const live = await json<EntityPage>(await entities(`Ended${marker}`, token));
       expect(live.result.items.map(item => item.id)).toEqual([similar]);
