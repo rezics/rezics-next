@@ -223,10 +223,10 @@ async function environment(pool: Pool, objectDirectory: string, relay: Pool, acc
   };
   const input = (owner: string, revisionIds: string[]): ContentErasureInput => ({ actingSubject: resource(),
     resourceId: owner, revisionIds, idempotencyKey: randomUUID() });
-  const contribution = (owner: string) => {
+  const contribution = (owner: string, body = 'private authored component bytes') => {
     const id = randomUUID();
     const digest = prepareComponent(objectDirectory, owner, { work: resource(), author: resource(), language: 'en',
-      body: 'private authored component bytes', publication: 'draft' }, CONTRIBUTION_PROFILE);
+      body, publication: 'draft' }, CONTRIBUTION_PROFILE);
     const manifest = JSON.parse(readFileSync(join(objectDirectory, digest), 'utf8')) as { payload: string };
     const payload = manifest.payload.slice(7);
     objects.data.set(`sha256/${payload}`, readFileSync(join(objectDirectory, payload)));
@@ -957,3 +957,75 @@ test('P4 final SQL absence rejects replanted bytes with a matching erasure ident
     expect(f.objects.data.has(`sha256/${contribution.payload}`)).toBe(false);
   });
 });
+
+test('D3 preflight reserves reverse-reference refresh before suppression', async () => {
+  for (const count of [32, 64]) await fixture(async f => {
+    const owner = resource(), selected: string[] = [];
+    for (let index = 0; index < count; index++) {
+      const contribution = f.contribution(owner, `distinct private body ${index}`);
+      selected.push(contribution.id);
+      for (let other = 0; other < 3; other++) {
+        const id = randomUUID();
+        f.graph.revisions.set(id, { kind: 'text_contribution_draft', owner,
+          manifest: `urn:rezics:sha256:${contribution.digest}` });
+        f.graph.suppressed.add(resourceIri(id));
+      }
+    }
+    if (count === 64) {
+      await expect(f.call(f.input(owner, selected))).rejects.toBeInstanceOf(ErasurePreflightUnsupported);
+      expect(f.graph.commands).toEqual([]);
+      expect((await f.relay.query('SELECT id FROM relay.erasure')).rows).toEqual([]);
+      expect(f.objects.deletes).toEqual([]);
+    } else {
+      const result = await f.call(f.input(owner, selected));
+      expect(result.report.suppression).toBe('suppressed');
+      expect(result.report.targets.filter(target => target.kind === 'object'
+        && target.completionState === 'completed')).toHaveLength(16);
+    }
+  });
+});
+
+test('D3 a maximal completed closure reserves a repair share for one replanted remote key', async () => {
+  await fixture(async f => {
+    const owner = resource(), revision = await f.draft(owner), input = f.input(owner, [revision]);
+    const admitted = await f.access.register({ actingSubject: owner, scope: `erasure:${owner}`,
+      action: 'erasure.request', idempotencyKey: input.idempotencyKey, requestDigest: contentErasureDigest(input) });
+    const keys = Array.from({ length: 255 }, (_, index) => hash(Buffer.from(`completed object ${index}`)));
+    const entry = await journalErasure(f.relay, { operationId: `erasure:${admitted.id}`, requestDigest: admitted.requestDigest,
+      kind: 'revision', principalId: admitted.principalId, admissionId: admitted.id, authorityEpoch: admitted.authorityEpoch,
+      targets: [{ kind: 'content_revision', ref: revision }, ...keys.map(digest => ({ kind: 'object' as const, ref: `sha256:${digest}` }))] });
+    for (let index = 0; index < keys.length; index++) await completeErasureTarget(f.relay, entry.erasureId,
+      index + 2, hash(Buffer.from(keys[index]!)));
+    f.objects.data.set(`sha256/${keys[254]}`, Buffer.from('replanted last key'));
+    const result = await f.call(input);
+    expect(result.report.stage).toBe('reconciling');
+    expect(f.objects.deletes).toEqual([`sha256/${keys[254]}`]);
+    expect(f.objects.data.size).toBe(0);
+    expect((await f.relay.query('SELECT live_completion_pending FROM relay.erasure WHERE id=$1',
+      [entry.erasureId])).rows).toEqual([{ live_completion_pending: false }]);
+  });
+});
+
+test('D3 suppression receives only the remaining shared deadline', async () => {
+  await fixture(async f => {
+    const owner = resource(), revision = await f.draft(owner);
+    const query = f.graph.query.bind(f.graph), command = f.graph.commandWithReceipt.bind(f.graph);
+    f.graph.query = async sql => {
+      if (sql.includes('SELECT DISTINCT ?graph ?unit ?target')) await new Promise(resolve => setTimeout(resolve, 8_000));
+      return query(sql);
+    };
+    const deadlines: number[] = [];
+    f.graph.commandWithReceipt = async envelope => {
+      deadlines.push(envelope.deadlineMs!);
+      await new Promise(resolve => setTimeout(resolve, Math.min(envelope.deadlineMs!, 6_000)));
+      if (envelope.deadlineMs! < 6_000) return { status: 'deadline' };
+      return command(envelope);
+    };
+    await expect(f.call(f.input(owner, [revision]))).rejects.toThrow();
+    expect(deadlines.length).toBeGreaterThan(0);
+    expect(deadlines.every(deadline => deadline <= 2_000)).toBe(true);
+    expect(f.graph.commands).toEqual([]);
+    expect((await f.pool.query('SELECT availability FROM content.revision WHERE id=$1', [revision])).rows)
+      .toEqual([{ availability: 'available' }]);
+  });
+}, 30_000);

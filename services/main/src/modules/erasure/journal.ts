@@ -41,6 +41,9 @@ export interface ErasurePreflightBudget {
   deadline: number;
   graphInventories: Map<string, { graph: 'urn:rezics:search:public' | 'urn:rezics:search:private'; unit: string; target: string }[]>;
   contributionManifests: Map<string, { manifest: string; component: string }[]>;
+  contributionReferenceCounts: Map<string, number>;
+  objectReferenceReservations: Map<string, Map<string, number>>;
+  liveProbeShares?: { sweep: number; repair: number };
 }
 
 export class ErasurePreflightUnsupported extends ErasureUnavailable {}
@@ -48,7 +51,8 @@ export class ErasurePreflightUnsupported extends ErasureUnavailable {}
 export function createErasurePreflightBudget(): ErasurePreflightBudget {
   return { targets: [], indexedUnits: 0, inventoryEntries: 0, metadataBytes: 0, listingBytes: 0,
     absenceProbes: 0, signal: AbortSignal.timeout(10_000), deadline: Date.now() + 10_000,
-    graphInventories: new Map(), contributionManifests: new Map() };
+    graphInventories: new Map(), contributionManifests: new Map(),
+    contributionReferenceCounts: new Map(), objectReferenceReservations: new Map() };
 }
 
 export function consumeErasurePreflight(budget: ErasurePreflightBudget,
@@ -373,7 +377,7 @@ export async function completeErasureTarget(relay: Pool, erasureId: string, ordi
 }
 
 /** Idempotent registration; an existing label must keep its declared meaning. */
-export async function ensureRetentionDomain(relay: Pool, spec: RetentionDomainSpec): Promise<string> {
+export async function ensureRetentionDomain(relay: Pool, spec: RetentionDomainSpec, borrowed?: PoolClient): Promise<string> {
   return relayTransaction(relay, async client => {
     await client.query(`INSERT INTO relay.retention_domain (id, label, owner, store, custody,
         expires_at, hold_reason) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (label) DO NOTHING`,
@@ -406,7 +410,7 @@ export async function ensureRetentionDomain(relay: Pool, spec: RetentionDomainSp
           WHERE x.erasure_id = e.id AND x.domain_id = $1)`, [row.id]);
     }
     return row.id;
-  });
+  }, borrowed);
 }
 
 export interface InventoryFacts {

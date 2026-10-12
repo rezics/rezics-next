@@ -18,7 +18,7 @@ import { applyContentErasure, assertFreshContentTargets, ContentErasureGraphRequ
   contentErasureResource, ContentErasureInvalid, ContentErasureStale } from './content.ts';
 import { graphRevisionIds, isGraphErasureKind, resolveErasureRevisions } from './revision-kind.ts';
 import { assertErasureJournalTargetBound, GraphErasureConflict, GraphErasureUnavailable,
-  inventoryContributionPayloads, preflightGraphErasure, readGraphErasureProof, suppressGraphContentRevisions } from './graph.ts';
+  inventoryContributionPayloads, preflightGraphErasure, readGraphErasureProof, suppressGraphContentRevisions, erasureGraphClient } from './graph.ts';
 import { ERASURE_JOURNAL_EPOCH, ErasureInvalid, ErasureNotFound, ErasureStale, ErasureUnavailable,
   createErasurePreflightBudget, consumeErasurePreflight, type ErasurePreflightBudget, erasurePreflightRemaining, ErasurePreflightUnsupported, findErasureByOperation,
   completeErasureTarget, failErasureTarget, isValidErasureTargetList, journalErasure,
@@ -114,6 +114,7 @@ async function completeFencedContentErasure(service: ErasureService, graph: Work
   const resourceId = admission.scope.slice('erasure:'.length);
   const plan = preflight ?? { budget: createErasurePreflightBudget(), custodyReadReservation: 0 };
   const { budget } = plan;
+  graph = { ...graph, fuseki: erasureGraphClient(graph.fuseki, budget) };
   budget.signal.throwIfAborted();
   budget.targets = journaled.targets.map(({ kind, ref }) => ({ kind, ref }));
   if (!preflight) {
@@ -145,6 +146,7 @@ async function completeFencedContentErasure(service: ErasureService, graph: Work
       plan.custodyReadReservation += bytes;
     }
   }
+  await reserveLiveCompletion(graph, journaled.targets, budget);
   const suppressionReceipt = await erasureSuppressionReceipt(service.relay, erasureId);
   const guarded = await withErasureFence(service, resourceId, erasureId,
     async (fence, accessClient) => {
@@ -175,31 +177,34 @@ async function completeFencedContentErasure(service: ErasureService, graph: Work
   }
   return async () => {
     await access.recordGraphOutcome(admission.id, proof(admission, 'succeeded', journaled.erasureEpoch));
-    await ensureRetentionDomain(service.relay, { label: CONTENT_LIVE_DOMAIN, owner: 'content',
-      store: 'postgresql', custody: 'live' });
-    await ensureRetentionDomain(service.relay, { label: CONTENT_WAL_DOMAIN, owner: 'content',
-      store: 'postgresql_wal', custody: 'live' });
-    const hasCustody = (await commandCustodyErasureTargets(service.preservationAccess,
-      journaled.targets.filter(target => isGraphErasureKind(target.kind)).map(target => `https://rezics.com/id/${target.ref}`))).length > 0;
-    if (hasCustody) {
-      for (const [store, label] of [['postgresql', 'access:postgresql:live'],
-        ['postgresql_wal', 'access:postgresql-wal:live']] as const) {
-        await ensureRetentionDomain(service.relay, { label, owner: 'access', store, custody: 'live' });
+    const hasCustody = await relayTransaction(service.relay, async retentionClient => {
+      await ensureRetentionDomain(service.relay, { label: CONTENT_LIVE_DOMAIN, owner: 'content',
+        store: 'postgresql', custody: 'live' }, retentionClient);
+      await ensureRetentionDomain(service.relay, { label: CONTENT_WAL_DOMAIN, owner: 'content',
+        store: 'postgresql_wal', custody: 'live' }, retentionClient);
+      const hasCustody = (await commandCustodyErasureTargets(service.preservationAccess,
+        journaled.targets.filter(target => isGraphErasureKind(target.kind)).map(target => `https://rezics.com/id/${target.ref}`))).length > 0;
+      if (hasCustody) {
+        for (const [store, label] of [['postgresql', 'access:postgresql:live'],
+          ['postgresql_wal', 'access:postgresql-wal:live']] as const) {
+          await ensureRetentionDomain(service.relay, { label, owner: 'access', store, custody: 'live' }, retentionClient);
+        }
       }
-    }
-    for (const [store, label] of [
-      ['tdb2_generation', `graph:tdb2:live:${graph.lineage.dataEpoch}`],
-      ['lucene', `graph:lucene:live:${graph.lineage.dataEpoch}`],
-    ] as const) {
-      await ensureRetentionDomain(service.relay, { label, owner: 'graph', store, custody: 'live' });
-    }
-    for (const [store, label, holdReason, custody] of [
-      ['snapshot', 'graph:snapshot:unverified', 'Snapshot destruction evidence is required', 'archive'],
-      ['tdb2', 'graph:backup:unverified', 'Backup destruction evidence is required', 'backup'],
-      ['media', 'graph:media:unverified', 'Media destruction evidence is required', 'archive'],
-    ] as const) {
-      await ensureRetentionDomain(service.relay, { label, owner: 'graph', store, custody, holdReason });
-    }
+      for (const [store, label] of [
+        ['tdb2_generation', `graph:tdb2:live:${graph.lineage.dataEpoch}`],
+        ['lucene', `graph:lucene:live:${graph.lineage.dataEpoch}`],
+      ] as const) {
+        await ensureRetentionDomain(service.relay, { label, owner: 'graph', store, custody: 'live' }, retentionClient);
+      }
+      for (const [store, label, holdReason, custody] of [
+        ['snapshot', 'graph:snapshot:unverified', 'Snapshot destruction evidence is required', 'archive'],
+        ['tdb2', 'graph:backup:unverified', 'Backup destruction evidence is required', 'backup'],
+        ['media', 'graph:media:unverified', 'Media destruction evidence is required', 'archive'],
+      ] as const) {
+        await ensureRetentionDomain(service.relay, { label, owner: 'graph', store, custody, holdReason }, retentionClient);
+      }
+      return hasCustody;
+    });
     await recordErasureInventory(service.relay, erasureId,
       { owners: hasCustody ? ['content', 'graph', 'access'] : ['content', 'graph'], liveRetentionReason: CONTENT_LIVE_RETENTION,
         liveRetentionReasons: { graph: GRAPH_LIVE_RETENTION } });
@@ -332,7 +337,8 @@ async function freshObjectProtection(client: PoolClient,
   for (const root of budget.contributionManifests.get(ref) ?? []) manifests.set(root.manifest, root.component);
   for (const [manifest, component] of manifests) {
     budget.signal.throwIfAborted();
-    const limit = Math.min(64, erasurePreflightRemaining(budget, 'inventoryEntries'));
+    const limit = budget.objectReferenceReservations.get(ref)?.get(manifest);
+    if (limit === undefined) throw new ErasurePreflightUnsupported('object reference refresh was not reserved');
     const result = await graph.fuseki.query(`PREFIX rv: <${RV}>
       SELECT ?revision ?component ?manifest ?erased ?duplicate WHERE {
       VALUES ?manifest { ${iri(manifest)} }
@@ -342,8 +348,7 @@ async function freshObjectProtection(client: PoolClient,
         FILTER(!sameTerm(?otherManifest, ?manifest)) } } AS ?duplicate)
     } ORDER BY ?revision LIMIT ${limit + 1}`, 65_536);
     const rows = result.results?.bindings;
-    if (rows) consumeErasurePreflight(budget, 'inventoryEntries', rows.length);
-    if (!rows || component !== undefined && !rows.length || rows.length > 64 || rows.some(row => row.manifest?.type !== 'uri' || row.manifest.value !== manifest
+    if (!rows || component !== undefined && !rows.length || rows.length > limit || rows.some(row => row.manifest?.type !== 'uri' || row.manifest.value !== manifest
       || component !== undefined && row.component?.value !== component || row.duplicate?.value !== 'false'
       || row.component?.type !== 'uri' || row.revision?.type !== 'uri'
       || row.erased?.type !== 'literal' || row.erased.datatype !== 'http://www.w3.org/2001/XMLSchema#boolean'
@@ -354,6 +359,56 @@ async function freshObjectProtection(client: PoolClient,
     if (rows.some(row => row.erased?.value !== 'true')) references.add(ref);
   }
   return references;
+}
+
+/** Charge the refresh from retained reverse-index counts before suppression.
+ * Unknown command/Media roots use one aggregate lookahead read, never a scan. */
+async function reserveLiveCompletion(graph: WorkActivationEnvironment,
+  targets: readonly (ErasureTargetInput & { completionState?: string | null })[],
+  budget: ErasurePreflightBudget): Promise<void> {
+  const objects = targets.filter(target => target.kind === 'object');
+  const manifestsFor = (ref: string) => [...new Set([`urn:rezics:sha256:${ref.slice(-64)}`,
+    ...(budget.contributionManifests.get(ref) ?? []).map(root => root.manifest)])];
+  const unknown = [...new Set(objects.flatMap(target => manifestsFor(target.ref)))].filter(manifest =>
+    !budget.contributionReferenceCounts.has(manifest));
+  if (unknown.length) {
+    const limit = erasurePreflightRemaining(budget, 'inventoryEntries');
+    const result = await graph.fuseki.query(`PREFIX rv: <${RV}>
+      SELECT ?revision ?component ?manifest ?erased ?duplicate WHERE {
+      VALUES ?manifest { ${unknown.map(iri).join(' ')} }
+      GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:RevisionAnchor ; rv:component ?component ; rv:manifest ?manifest }
+      BIND(EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:ErasedRevision } } AS ?erased)
+      BIND(EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?revision rv:manifest ?otherManifest
+        FILTER(!sameTerm(?otherManifest, ?manifest)) } } AS ?duplicate)
+    } ORDER BY ?manifest ?revision LIMIT ${limit + 1}`, 65_536);
+    const rows = result.results?.bindings;
+    if (!rows) throw new ContentErasureStale('object reverse-reference inventory is unavailable');
+    consumeErasurePreflight(budget, 'inventoryEntries', rows.length);
+    for (const manifest of unknown) budget.contributionReferenceCounts.set(manifest, 0);
+    for (const row of rows) {
+      if (row.manifest?.type !== 'uri' || !unknown.includes(row.manifest.value)
+        || row.revision?.type !== 'uri' || row.component?.type !== 'uri'
+        || row.duplicate?.value !== 'false' || !['true', 'false'].includes(row.erased?.value ?? '')) {
+        throw new ContentErasureStale('object reverse-reference inventory differs');
+      }
+      const count = budget.contributionReferenceCounts.get(row.manifest.value)! + 1;
+      if (count > 64) throw new ErasurePreflightUnsupported('object reverse-reference fanout exceeds 64');
+      budget.contributionReferenceCounts.set(row.manifest.value, count);
+    }
+  }
+  for (const target of objects) {
+    if (budget.objectReferenceReservations.has(target.ref)) continue;
+    const reserved = new Map(manifestsFor(target.ref).map(manifest =>
+      [manifest, budget.contributionReferenceCounts.get(manifest)!] as const));
+    consumeErasurePreflight(budget, 'inventoryEntries', [...reserved.values()].reduce((sum, count) => sum + count, 0));
+    budget.objectReferenceReservations.set(target.ref, reserved);
+  }
+  const sweep = objects.filter(target => target.completionState === 'completed')
+    .reduce((sum, target) => sum + (target.ref.startsWith('sha256:') ? 2 : 1), 0);
+  const repair = objects.length ? 2 : 0;
+  if (sweep + repair > erasurePreflightRemaining(budget, 'absenceProbes'))
+    throw new ErasurePreflightUnsupported('object absence sweep leaves no repair allowance');
+  budget.liveProbeShares = { sweep, repair };
 }
 
 /** Inject a shared deadline into the existing object owners, including uncached probes. */
@@ -374,6 +429,8 @@ async function completeLiveTargets(service: ErasureService, graph: WorkActivatio
     mediaObjects: { asset: id => deadlineObjects(service.mediaObjects?.(assetNamespace(id)), signal),
       quarantine: id => deadlineObjects(service.mediaObjects?.(`media-quarantine/${id}/`), signal) } };
   const objectTargets = report.targets.filter(target => target.kind === 'object');
+  if (!budget.liveProbeShares || objectTargets.length && budget.liveProbeShares.repair < 2)
+    throw new ErasurePreflightUnsupported('live object probe shares were not reserved');
   const completedPresent = new Set<number>();
   const absent = new Map<number, boolean>();
   for (const target of objectTargets.filter(target => target.completionState === 'completed')) {
@@ -383,15 +440,25 @@ async function completeLiveTargets(service: ErasureService, graph: WorkActivatio
     absent.set(target.ordinal, missing);
     if (!missing) completedPresent.add(target.ordinal);
   }
-  const attempted = objectTargets.filter(target => target.completionState !== 'completed'
-    || completedPresent.has(target.ordinal)).slice(0,
-    Math.min(16, Math.floor(erasurePreflightRemaining(budget, 'absenceProbes') / 4)));
+  // Completed presence is already known. Its verified repair spends two probes,
+  // so a maximal 510-probe sweep always retains one repair instead of starving.
+  let repairAllowance = erasurePreflightRemaining(budget, 'absenceProbes');
+  const attempted: typeof objectTargets = [];
+  for (const target of [...objectTargets.filter(target => completedPresent.has(target.ordinal)),
+    ...objectTargets.filter(target => target.completionState !== 'completed')]) {
+    if (attempted.length === 16) break;
+    const cost = completedPresent.has(target.ordinal) ? 2 : 4;
+    if (repairAllowance < cost) continue;
+    repairAllowance -= cost;
+    attempted.push(target);
+  }
   for (const target of attempted) {
     signal.throwIfAborted();
     const digest = target.ref.slice(-64);
     const outcome = await withReferenceFence(service.content, digest, async client => {
       const references = await freshObjectProtection(client, graph, target.ref, budget);
-      return applyLiveObjectErasure(objects, target.ref, { kind: 'live-bounded', references }, true, budget);
+      return applyLiveObjectErasure(objects, target.ref, { kind: 'live-bounded', references }, true, budget,
+        completedPresent.has(target.ordinal));
     });
     absent.set(target.ordinal, outcome !== 'conflict');
     if (outcome === 'conflict') {
@@ -434,13 +501,17 @@ async function completeLiveTargets(service: ErasureService, graph: WorkActivatio
   signal.throwIfAborted();
   // Earlier journal evidence is immutable even when the current proof format differs.
   // Every owner above was re-probed; a completed marker never substitutes for absence.
-  for (const target of report.targets.filter(target => target.kind !== 'object'
-    && target.completionState !== 'completed')) {
-    await completeErasureTarget(service.relay, report.erasureId, target.ordinal, completionEvidence(report, target));
-  }
-  const refreshed = await readErasure(service.relay, report.erasureId);
+  await relayTransaction(service.relay, async client => {
+    for (const target of report.targets.filter(target => target.kind !== 'object'
+      && target.completionState !== 'completed')) {
+      await completeErasureTarget(service.relay, report.erasureId, target.ordinal, completionEvidence(report, target), client);
+    }
+  });
+  const durable = (await service.relay.query<{ complete: boolean }>(`SELECT NOT EXISTS (
+    SELECT 1 FROM relay.erasure_target WHERE erasure_id=$1
+      AND completion_state IS DISTINCT FROM 'completed') AS complete`, [report.erasureId])).rows[0];
   const complete = objectTargets.every(target => absent.get(target.ordinal) === true)
-    && refreshed.targets.every(target => target.completionState === 'completed');
+    && durable?.complete === true;
   await service.relay.query(`UPDATE relay.erasure SET stage = 'deleting'
     WHERE id = $1 AND stage IN ('fenced', 'inventory_complete', 'deleting', 'reconciling')`,
   [report.erasureId]);
@@ -530,6 +601,7 @@ async function requestFencedContentErasure(service: ErasureService, graph: WorkA
   if (!erasureId) {
     preflight = { budget: createErasurePreflightBudget(), custodyReadReservation: 0 };
     const { budget } = preflight;
+    graph = { ...graph, fuseki: erasureGraphClient(graph.fuseki, budget) };
     const resolved = await resolveErasureRevisions(service.content, graph.fuseki,
       input.resourceId, input.revisionIds);
     if (resolved.some(revision => revision.erased)) {
@@ -584,12 +656,13 @@ async function requestFencedContentErasure(service: ErasureService, graph: WorkA
       graphRevisionIds(targets), budget);
     const journal = async (completeTargets: readonly ErasureTargetInput[]) => {
       assertErasureJournalTargetBound(completeTargets);
+      await reserveLiveCompletion(graph, completeTargets, budget);
       const journaled = await journalErasure(service.relay, { operationId, requestDigest,
         kind: 'revision', principalId: registered.principalId, admissionId: registered.id,
         authorityEpoch: registered.authorityEpoch, targets: [...completeTargets] });
       erasureId = journaled.erasureId;
       replayed = journaled.replayed;
-      return readErasure(service.relay, erasureId);
+      return journaled;
     };
     const asset = contentTargets.length ? (await service.content.query<{ id: string }>(
       'SELECT id::text FROM media.asset WHERE id=$1', [input.resourceId.slice(-36)])).rows[0]?.id : undefined;
@@ -600,7 +673,8 @@ async function requestFencedContentErasure(service: ErasureService, graph: WorkA
           await withMediaErasureInventory(service.content, { asset,
             revisionIds: contentTargets.map(target => target.ref), admission: registered }, fence,
           service.mediaObjects!, async (_inventory, apply) => {
-            const report = await journal(budget.targets);
+            const intent = await journal(budget.targets);
+            const report = await readErasure(service.relay, intent.erasureId);
             validateCompletion(report, registered);
             await suppressGraphContentRevisions(graph.fuseki, graph.lineage, report.erasureId,
               report.erasureEpoch, graphRevisionIds(report.targets), undefined, budget);

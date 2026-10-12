@@ -3,6 +3,7 @@ import {
   CommandForbidden,
   CommandOutcomeUnknown,
   FusekiClient,
+  fusekiReadBudget,
   type CommandEnvelope,
 } from '../../infrastructure/fuseki.ts';
 import { GRAPHS, DATASET, RV, hash, iri, lit, type GraphLineage } from '../work/activate.ts';
@@ -28,6 +29,30 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const MAX_TARGETS = 64;
 const MAX_UNITS = 64;
 const MAX_REFERENCES = 64;
+
+/** Use the existing transport budget for all reads, including receipt recovery;
+ * native writes receive the remainder rather than a new ten-second allowance. */
+export function erasureGraphClient<T extends Pick<FusekiClient, 'query'>>(fuseki: T,
+  budget: ErasurePreflightBudget): T {
+  const context = { signal: budget.signal, callsLeft: Infinity, bytesLeft: Infinity };
+  return new Proxy(fuseki, { get(target, key) {
+    const value = Reflect.get(target, key, target);
+    if (typeof value !== 'function') return value;
+    return (...args: unknown[]) => fusekiReadBudget.run(context, async () => {
+      budget.signal.throwIfAborted();
+      const remaining = Math.floor(budget.deadline - Date.now());
+      if (remaining <= 0) throw new GraphErasureUnavailable('shared erasure deadline elapsed');
+      if (key === 'command' || key === 'commandWithReceipt') {
+        const envelope = args[0] as CommandEnvelope;
+        args[0] = { ...envelope, deadlineMs: Math.min(envelope.deadlineMs ?? 10_000, remaining) };
+      }
+      const result = await Reflect.apply(value, target, args);
+      budget.signal.throwIfAborted();
+      if (Date.now() >= budget.deadline) throw new GraphErasureUnavailable('shared erasure deadline elapsed');
+      return result;
+    });
+  } });
+}
 const XSD_BOOLEAN = 'http://www.w3.org/2001/XMLSchema#boolean';
 
 export class GraphErasureUnavailable extends Error {}
@@ -162,6 +187,7 @@ async function indexedUnits(fuseki: FusekiClient, targets: readonly string[],
 /** The same owner index used by suppression is checked before committing intent. */
 export async function preflightGraphErasure(fuseki: FusekiClient, revisionIds: readonly string[],
   budget: ErasurePreflightBudget): Promise<void> {
+  fuseki = erasureGraphClient(fuseki, budget);
   const targets = checkedTargets(revisionIds);
   budget.graphInventories.set(JSON.stringify(targets), await indexedUnits(fuseki, targets, budget));
 }
@@ -228,6 +254,7 @@ export async function inventoryContributionPayloads(
   revisions: readonly ResolvedErasureRevision[],
   sharedBudget?: ErasurePreflightBudget,
 ): Promise<ContributionPayloadInventory[]> {
+  if (sharedBudget) fuseki = erasureGraphClient(fuseki, sharedBudget);
   const contributions = revisions.filter(revision => revision.kind === 'text_contribution_draft');
   if (!contributions.length) return [];
   if (contributions.length > MAX_TARGETS
@@ -269,7 +296,10 @@ export async function inventoryContributionPayloads(
       65_536,
     );
     const rows = refs.results?.bindings;
-    if (sharedBudget && rows) consumeErasurePreflight(sharedBudget, 'inventoryEntries', rows.length);
+    if (sharedBudget && rows) {
+      consumeErasurePreflight(sharedBudget, 'inventoryEntries', rows.length);
+      sharedBudget.contributionReferenceCounts.set(candidateManifest, rows.length);
+    }
     if (!rows || rows.length > MAX_REFERENCES) {
       throw new GraphErasureUnavailable('Contribution reverse-reference fanout exceeds 64');
     }
@@ -619,6 +649,7 @@ export async function suppressGraphContentRevisions(
   expectedReceipt?: string,
   budget?: ErasurePreflightBudget,
 ): Promise<void> {
+  if (budget) fuseki = erasureGraphClient(fuseki, budget);
   if (!/^[1-9][0-9]{0,18}$/.test(epoch)) throw new GraphErasureConflict('invalid erasure epoch');
   const targets = checkedTargets(revisionIds);
   const digest = hash(JSON.stringify({ family: 'erasure-graph-v1', erasureId, epoch, targets }));

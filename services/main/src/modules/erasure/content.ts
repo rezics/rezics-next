@@ -214,7 +214,8 @@ async function eraseContent(content: Pool, command: ContentErasureCommand): Prom
       await bounded(`UPDATE content.revision SET availability = 'erased',
           serialized_bytes = NULL, body = NULL
         WHERE id = ANY(${pendingIds}) AND availability = 'available'`);
-      if (command.graphProof) await bounded(`INSERT INTO content.publication_erasure_supersession
+      if (command.graphProof && preparations.some(p => p.status === 'active' && p.pin_active))
+        await bounded(`INSERT INTO content.publication_erasure_supersession
         (operation_id, revision_id, erasure_id, erasure_epoch,
          graph_receipt, graph_data_epoch, graph_sequence)
         SELECT p.operation_id, p.revision_id, ${erasureId}, ${epoch},

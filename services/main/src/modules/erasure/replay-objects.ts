@@ -151,12 +151,13 @@ export async function replayObjectErasure(store: ObjectRecoveryStore, ref: strin
 /** Apply a live journal target using fresh fenced owner references.
  * This entry point cannot initiate the offline graph-wide recovery scan. */
 export async function applyLiveObjectErasure(store: ObjectRecoveryStore, ref: string,
-  protection: LiveBoundedObjectProtection, replay: boolean, budget?: ErasurePreflightBudget): Promise<'erased' | 'replayed' | 'conflict'> {
+  protection: LiveBoundedObjectProtection, replay: boolean, budget?: ErasurePreflightBudget,
+  knownPresent = false): Promise<'erased' | 'replayed' | 'conflict'> {
   if (protection.kind !== 'live-bounded') return 'conflict';
   const address = addressFor(store, ref);
   if (protection.references.has(address.reference)) return 'conflict';
   let absent: boolean;
-  try { absent = await addressAbsent(store, address, budget); }
+  try { absent = !knownPresent && await addressAbsent(store, address, budget); }
   catch { budget?.signal.throwIfAborted(); return 'conflict'; }
   if (absent) { evictVerifiedImmutableObject(address.digest); return 'erased'; }
   if (!replay) return 'conflict';
