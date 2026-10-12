@@ -11,7 +11,12 @@ ALTER TABLE access.account_deletion_progress
 CREATE INDEX account_deletion_progress_open ON access.account_deletion_progress (principal_id, operation_id)
     WHERE NOT completed;
 ALTER TABLE access.account_deletion_progress_agent
-    ADD COLUMN expanded boolean NOT NULL DEFAULT false;
+    ADD COLUMN expanded boolean NOT NULL DEFAULT false,
+    ADD COLUMN fenced boolean NOT NULL DEFAULT false;
+UPDATE access.account_deletion_progress_agent a SET fenced = true
+    FROM access.account_deletion_progress p WHERE p.operation_id = a.operation_id AND NOT p.completed;
+CREATE UNIQUE INDEX account_deletion_live_fence ON access.account_deletion_progress_agent (agent_id) WHERE fenced;
+CREATE INDEX account_deletion_fence_release ON access.account_deletion_progress_agent (operation_id, effect, agent_id) WHERE fenced;
 CREATE INDEX account_deletion_root_frontier ON access.representation (principal_id, id)
     INCLUDE (subject_id) WHERE active AND action = 'agent.control';
 CREATE INDEX account_deletion_foreign_controllers ON access.representation (subject_id, principal_id, id)
@@ -31,57 +36,106 @@ CREATE TABLE access.account_deletion_classification_frontier (
 CREATE INDEX account_deletion_classification_frontier_subject
     ON access.account_deletion_classification_frontier (agent_id);
 
--- Exclude the deleting principal before either indexed controller range. Its
--- repeated mandates must never hide a foreign controller behind a row budget.
--- A surviving Agent edge cuts traversal even when that Agent is a Person. Keep accounting
--- in the owner so tests can measure actual inventory rows, independent of time.
+-- Seek only live mandates, never retained controller history. The owner drains
+-- this index in bounded pages in the same transaction as principal deactivation.
+-- Authority proofs continue to retain the original representation rows.
+CREATE TABLE access.live_principal_controller (
+    representation_id uuid PRIMARY KEY REFERENCES access.representation(id),
+    principal_id uuid NOT NULL REFERENCES access.principal(id),
+    subject_id text NOT NULL REFERENCES access.authority_subject(id)
+);
+CREATE INDEX live_principal_controller_subject ON access.live_principal_controller
+    (subject_id, principal_id, representation_id);
+CREATE INDEX live_principal_controller_principal ON access.live_principal_controller
+    (principal_id, representation_id) INCLUDE (subject_id);
+INSERT INTO access.live_principal_controller
+    SELECT r.id, r.principal_id, r.subject_id FROM access.representation r
+    JOIN access.principal p ON p.id = r.principal_id AND p.active
+    WHERE r.active AND r.action = 'agent.control';
+
+CREATE FUNCTION access.sync_live_principal_controller() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW.action <> 'agent.control' THEN RETURN NEW; END IF;
+    IF NEW.active AND EXISTS (SELECT 1 FROM access.principal WHERE id = NEW.principal_id AND active) THEN
+        INSERT INTO access.live_principal_controller VALUES (NEW.id, NEW.principal_id, NEW.subject_id)
+            ON CONFLICT DO NOTHING;
+    ELSE
+        DELETE FROM access.live_principal_controller WHERE representation_id = NEW.id;
+    END IF;
+    RETURN NEW;
+END $$;
+CREATE TRIGGER representation_live_principal_controller AFTER INSERT OR UPDATE ON access.representation
+    FOR EACH ROW EXECUTE FUNCTION access.sync_live_principal_controller();
+
+CREATE INDEX account_deletion_continuity_recovery ON access.protected_change_activation
+    (target_subject, activation_txid) WHERE kind = 'agent-recovery';
+
 CREATE FUNCTION access.account_deletion_remaining_controllers(
     controlled text, deleting uuid, operation text)
 RETURNS TABLE (remaining integer, controller_rows integer)
 LANGUAGE sql STABLE AS $$
     WITH below AS MATERIALIZED (
-        SELECT r.principal_id FROM access.representation r
-        JOIN access.principal p ON p.id = r.principal_id AND p.active
-        WHERE r.subject_id = controlled AND r.action = 'agent.control' AND r.active
-            AND r.principal_id < deleting
-        ORDER BY r.principal_id, r.id LIMIT 17
+        SELECT principal_id FROM access.live_principal_controller
+        WHERE subject_id = controlled AND principal_id < deleting
+        ORDER BY principal_id, representation_id LIMIT 17
     ), above AS MATERIALIZED (
-        SELECT r.principal_id FROM access.representation r
-        JOIN access.principal p ON p.id = r.principal_id AND p.active
-        WHERE r.subject_id = controlled AND r.action = 'agent.control' AND r.active
-            AND r.principal_id > deleting
-        ORDER BY r.principal_id, r.id LIMIT 17
+        SELECT principal_id FROM access.live_principal_controller
+        WHERE subject_id = controlled AND principal_id > deleting
+        ORDER BY principal_id, representation_id LIMIT 17
     ), principals AS MATERIALIZED (
         SELECT principal_id FROM below UNION ALL SELECT principal_id FROM above
+    ), edge_page AS MATERIALIZED (
+        -- Admission bounds ACTIVE incoming edges to 16, including edges whose
+        -- representative has ended. Page before testing representative liveness.
+        SELECT representative_subject FROM access.representation_edge
+        WHERE represented_subject = controlled AND action = 'agent.control' AND active
+        ORDER BY id LIMIT 17
     ), agents AS MATERIALIZED (
-        SELECT e.representative_subject FROM access.representation_edge e
-        JOIN access.authority_subject s ON s.id = e.representative_subject AND s.active
-        WHERE e.represented_subject = controlled AND e.action = 'agent.control'
-            AND e.active AND e.valid_until > clock_timestamp()
-        ORDER BY e.id LIMIT 17
+        SELECT e.representative_subject FROM edge_page e WHERE EXISTS (SELECT 1 FROM access.authority_subject s
+            WHERE s.id = e.representative_subject AND s.active LIMIT 1 OFFSET 0)
     ) SELECT ((SELECT count(*) FROM principals)
         + (SELECT count(*) FROM agents e WHERE NOT EXISTS (
             SELECT 1 FROM access.account_deletion_progress_agent a
             WHERE a.operation_id = operation AND a.agent_id = e.representative_subject
                 AND a.effect = 'end')))::integer,
-        ((SELECT count(*) FROM principals) + (SELECT count(*) FROM agents))::integer
+        ((SELECT count(*) FROM principals) + (SELECT count(*) FROM edge_page))::integer
+$$;
+
+CREATE OR REPLACE FUNCTION access.agent_controller_count(controlled text) RETURNS integer
+LANGUAGE sql STABLE AS $$
+    WITH principals AS MATERIALIZED (
+        SELECT representation_id FROM access.live_principal_controller
+        WHERE subject_id = controlled ORDER BY principal_id, representation_id LIMIT 17
+    ), edges AS MATERIALIZED (
+        SELECT representative_subject FROM access.representation_edge
+        WHERE represented_subject = controlled AND action = 'agent.control' AND active
+        ORDER BY id LIMIT 17
+    ) SELECT (SELECT count(*) FROM principals)::integer + (SELECT count(*) FROM edges e WHERE EXISTS (SELECT 1 FROM access.authority_subject s
+            WHERE s.id = e.representative_subject AND s.active LIMIT 1 OFFSET 0))::integer
 $$;
 
 -- A cut is not fenced. If an ordinary controller change makes it affected
 -- between steps, wake precisely that subject rather than replaying old levels.
 CREATE FUNCTION access.queue_account_deletion_candidate(controlled text) RETURNS void
 LANGUAGE sql AS $$
-    WITH relevant AS MATERIALIZED (
+    WITH principals AS MATERIALIZED (
+        SELECT principal_id FROM access.live_principal_controller WHERE subject_id = controlled
+            ORDER BY principal_id, representation_id LIMIT 17
+    ), edges AS MATERIALIZED (
+        SELECT representative_subject FROM access.representation_edge
+        WHERE represented_subject = controlled AND action = 'agent.control' AND active
+        ORDER BY id LIMIT 17
+    ), relevant AS MATERIALIZED (
         SELECT DISTINCT p.operation_id, p.principal_id FROM (
-            SELECT p.operation_id FROM access.representation r
-            JOIN access.account_deletion_progress p ON p.principal_id = r.principal_id AND NOT p.completed
-            WHERE r.subject_id = controlled AND r.active AND r.action = 'agent.control'
+            SELECT p.operation_id FROM principals r
+            CROSS JOIN LATERAL (SELECT operation_id FROM access.account_deletion_progress
+                WHERE principal_id = r.principal_id AND NOT completed LIMIT 1 OFFSET 0) p
             UNION
-            SELECT a.operation_id FROM access.representation_edge e
-            JOIN access.account_deletion_progress_agent a ON a.agent_id = e.representative_subject AND a.effect = 'end'
-            WHERE e.represented_subject = controlled AND e.action = 'agent.control'
-                AND e.active AND e.valid_until > clock_timestamp()
-        ) connected JOIN access.account_deletion_progress p USING (operation_id)
+            SELECT a.operation_id FROM edges e
+            CROSS JOIN LATERAL (SELECT operation_id FROM access.account_deletion_progress_agent
+                WHERE agent_id = e.representative_subject AND effect = 'end' AND fenced LIMIT 1 OFFSET 0) a
+        ) connected CROSS JOIN LATERAL (SELECT operation_id, principal_id, completed
+            FROM access.account_deletion_progress WHERE operation_id = connected.operation_id LIMIT 1 OFFSET 0) p
         WHERE NOT p.completed AND EXISTS (SELECT 1 FROM access.authority_subject s WHERE s.id = controlled AND s.active)
             AND NOT EXISTS (SELECT 1 FROM access.account_deletion_progress_agent a
                 WHERE a.operation_id = p.operation_id AND a.agent_id = controlled)
@@ -100,16 +154,7 @@ CREATE FUNCTION access.wake_account_deletion_frontier() RETURNS trigger
 LANGUAGE plpgsql AS $$
 DECLARE controlled text;
 BEGIN
-    -- Ordinary writes do not enter the frontier planner without an open deletion.
-    IF NOT EXISTS (SELECT 1 FROM access.account_deletion_progress WHERE NOT completed) THEN
-        RETURN NEW;
-    END IF;
-    IF TG_TABLE_NAME = 'principal' THEN
-        IF NEW.active OR NOT OLD.active THEN RETURN NEW; END IF;
-        FOR controlled IN SELECT subject_id FROM access.representation
-            WHERE principal_id = NEW.id AND active AND action = 'agent.control'
-        LOOP PERFORM access.queue_account_deletion_candidate(controlled); END LOOP;
-    ELSIF TG_TABLE_NAME = 'authority_subject' THEN
+    IF TG_TABLE_NAME = 'authority_subject' THEN
         IF NEW.active OR NOT OLD.active THEN RETURN NEW; END IF;
         FOR controlled IN SELECT represented_subject FROM access.representation_edge
             WHERE representative_subject = NEW.id AND active AND action = 'agent.control'
@@ -124,14 +169,101 @@ BEGIN
     END IF;
     RETURN NEW;
 END $$;
-CREATE TRIGGER principal_wake_account_deletion_frontier AFTER UPDATE OF active ON access.principal
-    FOR EACH ROW EXECUTE FUNCTION access.wake_account_deletion_frontier();
-CREATE TRIGGER representation_wake_account_deletion_frontier AFTER INSERT OR UPDATE ON access.representation
+CREATE TRIGGER representation_z_wake_account_deletion_frontier AFTER INSERT OR UPDATE ON access.representation
     FOR EACH ROW EXECUTE FUNCTION access.wake_account_deletion_frontier();
 CREATE TRIGGER representation_edge_wake_account_deletion_frontier AFTER INSERT OR UPDATE ON access.representation_edge
     FOR EACH ROW EXECUTE FUNCTION access.wake_account_deletion_frontier();
 CREATE TRIGGER authority_subject_wake_account_deletion_frontier AFTER UPDATE OF active ON access.authority_subject
     FOR EACH ROW EXECUTE FUNCTION access.wake_account_deletion_frontier();
+
+-- A deleted live mandate wakes only connected open operations, through point
+-- lookups after bounded live-controller ranges, even with many unrelated erasures.
+CREATE FUNCTION access.guard_removed_principal_controller() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM access.account_deletion_progress_agent a
+        JOIN access.account_deletion_progress p ON p.operation_id = a.operation_id
+        WHERE a.agent_id = OLD.subject_id AND a.fenced AND p.principal_id <> OLD.principal_id) THEN
+        RAISE EXCEPTION 'Account deletion control inventory is fenced' USING ERRCODE = '54000';
+    END IF;
+    RETURN OLD;
+END $$;
+CREATE TRIGGER live_principal_controller_guard BEFORE DELETE ON access.live_principal_controller
+    FOR EACH ROW EXECUTE FUNCTION access.guard_removed_principal_controller();
+
+CREATE FUNCTION access.wake_removed_principal_controller() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    PERFORM access.queue_account_deletion_candidate(OLD.subject_id);
+    RETURN OLD;
+END $$;
+CREATE TRIGGER live_principal_controller_removed AFTER DELETE ON access.live_principal_controller
+    FOR EACH ROW EXECUTE FUNCTION access.wake_removed_principal_controller();
+
+CREATE FUNCTION access.retire_principal_controller_page(deleting uuid, budget integer)
+RETURNS integer LANGUAGE sql AS $$
+    WITH page AS MATERIALIZED (
+        SELECT representation_id, ctid FROM access.live_principal_controller WHERE principal_id = deleting
+        ORDER BY representation_id LIMIT least(budget, 256)
+    ), removed AS (
+        DELETE FROM access.live_principal_controller
+        WHERE ctid = ANY(ARRAY(SELECT ctid FROM page)) RETURNING representation_id
+    ) SELECT count(*)::integer FROM removed
+$$;
+
+-- Ordinary fences already have a 256-subject owner budget. The large deletion
+-- owner drains its own mandate index before this update. The trigger never
+-- replays an unbounded mandate inventory because an unrelated erasure is open.
+CREATE FUNCTION access.principal_live_controller_transition() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE inventory integer;
+BEGIN
+    IF NEW.active = OLD.active THEN RETURN NEW; END IF;
+    IF NOT NEW.active THEN
+        SELECT count(*) INTO inventory FROM (SELECT 1 FROM access.live_principal_controller
+            WHERE principal_id = NEW.id ORDER BY representation_id LIMIT 257) bounded;
+        IF inventory > 256 THEN
+            RAISE EXCEPTION 'principal controller change requires paged retirement' USING ERRCODE = '54000';
+        END IF;
+        PERFORM access.retire_principal_controller_page(NEW.id, 256);
+    ELSE
+        SELECT count(*) INTO inventory FROM (SELECT 1 FROM access.representation
+            WHERE principal_id = NEW.id AND active AND action = 'agent.control' ORDER BY id LIMIT 257) bounded;
+        IF inventory > 256 THEN
+            RAISE EXCEPTION 'principal controller restoration exceeds its subject budget' USING ERRCODE = '54000';
+        END IF;
+        INSERT INTO access.live_principal_controller
+            SELECT id, principal_id, subject_id FROM access.representation
+            WHERE principal_id = NEW.id AND active AND action = 'agent.control' ORDER BY id LIMIT 256
+            ON CONFLICT DO NOTHING;
+    END IF;
+    RETURN NEW;
+END $$;
+CREATE TRIGGER principal_z_live_controller_transition BEFORE UPDATE OF active ON access.principal
+    FOR EACH ROW EXECUTE FUNCTION access.principal_live_controller_transition();
+
+CREATE OR REPLACE FUNCTION access.fence_account_deletion_control() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE subjects text[];
+BEGIN
+    IF TG_TABLE_NAME = 'principal' THEN
+        -- The owner checks each retiring mandate in its paged retirement. The
+        -- final UPDATE reads only this principal's open operation, never others.
+        IF NEW.active OR NOT OLD.active THEN RETURN NEW; END IF;
+        IF EXISTS (SELECT 1 FROM access.account_deletion_progress WHERE principal_id = NEW.id AND NOT completed) THEN
+            RAISE EXCEPTION 'Account deletion control inventory is fenced' USING ERRCODE = '54000';
+        END IF;
+        RETURN NEW;
+    ELSIF TG_TABLE_NAME = 'agent_control' THEN subjects := ARRAY[NEW.subject_id];
+    ELSIF TG_TABLE_NAME = 'representation' THEN
+        IF NEW.action <> 'agent.control' THEN RETURN NEW; END IF;
+        subjects := ARRAY[NEW.subject_id];
+    ELSE
+        IF NEW.action <> 'agent.control' THEN RETURN NEW; END IF;
+        subjects := ARRAY[NEW.representative_subject, NEW.represented_subject];
+    END IF;
+    PERFORM 1 FROM access.scope_gate WHERE id = 'access:representation-topology' FOR UPDATE;
+    IF EXISTS (SELECT 1 FROM access.account_deletion_progress_agent WHERE agent_id = ANY(subjects) AND fenced) THEN
+        RAISE EXCEPTION 'Account deletion control inventory is fenced' USING ERRCODE = '54000';
+    END IF;
+    RETURN NEW;
+END $$;
 
 -- Preserve inventories admitted under the previous release's fence-first flow.
 UPDATE access.account_deletion_progress p SET roots_done = true, classification_done = true, consent = true,

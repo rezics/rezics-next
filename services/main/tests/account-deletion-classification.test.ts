@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
@@ -8,8 +8,9 @@ import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/su
 import { boundedPool, nestedPoolCheckoutMode, setNestedPoolCheckoutMode } from '../src/infrastructure/pg-pool.ts';
 import type { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import {
-  AccessAdmissionRegistry, type VerifiedPrincipal,
+  AccessAdmissionRegistry, AccountHasOwnedAgents, type VerifiedPrincipal,
 } from '../src/modules/access/admission.ts';
+import { collectAccountDeletionAgents, lockAccountDeletionTopology } from '../src/modules/access/account-deletion-agents.ts';
 import { AccessAgentControl } from '../src/modules/access/agent-control.ts';
 import { grantFixtureAuthority, grantFixtureControllerEdge } from '../src/modules/access/fixture-authority.ts';
 import { AgentProvisioning, agentProvisionDigest } from '../src/modules/agent/provision.ts';
@@ -21,7 +22,16 @@ let pool: Pool;
 let control: AccessAgentControl;
 
 beforeAll(async () => {
-  cluster = await startPostgresCluster();
+  cluster = await startPostgresCluster({ serverSettings: `shared_preload_libraries = 'auto_explain'
+auto_explain.log_analyze = on
+auto_explain.log_buffers = on
+auto_explain.log_timing = off
+auto_explain.log_nested_statements = on
+auto_explain.log_format = 'json'
+log_line_prefix = ''
+logging_collector = off
+log_destination = 'stderr'
+` });
   pool = new Pool({ ...cluster.connection, max: 4, connectionTimeoutMillis: 5000 });
   const client = await pool.connect();
   try {
@@ -312,4 +322,154 @@ test('bounded production pool releases classification and orphan handoffs in thr
     console.error = original;
     setNestedPoolCheckoutMode(previous);
   }
+}, 60_000);
+
+
+type ReadPlan = {
+  'Node Type': string; 'Relation Name'?: string; 'Actual Rows': number; 'Actual Loops': number;
+  'Rows Removed by Filter'?: number; 'Rows Removed by Index Recheck'?: number;
+  'Shared Hit Blocks'?: number; 'Shared Read Blocks'?: number; Plans?: ReadPlan[];
+};
+type RecordedPlan = { 'Query Text': string; Plan: ReadPlan; Statement: string; StatementInstance: number };
+function planRows(plan: ReadPlan): number {
+  const own = plan['Relation Name'] ? (plan['Actual Rows'] + (plan['Rows Removed by Filter'] ?? 0)
+    + (plan['Rows Removed by Index Recheck'] ?? 0)) * plan['Actual Loops'] : 0;
+  return own + (plan.Plans ?? []).reduce((sum, child) => sum + planRows(child), 0);
+}
+
+/** auto_explain logs the executed production statement and every nested SQL
+ * function/trigger plan. Result cardinality cannot hide discarded history. */
+function planPool(plans: RecordedPlan[]) {
+  const measured = new Pool({ ...cluster!.connection, max: 1 });
+  let instance = 0;
+  measured.on('connect', client => {
+    const query = client.query.bind(client);
+    let armed = false;
+    client.query = ((...args: unknown[]) => {
+      const callback = typeof args.at(-1) === 'function' ? args.pop() as (error: unknown, result?: unknown) => void : undefined;
+      const pending = (async () => {
+        if (!armed) {
+          await query("SET auto_explain.log_min_duration = 0");
+          armed = true;
+        }
+        const statement = typeof args[0] === 'string' ? args[0] : '';
+        const statementInstance = ++instance;
+        const path = join(cluster!.directory, 'postgres.log');
+        const offset = statSync(path).size;
+        const result = await Reflect.apply(query, client, args);
+        // ReadyForQuery can arrive before ExecutorEnd flushes the plan log.
+        await query('SELECT 1 /* plan_log_flush */');
+        const log = readFileSync(path).subarray(offset).toString();
+        for (const match of log.matchAll(/plan:\n\t(\{[\s\S]*?\n\t\})/g)) {
+          const plan = JSON.parse(match[1]!) as RecordedPlan;
+          if (!plan['Query Text'].includes('plan_log_flush')) plans.push({ ...plan,
+            Statement: statement, StatementInstance: statementInstance });
+        }
+        return result;
+      })();
+      if (callback) {
+        void pending.then(result => callback(null, result), error => callback(error));
+        return undefined;
+      }
+      return pending;
+    }) as typeof client.query;
+  });
+  return measured;
+}
+
+async function measuredWork(work: (measured: Pool) => Promise<void>) {
+  const plans: RecordedPlan[] = [];
+  const measured = planPool(plans);
+  try { await work(measured); } finally { await measured.end(); }
+  expect(plans.length).toBeGreaterThan(0);
+  return { rows: plans.reduce((sum, plan) => sum + planRows(plan.Plan), 0), plans };
+}
+
+test('classification and wake-up read budgets exclude inactive history and unrelated open deletions', async () => {
+  const survivor = await principal();
+  const target = await provision(survivor, 'organization');
+  const unrelated = await provision(survivor, 'organization');
+  const inactiveCosts: number[] = [];
+  const wakeCosts: number[] = [];
+  let size = 0;
+  for (const next of [8, 64, 512]) {
+    for (; size < next; size++) {
+      // Historical mandates are installed through the fixture authority owner;
+      // ordinary Account deletion retains them after principal deactivation.
+      const historical = await principal();
+      await addFixtureController(historical, target);
+      await new AccessAdmissionRegistry(pool).strongDeactivateAccountSubject(
+        historical.verified.issuer, historical.verified.subject);
+      const waiting = await principal();
+      await addFixtureController(waiting, unrelated);
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await lockAccountDeletionTopology(client);
+        await collectAccountDeletionAgents(client, waiting.id, randomUUID(), {});
+        await client.query('COMMIT');
+      } finally { client.release(); }
+    }
+    const deleting = await principal();
+    await addFixtureController(deleting, target);
+    const classified = await measuredWork(async measured => {
+      await new AccessAdmissionRegistry(measured).strongDeactivateAccountSubject(
+        deleting.verified.issuer, deleting.verified.subject);
+    });
+    inactiveCosts.push(classified.rows);
+    const waking = await measuredWork(async measured => {
+      await measured.query('SELECT access.queue_account_deletion_candidate($1)', [target]);
+    });
+    wakeCosts.push(waking.rows);
+  }
+  expect(inactiveCosts[1]).toBe(inactiveCosts[0]);
+  expect(inactiveCosts[2]).toBe(inactiveCosts[0]);
+  expect(wakeCosts[1]).toBe(wakeCosts[0]);
+  expect(wakeCosts[2]).toBe(wakeCosts[0]);
+}, 300_000);
+
+test('final principal UPDATE excludes retained mandates and unrelated open erasures', async () => {
+  const survivor = await principal();
+  const target = await provision(survivor, 'organization');
+  for (const size of [8, 64, 512]) {
+    const owner = await principal();
+    for (let index = 0; index < size; index++) await addFixtureController(owner, target);
+    const cost = await measuredWork(async measured => {
+      await new AccessAdmissionRegistry(measured).strongDeactivateAccountSubject(
+        owner.verified.issuer, owner.verified.subject);
+    });
+    const update = cost.plans.filter(plan => /^\s*UPDATE access\.principal SET active = false/.test(plan.Statement));
+    expect(update.length).toBeGreaterThan(0);
+    expect(update.reduce((sum, plan) => sum + planRows(plan.Plan), 0)).toBeLessThanOrEqual(64);
+    expect(await principalState(owner)).toEqual({ active: false, enforcement_epoch: '1' });
+  }
+}, 300_000);
+
+test('owned refusal cleans a persisted long closure in bounded statements and releases every fence', async () => {
+  const owner = await principal();
+  const builder = await principal();
+  const persons = [await provision(owner, 'person')];
+  for (let index = 1; index < 40; index++) persons.push(await appendPerson(builder, persons.at(-1)!));
+  const organization = await provision(builder, 'organization', 'Long closure consent');
+  await grantFixtureControllerEdge(pool, { principalId: builder.id,
+    representative: persons.at(-1)!, represented: organization });
+  await removeController(builder, organization);
+  let refusal: unknown;
+  const cost = await measuredWork(async measured => {
+    try {
+      await new AccessAdmissionRegistry(measured).strongDeactivateAccountSubject(owner.verified.issuer, owner.verified.subject);
+    } catch (error) { refusal = error; }
+  });
+  expect(refusal).toBeInstanceOf(AccountHasOwnedAgents);
+  expect(refusal).toMatchObject({ agents: [{ id: organization, kind: 'organization', displayName: 'Long closure consent' }],
+    hasMore: false, moreCount: 0 });
+  const deletes = Map.groupBy(cost.plans.filter(plan => /DELETE FROM access\.account_deletion_progress_agent/.test(plan.Statement)),
+    plan => plan.StatementInstance);
+  expect(deletes.size).toBeGreaterThanOrEqual(3);
+  for (const plans of deletes.values()) expect(plans.reduce((sum, plan) => sum + planRows(plan.Plan), 0))
+    .toBeLessThanOrEqual(32);
+  expect((await pool.query('SELECT operation_id FROM access.account_deletion_progress WHERE principal_id = $1',
+    [owner.id])).rows).toEqual([]);
+  expect(await principalState(owner)).toEqual({ active: true, enforcement_epoch: '0' });
+  for (const person of persons) expect(await subjectState(person)).toEqual({ active: true, controllers: 1 });
 }, 60_000);
