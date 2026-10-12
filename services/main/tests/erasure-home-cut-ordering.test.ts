@@ -245,7 +245,7 @@ test('home publication fences identity, complete inventory, durable journal, sup
       expect(f.observation.held).toBe(false);
     } finally { await publisher.query('ROLLBACK'); publisher.release(); await initial; }
   });
-}, 15_000);
+});
 
 test('concurrent same-key callers refresh retained intent after waiting for the home fence', async () => {
   await fixture(async f => {

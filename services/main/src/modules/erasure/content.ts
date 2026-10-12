@@ -294,7 +294,8 @@ export async function commandCustodyErasureTargets(access: Pool | PoolClient,
  * authoritative. This adapter only binds those identities to the retained inventory. */
 export async function applyCommandCustodyErasure(custody: ReceiptCustody | undefined,
   targets: readonly CommandCustodyErasureTarget[],
-  command: { erasureId: string; erasureEpoch: string; objectRefs: ReadonlySet<string> }): Promise<void> {
+  command: { erasureId: string; erasureEpoch: string; objectRefs: ReadonlySet<string> },
+  budget?: ErasurePreflightBudget): Promise<void> {
   for (const target of targets) {
     if (!custody || !command.objectRefs.has(`sha256:${target.payloadSha256}`)
       || (target.payloadAbsent && (target.erasureId !== command.erasureId
@@ -303,7 +304,7 @@ export async function applyCommandCustodyErasure(custody: ReceiptCustody | undef
     }
     await custody.erasePayloadForErasure(target.receipt, { revision: target.revision,
       payloadSha256: target.payloadSha256, erasureId: command.erasureId,
-      erasureEpoch: command.erasureEpoch });
+      erasureEpoch: command.erasureEpoch }, undefined, budget);
   }
 }
 

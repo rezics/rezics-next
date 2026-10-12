@@ -17,7 +17,7 @@ import { graphRevisionIds, isGraphErasureKind, resolveErasureRevisions } from '.
 import { assertErasureJournalTargetBound, GraphErasureConflict, GraphErasureUnavailable,
   inventoryContributionPayloads, preflightGraphErasure, readGraphErasureProof, suppressGraphContentRevisions } from './graph.ts';
 import { ERASURE_JOURNAL_EPOCH, ErasureInvalid, ErasureNotFound, ErasureStale, ErasureUnavailable,
-  createErasurePreflightBudget, erasurePreflightRemaining, ErasurePreflightUnsupported, findErasureByOperation,
+  createErasurePreflightBudget, consumeErasurePreflight, type ErasurePreflightBudget, erasurePreflightRemaining, ErasurePreflightUnsupported, findErasureByOperation,
   completeErasureTarget, failErasureTarget, isValidErasureTargetList, journalErasure,
   markErasureBlocked, markErasureSuppressed, readErasure, extendErasureTargets, type ErasureTargetInput,
   recordErasureInventory, type ErasureReport, ensureRetentionDomain, relayTransaction,
@@ -78,6 +78,12 @@ function proof(admission: Pick<RegisteredAdmission, 'id' | 'requestDigest' | 'au
     scope: admission.scope, dataEpoch: ERASURE_JOURNAL_EPOCH, sequence: erasureEpoch };
 }
 
+interface ErasurePreflightPlan {
+  budget: ErasurePreflightBudget;
+  /** Reserve the owner's second verification read before any destructive transition. */
+  custodyReadReservation: number;
+}
+
 /**
  * Finish one journaled Content erasure. Every step is idempotent: the Content
  * tombstone, the journal fence, the Access seal and the retention inventory.
@@ -91,16 +97,17 @@ async function completeContentErasure(service: ErasureService, graph: WorkActiva
 
 async function completeFencedContentErasure(service: ErasureService, graph: WorkActivationEnvironment,
   access: ErasureAccess, admission: RegisteredAdmission, erasureId: string,
-  mediaApplied: boolean, publicationClient: PoolClient, preflightComplete = false): Promise<() => Promise<void>> {
+  mediaApplied: boolean, publicationClient: PoolClient, preflight?: ErasurePreflightPlan): Promise<() => Promise<void>> {
   let journaled = await readErasure(service.relay, erasureId);
   if (journaled.stage === 'blocked') {
     return () => access.recordGraphOutcome(admission.id, proof(admission, 'succeeded', journaled.erasureEpoch));
   }
   validateCompletion(journaled, admission);
   const resourceId = admission.scope.slice('erasure:'.length);
-  const budget = createErasurePreflightBudget();
+  const plan = preflight ?? { budget: createErasurePreflightBudget(), custodyReadReservation: 0 };
+  const { budget } = plan;
   budget.targets = journaled.targets.map(({ kind, ref }) => ({ kind, ref }));
-  if (!preflightComplete) {
+  if (!preflight) {
     const contentIds = journaled.targets.filter(target => target.kind === 'content_revision').map(target => target.ref);
     if (contentIds.length) {
       // Revalidate the admitted resource even when its bytes already carry this tombstone.
@@ -118,10 +125,14 @@ async function completeFencedContentErasure(service: ErasureService, graph: Work
     const custody = await commandCustodyErasureTargets(publicationClient,
       journaled.targets.filter(target => isGraphErasureKind(target.kind)).map(target => `https://rezics.com/id/${target.ref}`), budget);
     for (const target of custody.filter(target => !target.payloadAbsent)) {
+      const bytesBefore = budget.metadataBytes;
       const source = await graph.receiptCustody?.readCommitted(target.receipt, budget);
       if (!source || source.terminal.revision !== target.revision || source.payloadSha256 !== target.payloadSha256) {
         throw new ContentErasureStale('command custody is unavailable for erasure');
       }
+      const bytes = budget.metadataBytes - bytesBefore;
+      consumeErasurePreflight(budget, 'metadataBytes', bytes);
+      plan.custodyReadReservation += bytes;
     }
   }
   const guarded = await withErasureFence(service, resourceId, erasureId,
@@ -141,7 +152,7 @@ async function completeFencedContentErasure(service: ErasureService, graph: Work
         }
       }
       // Media commits its exact namespace inventory before other owners clear their bytes.
-      await applyRevisionOwners(service, graph, admission, journaled, fence, accessClient);
+      await applyRevisionOwners(service, graph, admission, journaled, fence, accessClient, plan);
       await markErasureSuppressed(service.relay, erasureId);
       // Disclosure is suppressed even while physical objects await retry.
       return completeLiveTargets(service, graph, journaled, accessClient);
@@ -246,7 +257,7 @@ function validateCompletion(report: ErasureReport, admission: RegisteredAdmissio
 
 async function applyRevisionOwners(service: ErasureService, graph: WorkActivationEnvironment,
   admission: RegisteredAdmission, report: ErasureReport, fence: PreservationFence,
-  accessClient: PoolClient): Promise<void> {
+  accessClient: PoolClient, plan: ErasurePreflightPlan): Promise<void> {
   const graphIds = graphRevisionIds(report.targets);
   await suppressGraphContentRevisions(graph.fuseki, graph.lineage, report.erasureId, report.erasureEpoch, graphIds);
   const graphProof = await readGraphErasureProof(graph.fuseki, graph.lineage, report.erasureId,
@@ -257,9 +268,13 @@ async function applyRevisionOwners(service: ErasureService, graph: WorkActivatio
     revisionIds: contentIds, graphProof, preservationAccess: fence });
   const custody = await commandCustodyErasureTargets(accessClient,
     report.targets.filter(target => isGraphErasureKind(target.kind)).map(target => `https://rezics.com/id/${target.ref}`));
+  // Transfer the preflight reservation back to remaining bytes. The owner consumes
+  // this same shared budget while revalidating its exact immutable source under lock.
+  plan.budget.metadataBytes -= plan.custodyReadReservation;
+  plan.custodyReadReservation = 0;
   await applyCommandCustodyErasure(graph.receiptCustody, custody, { erasureId: report.erasureId,
     erasureEpoch: report.erasureEpoch,
-    objectRefs: new Set(report.targets.filter(target => target.kind === 'object').map(target => target.ref)) });
+    objectRefs: new Set(report.targets.filter(target => target.kind === 'object').map(target => target.ref)) }, plan.budget);
 }
 
 /** Inject a shared deadline into the existing object owners, including uncached probes. */
@@ -433,8 +448,10 @@ async function requestFencedContentErasure(service: ErasureService, graph: WorkA
   let finish: (() => Promise<void>) | undefined;
   let replayed = Boolean(erasureId);
   let finished = false;
+  let preflight: ErasurePreflightPlan | undefined;
   if (!erasureId) {
-    const budget = createErasurePreflightBudget();
+    preflight = { budget: createErasurePreflightBudget(), custodyReadReservation: 0 };
+    const { budget } = preflight;
     const resolved = await resolveErasureRevisions(service.content, graph.fuseki,
       input.resourceId, input.revisionIds);
     if (resolved.some(revision => revision.erased)) {
@@ -452,10 +469,14 @@ async function requestFencedContentErasure(service: ErasureService, graph: WorkA
       if (!graph.receiptCustody || !graph.workObjects || target.payloadAbsent || target.erasureId) {
         throw new ContentErasureStale('command custody is unavailable for erasure');
       }
+      const bytesBefore = budget.metadataBytes;
       const source = await graph.receiptCustody.readCommitted(target.receipt, budget);
       if (!source || source.terminal.revision !== target.revision || source.payloadSha256 !== target.payloadSha256) {
         throw new ContentErasureStale('command custody is unavailable for erasure');
       }
+      const bytes = budget.metadataBytes - bytesBefore;
+      consumeErasurePreflight(budget, 'metadataBytes', bytes);
+      preflight.custodyReadReservation += bytes;
     }
     const targets: ErasureTargetInput[] = [
       ...resolved.map(revision => ({ kind: revision.kind, ref: revision.ref })),
@@ -512,13 +533,13 @@ async function requestFencedContentErasure(service: ErasureService, graph: WorkA
       if (guarded.held) throw new MediaFenced('media is retained under a preservation hold');
       // Media committed while the shared publication and preservation fence remains held.
       await markErasureSuppressed(service.relay, erasureId!);
-      finish = await completeFencedContentErasure(service, graph, access, registered, erasureId!, true, publicationClient, true);
+      finish = await completeFencedContentErasure(service, graph, access, registered, erasureId!, true, publicationClient, preflight);
       finished = true;
     } else {
       await journal(targets);
     }
   }
-  if (!finished) finish = await completeFencedContentErasure(service, graph, access, registered, erasureId!, false, publicationClient, !replayed);
+  if (!finished) finish = await completeFencedContentErasure(service, graph, access, registered, erasureId!, false, publicationClient, replayed ? undefined : preflight);
   return { erasureId: erasureId!, replayed, finish: finish! };
 }
 

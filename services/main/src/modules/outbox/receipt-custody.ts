@@ -931,10 +931,10 @@ export class ReceiptCustody implements CustodiedOutboxSource {
 
   /** Upgrade legacy reconciled receipts under their lock before an exact erasure clears their payload. */
   async erasePayloadForErasure(receipt: string, erasure: CustodyPayloadErasure,
-    client?: PoolClient): Promise<readonly string[]> {
+    client?: PoolClient, budget?: ErasurePreflightBudget): Promise<readonly string[]> {
     nativeIri(receipt);
     return this.store.withReceipt(receipt, async session => {
-      const stored = await session.read();
+      const stored = await session.read(budget ? erasurePreflightRemaining(budget, 'metadataBytes') : undefined);
       const row = stored ? custodyState(stored) : null;
       if (!row || !session.clearPayloadForErasure) throw new ReceiptCustodyErasureConflict();
       let missingObjectDigests: readonly string[] = [];
@@ -944,7 +944,8 @@ export class ReceiptCustody implements CustodiedOutboxSource {
         if (!row.reconciled || !row.terminal || !row.outbox || !session.persistObjectReferences) {
           throw new ReceiptCustodyErasureConflict();
         }
-        const source = await this.verifyCommitted(row, true);
+        if (budget) consumeErasurePreflight(budget, 'metadataBytes', row.payload.byteLength);
+        const source = await this.verifyCommitted(row, true, budget);
         missingObjectDigests = source.missingObjectDigests ?? [];
         if (source.terminal.revision !== erasure.revision || source.payloadSha256 !== erasure.payloadSha256) {
           throw new ReceiptCustodyErasureConflict();

@@ -16,7 +16,7 @@ import { AdmissionDenied, type RegisteredAdmission } from '../src/modules/access
 import { CONTRIBUTION_PROFILE } from '../src/modules/contribution/draft.ts';
 import { applyContentErasure, ContentErasureStale, probeContentErasure } from '../src/modules/erasure/content.ts';
 import { ERASURE_PREFLIGHT_LIMITS, journalErasure, readErasure,
-  sha256, type ErasureTargetInput } from '../src/modules/erasure/journal.ts';
+  sha256, ErasurePreflightUnsupported, type ErasureTargetInput } from '../src/modules/erasure/journal.ts';
 import { completePendingContentErasures, contentErasureDigest, ErasureDenied, ErasureService,
   requestContentErasure, type ContentErasureInput } from '../src/modules/erasure/request.ts';
 import { assetIri, assetNamespace, assetVariant, MediaStore } from '../src/modules/media/store.ts';
@@ -546,7 +546,7 @@ test('P3 selecting only part of retained Media history refuses before journaling
 });
 
 test('P2/P4 the existing ReceiptCustody owner clears a journaled command before object retry and preserves historical facts', async () => {
-  await fixture(async f => {
+  for (const overflow of [false, true]) await fixture(async f => {
     const component = resource(), work = resource(), id = randomUUID(), revision = resourceIri(id);
     const receipt = `urn:rezics:receipt:${randomUUID()}`;
     const state: MetadataEditionState = { kind: 'edition', id: component, status: 'active',
@@ -556,9 +556,12 @@ test('P2/P4 the existing ReceiptCustody owner clears a journaled command before 
     const manifest = `urn:rezics:sha256:${await prepareWorkComponent(f.objects.namespace(), component,
       { revision, intent: { work, expectedHead: null, state } }, METADATA_PROFILE)}`;
     const entry = profileRegistry['work-metadata-details-v1'];
-    expect(await f.objects.namespace().put(readFileSync(join(root, 'generated/model', entry.file)))).toBe(entry.sha256);
+    const originalShape = readFileSync(join(root, 'generated/model', entry.file));
+    const shape = overflow ? Buffer.concat([originalShape, Buffer.alloc(4_194_304 - originalShape.length, 32)]) : originalShape;
+    const shapeDigest = await f.objects.namespace().put(shape);
+    if (!overflow) expect(shapeDigest).toBe(entry.sha256);
     const validations = (['work', 'component', 'revision'] as const).map(role => ({ profile: 'work-metadata-details-v1',
-      sha256: entry.sha256, shape: `${METADATA_PROFILE}/${role}-shape`,
+      sha256: shapeDigest, shape: `${METADATA_PROFILE}/${role}-shape`,
       focus: [role === 'work' ? work : role === 'component' ? component : revision],
       graphs: [GRAPHS.current, GRAPHS.revisions] }));
     let proof: { payload: string } | undefined;
@@ -576,15 +579,50 @@ test('P2/P4 the existing ReceiptCustody owner clears a journaled command before 
         return { status: 'committed', position: { datasetId: 'urn:rezics:dataset:product',
           dataEpoch: f.graph.lineage.dataEpoch, sequence: '4' } };
       } });
+    let preflightReadBytes = 0, applicationReadBytes = 0, finalMetadataBytes = 0;
+    const readCommitted = custody.readCommitted.bind(custody);
+    custody.readCommitted = async (selectedReceipt, budget) => {
+      const before = budget?.metadataBytes ?? 0;
+      const source = await readCommitted(selectedReceipt, budget);
+      preflightReadBytes += (budget?.metadataBytes ?? 0) - before;
+      return source;
+    };
+    const erasePayload = custody.erasePayloadForErasure.bind(custody);
+    custody.erasePayloadForErasure = async (selectedReceipt, erasure, client, budget) => {
+      expect(budget).toBeDefined();
+      const before = budget!.metadataBytes;
+      const result = await erasePayload(selectedReceipt, erasure, client, budget);
+      applicationReadBytes += budget!.metadataBytes - before;
+      finalMetadataBytes = budget!.metadataBytes;
+      return result;
+    };
     const original = (await f.pool.query(`SELECT receipt,revision,request_digest,payload_sha256,terminal,outbox,
       data_epoch,stream_sequence::text FROM access.command_custody WHERE receipt=$1`, [receipt])).rows[0]!;
     f.graph.revisions.set(id, { kind: 'semantic_revision', owner: component });
     const sqlRevision = await f.draft(component);
     const input = f.input(component, [id, sqlRevision]);
+    if (overflow) {
+      // Each bounded owner read fits alone. Reserving custody's second exact read
+      // pushes the one request past 8 MiB, so even the first tombstone is refused.
+      await expect(f.call(input)).rejects.toThrow(ErasurePreflightUnsupported);
+      expect(preflightReadBytes).toBeGreaterThan(ERASURE_PREFLIGHT_LIMITS.metadataBytes / 2);
+      expect(applicationReadBytes).toBe(0);
+      expect(f.graph.commands).toEqual([]);
+      expect(f.objects.deletes).toEqual([]);
+      expect((await f.pool.query('SELECT id FROM relay.erasure')).rows).toEqual([]);
+      expect((await f.pool.query('SELECT payload IS NOT NULL AS present FROM access.command_custody WHERE receipt=$1',
+        [receipt])).rows[0]).toEqual({ present: true });
+      expect((await f.pool.query('SELECT availability FROM content.revision WHERE id=$1',
+        [sqlRevision])).rows[0]).toEqual({ availability: 'available' });
+      return;
+    }
     // HEAD still works for owner verification, but deletion fails after SQL terminalization.
     const workObjects = f.env.workObjects!;
     f.env.workObjects = { ...workObjects, deleteAndVerifyAbsent: async () => { throw new ObjectUnavailable('delete outage'); } };
     const first = await f.call(input);
+    expect(preflightReadBytes).toBeGreaterThan(0);
+    expect(applicationReadBytes).toBe(preflightReadBytes);
+    expect(finalMetadataBytes).toBe(preflightReadBytes + applicationReadBytes);
     expect(first.report.stage).toBe('deleting');
     expect(first.report.targets.some(target => target.kind === 'object' && target.ref === `sha256:${original.payload_sha256}`)).toBe(true);
     expect(first.report.dispositions.filter(disposition => disposition.owner === 'access')
