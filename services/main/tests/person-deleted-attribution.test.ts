@@ -174,4 +174,24 @@ for (const adapter of ['cards', 'discovery'] as const) {
     await session.fenceDependencies();
     expect(reads).toBe(2);
   });
+
+  test(`${adapter} live name disclosure is rechecked after paused tombstone enrichment`, async () => {
+    const { session } = fixture();
+    let resume: () => void = () => {}, reached: () => void = () => {};
+    const paused = new Promise<void>(resolve => { reached = resolve; });
+    const released = new Promise<void>(resolve => { resume = resolve; });
+    let visible = true;
+    session.deps.personPreferences!.visibleNameOwners = async agents => new Set(visible ? agents.filter(agent => agent === live) : []);
+    session.deps.personAttributionTombstones = { read: async () => {
+      reached();
+      await released;
+      return new Map([[deleted, proof]]);
+    } };
+    const read = adapter === 'cards' ? readCreditAttributionCards(session, [deleted, live], 'preview')
+      : namedDiscoveryCredits(session, [credit(deleted), credit(live, 11)], 20, true);
+    await paused;
+    visible = false;
+    resume();
+    expect([...(await read).keys()]).toEqual([deleted]);
+  });
 }

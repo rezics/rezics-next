@@ -4,6 +4,8 @@ import { WorkReadMissing, WorkReadMoved, WorkReadUnavailable,
   type ReadPosition, type WorkReadSession } from '../work/read-session.ts';
 import { readAgent, readAgentCards } from './read.ts';
 import { optionalPreview } from '../query/optional-preview.ts';
+import { visibleNames } from '../disclosure/name-policy.ts';
+import { ANONYMOUS_VIEWER } from '../suitability/policy.ts';
 
 /** The erasure owner supplies only Person tombstones bound to the retained
  * Account closure journal. Missing/private Agents and provision compensation
@@ -96,5 +98,10 @@ export async function readCreditAttributionCards(session: WorkReadSession, agent
   const readDeleted = () => readDeletedPersonAttributions(session, missing, mode);
   const deleted = mode === 'preview' ? await optionalPreview(session, readDeleted) : await readDeleted();
   for (const [agent, attribution] of deleted ?? []) result.set(agent, attribution);
+  if (live.size) {
+    const readVisible = () => visibleNames(session.deps.personPreferences, [...live.keys()], session.viewer ?? ANONYMOUS_VIEWER);
+    const current = mode === 'preview' ? await optionalPreview(session, readVisible) : await readVisible();
+    for (const agent of live.keys()) if (!current?.has(agent)) result.delete(agent);
+  }
   return result;
 }

@@ -110,5 +110,13 @@ export async function namedDiscoveryCredits(session: WorkReadSession,
   const readDeleted = () => readDeletedPersonAttributions(session, missing, preview ? 'preview' : 'required');
   const deleted = preview ? await optionalPreview(session, readDeleted) : await readDeleted();
   for (const [agent, attribution] of deleted ?? []) named.set(agent, attribution);
+  // Handles and deleted-credit enrichment can outlive the opening name read.
+  // Recheck the same owner before any retained live name leaves this adapter.
+  const liveAgents = [...named].filter(([, attribution]) => attribution.identityStatus === 'active').map(([agent]) => agent);
+  if (liveAgents.length) {
+    const readVisible = () => visibleNames(session.deps.personPreferences, liveAgents, session.viewer ?? ANONYMOUS_VIEWER);
+    const current = preview ? await optionalPreview(session, readVisible) : await readVisible();
+    for (const agent of liveAgents) if (!current?.has(agent)) named.delete(agent);
+  }
   return named;
 }
