@@ -60,7 +60,7 @@ function feedReferenceReader(graphByStream: ReadonlyMap<string, string>, mainByG
   referenceRows: { id: string; sequence: string; kind: string }[]) {
   const graphQueries: string[] = [];
   const relay = { query: async (sql: string, values: unknown[] = []) => {
-    if (sql.includes('FROM relay.delivered_batch')) {
+    if (sql.includes('SELECT batch.graph_sequence')) {
       const streamSequence = String(values[2]);
       const graphSequence = graphByStream.get(streamSequence);
       return { rows: graphSequence ? [{ graph_sequence: graphSequence, actual_count: '1',

@@ -112,7 +112,8 @@ test('feed cuts refuse absent headers and identify the repair needed for a NULL 
   const epoch = randomUUID();
   await expect(references(epoch, '1')).rejects.toThrow('Main feed graph reference cut is unavailable');
   await putHeader(pool, header(epoch, '1', null, 0));
-  await expect(references(epoch, '1')).rejects.toThrow('repair with task main:relay');
+  await expect(references(epoch, '1')).rejects.toThrow('--repair-graph-cuts --data-epoch <epoch>');
+  await expect(references(epoch, '1')).rejects.toThrow('--repair-graph-cut --data-epoch <epoch> --sequence <sequence>');
 });
 
 test('feed cuts refuse incomplete retained members and duplicate ordinals', async () => {

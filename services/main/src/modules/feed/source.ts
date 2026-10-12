@@ -81,12 +81,10 @@ interface GraphSourcePosition { dataEpoch: string; sequence: string }
 interface DeliveredReferencePosition {
   graph_sequence: string;
   stream_sequence: string;
-  dataset_id: string;
-  graph_epoch: string;
-  relay_scope: string;
-  relay_epoch: string;
-  envelope_stream_sequence: string;
 }
+
+const GRAPH_CUT_REPAIR = 'repair with task main:relay -- --repair-graph-cuts --data-epoch <epoch> or task main:relay -- --repair-graph-cut --data-epoch <epoch> --sequence <sequence>';
+const GRAPH_CUT_UNAVAILABLE = `Main feed graph reference cut is unavailable; ${GRAPH_CUT_REPAIR}`;
 
 function requireSequence(value: string | undefined): string {
   if (!value || !/^(0|[1-9][0-9]{0,99})$/.test(value))
@@ -112,9 +110,11 @@ async function graphPositionAtRelay(relay: Pick<Pool, 'query'>, position: RelayH
           AND envelope #>> '{data,sourcePosition,datasetId}' = 'product'
           AND envelope #>> '{data,sourcePosition,dataEpoch}' = batch.data_epoch
           AND envelope #>> '{data,sourcePosition,sequence}' = batch.graph_sequence::text
-          AND envelope #>> '{data,relayPosition,streamScope}' = batch.stream_scope
+          AND CASE WHEN NOT (envelope->'data' ? 'relayPosition') THEN
+            envelope #>> '{data,sourcePosition,sequence}' = batch.sequence::text
+          ELSE envelope #>> '{data,relayPosition,streamScope}' = batch.stream_scope
           AND envelope #>> '{data,relayPosition,dataEpoch}' = batch.data_epoch
-          AND envelope #>> '{data,relayPosition,sequence}' = batch.sequence::text
+          AND envelope #>> '{data,relayPosition,sequence}' = batch.sequence::text END
           AND CASE WHEN envelope #>> '{data,ordinal}' ~ '^(0|[1-9][0-9]?)$'
             THEN (envelope #>> '{data,ordinal}')::integer < batch.event_count ELSE false END,
           false)), true) AS envelopes_match
@@ -125,10 +125,9 @@ async function graphPositionAtRelay(relay: Pick<Pool, 'query'>, position: RelayH
   [position.streamScope, position.dataEpoch, position.sequence])).rows;
   const row = rows[0];
   if (rows.length !== 1 || !row) {
-    throw new WorkReadUnavailable('Main feed graph reference cut is unavailable');
+    throw new WorkReadUnavailable(GRAPH_CUT_UNAVAILABLE);
   }
-  if (row.graph_sequence === null) throw new WorkReadUnavailable(
-    'Main feed graph reference cut is unavailable; repair with task main:relay -- --repair-graph-cut --data-epoch <epoch> --sequence <sequence>');
+  if (row.graph_sequence === null) throw new WorkReadUnavailable(GRAPH_CUT_UNAVAILABLE);
   if (row.actual_count !== String(row.event_count) || row.ordinal_count !== String(row.event_count)
     || !row.envelopes_match || BigInt(requireSequence(row.graph_sequence)) <= 0n) {
     throw new WorkReadUnavailable('Main feed graph reference cut is unavailable');
@@ -147,34 +146,30 @@ async function graphPositionAtReference(session: WorkReadSession, epoch: string,
 async function mainSequencesForGraphReferences(relay: Pick<Pool, 'query'>, epoch: string,
   through: RelayHandoffPosition, sequences: readonly string[]): Promise<Map<string, string>> {
   if (!sequences.length) return new Map();
-  const rows = (await relay.query<DeliveredReferencePosition>(`SELECT DISTINCT
-      envelope #>> '{data,sourcePosition,sequence}' AS graph_sequence,
-      sequence::text AS stream_sequence,
-      envelope #>> '{data,sourcePosition,datasetId}' AS dataset_id,
-      envelope #>> '{data,sourcePosition,dataEpoch}' AS graph_epoch,
-      envelope #>> '{data,relayPosition,streamScope}' AS relay_scope,
-      envelope #>> '{data,relayPosition,dataEpoch}' AS relay_epoch,
-      envelope #>> '{data,relayPosition,sequence}' AS envelope_stream_sequence
-    FROM relay.delivered_event
+  // One indexed probe per distinct requested graph position (at most the feed
+  // page bound); two headers suffice to prove ambiguity, including beyond through.
+  const requested = [...new Set(sequences.map(requireSequence))];
+  const rows = (await relay.query<DeliveredReferencePosition>(`SELECT position.graph_sequence::text AS graph_sequence,
+      position.stream_sequence FROM unnest($3::numeric[]) AS requested(graph_sequence)
+    CROSS JOIN LATERAL (SELECT graph_sequence, sequence::text AS stream_sequence FROM relay.delivered_batch
     WHERE stream_scope = $1 AND data_epoch = $2
-      AND envelope #>> '{data,sourcePosition,sequence}' = ANY($3::text[])`,
-  [MAIN_RELAY_STREAM_SCOPE, epoch, [...new Set(sequences)]] )).rows;
+      AND graph_sequence = requested.graph_sequence LIMIT 2) AS position`,
+  [MAIN_RELAY_STREAM_SCOPE, epoch, requested])).rows;
   const result = new Map<string, string>();
   for (const row of rows) {
     const graphSequence = requireSequence(row.graph_sequence);
     const streamSequence = requireSequence(row.stream_sequence);
-    if (row.dataset_id !== 'product' || row.graph_epoch !== epoch || row.relay_scope !== MAIN_RELAY_STREAM_SCOPE
-      || row.relay_epoch !== epoch || row.envelope_stream_sequence !== streamSequence
-      || compareRelayPositions({ streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: epoch, sequence: streamSequence }, through) > 0) {
-      throw new WorkReadUnavailable('Feed reference relay position is unavailable');
-    }
     const previous = result.get(graphSequence);
     if (previous !== undefined && previous !== streamSequence)
       throw new WorkReadUnavailable('Ambiguous feed reference relay position');
     result.set(graphSequence, streamSequence);
   }
+  for (const sequence of result.values()) {
+    if (compareRelayPositions({ streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: epoch, sequence }, through) > 0)
+      throw new WorkReadUnavailable('Feed reference relay position is unavailable');
+  }
   if (sequences.some(sequence => !result.has(sequence)))
-    throw new WorkReadUnavailable('Feed reference relay position is unavailable');
+    throw new WorkReadUnavailable(`Feed reference relay position is unavailable; ${GRAPH_CUT_REPAIR}`);
   return result;
 }
 

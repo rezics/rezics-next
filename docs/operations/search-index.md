@@ -111,6 +111,18 @@ control sequence the indexer command advanced from. The job file records that
 sequence as `offlinePreSequence`. A resume uses it, and does not sort the
 receipts graph.
 
+## Retained relay graph cuts
+
+After relay migrations 024 and 025 on a retained dataset, check for unresolved
+graph cuts with `SELECT count(*) FROM relay.delivered_batch WHERE graph_sequence IS NULL`.
+Run `task main:relay -- --repair-graph-cuts --data-epoch <epoch>` for the dataset's
+epoch; each call examines at most 200 headers by default (`--limit <n>` allows up
+to 1000) using exact source evidence and prints `{ repaired, refused, next }`.
+Continue with `--after <next>` until `next` is null, then repeat the check query.
+Refused headers remain NULL and are listed with their sequence and reason;
+resolve the reported source-evidence refusal before retrying them. The repair
+is safe to run again.
+
 ## Resuming the stuck development stack
 
 Stop the development server so Main is not writing, then rebuild, then start
