@@ -1,4 +1,5 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
+import { Client } from 'pg';
 import { randomUUID } from 'node:crypto';
 import { createAuthMiddleware, createEmailVerificationToken } from 'better-auth/api';
 import { queueAfterTransactionHook } from '@better-auth/core/context';
@@ -9,6 +10,90 @@ import { cookies, recoveryProof } from './recovery-fixture.ts';
 
 const link = (text: string) => /https?:\/\/\S+/.exec(text)![0];
 type Fixture = Awaited<ReturnType<typeof accountFixture>>;
+
+async function waitForBlockedQuery(f: Fixture, statement: string) {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const blocked = await f.pool.query(`SELECT 1 FROM pg_stat_activity
+      WHERE datname = current_database() AND wait_event_type = 'Lock'
+        AND query LIKE $1 AND cardinality(pg_blocking_pids(pid)) > 0`, [`%${statement}%`]);
+    if (blocked.rowCount) return;
+    await Bun.sleep(5);
+  }
+  throw new Error(`No blocked query observed for ${statement}`);
+}
+
+for (const first of ['verification', 'operator-note'] as const) {
+  test(`${first} first: verification and operator note serialize without a deadlock`, async () => {
+    const f = await accountFixture();
+    const paused = Promise.withResolvers<void>();
+    const resumed = Promise.withResolvers<void>();
+    const pending: Promise<Response>[] = [];
+    let restore = () => {};
+    try {
+      const operator = await f.signup('note-operator@example.test');
+      f.operators.add(operator.id);
+      await bootstrapOperators(f.pool, f.operators);
+      const email = 'note-verification@example.test';
+      expect((await f.request('/api/auth/sign-up/email', { email, name: 'Member',
+        password: 'member independently chosen password' })).status).toBe(200);
+      await f.email.drain();
+      const retained = link(f.messages.at(-1)!.text);
+      const id = (await f.pool.query('SELECT id FROM "user" WHERE email = $1', [email])).rows[0].id;
+      const verify = () => f.request(retained);
+      const note = () => f.request(`/api/account/admin/users/${id}/actions`, {
+        commandId: randomUUID(), action: 'add-note', reasonCode: 'support',
+        reason: 'Mailbox verification in progress', note: 'Requested help verifying the mailbox',
+      }, operator.cookie);
+      if (first === 'verification') {
+        const context = await f.auth.$context;
+        const update = context.internalAdapter.updateUserByEmail;
+        context.internalAdapter.updateUserByEmail = async (...args) => {
+          // The provider lookup already holds the identity lock here.
+          paused.resolve();
+          await resumed.promise;
+          return update(...args);
+        };
+        restore = () => { context.internalAdapter.updateUserByEmail = update; };
+      } else {
+        const query = Client.prototype.query;
+        const spy = spyOn(Client.prototype, 'query').mockImplementation(function(this: Client, ...args: unknown[]) {
+          if (typeof args[0] === 'string' && args[0].startsWith('INSERT INTO rezics_account_operator_note')) {
+            // performUserAction has acquired security; pause before its FK takes KEY SHARE on user.
+            paused.resolve();
+            return resumed.promise.then(() => Reflect.apply(query, this, args));
+          }
+          return Reflect.apply(query, this, args);
+        });
+        restore = () => spy.mockRestore();
+      }
+      const firstRequest = first === 'verification' ? verify() : note();
+      pending.push(firstRequest);
+      await paused.promise;
+      const secondRequest = first === 'verification' ? note() : verify();
+      pending.push(secondRequest);
+      await waitForBlockedQuery(f, first === 'verification'
+        ? 'rezics_account_security' : 'FOR UPDATE');
+      resumed.resolve();
+      const [firstResponse, secondResponse] = await Promise.all(pending);
+      const verified = first === 'verification' ? firstResponse! : secondResponse!;
+      const noted = first === 'verification' ? secondResponse! : firstResponse!;
+      expect(noted.status).toBe(200);
+      expect(verified.status).toBe(302);
+      expect(new URL(verified.headers.get('location')!, f.baseURL).searchParams.get('error')).toBeNull();
+      expect(await (await f.request('/api/auth/get-session', undefined, cookies(verified))).json())
+        .toMatchObject({ user: { id, email, emailVerified: true } });
+      expect((await f.pool.query('SELECT "userId" FROM "session" WHERE "userId" = $1', [id])).rows)
+        .toEqual([{ userId: id }]);
+      expect((await f.pool.query('SELECT user_id, author_id FROM rezics_account_operator_note WHERE user_id = $1', [id])).rows)
+        .toEqual([{ user_id: id, author_id: operator.id }]);
+    } finally {
+      resumed.resolve();
+      await Promise.allSettled(pending);
+      restore();
+      await f.close();
+    }
+  }, 60_000);
+}
 
 test('ordinary verification commits the verified user and session with and without callback', async () => {
   const f = await accountFixture();
