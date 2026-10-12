@@ -16,10 +16,28 @@ interface QueryEvidence {
   bytesLeft: number;
   bytesSpent: number;
 }
+type WriteScope = 'none' | 'neighbourhood' | 'unrelated';
+interface WriteEvidence {
+  attempt: number;
+  relation: Exclude<WriteScope, 'none'>;
+  kind: 'work' | 'realm';
+  resource: string;
+  endpoint: string;
+  expectedHead: string | null;
+  revision: string;
+  committedSequence: string;
+  openingSequence: string | null;
+  closingSequence: string | null;
+  retryStarted: boolean;
+  fence: 'dataset-sequence' | 'selected-dependency' | null;
+  errorClass: 'WorkReadMoved' | null;
+  errorObserved: boolean;
+}
 interface Reading {
   endpoint: string;
   shape: 'text' | 'rich' | 'attachments';
   concurrent: boolean;
+  writeScope: WriteScope;
   attachments: number;
   status: number;
   code: string | null;
@@ -29,6 +47,7 @@ interface Reading {
   deliveredCover: boolean;
   nativeVisits: Record<string, number | null>;
   queries: QueryEvidence[];
+  writeEvidence: WriteEvidence[];
   profile: WorkProfile;
 }
 interface Evidence {
@@ -55,12 +74,18 @@ if (process.env.REZICS_ZONE_BUDGET_PROFILE_CHILD === '1') {
   const { readZoneConfiguration } = await import('../src/modules/zone/configuration.ts');
   const { GLOBAL_CONTEXT_SCOPE } = await import('../src/modules/rating/global.ts');
   const { fusekiReadBudget, FusekiReadBudgetExceeded } = await import('../src/infrastructure/fuseki.ts');
+  const { WorkReadSession, WorkReadMoved } = await import('../src/modules/work/read-session.ts');
   const { GRAPHS, iri } = await import('../src/modules/work/activate.ts');
   const { fromPlainText } = await import('@rezics/document');
   const { foregroundCounted } = await import('../../../tests/qa/integration/support/query-cost-meter.ts');
   const sharp = (await import('sharp')).default;
   const home = await startHomeStack('zone-resource-page-budget', { projectionStart: 'current' });
   const evidence: Evidence = { readings: [], attachmentSizes, missingEndpoints: [], preparationMs: 0 };
+  const retain = () => {
+    const destination = process.env.REZICS_WORK_PROFILE_RESULT!;
+    mkdirSync(dirname(destination), { recursive: true });
+    writeFileSync(destination, JSON.stringify(evidence));
+  };
   const prepared = performance.now();
   try {
     const { stack, call, json } = home;
@@ -93,9 +118,9 @@ if (process.env.REZICS_ZONE_BUDGET_PROFILE_CHILD === '1') {
     const pagePath = `/v1/resources/${work.work.slice(-36)}/page`;
     await grant(`work:edit:${work.work}`, 'work.edit');
     await grant(`work:read:${work.work}`, 'work.read');
-    const head = async () => {
+    const head = async (target = work.work) => {
       const rows = (await stack.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
-        SELECT ?head WHERE { GRAPH ${iri(GRAPHS.current)} { ${iri(work.work)} rv:head ?head } } LIMIT 2`)).results?.bindings ?? [];
+        SELECT ?head WHERE { GRAPH ${iri(GRAPHS.current)} { ${iri(target)} rv:head ?head } } LIMIT 2`)).results?.bindings ?? [];
       expect(rows).toHaveLength(1);
       return rows[0]!.head!.value;
     };
@@ -133,16 +158,30 @@ if (process.env.REZICS_ZONE_BUDGET_PROFILE_CHILD === '1') {
     expect(await about.readThread(realm.realm, work.work)).toMatchObject({ state: 'reserved',
       openerReply: reservation.openerReply });
 
+    // These targets are not mounted, rated, covered or otherwise hydrated by the selected page.
+    const otherWork = await stack.publicWork(actor, ['en'], 'Unrelated writer target');
+    await grant(`work:edit:${otherWork.work}`, 'work.edit');
+    const otherRealm = await json<{ realm: string }>(await send('POST', '/v1/spaces', {
+      profile: 'space-realm-v2', name: 'Unrelated writer community', language: 'en', capabilities: ['realm'],
+      actingSubject: actor,
+    }), 201);
+    for (const target of [realm.realm, otherRealm.realm]) await grant(`realm:profile:${target}`, 'realm.profile.publish');
+    const realmHeads = new Map<string, string | null>([[realm.realm, null], [otherRealm.realm, null]]);
+
     let active: { reading: Omit<Reading, 'profile' | 'nativeVisits'>; probes: number;
+      openingSequence: string | null;
       budget?: NonNullable<ReturnType<typeof fusekiReadBudget.getStore>> } | undefined;
     let writing = false;
     let writeHead = await head();
+    let otherWriteHead = await head(otherWork.work);
     let writeSerial = 0;
     const originalQuery = stack.fuseki.query.bind(stack.fuseki);
     const classify = (query: string) => query.includes('SELECT ?work ?head ?owningWork') ? 'disclosure-heads'
       : query.includes('SELECT ?work ?head ?nameOwner') ? 'disclosure-name-owner'
-      : /SELECT\s+\?epoch\s+\?sequence\s+WHERE/.test(query) ? 'position'
-      : query.includes('SELECT ?r ?type') ? 'summary'
+      : /SELECT\s+(?:\?epoch\s+)?\?sequence\s+WHERE/.test(query) ? 'position'
+      : query.includes('SELECT ?epoch ?sequence ?hold ?r ?type') ? 'summary'
+      : query.includes('SELECT ?epoch ?sequence ?r ?revision') ? 'target-revision'
+      : query.includes('SELECT ?head ?main ?mainHead') ? 'work-basis'
       : query.includes('SELECT DISTINCT ?origin') ? 'merged-origins'
       : query.includes('SELECT ?realm ?payload') ? 'realm-profile-names'
       : 'owner-read';
@@ -155,7 +194,11 @@ if (process.env.REZICS_ZONE_BUDGET_PROFILE_CHILD === '1') {
         && query.includes('rv:routingEpoch');
       if (basis) {
         context.probes++;
-        if (context.probes % 2 === 1) context.reading.attempts++;
+        if (context.probes % 2 === 1) {
+          const preceding = context.reading.writeEvidence.at(-1);
+          if (preceding?.errorClass) preceding.retryStarted = true;
+          context.reading.attempts++;
+        }
         else if (context.reading.concurrent) {
           // A real independent edit commits between the read's opening and closing snapshots.
           writing = true;
@@ -164,18 +207,61 @@ if (process.env.REZICS_ZONE_BUDGET_PROFILE_CHILD === '1') {
               const headers = new Headers({ authorization: `Bearer ${home.author.token}`,
                 'content-type': 'application/json', 'idempotency-key': randomUUID(),
                 traceparent: `00-${randomBytes(16).toString('hex')}-${randomBytes(8).toString('hex')}-01` });
-              const changed = await json<{ revision: string }>(await home.app.handle(new Request(
-                `http://main.local${workPath}/scalar-value`, { method: 'POST', headers,
-                  body: JSON.stringify({ profile: 'work-scalar-state-v1', expectedHead: writeHead,
-                    actingSubject: actor, scalarValue: { kind: ++writeSerial % 2 ? 'unknown' : 'no-value' } }) })));
-              writeHead = changed.revision;
+              const unrelated = context.reading.writeScope === 'unrelated';
+              const kind = unrelated ? context.reading.attempts % 2 === 1 ? 'work' : 'realm'
+                : context.reading.endpoint === `/v1/realms/${realm.realm.slice(-36)}` ? 'realm' : 'work';
+              const resource = kind === 'work' ? unrelated ? otherWork.work : work.work
+                : unrelated ? otherRealm.realm : realm.realm;
+              const endpoint = kind === 'work' ? `/v1/works/${resource.slice(-36)}/scalar-value`
+                : `/v1/realms/${resource.slice(-36)}/profile`;
+              const expectedHead = kind === 'work' ? unrelated ? otherWriteHead : writeHead : realmHeads.get(resource)!;
+              const serial = ++writeSerial;
+              const body = kind === 'work' ? { profile: 'work-scalar-state-v1', expectedHead, actingSubject: actor,
+                scalarValue: { kind: serial % 2 ? 'unknown' : 'no-value' } }
+                : { profile: 'realm-public-profile-v2', expectedHead, actingSubject: actor,
+                  publication: { name: { original: 'en', labels: { en: 'Writer community' } },
+                    description: { original: 'en', labels: { en: `Profile write ${serial}` } },
+                    iconSelection: null, bannerSelection: null, rules: [], moderators: [],
+                    count: { kind: 'unknown', value: null } } };
+              const changed = await json<{ revision: string; sourcePosition: { sequence: string } }>(
+                await home.app.handle(new Request(`http://main.local${endpoint}`, {
+                  method: kind === 'work' ? 'POST' : 'PUT', headers, body: JSON.stringify(body),
+                })), kind === 'work' ? 200 : 201);
+              if (kind === 'work') {
+                if (unrelated) otherWriteHead = changed.revision;
+                else writeHead = changed.revision;
+              } else realmHeads.set(resource, changed.revision);
               context.reading.writes++;
+              context.reading.writeEvidence.push({ attempt: context.reading.attempts,
+                relation: unrelated ? 'unrelated' : 'neighbourhood', kind, resource, endpoint, expectedHead,
+                revision: changed.revision, committedSequence: changed.sourcePosition.sequence,
+                openingSequence: context.openingSequence, closingSequence: null, retryStarted: false,
+                fence: null, errorClass: null, errorObserved: false });
             });
           } finally { writing = false; }
         }
       }
       const before = budget.bytesLeft;
-      try { return await originalQuery(query, maximum); }
+      try {
+        const result = await originalQuery(query, maximum);
+        if (basis) {
+          const sequence = result.results?.bindings?.[0]?.sequence?.value ?? null;
+          if (context.probes % 2 === 1) context.openingSequence = sequence;
+          else {
+            const write = context.reading.writeEvidence.at(-1);
+            if (write?.attempt === context.reading.attempts) {
+              write.closingSequence = sequence;
+              // The global envelope compares these exact rows; the later opening proves replay.
+              // The Work header instead fences selected dependencies, observed separately below.
+              if (context.reading.endpoint !== workPath && sequence !== write.openingSequence) {
+                write.fence = 'dataset-sequence';
+                write.errorClass = 'WorkReadMoved';
+              }
+            }
+          }
+        }
+        return result;
+      }
       catch (error) {
         if (error instanceof FusekiReadBudgetExceeded) {
           context.reading.ceiling = error.message.includes('call budget') ? 'calls' : 'bytes';
@@ -186,10 +272,24 @@ if (process.env.REZICS_ZONE_BUDGET_PROFILE_CHILD === '1') {
           callsLeft: budget.callsLeft, bytesLeft: budget.bytesLeft, bytesSpent: before - budget.bytesLeft });
       }
     };
-    const measure = async (endpoint: string, shape: Reading['shape'], concurrent = false, attachments = 0) => {
-      const reading: Omit<Reading, 'profile' | 'nativeVisits'> = { endpoint, shape, concurrent, attachments,
-        status: 0, code: null, attempts: 0, writes: 0, ceiling: null, deliveredCover: false, queries: [] };
-      active = { reading, probes: 0 };
+    const originalFence = WorkReadSession.prototype.fenceDependencies;
+    WorkReadSession.prototype.fenceDependencies = async function () {
+      try { await originalFence.call(this); }
+      catch (error) {
+        const write = active?.reading.writeEvidence.at(-1);
+        if (write && error instanceof WorkReadMoved) {
+          write.fence = 'selected-dependency';
+          write.errorClass = 'WorkReadMoved';
+          write.errorObserved = true;
+        }
+        throw error;
+      }
+    };
+    const measure = async (endpoint: string, shape: Reading['shape'], writeScope: WriteScope = 'none', attachments = 0) => {
+      const concurrent = writeScope !== 'none';
+      const reading: Omit<Reading, 'profile' | 'nativeVisits'> = { endpoint, shape, concurrent, writeScope, attachments,
+        status: 0, code: null, attempts: 0, writes: 0, ceiling: null, deliveredCover: false, queries: [], writeEvidence: [] };
+      active = { reading, probes: 0, openingSequence: null };
       try {
         const measured = await profileRequest(sink, async headers => {
           headers.set('authorization', `Bearer ${home.author.token}`);
@@ -212,10 +312,11 @@ if (process.env.REZICS_ZONE_BUDGET_PROFILE_CHILD === '1') {
         }
         expect(measured.profile.fusekiRequests).not.toBeNull();
         evidence.readings.push({ ...reading, profile: measured.profile, nativeVisits });
-        console.log('Zone resource budget', JSON.stringify({ endpoint, shape, concurrent, attachments,
+        retain();
+        console.log('Zone resource budget', JSON.stringify({ endpoint, shape, writeScope, attachments,
           status: reading.status, attempts: reading.attempts, writes: reading.writes, ceiling: reading.ceiling,
           calls: measured.profile.fusekiRequests, sentBytes: measured.profile.fusekiSentBytes,
-          receivedBytes: measured.profile.fusekiReceivedBytes, nativeVisits }));
+          receivedBytes: measured.profile.fusekiReceivedBytes, writeEvidence: reading.writeEvidence, nativeVisits }));
         return measured.result;
       } finally { active = undefined; sink.clear(); }
     };
@@ -257,7 +358,10 @@ if (process.env.REZICS_ZONE_BUDGET_PROFILE_CHILD === '1') {
     writeHead = await head();
     for (const endpoint of endpoints) {
       await measure(endpoint, 'rich');
-      await measure(endpoint, 'rich', true);
+      await measure(endpoint, 'rich', 'neighbourhood');
+      if ([pagePath, workPath, `/v1/realms/${realm.realm.slice(-36)}`].includes(endpoint)) {
+        await measure(endpoint, 'rich', 'unrelated');
+      }
     }
 
     const pixels = await sharp({ create: { width: 256, height: 256, channels: 4,
@@ -288,13 +392,11 @@ if (process.env.REZICS_ZONE_BUDGET_PROFILE_CHILD === '1') {
       }
       const facts = await stack.store.visibilityFacts([`https://rezics.com/id/${upload.asset}`]);
       expect(facts.get(`https://rezics.com/id/${upload.asset}`)?.attachments).toHaveLength(size);
-      await measure(pagePath, 'attachments', false, size);
+      await measure(pagePath, 'attachments', 'none', size);
     }
     evidence.preparationMs = performance.now() - prepared;
   } finally {
-    const destination = process.env.REZICS_WORK_PROFILE_RESULT!;
-    mkdirSync(dirname(destination), { recursive: true });
-    writeFileSync(destination, JSON.stringify(evidence));
+    retain();
     await home.stop();
     await sink.stop();
     await shutdownTelemetry();
@@ -304,7 +406,8 @@ if (process.env.REZICS_ZONE_BUDGET_PROFILE_CHILD === '1') {
   let resultPath: string;
   const summary = (readings: Reading[]) => readings.map(reading => ({ endpoint: reading.endpoint,
     status: reading.status, attachments: reading.attachments, attempts: reading.attempts, writes: reading.writes,
-    calls: reading.profile.fusekiRequests, bytes: reading.profile.fusekiReceivedBytes, ceiling: reading.ceiling }));
+    writeScope: reading.writeScope, calls: reading.profile.fusekiRequests, bytes: reading.profile.fusekiReceivedBytes,
+    ceiling: reading.ceiling, writeEvidence: reading.writeEvidence }));
   beforeAll(async () => {
     const child = await runWorkProfileChild('services/main/tests/zone-resource-page-budget.integration.test.ts', {
       env: { REZICS_ZONE_BUDGET_PROFILE_CHILD: '1' }, timeoutMs: 660_000,
@@ -328,15 +431,27 @@ if (process.env.REZICS_ZONE_BUDGET_PROFILE_CHILD === '1') {
     const covered = evidence.readings.find(reading => reading.shape === 'attachments')!;
     expect(covered.status, JSON.stringify(summary([covered]))).toBe(200);
     expect(covered.deliveredCover).toBe(true);
-    const raced = evidence.readings.find(reading => reading.shape === 'rich' && reading.concurrent
+    const raced = evidence.readings.find(reading => reading.shape === 'rich' && reading.writeScope === 'unrelated'
       && reading.endpoint.includes('/page'))!;
     expect(raced.attempts, JSON.stringify(summary([raced]))).toBeGreaterThan(1);
     expect(raced.writes).toBeGreaterThan(0);
+    expect(raced.writeEvidence.some(write => write.kind === 'realm')).toBe(true);
+    const unrelatedHeader = evidence.readings.find(reading => reading.writeScope === 'unrelated'
+      && /\/v1\/works\/[0-9a-f-]+$/.test(reading.endpoint))!;
+    expect(unrelatedHeader.status, JSON.stringify(summary([unrelatedHeader]))).toBe(200);
+    expect(unrelatedHeader.attempts).toBe(1);
+    for (const reading of evidence.readings.filter(row => row.writeScope !== 'none')) {
+      expect(reading.writeEvidence.filter(write => write.retryStarted)).toHaveLength(Math.max(0, reading.attempts - 1));
+      for (const write of reading.writeEvidence.filter(row => row.retryStarted)) {
+        expect(write.errorClass).toBe('WorkReadMoved');
+        expect(write.openingSequence).not.toBe(write.closingSequence);
+      }
+    }
   });
 
   // Owner: kernel; keep one request budget and stop replay before another full attempt can exhaust it.
   test.failing('concurrent rich resource-page retries stay within the remaining request budget', () => {
-    const raced = evidence.readings.find(reading => reading.shape === 'rich' && reading.concurrent
+    const raced = evidence.readings.find(reading => reading.shape === 'rich' && reading.writeScope === 'unrelated'
       && reading.endpoint.includes('/page'))!;
     expect(raced.ceiling, `One budget; bound retries or read a consistent cut: ${JSON.stringify(summary([raced]))}; ${resultPath}`)
       .toBeNull();
