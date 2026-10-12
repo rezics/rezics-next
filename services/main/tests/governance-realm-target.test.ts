@@ -10,8 +10,11 @@ import { loadDockerEnvironment } from '../../../scripts/load/docker-env.ts';
 import type { ContentModeration } from '../../content/src/moderation.ts';
 import type { CommandEnvelope } from '../src/infrastructure/fuseki.ts';
 import { graphNoticeParticipants, ownerModerationEffects, restrictionOwners } from '../src/modules/governance/effects.ts';
-import { governanceGraphTypes, governanceGraphTargetKinds, ownerEvidenceCapture, ownerTargetHeads }
+import { ownerEvidenceCapture, ownerTargetHeads }
   from '../src/modules/governance/evidence.ts';
+import { CANONICAL_TYPES, semanticOwnerTypes, semanticChangeTypeOutcome }
+  from '../src/modules/semantic/change.ts';
+import { RESERVED_OWNER_TYPES } from '../src/modules/semantic/schema.ts';
 import { prepareDecisionNotices, unrecordedReasons } from '../src/modules/governance/notices.ts';
 import { GovernanceConflict, GovernanceStale, GovernanceUnavailable,
   type DecisionTargetInput } from '../src/modules/governance/store.ts';
@@ -43,9 +46,10 @@ const target = (expectedHead = head): DecisionTargetInput => ({
   scopeKind: 'component', revision: null, expectedHead, effect: 'disclosure',
 });
 
-test('every authored model class and canonical owner has a Governance type role', () => {
-  const table = new Map(governanceGraphTypes.map(entry => [entry.type, entry.role]));
-  expect(table.size).toBe(governanceGraphTypes.length);
+test('Governance derives primary ownership from the semantic admission policy for every model class', async () => {
+  expect([...semanticOwnerTypes].sort()).toEqual([...new Set([...CANONICAL_TYPES, ...RESERVED_OWNER_TYPES])].sort());
+  const types = new Set([...semanticOwnerTypes, `${RV}Character`, `${RV}Role`,
+    'http://www.w3.org/2000/01/rdf-schema#Resource', 'https://example.org/Genre']);
   for (const definition of authoredProfiles) {
     const prefixes = new Map(definition.prefixes);
     for (const shape of definition.shapes) {
@@ -54,13 +58,33 @@ test('every authored model class and canonical owner has a Governance type role'
           .filter(property => property.path === 'rdf:type')
           .flatMap(property => [...property.in ?? [], ...property.hasValue ? [property.hasValue] : []])),
       ];
-      for (const type of declared) expect(table.has(expand(type, prefixes))).toBe(true);
+      for (const type of declared) types.add(expand(type, prefixes));
     }
   }
-  expect(table.get('https://schema.org/CreativeWork')).toBe('PRIMARY');
-  expect(table.get('http://www.w3.org/2004/02/skos/core#ConceptScheme')).toBe('PRIMARY');
-  expect(table.get(`${RV}Character`)).toBe('DESCRIPTIVE');
-  expect(table.get(`${RV}Role`)).toBe('DESCRIPTIVE');
+  for (const type of types) {
+    const f = graph();
+    if (type !== `${RV}Realm`) f.state.extraKinds.push(type);
+    const classified = ownerTargetHeads({ graph: f.env }).realmBasis(target());
+    if (type !== `${RV}Realm` && semanticChangeTypeOutcome(type) === 'reserved-owner') {
+      await expect(classified).rejects.toBeInstanceOf(GovernanceUnavailable);
+    } else expect((await classified)?.realm).toBe(realm);
+  }
+});
+
+test('Governance classification and atomic guards consult the live semantic owner policy', async () => {
+  const kind = 'https://example.org/NewCanonicalOwner';
+  const registry = semanticOwnerTypes as Set<string>;
+  registry.add(kind);
+  try {
+    expect(semanticChangeTypeOutcome(kind)).toBe('reserved-owner');
+    const f = graph();
+    f.state.extraKinds.push(kind);
+    await expect(ownerTargetHeads({ graph: f.env }).realmBasis(target()))
+      .rejects.toBeInstanceOf(GovernanceUnavailable);
+    f.state.extraKinds = [];
+    await f.effects.apply(operation, 1, target());
+    expect(f.commands[0]!.update).toContain(`<${kind}>`);
+  } finally { registry.delete(kind); }
 });
 
 /** The owner simulator retains committed receipts independently of response delivery.
@@ -257,7 +281,8 @@ for (const kind of ['https://schema.org/CreativeWork', `${RV}Agent`, `${RV}Zone`
   });
 }
 
-for (const description of [`${RV}Character`, `${RV}Role`, 'http://www.w3.org/2000/01/rdf-schema#Resource']) {
+for (const description of [`${RV}Character`, `${RV}Role`, 'http://www.w3.org/2000/01/rdf-schema#Resource',
+  'https://example.org/Genre']) {
   test(`Work ownership ignores the attached descriptive type ${description}`, async () => {
     const f = graph();
     f.state.kind = 'https://schema.org/CreativeWork';
@@ -271,11 +296,13 @@ for (const description of [`${RV}Character`, `${RV}Role`, 'http://www.w3.org/200
   });
 }
 
-test('unknown graph types refuse classification instead of disappearing from discovery', async () => {
+test('a descriptive-only record has no command profile and uses the Access-only restriction path', async () => {
   const f = graph();
-  f.state.extraKinds.push('https://example.org/UnknownOwner');
-  await expect(ownerTargetHeads({ graph: f.env }).realmBasis(target()))
-    .rejects.toBeInstanceOf(GovernanceUnavailable);
+  f.state.kind = `${RV}Character`;
+  f.state.extraKinds.push('http://www.w3.org/2000/01/rdf-schema#Resource');
+  expect(await ownerTargetHeads({ graph: f.env }).realmBasis(target())).toBeNull();
+  await f.effects.apply(operation, 1, { ...target(), expectedHead: null, effect: 'search' });
+  expect(f.commands).toHaveLength(0);
 });
 
 for (const [name, mutate] of [
@@ -465,7 +492,8 @@ test('emitted Realm commands enforce authored SHACL and atomic guards in native 
     expected: 'guard-unmatched' });
   // Each mutation is applied after ownerTargetHeads supplied the command basis.
   // Exercise the emitted atomic guard against every canonical resource kind.
-  for (const kind of governanceGraphTargetKinds.filter(kind => kind !== `${RV}Realm`)) {
+  for (const kind of [...semanticOwnerTypes].filter(kind => kind !== `${RV}Realm`
+    && semanticChangeTypeOutcome(kind) === 'reserved-owner')) {
     cases.push({ name: `competing-primary-kind-${kind}`, command: declaredCommand,
       seed: seed(3, true), mutation: change('', `<${realm}> a <${kind}> .`), expected: 'guard-unmatched' });
   }
@@ -474,7 +502,7 @@ test('emitted Realm commands enforce authored SHACL and atomic guards in native 
       seed: seed(3, true), mutation: change('', `<${realm}> a <${kind}> .`), expected: 'committed' });
   }
   cases.push({ name: 'unknown-type', command: declaredCommand, seed: seed(3, true),
-    mutation: change('', `<${realm}> a <https://example.org/UnknownOwner> .`), expected: 'guard-unmatched' });
+    mutation: change('', `<${realm}> a <https://example.org/Genre> .`), expected: 'committed' });
   for (const both of [false, true]) cases.push({ name: `legacy-${both ? 'both' : 'one'}-profile-appears`,
     command: legacyCommand, seed: seed(1, false), expected: 'guard-unmatched',
     mutation: change('', `<${realm}> rv:definitionProfile <${profile(1)}> .
@@ -863,7 +891,7 @@ test('production Realm dispatch commits a Character description introduced after
   } finally { f.stack.fuseki.commandWithReceipt = original; await f.stack.stop(); }
 }, 120_000);
 
-test('a public Work with an owner-attached Character description still accepts a record search decision', async () => {
+test('a public Work with an arbitrary semantic description accepts a title search decision through public intake', async () => {
   const f = await productionRealm('work-descriptive-governance');
   try {
     const work = await f.stack.publicWork(f.editor.actor, ['en'], 'Described Work');
@@ -874,36 +902,75 @@ test('a public Work with an owner-attached Character description still accepts a
     await f.grant(f.editor, `work:read:${work.work}`, 'work.read');
     await responseJson(await f.editor.send('POST', '/v1/semantic/changes', {
       profile: 'semantic-change-v1', target: work.work, expectedHead: workHead, actingSubject: f.editor.actor,
-      state: { component: 'resource', types: [`${RV}Character`], properties: [], lifecycle: 'active' },
+      state: { component: 'resource', types: ['https://example.org/Genre'], properties: [], lifecycle: 'active' },
     }), 200);
-    const selected = { owner: 'graph' as const, resource: work.work, component: 'record' as const,
+    const selected = { owner: 'graph' as const, resource: work.work, component: 'title' as const,
       locator: null, revision: workHead };
     expect(await ownerTargetHeads({ graph: f.stack.env }).realmBasis(selected)).toBeNull();
-    // Authenticated Work intake ordinarily retains titles. This record fixture
-    // retains the same exact native anchor through the admitted evidence owner.
-    const evidence = Reflect.get(f.governance.store, 'evidence');
-    const capture = ownerEvidenceCapture({ graph: { env: f.stack.env, canReadWork: async () => true } });
-    Object.assign(f.governance.store, { evidence: { capture: async () => capture.admitted(selected) } });
-    let report: Awaited<ReturnType<typeof f.governance.store.submitReport>>;
-    try {
-      report = await f.governance.store.submitReport(f.staff.principal, {
-        kind: 'content_report', actingSubject: f.staff.actor,
-        authority: { kind: 'platform', scopeId: 'governance:platform' }, context: GLOBAL_CONTEXT,
-        target: selected, evidence: [selected], disclosure: 'private', reasonCode: 'spam',
-        statement: 'Review this retained Work record.', idempotencyKey: randomUUID(),
-      });
-    } finally { Object.assign(f.governance.store, { evidence }); }
+    const report = await responseJson<{ reportId: string; caseId: string }>(await f.stack.call('POST',
+      '/v1/public-reports', { key: randomUUID(), body: { profile: 'public-report-v1',
+        target: work.work, category: 'spam_or_manipulation', statement: 'Review this described Work.',
+        contentLanguage: 'en' } }), 201);
+    const basis = (await f.stack.accessPool.query<{ generation: string; evidence_digest: string }>(
+      `SELECT c.generation::text,r.evidence_digest FROM access.governance_case c
+       JOIN access.governance_report r ON r.case_id=c.id WHERE r.id=$1`, [report.reportId])).rows[0]!;
+    expect((await f.stack.accessPool.query('SELECT component,revision,state FROM access.governance_evidence WHERE report_id=$1',
+      [report.reportId])).rows).toEqual([{ component: 'title', revision: workHead, state: 'available' }]);
     await f.governance.store.safety.claim(f.staff.principal, f.staff.actor, report.caseId);
     const result = await f.governance.store.decide(f.staff.principal, { ...f.input,
-      caseId: report.caseId, expectedGeneration: report.caseGeneration, evidenceDigest: report.evidenceDigest,
+      caseId: report.caseId, expectedGeneration: basis.generation, evidenceDigest: basis.evidence_digest,
       idempotencyKey: randomUUID(), targets: [{ ...selected, revision: null, scopeKind: 'component',
         expectedHead: workHead, effect: 'search' }],
     });
     expect(result.operation.status).toBe('completed');
     expect((await f.stack.accessPool.query(`SELECT 1 FROM access.governance_enforcement
-      WHERE resource=$1 AND component='record' AND effect='search'`, [work.work])).rowCount).toBe(1);
+      WHERE resource=$1 AND component='title' AND effect='search'`, [work.work])).rowCount).toBe(1);
   } finally { await f.stack.stop(); }
 }, 120_000);
+
+for (const kind of ['Character', 'Role']) {
+  test(`a semantic ${kind} record completes an Access-only search decision through production intake`, async () => {
+    const f = await productionRealm(`semantic-${kind}-governance`);
+    try {
+      await f.grant(f.editor, 'semantic:create:root', 'semantic.change');
+      const created = await responseJson<{ component: string; revision: string }>(await f.editor.send('POST', '/v1/semantic/changes', {
+        profile: 'semantic-change-v1', expectedHead: null, actingSubject: f.editor.actor,
+        state: { component: 'resource', types: [`${RV}${kind}`], properties: [], lifecycle: 'active' },
+      }), 201);
+      const resource = created.component;
+      await f.grant(f.editor, `semantic:read:${resource}`, 'semantic.read');
+      const types = (await f.stack.fuseki.query(`SELECT ?type WHERE { GRAPH <${GRAPHS.current}> {
+        <${resource}> a ?type } }`, 4096)).results!.bindings.map(row => row.type!.value).sort();
+      expect(types).toEqual([`${RV}${kind}`, 'http://www.w3.org/2000/01/rdf-schema#Resource'].sort());
+      const selected = { owner: 'graph' as const, resource, component: 'record' as const,
+        locator: null, revision: created.revision };
+      expect(await ownerTargetHeads({ graph: f.stack.env }).realmBasis(selected)).toBeNull();
+      const report = await responseJson<{ reportId: string; caseId: string }>(await f.editor.send('POST',
+        '/v1/public-reports', { profile: 'public-report-v1', target: resource,
+          actingSubject: f.editor.actor, category: 'spam_or_manipulation',
+          statement: 'Review this descriptive record.', contentLanguage: 'en' }), 201);
+      const basis = (await f.stack.accessPool.query<{ generation: string; evidence_digest: string }>(
+        `SELECT c.generation::text,r.evidence_digest FROM access.governance_case c
+         JOIN access.governance_report r ON r.case_id=c.id WHERE r.id=$1`, [report.reportId])).rows[0]!;
+      expect((await f.stack.accessPool.query(
+        'SELECT component,revision,state FROM access.governance_evidence WHERE report_id=$1',
+        [report.reportId])).rows).toEqual([{ component: 'record', revision: created.revision, state: 'available' }]);
+      await f.governance.store.safety.claim(f.staff.principal, f.staff.actor, report.caseId);
+      const result = await f.governance.store.decide(f.staff.principal, { ...f.input,
+        caseId: report.caseId, expectedGeneration: basis.generation, evidenceDigest: basis.evidence_digest,
+        idempotencyKey: randomUUID(), targets: [{ ...selected, revision: null, scopeKind: 'component',
+          expectedHead: null, effect: 'search' }],
+      });
+      expect(result.operation.status).toBe('completed');
+      expect((await f.stack.accessPool.query(`SELECT 1 FROM access.governance_enforcement
+        WHERE resource=$1 AND component='record' AND effect='search'`, [resource])).rowCount).toBe(1);
+      expect((await f.stack.accessPool.query('SELECT receipt FROM access.safety_decision_effect WHERE decision_id=$1',
+        [result.decisionId])).rows).toEqual([{ receipt: `access:governance-enforcement:${result.decisionId}:1` }]);
+      expect((await f.stack.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH <${GRAPHS.receipts}> {
+        ?receipt rv:moderationTarget <${resource}> } }`, 1024)).boolean).toBe(false);
+    } finally { await f.stack.stop(); }
+  }, 120_000);
+}
 
 test('production Realm moderationTarget receipt refreshes the directory without a publication slot', async () => {
   const label = `realm-receipt-directory-${randomUUID()}`;

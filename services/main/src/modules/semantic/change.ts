@@ -10,7 +10,8 @@ import { assertSemanticDispatchable, checkedSemanticTerminal, ensureModelGenerat
   sealComponentState, sealSemanticRejection, sendSemanticWrite, StaleSemanticHead, validationsFor,
   type SemanticAdmission, type SemanticTerminal } from './command.ts';
 import { checkedNativeIri, DEFINITION_KINDS, definitionKindIri, MODEL_COMPONENT, PROFILES, SEMANTIC_CHANGE_LIMITS,
-  semanticPredicateOutcome, semanticTypeOutcome, type DefinitionKind, type Lifecycle } from './schema.ts';
+  RESERVED_OWNER_TYPES, semanticPredicateOutcome, semanticTypeOutcome,
+  type DefinitionKind, type Lifecycle, type TermOutcome } from './schema.ts';
 import { checkedSemanticValue, semanticValueRdf, type SemanticValue, type ValueRdf } from './value.ts';
 import { modelGenerationHeadGuard } from './generation-guard.ts';
 
@@ -31,6 +32,14 @@ export const WORK_OWNER_PREDICATES: ReadonlySet<string> = new Set([
 export const CANONICAL_TYPES: ReadonlySet<string> = new Set((JSON.parse(readFileSync(
   join(import.meta.dir, '../../../../../generated/model/manifest.json'), 'utf8')) as {
   canonical: { type: string }[] }).canonical.map(entry => entry.type));
+
+/** The semantic owner's complete reserved registry, including canonical routing. */
+export const semanticOwnerTypes: ReadonlySet<string> = new Set([...CANONICAL_TYPES, ...RESERVED_OWNER_TYPES]);
+
+/** Shared admission policy: descriptive assertions cannot select another owner. */
+export function semanticChangeTypeOutcome(type: string): TermOutcome {
+  return semanticOwnerTypes.has(type) ? 'reserved-owner' : semanticTypeOutcome(type);
+}
 
 export interface SemanticProperty { predicate: string; value: SemanticValue }
 /** A stored assertion keeps its identified value node so history resolves exactly. */
@@ -120,9 +129,8 @@ function checkedTypes(types: readonly unknown[]): string[] {
     || new Set(types).size !== types.length) fail('invalid', 'semantic type set is invalid');
   for (const type of types) {
     if (typeof type !== 'string') fail('invalid', 'semantic type is invalid');
-    const outcome = semanticTypeOutcome(type as string);
+    const outcome = semanticChangeTypeOutcome(type as string);
     if (outcome !== 'admitted') fail(outcome === 'invalid' ? 'invalid' : outcome, 'semantic type is not admitted');
-    if (CANONICAL_TYPES.has(type as string)) fail('reserved-owner', 'semantic type belongs to another owner');
   }
   return [...types as string[]].sort();
 }

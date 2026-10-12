@@ -9,10 +9,7 @@ import { resolveRealmProfile } from '../space/policy.ts';
 import { readExactMainRevision, readExactWorkRevision, RevisionNotFound } from '../work/history.ts';
 import { CompositionCorrupt, CompositionUnavailable, readCompositionHeader } from '../structure/graph.ts';
 import { readCompositionPage } from '../structure/read.ts';
-import { shapeSchemas } from '../../../../../packages/model/src/generated/schemas.ts';
-import { typeRegistry } from '../../../../../packages/model/src/generated/types.ts';
-import { CANONICAL_TYPES } from '../semantic/change.ts';
-import { RESERVED_OWNER_TYPES } from '../semantic/schema.ts';
+import { semanticChangeTypeOutcome } from '../semantic/change.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable } from '../structure/tree.ts';
 import { type CapturedEvidence, type EvidenceCapture, type EvidenceTarget, GovernanceDenied, GovernanceInvalid,
   GovernanceUnavailable, sha256, type TargetHeads } from './store.ts';
@@ -20,38 +17,6 @@ import { type CapturedEvidence, type EvidenceCapture, type EvidenceTarget, Gover
 const agent = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const graphAnchor = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}(?:-agent-revision)?$/;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-/** Shared envelopes accompany owner types and never compete for ownership. */
-const graphTypeEnvelopes = new Set(['http://www.w3.org/2000/01/rdf-schema#Resource', `${RV}RevisionAnchor`]);
-const primaryGraphTypes = new Set([...CANONICAL_TYPES, ...RESERVED_OWNER_TYPES]
-  .filter(type => !graphTypeEnvelopes.has(type)));
-
-/** Read only rdf:type literals from the generated model, not property values. */
-function graphTypeLiterals(schema: unknown): string[] {
-  if (!schema || typeof schema !== 'object') return [];
-  const node = schema as { const?: unknown };
-  return typeof node.const === 'string' ? [node.const]
-    : Object.values(node).flatMap(graphTypeLiterals);
-}
-
-function declaredGraphTypes(schema: unknown): string[] {
-  if (!schema || typeof schema !== 'object') return [];
-  // Some authored shapes lower to disjunctions or refinements rather than a
-  // top-level Object. Find their rdf:type properties through those wrappers.
-  return Object.entries(schema).flatMap(([key, value]) => key === 'rdf:type'
-    ? graphTypeLiterals(value) : declaredGraphTypes(value));
-}
-
-/** Canonical routing and semantic admission define ownership. All other declared
- * types describe their resource; the table also covers catalogue-only types. */
-export const governanceGraphTypes: readonly { type: string; role: 'PRIMARY' | 'DESCRIPTIVE' }[] =
-  [...new Set([...primaryGraphTypes, ...graphTypeEnvelopes, ...Object.keys(typeRegistry),
-    ...Object.values(shapeSchemas).flatMap(declaredGraphTypes),
-  ])].sort().map(type => ({ type, role: primaryGraphTypes.has(type) ? 'PRIMARY' : 'DESCRIPTIVE' }));
-export const governanceGraphTargetKinds: readonly string[] = governanceGraphTypes
-  .filter(entry => entry.role === 'PRIMARY').map(entry => entry.type);
-export const governanceGraphDescriptiveTypes: readonly string[] = governanceGraphTypes
-  .filter(entry => entry.role === 'DESCRIPTIVE').map(entry => entry.type);
-const graphTypeRoles = new Map(governanceGraphTypes.map(entry => [entry.type, entry.role]));
 const sourceId = (value: string): string | null => {
   const id = value.startsWith('https://rezics.com/id/') ? value.slice('https://rezics.com/id/'.length) : value;
   return uuid.test(id) ? id : null;
@@ -359,21 +324,21 @@ export function ownerTargetHeads(owners: { graph?: WorkActivationEnvironment; co
       if (!agent.test(target.resource)) throw new GovernanceInvalid('Graph target identity is invalid');
       if (!owners.graph) throw new GovernanceUnavailable('Graph target classification is unavailable');
       try {
-        // Read every asserted type so an unknown class cannot disappear behind
-        // a VALUES filter. Descriptions never introduce a competing owner.
+        // Read every asserted type to detect competing primary owners.
+        // Descriptions never introduce an owner or select a command profile.
         const rows = (await owners.graph.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
           SELECT DISTINCT ?kind ?head WHERE { GRAPH ${iri(GRAPHS.current)} {
             ${iri(target.resource)} a ?kind .
             OPTIONAL { FILTER(?kind = rv:Realm) ${iri(target.resource)} rv:head ?head }
           } } LIMIT 65`, 16_384)).results?.bindings ?? [];
-        if (rows.length >= 65 || rows.some(row => row.kind?.type !== 'uri'
-          || !graphTypeRoles.has(row.kind.value))) {
+        if (rows.length >= 65 || rows.some(row => row.kind?.type !== 'uri')) {
           throw new GovernanceUnavailable('Graph target kind or head is unavailable or ambiguous');
         }
-        const primary = rows.filter(row => graphTypeRoles.get(row.kind!.value) === 'PRIMARY');
-        if (primary.length !== 1) {
+        const primary = rows.filter(row => semanticChangeTypeOutcome(row.kind!.value) === 'reserved-owner');
+        if (primary.length > 1) {
           throw new GovernanceUnavailable('Graph target kind or head is unavailable or ambiguous');
         }
+        if (!primary.length) return null;
         const row = primary[0]!;
         if (row.kind!.value !== `${RV}Realm`) return null;
         if (row.head?.type !== 'uri' || !row.head.value) {
