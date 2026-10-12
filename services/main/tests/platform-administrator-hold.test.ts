@@ -38,7 +38,7 @@ async function prepare(pool: Pool) {
   await new AccessPlatformAdministrators(pool).designateFirst(identity.issuer, identity.subject, () => undefined);
   const store = new MediaStore(pool, new ContentCore(pool));
   const bytes = Buffer.from([71, 73, 70, 56, 57, 97, 1, 0, 1, 0]);
-  const input = { asset: null, mediaType: 'image/gif', byteLength: bytes.length,
+  const input = { asset: null, mediaType: 'image/gif' as const, byteLength: bytes.length,
     sha256: digest(bytes), disclosure: 'public' as const };
   const admission = { admissionId: randomUUID(), principalId, actingSubject: actor,
     authorityEpoch: '0', requestDigest: uploadDigest(input) };
