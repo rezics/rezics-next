@@ -200,11 +200,19 @@ for (const issuer of ['http://issuer.test', 'https://issuer.test', 'HTTPS://issu
   }, 60_000);
 }
 
-test('post-provider subject replacement denies issuance, charges both users and records the change', async () => {
+for (const retirementLookup of ['available', 'failed-once'] as const)
+test(`post-provider subject replacement retires issuance with ${retirementLookup} provider lookup and records both failures`, async () => {
   const f = await issuerFixture('https://issuer.test');
   const admission = pause();
+  const context = await f.auth.$context;
+  const findMany = context.adapter.findMany;
+  const deleteSession = context.internalAdapter.deleteSession;
   let providerAuthenticatedUser: string | undefined;
   let providerIssuedCookie = '';
+  let providerIssuedToken: string | undefined;
+  let failedLookups = 0;
+  let retirementBeforeCleanup: unknown[] = [];
+  let failuresBeforeCleanup: unknown[] = [];
   let pending: Promise<Response> | undefined;
   let provider: ReturnType<typeof spyOn> | undefined;
   try {
@@ -231,12 +239,38 @@ test('post-provider subject replacement denies issuance, charges both users and 
       }
       const response = await handler(request);
       if (new URL(request.url).pathname === '/api/auth/two-factor/verify-totp') {
-        const output = await response.clone().json() as { user?: { id: string } };
+        const output = await response.clone().json() as { user?: { id: string }; token?: string };
         providerAuthenticatedUser = output.user?.id;
         providerIssuedCookie = cookies(response);
+        providerIssuedToken = output.token;
       }
       return response;
     });
+    context.adapter.findMany = async (...args) => {
+      const [query] = args;
+      if (retirementLookup === 'failed-once' && failedLookups === 0 && providerIssuedToken
+        && query.model === 'session'
+        && query.where?.some(field => field.field === 'token' && field.value === providerIssuedToken)) {
+        failedLookups++;
+        // The pinned deleteWithHooks catches this lookup fault and returns
+        // without either deleting the session or running its retirement hook.
+        throw new Error('provider retirement lookup unavailable');
+      }
+      return findMany(...args);
+    };
+    context.internalAdapter.deleteSession = async token => {
+      if (token === providerIssuedToken) {
+        // A separate connection sees both durable effects before provider
+        // cleanup starts: completion of that cleanup proves nothing.
+        retirementBeforeCleanup = (await f.pool.query('SELECT rezics_generation FROM "session" WHERE token = $1',
+          [token])).rows;
+        failuresBeforeCleanup = (await f.pool.query(`SELECT user_id FROM rezics_account_security_event
+          WHERE user_id IN ($1, $2) AND action = 'sign_in_failed'
+            AND detail->>'reason' = 'provider_subject_changed' ORDER BY user_id`,
+        [a.id, b.id])).rows;
+      }
+      return deleteSession(token);
+    };
     pending = f.request('/api/auth/two-factor/verify-totp', { code: await createOTP(bSecret).totp() }, aChallenge.cookie);
     expect(await Promise.race([admission.entered, pending.then(() => 'finished')])).toBe('paused');
     // One signed A challenge is admitted. Replace its owner after Account's
@@ -254,6 +288,12 @@ test('post-provider subject replacement denies issuance, charges both users and 
     // additional live generation-fenced session remains.
     expect(providerIssuedCookie).not.toBe('');
     expect(await f.auth.api.getSession({ headers: new Headers({ cookie: providerIssuedCookie }) })).toBeNull();
+    expect(await (await f.request('/api/auth/get-session', undefined, providerIssuedCookie)).json()).toBeNull();
+    expect(failedLookups).toBe(retirementLookup === 'failed-once' ? 1 : 0);
+    expect(retirementBeforeCleanup).toEqual([{ rezics_generation: null }]);
+    expect(failuresBeforeCleanup).toEqual([a.id, b.id].sort().map(user_id => ({ user_id })));
+    expect((await f.pool.query('SELECT session_cleanup_pending FROM rezics_account_security WHERE user_id = $1',
+      [b.id])).rows).toEqual([{ session_cleanup_pending: true }]);
     expect(await liveSessions()).toEqual(sessionsBefore);
     for (const userId of [a.id, b.id]) {
       expect((await f.pool.query('SELECT count FROM rezics_account_rate_limit WHERE key = $1', [key(userId)])).rows[0]?.count).toBe(1);
@@ -266,6 +306,8 @@ test('post-provider subject replacement denies issuance, charges both users and 
     admission.resume();
     await pending?.catch(() => {});
     provider?.mockRestore();
+    context.adapter.findMany = findMany;
+    context.internalAdapter.deleteSession = deleteSession;
     await f.close();
   }
 }, 60_000);

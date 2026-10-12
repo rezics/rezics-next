@@ -17,7 +17,6 @@ export function authenticationSubjectChanged(subject: AuthenticationSubject, evi
 export async function settleChangedAuthentication(auth: AuthenticationProvider, pool: Pool,
   subject: AuthenticationSubject, evidence: Evidence, held?: PoolClient): Promise<void> {
   const provider = await auth.$context as AuthContext;
-  for (const token of evidence.issuedTokens) await provider.internalAdapter.deleteSession(token);
   const users = [...new Set([...(subject.candidateUserId ? [subject.candidateUserId] : []),
     ...evidence.authenticatedUserIds])].sort();
   // The original proof transaction has committed and released its own rate
@@ -38,9 +37,20 @@ export async function settleChangedAuthentication(auth: AuthenticationProvider, 
       await db.query(`INSERT INTO rezics_account_security_event (user_id, action, detail)
         VALUES ($1, 'sign_in_failed', $2)`, [userId, JSON.stringify({ reason: 'provider_subject_changed' })]);
     }
+    // Provider deletion may swallow its lookup fault and skip the native
+    // hook. Commit Account's terminal stamp with the failures, using the
+    // existing security-before-session lock order and retained cleanup path.
+    await db.query(`SELECT 1 FROM rezics_account_security
+      WHERE user_id = ANY($1::text[]) ORDER BY user_id FOR UPDATE`, [users]);
+    const retired = await db.query<{ user_id: string }>(`UPDATE "session" SET rezics_generation = NULL
+      WHERE token = ANY($1::text[]) AND rezics_generation IS NOT NULL
+      RETURNING "userId" AS user_id`, [[...evidence.issuedTokens]]);
+    if (retired.rowCount) await db.query(`UPDATE rezics_account_security SET session_cleanup_pending = true
+      WHERE user_id = ANY($1::text[])`, [[...new Set(retired.rows.map(row => row.user_id))]]);
     await db.query('COMMIT');
   } catch (error) { await db.query('ROLLBACK'); throw error; }
   finally { if (!held) db.release(); }
+  for (const token of evidence.issuedTokens) await provider.internalAdapter.deleteSession(token);
 }
 
 /** Order factor verification and session creation against recovery. A password
