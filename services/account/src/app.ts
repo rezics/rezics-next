@@ -144,7 +144,7 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
   const guardedAuthHandler = async (request: Request): Promise<Response> => {
     const path = new URL(request.url).pathname;
     let totpUserId: string | undefined;
-    if (path === '/api/auth/two-factor/verify-totp') {
+    if (request.method === 'POST' && path === '/api/auth/two-factor/verify-totp') {
       const session = await auth.api.getSession({ headers: request.headers });
       if (session) {
         totpUserId = session.user.id;

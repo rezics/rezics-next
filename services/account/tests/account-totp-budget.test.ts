@@ -20,6 +20,7 @@ test('signed-in TOTP guesses share the immutable user reauthentication budget', 
     expect(verified.status).toBe(200);
     const cookie = cookies(verified);
     await f.pool.query('UPDATE "session" SET "createdAt" = now() - interval \'10 minutes\' WHERE "userId" = $1', [member.id]);
+    expect((await f.request('/api/auth/two-factor/verify-totp', undefined, cookie)).status).toBe(404);
     expect((await f.request('/api/account/reauthenticate', {
       password: 'incorrect',
     }, cookie)).status).toBe(403);
@@ -72,10 +73,15 @@ test('concurrent signed-in TOTP sessions cannot overspend and the user budget ex
       code: await createOTP(secret).totp(),
     }, cookies(challenge));
     expect(otherSession.status).toBe(200);
-    const responses = await Promise.all(Array.from({ length: 8 }, (_, attempt) =>
-      f.request('/api/auth/two-factor/verify-totp', {
-        code: 'invalid', email: `parallel-${attempt}@example.test`,
-      }, attempt % 2 ? firstCookie : cookies(otherSession))));
+    const responses: Response[] = [];
+    // Two callers race for the last attempt without exhausting the existing
+    // four-connection pool shared by the nested recovery/credential guards.
+    for (let wave = 0; wave < 4; wave++) {
+      responses.push(...await Promise.all(Array.from({ length: 2 }, (_, index) =>
+        f.request('/api/auth/two-factor/verify-totp', {
+          code: 'invalid', email: `parallel-${wave}-${index}@example.test`,
+        }, index ? firstCookie : cookies(otherSession)))));
+    }
     expect(responses.filter(response => response.status === 429)).toHaveLength(3);
     expect(responses.every(response => !response.ok)).toBe(true);
     const key = createHmac('sha256', f.secret).update(`reauth:${member.id}`).digest('hex');
