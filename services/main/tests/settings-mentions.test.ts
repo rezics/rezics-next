@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import type { Pool } from 'pg';
 import { NotificationProducer } from '../src/modules/notification-producers/producer.ts';
 import type { NotificationEvent } from '../src/modules/notification/store.ts';
+import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts';
 
 const id = (last: number) => `00000000-0000-4000-8000-${String(last).padStart(12, '0')}`;
 const native = (last: number) => `https://rezics.com/id/${id(last)}`;
@@ -19,7 +20,7 @@ async function mentionEvents(currentRevision: string) {
     return { rows: [] };
   }, release: () => {} };
   const relay = { connect: async () => relayClient,
-    query: async () => ({ rows: [{ data_epoch: 'epoch', sequence: '1' }] }) } as unknown as Pool;
+    query: async () => ({ rows: [{ stream_scope: MAIN_RELAY_STREAM_SCOPE, data_epoch: 'epoch', sequence: '1' }] }) } as unknown as Pool;
   const access = { query: async (sql: string) => {
     if (sql.includes('FROM access.admission')) return { rows: [{ principal_id: id(8) }] };
     if (sql.includes('FROM access.alias_registry')) return { rows: [{ agent_id: native(9) }] };

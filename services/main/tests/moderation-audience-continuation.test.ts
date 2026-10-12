@@ -8,6 +8,7 @@ import { NotificationStore } from '../src/modules/notification/store.ts';
 import type { RecipientFrontier } from '../src/modules/follows/recipients.ts';
 import { notificationProducerSubjectReader } from '../src/modules/notification-producers/subjects.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
+import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts';
 
 const uid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const agent = (n: number) => `https://rezics.com/id/${uid(n)}`;
@@ -349,7 +350,7 @@ function audienceScene(kind = 'moderation_outcome') {
   };
   const relay = { connect: async () => relayClient } as unknown as Pool;
   const checkpoint = {
-    query: async () => ({ rows: [{ data_epoch: 'epoch', sequence: '1' }] }),
+    query: async () => ({ rows: [{ stream_scope: MAIN_RELAY_STREAM_SCOPE, data_epoch: 'epoch', sequence: '1' }] }),
   } as unknown as Pool;
   const graph = {
     query: async (sql: string) => {

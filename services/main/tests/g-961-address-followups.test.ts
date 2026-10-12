@@ -17,6 +17,7 @@ import { DEFAULT_MEDIA_CONTEXT, type MediaStore } from '../src/modules/media/sto
 import { rateLimitFamily } from '../src/modules/rate-limit/routes.ts';
 import { NotificationProducer } from '../src/modules/notification-producers/producer.ts';
 import type { NotificationEvent } from '../src/modules/notification/store.ts';
+import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts';
 import { RV, prepareComponent } from '../src/modules/work/activate.ts';
 import { listOfficialZones, readZonePublication } from '../src/modules/zone/publication.ts';
 import { ZONE_CONFIG_FORMAT, ZONE_PROFILE } from '../src/modules/zone/config-format.ts';
@@ -535,7 +536,7 @@ test('G961: reply mentions read only current Agent names from the registry', asy
   };
   const relay = { connect: async () => relayClient } as unknown as Pool;
   const checkpoint = {
-    query: async () => ({ rows: [{ data_epoch: 'epoch', sequence: '1' }] }),
+    query: async () => ({ rows: [{ stream_scope: MAIN_RELAY_STREAM_SCOPE, data_epoch: 'epoch', sequence: '1' }] }),
   } as unknown as Pool;
   const emitted: NotificationEvent[] = [];
   const producer = new NotificationProducer(

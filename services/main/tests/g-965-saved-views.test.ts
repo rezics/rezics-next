@@ -7,6 +7,7 @@ import { QueryRejected } from '../src/modules/query/compile.ts';
 import type { WorkReadSession } from '../src/modules/work/read-session.ts';
 import type { NotificationEvent } from '../src/modules/notification/store.ts';
 import { defaultFollowLevel } from '../src/modules/follows/contract.ts';
+import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts';
 
 const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const id = (n: number) => `https://rezics.com/id/${uuid(n)}`;
@@ -124,7 +125,8 @@ test('G-965 relay checkpoint waits for all saved-view matching pages', async () 
     return { rows: [] };
   }, release: () => {} };
   const relay = { connect: async () => client } as unknown as Pool;
-  const checkpoint = { query: async () => ({ rows: [{ data_epoch: 'epoch', sequence: '1' }] }) } as unknown as Pool;
+  const checkpoint = { query: async () => ({ rows: [{ stream_scope: MAIN_RELAY_STREAM_SCOPE,
+    data_epoch: 'epoch', sequence: '1' }] }) } as unknown as Pool;
   const producer = new NotificationProducer({} as Pool, relay, {} as Pool, {} as never, {} as never, 'consumer', checkpoint);
   producer.setSavedViews({ run: async () => ({ complete: false, produced: 8 }) });
   expect(await producer.runSavedViewsRelayOnce()).toBe(8);
