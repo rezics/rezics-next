@@ -12,7 +12,7 @@ import {
 } from '../src/modules/access/admission.ts';
 import { collectAccountDeletionAgents, lockAccountDeletionTopology } from '../src/modules/access/account-deletion-agents.ts';
 import { AccessAgentControl } from '../src/modules/access/agent-control.ts';
-import { grantFixtureAuthority, grantFixtureControllerEdge } from '../src/modules/access/fixture-authority.ts';
+import { grantFixtureAuthority, grantFixtureControllerEdge, deactivateFixtureController } from '../src/modules/access/fixture-authority.ts';
 import { AgentProvisioning, agentProvisionDigest } from '../src/modules/agent/provision.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -32,7 +32,10 @@ log_line_prefix = ''
 logging_collector = off
 log_destination = 'stderr'
 ` });
-  pool = new Pool({ ...cluster.connection, max: 4, connectionTimeoutMillis: 5000 });
+  pool = new Pool({ ...cluster.connection, max: 4, connectionTimeoutMillis: 5000,
+    // Only fixture preparation skips per-write flushes. Metered production
+    // clients retain the server's synchronous commit and timeout defaults.
+    options: '-c synchronous_commit=off -c jit=off' });
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -512,13 +515,24 @@ test('sole-controlled chains at 8, 64 and 512 levels read a fixed budget per per
   const links = [...Array.from({ length: 7 }, (_, index) => index + 1),
     ...Array.from({ length: 63 }, (_, index) => index + 9),
     ...Array.from({ length: 511 }, (_, index) => index + 73).filter(index => index !== 328), 328];
-  for (const index of links) await grantFixtureControllerEdge(pool, {
-    principalId: builder.id, representative: corpus[index - 1]!, represented: corpus[index]!,
-  });
-  const anchors = new Set([0, 8, 72]);
-  for (let index = 1; index < corpus.length; index++) {
-    if (!anchors.has(index)) await removeController(builder, corpus[index]!);
-  }
+  const setup = await pool.connect();
+  try {
+    await setup.query('BEGIN');
+    for (const index of links) await grantFixtureControllerEdge(setup, {
+      principalId: builder.id, representative: corpus[index - 1]!, represented: corpus[index]!,
+    });
+    const anchors = new Set([0, 8, 72]);
+    const mandates = (await setup.query<{ id: string; subject_id: string }>(`SELECT id, subject_id
+      FROM access.representation WHERE principal_id = $1 AND action = 'agent.control' AND active`, [builder.id])).rows;
+    const roots = new Set([...anchors].map(index => corpus[index]!));
+    for (const mandate of mandates) {
+      if (!roots.has(mandate.subject_id)) await deactivateFixtureController(setup, mandate.id);
+    }
+    await setup.query('COMMIT');
+  } catch (error) {
+    await setup.query('ROLLBACK');
+    throw error;
+  } finally { setup.release(); }
   const samples: { size: number; steps: number; maxReads: number; maxBuffers: number }[] = [];
   for (const [offset, size] of [[0, 8], [8, 64], [72, 512]] as const) {
     const owner = await principal();
