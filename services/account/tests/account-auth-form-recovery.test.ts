@@ -56,6 +56,9 @@ for (const scheme of ['https', 'http']) for (const reverse of [false, true]) for
       const aChallenge = (await challenge(a)).replace(exact, other);
       const bChallenge = await challenge(b);
       const retained = scenario === 'lock' ? await challenge(b) : undefined;
+      const savedChallenge = scenario === 'lock' ? (await f.pool.query<{
+        id: string; identifier: string; value: string; createdAt: Date; updatedAt: Date; expiresAt: Date;
+      }>('SELECT * FROM verification WHERE value = $1 AND identifier LIKE \'2fa-%\'', [b.id])).rows : [];
       const pairs = [aChallenge, bChallenge];
       if (reverse) pairs.reverse();
       const both = pairs.join('; ');
@@ -121,6 +124,12 @@ for (const scheme of ['https', 'http']) for (const reverse of [false, true]) for
       expect(verified.status).toBe(200);
       expect((await recovering).status).toBe(200);
       expect(await (await request('/api/auth/get-session', undefined, cookies(verified))).json()).toBeNull();
+      // The credential fence deletes these rows. Restore the isolated saved
+      // artifact to also prove a delayed value-keyed challenge stays fenced.
+      for (const artifact of savedChallenge) await f.pool.query(`INSERT INTO verification
+        (id, identifier, value, "createdAt", "updatedAt", "expiresAt") VALUES ($1,$2,$3,$4,$5,$6)
+        ON CONFLICT (id) DO NOTHING`, [artifact.id, artifact.identifier, artifact.value,
+        artifact.createdAt, artifact.updatedAt, artifact.expiresAt]);
       expect((await request('/api/auth/two-factor/verify-totp', { code: await createOTP(secret).totp() }, `${aChallenge}; ${retained}`)).status).toBe(403);
     } finally {
       resume();

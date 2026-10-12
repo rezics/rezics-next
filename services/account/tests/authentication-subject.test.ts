@@ -1,14 +1,13 @@
 import { expect, test } from 'bun:test';
 import { authenticationSubject, authenticationSubjectRule } from '../src/authentication-subject.ts';
 import type { Pool } from 'pg';
-import { createHMAC } from '@better-auth/utils/hmac';
-import { createInternalContext } from 'better-call';
+import { createInternalContext, serializeSignedCookie } from 'better-call';
 import { createCookieGetter } from 'better-auth/cookies';
 import { authenticationCookies } from '../src/authentication-cookies.ts';
 import { readdirSync, readFileSync } from 'node:fs';
 
 const signingSecret = 'cookie-selection-secret-at-least-32-characters';
-const signed = async (value: string) => encodeURIComponent(`${value}.${await createHMAC('SHA-256', 'base64').sign(signingSecret, value)}`);
+const signed = async (value: string) => (await serializeSignedCookie('fixture', value, signingSecret)).slice('fixture='.length);
 
 for (const scheme of ['https', 'http']) for (const reverse of [false, true]) for (const kind of ['two_factor', 'better-auth-passkey', 'trust_device'] as const) {
   test(`${scheme} ${kind} selects the issuer name in ${reverse ? 'reverse' : 'forward'} order`, async () => {
