@@ -1855,8 +1855,10 @@ final class CommandService extends ActionService {
                 || !variant.equals(exactlyOne(dataset, revisions, previous, "component"))
                 || !currentResource.equals(exactlyOne(dataset, revisions, previous, "resource")))
                 return "Content withdrawal requires the active publication predecessor: " + subject;
-            for (String property : List.of("contentRevision", "contentPreparation", "byteDigest", "contentFormat",
-                "contentModel", "contentLanguageKind", "contentLanguage", "contentDirection", "ownerDataEpoch", "ownerSequence")) {
+            // Preparation and owner position belong to the new settlement;
+            // only immutable revision pins are inherited from its publication.
+            for (String property : List.of("contentRevision", "byteDigest", "contentFormat",
+                "contentModel", "contentLanguageKind", "contentLanguage", "contentDirection")) {
                 if (!Objects.equals(exactlyOne(dataset, revisions, decision, property),
                     exactlyOne(dataset, revisions, previous, property)))
                     return "Content withdrawal source differs from publication: " + property;

@@ -45,9 +45,9 @@ public class ContentWithdrawalTest {
     private static final Node PUBLIC = uri(CommandPolicy.PUBLIC_SEARCH);
     private static final Node CONTROL = uri(CommandPolicy.CONTROL);
     private static final Node PRODUCT = uri("urn:rezics:dataset:product");
-    private static final List<String> SOURCE_PINS = List.of("contentRevision", "contentPreparation",
+    private static final List<String> SOURCE_PINS = List.of("contentRevision",
         "byteDigest", "contentFormat", "contentModel", "contentLanguageKind", "contentLanguage",
-        "contentDirection", "ownerDataEpoch", "ownerSequence");
+        "contentDirection");
 
     private static Node uri(String value) { return NodeFactory.createURI(value); }
     private static Node p(String value) { return uri(RV + value); }
@@ -187,6 +187,21 @@ public class ContentWithdrawalTest {
         } finally { data.abort(); data.end(); data.close(); }
     }
 
+    @Test public void newOwnerSettlementPinsCanAdvanceAndMustMatchTheWithdrawalReceipt() {
+        DatasetGraph data = published();
+        data.begin(ReadWrite.WRITE);
+        try {
+            var before = withdraw(data);
+            for (var entry : Map.of("contentPreparation", "withdrawal-preparation",
+                "ownerDataEpoch", "00000000-0000-4000-8000-000000000004", "ownerSequence", "9").entrySet()) {
+                Node next = text(entry.getValue());
+                put(data, REVISIONS, WITHDRAWAL, entry.getKey(), next);
+                assertNotNull("new owner pin needs its receipt: " + entry.getKey(), withdrawalFailure(data, before));
+                put(data, RECEIPTS, RECEIPT, entry.getKey(), next);
+                assertNull(withdrawalFailure(data, before));
+            }
+        } finally { data.abort(); data.end(); data.close(); }
+    }
     @Test public void withdrawalIsItsOwnValidHeadAndRequiresItsOwnFocus() {
         DatasetGraph data = published();
         data.begin(ReadWrite.WRITE);
