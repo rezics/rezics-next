@@ -23,8 +23,9 @@ test('ordinary Concept, Agent and Space reports confirm disclosure receipts and 
       profile: 'space-realm-v1', name: label, capabilities: ['realm'], actingSubject: editor.actor,
     }));
     await editor.grant('classification:define:global', 'classification.proposition.define');
-    const concept = await json<{ concept: string }>(await editor.send('POST', '/v1/classification-propositions', {
-      profile: 'classification-proposition-v1', label, actingSubject: editor.actor,
+    const concept = await json<{ concept: string }>(await editor.send('POST', '/v1/classification-vocabulary', {
+      profile: 'classification-proposition-v2', scheme: null, labels: [{ language: 'en', value: label }],
+      alternativeLabels: [], broader: [], narrower: [], actingSubject: editor.actor,
     }));
     await staff.grant('governance:platform', 'governance.moderate');
     await staff.grant('governance:platform', 'governance.rule.publish');
@@ -33,10 +34,10 @@ test('ordinary Concept, Agent and Space reports confirm disclosure receipts and 
       ref: `urn:rule:${randomUUID()}`, scopeId: 'governance:platform', actingSubject: staff.actor,
       expectedRevision: null, document: { purpose: 'Review graph disclosure' }, idempotencyKey: randomUUID(),
     });
-    for (const [kind, resource, profile] of [
-      ['Concept', concept.concept, 'classification-proposition-v1'],
-      ['Agent', editor.actor, 'agent-provision-v1'],
-      ['Space', space.space, 'space-realm-v3'],
+    for (const [kind, resource] of [
+      ['Concept', concept.concept],
+      ['Agent', editor.actor],
+      ['Space', space.space],
     ] as const) {
       const rows = (await stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head WHERE {
         GRAPH <${GRAPHS.current}> { <${resource}> rv:head ?head }
@@ -83,13 +84,10 @@ test('ordinary Concept, Agent and Space reports confirm disclosure receipts and 
       expect(await discloseInventory(stack.env, [target], ANONYMOUS_VIEWER, 'read')).toEqual(['hidden']);
       expect(await discloseInventory(stack.env, [target], ANONYMOUS_VIEWER, 'search')).toEqual(['hidden']);
       if (kind === 'Concept') {
-        const vocabulary = await json<{ concepts: { id: string }[] }>(await stack.call('GET',
+        const vocabulary = await json<{ items: { id: string }[] }>(await stack.call('GET',
           `/v1/classification-vocabulary?q=${encodeURIComponent(label)}`), 200);
-        expect(vocabulary.concepts.some(item => item.id === resource)).toBe(false);
+        expect(vocabulary.items.some(item => item.id === resource)).toBe(false);
       }
-      // The real Jena command admitted this owner's profile; the unit matrix
-      // separately records each emitted validation envelope, including variants.
-      expect(profile).not.toBe('work-metadata-v1');
     }
   } finally { await stack.stop(); }
 }, 180_000);
