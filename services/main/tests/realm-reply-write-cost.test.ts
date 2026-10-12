@@ -12,15 +12,22 @@ const nativeFetch = globalThis.fetch;
 if (sink) startTelemetry('realm-reply-write-cost', { ...process.env, ...sink.env,
   OTEL_SERVICE_NAME: 'realm-reply-write-cost', OTEL_TRACES_SAMPLER_ARG: '0' });
 const { foregroundCounted, meterPool, meterFuseki } = await import('../../../tests/qa/integration/support/query-cost-meter.ts');
+const pg = await import('pg');
+const { signIn } = await import('../../../scripts/lib/oauth-client.ts');
+const { agentProvisionHarness } = await import('../../../tests/qa/integration/agent-provision-support.ts');
+const { cloneQaOwnerDatabases } = await import('../../../tests/qa/support/databases.ts');
 const { createAccountApp } = await import('../../account/src/app.ts');
 const { createAccountAuth } = await import('../../account/src/auth.ts');
 const { composeMain } = await import('../src/composition.ts');
-const { mainConfig } = await import('../src/config.ts');
+const { grantFixtureAuthority } = await import('../src/modules/access/fixture-authority.ts');
 const { RealmReplyDenied } = await import('../src/modules/realm-reply/content-store.ts');
+const { GRAPHS } = await import('../src/modules/work/activate.ts');
 const { TargetUnavailable } = await import('../src/modules/target/resolve.ts');
 const { WorkReadMissing } = await import('../src/modules/work/read-session.ts');
-const { growRealmThreads } = await import('./g-1034-fixture.ts');
+const { restoreRealmRankingCorpus, timeRealmRankingStage } = await import('./realm-ranking-corpus.ts');
+type RealmRankingRestore = Awaited<ReturnType<typeof restoreRealmRankingCorpus>>;
 const { realmVisibilityFixture } = await import('./realm-visibility-fixture.ts');
+const replyCostScopes = ['agent:create', 'work:create', 'work:edit', 'work:read', 'comment:create', 'realm:adopt'] as const;
 
 afterAll(async () => {
   if (!sink) return;
@@ -28,9 +35,9 @@ afterAll(async () => {
   finally { await sink.stop(); }
 });
 
-/** Deterministic counts per owner and command reject growth and omitted owner checks.
+/** Ceiling evidence per owner and command rejects growth and omitted owner checks.
  * SQL shares are Content persistence, Access authority/disclosure, and Account live verification.
- * Production composition totals 64 Content + 516 Access + 198 Account = 778 SQL.
+ * The measured 100-thread composition totals 64 Content + 516 Access + 198 Account = 778 SQL.
  * Guard calls retain the legacy convention, including nested graph command wrappers. */
 export const REALM_REPLY_WRITE_COST = {
   draft: { content: 14, access: 111, account: 54, statements: 179, fusekiReads: 27, guardCalls: 27 },
@@ -145,15 +152,44 @@ function tallyFuseki(fuseki: FusekiClient) {
   return { get count() { return count }, reset() { count = 0 } };
 }
 
-async function completeOwnerFixture() {
-  const fx = await realmVisibilityFixture();
+async function completeOwnerFixture(restored: RealmRankingRestore) {
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['account'], 'owner');
+  const config = restored.home.stack.composition.config;
+  const environment = { ACCOUNT_DATABASE_URL: databases.urls.account,
+    ACCESS_DATABASE_URL: config.ACCESS_DATABASE_URL, FUSEKI_URL: restored.fusekiUrl,
+    FUSEKI_COMMAND_TOKEN: config.FUSEKI_COMMAND_TOKEN,
+    MAIN_DATA_EPOCH: config.MAIN_DATA_EPOCH, MAIN_ROUTING_EPOCH: config.MAIN_ROUTING_EPOCH };
+  const previous = new Map(Object.keys(environment).map(key => [key, Bun.env[key]]));
+  let fx: Awaited<ReturnType<typeof agentProvisionHarness>>;
+  try {
+    Object.assign(Bun.env, environment);
+    fx = await agentProvisionHarness(replyCostScopes, { offlineAccess: true });
+  } catch (error) {
+    await databases.close();
+    throw error;
+  } finally {
+    for (const [key, value] of previous) {
+      if (value === undefined) delete Bun.env[key]; else Bun.env[key] = value;
+    }
+  }
+  const restoredContent = new pg.Pool({ connectionString: config.CONTENT_DATABASE_URL });
   let accountApp: ReturnType<typeof createAccountApp> | undefined;
   let composition: Awaited<ReturnType<typeof composeMain>> | undefined;
   let restoreFetch: (() => void) | undefined;
   try {
-    const callbacks = { content: auditCallbackCheckouts(fx.contentPool),
+    await fx.accountPool.query('UPDATE "user" SET "emailVerified" = true WHERE id = $1', [fx.user.id]);
+    const signedIn = await fetch(`${fx.base}/api/auth/sign-in/email`, { method: 'POST',
+      headers: { 'content-type': 'application/json', origin: fx.base },
+      body: JSON.stringify({ email: fx.user.email, password: fx.user.password }) });
+    expect(signedIn.status).toBe(200);
+    const oauth = await signIn({ account: fx.base, clientId: fx.client.client_id, redirectUri: fx.redirectUri,
+      scope: `openid offline_access ${replyCostScopes.join(' ')}`,
+      resource: Bun.env.ACCOUNT_MAIN_RESOURCE! }, signedIn.headers.get('set-cookie')!);
+    expect(oauth.refreshToken).toBeString();
+    const currentToken = () => oauth.current(Date.now(), 30_000);
+    const callbacks = { content: auditCallbackCheckouts(restoredContent),
       access: auditCallbackCheckouts(fx.accessPool), account: auditCallbackCheckouts(fx.accountPool) };
-    const contentPool = meterPool(fx.contentPool);
+    const contentPool = meterPool(restoredContent);
     const accessPool = meterPool(fx.accessPool);
     const accountPool = meterPool(fx.accountPool);
     const guard = tallyFuseki(fx.fuseki);
@@ -170,54 +206,98 @@ async function completeOwnerFixture() {
     if (sink) {
       const startupFetch = globalThis.fetch;
       globalThis.fetch = nativeFetch;
-      const undo = instrumentFetch(new Set([fx.base, new URL(Bun.env.FUSEKI_URL!).origin]), sink.url,
-        new Map([[fx.base, 'account'], [new URL(Bun.env.FUSEKI_URL!).origin, 'fuseki']]));
+      const undo = instrumentFetch(new Set([fx.base, new URL(restored.fusekiUrl).origin]), sink.url,
+        new Map([[fx.base, 'account'], [new URL(restored.fusekiUrl).origin, 'fuseki']]));
       restoreFetch = () => { undo(); globalThis.fetch = startupFetch; };
     }
-    composition = await composeMain({ config: mainConfig({ ...Bun.env,
-      MAIN_OBJECT_DIRECTORY: fx.env.objectDirectory,
+    composition = await composeMain({ config: { ...config,
       ACCOUNT_ISSUER: `${fx.base}/api/auth`, ACCOUNT_JWKS_URL: `${fx.base}/api/auth/jwks`,
       ACCOUNT_INTROSPECT_URL: `${fx.base}/api/auth/oauth2/introspect`,
       ACCOUNT_MAIN_CLIENT_ID: fx.verifierClient.client_id,
       ACCOUNT_MAIN_CLIENT_SECRET: fx.verifierClient.client_secret!,
-    }), fuseki, accessPool, contentPool });
+    }, fuseki, accessPool, contentPool,
+      relayPool: restored.home.relay, erasureRelayPool: restored.home.relay,
+      ownerRelayPool: restored.home.relay, recommendationRelayPool: restored.home.relay });
     const app = composition.app;
-    const call = async (method: string, path: string, body?: object, actor: string | null = fx.actor,
+    // The restored Home bearer table is only a smoke-read helper. Provision a
+    // real OAuth principal through production so every measured owner keeps its live checks.
+    const provisioned = await app.handle(new Request('http://main.local/v1/agents', { method: 'POST',
+      headers: { authorization: `Bearer ${await currentToken()}`, 'content-type': 'application/json',
+        'idempotency-key': randomUUID() },
+      body: JSON.stringify({ profile: 'agent-provision-v1', kind: 'person', displayName: 'Reply cost author' }) }));
+    const provision = await provisioned.json() as { agent: string };
+    expect(provisioned.status, JSON.stringify(provision)).toBe(201);
+    expect(provision.agent).toBeString();
+    const actor = restored.manifest.identity.author;
+    const principal = await fx.verifier.verify(new Request('http://main.local', {
+      headers: { authorization: `Bearer ${await currentToken()}` } }), ['work:read']);
+    const principalId = await composition.access.activePrincipalId(principal);
+    expect(principalId).toBeString();
+    const realm = restored.manifest.identity.realm;
+    const work = { work: restored.manifest.identity.work };
+    const grant = (subject: string, scope: string, action: string) => grantFixtureAuthority(accessPool, {
+      scope, requireDispatch: true,
+      // A current controller may differ from the provisioning principal. Keep
+      // the corpus author's own-root workload and its product-written provenance.
+      representations: [
+        { principalId: principalId!, actor: subject, action: 'agent.control', lifetime: 'infinity' },
+        { principalId: principalId!, actor: subject, action, lifetime: '8 hours' },
+      ],
+      grant: { actor: subject, action, lifetime: '8 hours' },
+    });
+    const draftInput = () => ({ profile: 'member-reply-draft-v1', reply: `https://rezics.com/id/${randomUUID()}`,
+      variantId: `urn:rezics:variant:${randomUUID()}`, originRealm: realm,
+      rootTarget: work.work, rootRevision: restored.manifest.identity.draftRevision,
+      language: 'en', direction: 'ltr', expectedHead: null, body: 'Retained Realm reply cost', actingSubject: actor });
+    const call = async (method: string, path: string, body?: object, actingSubject: string | null = actor,
       key = randomUUID(), traceHeaders?: Headers, preparedBearer?: string) => {
       const url = new URL(`http://main.local${path}`);
-      if (method === 'GET' && actor) url.searchParams.set('actingSubject', actor);
+      if (method === 'GET' && actingSubject) url.searchParams.set('actingSubject', actingSubject);
       const response = await app.handle(new Request(url, { method, headers: {
         ...Object.fromEntries(traceHeaders ?? []),
-        ...(actor ? { authorization: `Bearer ${preparedBearer ?? await fx.currentToken()}` } : {}),
+        ...(actingSubject ? { authorization: `Bearer ${preparedBearer ?? await currentToken()}` } : {}),
         'content-type': 'application/json', 'idempotency-key': key,
       }, body: body ? JSON.stringify(body) : undefined }));
       return { status: response.status, headers: response.headers,
         body: await response.json() as Record<string, any> };
     };
-    return { ...fx, app, call, env: composition.environment, access: composition.access,
+    return { ...fx, app, call, actor, realm, work, grant, draftInput, oauth, currentToken,
+      env: composition.environment, access: composition.access,
       content: composition.content, contentPool, accessPool, accountPool, guard, fuseki, callbacks,
       close: async () => {
         try { await app.stop(); }
         finally {
           try { await accountApp!.stop(); }
-          finally { restoreFetch?.(); await fx.close(); }
+          finally {
+            restoreFetch?.();
+            try { await Promise.all([restoredContent.end(), fx.close()]); }
+            finally { await databases.close(); }
+          }
         }
       } };
   } catch (error) {
     try { await composition?.app.stop(); }
     finally {
       try { await accountApp?.stop(); }
-      finally { restoreFetch?.(); await fx.close(); }
+      finally {
+        restoreFetch?.();
+        try { await Promise.all([restoredContent.end(), fx.close()]); }
+        finally { await databases.close(); }
+      }
     }
     throw error;
   }
 }
 
-// Seed through the same reply commands as the measured writes, so the graph and
-// owner stores retain the same Realm population.
-test('one reply costs the same per command and owner at 100 and 1,000 threads', async () => {
-  if (!costProfileChild) return runCostProfileChild();
-  const fx = await completeOwnerFixture();
+// Both cuts were built once through reply commands. Each measurement restores
+// isolated owner stores and adds only a warm-up reply and the measured reply.
+async function measureRetainedReplyCost(size: 100 | 1600): Promise<ReplyCost> {
+  const restored = await restoreRealmRankingCorpus(size);
+  const fx = await timeRealmRankingStage('production-setup', () => completeOwnerFixture(restored),
+    { threads: size, target: restored.target }).catch(async error => {
+    await restored.close();
+    throw error;
+  });
   try {
     // A positive control proves the diagnostic sees the shared meter's gap;
     // pool.query's own callback dispatch remains counted exactly once.
@@ -319,65 +399,98 @@ test('one reply costs the same per command and owner at 100 and 1,000 threads', 
       return { reply: identity.reply as string, revision: draft.revisionId as string, cost };
     };
 
-    await postReply();
-    await growRealmThreads(() => postReply(), 99, { keyPrefix: 'realm-reply-cost' });
-    await postReply();
-    const at100 = (await postReply(true)).cost;
-    console.log(JSON.stringify({ realmReplyWriteCostCheckpoint: { cut: 100, cost: at100 } }));
-    await growRealmThreads(() => postReply(), 899, { keyPrefix: 'realm-reply-cost', startIndex: 99 });
-    await postReply();
-    const at1000 = (await postReply(true)).cost;
-    console.log(JSON.stringify({ realmReplyWriteCost: { at100, at1000 } }));
-    const counted = (cost: ReplyCost) => ({
-      statements: cost.statements, fusekiReads: cost.fusekiReads, guardCalls: cost.guardCalls,
-      content: cost.content, access: cost.access, account: cost.account,
-      commands: Object.fromEntries(Object.entries(cost.commands).map(([name, command]) => [name, {
-        statements: command.statements, fusekiReads: command.fusekiReads, guardCalls: command.guardCalls,
-        content: command.content, access: command.access, account: command.account,
-      }])),
-    });
-    expect(counted(at1000), JSON.stringify({ at100, at1000 })).toEqual(counted(at100));
-    for (const cost of [at100, at1000]) {
-      for (const name of Object.keys(REALM_REPLY_WRITE_COST) as Command[]) {
-        const command = cost.commands[name];
-        for (const metric of Object.keys(REALM_REPLY_WRITE_COST[name]) as (keyof Count)[]) {
-          expect(command[metric], `${name} ${metric}: ${JSON.stringify(command)}`)
-            .toBe(REALM_REPLY_WRITE_COST[name][metric]);
+    const roots = await fx.contentPool.query<{ count: string }>(
+      'SELECT count(*)::text AS count FROM content.reply WHERE root_target=$1 AND parent_reply IS NULL',
+      [fx.work.work]);
+    expect(Number(roots.rows[0]!.count), 'retained Content root-thread population').toBe(size);
+    const slotCensus = `PREFIX rv: <https://rezics.com/vocab/>
+      SELECT (COUNT(DISTINCT ?slot) AS ?count) WHERE {
+        GRAPH <${GRAPHS.current}> { ?slot a rv:RealmReplySlot ;
+          rv:realm <${fx.realm}> ; rv:replyPlacementHead ?head }
+      }`;
+    const slots = await fx.fuseki.query(slotCensus);
+    const populatedSlots = Number(slots.results?.bindings?.[0]?.count?.value);
+    expect(populatedSlots, 'retained graph population must agree with the owner cut')
+      .toBe(size + (size === 1600 ? restored.manifest.identity.deepChain.length : 0));
+    console.log(JSON.stringify({ realmReplyRetainedPopulation: { cut: size,
+      rootThreads: Number(roots.rows[0]!.count), populatedSlots } }));
+    await timeRealmRankingStage('production-warmup', () => postReply(), { threads: size, target: restored.target });
+    const warmedRoots = await fx.contentPool.query<{ count: string }>(
+      'SELECT count(*)::text AS count FROM content.reply WHERE root_target=$1 AND parent_reply IS NULL',
+      [fx.work.work]);
+    const warmedSlots = await fx.fuseki.query(slotCensus);
+    const measuredRootThreads = Number(warmedRoots.rows[0]!.count);
+    const measuredSlots = Number(warmedSlots.results?.bindings?.[0]?.count?.value);
+    expect(measuredRootThreads).toBe(size + 1);
+    expect(measuredSlots).toBe(populatedSlots + 1);
+    const cost = (await timeRealmRankingStage('production-measurement', () => postReply(true),
+      { threads: size, target: restored.target })).cost;
+    console.log(JSON.stringify({ realmReplyWriteCostCheckpoint: { cut: size,
+      measuredRootThreads, measuredSlots, cost } }));
+
+    if (size === 1600) {
+      const original = fx.fuseki.commandWithReceipt.bind(fx.fuseki);
+      let failCancels = 0;
+      fx.fuseki.commandWithReceipt = async (envelope) => {
+        if (failCancels > 0 && envelope.update.includes('rv:outcome rv:Cancelled')) {
+          failCancels -= 1;
+          throw new Error('placement cancellation transport failed');
         }
+        return original(envelope);
+      };
+      const poisoned = fx.draftInput();
+      const poisonedDraft = await fx.call('POST', '/v1/member-reply-drafts', poisoned);
+      expect(poisonedDraft.status, JSON.stringify(poisonedDraft.body)).toBe(201);
+      const poisonedKey = randomUUID();
+      failCancels = 1;
+      const lost = await fx.call('POST', '/v1/realm-replies', {
+        profile: 'realm-reply-identity-v1', reply: poisoned.reply, variantId: poisoned.variantId,
+        revisionId: poisonedDraft.body.revisionId, author: fx.actor, rootTarget: poisoned.rootTarget,
+        rootRevision: poisoned.rootRevision, parentReply: `https://rezics.com/id/${randomUUID()}`,
+        parentRevision: randomUUID(), contextRevision: null,
+      }, fx.actor, poisonedKey);
+      expect(lost.status, JSON.stringify(lost.body)).toBe(503);
+      const admission = await fx.accessPool.query<{ id: string }>(
+        `SELECT id FROM access.admission WHERE idempotency_key = $1 AND action = 'reply.create'`, [poisonedKey]);
+      expect(admission.rowCount).toBe(1);
+      const receipt = await fx.contentPool.query<{ outcome: string }>(
+        'SELECT outcome FROM content.receipt WHERE operation_id = $1', [admission.rows[0]!.id]);
+      expect(receipt.rows[0]?.outcome).toBe('rejected');
+      const next = await postReply();
+      expect(next.reply.startsWith('https://rezics.com/id/')).toBe(true);
+    }
+    return cost;
+  } finally {
+    try { await fx.close(); }
+    finally { await restored.close(); }
+  }
+}
+
+test('one reply costs the same per command and owner at retained 100 and 1,600-thread cuts', async () => {
+  if (!costProfileChild) return runCostProfileChild();
+  const at100 = await measureRetainedReplyCost(100);
+  const at1600 = await measureRetainedReplyCost(1600);
+  console.log(JSON.stringify({ realmReplyWriteCost: { at100, at1600 } }));
+  const counted = (cost: ReplyCost) => ({
+    statements: cost.statements, fusekiReads: cost.fusekiReads, guardCalls: cost.guardCalls,
+    content: cost.content, access: cost.access, account: cost.account,
+    commands: Object.fromEntries(Object.entries(cost.commands).map(([name, command]) => [name, {
+      statements: command.statements, fusekiReads: command.fusekiReads, guardCalls: command.guardCalls,
+      content: command.content, access: command.access, account: command.account,
+    }])),
+  });
+  expect(counted(at1600), JSON.stringify({ at100, at1600 })).toEqual(counted(at100));
+  for (const cost of [at100, at1600]) {
+    expect(cost.statements).toBeLessThanOrEqual(778);
+    expect(cost.fusekiReads).toBeLessThanOrEqual(70);
+    expect(cost.guardCalls).toBeLessThanOrEqual(77);
+    for (const name of Object.keys(REALM_REPLY_WRITE_COST) as Command[]) {
+      const command = cost.commands[name];
+      for (const metric of Object.keys(REALM_REPLY_WRITE_COST[name]) as (keyof Count)[]) {
+        expect(command[metric], `${name} ${metric}: ${JSON.stringify(command)}`)
+          .toBeLessThanOrEqual(REALM_REPLY_WRITE_COST[name][metric]);
       }
     }
-
-    const original = fx.fuseki.commandWithReceipt.bind(fx.fuseki);
-    let failCancels = 0;
-    fx.fuseki.commandWithReceipt = async (envelope) => {
-      if (failCancels > 0 && envelope.update.includes('rv:outcome rv:Cancelled')) {
-        failCancels -= 1;
-        throw new Error('placement cancellation transport failed');
-      }
-      return original(envelope);
-    };
-    const poisoned = fx.draftInput();
-    const poisonedDraft = await fx.call('POST', '/v1/member-reply-drafts', poisoned);
-    expect(poisonedDraft.status, JSON.stringify(poisonedDraft.body)).toBe(201);
-    const poisonedKey = randomUUID();
-    failCancels = 1;
-    const lost = await fx.call('POST', '/v1/realm-replies', {
-      profile: 'realm-reply-identity-v1', reply: poisoned.reply, variantId: poisoned.variantId,
-      revisionId: poisonedDraft.body.revisionId, author: fx.actor, rootTarget: poisoned.rootTarget,
-      rootRevision: poisoned.rootRevision, parentReply: `https://rezics.com/id/${randomUUID()}`,
-      parentRevision: randomUUID(), contextRevision: null,
-    }, fx.actor, poisonedKey);
-    expect(lost.status, JSON.stringify(lost.body)).toBe(503);
-    const admission = await fx.accessPool.query<{ id: string }>(
-      `SELECT id FROM access.admission WHERE idempotency_key = $1 AND action = 'reply.create'`, [poisonedKey]);
-    expect(admission.rowCount).toBe(1);
-    const receipt = await fx.contentPool.query<{ outcome: string }>(
-      'SELECT outcome FROM content.receipt WHERE operation_id = $1', [admission.rows[0]!.id]);
-    expect(receipt.rows[0]?.outcome).toBe('rejected');
-    const next = await postReply();
-    expect(next.reply.startsWith('https://rezics.com/id/')).toBe(true);
-  } finally {
-    await fx.close();
   }
 }, 420_000);
 
