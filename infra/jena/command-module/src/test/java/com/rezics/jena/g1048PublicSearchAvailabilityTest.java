@@ -9,7 +9,6 @@ import org.apache.jena.graph.Node;
 import org.apache.jena.graph.NodeFactory;
 import org.apache.jena.query.ReadWrite;
 import org.apache.jena.query.text.*;
-import org.apache.jena.sparql.core.DatasetGraphFactory;
 import org.apache.jena.vocabulary.RDF;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.StoredField;
@@ -32,6 +31,7 @@ public class g1048PublicSearchAvailabilityTest {
         return NodeFactory.createLiteralByValue(BigInteger.valueOf(value), XSDDatatype.XSDinteger);
     }
     private static final class Fixture implements AutoCloseable {
+        final java.nio.file.Path directory = storageDirectory("occurrence-availability-");
         final FilteredGraphTextIndex index;
         final DatasetGraphText data;
         Runnable duringReplay;
@@ -45,7 +45,8 @@ public class g1048PublicSearchAvailabilityTest {
             var config = new TextIndexConfig(definition); config.setValueStored(true);
             config.setAnalyzer(new FilteredGraphTextAssembler.CjkBigramV2());
             index = new FilteredGraphTextIndex(new TextIndexLucene(new ByteBuffersDirectory(), config));
-            var source = new org.apache.jena.sparql.core.DatasetGraphWrapper(DatasetGraphFactory.createTxnMem()) {
+            var source = new org.apache.jena.sparql.core.DatasetGraphWrapper(
+                org.apache.jena.tdb2.DatabaseMgr.connectDatasetGraph(directory.toString())) {
                 @Override public java.util.Iterator<org.apache.jena.sparql.core.Quad> find(Node g, Node s, Node p, Node o) {
                     return org.apache.jena.atlas.iterator.Iter.map(super.find(g, s, p, o), quad -> {
                         if (duringReplay != null) duringReplay.run();
@@ -115,6 +116,7 @@ public class g1048PublicSearchAvailabilityTest {
         }
         @Override public void close() {
             synchronized (data) { SearchDeltaJournal.stopRecovery(data); data.close(); }
+            deleteStorage(directory);
         }
     }
 

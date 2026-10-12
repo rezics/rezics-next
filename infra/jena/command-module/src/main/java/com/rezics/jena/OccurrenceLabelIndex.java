@@ -75,7 +75,9 @@ public final class OccurrenceLabelIndex {
         set(data, generation, "indexBuild", revision);
         set(data, generation, "indexedRevision", null);
         set(data, generation, "indexedCount", literal("0"));
-        set(data, generation, "indexOffset", literal("0"));
+        set(data, generation, "indexOffset", null);
+        set(data, generation, "indexCursor", null);
+        set(data, generation, "indexClearCursor", null);
         set(data, generation, "indexBatch", literal("0"));
         set(data, generation, "indexPhase", literal("clear"));
         set(data, generation, "pending", org.apache.jena.sparql.expr.NodeValue.TRUE.asNode());
@@ -120,6 +122,44 @@ public final class OccurrenceLabelIndex {
         if (entity != null) data.deleteAny(TEXT, entity, Node.ANY, Node.ANY);
         data.deleteAny(STATE, placement, Node.ANY, Node.ANY);
     }
+    /** Seek the existing GPOS B+tree in its immutable generation's placement
+     * order. Store RDF subjects, resolving their physical keys each transaction.
+     * Bound raw records too: removed placements must not enlarge a batch.
+     * https://github.com/apache/jena/blob/jena-6.2.0/jena-tdb2/src/main/java/org/apache/jena/tdb2/store/tupletable/TupleIndexRecord.java */
+    static List<Node> placementRange(DatasetGraph data, Node graph, Node predicate, Node generation,
+        Node after, String counter) {
+        var tdb = org.apache.jena.tdb2.sys.TDBInternal.requireStorage(
+            org.apache.jena.sparql.core.DatasetGraphWrapper.unwrap(data));
+        var table = tdb.getQuadTable().getNodeTupleTable();
+        var nodes = table.getNodeTable();
+        var index = (org.apache.jena.tdb2.store.tupletable.TupleIndexRecord)
+            table.getTupleTable().selectIndex("GPOS").baseTupleIndex();
+        var factory = index.getRangeIndex().getRecordFactory();
+        var low = factory.createKeyOnly();
+        var high = factory.createKeyOnly();
+        Node[] prefix = { graph, predicate, generation };
+        for (int i = 0; i < prefix.length; i++) {
+            var key = nodes.getNodeIdForNode(prefix[i]);
+            if (org.apache.jena.tdb2.store.NodeId.isDoesNotExist(key)) return List.of();
+            org.apache.jena.tdb2.store.NodeIdFactory.set(key, low.getKey(), i * 8);
+            org.apache.jena.tdb2.store.NodeIdFactory.set(key, high.getKey(), i * 8);
+        }
+        org.apache.jena.tdb2.store.NodeIdFactory.setNext(nodes.getNodeIdForNode(generation), high.getKey(), 16);
+        if (after != null) {
+            var key = nodes.getNodeIdForNode(after);
+            if (org.apache.jena.tdb2.store.NodeId.isDoesNotExist(key))
+                throw new IllegalStateException("occurrence projection cursor is missing from its node table");
+            org.apache.jena.tdb2.store.NodeIdFactory.setNext(key, low.getKey(), 24);
+        }
+        var rows = index.getRangeIndex().iterator(low, high);
+        List<Node> batch = new ArrayList<>();
+        try { while (batch.size() < BATCH && rows.hasNext()) {
+            var record = rows.next();
+            CommandWork.count(counter, 1);
+            batch.add(nodes.getNodeForNodeId(org.apache.jena.tdb2.store.NodeIdFactory.get(record.getKey(), 24)));
+        } } finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
+        return batch;
+    }
     static void project(DatasetGraph data, Node generation, Node revision) {
         if (!revision.equals(one(data, STATE, generation, p("targetRevision")))
             || !Objects.equals(textGeneration(data), one(data, STATE, generation, p("targetTextGeneration"))))
@@ -127,38 +167,45 @@ public final class OccurrenceLabelIndex {
         long checkpoint = Long.parseLong(one(data, STATE, generation, p("indexBatch")).getLiteralLexicalForm());
         set(data, generation, "indexBatch", literal(Long.toString(checkpoint + 1)));
         Node phase = one(data, STATE, generation, p("indexPhase"));
+        // A pending pre-keyset build has no subject checkpoint. Clear its
+        // partial projection once, keeping the command/retry serial monotonic.
+        if (one(data, STATE, generation, p("indexOffset")) != null) {
+            if (phase != null && phase.getLiteralLexicalForm().equals("index")) {
+                set(data, generation, "indexPhase", literal("clear"));
+                phase = literal("clear");
+                set(data, generation, "indexedCount", literal("0"));
+                set(data, generation, "indexedRevision", null);
+                set(data, generation, "indexedTextGeneration", null);
+                set(data, generation, "indexCursor", null);
+                set(data, generation, "indexClearCursor", null);
+            }
+            set(data, generation, "indexOffset", null);
+        }
         if (phase != null && phase.getLiteralLexicalForm().equals("clear")) {
             // Deletions also stay bounded; an edit never clears a whole story
             // inside its transaction. Restart resumes from retained descriptors.
-            var rows = data.find(STATE, Node.ANY, p("indexedGeneration"), generation);
-            List<Node> old = new ArrayList<>();
-            try { while (rows.hasNext() && old.size() < BATCH) {
-                old.add(rows.next().getSubject());
-                CommandWork.count("occurrence_clear_visited", 1);
-            } }
-            finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
+            List<Node> old = placementRange(data, STATE, p("indexedGeneration"), generation,
+                one(data, STATE, generation, p("indexClearCursor")), "occurrence_clear_visited");
             for (Node placement : old) deleteProjection(data, placement);
-            if (!old.isEmpty()) return;
+            if (!old.isEmpty()) {
+                set(data, generation, "indexClearCursor", old.getLast());
+                return;
+            }
             set(data, generation, "indexPhase", literal("index"));
         }
-        long offset = Long.parseLong(one(data, STATE, generation, p("indexOffset")).getLiteralLexicalForm());
-        var rows = data.find(CURRENT, Node.ANY, p("generation"), generation);
-        List<Node> batch = new ArrayList<>(); long skipped = 0;
-        // TDB's fixed index order is stable for this immutable revision. A head
-        // change discards the checkpoint. OFFSET retains no prefix inventory.
-        try { while (rows.hasNext() && batch.size() < BATCH) {
-            Node placement = rows.next().getSubject();
-            CommandWork.count("occurrence_placements_visited", 1);
+        long indexed = Long.parseLong(one(data, STATE, generation, p("indexedCount")).getLiteralLexicalForm());
+        List<Node> batch = placementRange(data, CURRENT, p("generation"), generation,
+            one(data, STATE, generation, p("indexCursor")), "occurrence_placements_visited");
+        for (Node placement : batch) {
             if (!data.contains(CURRENT, placement, RDF.type.asNode(), p("OccurrencePlacement"))
                 || data.contains(CURRENT, placement, p("removedBy"), Node.ANY)) continue;
-            if (skipped++ < offset) continue;
-            batch.add(placement);
-        } } finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
-        for (Node placement : batch) projectPlacement(data, generation, revision, placement);
-        long indexed = offset + batch.size(), population = count(data, generation);
+            projectPlacement(data, generation, revision, placement);
+            indexed++;
+        }
+        long population = count(data, generation);
         if (indexed > population || batch.size() < BATCH && indexed != population)
             throw new IllegalStateException("occurrence projection population differs from generation");
-        set(data, generation, "indexOffset", literal(Long.toString(indexed)));
+        if (!batch.isEmpty()) set(data, generation, "indexCursor", batch.getLast());
         set(data, generation, "indexedCount", literal(Long.toString(indexed)));
         if (indexed == population) {
             set(data, generation, "indexedRevision", revision);

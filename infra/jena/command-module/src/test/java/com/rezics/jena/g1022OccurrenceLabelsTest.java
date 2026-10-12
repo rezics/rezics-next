@@ -2,6 +2,8 @@ package com.rezics.jena;
 
 import static org.junit.Assert.*;
 import java.util.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import org.apache.jena.graph.Node;
 import org.apache.jena.graph.NodeFactory;
 import org.apache.jena.query.ReadWrite;
@@ -18,7 +20,17 @@ public class g1022OccurrenceLabelsTest {
     static Node p(String value) { return OccurrenceLabelIndex.p(value); }
     static Node text(String value) { return NodeFactory.createLiteralString(value); }
     static final Node CURRENT = OccurrenceLabelIndex.uri(CommandPolicy.CURRENT), GENERATION = id(1), STRUCTURE = id(2), GROUP = id(3), REVISION = id(4);
+    static Path storageDirectory(String prefix) {
+        try { return Files.createTempDirectory(prefix); }
+        catch (java.io.IOException failure) { throw new java.io.UncheckedIOException(failure); }
+    }
+    static void deleteStorage(Path directory) {
+        try (var paths = Files.walk(directory)) {
+            for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) Files.delete(path);
+        } catch (java.io.IOException failure) { throw new java.io.UncheckedIOException(failure); }
+    }
     static final class Fixture implements AutoCloseable {
+        final Path directory = storageDirectory("occurrence-labels-");
         final FilteredGraphTextIndex index;
         final DatasetGraphText data;
         Fixture() {
@@ -29,7 +41,8 @@ public class g1022OccurrenceLabelsTest {
             var config = new TextIndexConfig(definition); config.setValueStored(true);
             config.setAnalyzer(new FilteredGraphTextAssembler.CjkBigramV2());
             index = new FilteredGraphTextIndex(new TextIndexLucene(new ByteBuffersDirectory(), config));
-            data = new DatasetGraphText(DatasetGraphFactory.createTxnMem(), index, new TextDocProducerTriples(index));
+            data = new DatasetGraphText(org.apache.jena.tdb2.DatabaseMgr.connectDatasetGraph(directory.toString()),
+                index, new TextDocProducerTriples(index));
         }
         void drain() {
             for (int attempt = 0; attempt < 1000; attempt++) {
@@ -47,7 +60,7 @@ public class g1022OccurrenceLabelsTest {
                 page.put("current", OccurrenceLabelIndex.ready(data, GENERATION, REVISION)); return page; }
             finally { data.end(); }
         }
-        public void close() { data.close(); }
+        public void close() { data.close(); deleteStorage(directory); }
     }
     private static final class Measured extends DatasetGraphWrapper implements DatasetGraphWrapperView {
         long quads;
