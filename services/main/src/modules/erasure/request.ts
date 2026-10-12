@@ -110,7 +110,7 @@ async function completeFencedContentErasure(service: ErasureService, graph: Work
     SET live_completion_pending=true, live_completion_attempt=live_completion_attempt+1
     WHERE id=$1 AND stage IN ('requested','fenced','inventory_complete','deleting','reconciling')
     RETURNING live_completion_attempt::text AS token`, [erasureId])).rows[0]?.token;
-  if (!attempt) throw new ErasureStale('live completion attempt is unavailable');
+  if (!attempt) throw new ErasureUnavailable('live completion attempt is unavailable');
   const resourceId = admission.scope.slice('erasure:'.length);
   const plan = preflight ?? { budget: createErasurePreflightBudget(), custodyReadReservation: 0 };
   const { budget } = plan;
