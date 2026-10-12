@@ -3,6 +3,9 @@ import { randomUUID } from 'node:crypto';
 import { startMediaStack, type MediaStack } from '../../../tests/qa/integration/media-support.ts';
 import { grantFixtureAuthority, registerFixtureIdentity } from '../src/modules/access/fixture-authority.ts';
 import type { VerifiedPrincipal } from '../src/modules/access/admission.ts';
+import { boundedPool } from '../src/infrastructure/pg-pool.ts';
+import { mirrorAccountDeletionIntent } from '../src/modules/outbox/account-deletion-journal.ts';
+import { retainAccountSubjectDeletion } from '../src/modules/outbox/account-subject-deletion.ts';
 import { backfillCatalogueNames } from '../src/modules/search/names.ts';
 import { iri, lit } from '../src/modules/work/activate.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../src/modules/media/store.ts';
@@ -161,8 +164,20 @@ test('name, alias, phrase and entity search find the live Person before Account 
 }, 60_000);
 
 test('Account deletion with consent ends the Person without removing indexed names', async () => {
-  expect((await stack.access.strongDeactivateAccountSubject(closing.principal.issuer,
-    closing.principal.subject, { leaveOwnedAgentsStanding: true }))?.principalId).toBe(closing.principalId);
+  const relay = boundedPool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL! });
+  try {
+    // Match Account's inline accessDeletionFence hook in services/account/src/index.ts.
+    const fence = await stack.access.strongDeactivateAccountSubject(
+      closing.principal.issuer, closing.principal.subject, { leaveOwnedAgentsStanding: true });
+    if (fence) await mirrorAccountDeletionIntent(stack.accessPool, relay, fence.principalId, fence.enforcementEpoch);
+    await retainAccountSubjectDeletion(relay, closing.principal.issuer, closing.principal.subject);
+    expect(fence?.principalId).toBe(closing.principalId);
+    expect((await relay.query('SELECT authority_epoch::text FROM relay.account_deletion_intent WHERE principal_id = $1',
+      [closing.principalId])).rows).toEqual([{ authority_epoch: fence!.enforcementEpoch }]);
+    expect((await relay.query('SELECT issuer, account_subject FROM relay.account_subject_deletion WHERE issuer = $1 AND account_subject = $2',
+      [closing.principal.issuer, closing.principal.subject])).rows)
+      .toEqual([{ issuer: closing.principal.issuer, account_subject: closing.principal.subject }]);
+  } finally { await relay.end(); }
   expect((await stack.accessPool.query('SELECT active FROM access.authority_subject WHERE id = $1', [person])).rows)
     .toEqual([{ active: false }]);
   expect((await stack.fuseki.query(`ASK { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
