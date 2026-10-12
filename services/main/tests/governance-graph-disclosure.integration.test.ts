@@ -35,6 +35,14 @@ test('ordinary Concept, Agent and Space reports confirm disclosure receipts and 
       expectedRevision: null, document: { purpose: 'Review graph disclosure' }, idempotencyKey: randomUUID(),
     });
     const ownerResponses: unknown[] = [];
+    const ownerQuery = stack.fuseki.query.bind(stack.fuseki);
+    stack.fuseki.query = async (query, maximum) => {
+      try {
+        const result = await ownerQuery(query, maximum);
+        if (query.includes('# registry-binding:')) ownerResponses.push({ bindingRows: result.results?.bindings });
+        return result;
+      } catch (error) { ownerResponses.push({ queryError: String(error) }); throw error; }
+    };
     const ownerCommand = stack.fuseki.commandWithReceipt.bind(stack.fuseki);
     stack.fuseki.commandWithReceipt = async command => {
       try {

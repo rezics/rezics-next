@@ -1,5 +1,5 @@
 import manifest from '../../../../../generated/model/manifest.json';
-import { commandBindingRead, commandBindingValue, selectCommandProfile } from '../../../../../model/compiler/registry.ts';
+import { commandBindingGraphs, commandBindingRead, commandBindingValue, selectCommandProfile } from '../../../../../model/compiler/registry.ts';
 import { profileValidations, type ProfileId } from '../../infrastructure/profile.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { ContentModeration, ContentModerationConflict, ContentModerationStale }
@@ -129,7 +129,7 @@ async function graphBindingValidations(env: WorkActivationEnvironment, resource:
   const graphs = [GRAPHS.current, GRAPHS.revisions, GRAPHS.receipts];
   if (!definition) return { validations: await profileValidations(env.fuseki, selected.profile as ProfileId,
     [{ shape: selected.shape, focus: [resource], graphs: [GRAPHS.current, GRAPHS.revisions] }]), guard: '' };
-  const read = commandBindingRead(selected.profile, definition, selected.shape, graphs);
+  const read = commandBindingRead(selected.profile, definition, selected.shape, graphs, manifest);
   const rows = (await env.fuseki.query(`# registry-binding:${selected.profile}
     SELECT DISTINCT ${read.keys.map(key => `?${read.variables[key]}`).join(' ')} WHERE {
       VALUES ${read.anchor} { ${iri(resource)} }
@@ -144,7 +144,7 @@ async function graphBindingValidations(env: WorkActivationEnvironment, resource:
     .map(key => [key, commandBindingValue(key, row![read.variables[key]!]!.value)]));
   const validations = await profileValidations(env.fuseki, selected.profile as ProfileId,
     definition.roles.map(role => ({ shape: `https://rezics.com/definition/${selected.profile}/${role}-shape`,
-      focus: [row![read.variables[role]!]!.value], graphs })), binding);
+      focus: [row![read.variables[role]!]!.value], graphs: commandBindingGraphs(selected.profile, GRAPHS) })), binding);
   // Pin the same structural witness in the writing transaction. BindingPolicy
   // then validates the complete focus/argument bundle against that transaction.
   const retained = read.keys.filter(key => !read.derived.includes(key));

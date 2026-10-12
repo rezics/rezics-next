@@ -184,7 +184,7 @@ export function buildCommandRegistry(profiles: readonly ProfileDefinition[],
  * arguments; native BindingPolicy remains the validator of their relationships.
  * Roles and keys always come from the registry, never a consumer's profile table. */
 export function commandBindingRead(profile: string, binding: RegistryBinding, shape: string,
-  graphs: readonly string[]) {
+  graphs: readonly string[], registry: Pick<CommandRegistry, 'canonical'>) {
   const keys = [...new Set([...binding.roles, ...binding.required, ...binding.optional])];
   const variables = Object.fromEntries(keys.map((key, index) => [key, `b${index}`]));
   const variable = (key: string) => {
@@ -301,6 +301,18 @@ export function commandBindingRead(profile: string, binding: RegistryBinding, sh
       digest: 'bodyDigest', manifest: 'manifest', actor: 'sealedBy' });
     receipt('release', 'fixedRelease');
   } else throw new Error(`${profile} has no structural binding read`);
+  // Canonical role types exclude historical revision anchors that retain the
+  // same links. A structural bundle must identify the definition subjects.
+  for (const focus of binding.roles) {
+    const focusShape = `https://rezics.com/definition/${profile}/${focus}-shape`;
+    const types = registry.canonical.filter(entry => entry.routes.some(route => route.shape === focusShape))
+      .map(entry => entry.type);
+    if (!types.length) continue;
+    const graph = `?bindingGraph${graphIndex++}`, type = `?bindingType${graphIndex}`;
+    patterns.push(`VALUES ${graph} { ${graphs.map(value => `<${value}>`).join(' ')} }
+      VALUES ${type} { ${types.map(value => `<${value}>`).join(' ')} }
+      GRAPH ${graph} { ${variable(focus)} <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ${type} }`);
+  }
   // Catch newly declared roles or required arguments at the owning registry.
   const pattern = patterns.join('\n');
   for (const key of [...binding.roles, ...binding.required]) {
@@ -323,4 +335,14 @@ export function commandBindingValue(key: string, value: string): string {
       'https://rezics.com/definition/rating-pooled-observation-mean-v1': 'pooled-observation-mean' },
   };
   return enums[key]?.[value] ?? value;
+}
+
+/** These historical bindings validate their retained admission receipts as well
+ * as the owner graph; all other bound shapes admit only current and revisions. */
+export function commandBindingGraphs(profile: string, graphs: {
+  current: string; revisions: string; receipts: string; control: string;
+}): string[] {
+  const receiptBound = ['translation-link-v1', 'work-derivation-v1',
+    'fixed-native-text-release-v1', 'work-author-credit-v1'].includes(profile);
+  return [graphs.current, graphs.revisions, ...receiptBound ? [graphs.receipts, graphs.control] : []];
 }

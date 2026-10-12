@@ -11,7 +11,7 @@ import type { CommandEnvelope } from '../src/infrastructure/fuseki.ts';
 import { ownerModerationEffects } from '../src/modules/governance/effects.ts';
 import { CANONICAL_TYPES, semanticOwnerTypes } from '../src/modules/semantic/change.ts';
 import { GovernanceConflict, GovernanceStale, type DecisionTargetInput } from '../src/modules/governance/store.ts';
-import { RV, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
+import { GRAPHS, RV, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 
 const native = () => `https://rezics.com/id/${randomUUID()}`;
 const uri = (value: string) => ({ type: 'uri', value });
@@ -41,7 +41,7 @@ function graph(kind: string, selectors: Record<string, string> = {}) {
         const selected = selectCommandProfile(manifest, state.kinds,
           path => state.selectors[path] ? [state.selectors[path]!] : []);
         const shape = selected!.shape;
-        const read = commandBindingRead(profile, binding, shape, ['urn:rezics:graph:current']);
+        const read = commandBindingRead(profile, binding, shape, ['urn:rezics:graph:current'], manifest);
         const role = shape.split('/').at(-1)!.replace(/-shape$/, '');
         return { results: { bindings: Array.from({ length: state.bindingRows }, () => Object.fromEntries(
           read.keys.map(key => [read.variables[key]!, binding.roles.includes(key)
@@ -66,6 +66,13 @@ function graph(kind: string, selectors: Record<string, string> = {}) {
         const entries = command.validations.filter(entry => entry.profile === profile);
         const required = manifest.profiles.find(entry => entry.id === profile)?.binding;
         if (!required) { expect(entries.every(entry => !entry.binding)).toBe(true); continue; }
+        const nativeParser = readFileSync(new URL('../../../infra/jena/command-module/src/main/java/com/rezics/jena/CommandService.java',
+          import.meta.url), 'utf8');
+        const receiptProfiles = [...nativeParser.matchAll(/boolean \w+ = profileId\.equals\("([^"]+)"\)/g)]
+          .map(match => match[1]!);
+        const graphs = [GRAPHS.current, GRAPHS.revisions,
+          ...receiptProfiles.includes(profile) ? [GRAPHS.receipts, GRAPHS.control] : []];
+        expect(entries.every(entry => JSON.stringify(entry.graphs) === JSON.stringify(graphs))).toBe(true);
         const args = entries[0]!.binding;
         expect(args, `${profile} needs its native bindings`).toBeDefined();
         expect(required.required.every(key => typeof args![key] === 'string' && args![key]!.length > 0)).toBe(true);
@@ -246,7 +253,7 @@ for (const definition of authoredProfiles.filter(profile => profile.binding)) {
   test(`binding reads for ${definition.id} use authored role predicates`, () => {
     const binding = manifest.profiles.find(profile => profile.id === definition.id)!.binding!;
     const selected = definition.shapes.find(shape => shape.iri.endsWith(`/${binding.roles[0]}-shape`))!;
-    const read = commandBindingRead(definition.id, binding, selected.iri, ['urn:rezics:graph:current']);
+    const read = commandBindingRead(definition.id, binding, selected.iri, ['urn:rezics:graph:current'], manifest);
     const prefixes = new Map(definition.prefixes);
     for (const role of binding.roles) {
       const shape = definition.shapes.find(shape => shape.iri.endsWith(`/${role}-shape`))!;
