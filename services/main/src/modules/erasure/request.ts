@@ -20,7 +20,7 @@ import { graphRevisionIds, isGraphErasureKind, resolveErasureRevisions } from '.
 import { assertErasureJournalTargetBound, GraphErasureConflict, GraphErasureUnavailable,
   inventoryContributionPayloads, preflightGraphErasure, readGraphErasureProof, suppressGraphContentRevisions } from './graph.ts';
 import { ERASURE_JOURNAL_EPOCH, ErasureInvalid, ErasureNotFound, ErasureStale, ErasureUnavailable,
-  ERASURE_PREFLIGHT_LIMITS, createErasurePreflightBudget, consumeErasurePreflight, type ErasurePreflightBudget, erasurePreflightRemaining, ErasurePreflightUnsupported, findErasureByOperation,
+  createErasurePreflightBudget, consumeErasurePreflight, type ErasurePreflightBudget, erasurePreflightRemaining, ErasurePreflightUnsupported, findErasureByOperation,
   completeErasureTarget, failErasureTarget, isValidErasureTargetList, journalErasure,
   markErasureBlocked, markErasureSuppressed, readErasure, extendErasureTargets, erasureSuppressionReceipt, type ErasureTargetInput,
   recordErasureInventory, type ErasureReport, ensureRetentionDomain, relayTransaction,
@@ -109,6 +109,7 @@ async function completeFencedContentErasure(service: ErasureService, graph: Work
   const resourceId = admission.scope.slice('erasure:'.length);
   const plan = preflight ?? { budget: createErasurePreflightBudget(), custodyReadReservation: 0 };
   const { budget } = plan;
+  budget.signal.throwIfAborted();
   budget.targets = journaled.targets.map(({ kind, ref }) => ({ kind, ref }));
   if (!preflight) {
     const contentIds = journaled.targets.filter(target => target.kind === 'content_revision').map(target => target.ref);
@@ -125,6 +126,7 @@ async function completeFencedContentErasure(service: ErasureService, graph: Work
       budget.targets = journaled.targets.map(({ kind, ref }) => ({ kind, ref }));
     }
     await preflightGraphErasure(graph.fuseki, graphRevisionIds(journaled.targets), budget);
+    await retainContributionManifests(service, graph, journaled, resourceId, budget);
     const custody = await commandCustodyErasureTargets(publicationClient,
       journaled.targets.filter(target => isGraphErasureKind(target.kind)).map(target => `https://rezics.com/id/${target.ref}`), budget);
     for (const target of custody.filter(target => !target.payloadAbsent)) {
@@ -152,14 +154,14 @@ async function completeFencedContentErasure(service: ErasureService, graph: Work
             revisionIds: journaled.targets.filter(target => target.kind === 'content_revision').map(target => target.ref),
             admission }, fence, { relay: service.relay, erasureId, erasureEpoch: journaled.erasureEpoch,
             graph }, service.mediaObjects, budget, () => suppressGraphContentRevisions(graph.fuseki,
-            graph.lineage, journaled.erasureId, journaled.erasureEpoch, graphRevisionIds(journaled.targets), suppressionReceipt));
+            graph.lineage, journaled.erasureId, journaled.erasureEpoch, graphRevisionIds(journaled.targets), suppressionReceipt, budget));
         }
       }
       // Media commits its exact namespace inventory before other owners clear their bytes.
       await applyRevisionOwners(service, graph, admission, journaled, fence, accessClient, plan, suppressionReceipt);
       await markErasureSuppressed(service.relay, erasureId);
       // Disclosure is suppressed even while physical objects await retry.
-      return completeLiveTargets(service, graph, journaled, accessClient, resourceId);
+      return completeLiveTargets(service, graph, journaled, accessClient, budget);
     }, publicationClient);
   if (guarded.held) {
     if (journaled.stage !== 'requested') throw new ContentErasureStale('Content erasure is deferred');
@@ -263,13 +265,13 @@ async function applyRevisionOwners(service: ErasureService, graph: WorkActivatio
   admission: RegisteredAdmission, report: ErasureReport, fence: PreservationFence,
   accessClient: PoolClient, plan: ErasurePreflightPlan, suppressionReceipt?: string): Promise<void> {
   const graphIds = graphRevisionIds(report.targets);
-  await suppressGraphContentRevisions(graph.fuseki, graph.lineage, report.erasureId, report.erasureEpoch, graphIds, suppressionReceipt);
+  await suppressGraphContentRevisions(graph.fuseki, graph.lineage, report.erasureId, report.erasureEpoch, graphIds, suppressionReceipt, plan.budget);
   const graphProof = await readGraphErasureProof(graph.fuseki, graph.lineage, report.erasureId,
     report.erasureEpoch, graphIds);
   const contentIds = report.targets.filter(target => target.kind === 'content_revision').map(target => target.ref);
   if (contentIds.length) await applyContentErasure(service.content, { erasureId: report.erasureId,
     erasureEpoch: report.erasureEpoch, resourceId: admission.scope.slice('erasure:'.length),
-    revisionIds: contentIds, graphProof, preservationAccess: fence });
+    revisionIds: contentIds, graphProof, preservationAccess: fence, budget: plan.budget });
   const custody = await commandCustodyErasureTargets(accessClient,
     report.targets.filter(target => isGraphErasureKind(target.kind)).map(target => `https://rezics.com/id/${target.ref}`));
   // Transfer the preflight reservation back to remaining bytes. The owner consumes
@@ -281,33 +283,49 @@ async function applyRevisionOwners(service: ErasureService, graph: WorkActivatio
     objectRefs: new Set(report.targets.filter(target => target.kind === 'object').map(target => target.ref)) }, plan.budget);
 }
 
+/** Retained replays need only the preserved manifest, never already erased bytes. */
+async function retainContributionManifests(service: ErasureService, graph: WorkActivationEnvironment,
+  report: ErasureReport, resourceId: string, budget: ErasurePreflightBudget): Promise<void> {
+  const drafts = report.targets.filter(target => target.kind === 'text_contribution_draft');
+  if (!drafts.length) return;
+  const resolved = await resolveErasureRevisions(service.content, graph.fuseki, resourceId, drafts.map(target => target.ref));
+  for (const revision of resolved) {
+    const manifest = revision.manifest!;
+    if ([...budget.contributionManifests.values()].some(roots => roots.some(root => root.manifest === manifest))) continue;
+    const path = join(graph.objectDirectory, manifest.slice('urn:rezics:sha256:'.length));
+    const remaining = erasurePreflightRemaining(budget, 'metadataBytes');
+    if ((await stat(path)).size > remaining) throw new ErasurePreflightUnsupported('manifest exceeds metadata allowance');
+    const bytes = await readFile(path, { signal: budget.signal });
+    consumeErasurePreflight(budget, 'metadataBytes', bytes.length);
+    if (sha256(bytes) !== manifest.slice('urn:rezics:sha256:'.length)) throw new ContentErasureStale('manifest digest differs');
+    const value = JSON.parse(bytes.toString('utf8')) as { format: string; component: string; payload: string };
+    if (value.format !== 'rezics-manifest-v1' || value.component !== revision.resourceId
+      || !/^sha256:[0-9a-f]{64}$/.test(value.payload)) throw new ContentErasureStale('manifest reference differs');
+    const roots = budget.contributionManifests.get(value.payload) ?? [];
+    roots.push({ manifest, component: revision.resourceId });
+    budget.contributionManifests.set(value.payload, roots);
+  }
+}
+
 /** Reverse indexes are read under the same digest fence as every reference writer.
  * Tombstones retain identities, so absence of payload bytes never removes protection. */
-async function freshObjectProtection(client: PoolClient, service: ErasureService,
-  graph: WorkActivationEnvironment, report: ErasureReport, ref: string, resourceId: string): Promise<Set<string>> {
+async function freshObjectProtection(client: PoolClient,
+  graph: WorkActivationEnvironment, ref: string, budget: ErasurePreflightBudget): Promise<Set<string>> {
   const digest = ref.slice(-64);
-  const references = new Set<string>([`checked:${digest}`]);
+  const references = new Set<string>();
   const owners = await client.query<{ protected: boolean }>(`SELECT
     EXISTS (SELECT 1 FROM content.revision WHERE byte_digest=$1 AND availability <> 'erased')
     OR EXISTS (SELECT 1 FROM media.representation r JOIN media.asset a ON a.id=r.asset_id
       JOIN media.asset_state s ON s.id=a.state_head
-      WHERE r.byte_digest=$1 AND r.availability <> 'erased' AND s.lifecycle <> 'erased') AS protected`, [digest]);
+      WHERE r.byte_digest=$1 AND ($2::uuid IS NULL OR r.asset_id=$2::uuid)
+        AND r.availability <> 'erased' AND s.lifecycle <> 'erased') AS protected`,
+  [digest, /^media-asset:v1:([0-9a-f-]{36}):/.exec(ref)?.[1] ?? null]);
   if (owners.rows[0]?.protected !== false) references.add(ref);
-  const drafts = report.targets.filter(target => target.kind === 'text_contribution_draft');
-  const resolved = drafts.length ? await resolveErasureRevisions(service.content, graph.fuseki,
-    resourceId, drafts.map(target => target.ref)) : [];
   const manifests = new Map<string, string | undefined>([[`urn:rezics:sha256:${digest}`, undefined]]);
-  for (const revision of resolved) {
-    const manifest = revision.manifest!;
-    const path = join(graph.objectDirectory, manifest.slice('urn:rezics:sha256:'.length));
-    if ((await stat(path)).size > ERASURE_PREFLIGHT_LIMITS.metadataBytes) throw new ErasurePreflightUnsupported('manifest exceeds metadata bound');
-    const bytes = await readFile(path);
-    if (sha256(bytes) !== manifest.slice('urn:rezics:sha256:'.length)) throw new ContentErasureStale('manifest digest differs');
-    const value = JSON.parse(bytes.toString('utf8')) as { payload: string };
-    if (value.payload !== `sha256:${digest}` && manifest !== `urn:rezics:sha256:${digest}`) continue;
-    manifests.set(manifest, revision.resourceId);
-  }
+  for (const root of budget.contributionManifests.get(ref) ?? []) manifests.set(root.manifest, root.component);
   for (const [manifest, component] of manifests) {
+    budget.signal.throwIfAborted();
+    const limit = Math.min(64, erasurePreflightRemaining(budget, 'inventoryEntries'));
     const result = await graph.fuseki.query(`PREFIX rv: <${RV}>
       SELECT ?revision ?component ?manifest ?erased ?duplicate WHERE {
       VALUES ?manifest { ${iri(manifest)} }
@@ -315,11 +333,15 @@ async function freshObjectProtection(client: PoolClient, service: ErasureService
       BIND(EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:ErasedRevision } } AS ?erased)
       BIND(EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?revision rv:manifest ?otherManifest
         FILTER(!sameTerm(?otherManifest, ?manifest)) } } AS ?duplicate)
-    } ORDER BY ?revision LIMIT 65`, 65_536);
+    } ORDER BY ?revision LIMIT ${limit + 1}`, 65_536);
     const rows = result.results?.bindings;
-    if (!rows || rows.length > 64 || rows.some(row => row.manifest?.value !== manifest
+    if (rows) consumeErasurePreflight(budget, 'inventoryEntries', rows.length);
+    if (!rows || component !== undefined && !rows.length || rows.length > 64 || rows.some(row => row.manifest?.type !== 'uri' || row.manifest.value !== manifest
       || component !== undefined && row.component?.value !== component || row.duplicate?.value !== 'false'
-      || !['true', 'false'].includes(row.erased?.value ?? ''))) {
+      || row.component?.type !== 'uri' || row.revision?.type !== 'uri'
+      || row.erased?.type !== 'literal' || row.erased.datatype !== 'http://www.w3.org/2001/XMLSchema#boolean'
+      || row.duplicate?.type !== 'literal' || row.duplicate.datatype !== 'http://www.w3.org/2001/XMLSchema#boolean'
+      || !['true', 'false'].includes(row.erased.value))) {
       throw new ContentErasureStale('Contribution reverse references are unavailable');
     }
     if (rows.some(row => row.erased?.value !== 'true')) references.add(ref);
@@ -338,28 +360,33 @@ function deadlineObjects(objects: ImmutableObjects | undefined, signal: AbortSig
 }
 
 async function completeLiveTargets(service: ErasureService, graph: WorkActivationEnvironment,
-  report: ErasureReport, accessClient: PoolClient, resourceId: string): Promise<boolean> {
-  const signal = AbortSignal.timeout(10_000);
+  report: ErasureReport, accessClient: PoolClient, budget: ErasurePreflightBudget): Promise<boolean> {
+  const { signal } = budget;
   const objects: ObjectRecoveryStore = { directory: graph.objectDirectory,
     workObjects: deadlineObjects(graph.workObjects, signal),
     mediaObjects: { asset: id => deadlineObjects(service.mediaObjects?.(assetNamespace(id)), signal),
       quarantine: id => deadlineObjects(service.mediaObjects?.(`media-quarantine/${id}/`), signal) } };
   const objectTargets = report.targets.filter(target => target.kind === 'object');
   const completedPresent = new Set<number>();
+  const absent = new Map<number, boolean>();
   for (const target of objectTargets.filter(target => target.completionState === 'completed')) {
     signal.throwIfAborted();
     // Replanted bytes need the same exact replay; progress is never an exemption.
-    if (!(await objectErasureAbsent(objects, target.ref))) completedPresent.add(target.ordinal);
+    const missing = await objectErasureAbsent(objects, target.ref, budget);
+    absent.set(target.ordinal, missing);
+    if (!missing) completedPresent.add(target.ordinal);
   }
   const attempted = objectTargets.filter(target => target.completionState !== 'completed'
-    || completedPresent.has(target.ordinal)).slice(0, 16);
+    || completedPresent.has(target.ordinal)).slice(0,
+    Math.min(16, Math.floor(erasurePreflightRemaining(budget, 'absenceProbes') / 4)));
   for (const target of attempted) {
     signal.throwIfAborted();
     const digest = target.ref.slice(-64);
     const outcome = await withReferenceFence(service.content, digest, async client => {
-      const references = await freshObjectProtection(client, service, graph, report, target.ref, resourceId);
-      return applyLiveObjectErasure(objects, target.ref, { kind: 'live-bounded', references }, true);
+      const references = await freshObjectProtection(client, graph, target.ref, budget);
+      return applyLiveObjectErasure(objects, target.ref, { kind: 'live-bounded', references }, true, budget);
     });
+    absent.set(target.ordinal, outcome !== 'conflict');
     if (outcome === 'conflict') {
       if (target.completionState !== 'completed') {
         await failErasureTarget(service.relay, report.erasureId, target.ordinal, 'live_copy_unavailable');
@@ -370,17 +397,8 @@ async function completeLiveTargets(service: ErasureService, graph: WorkActivatio
       }
     }
   }
-  // Flags are progress, never absence evidence. A sealed replay must inspect completed keys too.
-  let next = 0;
-  const absent = new Map<number, boolean>();
-  await Promise.all(Array.from({ length: Math.min(4, objectTargets.length) }, async () => {
-    while (next < objectTargets.length) {
-      const target = objectTargets[next++]!;
-      signal.throwIfAborted();
-      try { absent.set(target.ordinal, await objectErasureAbsent(objects, target.ref)); }
-      catch { absent.set(target.ordinal, false); }
-    }
-  }));
+  // This attempt's probes and verified deletes are fresh evidence. Completed
+  // flags are never used as absence evidence, and no key spends the budget twice.
   signal.throwIfAborted();
   const contentIds = report.targets.filter(target => target.kind === 'content_revision').map(target => target.ref);
   const contentProofs = contentIds.length
@@ -578,7 +596,7 @@ async function requestFencedContentErasure(service: ErasureService, graph: WorkA
             const report = await journal(budget.targets);
             validateCompletion(report, registered);
             await suppressGraphContentRevisions(graph.fuseki, graph.lineage, report.erasureId,
-              report.erasureEpoch, graphRevisionIds(report.targets));
+              report.erasureEpoch, graphRevisionIds(report.targets), undefined, budget);
             await apply({ relay: service.relay, erasureId: report.erasureId,
               erasureEpoch: report.erasureEpoch, graph });
           }, budget);

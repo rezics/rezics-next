@@ -14,7 +14,7 @@ import { boundedPool } from '../src/infrastructure/pg-pool.ts';
 import type { RegisteredAdmission } from '../src/modules/access/admission.ts';
 import { applyContentErasure } from '../src/modules/erasure/content.ts';
 import { graphErasureReceipt, GraphErasureUnavailable } from '../src/modules/erasure/graph.ts';
-import { journalErasure, readErasure, type ErasureTargetInput } from '../src/modules/erasure/journal.ts';
+import { journalErasure, readErasure, createErasurePreflightBudget, type ErasureTargetInput } from '../src/modules/erasure/journal.ts';
 import { applyLiveObjectErasure, objectErasureAbsent } from '../src/modules/erasure/replay-objects.ts';
 import { MediaErasureUnsupported, replayMediaErasure, withMediaErasureInventory,
   type MediaErasureBudget, type MediaErasureJournal,
@@ -259,13 +259,16 @@ test('P3 put then rollback and expired-lease rendition orphans are inventoried w
     const queued = (await f.pool.query<{ id: string; profile: string; crop: string | null }>(
       "SELECT id::text,profile,crop FROM media.transform_job WHERE status='queued' ORDER BY created_at,id LIMIT 1")).rows[0]!;
     const orphan = await f.outputFor(queued);
-    const fresh = (await f.store.renditions.leaseNext(100))!;
+    const fresh = (await f.store.renditions.leaseNext(2_000))!;
     expect(fresh.job).toBe(queued.id);
+    let persisted = false;
     expect(await f.store.renditions.settle(fresh, orphan, async signal => {
       const digest = await f.memory.objects(fresh.namespace).put(orphan.bytes, signal);
-      await new Promise(resolve => setTimeout(resolve, 110));
+      persisted = true;
+      await new Promise(resolve => setTimeout(resolve, 2_010));
       return digest;
     })).toBe(false);
+    expect(persisted).toBe(true);
     for (const digest of [sha(output.bytes), sha(orphan.bytes)]) {
       expect((await f.pool.query('SELECT id FROM media.representation WHERE byte_digest=$1', [digest])).rowCount).toBe(0);
     }
@@ -334,7 +337,7 @@ test('P5 indexed upload and physical orphan overflow refuse before any erasure',
 
 test('P5 shared target and metadata ceilings refuse before lifecycle or physical erasure', async () => {
   await fixture(async f => {
-    const budget: MediaErasureBudget = { targets: Array.from({ length: 254 }, (_, index) => ({ kind: 'object', ref: `sha256:${sha(String(index))}` })),
+    const budget: MediaErasureBudget = { ...createErasurePreflightBudget(), targets: Array.from({ length: 254 }, (_, index) => ({ kind: 'object', ref: `sha256:${sha(String(index))}` })),
       indexedUnits: 0, inventoryEntries: 0, metadataBytes: 0, listingBytes: 0 };
     const before = await f.store.readAsset(reservation.asset), keys = [...f.memory.data.keys()];
     await expect(f.preflight(async () => { throw new Error('must not accept overflow'); }, budget)).rejects.toBeInstanceOf(MediaErasureUnsupported);
@@ -342,7 +345,7 @@ test('P5 shared target and metadata ceilings refuse before lifecycle or physical
     await assertUnchanged(f, before, keys);
   });
   await fixture(async f => {
-    const budget: MediaErasureBudget = { targets: [], indexedUnits: 0, inventoryEntries: 0,
+    const budget: MediaErasureBudget = { ...createErasurePreflightBudget(), targets: [], indexedUnits: 0, inventoryEntries: 0,
       metadataBytes: 8 * 1024 * 1024, listingBytes: 0 };
     const before = await f.store.readAsset(reservation.asset), keys = [...f.memory.data.keys()];
     await expect(f.preflight(async () => { throw new Error('must not accept overflow'); }, budget)).rejects.toBeInstanceOf(MediaErasureUnsupported);
@@ -358,7 +361,7 @@ test('P5 SQL inventory stops at one lookahead when another owner consumed the sh
       for (let index = 0; index < 5; index++) await f.store.reserveUpload(mediaAdmission(), {
         asset: reservation.asset, mediaType: 'image/png', byteLength: image.length, sha256: sha(image), disclosure: 'private' });
     }
-    const budget: MediaErasureBudget = { targets: [], indexedUnits: 0,
+    const budget: MediaErasureBudget = { ...createErasurePreflightBudget(), targets: [], indexedUnits: 0,
       inventoryEntries: overflow === 'revisions' ? 255 : 251, metadataBytes: 0, listingBytes: 0 };
     const before = await f.store.readAsset(reservation.asset), keys = [...f.memory.data.keys()];
     await expect(f.preflight(async () => { throw new Error('must not accept overflow'); }, budget))

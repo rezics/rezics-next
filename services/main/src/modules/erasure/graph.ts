@@ -162,7 +162,8 @@ async function indexedUnits(fuseki: FusekiClient, targets: readonly string[],
 /** The same owner index used by suppression is checked before committing intent. */
 export async function preflightGraphErasure(fuseki: FusekiClient, revisionIds: readonly string[],
   budget: ErasurePreflightBudget): Promise<void> {
-  await indexedUnits(fuseki, checkedTargets(revisionIds), budget);
+  const targets = checkedTargets(revisionIds);
+  budget.graphInventories.set(JSON.stringify(targets), await indexedUnits(fuseki, targets, budget));
 }
 
 export interface ContributionPayloadInventory {
@@ -306,7 +307,7 @@ export async function inventoryContributionPayloads(
   const budget: RevisionReadBudget = {
     bytesLeft: sharedBudget ? erasurePreflightRemaining(sharedBudget, 'metadataBytes')
       : CONTRIBUTION_CREATE_READ_COST.objectBytes,
-    signal: AbortSignal.timeout(CONTRIBUTION_CREATE_READ_COST.deadlineMs),
+    signal: sharedBudget?.signal ?? AbortSignal.timeout(CONTRIBUTION_CREATE_READ_COST.deadlineMs),
   };
   const payloadByManifest = new Map<string, { payloadRef: string; contentForm: 'body' | 'document' }>();
   for (const [manifest, component] of byManifest) {
@@ -333,6 +334,12 @@ export async function inventoryContributionPayloads(
       payloadRef: `sha256:${captured[1]}`,
       contentForm: checkedContributionState(state),
     });
+    if (sharedBudget) {
+      const payloadRef = `sha256:${captured[1]}`;
+      const roots = sharedBudget.contributionManifests.get(payloadRef) ?? [];
+      roots.push({ manifest, component });
+      sharedBudget.contributionManifests.set(payloadRef, roots);
+    }
   }
 
   return contributions.map(revision => {
@@ -610,6 +617,7 @@ export async function suppressGraphContentRevisions(
   epoch: string,
   revisionIds: readonly string[],
   expectedReceipt?: string,
+  budget?: ErasurePreflightBudget,
 ): Promise<void> {
   if (!/^[1-9][0-9]{0,18}$/.test(epoch)) throw new GraphErasureConflict('invalid erasure epoch');
   const targets = checkedTargets(revisionIds);
@@ -621,7 +629,11 @@ export async function suppressGraphContentRevisions(
   if (await graphErasureSuppressed(fuseki, erasureId, epoch, revisionIds, undefined, receipt)) return;
   let lastFailure: unknown;
   for (let attempt = 0; attempt < 3; attempt++) {
-    const units = await indexedUnits(fuseki, targets);
+    budget?.signal.throwIfAborted();
+    // The native invariant refuses an unlisted live unit transactionally. A
+    // racing projection cannot turn this charged snapshot into an extra read.
+    const units = budget ? budget.graphInventories.get(JSON.stringify(targets)) : await indexedUnits(fuseki, targets);
+    if (!units) throw new GraphErasureUnavailable('graph erasure preflight inventory is unavailable');
     try {
       const result = await fuseki.commandWithReceipt({
         receipt,

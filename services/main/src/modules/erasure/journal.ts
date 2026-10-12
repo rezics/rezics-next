@@ -27,6 +27,7 @@ export interface ErasureTargetInput { kind: ErasureTargetKind; ref: string }
 export const ERASURE_PREFLIGHT_LIMITS = {
   indexedUnits: 64, inventoryEntries: MAX_ERASURE_TARGETS,
   metadataBytes: 8 * 1024 * 1024, listingBytes: 1024 * 1024,
+  absenceProbes: 512,
 } as const;
 
 export interface ErasurePreflightBudget {
@@ -35,16 +36,24 @@ export interface ErasurePreflightBudget {
   inventoryEntries: number;
   metadataBytes: number;
   listingBytes: number;
+  absenceProbes: number;
+  signal: AbortSignal;
+  deadline: number;
+  graphInventories: Map<string, { graph: 'urn:rezics:search:public' | 'urn:rezics:search:private'; unit: string; target: string }[]>;
+  contributionManifests: Map<string, { manifest: string; component: string }[]>;
 }
 
 export class ErasurePreflightUnsupported extends ErasureUnavailable {}
 
 export function createErasurePreflightBudget(): ErasurePreflightBudget {
-  return { targets: [], indexedUnits: 0, inventoryEntries: 0, metadataBytes: 0, listingBytes: 0 };
+  return { targets: [], indexedUnits: 0, inventoryEntries: 0, metadataBytes: 0, listingBytes: 0,
+    absenceProbes: 0, signal: AbortSignal.timeout(10_000), deadline: Date.now() + 10_000,
+    graphInventories: new Map(), contributionManifests: new Map() };
 }
 
 export function consumeErasurePreflight(budget: ErasurePreflightBudget,
   field: keyof typeof ERASURE_PREFLIGHT_LIMITS, count: number): void {
+  budget.signal.throwIfAborted();
   const total = budget[field] + count;
   if (!Number.isSafeInteger(count) || count < 0 || !Number.isSafeInteger(total)
     || total > ERASURE_PREFLIGHT_LIMITS[field]) {

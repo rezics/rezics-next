@@ -4,7 +4,7 @@ import type { ImmutableObjects } from '../../infrastructure/immutable-objects.ts
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { MAX_CONTENT_ERASURE_TARGETS } from '../erasure/content.ts';
 import { readGraphErasureProof } from '../erasure/graph.ts';
-import { ERASURE_PREFLIGHT_LIMITS, MAX_ERASURE_TARGETS, readErasure,
+import { ERASURE_PREFLIGHT_LIMITS, MAX_ERASURE_TARGETS, readErasure, createErasurePreflightBudget,
   type ErasurePreflightBudget, type ErasureTargetInput } from '../erasure/journal.ts';
 import { graphRevisionIds } from '../erasure/revision-kind.ts';
 import { settledContentPosition } from '../content-sequence.ts';
@@ -265,9 +265,8 @@ async function applyLocked(client: PoolClient, selection: MediaErasureSelection,
     || inventory?.targets.some(target => !report.targets.some(retained => retained.kind === target.kind && retained.ref === target.ref))) {
     throw new MediaFenced('media erasure does not match the admitted journal inventory');
   }
-  const replayBudget: MediaErasureBudget = { targets: [], indexedUnits: 0, inventoryEntries: 0, metadataBytes: 0, listingBytes: 0 };
-  // A fresh inventory already proved these identities while retaining this same lock.
-  if (!inventory) await revisionIdentities(client, selection, replayBudget);
+  // Both callers already proved these identities with the shared budget while
+  // retaining this asset lock, including terminal replay's fresh indexed read.
   await readGraphErasureProof(journal.graph.fuseki, journal.graph.lineage, report.erasureId,
     report.erasureEpoch, graphRevisionIds(report.targets), journal.heldGraphProof);
   const operationId = `media-erasure:${journal.erasureId}:${selection.asset}`;
@@ -282,12 +281,6 @@ async function applyLocked(client: PoolClient, selection: MediaErasureSelection,
       throw new MediaStale('media erasure owner outcome differs from its journal');
     }
     // Restore may replant representation availability: the retained terminal owner still wins.
-    const budget = replayBudget;
-    const { representations, uploads } = await indexedRows(client, selection.asset, budget);
-    representationTargets(selection.asset, representations, uploads, budget);
-    if (budget.targets.some(target => !report.targets.some(retained => retained.kind === target.kind && retained.ref === target.ref))) {
-      throw new MediaFenced('media replay representation differs from its retained journal inventory');
-    }
     await client.query("UPDATE media.representation SET availability='erased' WHERE asset_id=$1 AND availability='available'",
       [selection.asset]);
     return operationId;
@@ -326,7 +319,7 @@ export async function withMediaErasureInventory<T>(content: Pool, selection: Med
   preservationAccess: PreservationAccess, objects: (namespace: string) => ImmutableObjects,
   accept: (inventory: MediaErasureInventory, apply: (journal: MediaErasureJournal) => Promise<void>,
     preservationFence: PreservationFence) => Promise<T>,
-  budget: MediaErasureBudget = { targets: [], indexedUnits: 0, inventoryEntries: 0, metadataBytes: 0, listingBytes: 0 },
+  budget: MediaErasureBudget = createErasurePreflightBudget(),
 ): Promise<T> {
   checkSelection(selection);
   const operationId = `erasure:${selection.admission.id}`;
@@ -339,12 +332,14 @@ export async function withMediaErasureInventory<T>(content: Pool, selection: Med
       await client.query("BEGIN; SET LOCAL lock_timeout='2s'; SET LOCAL statement_timeout='5s'");
       const row = await lockMediaAssetState(client, selection.asset);
       // One deadline spans all physical listing responses while the writer lock is held.
-      const fence = await transactionFence(client), { signal } = fence;
+      const fence = await transactionFence(client);
+      const signal = AbortSignal.any([fence.signal, budget.signal]);
       const inventory = await inventoryLocked(client, selection, row, objects, budget, signal);
       const result = await accept(inventory, async journal => {
         if (!active || applicationStarted) throw new MediaStale('media erasure inventory fence is unavailable');
         applicationStarted = true;
         await assertTransactionFence(client, fence);
+        budget.signal.throwIfAborted();
         appliedOperation = await applyLocked(client, selection, row, journal, inventory);
       }, preservationFence);
       signal.throwIfAborted();
@@ -365,7 +360,7 @@ export async function withMediaErasureInventory<T>(content: Pool, selection: Med
 export async function replayMediaErasure(content: Pool, selection: MediaErasureSelection,
   preservationAccess: PreservationAccess, journal: MediaErasureJournal,
   objects?: (namespace: string) => ImmutableObjects,
-  budget: MediaErasureBudget = { targets: [], indexedUnits: 0, inventoryEntries: 0, metadataBytes: 0, listingBytes: 0 },
+  budget: MediaErasureBudget = createErasurePreflightBudget(),
   beforeApply?: () => Promise<void>): Promise<void> {
   checkSelection(selection);
   const guarded = await withPreservationFence(preservationAccess, assetIri(selection.asset), journal.erasureId, async () => {
@@ -374,6 +369,7 @@ export async function replayMediaErasure(content: Pool, selection: MediaErasureS
       await client.query("BEGIN; SET LOCAL lock_timeout='2s'; SET LOCAL statement_timeout='5s'");
       const row = await lockMediaAssetState(client, selection.asset);
       const fence = await transactionFence(client);
+      const signal = AbortSignal.any([fence.signal, budget.signal]);
       let inventory: MediaErasureInventory | undefined;
       if (row.lifecycle !== 'erased') {
         if (!objects) throw new MediaErasureUnsupported('media replay requires bounded namespace inventory');
@@ -381,7 +377,7 @@ export async function replayMediaErasure(content: Pool, selection: MediaErasureS
         // Content tombstone can replace its raw manifest, and the retained closure
         // must still cover every current physical key before the owner may terminalize.
         inventory = await inventoryLocked(client, selection, row, objects,
-          budget, fence.signal, journal);
+          budget, signal, journal);
       } else {
         // Terminal repair still preflights its indexed closure with the request's budget.
         await revisionIdentities(client, selection, budget);
@@ -394,6 +390,7 @@ export async function replayMediaErasure(content: Pool, selection: MediaErasureS
       }
       await assertTransactionFence(client, fence);
       await beforeApply?.();
+      budget.signal.throwIfAborted();
       const operationId = await applyLocked(client, selection, row, journal, inventory);
       fence.signal.throwIfAborted();
       await client.query('COMMIT');

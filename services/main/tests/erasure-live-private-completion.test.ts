@@ -16,7 +16,7 @@ import { AdmissionDenied, type RegisteredAdmission } from '../src/modules/access
 import { CONTRIBUTION_PROFILE } from '../src/modules/contribution/draft.ts';
 import { editTextContributionDraft, textContributionEditDigest } from '../src/modules/contribution/edit.ts';
 import { applyContentErasure, ContentErasureStale, probeContentErasure } from '../src/modules/erasure/content.ts';
-import { ERASURE_PREFLIGHT_LIMITS, journalErasure, readErasure,
+import { ERASURE_PREFLIGHT_LIMITS, journalErasure, readErasure, completeErasureTarget, createErasurePreflightBudget,
   sha256, ErasurePreflightUnsupported, type ErasureTargetInput } from '../src/modules/erasure/journal.ts';
 import { completePendingContentErasures, contentErasureDigest, ErasureDenied, ErasureService,
   requestContentErasure, type ContentErasureInput } from '../src/modules/erasure/request.ts';
@@ -150,6 +150,11 @@ class Graph extends FusekiClient {
     throw new Error(`unexpected graph query: ${query.slice(0, 120)}`);
   }
   override async commandWithReceipt(envelope: CommandEnvelope): Promise<CommandResult> {
+    const targets = envelope.validations.flatMap(validation => validation.focus);
+    if (this.units.some(unit => targets.includes(unit.target) && !this.suppressed.has(unit.target)
+      && !envelope.update.includes(`<${unit.unit}>`))) {
+      return { status: 'invalid', report: { reason: 'a live indexed unit was not covered by the inventory' } };
+    }
     this.commands.push(envelope);
     for (const target of envelope.validations.flatMap(validation => validation.focus)) this.suppressed.add(target);
     return { status: 'committed', position: { datasetId: 'urn:rezics:dataset:product',
@@ -315,7 +320,7 @@ test('P1 the Contribution editor holds the deletion fence while linking existing
       : { boolean: false, results: { bindings: [] } };
     let held = false;
     f.graph.commandWithReceipt = async envelope => {
-      if (envelope.validations.length) held = !(await f.pool.query<{ locked: boolean }>(
+      if (envelope.validations.length) held = !(await f.relay.query<{ locked: boolean }>(
         "SELECT pg_try_advisory_xact_lock(hashtextextended('rezics-payload-reference:' || $1, 0)) AS locked", [digest])).rows[0]!.locked;
       throw new Error('uncommitted dispatch');
     };
@@ -333,7 +338,7 @@ test('P1 a payload reference fence holds through the owner commit and releases o
     const pause = new Promise<void>(resolve => { release = resolve; });
     const first = withReferenceFence(f.pool, digest, async () => { entered(); await pause; });
     await ready;
-    const client = await f.pool.connect();
+    const client = await f.relay.connect();
     try {
       await client.query('BEGIN');
       expect((await client.query<{ locked: boolean }>(
@@ -496,6 +501,47 @@ test('D3 graph and Media indexed units share one preflight ceiling; exactly 64 p
   });
 });
 
+test('D3 graph growth after mixed preflight refuses before any owner mutation', async () => {
+  await fixture(async f => {
+    const image = await sharp({ create: { width: 16, height: 16, channels: 3, background: '#bd335b' } }).png().toBuffer();
+    const { upload, revision } = await media(f, image);
+    for (let at = 0; at < 62; at++) f.graph.units.push({ graph: 'urn:rezics:search:private',
+      unit: `urn:rezics:preflight-unit:${at}`, target: `urn:rezics:content:revision:${revision}` });
+    const health = f.graph.commandHealth.bind(f.graph);
+    f.graph.commandHealth = async () => {
+      f.graph.units.push({ graph: 'urn:rezics:search:private', unit: 'urn:rezics:preflight-unit:late',
+        target: `urn:rezics:content:revision:${revision}` });
+      return health();
+    };
+    await expect(f.call(f.input(assetIri(upload.asset), [revision]))).rejects.toThrow();
+    expect(f.graph.commands).toEqual([]);
+    expect(f.objects.deletes).toEqual([]);
+    expect((await f.pool.query('SELECT availability FROM content.revision WHERE id=$1', [revision])).rows[0]?.availability).toBe('available');
+    expect((await f.pool.query(`SELECT s.lifecycle FROM media.asset a JOIN media.asset_state s ON s.id=a.state_head WHERE a.id=$1`,
+      [upload.asset])).rows[0]?.lifecycle).toBe('active');
+  });
+});
+
+test('D3 completed absent object targets are probed once within the 512 probe ceiling', async () => {
+  await fixture(async f => {
+    const owner = resource(), revision = await f.draft(owner), input = f.input(owner, [revision]);
+    const admitted = await f.access.register({ actingSubject: input.actingSubject, scope: `erasure:${owner}`,
+      action: 'erasure.request', idempotencyKey: input.idempotencyKey, requestDigest: contentErasureDigest(input) });
+    const keys = Array.from({ length: 255 }, (_, index) => hash(Buffer.from(`absent object ${index}`)));
+    const entry = await journalErasure(f.relay, { operationId: `erasure:${admitted.id}`, requestDigest: admitted.requestDigest,
+      kind: 'revision', principalId: admitted.principalId, admissionId: admitted.id, authorityEpoch: admitted.authorityEpoch,
+      targets: [{ kind: 'content_revision', ref: revision }, ...keys.map(digest => ({ kind: 'object' as const, ref: `sha256:${digest}` }))] });
+    for (let index = 0; index < keys.length; index++) await completeErasureTarget(f.relay, entry.erasureId, index + 2, hash(Buffer.from(keys[index]!)));
+    let probes = 0;
+    const objects = f.env.workObjects!, probe = objects.probe!;
+    f.env.workObjects = { ...objects, probe: async (...args) => { probes++; await probe(...args); } };
+    const completed = await f.call(input);
+    expect(probes).toBe(255);
+    expect(f.objects.deletes).toEqual([]);
+    expect(completed.report.targets.every(target => target.completionState === 'completed')).toBe(true);
+  });
+});
+
 test('D3 a retained mixed closure re-preflights graph and Media together before retry mutation', async () => {
   await fixture(async f => {
     const image = await sharp({ create: { width: 16, height: 16, channels: 3, background: '#bd335b' } }).png().toBuffer();
@@ -602,7 +648,7 @@ test('P3/P4 unfinished Media with an independently committed Content clear retri
     expect(first.targets.some(target => target.ref === `media-asset:v1:${upload.asset}:sha256:${orphan}`)).toBe(true);
     expect(f.objects.deletes).toEqual([]);
     f.objects.beforeDelete = async () => {
-      expect((await f.pool.query(`SELECT s.lifecycle FROM media.asset a JOIN media.asset_state s ON s.id=a.state_head
+      expect((await f.relay.query(`SELECT s.lifecycle FROM media.asset a JOIN media.asset_state s ON s.id=a.state_head
         WHERE a.id=$1`, [upload.asset])).rows[0]?.lifecycle).toBe('erased');
     };
     const replay = await call();
@@ -663,6 +709,25 @@ test('P2/P4 the existing ReceiptCustody owner clears a journaled command before 
         return { status: 'committed', position: { datasetId: 'urn:rezics:dataset:product',
           dataEpoch: f.graph.lineage.dataEpoch, sequence: '4' } };
       } });
+    const source = (await custody.readCommitted(receipt))!;
+    const held = await f.accessPool.connect();
+    let redundantPayloadBytes = 0;
+    const observed = new Proxy(held, { get(client, method) {
+      if (method === 'query') return async (sql: string, values?: unknown[]) => {
+        const result = await client.query(sql, values);
+        for (const row of result.rows) if (row.payload instanceof Uint8Array) redundantPayloadBytes += row.payload.byteLength;
+        return result;
+      };
+      const value = Reflect.get(client, method, client);
+      return typeof value === 'function' ? value.bind(client) : value;
+    } }) as PoolClient;
+    try { await new PostgresReceiptCustodyStore(f.accessPool).withReceipt(receipt,
+      session => session.persistObjectReferences(source.objectReferences), observed); }
+    finally { held.release(); }
+    expect(redundantPayloadBytes).toBe(0);
+    const exhausted = createErasurePreflightBudget();
+    exhausted.metadataBytes = ERASURE_PREFLIGHT_LIMITS.metadataBytes;
+    await expect(custody.readCommitted(receipt, exhausted)).rejects.toBeInstanceOf(ErasurePreflightUnsupported);
     let preflightReadBytes = 0, applicationReadBytes = 0, finalMetadataBytes = 0;
     const readCommitted = custody.readCommitted.bind(custody);
     custody.readCommitted = async (selectedReceipt, budget) => {

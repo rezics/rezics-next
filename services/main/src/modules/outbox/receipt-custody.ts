@@ -252,13 +252,16 @@ export class PostgresReceiptCustodyStore implements ReceiptCustodyStore {
           const row = (await held.query<{ receipt: string; request_digest: string; payload_sha256: string;
             payload: Buffer | null; payload_erasure_id: string | null; payload_erasure_epoch: string | null;
             revision: string; terminal: CustodiedReceipt | null; outbox: Record<string, unknown> | null;
-            reconciled: boolean; retired: boolean }>(`SELECT receipt, request_digest, payload_sha256, payload,
+            reconciled: boolean; retired: boolean; payload_length: number | null }>(`SELECT receipt, request_digest, payload_sha256,
+              CASE WHEN $2::integer IS NULL OR coalesce(octet_length(payload),0) <= $2 THEN payload END AS payload,
+              octet_length(payload) AS payload_length,
               payload_erasure_id, payload_erasure_epoch, revision, terminal, outbox,
               reconciled_at IS NOT NULL AS reconciled, retired_at IS NOT NULL AS retired
-              FROM access.command_custody WHERE receipt = $1
-                AND ($2::integer IS NULL OR coalesce(octet_length(payload),0) <= $2)`,
+              FROM access.command_custody WHERE receipt = $1`,
           [receipt, maxPayloadBytes ?? null])).rows[0];
           if (!row) return null;
+          if (maxPayloadBytes !== undefined && (row.payload_length ?? 0) > maxPayloadBytes)
+            throw new ErasurePreflightUnsupported('command custody exceeds the remaining metadata allowance');
           if ((row.payload === null) !== (row.payload_erasure_id !== null)
             || (row.payload_erasure_id === null) !== (row.payload_erasure_epoch === null)) {
             throw new ObjectIntegrityError('Receipt custody payload erasure state is incomplete');
@@ -292,11 +295,11 @@ export class PostgresReceiptCustodyStore implements ReceiptCustodyStore {
           if (updated.rowCount !== 1) throw new Error('Receipt custody is not reconciled');
         },
         persistObjectReferences: references => durable(async () => {
-          const existing = (await held.query<{ payload_sha256: string; payload: Buffer | null;
+          const existing = (await held.query<{ payload_sha256: string; payload_present: boolean;
             terminal: CustodiedReceipt | null; outbox: Record<string, unknown> | null; reconciled: boolean }>(
-          `SELECT payload_sha256,payload,terminal,outbox,reconciled_at IS NOT NULL AS reconciled
+          `SELECT payload_sha256,payload IS NOT NULL AS payload_present,terminal,outbox,reconciled_at IS NOT NULL AS reconciled
             FROM access.command_custody WHERE receipt = $1`, [receipt])).rows[0];
-          if (!existing?.payload || !existing.reconciled || !existing.terminal || !existing.outbox
+          if (!existing?.payload_present || !existing.reconciled || !existing.terminal || !existing.outbox
             || !exactCustodyObjectReferences(references, existing.payload_sha256)) {
             throw new ReceiptCustodyErasureConflict();
           }
@@ -731,7 +734,7 @@ export class ReceiptCustody implements CustodiedOutboxSource {
     const remaining = erasurePreflightRemaining(budget, 'metadataBytes');
     if (remaining === 0) consumeErasurePreflight(budget, 'metadataBytes', 1);
     let bytes: Uint8Array;
-    try { bytes = await this.objects.get(digest, remaining); }
+    try { bytes = await this.objects.get(digest, remaining, budget.signal); }
     catch (error) {
       if (error instanceof ObjectReadBudgetExceeded) {
         throw new ErasurePreflightUnsupported('erasure closure exceeds the supported preflight bound', { cause: error });

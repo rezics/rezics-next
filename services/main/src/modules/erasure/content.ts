@@ -115,6 +115,7 @@ export interface ContentErasureGraphProof {
 }
 
 export interface ContentErasureCommand {
+  budget?: ErasurePreflightBudget;
   preservationAccess: PreservationAccess;
   erasureId: string;
   erasureEpoch: string;
@@ -175,7 +176,9 @@ async function eraseContent(content: Pool, command: ContentErasureCommand): Prom
     await client.query("BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL statement_timeout = '5s'");
     const started = Date.now();
     const bounded = async <T>(statement: string): Promise<{ rows: T[] }> => {
-      const left = 5_000 - (Date.now() - started);
+      command.budget?.signal.throwIfAborted();
+      const left = Math.min(5_000 - (Date.now() - started),
+        command.budget ? command.budget.deadline - Date.now() : 5_000);
       if (!Number.isInteger(left) || left < 1 || left > 5_000) {
         throw new ContentErasureStale('Content erasure deadline passed');
       }

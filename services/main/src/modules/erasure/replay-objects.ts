@@ -1,6 +1,7 @@
 import { lstat, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
+import { consumeErasurePreflight, type ErasurePreflightBudget } from './journal.ts';
 import { evictVerifiedImmutableObject, ObjectNotFound, type ImmutableObjects }
   from '../../infrastructure/immutable-objects.ts';
 import { captureObjectRecoveryCoverage, ObjectRecoveryConflict,
@@ -55,7 +56,8 @@ function addressFor(store: ObjectRecoveryStore, ref: string): ObjectAddress {
   return { ...address, remote: store.workObjects };
 }
 
-async function localPresent(store: ObjectRecoveryStore, key: string): Promise<boolean> {
+async function localPresent(store: ObjectRecoveryStore, key: string, budget?: ErasurePreflightBudget): Promise<boolean> {
+  if (budget) consumeErasurePreflight(budget, 'absenceProbes', 1);
   try {
     const stat = await lstat(join(store.directory, key));
     if (!stat.isFile()) throw new ObjectErasureConflict('object copy is not a regular file');
@@ -67,9 +69,10 @@ async function localPresent(store: ObjectRecoveryStore, key: string): Promise<bo
 }
 
 /** Only the exact missing-key signal proves remote absence. */
-async function remotePresent(objects: ImmutableObjects | undefined, digest: string): Promise<boolean> {
+async function remotePresent(objects: ImmutableObjects | undefined, digest: string, budget?: ErasurePreflightBudget): Promise<boolean> {
   if (!objects) return false;
   if (!objects.probe) throw new ObjectErasureConflict('exact object probe is unavailable');
+  if (budget) consumeErasurePreflight(budget, 'absenceProbes', 1);
   try {
     await objects.probe(digest);
     return true;
@@ -79,13 +82,13 @@ async function remotePresent(objects: ImmutableObjects | undefined, digest: stri
   }
 }
 
-async function addressAbsent(store: ObjectRecoveryStore, address: ObjectAddress): Promise<boolean> {
-  if (address.localKey && await localPresent(store, address.localKey)) return false;
-  return !(await remotePresent(address.remote, address.digest));
+async function addressAbsent(store: ObjectRecoveryStore, address: ObjectAddress, budget?: ErasurePreflightBudget): Promise<boolean> {
+  if (address.localKey && await localPresent(store, address.localKey, budget)) return false;
+  return !(await remotePresent(address.remote, address.digest, budget));
 }
 
-export async function objectErasureAbsent(store: ObjectRecoveryStore, ref: string): Promise<boolean> {
-  return addressAbsent(store, addressFor(store, ref));
+export async function objectErasureAbsent(store: ObjectRecoveryStore, ref: string, budget?: ErasurePreflightBudget): Promise<boolean> {
+  return addressAbsent(store, addressFor(store, ref), budget);
 }
 
 /** Use the recovery closure, including exact model artifacts, only during offline restore. */
@@ -145,20 +148,37 @@ export async function replayObjectErasure(store: ObjectRecoveryStore, ref: strin
   return deleteObjectAddress(store, address);
 }
 
-/** Apply a live journal target using only its bounded preflight references.
+/** Apply a live journal target using fresh fenced owner references.
  * This entry point cannot initiate the offline graph-wide recovery scan. */
 export async function applyLiveObjectErasure(store: ObjectRecoveryStore, ref: string,
-  protection: LiveBoundedObjectProtection, replay: boolean): Promise<'erased' | 'replayed' | 'conflict'> {
+  protection: LiveBoundedObjectProtection, replay: boolean, budget?: ErasurePreflightBudget): Promise<'erased' | 'replayed' | 'conflict'> {
   if (protection.kind !== 'live-bounded') return 'conflict';
   const address = addressFor(store, ref);
   if (protection.references.has(address.reference)) return 'conflict';
   let absent: boolean;
-  try { absent = await addressAbsent(store, address); }
-  catch { return 'conflict'; }
-  if (absent) {
-    evictVerifiedImmutableObject(address.digest);
-    return 'erased';
-  }
+  try { absent = await addressAbsent(store, address, budget); }
+  catch { budget?.signal.throwIfAborted(); return 'conflict'; }
+  if (absent) { evictVerifiedImmutableObject(address.digest); return 'erased'; }
   if (!replay) return 'conflict';
-  return deleteObjectAddress(store, address);
+  const failures: unknown[] = [];
+  try {
+    budget?.signal.throwIfAborted();
+    evictVerifiedImmutableObject(address.digest);
+    if (address.localKey) {
+      try { await unlink(join(store.directory, address.localKey)); }
+      catch (error) { if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error; }
+      if (await localPresent(store, address.localKey, budget)) throw new ObjectErasureConflict('local copy remains');
+    }
+  } catch (error) { failures.push(error); }
+  try {
+    if (address.remote) {
+      if (!address.remote.deleteAndVerifyAbsent) throw new ObjectErasureConflict('verified deletion is unavailable');
+      // The remote owner's verified delete includes its exact-key absence probe.
+      if (budget) consumeErasurePreflight(budget, 'absenceProbes', 1);
+      await address.remote.deleteAndVerifyAbsent(address.digest, budget?.signal);
+    }
+  } catch (error) { failures.push(error); }
+  finally { evictVerifiedImmutableObject(address.digest); }
+  budget?.signal.throwIfAborted();
+  return failures.length ? 'conflict' : 'replayed';
 }
