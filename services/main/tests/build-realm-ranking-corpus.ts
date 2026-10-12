@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { readEnv, stackDirectory } from '../../../scripts/dev/config.ts';
 import { loadCompatibility } from '../../../scripts/load/compatibility.ts';
+import { grantFixtureAuthority } from '../src/modules/access/fixture-authority.ts';
 import { growRealmThreads } from './g-1034-fixture.ts';
 import {
   REALM_RANKING_BUILD_RUN,
@@ -204,20 +205,12 @@ const project = async () =>
   });
 
 const grant = async (scope: string, action: string) => {
-  await stack.accessPool.query(
-    'INSERT INTO access.scope_gate(id) VALUES($1) ON CONFLICT DO NOTHING',
-    [scope],
-  );
-  await stack.accessPool.query(
-    `INSERT INTO access.representation(id,principal_id,subject_id,action,valid_until)
-     VALUES($1,$2,$3,$4,now()+interval '24 hours')`,
-    [randomUUID(), home.author.principalId, actor, action],
-  );
-  await stack.accessPool.query(
-    `INSERT INTO access.permission_grant(id,issuer_subject,recipient_subject,scope_id,action,valid_until)
-     VALUES($1,$2,$2,$3,$4,now()+interval '24 hours')`,
-    [randomUUID(), actor, scope, action],
-  );
+  await grantFixtureAuthority(stack.accessPool, {
+    scope,
+    requireDispatch: true,
+    representations: [{ principalId: home.author.principalId, actor, action, lifetime: '8 hours' }],
+    grant: { actor, action, lifetime: '8 hours', requireSelfIssuer: true },
+  });
 };
 
 const command = async <T>(key: string, init: Parameters<typeof api.command>[1]) => {
