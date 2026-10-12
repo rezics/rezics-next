@@ -28,6 +28,13 @@ export async function advanceFixtureAuthorityGeneration(pool: Pool,
   await pool.query(`UPDATE access.${table} SET ${generation} = ${generation} + 1 WHERE id = $1`, [id]);
 }
 
+/** End or replace only the selected fixture membership episode. */
+export async function setFixtureMembershipState(pool: Pool, membershipId: string, state: 'left' | 'stale'): Promise<void> {
+  await pool.query(`UPDATE access.membership SET state = 'left',generation = generation + 1 WHERE id = $1`, [membershipId]);
+  if (state === 'stale') await pool.query(`UPDATE access.membership SET state = 'joined',generation = generation + 1
+    WHERE id = $1`, [membershipId]);
+}
+
 /** Isolated owner-test authority, including states a live grant may outlast. */
 export async function fixtureAuthorityScenario(pool: Pool, input: {
   scope: string; action: string; mandate: string;

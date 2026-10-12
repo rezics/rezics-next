@@ -8,11 +8,13 @@ import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/su
 import { AccessAdmissionRegistry, AdmissionDenied } from '../src/modules/access/admission.ts';
 import { advanceFixtureAuthorityGeneration, fixtureAuthorityScenario, setFixtureGrantDeadline,
   setFixtureMandateState } from '../src/modules/access/fixture-authority-scenario.ts';
+import { setFixtureMembershipState } from '../src/modules/access/fixture-authority-scenario.ts';
 import { grantFixtureAuthority } from '../src/modules/access/fixture-authority.ts';
 import { AccessRealmManagement } from '../src/modules/access/realm-management.ts';
+import { AccessManagedRealms } from '../src/modules/access/realm-management-managed.ts';
 import { requireRealmSubmissionPolicy } from '../src/modules/access/realm-management-settings.ts';
 import { realmManager } from '../src/modules/access/realm-management-authority.ts';
-import { RealmAdminDenied } from '../src/modules/realm-admin/contract.ts';
+import { RealmAdminDenied, RealmAdminStale } from '../src/modules/realm-admin/contract.ts';
 import { realmApprovedProof } from '../src/modules/realm-reply/member-policy.ts';
 import { representedGrantProof } from '../src/modules/access/composition.ts';
 import { visibleRealmReply } from '../src/modules/realm-reply/store.ts';
@@ -158,3 +160,24 @@ test('baseline Realm owner participation retains the selected owner mandate gene
     expect(await realmApprovedProof(client,h.realm,h.principalId,h.actor)).not.toBe(before);
   } finally { client.release(); }
 });
+
+for (const state of ['left','stale'] as const) {
+  test(`managed Realm disclosure refuses a ${state} grant membership during its graph read`, async () => {
+    const realm = `https://rezics.com/id/${randomUUID()}`, scope = `governance:realm:${realm}`;
+    const h = await fixtureAuthorityScenario(pool,{ scope,action: 'realm.members.manage',
+      mandate: 'realm.members.manage',membership: 'joined' });
+    await pool.query('INSERT INTO access.realm_admin_revision (realm) VALUES ($1)', [realm]);
+    const membership = (await pool.query<{ membership_id: string }>(
+      'SELECT membership_id FROM access.permission_grant WHERE id = $1',[h.grantId])).rows[0]!;
+    let graphReads = 0;
+    const env = { lineage: { dataEpoch: 'epoch',routingEpoch: '0' },fuseki: { query: async () => {
+      graphReads++;
+      await setFixtureMembershipState(pool,membership.membership_id,state);
+      return { results: { bindings: [{ space: { type: 'uri',value: realm },
+        disclosure: { type: 'uri',value: `${RV}Private` } }] } };
+    } } } as unknown as WorkActivationEnvironment;
+    await expect(new AccessManagedRealms(pool,env).read(h.principal,h.actor,{},
+      { governance: true,review: false })).rejects.toBeInstanceOf(RealmAdminStale);
+    expect(graphReads).toBe(1);
+  });
+}

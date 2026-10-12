@@ -6,6 +6,8 @@ import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { readRealmPolicy } from '../space/policy.ts';
 
 export const MANAGED_REALMS_COST = { page: 20, grants: 4096, countPointReads: 20, graphCalls: 20, graphBytes: 8192 } as const;
+const authorityStamp = `jsonb_build_array(p.id,p.enforcement_epoch,s.generation,r.id,r.generation,r.action,
+  g.id,g.generation,g.membership_id,g.membership_generation,gate.id,gate.authority_epoch,recovery.generation)::text`;
 const countView = (value: string) => {
   const count = Number(value);
   if (!Number.isSafeInteger(count)) throw new RealmAdminLimit('Queue count exceeds the response range');
@@ -28,8 +30,8 @@ export class AccessManagedRealms {
         WHERE p.account_issuer = $1 AND p.account_subject = $2 AND p.active LIMIT 1 FOR SHARE OF p,r,s`,
       [principal.issuer,principal.subject,actor])).rows[0];
       if (!identity) throw new RealmAdminDenied('Acting Agent is unavailable');
-      const rows = (await client.query<{ realm: string; action: string; grant_id: string; representation_id: string }>(`
-        SELECT v.realm,g.action,g.id AS grant_id,r.id AS representation_id
+      const rows = (await client.query<{ realm: string; action: string; grant_id: string; representation_id: string; stamp: string }>(`
+        SELECT v.realm,g.action,g.id AS grant_id,r.id AS representation_id,${authorityStamp} AS stamp
         FROM access.permission_grant g JOIN access.realm_admin_revision v ON v.realm = CASE g.action
           WHEN 'review.decide' THEN substring(g.scope_id FROM 15)
           WHEN 'publication.adopt' THEN substring(g.scope_id FROM 19) ELSE substring(g.scope_id FROM 18) END
@@ -38,6 +40,9 @@ export class AccessManagedRealms {
         JOIN access.scope_gate gate ON gate.id = g.scope_id AND gate.open AND gate.dispatch_open
         JOIN access.representation r ON r.principal_id = $1 AND r.subject_id = g.recipient_subject
           AND r.action IN (g.action,'agent.control') AND r.active AND r.valid_until > clock_timestamp()
+        JOIN access.principal p ON p.id = r.principal_id AND p.active
+        JOIN access.authority_subject s ON s.id = r.subject_id AND s.active AND s.kind = 'agent'
+        JOIN access.recovery_fence recovery ON recovery.id AND recovery.open
         WHERE g.recipient_subject = $2 AND g.active AND g.valid_until > clock_timestamp()
           AND g.action = ANY($3::text[])
           AND (g.membership_id IS NULL OR EXISTS (SELECT 1 FROM access.membership m
@@ -67,11 +72,20 @@ export class AccessManagedRealms {
         items.push({ realm,permissions: actions,openCount: countView(row.open_count),
           escalatedCount: countView(row.escalated_count),latestActivity: row.latest_activity?.toISOString() ?? null });
       }
-      if (rows.length && !(await client.query<{ current: boolean }>(`SELECT bool_and(g.valid_until > clock_timestamp()
-        AND r.valid_until > clock_timestamp()) AS current FROM unnest($1::uuid[],$2::uuid[]) AS proof(grant_id,representation_id)
-        JOIN access.permission_grant g ON g.id = proof.grant_id JOIN access.representation r ON r.id = proof.representation_id`,
-      [rows.map(row => row.grant_id),rows.map(row => row.representation_id)])).rows[0]?.current) {
-        throw new RealmAdminStale('Managed Realm authority expired during the read');
+      if (rows.length && Number((await client.query<{ current: string }>(`SELECT count(*)::text AS current
+        FROM unnest($1::uuid[],$2::uuid[],$3::text[]) AS proof(grant_id,representation_id,stamp)
+        JOIN access.permission_grant g ON g.id = proof.grant_id AND g.active AND g.valid_until > clock_timestamp()
+        JOIN access.representation r ON r.id = proof.representation_id AND r.active AND r.valid_until > clock_timestamp()
+          AND r.action IN (g.action,'agent.control') AND r.subject_id = g.recipient_subject
+        JOIN access.principal p ON p.id = r.principal_id AND p.active
+        JOIN access.authority_subject s ON s.id = r.subject_id AND s.active AND s.kind = 'agent'
+        JOIN access.scope_gate gate ON gate.id = g.scope_id AND gate.open AND gate.dispatch_open
+        JOIN access.recovery_fence recovery ON recovery.id AND recovery.open
+        WHERE ${authorityStamp} = proof.stamp AND (g.membership_id IS NULL OR EXISTS (
+          SELECT 1 FROM access.membership m WHERE m.id = g.membership_id
+            AND m.state = 'joined' AND m.generation = g.membership_generation))`,
+      [rows.map(row => row.grant_id),rows.map(row => row.representation_id),rows.map(row => row.stamp)])).rows[0]?.current) !== rows.length) {
+        throw new RealmAdminStale('Managed Realm authority changed during the read');
       }
       return { items,nextCursor: realms.length > limit ? realms[limit - 1]! : null };
     });
