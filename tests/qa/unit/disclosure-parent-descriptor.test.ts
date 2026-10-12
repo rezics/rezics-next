@@ -355,6 +355,14 @@ test('disclosure ancestry: relationship kinds refuse unresolved required parents
   const f = fixture([]);
   f.setEvidence([{ ...evidence(target), relationshipBasis: { ...basis(), kind: 'work-ownership' } }]);
   await expect(captured(f)).rejects.toBeInstanceOf(DisclosureUnavailable);
+  const unresolvedParent = fixture([parent('work')]);
+  unresolvedParent.setEvidence([{ ...evidence(target, [parent('work')]),
+    relationshipBasis: { ...basis(), kind: 'publication' } }]);
+  // A main publication proof cannot erase the Realm relationship declared by
+  // an individual parent basis. Every declared relationship must be complete.
+  await expect(captured(unresolvedParent)).rejects.toBeInstanceOf(DisclosureUnavailable);
+  expect(unresolvedParent.headQueries).toHaveLength(0);
+  expect(unresolvedParent.ownerReads).toHaveLength(0);
 });
 
 test('disclosure final fence compares only a cut’s established dependencies in a mixed batch', async () => {
