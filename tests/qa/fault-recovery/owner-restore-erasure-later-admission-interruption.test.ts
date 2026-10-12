@@ -3,6 +3,15 @@ import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import * as admission from '../../../services/main/src/modules/access/admission.ts';
 import * as contentErasure from '../../../services/main/src/modules/erasure/content.ts';
+import * as accountCoverage from '../../../services/account/src/recovery-coverage.ts';
+import * as accessCoverage from '../../../services/main/src/modules/work/access-recovery-coverage.ts';
+import * as commerceCoverage from '../../../services/main/src/modules/commerce/recovery-coverage.ts';
+import * as pgCoverage from '../../../services/main/src/modules/work/pg-recovery-frontier.ts';
+import * as subjectDeletion from '../../../services/main/src/modules/outbox/account-subject-deletion.ts';
+import * as relayCoverage from '../../../services/main/src/modules/outbox/relay.ts';
+import * as journalCoverage from '../../../services/main/src/modules/erasure/core-journal-coverage.ts';
+import * as erasureAuthority from '../../../services/main/src/modules/erasure/authority.ts';
+import { RestoreLineageConflict } from '../../../services/main/src/modules/work/restore-lineage.ts';
 import { readGraphErasureProof } from '../../../services/main/src/modules/erasure/graph.ts';
 import { readErasure } from '../../../services/main/src/modules/erasure/journal.ts';
 import * as binding from '../../../services/main/src/modules/owner/restore-release-binding.ts';
@@ -364,10 +373,58 @@ test(
 
         const restoreOuter = await preservedOuter(qualified, key);
         const maintenance = spyOn(qualified.resources.erasures!.maintenance, 'command');
-        const graphCommands = spyOn(qualified.fuseki, 'commandWithReceipt');
+        let graphCommands = spyOn(qualified.fuseki, 'commandWithReceipt');
         const imported = spyOn(qualified.resources, 'nativeAccessAttachment');
         const requalified = spyOn(binding, 'recordQualification');
         const actualRequire = binding.requireQualification;
+        // D and replay have committed: C0 cannot admit a fresh operation. Every
+        // adapter must leave this exact operation retryable on transport loss.
+        // The unit table completes an independent same-key operation per site;
+        // this native C1 drill keeps the same durable findings across all sites
+        // and completes it below without importing D or replaying erasures again.
+        const qualifiedSites = [
+          ['Access outbox', () => spyOn(accessCoverage, 'scanAccessOutbox')],
+          ['Access state', () => spyOn(accessCoverage, 'scanAccessState')],
+          ['Commerce', () => spyOn(commerceCoverage, 'assertCommerceRecoveryCoverageOnClient')],
+          ['Account WAL', () => spyOn(pgCoverage, 'assertPgRecoveryFrontier')],
+          ['Account rows', () => spyOn(accountCoverage, 'assertAccountRecoveryCoverage')],
+          ['Account absent subjects', () => spyOn(subjectDeletion, 'assertAccountSubjectDeletionsAbsent')],
+          ['captured relay scan', () => spyOn(relayCoverage, 'relayCoverageOnClient')],
+          ['captured journal scan', () => spyOn(journalCoverage, 'captureErasureJournalCoreCoverage')],
+          ['retained authority', () => spyOn(erasureAuthority, 'assertRetainedAuthorityCapture')],
+          ['retained reconciliation / Content basis', () => spyOn(binding, 'captureReleaseBasis')],
+          ['native graph release', () => spyOn(qualified.fuseki, 'commandWithReceipt')],
+        ] as const;
+        for (const [site, install] of qualifiedSites) {
+          for (const code of ['ECONNRESET', '57P01', 'integrity']) {
+            const failure = code === 'integrity'
+              ? new RestoreLineageConflict('integrity mismatch: connection timeout ECONNRESET 57P01')
+              : Object.assign(new Error('owner unavailable'), { code });
+            const injected = install().mockImplementationOnce(async () => { throw failure; });
+            try {
+              await expect(attempt(qualified, key)).rejects.toBeInstanceOf(RecoveryRefusal);
+              expect(injected).toHaveBeenCalledTimes(1);
+              const failed = await outerOperation(qualified, key);
+              expect(failed.state).toBe(code === 'integrity' ? 'held' : 'running');
+              if (code !== 'integrity') expect(failed.hold_reason).toBeNull();
+              expect(failed.erasures).toEqual(interrupted.erasures);
+              expect(failed.qualifications).toEqual(interrupted.qualifications);
+              expect(failed.releases).toHaveLength(0);
+              expect(await liveAccess(qualified)).toEqual(current);
+              expect(maintenance).not.toHaveBeenCalled();
+              expect(imported).not.toHaveBeenCalled();
+              expect(requalified).not.toHaveBeenCalled();
+              await closed(qualified);
+              console.info('qualified owner wrapper proved', { site, code, state: failed.state });
+            } finally {
+              injected.mockRestore();
+              // A terminal mismatch is deliberately isolated just like the
+              // binding-denial matrix; ordinary transport retries need no repair.
+              if (code === 'integrity') await restoreOuter();
+            }
+          }
+        }
+        graphCommands = spyOn(qualified.fuseki, 'commandWithReceipt');
         const denials: [string, (args: QualificationArgs) => void][] = [
           [
             'C0-envelope',

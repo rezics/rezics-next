@@ -1,6 +1,8 @@
 import { expect, spyOn, test } from 'bun:test';
 import type { Pool, PoolClient } from 'pg';
+import { Pool as PgPool } from 'pg';
 import * as accountCoverage from '../../account/src/recovery-coverage.ts';
+import * as deletionRecovery from '../../account/src/deletion-recovery-set.ts';
 import { sealRecoveryPayload } from '../../account/src/recovery-envelope.ts';
 import { FusekiClient, type CommandEnvelope, type CommandResult,
   type SparqlResult } from '../src/infrastructure/fuseki.ts';
@@ -17,6 +19,9 @@ import { DATASET, hash, type GraphLineage } from '../src/modules/work/activate.t
 import * as accessCoverage from '../src/modules/work/access-recovery-coverage.ts';
 import * as contentCoverage from '../src/modules/work/content-recovery-coverage.ts';
 import * as pgCoverage from '../src/modules/work/pg-recovery-frontier.ts';
+import * as restoreLineage from '../src/modules/work/restore-lineage.ts';
+import { OwnerOperations, OwnerOperationUnavailable } from '../src/modules/owner/operations.ts';
+import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { releaseRestoredGraphHold, RestoreInterrupted, RestoreLineageConflict,
   type AuthenticatedRecoveryCoverage, type RecoveryCoverage } from '../src/modules/work/restore-lineage.ts';
 
@@ -329,14 +334,14 @@ function fixture(options: { actualCapturedRelay?: boolean } = {}) {
     capturedRelay.checkpoint = { stream_scope: MAIN_RELAY_STREAM_SCOPE, data_epoch: priorDataEpoch, sequence: '0' };
     fuseki.savedMainSequence = '0';
   }
-  const state = { failAt: undefined as OwnerCheck | undefined, callbackCalls: 0,
+  const state = { failAt: undefined as OwnerCheck | undefined, failError: undefined as Error | undefined, callbackCalls: 0,
     historicalRoot: 'retired-model-root', historicalDigest: digest,
     journalGeneration: '11', authorityGeneration: '7', interruptEvidence: false,
     advanceJournalAfterChecks: false, advanceAuthorityAfterChecks: false };
   const validate = async (check: OwnerCheck, client?: PoolClient) => {
     if (client) await client.query(`SELECT 1 /* signed restore coverage: ${check} */`);
     trace.push(`validated:${check}`);
-    if (state.failAt === check) throw new RestoreLineageConflict(`fixture rejected ${check}`);
+    if (state.failAt === check) throw state.failError ?? new RestoreLineageConflict(`fixture rejected ${check}`);
   };
   const spies = [
     spyOn(accessCoverage, 'scanAccessOutbox').mockImplementation(async client => {
@@ -461,6 +466,220 @@ function expectBothHeld(run: ReturnType<typeof fixture>) {
   expect(run.trace).not.toContain('graph:release');
   expect(run.trace).not.toContain('access:open');
 }
+
+/** Exercise the real outer operation with an in-memory relay record, while the
+ * existing release fixture supplies the independently held owner transactions.
+ * Only the composed erasure callback is a seam; error handling and same-key
+ * settlement run through OwnerOperations and the real release helper. */
+function outerRestore(run: ReturnType<typeof fixture>) {
+  const row = { id: '', request_digest: '', kind: 'restore', scope: 'product',
+    state: 'running', hold_reason: null as string | null };
+  let disposition: string | null = null;
+  let durable = false;
+  let qualifications = 0;
+  const query = run.relay.client.query.bind(run.relay.client);
+  const relaySpy = spyOn(run.relay.client, 'query').mockImplementation((async (sql: string, values: unknown[] = []) => {
+    if (sql.includes('pg_try_advisory_lock')) return { rows: [{ locked: true }], rowCount: 1 };
+    if (sql.includes('FROM relay.recovery_coverage_head')) return { rows: [{ generation: '7' }], rowCount: 1 };
+    if (sql.includes('FROM relay.owner_reconciliation_item')) {
+      return { rows: disposition ? [{ disposition }] : [], rowCount: disposition ? 1 : 0 };
+    }
+    if (sql.includes('FROM relay.owner_reconciliation WHERE')) return { rows: row.id ? [row] : [], rowCount: row.id ? 1 : 0 };
+    if (sql.includes('INSERT INTO relay.owner_reconciliation_item')) {
+      disposition = sql.includes("'matched'") ? 'matched' : String(values[2]);
+      return { rows: [], rowCount: 1 };
+    }
+    if (sql.includes('INSERT INTO relay.owner_reconciliation_cut')) return { rows: [], rowCount: 1 };
+    if (sql.includes('INSERT INTO relay.owner_reconciliation')) {
+      row.id = String(values[0]); row.request_digest = String(values[2]);
+      return { rows: [], rowCount: 1 };
+    }
+    if (sql.includes('UPDATE relay.owner_reconciliation SET state')) {
+      row.state = sql.includes("'held'") ? 'held' : 'reconciled';
+      row.hold_reason = row.state === 'held' ? String(values[1]) : null;
+      return { rows: [], rowCount: 1 };
+    }
+    return await query(sql, values);
+  }) as typeof run.relay.client.query);
+  const actualRelease = restoreLineage.releaseRestoredGraphHold;
+  const releaseSpy = spyOn(restoreLineage, 'releaseRestoredGraphHold').mockImplementation(
+    async (graph, access, relay, actualLineage, evidence, client) => {
+      expect(evidence.sealedCoverage).toBe(run.evidence.sealedCoverage);
+      await actualRelease(graph, access, relay, actualLineage, run.evidence, client);
+    });
+  const operations = new OwnerOperations(run.relay.pool,
+    { fuseki: run.fuseki, lineage, objectDirectory: '.temp/unused-restore-release-objects' } as WorkActivationEnvironment, {
+      accountPool: run.evidence.accountPool, accessPool: run.access.pool,
+      contentPool: run.evidence.contentPool!, hmacKey, objectStore: run.evidence.objectStore!,
+      restoredRelayPool: run.capturedRelay.pool,
+    });
+  const key = 'qualified-owner-retry';
+  const attempt = () => {
+    run.evidence.qualification = { resume: durable, authenticateResume: async () => {
+      expect(qualifications).toBe(1);
+    } };
+    return operations.reconcileRestore({ sealedCoverage: run.evidence.sealedCoverage, sealedDeletionSets: [] }, key);
+  };
+  return { row, attempt, releaseSpy, get qualifications() { return qualifications; },
+    qualify: async () => {
+      run.evidence.releaseErasures = async clients => {
+        await clients.relayClient.query('SELECT 1 /* retained qualification */');
+        await clients.commitQualification();
+        durable = true; qualifications++;
+        throw new RestoreInterrupted('stopped after durable qualification');
+      };
+      await expect(attempt()).rejects.toBeInstanceOf(OwnerOperationUnavailable);
+      expect(row).toMatchObject({ state: 'running', hold_reason: null });
+      expectBothHeld(run);
+      run.evidence.releaseErasures = async (clients, releaseGraph) => {
+        await releaseGraph(); await openAccess(clients);
+      };
+    },
+    stop: () => { releaseSpy.mockRestore(); relaySpy.mockRestore(); },
+  };
+}
+
+const qualifiedSites = [
+  'access-outbox', 'access-state', 'commerce', 'account-wal', 'account-rows',
+  'account-subject-deletions', 'account-deletion-journal', 'deleted-account-access-state',
+  'captured-relay', 'captured-relay-connect', 'captured-journal', 'current-coverage-head',
+  'retained-authority', 'retained-reconciliation-content', 'native-graph-release',
+] as const;
+
+for (const site of qualifiedSites) {
+  for (const code of ['ECONNRESET', '57P01', 'integrity'] as const) {
+    test(`qualified ${site}: ${code} preserves cause and settles the same-key owner operation correctly`, async () => {
+      const run = fixture();
+      const failure = code === 'integrity'
+        ? new RestoreLineageConflict('integrity mismatch: connection timeout ECONNRESET 57P01')
+        : Object.assign(new Error('owner unavailable'), { code });
+      let armed = false;
+      const extraSpies: { mockRestore: () => void }[] = [];
+      if (site === 'captured-journal' || site === 'retained-authority') {
+        run.coverage.accessFenceGeneration = '5';
+        run.coverage.erasureJournal = { version: 1, epoch: null, count: '0',
+          digest: hash(JSON.stringify(['relay-erasure-journal-core-v1', null])) };
+        run.seal();
+        const current = { ...run.coverage, accountPg: { ...run.coverage.accountPg, flushedLsn: '0/2000' } };
+        run.evidence.retainedAuthorityCoverage = JSON.stringify(sealRecoveryPayload(current, hmacKey, 'graph-recovery-coverage'));
+        extraSpies.push(spyOn(erasureAuthority, 'assertRetainedAuthorityCapture').mockImplementation(async () => {
+          if (armed && site === 'retained-authority') throw failure;
+          return current;
+        }));
+      }
+      if (site === 'deleted-account-access-state') {
+        run.access.deletionMarkers = [{ principal_id: 'deleted', authority_epoch: '1' }];
+        run.evidence.deletions = { accountPool: run.evidence.accountPool, hmacKey,
+          sealedSets: [JSON.stringify(sealRecoveryPayload({ deletion: {
+            accessPrincipalId: 'deleted', enforcementEpoch: '1' } }, hmacKey, 'deletion-recovery-set'))] };
+        extraSpies.push(spyOn(deletionRecovery, 'assertDeletionRecoverySet').mockImplementation(async () => {
+          if (armed) throw failure;
+        }));
+      }
+      const owner = outerRestore(run);
+      try {
+        await owner.qualify();
+        armed = true;
+        if (ownerChecks.includes(site as OwnerCheck)) {
+          run.state.failAt = site as OwnerCheck; run.state.failError = failure;
+        } else if (site === 'captured-relay-connect') run.capturedRelay.connectFailure = failure;
+        else if (site === 'captured-journal') run.capturedRelay.queryGate = async sql => {
+          if (armed && sql === 'SELECT max(erasure_epoch)::text AS epoch FROM relay.erasure') throw failure;
+        };
+        else if (site === 'retained-reconciliation-content') run.evidence.releaseErasures = async () => { throw failure; };
+        else if (site === 'native-graph-release') extraSpies.push(
+          spyOn(run.fuseki, 'commandWithReceipt').mockImplementation(async () => { throw failure; }));
+
+        if (code === 'integrity') {
+          expect(await owner.attempt()).toMatchObject({ state: 'held', replayed: true });
+          expect(owner.row.state).toBe('held');
+        } else {
+          try { await owner.attempt(); throw new Error('transport unexpectedly settled'); }
+          catch (error) {
+            expect(error).toBeInstanceOf(OwnerOperationUnavailable);
+            expect((error as Error).cause).toBeInstanceOf(RestoreInterrupted);
+            let original: unknown = error;
+            while (original instanceof Error && original.cause !== undefined) original = original.cause;
+            expect(original).toBe(failure);
+          }
+          expect(owner.row).toMatchObject({ state: 'running', hold_reason: null });
+        }
+        expectBothHeld(run);
+        armed = false; run.state.failAt = undefined; run.state.failError = undefined;
+        run.capturedRelay.connectFailure = undefined; run.capturedRelay.queryGate = undefined;
+        if (site === 'native-graph-release') extraSpies.pop()!.mockRestore();
+        run.evidence.releaseErasures = async (clients, releaseGraph) => {
+          await releaseGraph(); await openAccess(clients);
+        };
+        expect(await owner.attempt()).toMatchObject({ state: code === 'integrity' ? 'held' : 'reconciled', replayed: true });
+        expect(owner.qualifications).toBe(1);
+        if (code === 'integrity') expectBothHeld(run);
+        else {
+          expect(run.fuseki.commands).toHaveLength(1);
+          expect(run.access.open).toBe(true); expect(run.access.generation).toBe('6');
+          const calls = owner.releaseSpy.mock.calls.length;
+          expect(await owner.attempt()).toMatchObject({ state: 'reconciled', replayed: true });
+          expect(owner.releaseSpy).toHaveBeenCalledTimes(calls);
+          expect(run.fuseki.commands).toHaveLength(1);
+        }
+      } finally { owner.stop(); for (const spy of extraSpies) spy.mockRestore(); run.stop(); }
+    });
+  }
+}
+
+for (const site of ['content', 'objects'] as const) {
+  for (const code of ['ECONNRESET', '57P01', 'integrity']) {
+    test(`prequalification ${site}: ${code} retains the original cause without bypassing C0 verification`, async () => {
+      const run = fixture();
+      const failure = code === 'integrity' ? new RestoreLineageConflict('connection timeout mismatch')
+        : Object.assign(new Error('owner unavailable'), { code });
+      run.state.failAt = site; run.state.failError = failure;
+      try {
+        try { await run.release(); throw new Error('C0 mismatch accepted'); }
+        catch (error) {
+          expect(error).toBeInstanceOf(RestoreLineageConflict);
+          expect((error as Error).cause).toBe(failure);
+          expect(restoreLineage.isRestoreTransientFailure(error)).toBe(code !== 'integrity');
+        }
+        expectBothHeld(run);
+      } finally { run.stop(); }
+    });
+  }
+}
+
+for (const code of ['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EPIPE', '08000', '08006',
+  '08P01', '57P01', '57P02', '57P03', '40001', '40P01', '53300']) {
+  test(`qualified transport classifier walks wrapped ${code} causes`, () => {
+    const original = { code };
+    expect(restoreLineage.isRestoreTransientFailure(new RestoreLineageConflict('owner differs', {
+      cause: new Error('adapter failed', { cause: original }) }))).toBe(true);
+  });
+}
+
+test('qualified transport classifier refuses message-only integrity errors and cause cycles', () => {
+  for (const message of ['connection timeout', 'ECONNRESET', '57P01', 'pool timeout', 'fetch failed']) {
+    expect(restoreLineage.isRestoreTransientFailure(new RestoreLineageConflict(message))).toBe(false);
+  }
+  const cycle = new Error('connection timeout'); cycle.cause = cycle;
+  expect(restoreLineage.isRestoreTransientFailure(cycle)).toBe(false);
+});
+
+test('qualified transport classifier recognizes a real pg-pool checkout timeout through wrappers', async () => {
+  const pool = new PgPool({ max: 1, connectionTimeoutMillis: 10 });
+  // Occupy the sole slot without opening a network connection. The real pool
+  // owns its pending queue, timer, error construction and promise stack boundary.
+  const clients = (pool as unknown as { _clients: object[] })._clients;
+  clients.push({});
+  try {
+    try { await pool.connect(); throw new Error('pool unexpectedly checked out'); }
+    catch (error) {
+      expect((error as Error).message).toBe('timeout exceeded when trying to connect');
+      expect(restoreLineage.isRestoreTransientFailure(new RestoreLineageConflict('owner differs', { cause: error }))).toBe(true);
+    }
+    const plain = new Error('timeout exceeded when trying to connect');
+    expect(restoreLineage.isRestoreTransientFailure(plain)).toBe(false);
+  } finally { clients.length = 0; await pool.end(); }
+});
 
 function contentionFixture(run: ReturnType<typeof fixture>) {
   const locks = new MaintenanceLocks();

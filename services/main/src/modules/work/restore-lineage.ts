@@ -18,7 +18,7 @@ import { exportAccessErasureRecoveryAttachment,
 import { assertErasureJournalCoreCoverage, createPublicRevisionJournalDeltaVerifier,
   captureErasureJournalCoreCoverage,
   type ErasureJournalCoreCoverage } from '../erasure/core-journal-coverage.ts';
-import { isRelayTransientFailure, relayCoverage, relayCoverageOnClient, relayPrefixCoverageOnClient, type RelayCoverage } from '../outbox/relay.ts';
+import { relayCoverage, relayCoverageOnClient, relayPrefixCoverageOnClient, type RelayCoverage } from '../outbox/relay.ts';
 import { MAIN_RELAY_STREAM_SCOPE, type RelayHandoffPosition } from '../outbox/relay-position.ts';
 import { assertAccountDeletionJournalCoverage } from
   '../outbox/account-deletion-journal.ts';
@@ -333,6 +333,28 @@ export interface RestoredReleaseClients {
 /** A genuine owner interruption after the native release was authenticated:
  * the operation is not definitively held and may be resumed with the same key. */
 export class RestoreInterrupted extends Error {}
+
+/** Only owner transport evidence can make a durable qualification retryable. */
+export function isRestoreTransientFailure(error: unknown): boolean {
+  const seen = new Set<object>();
+  while (error !== null && typeof error === 'object' && !seen.has(error)) {
+    seen.add(error);
+    const failure = error as { code?: unknown; cause?: unknown; message?: unknown; stack?: unknown };
+    if (typeof failure.code === 'string' && (/^08[0-9A-Z]{3}$/.test(failure.code)
+      || ['57P01', '57P02', '57P03', '40001', '40P01', '53300',
+        'ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EPIPE'].includes(failure.code))) return true;
+    // pg-pool emits uncoded checkout/connect timeouts and replaces their stack
+    // at its promise boundary. Require that driver provenance as well as its
+    // exact timeout signatures; integrity messages alone never decide a retry.
+    if (error instanceof Error && !(error instanceof RestoreLineageConflict)
+      && failure.code === undefined && typeof failure.stack === 'string'
+      && /\n\s+at [^\n]*[/\\]pg-pool[/\\]index\.js:\d+:\d+/.test(failure.stack)
+      && (failure.message === 'timeout exceeded when trying to connect'
+        || failure.message === 'Connection terminated due to connection timeout')) return true;
+    error = failure.cause;
+  }
+  return false;
+}
 
 export { accessOutboxCoverage, accessStateCoverage } from './access-recovery-coverage.ts';
 
@@ -681,14 +703,14 @@ export async function assertGraphDeletionEvidence(
         let set: DeletionRecoverySet;
         try { set = openRecoveryPayload<DeletionRecoverySet>(
           sealed, evidence.hmacKey, 'deletion-recovery-set'); }
-        catch { throw new RestoreLineageConflict('Account deletion recovery envelope is invalid'); }
+        catch (error) { throw new RestoreLineageConflict('Account deletion recovery envelope is invalid', { cause: error }); }
         const epoch = byPrincipal.get(set.deletion?.accessPrincipalId);
         if (!epoch || epoch !== set.deletion.enforcementEpoch) {
           throw new RestoreLineageConflict('Account deletion intent differs from retained evidence');
         }
         byPrincipal.delete(set.deletion.accessPrincipalId);
         try { await assertDeletionRecoverySet(evidence.accountPool, accessPool, set, held); }
-        catch { throw new RestoreLineageConflict('deleted Account/Access state differs from retained evidence'); }
+        catch (error) { throw new RestoreLineageConflict('deleted Account/Access state differs from retained evidence', { cause: error }); }
       }
       if (byPrincipal.size !== 0) {
         throw new RestoreLineageConflict('Account deletion recovery evidence is incomplete');
@@ -796,7 +818,7 @@ export async function cutoverRestoredGraphLineage(
     || after.sequence !== '0') {
     throw new RestoreLineageConflict(updateError
       ? 'restore lineage update outcome is unknown'
-      : `restored graph lineage was not activated (${updateStatus ?? 'no status'}: ${JSON.stringify(updateReport)})`);
+      : `restored graph lineage was not activated (${updateStatus ?? 'no status'}: ${JSON.stringify(updateReport)})`, { cause: updateError });
   }
   if (restoreCutoverCrashArmed(crashAt)) {
     const held = await fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.control)} {
@@ -824,9 +846,9 @@ function assertNativeAccessErasureReference(coverage: RecoveryCoverage): void {
   const validRows = (value: RowCoverage | undefined): boolean => canonicalDecimal(value?.count)
     && /^[0-9a-f]{64}$/.test(value?.digest ?? '');
   try { assertErasureJournalCoreCoverage(reference.baseErasureJournal); }
-  catch { throw new RestoreLineageConflict('native Access base journal reference is invalid'); }
+  catch (error) { throw new RestoreLineageConflict('native Access base journal reference is invalid', { cause: error }); }
   try { assertErasureJournalCoreCoverage(reference.sourceErasureJournal); }
-  catch { throw new RestoreLineageConflict('native Access source journal reference is invalid'); }
+  catch (error) { throw new RestoreLineageConflict('native Access source journal reference is invalid', { cause: error }); }
   const baseGeneration = summary?.baseFenceGeneration;
   const sourceGeneration = summary?.sourceFenceGeneration;
   const sameGeneration = canonicalDecimal(baseGeneration) && baseGeneration === sourceGeneration;
@@ -903,7 +925,7 @@ export function assertRecoveryCoverage(coverage: RecoveryCoverage): void {
   }
   if (coverage.erasureJournal) {
     try { assertErasureJournalCoreCoverage(coverage.erasureJournal); }
-    catch { throw new RestoreLineageConflict('invalid recovery erasure journal coverage'); }
+    catch (error) { throw new RestoreLineageConflict('invalid recovery erasure journal coverage', { cause: error }); }
   }
   if (coverage.nativeAccessErasure) assertNativeAccessErasureReference(coverage);
 }
@@ -926,7 +948,7 @@ export async function assertRestoreAuthorityBaseline(relay: PoolClient,
   if (evidence.retainedAuthorityCoverage === undefined) {
     if (release) throw new RestoreLineageConflict('two-cut release lacks independently current evidence');
     try { await assertCurrentRecoveryCoverageHead(relay, base); }
-    catch { throw new RestoreLineageConflict('signed recovery coverage is not the retained current capture'); }
+    catch (error) { throw new RestoreLineageConflict('signed recovery coverage is not the retained current capture', { cause: error }); }
     return;
   }
   let current: RecoveryCoverage;
@@ -1055,7 +1077,7 @@ export async function releaseRestoredGraphHold(
   let coverage: RecoveryCoverage;
   try { coverage = openRecoveryPayload<RecoveryCoverage>(
     evidence?.sealedCoverage, evidence?.hmacKey, 'graph-recovery-coverage'); }
-  catch { throw new RestoreLineageConflict('recovery coverage envelope is invalid'); }
+  catch (error) { throw new RestoreLineageConflict('recovery coverage envelope is invalid', { cause: error }); }
   assertRecoveryCoverage(coverage);
   if (!evidence.releaseErasures) {
     // Absence is authoritative: the retained capture is not here, so waiting
@@ -1087,8 +1109,7 @@ export async function releaseRestoredGraphHold(
     }
     // The durable qualification already owns the retry identity. An unavailable
     // captured snapshot cannot settle that operation as a permanent refusal.
-    if (evidence.qualification?.resume && !(error instanceof RestoreLineageConflict)
-      && isRelayTransientFailure(error)) {
+    if (evidence.qualification?.resume && isRestoreTransientFailure(error)) {
       throw new RestoreInterrupted('qualified restore captured relay connection was interrupted', { cause: error });
     }
     throw new RestoreLineageConflict('captured relay handoff is unavailable', { cause: error });
@@ -1175,13 +1196,13 @@ export async function releaseRestoredGraphHold(
       throw new RestoreLineageConflict('Access state differs from recovery coverage');
     }
     try { await assertCommerceRecoveryCoverageOnClient(client, coverage.commerce); }
-    catch { throw new RestoreLineageConflict('Commerce owner differs from recovery coverage'); }
+    catch (error) { throw new RestoreLineageConflict('Commerce owner differs from recovery coverage', { cause: error }); }
     try { await assertPgRecoveryFrontier(evidence.accountPool, coverage.accountPg); }
-    catch { throw new RestoreLineageConflict('Account WAL differs from recovery coverage'); }
+    catch (error) { throw new RestoreLineageConflict('Account WAL differs from recovery coverage', { cause: error }); }
     try { await assertAccountRecoveryCoverage(evidence.accountPool, coverage.account); }
-    catch { throw new RestoreLineageConflict('Account rows differ from recovery coverage'); }
+    catch (error) { throw new RestoreLineageConflict('Account rows differ from recovery coverage', { cause: error }); }
     try { await assertAccountSubjectDeletionsAbsent(evidence.accountPool, relayPool, relayHeadClient); }
-    catch { throw new RestoreLineageConflict('retained Account deletion subject exists in restored Account'); }
+    catch (error) { throw new RestoreLineageConflict('retained Account deletion subject exists in restored Account', { cause: error }); }
     await assertAccountDeletionJournalCoverage(accessPool, relayPool, client, relayHeadClient);
     await assertGraphDeletionEvidence(accessPool, evidence.deletions, client);
     if (evidence.retainedAuthorityCoverage !== undefined
@@ -1199,7 +1220,7 @@ export async function releaseRestoredGraphHold(
     if (!evidence.qualification?.resume) {
       try { await assertContentRecoveryCoverage(evidence.contentPool, fuseki, coverage.content,
         { fuseki, relayClient: relayHeadClient, contentClient: evidence.contentClient }); }
-      catch { throw new RestoreLineageConflict('Content owner or graph references differ from recovery coverage'); }
+      catch (error) { throw new RestoreLineageConflict('Content owner or graph references differ from recovery coverage', { cause: error }); }
       const restoredObjects = evidence.objectStore.structureObjects
         ? { ...evidence.objectStore, structureGroupRoots: new StructureGroupRootStore(
           evidence.contentPool, evidence.objectStore.structureObjects),
@@ -1208,7 +1229,7 @@ export async function releaseRestoredGraphHold(
       try { await assertObjectRecoveryCoverage(fuseki, restoredObjects, coverage.objects); }
       catch (error) { throw new RestoreLineageConflict(
         `graph or immutable objects differ from recovery coverage (${error instanceof ObjectRecoveryConflict
-          ? error.kind : 'unavailable'})`); }
+          ? error.kind : 'unavailable'})`, { cause: error }); }
     }
     const marker = `urn:rezics:restore:${lineage.dataEpoch}`;
     const receipt = `urn:rezics:receipt:restore-release:${hash(lineage.dataEpoch)}`;
@@ -1302,7 +1323,7 @@ export async function releaseRestoredGraphHold(
       const released = await fuseki.query(releasedQuery);
       if (released.boolean !== true) {
         throw new RestoreLineageConflict(updateError
-          ? 'recovery release outcome is unknown' : 'recovery hold was not released');
+          ? 'recovery release outcome is unknown' : 'recovery hold was not released', { cause: updateError });
       }
       graphReleased = true;
     };
@@ -1330,7 +1351,7 @@ export async function releaseRestoredGraphHold(
           await borrowedTransaction('relay', relayHeadClient!, 'read committed');
           await borrowedTransaction('Access', client, 'repeatable read');
         } catch (error) {
-          if (isRelayTransientFailure(error)) throw new RestoreInterrupted(
+          if (isRestoreTransientFailure(error)) throw new RestoreInterrupted(
             'restore qualification commit or owner reacquisition was interrupted', { cause: error });
           throw error;
         }
@@ -1372,7 +1393,7 @@ export async function releaseRestoredGraphHold(
     if (accessClient && !borrowedOwners) {
       try { await accessClient.query('ROLLBACK'); } catch { /* retain original error */ }
     }
-    if (evidence.qualification?.resume && isRelayTransientFailure(error)) {
+    if (evidence.qualification?.resume && isRestoreTransientFailure(error)) {
       throw new RestoreInterrupted('qualified restore owner connection was interrupted', { cause: error });
     }
     throw error;

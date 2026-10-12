@@ -7,7 +7,6 @@ import { pipeline } from 'node:stream/promises';
 import { importAccessErasureRecoveryAttachment } from '../access/erasure-recovery.ts';
 import { createPublicRevisionJournalDeltaVerifier } from '../erasure/core-journal-coverage.ts';
 import { accessOutboxCoverage, accessStateCoverage } from '../work/access-recovery-coverage.ts';
-import { isRelayTransientFailure } from '../outbox/relay.ts';
 import type { Pool, PoolClient } from 'pg';
 import { Pool as PgPool } from 'pg';
 import { openRecoveryPayload } from '../../../../account/src/recovery-envelope.ts';
@@ -34,7 +33,7 @@ import { StructureGroupRootStore } from '../structure/group-root.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { readExactWorkRevision, RevisionCorrupt, RevisionNotFound, RevisionUnavailable }
   from '../work/history.ts';
-import { assertRestoreAuthorityBaseline, ownerRestoreEvidence,
+import { assertRestoreAuthorityBaseline, isRestoreTransientFailure, ownerRestoreEvidence,
   readRestoredGraphReleaseExpectation, releaseRestoredGraphHold, RestoreInterrupted,
   RestoreLineageConflict, type RecoveryCoverage, type RestoredGraphReleaseExpectation,
   type RestoredReleaseClients }
@@ -496,7 +495,7 @@ export class OwnerOperations {
       let current: RecoveryCoverage;
       try { current = openRecoveryPayload<RecoveryCoverage>(erasures.authority.sealedCoverage,
         erasures.authority.hmacKey, 'graph-recovery-coverage'); }
-      catch { throw new RestoreLineageConflict('independently current authority capture is invalid'); }
+      catch (error) { throw new RestoreLineageConflict('independently current authority capture is invalid', { cause: error }); }
       if (!current?.relay?.consumer) {
         throw new RestoreLineageConflict('independently current authority capture is unavailable');
       }
@@ -582,7 +581,7 @@ export class OwnerOperations {
     } catch (error) {
       // Once the qualification is durable, only a definitive refusal settles
       // the operation as held; an owner interruption leaves it resumable.
-      if (committed && isRelayTransientFailure(error)) {
+      if (committed && isRestoreTransientFailure(error)) {
         throw new RestoreInterrupted('qualified restore owner connection was interrupted', { cause: error });
       }
       if (!committed || error instanceof RestoreLineageConflict || error instanceof RestoreInterrupted
@@ -607,7 +606,7 @@ export class OwnerOperations {
     let current: RecoveryCoverage;
     try { current = openRecoveryPayload<RecoveryCoverage>(erasures.authority.sealedCoverage,
       erasures.authority.hmacKey, 'graph-recovery-coverage'); }
-    catch { throw new RestoreLineageConflict('independently current authority capture is invalid'); }
+    catch (error) { throw new RestoreLineageConflict('independently current authority capture is invalid', { cause: error }); }
     if (!current?.relay?.consumer) {
       throw new RestoreLineageConflict('independently current authority capture is unavailable');
     }
@@ -637,7 +636,7 @@ export class OwnerOperations {
         await assertReleasedErasuresCurrent(this.relay, restored, record.id, captured, erasures.authority,
           { relayClient: client, accessClient, graphRelease }, outerId);
       } catch (error) {
-        if (isRelayTransientFailure(error)) throw new RestoreInterrupted(
+        if (isRestoreTransientFailure(error)) throw new RestoreInterrupted(
           'released restore owner comparison was interrupted', { cause: error });
         if (error instanceof RestoreLineageConflict) throw error;
         if (isDefinitiveRefusal(error)) {
