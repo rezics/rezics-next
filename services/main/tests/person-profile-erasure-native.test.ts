@@ -258,6 +258,23 @@ public class PersonProfileCallerContractTest {
       }finally{data.end();}
     }finally{data.close();}
   }
+  @Test public void productionCommandWriterCommitsAndReplaysTheActualPersonTemplate() throws Exception {
+    var data=fixture();try {var command=body("complete");String update=command.get("update").getAsString().value();
+      var plan=CommandPolicy.parse(update,"${receiptPlaceholder}");
+      var modify=(org.apache.jena.sparql.modify.request.UpdateModify)plan.request().getOperations().getFirst();
+      String digest=modify.getInsertQuads().stream().filter(q->q.getGraph().equals(iri("${GRAPHS.receipts}"))
+        &&q.getPredicate().equals(rv("requestDigest"))).findFirst().orElseThrow().getObject().getLiteralLexicalForm();
+      var profiles=ProfileRegistry.load(Path.of("profiles"));
+      var service=new CommandService(profiles,"1".repeat(64).getBytes(),"2".repeat(64).getBytes(),"3".repeat(64).getBytes());
+      var validations=List.of(new CommandService.Validation("agent-erasure-v1",profiles.get("agent-erasure-v1"),
+        "https://rezics.com/definition/agent-erasure-v1/tombstone-shape",List.of("${person}"),List.of("${GRAPHS.current}"),Map.of()));
+      var result=service.runCommand(data.asDatasetGraph(),"${receiptPlaceholder}",digest,update,validations,System.nanoTime()+30_000_000_000L);
+      assertEquals(result.toString(),"committed",result.get("status"));assertTrue(complete(data,command));
+      var before=snapshot(data);
+      var replay=service.runCommand(data.asDatasetGraph(),"${receiptPlaceholder}",digest,update,validations,System.nanoTime()+30_000_000_000L);
+      assertEquals(replay.toString(),"committed",replay.get("status"));assertEquals(before,snapshot(data));
+    }finally{data.close();}
+  }
   @Test public void creditedWorkPrefixBlocksCompletionUntilItsProjectionIsCleaned() throws Exception {
     var data=fixture();try {var command=body("complete");execute(data,command.get("update").getAsString().value());
       assertTrue(complete(data,command));
