@@ -6,7 +6,7 @@ import { Pool } from 'pg';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { AccessAdmissionRegistry, AdmissionDenied } from '../src/modules/access/admission.ts';
-import { fixtureAuthorityScenario } from '../src/modules/access/fixture-authority-scenario.ts';
+import { fixtureAuthorityScenario, setFixtureMandateState } from '../src/modules/access/fixture-authority-scenario.ts';
 import { grantFixtureAuthority } from '../src/modules/access/fixture-authority.ts';
 import { AccessRealmManagement } from '../src/modules/access/realm-management.ts';
 import { requireRealmSubmissionPolicy } from '../src/modules/access/realm-management-settings.ts';
@@ -38,12 +38,7 @@ async function fixture(mandate: string, mandateState?: 'expired' | 'revoked') {
     representations: [{ principalId, actor: authority.actor, action: mandate,
       lifetime: mandate === 'agent.control' ? 'infinity' : '8 hours' }],
     grant: { actor: authority.actor, action: 'realm.settings.manage', lifetime: '8 hours' } });
-  if (mandateState === 'expired') {
-    await pool.query("UPDATE access.representation SET valid_until = clock_timestamp() - interval '1 second' WHERE id = $1",
-      [authority.representationIds[0]]);
-  } else if (mandateState === 'revoked') {
-    await pool.query('UPDATE access.representation SET active = false WHERE id = $1', [authority.representationIds[0]]);
-  }
+  if (mandateState) await setFixtureMandateState(pool, authority.representationIds[0]!, mandateState);
   return { ...authority, realm, scope, principalId, access: new AccessAdmissionRegistry(pool),
     management: new AccessRealmManagement(pool) };
 }

@@ -2,6 +2,17 @@ import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { grantFixtureAuthority } from './fixture-authority.ts';
 
+/** Change only the selected fixture mandate; its Agent grants remain live. */
+export async function setFixtureMandateState(pool: Pool, representationId: string,
+  state: 'expired' | 'revoked'): Promise<void> {
+  if (state === 'expired') {
+    await pool.query(`UPDATE access.representation
+      SET valid_until = clock_timestamp() - interval '1 second' WHERE id = $1`, [representationId]);
+  } else {
+    await pool.query('UPDATE access.representation SET active = false WHERE id = $1', [representationId]);
+  }
+}
+
 /** Isolated owner-test authority, including states a live grant may outlast. */
 export async function fixtureAuthorityScenario(pool: Pool, input: {
   scope: string; action: string; mandate: string;
@@ -19,14 +30,7 @@ export async function fixtureAuthorityScenario(pool: Pool, input: {
       lifetime: input.mandate === 'agent.control' ? 'infinity' : '8 hours' }],
     grant: { actor, action: input.membership ? 'fixture.membership.setup' : input.action, lifetime: '8 hours' },
   });
-  if (input.mandateState === 'expired') {
-    await pool.query(`UPDATE access.representation
-      SET valid_until = clock_timestamp() - interval '1 second' WHERE id = $1`,
-    [authority.representationIds[0]]);
-  } else if (input.mandateState === 'revoked') {
-    await pool.query('UPDATE access.representation SET active = false WHERE id = $1',
-      [authority.representationIds[0]]);
-  }
+  if (input.mandateState) await setFixtureMandateState(pool, authority.representationIds[0]!, input.mandateState);
   if (input.membership) {
     const membershipId = randomUUID();
     await pool.query(`INSERT INTO access.membership_policy (kind, owner_subject, revision, terms_revision)
