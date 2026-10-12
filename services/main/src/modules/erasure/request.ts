@@ -106,6 +106,9 @@ async function completeFencedContentErasure(service: ErasureService, graph: Work
     return () => access.recordGraphOutcome(admission.id, proof(admission, 'succeeded', journaled.erasureEpoch));
   }
   validateCompletion(journaled, admission);
+  await service.relay.query(`UPDATE relay.erasure SET live_completion_pending=true
+    WHERE id=$1 AND NOT live_completion_pending
+      AND stage IN ('requested','fenced','inventory_complete','deleting','reconciling')`, [erasureId]);
   const resourceId = admission.scope.slice('erasure:'.length);
   const plan = preflight ?? { budget: createErasurePreflightBudget(), custodyReadReservation: 0 };
   const { budget } = plan;
@@ -200,7 +203,7 @@ async function completeFencedContentErasure(service: ErasureService, graph: Work
         liveRetentionReasons: { graph: GRAPH_LIVE_RETENTION } });
     // Target flags can commit before sealing or inventory. Only this last marker
     // lets the bounded pending worker skip a fully completed live transaction.
-    if (guarded.value) await service.relay.query(`UPDATE relay.erasure SET stage = 'reconciling'
+    if (guarded.value) await service.relay.query(`UPDATE relay.erasure SET stage = 'reconciling', live_completion_pending=false
       WHERE id = $1 AND stage IN ('fenced', 'inventory_complete', 'deleting', 'reconciling')`, [erasureId]);
   };
 }
@@ -633,14 +636,16 @@ export async function completePendingContentErasures(service: ErasureService,
   graph: WorkActivationEnvironment, access: ErasureAccess,
   limit = 1): Promise<{ completed: number; failed: string[]; continuation: boolean }> {
   if (!Number.isInteger(limit) || limit < 1) throw new ErasureInvalid('pending erasure limit is invalid');
-  const pending = await relayTransaction(service.relay, async client => (await client.query<{
+  const pending = await relayTransaction(service.relay, async client => {
+    const rows = (await client.query<{
     id: string; admission_id: string; request_digest: string; authority_epoch: string }>(
     `SELECT id, admission_id, request_digest, authority_epoch::text AS authority_epoch
-     FROM relay.erasure WHERE stage IN ('requested', 'fenced', 'inventory_complete', 'deleting', 'reconciling')
-       AND kind = 'revision' AND (stage <> 'reconciling' OR EXISTS (
-         SELECT 1 FROM relay.erasure_target t WHERE t.erasure_id = relay.erasure.id
-           AND t.completion_state IS DISTINCT FROM 'completed'))
-     ORDER BY erasure_epoch LIMIT 2`)).rows);
+     FROM relay.erasure WHERE live_completion_pending AND kind = 'revision'
+       AND stage IN ('requested', 'fenced', 'inventory_complete', 'deleting', 'reconciling')
+     ORDER BY last_completion_attempt NULLS FIRST, erasure_epoch LIMIT 2 FOR UPDATE SKIP LOCKED`)).rows;
+    if (rows[0]) await client.query(`UPDATE relay.erasure SET last_completion_attempt=clock_timestamp() WHERE id=$1`, [rows[0].id]);
+    return rows;
+  });
   const failed: string[] = [];
   let completed = 0, continuation = pending.length > 1;
   for (const row of pending.slice(0, 1)) {

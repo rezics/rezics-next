@@ -445,7 +445,7 @@ test('P4 one pending tick attempts sixteen objects, includes deleting entries an
     const entry = await journalErasure(f.pool, { operationId: `erasure:${admitted.id}`, requestDigest: admitted.requestDigest,
       kind: 'revision', principalId: admitted.principalId, admissionId: admitted.id, authorityEpoch: admitted.authorityEpoch, targets });
     const other = await f.draft(resource());
-    await journalErasure(f.pool, { operationId: `erasure:${randomUUID()}`, requestDigest: sha256('next request'),
+    const unrelated = await journalErasure(f.pool, { operationId: `erasure:${randomUUID()}`, requestDigest: sha256('next request'),
       kind: 'revision', principalId: randomUUID(), admissionId: randomUUID(), authorityEpoch: '1',
       targets: [{ kind: 'content_revision', ref: other }] });
     const first = await completePendingContentErasures(f.service, f.env, f.access as never);
@@ -455,7 +455,10 @@ test('P4 one pending tick attempts sixteen objects, includes deleting entries an
     expect((await f.pool.query('SELECT availability FROM content.revision WHERE id=$1', [other])).rows[0]?.availability)
       .toBe('available');
     const second = await completePendingContentErasures(f.service, f.env, f.access as never);
-    expect(second).toEqual({ completed: 1, failed: [], continuation: true });
+    expect(second).toEqual({ completed: 0, failed: [unrelated.erasureId], continuation: true });
+    expect(f.objects.deletes).toHaveLength(16);
+    const third = await completePendingContentErasures(f.service, f.env, f.access as never);
+    expect(third).toEqual({ completed: 1, failed: [], continuation: true });
     expect(f.objects.deletes).toHaveLength(17);
     expect((await readErasure(f.pool, entry.erasureId)).targets.every(target => target.completionState === 'completed')).toBe(true);
   });
@@ -475,6 +478,44 @@ async function media(f: Awaited<ReturnType<typeof environment>>, image: Buffer, 
   const recorded = await store.recordAssetRevision(upload.upload);
   return { store, upload, revision: recorded.revision };
 }
+
+test('pending selection skips completed history and rotates a held oldest entry behind recoverable work', async () => {
+  await fixture(async f => {
+    for (let index = 0; index < 12; index++) {
+      const owner = resource(), revision = await f.draft(owner);
+      await f.call(f.input(owner, [revision]));
+    }
+    const heldOwner = resource(), heldRevision = await f.draft(heldOwner), heldPayload = f.contribution(heldOwner);
+    f.objects.failure = true;
+    const held = await f.call(f.input(heldOwner, [heldRevision, heldPayload.id]));
+    f.objects.failure = false;
+    await f.accessPool.query('INSERT INTO access.governance_preservation_hold VALUES ($1,$2,$3,NULL)',
+      [randomUUID(), heldOwner, 'hold after partial deletion']);
+    const nextOwner = resource(), nextRevision = await f.draft(nextOwner), input = f.input(nextOwner, [nextRevision]);
+    const admitted = await f.access.register({ actingSubject: input.actingSubject, scope: `erasure:${nextOwner}`,
+      action: 'erasure.request', idempotencyKey: input.idempotencyKey, requestDigest: contentErasureDigest(input) });
+    const next = await journalErasure(f.relay, { operationId: `erasure:${admitted.id}`, requestDigest: admitted.requestDigest,
+      kind: 'revision', principalId: admitted.principalId, admissionId: admitted.id, authorityEpoch: admitted.authorityEpoch,
+      targets: [{ kind: 'content_revision', ref: nextRevision }] });
+    expect(await completePendingContentErasures(f.service, f.env, f.access as never))
+      .toEqual({ completed: 0, failed: [held.report.erasureId], continuation: true });
+    expect(await completePendingContentErasures(f.service, f.env, f.access as never))
+      .toEqual({ completed: 1, failed: [], continuation: true });
+    expect((await readErasure(f.relay, next.erasureId)).targets.every(target => target.completionState === 'completed')).toBe(true);
+    const client = await f.relay.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SET LOCAL enable_seqscan=off');
+      const plan = await client.query(`EXPLAIN (FORMAT JSON) SELECT id FROM relay.erasure
+        WHERE live_completion_pending AND kind='revision'
+          AND stage IN ('requested','fenced','inventory_complete','deleting','reconciling')
+        ORDER BY last_completion_attempt NULLS FIRST,erasure_epoch LIMIT 2`);
+      expect(JSON.stringify(plan.rows)).toContain('erasure_live_completion_pending');
+      expect((await client.query("SELECT count(*)::integer AS count FROM relay.erasure WHERE NOT live_completion_pending")).rows[0]?.count).toBe(13);
+      await client.query('ROLLBACK');
+    } finally { client.release(); }
+  });
+});
 
 test('D3 graph and Media indexed units share one preflight ceiling; exactly 64 passes', async () => {
   for (const total of [65, 64]) await fixture(async f => {
