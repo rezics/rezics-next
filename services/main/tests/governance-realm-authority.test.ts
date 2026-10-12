@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -372,15 +373,24 @@ for (const resourceKind of ['Agent', 'Space'] as const) {
     const confirmed = await f.store.decide(f.member.principal, input);
     expect(confirmed.operation.status).toBe('completed');
     const original = f.stack.fuseki.query;
+    const replayScope = new AsyncLocalStorage<boolean>();
     let reads = 0;
-    f.stack.fuseki.query = async () => { reads++; throw new Error('Graph owner unavailable during retained-key replay'); };
+    // Directory refresh runs independently on this production stack. Only
+    // graph reads initiated by the replay belong to its no-owner-read proof.
+    f.stack.fuseki.query = async (...args) => {
+      if (replayScope.getStore()) {
+        reads++;
+        throw new Error('Graph owner unavailable during retained-key replay');
+      }
+      return original.apply(f.stack.fuseki, args);
+    };
     try {
-      const replay = await withSavedRead(f.stack.accessPool, confirmed.decisionId, row => {
+      const replay = await replayScope.run(true, () => withSavedRead(f.stack.accessPool, confirmed.decisionId, row => {
         if (!row.plan) return row;
         const plan = { ...row.plan as Record<string, unknown> };
         delete plan.realm;
         return { ...row, plan };
-      }, () => f.store.decide(f.member.principal, input));
+      }, () => f.store.decide(f.member.principal, input)));
       expect(replay.decisionId).toBe(confirmed.decisionId);
       expect(replay.operation.status).toBe('completed');
       expect(reads).toBe(0);
