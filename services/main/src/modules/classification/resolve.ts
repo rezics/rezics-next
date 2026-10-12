@@ -66,7 +66,7 @@ export async function resolveClassifications(
   const selected = !!session?.fencesSelectedUnits;
   const query = async (body: string, maxBytes: number) => selected
     ? { results: { bindings: await session!.query(body, CLASSIFICATION_RESOLUTION_COST.candidates + 1,
-      rows => rows.map(({ sequence: _sequence, ...row }) => row)) } }
+      rows => rows.map(({ sequence: _sequence, ...row }) => row), maxBytes) } }
     : env.fuseki.query(body, maxBytes);
   if (
     inputs.some((row) => JSON.stringify(row.context) !== JSON.stringify(input.context)) ||

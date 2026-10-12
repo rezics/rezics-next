@@ -22,11 +22,11 @@ export function wikiRead<T>(work: MainWorkDependencies, principal: VerifiedPrinc
     targetRead(work.environment, { access: work.access, principal, actingSubject }, async targetSession => {
       const session = new WorkReadSession(work, targetSession.request, { actingSubject }, targetSession.position);
       session.principal = principal;
-      session.query = async (body, limit, fenceRows) => {
-        const rows = await targetSession.query(body, limit);
+      session.query = async (body, limit, fenceRows, maxBytes) => {
+        const rows = await targetSession.query(body, limit, undefined, maxBytes);
         const selected = (value: typeof rows) => fenceRows ? fenceRows(value) : value;
         session.observeDependency(`wiki-target-query:${body}`, selected(rows),
-          async () => selected(await targetSession.query(body, limit)));
+          async () => selected(await targetSession.query(body, limit, undefined, maxBytes)));
         return rows;
       };
       session.checkDeadline = targetSession.checkDeadline;
@@ -96,7 +96,7 @@ export async function wikiScope(read: WikiRead, target: string, zone: string) {
     ?placement a rv:OccurrencePlacement ; rv:generation ${iri(franchise.generation)} ;
       rv:occurrenceRole rv:MemberRole ; <https://schema.org/item> ${iri(target)} .
     FILTER NOT EXISTS { ?placement rv:removedBy ?removed }
-  } } AS ?member) WHERE {} LIMIT 1`, 1);
+  } } AS ?member) WHERE {} LIMIT 1`, 1, undefined, 1024);
   if (member[0]?.member?.value !== 'true') throw new WikiRejected('wiki_target_mismatch');
   return { target: workTarget, collections };
 }

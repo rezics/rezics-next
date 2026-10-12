@@ -40,7 +40,7 @@ export async function phraseWorkTypes(env: WorkActivationEnvironment,
         OPTIONAL { ?work a ?type . VALUES ?type { ${WORK_SEMANTIC_TYPES.map(type => `<${type}>`).join(' ')} } }
       }
     } LIMIT ${MAX_ROWS + 1}`;
-  const rows = session ? await session.query(query, MAX_ROWS)
+  const rows = session ? await session.query(query, MAX_ROWS, undefined, MAX_SEARCH_RESPONSE_BYTES)
     : (await env.fuseki.query(query, MAX_SEARCH_RESPONSE_BYTES)).results?.bindings ?? [];
   if (rows.length > MAX_ROWS || rows.some(row => !row.work || (session ? !row.head :
     !row.epoch || !row.sequence || row.epoch.value !== position.dataEpoch || row.sequence.value !== position.sequence))) {

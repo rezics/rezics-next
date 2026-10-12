@@ -15,7 +15,7 @@ export async function boundedReadingPositionRead<T>(
   request: Request,
   principal: VerifiedPrincipal | null,
   actingSubject: string | undefined,
-  operation: (boundary: ReadingBoundary) => Promise<T>,
+  operation: (boundary: ReadingBoundary, session: WorkReadSession) => Promise<T>,
 ): Promise<T> {
   const outer = fusekiReadBudget.getStore();
   const signal = AbortSignal.any([
@@ -97,7 +97,7 @@ export async function boundedReadingPositionRead<T>(
  * The owner's selected dependencies and current authority close each attempt. */
 export async function readingPositionRead<T>(deps: MainWorkDependencies, request: Request,
   principal: VerifiedPrincipal | null, actingSubject: string | undefined,
-  operation: (boundary: ReadingBoundary) => Promise<T>): Promise<T> {
+  operation: (boundary: ReadingBoundary, session: WorkReadSession) => Promise<T>): Promise<T> {
   const position = async () => {
     const rows = (await deps.environment.fuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?sequence WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence ;
@@ -110,13 +110,13 @@ export async function readingPositionRead<T>(deps: MainWorkDependencies, request
   };
   return withTelemetrySpan('main.work_read.attempt', async () => {
     const start = await position();
-    const session = new WorkReadSession(deps, request, { actingSubject }, start, false,
+    const session = new WorkReadSession(deps, request, { actingSubject, localBasis: true }, start, false,
       fusekiReadBudget.getStore()?.attempt ?? 1);
     session.principal = principal;
     return withWorkReadSession(session, async () => {
       const boundary = new ReadingBoundary(session);
       try {
-        const result = await operation(boundary);
+        const result = await operation(boundary, session);
         await boundary.fence();
         const end = await position();
         if (start.dataEpoch !== end.dataEpoch) throw new WorkReadMoved('Reading position changed during the read');

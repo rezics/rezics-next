@@ -51,7 +51,7 @@ export async function readSearchDecisionSupports(env: WorkActivationEnvironment,
     } LIMIT ${MAX_SEARCH_SUPPORTS + 1}`;
   const rows = session?.fencesSelectedUnits
     ? await session.query(body, MAX_SEARCH_SUPPORTS + 1,
-      rows => rows.map(({ sequence: _sequence, ...row }) => row))
+      rows => rows.map(({ sequence: _sequence, ...row }) => row), MAX_SEARCH_RESPONSE_BYTES)
     : (await env.fuseki.query(body, MAX_SEARCH_RESPONSE_BYTES)).results?.bindings ?? [];
   if (rows.length > MAX_SEARCH_SUPPORTS) {
     throw new PublicQueryBudgetExceeded('active supporting Statements exceed hydration budget');

@@ -7,7 +7,7 @@ import { showcaseBatchCommand, showcaseBatchResult, showcaseSelectionCommand, sh
   showcaseTrailerCommand, type ShowcaseSelectionInput, type ShowcaseTrailerInput } from '../modules/media/showcase-contract.ts';
 import { publicAgent } from '../modules/profiles/read.ts';
 import { DEFAULT_MEDIA_CONTEXT, MediaMissing } from '../modules/media/store.ts';
-import { MAX_SUMMARY_BATCH, readContentAvailability, readResourceSummaries,
+import { MAX_SUMMARY_BATCH, readContentAvailability,
   MAX_SUMMARY_REFERENCE_LENGTH, SUMMARY_REFERENCE_PATTERN, type SummaryReader } from '../modules/media/summary.ts';
 import { GRAPHS, RV, iri } from '../modules/work/activate.ts';
 import { readSitemap } from '../modules/disclosure/sitemap.ts';
@@ -90,18 +90,21 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       : undefined } };
   };
   const summarize = async (request: Request, input: { resources: string[]; actingSubject?: string;
-    context?: string; language?: string; position?: string }, batch = true, includeMedia = true) => {
+    context?: string; language?: string; position?: string; channel?: 'preview' }, batch = true, includeMedia = true,
+    anonymous = false) => {
     await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
-    const { reader,principal } = await readerFor(request, input.actingSubject, batch);
+    const { reader,principal } = anonymous ? { reader: anonymousReader, principal: null }
+      : await readerFor(request, input.actingSubject, batch);
     const url = new URL(request.url);
     if (input.position !== undefined) url.searchParams.set('position',input.position);
     const selected = new Request(url,{ headers: request.headers,signal: request.signal });
-    return boundedReadingPositionRead(work,selected,principal,input.actingSubject,boundary =>
-      readResourceSummaries(work.environment, includeMedia ? work.media?.store : undefined,
-      { ...reader,visibleRecords: records => boundary.visible(records) }, { resources: input.resources,
+    return boundedReadingPositionRead(work,selected,principal,input.actingSubject,(boundary, session) =>
+      session.summaryBatch({ resources: input.resources,
+        channel: input.channel,
         context: input.context ?? DEFAULT_MEDIA_CONTEXT, language: input.language ?? null,
         languages: readerLanguages([input.language, request.headers.get('x-rezics-display-languages')]
-          .filter(Boolean).join(',') || null, request.headers.get('accept-language')) }));
+          .filter(Boolean).join(',') || null, request.headers.get('accept-language')) },
+      { ...reader,visibleRecords: records => boundary.visible(records) }, includeMedia ? work.media?.store : undefined));
   };
   const summaryError = (error: unknown) => error instanceof WorkReadInvalid || error instanceof WorkReadMissing
     || error instanceof WorkReadMoved || error instanceof WorkReadUnavailable ? workReadError(error) : mediaError(error);
@@ -226,11 +229,9 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
         // Anonymous: only public resources resolve; private and absent share one answer.
-        const batch = await readResourceSummaries(work.environment, work.media?.store, anonymousReader,
+        const batch = await summarize(request,
           { resources: [`${ID}${params.resource}`], context: DEFAULT_MEDIA_CONTEXT, channel: 'preview',
-            language: query.language ?? null,
-            languages: readerLanguages([query.language, request.headers.get('x-rezics-display-languages')]
-              .filter(Boolean).join(',') || null, request.headers.get('accept-language')) });
+            language: query.language }, true, true, true);
         const summary = batch.summaries[0]!;
         if (summary.status !== 'available' || summary.disclosure !== 'public') return unavailable();
         return Response.json({ profile: 'public-preview-v1', ...summary, generation: batch.generation },

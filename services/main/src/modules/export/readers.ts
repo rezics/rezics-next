@@ -200,11 +200,11 @@ async function readExportPlanUnchecked(deps: ExportReaderDependencies, principal
           async targetSession => {
             const session = new WorkReadSession(work, request, { actingSubject }, targetSession.position);
             session.principal = reader;
-            session.query = async (body, limit, fenceRows) => {
-              const rows = await targetSession.query(body, limit);
+            session.query = async (body, limit, fenceRows, maxBytes) => {
+              const rows = await targetSession.query(body, limit, undefined, maxBytes);
               const selected = (value: typeof rows) => fenceRows ? fenceRows(value) : value;
               session.observeDependency(`export-target-query:${body}`, selected(rows),
-                async () => selected(await targetSession.query(body, limit)));
+                async () => selected(await targetSession.query(body, limit, undefined, maxBytes)));
               return rows;
             };
             session.checkDeadline = targetSession.checkDeadline;

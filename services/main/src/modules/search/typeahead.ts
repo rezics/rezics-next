@@ -32,7 +32,7 @@ export async function queryTypeaheadCandidates(env: WorkActivationEnvironment, p
   if (!candidates.length) return [];
   const units = [...new Set(candidates.map(entry => entry.matchUnit))];
   const query = async (body: string, maxBytes: number, limit: number) => session
-    ? session.query(body, limit) : (await env.fuseki.query(body, maxBytes)).results?.bindings ?? [];
+    ? session.query(body, limit, undefined, maxBytes) : (await env.fuseki.query(body, maxBytes)).results?.bindings ?? [];
   const identities = await query(`PREFIX rv: <${RV}>
     SELECT ?unit ?work ?main ?contribution ?revision ?selection ?language ?resultWork ?resultMain ?chapterTitle WHERE {
       VALUES ?unit { ${units.map(iri).join(' ')} }

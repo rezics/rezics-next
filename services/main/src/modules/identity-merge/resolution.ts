@@ -25,7 +25,7 @@ export function redirectOf(env: WorkActivationEnvironment, position?: { sequence
       OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ${iri(resource)} rv:mergedInto ?mergedInto } }
     } LIMIT 2`;
     const rows = session?.fencesSelectedUnits
-      ? await session.query(body, 2, rows => rows.map(({ sequence: _sequence, ...row }) => row))
+      ? await session.query(body, 2, rows => rows.map(({ sequence: _sequence, ...row }) => row), 4096)
       : (await env.fuseki.query(body, 4096)).results?.bindings ?? [];
     if (rows.length !== 1 || !rows[0]?.sequence || !/^\d+$/.test(rows[0].sequence.value) || rows[0].mergedInto
       && (rows[0].mergedInto.type !== 'uri' || !Value.Check(targetRef, rows[0].mergedInto.value))) {

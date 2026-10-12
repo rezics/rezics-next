@@ -1,5 +1,6 @@
 ALTER TABLE access.serial_summary ADD COLUMN main_version text;
 ALTER TABLE access.serial_summary ADD COLUMN structure_head text;
+ALTER TABLE access.serial_summary ADD COLUMN publication_head text;
 ALTER TABLE access.serial_chapter ADD COLUMN publication text;
 ALTER TABLE access.serial_chapter ADD COLUMN eligibility text;
 

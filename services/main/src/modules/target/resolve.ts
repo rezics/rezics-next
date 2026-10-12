@@ -70,9 +70,9 @@ export async function targetRead<T>(environment: WorkActivationEnvironment,
   const checkDeadline = () => {
     if (Date.now() > deadline) throw new WorkReadUnavailable('Target deadline exceeded');
   };
-  const query: TargetReadSession['query'] = async (body, limit) => {
+  const query: TargetReadSession['query'] = async (body, limit, _fenceRows, maxBytes = 262_144) => {
     checkDeadline();
-    const rows = (await environment.fuseki.query(`${READ_PREFIX}\n${body}`, 262_144)).results?.bindings ?? [];
+    const rows = (await environment.fuseki.query(`${READ_PREFIX}\n${body}`, maxBytes)).results?.bindings ?? [];
     if (rows.length > limit) throw new WorkReadUnavailable('Target probe exceeds its bound');
     return rows;
   };

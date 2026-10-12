@@ -23,7 +23,7 @@ import { readZonePublication, readZoneHomeDocument, type ZonePublicPage } from '
 import { ZoneUnavailable } from './configuration.ts';
 import { parseZonePath } from './route-path.ts';
 import { ZONE_ROUTE_COST } from './route-cost.ts';
-import { collectionPopulation, realmPopulation, readZonePopulation }
+import { collectionPopulation, realmPopulation, readZonePopulation, ZONE_POPULATION_COST }
   from './route-population.ts';
 import { ReadingBoundary } from '../reading-position/boundary.ts';
 import { identityKeyUuid, uuidToSid } from '@rezics/model/address/sid';
@@ -126,7 +126,7 @@ class RouteRead {
     this.boundary = new ReadingBoundary(session);
     this.reader = { ...summaryReader(work, viewer), visibleRecords: records => this.boundary.visible(records) };
   }
-  query(body: string, limit: number) { return this.scopeSession.query(body, limit); }
+  query(body: string, limit: number, maxBytes: number) { return this.scopeSession.query(body, limit, undefined, maxBytes); }
   async dependency<T>(name: string, read: () => Promise<T>): Promise<T> {
     const value = await read();
     this.scopeSession.observeDependency(name, value, read);
@@ -217,7 +217,7 @@ class RouteRead {
       GRAPH ${iri(GRAPHS.current)} { ${iri(state.zone)} a rv:Zone ; rv:zoneState rv:Active ;
         rv:space ${iri(state.configuration.space)} .
         ${iri(state.configuration.space)} a rv:Space ; rv:disclosure ?spaceDisclosure . }
-    } LIMIT 2`, 2);
+    } LIMIT 2`, 2, 1024);
     if (rows.length !== 1 || ![RV + 'Public',RV + 'Private'].includes(rows[0]?.spaceDisclosure?.value ?? '')) {
       throw new ZoneRouteMissing('Zone route is unavailable');
     }
@@ -416,7 +416,7 @@ async function mountAt(read: RouteRead, state: Publication, header: CompositionH
       ?q a rv:ZoneMount ; rv:zone ${iri(state.zone)} ; rv:routeSegment ${lit(segment)} ; rv:disclosure ?disclosure .
       OPTIONAL { ?q rv:routeKey ?key }
       FILTER NOT EXISTS { ?placement rv:removedBy ?removed }
-    } } LIMIT 2`, 2);
+    } } LIMIT 2`, 2, 8192);
   const row = rows[0];
   if (rows.length !== 1 || !row?.occurrence || !row.target || !row.disclosure
     || ![`${RV}Public`, `${RV}Private`].includes(row.disclosure.value)) {
@@ -439,7 +439,7 @@ async function resourceTypeBatch(read: RouteRead, targets: readonly string[]) {
   const rows = await read.query(`SELECT DISTINCT ?resource ?type WHERE {
     VALUES ?resource { ${targets.map(iri).join(' ')} }
     GRAPH ${iri(GRAPHS.current)} { ?resource a ?type }
-  } ORDER BY STR(?resource) STR(?type) LIMIT ${limit + 1}`, limit + 1);
+  } ORDER BY STR(?resource) STR(?type) LIMIT ${limit + 1}`, limit + 1, 64 * 1024);
   if (rows.length > limit) throw new WorkReadUnavailable('Zone resource types exceed their bound');
   for (const target of targets) {
     const found = rows.filter(row => row.resource?.value === target);
@@ -456,7 +456,7 @@ async function resourceTypeBatch(read: RouteRead, targets: readonly string[]) {
 async function collectionHeader(read: RouteRead, collection: string) {
   const rows = await read.query(`PREFIX rv: <${RV}> SELECT ?structure WHERE {
     GRAPH ${iri(GRAPHS.current)} { ${iri(collection)} a rv:Collection ; rv:collectionState rv:Active ;
-      rv:structure ?structure } } LIMIT 2`, 2);
+      rv:structure ?structure } } LIMIT 2`, 2, 4096);
   const header = rows.length === 1 && rows[0]?.structure
     ? await read.header(rows[0].structure.value) : null;
   if (!header || header.profile !== 'collection-membership' || header.owner !== collection) {
@@ -488,7 +488,7 @@ async function indexItems(read: RouteRead, targets: string[]): Promise<Array<Wor
       VALUES ?work { ${works.map(iri).join(' ')} }
       GRAPH ${iri(GRAPHS.current)} { ?work rv:head ?head ; rv:mainVersion ?main .
         OPTIONAL { ?work a ?type . VALUES ?type { ${WORK_SEMANTIC_TYPES.map(type => `<${type}>`).join(' ')} } } }
-    } LIMIT ${works.length * 8 + 1}`, works.length * 8 + 1) : [];
+    } LIMIT ${works.length * 8 + 1}`, works.length * 8 + 1, 64 * 1024) : [];
   if (rows.length > works.length * 8) throw new WorkReadUnavailable('Zone Work card types exceed their bound');
   const session = new WorkReadSession(read.work, read.request, {}, read.position, false, read.attemptCount);
   session.principal = read.viewer.principal;
@@ -601,7 +601,7 @@ export async function resolveZoneRoute(work: MainWorkDependencies, request: Requ
         .flatMap(summary => summary ? [summary.reference] : [])),
       visible: item => item.role === 'member' && !!item.target && NATIVE_ID.test(item.target) });
     const cards = await indexItems(read, page.occurrences.map(item => item.target!));
-    const members = await readZonePopulation((query, limit) => read.query(query, limit),
+    const members = await readZonePopulation((query, limit) => read.query(query, limit, ZONE_POPULATION_COST.graphBytes),
     { collection: header }, cards.map(card => card.id));
     const items = cards.map(card => ({ ...card, inZone: members.has(card.id) }));
     const fenced = await read.targets([mount.target, ...items.map(item => item.id)]);

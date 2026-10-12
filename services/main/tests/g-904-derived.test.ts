@@ -520,7 +520,7 @@ test('G-904: serial counts fence current child restrictions without a relay even
   const publication = id(12), eligibility = id(13);
   const queryGraph = f.environment.fuseki.query.bind(f.environment.fuseki);
   f.environment.fuseki.query = async query => query.includes('VALUES (?work ?main ?structure)')
-    ? { results: { bindings: [row({ work, head: id(900) })] } }
+    ? { results: { bindings: [row({ work, head: id(900), publication: id(901) })] } }
     : query.includes('SELECT ?occurrence ?variant') ? { results: { bindings: [row({ occurrence: id(3),
       variant, revision, publication, eligibility, epoch: 'epoch', sequence: '1', public: 'true' })] } }
     : queryGraph(query);
@@ -534,7 +534,7 @@ test('G-904: serial counts fence current child restrictions without a relay even
               graph_epoch: 'epoch',
               sequence: '1',
               work,
-              main_version: id(4), structure: id(5), structure_head: id(900),
+              main_version: id(4), structure: id(5), structure_head: id(900), publication_head: id(901),
               chapter_count: 1,
               word_count: '8',
               last_updated_at: new Date('2026-09-30T00:00:00Z'),

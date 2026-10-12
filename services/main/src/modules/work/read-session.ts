@@ -10,7 +10,8 @@ import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import type {} from '../../routes/media.ts';
 import { AccountAssertionDenied, verifyRequestAccount } from '../account/verify-assertion.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
-import { readResourceSummaries, type ResourceSummary } from '../media/summary.ts';
+import { readResourceSummaries, type ResourceSummary, type SummaryInput, type SummaryReader,
+  type SummaryMedia } from '../media/summary.ts';
 import { readerLanguages } from '../display-language/select.ts';
 import { readRealmPolicy } from '../space/policy.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
@@ -118,7 +119,7 @@ export class WorkReadSession {
   private captureDependencies = true;
   /** Moving inventories own their live-row fences; every other read captures selected inputs. */
   get fencesSelectedUnits() { return !this.options.movingGraph || !!this.options.localBasis; }
-  private readonly queryDependencies = new Map<string, { limit: number; token: string;
+  private readonly queryDependencies = new Map<string, { limit: number; maxBytes: number; token: string;
     fenceRows?: (rows: readonly ReadRow[]) => ReadRow[] }>();
   private readonly ownerDependencies = new Map<string, { token: string; read: () => Promise<unknown> }>();
   async dependency(name: string, read: () => Promise<unknown>): Promise<string> {
@@ -155,7 +156,7 @@ export class WorkReadSession {
   /** Recheck only the bounded inputs consumed by this page. Retries share its HTTP budget. */
   async fenceDependencies() {
     for (const [body, prior] of this.queryDependencies) {
-      const rows = await this.query(body, prior.limit, prior.fenceRows);
+      const rows = await this.query(body, prior.limit, prior.fenceRows, prior.maxBytes);
       if (readRowsToken(prior.fenceRows ? prior.fenceRows(rows) : rows) !== prior.token) {
         throw new WorkReadMoved('Selected head changed');
       }
@@ -246,15 +247,16 @@ export class WorkReadSession {
     }
   }
 
-  async query(body: string, limit: number, fenceRows?: (rows: readonly ReadRow[]) => ReadRow[]): Promise<ReadRow[]> {
+  async query(body: string, limit: number, fenceRows?: (rows: readonly ReadRow[]) => ReadRow[],
+    maxBytes: number = WORK_READ_COST.queryBytes): Promise<ReadRow[]> {
     this.checkDeadline();
     const rows = (await this.deps.environment.fuseki.query(`${READ_PREFIX}\n${body}`,
-      WORK_READ_COST.queryBytes)).results?.bindings ?? [];
+      maxBytes)).results?.bindings ?? [];
     if (rows.length > limit) throw new WorkReadLimit('Read exceeds its bounded relation');
     if (this.fencesSelectedUnits && this.captureDependencies) {
       const token = readRowsToken(fenceRows ? fenceRows(rows) : rows), prior = this.queryDependencies.get(body);
       if (prior && prior.token !== token) throw new WorkReadMoved('Selected head changed');
-      this.queryDependencies.set(body, { limit, token, fenceRows });
+      this.queryDependencies.set(body, { limit, maxBytes, token, fenceRows });
     }
     return rows;
   }
@@ -266,7 +268,25 @@ export class WorkReadSession {
       Promise.resolve(this.deps.access.realmReadProof?.(this.principal!, this.options.actingSubject!, realm) ?? null) : undefined,
     canReadWork: this.principal && this.options.actingSubject ? (work: string) =>
       this.deps.access.canReadWork(this.principal!, this.options.actingSubject!, work) : undefined };
-    const media = this.deps.media?.store;
+    const result = await this.summaryBatch({ resources, context: DEFAULT_MEDIA_CONTEXT,
+      language: this.options.language?.toLowerCase() ?? null, languages: this.displayLanguages,
+      settleNonAgentNameOwners: 'includingAbsent' }, reader, this.deps.media?.store, optionalMedia);
+    return result.summaries;
+  }
+
+  /** Transport-specific summary inputs share the same selected dependency and
+   * authority close as headers and cards, including merged identities. */
+  async summaryBatch(input: SummaryInput, reader: SummaryReader, media: SummaryMedia | undefined,
+    optionalMedia = false) {
+    this.checkDeadline();
+    const proof = reader.realmReadProof;
+    const selectedReader: SummaryReader = { ...reader, ...(proof ? {
+      realmReadProof: async (realm: string) => {
+        const value = await proof(realm);
+        this.observeDependency(`summary-realm-proof:${realm}`, value, () => proof(realm));
+        return value;
+      },
+    } : {}) };
     const summaryMedia = media ? {
       avatarRows: async (...args: Parameters<typeof media.avatarRows>) => {
         const row = optionalMedia ? await optionalPreview(this, () => media.avatarRows(...args)) : await media.avatarRows(...args);
@@ -284,41 +304,39 @@ export class WorkReadSession {
         return row;
       },
     } : undefined;
-    const summaryInput = (localBasis: boolean) => ({
-      resources, context: DEFAULT_MEDIA_CONTEXT, language: this.options.language?.toLowerCase() ?? null,
-      languages: this.displayLanguages, localBasis, settleNonAgentNameOwners: 'includingAbsent' as const,
-    });
-    const result = await readResourceSummaries(this.deps.environment, summaryMedia, reader, summaryInput(this.fencesSelectedUnits));
+    const summaryInput = (localBasis: boolean) => ({ ...input, localBasis });
+    const result = await readResourceSummaries(this.deps.environment, summaryMedia, selectedReader,
+      summaryInput(this.fencesSelectedUnits));
     const rememberWorkRevisions = (revisions: ReadonlyMap<string, string>) => {
       for (const [work, revision] of revisions) this.workRevisions.set(work, revision);
     };
     rememberWorkRevisions(result.workRevisions);
     if (this.fencesSelectedUnits && this.captureDependencies) {
-      const key = `summaries:${JSON.stringify(resources)}`;
+      const key = `summaries:${JSON.stringify(input)}`;
       const token = readDependencyToken([result.generation.graph, result.generation.media?.split(':')[0] ?? null, result.summaries]);
       const previous = this.ownerDependencies.get(key);
       if (previous && previous.token !== token) throw new WorkReadMoved('Summary dependency changed');
       this.ownerDependencies.set(key, { token, read: async () => {
-        const fresh = await readResourceSummaries(this.deps.environment, summaryMedia, reader, summaryInput(true));
+        const fresh = await readResourceSummaries(this.deps.environment, summaryMedia, selectedReader, summaryInput(true));
         rememberWorkRevisions(fresh.workRevisions);
         return [fresh.generation.graph, fresh.generation.media?.split(':')[0] ?? null, fresh.summaries];
       } });
     } else if (!this.fencesSelectedUnits && result.generation.graph !== `${this.position.dataEpoch}:${this.position.sequence}`) {
       if (this.options.movingGraph && result.generation.graph.startsWith(`${this.position.dataEpoch}:`)) {
         this.stale = true;
-        return result.summaries;
+        return result;
       }
       throw new WorkReadMoved('Graph changed during the read');
     }
     for (const summary of result.summaries) {
       if (summary.status !== 'available' || summary.avatar.kind !== 'image') continue;
-      const captured = this.avatarSnapshots.get(DEFAULT_MEDIA_CONTEXT)?.rows.get(summary.reference);
+      const captured = this.avatarSnapshots.get(input.context)?.rows.get(summary.reference);
       if (captured) {
         const row = JSON.parse(captured) as { asset?: string } | null;
         if (row?.asset) this.deliveredSummaryAssets.add(`https://rezics.com/id/${row.asset}`);
       }
     }
-    return result.summaries;
+    return result;
   }
 
   /** One mutable-media fence per context for every summary section together.

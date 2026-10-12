@@ -67,6 +67,8 @@ async function concurrentReadProfiles() {
   const sampleContext = new AsyncLocalStorage<{
     path: string; attempts: number[]; observedAttempts: number[]; opening?: { dataEpoch: string; sequence: string };
     reached: () => void; held: Promise<void>; paused: boolean;
+    summary?: { resources: string[]; phase: 'closing-position' | 'survivor'; survivor?: string };
+    positionReads: number;
     failures: Array<{ phase: string; attempt: number; query?: string; error: unknown }>;
     prefixWalks: unknown[];
     sessions: Map<InstanceType<typeof WorkReadSession>, { done: Promise<void>; close: () => void }>;
@@ -83,6 +85,20 @@ async function concurrentReadProfiles() {
     ? { name: error.name, message: error.message, stack: error.stack,
       ...(error.cause ? { cause: failureDetail(error.cause) } : {}) } : String(error);
   const originalQuery = WorkReadSession.prototype.query;
+  const originalGraphQuery = home.stack.fuseki.query;
+  home.stack.fuseki.query = async function (...args) {
+    const sample = sampleContext.getStore();
+    if (sample?.summary && !sample.paused) {
+      const body = args[0];
+      const closing = sample.summary.phase === 'closing-position'
+        && body.includes('SELECT ?epoch ?sequence WHERE') && ++sample.positionReads === 2;
+      const survivor = sample.summary.phase === 'survivor' && body.includes('SELECT ?epoch ?sequence ?hold ?r')
+        && !!sample.summary.survivor && body.includes(`<${sample.summary.survivor}>`)
+        && !body.includes(`<${sample.summary.resources[0]}>`);
+      if (closing || survivor) { sample.paused = true; sample.reached(); await sample.held; }
+    }
+    return originalGraphQuery.apply(this, args);
+  };
   const originalAuthority = WorkReadSession.prototype.fenceAuthority;
   WorkReadSession.prototype.fenceAuthority = async function () {
     trackSession(this);
@@ -180,7 +196,7 @@ async function concurrentReadProfiles() {
       unrelated.push({ work: created.work, revision: head.revision, next: 'unknown' });
     }
     await grant('space:create:root', 'space.create');
-    const space = await command<{ space: string }>('POST', '/v1/spaces', {
+    const space = await command<{ space: string; realm: string }>('POST', '/v1/spaces', {
       profile: 'space-realm-v1', name: 'Concurrent community', language: 'en',
       capabilities: ['realm'], actingSubject: actor,
     }, 201);
@@ -233,12 +249,14 @@ async function concurrentReadProfiles() {
         publicSearchWriteActive: health.publicSearchWriteActive, prefixWalkAvailable: health.prefixWalkAvailable };
     };
     const measure = async (path: string, mutate: () => Promise<unknown> = async () => {}, token?: string,
-      concurrentWrites?: () => { requested: number; durable: number; finished: number }) => {
+      concurrentWrites?: () => { requested: number; durable: number; finished: number },
+      summary?: { resources: string[]; phase: 'closing-position' | 'survivor'; survivor?: string }) => {
       const searchBefore = path.startsWith('/v1/search/typeahead') ? await nativeSearchState() : undefined;
       let reached!: () => void, release!: () => void;
       const entered = new Promise<void>(resolve => { reached = resolve; });
       const held = new Promise<void>(resolve => { release = resolve; });
       const sample = { path, attempts: [] as number[], observedAttempts: [] as number[], reached, held, paused: false,
+        summary, positionReads: 0,
         failures: [] as Array<{ phase: string; attempt: number; query?: string; error: unknown }>,
         prefixWalks: [] as unknown[],
         sessions: new Map<InstanceType<typeof WorkReadSession>, { done: Promise<void>; close: () => void }>(),
@@ -247,7 +265,10 @@ async function concurrentReadProfiles() {
       let writesBeforeFence: typeof writesAtHydration, writesAtDelivery: typeof writesAtHydration;
       const measured = profileRequest(sink, headers => sampleContext.run(sample, async () => {
         if (token) headers.set('authorization', `Bearer ${token}`);
-        const response = await home.app.handle(new Request(`http://main.local${path}`, { headers }));
+        if (summary) headers.set('content-type', 'application/json');
+        const response = await home.app.handle(new Request(`http://main.local${path}`, { headers,
+          ...(summary ? { method: 'POST', body: JSON.stringify({ profile: 'resource-summary-batch-v1',
+            resources: summary.resources }) } : {}) }));
         const text = await response.text();
         writesAtDelivery = concurrentWrites?.();
         // A search deadline can return HTTP while the canceled attempt closes
@@ -550,6 +571,22 @@ async function concurrentReadProfiles() {
     });
     const firstPublication = await command<{ publicationDecision: string }>('POST', '/v1/work-publications',
       publicationBody(composition.revision, null), 201);
+    const { SerialStatisticsProjection } = await import('../../../services/main/src/modules/work/serial-projection.ts');
+    const serialStats = new SerialStatisticsProjection(home.stack.accessPool, home.relay,
+      home.stack.contentPool, home.stack.env);
+    Object.assign(home.deps, { serialStats });
+    const materializeStatistics = async () => {
+      await home.projectRelay();
+      for (let index = 0; index < 1000; index++) {
+        if (!await serialStats.tick()) return;
+      }
+      throw new Error('Serial statistics did not reach the retained fixture cut');
+    };
+    await materializeStatistics();
+    const selectedStatistics = (await serialStats.batch([structured.work])).get(structured.work);
+    assert.equal(selectedStatistics?.chapterCount, 0);
+    assert.equal(selectedStatistics.wordCount, 0);
+    assert(selectedStatistics.lastUpdatedAt, 'The published Recipe must have a materialized publication date');
     const structuredPath = `/v1/resources/${short(structured.work)}/page`;
     const structuredBaseline = await measure(structuredPath);
     assert.equal(structuredBaseline.result.status, 200);
@@ -562,11 +599,14 @@ async function concurrentReadProfiles() {
             usesIngredient: [], media: [], scaling: 'not-scalable' } }],
       });
       draftRevision = changed.revision;
+      await materializeStatistics();
     });
     assert.equal(draftOnly.result.status, 200, JSON.stringify(draftOnly.result.body));
     assert.equal(draftOnly.attempts, 1, 'An unselected Structure draft must not move the public Work page');
     assert.equal(draftOnly.profile.fusekiRequests, structuredBaseline.profile.fusekiRequests);
     assert.deepEqual(displayed(draftOnly.result.body), displayed(structuredBaseline.result.body));
+    assert.deepEqual((await serialStats.batch([structured.work])).get(structured.work), selectedStatistics,
+      'Processing a private Structure command must preserve selected public statistics and date');
     const republished = await measure(structuredPath, () => command('POST', '/v1/work-publications',
       publicationBody(draftRevision, firstPublication.publicationDecision), 201));
     assertAffected(republished, structured.work);
@@ -578,6 +618,35 @@ async function concurrentReadProfiles() {
     const selectedRecipe = await home.json<{ revision: string }>(await home.call('GET',
       `/v1/recipes/works/${short(structured.work)}`));
     assert.equal(selectedRecipe.revision, draftRevision, 'The published Work must select the edited Structure exactly');
+
+    await grant(`agent:control:${actor}`, 'agent.control');
+    const settings = await home.json<{ generation: string; settings: object }>(await home.call('GET',
+      `/v1/spaces/${short(space.space)}/settings`, undefined, home.author.token));
+    const realmSummary = { resources: [space.realm], phase: 'closing-position' as const };
+    const realmBaseline = await measure('/v1/resources/summaries', undefined, undefined, undefined, realmSummary);
+    assert.equal(realmBaseline.result.status, 200, JSON.stringify(realmBaseline.result.body));
+    assert(JSON.stringify(realmBaseline.result.body).includes('Concurrent community'));
+    const privateRealm = await measure('/v1/resources/summaries', () => command('PUT',
+      `/v1/spaces/${short(space.space)}/settings`, { actingSubject: actor,
+        expectedGeneration: settings.generation, reason: 'Close the selected Realm',
+        settings: { ...settings.settings, visibility: 'private' } }, 201), undefined, undefined, realmSummary);
+    assert(!JSON.stringify(privateRealm.result.body).includes('Concurrent community'),
+      'A Realm made private after hydration must never deliver its title');
+    assert(privateRealm.result.status !== 200 || privateRealm.attempts > 1,
+      'The changed Realm summary must replay or return a typed refusal');
+
+    // The redirect fixture represents an already committed merge. Both the
+    // summary request and the concurrent unrelated edit use the product API.
+    await home.stack.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA {
+      GRAPH <urn:rezics:graph:current> { <${shown.work}> rv:mergedInto <${unrelatedPublic.work}> } }`);
+    const mergedSummary = { resources: [shown.work], phase: 'survivor' as const, survivor: unrelatedPublic.work };
+    const mergedBaseline = await measure('/v1/resources/summaries', undefined, undefined, undefined, mergedSummary);
+    const mergedRace = await measure('/v1/resources/summaries', () => scalarEdit(unrelated[0]!, unrelated[0]!.next),
+      undefined, undefined, mergedSummary);
+    assert.equal(mergedBaseline.result.status, 200, JSON.stringify(mergedBaseline.result.body));
+    assert.equal(mergedRace.result.status, 200, JSON.stringify(mergedRace.result.body));
+    assert.equal(mergedRace.attempts, 1, 'Unrelated edits between source and survivor hydration must not replay');
+    assert.deepEqual(displayed(mergedRace.result.body), displayed(mergedBaseline.result.body));
   } finally {
     mkdirSync(directory, { recursive: true });
     writeFileSync(join(directory, 'profiles.json'), JSON.stringify(evidence, null, 2) + '\n');
@@ -586,6 +655,7 @@ async function concurrentReadProfiles() {
     WorkReadSession.prototype.fenceAuthority = originalAuthority;
     home.stack.fuseki.commandWithReceipt = originalCommand;
     home.stack.fuseki.prefixWalk = originalPrefixWalk;
+    home.stack.fuseki.query = originalGraphQuery;
     await home.stop();
     await shutdownTelemetry();
     await telemetryIngress.stop(true);
