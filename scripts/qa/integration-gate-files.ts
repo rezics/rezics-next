@@ -83,4 +83,5 @@ export const integrationGateFiles = [
   'services/account/tests/bulk-session-revocation-fairness.integration.test.ts',
   'services/main/tests/realm-reply-write-cost.test.ts',
   'services/main/tests/content-eligibility-state.integration.test.ts',
+  'services/main/tests/zone-resource-page-budget.integration.test.ts',
 ] as const;
