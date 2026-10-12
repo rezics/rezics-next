@@ -1,6 +1,6 @@
 import { ObjectIntegrityError, ObjectUnavailable, type ImmutableObjects }
   from '../../infrastructure/immutable-objects.ts';
-import { InvalidStructureObject, STRUCTURE_LIMITS, STRUCTURE_PAGE_FORMAT, STRUCTURE_QUALIFIER_KEY_PAGE_FORMAT, checkStructurePage }
+import { InvalidStructureObject, STRUCTURE_LIMITS, STRUCTURE_PAGE_FORMAT, STRUCTURE_RECORD_PAGE_FORMAT, STRUCTURE_QUALIFIER_KEY_PAGE_FORMAT, checkStructurePage }
   from './format.ts';
 
 // Copy-on-write B+tree over immutable pages. A change set rewrites only the
@@ -72,7 +72,8 @@ export class StructureTree<T> {
 
   private async write(level: number, entries: readonly unknown[], cost: TreeCost): Promise<string> {
     const bytes = new TextEncoder().encode(JSON.stringify({ format: this.kind === 'qualifier-key'
-      ? STRUCTURE_QUALIFIER_KEY_PAGE_FORMAT : STRUCTURE_PAGE_FORMAT,
+      ? STRUCTURE_QUALIFIER_KEY_PAGE_FORMAT : this.kind === 'record'
+        ? STRUCTURE_RECORD_PAGE_FORMAT : STRUCTURE_PAGE_FORMAT,
       tree: this.kind, level, entries }));
     checkStructurePage(bytes);
     cost.pagesWritten++;

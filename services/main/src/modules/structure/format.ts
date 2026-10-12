@@ -10,6 +10,7 @@ export const STRUCTURE_PROFILE = 'https://rezics.com/definition/structure-compos
 export const STRUCTURE_MANIFEST_FORMAT = 'rezics-structure-manifest-v1';
 export const STRUCTURE_INDEXED_MANIFEST_FORMAT = 'rezics-structure-manifest-v2';
 export const STRUCTURE_PAGE_FORMAT = 'rezics-structure-page-v1';
+export const STRUCTURE_RECORD_PAGE_FORMAT = 'rezics-structure-record-page-v2';
 export const STRUCTURE_QUALIFIER_KEY_PAGE_FORMAT = 'rezics-structure-qualifier-key-page-v1';
 export const STRUCTURE_QUALIFIER_KEY_INDEX_FORMAT = 'rezics-structure-qualifier-key-index-v1';
 export const STRUCTURE_SEAL_FORMAT = 'rezics-structure-seal-v1';
@@ -174,6 +175,10 @@ export const OccurrenceRecord = Type.Object({
   segmentKey: Type.Optional(orderKey),
   orderKey: Type.Optional(orderKey),
   role: Type.String({ minLength: 1, maxLength: 32, pattern: profileIdPattern }),
+  /** Active descendants at distances 1..16; derived only by the Structure owner. */
+  subtreeLevels: Type.Optional(Type.Array(Type.Integer({ minimum: 0,
+    maximum: STRUCTURE_LIMITS.maxPlacements }), {
+    minItems: STRUCTURE_LIMITS.maxDepth, maxItems: STRUCTURE_LIMITS.maxDepth })),
   target: Type.Optional(reference),
   selection: Type.Optional(selection),
   labels: Type.Array(text(STRUCTURE_LIMITS.labelChars), { maxItems: 16 }),
@@ -217,7 +222,12 @@ export const StructurePage = Type.Union([
     level: Type.Integer({ minimum: 1, maximum: STRUCTURE_LIMITS.treeLevels - 1 }),
     entries: entries(interiorEntry) }, { additionalProperties: false }),
   Type.Object({ format: Type.Literal(STRUCTURE_PAGE_FORMAT), tree: Type.Literal('record'),
+    level: Type.Literal(0), entries: entries(Type.Omit(OccurrenceRecord, ['subtreeLevels'], { additionalProperties: false }), 0) }, { additionalProperties: false }),
+  Type.Object({ format: Type.Literal(STRUCTURE_RECORD_PAGE_FORMAT), tree: Type.Literal('record'),
     level: Type.Literal(0), entries: entries(OccurrenceRecord, 0) }, { additionalProperties: false }),
+  Type.Object({ format: Type.Literal(STRUCTURE_RECORD_PAGE_FORMAT), tree: Type.Literal('record'),
+    level: Type.Integer({ minimum: 1, maximum: STRUCTURE_LIMITS.treeLevels - 1 }),
+    entries: entries(interiorEntry) }, { additionalProperties: false }),
   Type.Object({ format: Type.Literal(STRUCTURE_PAGE_FORMAT), tree: Type.Literal('order'),
     level: Type.Literal(0), entries: entries(OrderEntry, 0) }, { additionalProperties: false }),
   Type.Object({ format: Type.Literal(STRUCTURE_PAGE_FORMAT), tree: Type.Literal('pin'),
@@ -260,6 +270,7 @@ const manifestProperties = {
   structureOf: reference,
   profile: Type.String({ minLength: 1, maxLength: 64, pattern: profileIdPattern }),
   generation: nativeId,
+  /** Base order/pin format; record pages declare their own v1/v2 format. */
   pageFormat: Type.Literal(STRUCTURE_PAGE_FORMAT),
   records: treeRoot,
   order: treeRoot,

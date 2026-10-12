@@ -2,11 +2,12 @@ import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
 import { hash } from '../work/activate.ts';
-import { COMPOSITION_PROFILE, NATIVE_ID, derivedId, orderTreeKey, recordTreeKey } from './graph.ts';
+import { COMPOSITION_PROFILE, NATIVE_ID, derivedId, orderTreeKey, recordTreeKey, rebuildSubtreeLevels } from './graph.ts';
 import { orderTree, recordTree } from './change.ts';
 import { checkOccurrenceRecord, checkStructureManifest, checkStructurePage,
   STRUCTURE_LIMITS, STRUCTURE_MANIFEST_FORMAT, STRUCTURE_PAGE_FORMAT,
   STRUCTURE_INDEXED_MANIFEST_FORMAT,
+  STRUCTURE_RECORD_PAGE_FORMAT,
   type OccurrenceRecord, type OrderEntry } from './format.ts';
 import { newCost } from './tree.ts';
 import { deepestLevel, isContainerRole, structureProfileFor } from './profiles.ts';
@@ -127,7 +128,7 @@ export class StructureStageStore {
       || input.entries.length > STRUCTURE_LIMITS.pageEntries) {
       throw new StructureStageInvalid('stage page exceeds its bounds');
     }
-    const page = { format: STRUCTURE_PAGE_FORMAT, tree: 'record' as const,
+    const page = { format: STRUCTURE_RECORD_PAGE_FORMAT, tree: 'record' as const,
       level: 0 as const, entries: input.entries };
     const bytes = new TextEncoder().encode(JSON.stringify(page));
     checkStructurePage(bytes);
@@ -231,6 +232,7 @@ export class StructureStageStore {
       throw new StructureStageInvalid('stage order segment exceeds its bound');
     }
     const cost = newCost();
+    rebuildSubtreeLevels(records, stage.structure, sealed.id);
     const recordRoot = await recordTree(this.objects).apply(await recordTree(this.objects).empty(cost),
       new Map(records.map(record => [recordTreeKey(record), record])), cost);
     const orderRoot = await orderTree(this.objects).apply(await orderTree(this.objects).empty(cost),

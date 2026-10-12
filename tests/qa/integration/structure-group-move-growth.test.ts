@@ -23,6 +23,11 @@ if (process.env.REZICS_GROUP_MOVE_PROFILE_CHILD === '1') {
   const { createMainApp } = await import('../../../services/main/src/app.ts');
   const { activateMetadataWork, metadataWorkRequestDigest } =
     await import('../../../services/main/src/modules/work/activate.ts');
+  const { StructureStageStore } = await import('../../../services/main/src/modules/structure/stage.ts');
+  const { readCompositionHeader } = await import('../../../services/main/src/modules/structure/graph.ts');
+  const { recordTree, subtreeHeight } = await import('../../../services/main/src/modules/structure/change.ts');
+  const { checkStructureManifest } = await import('../../../services/main/src/modules/structure/format.ts');
+  const { newCost } = await import('../../../services/main/src/modules/structure/tree.ts');
   const stack = await startMediaStack('structure-group-move-growth');
   const readings: Reading[] = [];
   try {
@@ -30,7 +35,8 @@ if (process.env.REZICS_GROUP_MOVE_PROFILE_CHILD === '1') {
     const objects = stack.objects('semantic/structure/');
     await objects.initialize();
     const app = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access,
-      structureObjects: objects, account: { verify: async () => member.principal } });
+      structureObjects: objects, structureStages: new StructureStageStore(stack.contentPool, objects),
+      account: { verify: async () => member.principal } });
     const prepared = performance.now();
     const json = async <T>(response: Response, status = 200): Promise<T> => {
       const text = await response.text();
@@ -46,6 +52,7 @@ if (process.env.REZICS_GROUP_MOVE_PROFILE_CHILD === '1') {
         admission: stack.admission(member.actor, 'work:create:root', 'work.create',
           metadataWorkRequestDigest(title, semanticTypes)) });
       await member.grant(`work:edit:${work.work}`, 'work.edit');
+      await member.grant(`work:read:${work.work}`, 'work.read');
       const call = (path: string, body: object, headers = new Headers()) => {
         headers.set('authorization', `Bearer ${member.token}`);
         headers.set('idempotency-key', randomUUID());
@@ -64,6 +71,11 @@ if (process.env.REZICS_GROUP_MOVE_PROFILE_CHILD === '1') {
           actingSubject: member.actor, expectedHead: composition.revision, operations }, headers));
         return composition;
       };
+      const retained = async () => {
+        const header = (await readCompositionHeader(stack.env, composition.structure))!;
+        const manifest = checkStructureManifest(await objects.get(header.manifest.slice(-64)));
+        return recordTree(objects).range(manifest.records, '', '\uffff', 300, newCost());
+      };
       const roots = await change([group(composition.structure), group(composition.structure)]);
       const [moved, destination] = roots.occurrences;
       for (let count = 0; count < descendants; count += 16) {
@@ -81,6 +93,50 @@ if (process.env.REZICS_GROUP_MOVE_PROFILE_CHILD === '1') {
       readings.push({ descendants, profile, nativeAdds: counter('current_adds') + counter('revisions_adds') + counter('other_adds'),
         validationFocuses: counter('validation_focuses'), pagesRead: result.cost.pagesRead });
       sink.clear();
+      const afterMove = await retained();
+      expect(afterMove.find(record => record.occurrence === moved)!.subtreeLevels![0]).toBe(descendants);
+      expect(afterMove.find(record => record.occurrence === destination)!.subtreeLevels!.slice(0, 2))
+        .toEqual([1, descendants]);
+      if (descendants === 16) {
+        const leaf = afterMove.find(record => record.parent === moved)!;
+        const inserted = (await change([group(leaf.occurrence)])).occurrences[0]!;
+        expect(subtreeHeight((await retained()).find(record => record.occurrence === destination)!.subtreeLevels)).toBe(3);
+        await change([{ op: 'remove', occurrence: inserted }]);
+        expect(subtreeHeight((await retained()).find(record => record.occurrence === destination)!.subtreeLevels)).toBe(2);
+        await change([{ op: 'move', occurrence: moved, parent: composition.structure, position: 'last' }]);
+        expect(subtreeHeight((await retained()).find(record => record.occurrence === destination)!.subtreeLevels)).toBe(0);
+
+        const base = `/v1/compositions/${composition.structure.slice(-36)}`;
+        type Stage = { id: string; holder: string; fence: string; revision: string };
+        const stage = await json<Stage>(await call(`${base}/stages`, {
+          actingSubject: member.actor, expectedHead: composition.revision }), 201);
+        const legacyRecords = (await retained()).map(record => {
+          const { subtreeLevels: _levels, ...legacy } = record;
+          return legacy;
+        });
+        const headers = new Headers({ authorization: `Bearer ${member.token}`,
+          'content-type': 'application/json', 'idempotency-key': randomUUID() });
+        await json(await app.handle(new Request(`http://main.local${base}/stages/${stage.id}/pages/0`, {
+          method: 'PUT', headers, body: JSON.stringify({ actingSubject: member.actor,
+            holder: stage.holder, fence: stage.fence, entries: legacyRecords }) })));
+        await json(await call(`${base}/stages/${stage.id}/seal`, { actingSubject: member.actor,
+          holder: stage.holder, fence: stage.fence }));
+        await json(await call(`${base}/stages/${stage.id}/activate`, { actingSubject: member.actor }));
+        composition.revision = stage.revision;
+        expect(subtreeHeight((await retained()).find(record => record.occurrence === moved)!.subtreeLevels)).toBe(1);
+        await change([{ op: 'move', occurrence: moved, parent: destination, position: 'last' }]);
+        const page = await json<{ occurrences: object[] }>(await app.handle(new Request(
+          `http://main.local${base}?actingSubject=${encodeURIComponent(member.actor)}`,
+          { headers: { authorization: `Bearer ${member.token}` } })));
+        expect(page.occurrences.every(record => !('subtreeLevels' in record))).toBe(true);
+
+        let parent = composition.structure;
+        for (let depth = 0; depth < 15; depth++) parent = (await change([group(parent)])).occurrences[0]!;
+        const head = composition.revision;
+        await json(await call(path, { profile: 'work-composition', actingSubject: member.actor,
+          expectedHead: head, operations: [{ op: 'move', occurrence: moved, parent, position: 'last' }] }), 409);
+        expect((await readCompositionHeader(stack.env, composition.structure))!.head).toBe(head);
+      }
     }
     expect(performance.now() - prepared).toBeLessThan(600_000);
     await app.stop();
@@ -105,7 +161,7 @@ if (process.env.REZICS_GROUP_MOVE_PROFILE_CHILD === '1') {
       adds: reading.nativeAdds, focuses: reading.validationFocuses, pages: reading.pagesRead }));
     console.log('Group move growth', JSON.stringify(counts), resultPath);
   }, 600_000);
-  test.failing('cross-parent group move work is constant at 16/64/256 descendants', () => {
+  test('cross-parent group move work is constant at 16/64/256 descendants', () => {
     const counts = readings.map(reading => ({ descendants: reading.descendants,
       sql: reading.profile.postgresStatements, fuseki: reading.profile.fusekiRequests,
       adds: reading.nativeAdds, focuses: reading.validationFocuses, pages: reading.pagesRead }));

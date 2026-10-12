@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto';
 import type { SparqlResult } from '../../infrastructure/fuseki.ts';
 import { GRAPHS, ID, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
-import type { OccurrenceRecord, OrderEntry } from './format.ts';
+import { STRUCTURE_LIMITS, type OccurrenceRecord, type OrderEntry } from './format.ts';
 import type { OccurrenceRole, StructureProfile } from './format.ts';
-import { structureProfileFor, structureProfileForGraph } from './profiles.ts';
+import { isContainerRole, structureProfileFor, structureProfileForGraph } from './profiles.ts';
 
 // Bounded current-graph reads for Book compositions. Every read names the
 // selected generation, so a staged or retired generation is never unioned in.
@@ -78,6 +78,7 @@ export interface PlacementState {
   segmentKey?: string;
   orderKey?: string;
   role: OccurrenceRole;
+  subtreeLevels?: number[];
   label?: Label;
   /** Every carried language; label is the first-label convenience for owners. */
   labels?: Label[];
@@ -329,9 +330,42 @@ export function placementRecord(state: PlacementState): OccurrenceRecord {
     parent: state.parent,
     ...(state.active ? { segmentKey: state.segmentKey!, orderKey: state.orderKey! } : {}),
     role: state.role, ...(state.target ? { target: state.target } : {}),
+    ...(state.subtreeLevels ? { subtreeLevels: state.subtreeLevels } : {}),
     ...(state.selection ? { selection: state.selection } : {}),
     ...(state.qualifier ? { qualifier: state.qualifier } : {}),
     labels: state.labels ?? (state.label ? [state.label] : []),
     ...(state.sourceKey ? { sourceKey: state.sourceKey } : {}),
     introducedBy: state.introducedBy, ...(state.removedBy ? { removedBy: state.removedBy } : {}) };
+}
+
+/** Staged replacement and restore already materialize validated topology. Derive
+ * owner summaries there, rather than trusting counters supplied by an uploader. */
+export function rebuildSubtreeLevels(records: readonly OccurrenceRecord[], structure: string,
+  profile: StructureProfile): void {
+  const byId = new Map(records.map(record => [record.occurrence, record]));
+  const summaries = new Map<string, number[]>();
+  for (const record of records) {
+    if (record.state === 'active' && isContainerRole(profile, record.role)) {
+      summaries.set(record.occurrence, Array<number>(STRUCTURE_LIMITS.maxDepth).fill(0));
+    }
+  }
+  for (const record of records) {
+    if (record.state !== 'active') continue;
+    const seen = new Set([record.occurrence]);
+    let parent = record.parent;
+    for (let distance = 0; parent !== structure; distance++) {
+      const owner = byId.get(parent), levels = summaries.get(parent);
+      if (!owner || !levels || seen.has(parent) || distance >= STRUCTURE_LIMITS.maxDepth) {
+        throw new CompositionCorrupt('Structure summary parent chain is unavailable or cyclic');
+      }
+      seen.add(parent);
+      levels[distance] = levels[distance]! + 1;
+      parent = owner.parent;
+    }
+  }
+  for (const record of records) {
+    const levels = summaries.get(record.occurrence);
+    if (levels) record.subtreeLevels = levels;
+    else delete record.subtreeLevels;
+  }
 }

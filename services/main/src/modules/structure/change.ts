@@ -32,7 +32,7 @@ import {
   readPlacements,
   readPublishedVariants,
   readSegment,
-  readSegments,
+  rebuildSubtreeLevels,
   recordTreeKey,
   structureIri,
   type CompositionHeader,
@@ -62,6 +62,7 @@ export class CompositionConflict extends Error {}
 export class CompositionExists extends Error {}
 export class CompositionTooLarge extends Error {}
 export class CompositionCancelled extends Error {}
+export class StructureSummaryRepairRequired extends StructureObjectUnavailable {}
 
 export type Position = 'first' | 'last' | { after: string };
 export type CompositionOperation =
@@ -803,6 +804,7 @@ function placementFromRecord(record: OccurrenceRecord, generation: string): Plac
   const active = record.state === 'active';
   return { occurrence: record.occurrence, placement: placementIri(generation, record.occurrence),
     active, parent: record.parent, role: record.role, introducedBy: record.introducedBy,
+    ...(record.subtreeLevels ? { subtreeLevels: [...record.subtreeLevels] } : {}),
     labels: record.labels, ...(record.labels[0] ? { label: record.labels[0] } : {}),
     ...(active ? { segmentKey: record.segmentKey, orderKey: record.orderKey }
       : { removedBy: record.removedBy }),
@@ -817,10 +819,10 @@ function placementFromRecord(record: OccurrenceRecord, generation: string): Plac
 /** In-memory working state over lazily loaded placements and order segments. */
 class Working {
   readonly placements = new Map<string, PlacementState>();
+  readonly retainedRecords = new Map<string, OccurrenceRecord>();
   readonly original = new Map<string, string | null>();
   readonly segments = new Map<string, SegmentState>();
   readonly originalSegments = new Map<string, string | null>();
-  private readonly parentSegments = new Map<string, string[]>();
   private readonly members = new Map<string, string[]>();
   private readonly indexedSegments = new Map<string, string>();
   private readonly soughtSegments = new Map<string, SegmentState | null>();
@@ -888,6 +890,7 @@ class Working {
       return undefined;
     }
     const state = placementFromRecord(record, this.header.generation);
+    this.retainedRecords.set(occurrence, record);
     if (record.orderKey) this.orderKeys.set(occurrence, record.orderKey);
     if (record.state === 'active') {
       const known = [...this.segments.values()].find(segment =>
@@ -910,18 +913,6 @@ class Working {
   }
 
   allocate(kind: string): string { return derivedId(`${this.seed}\0${kind}\0${this.allocated++}`); }
-
-  async segmentsOf(parent: string): Promise<string[]> {
-    let ids = this.parentSegments.get(parent);
-    if (!ids) {
-      const loaded = await readSegments(this.env, this.header.generation, [parent]);
-      for (const segment of loaded) this.rememberSegment(segment);
-      ids = [...this.segments.values()].filter(segment => segment.parent === parent)
-        .sort((a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0).map(segment => segment.segment);
-      this.parentSegments.set(parent, ids);
-    }
-    return ids;
-  }
 
   segment(id: string): SegmentState {
     const segment = this.segments.get(id);
@@ -1008,13 +999,11 @@ class Working {
     return list;
   }
 
-  newSegment(parent: string, key: string, after?: string): SegmentState {
+  newSegment(parent: string, key: string): SegmentState {
     const segment = { segment: this.allocate('segment'), parent, key, count: 0 };
     this.segments.set(segment.segment, segment);
     this.originalSegments.set(segment.segment, null);
     this.members.set(segment.segment, []);
-    const ids = this.parentSegments.get(parent);
-    if (ids) ids.splice(after === undefined ? ids.length : ids.indexOf(after) + 1, 0, segment.segment);
     return segment;
   }
 }
@@ -1046,7 +1035,7 @@ async function split(w: Working, segment: SegmentState): Promise<void> {
     await rebalanceSegmentKeys(w, segment);
     key = segmentKeyBetween(segment.key, next?.key ?? null);
   }
-  const created = w.newSegment(segment.parent, key, segment.segment);
+  const created = w.newSegment(segment.parent, key);
   const upper = members.splice(Math.floor(members.length / 2));
   for (const occurrence of upper) {
     const state = (await w.get(occurrence))!;
@@ -1130,26 +1119,59 @@ async function ancestry(w: Working, parent: string): Promise<string[]> {
   return chain;
 }
 
-/** Levels of descendants below an occurrence; only groups own children. */
-async function height(w: Working, occurrence: string): Promise<number> {
-  let frontier = [occurrence];
-  let levels = 0;
-  while (frontier.length && levels <= STRUCTURE_LIMITS.maxDepth) {
-    const next: string[] = [];
-    let found = false;
-    for (const parent of frontier) {
-      for (const id of await w.segmentsOf(parent)) {
-        for (const child of await w.membersOf(id)) {
-          found = true;
-          if (isContainerRole(w.header.profile, (await w.get(child))!.role)) next.push(child);
-        }
-      }
-    }
-    if (!found) break;
-    levels++;
-    frontier = next;
+/** No descendant read is permitted on a foreground change. Legacy topology is
+ * repaired through the existing staged replacement owner before it is changed. */
+export function subtreeHeight(levels: readonly number[] | undefined): number {
+  if (!levels) throw new StructureSummaryRepairRequired(
+    'Structure subtree summaries are missing; repair with POST /v1/compositions/:id/stages, upload retained records, seal and activate the replacement');
+  if (levels.length !== STRUCTURE_LIMITS.maxDepth
+    || levels.some(count => !Number.isSafeInteger(count) || count < 0
+      || count > STRUCTURE_LIMITS.maxPlacements)
+    || levels.reduce((sum, count) => sum + count, 0) > STRUCTURE_LIMITS.maxPlacements) {
+    throw new StructureObjectCorrupt('Structure subtree summary differs');
   }
-  return levels;
+  for (let index = levels.length - 1; index >= 0; index--) {
+    if (levels[index]! > 0) return index + 1;
+  }
+  return 0;
+}
+
+export function checkSubtreeDepth(parentDepth: number, descendantHeight: number, maxDepth: number): void {
+  if (parentDepth + 1 + descendantHeight > maxDepth) {
+    throw new CompositionConflict('composition depth exceeded');
+  }
+}
+
+/** Histogram bins permit the maximum to shrink without inspecting any sibling.
+ * Compute every replacement before applying it so corrupt summaries are atomic. */
+export function adjustSubtreeAncestors(ancestors: readonly PlacementState[],
+  contribution: readonly number[], delta: 1 | -1): void {
+  const updates = ancestors.map((ancestor, distance) => {
+    subtreeHeight(ancestor.subtreeLevels);
+    const next = [...ancestor.subtreeLevels!];
+    for (const [level, count] of contribution.entries()) {
+      if (!Number.isSafeInteger(count) || count < 0) {
+        throw new StructureObjectCorrupt('Structure subtree contribution differs');
+      }
+      if (level + distance >= next.length) {
+        if (count) throw new CompositionConflict('composition depth exceeded');
+        continue;
+      }
+      next[level + distance] = next[level + distance]! + delta * count;
+    }
+    subtreeHeight(next);
+    return next;
+  });
+  ancestors.forEach((ancestor, index) => { ancestor.subtreeLevels = updates[index]!; });
+}
+
+async function summaryAncestors(w: Working, parent: string): Promise<PlacementState[]> {
+  const chain = await ancestry(w, parent);
+  return Promise.all(chain.map(async id => {
+    const state = (await w.get(id))!;
+    subtreeHeight(state.subtreeLevels);
+    return state;
+  }));
 }
 
 async function apply(w: Working, operation: CompositionOperation, index: number): Promise<void> {
@@ -1163,6 +1185,8 @@ async function apply(w: Working, operation: CompositionOperation, index: number)
     const occurrence = derivedId(`${w.revision}\0occurrence\0${index}`);
     const state: PlacementState = { occurrence, placement: placementIri(w.header.generation, occurrence),
       active: true, parent: operation.parent, role: operation.role, introducedBy: w.revision,
+      ...(isContainerRole(profile, operation.role)
+        ? { subtreeLevels: Array<number>(STRUCTURE_LIMITS.maxDepth).fill(0) } : {}),
       ...(operation.label ? { label: operation.label } : {}),
       ...(operation.target ? { target: operation.target,
         ...(operation.selection ? { selection: operation.selection } : {}) } : {}),
@@ -1173,6 +1197,7 @@ async function apply(w: Working, operation: CompositionOperation, index: number)
       throw new CompositionConflict('composition placement limit exceeded');
     }
     await place(w, state, operation.parent, operation.position);
+    adjustSubtreeAncestors(await summaryAncestors(w, operation.parent), [1], 1);
     w.activeDelta++;
     return;
   }
@@ -1198,9 +1223,11 @@ async function apply(w: Working, operation: CompositionOperation, index: number)
   if (operation.op === 'remove') {
     if (await w.hasChildren(state.occurrence)) throw new CompositionConflict('a group with children cannot be removed');
     await unplace(w, state);
+    adjustSubtreeAncestors(await summaryAncestors(w, state.parent), [1], -1);
     state.active = false;
     state.tombstone = true;
     state.removedBy = w.revision;
+    delete state.subtreeLevels;
     w.activeDelta--;
     return;
   }
@@ -1210,10 +1237,16 @@ async function apply(w: Working, operation: CompositionOperation, index: number)
   if (typeof operation.position === 'object' && operation.position.after === state.occurrence) {
     throw new CompositionConflict('an occurrence cannot be placed after itself');
   }
-  if (chain.length + 1 > deepestLevel(profile, state.role) || isContainerRole(profile, state.role)
-    && operation.parent !== state.parent
-    && chain.length + 1 + await height(w, state.occurrence) > (profile.maxDepth ?? STRUCTURE_LIMITS.maxDepth)) {
-    throw new CompositionConflict('composition depth exceeded');
+  checkSubtreeDepth(chain.length, 0, deepestLevel(profile, state.role));
+  if (operation.parent !== state.parent) {
+    const levels = isContainerRole(profile, state.role) ? state.subtreeLevels : undefined;
+    const height = isContainerRole(profile, state.role) ? subtreeHeight(levels) : 0;
+    checkSubtreeDepth(chain.length, height, profile.maxDepth ?? STRUCTURE_LIMITS.maxDepth);
+    const oldAncestors = await summaryAncestors(w, state.parent);
+    const newAncestors = await summaryAncestors(w, operation.parent);
+    const contribution = [1, ...levels ?? []];
+    adjustSubtreeAncestors(oldAncestors, contribution, -1);
+    adjustSubtreeAncestors(newAncestors, contribution, 1);
   }
   await unplace(w, state);
   await place(w, state, operation.parent, operation.position);
@@ -1469,6 +1502,7 @@ export async function changeComposition(env: WorkActivationEnvironment,
   const qualifierEdits = new Set(operations.flatMap(operation => operation.op === 'update' && operation.qualifier
     ? [operation.occurrence] : []));
   const changedExisting: PlacementState[] = [];
+  const projectedOccurrences = new Set<string>();
   const listParents = new Set<string>();
   for (const [occurrence, state] of w.placements) {
     const before = w.original.get(occurrence);
@@ -1477,8 +1511,14 @@ export async function changeComposition(env: WorkActivationEnvironment,
       old ? placementTriples(old, header.generation, header.profile) : [],
       placementTriples(state, header.generation, header.profile),
     );
-    if (old && !change.removed.length && !change.added.length && !qualifierEdits.has(occurrence)) continue;
+    if (old && !change.removed.length && !change.added.length && !qualifierEdits.has(occurrence)) {
+      if (JSON.stringify(old.subtreeLevels) !== JSON.stringify(state.subtreeLevels)) {
+        records.set(occurrence, { ...w.retainedRecords.get(occurrence)!, subtreeLevels: state.subtreeLevels });
+      }
+      continue;
+    }
     const record = placementRecord(state);
+    projectedOccurrences.add(occurrence);
     checkOccurrenceRecord(
       record,
       header.profile,
@@ -1505,7 +1545,7 @@ export async function changeComposition(env: WorkActivationEnvironment,
     cost.placementsWritten++;
   }
   for (const parent of listParents) inserts.push(itemListTriples(header.generation, parent));
-  for (const occurrence of records.keys()) {
+  for (const occurrence of projectedOccurrences) {
     const state = w.placements.get(occurrence)!;
     if (state.active) {
       const entry = { parent: state.parent, segmentKey: state.segmentKey!,
@@ -1542,6 +1582,7 @@ export async function changeComposition(env: WorkActivationEnvironment,
   const graphRecords = new Map(graphStates.map(state => [state.occurrence, placementRecord(state)]));
   for (const old of changedExisting) {
     const canonical = (record: OccurrenceRecord | undefined) => record && JSON.stringify({ ...record,
+      subtreeLevels: undefined,
       ...(record.qualifier ? { qualifier: record.qualifier.type === 'ingredient-line'
         ? { ...record.qualifier, substituteFor: [...new Set(record.qualifier.substituteFor)].sort() }
         : record.qualifier.type === 'recipe-step' ? { ...record.qualifier,
@@ -1641,7 +1682,7 @@ export async function changeComposition(env: WorkActivationEnvironment,
       (parent) => ['item-list', itemListIri(header.generation, parent)] as [string, string],
     ),
   ];
-  for (const occurrence of records.keys()) {
+  for (const occurrence of projectedOccurrences) {
     const state = w.placements.get(occurrence)!;
     focus.push([state.active || state.tombstone ? 'placement' : 'removed-placement', state.placement]);
     if (w.original.get(occurrence) === null) focus.push(['occurrence', occurrence]);
@@ -2106,7 +2147,12 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
   const topGroups = header.profile === 'book-composition'
     ? sourceManifest.topGroups ?? await orderTree(objects).apply(await orderTree(objects).empty(cost),
       new Map(groupEntries.map(entry => [orderTreeKey(entry), entry])), cost) : undefined;
+  const originalSummaries = new Map(records.map(record => [record.occurrence, JSON.stringify(record.subtreeLevels)]));
+  rebuildSubtreeLevels(records, header.structure, header.profile);
+  const summaryChanges = new Map(records.filter(record => originalSummaries.get(record.occurrence)
+    !== JSON.stringify(record.subtreeLevels)).map(record => [record.occurrence, record]));
   const replacementSource = { ...sourceManifest, generation,
+    records: await recordTree(objects).apply(sourceManifest.records, summaryChanges, cost),
     ...(topGroups ? { topGroups } : {}),
     ...(completion ? { completion } : {}),
     ...(intent.stage ? {} : { restoredFrom: intent.restoredFrom }) };

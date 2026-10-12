@@ -13,6 +13,13 @@ import { encodeReadCursor, decodeReadCursor, WorkReadMoved } from '../work/read-
 import { qualifierKeyTree, qualifierKeyPrefix, qualifierKeyOf, requireQualifierKeyIndex, resolvePreparedQualifierKeys,
   QUALIFIER_KEY_COST, type QualifierKey } from './qualifier-index.ts';
 
+/** Derived topology counters include undisclosed descendants. Every read surface
+ * returns occurrence content without those owner-only counters. */
+function disclosedRecord(record: OccurrenceRecord): OccurrenceRecord {
+  const { subtreeLevels: _levels, ...disclosed } = record;
+  return disclosed;
+}
+
 /** Source-bound candidates refine existing immutable membership. A miss never
  * falls back to a complete order/record inventory or invents legacy coverage. */
 export async function readCompositionOccurrenceByQualifierKey(env: WorkActivationEnvironment, input: {
@@ -129,7 +136,7 @@ export async function readCompositionOccurrenceByQualifierKey(env: WorkActivatio
   if (!await input.canReadOwner(header.owner)) throw new CompositionUnavailable('Composition is unavailable');
   if ((await readable(occurrences)).length !== occurrences.length) throw new WorkReadMoved('Qualifier key disclosure changed during read');
   return { structure: input.structure, owner: header.owner, component: header.component, work: header.work,
-    mainVersion: header.mainVersion, revision, occurrences,
+    mainVersion: header.mainVersion, revision, occurrences: occurrences.map(disclosedRecord),
     outcome: occurrences.length === 2 ? 'ambiguous' as const : occurrences.length ? 'found' as const : 'missing' as const,
     sourcePosition: { datasetId: 'product' as const, dataEpoch: row!.epoch!.value, sequence: row!.sequence!.value },
     cost: { ...cost, pagesRead: cached.size } };
@@ -335,8 +342,8 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
       && !(input.canReadTargets ? (await input.canReadTargets([record.target])).has(record.target)
         : await input.canReadTarget(record.target));
     if (withheld && profile.withholdUnreadableTargets) throw new CompositionUnavailable('occurrence is unavailable');
-    const visible = withheld
-      ? { ...record, target: undefined, selection: undefined, labels: [] } : record;
+    const visible = disclosedRecord(withheld
+      ? { ...record, target: undefined, selection: undefined, labels: [] } : record);
     let occurrenceContext: CompositionPage['occurrenceContext'];
     if (!profile.withholdUnreadableTargets && record.state === 'active' && record.segmentKey && record.orderKey) {
       const key = orderTreeKey(record as Required<Pick<OccurrenceRecord,
@@ -432,7 +439,7 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
       const withheld = record.target && !isCatalogTarget(profile, record.target)
         && !(readable ? readable.has(record.target) : await input.canReadTarget(record.target));
       if (!withheld || !profile.withholdUnreadableTargets) {
-        const visible = withheld ? { ...record, target: undefined, selection: undefined, labels: [] } : record;
+        const visible = disclosedRecord(withheld ? { ...record, target: undefined, selection: undefined, labels: [] } : record);
         if (!input.visible || input.visible(visible)) occurrences.push(visible);
       }
       if (disclosed && occurrences.length > input.limit) break;

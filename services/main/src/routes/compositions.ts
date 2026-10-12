@@ -7,7 +7,7 @@ import { createAdmittedComposition, changeAdmittedComposition, sealAdmittedCompo
   restoreAdmittedComposition, activateAdmittedCompositionStage }
   from '../modules/structure/change-admitted.ts';
 import { cancelCompositionStage, CompositionConflict, CompositionExists, CompositionTooLarge,
-  InvalidCompositionChange, StaleCompositionHead, type CompositionOperation } from '../modules/structure/change.ts';
+  InvalidCompositionChange, StaleCompositionHead, StructureSummaryRepairRequired, type CompositionOperation } from '../modules/structure/change.ts';
 import { CompositionCorrupt, CompositionUnavailable, readCompositionHeader, derivedId }
   from '../modules/structure/graph.ts';
 import { readCompositionPage, type CompositionPage } from '../modules/structure/read.ts';
@@ -230,6 +230,9 @@ export function compositionError(error: unknown): Response {
   if (error instanceof StructureStageUnavailable) return problem(404, 'structure_stage_unavailable',
     'Structure stage is unavailable');
   if (error instanceof InvalidCompositionChange) return problem(400, 'invalid_composition', error.message);
+  if (error instanceof StructureSummaryRepairRequired) {
+    return problem(409, 'structure_summary_repair_required', error.message);
+  }
   if (error instanceof CompositionUnavailable) return problem(404, 'composition_unavailable',
     'Composition is unavailable');
   if (error instanceof StaleCompositionHead) return problem(409, 'stale_composition_head', error.message);

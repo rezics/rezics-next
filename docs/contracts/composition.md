@@ -8,6 +8,8 @@ publication custody separate from the Book's creative scope, as
 [the Post decision](work-and-release.md#posts-texts-and-works) explains. The
 shared Structure format, owner profiles and commands carry the exact behavior
 in `services/main/src/modules/structure/`.
+[Structure change work](structure.md) describes bounded subtree moves and
+repairing retained trees that predate their summaries.
 
 The authoring choice is contextual: an ordinary chapter may follow eligible
 published content, while reviewed adoption and a fixed release select exact
