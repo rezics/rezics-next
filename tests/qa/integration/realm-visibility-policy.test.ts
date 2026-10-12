@@ -6,11 +6,42 @@ import { fusekiReadBudget } from '../../../services/main/src/infrastructure/fuse
 import { readRealmPolicy } from '../../../services/main/src/modules/space/policy.ts';
 import { AccessMembershipConsents } from '../../../services/main/src/modules/access/membership-consents.ts';
 import { AdmissionDenied } from '../../../services/main/src/modules/access/admission.ts';
+import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import type { AuthorityWitness } from '../../../services/main/src/modules/access/authority-witness.ts';
 import { AccessRealmJoining } from '../../../services/main/src/modules/access/realm-management-joining.ts';
 import { readMainOutboxEnvelope, readNextMainOutboxBatch } from '../../../services/main/src/modules/outbox/relay.ts';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { waitForRealmDirectory } from './support/realm-directory.ts';
+
+test('private Realm reads and management deny an owner represented only for Work creation', async () => {
+  const h = await realmVisibilityFixture();
+  try {
+    await h.policy('private', 'mandatory');
+    const actor = `https://rezics.com/id/${randomUUID()}`;
+    const scope = `governance:realm:${h.realm}`;
+    await h.accessPool.query("INSERT INTO access.authority_subject (id,kind) VALUES ($1,'agent')", [actor]);
+    const grant = (action: string, mandate: string) => grantFixtureAuthority(h.accessPool, {
+      scope, requireDispatch: true,
+      representations: [{ principalId: h.principalId, actor, action: mandate, lifetime: '8 hours' }],
+      grant: { actor, action, lifetime: '8 hours' },
+    });
+    await grant('realm.owner', 'work.create');
+    await grant('realm.settings.manage', 'work.create');
+    expect((await h.accessPool.query(`SELECT 1 FROM access.membership
+      WHERE kind = 'realm' AND owner_subject = $1 AND member_subject = $2 AND state = 'joined'
+      UNION ALL SELECT 1 FROM access.private_membership
+      WHERE kind = 'realm' AND owner_subject = $1 AND principal_id = $3 AND state = 'joined'`,
+    [h.realm, actor, h.principalId])).rowCount).toBe(0);
+    expect(await h.access.realmReadProof(h.principal, actor, h.realm)).toBeNull();
+    expect((await h.call('GET', h.root, undefined, actor)).status).toBe(404);
+    expect((await h.call('GET', `${h.root}/settings`, undefined, actor)).status).toBe(403);
+    await grant('realm.owner', 'realm.owner');
+    expect((await h.call('GET', h.root, undefined, actor)).status).toBe(200);
+    expect((await h.call('GET', `${h.root}/settings`, undefined, actor)).status).toBe(403);
+    await grant('realm.settings.manage', 'realm.settings.manage');
+    expect((await h.call('GET', `${h.root}/settings`, undefined, actor)).status).toBe(200);
+  } finally { await h.close(); }
+}, 180_000);
 
 test('policy-only Realm replies retain identity witnesses and lose dispatch when outsider policy closes', async () => {
   const h = await realmVisibilityFixture();
