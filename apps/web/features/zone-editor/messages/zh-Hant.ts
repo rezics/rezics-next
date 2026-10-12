@@ -2,6 +2,13 @@
 import type { ZoneEditorMessages } from '../messages.ts';
 
 const messages: ZoneEditorMessages = {
+  realmFailedBody: 'REZICS 未回應。您的連結選擇仍保留在此處；請重試。',
+  realmStaleBody: '已連結的 Realm 已變更。請先核對目前的連結，再重試。',
+  realmReview: '核對目前的連結',
+  realmReviewedBody: '下方顯示目前的連結。請確認後再對其套用您的變更。',
+  realmApplyReviewed: '對已核對的連結套用變更',
+  realmRetry: '重試連結變更',
+  realmDenied: '您無法變更此 Zone。已輸入的 Realm 識別名稱仍保留在此處。',
   pageSearchUnavailable: '無法載入頁面建議。您的搜尋內容仍保留在此處。',
   pageSearchPartial: '部分頁面建議無法讀取。請重試。',
   pageSearchDenied: '您無法存取頁面建議。',

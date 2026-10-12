@@ -2,6 +2,13 @@
 import type { ZoneEditorMessages } from '../messages.ts';
 
 const messages: ZoneEditorMessages = {
+  realmFailedBody: 'REZICSから応答がありませんでした。接続の選択はここに残っています。もう一度お試しください。',
+  realmStaleBody: '接続されたRealmが変更されました。再試行する前に、現在の接続を確認してください。',
+  realmReview: '現在の接続を確認',
+  realmReviewedBody: '現在の接続を下に表示しています。変更を適用する前に確認してください。',
+  realmApplyReviewed: '確認した接続に変更を適用',
+  realmRetry: '接続の変更を再試行',
+  realmDenied: 'このZoneは変更できません。入力したRealmのハンドルはここに残っています。',
   pageSearchUnavailable: 'ページ候補を読み込めませんでした。検索内容はここに残っています。',
   pageSearchPartial: '一部のページ候補を読み取れませんでした。もう一度お試しください。',
   pageSearchDenied: 'ページ候補を利用できません。',

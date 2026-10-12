@@ -2,6 +2,13 @@
 import type { ZoneEditorMessages } from '../messages.ts';
 
 const messages: ZoneEditorMessages = {
+  realmFailedBody: 'REZICS n’a pas répondu. Votre choix de rattachement est conservé ; réessayez.',
+  realmStaleBody: 'Le Realm rattaché a changé. Vérifiez son rattachement actuel avant de réessayer.',
+  realmReview: 'Vérifier le rattachement actuel',
+  realmReviewedBody: 'Le rattachement actuel est affiché ci-dessous. Confirmez avant de lui appliquer votre modification.',
+  realmApplyReviewed: 'Appliquer à ce rattachement vérifié',
+  realmRetry: 'Réessayer la modification du rattachement',
+  realmDenied: 'Vous ne pouvez pas modifier cette Zone. Votre identifiant de Realm est conservé.',
   pageSearchUnavailable: 'Les suggestions de pages n’ont pas pu être chargées. Votre recherche est conservée.',
   pageSearchPartial: 'Certaines suggestions de pages n’ont pas pu être lues. Réessayez.',
   pageSearchDenied: 'Les suggestions de pages ne sont pas accessibles pour vous.',

@@ -10,6 +10,13 @@ import zhHant from './messages/zh-Hant.ts';
 
 // Interface copy for writing a Zone's home page. The page the author writes is theirs, never this catalog.
 const en = {
+  realmFailedBody: 'REZICS did not answer. Your attachment choice is still here; try again.',
+  realmStaleBody: 'The attached Realm changed. Review its current attachment before trying again.',
+  realmReview: 'Review current attachment',
+  realmReviewedBody: 'The current attachment is shown below. Confirm before applying your change to it.',
+  realmApplyReviewed: 'Apply change to reviewed attachment',
+  realmRetry: 'Retry attachment change',
+  realmDenied: 'This Zone is not available for you to change. Your Realm handle is still here.',
   pageSearchUnavailable: 'Page suggestions could not be loaded. Your search is still here.',
   pageSearchPartial: 'Some page suggestions could not be read. Try again.',
   pageSearchDenied: 'Page suggestions are not available to you.',

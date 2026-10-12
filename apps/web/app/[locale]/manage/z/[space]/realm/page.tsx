@@ -32,7 +32,7 @@ export default async function ZoneRealmPage({ params }: { params: Promise<{ spac
   const named = realm ? await settle(() => anonymous.v1.realms({ realm: realm.slice(-36) }).get({ query: {} })) : null;
   const name = named?.ok ? realmName(named.data) : null;
   return <RealmAttachmentEditor zoneId={loaded.model.zoneId} actingSubject={actingSubject} copy={copy}
-    zoneHead={revision} attachedName={realm ? name ?? copy.realmAttachedNameless : null} signInHref={signInHref} />;
+    zoneHead={revision} attachedRealm={realm} attachedName={realm ? name ?? copy.realmAttachedNameless : null} signInHref={signInHref} />;
 }
 
 function configurationRealm(configuration: unknown): string | null {

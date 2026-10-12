@@ -1,141 +1,189 @@
 'use client';
 
 import { Button } from '@rezics/ui/button';
-import { useState, type FormEvent } from 'react';
-import { browserMainApi } from '../api/browser.ts';
+import type { FormEvent, SetStateAction } from 'react';
+import { commandLane } from '../api/command.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
+import { browserZoneRealmAttachment, commitCommand, type ZoneRealmAttachmentClient,
+  type ZoneRealmAttachmentSnapshot, type ZoneRealmAttachmentWrite, type ZoneRealmAttachmentWritten } from './api.ts';
+import { useZoneEditorDraft, useZoneEditorRef, useZoneEditorResource, useZoneEditorSessionState } from './draft-provider.tsx';
 import type { ZoneEditorMessages } from './messages.ts';
 
 const handlePattern = /^[A-Za-z0-9](?:[A-Za-z0-9_-]{1,28})[A-Za-z0-9]$/;
 const fieldClass = 'h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
-/** The Zone author attaches one Realm by the handle of its Space, or removes it. */
-export function RealmAttachmentEditor({ zoneId, actingSubject, copy, zoneHead, attachedName, signInHref, startingNotice = null }: {
+interface AttachmentChoice { body: ZoneRealmAttachmentWrite; handle: string; name: string | null }
+interface AttachmentDraft {
+  head: string;
+  attachedRealm: string | null;
+  attachedName: string | null;
+  handle: string;
+  command: AttachmentChoice | null;
+  needsReview: boolean;
+  review: ZoneRealmAttachmentSnapshot | null;
+  notice: null | 'saved' | 'removed' | 'unavailable' | 'limit' | 'sign-in' | 'failed' | 'denied' | 'stale' | 'reviewed';
+}
+
+const isDirty = (draft: AttachmentDraft) => Boolean(draft.handle.trim() || draft.command);
+function accepts(value: unknown): value is AttachmentDraft {
+  if (!value || typeof value !== 'object') return false;
+  const row = value as Partial<AttachmentDraft>;
+  return typeof row.head === 'string' && typeof row.handle === 'string'
+    && (typeof row.attachedName === 'string' || row.attachedName === null)
+    && (typeof row.attachedRealm === 'string' || row.attachedRealm === null)
+    && typeof row.needsReview === 'boolean' && 'command' in row && 'review' in row && 'notice' in row;
+}
+
+/** Stale attachment changes require review; unresolved commands retain their original envelope across sections. */
+export function RealmAttachmentEditor({ zoneId, actingSubject, copy, zoneHead, attachedName, attachedRealm = null,
+  signInHref, startingNotice = null, api }: {
   zoneId: string;
   actingSubject: string;
   copy: ZoneEditorMessages;
   zoneHead: string;
   attachedName: string | null;
+  attachedRealm?: string | null;
   signInHref: string;
-  /** Storybook shows a refusal before an attach request. The page leaves this unset. */
   startingNotice?: null | 'limit';
+  api?: ZoneRealmAttachmentClient;
 }) {
-  const [head, setHead] = useState(zoneHead);
-  const [attached, setAttached] = useState<string | null>(attachedName);
-  const [handle, setHandle] = useState('');
-  const [busy, setBusy] = useState<null | 'attach' | 'remove'>(null);
-  const [notice, setNotice] = useState<null | 'saved' | 'removed' | 'unavailable' | 'limit' | 'sign-in' | 'failed'>(startingNotice);
-
-  async function currentHead(fallback: string): Promise<string | null> {
-    const read = await browserMainApi().v1.zones({ id: zoneId }).configuration.get({ query: { actingSubject } });
-    const revision = read.data && typeof read.data === 'object' && 'revision' in read.data ? read.data.revision : null;
-    return typeof revision === 'string' ? revision : read.error ? null : fallback;
+  const [state, updateState, ready] = useZoneEditorDraft<AttachmentDraft>('attachment', {
+    head: zoneHead, attachedName, attachedRealm, handle: '', command: null, needsReview: false, review: null, notice: startingNotice,
+  }, isDirty, accepts);
+  const [busy, updateBusy] = useZoneEditorSessionState<null | 'attach' | 'remove' | 'review'>('attachment-busy', null);
+  const stateRef = useZoneEditorRef('attachment-state', state);
+  stateRef.current = state;
+  const busyRef = useZoneEditorRef('attachment-busy-ref', busy);
+  busyRef.current = busy;
+  function setState(next: SetStateAction<AttachmentDraft>) {
+    updateState(current => {
+      const value = typeof next === 'function' ? next(current) : next;
+      stateRef.current = value;
+      return value;
+    });
   }
+  function setBusy(value: typeof busy) {
+    busyRef.current = value;
+    updateBusy(value);
+  }
+  const client = useZoneEditorResource('attachment-client', () => api ?? browserZoneRealmAttachment());
+  const lane = useZoneEditorResource('attachment-command', () =>
+    commandLane<AttachmentChoice, ZoneRealmAttachmentWritten>({ ok: false, failure: 'unavailable' }));
+  const reviewing = state.needsReview;
+  const disabled = !ready || busy !== null;
 
-  async function write(next: string | null, key: string, started: string) {
-    const body = { expectedHead: started, actingSubject, defaultRealm: next };
-    const send = (expectedHead: string, idempotency: string) => browserMainApi().v1.zones({ id: zoneId }).configuration.put(
-      { ...body, expectedHead }, { headers: { 'idempotency-key': idempotency } });
-    let answer = await send(started, key);
-    if (answer.error?.status === 409) {
-      const moved = await currentHead(started);
-      if (!moved) return answer;
-      setHead(moved);
-      answer = await send(moved, crypto.randomUUID());
+  async function write(choice: AttachmentChoice) {
+    setBusy(choice.body.defaultRealm ? 'attach' : 'remove');
+    setState(current => ({ ...current, command: choice, needsReview: false, review: null, notice: null }));
+    try {
+      const answer = await lane.submit(choice, (captured, round) => commitCommand(round,
+        key => client.saveConfiguration(zoneId, captured.body, key)));
+      setState(current => {
+        if (answer.ok) return { ...current, head: answer.data.revision, attachedRealm: choice.body.defaultRealm,
+          attachedName: choice.body.defaultRealm ? choice.name : null,
+          handle: choice.body.defaultRealm && current.handle === choice.handle ? '' : current.handle,
+          command: null, needsReview: false, review: null, notice: choice.body.defaultRealm ? 'saved' : 'removed' };
+        if (answer.failure === 'stale') return { ...current, command: choice, needsReview: true, review: null, notice: 'stale' };
+        if (answer.failure === 'unavailable') return { ...current, command: choice, notice: 'failed' };
+        return { ...current, command: null, needsReview: false, review: null,
+          notice: answer.failure === 'sign-in' ? 'sign-in' : answer.failure === 'denied' ? 'denied'
+            : 'reason' in answer && answer.reason === 'attachment-limit' ? 'limit' : 'unavailable' };
+      });
+    } finally {
+      setBusy(null);
     }
-    const revision = answer.data && typeof answer.data === 'object' && 'revision' in answer.data
-      ? answer.data.revision : null;
-    if (typeof revision === 'string') setHead(revision);
-    return answer;
   }
 
   async function attach(event: FormEvent) {
     event.preventDefault();
-    const typed = handle.trim().replace(/^@/, '');
-    if (!handlePattern.test(typed)) {
-      setNotice('unavailable');
-      return;
-    }
+    if (disabled || state.command) return;
+    const capturedHandle = state.handle;
+    const typed = capturedHandle.trim().replace(/^@/, '');
+    if (!handlePattern.test(typed)) { setState(current => ({ ...current, notice: 'unavailable' })); return; }
+    const expectedHead = state.head;
     setBusy('attach');
-    setNotice(null);
+    setState(current => ({ ...current, notice: null }));
     try {
-      const resolved = await browserMainApi().v1.addresses.resolve.get({
-        query: { scope: 'space', key: typed, actingSubject } });
-      const realm = resolved.data && typeof resolved.data === 'object' && 'capabilities' in resolved.data
-        ? resolved.data.capabilities?.realm : null;
-      const resolveStatus: number | undefined = resolved.error?.status;
-      if (resolved.error || resolved.data?.status !== 'resolved' || typeof realm !== 'string') {
-        setNotice(resolveStatus === 401 ? 'sign-in' : 'unavailable');
+      const found = await client.resolveRealmHandle(typed, actingSubject);
+      if (!found.ok) {
+        setState(current => ({ ...current, notice: found.failure === 'sign-in' ? 'sign-in' : 'unavailable' }));
         return;
       }
-      const answer = await write(realm, crypto.randomUUID(), head);
-      if (answer.error) {
-        const status: number | undefined = answer.error.status;
-        const code = typeof answer.error.value === 'object' && answer.error.value !== null
-          && 'code' in answer.error.value && typeof answer.error.value.code === 'string'
-          ? answer.error.value.code : undefined;
-        setNotice(code === 'realm_attachment_limit' ? 'limit' : status === 401 ? 'sign-in' : status === 400 ? 'unavailable' : 'failed');
-        return;
-      }
-      const named = await browserMainApi().v1.realms({ realm: realm.slice(-36) }).get({ query: { actingSubject } });
-      const value = named.data && typeof named.data === 'object' && 'name' in named.data
-        && named.data.name && typeof named.data.name === 'object' && 'value' in named.data.name
-        ? named.data.name.value : null;
-      setAttached(typeof value === 'string' && value.trim() ? value : typed);
-      setHandle('');
-      setNotice('saved');
+      await write({ body: { expectedHead, actingSubject, defaultRealm: found.data.realm },
+        handle: capturedHandle, name: found.data.name });
     } catch {
-      setNotice('failed');
+      setState(current => ({ ...current, notice: 'failed' }));
     } finally {
       setBusy(null);
     }
   }
 
-  async function remove() {
-    setBusy('remove');
-    setNotice(null);
+  async function reviewAttachment() {
+    if (!state.command || !state.needsReview || disabled) return;
+    setBusy('review');
     try {
-      const answer = await write(null, crypto.randomUUID(), head);
-      if (answer.error) {
-        const status: number | undefined = answer.error.status;
-        setNotice(status === 401 ? 'sign-in' : 'failed');
+      const read = await client.readConfiguration(zoneId, actingSubject);
+      if (!read.ok) {
+        setState(current => ({ ...current, review: null,
+          notice: read.failure === 'sign-in' ? 'sign-in' : read.failure === 'denied' ? 'denied'
+            : read.failure === 'stale' ? 'stale' : 'failed' }));
         return;
       }
-      setAttached(null);
-      setNotice('removed');
+      setState(current => ({ ...current, attachedRealm: read.data.realm, attachedName: read.data.name,
+        review: read.data, notice: 'reviewed' }));
     } catch {
-      setNotice('failed');
+      setState(current => ({ ...current, review: null, notice: 'failed' }));
     } finally {
       setBusy(null);
     }
   }
 
+  function applyReviewed() {
+    if (!state.review || !state.command || disabled) return;
+    void write({ ...state.command, body: { ...state.command.body, expectedHead: state.review.revision } });
+  }
+
+  const attached = state.attachedName ?? (state.attachedRealm ? copy.realmAttachedNameless : null);
   return <section className="grid min-w-0 max-w-xl gap-3" aria-labelledby="zone-realm-title">
     <div className="min-w-0 space-y-2">
       <h2 id="zone-realm-title" className="font-semibold text-lg tracking-tight sm:text-xl">{copy.realmTitle}</h2>
       <p className="text-pretty text-muted-foreground text-sm">{copy.realmHelp}</p>
     </div>
-    {notice === 'saved' ? <p className="text-sm" role="status">{copy.realmSaved}</p> : null}
-    {notice === 'removed' ? <p className="text-sm" role="status">{copy.realmRemoved}</p> : null}
-    {notice === 'unavailable' ? <p className="text-pretty text-destructive text-sm" role="alert">{copy.realmUnavailable}</p> : null}
-    {notice === 'limit' ? <p className="text-pretty text-destructive text-sm" role="alert">{copy.realmAttachmentLimit}</p> : null}
-    {notice === 'failed' ? <p className="text-pretty text-sm" role="alert">{copy.unavailableBody}</p> : null}
-    {notice === 'sign-in' ? <p className="text-sm" role="alert"><LocalizedLink href={signInHref} className="underline-offset-4 hover:underline">{copy.signInTitle}</LocalizedLink></p> : null}
+    {state.notice === 'saved' ? <p className="text-sm" role="status">{copy.realmSaved}</p> : null}
+    {state.notice === 'removed' ? <p className="text-sm" role="status">{copy.realmRemoved}</p> : null}
+    {state.notice === 'unavailable' ? <p className="text-pretty text-destructive text-sm" role="alert">{copy.realmUnavailable}</p> : null}
+    {state.notice === 'limit' ? <p className="text-pretty text-destructive text-sm" role="alert">{copy.realmAttachmentLimit}</p> : null}
+    {state.notice === 'failed' ? <p className="text-pretty text-sm" role="alert">{copy.realmFailedBody}</p> : null}
+    {state.notice === 'denied' ? <p className="text-pretty text-sm" role="alert">{copy.realmDenied}</p> : null}
+    {state.notice === 'sign-in' ? <p className="text-sm" role="alert"><LocalizedLink href={signInHref}
+      className="underline-offset-4 hover:underline">{copy.signInTitle}</LocalizedLink></p> : null}
+    {state.notice === 'stale' ? <p className="text-pretty text-sm" role="alert">{copy.realmStaleBody}</p> : null}
+    {state.needsReview && !state.review ? <Button variant="outline" size="sm" className="justify-self-start" disabled={disabled}
+      onClick={() => void reviewAttachment()}>{copy.realmReview}</Button> : null}
+    {state.review ? <div className="grid gap-2" role="status">
+      <p className="text-pretty text-sm">{copy.realmReviewedBody}</p>
+      <Button variant="outline" size="sm" className="justify-self-start" disabled={disabled}
+        onClick={applyReviewed}>{copy.realmApplyReviewed}</Button>
+    </div> : null}
+    {state.command && !state.needsReview && state.notice === 'failed' ? <Button variant="outline" size="sm" className="justify-self-start"
+      disabled={disabled} onClick={() => void write(state.command!)}>{copy.realmRetry}</Button> : null}
     {attached ? <div className="grid min-w-0 gap-2 rounded-xl border border-border/60 p-3">
       <p className="truncate font-medium">{attached}</p>
       <p className="text-pretty text-muted-foreground text-sm">{copy.realmAttached}</p>
-      <Button variant="outline" size="sm" className="justify-self-start" disabled={busy !== null}
-        isLoading={busy === 'remove'} onClick={() => void remove()}>{busy === 'remove' ? copy.realmRemoving : copy.realmRemove}</Button>
+      <Button variant="outline" size="sm" className="justify-self-start" disabled={disabled || reviewing || Boolean(state.command)}
+        isLoading={busy === 'remove'} onClick={() => void write({ body: { expectedHead: state.head, actingSubject, defaultRealm: null },
+          handle: state.handle, name: null })}>{busy === 'remove' ? copy.realmRemoving : copy.realmRemove}</Button>
     </div> : <p className="text-pretty text-muted-foreground text-sm">{copy.realmNone}</p>}
-    {attached ? null : <form className="grid min-w-0 gap-2" onSubmit={event => void attach(event)}>
+    {attached && !state.handle.trim() ? null : <form className="grid min-w-0 gap-2" onSubmit={event => void attach(event)}>
       <label className="grid gap-1 text-sm">
         <span className="text-muted-foreground">{copy.realmHandle}</span>
-        <input className={fieldClass} name="realm-handle" aria-label={copy.realmHandle} value={handle}
-          autoCapitalize="off" autoCorrect="off" spellCheck={false} maxLength={30}
-          onChange={event => setHandle(event.target.value)} />
+        <input className={fieldClass} name="realm-handle" aria-label={copy.realmHandle} value={state.handle}
+          disabled={!ready} autoCapitalize="off" autoCorrect="off" spellCheck={false} maxLength={30}
+          onChange={event => { const handle = event.target.value; setState(current => ({ ...current, handle })); }} />
       </label>
-      <Button type="submit" variant="secondary" size="sm" className="justify-self-start" disabled={busy !== null || !handle.trim()}
-        isLoading={busy === 'attach'}>{busy === 'attach' ? copy.realmAttaching : copy.realmAttach}</Button>
+      <Button type="submit" variant="secondary" size="sm" className="justify-self-start"
+        disabled={disabled || !state.handle.trim() || Boolean(state.command)} isLoading={busy === 'attach'}>
+        {busy === 'attach' ? copy.realmAttaching : copy.realmAttach}</Button>
     </form>}
   </section>;
 }

@@ -2,6 +2,13 @@
 import type { ZoneEditorMessages } from '../messages.ts';
 
 const messages: ZoneEditorMessages = {
+  realmFailedBody: 'REZICS가 응답하지 않았습니다. 연결 선택은 그대로 남아 있습니다. 다시 시도하세요.',
+  realmStaleBody: '연결된 Realm이 변경되었습니다. 다시 시도하기 전에 현재 연결을 확인하세요.',
+  realmReview: '현재 연결 확인',
+  realmReviewedBody: '현재 연결이 아래에 표시됩니다. 변경 사항을 적용하기 전에 확인하세요.',
+  realmApplyReviewed: '확인한 연결에 변경 적용',
+  realmRetry: '연결 변경 다시 시도',
+  realmDenied: '이 Zone을 변경할 수 없습니다. 입력한 Realm 핸들은 그대로 남아 있습니다.',
   pageSearchUnavailable: '페이지 추천을 불러오지 못했습니다. 검색 내용은 그대로 남아 있습니다.',
   pageSearchPartial: '일부 페이지 추천을 읽지 못했습니다. 다시 시도하세요.',
   pageSearchDenied: '페이지 추천을 사용할 수 없습니다.',

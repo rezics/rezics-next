@@ -2,6 +2,13 @@
 import type { ZoneEditorMessages } from '../messages.ts';
 
 const messages: ZoneEditorMessages = {
+  realmFailedBody: 'REZICS no respondió. Tu elección de conexión sigue aquí; inténtalo de nuevo.',
+  realmStaleBody: 'El Realm adjunto ha cambiado. Revisa su conexión actual antes de intentarlo de nuevo.',
+  realmReview: 'Revisar conexión actual',
+  realmReviewedBody: 'La conexión actual aparece abajo. Confirma antes de aplicarle tu cambio.',
+  realmApplyReviewed: 'Aplicar cambio a la conexión revisada',
+  realmRetry: 'Reintentar cambio de conexión',
+  realmDenied: 'No puedes cambiar esta Zone. El identificador del Realm sigue aquí.',
   pageSearchUnavailable: 'No se pudieron cargar las sugerencias de páginas. Tu búsqueda sigue aquí.',
   pageSearchPartial: 'No se pudieron leer algunas sugerencias de páginas. Inténtalo de nuevo.',
   pageSearchDenied: 'Las sugerencias de páginas no están disponibles para ti.',

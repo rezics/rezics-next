@@ -2,6 +2,13 @@
 import type { ZoneEditorMessages } from '../messages.ts';
 
 const messages: ZoneEditorMessages = {
+  realmFailedBody: 'REZICS 未响应。您的连接选择仍保留在此处；请重试。',
+  realmStaleBody: '已连接的 Realm 已更改。请先核对当前连接，再重试。',
+  realmReview: '核对当前连接',
+  realmReviewedBody: '下方显示当前连接。请确认后再对其应用您的更改。',
+  realmApplyReviewed: '对已核对的连接应用更改',
+  realmRetry: '重试连接更改',
+  realmDenied: '您无法更改此 Zone。已输入的 Realm 标识仍保留在此处。',
   pageSearchUnavailable: '无法加载页面建议。您的搜索内容仍保留在此处。',
   pageSearchPartial: '部分页面建议无法读取。请重试。',
   pageSearchDenied: '您无法访问页面建议。',

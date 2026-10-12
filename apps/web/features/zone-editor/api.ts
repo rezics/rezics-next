@@ -52,6 +52,59 @@ export interface ZoneLifecycleClient {
   recover(zoneId: string, body: ZoneLifecycleWrite, key: string): Promise<WriteResult<SavedZoneLifecycle>>;
 }
 
+export interface ZoneRealmAttachmentSnapshot { revision: string; realm: string | null; name: string | null }
+export interface ZoneRealmAttachmentWrite { expectedHead: string; actingSubject: string; defaultRealm: string | null }
+export type ZoneRealmAttachmentWritten = WriteResult<SavedZoneTheme>
+  | { ok: false; failure: 'invalid'; reason: 'attachment-limit' };
+export interface ZoneRealmAttachmentClient {
+  readConfiguration(zoneId: string, actingSubject: string): Promise<WriteResult<ZoneRealmAttachmentSnapshot>>;
+  resolveRealmHandle(handle: string, actingSubject: string): Promise<WriteResult<{ realm: string; name: string }>>;
+  saveConfiguration(zoneId: string, body: ZoneRealmAttachmentWrite, key: string): Promise<ZoneRealmAttachmentWritten>;
+}
+
+/** Attachment commands capture a configuration head; callers review a stale attachment before changing it. */
+export function browserZoneRealmAttachment(main: ReturnType<typeof browserMainApi> = browserMainApi()): ZoneRealmAttachmentClient {
+  const nameOf = async (realm: string, actingSubject: string): Promise<string | null> => {
+    const answer = await post(() => main.v1.realms({ realm: realm.slice(-36) }).get({ query: { actingSubject } }));
+    return answer.ok ? pageNameOf(answer.data) : null;
+  };
+  return {
+    async readConfiguration(zoneId, actingSubject) {
+      const answer = await post(() => main.v1.zones({ id: zoneId }).configuration.get({ query: { actingSubject } }));
+      if (!answer.ok) return answer;
+      const row = record(answer.data);
+      const configuration = record(row?.configuration);
+      const revision = row?.revision;
+      const realm = configuration?.defaultRealm ?? null;
+      if (typeof revision !== 'string' || !iriPattern.test(revision) || !configuration
+        || realm !== null && (typeof realm !== 'string' || !iriPattern.test(realm))) {
+        return { ok: false, failure: 'unavailable' };
+      }
+      return { ok: true, data: { revision, realm, name: realm ? await nameOf(realm, actingSubject) : null } };
+    },
+    async resolveRealmHandle(handle, actingSubject) {
+      const answer = await post(() => main.v1.addresses.resolve.get({ query: { scope: 'space', key: handle, actingSubject } }));
+      if (!answer.ok) return answer;
+      const row = record(answer.data);
+      const realm = record(row?.capabilities)?.realm;
+      if (row?.status !== 'resolved' || typeof realm !== 'string' || !iriPattern.test(realm)) {
+        return { ok: false, failure: 'denied' };
+      }
+      return { ok: true, data: { realm, name: await nameOf(realm, actingSubject) ?? handle } };
+    },
+    async saveConfiguration(zoneId, body, key) {
+      let limited = false;
+      const answer = await post(async () => {
+        const written = await main.v1.zones({ id: zoneId }).configuration.put(body, { headers: { 'idempotency-key': key } });
+        limited = problemCode(written.error?.value) === 'realm_attachment_limit';
+        return written;
+      });
+      if (limited) return { ok: false, failure: 'invalid', reason: 'attachment-limit' };
+      return lifecycleWrittenOf(answer);
+    },
+  };
+}
+
 /**
  * One command, retried once when the response is lost. The same Idempotency-Key
  * replays a commit that landed. A stale head is a definitive refusal: the text stays.

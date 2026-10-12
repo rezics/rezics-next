@@ -2,6 +2,13 @@
 import type { ZoneEditorMessages } from '../messages.ts';
 
 const messages: ZoneEditorMessages = {
+  realmFailedBody: 'REZICS hat nicht geantwortet. Ihre Auswahl zur Verknüpfung bleibt erhalten. Versuchen Sie es erneut.',
+  realmStaleBody: 'Die verknüpfte Realm hat sich geändert. Prüfen Sie die aktuelle Verknüpfung, bevor Sie es erneut versuchen.',
+  realmReview: 'Aktuelle Verknüpfung prüfen',
+  realmReviewedBody: 'Die aktuelle Verknüpfung wird unten angezeigt. Bestätigen Sie, bevor Sie Ihre Änderung darauf anwenden.',
+  realmApplyReviewed: 'Änderung auf geprüfte Verknüpfung anwenden',
+  realmRetry: 'Verknüpfung erneut ändern',
+  realmDenied: 'Sie können diese Zone nicht ändern. Ihr Realm-Handle bleibt erhalten.',
   pageSearchUnavailable: 'Die Seitenvorschläge konnten nicht geladen werden. Ihre Suche bleibt erhalten.',
   pageSearchPartial: 'Einige Seitenvorschläge konnten nicht gelesen werden. Versuchen Sie es erneut.',
   pageSearchDenied: 'Die Seitenvorschläge sind für Sie nicht verfügbar.',
