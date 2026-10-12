@@ -51,17 +51,25 @@ if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
     await import('../support/seed-checkpoints.ts');
   const { RECIPE_WORK_PAGE_OCCURRENCES, RECIPE_WORK_PAGE_READ_BOUND } =
     await import('../../../services/main/src/modules/recipe/work-page.ts');
-  const { STRUCTURE_LIMITS } = await import('../../../services/main/src/modules/structure/format.ts');
-  // Recipe work-page.ts supplies K; tree.ts chunks both leaves and interior
-  // nodes using format.ts's pageEntries. Neither bound is duplicated here.
+  const { checkStructurePage } = await import('../../../services/main/src/modules/structure/format.ts');
+  const { readCompositionSnapshot } = await import('../../../services/main/src/modules/structure/read.ts');
+  const { recordTree, orderTree } = await import('../../../services/main/src/modules/structure/change.ts');
+  const { withoutVerifiedImmutableObjectCache } =
+    await import('../../../services/main/src/infrastructure/immutable-objects.ts');
+  // K comes from the request's owner. Restored depth/node count come from
+  // independent owner reads below, never from the measured request's GETs.
   const recipePageSize = RECIPE_WORK_PAGE_OCCURRENCES;
-  const structureNodeFanout = STRUCTURE_LIMITS.pageEntries;
   const structureObjectPrefix = '/rezics-semantic/semantic/structure/sha256/';
-  const objectReadBudget = (occurrences: number) => {
-    const logDepth = Math.log(occurrences) / Math.log(structureNodeFanout);
-    const treeDepth = Math.ceil(logDepth);
-    return { occurrences, pageSize: recipePageSize, fanout: structureNodeFanout,
-      logDepth, treeDepth, maximumGets: recipePageSize * (treeDepth + 1) };
+  type TreeCensus = {
+    structure: string; revision: string; occurrences: number; depth: number;
+    nodeCount: number; manifestNodes: number; recordNodes: number; orderNodes: number;
+    recordDepth: number; orderDepth: number;
+  };
+  const objectReadBudget = (census: TreeCensus) => {
+    const keyedPathBudget = recipePageSize * (census.depth + 1);
+    return { ...census, pageSize: recipePageSize, keyedPathBudget,
+      maximumGets: Math.min(census.nodeCount, keyedPathBudget),
+      fullWalkDetectable: census.nodeCount > keyedPathBudget };
   };
   type ObjectRead = ReturnType<typeof objectReadBudget> & {
     scale: string; read: string; gets: number; unknownOtherFetches: number;
@@ -157,12 +165,53 @@ if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
       .toBe(profile.unclassifiedFetches);
     return inventory;
   };
+  const censusRestoredTree = async (recipe: typeof cuts[number]['population']['recipe']) => {
+    if (!copy) throw new Error('Restored Recipe fixture is unavailable for independent census');
+    const { stack } = copy;
+    return withoutVerifiedImmutableObjectCache(async (): Promise<TreeCensus> => {
+      const snapshot = await readCompositionSnapshot(stack.env, {
+        structure: recipe.structure, revision: recipe.revision,
+      });
+      expect(snapshot.header.profile).toBe('recipe-composition');
+      const { records: recordRoot, order: orderRoot } = snapshot.manifest;
+      expect(recordRoot.count).toBe(recipe.occurrences.length);
+      expect(orderRoot.count).toBe(recipe.occurrences.length);
+      // Read actual root-node depth with the owner's format validator, rather
+      // than estimating height from occupancy or trusting request counters.
+      const recordRootNode = checkStructurePage(await snapshot.objects.get(recordRoot.page.slice(7)));
+      const orderRootNode = checkStructurePage(await snapshot.objects.get(orderRoot.page.slice(7)));
+      expect(recordRootNode.tree).toBe('record');
+      expect(orderRootNode.tree).toBe('order');
+      expect(recordRootNode.level).toBe(recordRoot.level);
+      expect(orderRootNode.level).toBe(orderRoot.level);
+      const manifestNodes = snapshot.cost.pagesRead;
+      expect(manifestNodes).toBe(1);
+      // Complete owner ranges visit the reachable nodes once. They share this
+      // fresh TreeCost; census I/O is outside the request trace and bypasses the
+      // verified-object cache without filling it. Historical/index-only blobs
+      // are outside the Recipe page's manifest/record/order read scope.
+      const records = await recordTree(snapshot.objects).range(recordRoot, '', '\uffff', recordRoot.count, snapshot.cost);
+      const recordNodes = snapshot.cost.pagesRead - manifestNodes;
+      const ordering = await orderTree(snapshot.objects).range(orderRoot, '', '\uffff', orderRoot.count, snapshot.cost);
+      const orderNodes = snapshot.cost.pagesRead - manifestNodes - recordNodes;
+      expect(records).toHaveLength(recordRoot.count);
+      expect(ordering).toHaveLength(orderRoot.count);
+      expect(new Set(records.map(item => item.occurrence)).size).toBe(recipe.occurrences.length);
+      expect(records.map(item => item.occurrence).sort()).toEqual([...recipe.occurrences].sort());
+      expect(ordering.map(item => item.occurrence).sort()).toEqual([...recipe.occurrences].sort());
+      expect(recordNodes).toBeGreaterThan(0);
+      expect(orderNodes).toBeGreaterThan(0);
+      return { structure: recipe.structure, revision: recipe.revision, occurrences: recipe.occurrences.length,
+        depth: Math.max(recordRootNode.level, orderRootNode.level), nodeCount: snapshot.cost.pagesRead,
+        manifestNodes, recordNodes, orderNodes, recordDepth: recordRootNode.level, orderDepth: orderRootNode.level };
+    });
+  };
   const budgetedRead = (profile: WorkProfile, inventory: ReturnType<typeof fetchInventory>,
-    scale: string, read: string, occurrences: number) => {
+    scale: string, read: string, census: TreeCensus) => {
     const gets = inventory.filter(item => item.peer === 'other' && item.method === 'GET'
       && item.origin === copy!.ownerOrigins.MAIN_S3_ENDPOINT && item.path.startsWith(structureObjectPrefix))
       .reduce((sum, item) => sum + item.count, 0);
-    const budget = { scale, read, ...objectReadBudget(occurrences), gets,
+    const budget = { scale, read, ...objectReadBudget(census), gets,
       unknownOtherFetches: profile.otherFetches! - gets };
     objectReads.push(budget);
     return { budget, profile: { ...profile, otherFetches: budget.unknownOtherFetches } };
@@ -250,6 +299,11 @@ if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
       const recipe = cut.population.recipe;
       const expectedOccurrences = cut.manifest.dimensions.recipeOccurrences!;
       expect(recipe.occurrences).toHaveLength(expectedOccurrences);
+      phase = `${cut.manifest.scale} independent tree census`;
+      const treeCensus = await censusRestoredTree(recipe);
+      evidence.push({ independentTreeCensus: treeCensus, scale: cut.manifest.scale,
+        source: 'Owner full-range TreeCost plus root-node levels; cache bypass; outside profiled request' });
+      console.log('recipe-page-growth-tree-census', JSON.stringify({ scale: cut.manifest.scale, ...treeCensus }));
       const path = `/v1/recipes/works/${recipe.work.slice(-36)}?${new URLSearchParams({ actingSubject: retained.actor })}`;
       phase = `${cut.manifest.scale} first page`;
       const first = await measuredRead<RecipePage>(path);
@@ -271,7 +325,7 @@ if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
       evidence.push(row);
       const firstFetches = fetchInventory(first.profile);
       (row.firstPage as Record<string, unknown>).fetches = firstFetches;
-      const budgetedFirst = budgetedRead(first.profile, firstFetches, cut.manifest.scale, 'first page', expectedOccurrences);
+      const budgetedFirst = budgetedRead(first.profile, firstFetches, cut.manifest.scale, 'first page', treeCensus);
       (row.firstPage as Record<string, unknown>).objectReadBudget = budgetedFirst.budget;
       firstProfiles.push({ ...budgetedFirst.profile, mainCalls: cut.manifest.dimensions.unrelatedWorks });
       if (first.result.next) {
@@ -289,7 +343,7 @@ if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
         const continuationFetches = fetchInventory(next.profile);
         (row.continuation as Record<string, unknown>).fetches = continuationFetches;
         const budgetedContinuation = budgetedRead(next.profile, continuationFetches,
-          cut.manifest.scale, 'continuation', expectedOccurrences);
+          cut.manifest.scale, 'continuation', treeCensus);
         (row.continuation as Record<string, unknown>).objectReadBudget = budgetedContinuation.budget;
         continuationProfiles.push({ scale: cut.manifest.scale,
           unrelatedWorks: cut.manifest.dimensions.unrelatedWorks, profile: budgetedContinuation.profile });
@@ -334,21 +388,17 @@ if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
     for (const objectRead of objectReads)
       check(`GET /v1/recipes/works/:id ${objectRead.scale} ${objectRead.read} Structure object budget`, () =>
         expect(objectRead.gets).toBeLessThanOrEqual(objectRead.maximumGets));
-    const firstObjectReads = objectReads.filter(item => item.read === 'first page');
-    const objectIncrements = firstObjectReads.slice(1).map((larger, index) => {
-      const smaller = firstObjectReads[index]!;
-      return { scales: [smaller.scale, larger.scale],
-        occurrences: [smaller.occurrences, larger.occurrences],
-        gets: [smaller.gets, larger.gets], treeDepths: [smaller.treeDepth, larger.treeDepth],
-        observedIncrement: larger.gets - smaller.gets,
-        maximumIncrement: recipePageSize * (larger.treeDepth - smaller.treeDepth),
-        rule: 'pageSize * (larger ceil(log_fanout(N)) - smaller ceil(log_fanout(N)))' };
-    });
-    evidence.push({ structureObjectIncrements: objectIncrements });
-    console.log('recipe-page-growth-object-increments', JSON.stringify(objectIncrements));
-    for (const increment of objectIncrements)
-      check(`GET /v1/recipes/works/:id ${increment.scales.join(' to ')} Structure object increment`, () =>
-        expect(increment.observedIncrement).toBeLessThanOrEqual(increment.maximumIncrement));
+    const largeReads = objectReads.filter(item => item.scale === 'large');
+    for (const objectRead of largeReads)
+      if (objectRead.fullWalkDetectable)
+        check(`GET /v1/recipes/works/:id large ${objectRead.read} excludes a full tree walk`, () =>
+          expect(objectRead.gets).toBeLessThan(objectRead.nodeCount));
+    const large = largeReads[0]!;
+    const registryNote = large.fullWalkDetectable
+      ? 'Large tree exceeds the keyed-path budget; a full node walk must fail the check'
+      : 'Large tree nodeCount is within the keyed-path budget: this cut cannot distinguish a full walk from a bounded read; a fourth cut is needed';
+    evidence.push({ registryNote, largeNodeCount: large.nodeCount, keyedPathBudget: large.keyedPathBudget });
+    console.log('recipe-page-growth-registry-note', registryNote);
     if (failures.length) throw new AggregateError(failures, 'Recipe page cost contracts failed');
     evidence.push({ verdict: 'pass', coverage: 'first page at three cuts; continuation at medium/large; no nested sections' });
   } catch (error) {
