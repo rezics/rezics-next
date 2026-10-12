@@ -439,7 +439,7 @@ test('all snapshot statements cost one indexed read per store, independent of mo
       // then hold them after graph movement stops so intake has a stable cut.
       const unrelated: string[] = [];
       for (let ordinal = 0; ordinal < history; ordinal++) {
-        unrelated.push((await stack.catalogueWork(f.member.actor, `Unrelated preserved metadata ${ordinal}`)).work);
+        unrelated.push((await stack.publicWork(f.member.actor, ['en'], `Unrelated preserved Work ${ordinal}`)).work);
       }
       for (let batch = 0; batch < 50; batch++) {
         await Promise.all(unrelated.slice(batch * 20, (batch + 1) * 20).map(resource => f.hold(resource)));
@@ -496,7 +496,10 @@ test('snapshot rows examined stay constant for null and exact references beside 
         if (typeof query !== 'string' || !Array.isArray(parameters)) throw new Error('Expected recorded snapshot SQL');
         const result = await client.query<{ 'QUERY PLAN': { Plan: Plan }[] }>(
           `EXPLAIN (ANALYZE, FORMAT JSON) ${query}`, parameters);
-        rows += examined(result.rows[0]!['QUERY PLAN'][0]!.Plan);
+        const plan = result.rows[0]!['QUERY PLAN'][0]!.Plan;
+        const inspected = examined(plan);
+        if (inspected > 12) throw new Error(`Unbounded snapshot plan: ${JSON.stringify(plan)}`);
+        rows += inspected;
       }
       return rows;
     } finally { await client.query('ROLLBACK'); client.release(); }

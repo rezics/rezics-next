@@ -161,18 +161,21 @@ function validMaterial(material: MaterialScope): boolean {
     && (material.scopeKind !== 'wiki_evidence' || agentPattern.test(material.wikiEvidenceId ?? ''));
 }
 
-/** Admission and delivery follow the same exact material/use identity. */
+/** Admission and delivery follow the same exact material/use identity.
+ * Bound the head seek before other joins so a missing use cannot scan unrelated heads. */
 function publicDomainAssessmentSelection(work = '$1', assessment = '$2'): string {
   return `SELECT h.assessment_id::text AS assessment_head, a.basis, a.outcome
-    FROM rights.material m
-    JOIN rights.use_assessment_head h ON h.material_id = m.id
-      AND h.family = 'data_rights' AND h.use_kind = 'redistribution'
-      AND h.use_scope = 'rezics:public-text'
+    FROM (
+      SELECT assessment_id FROM rights.use_assessment_head
+      WHERE material_id = (SELECT material_id FROM rights.use_assessment WHERE id = ${assessment}::uuid)
+        AND family = 'data_rights' AND use_kind = 'redistribution'
+        AND use_scope = 'rezics:public-text'
+      LIMIT 1
+    ) h
     JOIN rights.use_assessment a ON a.id = h.assessment_id
+    JOIN rights.material m ON m.id = a.material_id
     WHERE m.scope_kind = 'work' AND m.work_id = ${work}
       AND m.component = 'body' AND m.expression_kind = 'expression'
-      AND m.id = (
-        SELECT material_id FROM rights.use_assessment WHERE id = ${assessment}::uuid)
     LIMIT 1`;
 }
 
