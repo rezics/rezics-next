@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { Value } from 'typebox/value';
 import { settingsCommand } from '../../../services/main/src/modules/realm-admin/contract.ts';
 import { uiLocales } from '../i18n/define.ts';
-import { addRuleTranslation, compareRules, emptyRule, languageStatus, nextRevision, removeRuleTranslation, restoredRule,
+import { addRuleTranslation, compareRules, emptyRule, languageStatus, nextRevision, removeRuleTranslation,
   ruleFromText, ruleIdFrom, ruleProblems, setRuleOriginal, shownRule } from '../features/manage/rules.ts';
 import type { RealmRule } from '../features/manage/types.ts';
 
@@ -97,15 +97,6 @@ describe('authoring: edit, compare, publish', () => {
       expectedGeneration: '0', expectedRulesRevision: null, reason: 'Set up the community',
       settings: { visibility: 'public', reviewRequired: false, whoMaySubmit: 'members', rules },
     })).toBe(true);
-  });
-
-  test('saved v1 drafts retain their text and normalize duplicated fields to und', () => {
-    const legacy = { id: 'draft', governanceRule: null,
-      title: { en: '親切に', 'zh-CN': '親切に' }, body: { en: 'Be kind', 'zh-CN': '友善' } };
-    const restored = restoredRule(legacy as unknown as RealmRule);
-    expect(restored.title).toEqual({ original: 'und', labels: { und: '親切に' } });
-    expect(restored.body).toEqual({ original: 'en', labels: { en: 'Be kind', 'zh-Hans': '友善' } });
-    expect(restoredRule(native)).toEqual(native);
   });
 
   test('rule identities derive from the authored title and stay unique', () => {

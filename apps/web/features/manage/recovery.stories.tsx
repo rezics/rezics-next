@@ -12,7 +12,7 @@ import { RealmFrame } from './realm-frame.tsx';
 import { decisionReceipt, recoveryReasons } from './recovery-fixtures.ts';
 import { RolesView } from './roles-view.tsx';
 import { attemptStorage, forgetCommand, recoveryIndexKey, readQueueAttempt, readCommand, retainedCommands, readReportAttempt as readStoredReport, retainCommand as retainStoredCommand, type ReportAttempt } from './safety-pending.ts';
-import { rulesDraftKey, SettingsView } from './settings-view.tsx';
+import { SettingsView } from './settings-view.tsx';
 import type { MainClient, ModerationItem, RoleCommand } from './types.ts';
 
 const recoveryStore = () => attemptStorage('storybook:account-one');
@@ -119,9 +119,8 @@ const meta = {
   beforeEach() {
     sent.length = 0; complete = false; cancelled = false; previews = 0; latestSettings = settings; settingsRead = null; rolesRead = null;
     roleReceipts.clear(); roleWrites.clear(); settingsReceipts.clear();
-    // Remove only this isolated fixture's recovery records and draft.
+    // Remove only this isolated fixture's recovery records.
     localStorage.removeItem(recoveryIndexKey('storybook:account-one', realm));
-    localStorage.removeItem(rulesDraftKey('storybook:account-one', realm, acting.iri));
   },
 } satisfies Meta;
 export default meta;
@@ -459,9 +458,6 @@ export const EditsAfterPublishSurviveTheRead: Story = {
     release();
     await expect(await canvas.findByText('Revision 4 is published.')).toBeVisible();
     await expect(ruleTitle(canvas)).toHaveValue('Mark spoilers in titles (after publishing)');
-    const stored = JSON.parse(localStorage.getItem(rulesDraftKey('storybook:account-one', realm, acting.iri)) ?? 'null');
-    await expect(stored.base).toBe('4');
-    await expect(JSON.stringify(stored.drafts)).toContain('(after publishing)');
     await expect(canvas.getByRole('button', { name: 'Review changes' })).toBeEnabled();
   },
 };
@@ -488,9 +484,6 @@ export const NewerRevisionAfterPublishIsAConflict: Story = {
     await expect(canvas.getByText('Added by another moderator')).toBeVisible();
     await expect(ruleTitle(canvas)).toHaveValue('Mark spoilers in titles (after publishing)');
     await expect(canvas.getByRole('button', { name: 'Review changes' })).toBeDisabled();
-    const stored = JSON.parse(localStorage.getItem(rulesDraftKey('storybook:account-one', realm, acting.iri)) ?? 'null');
-    await expect(stored.base).toBe('4');
-    await expect(JSON.stringify(stored.drafts)).toContain('(after publishing)');
   },
 };
 // Choosing to publish on top is explicit, and the review names what it would remove.

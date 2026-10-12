@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import type { ComponentProps } from 'react';
+import { type ComponentProps, useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { forgetReadingLanguages } from '../content-language/use-reading-languages.ts';
 import { acting, adminApi, type AdminRecord, header, realm, rules, settings } from './fixtures.ts';
@@ -7,7 +7,7 @@ import { messages } from './messages.ts';
 import ko from './messages/ko.ts';
 import zhHans from './messages/zh-Hans.ts';
 import { RealmFrame } from './realm-frame.tsx';
-import { rulesDraftKey, SettingsView } from './settings-view.tsx';
+import { SettingsView } from './settings-view.tsx';
 
 // Realm rules have one approved meaning, the published revision moderators
 // cite, and localized forms readers see. These stories hold that behavior:
@@ -18,6 +18,8 @@ import { rulesDraftKey, SettingsView } from './settings-view.tsx';
 const record: AdminRecord = { members: [], roles: [], settings: [] };
 const chinese = { ...messages, ...zhHans };
 const korean = { ...messages, ...ko };
+// Older clients stored unsent drafts here; current clients must ignore them.
+const legacyDraftKey = `rezics:manage:rules-draft:${encodeURIComponent('storybook:account-one')}:${realm}:${encodeURIComponent(acting.iri)}`;
 
 const meta = {
   title: 'Manage/Settings and rules',
@@ -26,8 +28,8 @@ const meta = {
   args: { principal: 'storybook:account-one', realm, actingSubject: acting.iri, initial: settings, locale: 'en', messages, api: adminApi({ record }) },
   beforeEach: () => {
     record.settings.length = 0;
-    localStorage.removeItem(rulesDraftKey('storybook:account-one', realm, acting.iri));
-    return () => localStorage.removeItem(rulesDraftKey('storybook:account-one', realm, acting.iri));
+    localStorage.removeItem(legacyDraftKey);
+    return () => localStorage.removeItem(legacyDraftKey);
   },
   render: (args: ComponentProps<typeof SettingsView>) => <RealmFrame realm={realm} header={header} agent={acting}
     locale={args.locale} messages={args.messages}><SettingsView {...args} /></RealmFrame>,
@@ -186,19 +188,37 @@ export const ConcurrentPublicationKeepsDraft: Story = {
   },
 };
 
-/** A draft survives a reload until it is published or discarded. */
-export const DraftSurvivesReload: Story = {
-  beforeEach: () => {
-    localStorage.setItem(rulesDraftKey('storybook:account-one', realm, acting.iri), JSON.stringify({ base: '3', whoMaySubmit: 'closed',
-      drafts: rules.slice(0, 1).map(rule => ({ key: rule.id, rule, published: true })) }));
-  },
+function ReloadableRules(args: ComponentProps<typeof SettingsView>) {
+  const [version, setVersion] = useState(0);
+  return <RealmFrame realm={realm} header={header} agent={acting} locale={args.locale} messages={args.messages}>
+    <button type="button" onClick={() => setVersion(value => value + 1)}>Reload settings</button>
+    <SettingsView {...args} key={version} initial={version ? theirs : args.initial} />
+  </RealmFrame>;
+}
+
+/** Reload reads the published revision, without unsent edits or drafts left by older clients. */
+export const ReloadShowsPublishedRulesWithoutDraft: Story = {
+  render: args => <ReloadableRules {...args} />,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await waitFor(() => expect(canvas.getByRole('radio', { name: /No one/ })).toBeChecked());
-    await expect(canvas.getAllByRole('heading', { name: /^Rule \d$/ })).toHaveLength(1);
-    await userEvent.click(canvas.getByRole('button', { name: 'Discard changes' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Edit rules' }));
+    await typeText(() => canvas.getAllByRole('textbox', { name: 'Title in English' })[0]!, 'Unsent rule title');
+    await userEvent.click(canvas.getByRole('radio', { name: /No one/ }));
+    await expect(localStorage.getItem(legacyDraftKey)).toBeNull();
+    const staleRule = { ...rules[0]!, title: { ...rules[0]!.title, labels: { en: 'Stale stored title' } } };
+    localStorage.setItem(legacyDraftKey, JSON.stringify({ base: '3', whoMaySubmit: 'closed',
+      drafts: [{ key: staleRule.id, rule: staleRule, published: true }] }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Reload settings' }));
+    await expect(await canvas.findByText('Revision 4')).toBeVisible();
     await expect(canvas.getByRole('radio', { name: /Realm members/ })).toBeChecked();
-    await expect(localStorage.getItem(rulesDraftKey('storybook:account-one', realm, acting.iri))).toBeNull();
+    await expect(canvas.getAllByRole('heading', { level: 3 })).toHaveLength(theirs.settings.rules.length);
+    await expect(firstRule(canvas)).toHaveTextContent('Mark spoilers');
+    await expect(canvas.getByText('Criticise readings and translations, never the people who made them.')).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: 'Review changes' })).toBeNull();
+    await expect(canvas.queryByText('Someone else published first')).toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: 'Edit rules' }));
+    await expect(canvas.getAllByRole('textbox', { name: 'Title in English' })[0]).toHaveValue('Mark spoilers');
+    await expect(record.settings).toEqual([]);
   },
 };
 

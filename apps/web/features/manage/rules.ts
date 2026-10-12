@@ -176,19 +176,6 @@ export function removeRuleTranslation(rule: RealmRule, language: RuleLanguage): 
   return { ...rule, title: removed(rule.title), body: removed(rule.body) };
 }
 
-/** Previously saved local drafts use the same v1 compatibility rule as Main reads. */
-export function restoredRule(rule: RealmRule): RealmRule {
-  const restoredText = (field: RuleText): RuleText => {
-    if (field && typeof field.original === 'string' && field.labels && typeof field.labels === 'object'
-      && Object.values(field.labels).every(value => typeof value === 'string')) return field;
-    const legacy = field as unknown as { en?: unknown; 'zh-CN'?: unknown };
-    if (typeof legacy?.en !== 'string' || typeof legacy['zh-CN'] !== 'string') throw new Error('Invalid saved rule');
-    return legacy.en === legacy['zh-CN'] ? { original: 'und', labels: { und: legacy.en } }
-      : { original: 'en', labels: { en: legacy.en, 'zh-Hans': legacy['zh-CN'] } };
-  };
-  return { ...rule, title: restoredText(rule.title), body: restoredText(rule.body) };
-}
-
 /** The revision publishing would create, when the current one is known. */
 export const nextRevision = (meaning: RuleMeaning) => meaning.revision === null ? '1'
   : (BigInt(meaning.revision) + 1n).toString();

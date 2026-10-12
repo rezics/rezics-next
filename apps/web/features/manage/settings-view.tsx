@@ -19,15 +19,13 @@ import type { ManageMessages } from './messages.ts';
 import { useReadingLanguages } from '../content-language/use-reading-languages.ts';
 import { REASON_LIMIT } from './reason-dialog.tsx';
 import { RevisionBadge, RuleList, ruleLanguageName } from './rule-list.tsx';
-import { compareRules, nextRevision, type RuleChange, ruleProblems, type RuleProblem, restoredRule, shownRule } from './rules.ts';
+import { compareRules, nextRevision, type RuleChange, ruleProblems, type RuleProblem, shownRule } from './rules.ts';
 import { draftsOf, type RuleDraft, RulesEditor } from './rules-editor.tsx';
 import type { RealmRule, SettingsView as Settings, WhoMaySubmit } from './types.ts';
 
 const submitChoices = [['granted', 'submitGranted', 'submitGrantedHelp'], ['members', 'submitMembers', 'submitMembersHelp'],
   ['closed', 'submitClosed', 'submitClosedHelp']] as const satisfies ReadonlyArray<readonly [WhoMaySubmit, string, string]>;
 
-export const rulesDraftKey = (principal: string, realm: string, actor: string) => `rezics:manage:rules-draft:${encodeURIComponent(principal)}:${realm}:${encodeURIComponent(actor)}`;
-interface StoredDraft { base: string | null; drafts: RuleDraft[]; whoMaySubmit: WhoMaySubmit }
 export const newestSettings = (a: Settings, b: Settings): Settings => BigInt(a.generation) >= BigInt(b.generation) ? a : b;
 type SettingsCommand = Parameters<AdminApi['saveSettings']>[0];
 
@@ -60,32 +58,17 @@ export function SettingsView({ principal, realm, actingSubject, initial, locale,
   const editingNow = useRef(editing);
   editingNow.current = editing;
 
-  // A draft survives a reload until it is published or discarded.
+  // Only dispatched operations survive a reload; unsent edits belong to this page.
   useEffect(() => {
-    try {
-      const attempt = readCommand<SettingsCommand>(realm, actingSubject, 'settings', store);
-      if (attempt) {
-        setRecovering(true);
-        setDrafts(draftsOf(attempt.input.settings.rules));
-        setWho(attempt.input.settings.whoMaySubmit);
-        setEditing(true);
-        setReviewing(true);
-        return;
-      }
-      const stored = JSON.parse(localStorage.getItem(rulesDraftKey(principal, realm, actingSubject)) ?? 'null') as StoredDraft | null;
-      if (!stored) return;
-      const restored = stored.drafts.map(draft => ({ ...draft, rule: restoredRule(draft.rule) }));
-      setDrafts(restored);
-      setWho(stored.whoMaySubmit);
+    const attempt = readCommand<SettingsCommand>(realm, actingSubject, 'settings', store);
+    if (attempt) {
+      setRecovering(true);
+      setDrafts(draftsOf(attempt.input.settings.rules));
+      setWho(attempt.input.settings.whoMaySubmit);
       setEditing(true);
-      if (stored.base !== initial.ruleBasis.revision) setConflict(initial);
-    } catch { /* an unreadable draft is ignored */ }
+      setReviewing(true);
+    }
   }, [realm, actingSubject, initial, store]);
-  useEffect(() => {
-    if (!editing) return;
-    const stored: StoredDraft = { base: current.ruleBasis.revision, drafts, whoMaySubmit: who };
-    try { localStorage.setItem(rulesDraftKey(principal, realm, actingSubject), JSON.stringify(stored)); } catch { /* storage may be full or off */ }
-  }, [editing, drafts, who, current.ruleBasis.revision, realm]);
 
   useEffect(() => {
     if (!editing && !recovering && BigInt(initial.generation) > BigInt(current.generation)) {
@@ -100,7 +83,6 @@ export function SettingsView({ principal, realm, actingSubject, initial, locale,
   const whoChanged = who !== current.settings.whoMaySubmit;
 
   function discard(to: Settings = current) {
-    try { localStorage.removeItem(rulesDraftKey(principal, realm, actingSubject)); } catch { /* nothing to remove */ }
     setCurrent(to);
     setDrafts(draftsOf(to.settings.rules));
     setWho(to.settings.whoMaySubmit);
