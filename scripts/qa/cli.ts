@@ -67,9 +67,10 @@ import { stageQaBootstrap } from './bootstrap.ts';
 import { browserBudgets, browserFileCounts, browserProjectCount, e2eBrowserPlan } from './browser-budget.ts';
 import { qaMemoryDeadline, qaMemoryNeed, type StartupSlotGate } from './memory-admission.ts';
 import { admitIntegrationWorkScope, runQaStartupChildAsync } from './stack-startup.ts';
-import { allocateWebPort, webOrigin } from './e2e.ts';
+import { allocateWebPort, measuredBrowserStep, runPreparedJourneys, startBrowserStack, webOrigin,
+  type BrowserStack, type BrowserStepResult, type JourneyPreparationFailure } from './e2e.ts';
 import { discoverJourneyPreparations, preparationBudgetMs, selectJourneyPreparations } from './e2e-preparation.ts';
-import { cleanupQaStacks, QA_STACK_REGISTRY, QA_STACK_TIER } from './stack-ownership.ts';
+import { cleanupQaStacks, forgetQaStack, QA_STACK_REGISTRY, QA_STACK_TIER } from './stack-ownership.ts';
 import { commandOnlyIntegrationFiles } from './isolated-integration-files.ts';
 import {
   integrationBudgetSummary, integrationOverBudgetFiles, integrationStackPoolEligible, integrationTierWallMs, planIntegrationShards,
@@ -1063,50 +1064,95 @@ try {
       const reserved = await allocateWebPort();
       const origin = webOrigin(reserved.port);
       console.log(`e2e web origin: ${origin}`);
+      let browserStack: BrowserStack | undefined;
       try {
         const projectRunId = `${runId}-e`;
-        startedProjects.push(projectRunId);
-        const up = await startRunStack(['stack:up', '--profile', 'qa', '--run-id', projectRunId,
-          '--accounts-app'], 180_000, { ...process.env, REZICS_QA_MEMORY_KIND: 'browser' });
-        if (!up.ok) {
-          errors.push('e2e stack startup failed');
-          writeFileSync(join(logs, 'e2e-stack.log'), up.output);
-          tiers.push({ name: tier, status: 'failed' });
-          writeFileSync(join(directory, 'e2e.xml'), xmlForCommand(tier, false, up.elapsedMs, up.output));
-          continue;
-        }
-        const stackDir = join(root, '.temp', 'stack', `rezics-qa-${projectRunId}`);
-        const staged = stageQaBootstrap(stackDir);
-        const appsPath = staged.args[1]!;
-        const bootstrap = command(root, 'bun', staged.args, 180_000);
-        if (!bootstrap.ok) {
-          errors.push('e2e stack bootstrap failed');
-          writeFileSync(join(logs, 'e2e-bootstrap.log'), bootstrap.output);
-          tiers.push({ name: tier, status: 'failed' });
-          writeFileSync(join(directory, 'e2e.xml'), xmlForCommand(tier, false, bootstrap.elapsedMs, bootstrap.output));
-          continue;
-        }
-        const webAuth = command(root, 'bun', ['scripts/dev/web-auth-bootstrap.ts',
-          '--run-id', projectRunId, '--redirect-uri', `${origin}/auth/callback`], 180_000);
-        if (!webAuth.ok) {
-          errors.push('e2e web authorization bootstrap failed');
-          writeFileSync(join(logs, 'e2e-web-auth-bootstrap.log'), webAuth.output);
-          tiers.push({ name: tier, status: 'failed' });
-          writeFileSync(join(directory, 'e2e.xml'), xmlForCommand(tier, false, webAuth.elapsedMs, webAuth.output));
-          continue;
-        }
         const args = e2eArgs(selection, chosenFor('e2e'));
+        const preparations = selectJourneyPreparations(await discoverJourneyPreparations(root), args);
+        const restoreSteps: BrowserStepResult[] = [];
+        const restoreFailures: JourneyPreparationFailure[] = [];
+        const owned = await startBrowserStack(preparations, {
+          root, playwrightArgs: args,
+          recordFailure: async failure => {
+            restoreFailures.push(failure);
+            writeFileSync(join(logs, `e2e-${failure.preparation.slug}.log`), failure.error);
+            // Record before even fresh storage startup can fail.
+            await runPreparedJourneys([], restoreFailures.map(item => item.preparation.journey), {
+              root, artifactDir: directory, initialFailures: restoreFailures,
+              prepare: async () => {}, playwright: async () => {},
+            });
+          },
+          restore: async preparation => {
+            const accounts = await allocateWebPort();
+            const registry = join(root, '.temp', 'qa-child-stacks', projectRunId);
+            childStackRegistries.add(registry);
+            const previousRegistry = process.env[QA_STACK_REGISTRY];
+            process.env[QA_STACK_REGISTRY] = registry;
+            let restored: BrowserStack | undefined;
+            try {
+              await measuredBrowserStep(`${preparation.step} restore`, preparation.budgetMs, async () => {
+                await reserveRunSlot({ deadline: runDeadline, runDeadline });
+                restored = await preparation.restoreStack!({ runId: projectRunId, webOrigin: origin,
+                  accountsPort: String(accounts.port) });
+              }, { root, env: { ...process.env, REZICS_STACK_PROFILE: 'qa' }, deadline: runDeadline,
+                record: result => {
+                  restoreSteps.push(result);
+                  writeFileSync(join(directory, 'e2e-steps.json'), JSON.stringify(restoreSteps, null, 2));
+                } });
+              const copy = restored!;
+              return { ...copy, stop: async () => {
+                await copy.stop();
+                forgetQaStack({ profile: 'qa', runId: copy.runId, persistent: true }, registry);
+              } };
+            } finally {
+              if (previousRegistry === undefined) delete process.env[QA_STACK_REGISTRY];
+              else process.env[QA_STACK_REGISTRY] = previousRegistry;
+              accounts.release();
+            }
+          },
+          fresh: async () => {
+            startedProjects.push(projectRunId);
+            const up = await startRunStack(['stack:up', '--profile', 'qa', '--run-id', projectRunId,
+              '--accounts-app'], 180_000, { ...process.env, REZICS_QA_MEMORY_KIND: 'browser' });
+            if (!up.ok) {
+              writeFileSync(join(logs, 'e2e-stack.log'), up.output);
+              throw new Error(`e2e stack startup failed: ${up.output}`);
+            }
+            const stackDir = join(root, '.temp', 'stack', `rezics-qa-${projectRunId}`);
+            const staged = stageQaBootstrap(stackDir);
+            const bootstrap = command(root, 'bun', staged.args, 180_000);
+            if (!bootstrap.ok) {
+              writeFileSync(join(logs, 'e2e-bootstrap.log'), bootstrap.output);
+              throw new Error(`e2e stack bootstrap failed: ${bootstrap.output}`);
+            }
+            const webAuth = command(root, 'bun', ['scripts/dev/web-auth-bootstrap.ts',
+              '--run-id', projectRunId, '--redirect-uri', `${origin}/auth/callback`], 180_000);
+            if (!webAuth.ok) {
+              writeFileSync(join(logs, 'e2e-web-auth-bootstrap.log'), webAuth.output);
+              throw new Error(`e2e web authorization bootstrap failed: ${webAuth.output}`);
+            }
+            return { runId: projectRunId, apps: readEnv(join(stackDir, 'apps.env')), stop: async () => {} };
+          },
+        });
+        browserStack = owned.stack;
+        writeFileSync(join(directory, 'e2e-preparation-failures.json'), JSON.stringify(owned.failures, null, 2));
+        if (!browserStack) {
+          errors.push(...owned.failures.map(item => `${item.preparation.step}: ${item.error}`));
+          tiers.push({ name: tier, status: 'failed' });
+          continue;
+        }
+        const appsPath = join(root, '.temp', 'stack', `rezics-qa-${browserStack.runId}`, 'qa-apps.json');
+        writeFileSync(appsPath, JSON.stringify(browserStack.apps), { mode: 0o600 });
         const plan = e2eBrowserPlan(args, options.storybook === true);
         const counts = browserFileCounts(root, args);
         const budgets = browserBudgets(counts.playwright, counts.storybook, browserProjectCount(), {
           playwright: plan.accountsJourneys ? counts.accountsPlaywright : 0,
           stories: plan.stories ? counts.accountsStories : 0,
         });
-        const preparation = preparationBudgetMs(selectJourneyPreparations(
-          await discoverJourneyPreparations(root), args));
+        const preparation = preparationBudgetMs(preparations);
         const storyBudget = plan.stories ? budgets.storybook + budgets.accountsStorybook : 0;
         const e2eEnv: NodeJS.ProcessEnv = { ...process.env, REZICS_WEB_E2E_BASE_URL: origin,
-          REZICS_WEB_E2E_PORT_HOLDER: String(reserved.pid) };
+          REZICS_WEB_E2E_PORT_HOLDER: String(reserved.pid), REZICS_BROWSER_STACK_RUN_ID: browserStack.runId };
         if (options.storybook) e2eEnv.REZICS_E2E_STORYBOOK = '1';
         else delete e2eEnv.REZICS_E2E_STORYBOOK;
         const result = await commandAsync(root, 'bun', ['scripts/qa/e2e.ts', appsPath, directory, projectRunId, ...args],
@@ -1126,10 +1172,19 @@ try {
           if (!existsSync(join(directory, 'e2e.xml'))) {
             writeFileSync(join(directory, 'e2e.xml'), xmlForCommand(tier, false, result.elapsedMs, result.output));
           }
-          const stackLogs = command(root, 'bun', ['scripts/dev/cli.ts', 'stack:logs', '--profile', 'qa', '--run-id', projectRunId], 20_000);
+          const stackLogs = command(root, 'bun', ['scripts/dev/cli.ts', 'stack:logs', '--profile', 'qa', '--run-id', browserStack.runId], 20_000);
           writeFileSync(join(logs, 'e2e-stack.log'), stackLogs.output);
         }
-      } finally { reserved.release(); }
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        errors.push(detail);
+        tiers.push({ name: tier, status: 'failed' });
+        if (!existsSync(join(directory, 'e2e.xml')))
+          writeFileSync(join(directory, 'e2e.xml'), xmlForCommand(tier, false, 0, detail));
+      } finally {
+        try { await browserStack?.stop(); }
+        finally { reserved.release(); }
+      }
     }
     if (tier === 'integration' || tier === 'fault/recovery') await runStackTier(tier);
     if (tier === 'load') {

@@ -2,7 +2,8 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { join, resolve } from 'node:path';
 import { describe, expect, test } from 'bun:test';
 import { e2eArgs, failedSelection, parseJUnit, selectedTestExecuted } from './acceptance.ts';
-import { measuredBrowserStep, replaceBrowserStackEnvironment, runPreparedJourneys, type BrowserStepResult } from './e2e.ts';
+import { browserStackEnvironment, measuredBrowserStep, runPreparedJourneys, startBrowserStack,
+  type BrowserStack, type BrowserStepResult } from './e2e.ts';
 import { discoverJourneyPreparations, type JourneyPreparation } from './e2e-preparation.ts';
 
 const preparation = (name: string): JourneyPreparation => ({
@@ -32,8 +33,7 @@ describe('restored browser stack credentials', () => {
     REZICS_WEB_E2E_BASE_URL: 'http://127.0.0.1:4200', CI: '1' };
 
   test('the restored issuer, administrator and clients replace the empty stack identities', () => {
-    const env: NodeJS.ProcessEnv = { ...settings, ...previous };
-    replaceBrowserStackEnvironment(env, previous, {
+    const env = browserStackEnvironment({ ...settings, ...previous }, {
       ACCOUNT_BASE_URL: 'http://127.0.0.1:4301', MAIN_PORT: '4302',
       PLATFORM_FIRST_ADMIN_ACCOUNT: 'retained-admin', ACCOUNT_OPERATOR_USER_IDS: 'restored-operator',
       ACCOUNT_MAIN_CLIENT_ID: 'restored-main-client', ACCOUNT_MAIN_CLIENT_SECRET: 'restored-secret',
@@ -48,14 +48,152 @@ describe('restored browser stack credentials', () => {
   });
 
   test('absent restored administrator and client credentials are removed while QA settings remain', () => {
-    const env: NodeJS.ProcessEnv = { ...settings, ...previous };
-    replaceBrowserStackEnvironment(env, previous, { ACCOUNT_BASE_URL: 'http://127.0.0.1:4301', MAIN_PORT: '4302' });
+    const env = browserStackEnvironment({ ...settings, ...previous },
+      { ACCOUNT_BASE_URL: 'http://127.0.0.1:4301', MAIN_PORT: '4302' });
     expect(env).toEqual({ ...settings, ACCOUNT_BASE_URL: 'http://127.0.0.1:4301', MAIN_PORT: '4302' });
     expect(Object.hasOwn(env, 'PLATFORM_FIRST_ADMIN_ACCOUNT')).toBe(false);
     expect(Object.hasOwn(env, 'ACCOUNT_OPERATOR_USER_IDS')).toBe(false);
     expect(Object.hasOwn(env, 'ACCOUNT_MAIN_CLIENT_ID')).toBe(false);
     expect(Object.hasOwn(env, 'ACCOUNT_MAIN_CLIENT_SECRET')).toBe(false);
     expect(Object.hasOwn(env, 'WEB_OAUTH_CLIENT_ID')).toBe(false);
+  });
+});
+
+describe('browser storage ownership', () => {
+  const missingBackup = "ENOENT: no such file or directory, open '.temp/launch-corpus/recipes/backups/retained/backup.json'";
+  const stack = (runId: string): BrowserStack => ({ runId, apps: { MAIN_PORT: '4321' }, stop: async () => {} });
+  const retained = (name: string): JourneyPreparation => ({ ...preparation(name),
+    restoreStack: async () => stack('retained-copy') });
+
+  test('a retained recipe run starts exactly one storage project, before application setup', async () => {
+    const f = fixture();
+    try {
+      const recipes = retained('launch-real-recipes');
+      const projects: string[] = [], events: string[] = [];
+      const owned = await startBrowserStack([recipes], {
+        root: f.root, playwrightArgs: [recipes.journey],
+        restore: async () => { projects.push('restored'); events.push('restore'); return stack('retained-copy'); },
+        fresh: async () => { projects.push('empty'); return stack('empty'); },
+      });
+      expect(owned.stack?.runId).toBe('retained-copy');
+      expect(owned.failures).toEqual([]);
+      events.push('setup');
+      await runPreparedJourneys([recipes], [recipes.journey], {
+        root: f.root, artifactDir: f.artifactDir, initialFailures: owned.failures,
+        prepare: async () => { events.push('prepare'); },
+        playwright: async () => { events.push('playwright'); },
+      });
+      expect(projects).toEqual(['restored']);
+      expect(events).toEqual(['restore', 'setup', 'prepare', 'playwright']);
+    } finally { f.cleanup(); }
+  });
+
+  test('a missing retained recipe backup allows fresh setup, preparation and Playwright for another journey', async () => {
+    const f = fixture();
+    try {
+      const recipes = retained('launch-real-recipes'), another = preparation('another');
+      const args = [recipes.journey, another.journey, '--project', 'chromium'];
+      const events: string[] = [];
+      const owned = await startBrowserStack([recipes, another], {
+        root: f.root, playwrightArgs: args,
+        restore: async () => { events.push('restore'); throw new Error(missingBackup); },
+        fresh: async () => { events.push('fresh'); return stack('empty'); },
+      });
+      expect(owned.stack?.runId).toBe('empty');
+      expect(owned.failures).toEqual([{ preparation: recipes, error: missingBackup }]);
+      // The owner records restoration before the application child can start.
+      await runPreparedJourneys([], [recipes.journey], {
+        root: f.root, artifactDir: f.artifactDir, initialFailures: owned.failures,
+        prepare: async () => { throw new Error('no preparations selected'); },
+        playwright: async () => { throw new Error('failed-only selection must not start Playwright'); },
+      });
+      events.push('setup');
+      const failures = await runPreparedJourneys([recipes, another], args, {
+        root: f.root, artifactDir: f.artifactDir, initialFailures: owned.failures,
+        prepare: async item => { events.push(item.journey); },
+        playwright: async selected => {
+          expect(selected).toEqual(['--project', 'chromium', another.journey]);
+          events.push('playwright');
+          writeFileSync(join(f.artifactDir, 'e2e.xml'), `<testsuites><testsuite><testcase name="another" classname="another.e2e.ts" /></testsuite></testsuites>`);
+        },
+      });
+      expect(events).toEqual(['restore', 'fresh', 'setup', another.journey, 'playwright']);
+      expect(failures).toEqual(owned.failures);
+      expect(f.results()).toEqual([
+        expect.objectContaining({ file: another.journey, failed: false }),
+        expect.objectContaining({ file: recipes.journey, failed: true, preparationFailure: true,
+          detail: `${recipes.step}: ${missingBackup}; see logs/e2e-${recipes.slug}.log` }),
+      ]);
+    } finally { f.cleanup(); }
+  });
+
+  test('a missing recipe-only backup reports its journey without starting empty storage or Playwright', async () => {
+    const f = fixture();
+    try {
+      const recipes = retained('launch-real-recipes');
+      const owned = await startBrowserStack([recipes], {
+        root: f.root, playwrightArgs: [recipes.journey],
+        restore: async () => { throw new Error(missingBackup); },
+        fresh: async () => { throw new Error('failed-only selection must not start empty storage'); },
+      });
+      expect(owned.stack).toBeUndefined();
+      await runPreparedJourneys([recipes], [recipes.journey], {
+        root: f.root, artifactDir: f.artifactDir, initialFailures: owned.failures,
+        prepare: async () => { throw new Error('failed restore must not rebuild its fixture'); },
+        playwright: async () => { throw new Error('failed-only selection must not start Playwright'); },
+      });
+      // A reporter retry preserves exactly one failure, including when no browser wrote XML.
+      await runPreparedJourneys([], [recipes.journey], {
+        root: f.root, artifactDir: f.artifactDir, initialFailures: owned.failures,
+        prepare: async () => {}, playwright: async () => {},
+      });
+      expect(f.results()).toEqual([expect.objectContaining({ file: recipes.journey, failed: true,
+        detail: `${recipes.step}: ${missingBackup}; see logs/e2e-${recipes.slug}.log` })]);
+    } finally { f.cleanup(); }
+  });
+
+  test('a failed fresh stack startup keeps the retained journey restore failure in its report', async () => {
+    const f = fixture();
+    try {
+      const recipes = retained('launch-real-recipes'), another = preparation('another');
+      await expect(startBrowserStack([recipes, another], {
+        root: f.root, playwrightArgs: [recipes.journey, another.journey],
+        restore: async () => { throw new Error(missingBackup); },
+        recordFailure: async failure => {
+          await runPreparedJourneys([], [recipes.journey], {
+            root: f.root, artifactDir: f.artifactDir, initialFailures: [failure],
+            prepare: async () => {}, playwright: async () => {},
+          });
+        },
+        fresh: async () => { throw new Error('fresh storage startup unavailable'); },
+      })).rejects.toThrow('fresh storage startup unavailable');
+      expect(f.results()).toEqual([expect.objectContaining({ file: recipes.journey, failed: true,
+        detail: `${recipes.step}: ${missingBackup}; see logs/e2e-${recipes.slug}.log` })]);
+    } finally { f.cleanup(); }
+  });
+
+  test('incompatible retained journeys fail individually while another selected journey uses the one restored stack', async () => {
+    const f = fixture();
+    try {
+      const first = retained('first'), second = retained('second'), another = preparation('another');
+      const args = [first.journey, second.journey, another.journey];
+      const restored: string[] = [];
+      const owned = await startBrowserStack([first, second, another], {
+        root: f.root, playwrightArgs: args,
+        restore: async item => { restored.push(item.journey); return stack('first-copy'); },
+        fresh: async () => { throw new Error('retained stack already owns storage'); },
+      });
+      expect(restored).toEqual([first.journey]);
+      expect(owned.failures).toEqual([{ preparation: second,
+        error: 'This journey needs a different retained stack; select it in a separate browser run' }]);
+      const prepared: string[] = [];
+      await runPreparedJourneys([first, second, another], args, {
+        root: f.root, artifactDir: f.artifactDir, initialFailures: owned.failures,
+        prepare: async item => { prepared.push(item.journey); },
+        playwright: async selected => { expect(selected).toEqual([first.journey, another.journey]); },
+      });
+      expect(prepared).toEqual([first.journey, another.journey]);
+    } finally { f.cleanup(); }
   });
 });
 

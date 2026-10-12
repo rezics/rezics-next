@@ -23,11 +23,12 @@ export interface BrowserStepOptions {
   record?: (result: BrowserStepResult) => void;
 }
 
-/** A restored stack owns its credentials and administrator; absent values cannot come from the empty stack. */
-export function replaceBrowserStackEnvironment(env: NodeJS.ProcessEnv,
-  previous: Record<string, string>, restored: Record<string, string>): void {
-  for (const key of Object.keys(previous)) delete env[key];
-  Object.assign(env, restored);
+/** A stack owns its administrator and clients; missing values cannot be inherited from the caller. */
+export function browserStackEnvironment(parent: NodeJS.ProcessEnv, stack: Record<string, string>): NodeJS.ProcessEnv {
+  const env = { ...parent };
+  for (const key of ['PLATFORM_FIRST_ADMIN_ACCOUNT', 'ACCOUNT_OPERATOR_USER_IDS',
+    'ACCOUNT_MAIN_CLIENT_ID', 'ACCOUNT_MAIN_CLIENT_SECRET', 'WEB_OAUTH_CLIENT_ID']) delete env[key];
+  return { ...env, ...stack };
 }
 
 /** Admission has the run deadline; the step keeps its full execution budget once admitted. */
@@ -61,24 +62,59 @@ export interface JourneyPreparationFailure {
   error: string;
 }
 
+export type BrowserStack = Awaited<ReturnType<NonNullable<JourneyPreparation['restoreStack']>>>;
+
+function selectedJourneyFiles(root: string, args: readonly string[]): string[] {
+  const selected = args.filter(arg => arg.endsWith('.e2e.ts'));
+  return selected.length ? selected : [...new Bun.Glob('*.e2e.ts').scanSync({
+    cwd: join(root, 'apps/web/tests'),
+  })].sort().map(file => `apps/web/tests/${file}`);
+}
+
+/** The stack owner decides on retained stores before creating empty storage.
+ * Restore errors belong to their journeys; an unrelated journey can use fresh stores. */
+export async function startBrowserStack(preparations: readonly JourneyPreparation[], options: {
+  root: string; playwrightArgs: readonly string[];
+  restore: (preparation: JourneyPreparation) => Promise<BrowserStack>;
+  fresh: () => Promise<BrowserStack>;
+  recordFailure?: (failure: JourneyPreparationFailure) => Promise<void>;
+}): Promise<{ stack?: BrowserStack; failures: JourneyPreparationFailure[] }> {
+  const failures: JourneyPreparationFailure[] = [];
+  let stack: BrowserStack | undefined;
+  for (const preparation of preparations.filter(item => item.restoreStack)) {
+    try {
+      if (stack) throw new Error('This journey needs a different retained stack; select it in a separate browser run');
+      stack = await options.restore(preparation);
+    } catch (error) {
+      const failure = { preparation, error: error instanceof Error ? error.message : String(error) };
+      failures.push(failure);
+      await options.recordFailure?.(failure);
+    }
+  }
+  const runnable = selectedJourneyFiles(options.root, options.playwrightArgs).some(journey =>
+    !failures.some(({ preparation }) => sameJourney(journey, preparation.journey)));
+  if (!stack && runnable) stack = await options.fresh();
+  return { stack, failures };
+}
+
 /** A preparation owns only its journey. Keep its failure in the same reporter
  * even when Playwright fails or never starts. */
 export async function runPreparedJourneys(preparations: readonly JourneyPreparation[], playwrightArgs: readonly string[],
   options: { root: string; artifactDir: string; prepare: (preparation: JourneyPreparation) => Promise<void>;
+    initialFailures?: readonly JourneyPreparationFailure[];
     playwright: (args: readonly string[]) => Promise<void> }): Promise<JourneyPreparationFailure[]> {
-  const failures: JourneyPreparationFailure[] = [];
+  const failures: JourneyPreparationFailure[] = [...options.initialFailures ?? []];
   const started = Date.now();
   try {
     for (const preparation of preparations) {
+      if (failures.some(failure => sameJourney(failure.preparation.journey, preparation.journey))) continue;
       try { await options.prepare(preparation); }
       catch (error) { failures.push({ preparation, error: error instanceof Error ? error.message : String(error) }); }
     }
     let args = playwrightArgs;
     if (failures.length) {
       const selected = playwrightArgs.filter(arg => arg.endsWith('.e2e.ts'));
-      const journeys = selected.length ? selected : [...new Bun.Glob('*.e2e.ts').scanSync({
-        cwd: join(options.root, 'apps/web/tests'),
-      })].sort().map(file => `apps/web/tests/${file}`);
+      const journeys = selectedJourneyFiles(options.root, playwrightArgs);
       const runnable = journeys.filter(journey => !failures.some(({ preparation }) => sameJourney(journey, preparation.journey)));
       if (!runnable.length) return failures;
       args = [...playwrightArgs.filter(arg => !selected.includes(arg)), ...runnable];
@@ -90,7 +126,10 @@ export async function runPreparedJourneys(preparations: readonly JourneyPreparat
       const escape = (value: string) => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;')
         .replaceAll('>', '&gt;').replaceAll('"', '&quot;');
       const xmlPath = join(options.artifactDir, 'e2e.xml');
-      const suites = existsSync(xmlPath) ? junitSuites(readFileSync(xmlPath, 'utf8')).map(suite => suite.xml) : [];
+      const suites = existsSync(xmlPath) ? junitSuites(readFileSync(xmlPath, 'utf8'))
+        .filter(suite => !suite.xml.includes('type="JourneyPreparationError"')
+          || !failures.some(({ preparation }) => suite.file === escape(preparation.journey)))
+        .map(suite => suite.xml) : [];
       for (const { preparation, error } of failures) {
         const file = escape(preparation.journey);
         const step = escape(preparation.step);
@@ -282,7 +321,8 @@ async function runE2e(): Promise<void> {
     throw new Error('e2e requires an apps file, artifact directory and isolated run ID');
   }
   const web = requiredWebOrigin();
-  let apps = JSON.parse(readFileSync(appsPath, 'utf8')) as Record<string, string>;
+  const apps = JSON.parse(readFileSync(appsPath, 'utf8')) as Record<string, string>;
+  const appRunId = process.env.REZICS_BROWSER_STACK_RUN_ID ?? runId;
   const plan = e2eBrowserPlan(playwrightArgs, storybookRequested);
   const counts = browserFileCounts(root, playwrightArgs);
   const budgets = browserBudgets(counts.playwright, counts.storybook, browserProjectCount(), {
@@ -291,25 +331,24 @@ async function runE2e(): Promise<void> {
   });
   writeFileSync(join(artifactDir, 'e2e-browser-plan.json'), JSON.stringify(plan, null, 2));
   if (!plan.stories) console.log(`Storybook: skipped (${plan.storySkipReason})`);
-  const authDir = join(root, '.temp', 'stack', `rezics-qa-${runId}`, 'web-auth');
+  const authDir = join(root, '.temp', 'stack', `rezics-qa-${appRunId}`, 'web-auth');
   const runtime = readEnv(join(authDir, 'runtime.env'));
   const publicConfig = JSON.parse(readFileSync(join(authDir, 'public.json'), 'utf8')) as { clientId: string };
   // Journeys that verify an email read this stack's Mailpit, not the shared dev stack's.
-  const compose = readEnv(join(root, '.temp', 'stack', `rezics-qa-${runId}`, 'compose.env'));
-  const env: NodeJS.ProcessEnv = { ...process.env, ...apps, ...runtime, WEB_OAUTH_CLIENT_ID: publicConfig.clientId,
+  const compose = readEnv(join(root, '.temp', 'stack', `rezics-qa-${appRunId}`, 'compose.env'));
+  const env = browserStackEnvironment(process.env, { ...apps, ...runtime, WEB_OAUTH_CLIENT_ID: publicConfig.clientId,
     ...(compose.MAILPIT_HTTP_PORT ? { MAILPIT_URL: `http://127.0.0.1:${compose.MAILPIT_HTTP_PORT}` } : {}),
     REZICS_QA_RUN_ID: runId,
     REZICS_WEB_AUTH_PUBLIC_PATH: join(authDir, 'public.json'),
     REZICS_WEB_AUTH_PRIVATE_PATH: join(authDir, 'private.json'),
     REZICS_WEB_E2E_BASE_URL: web.origin,
-    REZICS_WEB_E2E_PORT_HOLDER: String(web.holderPid) };
+    REZICS_WEB_E2E_PORT_HOLDER: String(web.holderPid) });
   const children: ChildProcess[] = [];
   const launchErrors = new WeakMap<ChildProcess, Error>();
   const runDeadline = qaMemoryDeadline(env);
-  const steps: BrowserStepResult[] = [];
+  const stepsPath = join(artifactDir, 'e2e-steps.json');
+  const steps: BrowserStepResult[] = existsSync(stepsPath) ? JSON.parse(readFileSync(stepsPath, 'utf8')) : [];
   let ownedPort: number | undefined;
-  let appRunId = runId;
-  let stopRestoredStack: (() => Promise<void>) | undefined;
 
   async function measured(step: string, budgetMs: number, run: () => Promise<void>): Promise<void> {
     console.log(`${step}: ${budgetMs / 1000}s budget`);
@@ -399,30 +438,9 @@ async function runE2e(): Promise<void> {
     ownedPort = web.port;
     console.log(`Web origin: ${web.origin}`);
     const preparations = selectJourneyPreparations(await discoverJourneyPreparations(root), playwrightArgs);
-    const restores = preparations.filter(item => item.restoreStack);
-    if (restores.length > 1) throw new Error('A browser run can restore only one retained stack');
-    if (restores[0]) {
-      const preparation = restores[0];
-      await measured(`${preparation.step} restore`, preparation.budgetMs, async () => {
-        if (!apps.ACCOUNTS_PORT) throw new Error('Retained browser restore needs an Accounts port');
-        const restored = await preparation.restoreStack!({ runId, webOrigin: web.origin,
-          accountsPort: apps.ACCOUNTS_PORT });
-        stopRestoredStack = restored.stop;
-        appRunId = restored.runId;
-        const previousStackEnvironment = { ...apps, ...runtime };
-        apps = restored.apps;
-        const stackDir = join(root, '.temp/stack', `rezics-qa-${appRunId}`);
-        const authDir = join(stackDir, 'web-auth');
-        const client = JSON.parse(readFileSync(join(authDir, 'public.json'), 'utf8')) as { clientId: string };
-        const compose = readEnv(join(stackDir, 'compose.env'));
-        replaceBrowserStackEnvironment(env, previousStackEnvironment, { ...apps, ...readEnv(join(authDir, 'runtime.env')),
-          WEB_OAUTH_CLIENT_ID: client.clientId,
-          MAILPIT_URL: `http://127.0.0.1:${compose.MAILPIT_HTTP_PORT}`,
-          REZICS_WEB_AUTH_PUBLIC_PATH: join(authDir, 'public.json'),
-          REZICS_WEB_AUTH_PRIVATE_PATH: join(authDir, 'private.json'),
-        });
-      });
-    }
+    const failuresPath = join(artifactDir, 'e2e-preparation-failures.json');
+    const initialFailures: JourneyPreparationFailure[] = existsSync(failuresPath)
+      ? JSON.parse(readFileSync(failuresPath, 'utf8')) : [];
     await measured('Application setup', budgets.setup, async () => {
       if (!env.MAIN_RELAY_DATABASE_URL || !env.MAIN_RELAY_CONSUMER || !env.MAIN_DATA_EPOCH) {
         throw new Error('The e2e stack needs a Main relay checkpoint');
@@ -448,6 +466,7 @@ async function runE2e(): Promise<void> {
       await ready('Web Worker', `${web.origin}/search`, preview, 240_000);
     });
     const preparationFailures = await runPreparedJourneys(preparations, playwrightArgs, {
+      initialFailures,
       root, artifactDir,
       prepare: async preparation => {
         await measured(preparation.step, preparation.budgetMs, async () => {
@@ -493,8 +512,7 @@ async function runE2e(): Promise<void> {
     process.exitCode = 1;
   } finally {
     stopAll();
-    try { await stopRestoredStack?.(); }
-    finally { if (ownedPort !== undefined) releaseOwnedClaim(ownedPort); }
+    if (ownedPort !== undefined) releaseOwnedClaim(ownedPort);
   }
 
   // The browser suite has finished using the services. Release them before
