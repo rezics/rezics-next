@@ -1,0 +1,304 @@
+import { expect, test } from 'bun:test';
+import type { Pool } from 'pg';
+import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
+import type { ResourceSummary } from '../src/modules/media/summary.ts';
+import { fallbackAvatar } from '../src/modules/media/summary.ts';
+import { configureDisclosure, configureDisclosurePool, discloseInventory, DisclosureStore,
+  DisclosureUnavailable, type DisclosureChannel, type DisclosureDecision, type DisclosureTarget }
+  from '../src/modules/disclosure/read.ts';
+import { ANONYMOUS_VIEWER, type Viewer } from '../src/modules/suitability/policy.ts';
+import { RV, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
+import { WorkReadSession, WorkReadMissing, WorkReadUnavailable, WorkReadInvalid,
+  decodeReadCursor, type ReadRow } from '../src/modules/work/read-session.ts';
+import { readRealmBasis, readRealmHeader, readRealmLanding } from '../src/modules/realm-reads/read-realm.ts';
+import { readRealmWorks } from '../src/modules/realm-reads/read-works.ts';
+import { readRealmDecision } from '../src/modules/realm-reads/public-decision-index.ts';
+import { readRealmZone } from '../src/modules/realm-reads/read-zone.ts';
+import { readRealmThreads, readRealmThread } from '../src/modules/realm-reply/thread-read.ts';
+import { RealmReplyThreadStore } from '../src/modules/realm-reply/thread-store.ts';
+import { RealmDirectoryIndex, type DirectoryRow } from '../src/modules/realm-directory/index.ts';
+import { readRealmDirectory } from '../src/modules/realm-directory/read.ts';
+
+const native = (number: number) => `https://rezics.com/id/00000000-0000-4000-8000-${number.toString(16).padStart(12, '0')}`;
+const realm = native(1), space = native(2), head = native(3), work = native(4), selection = native(5), reply = native(6), zone = native(7);
+const position = { dataEpoch: 'closure-owner-epoch', sequence: '17' };
+const binding = (value: string) => ({ type: 'uri', value });
+const actors = ['anonymous', 'member', 'manager', 'case-party'] as const;
+type Actor = typeof actors[number];
+
+async function expectUnavailable(operation: Promise<unknown>) {
+  const result: unknown = await operation.then(() => null, (error: unknown) => error);
+  expect(result instanceof WorkReadUnavailable || result instanceof DisclosureUnavailable).toBe(true);
+}
+
+// These are bounded owner responses, not persisted fixture records. Integration
+// tests create resources and decisions through the product APIs. Keeping Access
+// as a separate reader here detects adapters that never ask it for a Realm fence.
+class OwnerDisclosure extends DisclosureStore {
+  readonly calls: { targets: readonly DisclosureTarget[]; channel: DisclosureChannel }[] = [];
+  decision: (target: DisclosureTarget, channel: DisclosureChannel) => DisclosureDecision = () => 'visible';
+  unavailable = false;
+  constructor() { super({} as Pool); }
+  override async read(targets: readonly DisclosureTarget[], _viewer: Viewer, channel: DisclosureChannel) {
+    this.calls.push({ targets, channel });
+    if (this.unavailable) throw new DisclosureUnavailable('Disclosure owner is unavailable');
+    return targets.map(target => this.decision(target, channel));
+  }
+}
+
+function summary(id: string): ResourceSummary {
+  return { reference: id, status: 'available', disclosure: 'public', type: 'realm',
+    name: { value: `Community ${id.slice(-12)}`, language: 'en', direction: 'ltr', basis: 'requested' },
+    avatar: fallbackAvatar('realm', id) } as ResourceSummary;
+}
+
+function ownerSession(actor: Actor = 'anonymous', input: { private?: boolean; reader?: boolean } = {}) {
+  const reader = new OwnerDisclosure();
+  let closed = false, proof = 'current-member-proof';
+  const calls = { profile: 0, content: 0, thread: 0, policy: 0, summary: 0 };
+  let queryRows: (query: string) => ReadRow[] = () => [];
+  const graph = { query: async (query: string) => {
+    let rows: ReadRow[];
+    if (query.includes('SELECT ?space ?realmRevision')) {
+      calls.policy++;
+      rows = [{ space: binding(space), realmRevision: binding(head), disclosure: binding(`${RV}${input.private ? 'Private' : 'Public'}`),
+        visibility: binding(input.private ? 'private' : 'public'), mode: binding('open'),
+        listing: binding('listed'), history: binding('everything'), admission: binding(input.private ? 'request' : 'open') }];
+    } else if (query.includes('SELECT ?revision ?payload ?model')) {
+      calls.profile++;
+      rows = [{}];
+    } else if (query.includes('SELECT ?name WHERE')) {
+      rows = [{ name: { type: 'literal', value: 'Request community', 'xml:lang': 'en' } }];
+    } else if (query.includes('SELECT ?work ?head ?owningWork')) {
+      rows = [realm, work, selection, reply, zone].filter(id => query.includes(`<${id}>`))
+        .map(id => ({ work: binding(id), head: binding(head),
+          ...(id === work ? { owningWork: binding(work), owningHead: binding(head) } : {}) }));
+    } else rows = queryRows(query);
+    return { results: { bindings: rows } };
+  } };
+  const environment = { fuseki: graph, lineage: { dataEpoch: position.dataEpoch, routingEpoch: 'routing' },
+    objectDirectory: '.temp/realm-platform-closure-owner' } as WorkActivationEnvironment;
+  if (input.reader !== false) configureDisclosure(environment, reader);
+  reader.decision = target => closed && target.owner === 'graph' && target.resource === realm ? 'hidden' : 'visible';
+  const deps = { environment, access: { realmReadProof: async () => proof || null },
+    content: { readExactBatch: async () => { calls.content++; return []; } },
+    realmReplyThreads: { assertThreadProjection: async () => { calls.thread++; },
+      focusBasis: async () => { calls.thread++; return null; },
+      rankingRevision: async () => '1', rankedPage: async () => { calls.thread++; return { rows: [], revision: '1' }; },
+      admitted: async () => new Map(), counts: async () => ({ counts: new Map(), complete: true }),
+      votes: async () => new Map() },
+  } as unknown as MainWorkDependencies;
+  const session = new WorkReadSession(deps, new Request('http://main.test/v1/realms'),
+    actor === 'anonymous' ? { limit: 2 } : { limit: 2, actingSubject: native(20 + actors.indexOf(actor)) }, position);
+  if (actor !== 'anonymous') session.principal = { issuer: 'account.test', subject: actor } as never;
+  session.summaries = async ids => { calls.summary++; return ids.map(summary); };
+  return { session, reader, calls, close: () => { closed = true; }, restore: () => { closed = false; },
+    revoke: () => { proof = ''; }, rows: (read: typeof queryRows) => { queryRows = read; } };
+}
+
+for (const actor of actors) {
+  test(`closed-home-${actor}: ordinary Realm basis stays absent with current identity and membership`, async () => {
+    const owner = ownerSession(actor, { private: actor !== 'anonymous' });
+    expect((await readRealmBasis(owner.session, realm)).id).toBe(realm);
+    owner.close();
+    await expect(readRealmBasis(owner.session, realm)).rejects.toBeInstanceOf(WorkReadMissing);
+    expect(owner.calls.profile).toBe(0);
+    expect(owner.calls.content).toBe(0);
+  });
+}
+
+test('restored-home-member: restoration restores current private policy and does not restore revoked membership', async () => {
+  const owner = ownerSession('member', { private: true });
+  owner.close();
+  await expect(readRealmBasis(owner.session, realm)).rejects.toBeInstanceOf(WorkReadMissing);
+  owner.restore();
+  expect((await readRealmBasis(owner.session, realm)).visibility).toBe('private');
+  owner.revoke();
+  await expect(readRealmBasis(owner.session, realm)).rejects.toBeInstanceOf(WorkReadMissing);
+});
+
+test('closure-private-landing-no-exception: request admission cannot expose a closed Realm join teaser', async () => {
+  const owner = ownerSession('anonymous', { private: true });
+  expect((await readRealmLanding(owner.session, realm)).profile).toBe('realm-join-page-v1');
+  owner.close();
+  await expect(readRealmLanding(owner.session, realm)).rejects.toBeInstanceOf(WorkReadMissing);
+});
+
+test('closure-delivery-race: a closure confirmed after summary hydration discards the Realm header', async () => {
+  const owner = ownerSession('manager');
+  owner.session.summaries = async ids => { owner.close(); return ids.map(summary); };
+  await expect(readRealmHeader(owner.session, realm)).rejects.toBeInstanceOf(WorkReadMissing);
+});
+
+test('closure-owner-unavailable-replay: missing or unavailable disclosure never grants a public Realm basis', async () => {
+  const missing = ownerSession('anonymous', { reader: false });
+  await expectUnavailable(readRealmBasis(missing.session, realm));
+  const owner = ownerSession();
+  owner.reader.unavailable = true;
+  await expectUnavailable(readRealmBasis(owner.session, realm));
+  owner.reader.unavailable = false;
+  owner.close();
+  await expect(readRealmBasis(owner.session, realm)).rejects.toBeInstanceOf(WorkReadMissing);
+  owner.restore();
+  expect((await readRealmBasis(owner.session, realm)).id).toBe(realm);
+});
+
+test('narrow-realm-restriction: title and search restrictions do not imply whole-record closure', async () => {
+  const owner = ownerSession();
+  owner.reader.decision = (target, channel) => target.resource === realm
+    && (target.component === 'title' || channel === 'search') ? 'hidden' : 'visible';
+  expect((await readRealmBasis(owner.session, realm)).id).toBe(realm);
+});
+
+test('closed-works-anonymous: the Realm collection is missing before summary hydration even when empty', async () => {
+  const owner = ownerSession();
+  owner.close();
+  await expect(readRealmWorks(owner.session, realm)).rejects.toBeInstanceOf(WorkReadMissing);
+  expect(owner.calls.summary).toBe(0);
+});
+
+test('closed-selection-member: an exact publication selection cannot bypass the containing Realm', async () => {
+  const owner = ownerSession('member');
+  owner.rows(query => query.includes('SELECT DISTINCT ?id ?kind') ? [{ id: binding(selection), kind: binding('adoption'),
+    work: binding(work), main: binding(native(8)), subject: binding(native(9)), revisionEpoch: binding(position.dataEpoch),
+    sequence: binding('12') }] : []);
+  expect((await readRealmDecision(owner.session, realm, selection)).id).toBe(selection);
+  owner.close();
+  await expect(readRealmDecision(owner.session, realm, selection)).rejects.toBeInstanceOf(WorkReadMissing);
+});
+
+for (const surface of ['threads', 'reply'] as const) {
+  test(`closed-${surface}-manager: closure precedes Content and ranking owner hydration`, async () => {
+    const owner = ownerSession('manager');
+    owner.close();
+    const read = surface === 'threads' ? readRealmThreads(owner.session, realm, { sort: 'top' })
+      : readRealmThread(owner.session, realm, reply, 'new');
+    await expect(read).rejects.toBeInstanceOf(WorkReadMissing);
+    expect(owner.calls.thread).toBe(0);
+    expect(owner.calls.content).toBe(0);
+  });
+}
+
+test('closed-zone-discussion-entry: the Realm-owned Zone entry is missing before Zone presentation hydration', async () => {
+  const owner = ownerSession();
+  owner.rows(query => query.includes('SELECT DISTINCT ?zone ?official') ? [{ zone: binding(zone) }] : []);
+  let publications = 0;
+  const publication = async () => { publications++; return { realm, space, disclosure: 'public', official: null,
+    listing: 'listed', revision: head, presentation: {}, discovery: {} } as never; };
+  expect((await readRealmZone(owner.session, realm, publication)).zone).toBe(zone);
+  publications = 0;
+  owner.close();
+  await expect(readRealmZone(owner.session, realm, publication)).rejects.toBeInstanceOf(WorkReadMissing);
+  expect(publications).toBe(0);
+});
+
+test('independent-publication-not-descendant: Realm context alone is not a parent and does not replace the Work fence', async () => {
+  const owner = ownerSession();
+  owner.close();
+  const target: DisclosureTarget = { owner: 'content', resource: reply, component: 'body', revision: native(10),
+    context: realm, work, workRevision: head };
+  expect(await discloseInventory(owner.session.deps.environment, [target], ANONYMOUS_VIEWER, 'read')).toEqual(['visible']);
+  owner.reader.decision = item => item.work === work ? 'hidden' : 'visible';
+  expect(await discloseInventory(owner.session.deps.environment, [target], ANONYMOUS_VIEWER, 'read')).toEqual(['hidden']);
+  expect(owner.reader.calls.at(-1)!.targets[0]!.work).toBe(work);
+  expect(owner.reader.calls.at(-1)!.targets[0]!.workRevision).toBe(head);
+});
+
+function countStore(reader = true) {
+  const owner = ownerSession();
+  const content = { query: async () => ({ rows: [{ thread: reply, id: native(11), parent_reply: reply,
+    root_target: work, visible: true, truncated: false }] }) } as unknown as Pool;
+  const access = {} as Pool;
+  if (reader) { configureDisclosurePool(access, owner.reader); configureDisclosure(owner.session.deps.environment, owner.reader); }
+  return { ...owner, store: new RealmReplyThreadStore(content, access) };
+}
+
+test('reply-count-work-fence: an independent Work restriction remains enforced in Realm reply counts', async () => {
+  const owner = countStore();
+  expect((await owner.store.counts(realm, [reply])).counts.get(reply)).toBe(1);
+  owner.reader.decision = target => target.work === work ? 'hidden' : 'visible';
+  expect((await owner.store.counts(realm, [reply])).counts.get(reply)).toBe(0);
+  expect(owner.reader.calls.at(-1)!.targets[0]!.work).toBe(work);
+});
+
+test('reply-count-missing-reader: an uncomposed count adapter with approved content returns unavailable', async () => {
+  const owner = countStore(false);
+  await expectUnavailable(owner.store.counts(realm, [reply]));
+});
+
+function directoryOwner(ids: string[]) {
+  const owner = ownerSession();
+  const records: DirectoryRow[] = ids.map((id, index) => ({ realm: id, space: native(1000 + index), profile: null,
+    rank: String(index), count_value: '0', count_revision: '1' }));
+  const query = async (sql: string, values: unknown[] = []) => {
+    let rows: object[] = [];
+    if (sql.includes('FROM access.recovery_fence')) rows = [{}];
+    else if (sql.includes('FROM access.realm_directory_position')) rows = [{ data_epoch: position.dataEpoch, sequence: position.sequence, generation: 1 }];
+    else if (sql.includes('FROM access.realm_count_position')) rows = [{ revision: '1' }];
+    else if (sql.includes('FROM access.realm_directory d')) rows = records
+      .filter(row => values[0] === null || Number(row.rank) > Number(values[0])
+        || row.rank === values[0] && row.realm > String(values[1])).slice(0, Number(values[3]));
+    return { rows, rowCount: rows.length };
+  };
+  const realmDirectory = new RealmDirectoryIndex({ query,
+    connect: async () => ({ query, release() {} }) } as unknown as Pool);
+  const session = new WorkReadSession({ ...owner.session.deps,
+    access: { ...owner.session.deps.access, realmDirectory } }, owner.session.request,
+  owner.session.options, owner.session.position);
+  session.summaries = owner.session.summaries;
+  owner.rows(sparql => sparql.includes('SELECT ?realm ?mode') ? records.filter(row => sparql.includes(`<${row.realm}>`))
+    .map(row => ({ realm: binding(row.realm), mode: binding('open') })) : []);
+  return { ...owner, session };
+}
+
+test('closed-directory-before-drain: hidden indexed rows are omitted and live rows remain traversable', async () => {
+  const hidden = Array.from({ length: 35 }, (_, index) => native(2000 + index));
+  const visible = [native(3001), native(3002), native(3003)];
+  const owner = directoryOwner([...hidden, ...visible]);
+  owner.session.summaries = async ids => ids.map(id => hidden.includes(id)
+    ? { reference: id, status: 'unavailable' } as ResourceSummary : summary(id));
+  owner.reader.decision = target => hidden.includes(target.resource) ? 'hidden' : 'visible';
+  const traversed: string[] = [];
+  const cursors = new Set<string>();
+  // A source budget may return a sparse or empty page with a continuation.
+  // Traversal must still advance across every hidden source row and terminate.
+  const maximumPages = hidden.length + visible.length + 1;
+  let finished = false;
+  for (let pages = 0; pages < maximumPages; pages++) {
+    const page = await readRealmDirectory(owner.session, { sort: 'members' });
+    const ids = page.items.map(item => item.id);
+    expect(ids.length).toBeLessThanOrEqual(owner.session.options.limit!);
+    for (const id of ids) expect(visible).toContain(id);
+    traversed.push(...ids);
+    if (!page.nextCursor) { finished = true; break; }
+    expect(cursors.has(page.nextCursor)).toBe(false);
+    cursors.add(page.nextCursor);
+    const bytes = Buffer.from(page.nextCursor, 'base64url').toString('utf8');
+    for (const id of [...hidden, ...visible]) {
+      expect(bytes).not.toContain(id);
+      expect(bytes).not.toContain(id.slice(-36));
+    }
+    expect(bytes).not.toContain(position.dataEpoch);
+    owner.session.options.cursor = page.nextCursor;
+  }
+  expect(finished).toBe(true);
+  expect(traversed).toEqual(visible);
+});
+
+test('narrow-search-restriction: directory classifies search visibility even when the Realm summary is public', async () => {
+  const owner = directoryOwner([realm, native(4001)]);
+  owner.reader.decision = (target, channel) => target.resource === realm && channel === 'search' ? 'hidden' : 'visible';
+  expect((await readRealmDirectory(owner.session, { sort: 'members' })).items.map(item => item.id)).toEqual([native(4001)]);
+  expect((await readRealmBasis(owner.session, realm)).id).toBe(realm);
+});
+
+test('directory-continuation-opacity: native continuation encrypts identity, ranking and source position and binds the query', async () => {
+  const owner = directoryOwner([realm, native(5001), native(5002)]);
+  const page = await readRealmDirectory(owner.session, { sort: 'members' });
+  const token = page.nextCursor!;
+  expect(decodeReadCursor(token, ['realm-directory-v3', 'members', '', null, null], position)?.after).toBe(native(5001));
+  const decodedBytes = Buffer.from(token, 'base64url').toString('utf8');
+  expect(decodedBytes).not.toContain(native(5001));
+  expect(decodedBytes).not.toContain(position.dataEpoch);
+  expect(() => decodeReadCursor(token, ['realm-directory-v3', 'members', 'other', null, null], position)).toThrow(WorkReadInvalid);
+});
