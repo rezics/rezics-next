@@ -434,10 +434,17 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
     const targets = [...new Set(records.flatMap(record => record.target && !isCatalogTarget(profile, record.target)
       ? [record.target] : []))];
     const readable = input.canReadTargets && targets.length ? await input.canReadTargets(targets) : undefined;
+    // Repeated placements share one current decision in this immutable range.
+    // Keep fallback reads lazy, and refresh decisions when the scan advances.
+    const targetDecisions = new Map<string, boolean>();
     for (const record of records) {
       input.signal?.throwIfAborted();
+      if (record.target && !isCatalogTarget(profile, record.target)
+        && !readable && !targetDecisions.has(record.target)) {
+        targetDecisions.set(record.target, await input.canReadTarget(record.target));
+      }
       const withheld = record.target && !isCatalogTarget(profile, record.target)
-        && !(readable ? readable.has(record.target) : await input.canReadTarget(record.target));
+        && !(readable ? readable.has(record.target) : targetDecisions.get(record.target));
       if (!withheld || !profile.withholdUnreadableTargets) {
         const visible = disclosedRecord(withheld ? { ...record, target: undefined, selection: undefined, labels: [] } : record);
         if (!input.visible || input.visible(visible)) occurrences.push(visible);
