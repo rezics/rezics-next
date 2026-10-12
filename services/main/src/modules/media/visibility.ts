@@ -21,8 +21,8 @@ type Gate = (targets: readonly DisclosureTarget[], viewer: Viewer) => Promise<bo
 const gateOwner = Symbol('mediaVisibility');
 type MediaEnvironment = WorkActivationEnvironment & { [gateOwner]?: Gate };
 
-/** Every media disclosure, including bare representations and exports, resolves
- * the asset's current attachments. A public occurrence cannot widen a draft's audience. */
+/** Uses resolve their exact current attachment; bare Assets and exports retain
+ * the conservative inventory audience and fail closed when it exceeds one page. */
 export function configureMediaVisibility(deps: MainWorkDependencies): void {
   if (!deps.media) return;
   const store = deps.media.store;
@@ -93,12 +93,15 @@ export function configureMediaVisibility(deps: MainWorkDependencies): void {
           : undefined,
     };
     const byContext = new Map<string, Set<string>>();
-    for (const fact of facts.values())
+    for (const fact of facts.values()) {
+      // A truncated Asset inventory cannot prove readability. Do not probe it.
+      if (fact.attachmentOverflow) continue;
       for (const attachment of fact.attachments) {
         const resources = byContext.get(attachment.context) ?? new Set<string>();
         resources.add(attachment.target);
         byContext.set(attachment.context, resources);
       }
+    }
     const readable = new Set<string>();
     for (const [context, resources] of byContext) {
       const references = [...resources];
@@ -118,7 +121,7 @@ export function configureMediaVisibility(deps: MainWorkDependencies): void {
       const fact = facts.get(target.resource);
       // A media target may name a Work for governance rather than an Asset or Use.
       if (!fact) return true;
-      if (fact.blocked) return false;
+      if (fact.blocked || fact.attachmentOverflow) return false;
       if ((fact.disclosure !== 'public' || fact.pending) && !(canManage && actor === fact.owner))
         return false;
       return fact.attachments.every((attachment) =>
@@ -147,12 +150,13 @@ export interface MediaVisibilityFact {
   disclosure: string;
   pending: boolean;
   blocked: boolean;
+  attachmentOverflow: boolean;
   attachments: { target: string; context: string }[];
 }
 export const MEDIA_VISIBILITY_COST = {
   batch: 64,
   ownerStatements: 1,
   attachmentComplexity:
-    'O(requested Asset/Use probes + those assets retained Uses and matching jobs); current target policy pages of 64',
+    'one exact attachment per Use; at most 64 current attachments per Asset, with overflow unavailable',
   defaultContext: DEFAULT_MEDIA_CONTEXT,
 } as const;

@@ -530,8 +530,8 @@ export class MediaStore {
     this.matching = new RequiredMediaMatchStore(pool);
   }
 
-  /** One page of exact Asset/Use probes and indexed current attachment ranges.
-   * Output scales with these assets' Uses; it never samples their audience. */
+  /** Exact Uses carry only their own current attachment. Asset probes retain
+   * the conservative inventory rule, bounded to 64 with an overflow sentinel. */
   async visibilityFacts(references: readonly string[]): Promise<Map<string, MediaVisibilityFact>> {
     if (references.length > 64) throw new MediaInvalid('invalid visibility page');
     const ids = references.map(reference => nativeId.test(reference) ? reference.slice(ID.length) : null);
@@ -543,17 +543,23 @@ export class MediaStore {
         s.lifecycle <> 'active' OR s.moderation <> 'none' OR EXISTS (
           SELECT 1 FROM media.transform_job j WHERE j.asset_id=a.id AND j.profile=$3
             AND j.status='failed') AS blocked,
-        COALESCE((SELECT jsonb_agg(jsonb_build_object('target',u.target,'context',u.context))
-          FROM media.use u WHERE u.asset_id=a.id AND
-            (u.role NOT IN ('avatar') AND u.role NOT LIKE 'showcase-%' OR EXISTS (
-              SELECT 1 FROM media.selection_slot slot JOIN media.selection_revision r ON r.id=slot.head
-              WHERE slot.target=u.target AND slot.context=u.context AND slot.role=u.role AND r.use_id=u.id))),
-          '[]'::jsonb) AS attachments
+        COALESCE(to_jsonb(attachment.items[1:64]),'[]'::jsonb) AS attachments,
+        COALESCE(cardinality(attachment.items)>64,false) AS attachment_overflow
       FROM requested q LEFT JOIN media.use requested_use ON requested_use.id=q.id
       JOIN media.asset a ON a.id=COALESCE(requested_use.asset_id,q.id)
-      JOIN media.asset_state s ON s.id=a.state_head`, [references, ids, REQUIRED_MATCH_PROFILE])).rows;
+      JOIN media.asset_state s ON s.id=a.state_head
+      LEFT JOIN LATERAL (
+        SELECT array_agg(jsonb_build_object('target',u.target,'context',u.context)) AS items
+        FROM (SELECT u.target,u.context FROM media.use u
+          WHERE u.asset_id=a.id AND (requested_use.id IS NULL OR u.id=requested_use.id) AND
+            (u.role NOT IN ('avatar') AND u.role NOT LIKE 'showcase-%' OR EXISTS (
+              SELECT 1 FROM media.selection_slot slot JOIN media.selection_revision r ON r.id=slot.head
+              WHERE slot.target=u.target AND slot.context=u.context AND slot.role=u.role AND r.use_id=u.id))
+          LIMIT 65) u
+      ) attachment ON true`, [references, ids, REQUIRED_MATCH_PROFILE])).rows;
     return new Map(rows.map(row => [row.reference as string, { owner: row.owner as string,
       disclosure: row.disclosure as string, pending: row.pending as boolean, blocked: row.blocked as boolean,
+      attachmentOverflow: row.attachment_overflow as boolean,
       attachments: row.attachments as MediaVisibilityFact['attachments'] }]));
   }
 
