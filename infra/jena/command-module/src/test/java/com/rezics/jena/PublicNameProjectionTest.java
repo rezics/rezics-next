@@ -10,6 +10,13 @@ import org.apache.jena.query.ReadWrite;
 import org.apache.jena.query.text.*;
 import org.apache.jena.sparql.core.*;
 import org.apache.jena.vocabulary.RDF;
+import org.apache.lucene.index.DirectoryReader;
+import org.apache.lucene.index.Term;
+import org.apache.lucene.search.BooleanClause;
+import org.apache.lucene.search.BooleanQuery;
+import org.apache.lucene.search.FieldExistsQuery;
+import org.apache.lucene.search.IndexSearcher;
+import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.store.ByteBuffersDirectory;
 import org.junit.Test;
 
@@ -60,6 +67,124 @@ public class PublicNameProjectionTest {
     }
     private static boolean stored(DatasetGraph data, Node resource, String kind) {
         return data.contains(PUBLIC,unit(resource,kind),p("publicTitle"),Node.ANY);
+    }
+    private static Set<Node> projectionSubjects(DatasetGraph data, String predicate, Node object) {
+        Set<Node> subjects = new java.util.LinkedHashSet<>();
+        var rows = data.find(PUBLIC,Node.ANY,p(predicate),object);
+        try { while (rows.hasNext()) subjects.add(rows.next().getSubject()); }
+        finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
+        return subjects;
+    }
+    private static int indexedPublicTitles(TextIndexLucene index, Node subject) throws java.io.IOException {
+        // Open the committed Lucene directory directly: read-side visibility
+        // fences cannot make this assertion pass while a copied document remains.
+        try (var reader = DirectoryReader.open(index.getIndexWriter().getDirectory())) {
+            var definition = index.getDocDef();
+            var query = new BooleanQuery.Builder()
+                .add(new TermQuery(new Term(definition.getEntityField(),subject.getURI())),BooleanClause.Occur.FILTER)
+                .add(new TermQuery(new Term(definition.getGraphField(),CommandPolicy.PUBLIC_SEARCH)),BooleanClause.Occur.FILTER)
+                .add(new FieldExistsQuery("publicTitle"),BooleanClause.Occur.FILTER).build();
+            return new IndexSearcher(reader).count(query);
+        }
+    }
+    @Test public void personTombstoneCommitsNameDirectoryAndCopiedAuthorPurgeWhileKeepingAttribution() throws Exception {
+        for (boolean retainedSourceLabels : List.of(false,true)) {
+            var definition = new EntityDefinition("uri","label","graph");
+            definition.set("publicTitle",p("publicTitle"));
+            definition.setLangField("lang"); definition.setUidField("uid");
+            var config = new TextIndexConfig(definition); config.setValueStored(true);
+            var lucene = new TextIndexLucene(new ByteBuffersDirectory(),config);
+            var index = new FilteredGraphTextIndex(lucene);
+            var data = new DatasetGraphText(DatasetGraphFactory.createTxnMem(),index,new TextDocProducerTriples(index));
+            Node person=id(810), personHead=id(811), personCredit=id(812), personCreditRevision=id(813),
+                organization=id(820), organizationHead=id(821), organizationCredit=id(822), organizationCreditRevision=id(823),
+                matchUnit=id(830);
+            Set<Node> erasedSubjects;
+            try {
+                data.begin(ReadWrite.WRITE);
+                try {
+                    publishedOwner(data);
+                    data.add(uri(CommandPolicy.CONTROL),uri("urn:rezics:dataset:product"),p("sequence"),NodeFactory.createLiteralString("1"));
+                    data.add(PUBLIC,uri(PublicNameProjection.PREFIX+"policy-state"),p("complete"),
+                        NodeFactory.createLiteralByValue(true,org.apache.jena.datatypes.xsd.XSDDatatype.XSDboolean));
+                    data.add(REVISION_GRAPH,SELECTION,p("matchUnit"),matchUnit);
+                    data.add(REVISION_GRAPH,SELECTION,p("language"),NodeFactory.createLiteralString("en"));
+                    data.add(PUBLIC,matchUnit,RDF.type.asNode(),p("MatchUnit"));
+                    for (var entry : java.util.Map.of("work",WORK,"mainVersion",MAIN,"context",MAIN,"selection",SELECTION,
+                        "contribution",CONTRIBUTION,"revision",DRAFT,"language",NodeFactory.createLiteralString("en"),"disclosure",p("Public")).entrySet())
+                        data.add(PUBLIC,matchUnit,p(entry.getKey()),entry.getValue());
+                    data.add(PUBLIC,matchUnit,p("publicTitle"),NodeFactory.createLiteralLang("Owned work name","en"));
+                    for (Node agent : List.of(person,organization)) {
+                        Node head=agent.equals(person)?personHead:organizationHead,
+                            credit=agent.equals(person)?personCredit:organizationCredit,
+                            revision=agent.equals(person)?personCreditRevision:organizationCreditRevision;
+                        data.add(CURRENT,agent,RDF.type.asNode(),p("Agent"));
+                        data.add(CURRENT,agent,p("agentKind"),p(agent.equals(person)?"PersonAgent":"OrganizationAgent"));
+                        data.add(CURRENT,agent,p("head"),head);
+                        data.add(CURRENT,agent,p("profileDisclosure"),p("Public"));
+                        data.add(CURRENT,agent,LABEL,NodeFactory.createLiteralLang(agent.equals(person)?"Disappearingperson":"Retainedorganization","en"));
+                        data.add(REVISION_GRAPH,head,RDF.type.asNode(),p("RevisionAnchor"));
+                        data.add(REVISION_GRAPH,head,p("component"),agent);
+                        data.add(REVISION_GRAPH,head,p("modelRevision"),uri("https://rezics.com/definition/agent-provision-v1"));
+                        data.add(CURRENT,credit,RDF.type.asNode(),p("NativeAgentCredit"));
+                        data.add(CURRENT,credit,p("work"),WORK);
+                        data.add(CURRENT,credit,p("agent"),agent);
+                        data.add(CURRENT,credit,p("creditRevision"),revision);
+                        data.add(CURRENT,credit,uri("https://schema.org/roleName"),NodeFactory.createLiteralString("author"));
+                        data.add(REVISION_GRAPH,revision,RDF.type.asNode(),p("NativeAgentCreditRevision"));
+                        data.add(REVISION_GRAPH,revision,p("component"),credit);
+                        data.add(REVISION_GRAPH,revision,p("agent"),agent);
+                        PublicNameProjection.refresh(data,agent);
+                    }
+                    PublicNameProjection.rebuildPrefix(data);
+                    PublicNameProjection.refresh(data,WORK);
+                    erasedSubjects=projectionSubjects(data,"nameDirectoryResource",person);
+                    assertEquals(2,erasedSubjects.size());
+                    erasedSubjects.add(unit(person,"agent"));
+                    Set<Node> authorEntries=projectionSubjects(data,"prefixUnit",matchUnit);
+                    Set<String> personScopes=new java.util.LinkedHashSet<>();
+                    String name="disappearingperson";
+                    for (int length=1;length<=name.length();length++) {
+                        personScopes.add(PublicNameProjection.prefixScope(name.substring(0,length),null));
+                        personScopes.add(PublicNameProjection.prefixScope(name.substring(0,length),"en"));
+                    }
+                    authorEntries.removeIf(entry -> !data.contains(PUBLIC,entry,p("prefixField"),NodeFactory.createLiteralString("credit"))
+                        || personScopes.stream().noneMatch(scope -> entry.getURI().startsWith(scope)));
+                    assertEquals(2*name.length(),authorEntries.size());
+                    erasedSubjects.addAll(authorEntries);
+                    data.commit();
+                } finally { data.end(); }
+                for (Node subject : erasedSubjects) assertTrue("fixture must contain a real indexed copy",indexedPublicTitles(lucene,subject)>0);
+                assertFalse(lucene.query(p("publicTitle"),"Disappearingperson",CommandPolicy.PUBLIC_SEARCH,null,64).isEmpty());
+                data.begin(ReadWrite.WRITE);
+                try {
+                    if (!retainedSourceLabels) data.deleteAny(CURRENT,person,LABEL,Node.ANY);
+                    data.add(CURRENT,person,RDF.type.asNode(),p("AgentTombstone"));
+                    refresh(data,person,"urn:receipt:person-profile-erasure");
+                    assertFalse(data.contains(PUBLIC,unit(person,"agent"),Node.ANY,Node.ANY));
+                    assertTrue(projectionSubjects(data,"nameDirectoryResource",person).isEmpty());
+                    for (Node subject : erasedSubjects) assertFalse(data.contains(PUBLIC,subject,Node.ANY,Node.ANY));
+                    data.commit();
+                } finally { data.end(); }
+                for (Node subject : erasedSubjects) assertEquals("committed identifying copies must be physically absent",0,indexedPublicTitles(lucene,subject));
+                assertTrue(lucene.query(p("publicTitle"),"Disappearingperson",CommandPolicy.PUBLIC_SEARCH,null,64).isEmpty());
+                assertFalse(lucene.query(p("publicTitle"),"Retainedorganization",CommandPolicy.PUBLIC_SEARCH,null,64).isEmpty());
+                assertTrue(indexedPublicTitles(lucene,matchUnit)>0);
+                data.begin(ReadWrite.READ);
+                try {
+                    assertTrue(stored(data,organization,"agent"));
+                    assertTrue(stored(data,WORK,"work"));
+                    assertEquals(2,projectionSubjects(data,"nameDirectoryResource",organization).size());
+                    assertTrue(data.contains(CURRENT,personCredit,p("agent"),person));
+                    assertTrue(data.contains(CURRENT,personCredit,p("work"),WORK));
+                    assertTrue(data.contains(CURRENT,personCredit,p("creditRevision"),personCreditRevision));
+                    assertTrue(data.contains(REVISION_GRAPH,personCreditRevision,p("agent"),person));
+                    var page=index.prefixWalk("disappearingperson","en",10,null,data);
+                    assertTrue(page.get("entries").getAsArray().isEmpty());
+                    assertFalse(index.prefixWalk("retainedorganization","en",10,null,data).get("entries").getAsArray().isEmpty());
+                } finally { data.end(); }
+            } finally { data.close(); }
+        }
     }
     private static class Counted extends DatasetGraphWrapper {
         long probes, rows, mutations;

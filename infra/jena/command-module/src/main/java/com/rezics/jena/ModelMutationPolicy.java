@@ -108,6 +108,9 @@ final class ModelMutationPolicy {
             // Old address revisions are immutable historical records, imported
             // to Access before this maintenance-only projection decommission.
             if (nameProjectionRetired(data, receipt, entry.getKey(), entry.getValue())) continue;
+            // The typed erasure owner retained every incoming credit and revision
+            // edge. Their historical profile shapes do not describe a tombstone.
+            if (ErasurePolicy.personTombstone(data, plan, receipt, entry.getKey())) continue;
             // Affected focus. The edited node is validated above. Inbound neighbours
             // join the focus only when this edit can change a constraint they read.
             // Structure, generation, order-segment and item-list shapes are local:
@@ -161,6 +164,8 @@ final class ModelMutationPolicy {
         // The erasure marker keeps this revision's product type. Its product
         // shape rejects the added rv:ErasedRevision; the erasure profile checks it.
         if (erasureTombstone(data, plan, receipt, name, before)) return null;
+        if (before.graph().equals(CURRENT) && ErasurePolicy.personTombstone(data, plan, receipt, name))
+            return CanonicalPolicy.validate(profiles, data, name, false);
         Node node = NodeFactory.createURI(name);
         if (!data.contains(before.graph(), node, RDF.type.asNode(), NodeFactory.createURI(selected.type()))) {
             if (nameProjectionRetired(data, receipt, name, before))

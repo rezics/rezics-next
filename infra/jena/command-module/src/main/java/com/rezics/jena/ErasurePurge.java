@@ -39,6 +39,8 @@ public final class ErasurePurge {
     private static final Node REVISIONS = uri(CommandPolicy.REVISIONS);
     private static final Node ERASED_REVISION = uri("https://rezics.com/vocab/ErasedRevision");
     private static final Node ERASURE_EPOCH = uri("https://rezics.com/vocab/erasureEpoch");
+    private static final Node CURRENT = uri(CommandPolicy.CURRENT);
+    private static Node rv(String value) { return uri("https://rezics.com/vocab/" + value); }
 
     private static Node uri(String value) { return NodeFactory.createURI(value); }
 
@@ -52,7 +54,8 @@ public final class ErasurePurge {
         Map<Node, String> targets = new LinkedHashMap<>();
         for (String row : text.substring(0, text.length() - 1).split("\n", -1)) {
             String[] pair = row.split("\t", -1);
-            if (pair.length != 2 || !pair[0].matches(ErasurePolicy.REVISION_TARGET)
+            if (pair.length != 2 || !(pair[0].matches(ErasurePolicy.REVISION_TARGET)
+                    || pair[0].matches(ErasurePolicy.PROVISION_TARGET))
                 || !pair[1].matches("[1-9][0-9]{0,18}") || targets.size() == 64
                 || targets.putIfAbsent(uri(pair[0]), pair[1]) != null)
                 throw new IllegalArgumentException("invalid, duplicate or oversized campaign pair");
@@ -70,6 +73,28 @@ public final class ErasurePurge {
             if (input.contains(target, Node.ANY, Node.ANY, Node.ANY)
                 || input.contains(Node.ANY, Node.ANY, target, Node.ANY))
                 throw new IllegalArgumentException("target used outside revision identity: " + target);
+            Node epochValue = NodeFactory.createLiteralByValue(new BigInteger(epoch),
+                org.apache.jena.datatypes.xsd.XSDDatatype.XSDinteger);
+            if (!ErasurePolicy.positiveEpoch(epochValue)) throw new IllegalArgumentException("target epoch exceeds owner range");
+            if (input.contains(CURRENT, target, Node.ANY, Node.ANY)) {
+                requireRetainedPerson(input, target, epochValue);
+                epochs.put(target, epochValue);
+                return;
+            }
+            Node person = ErasurePolicy.one(input, REVISIONS, target, rv("component"));
+            boolean personRevision = target.getURI().matches(ErasurePolicy.PROVISION_TARGET)
+                || input.contains(REVISIONS, target, RDF.type.asNode(), rv("AgentPublicProfileRevision"))
+                || person != null && input.contains(CURRENT, person, rv("agentKind"), rv("PersonAgent"));
+            if (personRevision) {
+                if (person == null) throw new IllegalArgumentException("Person profile revision owner is missing or ambiguous");
+                requireRetainedPerson(input, person, epochValue);
+                if (!ErasurePolicy.personRevision(input, target, person))
+                    throw new IllegalArgumentException("Person revision kind, owner or provisioning anchor differs: " + target);
+            } else if (target.getURI().matches(ErasurePolicy.PROVISION_TARGET)
+                || target.getURI().startsWith("https://rezics.com/id/")
+                    && !ErasurePolicy.priorRevision(input, target.getURI())
+                    && !input.contains(REVISIONS, target, RDF.type.asNode(), ERASED_REVISION))
+                throw new IllegalArgumentException("target is not an exact revision: " + target);
             var values = input.find(REVISIONS, target, ERASURE_EPOCH, Node.ANY);
             Node prior = values.hasNext() ? values.next().getObject() : null;
             boolean erased = input.contains(REVISIONS, target, RDF.type.asNode(), ERASED_REVISION);
@@ -79,10 +104,79 @@ public final class ErasurePurge {
                     || !prior.getLiteralLexicalForm().matches("[1-9][0-9]{0,18}")
                     || !new BigInteger(epoch).equals(new BigInteger(prior.getLiteralLexicalForm())))))
                 throw new IllegalArgumentException("target tombstone/epoch evidence differs: " + target);
-            epochs.put(target, prior == null ? NodeFactory.createLiteralByValue(new BigInteger(epoch),
-                org.apache.jena.datatypes.xsd.XSDDatatype.XSDinteger) : prior);
+            epochs.put(target, prior == null ? epochValue : prior);
         });
+        // A retained Person head authorizes only its complete, typed profile
+        // history. A suffix or component edge on an arbitrary resource is insufficient.
+        for (Node person : campaign.targets().keySet()) if (input.contains(CURRENT, person, RDF.type.asNode(), rv("AgentTombstone"))) {
+            Node epoch = epochs.get(person);
+            var revisions = input.find(REVISIONS, Node.ANY, rv("component"), person);
+            int count = 0;
+            try { while (revisions.hasNext()) {
+                Node revision = revisions.next().getSubject();
+                if (++count > 64 || !ErasurePolicy.personRevision(input, revision, person))
+                    throw new IllegalArgumentException("Person profile history differs or exceeds bound");
+                Node prior = ErasurePolicy.one(input, REVISIONS, revision, ERASURE_EPOCH);
+                if (input.contains(REVISIONS, revision, ERASURE_EPOCH, Node.ANY) && !epoch.equals(prior)
+                    || input.contains(REVISIONS, revision, RDF.type.asNode(), ERASED_REVISION) != (prior != null)
+                    || epochs.containsKey(revision) && !epoch.equals(epochs.get(revision)))
+                    throw new IllegalArgumentException("Person profile epoch differs");
+                epochs.put(revision, epoch);
+            } } finally { org.apache.jena.atlas.iterator.Iter.close(revisions); }
+        }
+        personIndexDocuments(input, personTargets(input, epochs.keySet()));
         return epochs;
+    }
+
+    private static void requireRetainedPerson(DatasetGraph input, Node person, Node epoch) {
+        Node id = ErasurePolicy.one(input, CURRENT, person, rv("erasureId"));
+        if (!person.isURI() || !person.getURI().matches(ErasurePolicy.PERSON_TARGET)
+            || !rv("AgentTombstone").equals(ErasurePolicy.one(input, CURRENT, person, RDF.type.asNode()))
+            || !rv("PersonAgent").equals(ErasurePolicy.one(input, CURRENT, person, rv("agentKind")))
+            || id == null || !id.isLiteral() || !"http://www.w3.org/2001/XMLSchema#string".equals(id.getLiteralDatatypeURI())
+            || !id.getLiteralLexicalForm().matches("[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}")
+            || !epoch.equals(ErasurePolicy.one(input, CURRENT, person, ERASURE_EPOCH)))
+            throw new IllegalArgumentException("target is not this epoch's retained Person tombstone: " + person);
+        var fields = input.find(CURRENT, person, Node.ANY, Node.ANY);
+        int count = 0;
+        try { while (fields.hasNext()) {
+            Quad field = fields.next();
+            if (++count > 64 || !(Set.of(RDF.type.asNode(), rv("agentKind"), rv("erasureId"), ERASURE_EPOCH).contains(field.getPredicate())
+                || ErasurePolicy.PROFILE_PREDICATES.contains(field.getPredicate())))
+                throw new IllegalArgumentException("retained Person has unsupported current facts");
+        } } finally { org.apache.jena.atlas.iterator.Iter.close(fields); }
+    }
+
+    private static Set<Node> personTargets(DatasetGraph input, Set<Node> targets) {
+        Set<Node> result = new HashSet<>();
+        for (Node target : targets) {
+            Node owner = ErasurePolicy.one(input, REVISIONS, target, rv("component"));
+            if (input.contains(CURRENT, target, RDF.type.asNode(), rv("AgentTombstone"))
+                || owner != null && input.contains(CURRENT, owner, rv("agentKind"), rv("PersonAgent"))) result.add(target);
+        }
+        return result;
+    }
+
+    /** Delete only direct Person documents; credited Work documents are rebuilt
+     * by the existing projection owner, preserving coauthors and attribution. */
+    private record IndexUnit(Node graph, Node subject) {}
+    private static Set<IndexUnit> personIndexDocuments(DatasetGraph input, Set<Node> targets) {
+        Set<IndexUnit> documents = new HashSet<>();
+        for (Node graph : new Node[]{PUBLIC_SEARCH, PRIVATE_SEARCH}) for (Node target : targets)
+            for (Node predicate : ErasurePolicy.INDEX_REFERENCES) {
+                var found = input.find(graph, Node.ANY, predicate, target);
+                try { while (found.hasNext()) {
+                    Node unit = found.next().getSubject();
+                    for (Node reference : ErasurePolicy.INDEX_REFERENCES) {
+                        var owners = input.find(graph, unit, reference, Node.ANY);
+                        try { while (owners.hasNext()) if (!targets.contains(owners.next().getObject()))
+                            throw new IllegalArgumentException("Person indexed unit has a foreign owner"); }
+                        finally { org.apache.jena.atlas.iterator.Iter.close(owners); }
+                    }
+                    if (documents.add(new IndexUnit(graph, unit)) && documents.size() > 64) throw new IllegalArgumentException("Person indexed unit bound exceeded");
+                } } finally { org.apache.jena.atlas.iterator.Iter.close(found); }
+            }
+        return documents;
     }
 
     private static byte[] readCampaign(Path path) throws Exception {
@@ -106,15 +200,15 @@ public final class ErasurePurge {
     }
 
     /** Match units in the public or private text index that name one purged revision. */
-    private static Set<Node> textIndexDocuments(DatasetGraph source, Set<Node> revisions) {
-        Set<Node> documents = new HashSet<>();
+    private static Set<IndexUnit> textIndexDocuments(DatasetGraph source, Set<Node> revisions) {
+        Set<IndexUnit> documents = new HashSet<>();
         if (revisions.isEmpty()) return documents;
         for (Node graph : new Node[]{PUBLIC_SEARCH, PRIVATE_SEARCH}) {
             for (Node predicate : new Node[]{RV_REVISION, RV_CONTENT_REVISION}) {
                 var found = source.find(graph, Node.ANY, predicate, Node.ANY);
                 while (found.hasNext()) {
                     Quad quad = found.next();
-                    if (revisions.contains(quad.getObject())) documents.add(quad.getSubject());
+                    if (revisions.contains(quad.getObject())) documents.add(new IndexUnit(graph, quad.getSubject()));
                 }
             }
         }
@@ -168,8 +262,11 @@ public final class ErasurePurge {
                         DatasetGraph output = destination.asDatasetGraph();
                         Set<Node> contentTargets = new HashSet<>();
                         Set<Node> revisionTargets = new HashSet<>();
-                        for (Node target : campaign.targets().keySet()) {
-                            if (target.getURI().startsWith("https://rezics.com/id/")) revisionTargets.add(target);
+                        Set<Node> personTargets = personTargets(input, epochs.keySet());
+                        Set<Node> personHeads = new HashSet<>();
+                        for (Node target : epochs.keySet()) {
+                            if (input.contains(CURRENT, target, RDF.type.asNode(), rv("AgentTombstone"))) personHeads.add(target);
+                            else if (target.getURI().startsWith("https://rezics.com/id/")) revisionTargets.add(target);
                             else contentTargets.add(target);
                         }
                         // A Content URN still drops its projection and every edge that names it.
@@ -184,7 +281,10 @@ public final class ErasurePurge {
                             while (bindings.hasNext()) removed.add(bindings.next().getObject());
                         }
                         addDependents(input, removed);
-                        Set<Node> textDocuments = textIndexDocuments(input, revisionTargets);
+                        Set<Node> genericRevisions = new HashSet<>(revisionTargets);
+                        genericRevisions.removeAll(personTargets);
+                        Set<IndexUnit> textDocuments = textIndexDocuments(input, genericRevisions);
+                        Set<IndexUnit> personDocuments = personIndexDocuments(input, personTargets);
                         long retained = 0;
                         long excluded = 0;
                         var quads = input.find();
@@ -192,16 +292,21 @@ public final class ErasurePurge {
                             Quad quad = quads.next();
                             boolean dropContent = removed.contains(quad.getSubject()) || removed.contains(quad.getObject());
                             boolean dropRevision = revisionTargets.contains(quad.getSubject())
-                                && CommandPolicy.REVISIONS.equals(quad.getGraph().getURI());
-                            boolean dropText = textDocuments.contains(quad.getSubject())
-                                && (PUBLIC_SEARCH.equals(quad.getGraph()) || PRIVATE_SEARCH.equals(quad.getGraph()));
-                            if (dropContent || dropRevision || dropText) excluded++;
+                                && REVISIONS.equals(quad.getGraph())
+                                && (!personTargets.contains(quad.getSubject())
+                                    || ErasurePolicy.historicalProfilePredicate(quad.getPredicate()));
+                            boolean dropPerson = CURRENT.equals(quad.getGraph()) && personHeads.contains(quad.getSubject())
+                                && ErasurePolicy.PROFILE_PREDICATES.contains(quad.getPredicate());
+                            boolean dropText = textDocuments.contains(new IndexUnit(quad.getGraph(), quad.getSubject()))
+                                || personDocuments.contains(new IndexUnit(quad.getGraph(), quad.getSubject()));
+                            if (dropContent || dropRevision || dropPerson || dropText) excluded++;
                             else { output.add(quad); retained++; }
                         }
                         org.apache.jena.tdb2.sys.CopyDSG.copyPrefixes(input, output);
                         // Non-sensitive, exact identity and frontier survive compaction.
                         // The product command gate rejects later inserts naming this IRI.
                         epochs.forEach((target, epoch) -> {
+                            if (personHeads.contains(target)) return;
                             output.add(REVISIONS, target, RDF.type.asNode(), ERASED_REVISION);
                             output.add(REVISIONS, target, ERASURE_EPOCH, epoch);
                         });

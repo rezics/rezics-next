@@ -1272,7 +1272,8 @@ final class PublicNameProjection {
      * scopes; only the fixed tier/Main/unit suffix establishes page order. */
     static final String PREFIX_DIRECTORY = DIRECTORY + "prefix:";
     private static final Node PREFIX_STATE = uri(PREFIX + "prefix-state");
-    private static final Node PREFIX_SCHEMA = NodeFactory.createLiteralString("1");
+    // Author provenance is required before Person erasure can prove prefix absence.
+    private static final Node PREFIX_SCHEMA = NodeFactory.createLiteralString("2");
     // NFC and lowercase can expand the public route's raw 80 UTF-16 units.
     static final int PREFIX_TEXT_LIMIT = 160;
     private static final java.util.regex.Pattern SEARCH_SPACE = java.util.regex.Pattern.compile(
@@ -1447,8 +1448,8 @@ final class PublicNameProjection {
             && data.contains(REVISIONS, head, p("modelRevision"), uri("https://rezics.com/definition/agent-provision-v1"))
             && !data.contains(REVISIONS, head, RDF.type.asNode(), p("ErasedRevision"));
     }
-    private static Set<Node> prefixCreditNames(DatasetGraph data, Node work, long deadline) {
-        Set<Node> names = new LinkedHashSet<>();
+    private static java.util.Map<Node, Set<Node>> prefixCreditNames(DatasetGraph data, Node work, long deadline) {
+        java.util.Map<Node, Set<Node>> names = new java.util.LinkedHashMap<>();
         var credits = data.find(CURRENT, Node.ANY, p("work"), work);
         try { while (credits.hasNext()) {
             TemplateIndexService.workScopeBudget(deadline);
@@ -1467,7 +1468,7 @@ final class PublicNameProjection {
             try { while (labels.hasNext()) {
                 TemplateIndexService.workScopeBudget(deadline);
                 Node name = labels.next().getObject();
-                if (name.isLiteral()) names.add(name);
+                if (name.isLiteral()) names.computeIfAbsent(agent, ignored -> new LinkedHashSet<>()).add(name);
             } } finally { org.apache.jena.atlas.iterator.Iter.close(labels); }
         } } finally { org.apache.jena.atlas.iterator.Iter.close(credits); }
         return names;
@@ -1512,17 +1513,18 @@ final class PublicNameProjection {
                     if (name.isLiteral()) titles.add(name);
                 } } finally { org.apache.jena.atlas.iterator.Iter.close(labels); }
                 titles.addAll(payloadNames(data, work, "work"));
-                prefixEntries(desired, unit, work, main, language.getLiteralLexicalForm(), "title", titles, deadline);
-                Set<Node> creditNames = prefixCreditNames(data, work, deadline);
-                creditNames.addAll(SourceAuthorNameProjection.names(data, work, deadline));
-                prefixEntries(desired, unit, work, main, language.getLiteralLexicalForm(), "credit", creditNames, deadline);
+                prefixEntries(desired, unit, work, main, language.getLiteralLexicalForm(), "title", titles, null, deadline);
+                for (var author : prefixCreditNames(data, work, deadline).entrySet())
+                    prefixEntries(desired, unit, work, main, language.getLiteralLexicalForm(), "credit", author.getValue(), author.getKey(), deadline);
+                prefixEntries(desired, unit, work, main, language.getLiteralLexicalForm(), "credit",
+                    SourceAuthorNameProjection.names(data, work, deadline), null, deadline);
             }
         }
         for (Quad quad : prior) { TemplateIndexService.workScopeBudget(deadline); if (!desired.contains(quad)) data.delete(quad); }
         for (Quad quad : desired) { TemplateIndexService.workScopeBudget(deadline); if (!prior.contains(quad)) data.add(quad); }
     }
     private static void prefixEntries(Set<Quad> desired, Node unit, Node work, Node main, String language,
-                                      String field, Set<Node> names, long deadline) {
+                                      String field, Set<Node> names, Node author, long deadline) {
         String suffix = (field.equals("title") ? "0" : "1")
             + main.getURI().substring(PRODUCT.length()).replace("-", "")
             + unit.getURI().substring(PRODUCT.length()).replace("-", "");
@@ -1537,6 +1539,9 @@ final class PublicNameProjection {
             desired.add(new Quad(PUBLIC, entry, p("prefixWork"), work));
             desired.add(new Quad(PUBLIC, entry, p("prefixMain"), main));
             desired.add(new Quad(PUBLIC, entry, p("prefixField"), NodeFactory.createLiteralString(field)));
+            // Several authors can share a normalized prefix on the same Work.
+            // Erasure qualifies the author edge, never the shared directory entry.
+            if (author != null) desired.add(new Quad(PUBLIC, entry, p("prefixAuthor"), author));
             desired.add(new Quad(PUBLIC, entry, p("publicTitle"), NodeFactory.createLiteralString("rezicsprefixdirectory")));
         }
     }
