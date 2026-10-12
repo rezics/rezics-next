@@ -304,6 +304,18 @@ export const profileRegistry = {
       "decision"
     ]
   },
+  "content-withdrawal-v1": {
+    "sha256": "5512f68e6636782780c085788880c97ce88821c358af49530f31ba7199ad5113",
+    "file": "shapes/content-withdrawal-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/content-withdrawal-v1/variant-shape",
+      "https://rezics.com/definition/content-withdrawal-v1/decision-shape"
+    ],
+    "focusRoles": [
+      "variant",
+      "decision"
+    ]
+  },
   "context-definition-equivalence-v1": {
     "sha256": "d70b454077f96a64b4c994ba987d95aeb58ba60071f8d2bbf8963d3e1b6c9daf",
     "file": "shapes/context-definition-equivalence-v1.ttl",

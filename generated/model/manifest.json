@@ -192,6 +192,11 @@
       "file": "shapes/content-search-eligibility-v2.ttl"
     },
     {
+      "id": "content-withdrawal-v1",
+      "sha256": "5512f68e6636782780c085788880c97ce88821c358af49530f31ba7199ad5113",
+      "file": "shapes/content-withdrawal-v1.ttl"
+    },
+    {
       "id": "context-definition-equivalence-v1",
       "sha256": "d70b454077f96a64b4c994ba987d95aeb58ba60071f8d2bbf8963d3e1b6c9daf",
       "file": "shapes/context-definition-equivalence-v1.ttl"
@@ -1395,6 +1400,16 @@
         {
           "profile": "content-publication-v1",
           "shape": "https://rezics.com/definition/content-publication-v1/decision-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/ContentWithdrawalDecision",
+      "routes": [
+        {
+          "profile": "content-withdrawal-v1",
+          "shape": "https://rezics.com/definition/content-withdrawal-v1/decision-shape",
           "when": []
         }
       ]
@@ -3909,6 +3924,7 @@
     "contexts/content-publication-v1.jsonld": "d095a799fcd0333beb315d98cb9ddd1689427b09527529175da98b1d102a8b13",
     "contexts/content-search-eligibility-v1.jsonld": "a0ddcafdaad7f73ea5b7881817f9d2739bedb403eb3863fd716173f457c42dd5",
     "contexts/content-search-eligibility-v2.jsonld": "e3df722887c21f3ceffd11ba5ccc15516b7fc35f031f22791ffb065ab005ffcc",
+    "contexts/content-withdrawal-v1.jsonld": "ab9ed3165743e25589c1898d881ed6f8c63935a014291d978fbe429f367a4c03",
     "contexts/context-definition-equivalence-v1.jsonld": "9f03657d02a1ec24c37de3aca31af2a14fda3d6e889cea81820db2b89b4da0c4",
     "contexts/context-definition-state-v1.jsonld": "14aa723bf75690ab8a0ba87ad3d20c914a8e9d630b60c84a2fbc3d350652615c",
     "contexts/context-selection-v1.jsonld": "ac4b480e6d1f8871b8c7b91f6d41902a818a75643f7897e70fa660ea96cbc3f0",
@@ -4043,6 +4059,7 @@
     "shapes/content-publication-v1.ttl": "19f83eac251b0e11dcae8cfe4d69a02f311133d979bf4fabb4f92f4dc0b5736f",
     "shapes/content-search-eligibility-v1.ttl": "b8d630d9b5206bbdff3b979f815ac41a537d6569667b4859198896d56a22d3c1",
     "shapes/content-search-eligibility-v2.ttl": "a5c815048b2d021e85d03bcd041b2c5bd26a655daff4ff4476f5cc82402351da",
+    "shapes/content-withdrawal-v1.ttl": "5512f68e6636782780c085788880c97ce88821c358af49530f31ba7199ad5113",
     "shapes/context-definition-equivalence-v1.ttl": "d70b454077f96a64b4c994ba987d95aeb58ba60071f8d2bbf8963d3e1b6c9daf",
     "shapes/context-definition-state-v1.ttl": "d6c25bc9f0dd2face7a57a997babc888ecd0f7931af5066634d5aeafb85f8948",
     "shapes/context-selection-v1.ttl": "4f8db2ae8afffc2e935afcac0fad2047c37474a3b3efb69b0a0d32e5d87efdc4",
@@ -4154,8 +4171,8 @@
     "shapes/zone-capability-v1.ttl": "1b5fa82ec8c40e4a6b6b25223a7ca7bebc573b517e900858895a5a12ff6424a5",
     "shapes/zone-presentation-v1.ttl": "6aecbd83013a8a9f9e2dc712d26b6450df29554f2f2c7d6174c2897b418bece7",
     "shapes/zone-presentation-v2.ttl": "e331efea63e2bfb3ce883fb4d005ab63d7dd976973e43fd1599f655eef3ea730",
-    "packages/model/src/generated/profiles.ts": "3c3ee038c3fe52848c50d617b6883a92299378c1bee9fb5b69e4351b0421bbbd",
-    "packages/model/src/generated/schemas.ts": "d4bb4c99ca5f9460580d5f9cbb94f86e42f0ea4db505971b9b183ff6203e1091",
-    "packages/model/src/generated/vocabulary.ts": "fd9d813b0c603e29ca2e30a29ef0ea7b0427292b2f8cebbb2ca27d26f5b0b01c"
+    "packages/model/src/generated/profiles.ts": "2d403c527c735e3e22b2f6f15b271337f01ca5d89fcb03cb35705b131c102351",
+    "packages/model/src/generated/schemas.ts": "8eb049ade93c08bb6312e26d784c7d87f44c0235a760a0ccebd51ea15cd26981",
+    "packages/model/src/generated/vocabulary.ts": "98bfcce26d278b4edb2f507b69ea6e9441a4bd2680a5e5492bb86c832797f9a8"
   }
 }
