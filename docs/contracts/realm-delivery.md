@@ -28,9 +28,10 @@ must preserve other authors' original references.
 
 `GET /v1/realms/{realm}/modules/browse` accepts `publicationYear`, either a
 calendar year (`1995`) or an inclusive bounded range (`1990-2000`), within
-1..9999. It uses the same active, globally accepted date-published Statements
-as `work-publication-years`; missing, withdrawn or unaccepted dates do not
-match. Multiple matching Statements still yield one Work.
+1..9999. Kernel's `acceptedStatementPattern` admits active date-published
+Statements through global StatementTarget or QualifiedFactTarget acceptance;
+missing, withdrawn or unaccepted dates do not match. Multiple matching
+Statements still yield one Work.
 
 The admitted `publicationYear` Facet represents this global calendar-year
 path. GET compiles the year into the same inclusive range Condition that
@@ -45,6 +46,11 @@ empty page with a continuation, never a fixed member-population cap. Counts
 remain lower bounds until traversal finishes with a current projection.
 
 Anime and Manga pass their selected year to this read. Their all-years view
-uses `1-9999`; both views keep the API continuation and counts. The reason to
-apply the year here is that intersecting separately paged member and year
-lists loses eligible Works beyond whichever list the client stopped reading.
+uses `1-9999`; both views keep the API continuation and counts. The directory
+retains `publicationYearOrder=descending`: its existing order is publication
+year rather than adoption time. The native publication-year
+directory supplies bounded candidate pages; Main applies Realm membership,
+other Conditions and kernel's Statement acceptance to those pages. Multiple
+recorded years order a Work by its newest matching year without repeating it.
+Applying the year here keeps eligible Works reachable beyond the client’s
+former limit on separately paged member and year lists.
