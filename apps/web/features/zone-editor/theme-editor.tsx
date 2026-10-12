@@ -37,7 +37,7 @@ interface ThemeSaveIntent {
 }
 
 /** Edit the Zone's two structural tokens without replacing its saved presentation. */
-export function ZoneThemeEditor({ zoneId, actingSubject, copy, initial, signInHref, previewHref, siteHref, api }: {
+export function ZoneThemeEditor({ zoneId, actingSubject, copy, initial, signInHref, previewHref, siteHref, shellPresentation, api }: {
   zoneId: string;
   actingSubject: string;
   copy: ZoneEditorMessages;
@@ -45,14 +45,16 @@ export function ZoneThemeEditor({ zoneId, actingSubject, copy, initial, signInHr
   signInHref: string;
   previewHref?: string;
   siteHref?: string;
+  shellPresentation?: ZonePresentationBaseline;
   api?: ZoneThemeClient;
 }) {
   if (initial.kind !== 'ready') return <ThemeUnavailable kind={initial.kind} copy={copy} />;
   return <EditableThemeEditor zoneId={zoneId} actingSubject={actingSubject} copy={copy}
-    initial={initial.state} signInHref={signInHref} previewHref={previewHref} siteHref={siteHref} api={api} />;
+    initial={initial.state} signInHref={signInHref} previewHref={previewHref} siteHref={siteHref}
+    shellPresentation={shellPresentation} api={api} />;
 }
 
-function EditableThemeEditor({ zoneId, actingSubject, copy, initial, signInHref, previewHref, siteHref, api }: {
+function EditableThemeEditor({ zoneId, actingSubject, copy, initial, signInHref, previewHref, siteHref, shellPresentation, api }: {
   zoneId: string;
   actingSubject: string;
   copy: ZoneEditorMessages;
@@ -60,6 +62,7 @@ function EditableThemeEditor({ zoneId, actingSubject, copy, initial, signInHref,
   signInHref: string;
   previewHref?: string;
   siteHref?: string;
+  shellPresentation?: ZonePresentationBaseline;
   api?: ZoneThemeClient;
 }) {
   const [state, setState, draftReady] = useZoneEditorDraft('theme', initial, isThemeDirty, isThemeEditorState);
@@ -72,7 +75,7 @@ function EditableThemeEditor({ zoneId, actingSubject, copy, initial, signInHref,
   const client = useRef<ZoneThemeClient | null>(null);
   const saveLane = useZoneEditorResource('theme:save',
     () => commandLane<ThemeSaveIntent, WriteResult<SavedZoneTheme>>({ ok: false, failure: 'unavailable' }));
-  if (!client.current) client.current = api ?? browserZoneTheme();
+  if (!client.current) client.current = api ?? browserZoneTheme(undefined, shellPresentation);
   useZoneEditorExitActions('theme', async () => {
     if (busyRef.current || stateRef.current.needsReview) return false;
     const choice = captured.current ?? intentFor(stateRef.current);

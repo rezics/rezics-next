@@ -65,6 +65,21 @@ export function ZoneEditorDraftProvider({ zoneId, actingSubject, children }: {
     setExitFailed(false);
     setExit({ zoneId, actingSubject, action });
   }, [zoneId, actingSubject, hasUnsaved]);
+  const guardNavigation = useCallback((event: MouseEvent) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey || event.defaultPrevented) return;
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const anchor = target.closest<HTMLAnchorElement>('a[href]');
+    if (!anchor || anchor.hasAttribute('download') || (anchor.target && anchor.target !== '_self')) return;
+    const destination = new URL(anchor.href);
+    const currentSection = window.location.pathname.match(/^(?:\/[a-z]{2}(?:-[A-Za-z]+)?)?\/manage\/z\/([^/]+)(?:\/(navigation|theme|realm|lifecycle))?\/?$/);
+    const nextSection = destination.pathname.match(/^(?:\/[a-z]{2}(?:-[A-Za-z]+)?)?\/manage\/z\/([^/]+)(?:\/(navigation|theme|realm|lifecycle))?\/?$/);
+    if (destination.origin === window.location.origin && currentSection && nextSection && currentSection[1] === nextSection[1]) return;
+    if (!hasUnsaved()) return;
+    event.preventDefault();
+    event.stopPropagation();
+    requestExit(() => window.location.assign(anchor.href));
+  }, [hasUnsaved, requestExit]);
   const value = useMemo(() => ({ zoneId, actingSubject, dirty, drafts, actions, mark, requestExit }),
     [zoneId, actingSubject, dirty, drafts, actions, mark, requestExit]);
   useEffect(() => {
@@ -82,6 +97,11 @@ export function ZoneEditorDraftProvider({ zoneId, actingSubject, children }: {
     window.addEventListener('beforeunload', ask);
     return () => window.removeEventListener('beforeunload', ask);
   }, [hasUnsaved]);
+  // The provider sits inside <main>; capture shell links before Next handles them.
+  useEffect(() => {
+    document.addEventListener('click', guardNavigation, true);
+    return () => document.removeEventListener('click', guardNavigation, true);
+  }, [guardNavigation]);
   const selectedExit = exit?.zoneId === zoneId && exit.actingSubject === actingSubject ? exit : null;
   function leave() {
     setExit(null);
@@ -116,19 +136,7 @@ export function ZoneEditorDraftProvider({ zoneId, actingSubject, children }: {
     leave();
   }
   return <DraftContext.Provider value={value}>
-    <div className="contents" onClickCapture={event => {
-      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey || event.defaultPrevented) return;
-      const anchor = (event.target as Element).closest<HTMLAnchorElement>('a[href]');
-      if (!anchor || anchor.hasAttribute('download') || (anchor.target && anchor.target !== '_self')) return;
-      const target = new URL(anchor.href);
-      const currentSection = window.location.pathname.match(/^(?:\/[a-z]{2}(?:-[A-Za-z]+)?)?\/manage\/z\/([^/]+)(?:\/(navigation|theme|realm|lifecycle))?\/?$/);
-      const nextSection = target.pathname.match(/^(?:\/[a-z]{2}(?:-[A-Za-z]+)?)?\/manage\/z\/([^/]+)(?:\/(navigation|theme|realm|lifecycle))?\/?$/);
-      if (target.origin === window.location.origin && currentSection && nextSection && currentSection[1] === nextSection[1]) return;
-      if (!hasUnsaved()) return;
-      event.preventDefault();
-      event.stopPropagation();
-      requestExit(() => window.location.assign(anchor.href));
-    }}>{children}</div>
+    <div className="contents">{children}</div>
     <Dialog open={selectedExit !== null} pending={saving} onOpenChange={({ open }) => { if (!open) setExit(null); }}>
       <DialogContent size="md">
         <DialogHeader className="pr-14" title={copy.exitTitle} description={copy.exitBody} />

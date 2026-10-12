@@ -537,8 +537,22 @@ for (const storageFailure of ['denied access', 'quota failure'] as const) {
       await page.getByRole('button', { name: 'Create layout from defaults' }).click();
       await selectRadio(page, /Compact/);
       await selectRadio(page, 'In cards');
-      await page.getByRole('link', { name: 'Preview', exact: true }).click();
       const guard = page.getByRole('dialog');
+      for (const viewport of [desktop, phone]) {
+        await page.setViewportSize(viewport);
+        await page.locator('header').getByRole('link', { name: 'REZICS home' }).click();
+        await expect(guard).toContainText('Save your unsaved work before leaving?');
+        await guard.getByRole('button', { name: 'Keep editing' }).click();
+        await expect(page.getByRole('radio', { name: /Compact/ })).toBeChecked();
+
+        await page.getByRole('navigation', { name: 'Main navigation' })
+          .getByRole('link', { name: 'Discover', exact: true }).click();
+        await expect(guard).toContainText('Save your unsaved work before leaving?');
+        await guard.getByRole('button', { name: 'Keep editing' }).click();
+        await expect(page.getByRole('radio', { name: 'In cards' })).toBeChecked();
+      }
+      await page.setViewportSize(desktop);
+      await page.getByRole('link', { name: 'Preview', exact: true }).click();
       await expect(guard).toContainText('Save your unsaved work before leaving?');
       await guard.getByRole('button', { name: 'Keep editing' }).click();
       await expect(page.getByRole('radio', { name: /Compact/ })).toBeChecked();
@@ -588,6 +602,38 @@ for (const withRealm of [false, true]) {
       await expectShowcaseHome(page, 'The morning exhibition');
       expect((await zoneConfiguration(page, site.zoneId, actor.actingSubject)).configuration.presentation).toBeUndefined();
       await shoot(page, `zone-new-${label}-showcase-preview`, info);
+
+      if (!withRealm) {
+        const anonymous = await context.browser()!.newContext();
+        try {
+          const reader = await anonymous.newPage();
+          await publishSavedSite(page, site);
+          await reader.goto(site.siteHref);
+          await expectShowcaseHome(reader, 'The morning exhibition');
+
+          await page.goto(site.editorPath + '/theme');
+          await page.getByRole('button', { name: 'Create layout from defaults' }).click();
+          await page.getByRole('button', { name: 'Save layout' }).click();
+          await expect(page.getByText('Layout saved.')).toBeVisible({ timeout: 30_000 });
+          const configuredPresentation = (await zoneConfiguration(page, site.zoneId, actor.actingSubject))
+            .configuration.presentation as { slides: unknown[]; modules: Array<{ title: string }> };
+          expect(configuredPresentation.slides).toEqual([]);
+          expect(configuredPresentation.modules).not.toContainEqual(expect.objectContaining({ title: 'Harbor showcase' }));
+
+          await page.goto(site.editorPath);
+          await writeHome(page, 'The harbor page without its Showcase');
+          await page.getByRole('button', { name: 'Save draft' }).click();
+          await expect(page.getByText('Draft saved.')).toBeVisible({ timeout: 30_000 });
+          await page.getByRole('button', { name: 'Publish', exact: true }).click();
+          await expect(page.getByText(/^Published\./)).toBeVisible({ timeout: 30_000 });
+          await expect(async () => {
+            await reader.goto(site.siteHref);
+            await expect(reader.getByText('The harbor page without its Showcase', { exact: true })).toBeVisible({ timeout: 5_000 });
+            await expect(reader.locator('.showcase-slide')).toHaveCount(0, { timeout: 5_000 });
+          }).toPass({ timeout: 90_000 });
+          await saveShowcaseHome(page, site, actor.actingSubject, 'The morning exhibition');
+        } finally { await anonymous.close(); }
+      }
 
       await savePresentationLinks(page, site, actor.actingSubject, 'Visitor guide');
       await page.goto(site.previewHref);

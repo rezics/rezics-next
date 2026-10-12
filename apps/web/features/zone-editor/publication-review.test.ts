@@ -5,8 +5,9 @@ import {
   type NavigationSnapshot, type WriteResult, type ZoneThemeSnapshot,
 } from './api.ts';
 import { readSavedPublicationSelection } from './publication-review.ts';
-import type { ZonePresentationBaseline } from './theme.ts';
-import { presetTokens } from '../zones/presentation.ts';
+import { initialThemeState, type ZonePresentationBaseline } from './theme.ts';
+import { defaultPresentation, presetTokens } from '../zones/presentation.ts';
+import { messages as zoneMessages } from '../zones/messages.ts';
 import { zoneContentText } from '../language/untagged.ts';
 
 const zoneId = '00000000-0000-4000-8000-000000000601';
@@ -22,6 +23,7 @@ const ownerPresentation: ZonePresentationBaseline = {
   tokens: { ...presetTokens.clean, density: 'compact', pageSurface: 'cards' },
   navigation: [{ label: 'Saved archive', href: '/archive' }], modules: [], slides: [],
 };
+const shellPresentation = defaultPresentation(zoneMessages);
 
 const snapshot: NavigationSnapshot = {
   head: navigationRevision, navigation: navigationId, zoneHead, links: [], complete: true, after: null,
@@ -81,6 +83,29 @@ describe('saved publication presentation', () => {
       { operation: 'configuration', id: zoneId, query: { actingSubject: actor } },
       { operation: 'showcase-editor', id: zoneId, query: { actingSubject: actor } },
     ]);
+  });
+
+  test('theme initialization uses the shell default instead of Content-owned Showcase fields', async () => {
+    const contentOwnedPresentation: ZonePresentationBaseline = {
+      ...ownerPresentation,
+      tokens: { ...ownerPresentation.tokens, titleEffect: 'outline' },
+      modules: [{ id: 'home-showcase', type: 'hero-carousel', title: 'Home-owned Showcase',
+        source: { kind: 'query-block', block: 'new-adoptions' } }],
+      slides: [{ id: 'home-showcase-slide', title: 'Home-owned banner', href: '/home-showcase' }],
+    };
+    const fake = fakeMain({}, { data: { revision: zoneHead,
+      preview: { presentation: contentOwnedPresentation, navigation: { revision: navigationRevision } } }, error: null });
+    const result = await browserZoneTheme(fake.main, shellPresentation).readConfiguration(zoneId, actor);
+    expect(result).toEqual({ ok: true, data: { revision: zoneHead, configuration: {},
+      effectivePresentation: { revision: zoneHead, presentation: shellPresentation } } });
+    expect(fake.calls.map(call => call.operation)).toEqual(['configuration']);
+
+    if (!result.ok) throw new Error('shell default should initialize an absent presentation');
+    const initial = initialThemeState(result.data.configuration, result.data.revision, result.data.effectivePresentation);
+    expect(initial.kind).toBe('ready');
+    if (initial.kind !== 'ready') throw new Error('shell default should be editable');
+    expect(initial.state.presentation).toEqual(shellPresentation);
+    expect(JSON.stringify(initial.state.presentation)).not.toContain('Home-owned');
   });
 
   test('uses the saved presentation without requesting effective defaults', async () => {

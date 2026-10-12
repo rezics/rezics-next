@@ -166,7 +166,8 @@ export function browserZoneAuthoring(main: ReturnType<typeof browserMainApi> = b
 }
 
 /** Browser access to the public Zone configuration, which applies zone.edit on both operations. */
-export function browserZoneTheme(main: ReturnType<typeof browserMainApi> = browserMainApi()): ZoneThemeClient {
+export function browserZoneTheme(main: ReturnType<typeof browserMainApi> = browserMainApi(),
+  shellPresentation?: ZonePresentationBaseline): ZoneThemeClient {
   return {
     async readConfiguration(zoneId, actingSubject) {
       const answer = await post(() => main.v1.zones({ id: zoneId }).configuration.get({ query: { actingSubject } }));
@@ -178,6 +179,8 @@ export function browserZoneTheme(main: ReturnType<typeof browserMainApi> = brows
         return { ok: false, failure: 'unavailable' };
       }
       if (readPresentation(configuration).kind !== 'absent') return { ok: true, data: { revision, configuration } };
+      if (shellPresentation) return { ok: true, data: { revision, configuration,
+        effectivePresentation: { revision, presentation: shellPresentation } } };
       const editor = await post(() => main.v1.zones({ id: zoneId })['showcase-editor'].get({ query: { actingSubject } }));
       if (!editor.ok) return editor;
       const editorRow = record(editor.data);
