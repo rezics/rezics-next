@@ -439,6 +439,33 @@ for (const kind of ['content_report', 'rights_complaint'] as const) {
   }
 }
 
+test('production resume rejects a saved non-Realm plan before live Realm dispatch under local authority', async () => {
+  const f = await productionFixture();
+  const accepted = await f.store.decide(f.member.principal, f.input, true);
+  expect(accepted.operation.status).toBe('accepted');
+  const scope = `governance:resource:${f.space}`;
+  await f.grant(scope, DECIDE_ACTION.content_report);
+  const result = await withSavedRead(f.stack.accessPool, accepted.decisionId, row => {
+    if ('authority_kind' in row) return { ...row, authority_kind: 'resource_owner',
+      authority_scope_id: scope };
+    if (row.plan) return { ...row, plan: { ...row.plan as Record<string, unknown>, realm: null } };
+    return row;
+  }, () => f.store.resumeDecision(f.member.principal, f.member.actor, accepted.decisionId));
+  expect(result.operation.status).not.toBe('completed');
+  expect((await f.stack.accessPool.query('SELECT 1 FROM access.governance_enforcement WHERE decision_id=$1',
+    [accepted.decisionId])).rowCount).toBe(0);
+  expect((await f.stack.accessPool.query('SELECT state FROM access.safety_decision_effect WHERE decision_id=$1',
+    [accepted.decisionId])).rows[0]!.state).not.toBe('confirmed');
+  const receipts = () => f.stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?receipt WHERE {
+    GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:moderationTarget ${iri(f.realm)} }
+  } LIMIT 2`, 4096);
+  expect((await receipts()).results?.bindings ?? []).toHaveLength(0);
+  const completed = await f.store.resumeDecision(f.member.principal, f.member.actor, accepted.decisionId);
+  expect(completed.operation.status).toBe('completed');
+  expect(completed.enforcement).toMatchObject([{ resource: f.realm, state: 'restricted' }]);
+  expect((await receipts()).results?.bindings ?? []).toHaveLength(1);
+});
+
 async function expectNoDecision(f: Fixture) {
   expect(f.applications()).toBe(0);
   expect((await pool.query(
