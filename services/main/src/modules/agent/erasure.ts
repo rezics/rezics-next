@@ -229,7 +229,7 @@ export async function inventoryPersonProfileGraph(fuseki: QueryClient, objectDir
     }
   }
   consume(budget, 'indexedUnitsLeft', authorUnits.length);
-  consume(budget, 'journalTargetsLeft', 1 + revisions.length + objects.size);
+  consume(budget, 'journalTargetsLeft', 2 + revisions.length + objects.size + units.length + authorUnits.length + creditedWorks.length);
   return { person: person.person, provisionId: person.provisionId, head, profileHead,
     revisions, objects: [...objects].sort(), units, authorUnits, creditedWorks };
 }
@@ -282,6 +282,47 @@ function digest(proof: PersonProfileErasureProof, inventory: PersonProfileGraphI
 }
 function predicateIri(value: string): string { return `<${value}>`; }
 
+/** Stored atomically with the Account child's complete aggregate inventory.
+ * The per-Person digest allows one owner to verify its exact slice without
+ * reconstructing or recollecting the other Persons in that journal. */
+export function personProfileGraphTargets(inventory: PersonProfileGraphInventory):
+  readonly { owner: string; kind: string; ref: string }[] {
+  return [
+    { owner: 'graph', kind: 'person_head', ref: inventory.person },
+    { owner: 'graph', kind: 'person_profile_inventory', ref: `${inventory.person}|${hash(JSON.stringify(inventory))}` },
+    ...inventory.revisions.map(value => ({ owner: 'graph', kind: 'person_profile_revision', ref: value.revision })),
+    ...inventory.objects.map(ref => ({ owner: 'object', kind: 'object', ref })),
+    ...inventory.units.map(value => ({ owner: 'graph', kind: 'person_index_unit', ref: `${value.graph}|${value.unit}` })),
+    ...inventory.authorUnits.map(ref => ({ owner: 'graph', kind: 'person_author_unit', ref })),
+    ...inventory.creditedWorks.map(ref => ({ owner: 'graph', kind: 'person_credited_work', ref })),
+  ];
+}
+
+function completeOwnedGraph(inventory: PersonProfileGraphInventory): string {
+  const revisions = inventory.revisions.map(value => iri(value.revision)).join(', ');
+  const targets = [inventory.person, ...inventory.revisions.map(value => value.revision)].map(iri).join(' ');
+  return `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} {
+      ?unlistedRevision rv:component ${iri(inventory.person)} }
+      FILTER(?unlistedRevision NOT IN (${revisions})) }
+    ${inventory.units.length ? `FILTER NOT EXISTS { VALUES (?ownedGraph ?ownedUnit) {
+      ${inventory.units.map(value => `(${iri(value.graph)} ${iri(value.unit)})`).join(' ')} }
+      FILTER NOT EXISTS { VALUES ?ownedTarget { ${targets} }
+        VALUES ?ownedReference { rv:revision rv:contentRevision rv:resource rv:nameResource rv:nameDirectoryResource }
+        GRAPH ?ownedGraph { ?ownedUnit ?ownedReference ?ownedTarget } } }` : ''}
+    FILTER NOT EXISTS { VALUES ?liveGraph { ${iri(PUBLIC)} ${iri(PRIVATE)} }
+      VALUES ?liveTarget { ${targets} }
+      VALUES ?liveReference { rv:revision rv:contentRevision rv:resource rv:nameResource rv:nameDirectoryResource }
+      GRAPH ?liveGraph { ?liveUnit ?liveReference ?liveTarget }
+      ${inventory.units.length ? `FILTER NOT EXISTS { VALUES (?sealedGraph ?sealedUnit) {
+        ${inventory.units.map(value => `(${iri(value.graph)} ${iri(value.unit)})`).join(' ')} }
+        FILTER(?liveGraph = ?sealedGraph && ?liveUnit = ?sealedUnit) }` : ''} }
+    FILTER NOT EXISTS {
+      { GRAPH ${iri(GRAPHS.current)} { ?credit rv:agent ${iri(inventory.person)} ; rv:work ?unlistedWork } }
+      UNION { GRAPH <urn:rezics:projection:public-name-repair> { ${iri(inventory.person)} rv:prefixOwnerWork ?unlistedWork } }
+      ${inventory.creditedWorks.length ? `FILTER(?unlistedWork NOT IN (${inventory.creditedWorks.map(iri).join(', ')}))` : ''} }`;
+}
+
+
 /** Exact current allowlist and profile-literal history; attribution edges are retained. */
 export function personProfileErasureUpdate(lineage: GraphLineage, proof: PersonProfileErasureProof,
   inventory: PersonProfileGraphInventory): string {
@@ -325,6 +366,7 @@ export function personProfileErasureUpdate(lineage: GraphLineage, proof: PersonP
     FILTER NOT EXISTS { VALUES ?ownedRevision { ${inventory.revisions.map(value => iri(value.revision)).join(' ')} }
       GRAPH ${iri(GRAPHS.revisions)} { ?ownedRevision rv:component ?anotherOwner }
       FILTER(?anotherOwner != ${iri(proof.person)}) }
+    ${completeOwnedGraph(inventory)}
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
     OPTIONAL { VALUES ?currentP { ${PROFILE_PREDICATES.map(predicateIri).join(' ')} }
       GRAPH ${iri(GRAPHS.current)} { ${iri(proof.person)} ?currentP ?currentO } }
@@ -363,10 +405,20 @@ export async function personProfileGraphErased(fuseki: QueryClient, proof: Perso
     FILTER NOT EXISTS { VALUES ?revision { ${inventory.revisions.map(value => iri(value.revision)).join(' ')} }
       VALUES ?p { ${PROFILE_PREDICATES.map(predicateIri).join(' ')} }
       GRAPH ${iri(GRAPHS.revisions)} { ?revision ?p ?o } }
+    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?anyRevision rv:component ${iri(proof.person)} ; ?profilePredicate ?profileValue }
+      VALUES ?profilePredicate { ${PROFILE_PREDICATES.map(predicateIri).join(' ')} } }
     FILTER NOT EXISTS { VALUES ?graph { ${iri(PUBLIC)} ${iri(PRIVATE)} }
       VALUES ?target { ${[proof.person, ...inventory.revisions.map(value => value.revision)].map(iri).join(' ')} }
       VALUES ?reference { rv:revision rv:contentRevision rv:resource rv:nameResource rv:nameDirectoryResource }
       GRAPH ?graph { ?unit ?reference ?target } }
+    ${inventory.authorUnits.filter(unit => unit.startsWith('urn:rezics:search:directory:prefix:')).length ? `FILTER NOT EXISTS {
+      VALUES ?entry { ${inventory.authorUnits.filter(unit => unit.startsWith('urn:rezics:search:directory:prefix:')).map(iri).join(' ')} }
+      GRAPH ${iri(PUBLIC)} { ?entry ?entryP ?entryO } }` : ''}
+    ${inventory.creditedWorks.length && inventory.authorUnits.length ? `FILTER NOT EXISTS {
+      VALUES ?work { ${inventory.creditedWorks.map(iri).join(' ')} }
+      VALUES ?authorUnit { ${inventory.authorUnits.map(iri).join(' ')} }
+      GRAPH ${iri(PUBLIC)} { ?entry rv:prefixWork ?work ; rv:prefixUnit ?authorUnit ; rv:prefixField "credit" }
+      FILTER(?entry IN (${inventory.authorUnits.map(iri).join(', ')})) }` : ''}
   }`, 8192);
   return result.boolean === true;
 }
@@ -376,11 +428,7 @@ export async function erasePersonProfileGraph(access: Pool, relay: Pool, fuseki:
   lineage: GraphLineage, proof: PersonProfileErasureProof, inventory: PersonProfileGraphInventory): Promise<void> {
   identity(proof, inventory);
   await withPersonProfileErasureAuthority(access, relay, proof, async () => {
-    const expected = [
-      { owner: 'graph', kind: 'person_head', ref: inventory.person },
-      ...inventory.revisions.map(value => ({ owner: 'graph', kind: 'person_profile_revision', ref: value.revision })),
-      ...inventory.objects.map(ref => ({ owner: 'object', kind: 'object', ref })),
-    ];
+    const expected = personProfileGraphTargets(inventory);
     const sealed = await relay.query(`SELECT 1 FROM jsonb_to_recordset($2::jsonb)
       AS expected(owner text, kind text, ref text) WHERE NOT EXISTS (
         SELECT 1 FROM relay.erasure_target t WHERE t.erasure_id = $1
@@ -388,6 +436,8 @@ export async function erasePersonProfileGraph(access: Pool, relay: Pool, fuseki:
       LIMIT 1`, [proof.erasureId, JSON.stringify(expected)]);
     if (sealed.rowCount) throw new PersonGraphErasureConflict('Person closure differs from the sealed journal targets');
     if (await personProfileGraphErased(fuseki, proof, inventory)) return;
+    const ownership = await fuseki.query(`PREFIX rv: <${RV}> ASK { ${completeOwnedGraph(inventory)} }`, 8192);
+    if (ownership.boolean !== true) throw new PersonGraphErasureConflict('Person graph closure or search ownership changed');
     const validations: CommandValidation[] = await profileValidations(fuseki, 'agent-erasure-v1', [
       { shape: `${PROFILE}/tombstone-shape`, focus: [proof.person], graphs: [GRAPHS.current] },
     ]);
