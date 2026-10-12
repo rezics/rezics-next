@@ -311,7 +311,13 @@ function completeOwnedGraph(inventory: PersonProfileGraphInventory): string {
       ${inventory.units.map(value => `(${iri(value.graph)} ${iri(value.unit)})`).join(' ')} }
       FILTER NOT EXISTS { VALUES ?ownedTarget { ${targets} }
         VALUES ?ownedReference { rv:revision rv:contentRevision rv:resource rv:nameResource rv:nameDirectoryResource }
-        GRAPH ?ownedGraph { ?ownedUnit ?ownedReference ?ownedTarget } } }` : ''}
+        GRAPH ?ownedGraph { ?ownedUnit ?ownedReference ?ownedTarget } }
+      } FILTER NOT EXISTS { VALUES (?mixedGraph ?mixedUnit) {
+        ${inventory.units.map(value => `(${iri(value.graph)} ${iri(value.unit)})`).join(' ')} }
+        VALUES ?mixedReference { rv:revision rv:contentRevision rv:resource rv:nameResource rv:nameDirectoryResource }
+        GRAPH ?mixedGraph { ?mixedUnit ?mixedReference ?foreignTarget }
+        FILTER(?foreignTarget NOT IN (${[inventory.person, ...inventory.revisions.map(value => value.revision)].map(iri).join(', ')}))
+      }` : ''}
     FILTER NOT EXISTS { VALUES ?liveGraph { ${iri(PUBLIC)} ${iri(PRIVATE)} }
       VALUES ?liveTarget { ${targets} }
       VALUES ?liveReference { rv:revision rv:contentRevision rv:resource rv:nameResource rv:nameDirectoryResource }
@@ -409,6 +415,8 @@ export async function personProfileGraphErased(fuseki: QueryClient, proof: Perso
     FILTER NOT EXISTS { VALUES ?revision { ${inventory.revisions.map(value => iri(value.revision)).join(' ')} }
       VALUES ?p { ${PROFILE_PREDICATES.map(predicateIri).join(' ')} }
       GRAPH ${iri(GRAPHS.revisions)} { ?revision ?p ?o } }
+    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?unlistedRevision rv:component ${iri(proof.person)} }
+      FILTER(?unlistedRevision NOT IN (${inventory.revisions.map(value => iri(value.revision)).join(', ')})) }
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?anyRevision rv:component ${iri(proof.person)} ; ?profilePredicate ?profileValue }
       VALUES ?profilePredicate { ${PROFILE_PREDICATES.map(predicateIri).join(' ')} } }
     FILTER NOT EXISTS { VALUES ?graph { ${iri(PUBLIC)} ${iri(PRIVATE)} }
@@ -418,9 +426,8 @@ export async function personProfileGraphErased(fuseki: QueryClient, proof: Perso
     ${inventory.authorUnits.filter(unit => unit.startsWith('urn:rezics:search:directory:prefix:')).length ? `FILTER NOT EXISTS {
       VALUES ?entry { ${inventory.authorUnits.filter(unit => unit.startsWith('urn:rezics:search:directory:prefix:')).map(predicateIri).join(' ')} }
       GRAPH ${iri(PUBLIC)} { ?entry ?entryP ?entryO } }` : ''}
-    ${inventory.creditedWorks.length && inventory.authorUnits.length ? `FILTER NOT EXISTS {
+    ${inventory.creditedWorks.length ? `FILTER NOT EXISTS {
       VALUES ?work { ${inventory.creditedWorks.map(iri).join(' ')} }
-      VALUES ?authorUnit { ${inventory.authorUnits.map(predicateIri).join(' ')} }
       GRAPH ${iri(PUBLIC)} { ?entry rv:prefixWork ?work ; rv:prefixUnit ?authorUnit ; rv:prefixField "credit" }
       }` : ''}
   }`, 8192);
