@@ -416,16 +416,16 @@ test('Realm disclosure: real Access preserves Work and Realm fences, independent
       ]);
 
     const releaseWork = await restrict(work, 'title', workHead);
-    // Low-level policy batches remain usable by existing owners. Public
-    // compatibility reads below still require positively established ancestry.
-    expect(await reader.read([body], ANONYMOUS_VIEWER, 'read')).toEqual(['visible']);
-    expect(await reader.read([{ ...body, work, workRevision: workHead }], ANONYMOUS_VIEWER, 'read'))
-      .toEqual(['tombstone']);
-    expect(await reader.read([{ ...body, work }], ANONYMOUS_VIEWER, 'read')).toEqual(['tombstone']);
+    // Legacy lookup hints cannot establish the containing Realm for any entry.
+    for (const target of [body, { ...body, work, workRevision: workHead }, { ...body, work }]) {
+      await expect(reader.read([target], ANONYMOUS_VIEWER, 'read')).rejects.toBeInstanceOf(DisclosureUnavailable);
+      await expect(reader.readAtCut([target], ANONYMOUS_VIEWER, 'read')).rejects.toBeInstanceOf(DisclosureUnavailable);
+    }
     const constrained = await capture([body]);
     expect(constrained[0]!.decision).toBe('tombstone');
     expect(constrained[0]!.parents.map((parent) => parent.kind)).toEqual(['work', 'realm']);
     const releaseRealm = await restrict(realm, 'record');
+    await expect(reader.read([body], ANONYMOUS_VIEWER, 'read')).rejects.toBeInstanceOf(DisclosureUnavailable);
     for (const viewer of viewers) {
       for (const channel of DISCLOSURE_CHANNELS) {
         expect(await decisions(targets, channel, viewer)).toEqual([
