@@ -2016,12 +2016,12 @@ export class AccessAdmissionRegistry {
 
   private async deactivatePrincipal(
     principalId: string, expectedEpoch: string, accountDeletion: boolean,
-    options: AccountDeletionOptions = {},
+    options: AccountDeletionOptions = {}, heldClient?: PoolClient,
   ): Promise<StrongPrincipalDeactivation> {
     if (!/^[0-9a-f-]{36}$/.test(principalId) || !/^[0-9]+$/.test(expectedEpoch)) {
       throw new AdmissionDenied('invalid principal fence request');
     }
-    const client = await this.pool.connect();
+    const client = heldClient ?? await this.pool.connect();
     try {
       await client.query('BEGIN');
       await client.query("SET LOCAL lock_timeout = '2s'");
@@ -2055,7 +2055,7 @@ export class AccessAdmissionRegistry {
             await client.query('COMMIT');
             // Classification and orphan pages retain active Access. Release
             // transaction locks and resume the durable frontier on the next step.
-            return this.deactivatePrincipal(principalId, enforcementEpoch, true, options);
+            return this.deactivatePrincipal(principalId, enforcementEpoch, true, options, client);
           }
         }
         const changed = await client.query<{ enforcement_epoch: string }>(
@@ -2080,7 +2080,7 @@ export class AccessAdmissionRegistry {
       if (deletionPending) {
         await client.query('COMMIT');
         // Resume a pre-frontier operation already fenced by an older release.
-        return this.deactivatePrincipal(principalId, enforcementEpoch, true, options);
+        return this.deactivatePrincipal(principalId, enforcementEpoch, true, options, client);
       }
       if (accountDeletion) {
         await client.query(
@@ -2110,7 +2110,7 @@ export class AccessAdmissionRegistry {
       if (error instanceof ControlUnavailable) throw new AdmissionUnavailable(error.message);
       throw error;
     } finally {
-      client.release();
+      if (!heldClient) client.release();
     }
   }
 

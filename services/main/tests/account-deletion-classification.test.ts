@@ -5,6 +5,7 @@ import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
+import { boundedPool, nestedPoolCheckoutMode, setNestedPoolCheckoutMode } from '../src/infrastructure/pg-pool.ts';
 import type { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import {
   AccessAdmissionRegistry, type VerifiedPrincipal,
@@ -277,4 +278,28 @@ test('controller loss at an unfenced cut wakes only that frontier target', async
   }
   expect((await pool.query('SELECT agent_id FROM access.account_deletion_progress_agent WHERE operation_id = $1',
     [progress.operation_id])).rows).toEqual([{ agent_id: cut }]);
+}, 60_000);
+
+
+test('bounded production pool releases classification and orphan handoffs in throw and log modes', async () => {
+  const previous = nestedPoolCheckoutMode();
+  const original = console.error;
+  const logged: string[] = [];
+  console.error = (...args: unknown[]) => { logged.push(args.map(String).join(' ')); };
+  try {
+    for (const mode of ['throw', 'log'] as const) {
+      setNestedPoolCheckoutMode(mode);
+      const owner = await principal();
+      for (let index = 0; index < 18; index++) await provision(owner, 'person');
+      const measured = boundedPool({ ...cluster!.connection, max: 1, connectionTimeoutMillis: 1000 });
+      try {
+        expect(await new AccessAdmissionRegistry(measured).strongDeactivateAccountSubject(
+          owner.verified.issuer, owner.verified.subject)).toMatchObject({ enforcementEpoch: '1' });
+      } finally { await measured.end(); }
+    }
+    expect(logged.filter(line => line.includes('NestedPoolCheckoutError'))).toEqual([]);
+  } finally {
+    console.error = original;
+    setNestedPoolCheckoutMode(previous);
+  }
 }, 60_000);
