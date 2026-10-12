@@ -325,13 +325,16 @@ async function freshObjectProtection(client: PoolClient,
   graph: WorkActivationEnvironment, ref: string, budget: ErasurePreflightBudget): Promise<Set<string>> {
   const digest = ref.slice(-64);
   const references = new Set<string>();
+  // Equal bytes in another asset do not reference this asset/upload namespace.
   const owners = await client.query<{ protected: boolean }>(`SELECT
     EXISTS (SELECT 1 FROM content.revision WHERE byte_digest=$1 AND availability <> 'erased')
     OR EXISTS (SELECT 1 FROM media.representation r JOIN media.asset a ON a.id=r.asset_id
       JOIN media.asset_state s ON s.id=a.state_head
-      WHERE r.byte_digest=$1 AND ($2::uuid IS NULL OR r.asset_id=$2::uuid)
+      WHERE r.byte_digest=$1 AND (($2::uuid IS NULL AND $3::uuid IS NULL)
+        OR r.asset_id=coalesce($2::uuid, (SELECT u.asset_id FROM media.upload u WHERE u.id=$3::uuid)))
         AND r.availability <> 'erased' AND s.lifecycle <> 'erased') AS protected`,
-  [digest, /^media-asset:v1:([0-9a-f-]{36}):/.exec(ref)?.[1] ?? null]);
+  [digest, /^media-asset:v1:([0-9a-f-]{36}):/.exec(ref)?.[1] ?? null,
+    /^media-quarantine:v1:([0-9a-f-]{36}):/.exec(ref)?.[1] ?? null]);
   if (owners.rows[0]?.protected !== false) references.add(ref);
   const manifests = new Map<string, string | undefined>([[`urn:rezics:sha256:${digest}`, undefined]]);
   for (const root of budget.contributionManifests.get(ref) ?? []) manifests.set(root.manifest, root.component);

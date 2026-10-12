@@ -1180,3 +1180,20 @@ test('a borrowed reference fence remains held until its writer transaction commi
     } finally { await client.query('ROLLBACK'); client.release(); }
   });
 });
+
+
+test('Media erasure removes its quarantine copy when another asset retains identical image bytes', async () => {
+  await fixture(async f => {
+    const image = await sharp({ create: { width: 16, height: 16, channels: 3, background: '#682b9e' } }).png().toBuffer();
+    const erased = await media(f, image), retained = await media(f, image);
+    const result = await f.call(f.input(assetIri(erased.upload.asset), [erased.revision]));
+    expect(result.report.stage).toBe('reconciling');
+    expect(result.report.targets.every(target => target.completionState === 'completed')).toBe(true);
+    expect(f.objects.data.has(`${erased.upload.quarantineKey}/sha256/${hash(image)}`)).toBe(false);
+    expect(f.objects.data.has(`${erased.upload.objectNamespace}sha256/${hash(image)}`)).toBe(false);
+    expect(f.objects.data.has(`${retained.upload.quarantineKey}/sha256/${hash(image)}`)).toBe(true);
+    expect(f.objects.data.has(`${retained.upload.objectNamespace}sha256/${hash(image)}`)).toBe(true);
+    expect((await f.core.readExactBatch([retained.revision], async ids => new Set(ids)))[0]?.status).toBe('available');
+    expect((await retained.store.readAsset(retained.upload.asset))?.lifecycle).toBe('active');
+  });
+});
