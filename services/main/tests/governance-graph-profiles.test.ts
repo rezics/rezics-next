@@ -40,6 +40,7 @@ function graph(kind: string, selectors: Record<string, string> = {}) {
         if (state.becomeRealm) state.kinds = [`${RV}Realm`];
         return { boolean: state.kinds.includes(`${RV}ZoneHomeDocument`) };
       }
+      if (sql.includes('SELECT ?head')) return { results: { bindings: state.head ? [{ head: uri(state.head) }] : [] } };
       if (sql.includes('SELECT DISTINCT ?kind ?head')) return { results: { bindings: state.kinds.flatMap(current => {
         const terms = Object.entries(state.selectors).map(([path, value]) => ({ selector: uri(path), value: uri(value) }));
         return (sql.includes('?selector') && terms.length ? terms : [{}]).map(term => ({ kind: uri(current), ...term }));
@@ -192,6 +193,18 @@ for (const bindingRows of [0, 2]) {
     const f = graph(`${skos}Concept`);
     f.state.bindingRows = bindingRows;
     await expect(f.effects.apply(randomUUID(), 1, f.target)).rejects.toThrow('Concept owner binding is unavailable or ambiguous');
+    expect(f.commands).toHaveLength(0);
+    expect(f.receipts.size).toBe(0);
+  });
+}
+
+for (const effect of ['disclosure', 'search'] as const) {
+  test(`a reviewed Work losing its type and head refuses an Access-only ${effect} receipt`, async () => {
+    const f = graph('https://schema.org/CreativeWork');
+    f.state.kinds = [];
+    f.state.head = '';
+    await expect(f.effects.apply(randomUUID(), 1, { ...f.target, component: 'title', effect }))
+      .rejects.toBeInstanceOf(GovernanceStale);
     expect(f.commands).toHaveLength(0);
     expect(f.receipts.size).toBe(0);
   });

@@ -167,6 +167,23 @@ export function ownerModerationEffects(content: ContentModeration, env: WorkActi
       throw new GovernanceStale('Realm moderation has no body or structure grain');
     return realm;
   };
+  const accessReceipt = async (operationId: string, ordinal: number, target: DecisionTargetInput) => {
+    if (target.expectedHead !== null) {
+      let current: string | null;
+      if (target.owner === 'graph') {
+        const home = target.component === 'record' && (await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+          GRAPH ${iri(GRAPHS.current)} { ${iri(target.resource)} a rv:ZoneHomeDocument }
+        }`, 1024)).boolean === true;
+        const predicate = home ? 'rv:homeDocumentHead' : target.component === 'structure' ? 'rv:structureHead' : 'rv:head';
+        const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head WHERE {
+          GRAPH ${iri(GRAPHS.current)} { ${iri(target.resource)} ${predicate} ?head }
+        } LIMIT 2`, 2048)).results?.bindings ?? [];
+        current = rows.length === 1 && rows[0]?.head?.type === 'uri' ? rows[0].head.value : null;
+      } else current = await ownerTargetHeads({ content: media?.pool }).current(target);
+      if (current !== target.expectedHead) throw new GovernanceStale('owner head changed');
+    }
+    return { receipt: `access:governance-enforcement:${operationId}:${ordinal}` };
+  };
   return {
     ...graphNoticeParticipants(env),
     async plan(target, outcome, context) {
@@ -263,7 +280,7 @@ export function ownerModerationEffects(content: ContentModeration, env: WorkActi
     async apply(operationId, ordinal, target, plan, continuation) {
       if (restrictionOwners[target.effect] === 'access') {
         await validateGraphTarget(target, plan);
-        return { receipt: `access:governance-enforcement:${operationId}:${ordinal}` };
+        return accessReceipt(operationId, ordinal, target);
       }
       if (plan?.media && store) {
         await validateGraphTarget(target, plan);
@@ -298,7 +315,7 @@ export function ownerModerationEffects(content: ContentModeration, env: WorkActi
       if (target.owner === 'media')
         throw new GovernanceUnavailable('media original plan is unavailable');
       if (target.owner === 'review' || target.owner === 'source') {
-        return { receipt: `access:governance-enforcement:${operationId}:${ordinal}` };
+        return accessReceipt(operationId, ordinal, target);
       }
       if (target.owner === 'content') {
         if (!target.revision || !target.expectedHead || target.component !== 'body') {
@@ -342,8 +359,12 @@ export function ownerModerationEffects(content: ContentModeration, env: WorkActi
       if (await observed()) return { receipt };
       const realm = await validateGraphTarget(target, plan);
       const selected = realm ? null : await graphModerationProfile(env, target);
-      if (!realm && !selected)
-        return { receipt: `access:governance-enforcement:${operationId}:${ordinal}` };
+      if (!realm && !selected) {
+        const result = await accessReceipt(operationId, ordinal, target);
+        if (target.expectedHead !== null)
+          throw new GovernanceUnavailable('Reviewed graph command profile disappeared');
+        return result;
+      }
       if (!target.expectedHead) throw new GovernanceStale('Graph moderation needs an exact owner head');
       const concept = selected?.kind === 'http://www.w3.org/2004/02/skos/core#Concept'
         && (selected.profile === 'classification-proposition-v1' || selected.profile === 'classification-proposition-v2')

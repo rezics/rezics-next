@@ -937,6 +937,38 @@ test('a public Work with an arbitrary semantic description accepts a title searc
   } finally { await f.stack.stop(); }
 }, 120_000);
 
+test('deferred Work title disclosure refuses confirmation after its owner type and head disappear', async () => {
+  const f = await productionRealm('work-missing-owner-governance');
+  try {
+    const work = await f.stack.publicWork(f.editor.actor, ['en'], 'Reviewed Work');
+    const workHead = (await f.stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head WHERE {
+      GRAPH <${GRAPHS.current}> { <${work.work}> rv:head ?head } } LIMIT 2`, 4096))
+      .results!.bindings[0]!.head!.value;
+    const report = await responseJson<{ reportId: string; caseId: string }>(await f.stack.call('POST',
+      '/v1/public-reports', { key: randomUUID(), body: { profile: 'public-report-v1',
+        target: work.work, category: 'spam_or_manipulation', statement: 'Review this Work title.',
+        contentLanguage: 'en' } }), 201);
+    const basis = (await f.stack.accessPool.query<{ generation: string; evidence_digest: string }>(
+      `SELECT c.generation::text,r.evidence_digest FROM access.governance_case c
+       JOIN access.governance_report r ON r.case_id=c.id WHERE r.id=$1`, [report.reportId])).rows[0]!;
+    await f.governance.store.safety.claim(f.staff.principal, f.staff.actor, report.caseId);
+    const accepted = await f.governance.store.decide(f.staff.principal, { ...f.input,
+      caseId: report.caseId, expectedGeneration: basis.generation, evidenceDigest: basis.evidence_digest,
+      idempotencyKey: randomUUID(), targets: [{ owner: 'graph', resource: work.work, component: 'title',
+        locator: null, revision: null, scopeKind: 'component', expectedHead: workHead, effect: 'disclosure' }],
+    }, true);
+    expect(accepted.operation.status).toBe('accepted');
+    await mutateOwnerFixture(f.stack.env, `PREFIX rv: <${RV}> DELETE DATA { GRAPH <${GRAPHS.current}> {
+      <${work.work}> a <https://schema.org/CreativeWork> ; rv:head <${workHead}> } }`);
+    const resumed = await f.governance.store.resumeDecision(f.staff.principal, f.staff.actor, accepted.decisionId);
+    expect(resumed.operation.status).not.toBe('completed');
+    expect((await f.stack.accessPool.query('SELECT state,receipt FROM access.safety_decision_effect WHERE decision_id=$1',
+      [accepted.decisionId])).rows).toEqual([{ state: 'failed', receipt: null }]);
+    expect((await f.stack.accessPool.query('SELECT 1 FROM access.governance_enforcement WHERE resource=$1',
+      [work.work])).rowCount).toBe(0);
+  } finally { await f.stack.stop(); }
+}, 120_000);
+
 for (const kind of ['Character', 'Role']) {
   test(`a semantic ${kind} record completes an Access-only search decision through production intake`, async () => {
     const f = await productionRealm(`semantic-${kind}-governance`);
