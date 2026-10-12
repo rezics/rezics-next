@@ -72,11 +72,17 @@ interface GraphModerationProfile {
 }
 
 type GraphTerm = NonNullable<SparqlResult['results']>['bindings'][number][string];
+/** Model predicates and classes are RDF terms, not native resource identities. */
+function graphIri(value: string): string {
+  if (!/^(https?:\/\/[^<>\s"{}|\\^`]+|urn:[A-Za-z0-9][A-Za-z0-9:._-]+)$/.test(value))
+    throw new GovernanceUnavailable('Graph profile term is not a safe IRI');
+  return `<${value}>`;
+}
 function graphTerm(value: GraphTerm): string {
-  if (value.type === 'uri') return iri(value.value);
+  if (value.type === 'uri') return graphIri(value.value);
   if (value.type !== 'literal') throw new GovernanceUnavailable('Graph profile selector is not a retained RDF term');
   return `${lit(value.value)}${value['xml:lang'] ? `@${value['xml:lang']}`
-    : value.datatype ? `^^${iri(value.datatype)}` : ''}`;
+    : value.datatype ? `^^${graphIri(value.datatype)}` : ''}`;
 }
 
 /** The semantic owner determines primary kinds; the authored model determines
@@ -95,7 +101,7 @@ async function graphModerationProfile(env: WorkActivationEnvironment, target: De
   const rows = home ? [] : (await env.fuseki.query(`PREFIX rv: <${RV}>
     SELECT DISTINCT ?kind ?head ?selector ?value WHERE { GRAPH ${iri(GRAPHS.current)} {
       ${iri(target.resource)} a ?kind .
-      OPTIONAL { VALUES ?selector { ${selectors.map(iri).join(' ')} }
+      OPTIONAL { VALUES ?selector { ${selectors.map(graphIri).join(' ')} }
         ${iri(target.resource)} ?selector ?value }
     } } LIMIT 257`, 32_768)).results?.bindings ?? [];
   if (rows.length >= 257 || rows.some(row => row.kind?.type !== 'uri'))
@@ -104,6 +110,7 @@ async function graphModerationProfile(env: WorkActivationEnvironment, target: De
     .filter(kind => semanticResourceTypeRole(kind) === 'PRIMARY'))];
   if (kinds.length > 1) throw new GovernanceUnavailable('Graph target profile is unavailable or ambiguous');
   const kind = kinds[0];
+  if (kind === `${RV}Realm`) throw new GovernanceStale('Graph target became a Realm after classification');
   const routes = kind ? graphModerationProfiles.get(kind) : undefined;
   if (!routes?.length) return null;
   const values = (path: string) => [...new Map(rows.filter(row => row.selector?.value === path)
@@ -120,8 +127,8 @@ async function graphModerationProfile(env: WorkActivationEnvironment, target: De
     const selected = rows.filter(row => row.selector?.value === path).map(row => row.value)
       .filter(value => value !== undefined);
     const triples = [...new Set(selected.map(graphTerm))];
-    return `${triples.map(value => `${iri(target.resource)} ${iri(path)} ${value} .`).join('\n')}
-      FILTER NOT EXISTS { ${iri(target.resource)} ${iri(path)} ?otherSelector
+    return `${triples.map(value => `${iri(target.resource)} ${graphIri(path)} ${value} .`).join('\n')}
+      FILTER NOT EXISTS { ${iri(target.resource)} ${graphIri(path)} ?otherSelector
         ${triples.length ? `FILTER(?otherSelector NOT IN (${triples.join(', ')}))` : ''} }`;
   }).join('\n');
   return { ...route, kind, selectorGuard,
@@ -357,11 +364,11 @@ export function ownerModerationEffects(content: ContentModeration, env: WorkActi
       }]);
       const headPredicate = realm ? 'rv:head' : selected!.headPredicate;
       const profileGuard = selected ? `GRAPH ${iri(GRAPHS.current)} {
-        ${iri(target.resource)} a ${iri(selected.kind)} .
+        ${iri(target.resource)} a ${graphIri(selected.kind)} .
         ${selected.selectorGuard}
         FILTER NOT EXISTS { ${iri(target.resource)} a ?otherKind .
           FILTER(?otherKind IN (${[...semanticOwnerTypes].filter(kind => kind !== selected.kind
-            && semanticResourceTypeRole(kind) === 'PRIMARY').map(iri).join(', ')})) }
+            && semanticResourceTypeRole(kind) === 'PRIMARY').map(graphIri).join(', ')})) }
       }` : '';
       const realmGuard = realm ? `GRAPH ${iri(GRAPHS.current)} {
         ${iri(realm.realm)} a rv:Realm ; rv:realmState rv:Active ; rv:space ${iri(realm.space)} .

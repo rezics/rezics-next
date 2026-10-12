@@ -19,7 +19,7 @@ function graph(kind: string, selectors: Record<string, string> = {}) {
   const target: DecisionTargetInput = { owner: 'graph', resource, component: 'record', locator: null,
     scopeKind: 'component', revision: null, expectedHead: head, effect: 'disclosure' };
   const state = { head, selectors, kinds: [kind], loseResponse: false, stale: false,
-    status: 'committed' as 'committed' | 'invalid', digest: '' };
+    status: 'committed' as 'committed' | 'invalid', digest: '', becomeRealm: false };
   const receipts = new Map<string, { digest: string; head: string }>();
   const commands: CommandEnvelope[] = [];
   const reads: string[] = [];
@@ -31,7 +31,10 @@ function graph(kind: string, selectors: Record<string, string> = {}) {
         return { results: { bindings: saved ? [{ digest: literal(state.digest || saved.digest),
           target: uri(resource), head: uri(saved.head) }] : [] } };
       }
-      if (sql.includes('ASK')) return { boolean: state.kinds.includes(`${RV}ZoneHomeDocument`) };
+      if (sql.includes('ASK')) {
+        if (state.becomeRealm) state.kinds = [`${RV}Realm`];
+        return { boolean: state.kinds.includes(`${RV}ZoneHomeDocument`) };
+      }
       if (sql.includes('SELECT DISTINCT ?kind ?head')) return { results: { bindings: state.kinds.flatMap(current => {
         const terms = Object.entries(state.selectors).map(([path, value]) => ({ selector: uri(path), value: uri(value) }));
         return (sql.includes('?selector') && terms.length ? terms : [{}]).map(term => ({ kind: uri(current), ...term }));
@@ -164,4 +167,11 @@ test('a new PRIMARY kind without a table row remains eligible for Access-only di
       .toEqual({ receipt: `access:governance-enforcement:${operation}:1` });
     expect(f.commands).toHaveLength(0);
   } finally { (CANONICAL_TYPES as Set<string>).delete(kind); (semanticOwnerTypes as Set<string>).delete(kind); }
+});
+
+test('a non-Realm record becoming a Realm between classification and profile selection is stale', async () => {
+  const f = graph(`${RV}Agent`);
+  f.state.becomeRealm = true;
+  await expect(f.effects.apply(randomUUID(), 1, f.target, { realm: null })).rejects.toBeInstanceOf(GovernanceStale);
+  expect(f.commands).toHaveLength(0);
 });
