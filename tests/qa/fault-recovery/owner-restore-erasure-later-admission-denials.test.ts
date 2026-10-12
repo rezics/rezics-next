@@ -1043,6 +1043,14 @@ test(
               'INSERT INTO content.revision SELECT * FROM jsonb_populate_record(NULL::content.revision,$1::jsonb)',
               [JSON.stringify(row)],
             );
+            expect(
+              (
+                await completed.owners.content.query(
+                  'SELECT to_jsonb(r) AS row FROM content.revision r WHERE id=$1',
+                  [fixture.revisionId],
+                )
+              ).rows,
+            ).toEqual([{ row }]);
           };
           await controlled(
             'replanted-Content-bytes',
@@ -1133,18 +1141,25 @@ test(
               },
             );
           }
+          commands.mockClear();
+          maintenance.mockClear();
+          await attempt(completed, key);
+          const reconciled = await outerOperation(completed, key);
+          expect(reconciled.state).toBe('reconciled');
+          expect((await ownerLogins(completed)).map((row) => row.rolcanlogin)).toEqual([
+            true,
+            true,
+            true,
+            true,
+          ]);
+          await attempt(completed, key);
+          expect(await outerOperation(completed, key)).toEqual(reconciled);
+          expect(commands).not.toHaveBeenCalled();
+          expect(maintenance).not.toHaveBeenCalled();
         } finally {
           maintenance.mockRestore();
           commands.mockRestore();
         }
-        await attempt(completed, key);
-        expect((await outerOperation(completed, key)).state).toBe('reconciled');
-        expect((await ownerLogins(completed)).map((row) => row.rolcanlogin)).toEqual([
-          true,
-          true,
-          true,
-          true,
-        ]);
       } finally {
         await completed.dispose();
       }
@@ -1156,7 +1171,9 @@ test(
     }
     // 600 s is a hang deadline. The shared later-admission source + one restored
     // candidate measured 242,936 ms (246.0 s file) in QA 20261011t220649-f78dff;
-    // this file logs its two serial candidates and every <=180 s operator attempt.
+    // the full two-candidate matrix measured 202,994 ms (204.55 s file) in
+    // QA 20261011t235900-fe198c. This file logs its two serial candidates and
+    // every <=180 s operator attempt.
   },
   qaStartupTestTimeout(600_000),
 );
