@@ -49,6 +49,7 @@ export interface PersonProfileGraphInventory {
   units: PersonProfileIndexUnit[];
   /** Work text units and prefix-directory entries are refreshed, never erased. */
   authorUnits: string[];
+  creditedWorks: string[];
 }
 
 function consume(budget: PersonProfileInventoryBudget, key: keyof Pick<PersonProfileInventoryBudget,
@@ -193,9 +194,18 @@ export async function inventoryPersonProfileGraph(fuseki: QueryClient, objectDir
     throw new PersonGraphErasureUnavailable('Person search-unit inventory differs');
   }
   consume(budget, 'indexedUnitsLeft', units.length);
+  const works = await fuseki.query(`PREFIX rv: <${RV}> SELECT DISTINCT ?work WHERE {
+    { GRAPH ${iri(GRAPHS.current)} { ?credit rv:agent ${iri(person.person)} ; rv:work ?work } }
+    UNION { GRAPH <urn:rezics:projection:public-name-repair> { ${iri(person.person)} rv:prefixOwnerWork ?work } }
+  } ORDER BY ?work LIMIT 65`, 65_536);
+  consume(budget, 'bytesLeft', Buffer.byteLength(JSON.stringify(works)));
+  const workRows = works.results?.bindings;
+  if (!workRows || workRows.length > 64 || workRows.some(value => !PERSON.test(uri(value.work) ?? ''))) {
+    throw new PersonGraphErasureUnavailable('Person credited-Work mutation neighborhood is unsupported or oversized');
+  }
+  const creditedWorks = workRows.map(value => uri(value.work)!);
   const authors = await fuseki.query(`PREFIX rv: <${RV}> SELECT DISTINCT ?unit WHERE {
-    { { GRAPH ${iri(GRAPHS.current)} { ?credit rv:agent ${iri(person.person)} ; rv:work ?work } }
-      UNION { GRAPH <urn:rezics:projection:public-name-repair> { ${iri(person.person)} rv:prefixOwnerWork ?work } } }
+    VALUES ?work { ${creditedWorks.map(iri).join(' ')} }
     {
     {
       GRAPH ${iri(PUBLIC)} { ?entry rv:prefixWork ?work ; rv:prefixUnit ?matchUnit }
@@ -221,7 +231,7 @@ export async function inventoryPersonProfileGraph(fuseki: QueryClient, objectDir
   consume(budget, 'indexedUnitsLeft', authorUnits.length);
   consume(budget, 'journalTargetsLeft', 1 + revisions.length + objects.size);
   return { person: person.person, provisionId: person.provisionId, head, profileHead,
-    revisions, objects: [...objects].sort(), units, authorUnits };
+    revisions, objects: [...objects].sort(), units, authorUnits, creditedWorks };
 }
 
 function identity(proof: PersonProfileErasureProof, inventory: PersonProfileGraphInventory): void {
@@ -252,6 +262,9 @@ function identity(proof: PersonProfileErasureProof, inventory: PersonProfileGrap
   if (inventory.authorUnits.some(unit => !PERSON.test(unit)
     && !/^urn:rezics:search:directory:prefix:[A-Za-z0-9_:*-]+$/.test(unit))) {
     throw new PersonGraphErasureConflict('Person credited-Work projection identity differs');
+  }
+  if (inventory.creditedWorks.length > 64 || inventory.creditedWorks.some(work => !PERSON.test(work))) {
+    throw new PersonGraphErasureConflict('Person credited-Work mutation neighborhood differs');
   }
   if (inventory.objects.length > 128 || inventory.objects.some(value => !/^sha256:[0-9a-f]{64}$/.test(value))
     || new Set(inventory.objects).size !== inventory.objects.length) {
@@ -296,7 +309,8 @@ export function personProfileErasureUpdate(lineage: GraphLineage, proof: PersonP
       rv:sequence ?next ; rv:eventCount 1 ; rv:event ${iri(event)} .
       ${iri(event)} a rv:GraphErasureEvent ; rv:ordinal 0 ; rv:action "erasure.graph" ;
       rv:agent ${iri(proof.person)} ; rv:receipt ${iri(receipt)} ; rv:erasureId ${lit(proof.erasureId)} ;
-      rv:erasureEpoch ${proof.erasureEpoch} }
+      rv:erasureEpoch ${proof.erasureEpoch}
+      ${inventory.creditedWorks.length ? `; rv:work ${inventory.creditedWorks.map(iri).join(', ')}` : ''} }
   } WHERE {
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(lineage.dataEpoch)} ;
       rv:routingEpoch ${lit(lineage.routingEpoch)} ; rv:sequence ?n }

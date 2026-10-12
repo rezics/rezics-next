@@ -8,7 +8,7 @@ const focused = Bun.env.REZICS_NATIVE_TEST_CLASSES;
 
 test(focused ? `the image Maven invocation verifies ${focused}`
   : 'the native prefix projection and complete image Maven suite share one source pin', () => {
-  if (focused && !/^[A-Za-z][A-Za-z0-9]*(?:,[A-Za-z][A-Za-z0-9]*)*$/u.test(focused))
+  if (focused && !/^[A-Za-z][A-Za-z0-9]*(?:#[A-Za-z][A-Za-z0-9]*)?(?:,[A-Za-z][A-Za-z0-9]*(?:#[A-Za-z][A-Za-z0-9]*)?)*$/u.test(focused))
     throw new Error('invalid native test class selection');
   const temporary = join(root, '.temp');
   mkdirSync(temporary, { recursive: true });
@@ -56,7 +56,7 @@ test(focused ? `the image Maven invocation verifies ${focused}`
       throw new Error(`native suite failed (${result.status}); see ${evidence.slice(root.length + 1)}/maven.log\n`
         + `${result.stdout?.slice(-8000)}\n${result.stderr?.slice(-1000)}`);
     for (const name of focused?.split(',') ?? ['PrefixWalkTest'])
-      expect(readdirSync(reports)).toContain(`TEST-com.rezics.jena.${name}.xml`);
+      expect(readdirSync(reports)).toContain(`TEST-com.rezics.jena.${name.split('#')[0]}.xml`);
     expect(result.stdout).toContain('BUILD SUCCESS');
     expect(result.stdout).toMatch(/Tests run: [1-9][0-9]*, Failures: 0, Errors: 0/);
   } finally {

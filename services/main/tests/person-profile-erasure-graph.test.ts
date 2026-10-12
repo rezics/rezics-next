@@ -41,7 +41,7 @@ const nameUnit = 'urn:rezics:search:name:agent:00000000-0000-4000-8000-000000000
 const prefixUnit = 'urn:rezics:search:directory:prefix:RXhhY3Q:*:1fixture';
 function fixture(overrides: { kind?: string; revisions?: ReturnType<typeof revision>[];
   currentFields?: ReturnType<typeof fields>; units?: { graph: ReturnType<typeof uri>; unit: ReturnType<typeof uri> }[];
-  authorUnits?: { unit: ReturnType<typeof uri> }[] } = {}): Pick<FusekiClient, 'query'> {
+  authorUnits?: { unit: ReturnType<typeof uri> }[]; works?: { work: ReturnType<typeof uri> }[] } = {}): Pick<FusekiClient, 'query'> {
   return { query: async (query: string) => {
     if (query.includes('SELECT ?kind')) return { results: { bindings: [{
       kind: uri(`${RV}${overrides.kind ?? 'PersonAgent'}`), head: uri(anchor) }] } };
@@ -49,6 +49,7 @@ function fixture(overrides: { kind?: string; revisions?: ReturnType<typeof revis
     if (query.includes('SELECT DISTINCT ?revision')) return { results: { bindings: overrides.revisions ?? [revision()] } };
     if (query.includes('SELECT ?revision ?component')) return { results: { bindings: [{ revision: uri(anchor), component: uri(person.person) }] } };
     if (query.includes('SELECT DISTINCT ?graph')) return { results: { bindings: overrides.units ?? [{ graph: uri(publicGraph), unit: uri(nameUnit) }] } };
+    if (query.includes('SELECT DISTINCT ?work')) return { results: { bindings: overrides.works ?? [{ work: uri(`https://rezics.com/id/${id('8')}`) }] } };
     if (query.includes('SELECT DISTINCT ?unit')) return { results: { bindings: overrides.authorUnits ?? [{ unit: uri(prefixUnit) }] } };
     throw new Error(`Unexpected inventory query: ${query.slice(0, 80)}`);
   } } as Pick<FusekiClient, 'query'>;
@@ -62,6 +63,7 @@ test('inventory captures both original immutable objects and direct/credited pro
   expect(inventory.objects).toContain(`sha256:${manifest.slice(-64)}`);
   expect(inventory.units).toEqual([{ graph: publicGraph, unit: nameUnit }]);
   expect(inventory.authorUnits).toEqual([prefixUnit]);
+  expect(inventory.creditedWorks).toEqual([`https://rezics.com/id/${id('8')}`]);
   expect(shared.graphRevisionsLeft).toBe(63);
   expect(shared.indexedUnitsLeft).toBe(62);
   expect(shared.journalTargetsLeft).toBe(252);
@@ -83,6 +85,9 @@ test('wrong kinds, malformed anchors, another owner and unsupported current fiel
     .rejects.toBeInstanceOf(PersonGraphErasureUnavailable);
   await expect(inventoryPersonProfileGraph(fixture({ currentFields: [...fields(), {
     p: uri(`${RV}unreviewedProfileField`), o: literal('identifying copy') }] }), directory, person, budget()))
+    .rejects.toBeInstanceOf(PersonGraphErasureUnavailable);
+  await expect(inventoryPersonProfileGraph(fixture({ works: Array.from({ length: 65 },
+    (_, index) => ({ work: uri(`https://rezics.com/id/${id(String(index + 10))}`) })) }), directory, person, budget()))
     .rejects.toBeInstanceOf(PersonGraphErasureUnavailable);
 });
 
