@@ -14,6 +14,7 @@ export interface DeliveryCutTarget {
 }
 
 export type DeliveryCutResult<T> = { status: 'stable'; value: T }
+  | { status: 'denied' }
   | { status: 'unavailable-retry' };
 
 /**
@@ -22,10 +23,12 @@ export type DeliveryCutResult<T> = { status: 'stable'; value: T }
  * discarded. This detects owner movement; it does not lock all three owners.
  */
 export async function withDeliveryCut<T>(target: DeliveryCutTarget,
-  work: () => Promise<T>): Promise<DeliveryCutResult<T>> {
+  authorize: () => Promise<boolean>, work: () => Promise<T>): Promise<DeliveryCutResult<T>> {
   const { rights, resourceId, assessmentId } = target;
-  if (!rights) return { status: 'unavailable-retry' };
   for (let attempt = 0; attempt < 2; attempt++) {
+    // No owner state, including a hold or outage, may reveal a hidden target.
+    if (!await authorize()) return { status: 'denied' };
+    if (!rights) return { status: 'unavailable-retry' };
     let before: DeliveryCutSnapshot;
     try { before = await rights.deliveryCutSnapshot(resourceId, assessmentId); }
     catch (error) {

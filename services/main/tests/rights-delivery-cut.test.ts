@@ -16,9 +16,10 @@ afterAll(async () => { await stack?.stop(); }, 60_000);
 
 async function fixture(identity: { provider: string | null; namespace: string | null } = {
   provider: null, namespace: null,
-}) {
+}, privateTarget = false) {
   const member = await stack.member(`delivery-${randomUUID()}`);
-  const work = await stack.publicWork(member.actor, ['en'], 'Delivery target');
+  const work = privateTarget ? await stack.privateWork(member.actor, 'Private delivery target')
+    : await stack.publicWork(member.actor, ['en'], 'Delivery target');
   await member.grant(`work:read:${work.work}`, 'work.read');
   const authority = await fixtureAuthorityScenario(stack.accessPool,
     { scope: ASSESS_SCOPE, action: ASSESS_ACTION, mandate: ASSESS_ACTION });
@@ -69,7 +70,8 @@ async function fixture(identity: { provider: string | null; namespace: string | 
       return result;
     });
     try {
-      const cut = await withDeliveryCut(target, async () => {
+      const cut = await withDeliveryCut(target,
+        () => stack.access.canReadWork(member.principal, member.actor, work.work), async () => {
         attempts++;
         const response = await member.send('GET',
           `/v1/content-revisions/${revisionId}?actingSubject=${encodeURIComponent(member.actor)}`);
@@ -84,11 +86,11 @@ async function fixture(identity: { provider: string | null; namespace: string | 
         return erased.has(revisionId)
           ? problem(404, 'revision_unavailable', 'Revision is unavailable') : response;
       });
-      return cut.status === 'stable' ? cut.value
-        : problem(503, 'delivery_cut_unavailable', 'Delivery is unavailable; retry', { 'retry-after': '1' });
+      return cut.status === 'stable' ? cut.value : cut.status === 'denied'
+        ? problem(404, 'revision_unavailable', 'Revision is unavailable') : problem(503, 'delivery_cut_unavailable', 'Delivery is unavailable; retry', { 'retry-after': '1' });
     } finally { interceptor.mockRestore(); }
   };
-  return { target, text, serializedJson, revisionId, hold, moveRights, deliver, input, authority,
+  return { target, text, serializedJson, revisionId, hold, moveRights, deliver, input, authority, member,
     attempts: () => attempts };
 }
 
@@ -105,6 +107,60 @@ test('stable owner tokens deliver exact Content through production composition',
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({ serializedJson: f.serializedJson });
   expect(f.attempts()).toBe(1);
+});
+
+test('authorization precedes holds and owner failures; hidden and nonexistent targets have identical 404 bytes', async () => {
+  const f = await fixture({ provider: null, namespace: null }, true);
+  const outsider = await stack.member(`outsider-${randomUUID()}`);
+  await outsider.grant('work:read', 'work.read');
+  let reads = 0, deliveries = 0;
+  const rights = { deliveryCutSnapshot: async (resourceId: string, assessmentId: string | null) => {
+    reads++;
+    return f.target.rights.deliveryCutSnapshot(resourceId, assessmentId);
+  } };
+  const deliver = async (resourceId: string) => {
+    const cut = await withDeliveryCut({ ...f.target, resourceId, rights },
+      () => stack.access.canReadWork(outsider.principal, outsider.actor, resourceId),
+      async () => { deliveries++; return Response.json({ serializedJson: f.text }); });
+    return cut.status === 'stable' ? cut.value : cut.status === 'denied'
+      ? problem(404, 'comment_unavailable', 'Comment is unavailable')
+      : problem(503, 'delivery_cut_unavailable', 'Delivery is unavailable; retry', { 'retry-after': '1' });
+  };
+  const missing = await deliver(`https://rezics.com/id/${randomUUID()}`);
+  const privateResponse = await deliver(f.target.resourceId);
+  await f.hold();
+  const held = await deliver(f.target.resourceId);
+  expect(missing.status).toBe(404);
+  expect(privateResponse.status).toBe(404);
+  expect(held.status).toBe(404);
+  expect(await privateResponse.text()).toBe(await held.clone().text());
+  expect(await held.text()).toBe(await missing.text());
+  expect(reads).toBe(0);
+  expect(deliveries).toBe(0);
+  const authorized = await withDeliveryCut(f.target,
+    () => stack.access.canReadWork(f.member.principal, f.member.actor, f.target.resourceId),
+    async () => { deliveries++; return f.text; });
+  expect(authorized).toEqual({ status: 'unavailable-retry' });
+  expect(deliveries).toBe(0);
+  expect(await withDeliveryCut({ ...f.target, rights: undefined }, async () => false, async () => f.text))
+    .toEqual({ status: 'denied' });
+});
+
+test('a replay authorizes again before consulting the target owners or returning bytes', async () => {
+  const f = await fixture();
+  let authorizations = 0, reads = 0, deliveries = 0;
+  const target = { ...f.target, rights: { deliveryCutSnapshot: async (resourceId: string, assessmentId: string | null) => {
+    reads++;
+    return f.target.rights.deliveryCutSnapshot(resourceId, assessmentId);
+  } } };
+  expect(await withDeliveryCut(target, async () => ++authorizations === 1, async () => {
+    deliveries++;
+    await f.moveRights();
+    return f.text;
+  })).toEqual({ status: 'denied' });
+  expect(authorizations).toBe(2);
+  expect(reads).toBe(2);
+  expect(deliveries).toBe(1);
 });
 
 test('a not_supported assessment committed during the final query discards the bytes', async () => {
@@ -136,7 +192,7 @@ test('the none token changes when a first Work/body assessment appears', async (
   const before = await target.rights.deliveryCutSnapshot(target.resourceId, null);
   expect(before.assessmentHead).toBeNull();
   let attempts = 0;
-  const result = await withDeliveryCut(target, async () => {
+  const result = await withDeliveryCut(target, async () => true, async () => {
     if (++attempts === 1) await target.rights.assess(f.authority.principal, { ...f.input,
       material: { ...publicDomainWorkMaterial(work.work), provider: 'gutenberg' },
       expectedAssessment: null, idempotencyKey: randomUUID() });
@@ -241,7 +297,7 @@ test('concurrent intake for one case counts its hold once and release restores d
 test('movement on both attempts returns a typed retry outcome without retaining either value', async () => {
   const f = await fixture();
   let attempts = 0;
-  const result = await withDeliveryCut(f.target, async () => {
+  const result = await withDeliveryCut(f.target, async () => true, async () => {
     attempts++;
     await f.moveRights();
     return { serializedJson: f.text };
@@ -254,7 +310,7 @@ test('movement on both attempts returns a typed retry outcome without retaining 
 test('a single head movement replays the full callback and returns only the fresh value', async () => {
   const f = await fixture();
   let attempts = 0;
-  const result = await withDeliveryCut(f.target, async () => {
+  const result = await withDeliveryCut(f.target, async () => true, async () => {
     attempts++;
     if (attempts === 1) await f.moveRights();
     return attempts;
@@ -270,7 +326,7 @@ test('token reads cost one indexed statement per store per snapshot, with and wi
   try {
     for (const moving of [false, true]) {
       content.mockClear(); access.mockClear();
-      await withDeliveryCut(f.target, async () => { if (moving) await f.moveRights(); return f.text; });
+      await withDeliveryCut(f.target, async () => true, async () => { if (moving) await f.moveRights(); return f.text; });
       const contentReads = content.mock.calls.filter(([query]) => typeof query === 'string'
         && query.includes('AS assessment_head'));
       const accessReads = access.mock.calls.filter(([query]) => typeof query === 'string'
@@ -299,18 +355,18 @@ test('held and missing owners fail closed before the callback; owner failures af
   const f = await fixture();
   let attempts = 0;
   const work = async () => { attempts++; return f.text; };
-  expect(await withDeliveryCut({ resourceId: f.target.resourceId, assessmentId: f.target.assessmentId }, work))
+  expect(await withDeliveryCut({ resourceId: f.target.resourceId, assessmentId: f.target.assessmentId }, async () => true, work))
     .toEqual({ status: 'unavailable-retry' });
   await f.hold();
-  expect(await withDeliveryCut(f.target, work)).toEqual({ status: 'unavailable-retry' });
+  expect(await withDeliveryCut(f.target, async () => true, work)).toEqual({ status: 'unavailable-retry' });
   expect(attempts).toBe(0);
   let reads = 0;
   const failure = { ...f.target, rights: { deliveryCutSnapshot: async () => {
     if (++reads === 2) throw new RightsUnavailable('owner read failed');
     return { assessmentHead: null, preservationVersion: '0', held: false };
   } } };
-  expect(await withDeliveryCut(failure, work)).toEqual({ status: 'unavailable-retry' });
+  expect(await withDeliveryCut(failure, async () => true, work)).toEqual({ status: 'unavailable-retry' });
   expect(attempts).toBe(1);
-  await expect(withDeliveryCut({ ...f.target, resourceId: 'invalid' }, work))
+  await expect(withDeliveryCut({ ...f.target, resourceId: 'invalid' }, async () => true, work))
     .rejects.toBeInstanceOf(RightsInvalid);
 });
