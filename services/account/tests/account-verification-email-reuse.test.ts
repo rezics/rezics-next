@@ -2,12 +2,36 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { createAuthMiddleware, createEmailVerificationToken } from 'better-auth/api';
 import { queueAfterTransactionHook } from '@better-auth/core/context';
+import { decodeJwt } from 'jose';
 import { bootstrapOperators } from '../src/operators.ts';
 import { accountFixture } from './account-fixture.ts';
 import { cookies, recoveryProof } from './recovery-fixture.ts';
 
 const link = (text: string) => /https?:\/\/\S+/.exec(text)![0];
 type Fixture = Awaited<ReturnType<typeof accountFixture>>;
+
+test('ordinary verification commits the verified user and session with and without callback', async () => {
+  const f = await accountFixture();
+  try {
+    for (const callback of [true, false]) {
+      const email = `ordinary-${callback}@example.test`;
+      expect((await f.request('/api/auth/sign-up/email', { email, name: 'Ordinary',
+        password: 'ordinary sufficiently long password' })).status).toBe(200);
+      await f.email.drain();
+      const url = new URL(link(f.messages.at(-1)!.text));
+      const id = (await f.pool.query('SELECT id FROM "user" WHERE email = $1', [email])).rows[0].id;
+      expect(decodeJwt(url.searchParams.get('token')!)).toMatchObject({ email,
+        rezics_account_verification_user_id: id, rezics_account_recovery_generation: '0' });
+      if (!callback) url.searchParams.delete('callbackURL');
+      const response = await f.request(url.toString());
+      if (callback) expect(new URL(response.headers.get('location')!, f.baseURL).searchParams.get('error')).toBeNull();
+      else expect(await response.json()).toMatchObject({ status: true });
+      expect((await f.pool.query('SELECT "emailVerified" FROM "user" WHERE id = $1', [id])).rows[0].emailVerified).toBe(true);
+      expect(await (await f.request('/api/auth/get-session', undefined, cookies(response))).json())
+        .toMatchObject({ user: { id, emailVerified: true } });
+    }
+  } finally { await f.close(); }
+}, 60_000);
 
 for (const initialOwner of ['original', 'absent', 'provider-lookup'] as const) {
   test(`verification rejects email reuse across the ${initialOwner} lookup boundary`, async () => {
