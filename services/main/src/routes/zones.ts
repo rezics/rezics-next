@@ -199,6 +199,8 @@ const publicationRead = t.Object({ profile: t.Literal('zone-presentation-respons
   moduleData: t.Array(t.Any()),
   navigation: t.Array(t.Object({ occurrence: ref, segment: t.String(), target: ref,
     kind: t.Union([t.Literal('document'), t.Literal('index')]), name: readName }), { maxItems: 50 }),
+  navigationRevision: t.Nullable(ref), navigationNext: t.Nullable(t.String({ maxLength: 2048 })),
+  navigationComplete: t.Boolean(),
   renderTokens: t.Object({ ...ZonePresentation.properties.tokens.properties,
     textOnAccent: t.String({ pattern: '^#[0-9a-f]{6}$' }) }),
   execution,
@@ -334,15 +336,15 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       catch (error) { return routeError(error); }
     })
     .get('/v1/zones/:id/presentation', { params: t.Object({ id: groupUuid }),
-      query: t.Object({ actingSubject: t.Optional(ref),
+      query: t.Object({ actingSubject: t.Optional(ref), after: t.Optional(t.String({ maxLength: 2048 })),
         safeTheme: t.Optional(t.Literal('1')), 'safe-theme': t.Optional(t.Literal('1')),
         viewerOptOut: t.Optional(t.Literal('1')) },
       { additionalProperties: false }), response: { 200: publicationRead, ...authorizedReadProblems } },
     async ({ request, params, query }: { request: Request; params: { id: string };
-      query: { actingSubject?: string; safeTheme?: '1'; 'safe-theme'?: '1'; viewerOptOut?: '1' } }) => {
+      query: { actingSubject?: string; after?: string; safeTheme?: '1'; 'safe-theme'?: '1'; viewerOptOut?: '1' } }) => {
       try {
         const zone = `https://rezics.com/id/${params.id}`;
-        return await readZonePresentation(work, request, zone, query.actingSubject, async (state, navigation, viewer, visibleSlides) => {
+        return await readZonePresentation(work, request, zone, query.actingSubject, async (state, navigation, viewer, visibleSlides, continuation) => {
           let moduleData = await readZoneModuleData(work.environment, state.configuration);
           let slideMedia = await readZoneCampaignArt(work.media?.store, state.realm,
             state.presentation.slides, { environment: work.environment, zone });
@@ -366,7 +368,9 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
               : zonePackageExecution(await readFirstPartyTheme(work.environment, theme.slice(-36)), zone)
             : { state: 'fallback' as const, reason: 'none_approved' as const });
           const etag = `"${hash(JSON.stringify({ revision: state.revision, address: state.address,
-            listing: state.listing, discovery: state.discovery, navigation, moduleData, slideMedia, execution, home }))}"`;
+            listing: state.listing, discovery: state.discovery, navigation,
+            navigationRevision: continuation.navigationRevision, navigationComplete: continuation.navigationComplete,
+            moduleData, slideMedia, execution, home }))}"`;
           const headers = { etag, vary: 'accept-language, x-rezics-display-languages',
             ...pageDiscoveryHeaders(state.discovery),
             'cache-control': !viewer.principal && state.disclosure === 'public' && execution.state === 'fallback'
@@ -377,7 +381,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
             address: state.address,
             name: state.name, language: state.language, direction: state.direction,
             official: state.official, revision: state.revision, presentation,
-            navigation, moduleData, slideMedia, ...(home ? { home } : {}), renderTokens: zoneRenderTokens(execution.state === 'active'
+            navigation, ...continuation, moduleData, slideMedia, ...(home ? { home } : {}), renderTokens: zoneRenderTokens(execution.state === 'active'
               || execution.state === 'package'
               || execution.reason === 'none_approved'
               ? presentation.tokens : DEFAULT_ZONE_PRESENTATION.tokens),
@@ -390,7 +394,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
               maxResolvedCollections: state.cost.maxResolvedCollections * 2,
               maxModuleGraphReads: state.cost.maxModuleGraphReads * 2,
             } : state.cost }, { headers });
-        });
+        }, query.after);
       } catch (error) {
         if (error instanceof ZoneRouteMissing) return problem(404, 'zone_unavailable', 'Zone is unavailable');
         return routeError(error);

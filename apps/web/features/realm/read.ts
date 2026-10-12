@@ -1,4 +1,5 @@
 import { cache } from 'react';
+import { completePublicNavigation } from './public-navigation.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import { mainApiWithToken, readPlatformAccess } from '../api/main.ts';
 import { operationOpen } from '../api/platform-access.ts';
@@ -179,8 +180,12 @@ const readPrivateRealm = cache(async (ref: string, locale: UiLocale, address?: R
   );
 });
 
-export const readPresentation = cache(async (zone: string): Promise<Loaded<ZonePresentationRead>> =>
-  settle(() => main().v1.zones({ id: zone }).presentation.get({ query: {} })),
+export const readPresentation = cache(async (zone: string, after?: string): Promise<Loaded<ZonePresentationRead>> =>
+  settle(() => main().v1.zones({ id: zone }).presentation.get({ query: { after } }), after),
+);
+
+export const readCompletePresentation = cache(async (zone: string): Promise<Loaded<ZonePresentationRead>> =>
+  completePublicNavigation(after => readPresentation(zone, after)),
 );
 
 /**

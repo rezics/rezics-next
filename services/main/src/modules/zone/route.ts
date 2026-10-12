@@ -12,7 +12,8 @@ import { NATIVE_ID, readCompositionHeader, type CompositionHeader } from '../str
 import { readCompositionOccurrenceByQualifierKey } from '../structure/read.ts';
 import { DATASET, GRAPHS, RV, WORK_SEMANTIC_TYPES, iri, lit } from '../work/activate.ts';
 import { decodeReadCursor, encodeReadCursor, WorkReadSession, WorkReadMoved,
-  WorkReadExpired, WorkReadLimit, WorkReadMissing, WorkReadUnavailable, type ReadPosition } from '../work/read-session.ts';
+  WorkReadExpired, WorkReadLimit, WorkReadMissing, WorkReadUnavailable, readDependencyToken,
+  type ReadPosition } from '../work/read-session.ts';
 import { WORK_READ_COST } from '../work/read-contract.ts';
 import { SearchSnapshotMoved } from '../work/search-readiness.ts';
 import { readSerialSummaries } from '../work/summary-serial.ts';
@@ -39,6 +40,11 @@ type Row = NonNullable<SparqlResult['results']>['bindings'][number];
 export interface ZoneMountBinding { occurrence: string; segment: string; target: string; key?: 'alias' | 'id' }
 export interface ZoneNavigationItem extends ZoneMountBinding {
   kind: 'document' | 'index'; name: Available['name'];
+}
+export interface ZoneNavigationContinuation {
+  navigationRevision: string | null;
+  navigationNext: string | null;
+  navigationComplete: boolean;
 }
 interface ResourceBinding { id: string; types: string[]; name: Available['name']; address: CanonicalAddress }
 interface RouteBasis { profile: 'zone-route-v1'; zone: string; path: string;
@@ -239,20 +245,30 @@ async function navigationHeader(read: RouteRead, state: Publication) {
   return header;
 }
 
-/** ≤50 public mounts in immutable Structure order. Target names use the same
- * current disclosure reader as routes, including localized Collection names. */
+/** Each page has ≤50 public mounts in immutable Structure order. A cursor
+ * retains the publication, never the reader's authority or target disclosure. */
 export function readZonePresentation<T>(work: MainWorkDependencies, request: Request,
   zone: string, actingSubject: string | undefined,
   present: (state: Publication, navigation: ZoneNavigationItem[], viewer: ZoneRouteViewer,
-    visibleSlides: (slides: Publication['presentation']['slides']) => Promise<Publication['presentation']['slides']>) => Promise<T>) {
+    visibleSlides: (slides: Publication['presentation']['slides']) => Promise<Publication['presentation']['slides']>,
+    continuation: ZoneNavigationContinuation) => Promise<T>, after?: string) {
   return boundedRead(work, request, actingSubject, async read => {
     const state = await readZonePublication(work.environment, zone);
     await read.zone(state);
-    if (state.documentSite && !state.bundle) return present(state, [], read.viewer,
-      slides => visibleZoneSlides(read, slides));
+    if (state.documentSite && !state.bundle) {
+      if (after) throw new WorkReadExpired('Zone publication changed; restart from the first page');
+      return present(state, [], read.viewer, slides => visibleZoneSlides(read, slides),
+        { navigationRevision: null, navigationNext: null, navigationComplete: true });
+    }
     const header = await navigationHeader(read, state);
+    const revision = state.bundle?.navigationRevision ?? header.head;
+    const binding = ['zone-public-navigation-v1', state.zone, header.structure,
+      read.viewer.principal?.issuer, read.viewer.principal?.subject, actingSubject];
+    const navigationPosition = { ...read.position,
+      dependencyToken: readDependencyToken([state.revision, revision]) };
+    const cursor = decodeReadCursor(after, binding, navigationPosition);
     const page = await readVisibleCompositionPage(work.environment, { structure: header.structure, header,
-      ...(state.bundle ? { revision: state.bundle.navigationRevision } : {}),
+      revision, ...(cursor ? { after: cursor.after } : {}),
       limit: ZONE_ROUTE_COST.maxNavigation,
       canReadTarget: async target => {
         const summary = await read.target(target);
@@ -271,7 +287,9 @@ export function readZonePresentation<T>(work: MainWorkDependencies, request: Req
     await read.targets([...new Set(items.map(item => item.target))]);
     return present(await visibleZonePresentation(read, state),
       items.filter(item => read.summaries.get(item.target)), read.viewer,
-      slides => visibleZoneSlides(read, slides));
+      slides => visibleZoneSlides(read, slides), { navigationRevision: page.revision,
+        navigationNext: page.next ? encodeReadCursor(binding, navigationPosition, page.next) : null,
+        navigationComplete: page.next === null });
   });
 }
 
