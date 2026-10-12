@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { startMediaStack } from '../../../tests/qa/integration/media-support.ts';
 import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts';
-import { activateMetadataWork, initializeFreshGraph, metadataWorkRequestDigest,
+import { activateMetadataWork, DATASET, initializeFreshGraph, metadataWorkRequestDigest,
   type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { editMetadataWork, metadataWorkEditDigest, StaleWorkHead,
   workEditReceiptIri } from '../src/modules/work/edit.ts';
@@ -29,8 +29,11 @@ test('SYS04/SYS05/SYS12 partial: retained RDF outbox and durable handoff', async
     // This test owns one disposable QA project and exercises a source beginning at zero.
     await fuseki.resetDataset();
     await pool.query('TRUNCATE relay.delivered_event, relay.delivered_batch, relay.checkpoint CASCADE');
-    const lineage = { dataEpoch: Bun.randomUUIDv7(), routingEpoch: '1' };
+    const partitionLease = stack.env.partitionLease!;
+    const route = await partitionLease.routes.current('graph', DATASET);
+    const lineage = { dataEpoch: Bun.randomUUIDv7(), routingEpoch: route.routingEpoch };
     const env: WorkActivationEnvironment = { ...stack.env, fuseki, lineage,
+      partitionLease: { ...partitionLease, leaseEpoch: route.leaseEpoch },
       objectDirectory: join(state, 'objects'), candidateDirectory: join(state, 'candidates'),
       repositoryRoot: root, python: 'python3' };
     await initializeFreshGraph(fuseki, lineage);
