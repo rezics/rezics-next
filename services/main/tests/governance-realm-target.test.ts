@@ -421,7 +421,11 @@ test('emitted Realm commands enforce authored SHACL and atomic guards in native 
     mutation: '', expected: 'committed' });
   cpSync(join(module, 'pom.xml'), join(build, 'pom.xml'));
   cpSync(join(module, 'src/main'), join(build, 'src/main'), { recursive: true });
-  cpSync(join(root, 'generated/model'), join(build, 'profiles'), { recursive: true });
+  mkdirSync(join(build, 'profiles'));
+  for (const version of [1, 2, 3]) cpSync(
+    join(root, `generated/model/shapes/space-realm-v${version}.ttl`),
+    join(build, `profiles/space-realm-v${version}.ttl`),
+  );
   mkdirSync(join(build, 'tmp'));
   const java = join(build, 'src/test/java/com/rezics/jena');
   mkdirSync(java, { recursive: true });
@@ -436,19 +440,41 @@ import java.util.*;
 import org.apache.jena.atlas.json.*;
 import org.apache.jena.graph.*;
 import org.apache.jena.query.*;
+import org.apache.jena.rdf.model.ModelFactory;
+import org.apache.jena.riot.*;
 import org.apache.jena.tdb2.TDB2Factory;
 import org.apache.jena.update.*;
 import org.junit.Test;
 public class RealmTargetOwnerContractTest {
   private static Node iri(String value) { return NodeFactory.createURI(value); }
+  private static void phase(String value) {
+    System.out.println("REALM_NATIVE_PHASE " + System.currentTimeMillis() + " " + value);
+  }
   private static List<String> strings(JsonValue values) {
     List<String> result = new ArrayList<>();
     for (JsonValue value : values.getAsArray()) result.add(value.getAsString().value());
     return result;
   }
-  @Test public void emittedOwnerBytesValidateAndFenceInTheWritingTransaction() throws Exception {
-    ProfileRegistry profiles = ProfileRegistry.load(Path.of("profiles"));
+  @Test(timeout = 90_000) public void emittedOwnerBytesValidateAndFenceInTheWritingTransaction() throws Exception {
+    phase("profiles-start");
     var scenarios = JSON.parseAny(Files.readString(Path.of("cases.json"))).getAsArray();
+    Map<String, ProfileRegistry.Profile> profiles = new LinkedHashMap<>();
+    // Load only the three requested reviewed artifacts, through the native
+    // profile compiler; unrelated population shapes are outside this proof.
+    for (JsonValue item : scenarios) for (JsonValue raw : item.getAsObject().get("command")
+        .getAsObject().get("validations").getAsArray()) {
+      JsonObject entry = raw.getAsObject();
+      String id = entry.get("profile").getAsString().value();
+      if (profiles.containsKey(id)) continue;
+      Path file = Path.of("profiles", id + ".ttl");
+      String sha = HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+        .digest(Files.readAllBytes(file)));
+      assertEquals(id, entry.get("sha256").getAsString().value(), sha);
+      var model = ModelFactory.createDefaultModel();
+      RDFDataMgr.read(model, file.toUri().toString(), Lang.TTL);
+      profiles.put(id, new ProfileRegistry.Profile(sha, model, null));
+      phase("profile-loaded " + id);
+    }
     for (JsonValue item : scenarios) {
       JsonObject scenario = item.getAsObject(), command = scenario.get("command").getAsObject();
       String name = scenario.get("name").getAsString().value();
@@ -456,9 +482,11 @@ public class RealmTargetOwnerContractTest {
       String digest = command.get("digest").getAsString().value();
       String update = command.get("update").getAsString().value();
       String expected = scenario.get("expected").getAsString().value();
+      phase(name + " tdb-open");
       var data = TDB2Factory.connectDataset(Files.createTempDirectory(
         Path.of(System.getProperty("java.io.tmpdir")), "realm-target-").toString()).asDatasetGraph();
       try {
+        phase(name + " seed-start");
         data.begin(ReadWrite.WRITE);
         try {
           UpdateAction.parseExecute(scenario.get("seed").getAsString().value(), DatasetFactory.wrap(data));
@@ -466,13 +494,16 @@ public class RealmTargetOwnerContractTest {
           if (!mutation.isEmpty()) UpdateAction.parseExecute(mutation, DatasetFactory.wrap(data));
           data.commit();
         } finally { data.end(); }
+        phase(name + " command-parse");
         var plan = CommandPolicy.parse(update, receipt);
         String outcome = "guard-unmatched";
         data.begin(ReadWrite.WRITE);
         try {
           var before = CommandInvariant.readControl(data);
           var staged = new CommandOverlay(data);
+          phase(name + " command-execute");
           UpdateAction.execute(plan.request(), DatasetFactory.wrap(staged));
+          phase(name + " command-executed");
           if (staged.contains(iri(CommandPolicy.RECEIPTS), iri(receipt), Node.ANY, Node.ANY)) {
             outcome = "committed";
             for (JsonValue raw : command.get("validations").getAsArray()) {
@@ -483,9 +514,11 @@ public class RealmTargetOwnerContractTest {
               var validation = new CommandService.Validation(id, profile,
                 entry.get("shape").getAsString().value(), strings(entry.get("focus")),
                 strings(entry.get("graphs")), Map.of());
+              phase(name + " validate " + entry.get("shape").getAsString().value());
               if (CommandService.validateOne(staged, validation) != null) outcome = "invalid";
             }
             if (outcome.equals("committed")) {
+              phase(name + " receipt-invariant");
               assertNull(name, CommandInvariant.check(staged, receipt, digest, plan, before));
               staged.apply(); data.commit();
             } else data.abort();
@@ -502,13 +535,14 @@ public class RealmTargetOwnerContractTest {
             iri(receipt), iri("${RV}work"), iri("${realm}")));
         } finally { data.end(); }
         System.out.println("REALM_NATIVE_CASE " + name + " " + outcome);
-      } finally { data.close(); }
+      } finally { phase(name + " tdb-close"); data.close(); }
     }
   }
 }
 `);
   const dockerEnv = loadDockerEnvironment();
   const container = `rezics-realm-target-native-${randomUUID()}`;
+  let nativePassed = false;
   try {
     const child = Bun.spawn(['docker', 'run', '--rm', '--name', container,
       '--user', `${process.getuid!()}:${process.getgid!()}`,
@@ -525,15 +559,16 @@ public class RealmTargetOwnerContractTest {
     ]);
     const log = join(root, '.temp/goal/realm-target-native.log');
     mkdirSync(join(root, '.temp/goal'), { recursive: true });
-    writeFileSync(log, `${stdout}\n${stderr}`);
+    writeFileSync(log, `Native probe artifacts: ${build}\n${stdout}\n${stderr}`);
     expect(code, `Native Realm owner probe: ${log}`).toBe(0);
     expect(stdout).toContain('Tests run: 1, Failures: 0, Errors: 0');
     expect(stdout.split('\n').filter((line) => line.startsWith('REALM_NATIVE_CASE '))).toHaveLength(cases.length);
+    nativePassed = true;
   } finally {
     const cleanup = Bun.spawn(['docker', 'rm', '-f', container], {
       env: dockerEnv, stdout: 'ignore', stderr: 'ignore', timeout: 30_000,
     });
     await cleanup.exited;
-    rmSync(build, { recursive: true, force: true });
+    if (nativePassed) rmSync(build, { recursive: true, force: true });
   }
 }, 280_000);
