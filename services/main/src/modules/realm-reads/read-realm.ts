@@ -54,17 +54,16 @@ export async function readRealmHeader(session: WorkReadSession, realm: string) {
   const governance = session.deps.governance?.rules;
   let snapshot: Awaited<ReturnType<NonNullable<typeof governance>['realmHeaderRules']>> | undefined;
   if (governance) {
-    try { snapshot = await governance.realmHeaderRules(realm, profile?.rules ?? null); }
+    try { snapshot = await governance.realmHeaderRules(realm); }
     catch { throw new WorkReadUnavailable('Realm governance rule is unavailable'); }
   }
-  const sourceRules = snapshot?.rules ?? profile?.rules;
-  const rules = sourceRules ? sourceRules.map(rule => {
+  const rules = snapshot?.rules?.map(rule => {
     let governanceRule = rule.governanceRule;
     if (governanceRule && snapshot?.heads.get(governanceRule.ref)?.revision !== governanceRule.revision) {
       governanceRule = null;
     }
     return { id: rule.id, title: selected(rule.title), body: selected(rule.body), governanceRule };
-  }) : null;
+  }) ?? null;
   if (profile?.count.kind === 'exact' && !snapshot && !session.deps.access.publicRealmCount) {
     throw new WorkReadUnavailable('Realm count owner is unavailable');
   }
@@ -120,7 +119,7 @@ export async function readRealmLanding(session: WorkReadSession, realm: string) 
     const language = names[0].name['xml:lang'] ?? 'und';
     const name = published ? selected(published.profile.name)
       : selected({ original: language, labels: { [language]: names[0].name.value } });
-    const rules = await session.deps.governance?.rules?.publishedRealmRules(realm, true) ?? published?.profile.rules ?? [];
+    const rules = await session.deps.governance?.rules?.publishedRealmRules(realm, true) ?? [];
     const current = await readRealmPolicy(session.deps.environment, realm);
     if (!current || current.revision !== policy.revision || current.visibility !== 'private'
       || current.admission !== 'request') throw new WorkReadMissing('Realm is unavailable');

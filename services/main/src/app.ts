@@ -113,7 +113,7 @@ import { libraryRoutes } from './routes/library.ts';
 import { libraryImportsRoutes } from './routes/library-imports.ts';
 import { libraryExportRoutes } from './routes/library-export.ts';
 import { libraryCopiesRoutes } from './routes/library-copies.ts';
-import { realmProfileRoutes } from './routes/realm-profile.ts';
+import { realmProfileRoutes, realmProfileSchemaError } from './routes/realm-profile.ts';
 import { workMetadataRoutes } from './routes/work-metadata.ts';
 import { releaseRoutes } from './routes/releases.ts';
 import { realizationRoutes } from './routes/realizations.ts';
@@ -351,6 +351,8 @@ export function createMainApp(fuseki: FusekiClient, work?: SearchRouteDependenci
       work?.types?.endRequest?.();
     })
     .error(({ error, request }) => {
+      const profileProblem = realmProfileSchemaError(error, request);
+      if (profileProblem) return profileProblem;
       const wikiProblem = wikiSchemaError(error, request);
       if (wikiProblem) return wikiProblem;
       if (error instanceof ValidationError || error instanceof ParseError) {

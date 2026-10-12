@@ -18,11 +18,10 @@ function rule(id: string, title: string) {
   };
 }
 
-function profile(rules: PublicProfile['rules']): PublicProfile {
+function profile(): PublicProfile {
   return {
     name: { original: 'en', labels: { en: 'Rank community' } },
     description: { original: 'en', labels: { en: 'Read together' } },
-    rules,
     moderators: [],
     iconSelection: null,
     bannerSelection: null,
@@ -32,7 +31,7 @@ function profile(rules: PublicProfile['rules']): PublicProfile {
 
 /** The header read uses the real profile parser and the real governance store.
  * Graph identity and the summary card are already fenced by the page. */
-function headerSession(document: unknown, rules: PublicProfile['rules']) {
+function headerSession(document: unknown, legacyRules: unknown[]) {
   const calls: unknown[][] = [];
   const pool = {
     query: async (_sql: string, values: unknown[]) => {
@@ -60,7 +59,7 @@ function headerSession(document: unknown, rules: PublicProfile['rules']) {
             if (!sparql.includes('rv:publicProfileHead')) throw new Error('Unexpected profile query');
             return { results: { bindings: [{
               revision: { type: 'uri', value: 'urn:rezics:revision:profile' },
-              payload: { type: 'literal', value: JSON.stringify(profile(rules)) },
+              payload: { type: 'literal', value: JSON.stringify({ ...profile(), rules: legacyRules }) },
               model: { type: 'uri', value: REALM_PROFILE },
             }] } };
           },
@@ -73,7 +72,7 @@ function headerSession(document: unknown, rules: PublicProfile['rules']) {
   return { session, calls };
 }
 
-test('a settings document that lists rules stays the header source', async () => {
+test('settings rules stay the header source when an old profile also has rules', async () => {
   const managed = rule('stay', 'Stay');
   const { session } = headerSession(
     { profile: 'realm-settings-rules-v2', public: true, rules: [managed] },

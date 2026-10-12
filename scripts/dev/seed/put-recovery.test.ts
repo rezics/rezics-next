@@ -120,9 +120,8 @@ test('G-909: progress refresh retains its selected revision and position', async
   expect(recovery?.body).toEqual({ ...body, expectedVersion: 4 });
 });
 
-test('G-909: Realm profile reconciliation checks every language and rule body', async () => {
-  const publication = { name: label, description: label, rules: [{ id: 'welcome', title: label,
-    body: label, governanceRule: null }], count: { kind: 'exact', value: null }, moderators: [id],
+test('G-909: Realm profile reconciliation checks each profile language and leaves rules to settings', async () => {
+  const publication = { name: label, description: label, count: { kind: 'exact', value: null }, moderators: [id],
     iconSelection: null, bannerSelection: null };
   const body = { ...actor, profile: 'realm-public-profile-v2', expectedHead: null, publication };
   const read = async (route: string) => {
@@ -137,7 +136,7 @@ test('G-909: Realm profile reconciliation checks every language and rule body', 
   const path = `/v1/realms/${uuid}/profile`;
   expect((await recoverSeedPut(path, body, read, {}))?.matches).toBe(true);
   const changed = structuredClone(body);
-  changed.publication.rules[0]!.body.labels['zh-Hans'] = '新规则';
+  changed.publication.description.labels['zh-Hans'] = '新简介';
   expect((await recoverSeedPut(path, changed, read, {}))?.matches).toBe(false);
   expect((await recoverSeedPut(path, body, async route => ({ ...await read(route),
     profileContract: 'realm-public-profile-v1' }), {}))?.matches).toBe(false);

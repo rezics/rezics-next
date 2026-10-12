@@ -101,13 +101,9 @@ export async function publishRuleRevision(client: PoolClient, principalId: strin
 export class GovernanceRules implements RuleBasis {
   constructor(private readonly pool: Pool) {}
 
-  /** The header's managed rules and every scoped link share one statement
-   * snapshot. The fallback is the graph-fenced profile, never a request cache. */
-  async realmHeaderRules(
-    realm: string,
-    fallback: ReturnType<typeof currentRealmRulesDocument>['rules'] | null,
-  ) {
-    if (!agentPattern.test(realm) || (fallback?.length ?? 0) > MAX_RULES) {
+  /** The header's managed rules and every scoped link share one statement snapshot. */
+  async realmHeaderRules(realm: string) {
+    if (!agentPattern.test(realm)) {
       throw new GovernanceInvalid('Invalid Realm header rules');
     }
     const row = (
@@ -128,7 +124,6 @@ export class GovernanceRules implements RuleBasis {
         SELECT rule#>>'{governanceRule,ref}' AS ref FROM (SELECT rule FROM jsonb_array_elements(
           CASE WHEN jsonb_typeof((SELECT document->'rules' FROM document))='array'
             THEN (SELECT document->'rules' FROM document) ELSE '[]'::jsonb END) rule LIMIT ${MAX_RULES}) bounded
-        UNION SELECT rule#>>'{governanceRule,ref}' FROM jsonb_array_elements($3::jsonb) rule
       ) SELECT fence.open,(SELECT document FROM document) AS document,
         COALESCE((SELECT jsonb_agg(jsonb_build_object('ref',h.ref,'revision',h.revision::text,'digest',h.digest))
           FROM access.governance_rule_head h WHERE h.scope_id=$2 AND h.ref IN (SELECT ref FROM refs)), '[]'::jsonb) AS heads,
@@ -139,11 +134,11 @@ export class GovernanceRules implements RuleBasis {
       FROM fence`,
         // $2 is already `governance:realm:` plus the Realm IRI. The member count
         // stays in this statement so a ruled Realm does not take another round trip.
-        [realmRulesRef(realm), `governance:realm:${realm}`, JSON.stringify(fallback ?? [])],
+        [realmRulesRef(realm), `governance:realm:${realm}`],
       )
     ).rows[0];
     if (!row?.open) throw new GovernanceUnavailable('Access is held for recovery');
-    let rules = fallback;
+    let rules: ReturnType<typeof currentRealmRulesDocument>['rules'] | null = null;
     try {
       rules = currentRealmRulesDocument(
         row.document && typeof row.document === 'object'

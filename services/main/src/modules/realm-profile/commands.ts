@@ -4,7 +4,6 @@ import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry,
   type RegisteredAdmission } from '../access/admission.ts';
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
 import { avatarSelectionEligible, DEFAULT_MEDIA_CONTEXT, type MediaStore } from '../media/store.ts';
-import type { GovernanceRules } from '../governance/rules.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, IdempotencyConflict, PendingActivation,
   type WorkActivationEnvironment } from '../work/activate.ts';
@@ -191,8 +190,7 @@ async function chosenModerators(env: WorkActivationEnvironment, realm: string,
  * graph calls including rejection reconciliation, two Media point reads and R
  * scoped governance head probes. No member or grant roster scan occurs. */
 export async function publishRealmProfile(env: WorkActivationEnvironment, media: MediaStore | undefined,
-  account: Account, access: Access, request: Request, input: ProfilePublicationInput,
-  governance?: Pick<GovernanceRules, 'current'>) {
+  account: Account, access: Access, request: Request, input: ProfilePublicationInput) {
   if (!nativeId.test(input.realm) || !nativeId.test(input.actingSubject)
     || (input.expectedHead !== null && !nativeId.test(input.expectedHead))) {
     throw new RealmProfileInvalid('Realm profile identity is invalid');
@@ -222,17 +220,6 @@ export async function publishRealmProfile(env: WorkActivationEnvironment, media:
     try {
       await imageSelection(media, profile.iconSelection, input.realm, DEFAULT_MEDIA_CONTEXT);
       await imageSelection(media, profile.bannerSelection, input.realm, input.realm);
-      for (const rule of profile.rules) {
-        if (!rule.governanceRule) continue;
-        if (!governance) throw new RealmProfileUnavailable('Governance rule owner is unavailable');
-        let current: Awaited<ReturnType<GovernanceRules['current']>>;
-        try { current = await governance.current(rule.governanceRule.ref,
-          `governance:realm:${input.realm}`); }
-        catch { throw new RealmProfileUnavailable('Governance rule owner is unavailable'); }
-        if (current?.revision !== rule.governanceRule.revision) {
-          throw new RealmProfileInvalid('Linked governance rule revision is unavailable');
-        }
-      }
       const chosen = await chosenModerators(env, input.realm, profile.moderators);
       if (chosen.size !== profile.moderators.length) {
         throw new RealmProfileInvalid('Public moderator choice is missing');

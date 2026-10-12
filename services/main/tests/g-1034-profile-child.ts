@@ -538,26 +538,19 @@ try {
       moderators.push(moderator);
     }
     let profileHead: string | null = null;
-    // Realm creation stores an empty settings rules document, and the header
-    // reads that document. Advance it with the same rules the profile publishes.
-    const rulesRef = `urn:rezics:realm-rules:${realm.slice(-36)}`;
+    // Realm settings own the rules document; profile publication carries none.
     for (const count of [0, 1, 12]) {
-      const currentRules = await rules.current(rulesRef, `governance:realm:${realm}`);
-      await api.command(`g1034:rules-document:${count}`, {
-        method: 'POST',
-        path: '/v1/governance/rules',
+      const currentSettings = await api.read<Awaited<ReturnType<typeof realmAdmin.settings>>>(
+        `${root}/settings?actingSubject=${encodeURIComponent(actor)}`);
+      await api.command(`g1034:settings:${count}`, {
+        method: 'PUT',
+        path: `${root}/settings`,
         body: {
-          profile: 'governance-rule-v1',
-          ref: rulesRef,
-          scopeId: `governance:realm:${realm}`,
           actingSubject: actor,
-          expectedRevision: currentRules?.revision ?? null,
-          document: {
-            profile: 'realm-settings-rules-v2',
-            public: true,
-            rules: allRules.slice(0, count),
-          },
-          idempotencyKey: `g1034:rules-document:${count}`,
+          expectedGeneration: currentSettings.generation,
+          expectedRulesRevision: currentSettings.ruleBasis.revision,
+          reason: 'Measure settings-owned rules',
+          settings: { ...currentSettings.settings, rules: allRules.slice(0, count) },
         },
       });
       const published: { revision: string } = await api.command<{ revision: string }>(
@@ -572,7 +565,6 @@ try {
             publication: {
               name: { original: 'en', labels: { en: 'Rank community' } },
               description: { original: 'en', labels: { en: 'Read together' } },
-              rules: allRules.slice(0, count),
               moderators: moderators.slice(0, count === 12 ? 16 : count),
               iconSelection: null,
               bannerSelection: null,

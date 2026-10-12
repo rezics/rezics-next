@@ -247,7 +247,6 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
       const publication = { ...names,
         iconSelection: selectedIcon, bannerSelection: selectedBanner,
         replyPolicy: visibility === 'public' ? 'members-direct' as const : 'moderated' as const,
-        rules: creationIntent.current?.initialSettings?.rules ?? publishedRules,
         count: { kind: 'exact' as const, value: null }, moderators: [] };
       const saved = await main.v1.realms({ realm: id }).profile.put({ profile: 'realm-public-profile-v2',
         expectedHead: null, actingSubject, publication },

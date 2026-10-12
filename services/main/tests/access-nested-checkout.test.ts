@@ -86,14 +86,14 @@ test('Alias-held WorkRead identity, recovery, Rules and count/admin leaves obser
         (ref,scope_id,revision,digest,document,principal_id,acting_subject,idempotency_key,request_digest)
         VALUES ($1,$2,1,$3,$4,$5,$6,$7,$3)`,
       [realmRulesRef(realm), `governance:realm:${realm}`, 'a'.repeat(64), document, principalId, actor, randomUUID()]);
-      expect((await rules.realmHeaderRules(realm, null)).rules?.map(rule => rule.id)).toEqual(['kind']);
+      expect((await rules.realmHeaderRules(realm)).rules?.map(rule => rule.id)).toEqual(['kind']);
       expect(await rules.publishedRealmRules(realm)).toBeNull();
       expect((await rules.publishedRealmRules(realm, true))?.map(rule => rule.id)).toEqual(['kind']);
       await client.query('UPDATE access.principal SET active=false WHERE id=$1', [principalId]);
       await expect(workRead(deps, signed, { actingSubject: actor }, async () => 'unreachable')).rejects.toBeInstanceOf(AccountAssertionDenied);
       await client.query('UPDATE access.recovery_fence SET open=false WHERE id');
       await expect(workRead(deps, anonymous, {}, async () => 'unreachable')).rejects.toBeInstanceOf(AdmissionUnavailable);
-      await expect(rules.realmHeaderRules(realm, null)).rejects.toBeInstanceOf(GovernanceUnavailable);
+      await expect(rules.realmHeaderRules(realm)).rejects.toBeInstanceOf(GovernanceUnavailable);
       await expect(rules.publishedRealmRules(realm, true)).rejects.toBeInstanceOf(GovernanceUnavailable);
       await expect(admission.publicRealmCount(realm)).rejects.toBeInstanceOf(AdmissionUnavailable);
       expect((await client.query('SELECT txid_current()::text AS id')).rows[0]!.id).toBe(id);

@@ -320,18 +320,18 @@ async function measure(dimension: string, scale: string, operation: string, path
     publishedRules.push({ id: `rule-${index}`, title: { original: 'en', labels: { en: `Rule ${index}` } },
       body: { original: 'en', labels: { en: 'Be kind' } }, governanceRule: { ref, revision: '1' } });
     if (![0,3,11].includes(index)) continue;
-    // Settings owns the current rules document; publish that owner through its API too.
-    const rulesKey = `g1026:rules-document:${index}`;
-    const rulesRef = `urn:rezics:realm-rules:${community.realm.slice(-36)}`;
-    const current = await rules.current(rulesRef);
-    await authorApi.command(rulesKey, { method: 'POST', path: '/v1/governance/rules', body: {
-      profile: 'governance-rule-v1', ref: rulesRef, scopeId: `governance:realm:${community.realm}`, actingSubject: actor,
-      expectedRevision: current?.revision ?? null, document: { profile: 'realm-settings-rules-v2', public: true,
-        rules: publishedRules }, idempotencyKey: rulesKey } });
+    // Publish the current rule document through the Realm settings command.
+    const settingsPath = `${root}/settings` as `/v1/${string}`;
+    const settings = await authorApi.read<Awaited<ReturnType<typeof admin.settings>>>(
+      `${settingsPath}?actingSubject=${encodeURIComponent(actor)}` as `/v1/${string}`);
+    await authorApi.command(`g1026:settings:${index}`, { method: 'PUT', path: settingsPath, body: {
+      actingSubject: actor, expectedGeneration: settings.generation,
+      expectedRulesRevision: settings.ruleBasis.revision, reason: 'Measure Realm rule reads',
+      settings: { ...settings.settings, rules: publishedRules } } });
     const published: { revision: string } = await authorApi.command(`g1026:profile:${index}`, {
       method: 'PUT', path: `${root}/profile`, body: { profile: 'realm-public-profile-v2', expectedHead: profileHead,
         actingSubject: actor, publication: { name: { original: 'en', labels: { en: 'Cost community' } },
-          description: { original: 'en', labels: { en: 'Read together' } }, rules: publishedRules,
+          description: { original: 'en', labels: { en: 'Read together' } },
           iconSelection: null, bannerSelection: null, moderators: [], count: { kind: 'exact', value: null } } } });
     profileHead = published.revision;
     await measure('rules', String(index + 1), 'header-rules', root, body => {

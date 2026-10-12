@@ -42,7 +42,8 @@ test('localized fields fall back independently and legacy revisions normalize wi
       body: { en: 'Respect readers', 'zh-CN': '尊重读者' }, governanceRule: null }] };
   const migrated = currentProfile(legacy);
   expect(migrated.name).toEqual({ original: 'en', labels: { en: 'Fiction', 'zh-Hans': '小说' } });
-  expect(migrated.rules[0]?.title.labels['zh-Hans']).toBe('友善');
+  expect(migrated).not.toHaveProperty('rules');
+  expect(currentProfile({ ...legacy, rules: { obsolete: true } })).not.toHaveProperty('rules');
   expect(Value.Check(publicProfile, migrated)).toBe(true);
   expect(() => currentProfile({ ...migrated, name: { original: 'de', labels: { en: 'Fiction' } } }))
     .toThrow(RealmProfileInvalid);

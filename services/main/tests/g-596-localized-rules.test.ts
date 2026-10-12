@@ -121,8 +121,8 @@ test('G-596 legacy conversion is per field and private rules remain fenced', asy
   expect(rules![0]!.body.labels['zh-Hans']).toBe('尊重读者');
   const profile = currentProfile({ name: { en: 'Readers', 'zh-CN': '读者' },
     description: { en: 'Books', 'zh-CN': '书' }, iconSelection: null, bannerSelection: null,
-    rules: legacy(true).rules, count: { kind: 'unknown', value: null }, moderators: [] });
-  expect(profile.rules[0]!.title).toEqual({ original: 'und', labels: { und: 'Be kind' } });
+    rules: { obsolete: true }, count: { kind: 'unknown', value: null }, moderators: [] });
+  expect(profile).not.toHaveProperty('rules');
 });
 
 test('G-596 commands reject legacy maps and malformed, empty, duplicate or oversized localized rules before mutation', async () => {

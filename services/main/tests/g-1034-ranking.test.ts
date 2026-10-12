@@ -38,17 +38,16 @@ test('G1034: Realm rule document and live scoped links share a single cut; priva
     document: { profile: 'realm-settings-rules-v2', public: false, rules: [rule] },
     heads: [{ ref: 'urn:rule:a', revision: '2', digest: 'a'.repeat(64) }],
   });
-  const result = await new GovernanceRules(db.pool).realmHeaderRules(realm, []);
+  const result = await new GovernanceRules(db.pool).realmHeaderRules(realm);
   expect(result.rules).toEqual([rule]);
   expect(result.heads.get('urn:rule:a')?.revision).toBe('2');
   expect(db.calls).toHaveLength(1);
   expect(db.calls[0]!.values).toEqual([
     `urn:rezics:realm-rules:${realm.slice(-36)}`,
     `governance:realm:${realm}`,
-    '[]',
   ]);
   await expect(
-    new GovernanceRules(database({ open: false }).pool).realmHeaderRules(realm, []),
+    new GovernanceRules(database({ open: false }).pool).realmHeaderRules(realm),
   ).rejects.toBeInstanceOf(GovernanceUnavailable);
 });
 

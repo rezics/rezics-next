@@ -821,8 +821,7 @@ async function profiles(o: Official) {
         expectedHead: header?.profileRevision ?? null, actingSubject: realm.steward.actingSubject,
         publication: { name: localizedBilingual(profile.name),
           description: localizedBilingual(profile.description), iconSelection: null,
-          bannerSelection: null, rules: profile.rules.map(rule => ({ ...rule,
-            title: localizedBilingual(rule.title), body: localizedBilingual(rule.body), governanceRule: null })),
+          bannerSelection: null,
           count: { kind: 'exact', value: null }, moderators } },
       await token(realm.steward.id), seedKey('official-profile-v2', `${id}:${header?.profileRevision?.slice(-12) ?? 'first'}`));
     });

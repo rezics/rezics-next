@@ -6,6 +6,8 @@ import { readMainOutboxEnvelope, readNextMainOutboxBatch }
   from '../../../services/main/src/modules/outbox/relay.ts';
 import { REALM_PROFILE_COST } from '../../../services/main/src/modules/realm-profile/schema.ts';
 import { deliverRealmPolicy } from '../../../services/main/src/modules/space/policy.ts';
+import { saveRealmSettings } from '../../../services/main/src/modules/access/realm-management-settings.ts';
+import type { SettingsCommand } from '../../../services/main/src/modules/realm-admin/contract.ts';
 
 const short = (id: string) => id.slice(-36);
 async function response<T>(result: Response, expected: number): Promise<T> {
@@ -26,28 +28,56 @@ test('Realm public profile: manager admission, CAS, media, moderator choice and 
       actingSubject: manager.actor }), 201);
     const realm = created.realm;
     const root = `/v1/realms/${short(realm)}`;
-    const before = await response<{ profileRevision: null; description: null; rules: null;
+    const before = await response<{ profileRevision: null; description: null; rules: unknown[];
       membership: { count: { kind: string } }; moderators: { kind: string; items: string[] } }>(
       await stack.call('GET', root), 200);
-    expect(before).toMatchObject({ profileRevision: null, description: null, rules: null,
+    expect(before).toMatchObject({ profileRevision: null, description: null, rules: [],
       membership: { count: { kind: 'unknown' } }, moderators: { kind: 'unknown', items: [] } });
 
     await stack.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
       ${iri(moderator.actor)} a rv:Agent . ${iri(outsider.actor)} a rv:Agent . } }`);
+    const authoredRules = [{
+      id: 'be-kind',
+      title: { original: 'en', labels: { en: 'Be kind', 'zh-Hans': '友善' } },
+      body: { original: 'en', labels: { en: 'Respect others.', 'zh-Hans': '尊重他人。' } },
+      governanceRule: null,
+    }];
     const publication = {
       name: { original: 'en', labels: { en: 'Readers Guild', 'zh-Hans': '读者公会',
         'zh-Hant': '讀者公會', ja: '読者の会' } },
       description: { original: 'en', labels: { en: 'Read together.', 'zh-Hans': '一起阅读。' } },
       iconSelection: null as string | null, bannerSelection: null as string | null,
-      rules: [{ id: 'be-kind', title: { original: 'en', labels: { en: 'Be kind', 'zh-Hans': '友善' } },
-        body: { original: 'en', labels: { en: 'Respect others.', 'zh-Hans': '尊重他人。' } },
-        governanceRule: null }],
       count: { kind: 'estimated' as const, value: 120 }, moderators: [moderator.actor],
     };
     const body = (actingSubject: string, expectedHead: string | null, value = publication) => ({
       profile: 'realm-public-profile-v2', expectedHead, actingSubject, publication: value,
     });
     await manager.grant(`realm:profile:${realm}`, 'realm.profile.publish');
+    const rulesHead = (await stack.accessPool.query<{ revision: string }>(`SELECT revision::text FROM
+      access.governance_rule_head WHERE ref = $1 AND scope_id = $2`,
+    [`urn:rezics:realm-rules:${short(realm)}`, `governance:realm:${realm}`])).rows[0];
+    const settingsCommand = {
+      actingSubject: manager.actor,
+      expectedGeneration: '0',
+      expectedRulesRevision: rulesHead?.revision ?? null,
+      reason: 'Publish community rules',
+      settings: { visibility: 'public', reviewRequired: true, reviewMode: 'mandatory',
+        whoMaySubmit: 'granted', rules: authoredRules },
+    } satisfies SettingsCommand;
+    const settingsClient = await stack.accessPool.connect();
+    try {
+      await settingsClient.query('BEGIN');
+      await saveRealmSettings(settingsClient, realm, manager.principalId, settingsCommand,
+        `profile-rules-${randomUUID()}`);
+      await settingsClient.query('COMMIT');
+    } catch (error) {
+      await settingsClient.query('ROLLBACK');
+      throw error;
+    } finally { settingsClient.release(); }
+    const legacyRulesRejected = await response<{ status: number; code: string }>(await manager.send(
+      'PUT', `${root}/profile`, { ...body(manager.actor, null),
+        publication: { ...publication, rules: authoredRules } }, 'profile-rules-rejected'), 400);
+    expect(legacyRulesRejected).toMatchObject({ status: 400, code: 'invalid_realm_profile' });
     expect((await outsider.send('PUT', `${root}/profile`, body(outsider.actor, null))).status).toBe(403);
     expect((await manager.send('PUT', `${root}/profile`, body(manager.actor, null))).status).toBe(400);
     const afterDenied = await response<{ profileRevision: null }>(await stack.call('GET', root), 200);

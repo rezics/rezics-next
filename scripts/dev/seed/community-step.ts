@@ -112,7 +112,7 @@ async function moderatorRole(state: SeedState, plan: CommunityRealm, root: strin
   }
 }
 
-/** The public profile: name, description, rules and the moderators who agreed to be listed. */
+/** The public profile: name, description and the moderators who agreed to be listed. */
 async function profile(state: SeedState, operator: LocalOperatorInput, plan: CommunityRealm, realm: string,
   owner: Session, client: SeedApi, tokens: Map<string, string>) {
   const root = `/v1/realms/${short(realm)}`;
@@ -152,8 +152,6 @@ async function profile(state: SeedState, operator: LocalOperatorInput, plan: Com
     expectedHead: header?.profileRevision ?? null, actingSubject: owner.actingSubject,
     publication: { name: localizedBilingual(plan.name), description: localizedBilingual(plan.description),
       iconSelection: null, bannerSelection: null,
-      rules: plan.rules.map(rule => ({ ...rule, title: localizedBilingual(rule.title),
-        body: localizedBilingual(rule.body), governanceRule: null })),
       count: { kind: 'exact', value: null }, moderators } },
   await token(owner.id), seedKey('community-profile-v2', `${plan.id}:${header?.profileRevision?.slice(-12) ?? 'first'}`));
 }

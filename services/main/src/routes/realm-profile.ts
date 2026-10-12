@@ -1,4 +1,4 @@
-import { Elysia, t } from 'elysia';
+import { Elysia, t, ValidationError } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { writeProblems } from '../api-responses.ts';
 import { choosePublicModerator, publishRealmProfile } from '../modules/realm-profile/commands.ts';
@@ -41,6 +41,19 @@ function errorResponse(error: unknown): Response {
   return commandError(error);
 }
 
+/** Preserve the profile command's typed refusal when strict schema validation finds legacy rules. */
+export function realmProfileSchemaError(error: unknown, request: Request): Response | undefined {
+  if (!(error instanceof ValidationError) || error.type !== 'body'
+    || request.method !== 'PUT'
+    || !/^\/v1\/realms\/[0-9a-f-]{36}\/profile$/i.test(new URL(request.url).pathname)) return;
+  const value = error.value;
+  if (!value || typeof value !== 'object' || !('publication' in value)) return;
+  const publication = value.publication;
+  if (!publication || typeof publication !== 'object' || Array.isArray(publication)
+    || !('rules' in publication)) return;
+  return errorResponse(new RealmProfileInvalid('Realm public profile is invalid'));
+}
+
 export function realmProfileRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .put('/v1/realms/:realm/profile', {
@@ -56,7 +69,7 @@ export function realmProfileRoutes(work: MainWorkDependencies) {
         const result = await publishRealmProfile(work.environment, work.media?.store,
           work.account, work.access, request, { realm: id(params.realm),
             expectedHead: body.expectedHead, actingSubject: body.actingSubject,
-            profile: body.publication, idempotencyKey }, work.governance?.rules);
+            profile: body.publication, idempotencyKey });
         return Response.json(result, { status: result.replayed ? 200 : 201,
           headers: { 'cache-control': 'no-store' } });
       } catch (error) { return errorResponse(error); }

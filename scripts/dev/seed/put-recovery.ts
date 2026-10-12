@@ -150,11 +150,9 @@ export async function recoverSeedPut(path: string, input: unknown, read: SeedRea
     const name = record(publication.name);
     if (current.originalName) matches &&= record(current.originalName).language === name.original
       && record(current.originalName).value === record(name.labels)[String(name.original)];
-    // Headers select one display language. Check every authored label, including
-    // rule bodies, instead of equating a matching English title with the plan.
-    const rules = publication.rules as RecordValue[];
-    const fields = [record(publication.name), record(publication.description),
-      ...rules.flatMap(rule => [record(rule.title), record(rule.body)])];
+    // Headers select one display language. Rules are written by the independent
+    // Realm settings command and are not part of profile reconciliation.
+    const fields = [record(publication.name), record(publication.description)];
     const languages = new Set(fields.flatMap(field => Object.keys(record(field.labels))));
     for (const language of languages) {
       const localized = await read(`${query(route)}&language=${encodeURIComponent(language)}`, true);
@@ -163,14 +161,8 @@ export async function recoverSeedPut(path: string, input: unknown, read: SeedRea
         const label = record(record(planned).labels)[language];
         return label === undefined || !!shown && record(shown).value === label && record(shown).language === language;
       };
-      const shownRules = localized.rules as RecordValue[] | null;
       matches &&= equalLabel(publication.name, localized.name)
-        && equalLabel(publication.description, localized.description)
-        && !!shownRules && shownRules.length === rules.length && rules.every((rule, index) => {
-          const shown = shownRules[index]!;
-          return rule.id === shown.id && equalLabel(rule.title, shown.title)
-            && equalLabel(rule.body, shown.body) && isDeepStrictEqual(rule.governanceRule, shown.governanceRule);
-        });
+        && equalLabel(publication.description, localized.description);
     }
     // replyPolicy has no read representation. Do not certify a requested change.
     if ('replyPolicy' in publication) matches = false;

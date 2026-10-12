@@ -551473,101 +551473,6 @@
                           "members-direct"
                         ],
                         "type": "string"
-                      },
-                      "rules": {
-                        "items": {
-                          "additionalProperties": false,
-                          "properties": {
-                            "body": {
-                              "additionalProperties": false,
-                              "properties": {
-                                "labels": {
-                                  "patternProperties": {
-                                    "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$": {
-                                      "maxLength": 1000,
-                                      "minLength": 1,
-                                      "type": "string"
-                                    }
-                                  },
-                                  "type": "object"
-                                },
-                                "original": {
-                                  "maxLength": 35,
-                                  "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
-                                  "type": "string"
-                                }
-                              },
-                              "required": [
-                                "original",
-                                "labels"
-                              ],
-                              "type": "object"
-                            },
-                            "governanceRule": {
-                              "~elyTyp": 7,
-                              "additionalProperties": false,
-                              "nullable": true,
-                              "properties": {
-                                "ref": {
-                                  "maxLength": 512,
-                                  "minLength": 1,
-                                  "type": "string"
-                                },
-                                "revision": {
-                                  "pattern": "^[1-9][0-9]{0,18}$",
-                                  "type": "string"
-                                }
-                              },
-                              "required": [
-                                "ref",
-                                "revision"
-                              ],
-                              "type": [
-                                "object",
-                                "null"
-                              ]
-                            },
-                            "id": {
-                              "maxLength": 64,
-                              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
-                              "type": "string"
-                            },
-                            "title": {
-                              "additionalProperties": false,
-                              "properties": {
-                                "labels": {
-                                  "patternProperties": {
-                                    "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$": {
-                                      "maxLength": 100,
-                                      "minLength": 1,
-                                      "type": "string"
-                                    }
-                                  },
-                                  "type": "object"
-                                },
-                                "original": {
-                                  "maxLength": 35,
-                                  "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
-                                  "type": "string"
-                                }
-                              },
-                              "required": [
-                                "original",
-                                "labels"
-                              ],
-                              "type": "object"
-                            }
-                          },
-                          "required": [
-                            "id",
-                            "title",
-                            "body",
-                            "governanceRule"
-                          ],
-                          "type": "object"
-                        },
-                        "maxItems": 12,
-                        "type": "array"
                       }
                     },
                     "required": [
@@ -551575,7 +551480,6 @@
                       "description",
                       "iconSelection",
                       "bannerSelection",
-                      "rules",
                       "count",
                       "moderators"
                     ],
@@ -551754,101 +551658,6 @@
                           "members-direct"
                         ],
                         "type": "string"
-                      },
-                      "rules": {
-                        "items": {
-                          "additionalProperties": false,
-                          "properties": {
-                            "body": {
-                              "additionalProperties": false,
-                              "properties": {
-                                "labels": {
-                                  "patternProperties": {
-                                    "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$": {
-                                      "maxLength": 1000,
-                                      "minLength": 1,
-                                      "type": "string"
-                                    }
-                                  },
-                                  "type": "object"
-                                },
-                                "original": {
-                                  "maxLength": 35,
-                                  "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
-                                  "type": "string"
-                                }
-                              },
-                              "required": [
-                                "original",
-                                "labels"
-                              ],
-                              "type": "object"
-                            },
-                            "governanceRule": {
-                              "~elyTyp": 7,
-                              "additionalProperties": false,
-                              "nullable": true,
-                              "properties": {
-                                "ref": {
-                                  "maxLength": 512,
-                                  "minLength": 1,
-                                  "type": "string"
-                                },
-                                "revision": {
-                                  "pattern": "^[1-9][0-9]{0,18}$",
-                                  "type": "string"
-                                }
-                              },
-                              "required": [
-                                "ref",
-                                "revision"
-                              ],
-                              "type": [
-                                "object",
-                                "null"
-                              ]
-                            },
-                            "id": {
-                              "maxLength": 64,
-                              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
-                              "type": "string"
-                            },
-                            "title": {
-                              "additionalProperties": false,
-                              "properties": {
-                                "labels": {
-                                  "patternProperties": {
-                                    "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$": {
-                                      "maxLength": 100,
-                                      "minLength": 1,
-                                      "type": "string"
-                                    }
-                                  },
-                                  "type": "object"
-                                },
-                                "original": {
-                                  "maxLength": 35,
-                                  "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
-                                  "type": "string"
-                                }
-                              },
-                              "required": [
-                                "original",
-                                "labels"
-                              ],
-                              "type": "object"
-                            }
-                          },
-                          "required": [
-                            "id",
-                            "title",
-                            "body",
-                            "governanceRule"
-                          ],
-                          "type": "object"
-                        },
-                        "maxItems": 12,
-                        "type": "array"
                       }
                     },
                     "required": [
@@ -551856,7 +551665,6 @@
                       "description",
                       "iconSelection",
                       "bannerSelection",
-                      "rules",
                       "count",
                       "moderators"
                     ],
@@ -552035,101 +551843,6 @@
                           "members-direct"
                         ],
                         "type": "string"
-                      },
-                      "rules": {
-                        "items": {
-                          "additionalProperties": false,
-                          "properties": {
-                            "body": {
-                              "additionalProperties": false,
-                              "properties": {
-                                "labels": {
-                                  "patternProperties": {
-                                    "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$": {
-                                      "maxLength": 1000,
-                                      "minLength": 1,
-                                      "type": "string"
-                                    }
-                                  },
-                                  "type": "object"
-                                },
-                                "original": {
-                                  "maxLength": 35,
-                                  "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
-                                  "type": "string"
-                                }
-                              },
-                              "required": [
-                                "original",
-                                "labels"
-                              ],
-                              "type": "object"
-                            },
-                            "governanceRule": {
-                              "~elyTyp": 7,
-                              "additionalProperties": false,
-                              "nullable": true,
-                              "properties": {
-                                "ref": {
-                                  "maxLength": 512,
-                                  "minLength": 1,
-                                  "type": "string"
-                                },
-                                "revision": {
-                                  "pattern": "^[1-9][0-9]{0,18}$",
-                                  "type": "string"
-                                }
-                              },
-                              "required": [
-                                "ref",
-                                "revision"
-                              ],
-                              "type": [
-                                "object",
-                                "null"
-                              ]
-                            },
-                            "id": {
-                              "maxLength": 64,
-                              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
-                              "type": "string"
-                            },
-                            "title": {
-                              "additionalProperties": false,
-                              "properties": {
-                                "labels": {
-                                  "patternProperties": {
-                                    "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$": {
-                                      "maxLength": 100,
-                                      "minLength": 1,
-                                      "type": "string"
-                                    }
-                                  },
-                                  "type": "object"
-                                },
-                                "original": {
-                                  "maxLength": 35,
-                                  "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
-                                  "type": "string"
-                                }
-                              },
-                              "required": [
-                                "original",
-                                "labels"
-                              ],
-                              "type": "object"
-                            }
-                          },
-                          "required": [
-                            "id",
-                            "title",
-                            "body",
-                            "governanceRule"
-                          ],
-                          "type": "object"
-                        },
-                        "maxItems": 12,
-                        "type": "array"
                       }
                     },
                     "required": [
@@ -552137,7 +551850,6 @@
                       "description",
                       "iconSelection",
                       "bannerSelection",
-                      "rules",
                       "count",
                       "moderators"
                     ],
