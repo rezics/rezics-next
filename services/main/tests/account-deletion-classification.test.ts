@@ -411,7 +411,7 @@ function readScans(plan: ReadPlan): unknown[] {
 test('classification and wake-up read budgets exclude inactive history and unrelated open deletions', async () => {
   const survivor = await principal();
   const target = await provision(survivor, 'organization');
-  const unrelated = await provision(survivor, 'organization');
+  const { persons: unrelated } = await unaffectedChain();
   const inactiveCosts: number[] = [];
   const samples: unknown[] = [];
   const wakeCosts: number[] = [];
@@ -425,7 +425,7 @@ test('classification and wake-up read budgets exclude inactive history and unrel
       await new AccessAdmissionRegistry(pool).strongDeactivateAccountSubject(
         historical.verified.issuer, historical.verified.subject);
       const waiting = await principal();
-      await addFixtureController(waiting, unrelated);
+      await addFixtureController(waiting, unrelated[size]!);
       const client = await pool.connect();
       try {
         await client.query('BEGIN');

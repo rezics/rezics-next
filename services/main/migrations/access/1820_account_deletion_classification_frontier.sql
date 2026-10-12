@@ -247,13 +247,15 @@ BEGIN
         PERFORM access.retire_principal_controller_page(NEW.id, 256);
     ELSE
         SELECT count(*) INTO inventory FROM (SELECT 1 FROM access.representation
-            WHERE principal_id = NEW.id AND active AND action = 'agent.control' ORDER BY id LIMIT 257) bounded;
+            WHERE principal_id >= NEW.id AND principal_id <= NEW.id AND active AND action = 'agent.control'
+            ORDER BY principal_id, id LIMIT 257) bounded;
         IF inventory > 256 THEN
             RAISE EXCEPTION 'principal controller restoration exceeds its subject budget' USING ERRCODE = '54000';
         END IF;
         INSERT INTO access.live_principal_controller
             SELECT id, principal_id, subject_id FROM access.representation
-            WHERE principal_id = NEW.id AND active AND action = 'agent.control' ORDER BY id LIMIT 256
+            WHERE principal_id >= NEW.id AND principal_id <= NEW.id AND active AND action = 'agent.control'
+            ORDER BY principal_id, id LIMIT 256
             ON CONFLICT DO NOTHING;
     END IF;
     RETURN NEW;
