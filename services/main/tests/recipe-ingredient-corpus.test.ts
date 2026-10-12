@@ -270,6 +270,84 @@ test('ingredient views keep quantity fields separate from source text in both su
   }
 });
 
+test('every amount, span, name and unit branch preserves source or composes only numeric facts', () => {
+  const original = '  1 g salt to taste\t';
+  const parsed = importRecipe({ recipeIngredient: [original] }, root).ingredients[0]!.qualifier;
+  const units = [
+    { fields: { unit: 'https://qudt.org/vocab/unit/GM', unitText: 'cups' }, label: 'g' },
+    { fields: { unitText: 'g' }, label: 'g' },
+    { fields: {}, label: undefined },
+  ];
+  let cells = 0;
+  for (const quantity of [undefined, 0, 1]) {
+    for (const withSpans of [false, true]) {
+      for (const name of [undefined, 'salt', '']) {
+        for (const unit of units) {
+          cells++;
+          const qualifier: IngredientLine = { type: 'ingredient-line', originalText: { value: original, language: 'en' },
+            amountLexical: '1', optional: false, scaling: 'linear', substituteFor: [], parseStatus: 'partial',
+            ...(quantity !== undefined ? { amount: { numerator: quantity, denominator: 1 } } : {}),
+            ...(withSpans ? { textParts: parsed.textParts } : {}),
+            ...(name !== undefined ? { name } : {}), ...unit.fields };
+          checkOccurrenceQualifier(qualifier);
+          const stored = structuredClone(qualifier);
+          const recipe = exportRecipe([storedLine(qualifier)], root).recipe;
+          const after = parseRecipeFile(Buffer.from(JSON.stringify(recipe)), 'application/ld+json').preview.ingredients[0]!.qualifier;
+          expect(after).toEqual(stored);
+          for (const factor of [1n, 2n]) {
+            const view = scaleIngredients([storedLine(qualifier)], { numerator: factor, denominator: 1n })[0]!;
+            expect(view.originalText).toBe(original);
+            expect(view.unitText).toBe(unit.label);
+            expect(view.sourceLexical).toBe('1');
+            expect(view.amount).toEqual(quantity !== undefined
+              ? { numerator: BigInt(quantity) * factor, denominator: 1n } : undefined);
+            expect(view.scaled).toBe(quantity !== undefined);
+            if (quantity === undefined || (!withSpans && name === undefined)) {
+              expect(view.line).toBe(original);
+              expect(view.alternateLine).toBeUndefined();
+              expect(view.alternateSystem).toBeUndefined();
+              expect(view.hint).toBeUndefined();
+            } else {
+              // The explicit name wins over spans, including an explicit empty name.
+              const food = name ?? 'salt to taste\t';
+              const amount = String(BigInt(quantity) * factor);
+              expect(view.line).toBe([amount, unit.label ?? '', food].filter(part => part.length > 0).join(' '));
+            }
+            expect(view.line.length).toBeGreaterThan(0);
+            expect(scaleIngredients([storedLine(after)], { numerator: factor, denominator: 1n })[0]).toEqual(view);
+          }
+          // Reading never mutates or substitutes stored name/unit/source fields.
+          expect(qualifier).toEqual(stored);
+        }
+      }
+    }
+  }
+  expect(cells).toBe(54);
+});
+
+test('no numeric amount preserves retained wording for absent, supplied and empty food names', () => {
+  for (const text of ['salt to taste', '  salt to taste\t', '200 克 牛奶']) {
+    const parsed = importRecipe({ recipeIngredient: [text] }, root).ingredients[0]!.qualifier;
+    for (const name of [undefined, 'salt', '']) {
+      for (const textParts of [undefined, parsed.textParts]) {
+        const qualifier: IngredientLine = { ...parsed, amount: undefined,
+          ...(name !== undefined ? { name } : {}), textParts };
+        checkOccurrenceQualifier(qualifier);
+        const view = scaleIngredients([storedLine(qualifier)], { numerator: 2n, denominator: 1n })[0]!;
+        expect(view).toMatchObject({ originalText: text, line: text, scaled: false });
+        expect(view.amount).toBeUndefined();
+        expect(view.unitText).toBe(qualifier.unitText);
+        expect(qualifier.name).toBe(name);
+        expect(qualifier.originalText.value).toBe(text);
+      }
+    }
+  }
+  for (const ingredient of [{ text: 'salt to taste', name: 'salt' }, { text: 'salt to taste', name: '' }]) {
+    const qualifier = importRecipe({ recipeIngredient: [ingredient] }, root).ingredients[0]!.qualifier;
+    expect(scaleIngredients([storedLine(qualifier)], { numerator: 1n, denominator: 1n })[0]?.line).toBe(ingredient.text);
+  }
+});
+
 function assertNoOriginalTextSurgery(source: string) {
   const file = ts.createSourceFile('recipe-view.ts', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   const aliases = new Set(['originalText', 'original', 'source']);

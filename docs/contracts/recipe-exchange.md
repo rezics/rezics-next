@@ -99,6 +99,11 @@ explicit structured name, the numeric amount and the unit label. A registered
 `unitCode` always supplies its registry label; otherwise the written `unitText`
 supplies the label. Neither depends on optional name/spans.
 
+With no numeric amount there is nothing to scale: `line` is always the unchanged
+original text, even when a structured name (including an empty name) or recorded
+spans exist. `salt to taste` with name `salt` still displays `salt to taste`;
+spans on a source quantity never manufacture a missing structured amount.
+
 For an old qualifier with neither a name nor spans, the existing view fields
 remain separate: `originalText` and `line` both retain the unchanged original
 line, `amount`/`amountUpper` carry exact scaled values, `unitText` carries the

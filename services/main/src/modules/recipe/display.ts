@@ -265,8 +265,9 @@ export function presentQuantity(input: {
   original: string; name?: string; unitText?: string; unit?: Unit; amount?: ExactRational;
   amountUpper?: ExactRational; changed: boolean; judgment?: 'seasoning' | 'leavening';
 }): IngredientPresentation {
-  if (input.name === undefined) return { line: input.original, ...(input.judgment ? { judgment: input.judgment } : {}) };
-  if (!input.amount) return { line: input.name, ...(input.judgment ? { judgment: input.judgment } : {}) };
+  if (!input.amount || input.name === undefined) {
+    return { line: input.original, ...(input.judgment ? { judgment: input.judgment } : {}) };
+  }
   const line = phrase(input.amount, input.amountUpper, input.unit, input.unitText, input.name);
   const alternate = input.unit ? converted(input.amount, input.amountUpper, input.unit, input.name) : null;
   return {

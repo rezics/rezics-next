@@ -13,7 +13,7 @@ export interface ScaledIngredient {
   unitText?: string;
   scaled: boolean;
   reason?: 'unparsed' | 'non-linear' | 'not-scalable';
-  /** Composed from a supplied name/spans; otherwise the unchanged source line. */
+  /** Composed only with a numeric amount and supplied name/spans; otherwise unchanged source. */
   line: string;
   alternateLine?: string;
   alternateSystem?: 'us' | 'metric';
