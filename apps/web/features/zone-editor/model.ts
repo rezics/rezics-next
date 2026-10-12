@@ -104,7 +104,7 @@ export type EditorEvent =
   | { type: 'retarget'; currentHead: string }
   | { type: 'loaded'; value: string; expectedHead: string | null; basis: DraftBasis | null; embeds?: string[];
       variantId: string; language: ContentLanguage; direction: 'ltr' | 'rtl' | 'none';
-      zoneHead: string; publishedRevisionId: string | null }
+      zoneHead: string; navigationRevision: string; publishedRevisionId: string | null }
   | { type: 'published'; zoneHead: string; replayed: boolean }
   | { type: 'publish-stale' }
   | { type: 'heads'; zoneHead: string; navigationRevision: string }
@@ -160,6 +160,7 @@ export function reduceEditor(state: EditorState, event: EditorEvent): EditorStat
         language: event.language,
         direction: event.direction,
         zoneHead: event.zoneHead,
+        navigationRevision: event.navigationRevision,
         publishedRevisionId: event.publishedRevisionId,
         notice: { kind: 'loaded' },
       };

@@ -69,12 +69,25 @@ test('loading the saved page replaces the text only then', () => {
   const savedPage = blankDocument();
   const loaded = reduceEditor(start, {
     type: 'loaded', value: savedPage, expectedHead: head, basis: null, variantId, language: start.language,
-    direction: start.direction, zoneHead, publishedRevisionId: null,
+    direction: start.direction, zoneHead, navigationRevision: navigation, publishedRevisionId: null,
   });
   expect(loaded.value).toBe(savedPage);
   expect(loaded.value).not.toBe('Kept until load');
   expect(loaded.savedValue).toBeNull();
   expect(loaded.notice.kind).toBe('loaded');
+});
+
+test('loading a saved home adopts configuration and navigation heads atomically for publication', () => {
+  const start = state();
+  const nextZoneHead = 'https://rezics.com/id/00000000-0000-4000-8000-000000000211';
+  const nextNavigation = 'https://rezics.com/id/00000000-0000-4000-8000-000000000212';
+  const loaded = reduceEditor(start, { type: 'loaded', ...start, expectedHead: head,
+    zoneHead: nextZoneHead, navigationRevision: nextNavigation });
+  const choice = publicationChoice(loaded, zoneIri);
+  if (!choice) throw new Error('publishable loaded home');
+  expect(publicationWire(choice, actor)).toMatchObject({
+    expectedHead: nextZoneHead, navigationRevision: nextNavigation, routesRevision: nextNavigation,
+  });
 });
 
 test('publishing records the saved revision and the new zone head without changing the text', () => {
