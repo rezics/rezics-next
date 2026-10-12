@@ -977,6 +977,7 @@ test(
           expect(graphCommands).toHaveBeenCalledTimes(1);
           graphCommands.mockClear();
 
+          let commitCandidates = nativeReleased.releases;
           for (const code of ['503', 'ECONNRESET']) {
             const injected = interruptSql(qualified.resources.accessPool, 'COMMIT', ownerFailure(code));
             try {
@@ -984,7 +985,19 @@ test(
               expect(responseStatus).toBe(503);
               expect(injected.hits).toBe(1);
             } finally { injected.restore(); }
-            expect(await outerOperation(qualified, key)).toEqual(nativeReleased);
+            const failed = await outerOperation(qualified, key);
+            expect({ ...failed, releases: [] }).toEqual({ ...nativeReleased, releases: [] });
+            // Sequence allocation survives rollback. Each attempted CAS therefore
+            // retains one distinct signed candidate, while live C1 stays exact.
+            expect(failed.releases.slice(0, -1)).toEqual(commitCandidates);
+            expect(failed.releases).toHaveLength(commitCandidates.length + 1);
+            expect(new Set(failed.releases).size).toBe(failed.releases.length);
+            commitCandidates = failed.releases;
+            expect(await liveAccess(qualified)).toEqual(current);
+            expect(maintenance).not.toHaveBeenCalled();
+            expect(graphCommands).not.toHaveBeenCalled();
+            expect(imported).not.toHaveBeenCalled();
+            expect(requalified).not.toHaveBeenCalled();
             await closed(qualified, true);
             console.info('restore phase interruption proved', { phase: 'Access commit', code });
           }
@@ -1017,7 +1030,8 @@ test(
           expect(lost).toMatchObject({ state: 'running', hold_reason: null });
           expect(lost.erasures).toEqual(interrupted.erasures);
           expect(lost.qualifications).toEqual(interrupted.qualifications);
-          expect(lost.releases).toHaveLength(2);
+          expect(lost.releases.slice(0, -1)).toEqual(commitCandidates);
+          expect(lost.releases).toHaveLength(commitCandidates.length + 1);
           expect(await graphReleased(qualified)).toBe(true);
           expect(await accessFence(qualified)).toEqual([
             { open: true, generation: (BigInt(fixture.generation) + 1n).toString() },
