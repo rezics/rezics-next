@@ -25,7 +25,7 @@ Tables show SQL and Fuseki counts as **median / total** within each operation cl
 | POST /v1/compositions | 20 | 3.912 | 195.731 | 91 / 1,820 | 7 / 140 |
 | POST /v1/recipes/:id/file-imports | 20 | 7.532 | 362.747 | 202 / 4,139 | 12 / 240 |
 
-The first Work import included initialization: 602 SQL statements and 261 Fuseki calls, versus 41 and 5 for every later Boston Work import. It remains included in the totals and wall time. File imports accounted for 48.0% of summed command latency. All Work-bulk responses reported a succeeded item and complete batch; all composition and file-import responses were HTTP 201.
+The first Work import observed 602 SQL statements and 261 Fuseki calls, versus 41 and 5 for every later Boston Work import. The cause of that first-request overhead was not separately measured; it remains included in the totals and wall time. File imports accounted for 48.0% of summed command latency. All Work-bulk responses reported a succeeded item and complete batch; all composition and file-import responses were HTTP 201.
 
 ## Artusi — pg59047
 
