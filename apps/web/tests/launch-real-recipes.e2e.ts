@@ -24,7 +24,7 @@ test.beforeAll(() => {
   if (!runId) throw new Error('Run through isolated browser QA');
   const retained = join(process.cwd(), '.temp/launch-corpus', `browser-recipes-${runId}.json`);
   const prepared = JSON.parse(readFileSync(retained, 'utf8')) as PreparedRecipes;
-  expect(prepared.corpus.recipe).toBe('launch-real-recipes-v1');
+  expect(prepared.corpus.recipe).toBe('launch-real-recipes-v2');
   expect(prepared.corpus.records).toHaveLength(30);
   expect(prepared.restored).toBe(false);
   corpus = prepared.corpus;
@@ -38,13 +38,26 @@ const workPath = (work: string) => localizedPath(realmWorkHref('launch-recipes',
 const recipeLinks = (page: import('@playwright/test').Page) =>
   page.locator('main h3 a[href*="/z/launch-recipes/w/"]');
 
+async function waitForRecipeBrowse(page: import('@playwright/test').Page, retryPath = browsePath()) {
+  const search = page.getByRole('searchbox', { name: 'Search Recipes', exact: true });
+  const firstResult = recipeLinks(page).first();
+  const unavailable = page.getByRole('heading', { name: 'Couldn’t load this list', exact: true });
+  await expect(async () => {
+    const searchVisible = await search.isVisible().catch(() => false);
+    const resultVisible = await firstResult.isVisible().catch(() => false);
+    if (!resultVisible && (searchVisible || await unavailable.isVisible().catch(() => false)))
+      await page.goto(retryPath);
+    await expect(firstResult).toBeVisible({ timeout: 3_000 });
+  }).toPass({ timeout: 120_000, intervals: [1_000, 2_000, 3_000] });
+  return search;
+}
+
 test('recipes / Browse every recipe page in its Zone', async ({ page }) => {
   test.setTimeout(300_000);
   await signInAtAccounts(page, browsePath(), reader.member);
 
   const titles = corpus.records.map(record => record.title).sort();
-  const firstSearch = page.getByRole('searchbox', { name: 'Search Recipes' });
-  await expect(firstSearch).toBeVisible();
+  const firstSearch = await waitForRecipeBrowse(page);
   const browsePages = async () => {
     const visibleTitles: string[] = [];
     for (let pageNumber = 0; pageNumber < 5; pageNumber++) {
@@ -58,7 +71,7 @@ test('recipes / Browse every recipe page in its Zone', async ({ page }) => {
       const nextUrl = new URL(href, page.url()).href;
       await next.click();
       await expect(page).toHaveURL(nextUrl, { timeout: 60_000 });
-      await expect(recipeLinks(page).first()).toBeVisible({ timeout: 60_000 });
+      await waitForRecipeBrowse(page, nextUrl);
       await expect.poll(async () => (await recipeLinks(page).first().textContent())?.trim())
         .not.toBe(pageTitles[0]);
     }
@@ -81,9 +94,10 @@ test('recipes / Search and open Puff Paste and Artusi in English UI', async ({ p
   await signInAtAccounts(page, browsePath(), reader.member);
 
   const puff = corpus.records.find(record => record.recipeId === 'puff-paste')!;
-  const search = page.getByRole('searchbox', { name: 'Search Recipes' });
+  const search = await waitForRecipeBrowse(page);
   await search.fill('Puff Paste');
   await search.press('Enter');
+  await waitForRecipeBrowse(page, page.url());
   const puffLink = page.getByRole('link', { name: puff.title, exact: true });
   await expect(puffLink).toBeVisible();
   const puffPath = new URL(workPath(puff.work), page.url()).pathname;

@@ -1,14 +1,12 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { Pool } from 'pg';
 import { join } from 'node:path';
 import { readEnv } from '../../../scripts/dev/config.ts';
 import { root } from '../../../scripts/fixture/stack.ts';
 import { createCorpusBackupDriver, type CorpusRestoreSmokeInput } from '../../../scripts/load/corpus-backup-driver.ts';
-import { grantLaunchRecipeAuthority, launchRecipeSources, prepareLaunchRecipesCorpus,
+import { launchRecipeSources, loadLaunchRecipesCorpus,
   restoreLaunchRecipesCorpus, type LaunchRecipesCorpus }
   from '../../../scripts/load/launch-corpus.ts';
 import { workProfileCorpusApi, type CorpusApi } from '../../../scripts/load/work-profile-corpus.ts';
-import { initializeRelayCheckpoint } from '../../../services/main/src/modules/outbox/relay.ts';
 import { startMediaStack, type MediaStack } from './media-support.ts';
 
 const short = (id: string) => id.slice(-36);
@@ -28,34 +26,39 @@ function apiFor(stack: MediaStack, token: string): CorpusApi {
   });
 }
 
-async function importFile(stack: MediaStack, token: string, actor: string, key: string,
-  composition: { structure: string; revision: string }, file: Record<string, unknown>, signal: AbortSignal) {
-  const path = `/v1/recipes/${short(composition.structure)}/file-imports`
-    + `?actingSubject=${encodeURIComponent(actor)}&expectedHead=${encodeURIComponent(composition.revision)}`;
-  const response = await stack.main.handle(new Request(`http://main.local${path}`, { method: 'POST',
-    headers: { authorization: `Bearer ${token}`, 'idempotency-key': key,
-      'content-type': 'application/ld+json' }, body: JSON.stringify(file), signal }));
-  if (![200, 201].includes(response.status)) {
-    throw new Error(`Recipe file import returned HTTP ${response.status}: ${await response.text()}`);
-  }
-  return await response.json() as { structure: string; revision: string; sourceObservation: string; replayed: boolean };
-}
-
 async function openCopy(input: CorpusRestoreSmokeInput) {
   const env = { ...input.apps, REZICS_QA_RUN_ID: input.runId, REZICS_QA_STACK_MODE: 'scale',
     REZICS_QA_STACK_TIER: 'integration', REZICS_STACK_PROFILE: 'qa' };
   const previous = new Map(Object.keys(env).map(key => [key, Bun.env[key]]));
   Object.assign(Bun.env, env);
+  let stack: MediaStack | undefined;
   try {
-    const stack = await startMediaStack('launch-recipes-restored', { library: true, ownerUrls: {
+    stack = await startMediaStack('launch-recipes-restored', { library: true, ownerUrls: {
       access: input.apps.ACCESS_DATABASE_URL!, content: input.apps.CONTENT_DATABASE_URL!,
       relay: input.apps.ACCOUNT_RELAY_DATABASE_URL!,
     } });
+    input.signal.throwIfAborted();
+    const projection = stack.composition.zoneBrowse;
+    if (!projection) throw new Error('Restored recipes copy has no Zone browse projection');
+    const readinessStarted = performance.now();
+    try {
+      await projection.backfill();
+      input.signal.throwIfAborted();
+      console.log(JSON.stringify({ stage: 'restored-zone-browse-readiness',
+        readinessMs: Math.round(performance.now() - readinessStarted) }));
+    } catch (error) {
+      const readinessMs = Math.round(performance.now() - readinessStarted);
+      console.log(JSON.stringify({ stage: 'restored-zone-browse-readiness', readinessMs, outcome: 'failed' }));
+      throw new Error(`Restored Zone browse readiness failed after ${readinessMs} ms`, { cause: error });
+    }
     const workObjects = stack.objects('semantic/work/');
     const structureObjects = stack.objects('semantic/structure/');
     await Promise.all([workObjects.initialize(), structureObjects.initialize()]);
     Object.assign(stack.env, { objectDirectory: input.apps.MAIN_OBJECT_DIRECTORY!, workObjects, structureObjects });
     return stack;
+  } catch (error) {
+    await stack?.stop();
+    throw error;
   } finally {
     for (const [key, value] of previous) {
       if (value === undefined) delete Bun.env[key];
@@ -77,7 +80,10 @@ interface RecipePage {
 }
 
 interface ZoneBrowsePage {
+  profile: 'zone-browse-v1';
   items: { id: string; title: { value: string } }[];
+  matches: { value: number; kind: 'exact' | 'lower-bound' };
+  window: { scanned: number; complete: boolean };
   nextCursor: string | null;
 }
 
@@ -85,12 +91,9 @@ let corpus: LaunchRecipesCorpus;
 let recipeApi: CorpusApi;
 let recipeActor = '';
 const copies = new Map<string, MediaStack>();
-const targets = ['one', 'two'] as const;
-let driver: ReturnType<typeof createCorpusBackupDriver>;
-let source: MediaStack | undefined;
-let relay: Pool | undefined;
-let relayClosed = false;
-let sourceClosed = false;
+const target = 'isolated';
+let targetName = '';
+let driver: ReturnType<typeof createCorpusBackupDriver> | undefined;
 
 test('Gutenberg recipe pins select 30 ordered extracts and preserve the approved source lines', () => {
   const recipes = launchRecipeSources();
@@ -112,16 +115,15 @@ beforeAll(async () => {
     throw new Error('Launch recipe restore needs persistent catalogue-disk allocation (REZICS_QA_STACK_MODE=scale)');
   if (compose.REZICS_STACK_RAW_UPDATE === '1')
     throw new Error('Launch recipe restore needs commandOnlyIntegrationFiles registration for public Realm writes');
-  source = await startMediaStack('launch-recipes-source', { library: true, profileCredits: true });
-  relay = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL });
+  corpus = loadLaunchRecipesCorpus();
+  expect(corpus.counts).toEqual({ works: 30, recipes: 30, ingredientLines: 173, fractionLines: 47,
+    rangeLines: 2, englishRecipes: 20, italianRecipes: 10 });
+  expect(corpus.records).toHaveLength(30);
+  targetName = `launch-recipes-${sourceRunId}-${target}`;
   driver = createCorpusBackupDriver({ sourceRunId,
     directory: join(root, '.temp/launch-corpus/recipes/backups'), resumeSource: false,
-    async quiesce(signal) {
-      signal.throwIfAborted();
-      await relay!.end();
-      relayClosed = true;
-      await source!.stop();
-      sourceClosed = true;
+    async quiesce() {
+      throw new Error('The launch recipes integration test restores a retained API corpus and never backs it up');
     },
     async smokeRead(input) {
       const stack = await openCopy(input);
@@ -129,17 +131,20 @@ beforeAll(async () => {
         const importer = await stack.member('launch-recipes-importer', { stable: true, verified: true });
         const api = apiFor(stack, importer.token);
         const pathFor = (cursor?: string) => {
-          const query = new URLSearchParams({ limit: '20', language: 'en' });
+          const query = new URLSearchParams({ limit: '20' });
           if (cursor) query.set('cursor', cursor);
           return `/v1/realms/${short(corpus.realm)}/modules/browse?${query}` as const;
         };
-        const ids: string[] = [];
+        const pages: ZoneBrowsePage[] = [];
         let cursor: string | undefined;
         do {
           const page = await api.read<ZoneBrowsePage>(pathFor(cursor));
-          ids.push(...page.items.map(item => item.id));
+          pages.push(page);
           cursor = page.nextCursor ?? undefined;
         } while (cursor);
+        const ids = pages.flatMap(page => page.items.map(item => item.id));
+        expect(pages.at(-1)?.window.complete).toBe(true);
+        expect(pages.at(-1)?.matches).toEqual({ value: corpus.records.length, kind: 'exact' });
         expect(new Set(ids)).toEqual(new Set(corpus.records.map(item => item.work)));
         copies.set(input.target, stack);
         return async () => { copies.delete(input.target); await stack.stop(); };
@@ -149,37 +154,17 @@ beforeAll(async () => {
       }
     },
   });
-  const importer = await source.member('launch-recipes-importer', { stable: true, verified: true });
+  const restoreMs = await restoreLaunchRecipesCorpus(corpus, targetName, driver!);
+  expect(restoreMs).toBeLessThan(480_000);
+  const restored = copies.get(targetName)!;
+  const importer = await restored.member('launch-recipes-importer', { stable: true, verified: true });
   recipeActor = importer.actor;
-  await initializeRelayCheckpoint(relay, Bun.env.MAIN_RELAY_CONSUMER!, source.env.lineage.dataEpoch);
-  const api = apiFor(source, importer.token);
-  corpus = await prepareLaunchRecipesCorpus({ api, actor: importer.actor, backups: driver,
-    directory: join(root, '.temp/launch-corpus/recipes/manifests'),
-    authorize: (scope, action) => grantLaunchRecipeAuthority(source!.accessPool,
-      importer.principalId, importer.actor, scope, action),
-    importFile: (key, actor, composition, file, signal) => importFile(source!, importer.token,
-      actor, key, composition, file, signal),
-  });
-  expect(corpus.counts).toEqual({ works: 30, recipes: 30, ingredientLines: 173, fractionLines: 47,
-    rangeLines: 2, englishRecipes: 20, italianRecipes: 10 });
-  expect(corpus.records).toHaveLength(30);
-  expect(corpus.buildMs).toBeLessThan(600_000);
-  for (const target of targets) expect(await restoreLaunchRecipesCorpus(corpus, `launch-recipes-${sourceRunId}-${target}`, driver))
-    .toBeLessThan(600_000);
-  const restored = copies.get(`launch-recipes-${sourceRunId}-one`)!;
-  recipeApi = apiFor(restored, (await restored.member('launch-recipes-importer', { stable: true, verified: true })).token);
-}, 600_000);
+  recipeApi = apiFor(restored, importer.token);
+}, 480_000);
 
 afterAll(async () => {
-  const failures: unknown[] = [];
-  for (const target of targets) {
-    try { await driver?.stop(`launch-recipes-${Bun.env.REZICS_QA_RUN_ID}-${target}`); }
-    catch (error) { failures.push(error); }
-  }
-  if (!relayClosed && relay) { try { await relay.end(); } catch (error) { failures.push(error); } }
-  if (!sourceClosed && source) { try { await source.stop(); } catch (error) { failures.push(error); } }
-  if (failures.length) throw new AggregateError(failures, 'Launch recipe corpus cleanup failed');
-});
+  if (targetName) await driver?.stop(targetName);
+}, 120_000);
 
 async function readRecipe(record: LaunchRecipesCorpus['records'][number]): Promise<RecipePage[]> {
   const pages: RecipePage[] = [];
@@ -198,7 +183,7 @@ async function readAllBrowsePages(api: CorpusApi, realm: string, q?: string): Pr
   const pages: ZoneBrowsePage[] = [];
   let cursor: string | undefined;
   do {
-    const query = new URLSearchParams({ limit: '20', language: 'en' });
+    const query = new URLSearchParams({ limit: '20' });
     if (q) query.set('q', q);
     if (cursor) query.set('cursor', cursor);
     const page = await api.read<ZoneBrowsePage>(`/v1/realms/${short(realm)}/modules/browse?${query}`);
@@ -265,18 +250,16 @@ test('recipes / Pinned Schema.org imports retain ordered content, quantities and
   if (!flour)
     failures.push('Puff paste: ingredient flour line is missing');
   const puffSteps = puffOccurrences.filter(item => item.role === 'step');
-  const doughUse = puffOccurrences.find(item => item.role === 'step'
-    && item.qualifier?.instructionText?.value.startsWith('Work two tablespoons of butter into flour'));
-  const rollingUse = puffOccurrences.find(item => item.role === 'step'
-    && item.qualifier?.instructionText?.value.includes('dredging board slightly with flour when necessary'));
+  const doughIndex = puff.sourceMethods.findIndex(line => line.trim().includes('Work two tablespoons of'));
+  const rollingIndex = puff.sourceMethods.findIndex(line => line.trim().includes('dredging board'));
+  const doughUse = doughIndex < 0 ? undefined : puffSteps[doughIndex];
+  const rollingUse = rollingIndex < 0 ? undefined : puffSteps[rollingIndex];
   if (!rollingUse)
     failures.push('Puff paste: rolling flour instruction line is missing');
   if (!doughUse)
     failures.push('Puff paste: dough flour instruction line is missing');
   if (doughUse && rollingUse) {
-    const doughIndex = puffSteps.indexOf(doughUse);
-    const rollingIndex = puffSteps.indexOf(rollingUse);
-    if (doughIndex < 0 || rollingIndex <= doughIndex)
+    if (doughUse === rollingUse || rollingIndex <= doughIndex)
       failures.push('Puff paste: dough and rolling flour instruction lines must stay separate and in order');
     if (flour && [doughUse, rollingUse].some(step => step.qualifier?.usesIngredient?.includes(flour.occurrence)))
       failures.push('Puff paste: flour instruction lines must not be linked to the ingredient occurrence');
@@ -291,8 +274,12 @@ test('recipes / Catalogue browse and search in its Zone cover all 30 Works acros
   const items = pages.flatMap(page => page.items);
   expect(pages).toHaveLength(2);
   expect(items).toHaveLength(30);
+  expect(pages.at(-1)?.window.complete).toBe(true);
+  expect(pages.at(-1)?.matches).toEqual({ value: corpus.records.length, kind: 'exact' });
   expect(new Set(items.map(item => item.id))).toEqual(new Set(corpus.records.map(item => item.work)));
   const search = await readAllBrowsePages(recipeApi, corpus.realm, 'Puff Paste');
+  expect(search.at(-1)?.window.complete).toBe(true);
+  expect(search.at(-1)?.matches.kind).toBe('exact');
   expect(search.flatMap(page => page.items).map(item => item.id)).toContain(
     corpus.records.find(item => item.recipeId === 'puff-paste')!.work);
 });

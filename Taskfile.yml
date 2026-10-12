@@ -512,6 +512,11 @@ tasks:
     cmds:
       - bun scripts/load/clone-probe.ts {{.CLI_ARGS}}
 
+  launch:corpus:
+    desc: Build the retained launch API corpus or prepare a launch browser corpus.
+    cmds:
+      - bun scripts/load/launch-corpus.ts {{.CLI_ARGS}}
+
   release:build:
     desc: Package a content-addressed local release artifact.
     cmds:

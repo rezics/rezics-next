@@ -1,19 +1,27 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
-import type { Pool } from 'pg';
+import { Pool } from 'pg';
 import type { FixtureLock } from '../fixtures/pull.ts';
 import { prideEditionSet } from '../../tests/fixtures/sources/open-library.ts';
 import { stableId } from '../dev/seed/state.ts';
+import { readEnv } from '../dev/config.ts';
+import { stageQaBootstrap } from '../qa/bootstrap.ts';
+import { qaStackEnvironment } from '../qa/stack-environment.ts';
+import { runQaStartupChildAsync } from '../qa/stack-startup.ts';
+import { dockerEnvironment, stream } from '../fixture/stack.ts';
 import { grantFixtureAuthority } from '../../services/main/src/modules/access/fixture-authority.ts';
+import { initializeRelayCheckpoint } from '../../services/main/src/modules/outbox/relay.ts';
 import { seedCatalogueProfileWorks } from './catalogue-work.ts';
 import { compatibleLoadStorage, loadCompatibility, type LoadCompatibility } from './compatibility.ts';
+import { createCorpusBackupDriver, type CorpusRestoreSmokeInput } from './corpus-backup-driver.ts';
 import { workProfileCorpusApi, type CorpusApi, type CorpusBackupDriver } from './work-profile-corpus.ts';
+import type { MediaStack } from '../../tests/qa/integration/media-support.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const budgetMs = 600_000;
 const recipe = 'launch-books-v2';
-const launchRecipesRecipe = 'launch-real-recipes-v1';
+const launchRecipesRecipe = 'launch-real-recipes-v2';
 const short = (id: string) => id.slice(-36);
 
 interface OpenLibraryRecord {
@@ -428,6 +436,39 @@ function launchRecipeSourcesManifest() {
   }).filter((entry, index, all) => all.findIndex(candidate => candidate.id === entry.id) === index);
 }
 
+const launchRecipeCounts: LaunchRecipesCorpus['counts'] = { works: 30, recipes: 30,
+  ingredientLines: 173, fractionLines: 47, rangeLines: 2, englishRecipes: 20, italianRecipes: 10 };
+
+function launchRecipesIdentity(sources: LaunchRecipesCorpus['sources'], compatibility: LoadCompatibility): string {
+  return `launch-recipes-${createHash('sha256')
+    .update(JSON.stringify([launchRecipesRecipe, sources, compatibility.digest])).digest('hex').slice(0, 20)}`;
+}
+
+function launchRecipesManifestPath(directory: string, id: string): string {
+  const resolvedDirectory = resolve(directory);
+  if (!relative(root, resolvedDirectory).startsWith('.temp/'))
+    throw new Error('Launch corpus must stay in this checkout .temp');
+  return join(resolvedDirectory, `${id}.json`);
+}
+
+/** Read the retained API-built corpus without starting an importer or issuing commands. */
+export function loadLaunchRecipesCorpus(directory = join(root, '.temp/launch-corpus/recipes/manifests')): LaunchRecipesCorpus {
+  const sources = launchRecipeSourcesManifest();
+  const compatibility = loadCompatibility(root);
+  const id = launchRecipesIdentity(sources, compatibility);
+  const path = launchRecipesManifestPath(directory, id);
+  if (!existsSync(path)) throw new Error(`Launch recipes corpus is not built; run bun scripts/load/launch-corpus.ts --recipes-build`);
+  const saved = JSON.parse(readFileSync(path, 'utf8')) as LaunchRecipesCorpus;
+  const backup = resolve(saved.backup ?? '');
+  if (saved.id !== id || saved.recipe !== launchRecipesRecipe || JSON.stringify(saved.sources) !== JSON.stringify(sources)
+    || !compatibleLoadStorage(saved.compatibility, compatibility) || !relative(root, backup).startsWith('.temp/')
+    || !existsSync(backup) || JSON.stringify(saved.counts) !== JSON.stringify(launchRecipeCounts)
+    || !Array.isArray(saved.records) || saved.records.length !== 30
+    || !Number.isFinite(saved.buildMs) || saved.buildMs < 0 || saved.buildMs > budgetMs)
+    throw new Error('Incompatible or incomplete launch recipes corpus');
+  return saved;
+}
+
 export async function prepareLaunchRecipesCorpus(input: {
   api: CorpusApi;
   actor: string;
@@ -439,18 +480,12 @@ export async function prepareLaunchRecipesCorpus(input: {
 }): Promise<LaunchRecipesCorpus> {
   const sources = launchRecipeSourcesManifest();
   const compatibility = loadCompatibility(root);
-  const id = `launch-recipes-${createHash('sha256')
-    .update(JSON.stringify([launchRecipesRecipe, sources, compatibility.digest])).digest('hex').slice(0, 20)}`;
+  const id = launchRecipesIdentity(sources, compatibility);
   const directory = resolve(input.directory);
-  if (!relative(root, directory).startsWith('.temp/')) throw new Error('Launch corpus must stay in this checkout .temp');
   mkdirSync(directory, { recursive: true });
-  const path = join(directory, `${id}.json`);
+  const path = launchRecipesManifestPath(directory, id);
   if (existsSync(path)) {
-    const saved = JSON.parse(readFileSync(path, 'utf8')) as LaunchRecipesCorpus;
-    if (saved.id !== id || saved.recipe !== launchRecipesRecipe || JSON.stringify(saved.sources) !== JSON.stringify(sources)
-      || !compatibleLoadStorage(saved.compatibility, compatibility) || !existsSync(saved.backup)
-      || saved.records.length !== 30 || !Number.isFinite(saved.buildMs) || saved.buildMs < 0 || saved.buildMs > budgetMs)
-      throw new Error('Incompatible or incomplete launch recipes corpus');
+    const saved = loadLaunchRecipesCorpus(directory);
     console.log(JSON.stringify({ launchCorpus: id, reused: true, sources, counts: saved.counts,
       buildMs: Math.round(saved.buildMs) }));
     return saved;
@@ -464,8 +499,7 @@ export async function prepareLaunchRecipesCorpus(input: {
     const backup = await input.backups.backup(id, signal);
     signal.throwIfAborted();
     const manifest: LaunchRecipesCorpus = { recipe: launchRecipesRecipe, id, compatibility, sources,
-      ...built, counts: { works: 30, recipes: 30, ingredientLines: 173, fractionLines: 47,
-        rangeLines: 2, englishRecipes: 20, italianRecipes: 10 }, backup,
+      ...built, counts: launchRecipeCounts, backup,
       buildMs: performance.now() - started };
     writeFileSync(`${path}.tmp`, JSON.stringify(manifest, null, 2) + '\n', { mode: 0o600 });
     renameSync(`${path}.tmp`, path);
@@ -487,6 +521,174 @@ export async function restoreLaunchRecipesCorpus(corpus: LaunchRecipesCorpus, ta
   const restoreMs = performance.now() - started;
   console.log(JSON.stringify({ launchCorpus: corpus.id, target, restoreMs: Math.round(restoreMs) }));
   return restoreMs;
+}
+
+async function buildRecipesApiBackup() {
+  const directory = join(root, '.temp/launch-corpus/recipes/manifests');
+  const sources = launchRecipeSourcesManifest();
+  const compatibility = loadCompatibility(root);
+  const id = launchRecipesIdentity(sources, compatibility);
+  const manifestPath = launchRecipesManifestPath(directory, id);
+  if (existsSync(manifestPath)) {
+    const corpus = loadLaunchRecipesCorpus(directory);
+    console.log(JSON.stringify({ launchCorpus: corpus.id, reused: true, sources: corpus.sources,
+      counts: corpus.counts, buildMs: Math.round(corpus.buildMs) }));
+    return corpus;
+  }
+
+  const sourceRunId = `recipes-build-${Date.now().toString(36)}-${randomBytes(3).toString('hex')}`;
+  const environment = qaStackEnvironment({ ...process.env, REZICS_QA_STACK_MODE: 'scale',
+    REZICS_QA_STACK_TIER: 'integration', REZICS_STACK_PROFILE: 'qa' }, 'scale', 'catalogue-disk');
+  const resetSourceStack = async () => {
+    const reset = await runQaStartupChildAsync(root,
+      ['stack:reset', '--profile', 'qa', '--run-id', sourceRunId, '--persistent'], 180_000, environment);
+    if (!reset.ok) throw new Error(`Launch recipes source stack cleanup failed: ${reset.output.slice(-2000)}`);
+  };
+  const started = await runQaStartupChildAsync(root,
+    ['stack:up', '--profile', 'qa', '--run-id', sourceRunId, '--persistent'], 180_000, environment);
+  if (!started.ok) {
+    await resetSourceStack();
+    throw new Error(`Launch recipes source stack failed: ${started.output.slice(-2000)}`);
+  }
+
+  let sourceEnvironment: NodeJS.ProcessEnv;
+  let previous: Map<string, string | undefined>;
+  try {
+    const stackDirectory = join(root, '.temp/stack', `rezics-qa-${sourceRunId}`);
+    const compose = readEnv(join(stackDirectory, 'compose.env'));
+    if (compose.REZICS_STACK_STORAGE !== 'persistent' || compose.REZICS_STACK_RAW_UPDATE === '1')
+      throw new Error('Launch recipes build requires a persistent command-only QA stack');
+    const staged = stageQaBootstrap(stackDirectory);
+    await stream('bun', staged.args, { ...environment, ...staged.apps }, undefined, 180_000);
+    sourceEnvironment = { ...environment, ...readEnv(join(stackDirectory, 'apps.env')),
+      REZICS_QA_RUN_ID: sourceRunId, REZICS_QA_STACK_MODE: 'scale',
+      REZICS_QA_STACK_TIER: 'integration', REZICS_STACK_PROFILE: 'qa' };
+    previous = new Map(Object.keys(sourceEnvironment).map(key => [key, Bun.env[key]]));
+    Object.assign(Bun.env, sourceEnvironment);
+  } catch (error) {
+    await resetSourceStack();
+    throw error;
+  }
+
+  let source: MediaStack | undefined;
+  let relay: Pool | undefined;
+  let sourceClosed = false;
+  let relayClosed = false;
+  let corpus: LaunchRecipesCorpus | undefined;
+  let driver: ReturnType<typeof createCorpusBackupDriver> | undefined;
+  let failure: unknown;
+  try {
+    const { startMediaStack } = await import('../../tests/qa/integration/media-support.ts');
+    source = await startMediaStack('launch-recipes-api-source', { library: true, profileCredits: true });
+    const workObjects = source.objects('semantic/work/');
+    const structureObjects = source.objects('semantic/structure/');
+    await Promise.all([workObjects.initialize(), structureObjects.initialize()]);
+    Object.assign(source.env, { objectDirectory: sourceEnvironment.MAIN_OBJECT_DIRECTORY!, workObjects, structureObjects });
+    relay = new Pool({ connectionString: sourceEnvironment.ACCOUNT_RELAY_DATABASE_URL });
+
+    const openCopy = async (input: CorpusRestoreSmokeInput) => {
+      const env = { ...input.apps, REZICS_QA_RUN_ID: input.runId, REZICS_QA_STACK_MODE: 'scale',
+        REZICS_QA_STACK_TIER: 'integration', REZICS_STACK_PROFILE: 'qa' };
+      const saved = new Map(Object.keys(env).map(key => [key, Bun.env[key]]));
+      Object.assign(Bun.env, env);
+      let stack: MediaStack | undefined;
+      try {
+        const opened = await startMediaStack('launch-recipes-build-smoke', { library: true, ownerUrls: {
+          access: input.apps.ACCESS_DATABASE_URL!, content: input.apps.CONTENT_DATABASE_URL!,
+          relay: input.apps.ACCOUNT_RELAY_DATABASE_URL!,
+        } });
+        stack = opened;
+        const projection = opened.composition.zoneBrowse;
+        if (!projection) throw new Error('Restored recipes copy has no Zone browse projection');
+        const readinessStarted = performance.now();
+        await projection.backfill();
+        input.signal.throwIfAborted();
+        console.log(JSON.stringify({ launchCorpus: corpus!.id, stage: 'restored-zone-browse-readiness',
+          readinessMs: Math.round(performance.now() - readinessStarted) }));
+        const importer = await opened.member('launch-recipes-importer', { stable: true, verified: true });
+        const api = workProfileCorpusApi('http://main.local', importer.token, {
+          fetch: (async (request, init) => opened.main.handle(new Request(request, init))) as typeof fetch,
+        });
+        const page = await api.read<{ items: { id: string }[]; nextCursor: string | null }>(
+          `/v1/realms/${short(corpus!.realm)}/modules/browse?limit=20&language=en`);
+        if (page.items.length !== 20 || !page.nextCursor)
+          throw new Error('Restored recipes backup did not expose its first complete browse page');
+        return { stack: opened, stop: async () => opened.stop() };
+      } catch (error) {
+        await stack?.stop();
+        throw error;
+      } finally {
+        for (const [key, value] of saved) {
+          if (value === undefined) delete Bun.env[key];
+          else Bun.env[key] = value;
+        }
+      }
+    };
+
+    const importer = await source.member('launch-recipes-importer', { stable: true, verified: true });
+    await initializeRelayCheckpoint(relay, sourceEnvironment.MAIN_RELAY_CONSUMER!, source.env.lineage.dataEpoch);
+    const api = workProfileCorpusApi('http://main.local', importer.token, {
+      fetch: (async (request, init) => {
+        for (let attempt = 0; ; attempt++) {
+          init?.signal?.throwIfAborted();
+          const response = await source!.main.handle(new Request(request, init));
+          if (response.status !== 202 || attempt === 2) return response;
+          const pending = await response.json() as { retry?: { allowed?: boolean; afterMs?: number } };
+          if (!pending.retry?.allowed) throw new Error('Recipe corpus command cannot be retried');
+          await Bun.sleep(Math.min(1000, Math.max(0, pending.retry.afterMs ?? 1000)));
+        }
+      }) as typeof fetch,
+    });
+    driver = createCorpusBackupDriver({ sourceRunId,
+      directory: join(root, '.temp/launch-corpus/recipes/backups'), resumeSource: false,
+      async quiesce(signal) {
+        signal.throwIfAborted();
+        await relay!.end();
+        relayClosed = true;
+        await source!.stop();
+        sourceClosed = true;
+      },
+      async smokeRead(input) {
+        const copy = await openCopy(input);
+        return async () => copy.stop();
+      },
+    });
+    corpus = await prepareLaunchRecipesCorpus({ api, actor: importer.actor, backups: driver,
+      directory, authorize: (scope, action) => grantLaunchRecipeAuthority(source!.accessPool,
+        importer.principalId, importer.actor, scope, action),
+      importFile: async (key, actor, composition, file, signal) => {
+        const path = `/v1/recipes/${short(composition.structure)}/file-imports`
+          + `?actingSubject=${encodeURIComponent(actor)}&expectedHead=${encodeURIComponent(composition.revision)}`;
+        const response = await source!.main.handle(new Request(`http://main.local${path}`, { method: 'POST',
+          headers: { authorization: `Bearer ${importer.token}`, 'idempotency-key': key,
+            'content-type': 'application/ld+json' }, body: JSON.stringify(file), signal }));
+        if (![200, 201].includes(response.status))
+          throw new Error(`Recipe file import returned HTTP ${response.status}: ${await response.text()}`);
+        return await response.json() as RecipeFileImportReceipt;
+      },
+    });
+    if (JSON.stringify(corpus.counts) !== JSON.stringify(launchRecipeCounts) || corpus.records.length !== 30)
+      throw new Error('Launch recipes API build returned an incomplete corpus');
+  } catch (error) {
+    failure = error;
+  } finally {
+    const cleanup: unknown[] = [];
+    if (!relayClosed && relay) { try { await relay.end(); } catch (error) { cleanup.push(error); } }
+    if (!sourceClosed && source) { try { await source.stop(); } catch (error) { cleanup.push(error); } }
+    for (const [key, value] of previous) {
+      if (value === undefined) delete Bun.env[key];
+      else Bun.env[key] = value;
+    }
+    try { await resetSourceStack(); } catch (error) { cleanup.push(error); }
+    if (cleanup.length) failure = failure === undefined
+      ? new AggregateError(cleanup, 'Launch recipes API build cleanup failed')
+      : new AggregateError([failure, ...cleanup], 'Launch recipes API build and cleanup failed', { cause: failure });
+  }
+  if (failure !== undefined) throw failure;
+  if (!corpus || !driver) throw new Error('Launch recipes API build did not retain its corpus');
+  console.log(JSON.stringify({ launchCorpus: corpus.id, sources: corpus.sources, counts: corpus.counts,
+    buildMs: Math.round(corpus.buildMs), backup: corpus.backup }));
+  return corpus;
 }
 
 async function prepareBrowserRecipes() {
@@ -600,5 +802,6 @@ if (import.meta.main) {
   const command = process.argv.slice(2).join();
   if (command === '--browser-prepare') await prepareBrowserBooks();
   else if (command === '--browser-recipes-prepare') await prepareBrowserRecipes();
-  else throw new Error('Use --browser-prepare or --browser-recipes-prepare');
+  else if (command === '--recipes-build') await buildRecipesApiBackup();
+  else throw new Error('Use --recipes-build, --browser-prepare or --browser-recipes-prepare');
 }
