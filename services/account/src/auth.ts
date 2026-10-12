@@ -345,8 +345,9 @@ export function accountAuthOptions(config: AccountConfig) {
       const internal = ctx.context.internalAdapter;
       if (!sessionDeletionFences.has(internal)) {
         const deleteSession = internal.deleteSession;
+        const providerAdapter = ctx.context.adapter;
         internal.deleteSession = async token => {
-          const adapter = await getCurrentAdapter(ctx.context.adapter);
+          const adapter = await getCurrentAdapter(providerAdapter);
           const owner = sessionOwners.get(adapter);
           if (!owner) throw new APIError('SERVICE_UNAVAILABLE', { message: 'Account session owner is unavailable' });
           try { await retireProviderSession(owner, token); }
