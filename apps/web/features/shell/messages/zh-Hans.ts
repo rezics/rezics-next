@@ -41,7 +41,7 @@ export default {
   notificationsBudgetBody: '一次要加载的内容太多了。请稍后再试。',
   notificationsMoved: '这个列表变了',
   notificationsMovedBody: '重新加载即可查看你的通知。',
-  olderNotifications: '显示更早的通知', olderFailed: '未能加载更早的通知。',
+  olderNotifications: '显示更多', olderFailed: '未能加载更多通知。',
   notificationUnavailable: '这条通知已不可用。',
   someone: '有人',
   replied: insert('{{name}} 回复了你', { name: String }),

@@ -42,7 +42,7 @@ export default {
   notificationsBudgetBody: '한 번에 불러오기에는 너무 많아요. 잠시 후 다시 시도해 보세요.',
   notificationsMoved: '이 목록이 바뀌었어요',
   notificationsMovedBody: '알림을 보려면 페이지를 다시 불러오세요.',
-  olderNotifications: '이전 알림 보기', olderFailed: '이전 알림을 불러오지 못했어요.',
+  olderNotifications: '더 보기', olderFailed: '추가 알림을 불러오지 못했어요.',
   notificationUnavailable: '이 알림은 더 이상 확인할 수 없어요.',
   someone: '누군가',
   replied: insert('{{name}}님이 답글을 남겼어요', { name: String }),

@@ -42,7 +42,7 @@ export default {
   notificationsBudgetBody: 'C’est trop à charger d’un coup. Réessayez dans un instant.',
   notificationsMoved: 'Cette liste a changé',
   notificationsMovedBody: 'Rechargez la page pour voir vos notifications.',
-  olderNotifications: 'Afficher les plus anciennes', olderFailed: 'Impossible de charger les notifications plus anciennes.',
+  olderNotifications: 'Afficher plus', olderFailed: 'Impossible de charger plus de notifications.',
   notificationUnavailable: 'Cette notification n’est plus disponible.',
   someone: 'Quelqu’un',
   replied: insert('{{name}} vous a répondu', { name: String }),

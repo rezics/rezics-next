@@ -42,7 +42,7 @@ export default {
   notificationsBudgetBody: 'Es demasiado para cargarlo de una vez. Inténtalo de nuevo dentro de un momento.',
   notificationsMoved: 'Esta lista ha cambiado',
   notificationsMovedBody: 'Recarga para ver tus notificaciones.',
-  olderNotifications: 'Mostrar anteriores', olderFailed: 'No se pudieron cargar las notificaciones anteriores.',
+  olderNotifications: 'Mostrar más', olderFailed: 'No se pudieron cargar más notificaciones.',
   notificationUnavailable: 'Esta notificación ya no está disponible.',
   someone: 'Alguien',
   replied: insert('{{name}} respondió', { name: String }),

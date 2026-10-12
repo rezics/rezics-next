@@ -42,7 +42,7 @@ export default {
   notificationsBudgetBody: 'Das ist auf einmal zu viel. Versuch es gleich noch einmal.',
   notificationsMoved: 'Diese Liste hat sich geändert',
   notificationsMovedBody: 'Lade die Seite neu, um deine Benachrichtigungen zu sehen.',
-  olderNotifications: 'Ältere anzeigen', olderFailed: 'Ältere Benachrichtigungen konnten nicht geladen werden.',
+  olderNotifications: 'Weitere anzeigen', olderFailed: 'Weitere Benachrichtigungen konnten nicht geladen werden.',
   notificationUnavailable: 'Diese Benachrichtigung ist nicht mehr verfügbar.',
   someone: 'Jemand',
   replied: insert('{{name}} hat geantwortet', { name: String }),

@@ -39,7 +39,7 @@ export default {
   notificationsBudgetBody: '一次載入的內容太多了。請稍後再試一次。',
   notificationsMoved: '這個清單變了',
   notificationsMovedBody: '重新載入即可查看你的通知。',
-  olderNotifications: '顯示較早的通知', olderFailed: '無法載入較早的通知。',
+  olderNotifications: '顯示更多', olderFailed: '無法載入更多通知。',
   notificationUnavailable: '此通知已無法查看。',
   someone: '有人',
   replied: insert('{{name}}回覆了你', { name: String }),

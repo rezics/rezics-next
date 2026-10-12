@@ -42,7 +42,7 @@ export const messages = {
   notificationsBudgetBody: 'This is too much to load at once. Try again in a moment.',
   notificationsMoved: 'This list changed',
   notificationsMovedBody: 'Reload to see your notifications.',
-  olderNotifications: 'Show older', olderFailed: 'Couldn’t load older notifications.',
+  olderNotifications: 'Show more', olderFailed: 'Couldn’t load more notifications.',
   notificationUnavailable: 'This notification is no longer available.',
   someone: 'Someone',
   replied: insert('{{name}} replied', { name: String }),

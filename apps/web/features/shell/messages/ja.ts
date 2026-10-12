@@ -40,7 +40,7 @@ export default {
   notificationsBudgetBody: '一度に読み込むには多すぎます。しばらくしてからもう一度お試しください。',
   notificationsMoved: 'この一覧は変わりました',
   notificationsMovedBody: '通知を見るには、ページを読み込み直してください。',
-  olderNotifications: '過去の通知を表示', olderFailed: '過去の通知を読み込めませんでした。',
+  olderNotifications: 'さらに表示', olderFailed: '追加の通知を読み込めませんでした。',
   notificationUnavailable: 'この通知はすでに利用できません。',
   someone: 'ユーザー',
   replied: insert('{{name}}さんから返信がありました', { name: String }),
