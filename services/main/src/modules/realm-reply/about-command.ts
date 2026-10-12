@@ -192,9 +192,9 @@ export class RealmAboutPostCommand {
         selected = await this.store.recordPosted(selected.id, admission.id, receipt.receipt);
         return { status: replay ? 200 as const : 201 as const, body: await this.posted(selected) };
       };
-      // The graph receipt decides a committed winner before current authority,
-      // target or route checks. Recover settlement under the same admission; a
-      // cancellation also stays terminal. No fresh key or opener is allocated.
+      // Recover the graph owner's outcome before current authority, target or
+      // route checks. Success and cancellation finish native settlement under
+      // the retained admission; this intent allocates no fresh key or opener.
       if (selected?.placementAdmissionId && selected.dispatchBasis) {
         const draft = await this.store.savedDraft(selected);
         if (!draft) throw new RealmReplyUnavailable('Discussion draft receipt is unavailable');
