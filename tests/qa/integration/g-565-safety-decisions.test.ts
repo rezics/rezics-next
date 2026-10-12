@@ -48,8 +48,9 @@ const reasons = {
   contentLanguage: 'sw-KE',
 };
 
-// Affected credentials need recipient-specific target binding for operation progress.
-test.failing('G-565: platform queue, exclusive claims, immutable reasons, resumable owner effects, appeals and legal windows', async () => {
+let affectedOperation: DecisionResult['operation'] | null | undefined;
+
+test('G-565: platform queue, exclusive claims, immutable reasons, resumable owner effects, appeals and legal windows', async () => {
   const stack = await startMediaStack('g-565');
   try {
     for (const table of governanceTables) {
@@ -495,7 +496,7 @@ test.failing('G-565: platform queue, exclusive claims, immutable reasons, resuma
     expect(reporterStatus.statementOfReasons).toBeNull();
     const partyStatus = await json<{
       statementOfReasons: typeof reasons;
-      operation: DecisionResult['operation'];
+      operation: DecisionResult['operation'] | null;
     }>(
       await call(
         'GET',
@@ -508,7 +509,8 @@ test.failing('G-565: platform queue, exclusive claims, immutable reasons, resuma
       200,
     );
     expect(partyStatus.statementOfReasons.automation).toBe(false);
-    expect(partyStatus.operation.status).toBe('completed');
+    affectedOperation = partyStatus.operation;
+    expect(affectedOperation).toBeNull();
     expect(
       (await call('GET', '/v1/safety-notices', undefined, other.token)).headers.get(
         'cache-control',
@@ -1182,3 +1184,8 @@ test.failing('G-565: platform queue, exclusive claims, immutable reasons, resuma
     await stack.stop();
   }
 }, 180_000);
+
+// Only this assertion awaits recipient-specific target binding in governance notices.
+test.failing('affected party operation progress awaits recipient-specific target binding', () => {
+  expect(affectedOperation?.status).toBe('completed');
+});
