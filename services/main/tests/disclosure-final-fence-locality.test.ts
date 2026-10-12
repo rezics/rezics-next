@@ -282,7 +282,7 @@ for (const size of [65, 501, 512, 1_024]) {
     const targets = inputs.map(selection => ({ ...selection.target, ancestry: selection.ancestry }));
     const read = await reader.readAtCut(targets, ANONYMOUS_VIEWER, 'read', client as PoolClient);
     expect(read.decisions).toEqual(inputs.map((_item, index) => index % 2 ? 'tombstone' : 'visible'));
-    expect(read.fenceBases.map(basis => basis.enforcementCut)).toEqual(scoped.results);
+    expect(read.fenceBases.map(basis => basis.enforcementCut)).toEqual([...scoped.results]);
     expect(read.cost.statements).toBe(statements.length);
     expect(read.cost.ownerStatements).toBe(chunks);
     expect(read.cost.recoveryStatements).toBe(chunks);
