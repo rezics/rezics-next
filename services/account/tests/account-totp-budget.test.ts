@@ -1,9 +1,19 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import { createHmac } from 'node:crypto';
-import { symmetricDecrypt } from 'better-auth/crypto';
+import { Client } from 'pg';
+import { symmetricDecrypt, symmetricEncrypt } from 'better-auth/crypto';
 import { createOTP } from '@better-auth/utils/otp';
 import { accountFixture } from './account-fixture.ts';
 import { cookies } from './recovery-fixture.ts';
+
+function userBudgetKey(secret: string, userId: string) {
+  return createHmac('sha256', secret).update(`reauth:${userId}`).digest('hex');
+}
+
+async function expireUserBudget(f: Awaited<ReturnType<typeof accountFixture>>, userId: string) {
+  await f.pool.query("UPDATE rezics_account_rate_limit SET started_at = now() - interval '301 seconds' WHERE key = $1",
+    [userBudgetKey(f.secret, userId)]);
+}
 
 test('signed-in TOTP guesses share the immutable user reauthentication budget', async () => {
   const f = await accountFixture();
@@ -19,6 +29,7 @@ test('signed-in TOTP guesses share the immutable user reauthentication budget', 
     }, member.cookie);
     expect(verified.status).toBe(200);
     const cookie = cookies(verified);
+    await expireUserBudget(f, member.id);
     await f.pool.query('UPDATE "session" SET "createdAt" = now() - interval \'10 minutes\' WHERE "userId" = $1', [member.id]);
     expect((await f.request('/api/auth/two-factor/verify-totp', undefined, cookie)).status).toBe(404);
     expect((await f.request('/api/account/reauthenticate', {
@@ -41,7 +52,7 @@ test('signed-in TOTP guesses share the immutable user reauthentication budget', 
     }, cookie)).status).toBe(429);
     expect((await f.pool.query('SELECT 1 FROM rezics_account_step_up WHERE session_id IN (SELECT id FROM "session" WHERE "userId" = $1)', [member.id])).rowCount).toBe(0);
 
-    // Pending sign-in proofs retain their provider-owned challenge budget.
+    // Signed-out proofs have their own provider budget, independent of step-up.
     const challenge = await f.request('/api/auth/sign-in/email', {
       email: member.email, password: member.password,
     });
@@ -73,23 +84,202 @@ test('concurrent signed-in TOTP sessions cannot overspend and the user budget ex
       code: await createOTP(secret).totp(),
     }, cookies(challenge));
     expect(otherSession.status).toBe(200);
-    const responses: Response[] = [];
-    // Two callers race for the last attempt without exhausting the existing
-    // four-connection pool shared by the nested recovery/credential guards.
-    for (let wave = 0; wave < 4; wave++) {
-      responses.push(...await Promise.all(Array.from({ length: 2 }, (_, index) =>
-        f.request('/api/auth/two-factor/verify-totp', {
-          code: 'invalid', email: `parallel-${wave}-${index}@example.test`,
-        }, index ? firstCookie : cookies(otherSession)))));
-    }
+    await expireUserBudget(f, member.id);
+    // Eight callers exceed the four-connection guard pool together. Every
+    // admitted proof must reach the provider without a nested pool checkout.
+    const responses = await Promise.all(Array.from({ length: 8 }, (_, index) =>
+      f.request('/api/auth/two-factor/verify-totp', {
+        code: 'invalid', email: `parallel-${index}@example.test`,
+      }, index % 2 ? firstCookie : cookies(otherSession))));
     expect(responses.filter(response => response.status === 429)).toHaveLength(3);
-    expect(responses.every(response => !response.ok)).toBe(true);
-    const key = createHmac('sha256', f.secret).update(`reauth:${member.id}`).digest('hex');
+    expect(responses.filter(response => response.status === 401)).toHaveLength(5);
+    expect(responses.some(response => response.status === 503)).toBe(false);
+    expect(await Promise.all(responses.filter(response => response.status === 401)
+      .map(response => response.json()))).toEqual(Array.from({ length: 5 }, () =>
+      expect.objectContaining({ code: 'INVALID_CODE' })));
+    const key = userBudgetKey(f.secret, member.id);
     expect((await f.pool.query('SELECT count FROM rezics_account_rate_limit WHERE key = $1', [key])).rows[0].count).toBe(5);
     await f.pool.query("UPDATE rezics_account_rate_limit SET started_at = now() - interval '301 seconds' WHERE key = $1", [key]);
     expect((await f.request('/api/account/reauthenticate', {
       password: member.password, totpCode: await createOTP(secret).totp(),
     }, firstCookie)).status).toBe(200);
     expect((await f.pool.query('SELECT count FROM rezics_account_rate_limit WHERE key = $1', [key])).rows[0].count).toBe(1);
+  } finally { await f.close(); }
+}, 60_000);
+
+test('pending TOTP sign-in exhausts both challenge and account attempt limits', async () => {
+  const f = await accountFixture();
+  try {
+    const member = await f.signup('totp-pending-limits@example.test');
+    expect((await f.request('/api/auth/two-factor/enable', {
+      password: member.password,
+    }, member.cookie)).status).toBe(200);
+    const secret = await symmetricDecrypt({ key: f.secret,
+      data: (await f.pool.query('SELECT secret FROM "twoFactor" WHERE "userId" = $1', [member.id])).rows[0].secret });
+    expect((await f.request('/api/auth/two-factor/verify-totp', {
+      code: await createOTP(secret).totp(),
+    }, member.cookie)).status).toBe(200);
+
+    const challenge = async () => {
+      const response = await f.request('/api/auth/sign-in/email', {
+        email: member.email, password: member.password,
+      });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ twoFactorRedirect: true });
+      return cookies(response);
+    };
+    const firstChallenge = await challenge();
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const response = await f.request('/api/auth/two-factor/verify-totp', {
+        code: 'invalid',
+      }, firstChallenge);
+      expect(response.status).toBe(401);
+      expect(await response.json()).toMatchObject({ code: 'INVALID_CODE' });
+    }
+    // A correct proof after the challenge allowance must invalidate the
+    // challenge rather than create a session or reset the account failures.
+    const challengeDenied = await f.request('/api/auth/two-factor/verify-totp', {
+      code: await createOTP(secret).totp(),
+    }, firstChallenge);
+    expect(challengeDenied.status).toBe(400);
+    expect(await challengeDenied.json()).toMatchObject({ code: 'TOO_MANY_ATTEMPTS_REQUEST_NEW_CODE' });
+    const staleChallenge = await f.request('/api/auth/two-factor/verify-totp', {
+      code: 'invalid',
+    }, firstChallenge);
+    expect(staleChallenge.status).toBe(401);
+    expect(await staleChallenge.json()).toMatchObject({ code: 'INVALID_TWO_FACTOR_COOKIE' });
+    expect((await f.pool.query('SELECT "failedVerificationCount", "lockedUntil" FROM "twoFactor" WHERE "userId" = $1',
+      [member.id])).rows[0]).toMatchObject({ failedVerificationCount: 5, lockedUntil: null });
+
+    const secondChallenge = await challenge();
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const response = await f.request('/api/auth/two-factor/verify-totp', {
+        code: 'invalid',
+      }, secondChallenge);
+      expect(response.status).toBe(401);
+      expect(await response.json()).toMatchObject({ code: 'INVALID_CODE' });
+    }
+    const factor = (await f.pool.query('SELECT "failedVerificationCount", "lockedUntil" FROM "twoFactor" WHERE "userId" = $1',
+      [member.id])).rows[0];
+    expect(factor.failedVerificationCount).toBe(10);
+    expect(new Date(factor.lockedUntil).getTime()).toBeGreaterThan(Date.now());
+    // A fresh challenge cannot sidestep the account allowance.
+    const freshChallenge = await challenge();
+    for (const code of ['invalid', await createOTP(secret).totp()]) {
+      const denied = await f.request('/api/auth/two-factor/verify-totp', { code }, freshChallenge);
+      expect(denied.status).toBe(429);
+      expect(await denied.json()).toMatchObject({ code: 'ACCOUNT_TEMPORARILY_LOCKED' });
+      expect(await (await f.request('/api/auth/get-session', undefined, cookies(denied))).json()).toBeNull();
+    }
+    expect((await f.pool.query('SELECT "failedVerificationCount" FROM "twoFactor" WHERE "userId" = $1',
+      [member.id])).rows[0].failedVerificationCount).toBe(10);
+  } finally { await f.close(); }
+}, 60_000);
+
+test('TOTP verification charges the user budget after a no-factor snapshot races enrollment', async () => {
+  const f = await accountFixture();
+  let resume = () => {};
+  let interception: ReturnType<typeof spyOn<Client, 'query'>> | undefined;
+  try {
+    const member = await f.signup('totp-enrollment-race@example.test');
+    const otherSession = await f.request('/api/auth/sign-in/email', {
+      email: member.email, password: member.password,
+    });
+    expect(otherSession.status).toBe(200);
+    const secret = 'deterministic-enrollment-race-secret';
+    let entered = () => {};
+    const paused = new Promise<'paused'>(resolve => { entered = () => resolve('paused'); });
+    const released = new Promise<void>(resolve => { resume = resolve; });
+    let intercepted = false;
+    const query = Client.prototype.query;
+    interception = spyOn(Client.prototype, 'query').mockImplementation(function(this: Client, ...args: unknown[]) {
+      const result: unknown = Reflect.apply(query, this, args);
+      if (!intercepted && args[0] === 'SELECT verified FROM "twoFactor" WHERE "userId" = $1'
+        && Array.isArray(args[1]) && args[1][0] === member.id && result instanceof Promise) {
+        intercepted = true;
+        return result.then(async value => {
+          // The query has returned no factor. Keep that result pending while
+          // another authenticated session changes the factor and budget.
+          entered();
+          await released;
+          return value;
+        });
+      }
+      return result;
+    } as typeof Client.prototype.query);
+    const pending = f.request('/api/auth/two-factor/verify-totp', {
+      code: await createOTP(secret).totp(),
+    }, member.cookie);
+    expect(await Promise.race([paused, pending.then(() => 'finished' as const)])).toBe('paused');
+    const otherCookie = cookies(otherSession);
+    expect((await f.request('/api/auth/two-factor/enable', {
+      password: member.password,
+    }, otherCookie)).status).toBe(200);
+    // Seed a known secret so the already-paused proof is correct for the
+    // factor that this session is about to confirm.
+    await f.pool.query('UPDATE "twoFactor" SET secret = $2 WHERE "userId" = $1',
+      [member.id, await symmetricEncrypt({ key: f.secret, data: secret })]);
+    const verified = await f.request('/api/auth/two-factor/verify-totp', {
+      code: await createOTP(secret).totp(),
+    }, otherCookie);
+    expect(verified.status).toBe(200);
+    await expireUserBudget(f, member.id);
+    for (let attempt = 0; attempt < 5; attempt++) {
+      expect((await f.request('/api/account/reauthenticate', {
+        password: 'incorrect',
+      }, cookies(verified))).status).toBe(403);
+    }
+    const count = (await f.pool.query('SELECT count FROM rezics_account_rate_limit WHERE key = $1',
+      [userBudgetKey(f.secret, member.id)])).rows[0].count;
+    expect(count).toBe(5);
+    resume();
+    const response = await pending;
+    expect(response.status).toBe(429);
+    expect(await response.json()).toEqual({ error: 'rate_limited' });
+  } finally { resume(); interception?.mockRestore(); await f.close(); }
+}, 60_000);
+
+test('TOTP infrastructure failures roll back attempts before a later proof can use them', async () => {
+  const f = await accountFixture();
+  try {
+    const member = await f.signup('totp-unavailable-budget@example.test');
+    expect((await f.request('/api/auth/two-factor/enable', {
+      password: member.password,
+    }, member.cookie)).status).toBe(200);
+    const secret = await symmetricDecrypt({ key: f.secret,
+      data: (await f.pool.query('SELECT secret FROM "twoFactor" WHERE "userId" = $1', [member.id])).rows[0].secret });
+    const verified = await f.request('/api/auth/two-factor/verify-totp', {
+      code: await createOTP(secret).totp(),
+    }, member.cookie);
+    expect(verified.status).toBe(200);
+    const cookie = cookies(verified);
+    for (const failure of ['response', 'exception']) {
+      await expireUserBudget(f, member.id);
+      const before = (await f.pool.query('SELECT count, started_at FROM rezics_account_rate_limit WHERE key = $1',
+        [userBudgetKey(f.secret, member.id)])).rows[0];
+      const provider = spyOn(f.auth, 'handler').mockImplementationOnce(async () => {
+        if (failure === 'exception') throw new Error('injected provider database failure');
+        return Response.json({ error: 'temporarily_unavailable' }, { status: 503 });
+      });
+      try {
+        const unavailable = await f.request('/api/auth/two-factor/verify-totp', {
+          code: await createOTP(secret).totp(),
+        }, cookie);
+        expect(unavailable.status).toBe(503);
+        expect(provider).toHaveBeenCalledTimes(1);
+      } finally { provider.mockRestore(); }
+      expect((await f.pool.query('SELECT count, started_at FROM rezics_account_rate_limit WHERE key = $1',
+        [userBudgetKey(f.secret, member.id)])).rows[0]).toEqual(before);
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const response = await f.request('/api/auth/two-factor/verify-totp', { code: 'invalid' }, cookie);
+        expect(response.status).toBe(401);
+        expect(await response.json()).toMatchObject({ code: 'INVALID_CODE' });
+      }
+      expect((await f.request('/api/auth/two-factor/verify-totp', {
+        code: await createOTP(secret).totp(),
+      }, cookie)).status).toBe(429);
+      expect((await f.pool.query('SELECT count FROM rezics_account_rate_limit WHERE key = $1',
+        [userBudgetKey(f.secret, member.id)])).rows[0].count).toBe(5);
+    }
   } finally { await f.close(); }
 }, 60_000);
