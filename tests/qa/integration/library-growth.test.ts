@@ -1,5 +1,8 @@
 import { expect, test } from 'bun:test';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { trace } from '@opentelemetry/api';
 import { startTelemetry, flushTelemetryTraces, shutdownTelemetry } from '@rezics/observability/runtime';
 import { dockerEnvironment, root, stream } from '../../../scripts/fixture/stack.ts';
 import { readEnv } from '../../../scripts/dev/config.ts';
@@ -30,6 +33,61 @@ type Operation = 'status-shelf' | 'reader-state';
 const scales = [4, 16, 64] as const;
 const serviceName = 'library-growth-cost';
 const readerName = 'Library growth measurement reader';
+type SqlEvidence = { text: string; callSites: string[] };
+
+async function reportSqlStatements() {
+  // Pair local query text with the existing pg spans, without bound values or
+  // changes to exported telemetry. No additional instrumentation or spans are added.
+  const [{ Client, Pool }, { default: instrumentation }] = await Promise.all([
+    import('pg'),
+    import('@opentelemetry/instrumentation-pg/package.json'),
+  ]);
+  const tracer = trace.getTracer(instrumentation.name, instrumentation.version);
+  const queries = new AsyncLocalStorage<SqlEvidence>();
+  const evidence = new Map<string, SqlEvidence>();
+  const originalStart = tracer.startSpan;
+  const originalClientQuery = Client.prototype.query;
+  const originalPoolQuery = Pool.prototype.query;
+  const callSites = () => (new Error().stack ?? '').split('\n')
+    .filter(line => line.includes('/services/') || line.includes('/tests/qa/'))
+    .filter(line => !line.includes('/library-growth.test.ts'))
+    .map(line => line.trim().replaceAll(`${root}/`, ''));
+  const queryText = (input: unknown) => typeof input === 'string' ? input
+    : input && typeof input === 'object' && 'text' in input && typeof input.text === 'string' ? input.text : '';
+
+  tracer.startSpan = function (...args) {
+    const span = originalStart.apply(this, args);
+    const query = queries.getStore();
+    if (query && args[1]?.attributes?.['db.system.name'] === 'postgresql') {
+      const { traceId, spanId } = span.spanContext();
+      evidence.set(`${traceId}:${spanId}`, query);
+    }
+    return span;
+  };
+  Pool.prototype.query = function (...args: Parameters<typeof originalPoolQuery>) {
+    return queries.run({ text: queryText(args[0]), callSites: callSites() },
+      () => originalPoolQuery.apply(this, args));
+  } as typeof originalPoolQuery;
+  Client.prototype.query = function (...args: Parameters<typeof originalClientQuery>) {
+    const query = { text: queryText(args[0]), callSites: queries.getStore()?.callSites ?? callSites() };
+    return queries.run(query, () => originalClientQuery.apply(this, args));
+  } as typeof originalClientQuery;
+  return {
+    statements(profile: WorkProfile) {
+      return profile.postgres.map(statement => {
+        const query = evidence.get(`${profile.traceId}:${statement.spanId}`);
+        if (!query?.text) throw new Error(`SQL reporting lacks text for ${statement.spanId}`);
+        return { ...statement, ...query };
+      });
+    },
+    clear: () => evidence.clear(),
+    stop() {
+      tracer.startSpan = originalStart;
+      Client.prototype.query = originalClientQuery;
+      Pool.prototype.query = originalPoolQuery;
+    },
+  };
+}
 
 type RestoredContext = {
   stack: MediaStack;
@@ -178,6 +236,17 @@ test('Reader library shelf and Work status costs follow unrelated Work and own-s
     ...readerCost,
     postgresStatements: READER_LIBRARY_COST.sqlReads + STATUS_SHELF_COST.candidateBatches,
   } satisfies Omit<WorkCostContract, 'growth'>;
+  const sqlReporter = await reportSqlStatements();
+  const sqlReports: Array<{
+    axis: GrowthAxis;
+    size: number;
+    operation: Operation;
+    traceId: string;
+    statements: ReturnType<typeof sqlReporter.statements>;
+  }> = [];
+  const reportDirectory = join(root, '.temp/work-profiles');
+  const reportPath = join(reportDirectory, `library-sql-${runId}.json`);
+  mkdirSync(reportDirectory, { recursive: true });
   let activeCut: RetainedSeedCut | undefined;
   const restored = new Map<string, RestoredContext>();
   const targets: string[] = [];
@@ -311,6 +380,13 @@ test('Reader library shelf and Work status costs follow unrelated Work and own-s
         ];
         for (const request of requests) {
           const { result, profile } = await profileRead(context, sink, request.path, token);
+          const statements = sqlReporter.statements(profile);
+          expect(statements).toHaveLength(profile.postgresStatements!);
+          sqlReports.push({ axis, size, operation: request.operation, traceId: profile.traceId, statements });
+          writeFileSync(reportPath, JSON.stringify(sqlReports, null, 2) + '\n', { mode: 0o600 });
+          console.log('Library SQL report', { axis, size, operation: request.operation,
+            statements: statements.length, path: reportPath });
+          sqlReporter.clear();
           if (request.operation === 'status-shelf') {
             const shelf = result as { items: Array<{ work: string; status: string }> };
             expect(shelf.items).toHaveLength(ownShelf ? Math.min(size, STATUS_SHELF_COST.pageSize) : 1);
@@ -381,6 +457,7 @@ test('Reader library shelf and Work status costs follow unrelated Work and own-s
     }
     if (failures.length) throw new Error(failures.join('\n'));
   } finally {
+    sqlReporter.stop();
     const cleanupErrors: unknown[] = [];
     for (const target of targets) {
       try {
