@@ -224,7 +224,8 @@ test('SYS04/SYS05/SYS12 partial: retained RDF outbox and durable handoff', async
     expect((await pool.query<{ sequence: string }>(
       "SELECT sequence FROM relay.checkpoint WHERE consumer = 'first-handoff'"))
       .rows[0]!.sequence).toBe('6');
-    const newLineage = { dataEpoch: Bun.randomUUIDv7(), routingEpoch: '2' };
+    const newLineage = { dataEpoch: Bun.randomUUIDv7(), routingEpoch: /^(0|[1-9][0-9]*)$/.test(route.routingEpoch)
+      ? (BigInt(route.routingEpoch) + 1n).toString() : Bun.randomUUIDv7() };
     await cutoverRestoredGraphLineage(fuseki, { prior: { ...lineage, sequence: '7' }, next: newLineage });
     await expect(relayMainOutboxOnce(fuseki, pool, 'first-handoff'))
       .rejects.toBeInstanceOf(OutboxEpochChanged);
