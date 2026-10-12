@@ -20,7 +20,7 @@ test('G-539: summaries cannot bind an unrelated Work and semantic disclosure has
   expect(batch).toContain('return readSemanticDisclosure');
   expect(batch).not.toContain("resources, 'semantic:read:', 'semantic.read'");
   expect(batch).not.toContain('rv:semanticHead');
-  expect(source('modules/access/admission.ts')).toContain('await publicSemantics(');
+  expect(source('modules/access/admission.ts')).toContain('await publicInTransaction(');
   expect(source('routes/resources.ts')).toContain('canReadSemantics(null, null, resources, fuseki)');
   expect(source('routes/media.ts')).toContain('canReadSemantics(null, null, resources, fuseki)');
   expect(source('routes/search.ts')).toContain('canReadSemantics(null, null, resources, fuseki)');

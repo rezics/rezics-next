@@ -4,8 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import type { Pool } from 'pg';
 import { FusekiClient, type SparqlResult } from '../src/infrastructure/fuseki.ts';
 import type { ImmutableObjects } from '../src/infrastructure/immutable-objects.ts';
-import { readZoneNavigationTargetDisclosure } from '../src/modules/access/semantic-disclosure.ts';
-import { MediaAccessBatchReader } from '../src/modules/media/access-batch.ts';
+import { AccessAdmissionRegistry, type VerifiedPrincipal } from '../src/modules/access/admission.ts';
 import { orderTree, recordTree } from '../src/modules/structure/change.ts';
 import { STRUCTURE_MANIFEST_FORMAT, STRUCTURE_PAGE_FORMAT, STRUCTURE_PROFILE,
   type OccurrenceRecord, type OrderEntry, type StructureManifest } from '../src/modules/structure/format.ts';
@@ -29,7 +28,9 @@ const resourcesIn = (query: string) => [...query.matchAll(/VALUES \?resource \{(
  * responses are simulated; the counters count every issued SQL/Fuseki request. */
 async function fixture(count: number, options: { distinct?: boolean; hidden?: (index: number) => boolean;
   work?: (index: number) => boolean; workScope?: boolean; semanticGrantsOnly?: boolean;
-  workGrantsOnly?: boolean; scalar?: boolean } = {}) {
+  workGrantsOnly?: boolean; scalar?: boolean; policy?: 'allow' | 'deny' | 'unavailable';
+  maintainer?: 'organization' | 'pen-name'; successor?: boolean;
+  platform?: 'semantic.read' | 'work.read'; closed?: boolean } = {}) {
   const directory = mkdtempSync('.temp/zone-page-admission-');
   const stored = new Map<string, Uint8Array>();
   const objects: ImmutableObjects = {
@@ -61,28 +62,84 @@ async function fixture(count: number, options: { distinct?: boolean; hidden?: (i
     budget: { timeMs: 500, rows: 100 }, queryBlocks: [], model: ZONE_PROFILE,
   } }, ZONE_PROFILE);
   const sql: string[] = [], queries: string[] = [], batches: string[][] = [];
+  const viewer: VerifiedPrincipal = { ...principal, emailVerified: !!options.maintainer };
+  const proofOnly = !!options.maintainer || !!options.successor || !!options.platform;
+  const grantId = (scope: string) => id(`grant:${scope}`).slice(-36);
+  const mandate = id('mandate').slice(-36), policyId = id('policy').slice(-36);
+  const grantAllowed = (scope: string, action: string) => readable.has(scope.slice(scope.indexOf('https:')))
+    && !proofOnly && (action === 'work.read' ? !options.semanticGrantsOnly : !options.workGrantsOnly);
   let recoveryOpen = true, failureBatch = 0, semanticBatches = 0, ambiguous = false;
   const client = { release() {}, query: async (statement: string, parameters: unknown[] = []) => {
     sql.push(statement);
-    if (statement.includes('access.recovery_fence')) return { rows: [{ open: recoveryOpen, generation: '0' }] };
-    if (statement.includes('SELECT id FROM access.principal')) return { rows: [{ id: '00000000-0000-4000-8000-000000000001' }] };
-    if (statement.includes('CROSS JOIN (VALUES')) {
-      const requested = parameters[2] as string[];
-      return { rows: requested.filter(resource => readable.has(resource) && (works.has(resource)
-        ? statement.includes("('work:read:', 'work.read')") && !options.semanticGrantsOnly
-        : statement.includes("('semantic:read:', 'semantic.read')") && !options.workGrantsOnly)).map(resource => ({ resource })) };
+    const result = (values: object[]) => ({ rows: values, rowCount: values.length });
+    if (statement.includes('access.recovery_fence')) return result([{ open: recoveryOpen, generation: '0' }]);
+    if (statement.includes('SELECT id FROM access.principal')) return result([{ id: id('reader').slice(-36) }]);
+    if (statement.includes('WHERE NOT EXISTS (SELECT 1 FROM access.scope_gate')) {
+      return result((parameters[0] as string[]).filter(resource => resource === zone || !options.closed && !options.policy)
+        .map(resource => ({ resource })));
     }
-    if (statement.includes('FROM unnest($1::text[]) AS wanted(resource)')) {
-      return { rows: (parameters[0] as string[]).map(resource => ({ resource })) };
+    if (statement.includes('FROM access.scope_gate')) {
+      if (parameters[0] === 'platform:access') return result(options.platform ? [{ id: 'platform:access', open: true }] : []);
+      const scopes = Array.isArray(parameters[0]) ? parameters[0] as string[] : [parameters[0] as string];
+      return result(scopes.map(scope => ({ id: scope, open: !options.closed })));
     }
-    return { rows: [] };
+    if (statement.includes('FROM access.policy p LEFT JOIN')) {
+      if (options.policy === 'unavailable') throw new Error('policy unavailable');
+      return result(options.policy ? [{ id: policyId, head_revision: '1', max_states: 2048,
+        max_input_rows: 128, deadline_ms: 1000, now: new Date() }] : []);
+    }
+    if (statement.includes('FROM access.policy WHERE scope_id')) {
+      const scopes = Array.isArray(parameters[0]) ? parameters[0] as string[] : [parameters[0] as string];
+      return result(options.policy ? scopes.map(scope => ({ id: policyId, scope_id: scope })) : []);
+    }
+    if (statement.includes('FROM access.policy_rule\n')) return result([{ tier: 'ordered', position: 0,
+      rule_id: id('rule').slice(-36), effect: options.policy, actions: ['work.read', 'semantic.read'], condition: { op: 'authenticated' } }]);
+    if (statement.includes('FROM access.policy_rule_set_reference')) return result([]);
+    if (statement.includes('SELECT *,') && statement.includes('WHERE id = $1')) {
+      return result([{ id: parameters[0], generation: '1' }]);
+    }
+    if (statement.includes('access.read_platform_permissions')) return result(options.platform ? [
+      { id: id('admin-grant').slice(-36), action: 'platform:use:platform-admin', scope_id: 'platform:access',
+        generation: '1', valid_until: null, witness: 'admin' },
+      ...targets.map(target => ({ id: grantId(target), action: `platform:resource:${options.platform}`,
+        scope_id: `${options.platform === 'work.read' ? 'work' : 'semantic'}:read:${target}`,
+        generation: '1', valid_until: null, witness: 'exact' })),
+    ] : []);
+    if (statement.includes('SELECT $3::text AS receipt')) return result(options.platform ? [{ representation_id: mandate }] : []);
+    if (statement.includes('FROM access.authority_subject s') && statement.includes('JOIN access.agent_provision')) {
+      expect(statement).not.toContain("a.agent_kind = 'person'");
+      return result(options.maintainer ? [{ provision_id: 'provision', representation_id: mandate }] : []);
+    }
+    if (statement.includes('FROM access.agent_provision')) return result([]);
+    if (statement.includes('SELECT wanted.work AS resource')) {
+      return result(options.maintainer ? [{ resource: parameters[0], generation: '1', main_version: id('main'),
+        creation_admission: id('creation').slice(-36), action: 'work.create', scope_id: 'work:create:root',
+        graph_receipt: `urn:rezics:receipt:${'a'.repeat(64)}`, request_digest: 'b'.repeat(64) }] : []);
+    }
+    if (statement.includes('SELECT a.id FROM access.admission a')) {
+      // Creation belonged to a different principal; the successor's current control decides.
+      expect(statement).toContain('r.principal_id = $2');
+      expect(statement).not.toContain('a.principal_id = $2');
+      return result(options.successor ? [{ id: id('creation').slice(-36) }] : []);
+    }
+    if (statement.includes('SELECT id FROM access.authority_subject')) return result([{ id: actor }]);
+    if (statement.includes('SELECT id FROM access.representation WHERE')) return result([{ id: mandate }]);
+    if (statement.includes('FROM unnest($2::text[]) AS wanted(scope_id)')) {
+      return result((parameters[1] as string[]).filter(scope => grantAllowed(scope, parameters[2] as string))
+        .map(scope => ({ scope_id: scope, id: grantId(scope) })));
+    }
+    if (statement.includes('SELECT id FROM access.permission_grant WHERE')) {
+      const scope = parameters[1] as string;
+      return result(grantAllowed(scope, parameters[2] as string) ? [{ id: grantId(scope) }] : []);
+    }
+    return result([]);
   } };
   const pool = { connect: async () => client } as unknown as Pool;
   const graph = new FusekiClient('http://graph.invalid');
   graph.query = async query => {
     queries.push(query);
-    if (query.includes('ASK')) return { boolean: query.includes('a schema:CreativeWork')
-      ? [...works].some(work => query.includes(`<${work}>`)) : true };
+    if (query.includes('ASK')) return { boolean: query.includes('rv:admissionId') ? !!options.maintainer
+      : query.includes('a schema:CreativeWork') ? [...works].some(work => query.includes(`<${work}>`)) : true };
     if (query.includes('SELECT ?space ?navigation ?head')) return rows([{ space, navigation: structure, head: revision,
       manifest: `urn:rezics:sha256:${configuration}`, state: `${RV}Active`, spaceDisclosure: `${RV}Public` }]);
     if (query.includes('SELECT ?navigation WHERE')) return rows([{ navigation: structure }]);
@@ -102,29 +159,26 @@ async function fixture(count: number, options: { distinct?: boolean; hidden?: (i
       // The Zone is public; mounted Collections exercise private grant batching.
       return rows(requested.filter(resource => resource === zone).map(resource => ({ resource })));
     }
-    if (query.includes('SELECT ?resource ?admission ?receipt') || query.includes('SELECT DISTINCT ?resource')) return rows([]);
+    if (query.includes('SELECT ?admission ?receipt ?digest')) return rows(options.successor ? [{
+      admission: id('creation').slice(-36), receipt: `urn:rezics:receipt:${'a'.repeat(64)}`, digest: 'b'.repeat(64),
+    }] : []);
     throw new Error(`Unexpected graph query: ${query}`);
   };
-  const mediaAccess = new MediaAccessBatchReader(pool, graph);
-  const originalBatch = mediaAccess.canReadZoneNavigationTargets.bind(mediaAccess);
-  mediaAccess.canReadZoneNavigationTargets = (viewer, workViewer, subject, resources) => {
+  const access = new AccessAdmissionRegistry(pool);
+  access.configureBaseline(graph);
+  const originalBatch = access.canReadZoneNavigationTargets.bind(access);
+  const accessForRoute = Object.create(access) as MainWorkDependencies['access'];
+  accessForRoute.canReadZoneNavigationTargets = (current, workViewer, subject, resources) => {
     batches.push([...resources]);
-    return originalBatch(viewer, workViewer, subject, resources);
+    return originalBatch(current, workViewer, subject, resources);
   };
+  if (options.scalar) accessForRoute.canReadZoneNavigationTargets = undefined;
   const work = { environment: { fuseki: graph, structureObjects: objects, objectDirectory: directory,
-    lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } }, mediaAccess: options.scalar ? undefined : mediaAccess,
+    lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } }, access: accessForRoute,
     account: { verify: async (_request: Request, permissions: string[]) => {
       if (permissions.includes('work:read') && options.workScope === false) throw new Error('Missing Work scope');
-      return principal;
+      return viewer;
     } },
-    access: {
-      canReadSemanticResource: async (_viewer: unknown, _subject: string, resource: string) => {
-        const decision = await mediaAccess.canReadSemantics(principal, actor, [resource]);
-        return 'public' in decision ? decision.public.has(resource) || decision.granted.has(resource) : decision.has(resource);
-      },
-      canReadWork: async (_viewer: unknown, _subject: string, resource: string) =>
-        (await readZoneNavigationTargetDisclosure({ pool, graph }, principal, principal, actor, [resource])).has(resource),
-    },
   } as unknown as MainWorkDependencies;
   const app = zoneRoutes(graph, work);
   const read = async (limit = 100, after?: string, historical = false) => {
@@ -135,7 +189,16 @@ async function fixture(count: number, options: { distinct?: boolean; hidden?: (i
     const body = await response.json() as { mounts?: OccurrenceRecord[]; next?: string | null };
     return { status: response.status, body, sql: sql.length, fuseki: queries.length, batches: [...batches] };
   };
-  return { read, records, targets, sql, queries, close: () => rmSync(directory, { recursive: true, force: true }),
+  const scalar = async () => {
+    const allowed = new Set<string>();
+    for (const target of targets) {
+      if (works.has(target) ? options.workScope !== false && await access.canReadWork(viewer, actor, target)
+        : await access.canReadSemanticResource(viewer, actor, target)) allowed.add(target);
+    }
+    return allowed;
+  };
+  return { read, records, targets, sql, queries, scalar, batch: () => originalBatch(viewer,
+    options.workScope === false ? null : viewer, actor, targets), close: () => rmSync(directory, { recursive: true, force: true }),
     holdRecovery: () => { recoveryOpen = false; }, failGraph: () => { failureBatch = 2; },
     corruptTypes: () => { ambiguous = true; }, revoke: () => { readable.clear(); } };
 }
@@ -154,19 +217,28 @@ test('Zone page admission has constant SQL and Fuseki requests for 4/16/64 mount
     } finally { f.close(); }
   }
   expect(costs).toEqual([costs[0]!, costs[0]!, costs[0]!]);
-  expect(costs[0]!.sql).toBeLessThanOrEqual(24);
-  expect(costs[0]!.fuseki).toBeLessThanOrEqual(12);
+  expect(costs[0]!.sql).toBeLessThanOrEqual(32);
+  expect(costs[0]!.fuseki).toBeLessThanOrEqual(13);
+  console.info(`Zone duplicate-target admission counts: ${JSON.stringify(costs)}`);
 });
 
-test('64 distinct Collections use the same owner statement set as one Collection', async () => {
-  const one = await fixture(64), distinct = await fixture(64, { distinct: true });
-  try {
-    const baseline = await one.read(), result = await distinct.read();
-    expect(result.status, JSON.stringify(result.body)).toBe(200);
-    expect(result.body.mounts).toEqual(distinct.records);
-    expect(result.batches).toEqual([distinct.targets]);
-    expect({ sql: result.sql, fuseki: result.fuseki }).toEqual({ sql: baseline.sql, fuseki: baseline.fuseki });
-  } finally { one.close(); distinct.close(); }
+test('distinct 4/16/64 Collections batch shared facts and retain exact owner proofs per target', async () => {
+  const costs: Array<{ targets: number; sql: number; fuseki: number }> = [];
+  for (const count of [4, 16, 64]) {
+    const f = await fixture(count, { distinct: true });
+    try {
+      const result = await f.read();
+      expect(result.status, JSON.stringify(result.body)).toBe(200);
+      expect(result.body.mounts).toEqual(f.records);
+      expect(result.batches).toEqual([f.targets]);
+      expect(result.sql).toBeLessThanOrEqual(32 + count);
+      expect(result.fuseki).toBeLessThanOrEqual(12 + count);
+      expect(f.sql.filter(statement => statement.includes('scope_id = ANY($1::text[])'))).toHaveLength(1);
+      expect(f.sql.filter(statement => statement.includes('FROM unnest($2::text[]) AS wanted(scope_id)'))).toHaveLength(1);
+      costs.push({ targets: count, sql: result.sql, fuseki: result.fuseki });
+    } finally { f.close(); }
+  }
+  console.info(`Zone distinct-target admission counts: ${JSON.stringify(costs)}`);
 });
 
 test('page plus lookahead is admitted together; historical navigation uses the same batch path', async () => {
@@ -198,7 +270,7 @@ test('a full 100-mount page admits 101 candidates in one transaction with bounde
     expect(f.queries.filter(query => query.includes('rv:RevisionAnchor')).map(query => resourcesIn(query).length))
       .toEqual([1, 65, 36]);
     // The Zone admission has its own transaction; all mounted targets share one.
-    expect(f.sql.filter(statement => statement === 'BEGIN')).toHaveLength(2);
+    expect(f.sql.filter(statement => statement.startsWith('BEGIN'))).toHaveLength(2);
     expect(f.sql.filter(statement => statement === 'COMMIT')).toHaveLength(2);
   } finally { f.close(); }
 });
@@ -267,4 +339,44 @@ test('held recovery, partial batch failure and ambiguous target types return no 
       expect(f.sql).toContain('ROLLBACK');
     } finally { f.close(); }
   }
+});
+
+test('scalar and batch admission agree on published policies, every controller kind, successor stewardship and exact platform permission', async () => {
+  const cases = [
+    { name: 'semantic policy deny with mandate/grant', options: { policy: 'deny' as const }, allowed: false },
+    { name: 'Work policy deny with mandate/grant', options: { policy: 'deny' as const, work: () => true }, allowed: false },
+    { name: 'published allow with mandate/grant', options: { policy: 'allow' as const }, allowed: true },
+    { name: 'closed gate defeats published allow', options: { policy: 'allow' as const, closed: true }, allowed: false },
+    { name: 'Organization maintainer', options: { maintainer: 'organization' as const, work: () => true }, allowed: true },
+    { name: 'Pen Name maintainer', options: { maintainer: 'pen-name' as const, work: () => true }, allowed: true },
+    { name: 'successor controller of Zone/Space steward', options: { successor: true }, allowed: true },
+    { name: 'exact semantic platform permission', options: { platform: 'semantic.read' as const }, allowed: true },
+    { name: 'exact Work platform permission', options: { platform: 'work.read' as const, work: () => true }, allowed: true },
+    { name: 'mixed Work and semantic grants', options: { work: (index: number) => index % 2 === 0 }, allowed: true },
+    { name: 'semantic grant cannot substitute for Work scope', options: { work: () => true, workScope: false }, allowed: false },
+  ];
+  for (const current of cases) {
+    const f = await fixture(4, { distinct: true, ...current.options });
+    try {
+      const scalar = await f.scalar(), batch = await f.batch();
+      expect(batch, current.name).toEqual(scalar);
+      expect([...scalar], current.name).toEqual(current.allowed ? f.targets : []);
+      const page = await f.read();
+      expect(page.status, `${current.name}: ${JSON.stringify(page.body)}`).toBe(200);
+      expect(page.body.mounts, current.name).toEqual(current.allowed ? f.records : []);
+      expect(page.body.next).toBeNull();
+    } finally { f.close(); }
+  }
+});
+
+test('scalar and batch both fail closed when a published policy cannot be evaluated', async () => {
+  const f = await fixture(4, { distinct: true, policy: 'unavailable' });
+  try {
+    await expect(f.scalar()).rejects.toThrow('published policy could not be judged');
+    await expect(f.batch()).rejects.toThrow('published policy could not be judged');
+    const page = await f.read();
+    expect(page.status).toBe(503);
+    expect(page.body.mounts).toBeUndefined();
+    expect(f.sql).toContain('ROLLBACK');
+  } finally { f.close(); }
 });

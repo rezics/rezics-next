@@ -33,7 +33,9 @@ import { zoneSpaceCreatorAllowed } from '../space/create-authority.ts';
 import { ensureBaselineScopeGate, lockAccessKey, lockAdmissionKey } from './scope-gates.ts';
 import { AccountAssertionDenied } from '../account/verify-assertion.ts';
 import { recordInitialMaintainer } from '../work/maintainer-proof.ts';
-import { publicInTransaction, publicSemantics, readReferenceDisclosure, requireDisclosureGraph } from './semantic-disclosure.ts';
+import { publicInTransaction, readReferenceDisclosure, requireDisclosureGraph,
+  SEMANTIC_DISCLOSURE_LIMIT } from './semantic-disclosure.ts';
+import { GRAPHS, iri } from '../work/activate.ts';
 import { disclosureGraphEnvironment } from '../disclosure/read.ts';
 import { readableReplyRoot } from '../realm-reply/root.ts';
 import { realmPermit } from './realm-management-policy.ts';
@@ -364,19 +366,74 @@ async function baselineMemberDecision(client: PoolClient, principal: VerifiedPri
   return !!identity.rows[0] && !!await baselineMemberProof(client, identity.rows[0].id, actingSubject);
 }
 
-async function scopedResourceDecision(client: PoolClient, graph: Pick<FusekiClient, 'query'> | undefined,
-  principal: VerifiedPrincipal, actingSubject: string, scope: string, action: string): Promise<boolean> {
+interface ScopedReadFacts {
+  principalId?: string;
+  gateOpen?: boolean;
+  hasPolicy: boolean;
+  authority?: { subject: boolean; represented?: string; granted?: string };
+}
+
+const nativeReadTarget = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
+function checkedReadTargets(targets: readonly string[]): string[] {
+  const unique = [...new Set(targets.filter(target => nativeReadTarget.test(target)))];
+  if (unique.length > 101) throw new RangeError('read target batch exceeds its immutable range');
+  return unique;
+}
+
+/** Singleton and page reads load the same facts and use the same decision.
+ * Exact baselines and policy evaluation below remain the owner's existing proofs. */
+async function scopedResourceDecisions(client: PoolClient, graph: Pick<FusekiClient, 'query'> | undefined,
+  principal: VerifiedPrincipal, actingSubject: string, scopes: readonly string[], action: string): Promise<ReadonlySet<string>> {
+  const unique = [...new Set(scopes)], allowed = new Set<string>();
+  if (!unique.length) return allowed;
   await requireRecoveryOpen(client);
-  const gate = await client.query<{ open: boolean }>(
-    'SELECT open FROM access.scope_gate WHERE id = $1 FOR SHARE', [scope]);
-  if (gate.rows[0]?.open === false) return false;
+  const gates = unique.length === 1
+    ? (await client.query<{ open: boolean }>('SELECT open FROM access.scope_gate WHERE id = $1 FOR SHARE', unique))
+      .rows.map(row => ({ id: unique[0]!, open: row.open }))
+    : (await client.query<{ id: string; open: boolean }>(
+      'SELECT id, open FROM access.scope_gate WHERE id = ANY($1::text[]) FOR SHARE', [unique])).rows;
+  const gateById = new Map(gates.map(row => [row.id, row.open]));
+  if (unique.every(scope => gateById.get(scope) === false)) return allowed;
   const identity = await client.query<{ id: string }>(
     `SELECT id FROM access.principal WHERE account_issuer = $1 AND account_subject = $2
       AND active FOR SHARE`, [principal.issuer, principal.subject]);
   const principalId = identity.rows[0]?.id;
-  if (!principalId) return false;
-  // Every action uses one indexed read by scope_id (access.policy's UNIQUE key).
-  const hasPolicy = !!(await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [scope])).rowCount;
+  if (!principalId) return allowed;
+  const policies = unique.length === 1
+    ? (await client.query('SELECT id FROM access.policy WHERE scope_id = $1', unique)).rows.map(() => unique[0]!)
+    : (await client.query<{ scope_id: string }>('SELECT scope_id FROM access.policy WHERE scope_id = ANY($1::text[])',
+      [unique])).rows.map(row => row.scope_id);
+  const installed = new Set(policies);
+  let authorities: Map<string, NonNullable<ScopedReadFacts['authority']>> | undefined;
+  if (unique.length > 1) {
+    const subject = await client.query('SELECT id FROM access.authority_subject WHERE id = $1 AND active FOR SHARE', [actingSubject]);
+    const represented = await client.query<{ id: string }>(
+      `SELECT id FROM access.representation WHERE principal_id = $1 AND subject_id = $2
+        AND action = $3 AND active AND valid_until > clock_timestamp()
+        ORDER BY id LIMIT 1 FOR SHARE`, [principalId, actingSubject, action]);
+    const grants = await client.query<{ id: string; scope_id: string }>(
+      `SELECT wanted.scope_id, granted.id FROM unnest($2::text[]) AS wanted(scope_id)
+        JOIN LATERAL (SELECT id FROM access.permission_grant WHERE recipient_subject = $1
+          AND scope_id = wanted.scope_id AND action = $3 AND active AND valid_until > clock_timestamp()
+          ORDER BY id LIMIT 1 FOR SHARE) granted ON true`, [actingSubject, unique, action]);
+    const grantByScope = new Map(grants.rows.map(row => [row.scope_id, row.id]));
+    authorities = new Map(unique.map(scope => [scope, { subject: subject.rowCount === 1,
+      represented: represented.rowCount === 1 ? represented.rows[0]!.id : undefined, granted: grantByScope.get(scope) }]));
+  }
+  for (const scope of unique) {
+    if (await scopedResourceDecision(client, graph, principal, actingSubject, scope, action,
+      { principalId, gateOpen: gateById.get(scope), hasPolicy: installed.has(scope), authority: authorities?.get(scope) })) {
+      allowed.add(scope);
+    }
+  }
+  return allowed;
+}
+
+async function scopedResourceDecision(client: PoolClient, graph: Pick<FusekiClient, 'query'> | undefined,
+  principal: VerifiedPrincipal, actingSubject: string, scope: string, action: string,
+  facts: ScopedReadFacts): Promise<boolean> {
+  const { principalId, gateOpen, hasPolicy } = facts;
+  if (gateOpen === false || !principalId) return false;
   if (platformAdministratorAction(action, scope)
     && !hasPolicy
     && await platformAdministratorProof(client, principalId, actingSubject)
@@ -403,14 +460,16 @@ async function scopedResourceDecision(client: PoolClient, graph: Pick<FusekiClie
       { kind: readKind, id: targetId }, false)) {
     return true;
   }
-  if (!gate.rows[0]?.open) return false;
-  const subject = await client.query(
+  if (!gateOpen) return false;
+  const subject = facts.authority ? { rowCount: facts.authority.subject ? 1 : 0 } : await client.query(
     'SELECT id FROM access.authority_subject WHERE id = $1 AND active FOR SHARE', [actingSubject]);
-  const represented = await client.query(
+  const represented = facts.authority ? { rowCount: facts.authority.represented ? 1 : 0,
+    rows: [{ id: facts.authority.represented! }] } : await client.query(
     `SELECT id FROM access.representation WHERE principal_id = $1 AND subject_id = $2
       AND action = $3 AND active AND valid_until > clock_timestamp()
       ORDER BY id LIMIT 1 FOR SHARE`, [principalId, actingSubject, action]);
-  const granted = await client.query(
+  const granted = facts.authority ? { rowCount: facts.authority.granted ? 1 : 0,
+    rows: [{ id: facts.authority.granted! }] } : await client.query(
     `SELECT id FROM access.permission_grant WHERE recipient_subject = $1 AND scope_id = $2
       AND action = $3 AND active AND valid_until > clock_timestamp()
       ORDER BY id LIMIT 1 FOR SHARE`, [actingSubject, scope, action]);
@@ -585,9 +644,18 @@ export class AccessAdmissionRegistry {
   /** Current Work-specific disclosure decision; no historical grant is reused. */
   async canReadWork(principal: VerifiedPrincipal, actingSubject: string, work: string,
     client?: PoolClient): Promise<boolean> {
-    if (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(work)
-      || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(actingSubject)) return false;
-    return this.canReadScopedResource(principal, actingSubject, `work:read:${work}`, 'work.read', client);
+    return (await this.canReadWorks(principal, actingSubject, [work], client)).has(work);
+  }
+
+  canReadWorks(principal: VerifiedPrincipal, actingSubject: string, works: readonly string[],
+    client?: PoolClient): Promise<ReadonlySet<string>> {
+    const unique = checkedReadTargets(works);
+    if (!unique.length || !nativeReadTarget.test(actingSubject)) return Promise.resolve(new Set());
+    return readAdmission(this.pool, client, async held => {
+      const scopes = await scopedResourceDecisions(held, this.baselineGraph, principal, actingSubject,
+        unique.map(work => `work:read:${work}`), 'work.read');
+      return new Set(unique.filter(work => scopes.has(`work:read:${work}`)));
+    });
   }
 
   /** Current person-Agent baseline for private reader state on public chapters.
@@ -603,14 +671,53 @@ export class AccessAdmissionRegistry {
   /** Current disclosure decision for a semantic Resource or relation occurrence. */
   async canReadSemanticResource(principal: VerifiedPrincipal | null, actingSubject: string | null,
     resource: string, revision?: string, graph = this.baselineGraph, client?: PoolClient): Promise<boolean> {
-    client ??= accessClient(this.pool);
-    if (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(resource)) return false;
-    const visible = client
-      ? await publicInTransaction(client, requireDisclosureGraph(graph), [resource], revision)
-      : await publicSemantics({ pool: this.pool, graph }, [resource], revision);
-    if (visible.has(resource)) return true;
-    if (!principal || !actingSubject || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(actingSubject)) return false;
-    return this.canReadScopedResource(principal, actingSubject, `semantic:read:${resource}`, 'semantic.read', client);
+    return (await this.canReadSemanticResources(principal, actingSubject, [resource], revision, graph, client)).has(resource);
+  }
+
+  canReadSemanticResources(principal: VerifiedPrincipal | null, actingSubject: string | null,
+    resources: readonly string[], revision?: string, graph = this.baselineGraph,
+    client?: PoolClient): Promise<ReadonlySet<string>> {
+    const unique = checkedReadTargets(resources);
+    if (!unique.length) return Promise.resolve(new Set());
+    const disclosureGraph = requireDisclosureGraph(graph);
+    return readAdmission(this.pool, client, async held => {
+      await requireRecoveryOpen(held);
+      const allowed = new Set<string>();
+      for (let at = 0; (revision === undefined || nativeReadTarget.test(revision)) && at < unique.length;
+        at += SEMANTIC_DISCLOSURE_LIMIT) {
+        for (const resource of await publicInTransaction(held, disclosureGraph,
+          unique.slice(at, at + SEMANTIC_DISCLOSURE_LIMIT), revision)) allowed.add(resource);
+      }
+      if (!principal || !actingSubject || !nativeReadTarget.test(actingSubject)) return allowed;
+      const scopes = await scopedResourceDecisions(held, this.baselineGraph, principal, actingSubject,
+        unique.filter(resource => !allowed.has(resource)).map(resource => `semantic:read:${resource}`), 'semantic.read');
+      for (const resource of unique) if (scopes.has(`semantic:read:${resource}`)) allowed.add(resource);
+      return allowed;
+    });
+  }
+
+  canReadZoneNavigationTargets(principal: VerifiedPrincipal, workPrincipal: VerifiedPrincipal | null,
+    actingSubject: string, resources: readonly string[]): Promise<ReadonlySet<string>> {
+    const unique = checkedReadTargets(resources);
+    if (!unique.length) return Promise.resolve(new Set());
+    const graph = requireDisclosureGraph(this.baselineGraph);
+    return readAdmission(this.pool, undefined, async held => {
+      await requireRecoveryOpen(held);
+      const rows = (await graph.query(`PREFIX schema: <https://schema.org/>
+        SELECT ?resource WHERE { VALUES ?resource { ${unique.map(iri).join(' ')} }
+          GRAPH ${iri(GRAPHS.current)} { ?resource a schema:CreativeWork } }
+        LIMIT ${unique.length + 1}`, 32_768)).results?.bindings ?? [];
+      const works = new Set(rows.map(row => row.resource?.value));
+      if (rows.length !== works.size || rows.length > unique.length
+        || [...works].some(resource => !resource || !unique.includes(resource))) {
+        throw new AdmissionUnavailable('Zone navigation target types are ambiguous');
+      }
+      const semantics = await this.canReadSemanticResources(principal, actingSubject,
+        unique.filter(resource => !works.has(resource)), undefined, graph, held);
+      const readableWorks = workPrincipal ? await this.canReadWorks(workPrincipal, actingSubject,
+        unique.filter(resource => works.has(resource)), held) : new Set<string>();
+      return new Set([...semantics, ...readableWorks]);
+    });
   }
 
   /** The page equivalent of semantic disclosure followed by Work disclosure. */
@@ -952,8 +1059,8 @@ export class AccessAdmissionRegistry {
     principal: VerifiedPrincipal, actingSubject: string, scope: string, action: string,
     client?: PoolClient,
   ): Promise<boolean> {
-    return readAdmission(this.pool, client, held =>
-      scopedResourceDecision(held, this.baselineGraph, principal, actingSubject, scope, action));
+    return readAdmission(this.pool, client, async held =>
+      (await scopedResourceDecisions(held, this.baselineGraph, principal, actingSubject, [scope], action)).has(scope));
   }
 
   /** Import authority uses creation's grant/group/role path, never member baseline.

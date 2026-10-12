@@ -108,7 +108,13 @@ async function fixture(kind = 'person') {
   const registry = new AccessAdmissionRegistry(pool);
   registry.configureBaseline(graph);
   const scope = `work:read:${work}`;
-  const read = (who = owner, actor = control.actor) => registry.canReadWork(who.verified, actor, work);
+  const absent = native();
+  const read = async (who = owner, actor = control.actor) => {
+    const scalar = await registry.canReadWork(who.verified, actor, work);
+    const batch = await registry.canReadWorks(who.verified, actor, [work, absent, work]);
+    expect(batch).toEqual(new Set(scalar ? [work] : []));
+    return scalar;
+  };
   return { owner, control, work, mainVersion, graph, registry, scope, read, queries,
     loseReceipt: () => { receiptCurrent = false; } };
 }
