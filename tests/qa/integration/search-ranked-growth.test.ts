@@ -1,5 +1,5 @@
 import { beforeAll, expect, test } from 'bun:test';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { commandCounters } from '../../../packages/observability/src/http-measurement.ts';
 import {
@@ -19,7 +19,7 @@ const requestCounters = [
 ] as const satisfies readonly WorkCostField[];
 const counters = [...requestCounters, ...commandCounters];
 type MeasuredProfile = WorkProfile & Record<(typeof commandCounters)[number], number>;
-type Page = { complete: boolean; population: number; total: number;
+type Page = { complete?: boolean; relationComplete?: boolean; population: number; total: number;
   results: { work: string; mainVersion: string }[]; next: SearchContinuation | null };
 type Evidence = { matchingWorks: number; restoreMs: number;
   first: MeasuredProfile; continuation: MeasuredProfile };
@@ -67,6 +67,7 @@ async function profileRankedSearch() {
   let copy: MediaStack | undefined;
   const targets: string[] = [];
   const evidence: Evidence[] = [];
+  let blind: { matchingWorks: number; first: WorkProfile; continuation: WorkProfile } | undefined;
   const request = async (stack: MediaStack, path: string, body: object, headers = new Headers()) => {
     headers.set('content-type', 'application/json');
     const response = await stack.main.handle(new Request(`http://main.local${path}`, {
@@ -98,6 +99,17 @@ async function profileRankedSearch() {
         }
       }
       try {
+        // A restored project has a new Content consumer. Advance it through the
+        // retained outbox using its owner worker before admitting search reads.
+        const projection = stack.composition.dependencies.contentProjection!;
+        const source = await projection.content.ownerPosition();
+        const deadline = performance.now() + 60_000;
+        while ((await projection.cursor.read(projection.consumer)).sequence !== source.sequence) {
+          if (performance.now() >= deadline)
+            throw new Error('Restored Content projection readiness exceeded 60 seconds');
+          if (!await stack.composition.contentProjectionWorker.pollOnce())
+            throw new Error('Restored Content projection cannot cover its retained source');
+        }
         const result = await request(stack, '/v1/queries', {
           profile: 'public-main-phrase-v1', phrase, language: 'en',
         });
@@ -116,7 +128,13 @@ async function profileRankedSearch() {
       verifying = cut;
       const target = `ranked-growth-${qaRunId.replaceAll('-', '').slice(0, 24)}-${cut.manifest.scale}`;
       targets.push(target);
-      const restoreMs = await restoreWorkProfileCorpus(cut.manifest, target, backups);
+      // Restore accepts checkout-local backup artifacts. Copy the published
+      // read-only files, retaining the same stopped volumes and compatibility.
+      const local = join(root, '.temp/work-profiles/search-ranked-growth/retained', qaRunId, cut.manifest.id);
+      mkdirSync(dirname(local), { recursive: true, mode: 0o700 });
+      cpSync(dirname(cut.manifest.backup), local, { recursive: true, force: false, errorOnExist: true });
+      const restoreMs = await restoreWorkProfileCorpus({ ...cut.manifest, backup: join(local, 'backup.json') },
+        target, backups);
       try {
         const count = cut.works.length;
         const body = { profile: 'public-main-phrase-page-v1', phrase, language: 'en', pageSize };
@@ -126,8 +144,13 @@ async function profileRankedSearch() {
         const continuation = await profileRequest(sink, headers => request(copy!, '/v1/queries/page', {
           ...body, continuation: first.result.next,
         }, headers), { flush: flushTelemetryTraces });
+        if ([first.profile, continuation.profile].some(profile => profile.postgresStatements === 0
+          || profile.fusekiRequests === 0)) {
+          blind = { matchingWorks: count, first: first.profile, continuation: continuation.profile };
+          throw new Error(`meter blind at ${count} matching Works`);
+        }
         for (const result of [first.result, continuation.result]) {
-          expect(result.complete).toBe(true);
+          expect(result.relationComplete).toBe(true);
           expect(result.results).toHaveLength(pageSize);
           expect(result.total).toBe(count);
           expect(result.population).toBeGreaterThanOrEqual(count);
@@ -140,7 +163,7 @@ async function profileRankedSearch() {
     }
   } finally {
     mkdirSync(dirname(process.env.REZICS_WORK_PROFILE_RESULT!), { recursive: true });
-    writeFileSync(process.env.REZICS_WORK_PROFILE_RESULT!, JSON.stringify({ evidence }, null, 2));
+    writeFileSync(process.env.REZICS_WORK_PROFILE_RESULT!, JSON.stringify({ evidence, blind }, null, 2));
     const errors: unknown[] = [];
     for (const target of targets) {
       try { await backups.stop(target); } catch (error) { errors.push(error); }
