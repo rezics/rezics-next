@@ -182,7 +182,7 @@ public class PersonProfileCallerContractTest {
   private static JsonObject body(String name) throws Exception {return JSON.parse(Files.readString(Path.of(name+".json")));}
   private static Dataset fixture() throws Exception {
     var data=TDB2Factory.connectDataset(Files.createTempDirectory(Path.of("tmp"),"person-").toString());
-    data.begin(ReadWrite.WRITE);RDFDataMgr.read(data,"fixture.trig");data.commit();data.end();return data;
+    data.begin(ReadWrite.WRITE);RDFDataMgr.read(data,"fixture.trig");PublicNameProjection.rebuildPrefix(data.asDatasetGraph());data.commit();data.end();return data;
   }
   private static Set<Quad> snapshot(Dataset data){
     data.begin(ReadWrite.READ);try {var result=new HashSet<Quad>();data.asDatasetGraph().find().forEachRemaining(result::add);return result;}
@@ -269,6 +269,18 @@ public class PersonProfileCallerContractTest {
       assertFalse("a detached identifying author edge cannot evade the absence probe",complete(data,command));
       execute(data,"DELETE WHERE { GRAPH <${publicGraph}> { <${prefixEntry}> ?p ?o } }");
       assertTrue(complete(data,command));
+    }finally{data.close();}
+  }
+  @Test public void legacyPrefixDirectoryCannotProveAuthorAbsenceUntilNativeRebuild() throws Exception {
+    var data=fixture();try {var command=body("complete");execute(data,command.get("update").getAsString().value());
+      assertTrue(complete(data,command));
+      execute(data,"PREFIX rv: <${RV}> DELETE WHERE { GRAPH <urn:rezics:projection:public-name-repair> { <urn:rezics:search:name:prefix-state> rv:prefixSchema ?schema } }");
+      assertFalse("an unqualified prefix directory cannot prove author absence",complete(data,command));
+      execute(data,"PREFIX rv: <${RV}> INSERT DATA { GRAPH <urn:rezics:projection:public-name-repair> { <urn:rezics:search:name:prefix-state> rv:prefixSchema \\\"1\\\" } GRAPH <${publicGraph}> { <${prefixEntry}> rv:prefixWork <${work}> ; rv:prefixUnit <${authorUnit}> ; rv:prefixField \\\"credit\\\" ; rv:publicTitle \\\"rezicsprefixdirectory\\\" } }");
+      assertFalse("legacy prefixes without author provenance must keep replay unproven",complete(data,command));
+      data.begin(ReadWrite.WRITE);try {PublicNameProjection.rebuildPrefix(data.asDatasetGraph());data.commit();}finally{data.end();}
+      assertFalse(snapshot(data).stream().anyMatch(q->q.getSubject().equals(iri("${prefixEntry}"))));
+      assertTrue("the owner's rebuild removes the old copy and certifies author coverage",complete(data,command));
     }finally{data.close();}
   }
   private void coauthorProjection(Dataset data) {
@@ -386,7 +398,7 @@ public class PersonProfileCallerContractTest {
     writeFileSync(join(root, '.temp/goal/person-profile-native.log'), `${result.stdout}\n${result.stderr}`);
     if (result.status !== 0) throw new Error(`Native Person RDF proof failed: ${result.stdout}\n${result.stderr}`
       + `${result.error ? `\n${result.error.message}` : ''}`);
-    expect(result.stdout).toContain('Tests run: 12, Failures: 0, Errors: 0');
+    expect(result.stdout).toContain('Tests run: 13, Failures: 0, Errors: 0');
     for (const count of [0, 1, 2]) {
       const actual = JSON.parse(readFileSync(join(build, `events-${count}-result.json`), 'utf8')) as {
         batchId: string; eventIds: string[]; events: { id: string; relay: SparqlResult; facts: SparqlResult }[];

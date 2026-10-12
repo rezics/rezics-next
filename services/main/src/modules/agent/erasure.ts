@@ -388,6 +388,8 @@ export async function personProfileGraphErased(fuseki: QueryClient, proof: Perso
   inventory: PersonProfileGraphInventory): Promise<boolean> {
   identity(proof, inventory);
   const result = await fuseki.query(`PREFIX rv: <${RV}> ASK {
+    GRAPH <urn:rezics:projection:public-name-repair> {
+      <urn:rezics:search:name:prefix-state> rv:prefixSchema "2" }
     GRAPH ${iri(GRAPHS.current)} { ${iri(proof.person)} a rv:AgentTombstone ; rv:agentKind rv:PersonAgent ;
       rv:erasureId ${lit(proof.erasureId)} ; rv:erasureEpoch ${proof.erasureEpoch} }
     GRAPH ${iri(GRAPHS.receipts)} { ${iri(personProfileErasureReceipt(proof.erasureId, proof.person))}
