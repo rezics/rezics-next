@@ -16,7 +16,7 @@ for (const [path, rule] of [
   ['/api/auth/request-password-reset', 'email'],
   ['/api/auth/reset-password', 'reset-token'],
   ['/api/auth/verify-email', 'verified-email'],
-  ['/api/auth/passkey/verify-registration', 'session'],
+  ['/api/auth/passkey/verify-registration', 'registration'],
 ] as const) test(`${path} subject is ${rule}`, () => {
   expect(authenticationSubjectRule(path)).toBe(rule);
 });
@@ -52,3 +52,11 @@ for (const path of ['/api/auth/two-factor/verify-totp', '/api/auth/two-factor/ve
       .toMatchObject({ userId: 'A', target: 'A', signedInBudget: true });
   });
 }
+
+test('passkey registration keeps its session subject without spending a proof attempt', async () => {
+  const pool = { query: async () => { throw new Error('body identity must not be queried'); } } as unknown as Pool;
+  const request = new Request('http://account.test/api/auth/passkey/verify-registration', { method: 'POST',
+    body: JSON.stringify({ email: 'B@example.test', userId: 'B' }) });
+  expect(await authenticationSubject(pool, request, async () => ({ user: { id: 'A' }, session: { id: 'session-A' } })))
+    .toMatchObject({ userId: 'A', sessionId: 'session-A', signedInBudget: false });
+});

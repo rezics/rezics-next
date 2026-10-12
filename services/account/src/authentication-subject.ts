@@ -5,9 +5,10 @@ import { authenticationBody } from './recovery-auth.ts';
 
 /** Only providers proving the current session's user may prefer its cookie.
  * Provider-target sign-ins must never inherit an unrelated session owner. */
-export function authenticationSubjectRule(path: string): 'session' | 'email' | 'credential' | 'reset-token' | 'verified-email' | 'provider' {
+export function authenticationSubjectRule(path: string): 'session' | 'registration' | 'email' | 'credential' | 'reset-token' | 'verified-email' | 'provider' {
+  if (path === '/api/auth/passkey/verify-registration') return 'registration';
   if (path === '/api/account/reauthenticate' || path === '/api/account/reauthenticate/passkey'
-    || path === '/api/auth/passkey/verify-registration' || path.startsWith('/api/auth/two-factor/verify-')) return 'session';
+    || path.startsWith('/api/auth/two-factor/verify-')) return 'session';
   if (['/api/auth/sign-in/email', '/api/auth/sign-in/magic-link', '/api/auth/request-password-reset'].includes(path)) return 'email';
   if (path === '/api/auth/passkey/verify-authentication') return 'credential';
   if (path === '/api/auth/reset-password') return 'reset-token';
@@ -45,7 +46,7 @@ export async function authenticationSubject(pool: Pool, request: Request,
   const verification = async (identifier?: string) => identifier
     ? (await pool.query<Verification>('SELECT value, "createdAt", "expiresAt" FROM public.verification WHERE identifier = $1', [identifier])).rows[0]
     : undefined;
-  if (rule === 'session') {
+  if (rule === 'session' || rule === 'registration') {
     session = await readSession();
     if (session) { userId = session.user.id; target = userId; }
     else if (path.startsWith('/api/auth/two-factor/verify-')) {
