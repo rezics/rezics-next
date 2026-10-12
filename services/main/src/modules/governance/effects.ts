@@ -8,7 +8,7 @@ import type { Pool } from 'pg';
 import { MediaStore, MediaStale, copySuppressionId,
   type CopySuppression, type CopySuppressionLift, type CopySuppressionScope } from '../media/store.ts';
 import type { ContentCore } from '../../../../content/src/core.ts';
-import { ownerTargetHeads } from './evidence.ts';
+import { governanceGraphTargetKinds, ownerTargetHeads } from './evidence.ts';
 
 export interface EffectPlan {
   /** Owner-established identity; null is a positively classified non-Realm record. */
@@ -284,6 +284,10 @@ export function ownerModerationEffects(content: ContentModeration, env: WorkActi
       const realmGuard = realm ? `GRAPH ${iri(GRAPHS.current)} {
         ${iri(realm.realm)} a rv:Realm ; rv:realmState rv:Active ; rv:space ${iri(realm.space)} .
         ${iri(realm.space)} a rv:Space ; rv:realmCapability ${iri(realm.realm)} .
+        FILTER NOT EXISTS {
+          ${iri(realm.realm)} a ?otherKind .
+          VALUES ?otherKind { ${governanceGraphTargetKinds.filter(kind => kind !== `${RV}Realm`).map(iri).join(' ')} }
+        }
         FILTER NOT EXISTS { ${iri(realm.realm)} rv:space ?otherSpace . FILTER(?otherSpace != ${iri(realm.space)}) }
         FILTER NOT EXISTS { ?otherSpace rv:realmCapability ${iri(realm.realm)} . FILTER(?otherSpace != ${iri(realm.space)}) }
         FILTER NOT EXISTS { ${iri(realm.realm)} rv:head ?otherHead . FILTER(?otherHead != ${iri(target.expectedHead)}) }
