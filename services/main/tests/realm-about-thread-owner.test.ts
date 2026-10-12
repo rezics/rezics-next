@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
+import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { Pool } from 'pg';
 import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { appendContentEvent, ContentCore, contentDraftIntentDigest, type SaveDraftCommand } from '../../content/src/core.ts';
@@ -24,14 +26,32 @@ let pool: Pool;
 let about: RealmAboutThreadStore;
 let identities: RealmReplyContentStore;
 let content: ContentCore;
+let legacyRefusal: Operation;
 
 beforeAll(async () => {
   cluster = await startPostgresCluster();
   pool = new Pool({ ...cluster.connection, max: 8, connectionTimeoutMillis: 1000 });
-  await migrateContent(pool);
   about = new RealmAboutThreadStore(pool);
   identities = new RealmReplyContentStore(pool);
   content = new ContentCore(pool);
+  const migrationRoot = resolve(import.meta.dir, '../../content/migrations');
+  const scratchRoot = resolve(import.meta.dir, '../../../.temp');
+  mkdirSync(scratchRoot, { recursive: true });
+  const legacyMigrations = mkdtempSync(resolve(scratchRoot, 'discussion-legacy-migrations-'));
+  try {
+    for (const name of readdirSync(migrationRoot).filter(name => name.endsWith('.sql')
+      && name !== '2141_realm_about_refusal_outcome.sql')) {
+      copyFileSync(resolve(migrationRoot, name), resolve(legacyMigrations, name));
+    }
+    await migrateContent(pool, legacyMigrations);
+    legacyRefusal = await about.reserve(intent());
+    // Reproduce the previous owner's definite refusal before upgrading: its
+    // immutable operation survives the released canonical reservation.
+    await pool.query('UPDATE content.realm_about_post_operation SET terminal_refusal=true WHERE id=$1', [legacyRefusal.id]);
+    await pool.query('DELETE FROM content.realm_about_thread WHERE realm=$1 AND about=$2',
+      [legacyRefusal.realm, legacyRefusal.about]);
+    await migrateContent(pool);
+  } finally { rmSync(legacyMigrations, { recursive: true, force: true }); }
 }, 120_000);
 
 afterAll(async () => {
@@ -43,6 +63,13 @@ function intent(overrides: Partial<Parameters<RealmAboutThreadStore['reserve']>[
   return { realm: nativeId(), about: nativeId(), actor: nativeId(), intentKey: randomUUID(),
     intentDigest: digest(randomUUID()), rootRevision: nativeId(), ...overrides };
 }
+
+test('migration retains the legacy refused response after its canonical reservation was released', async () => {
+  const outcome = await about.refuseBeforeDispatch(legacyRefusal.id, refusal);
+  expect(outcome).toMatchObject({ kind: 'refused', operation: { id: legacyRefusal.id,
+    terminalOutcome: { kind: 'reply-stale', message: 'Discussion intent was refused before placement' } } });
+  expect(await about.readThread(legacyRefusal.realm, legacyRefusal.about)).toBeNull();
+});
 
 function admission(operation: Operation, action: string, scope: string): RegisteredAdmission {
   return { id: randomUUID(), principalId: randomUUID(), actingSubject: operation.actor,
