@@ -43,22 +43,21 @@ function session(options: {
 function rankingAccess(checkpoint: {
   mainSequence?: string;
   contentSequence?: string;
-  pendingEffects?: boolean;
+  contentEpoch?: string;
 } = {}) {
   return {
     query: async (sql: string, values: unknown[]) => {
-      const checksMainCoverage = sql.includes('c.sequence=$10::numeric') && values[9] === '3';
-      const checksContentOwner = sql.includes('c.content_sequence=$9::bigint')
-        && values[7] === contentEpoch && values[8] === '7';
-      const checksPendingEffects = sql.includes('AND NOT realm_thread_indexed')
-        && sql.includes('access.realm_thread_dirty');
+      const checksMainCoverage = sql.includes('access.read_realm_thread_rank_cut') && values[9] === '3';
+      const checksContentOwner = values[7] === contentEpoch && values[8] === '7';
       return {
         rows: [{
           open: true,
-          complete: checksMainCoverage && checksContentOwner && checksPendingEffects
-            && checkpoint.mainSequence !== undefined && checkpoint.mainSequence === values[9]
-            && checkpoint.contentSequence !== undefined && checkpoint.contentSequence === values[8]
-            && !checkpoint.pendingEffects,
+          complete: checksMainCoverage && checksContentOwner
+            && (checkpoint.contentEpoch ?? contentEpoch) === values[7]
+            && checkpoint.mainSequence !== undefined
+            && BigInt(checkpoint.mainSequence) <= BigInt(String(values[9]))
+            && checkpoint.contentSequence !== undefined
+            && BigInt(checkpoint.contentSequence) <= BigInt(String(values[8])),
           revision: '2',
           rows: [],
         }],
@@ -97,23 +96,44 @@ test('A8: foreign Main stream scope or epoch refuses Realm ranking admission', a
   }
 });
 
-test('A8: actual Main lag and Content lag still refuse Realm ranking admission', async () => {
-  await expect(realmRankPage(
-    rankingAccess({ mainSequence: '2', contentSequence: '7' }),
-    session(), realm, 'top', 'all', 20,
-  )).rejects.toBeInstanceOf(RealmRankingsIncomplete);
-
-  await expect(realmRankPage(
-    rankingAccess({ mainSequence: '3', contentSequence: '6' }),
-    session(), realm, 'top', 'all', 20,
-  )).rejects.toBeInstanceOf(RealmRankingsIncomplete);
+test('A8: established Realm rankings survive same-epoch Main and Content lag', async () => {
+  for (const checkpoint of [
+    { mainSequence: '2', contentSequence: '7' },
+    { mainSequence: '3', contentSequence: '6' },
+  ]) {
+    for (const sort of ['best', 'top'] as const) {
+      expect(await realmRankPage(rankingAccess(checkpoint), session(), realm, sort, 'all', 20))
+        .toEqual({ revision: '2', rows: [] });
+    }
+  }
 });
 
-test('A8: pending Main or Content effects still refuse Realm ranking admission', async () => {
-  await expect(realmRankPage(
-    rankingAccess({ mainSequence: '3', contentSequence: '7', pendingEffects: true }),
-    session(), realm, 'top', 'all', 20,
-  )).rejects.toBeInstanceOf(RealmRankingsIncomplete);
+test('A8: pending additions never impose a global Realm ranking gate', async () => {
+  const base = rankingAccess({ mainSequence: '2', contentSequence: '6' });
+  const access = {
+    query: async (sql: string, values: unknown[]) => {
+      expect(sql).toContain('access.read_realm_thread_rank_cut');
+      expect(sql).not.toContain("WHERE data_epoch=$1 AND kind<>'population'");
+      return base.query(sql, values);
+    },
+  } as unknown as Pool;
+  for (const sort of ['best', 'top'] as const) {
+    expect(await realmRankPage(access, session(), realm, sort, 'all', 20))
+      .toEqual({ revision: '2', rows: [] });
+  }
+});
+
+test('A8: missing or regressed source checkpoints refuse Realm ranking admission', async () => {
+  for (const checkpoint of [
+    {},
+    { mainSequence: '3', contentSequence: '7', contentEpoch: graphEpoch },
+    { mainSequence: '4', contentSequence: '7' },
+    { mainSequence: '3', contentSequence: '8' },
+  ]) {
+    await expect(realmRankPage(
+      rankingAccess(checkpoint), session(), realm, 'top', 'all', 20,
+    )).rejects.toBeInstanceOf(RealmRankingsIncomplete);
+  }
 });
 
 test('A8: Realm relay event replay selects only Main stream events', async () => {

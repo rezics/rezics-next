@@ -112,15 +112,16 @@ export async function ensureRealmHistoryPopulation(
   return population;
 }
 
-/** The projection is open but has not reached the graph position being read. */
+/** This population has not initialized or has an unsettled dependency. */
 export class RealmRankingsIncomplete extends WorkReadUnavailable {
   constructor() { super('Realm rankings are projecting'); }
 }
 
 /** Reads one maintained population, without visiting an expired or denied
  * prefix. The source cut and page share one statement snapshot. A continuation
- * already admitted that population revision; pending source events cannot move
- * it until the owner updates membership. Its selected rows pass live disclosure. */
+ * already admitted that population revision. Additions awaiting projection are
+ * absent from that cut; dirty indexed dependencies refuse only their population.
+ * Its selected rows still pass live disclosure. */
 export async function realmRankPage(
   access: Pool,
   session: WorkReadSession,
@@ -152,30 +153,8 @@ export async function realmRankPage(
       revision: string;
       rows: RealmRankPage['rows'];
     }>(
-      `
-    WITH fence AS MATERIALIZED (SELECT open FROM access.recovery_fence WHERE id FOR SHARE),
-    state AS MATERIALIZED (SELECT COALESCE(s.revision,0)::text AS revision,
-      c.content_epoch=$8::uuid AND ($4::double precision IS NOT NULL OR (
-        c.content_sequence=$9::bigint AND c.sequence=$10::numeric
-        AND c.after_event='￿'
-        AND NOT EXISTS(SELECT 1 FROM access.feed_item WHERE data_epoch=$1 AND kind IN ('reply','discussion')
-          AND NOT realm_thread_indexed LIMIT 1)
-        AND NOT EXISTS(SELECT 1 FROM access.realm_thread_dirty WHERE data_epoch=$1 AND kind<>'population' LIMIT 1)))
-        ${
-          population
-            ? `AND EXISTS(SELECT 1 FROM access.realm_thread_population p WHERE p.data_epoch=$1
-          AND p.realm=$2 AND p.population=$11 AND p.ready)
-        AND NOT EXISTS(SELECT 1 FROM access.realm_thread_population_job j WHERE j.data_epoch=$1 AND j.realm=$2 AND j.population=$11)`
-            : ''
-        }
-        AND NOT EXISTS(SELECT 1 FROM access.realm_thread_order WHERE data_epoch=$1 AND realm=$2
-          AND sort='top' AND period=$3 AND expires_at<=clock_timestamp() LIMIT 1) AS complete
-      FROM (SELECT 1) root LEFT JOIN access.realm_thread_checkpoint c ON c.data_epoch=$1
-      LEFT JOIN access.realm_thread_state s ON s.data_epoch=$1 AND s.realm=$2)
-    SELECT fence.open,state.complete,state.revision,
-      COALESCE((SELECT jsonb_agg(page) FROM access.seek_realm_thread_page($1,$2,'${sort}',$3,
-        $4::double precision,$5::bigint,$6::text,$7::integer,${population ? '$11::text' : 'NULL'}) page
-        WHERE state.complete AND fence.open),'[]'::jsonb) AS rows FROM fence CROSS JOIN state`,
+      `SELECT * FROM access.read_realm_thread_rank_cut($1,$2,'${sort}',$3,
+        $4::double precision,$5::bigint,$6::text,$7::integer,$8::uuid,$9::bigint,$10::numeric,$11::text)`,
       [
         session.position.dataEpoch,
         realm,
@@ -187,7 +166,7 @@ export async function realmRankPage(
         content.dataEpoch,
         content.sequence,
         main.sequence,
-        ...(population ? [population] : []),
+        population ?? null,
       ],
     )
   ).rows[0];
@@ -198,8 +177,8 @@ export async function realmRankPage(
 }
 
 /** Bounded, resumable owner projection attached to Home's existing refresh
- * worker. New references, graph changes, Content revisions and rolling Top
- * expiration finish before a request may describe the population as complete. */
+ * worker. It publishes reference, aggregate and order changes together; reads
+ * may use an established cut while unrelated work and additions remain pending. */
 export class RealmThreadRankingProjection {
   constructor(
     private readonly access: Pool,
