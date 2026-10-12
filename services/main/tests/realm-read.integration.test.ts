@@ -17,9 +17,9 @@ async function json<T>(response: Response, status = 200): Promise<T> {
 interface Page<T> { items: T[]; nextCursor: string | null;
   count: { value: number; total: null; kind: 'exact-page' } }
 
-// 8 page reads + 10 shared classification-reader reads, constant per page.
-// Reducing that fixed overhead is a follow-up; item count must not increase it.
-const DECISION_PAGE_QUERY_BUDGET = 18;
+// The opening summary disclosure pass (5b174de31) adds one query to each summary read.
+// This page performs three summary reads, so its fixed query budget is 21 at every page size.
+const DECISION_PAGE_QUERY_BUDGET = 21;
 
 /** Retain foreground query evidence alongside each page's measured cost. */
 async function measuredDecisionPage<T>(stack: MediaStack, path: string, sample: string): Promise<{ page: T; graphQueries: number }> {
@@ -118,7 +118,7 @@ test('Realm reads: public home, scoped Works, indexed decisions, privacy and sta
       statement, { kind: 'realm-classification', id: realm.realm }, 'accepted', null), editor.token, 'realm-topic-decision');
     const { page: decisions, graphQueries } = await measuredDecisionPage<Page<{ kind: string; work: string | null; subject: string | null;
       outcome: string | null }>>(stack, `${root}/decisions?limit=1`, 'one-classification');
-    expect(graphQueries).toBeLessThanOrEqual(DECISION_PAGE_QUERY_BUDGET);
+    expect(graphQueries).toBe(DECISION_PAGE_QUERY_BUDGET);
     expect(decisions.items).toMatchObject([{ kind: 'classification', work: first.work,
       subject: concept.sense, outcome: 'accepted' }]);
     expect(decisions.nextCursor).toBeString();
@@ -285,7 +285,7 @@ test('Statement classification disclosure hides judgments, private meaning, with
     const single = await measuredDecisionPage<Page<{ id: string; subject: string }>>(stack, root,
       'disclosure-one-classification');
     expect(single.page.items.map(item => item.subject)).toEqual([terms.visible.sense]);
-    expect(single.graphQueries).toBeLessThanOrEqual(DECISION_PAGE_QUERY_BUDGET);
+    expect(single.graphQueries).toBe(DECISION_PAGE_QUERY_BUDGET);
     for (const name of ['judgment', 'withheld'] as const) {
       for (const scope of [{ kind: 'global' } as const, { kind: 'realm-classification', id: realm.realm } as const]) {
         const population = scope.kind === 'global' ? 'global' : 'realm';
@@ -294,12 +294,17 @@ test('Statement classification disclosure hides judgments, private meaning, with
         if (scope.kind !== 'global') decisions.set(name, decision.decision);
       }
     }
-    const triple = await measuredDecisionPage<Page<{ id: string; subject: string }>>(stack, root,
-      'three-classifications');
-    expect(new Set(triple.page.items.map(item => item.subject))).toEqual(new Set([
-      terms.visible.sense, terms.judgment.sense, terms.withheld.sense]));
-    expect(triple.graphQueries).toBe(single.graphQueries);
-    expect(triple.graphQueries).toBeLessThanOrEqual(DECISION_PAGE_QUERY_BUDGET);
+    const tripleAtThree = await measuredDecisionPage<Page<{ id: string; subject: string }>>(stack, `${root}?limit=3`,
+      'three-classifications-limit-3');
+    const tripleAtTwenty = await measuredDecisionPage<Page<{ id: string; subject: string }>>(stack, `${root}?limit=20`,
+      'three-classifications-limit-20');
+    const expectedSubjects = new Set([
+      terms.visible.sense, terms.judgment.sense, terms.withheld.sense]);
+    expect(new Set(tripleAtThree.page.items.map(item => item.subject))).toEqual(expectedSubjects);
+    expect(new Set(tripleAtTwenty.page.items.map(item => item.subject))).toEqual(expectedSubjects);
+    expect(tripleAtThree.graphQueries).toBe(DECISION_PAGE_QUERY_BUDGET);
+    expect(tripleAtTwenty.graphQueries).toBe(DECISION_PAGE_QUERY_BUDGET);
+    expect(tripleAtThree.graphQueries).toBe(tripleAtTwenty.graphQueries);
     expect((await stats()).topConcepts.map(item => item.name).sort()).toEqual([
       'Judgment hidden genre', 'Visible genre', 'Withheld genre']);
 
