@@ -4,34 +4,35 @@ import { readWindow } from '../features/shell/notifications/window.ts';
 import { unreadBadge } from '../features/shell/unread.ts';
 
 function stream(head: number) {
-  const calls: { after: string; limit: number }[] = [];
-  const main = { v1: { me: { notifications: { get: async ({ query }: { query: { after: string; limit: number } }) => {
+  const calls: { after?: string; limit: number }[] = [];
+  const main = { v1: { me: { notifications: { get: async ({ query }: { query: { after?: string; limit: number } }) => {
     calls.push(query);
-    const start = Number(query.after.split(':')[1]);
+    const start = Number(query.after?.split(':')[1] ?? '0');
     const items = Array.from({ length: Math.min(query.limit, head - start) }, (_, index) => ({
       id: String(start + index + 1), sequence: String(start + index + 1) }));
-    return { data: { generation: '3', readThrough: '0', items, groups: [] }, error: null };
+    return { data: { generation: '3', head: String(head), reset: false, readThrough: '0', items, groups: [],
+      next: start + items.length < head ? `3:${items.at(-1)!.sequence}` : null }, error: null };
   } } } } } as unknown as MainClient;
   return { main, calls };
 }
 
 describe('notification windows', () => {
-  test('the newest window ends at the head and is shown newest first', async () => {
+  test('a bounded page is shown newest first and carries the API continuation', async () => {
     const { main, calls } = stream(130);
-    const window = await readWindow(main, '3', '130');
-    expect(calls).toEqual([{ after: '3:80', limit: 50 }]);
-    expect(window.ok && window.data.items.map(item => item.sequence).slice(0, 2)).toEqual(['130', '129']);
-    expect(window.ok && window.data.from).toBe('80');
+    const window = await readWindow(main, null);
+    expect(calls).toEqual([{ limit: 50 }]);
+    expect(window.ok && window.data.items.map(item => item.sequence).slice(0, 2)).toEqual(['50', '49']);
+    expect(window.ok && window.data.next).toBe('3:50');
   });
 
-  test('the oldest window starts at the beginning, and an empty stream reads nothing', async () => {
+  test('short and empty streams end according to Main', async () => {
     const { main, calls } = stream(30);
-    const window = await readWindow(main, '3', '30');
-    expect(calls).toEqual([{ after: '3:0', limit: 30 }]);
-    expect(window.ok && window.data.from).toBe('0');
+    const window = await readWindow(main, null);
+    expect(calls).toEqual([{ limit: 50 }]);
+    expect(window.ok && window.data.next).toBeNull();
     const empty = stream(0);
-    expect(await readWindow(empty.main, '3', '0')).toMatchObject({ ok: true, data: { items: [], from: '0' } });
-    expect(empty.calls).toEqual([]);
+    expect(await readWindow(empty.main, null)).toMatchObject({ ok: true, data: { items: [], next: null } });
+    expect(empty.calls).toEqual([{ limit: 50 }]);
   });
 
   test('the badge counts exactly through 99, as Main does', () => {
