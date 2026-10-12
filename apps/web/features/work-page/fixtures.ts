@@ -73,9 +73,9 @@ export const credits = ok<CreditPage>(page([
 export const noCredits = ok<CreditPage>(page([]));
 export const agentCredits = ok<AgentCreditPage>(page([
   { id: iri('f2b4d6f8-0a1c-4e3a-8b5d-7f9b1d3f5a71'), role: 'author', agent: iri('e1a3c5e7-9b0d-4f2a-8c4e-6a8c0e2a4c61'),
-    displayName: 'Maren Osei', handle: 'maren' },
+    identityStatus: 'active' as const, displayName: 'Maren Osei', handle: 'maren' },
   { id: iri('f3c5e7a9-1b2d-4f4c-8e6a-8c0e2a4c6e82'), role: 'translator', agent: iri('e2b4d6f8-0a1c-4e3b-9d5f-7b9d1f3b5d72'),
-    displayName: '林晓', handle: 'linxiao' },
+    identityStatus: 'active' as const, displayName: '林晓', handle: 'linxiao' },
 ]));
 export const noAgentCredits = ok<AgentCreditPage>(page([]));
 

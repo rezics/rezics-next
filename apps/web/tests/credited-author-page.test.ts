@@ -53,6 +53,7 @@ describe('author addresses', () => {
           id: discoveryFixtures.journey.id,
           role: 'author' as const,
           participantKind: 'agent' as const,
+          identityStatus: 'active' as const,
           provider: null,
           key: null,
           ordinal: null,

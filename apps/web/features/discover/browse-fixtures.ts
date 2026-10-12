@@ -35,6 +35,7 @@ export const browseResources: ResourceCard[] = Array.from({ length: 2400 }, (_, 
   },
   ...(kinds[index % kinds.length] === 'work' ? { work: {
     primaryCredits: [{ id: browseId(index + 10000), role: 'author' as const, participantKind: 'agent' as const,
+      identityStatus: 'active' as const,
       agent: browseId(2900), provider: null, key: null, ordinal: null, displayName: '林美玲 · Lin Mei', handle: 'lin-mei' }],
     creditCount: { value: 1, kind: 'exact' as const },
     rating: { context: browseId(2901), count: 20, sum: 85, mean: 4.25, scale: { min: 1 as const, max: 5 as const } },

@@ -7,7 +7,7 @@ import { canonicalHref } from '../address/path.ts';
 
 const preview = (names = ['Jane Austen', 'Lin Mei', 'K. Mori']): NonNullable<ResourceCard['work']> => ({
   primaryCredits: names.map((displayName, index) => ({ id: browseResources[index + 1]!.id,
-    role: 'author', participantKind: 'agent', agent: browseResources[index + 1]!.id,
+    role: 'author', participantKind: 'agent', identityStatus: 'active' as const, agent: browseResources[index + 1]!.id,
     displayName, handle: ['jane-austen', 'lin-mei', 'k-mori'][index]!, provider: null, key: null, ordinal: null })),
   creditCount: { value: 3, kind: 'at-least' },
   rating: { context: browseResources[9]!.id, count: 20, sum: 85, mean: 4.25, scale: { min: 1, max: 5 } },

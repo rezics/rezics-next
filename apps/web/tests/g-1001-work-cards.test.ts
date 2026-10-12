@@ -10,7 +10,7 @@ test('G1001: the shared Work tile receives authors, links, the honest credit tot
   const item: ResourceCard = { id: browseId(1), kind: 'work', types: ['https://schema.org/Book'],
     name: { value: 'Rain', language: 'en', direction: 'ltr', basis: 'requested' },
     icon: { kind: 'fallback', key: 'rain', policy: 'avatar-fallback-v1', resourceType: 'work' },
-    work: { primaryCredits: [{ id: browseId(2), role: 'author', participantKind: 'agent', agent: browseId(3),
+    work: { primaryCredits: [{ id: browseId(2), role: 'author', participantKind: 'agent', identityStatus: 'active' as const, agent: browseId(3),
       provider: null, key: null, ordinal: null, displayName: 'Lin Mei', handle: 'lin-mei' }],
       creditCount: { value: 3, kind: 'at-least' }, rating: { context: browseId(9), count: 2, sum: 9,
         mean: 4.5, scale: { min: 1, max: 5 } } } };

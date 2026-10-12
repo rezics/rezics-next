@@ -498,6 +498,7 @@ const authorNews = page([
         id: storyId(41, '0b0b'),
         role: 'author',
         participantKind: 'agent',
+        identityStatus: 'active' as const,
         provider: null,
         key: null,
         ordinal: null,

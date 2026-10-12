@@ -36,7 +36,7 @@ const openLibrary = (n: number, displayName: string): Credit => ({ id: storyId(n
   handle: null });
 /** A credited author with a REZICS profile. */
 const onRezics = (person: { id: string; name: string; handle: string }): Credit => ({ id: storyId(990, '0b0b'), role: 'author',
-  participantKind: 'agent', provider: null, key: null, ordinal: null, agent: person.id, displayName: person.name,
+  participantKind: 'agent', identityStatus: 'active' as const, provider: null, key: null, ordinal: null, agent: person.id, displayName: person.name,
   handle: person.handle });
 
 /** One post; `n` keys its IDs so every story item is distinct and stable. */
