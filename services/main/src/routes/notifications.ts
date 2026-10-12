@@ -187,6 +187,8 @@ export function notificationRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/me/notifications', {
       query: t.Object({ after: t.Optional(t.String({ pattern: '^[1-9][0-9]{0,18}:(0|[1-9][0-9]{0,18})$' })),
+              before: t.Optional(t.String({ minLength: 1, maxLength: 2048,
+                description: 'Use latest to start with the newest matching notifications, then pass next unchanged to page older. Cannot be combined with after.' })),
               view: t.Optional(
                 t.Union([t.Literal('inbox'), t.Literal('saved'), t.Literal('done')]),
               ),
@@ -208,6 +210,7 @@ export function notificationRoutes(work: MainWorkDependencies) {
           generationPart && sequencePart ? { generation: generationPart, sequence: sequencePart } : null,
           query.limit ?? 50,
               { view: query.view, reason: query.reason },
+              query.before,
             );
         return Response.json({ profile: 'notification-stream-page-v1', ...page }, noStore);
           } catch (error) {

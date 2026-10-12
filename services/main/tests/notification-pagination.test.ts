@@ -19,7 +19,7 @@ function inbox() {
     sequence: String((index + 1) * 71), purpose: 'governance', topic: 'proposal-revised',
     state: 'erased', subject_owner: 'access', subject_ref: 'proposal', subject_revision: null,
     disclosure_basis: 'proposal', kind: null, actor_agent: null, realm: null, group_key: null,
-    saved: index % 2 === 0, done: index % 2 === 1,
+    saved: index % 2 === 0, done: index % 2 === 0,
     reason: index % 2 === 0 ? 'manual' : 'reviewer', triage_revision: null,
     proposal: null, proposal_revision: null, created_at: new Date('2026-10-12T00:00:00Z'),
     individually_read: false,
@@ -32,6 +32,7 @@ function inbox() {
     if (sql.includes('FROM access.notification_item i')) {
       const descending = /ORDER BY i.sequence DESC/.test(sql);
       const selected = rows.filter(row => args[0] !== null
+        && (!sql.includes('i.sequence <= $7') || BigInt(row.sequence) <= BigInt(String(args[6])))
         && (args[2] === null || (descending ? BigInt(row.sequence) < BigInt(String(args[2]))
           : BigInt(row.sequence) > BigInt(String(args[2]))))
         && (args[4] === 'saved' ? row.saved : args[4] === 'done' ? row.done : !row.done)
@@ -44,7 +45,8 @@ function inbox() {
   const client = { query, release() {} };
   const store = new NotificationStore({ connect: async () => client, query } as unknown as Pool);
   return { store, rows, statements, reset: () => { generation = '8'; }, deny: () => { active = false; },
-    missing: () => { absent = true; }, shrink: () => { sequenceHead = '1'; } };
+    missing: () => { absent = true; }, shrink: () => { sequenceHead = '1'; },
+    concurrentArrival: () => { rows.push({ ...rows[0]!, id: 'concurrent', sequence: '20001' }); } };
 }
 
 for (const selection of selections) {
@@ -103,10 +105,22 @@ test('descending continuation resets from newest in a new generation, and stale 
 test('forward sync preserves ascending sequence and generation cursors', async () => {
   const { store } = inbox();
   const first = await store.readStream(principal, null, 2);
-  expect(first.items.map(item => item.sequence)).toEqual(['71', '213']);
-  expect(first.next).toBe('7:213');
-  const next = await store.readStream(principal, { generation: '7', sequence: '213' }, 2);
-  expect(next.items.map(item => item.sequence)).toEqual(['355', '497']);
+  expect(first.items.map(item => item.sequence)).toEqual(['142', '284']);
+  expect(first.next).toBe('7:284');
+  const next = await store.readStream(principal, { generation: '7', sequence: '284' }, 2);
+  expect(next.items.map(item => item.sequence)).toEqual(['426', '568']);
+});
+
+test('a concurrent arrival above the reported head waits for the next newest traversal', async () => {
+  const fixture = inbox();
+  fixture.concurrentArrival();
+  const first = await fixture.store.readStream(principal, null, 2, { view: 'saved' }, 'latest');
+  expect(first.head).toBe('20000');
+  expect(first.items.map(item => item.sequence)).toEqual(['17395', '17253']);
+  fixture.reset();
+  const reset = await fixture.store.readStream(principal, null, 2, { view: 'saved' }, first.next!);
+  expect(reset.reset).toBe(true);
+  expect(reset.items.map(item => item.sequence)).toEqual(['17395', '17253']);
 });
 
 test('HTTP exposes newest-first pages and returns a continuation that pages older', async () => {

@@ -14,6 +14,7 @@ import { PersonPreferencesStore } from '../preferences/store.ts';
 import type { Viewer } from '../suitability/policy.ts';
 import { notificationRecipientAllowed } from './recipient-policy.ts';
 import { relationshipRecipientPage, type RelationshipRecipients, type RecipientFrontier } from '../follows/recipients.ts';
+import { decodeReadCursor, encodeReadCursor } from '../work/read-session.ts';
 
 export class NotificationInvalid extends Error {}
 export class NotificationDenied extends Error {}
@@ -615,14 +616,14 @@ export class NotificationStore {
   }
 
   /**
-   * One bounded page of the caller's inbox after a (generation, sequence)
-   * cursor. A cursor from an older generation returns an explicit reset from
-   * the start of the current generation; sequences are gap-free, so a client
-   * detects missed realtime hints by comparing sequences.
+   * Forward device sync uses (generation, sequence). Inbox browsing uses
+   * `before=latest` and opaque descending continuations. Both filter before
+   * the page bound and restart in the current generation after a reset.
    */
   async readStream(principal: VerifiedPrincipal, after: { generation: string; sequence: string } | null,
     limit: number = NOTIFICATION_LIMITS.streamPage,
     selection: { view?: 'inbox' | 'saved' | 'done'; reason?: ProposalSubscriptionReason } = {},
+    before?: string,
   ): Promise<StreamPage> {
     if (!Number.isInteger(limit) || limit < 1 || limit > NOTIFICATION_LIMITS.streamPage
       || (after && (!/^[1-9][0-9]{0,18}$/.test(after.generation) || !/^(0|[1-9][0-9]{0,18})$/.test(after.sequence))) ||
@@ -630,18 +631,34 @@ export class NotificationStore {
       (selection.reason !== undefined && !proposalSubscriptionReasons.includes(selection.reason))) {
       throw new NotificationInvalid('stream cursor does not match its profile');
     }
+    if (before !== undefined && after !== null) throw new NotificationInvalid('Choose one stream direction');
+    const descending = before !== undefined;
+    const binding = ['notification-before-v1', principal.issuer, principal.subject,
+      selection.view ?? 'inbox', selection.reason ?? null];
+    // Generation belongs inside the encrypted seek, so an old generation can
+    // explicitly reset instead of failing the shared read-cursor epoch check.
+    const position = { dataEpoch: 'notification-before-v1', sequence: '0' };
+    let cursor = after;
+    if (descending && before !== 'latest') {
+      try {
+        const decoded = decodeReadCursor(before, binding, position);
+        cursor = JSON.parse(decoded!.after) as NonNullable<typeof after>;
+        if (!cursor || !/^[1-9][0-9]{0,18}$/.test(cursor.generation)
+          || !/^(0|[1-9][0-9]{0,18})$/.test(cursor.sequence)) throw new Error('cursor');
+      } catch { throw new NotificationInvalid('stream cursor does not match its profile'); }
+    }
     const { page: result, principalId } = await this.transaction(async client => {
       const principalId = await this.reader(client, principal);
       const stream = (principalId === null ? undefined : (await client.query<{ generation: string;
         head_sequence: string }>(`SELECT generation::text, head_sequence::text FROM access.notification_stream
          WHERE principal_id = $1 AND stream = 'inbox'`, [principalId])).rows[0])
         ?? { generation: '1', head_sequence: '0' };
-      if (after && BigInt(after.generation) > BigInt(stream.generation)) {
+      if (cursor && BigInt(cursor.generation) > BigInt(stream.generation)) {
         throw new NotificationStale('stream cursor is ahead of the recipient stream');
       }
-      const reset = after !== null && after.generation !== stream.generation;
-      const from = after && !reset ? after.sequence : '0';
-      if (BigInt(from) > BigInt(stream.head_sequence)) throw new NotificationStale('stream cursor is ahead of head');
+      const reset = cursor !== null && cursor.generation !== stream.generation;
+      const from = cursor && !reset ? cursor.sequence : descending ? null : '0';
+      if (from !== null && BigInt(from) > BigInt(stream.head_sequence)) throw new NotificationStale('stream cursor is ahead of head');
       const rows = (await client.query<{ id: string; sequence: string; purpose: string; topic: string;
         state: StreamItem['state']; subject_owner: string; subject_ref: string; subject_revision: string | null;
         disclosure_basis: string; kind: NotificationKind | null; actor_agent: string | null;
@@ -663,13 +680,16 @@ export class NotificationStore {
         LEFT JOIN access.notification_proposal_context pc ON pc.item_id = i.id
         LEFT JOIN access.notification_item_read r ON r.principal_id = i.principal_id AND r.item_id = i.id
         LEFT JOIN access.notification_display_context c ON c.item_id = i.id
-        WHERE i.principal_id = $1 AND i.stream = 'inbox' AND i.generation = $2 AND i.sequence > $3
+        WHERE i.principal_id = $1 AND i.stream = 'inbox' AND i.generation = $2
+          AND ${descending ? '($3::bigint IS NULL OR i.sequence < $3)' : 'i.sequence > $3'}
+          ${descending ? 'AND i.sequence <= $7::bigint' : ''}
           AND ($5::text IS NULL OR $5 = 'inbox' AND NOT coalesce(t.done,false)
             OR $5 = 'saved' AND t.saved OR $5 = 'done' AND t.done)
           AND ($6::text IS NULL OR pc.reason = $6)
-        ORDER BY i.sequence LIMIT $4`, [principalId, stream.generation, from, limit + 1,
+        ORDER BY i.sequence ${descending ? 'DESC' : 'ASC'} LIMIT $4`, [principalId, stream.generation, from, limit + 1,
             selection.view ?? 'inbox',
             selection.reason ?? null,
+            ...(descending ? [stream.head_sequence] : []),
           ])).rows;
       const watermark = (await client.query<{ read_through: string }>(`SELECT read_through::text
         FROM access.notification_read_watermark WHERE principal_id = $1 AND stream = 'inbox' AND generation = $2`,
@@ -697,7 +717,9 @@ export class NotificationStore {
             reason: null,
             proposal: null,
             subject: null, display: null, raw: row })),
-        next: rows.length > limit ? `${stream.generation}:${page.at(-1)!.sequence}` : null,
+        next: rows.length > limit ? descending
+          ? encodeReadCursor(binding, position, JSON.stringify({ generation: stream.generation, sequence: page.at(-1)!.sequence }))
+          : `${stream.generation}:${page.at(-1)!.sequence}` : null,
       } };
     });
     const items: StreamItem[] = [];
