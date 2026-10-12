@@ -47,6 +47,8 @@ export const commandCounters = [
   'catalogue_name_copies_visited',
   'catalogue_name_values_visited',
   'catalogue_name_witness_heads_visited',
+  'exact_unit_phrase_matches_visited',
+  'exact_unit_postings_visited',
   'exact_unit_rdf_rows_visited',
   'public_name_heads_visited',
   'public_name_labels_visited',
