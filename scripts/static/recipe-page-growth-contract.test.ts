@@ -194,9 +194,11 @@ test('the executable growth check names missing depth and the real continuation 
   expect(todo).toContain('class: linear');
   expect(todo).toContain('because');
   expect(RECIPE_GROWTH_COVERAGE).toContain('depth: not covered');
+  expect(RECIPE_GROWTH_COVERAGE).toContain('posts: not covered');
   expect(RECIPE_GROWTH_COVERAGE).toContain('small has no continuation');
   const source = readFileSync(resolve('tests/qa/integration/recipe-page-growth.test.ts'), 'utf8');
   expect(source).toContain('test.todo(recipeSectionDepthTodo(STRUCTURE_LIMITS.maxDepth),');
+  expect(source).toContain("test.todo('unrelatedPosts at 4/16/64 through the product API; expected class: constant; posts: not covered'");
   expect(source).toContain('coverage: RECIPE_GROWTH_COVERAGE');
 });
 

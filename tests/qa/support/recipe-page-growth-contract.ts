@@ -20,7 +20,7 @@ export type RecipeCostSeries = Record<RecipeReader, {
   firstPages: RecipeCostSample[]; continuations: RecipeCostSample[];
 }>;
 
-export const RECIPE_GROWTH_COVERAGE = 'depth: not covered; continuation: medium/large only, small has no continuation';
+export const RECIPE_GROWTH_COVERAGE = 'depth: not covered; posts: not covered; continuation: medium/large only, small has no continuation';
 
 export function recipeSectionDepthTodo(maxDepth: number): string {
   return `recipeSectionDepth at 1/${Math.floor(maxDepth / 2)}/${maxDepth}; unit: one nested Recipe section ancestor; `

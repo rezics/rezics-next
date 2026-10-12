@@ -440,6 +440,7 @@ if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
   const { test } = await import('bun:test');
   const { STRUCTURE_LIMITS } = await import('../../../services/main/src/modules/structure/format.ts');
   test.todo(recipeSectionDepthTodo(STRUCTURE_LIMITS.maxDepth), () => {});
+  test.todo('unrelatedPosts at 4/16/64 through the product API; expected class: constant; posts: not covered', () => {});
   test('Recipe Work page meets remote and immutable-object budgets on published growth cuts', async () => {
     const { stdout } = await runWorkProfileChild('tests/qa/integration/recipe-page-growth.test.ts', {
       env: { REZICS_RECIPE_GROWTH_CHILD: '1' }, timeoutMs: 1_800_000,
