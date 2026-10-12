@@ -216,6 +216,7 @@ export const commandOnlyIntegrationFiles: ReadonlySet<string> = new Set([
   'tests/qa/integration/growth-search-refresh.test.ts',
   // API-built corpus backups need the product assembler and a closed raw-update endpoint.
   'tests/qa/integration/profile-corpus-restore.test.ts',
+  'tests/qa/integration/recipe-page-growth.test.ts',
   'tests/qa/integration/work-profile-seed-checkpoints.test.ts',
   // Explicit seed preparation uses the same product assembler as checkpoint restores.
   'tests/qa/fault-recovery/work-profile-seed-build.test.ts',
