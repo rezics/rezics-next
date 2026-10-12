@@ -303,11 +303,11 @@ export const InvalidCursorRestartsFiltered: Story = {
   async play({ canvasElement, args }) {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
-    await waitFor(() => expect(args.calls).toEqual(['page:expired:saved:manual', 'page:latest:saved:manual']));
+    await waitFor(() => expect(args.calls).toEqual(['page:expired:saved:manual', 'page:latest:saved:manual', 'count']));
     await expect(canvas.getAllByRole('listitem')).toHaveLength(1);
     await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
     await waitFor(() => expect(canvas.getAllByRole('listitem')).toHaveLength(2));
-    await expect(args.calls).toEqual(['page:expired:saved:manual', 'page:latest:saved:manual', 'page:fresh:saved:manual']);
+    await expect(args.calls).toEqual(['page:expired:saved:manual', 'page:latest:saved:manual', 'count', 'page:fresh:saved:manual']);
     await expect(canvas.queryByRole('button', { name: 'Show more' })).toBeNull();
     await expect(canvas.getByRole('link', { name: 'Saved' })).toHaveAttribute('aria-current', 'page');
     await expect(canvas.getByRole('link', { name: 'Watching' })).toHaveAttribute('aria-current', 'page');

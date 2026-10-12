@@ -25,7 +25,7 @@ import { EmptyState, failureDetail } from '../empty-state.tsx';
 import LocalizedLink from '../localized-link.tsx';
 import { PageContainer, PageHeader } from '../page.tsx';
 import { useShell } from '../shell-provider.tsx';
-import { setUnread, setUnreadGeneration } from '../unread.ts';
+import { beginNotificationRequest, isNotificationRequestCurrent, setUnread, setUnreadGeneration } from '../unread.ts';
 import { inboxReasons, inboxViews, type NotificationSelection, type NotificationWindow, notificationsHref,
   readWindow, type StreamItem } from './window.ts';
 
@@ -280,7 +280,6 @@ export function NotificationsView({ initial, now, avatarQuery, invitations, main
   const mounted = useRef(true);
   const loadingMore = useRef<Traversal | null>(null);
   const restartRequired = useRef(false);
-  const countRequest = useRef(0);
   const triageBusy = useRef<string | null>(null);
   const displayed = traversal.current;
   useEffect(() => {
@@ -298,19 +297,20 @@ export function NotificationsView({ initial, now, avatarQuery, invitations, main
   const unread = windows.some(window => window.items.some(item => !isRead(item)));
 
   async function refreshCount(request: Traversal) {
-    const version = ++countRequest.current;
+    const fence = beginNotificationRequest();
     const count = await settle(() => client().v1.me.notifications['unread-count'].get());
-    if (!isCurrent(request) || version !== countRequest.current || !count.ok
+    if (!isCurrent(request) || !count.ok
       || count.data.generation !== request.generation) return;
-    setUnread({ count: count.data.count, overflow: count.data.overflow, generation: count.data.generation });
+    setUnread({ count: count.data.count, overflow: count.data.overflow, generation: count.data.generation }, fence);
   }
 
   async function markAll() {
     const request = displayed;
     if (!isCurrent(request) || restartRequired.current) return;
+    const fence = beginNotificationRequest();
     const result = await settle(() => client().v1.me['notification-read-watermarks'].inbox.put({
       profile: 'notification-read-watermark-v1', generation: request.generation, readThrough: request.head }));
-    if (!isCurrent(request)) return;
+    if (!isCurrent(request) || !isNotificationRequestCurrent(fence)) return;
     if (!result.ok) { setState('mark-failed'); return; }
     if (result.data.generation !== request.generation) return;
     setReadThrough(current => BigInt(current) > BigInt(result.data.readThrough) ? current : result.data.readThrough);
@@ -321,9 +321,10 @@ export function NotificationsView({ initial, now, avatarQuery, invitations, main
   function markOne(item: StreamItem) {
     const request = displayed;
     if (!isCurrent(request) || restartRequired.current || isRead(item)) return;
+    const fence = beginNotificationRequest();
     setReadHere(current => new Set(current).add(item.id));
     void settle(() => client().v1.me.notifications({ item: item.id }).read.put()).then(async result => {
-      if (!isCurrent(request) || !result.ok) return;
+      if (!isCurrent(request) || !isNotificationRequestCurrent(fence) || !result.ok) return;
       await refreshCount(request);
     });
   }
@@ -331,12 +332,12 @@ export function NotificationsView({ initial, now, avatarQuery, invitations, main
   function replaceTraversal(window: NotificationWindow) {
     traversal.current = { generation: window.generation, head: window.head, revision: traversal.current.revision + 1 };
     setUnreadGeneration(window.generation);
-    ++countRequest.current;
     triageBusy.current = null;
     setBusy(null); setTriageError(null); setTriageNote(null);
     setWindows([window]);
     setReadThrough(window.readThrough);
     setReadHere(new Set());
+    void refreshCount(traversal.current);
   }
 
   async function older() {
@@ -345,8 +346,16 @@ export function NotificationsView({ initial, now, avatarQuery, invitations, main
     loadingMore.current = request;
     setState('loading');
     let restarting = restartRequired.current;
+    let fence = beginNotificationRequest();
     let next = await readWindow(client(), restarting ? null : lastWindow.next, selection);
     if (!isCurrent(request)) return;
+    if (!isNotificationRequestCurrent(fence)) {
+      // Remember transport rejection even when a newer snapshot superseded this page.
+      if (!next.ok && next.failure === 'invalid') restartRequired.current = true;
+      loadingMore.current = null;
+      setState('idle');
+      return;
+    }
     if (!next.ok && next.failure === 'invalid' && !restarting) {
       // Invalidate the rejected cursor before recovery, including a failed recovery's retry.
       restartRequired.current = true;
@@ -354,14 +363,15 @@ export function NotificationsView({ initial, now, avatarQuery, invitations, main
       request = { ...request, revision: request.revision + 1 };
       traversal.current = request;
       loadingMore.current = request;
-      ++countRequest.current;
       triageBusy.current = null;
       setBusy(null); setTriageError(null); setTriageNote(null);
       setUnreadGeneration(request.generation);
+      fence = beginNotificationRequest();
       next = await readWindow(client(), null, selection);
       if (!isCurrent(request)) return;
     }
     loadingMore.current = null;
+    if (!isNotificationRequestCurrent(fence)) { setState('idle'); return; }
     if (!next.ok) { setState('older-failed'); return; }
     if (BigInt(next.data.generation) < BigInt(request.generation)
       || (next.data.generation !== request.generation && !next.data.reset && !restarting)) {
@@ -381,6 +391,7 @@ export function NotificationsView({ initial, now, avatarQuery, invitations, main
   async function triage(item: StreamItem, patch: { saved?: boolean; done?: boolean }) {
     const request = displayed;
     if (!isCurrent(request) || restartRequired.current || triageBusy.current) return;
+    const fence = beginNotificationRequest();
     triageBusy.current = item.id;
     setBusy(item.id); setTriageError(null); setTriageNote(null);
     const result = await settle(() => client().v1.me.notifications({ item: item.id }).triage.put({
@@ -388,6 +399,7 @@ export function NotificationsView({ initial, now, avatarQuery, invitations, main
     if (!isCurrent(request)) return;
     triageBusy.current = null;
     setBusy(null);
+    if (!isNotificationRequestCurrent(fence)) return;
     if (!result.ok) { setTriageError(result.failure === 'moved' ? t.triageStale : t.triageFailed); return; }
     const next = result.data;
     const leaves = (selection.view === 'inbox' && next.done) || (selection.view === 'saved' && !next.saved)

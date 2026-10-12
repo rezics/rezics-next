@@ -159,8 +159,9 @@ export function memoryInbox(stream: StreamItem[], options: { refuse?: boolean; r
     hint: { get: () => answer({ profile: 'notification-stream-hint-v1', generation, head: stream.at(-1)?.sequence ?? '0' }) },
   });
   const main = { v1: { me: { notifications, 'notification-read-watermarks': { inbox: { put: (body: {
-    readThrough: string }) => {
-    calls.push(`read-through:${body.readThrough}`);
+    generation: string; readThrough: string }) => {
+    calls.push(`read-through:${body.generation}:${body.readThrough}`);
+    if (body.generation !== generation) return Promise.resolve({ data: null, error: { status: 409, value: null } });
     if (!options.refuse && BigInt(body.readThrough) > BigInt(readThrough)) readThrough = body.readThrough;
     return answer({ profile: 'notification-read-watermark-v1', generation, readThrough });
   } } } } } } as unknown as MainClient;

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool, type PoolClient } from 'pg';
@@ -9,6 +9,10 @@ import { NotificationDenied, NotificationInvalid, NotificationStale, Notificatio
   from '../src/modules/notification/store.ts';
 import { notificationRoutes } from '../src/routes/notifications.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
+import { FusekiClient } from '../src/infrastructure/fuseki.ts';
+import { AgentProvisioning, agentProvisionDigest } from '../src/modules/agent/provision.ts';
+import { EditorialReviewStore, type EditorialCall } from '../src/modules/editorial-review/store.ts';
+import type { EditorialAdapter, EditorialTarget } from '../src/modules/editorial-review/contract.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 let cluster: PostgresCluster | undefined;
@@ -28,7 +32,10 @@ beforeAll(async () => {
     await client.query('BEGIN');
     for (const file of schemaFiles(root, 'access')) {
       if (file.endsWith('_notification_filter_seek.sql')) {
-        const owner = await seedOwner(client), itemId = randomUUID();
+        // Owning operations need the earlier schemas visible to their own transactions.
+        await client.query('COMMIT');
+        const owner = await seedOwner(), itemId = randomUUID();
+        await client.query('BEGIN');
         await client.query("UPDATE access.notification_stream SET head_sequence = 1 WHERE principal_id = $1", [owner.id]);
         await client.query(`INSERT INTO access.notification_item (id,principal_id,stream,generation,sequence,
           purpose,topic,source_owner,source_event,subject_owner,subject_ref,disclosure_basis)
@@ -79,25 +86,49 @@ function recordingPool(statements: Statement[], afterHead?: () => Promise<void>,
   } });
 }
 
-async function seedOwner(connection: Pick<PoolClient, 'query'>) {
-  const id = randomUUID(), proposal = randomUUID(), actor = `https://rezics.com/id/${randomUUID()}`;
+async function seedOwner() {
   const principal = { issuer: 'https://account.rezics.test', subject: randomUUID() };
-  await connection.query('INSERT INTO access.principal (id,account_issuer,account_subject) VALUES ($1,$2,$3)',
-    [id, principal.issuer, principal.subject]);
-  await connection.query("INSERT INTO access.notification_stream (principal_id,stream) VALUES ($1,'inbox')", [id]);
-  await connection.query("INSERT INTO access.authority_subject (id,kind) VALUES ($1,'agent')", [actor]);
-  await connection.query(`INSERT INTO access.editorial_proposal (id,kind,target,resource,context,
-    proposer_principal,proposer_agent,proposer_key,proposer_controllers)
-    VALUES ($1,'title','{}','fixture','fixture',$2,$3,$4,ARRAY[$2::uuid])`,
-  [proposal, id, actor, '0'.repeat(64)]);
-  await connection.query(`INSERT INTO access.editorial_revision (proposal,n,candidate,candidate_digest,
-    before_state,base_heads,evidence,author_agent) VALUES ($1,1,'{}',$2,'{}','[{}]','[]',$3)`,
-  [proposal, createHash('sha256').update('{}').digest('hex'), actor]);
-  return { id, proposal, principal };
+  const input = { kind: 'service' as const, displayName: 'Notification recipient' };
+  const fuseki = new FusekiClient('http://notification-fixture.invalid');
+  // This owner test substitutes the graph receipt boundary, while provisioning
+  // retains its real principal, control, activation and receipt operations.
+  const epoch = randomUUID();
+  fuseki.query = async () => ({ results: { bindings: [{
+    digest: { type: 'literal', value: agentProvisionDigest(input) },
+    epoch: { type: 'literal', value: epoch }, sequence: { type: 'literal', value: '1' },
+  }] } });
+  const environment = { fuseki, objectDirectory: join(root, '.temp/notification-fixture'),
+    lineage: { dataEpoch: epoch, routingEpoch: epoch } };
+  const agent = await new AgentProvisioning(pool, environment).provision({ verify: async () => principal },
+    new Request('http://localhost/v1/agents'), input, randomUUID());
+  expect(agent.state).toBe('active');
+  const id = (await pool.query<{ id: string }>(
+    'SELECT id FROM access.principal WHERE account_issuer = $1 AND account_subject = $2',
+    [principal.issuer, principal.subject])).rows[0]!.id;
+  await pool.query("INSERT INTO access.notification_stream (principal_id,stream) VALUES ($1,'inbox')", [id]);
+  const target: EditorialTarget = { resource: `https://rezics.com/id/${randomUUID()}`,
+    revision: `https://rezics.com/id/${randomUUID()}`, context: 'urn:rezics:context:global', work: null };
+  const validated = { candidate: {}, before: {}, baseHeads: [{ component: target.resource, head: target.revision }] };
+  const adapter = { kind: 'title', requiredApprovals: 1,
+    validate: async () => validated, preview: async () => [],
+    apply: async () => { throw new Error('Fixture proposal is never applied'); },
+    compensate: async () => { throw new Error('Fixture proposal is never compensated'); },
+  } satisfies EditorialAdapter;
+  class FixtureEditorialStore extends EditorialReviewStore {
+    override async resolveTarget(_call: Pick<EditorialCall, 'work' | 'request' | 'actingSubject'>,
+      _resource: string, _context: EditorialTarget['context']) { return target; }
+  }
+  const editorial = new FixtureEditorialStore(pool, Promise.resolve(new Map([['title', { kind: 'title', create: () => adapter }]])));
+  const proposal = await editorial.create({ principal, actingSubject: agent.agent,
+    request: new Request('http://localhost/v1/editorial/proposals'),
+    work: { environment } as unknown as MainWorkDependencies },
+  { kind: 'title', target, candidate: {}, baseHeads: validated.baseHeads, evidence: [] }, randomUUID());
+  expect(proposal).toMatchObject({ outcome: 'created', revision: 1 });
+  return { id, proposal: proposal.proposal, principal };
 }
 
 async function inbox() {
-  const { id, proposal, principal } = await seedOwner(pool);
+  const { id, proposal, principal } = await seedOwner();
   const statements: Statement[] = [];
   const rows: FixtureRow[] = [];
   let generation = '1';

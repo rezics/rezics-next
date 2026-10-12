@@ -16,6 +16,7 @@ const UNREAD_INTERVAL_MS = 60_000;
 let current: Unread | null = null;
 let displayedGeneration: string | null = null;
 let revision = 0;
+let requestOrder = 0;
 const listeners = new Set<() => void>();
 let users = 0;
 let timer: ReturnType<typeof setInterval> | undefined;
@@ -27,17 +28,16 @@ function publish(next: Unread | null) {
 
 async function refresh() {
   if (document.visibilityState !== 'visible') return;
-  const requestRevision = revision;
+  const request = beginNotificationRequest();
   try {
     const response = await fetch(`${BFF_PREFIX}/v1/me/notifications/unread-count`,
       { credentials: 'same-origin', headers: { accept: 'application/json' } });
     if (!response.ok) { await response.body?.cancel(); return; }
     const body = await response.json() as { profile?: string; generation?: unknown; count?: unknown; overflow?: unknown };
-    if (requestRevision !== revision) return;
     if (body.profile === 'notification-unread-count-v1' && typeof body.count === 'number'
       && typeof body.overflow === 'boolean' && typeof body.generation === 'string'
       && /^[1-9][0-9]{0,18}$/.test(body.generation)) {
-      setUnread({ generation: body.generation, count: body.count, overflow: body.overflow });
+      setUnread({ generation: body.generation, count: body.count, overflow: body.overflow }, request);
     }
   } catch { /* Offline: the badge keeps its last value. */ }
 }
@@ -64,14 +64,26 @@ function stop() {
   publish(null);
 }
 
-/** The notifications page sets what it just marked read, so badges agree at once; null forgets the count. */
-export function setUnread(next: Unread | null) {
+/** One issuance order for badge polls and view page, command and count responses. */
+export interface NotificationRequest { readonly revision: number; readonly order: number }
+export function beginNotificationRequest(): NotificationRequest {
+  return { revision, order: ++requestOrder };
+}
+
+export function isNotificationRequestCurrent(request: NotificationRequest, generation?: string): boolean {
+  return request.revision === revision && request.order === requestOrder
+    && (generation === undefined || displayedGeneration === null || generation === displayedGeneration);
+}
+
+/** Async producers submit their issuance fence; explicit seeds/reset invalidate outstanding responses. */
+export function setUnread(next: Unread | null, request?: NotificationRequest) {
+  if (request && !isNotificationRequestCurrent(request, next?.generation)) return;
   if (next === null) displayedGeneration = null;
   else {
     if (displayedGeneration !== null && next.generation !== displayedGeneration) return;
     if (next.generation && current?.generation && BigInt(next.generation) < BigInt(current.generation)) return;
   }
-  revision += 1;
+  if (!request) revision += 1;
   publish(next);
 }
 

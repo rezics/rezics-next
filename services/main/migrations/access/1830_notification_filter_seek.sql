@@ -11,26 +11,38 @@ CREATE TABLE access.notification_filter_seek (
 );
 
 CREATE FUNCTION access.sync_notification_filter_seek() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    item uuid;
 BEGIN
     IF TG_TABLE_NAME = 'notification_item' THEN
-        INSERT INTO access.notification_filter_seek (item_id, principal_id, generation, sequence)
-            VALUES (NEW.id, NEW.principal_id, NEW.generation, NEW.sequence);
-    ELSIF TG_TABLE_NAME = 'notification_item_triage' THEN
-        UPDATE access.notification_filter_seek SET saved = NEW.saved, done = NEW.done
-            WHERE item_id = NEW.item_id AND principal_id = NEW.principal_id;
+        item := NEW.id;
     ELSE
-        UPDATE access.notification_filter_seek SET reason = NEW.reason WHERE item_id = NEW.item_id;
+        item := NEW.item_id;
     END IF;
+    INSERT INTO access.notification_filter_seek AS seek (item_id, principal_id, generation, sequence, saved, done, reason)
+        SELECT i.id, i.principal_id, i.generation, i.sequence, coalesce(t.saved, false), coalesce(t.done, false), c.reason
+        FROM access.notification_item i
+        LEFT JOIN access.notification_item_triage t ON t.item_id = i.id AND t.principal_id = i.principal_id
+        LEFT JOIN access.notification_proposal_context c ON c.item_id = i.id
+        WHERE i.id = item
+        ON CONFLICT (item_id) DO UPDATE SET saved = EXCLUDED.saved, done = EXCLUDED.done, reason = EXCLUDED.reason
+        WHERE (seek.saved, seek.done, seek.reason) IS DISTINCT FROM (EXCLUDED.saved, EXCLUDED.done, EXCLUDED.reason);
     RETURN NEW;
 END $$;
 
 -- Install the source triggers before copying existing rows. Their DDL locks
 -- keep a concurrent source write from escaping the copy within this migration.
-CREATE TRIGGER notification_item_filter_seek AFTER INSERT ON access.notification_item
+-- Materialize the final owner state once at commit. Intermediate default Inbox
+-- membership would otherwise leave dead index tuples for every newly Done item,
+-- making a filtered read scan unrelated history until the next vacuum.
+CREATE CONSTRAINT TRIGGER notification_item_filter_seek AFTER INSERT ON access.notification_item
+    DEFERRABLE INITIALLY DEFERRED
     FOR EACH ROW EXECUTE FUNCTION access.sync_notification_filter_seek();
-CREATE TRIGGER notification_triage_filter_seek AFTER INSERT OR UPDATE ON access.notification_item_triage
+CREATE CONSTRAINT TRIGGER notification_triage_filter_seek AFTER INSERT OR UPDATE ON access.notification_item_triage
+    DEFERRABLE INITIALLY DEFERRED
     FOR EACH ROW EXECUTE FUNCTION access.sync_notification_filter_seek();
-CREATE TRIGGER notification_reason_filter_seek AFTER INSERT ON access.notification_proposal_context
+CREATE CONSTRAINT TRIGGER notification_reason_filter_seek AFTER INSERT ON access.notification_proposal_context
+    DEFERRABLE INITIALLY DEFERRED
     FOR EACH ROW EXECUTE FUNCTION access.sync_notification_filter_seek();
 
 INSERT INTO access.notification_filter_seek (item_id, principal_id, generation, sequence, saved, done, reason)

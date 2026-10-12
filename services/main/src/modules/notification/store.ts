@@ -806,8 +806,9 @@ export class NotificationStore {
     const { principalId, rows, generation } = await this.transaction(async client => {
       const principalId = await this.reader(client, principal);
       if (!principalId) return { principalId, rows: [], generation: '1' };
+      // The reset writer waits until both the generation and its unread rows are captured.
       const stream = (await client.query<{ generation: string }>(`SELECT generation::text
-        FROM access.notification_stream WHERE principal_id = $1 AND stream = 'inbox'`, [principalId])).rows[0];
+        FROM access.notification_stream WHERE principal_id = $1 AND stream = 'inbox' FOR SHARE`, [principalId])).rows[0];
       const generation = stream?.generation ?? '1';
       const rows = (await client.query<{ subject_owner: string; subject_ref: string;
         subject_revision: string | null; disclosure_basis: string; realm: string | null; actor_agent: string | null; group_key: string | null;
