@@ -157,6 +157,7 @@ const selectionSlot = media.table('selection_slot', {
   role: text('role').$type<'avatar' | ShowcaseSlot>().notNull(),
   policy: text('policy').$type<'avatar-selection-v1' | 'showcase-selection-v1'>().notNull(),
   head: uuid('head'),
+  attachmentAssetId: uuid('attachment_asset_id'),
   deliveryHead: uuid('delivery_head'),
   showcaseActive: boolean('showcase_active').notNull().default(false),
 });

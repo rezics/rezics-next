@@ -557,11 +557,13 @@ export class MediaStore {
       JOIN media.asset_state s ON s.id=a.state_head
       LEFT JOIN LATERAL (
         SELECT array_agg(jsonb_build_object('target',u.target,'context',u.context)) AS items
-        FROM (SELECT u.target,u.context FROM media.use u
-          WHERE requested_use.id IS NULL AND u.asset_id=a.id AND
-            (u.role NOT IN ('avatar') AND u.role NOT LIKE 'showcase-%' OR EXISTS (
-              SELECT 1 FROM media.selection_slot slot JOIN media.selection_revision r ON r.id=slot.head
-              WHERE slot.target=u.target AND slot.context=u.context AND slot.role=u.role AND r.use_id=u.id))
+        FROM (
+          SELECT u.target,u.context FROM media.use u
+          WHERE requested_use.id IS NULL AND u.asset_id=a.id
+            AND u.role <> 'avatar' AND u.role NOT LIKE 'showcase-%'
+          UNION ALL
+          SELECT slot.target,slot.context FROM media.selection_slot slot
+          WHERE requested_use.id IS NULL AND slot.attachment_asset_id=a.id
           LIMIT 65) u
       ) attachment ON true`, [references, ids, REQUIRED_MATCH_PROFILE])).rows;
     return new Map(rows.map(row => [row.reference as string, { owner: row.owner as string,

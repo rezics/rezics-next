@@ -269,6 +269,80 @@ test(`${role} attachments still count only the selected head in their exact cont
 });
 }
 
+for (const role of ['avatar', 'showcase'] as const) {
+test(`Asset database work ignores retained ${role} selection history`, async () => {
+  await isolated(async f => {
+    const target = iri(randomUUID()), context = iri(randomUUID());
+    if (role === 'showcase') await f.store.moderateOriginal(`clear:${randomUUID()}`, basis.representation,
+      (await f.store.readAsset(basis.asset))!.state, false);
+    const select = (asset: string | null, expectedSelection: string | null) => role === 'avatar'
+      ? f.store.selectAvatar(admission(), { target, context, expectedSelection, asset, crop: null })
+      : f.store.showcase.select(admission(), { target, context, expectedSelection, asset, crop: null,
+        role: 'background-landscape', focalArea: null }, async () => ({ width: 1280, height: 720, hasAlpha: false }));
+    // Keep the tiny-table planner fallback out of the growth measurement.
+    // These never-selected slots have no attachment and stay fixed in both samples.
+    await f.pool.query(`INSERT INTO media.selection_slot (target,context,role,policy)
+      SELECT 'https://rezics.com/id/'||gen_random_uuid(),$1,'avatar','avatar-selection-v1'
+      FROM generate_series(1,1024)`, [DEFAULT_MEDIA_CONTEXT]);
+    let count = 0, head: string | null = null;
+    const samples: number[] = [];
+    for (const size of [256, 1024]) {
+      while (count < size) {
+        const selected = await select(basis.asset, head);
+        const cleared = await select(null, selected.id);
+        head = cleared.id;
+        count++;
+      }
+      await f.pool.query('ANALYZE media.use; ANALYZE media.selection_slot; ANALYZE media.selection_revision');
+      const plan = await f.visibilityPlan(iri(basis.asset));
+      const nodes = planNodes(plan);
+      expect(nodes.some(node => node['Index Name'] === 'use_inventory_attachment_idx'
+        && node['Index Cond']?.includes('asset_id ='))).toBe(true);
+      expect(nodes.some(node => node['Index Name'] === 'selection_attachment_asset_idx'
+        && node['Index Cond']?.includes('attachment_asset_id ='))).toBe(true);
+      expect(nodes.some(node => node['Relation Name'] === 'selection_revision'
+        && node['Actual Loops'] > 0)).toBe(false);
+      samples.push(examinedRows(plan));
+      expect((await f.store.visibilityFacts([iri(basis.asset)])).get(iri(basis.asset))!.attachments)
+        .toEqual([{ target: ownTarget, context: DEFAULT_MEDIA_CONTEXT }]);
+    }
+    expect(samples).toEqual([1, 1]);
+    await select(basis.asset, head);
+    expect((await f.store.visibilityFacts([iri(basis.asset)])).get(iri(basis.asset))!.attachments)
+      .toEqual([{ target: ownTarget, context: DEFAULT_MEDIA_CONTEXT }, { target, context }]);
+    // A caller cannot forge the derived seek key while retaining the same head.
+    await f.pool.query('UPDATE media.selection_slot SET attachment_asset_id=NULL WHERE target=$1', [target]);
+    expect((await f.pool.query('SELECT attachment_asset_id FROM media.selection_slot WHERE target=$1', [target])).rows)
+      .toEqual([{ attachment_asset_id: basis.asset }]);
+  });
+}, 120_000);
+}
+
+test('current attachment lookup backfills existing selected and cleared heads', async () => {
+  await isolated(async f => {
+    // Recreate the additive migration against a fixture with pre-existing heads.
+    await f.pool.query(`DROP TRIGGER selection_slot_attachment_asset ON media.selection_slot;
+      DROP FUNCTION media.derive_attachment_asset();
+      ALTER TABLE media.selection_slot DROP COLUMN attachment_asset_id;
+      DROP INDEX media.use_inventory_attachment_idx`);
+    const selectedTarget = iri(randomUUID()), clearedTarget = iri(randomUUID());
+    await f.store.selectAvatar(admission(), { target: selectedTarget, context: DEFAULT_MEDIA_CONTEXT,
+      expectedSelection: null, asset: basis.asset, crop: null });
+    const selected = await f.store.selectAvatar(admission(), { target: clearedTarget, context: DEFAULT_MEDIA_CONTEXT,
+      expectedSelection: null, asset: basis.asset, crop: null });
+    await f.store.selectAvatar(admission(), { target: clearedTarget, context: DEFAULT_MEDIA_CONTEXT,
+      expectedSelection: selected.id, asset: null, crop: null });
+    await f.pool.query(readFileSync(join(root, 'services/content/migrations/2160_media_current_attachment_lookup.sql'), 'utf8'));
+    expect((await f.pool.query('SELECT attachment_asset_id FROM media.selection_slot WHERE target=$1', [selectedTarget])).rows)
+      .toEqual([{ attachment_asset_id: basis.asset }]);
+    expect((await f.pool.query('SELECT attachment_asset_id FROM media.selection_slot WHERE target=$1', [clearedTarget])).rows)
+      .toEqual([{ attachment_asset_id: null }]);
+    expect((await f.store.visibilityFacts([iri(basis.asset)])).get(iri(basis.asset))!.attachments)
+      .toEqual([{ target: ownTarget, context: DEFAULT_MEDIA_CONTEXT },
+        { target: selectedTarget, context: DEFAULT_MEDIA_CONTEXT }]);
+  });
+});
+
 for (const state of ['private', 'deleted', 'moderated', 'queued', 'leased', 'failed'] as const) {
   test(`asset ${state} still hides an otherwise readable Use`, async () => {
     await isolated(async f => {
