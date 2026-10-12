@@ -9,13 +9,15 @@ import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/su
 import { AccessAdmissionRegistry, engageAccessRecoveryFence, releaseAccessRecoveryFence } from '../src/modules/access/admission.ts';
 import { grantFixtureAuthority } from '../src/modules/access/fixture-authority.ts';
 import {
-  erasePersonProvisionProfile, listEndedPersonProvisions, personProvisionProfileErased,
+  erasePersonProvisionProfile, listEndedPersonProvisions, personProvisionProfileErased, withPersonProfileErasureAuthority,
   PersonProfileErasureDenied, PersonProfileErasureStale, PersonProfileErasureUnavailable,
   type PersonProfileErasureProof,
 } from '../src/modules/access/person-profile-erasure.ts';
 import { erasePersonProfileAliases, listPersonProfileAliases, personProfileAliasesErased } from '../src/modules/address/person-profile-erasure.ts';
 import { erasePersonProfileGraph, PersonGraphErasureConflict, type PersonProfileGraphInventory } from '../src/modules/agent/erasure.ts';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
+import { PublicReports } from '../src/modules/public-report/store.ts';
+import { GovernanceUnavailable } from '../src/modules/governance/store.ts';
 import { AliasRegistry, AliasConflict } from '../src/modules/address/registry.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -505,4 +507,24 @@ test('a live admitted Space claim cannot take an erased opaque Agent reservation
   await expect(claim(copies.key)).rejects.toBeInstanceOf(AliasConflict);
   expect((await access.query("SELECT 1 FROM access.alias_registry WHERE scope='space' AND holder=$1", [holder])).rowCount).toBe(0);
   expect(await claim(`newspace${randomUUID().slice(0,8)}`)).toMatchObject({ holder, scope: 'space', state: 'current' });
+});
+
+
+test('report intake cannot commit an author or Account hold while the Person graph owner has its fence', async () => {
+  const { proof } = await endedFixture();
+  const resource = native();
+  const reports = new PublicReports(access, { resolve: async () => ({
+    evidence: { owner: 'content', resource, component: 'body', locator: null,
+      revision: randomUUID(), state: 'available', representation: 'content-body-v1',
+      revisionDigest: 'b'.repeat(64), provenance: {} }, author: proof.person, realm: null,
+  }) });
+  await withPersonProfileErasureAuthority(access, relay, proof, async () => {
+    // This callback is the fence used by the graph applier across databases.
+    // Intake must time out on the same fence, never commit a hold after its check.
+    await expect(reports.submit({ profile: 'public-report-v1', category: 'child_exploitation',
+      target: resource, statement: 'Preserve reported material.', contentLanguage: 'en' }, randomUUID(),
+    new Request('http://main.test/v1/public-reports'), null)).rejects.toBeInstanceOf(GovernanceUnavailable);
+    expect((await access.query(`SELECT 1 FROM access.governance_preservation_hold
+      WHERE target_resource = $1 AND released_at IS NULL`, [resource])).rowCount).toBe(0);
+  });
 });
