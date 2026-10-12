@@ -412,6 +412,10 @@ export class GovernanceStore {
           throw new GovernanceInvalid('Private reply evidence requires private case disclosure');
         }
       }
+      if (evidence.provenance.capturedBy === 'zone-home-exact-cut-v1'
+        && evidence.provenance.disclosure === 'private' && input.disclosure !== 'private') {
+        throw new GovernanceInvalid('Private home evidence requires private case disclosure');
+      }
       captured.push(evidence);
     }
     const evidenceDigest = sha256(canonical(captured.map(item => [item.owner, item.resource, item.component,
