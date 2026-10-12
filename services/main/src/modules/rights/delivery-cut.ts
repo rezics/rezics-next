@@ -21,10 +21,11 @@ export type DeliveryCutResult<T> = { status: 'stable'; value: T }
  */
 export async function withDeliveryCut<T>(target: DeliveryCutTarget,
   work: () => Promise<T>): Promise<DeliveryCutResult<T>> {
-  if (!target.rights) return { status: 'unavailable-retry' };
+  const { rights, resourceId } = target;
+  if (!rights) return { status: 'unavailable-retry' };
   for (let attempt = 0; attempt < 2; attempt++) {
     let before: DeliveryCutSnapshot;
-    try { before = await target.rights.deliveryCutSnapshot(target.resourceId); }
+    try { before = await rights.deliveryCutSnapshot(resourceId); }
     catch (error) {
       if (!(error instanceof RightsUnavailable)) throw error;
       return { status: 'unavailable-retry' };
@@ -32,7 +33,7 @@ export async function withDeliveryCut<T>(target: DeliveryCutTarget,
     if (before.held) return { status: 'unavailable-retry' };
     const value = await work();
     let after: DeliveryCutSnapshot;
-    try { after = await target.rights.deliveryCutSnapshot(target.resourceId); }
+    try { after = await rights.deliveryCutSnapshot(resourceId); }
     catch (error) {
       if (!(error instanceof RightsUnavailable)) throw error;
       return { status: 'unavailable-retry' };

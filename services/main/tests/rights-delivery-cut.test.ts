@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { startMediaStack, type MediaStack } from '../../../tests/qa/integration/media-support.ts';
 import { fixtureAuthorityScenario } from '../src/modules/access/fixture-authority-scenario.ts';
+import { releaseFixturePreservationHold } from '../src/modules/access/fixture-preservation.ts';
 import { withDeliveryCut } from '../src/modules/rights/delivery-cut.ts';
 import { ASSESS_ACTION, ASSESS_SCOPE, PUBLIC_DOMAIN_TEXT_USE, publicDomainWorkMaterial,
   RightsInvalid, RightsUnavailable, type AssessmentInput } from '../src/modules/rights/store.ts';
@@ -15,7 +16,7 @@ afterAll(async () => { await stack?.stop(); }, 60_000);
 
 async function fixture() {
   const member = await stack.member(`delivery-${randomUUID()}`);
-  const work = await stack.publicWork(member.actor, 'en', 'Delivery target');
+  const work = await stack.publicWork(member.actor, ['en'], 'Delivery target');
   await member.grant(`work:read:${work.work}`, 'work.read');
   const authority = await fixtureAuthorityScenario(stack.accessPool,
     { scope: ASSESS_SCOPE, action: ASSESS_ACTION, mandate: ASSESS_ACTION });
@@ -50,14 +51,21 @@ async function fixture() {
   // The final publication read is deliberately after them, as in the Zone route.
   // Re-run graph erasure after that query; it does not move the Rights head.
   const deliver = async (duringQuery: (attempt: number) => Promise<void> = async () => {}) => {
-    const cut = await withDeliveryCut(target, async () => {
+    const query = stack.fuseki.query.bind(stack.fuseki);
+    const interceptor = spyOn(stack.fuseki, 'query').mockImplementation(async (sparql, maxBytes) => {
+      const result = await query(sparql, maxBytes);
+      if (sparql.includes('# final-publication-delivery')) await duringQuery(attempts);
+      return result;
+    });
+    try {
+      const cut = await withDeliveryCut(target, async () => {
       attempts++;
       const response = await member.send('GET',
         `/v1/content-revisions/${saved.revisionId}?actingSubject=${encodeURIComponent(member.actor)}`);
       if (response.status !== 200) return response;
-      const published = await stack.fuseki.query(`ASK { GRAPH ${iri(GRAPHS.current)} {
+      const published = await stack.fuseki.query(`# final-publication-delivery
+        ASK { GRAPH ${iri(GRAPHS.current)} {
         ${iri(work.work)} a <https://schema.org/CreativeWork> } }`);
-      await duringQuery(attempts);
       if (published.boolean !== true) return problem(404, 'revision_unavailable', 'Revision is unavailable');
       await stack.access.assertRecoveryOpen();
       const erased = await graphErasedContentRevisions(stack.fuseki, [saved.revisionId]);
@@ -67,6 +75,7 @@ async function fixture() {
     });
     return cut.status === 'stable' ? cut.value
       : problem(503, 'delivery_cut_unavailable', 'Delivery is unavailable; retry', { 'retry-after': '1' });
+    } finally { interceptor.mockRestore(); }
   };
   return { target, text, saved, hold, moveRights, deliver, attempts: () => attempts };
 }
@@ -114,13 +123,28 @@ test('graph erasure during the final query is caught by the existing erasure che
 
 test('an unrelated hold committed during the query neither replays nor refuses delivery', async () => {
   const f = await fixture();
-  const other = await stack.publicWork((await stack.member('unrelated')).actor, 'en', 'Unrelated target');
+  const other = await stack.publicWork((await stack.member('unrelated')).actor, ['en'], 'Unrelated target');
   const before = await f.target.rights.deliveryCutSnapshot(f.target.resourceId);
   const response = await f.deliver(async () => { await f.hold(other.work); });
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({ serializedJson: JSON.stringify({ body: f.text }) });
   expect(await f.target.rights.deliveryCutSnapshot(f.target.resourceId)).toEqual(before);
   expect(f.attempts()).toBe(1);
+});
+
+test('a hold added and released during the query still advances its own token and replays', async () => {
+  const f = await fixture();
+  const before = await f.target.rights.deliveryCutSnapshot(f.target.resourceId);
+  const response = await f.deliver(async attempt => {
+    if (attempt !== 1) return;
+    const receipt = await f.hold();
+    await releaseFixturePreservationHold(stack.accessPool, f.target.resourceId, receipt.caseId);
+  });
+  expect(response.status).toBe(200);
+  expect(f.attempts()).toBe(2);
+  const after = await f.target.rights.deliveryCutSnapshot(f.target.resourceId);
+  expect(after.held).toBe(false);
+  expect(BigInt(after.preservationVersion)).toBeGreaterThan(BigInt(before.preservationVersion));
 });
 
 test('movement on both attempts returns a typed retry outcome without retaining either value', async () => {
@@ -165,11 +189,13 @@ test('token reads cost one indexed statement per store per snapshot, with and wi
       for (const [query, parameters] of [...contentReads, ...accessReads]) {
         expect(query).not.toMatch(/\b(COUNT|SUM|ORDER BY)\b/i);
         expect(parameters).toEqual([f.target.resourceId]);
-        const plan = await (query.includes('AS assessment_head') ? stack.contentPool : stack.accessPool)
-          .query(`EXPLAIN ${query}`, parameters);
-        // Small fixtures may choose sequential scans; the equality predicates
-        // must also admit an indexed plan as target history grows.
-        expect(plan.rows.length).toBeGreaterThan(0);
+        const client = await (query.includes('AS assessment_head') ? stack.contentPool : stack.accessPool).connect();
+        try {
+          await client.query('BEGIN');
+          await client.query('SET LOCAL enable_seqscan = off');
+          const plan = await client.query(`EXPLAIN ${query}`, parameters);
+          expect(plan.rows.map(row => row['QUERY PLAN']).join('\n')).toMatch(/Index (Only )?Scan/);
+        } finally { await client.query('ROLLBACK'); client.release(); }
       }
     }
   } finally { content.mockRestore(); access.mockRestore(); }
