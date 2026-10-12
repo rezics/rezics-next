@@ -10,7 +10,7 @@ import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { boundedPool, NestedPoolCheckoutError, nestedPoolCheckoutMode, setNestedPoolCheckoutMode } from '../src/infrastructure/pg-pool.ts';
 import { ensureFixtureScopeGate } from '../src/modules/access/fixture-authority.ts';
 import { accessClient, controlRead, controlTransaction, withAccessClient } from '../src/modules/access/topology-control.ts';
-import { configureDisclosure, configureDisclosureAncestrySource, DISCLOSURE_COST, discloseInventory, discloseInventoryWithAnonymousNames,
+import { configureDisclosure, configureDisclosureAncestrySource, DISCLOSURE_COST, discloseInventory, discloseInventoryWithAnonymousNames, resolveDisclosureSelections,
   DisclosureStore, DisclosureUnavailable, type DisclosureAncestryEvidence, type DisclosureDecision, type DisclosureTarget } from '../src/modules/disclosure/read.ts';
 import { ANONYMOUS_VIEWER } from '../src/modules/suitability/policy.ts';
 
@@ -27,6 +27,9 @@ let pool: Pool;
 let other: Pool;
 let reader: DisclosureStore;
 let poolOnly: DisclosureStore;
+let issuedBody: DisclosureTarget;
+let issuedRestricted: DisclosureTarget;
+let issuedPoolNames: DisclosureTarget[];
 const body: DisclosureTarget = { owner: 'content', resource: native(), component: 'body' };
 const restricted: DisclosureTarget = { ...body, resource: native(), work, workRevision: native() };
 const names: DisclosureTarget[] = [publicAgent, inactiveAgent].map(resource => ({
@@ -68,6 +71,12 @@ beforeAll(async () => {
       .find(target => target.resource === basis.targetResource)!)),
   });
   poolOnly = new DisclosureStore(other);
+  const issued = (await resolveDisclosureSelections(environment, [body, restricted,
+    ...names.map(({ nameOwner: _owner, ...target }) => target)]))
+    .map(selection => ({ ...selection.target, ancestry: selection.ancestry }));
+  issuedBody = issued[0]!;
+  issuedRestricted = issued[1]!;
+  issuedPoolNames = issued.slice(2);
 }, 120_000);
 
 afterAll(async () => {
@@ -102,7 +111,9 @@ test('held topology reads disclose every inventory batch with unchanged visible,
 }, 30_000);
 
 test('pool-only Agent ownership probes and paired names reuse the same held client', async () => {
-  const targets = names.map(({ nameOwner: _owner, ...target }) => target);
+  const targets = issuedPoolNames;
+  expect(poolOnly.environment).toBeUndefined();
+  await expect(poolOnly.read(names, ANONYMOUS_VIEWER, 'summary')).rejects.toBeInstanceOf(DisclosureUnavailable);
   const ordinary = await poolOnly.readWithAnonymousNames(targets, ANONYMOUS_VIEWER, 'summary');
   expect(ordinary).toEqual({ decisions: ['visible', 'hidden'], anonymousNames: ['visible', 'hidden'] });
   await controlRead(other, async () => {
@@ -112,7 +123,7 @@ test('pool-only Agent ownership probes and paired names reuse the same held clie
 }, 30_000);
 
 test('disclosure keeps caller policy changes and rollback in the held transaction', async () => {
-  expect(await reader.read([restricted], ANONYMOUS_VIEWER, 'thread')).toEqual(['tombstone']);
+  expect(await reader.read([issuedRestricted], ANONYMOUS_VIEWER, 'thread')).toEqual(['tombstone']);
   await expect(controlTransaction(pool, async client => {
     const id = (await client.query('SELECT txid_current()::text AS id')).rows[0]!.id;
     await ensureFixtureScopeGate(client, gate, { open: true });
@@ -120,14 +131,14 @@ test('disclosure keeps caller policy changes and rollback in the held transactio
     expect((await client.query('SELECT txid_current()::text AS id')).rows[0]!.id).toBe(id);
     throw new Error('caller rolls back');
   })).rejects.toThrow('caller rolls back');
-  expect(await reader.read([restricted], ANONYMOUS_VIEWER, 'thread')).toEqual(['tombstone']);
+  expect(await reader.read([issuedRestricted], ANONYMOUS_VIEWER, 'thread')).toEqual(['tombstone']);
 }, 30_000);
 
 test('explicit disclosure clients win over the same pool held context', async () => {
   await controlRead(pool, async held => {
     await expect(controlTransaction(other, async explicit => {
       await ensureFixtureScopeGate(explicit, gate, { open: true });
-      expect(await reader.read([restricted], ANONYMOUS_VIEWER, 'thread')).toEqual(['tombstone']);
+      expect(await reader.read([issuedRestricted], ANONYMOUS_VIEWER, 'thread')).toEqual(['tombstone']);
       expect(await discloseInventory(environment, [restricted], ANONYMOUS_VIEWER, 'thread', explicit)).toEqual(['visible']);
       expect(accessClient(pool)).toBe(held);
       throw new Error('explicit rolls back');
@@ -139,7 +150,7 @@ test('concurrent siblings and completed scopes cannot reuse released disclosure 
   let retained: AsyncResource | undefined;
   await Promise.all([
     controlRead(pool, async () => {
-      expect(await reader.read([body], ANONYMOUS_VIEWER, 'thread')).toEqual(['visible']);
+      expect(await reader.read([issuedBody], ANONYMOUS_VIEWER, 'thread')).toEqual(['visible']);
       retained = new AsyncResource('retained-disclosure');
     }),
     controlRead(pool, async () => {
@@ -147,7 +158,7 @@ test('concurrent siblings and completed scopes cannot reuse released disclosure 
     }),
   ]);
   try {
-    expect(await retained!.runInAsyncScope(() => reader.read([body], ANONYMOUS_VIEWER, 'thread'))).toEqual(['visible']);
+    expect(await retained!.runInAsyncScope(() => reader.read([issuedBody], ANONYMOUS_VIEWER, 'thread'))).toEqual(['visible']);
     expect(accessClient(pool)).toBeUndefined();
   } finally { retained?.emitDestroy(); }
 }, 30_000);
@@ -157,17 +168,17 @@ test('held disclosure preserves recovery fencing and SQL error normalization, th
     await client.query('BEGIN');
     try {
       await client.query('UPDATE access.recovery_fence SET open=false WHERE id');
-      await expect(reader.read([body], ANONYMOUS_VIEWER, 'thread')).rejects.toThrow('Disclosure result is incomplete');
+      await expect(reader.read([issuedBody], ANONYMOUS_VIEWER, 'thread')).rejects.toThrow('Disclosure result is incomplete');
     } finally { await client.query('ROLLBACK'); }
     await client.query('BEGIN');
     try {
       await client.query('ALTER TABLE access.governance_enforcement RENAME TO unavailable_enforcement');
-      const error = await reader.read([body], ANONYMOUS_VIEWER, 'thread').catch(cause => cause);
+      const error = await reader.read([issuedBody], ANONYMOUS_VIEWER, 'thread').catch(cause => cause);
       expect(error).toBeInstanceOf(DisclosureUnavailable);
       expect(error.message).toBe('Disclosure owner is unavailable');
       expect(error.cause.code).toBe('42P01');
     } finally { await client.query('ROLLBACK'); }
-    expect(await reader.read([body], ANONYMOUS_VIEWER, 'thread')).toEqual(['visible']);
+    expect(await reader.read([issuedBody], ANONYMOUS_VIEWER, 'thread')).toEqual(['visible']);
   });
   expect(await discloseInventory(environment, [body], ANONYMOUS_VIEWER, 'thread')).toEqual(['visible']);
 }, 30_000);

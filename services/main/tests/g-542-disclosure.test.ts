@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import type { Pool } from 'pg';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { DISCLOSURE_CHANNELS, DisclosureStore, DisclosureUnavailable, configureDisclosure, disclosurePoolReader, disclose,
-  type DisclosureTarget } from '../src/modules/disclosure/read.ts';
+  resolveDisclosureSelections, type DisclosureTarget } from '../src/modules/disclosure/read.ts';
 import { readResourceSummaries } from '../src/modules/media/summary.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../src/modules/media/store.ts';
 import { ANONYMOUS_VIEWER, type Labels, type Viewer } from '../src/modules/suitability/policy.ts';
@@ -53,27 +53,38 @@ function storage() {
   }, queries: () => ownerQueries };
 }
 
+async function issuedFixtures() {
+  const proofEnvironment = { fuseki: new FusekiClient('http://proof.invalid'), objectDirectory: '.temp/disclosure-policy',
+    lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } };
+  configureFixtureDisclosureAncestry(proofEnvironment, () => undefined);
+  return (await resolveDisclosureSelections(proofEnvironment, fixtures))
+    .map(selection => ({ ...selection.target, ancestry: selection.ancestry }));
+}
+
 test('G-542: governance applies to every channel; interactive reads leave ratings to the client', async () => {
   const s = storage(), reader = new DisclosureStore(s.pool);
+  await expect(reader.read(fixtures, ANONYMOUS_VIEWER, 'read')).rejects.toBeInstanceOf(DisclosureUnavailable);
+  const targets = await issuedFixtures();
+  expect(reader.environment).toBeUndefined();
   const adult: Viewer = { signedIn: true, age: 'adult', country: 'US', optIns: { general: true, r15: true, sexual: true, grotesque: true } };
   for (const channel of DISCLOSURE_CHANNELS) {
     const before = s.queries();
-    expect(await reader.read(fixtures, ANONYMOUS_VIEWER, channel)).toEqual(fixtures.map(() => 'visible'));
+    expect(await reader.read(targets, ANONYMOUS_VIEWER, channel)).toEqual(fixtures.map(() => 'visible'));
     expect(s.queries() - before).toBe(1);
     s.set({ restricted: true });
-    expect((await reader.read(fixtures, adult, channel)).every(decision => decision !== 'visible')).toBe(true);
+    expect((await reader.read(targets, adult, channel)).every(decision => decision !== 'visible')).toBe(true);
     s.set({ restricted: false });
-    expect(await reader.read(fixtures, ANONYMOUS_VIEWER, channel)).toEqual(fixtures.map(() => 'visible'));
+    expect(await reader.read(targets, ANONYMOUS_VIEWER, channel)).toEqual(fixtures.map(() => 'visible'));
     for (const labels of [['r18'], ['r18g'], ['r18', 'r18g']] as Labels[]) {
       s.set({ labels: [labels] });
       for (const viewer of [ANONYMOUS_VIEWER, disclosureViewer({ issuer: 'account', subject: 'reader' })]) {
-        const decisions = await reader.read(fixtures, viewer, channel);
+        const decisions = await reader.read(targets, viewer, channel);
         if (['email', 'push', 'digest', 'preview', 'seo', 'sitemap'].includes(channel)) {
           expect(decisions.every(decision => decision !== 'visible')).toBe(true);
         } else expect(decisions).toEqual(fixtures.map(() => 'visible'));
       }
       if (['email', 'push', 'digest', 'preview', 'seo', 'sitemap'].includes(channel)) {
-        expect((await reader.read(fixtures, adult, channel)).every(decision => decision !== 'visible')).toBe(true);
+        expect((await reader.read(targets, adult, channel)).every(decision => decision !== 'visible')).toBe(true);
       }
     }
     s.set({ labels: [] });
@@ -82,10 +93,11 @@ test('G-542: governance applies to every channel; interactive reads leave rating
 
 test('G-542: configured recovery and incomplete results fail closed; absent governance is unavailable', async () => {
   const s = storage(), reader = new DisclosureStore(s.pool);
+  const targets = await issuedFixtures();
   s.set({ open: false });
-  await expect(reader.read(fixtures, ANONYMOUS_VIEWER, 'read')).rejects.toBeInstanceOf(DisclosureUnavailable);
+  await expect(reader.read(targets, ANONYMOUS_VIEWER, 'read')).rejects.toBeInstanceOf(DisclosureUnavailable);
   s.set({ open: true, malformed: true });
-  await expect(reader.read(fixtures, ANONYMOUS_VIEWER, 'read')).rejects.toThrow('Disclosure result is incomplete');
+  await expect(reader.read(targets, ANONYMOUS_VIEWER, 'read')).rejects.toThrow('Disclosure result is incomplete');
   const env = { fuseki: new FusekiClient('http://graph.invalid'), objectDirectory: '.temp/g-542',
     lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } };
   await expect(disclose(env, fixtures)).rejects.toBeInstanceOf(DisclosureUnavailable);

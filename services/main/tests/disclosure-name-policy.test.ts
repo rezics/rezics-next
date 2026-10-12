@@ -9,6 +9,8 @@ import {
   configureDisclosure,
   DISCLOSURE_CHANNELS,
   discloseInventory,
+  resolveDisclosureSelections,
+  DisclosureUnavailable,
   type DisclosureTarget,
 } from '../src/modules/disclosure/read.ts';
 import { disclosureViewer, withDisclosureViewer } from '../src/modules/disclosure/viewer.ts';
@@ -179,11 +181,19 @@ test('Pool-only disclosure readers enforce private names and withhold unknown oc
   const f = fixture(),
     reader = new DisclosureStore(f.pool);
   const target: DisclosureTarget = { owner: 'graph', resource: id(1), component: 'name' };
-  expect(await reader.read([target], ANONYMOUS_VIEWER, 'read')).toEqual(['hidden']);
-  expect(await reader.read([target], disclosureViewer(principal), 'read')).toEqual(['visible']);
+  await expect(reader.read([target], ANONYMOUS_VIEWER, 'read')).rejects.toBeInstanceOf(DisclosureUnavailable);
+  const proofEnvironment = { fuseki: new FusekiClient('http://proof.invalid'),
+    objectDirectory: '.temp/name-policy', lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } };
+  configureFixtureDisclosureAncestry(proofEnvironment, () => undefined);
+  const [issuedTarget, unknownOwner] = (await resolveDisclosureSelections(proofEnvironment,
+    [target, { ...target, resource: id(10), nameOwner: id(4) }]))
+    .map(selection => ({ ...selection.target, ancestry: selection.ancestry }));
+  expect(reader.environment).toBeUndefined();
+  expect(await reader.read([issuedTarget!], ANONYMOUS_VIEWER, 'read')).toEqual(['hidden']);
+  expect(await reader.read([issuedTarget!], disclosureViewer(principal), 'read')).toEqual(['visible']);
   expect(
     await reader.read(
-      [{ ...target, resource: id(10), nameOwner: id(4) }],
+      [unknownOwner!],
       ANONYMOUS_VIEWER,
       'summary',
     ),
