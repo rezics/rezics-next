@@ -1,7 +1,9 @@
 import { afterAll, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { FusekiClient } from '../src/infrastructure/fuseki.ts';
+import { ObjectReadBudgetExceeded, ObjectUnavailable,
+  type ImmutableObjects } from '../src/infrastructure/immutable-objects.ts';
 import { prepareComponent, RV } from '../src/modules/work/activate.ts';
 import { inventoryPersonProfileGraph, personProfileErasureUpdate, personProfileGraphErased,
   PersonGraphErasureConflict, PersonGraphErasureUnavailable,
@@ -68,6 +70,79 @@ test('inventory captures both original immutable objects and direct/credited pro
   expect(shared.indexedUnitsLeft).toBe(62);
   expect(shared.journalTargetsLeft).toBe(252);
   expect(shared.bytesLeft).toBeLessThan(8 * 1024 * 1024);
+});
+
+function remoteObjects(onRead?: (digest: string, maxBytes: number | undefined,
+  signal: AbortSignal | undefined) => void): ImmutableObjects {
+  const stored = new Map(readdirSync(directory).map(digest => [digest, readFileSync(join(directory, digest))]));
+  return {
+    async put() { throw new Error('inventory must not write immutable objects'); },
+    async get(digest, maxBytes, signal) {
+      onRead?.(digest, maxBytes, signal);
+      const bytes = stored.get(digest);
+      if (!bytes) throw new ObjectUnavailable('retained immutable object is absent');
+      if (maxBytes !== undefined && bytes.byteLength > maxBytes) throw new ObjectReadBudgetExceeded('remote body exceeds shared budget');
+      return new Uint8Array(bytes);
+    },
+  };
+}
+
+test('remote Person manifests and payloads form the same exact inventory and consume the shared byte budget', async () => {
+  const localBudget = budget();
+  const local = await inventoryPersonProfileGraph(fixture(), directory, person, localBudget);
+  const remoteBudget = budget();
+  const reads: { digest: string; maxBytes: number | undefined; signal: AbortSignal | undefined }[] = [];
+  const objects = remoteObjects((digest, maxBytes, signal) => reads.push({ digest, maxBytes, signal }));
+  const missingDirectory = join(directory, 'remote-only');
+  expect(existsSync(missingDirectory)).toBe(false);
+  const remote = await inventoryPersonProfileGraph(fixture(), missingDirectory, person, remoteBudget, objects);
+  expect(remote).toEqual(local);
+  expect(remote.objects).toHaveLength(2);
+  expect(reads.map(read => `sha256:${read.digest}`).sort()).toEqual(remote.objects);
+  expect(remoteBudget.bytesLeft).toBe(localBudget.bytesLeft);
+  expect(reads).toHaveLength(2);
+  expect(reads.every(read => read.signal === remoteBudget.signal)).toBe(true);
+  expect(reads[0]!.maxBytes).toBeGreaterThan(0);
+  expect(reads[1]!.maxBytes).toBe(reads[0]!.maxBytes! - readFileSync(join(directory, reads[0]!.digest)).byteLength);
+  expect(existsSync(missingDirectory)).toBe(false);
+});
+
+test('remote corruption never falls back to valid local files and remote reads refuse exhaustion or cancellation', async () => {
+  const corrupt: ImmutableObjects = { async put() { throw new Error('unexpected write'); },
+    async get() { return Buffer.from('wrong digest bytes'); } };
+  await expect(inventoryPersonProfileGraph(fixture(), directory, person, budget(), corrupt))
+    .rejects.toBeInstanceOf(PersonGraphErasureUnavailable);
+
+  let beforeObjects = 0;
+  let responseBytes = 0;
+  const localFixture = fixture();
+  await inventoryPersonProfileGraph({ query: async (query, maxBytes) => {
+    const result = await localFixture.query(query, maxBytes);
+    responseBytes += Buffer.byteLength(JSON.stringify(result));
+    if (query.includes('SELECT ?revision ?component')) beforeObjects = responseBytes;
+    return result;
+  } }, directory, person, budget());
+  const objectBytes = readdirSync(directory).reduce((sum, digest) => sum + readFileSync(join(directory, digest)).byteLength, 0);
+  const limited = budget();
+  limited.bytesLeft = beforeObjects + objectBytes - 1;
+  let boundedReads = 0;
+  await expect(inventoryPersonProfileGraph(fixture(), join(directory, 'remote-only'), person, limited,
+    remoteObjects((_digest, maxBytes, signal) => {
+      boundedReads++;
+      expect(maxBytes).toBeGreaterThan(0);
+      expect(signal).toBe(limited.signal);
+    }))).rejects.toBeInstanceOf(PersonGraphErasureUnavailable);
+  expect(boundedReads).toBeGreaterThan(0);
+
+  const controller = new AbortController();
+  const cancelled = { ...budget(), signal: controller.signal };
+  let cancelledReads = 0;
+  await expect(inventoryPersonProfileGraph(fixture(), join(directory, 'remote-only'), person, cancelled,
+    remoteObjects(() => {
+      cancelledReads++;
+      controller.abort(new Error('remote inventory cancelled'));
+    }))).rejects.toThrow();
+  expect(cancelledReads).toBe(1);
 });
 
 test('wrong kinds, malformed anchors, another owner and unsupported current fields refuse before mutation', async () => {
