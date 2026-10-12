@@ -144,7 +144,7 @@ test('private retained Z-owned evidence uses Zone authority and cannot inherit a
   expect(await h.capture.capture(principal, actor, h.target)).toMatchObject({ resource: h.zone, state: 'available' });
   h.grants(false);
   expect(await h.canRead(principal, actor, [h.target.revision!])).toEqual(new Set());
-  expect(h.semanticTargets).toEqual([h.zone, h.zone, h.zone]);
+  expect(h.semanticTargets).toEqual([h.zone]);
   expect(h.workTargets).toEqual([]);
 });
 
@@ -222,3 +222,32 @@ for (const authority of ['publication', 'edit'] as const) test(`legacy intake re
     authority === 'edit' ? principal : null, authority === 'edit' ? actor : undefined, h.target))
     .rejects.toBeInstanceOf(GovernanceDenied);
 });
+
+
+for (const authority of ['zone', 'realm'] as const) for (const path of ['reader', 'capture'] as const) {
+  test(`legacy ${path} checks ${authority} read authority after its final publication/edit lookup`, async () => {
+    const h = legacyEvidence();
+    h.visibilityRows[0]!.disclosure = cell(`${RV}Private`);
+    h.visibilityRows[0]!.zoneDisclosure = cell(`${RV}Private`);
+    if (authority === 'realm') h.visibilityRows[0]!.realm = cell(`https://rezics.com/id/${randomUUID()}`);
+    h.grants(authority === 'zone', false, authority === 'realm', true);
+    const lookup = h.registry.withOwnerAuthority.bind(h.registry);
+    let editLookups = 0;
+    const finalLookup = path === 'reader' ? 1 : 3;
+    h.registry.withOwnerAuthority = async (...args) => {
+      const allowed = await lookup(...args);
+      if (++editLookups === finalLookup) h.grants(false, false, false, true);
+      return allowed;
+    };
+    if (path === 'reader') {
+      expect(await h.canRead(principal, actor, [h.target.revision!])).toEqual(new Set());
+      expect(h.reads).toEqual([]);
+    } else {
+      await expect(capturePublishedHomeEvidence(h.env, h.core, h.registry, principal, actor, h.target))
+        .rejects.toBeInstanceOf(GovernanceDenied);
+      expect(h.reads).toEqual([[h.target.revision!]]);
+    }
+    expect(editLookups).toBe(finalLookup);
+    expect(h.workTargets).toEqual([]);
+  });
+}
