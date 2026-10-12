@@ -12,6 +12,7 @@ RETURNS boolean LANGUAGE sql STABLE AS $$
       AND NOT EXISTS (SELECT 1 FROM media.suppression_lift l WHERE l.suppression_id = d.id))
 $$;
 -- Retained callers that have no asset purpose can only establish a global fence.
+-- Purpose-bearing consults (admission, delivery, sweep, lift) must never call this overload because it ignores imported-cover scope; use the scope-bearing form.
 CREATE OR REPLACE FUNCTION media.digest_suppressed(original_digest text)
 RETURNS boolean LANGUAGE sql STABLE AS $$
   SELECT media.digest_suppressed(original_digest, false)
