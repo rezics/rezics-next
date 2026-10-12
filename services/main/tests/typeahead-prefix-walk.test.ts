@@ -32,11 +32,11 @@ function candidate(entry: PrefixWalkEntry, text = 'Bounded title'): Row {
 function fixture(entries: PrefixWalkEntry[], rows = entries.filter(entry => !entry.rejected).map(entry => candidate(entry))) {
   const queries: string[] = [], walks: PrefixWalkRequest[] = [];
   const state = { available: true, failure: null as Error | null, sequence: '7', summaryReads: 0,
-    hidden: new Set<string>(), changeNameOnSecondRead: false };
+    hidden: new Set<string>(), changeNameOnSecondRead: false, writeEpoch: '0', nativeGeneration: '1' };
   const control = () => ({ epoch: value('epoch'), sequence: value(state.sequence), generation: value(generation), population: value('256') });
   const fuseki = {
     commandHealth: async () => ({ moduleVersion: 'test', instanceId: '00000000-0000-4000-8000-000000000001',
-      publicSearchWriteEpoch: '0', publicSearchWriteActive: false, publicSearchDeltaAvailable: false,
+      publicSearchWriteEpoch: state.writeEpoch, publicSearchWriteActive: false, publicSearchDeltaAvailable: false,
       prefixWalkAvailable: state.available, profiles: {} }),
     prefixWalk: async (request: PrefixWalkRequest): Promise<PrefixWalkResponse> => {
       walks.push(request);
@@ -45,9 +45,9 @@ function fixture(entries: PrefixWalkEntry[], rows = entries.filter(entry => !ent
       const remaining = entries.filter(entry => entry.key.localeCompare(after) > 0);
       const page = remaining.slice(0, request.pageSize);
       const more = remaining.length > page.length;
-      return { entries: page, generation: '1', examined: page.length,
+      return { entries: page, generation: state.nativeGeneration, examined: page.length,
         rejected: page.filter(entry => entry.rejected).length, more,
-        cursor: more ? prefixWalkCursor(request, '1', page.at(-1)!.key) : null };
+        cursor: more ? prefixWalkCursor(request, state.nativeGeneration, page.at(-1)!.key) : null };
     },
     query: async (sparql: string) => {
       queries.push(sparql);
@@ -59,6 +59,9 @@ function fixture(entries: PrefixWalkEntry[], rows = entries.filter(entry => !ent
       } else if (sparql.includes('SELECT ?epoch ?sequence ?work ?type')) {
         bindings = rows.filter(row => sparql.includes(`<${row.work!.value}>`))
           .map(row => ({ ...control(), work: row.work! }));
+      } else if (sparql.includes('SELECT ?work ?head ?type')) {
+        bindings = rows.filter(row => sparql.includes(`<${row.work!.value}>`))
+          .map(row => ({ work: row.work!, head: value(id(4_001)) }));
       } else if (sparql.includes('SELECT ?epoch ?sequence ?hold ?r ?type')) {
         state.summaryReads++;
         bindings = rows.filter(row => sparql.includes(`<${row.work!.value}>`)).map(row => ({
@@ -175,7 +178,7 @@ test('typeahead advances past native tombstones, hidden and presentation-rejecte
   expect(f.walks.length).toBeGreaterThan(1);
   expect(f.walks[1]?.cursor).not.toBeNull();
   expect(f.walks.every(walk => walk.language === null && walk.pageSize <= SEARCH_FIELD_COST.typeaheadItems)).toBe(true);
-  expect(f.walks.reduce((sum, walk) => sum + walk.pageSize, 0)).toBeLessThanOrEqual(prefixWalkExaminedLimit(SEARCH_FIELD_COST.typeaheadItems));
+  expect(f.walks.reduce((sum, walk) => sum + walk.pageSize, 0)).toBeLessThanOrEqual(2 * prefixWalkExaminedLimit(SEARCH_FIELD_COST.typeaheadItems));
   expect(f.queries.every(sparql => !/CONTAINS\s*\(/iu.test(sparql))).toBe(true);
 });
 
@@ -189,7 +192,7 @@ test('terminal directory produces hasMore false and an exhausted rejection budge
   const empty = await readPublicTypeahead(rejected.work, request(), { prefix: 'bounded' }, present);
   expect(empty.items).toEqual([]);
   expect(empty.hasMore).toBe(true);
-  expect(rejected.walks.reduce((sum, walk) => sum + walk.pageSize, 0)).toBe(limit);
+  expect(rejected.walks.reduce((sum, walk) => sum + walk.pageSize, 0)).toBe(2 * limit);
 });
 
 test('unadvertised and unqualified native directories refuse the route with typed 503 without a scan', async () => {
@@ -217,4 +220,54 @@ test('native generation changes and changing hydrated disclosure refuse a partia
   changed.state.changeNameOnSecondRead = true;
   await expect(readPublicTypeahead(changed.work, new Request('http://main.test/typeahead'), { prefix: 'bounded' }, present))
     .rejects.toBeInstanceOf(SearchSnapshotMoved);
+});
+
+test('title-matched cards recheck their displayed source authors after hydration without a global source generation', async () => {
+  const entry = nativeEntry(1), f = fixture([entry]);
+  const selectedWork = candidate(entry).work!.value;
+  let name = 'Selected author', renamed = false;
+  f.work.sourceAdoptions = { authorReferences: async () => new Map([[selectedWork,
+    [{ id: id(6_100), key: '/authors/OL1A', ordinal: 0 }]]]) } as never;
+  f.work.sourceAuthorNames = { batch: async () => new Map([['/authors/OL1A', { displayName: name }]]) } as never;
+  const original = f.fuseki.query;
+  f.fuseki.query = async query => {
+    const rows = await original(query);
+    if (query.includes('SELECT ?epoch ?sequence ?hold ?r') && f.state.summaryReads === 2 && !renamed) {
+      renamed = true; name = 'Fresh selected author';
+    }
+    return rows;
+  };
+  const page = await readPublicTypeahead(f.work, request(), { prefix: 'bounded' }, present);
+  expect(page.items[0]?.authors[0]?.displayName).toBe('Fresh selected author');
+  expect(f.walks).toHaveLength(3);
+});
+
+test('unrelated native writer epochs and commit generations preserve an unchanged selected prefix traversal', async () => {
+  const f = fixture([nativeEntry(1)]), original = f.fuseki.query;
+  f.fuseki.query = async query => {
+    const rows = await original(query);
+    if (f.state.summaryReads === 2) {
+      f.state.sequence = '39'; f.state.writeEpoch = '64'; f.state.nativeGeneration = '2';
+    }
+    return rows;
+  };
+  const page = await readPublicTypeahead(f.work, request(), { prefix: 'bounded' }, present);
+  expect(page.items).toHaveLength(1); expect(page.sourcePosition.sequence).toBe('7');
+  expect(f.walks).toHaveLength(2); // One native walk and its selected-relation fence, with no replay.
+});
+
+test('a new selected native prefix entry during hydration replays the bounded traversal', async () => {
+  const entries = [nativeEntry(1)], rows = entries.map(entry => candidate(entry));
+  const f = fixture(entries, rows), original = f.fuseki.query;
+  let changed = false;
+  f.fuseki.query = async query => {
+    const result = await original(query);
+    if (f.state.summaryReads === 2 && !changed) {
+      changed = true; entries.push(nativeEntry(2)); rows.push(candidate(entries[1]!));
+      f.state.sequence = '8'; f.state.writeEpoch = '2'; f.state.nativeGeneration = '2';
+    }
+    return result;
+  };
+  const page = await readPublicTypeahead(f.work, request(), { prefix: 'bounded' }, present);
+  expect(page.items).toHaveLength(2); expect(f.walks).toHaveLength(4);
 });

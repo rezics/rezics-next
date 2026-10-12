@@ -3,6 +3,7 @@ import { DATASET, GRAPHS, RV, WORK_SEMANTIC_TYPES, MAX_WORK_SEMANTIC_TYPES, iri,
 import { PublicQueryUnavailable } from './search-budget.ts';
 import { InvalidPublicQuery } from './search-public.ts';
 import { MAX_SEARCH_RESPONSE_BYTES, SearchSnapshotMoved } from './search-readiness.ts';
+import type { WorkReadSession } from './read-session.ts';
 
 export interface WorkTypeSelection {
   /** Any selected type may match. Empty means no include restriction. */
@@ -21,25 +22,28 @@ const MAX_WORKS = 512;
 const MAX_ROWS = MAX_WORKS * MAX_WORK_SEMANTIC_TYPES;
 
 /** One bounded graph read for the complete phrase relation. Work type identity
- * comes from the current Work head; the control position fences the prior text read. */
+ * comes from the current Work head. Exact phrase relations use the matching cut;
+ * selected-card reads register each head/type row with their enclosing session. */
 export async function phraseWorkTypes(env: WorkActivationEnvironment,
-  matches: readonly PhraseFacetMatch[], position: { dataEpoch: string; sequence: string }) {
+  matches: readonly PhraseFacetMatch[], position: { dataEpoch: string; sequence: string },
+  session?: WorkReadSession) {
   const works = [...new Set(matches.map(match => match.work))];
   if (works.length > MAX_WORKS) throw new PublicQueryUnavailable('phrase type relation exceeds its bound');
   const types = new Map<string, string[]>(works.map(work => [work, []]));
   if (!works.length) return types;
-  const result = await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
-    SELECT ?epoch ?sequence ?work ?type WHERE {
-      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence }
+  const query = `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+    SELECT ${session ? '?work ?head ?type' : '?epoch ?sequence ?work ?type'} WHERE {
+      ${session ? '' : `GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence }`}
       VALUES ?work { ${works.map(iri).join(' ')} }
       GRAPH ${iri(GRAPHS.current)} {
         ?work a schema:CreativeWork ; rv:head ?head .
         OPTIONAL { ?work a ?type . VALUES ?type { ${WORK_SEMANTIC_TYPES.map(type => `<${type}>`).join(' ')} } }
       }
-    } LIMIT ${MAX_ROWS + 1}`, MAX_SEARCH_RESPONSE_BYTES);
-  const rows = result.results?.bindings ?? [];
-  if (rows.length > MAX_ROWS || rows.some(row => !row.work || !row.epoch || !row.sequence
-    || row.epoch.value !== position.dataEpoch || row.sequence.value !== position.sequence)) {
+    } LIMIT ${MAX_ROWS + 1}`;
+  const rows = session ? await session.query(query, MAX_ROWS)
+    : (await env.fuseki.query(query, MAX_SEARCH_RESPONSE_BYTES)).results?.bindings ?? [];
+  if (rows.length > MAX_ROWS || rows.some(row => !row.work || (session ? !row.head :
+    !row.epoch || !row.sequence || row.epoch.value !== position.dataEpoch || row.sequence.value !== position.sequence))) {
     throw new SearchSnapshotMoved('Work types changed during phrase search');
   }
   const seen = new Set<string>();

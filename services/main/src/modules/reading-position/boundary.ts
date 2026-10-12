@@ -1,7 +1,7 @@
 import { GRAPHS, RV, iri } from '../work/activate.ts';
 import { NATIVE_ID } from '../structure/graph.ts';
 import { targetSummaryReader } from '../target/resolve.ts';
-import { readResourceSummaries } from '../media/summary.ts';
+import { readResourceSummaries, type SummaryBatch } from '../media/summary.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
 import { WorkReadInvalid, WorkReadMissing, WorkReadMoved, WorkReadUnavailable,
   type WorkReadSession } from '../work/read-session.ts';
@@ -28,20 +28,29 @@ export interface ReadingOccurrence {
 }
 export interface ReadingComposition { work: string; occurrences: ReadingOccurrence[]; structures: string[]; works: string[] }
 
-function disclosureSummaries(session: WorkReadSession, resources: string[]) {
+async function disclosureSummaries(session: WorkReadSession, resources: string[]) {
   const reader = { ...targetSummaryReader(session) };
   // Boundary infrastructure reads owner disclosure, without invoking the policy
   // whose position it is resolving. No names from this batch are delivered.
   delete reader.visibleRecords;
-  return readResourceSummaries(session.deps.environment, session.deps.media?.store, reader,
-    { resources, context: DEFAULT_MEDIA_CONTEXT, language: null, settleNonAgentNameOwners: 'includingAbsent' });
+  const read = () => readResourceSummaries(session.deps.environment, session.deps.media?.store, reader,
+    { resources, context: DEFAULT_MEDIA_CONTEXT, language: null,
+      localBasis: session.fencesSelectedUnits, settleNonAgentNameOwners: 'includingAbsent' });
+  const result = await read();
+  if (session.fencesSelectedUnits) {
+    const token = (batch: SummaryBatch) => [batch.generation.graph,
+      batch.generation.media?.split(':')[0] ?? null, batch.summaries];
+    session.observeDependency(`reading-disclosure:${JSON.stringify(resources)}`, token(result),
+      async () => token(await read()));
+  }
+  return result;
 }
 
 /** Explicit diagnostic inventory for conformance fixtures. Reader disclosure
  * and chooser requests use exact locations, never this whole-composition read. */
 export async function readReadingComposition(session: WorkReadSession, work: string): Promise<ReadingComposition> {
   const root = await disclosureSummaries(session, [work]);
-  if (root.generation.graph !== `${session.position.dataEpoch}:${session.position.sequence}`) throw new WorkReadMoved('Reading composition changed');
+  if (!session.fencesSelectedUnits && root.generation.graph !== `${session.position.dataEpoch}:${session.position.sequence}`) throw new WorkReadMoved('Reading composition changed');
   if (root.summaries[0]?.status !== 'available' || root.summaries[0].type !== 'work') throw new WorkReadMissing('Work is unavailable');
   const byWork = new Map<string, ReadingOccurrence[]>();
   const identities = new Map<string, { placement: string; item: ReadingOccurrence }>();
@@ -187,7 +196,7 @@ export class ReadingBoundary {
     const available = new Set<string>();
     for (let at = 0; at < resources.length; at += 24) {
       const targets = await disclosureSummaries(this.session, resources.slice(at, at + 24));
-      if (targets.generation.graph !== `${this.session.position.dataEpoch}:${this.session.position.sequence}`) {
+      if (!this.session.fencesSelectedUnits && targets.generation.graph !== `${this.session.position.dataEpoch}:${this.session.position.sequence}`) {
         throw new WorkReadMoved('Reading composition changed');
       }
       for (const target of targets.summaries) if (target.status === 'available') available.add(target.reference);

@@ -4,6 +4,7 @@ import type { readName, readAvatar } from '../work/read-contract.ts';
 import type { discoveryCredit } from '../discovery/contract.ts';
 import { FusekiPrefixWalkRestart, FusekiPrefixWalkUnavailable } from '../../infrastructure/fuseki.ts';
 import type { SourceAuthorNameStore } from '../source/author-name.ts';
+import { readAuthorNames } from '../source/author-name-read.ts';
 import { GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
 import { publicAgent } from '../profiles/read.ts';
@@ -11,25 +12,29 @@ import { parsedMetadataState } from '../work/metadata-read.ts';
 import { PublicQueryBudgetExceeded, PublicQueryUnavailable } from '../work/search-budget.ts';
 import { SearchSnapshotMoved } from '../work/search-readiness.ts';
 import { phraseWorkTypes } from '../work/search-facets.ts';
-import { workRead } from '../work/read-session.ts';
+import { WorkReadMoved, WorkReadUnavailable, workRead, type WorkReadSession } from '../work/read-session.ts';
 import { currentDisclosureViewer } from '../disclosure/viewer.ts';
 import { discloseSearchMatches } from '../disclosure/search.ts';
 import { publicLanguageRequest } from '../display-language/public-request.ts';
 import { optionalPreview } from '../query/optional-preview.ts';
 import { searchPageAuthors } from './result-cards.ts';
 import { matchesSearchText, SEARCH_FIELD_COST, type FieldMatch } from './fields.ts';
-import { fillPrefixWalkPage, validatePrefixWalkResponse, type PrefixWalkEntry } from './prefix-walk.ts';
+import { fillPrefixWalkPage, validatePrefixWalkResponse, type PrefixWalkEntry,
+  type PrefixWalkRequest, type PrefixWalkResponse } from './prefix-walk.ts';
 import { withSearchGraphSnapshot } from './snapshot.ts';
 import { knownSearchPosition } from './snapshot-state.ts';
 
 /** Resolve only the native page's exact identities. Bind Work subjects before
  * opening names so field hydration cannot become another population scan. */
 export async function queryTypeaheadCandidates(env: WorkActivationEnvironment, prefix: string,
-  entries: readonly PrefixWalkEntry[], sourceNames?: SourceAuthorNameStore): Promise<FieldMatch[]> {
+  entries: readonly PrefixWalkEntry[], sourceNames?: SourceAuthorNameStore,
+  session?: WorkReadSession): Promise<FieldMatch[]> {
   const candidates = entries.filter(entry => !entry.rejected);
   if (!candidates.length) return [];
   const units = [...new Set(candidates.map(entry => entry.matchUnit))];
-  const identities = (await env.fuseki.query(`PREFIX rv: <${RV}>
+  const query = async (body: string, maxBytes: number, limit: number) => session
+    ? session.query(body, limit) : (await env.fuseki.query(body, maxBytes)).results?.bindings ?? [];
+  const identities = await query(`PREFIX rv: <${RV}>
     SELECT ?unit ?work ?main ?contribution ?revision ?selection ?language ?resultWork ?resultMain ?chapterTitle WHERE {
       VALUES ?unit { ${units.map(iri).join(' ')} }
       GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?unit a rv:MatchUnit ; rv:disclosure rv:Public ;
@@ -38,7 +43,9 @@ export async function queryTypeaheadCandidates(env: WorkActivationEnvironment, p
         OPTIONAL { ?unit rv:searchResultWork ?resultWork ; rv:searchResultMain ?resultMain ;
           rv:searchChapterTitle ?chapterTitle . } }
       GRAPH ${iri(GRAPHS.current)} { ?work rv:mainVersion ?main . ?main rv:selectionHead ?selection }
-    } LIMIT ${units.length + 1}`, 65_536)).results?.bindings ?? [];
+      FILTER(!BOUND(?resultWork) || EXISTS {
+        GRAPH ${iri(GRAPHS.current)} { ?resultWork rv:mainVersion ?resultMain } })
+    } LIMIT ${units.length + 1}`, 65_536, units.length + 1);
   if (identities.length > units.length || new Set(identities.map(row => row.unit?.value)).size !== identities.length) {
     throw new PublicQueryUnavailable('Typeahead candidate identity is ambiguous');
   }
@@ -54,7 +61,7 @@ export async function queryTypeaheadCandidates(env: WorkActivationEnvironment, p
     return row && (row.resultMain?.value ?? row.main!.value) === entry.mainVersion ? [{ entry, row }] : [];
   });
   if (!admitted.length) return [];
-  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+  const rows = await query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
     SELECT DISTINCT ?work ?field ?kind ?text ?state ?key ?agent WHERE {
       VALUES (?work ?field) { ${admitted.map(({ entry, row }) => `(${iri(row.work!.value)} ${lit(entry.matchedField)})`).join(' ')} }
@@ -77,10 +84,11 @@ export async function queryTypeaheadCandidates(env: WorkActivationEnvironment, p
             rv:component ?credit ; rv:externalKey ?key . FILTER NOT EXISTS { ?creditRevision a rv:ErasedRevision } }
           BIND("source" AS ?kind) }
       }
-    } LIMIT ${SEARCH_FIELD_COST.candidates + 1}`, SEARCH_FIELD_COST.responseBytes)).results?.bindings ?? [];
+    } LIMIT ${SEARCH_FIELD_COST.candidates + 1}`, SEARCH_FIELD_COST.responseBytes, SEARCH_FIELD_COST.candidates + 1);
   if (rows.length > SEARCH_FIELD_COST.candidates) throw new PublicQueryBudgetExceeded('Typeahead field hydration exceeds its bound');
   const keys = [...new Set(rows.flatMap(row => row.key ? [row.key.value] : []))];
-  const names = keys.length ? await sourceNames?.batch(keys) : undefined;
+  const names = keys.length ? session ? await readAuthorNames(session, keys)
+    : await sourceNames?.batch(keys) : undefined;
   const matches: FieldMatch[] = [];
   for (const { entry, row: identity } of admitted) {
     for (const row of rows.filter(row => row.work?.value === identity.work!.value && row.field?.value === entry.matchedField)) {
@@ -107,7 +115,9 @@ export async function queryTypeaheadCandidates(env: WorkActivationEnvironment, p
     }
   }
   // Keep alternate credited-name witnesses until their own disclosure is known.
-  const disclosed = await discloseSearchMatches(env, matches, 'typeahead');
+  const readDisclosed = () => discloseSearchMatches(env, matches, 'typeahead');
+  const disclosed = await readDisclosed();
+  session?.observeDependency(`typeahead-disclosure:${JSON.stringify(units)}`, disclosed, readDisclosed);
   const seen = new Set<string>();
   return disclosed.filter(row => {
     const key = `${row.mainVersion}\n${row.matchUnit}\n${row.matchedField}`;
@@ -136,12 +146,13 @@ export async function readPublicTypeahead(work: MainWorkDependencies, request: R
   if (!(await env.fuseki.commandHealth()).prefixWalkAvailable) {
     throw new PublicQueryUnavailable('Native prefix directory is unavailable');
   }
-  return withSearchGraphSnapshot(env, async () => {
-    const sourceGeneration = await work.sourceAuthorNames?.searchGeneration();
+  return withSearchGraphSnapshot(env, () => workRead(work, publicLanguageRequest(request),
+    { language: input.language, publicViewer: currentDisclosureViewer() }, async session => {
     const position = knownSearchPosition(env.fuseki, env.lineage);
     if (!position) throw new PublicQueryUnavailable('Typeahead graph snapshot is unavailable');
     let accepted = new Map<string, TypeaheadItem>();
     let generation: string | undefined;
+    const walks: Array<{ request: PrefixWalkRequest; response: PrefixWalkResponse }> = [];
     // Language selects card presentation, as before; matching spans all selected languages.
     const page = await fillPrefixWalkPage({ prefix: input.prefix, language: null,
       pageSize: SEARCH_FIELD_COST.typeaheadItems }, async walkRequest => {
@@ -157,45 +168,72 @@ export async function readPublicTypeahead(work: MainWorkDependencies, request: R
         throw new SearchSnapshotMoved('Prefix directory generation changed during matching');
       }
       const response = validatePrefixWalkResponse(native, walkRequest);
+      walks.push({ request: walkRequest, response });
       generation = response.generation;
-      const candidates = await queryTypeaheadCandidates(env, input.prefix, response.entries, work.sourceAuthorNames);
-      const visible = await present({ context: 'main-version-default', sourcePosition: position,
+      // Candidate identities, their matched fields, facets and all cards share
+      // one selected dependency set, including across native walk batches.
+      const candidates = await queryTypeaheadCandidates(env, input.prefix, response.entries, work.sourceAuthorNames, session);
+      const readPresentation = () => present({ context: 'main-version-default' as const, sourcePosition: position,
         total: candidates.length, results: candidates });
+      const visible = await readPresentation();
+      session.observeDependency(`typeahead-presentation:${JSON.stringify(response.entries)}`, visible, readPresentation);
       if (!visible.results.length) {
         accepted.clear();
         return response;
       }
-      const types = await phraseWorkTypes(env, visible.results.map(row => ({ work: row.work, language: '' })), position);
-      accepted = await workRead(work, publicLanguageRequest(request),
-        { language: input.language, publicViewer: currentDisclosureViewer() }, async session => {
-          if (session.position.dataEpoch !== position.dataEpoch || session.position.sequence !== position.sequence) {
-            throw new SearchSnapshotMoved('Typeahead moved during hydration');
-          }
-          const summaries = await session.summaries(visible.results.map(row => row.work), true);
-          const authors = await optionalPreview(session,
-            () => searchPageAuthors(session, [...new Set(visible.results.map(row => row.work))], true));
-          const after = await session.summaries(visible.results.map(row => row.work), true);
-          if (summaries.some((summary, i) => JSON.stringify({ ...summary, avatar: undefined })
-            !== JSON.stringify({ ...after[i], avatar: undefined }))) {
-            throw new SearchSnapshotMoved('Typeahead disclosure changed during hydration');
-          }
-          return new Map<string, TypeaheadItem>(visible.results.flatMap((row, i) => {
-            const summary = summaries[i], final = after[i];
-            return summary?.status === 'available' && summary.type === 'work' && summary.disclosure === 'public'
-              ? [[`${row.mainVersion}\n${row.matchUnit}\n${row.matchedField}`, {
-                work: row.work, mainVersion: row.mainVersion, title: summary.name,
-                cover: final?.status === 'available' ? final.avatar : summary.avatar,
-                types: types.get(row.work) ?? [], authors: authors?.get(row.work) ?? [],
-                matchedField: row.matchedField as 'title' | 'credit', matchedText: row.matchedText,
-                matchedLanguage: row.matchedLanguage }]] : [];
-          }));
-        });
+      const types = await phraseWorkTypes(env, visible.results.map(row => ({ work: row.work, language: '' })), position, session);
+      const summaries = await session.summaries(visible.results.map(row => row.work), true);
+      const authorWorks = [...new Set(visible.results.map(row => row.work))];
+      const readAuthors = () => optionalPreview(session, () => searchPageAuthors(session, authorWorks, true));
+      const authors = await readAuthors();
+      session.observeDependency(`typeahead-authors:${JSON.stringify(authorWorks)}`, authors, readAuthors);
+      const after = await session.summaries(visible.results.map(row => row.work), true);
+      if (summaries.some((summary, i) => JSON.stringify({ ...summary, avatar: undefined })
+        !== JSON.stringify({ ...after[i], avatar: undefined }))) {
+        throw new SearchSnapshotMoved('Typeahead disclosure changed during hydration');
+      }
+      accepted = new Map<string, TypeaheadItem>(visible.results.flatMap((row, i) => {
+        const summary = summaries[i], final = after[i];
+        return summary?.status === 'available' && summary.type === 'work' && summary.disclosure === 'public'
+          ? [[`${row.mainVersion}\n${row.matchUnit}\n${row.matchedField}`, {
+            work: row.work, mainVersion: row.mainVersion, title: summary.name,
+            cover: final?.status === 'available' ? final.avatar : summary.avatar,
+            types: types.get(row.work) ?? [], authors: authors?.get(row.work) ?? [],
+            matchedField: row.matchedField as 'title' | 'credit', matchedText: row.matchedText,
+            matchedLanguage: row.matchedLanguage }]] : [];
+      }));
       return response;
     }, async entry => accepted.get(`${entry.mainVersion}\n${entry.matchUnit}\n${entry.matchedField}`) ?? null);
-    if (work.sourceAuthorNames && sourceGeneration !== await work.sourceAuthorNames.searchGeneration()) {
-      throw new SearchSnapshotMoved('Source author names changed during matching');
-    }
+    // Reopen this exact bounded prefix traversal, including its empty/tail
+    // relation. Native commit generations and cursors can advance after an
+    // unrelated writer; the selected entries and continuation presence cannot.
+    const selectedWalk = (response: PrefixWalkResponse) => ({ entries: response.entries,
+      examined: response.examined, rejected: response.rejected, more: response.more });
+    session.observeDependency('typeahead-prefix-selection', walks.map(walk => selectedWalk(walk.response)), async () => {
+      let cursor: PrefixWalkRequest['cursor'] = null;
+      const fresh: ReturnType<typeof selectedWalk>[] = [];
+      for (const walk of walks) {
+        const query = { ...walk.request, cursor };
+        let native: unknown;
+        try { native = await env.fuseki.prefixWalk(query); }
+        catch (error) {
+          if (error instanceof FusekiPrefixWalkRestart) throw new SearchSnapshotMoved(error.message, { cause: error });
+          if (error instanceof FusekiPrefixWalkUnavailable) throw new PublicQueryUnavailable(error.message, { cause: error });
+          throw error;
+        }
+        const response = validatePrefixWalkResponse(native, query);
+        fresh.push(selectedWalk(response)); cursor = response.cursor;
+        if (!response.more) break;
+      }
+      return fresh;
+    });
     return { profile: 'public-work-typeahead-v1' as const, items: page.items, hasMore: page.hasMore,
       sourcePosition: { dataEpoch: position.dataEpoch, sequence: position.sequence } };
+  }), 'selected-units').catch((error: unknown) => {
+    if (error instanceof WorkReadMoved || error instanceof WorkReadUnavailable
+      && (error.cause instanceof WorkReadMoved || error.cause instanceof SearchSnapshotMoved)) {
+      throw new SearchSnapshotMoved(error.message, { cause: error });
+    }
+    throw error;
   });
 }

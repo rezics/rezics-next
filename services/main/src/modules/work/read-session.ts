@@ -1,5 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { setTimeout as delay } from 'node:timers/promises';
+import { withTelemetrySpan } from '@rezics/observability/runtime';
 import { fusekiReadBudget, FusekiQueryResponseTooLarge, FusekiReadBudgetExceeded,
   type SparqlResult } from '../../infrastructure/fuseki.ts';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
@@ -68,7 +70,10 @@ export const readRowsToken = (rows: readonly ReadRow[]) => bindingOf(rows.map(ro
   Object.entries(row).sort(([a], [b]) => a.localeCompare(b)).map(([key, term]) =>
     [key, Object.entries(term).sort(([a], [b]) => a.localeCompare(b))]))
   .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))));
-export const readDependencyToken = bindingOf;
+export const readDependencyToken = (value: unknown) => createHash('sha256').update(JSON.stringify(value,
+  (_key, item: unknown) => item instanceof Map ? [...item].sort(([a], [b]) => String(a).localeCompare(String(b)))
+    : item instanceof Set ? [...item].sort() : item)).digest('hex');
+const activeReadSession = new AsyncLocalStorage<WorkReadSession>();
 export function encodeReadCursor(binding: unknown, position: ReadPosition, after: string, order = '', expiresAt?: number): string {
   const iv = randomBytes(12);
   const cipher = createCipheriv('aes-256-gcm', cursorKey, iv);
@@ -109,14 +114,18 @@ export function decodeReadCursor(token: string | undefined, binding: unknown, po
 }
 
 export class WorkReadSession {
-  private readonly queryDependencies = new Map<string, { limit: number; token: string }>();
+  private readonly children = new Set<WorkReadSession>();
+  /** Moving inventories own their live-row fences; every other read captures selected inputs. */
+  get fencesSelectedUnits() { return !this.options.movingGraph || !!this.options.localBasis; }
+  private readonly queryDependencies = new Map<string, { limit: number; token: string;
+    fenceRows?: (rows: readonly ReadRow[]) => ReadRow[] }>();
   private readonly ownerDependencies = new Map<string, { token: string; read: () => Promise<unknown> }>();
   async dependency(name: string, read: () => Promise<unknown>): Promise<string> {
     return this.observeDependency(name, await read(), read);
   }
   observeDependency(name: string, value: unknown, read: () => Promise<unknown>): string {
     const token = readDependencyToken(value);
-    if (this.options.localBasis) {
+    if (this.fencesSelectedUnits) {
       const previous = this.ownerDependencies.get(name);
       if (previous && previous.token !== token) throw new WorkReadMoved('Selected dependency changed');
       this.ownerDependencies.set(name, { token, read });
@@ -126,13 +135,31 @@ export class WorkReadSession {
   /** Recheck only the bounded inputs consumed by this page. Retries share its HTTP budget. */
   async fenceDependencies() {
     for (const [body, prior] of this.queryDependencies) {
-      const rows = await this.query(body, prior.limit);
-      if (readRowsToken(rows) !== prior.token) throw new WorkReadMoved('Selected head changed');
+      const rows = await this.query(body, prior.limit, prior.fenceRows);
+      if (readRowsToken(prior.fenceRows ? prior.fenceRows(rows) : rows) !== prior.token) {
+        throw new WorkReadMoved('Selected head changed');
+      }
     }
     for (const prior of this.ownerDependencies.values()) {
       if (readDependencyToken(await prior.read()) !== prior.token) throw new WorkReadMoved('Selected dependency changed');
     }
     await this.fenceSummaryMedia();
+    for (const child of this.children) await child.fenceDependencies();
+  }
+  async fenceAuthority(): Promise<void> {
+    try {
+      await this.fenceRealms();
+      await fenceAuthorNames(this);
+      for (const child of this.children) await child.fenceAuthority();
+    } finally {
+      try {
+        if (this.principal && !await this.deps.access.activePrincipalId(this.principal)) {
+          throw new AccountAssertionDenied('Principal is inactive');
+        }
+      } finally {
+        await this.deps.access.assertRecoveryOpen();
+      }
+    }
   }
   private readonly avatarSnapshots = new Map<string, { epoch: string;
     rows: Map<string, string>; targets: Set<string> }>();
@@ -153,8 +180,11 @@ export class WorkReadSession {
   workRevision(work: string) { return this.workRevisions.get(work); }
   get viewer() { return this.principal ? disclosureViewer(this.principal, this.options.actingSubject)
     : this.options.publicViewer ?? disclosureViewer(null); }
-  disclosure(targets: readonly DisclosureTarget[], channel: DisclosureChannel = 'read') {
-    return discloseInventory(this.deps.environment, targets, this.viewer, channel);
+  async disclosure(targets: readonly DisclosureTarget[], channel: DisclosureChannel = 'read') {
+    const read = () => discloseInventory(this.deps.environment, targets, this.viewer, channel);
+    const result = await read();
+    this.observeDependency(`disclosure:${channel}:${JSON.stringify(targets)}`, result, read);
+    return result;
   }
   stale = false;
   private readonly realmProofs = new Map<string, string>();
@@ -166,6 +196,7 @@ export class WorkReadSession {
   async realm(realm: string) {
     const policy = await readRealmPolicy(this.deps.environment, realm);
     if (!policy) throw new WorkReadMissing('Realm is unavailable');
+    this.observeDependency(`realm-policy:${realm}`, policy, () => readRealmPolicy(this.deps.environment, realm));
     if (policy.visibility === 'private') {
       const proof = this.principal && this.options.actingSubject
         ? await this.deps.access.realmReadProof?.(this.principal, this.options.actingSubject, realm) : null;
@@ -185,17 +216,20 @@ export class WorkReadSession {
     }
   }
   constructor(readonly deps: MainWorkDependencies, readonly request: Request, readonly options: ReadOptions,
-    readonly position: ReadPosition, readonly graphSnapshotFenced = false) {}
+    readonly position: ReadPosition, readonly graphSnapshotFenced = false, readonly attemptCount = 1) {
+    const parent = activeReadSession.getStore();
+    if (parent?.position === position) parent.children.add(this);
+  }
 
-  async query(body: string, limit: number): Promise<ReadRow[]> {
+  async query(body: string, limit: number, fenceRows?: (rows: readonly ReadRow[]) => ReadRow[]): Promise<ReadRow[]> {
     this.checkDeadline();
     const rows = (await this.deps.environment.fuseki.query(`${READ_PREFIX}\n${body}`,
       WORK_READ_COST.queryBytes)).results?.bindings ?? [];
     if (rows.length > limit) throw new WorkReadLimit('Read exceeds its bounded relation');
-    if (this.options.localBasis) {
-      const token = readRowsToken(rows), prior = this.queryDependencies.get(body);
+    if (this.fencesSelectedUnits) {
+      const token = readRowsToken(fenceRows ? fenceRows(rows) : rows), prior = this.queryDependencies.get(body);
       if (prior && prior.token !== token) throw new WorkReadMoved('Selected head changed');
-      this.queryDependencies.set(body, { limit, token });
+      this.queryDependencies.set(body, { limit, token, fenceRows });
     }
     return rows;
   }
@@ -211,7 +245,7 @@ export class WorkReadSession {
     const summaryMedia = media ? {
       avatarRows: async (...args: Parameters<typeof media.avatarRows>) => {
         const row = optionalMedia ? await optionalPreview(this, () => media.avatarRows(...args)) : await media.avatarRows(...args);
-        if (row && this.graphSnapshotFenced) {
+        if (row) {
           const prior = this.avatarSnapshots.get(args[1]);
           const captured = prior ?? { epoch: row.generation.dataEpoch, rows: new Map<string,string>(), targets: new Set<string>() };
           if (captured.epoch !== row.generation.dataEpoch) throw new WorkReadMoved('Media owner changed');
@@ -229,20 +263,20 @@ export class WorkReadSession {
       resources, context: DEFAULT_MEDIA_CONTEXT, language: this.options.language?.toLowerCase() ?? null,
       languages: this.displayLanguages, localBasis, settleNonAgentNameOwners: 'includingAbsent' as const,
     });
-    const result = await readResourceSummaries(this.deps.environment, summaryMedia, reader, summaryInput(!!this.options.localBasis));
+    const result = await readResourceSummaries(this.deps.environment, summaryMedia, reader, summaryInput(this.fencesSelectedUnits));
     const rememberWorkRevisions = (revisions: ReadonlyMap<string, string>) => {
       for (const [work, revision] of revisions) this.workRevisions.set(work, revision);
     };
     rememberWorkRevisions(result.workRevisions);
-    if (this.options.localBasis) {
+    if (this.fencesSelectedUnits) {
       const key = `summaries:${JSON.stringify(resources)}`;
-      const token = readDependencyToken([result.generation.graph, result.summaries]);
+      const token = readDependencyToken([result.generation.graph, result.generation.media?.split(':')[0] ?? null, result.summaries]);
       const previous = this.ownerDependencies.get(key);
       if (previous && previous.token !== token) throw new WorkReadMoved('Summary dependency changed');
       this.ownerDependencies.set(key, { token, read: async () => {
         const fresh = await readResourceSummaries(this.deps.environment, summaryMedia, reader, summaryInput(true));
         rememberWorkRevisions(fresh.workRevisions);
-        return [fresh.generation.graph, fresh.summaries];
+        return [fresh.generation.graph, fresh.generation.media?.split(':')[0] ?? null, fresh.summaries];
       } });
     } else if (result.generation.graph !== `${this.position.dataEpoch}:${this.position.sequence}`) {
       if (this.options.movingGraph && result.generation.graph.startsWith(`${this.position.dataEpoch}:`)) {
@@ -251,7 +285,7 @@ export class WorkReadSession {
       }
       throw new WorkReadMoved('Graph changed during the read');
     }
-    if (this.graphSnapshotFenced) for (const summary of result.summaries) {
+    for (const summary of result.summaries) {
       if (summary.status !== 'available' || summary.avatar.kind !== 'image') continue;
       const captured = this.avatarSnapshots.get(DEFAULT_MEDIA_CONTEXT)?.rows.get(summary.reference);
       if (captured) {
@@ -263,7 +297,7 @@ export class WorkReadSession {
   }
 
   /** One mutable-media fence per context for every summary section together.
-   * Graph labels/publication heads use the enclosing graph position fence. */
+   * Graph labels/publication heads use the selected summary dependency token. */
   async fenceSummaryMedia() {
     for (const [context, prior] of this.avatarSnapshots) {
       const row = await this.deps.media!.store.avatarRows([...prior.targets], context);
@@ -305,7 +339,7 @@ async function position(deps: MainWorkDependencies, fresh = false, restoreLineag
   if (!restoreLineage) {
     const rows = (await env.fuseki.query(`${READ_PREFIX} SELECT ?epoch ?sequence WHERE {
     ${fence} } } LIMIT 2`, 8192)).results?.bindings ?? [];
-    if (rows.length !== 1 || !rows[0]?.epoch || !/^\d+$/.test(rows[0].sequence?.value ?? '')) {
+    if (rows.length !== 1 || rows[0]?.epoch?.value !== env.lineage.dataEpoch || !/^\d+$/.test(rows[0].sequence?.value ?? '')) {
       throw new WorkReadUnavailable('Graph is unavailable');
     }
     return { dataEpoch: rows[0].epoch.value, sequence: rows[0].sequence!.value, priors: null };
@@ -314,7 +348,7 @@ async function position(deps: MainWorkDependencies, fresh = false, restoreLineag
     ${fence}
       OPTIONAL { ?cutover a rv:RestoreCutover ; rv:dataEpoch ?cutEpoch ; rv:priorDataEpoch ?prior } } } LIMIT 34`, 8192)).results?.bindings ?? [];
   const epoch = rows[0]?.epoch?.value, sequence = rows[0]?.sequence?.value ?? '';
-  if (!rows.length || !epoch || !/^\d+$/.test(sequence)
+  if (!rows.length || epoch !== env.lineage.dataEpoch || !/^\d+$/.test(sequence)
     || rows.some(row => row.epoch?.value !== epoch || row.sequence?.value !== sequence)) {
     throw new WorkReadUnavailable('Graph is unavailable');
   }
@@ -351,6 +385,9 @@ export async function workRead<T>(deps: MainWorkDependencies, request: Request, 
   // Allocate once, outside the retry loop: every attempt debits both this read
   // and any enclosing search's call/byte budget and shares their deadline.
   const budget = { signal,
+    attempt: 1,
+    diagnostics: outer?.diagnostics,
+    deadline: outer?.deadline,
     get callsLeft() { return Math.min(callsLeft, outer?.callsLeft ?? callsLeft); },
     set callsLeft(value: number) { const used = this.callsLeft - value; callsLeft -= used; if (outer) outer.callsLeft -= used; },
     get bytesLeft() { return Math.min(bytesLeft, outer?.bytesLeft ?? bytesLeft); },
@@ -369,52 +406,52 @@ export async function workRead<T>(deps: MainWorkDependencies, request: Request, 
       const attempts = !options.movingGraph && (!hasCursor || options.retainedBasis) && (request.method === 'GET' || options.readOnlyTemplate)
         && url.pathname.startsWith('/v1/') ? WORK_READ_COST.attempts : 1;
       for (let attempt = 0; ; attempt++) {
+        const callsBefore = budget.callsLeft, bytesBefore = budget.bytesLeft;
+        budget.attempt = attempt + 1;
         try {
-          const located = await position(deps, options.localBasis, url.searchParams.get('sort') === 'new');
-          const session = new WorkReadSession(deps, request, options,
-            { dataEpoch: located.dataEpoch, sequence: located.sequence }, true);
-          session.restorePriors = located.priors;
-          if (request.headers.has('authorization')) {
-            if (!options.actingSubject) throw new WorkReadInvalid('actingSubject is required for authenticated reads');
-            // The rate-limit admission covers this attempt only. A retry verifies
-            // again, and each attempt rechecks that the principal remains active.
-            session.principal = await verifyRequestAccount(deps.account, request, ['work:read']);
-            if (!await deps.access.activePrincipalId(session.principal)) throw new AccountAssertionDenied('Principal is inactive');
-            if (deps.personPreferences) {
-              session.readingLanguages = await deps.personPreferences.languagesForReader(session.principal);
-            }
-          } else if (options.actingSubject) throw new AccountAssertionDenied('Authentication is required');
-          let result: T;
-          // Every completed attempt closes its authority check, including a
-          // failed consistency fence; retries cannot defer revocation.
-          try {
-            result = await withDisclosureViewer(session.viewer, () => operation(session));
-            const after = await position(deps, options.localBasis);
-            if (after.dataEpoch !== session.position.dataEpoch
-              || !options.localBasis && after.sequence !== session.position.sequence) {
-              if (options.movingGraph && after.dataEpoch === session.position.dataEpoch) {
-                session.stale = true;
-              } else {
-                throw new WorkReadMoved('Graph changed during the read');
+          return await withTelemetrySpan('main.work_read.attempt', async () => {
+            const located = await position(deps, options.localBasis, url.searchParams.get('sort') === 'new');
+            const session = new WorkReadSession(deps, request, options,
+              { dataEpoch: located.dataEpoch, sequence: located.sequence }, false, attempt + 1);
+            session.restorePriors = located.priors;
+            if (request.headers.has('authorization')) {
+              if (!options.actingSubject) throw new WorkReadInvalid('actingSubject is required for authenticated reads');
+              // The rate-limit admission covers this attempt only. A retry verifies
+              // again, and each attempt rechecks that the principal remains active.
+              session.principal = await verifyRequestAccount(deps.account, request, ['work:read']);
+              if (!await deps.access.activePrincipalId(session.principal)) throw new AccountAssertionDenied('Principal is inactive');
+              if (deps.personPreferences) {
+                session.readingLanguages = await deps.personPreferences.languagesForReader(session.principal);
               }
-            }
-            await session.fenceRealms();
-            await fenceAuthorNames(session);
-            if (options.localBasis) await session.fenceDependencies();
-          } finally {
-            if (session.principal && !await deps.access.activePrincipalId(session.principal)) {
-              throw new AccountAssertionDenied('Principal is inactive');
-            }
-          }
-          // The opening graph frame does not read the Access fence. A hold that
-          // begins after that frame must still refuse the completed read.
-          await deps.access.assertRecoveryOpen();
-          signal.throwIfAborted();
-          return complete ? complete(result, session) : result;
+            } else if (options.actingSubject) throw new AccountAssertionDenied('Authentication is required');
+            return activeReadSession.run(session, () => withDisclosureViewer(session.viewer, async () => {
+              let result: T;
+              // Every completed attempt closes its authority check, including a
+              // failed consistency fence; retries cannot defer revocation.
+              try {
+                result = await operation(session);
+                const after = await position(deps, true);
+                if (after.dataEpoch !== session.position.dataEpoch
+                  || options.movingGraph && after.sequence !== session.position.sequence) {
+                  if (options.movingGraph && after.dataEpoch === session.position.dataEpoch) {
+                    session.stale = true;
+                  } else {
+                    throw new WorkReadMoved('Graph changed during the read');
+                  }
+                }
+                await session.fenceDependencies();
+              } finally {
+                await session.fenceAuthority();
+              }
+              signal.throwIfAborted();
+              return complete ? complete(result, session) : result;
+            }));
+          });
         } catch (error) {
           if (!(error instanceof WorkReadMoved || error instanceof SearchSnapshotMoved)
             || error instanceof WorkReadExpired || attempts === 1) throw error;
-          if (attempt + 1 === attempts) {
+          const callsUsed = callsBefore - budget.callsLeft, bytesUsed = bytesBefore - budget.bytesLeft;
+          if (attempt + 1 === attempts || budget.callsLeft < callsUsed || budget.bytesLeft < bytesUsed) {
             throw new WorkReadUnavailable('A consistent graph read could not be obtained within its budget', { cause: error });
           }
           await delay(Math.min(WORK_READ_COST.retryDelayMs * 2 ** attempt,

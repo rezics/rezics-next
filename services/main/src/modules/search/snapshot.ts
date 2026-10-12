@@ -4,11 +4,13 @@ import { assertPublicTextReady, assertSameTextInstance, SearchIndexUnavailable,
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { searchGraphSnapshot } from './snapshot-state.ts';
 
-/** HTTP reads are separate transactions (https://jena.apache.org/documentation/rdfconnection/#remote-transactions).
- * Share graph facts only inside a qualified position, and fence that position
- * once after every owner has finished. Access/media/source fences still run.
- * One readiness proof + one final graph read; both debit the enclosing budget. */
-export async function withSearchGraphSnapshot<T>(env: WorkActivationEnvironment, read: () => Promise<T>) {
+/** Native phrase matching exposes an exact relation, including absence and rank;
+ * no per-match token covers that cut. Keep its narrow sequence fence until the
+ * matching owner exposes one. A selected-unit consumer instead fences all graph
+ * inputs in its Work session; both modes retain recovery and native instance /
+ * index generation checks. sourcePosition remains the opening position. */
+export async function withSearchGraphSnapshot<T>(env: WorkActivationEnvironment, read: () => Promise<T>,
+  graphBasis: 'matching-cut' | 'selected-units' = 'matching-cut') {
   const position = await assertPublicTextReady(env.fuseki, env.lineage).catch(async (error: unknown) => {
     // Readiness includes admission in its successful proof. On failure, retain
     // the recovery owner's typed hold outcome without taxing successful reads.
@@ -17,7 +19,7 @@ export async function withSearchGraphSnapshot<T>(env: WorkActivationEnvironment,
     }
     throw error;
   });
-  return searchGraphSnapshot.run({ clients: new Set([env.fuseki]), lineage: env.lineage, position }, async () => {
+  return searchGraphSnapshot.run({ clients: new Set([env.fuseki]), lineage: env.lineage, position, graphBasis }, async () => {
     const result = await read();
     const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?sequence ?generation WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence ;
@@ -25,10 +27,20 @@ export async function withSearchGraphSnapshot<T>(env: WorkActivationEnvironment,
         FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
     } LIMIT 2`, 8192)).results?.bindings ?? [];
     if (rows.length !== 1 || rows[0]?.epoch?.value !== position.dataEpoch
-      || rows[0]?.sequence?.value !== position.sequence || rows[0]?.generation?.value !== position.generation) {
+      || (graphBasis === 'matching-cut' && rows[0]?.sequence?.value !== position.sequence)
+      || rows[0]?.generation?.value !== position.generation) {
       throw new SearchSnapshotMoved('Search graph changed during matching or card hydration');
     }
-    await assertSameTextInstance(env.fuseki, position);
+    if (graphBasis === 'matching-cut') await assertSameTextInstance(env.fuseki, position);
+    else {
+      // Selected consumers recheck their native relation as an owner dependency.
+      // The global writer epoch includes commits with no matching/index change.
+      const health = await env.fuseki.commandHealth();
+      if (health.instanceId !== position.serverInstanceId
+        || (health as { textIndexUncertain?: boolean }).textIndexUncertain === true) {
+        throw new SearchIndexUnavailable('Fuseki text owner changed during selected hydration');
+      }
+    }
     return result;
   });
 }

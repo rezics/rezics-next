@@ -7,6 +7,7 @@ import type { PublicTextPosition } from '../work/search-readiness.ts';
  * scope. Never retain it across requests or retry attempts. */
 export const searchGraphSnapshot = new AsyncLocalStorage<{
   clients: Set<FusekiClient>; lineage: GraphLineage; position: PublicTextPosition;
+  graphBasis?: 'matching-cut' | 'selected-units';
 }>();
 
 export function knownSearchPosition(fuseki: FusekiClient, lineage: GraphLineage) {

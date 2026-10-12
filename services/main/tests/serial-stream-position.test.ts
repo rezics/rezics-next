@@ -8,7 +8,8 @@ const work = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
 
 function projection(
   relayHead: string,
-  options: { streamScope?: string; dataEpoch?: string; checkpointEpoch?: string; checkpointSequence?: string } = {},
+  options: { streamScope?: string; dataEpoch?: string; checkpointEpoch?: string; checkpointSequence?: string;
+    projected?: boolean } = {},
 ) {
   const relay = {
     query: async (sql: string, args?: unknown[]) => {
@@ -29,7 +30,7 @@ function projection(
       generation: 'generation',
       graph_epoch: options.checkpointEpoch ?? 'epoch',
       sequence: options.checkpointSequence ?? '3',
-      work,
+      work: options.projected === false ? null : work,
       chapter_count: 2,
       word_count: '480',
       last_updated_at: new Date('2026-10-01T00:00:00Z'),
@@ -44,8 +45,20 @@ test('A6: completed Main stream projection still returns statistics after graph-
   expect(result.get(work)).toEqual({ chapterCount: 2, wordCount: 480, lastUpdatedAt: '2026-10-01T00:00:00.000Z' });
 });
 
-test('A6: an actual Main stream gap keeps serial statistics unknown', async () => {
-  expect((await projection('4').batch([work], '100')).size).toBe(0);
+test('A6: unrelated Main stream lag preserves the selected Work statistics at their materialized position', async () => {
+  for (const relayHead of ['4', '12', '35']) {
+    expect((await projection(relayHead).batch([work], '100')).get(work)).toEqual({
+      chapterCount: 2, wordCount: 480, lastUpdatedAt: '2026-10-01T00:00:00.000Z',
+    });
+  }
+});
+
+test('A6: a genuinely unprojected selected Work stays incomplete while unrelated batches advance', async () => {
+  expect((await projection('35', { projected: false }).batch([work], '100')).size).toBe(0);
+});
+
+test('A6: a checkpoint ahead of its Main stream coverage cannot certify statistics', async () => {
+  expect((await projection('3', { checkpointSequence: '4' }).batch([work], '100')).size).toBe(0);
 });
 
 test('A6: foreign stream coverage is refused', async () => {

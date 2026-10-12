@@ -3,6 +3,7 @@ import { createPresentationMuteFilter,
   type ActivePresentationMute } from '../presentation/realm-mutes.ts';
 import { PublicQueryUnavailable } from './search-budget.ts';
 import { MAX_SEARCH_RESPONSE_BYTES, SearchSnapshotMoved } from './search-readiness.ts';
+import { knownSearchPosition, searchGraphSnapshot } from '../search/snapshot-state.ts';
 
 interface WorkSearchMatch {
   contribution: string;
@@ -20,6 +21,10 @@ async function authorsFor(env: WorkActivationEnvironment,
   const unique = [...new Set(contributions)];
   if (unique.length > 512) throw new PublicQueryUnavailable('author hydration exceeds result budget');
   if (!unique.length) return new Map<string, string>();
+  // Selected typeahead rereads its complete presentation result at delivery.
+  // Exact phrase consumers still require their matching owner's graph cut.
+  const selectedBasis = !!knownSearchPosition(env.fuseki, env.lineage)
+    && searchGraphSnapshot.getStore()?.graphBasis === 'selected-units';
   const values = unique.map(iri).join(' ');
   const result = await env.fuseki.query(`PREFIX rv: <${RV}>
     SELECT ?epoch ?sequence ?contribution ?author WHERE {
@@ -32,7 +37,7 @@ async function authorsFor(env: WorkActivationEnvironment,
     } LIMIT 513`, MAX_SEARCH_RESPONSE_BYTES);
   const rows = result.results?.bindings ?? [];
   if (rows.some(row => row.epoch?.value === position.dataEpoch
-    && row.sequence?.value !== position.sequence)) {
+    && !selectedBasis && row.sequence?.value !== position.sequence)) {
     throw new SearchSnapshotMoved('search author hydration crossed graph positions');
   }
   const authors = new Map<string, string>();
@@ -40,7 +45,8 @@ async function authorsFor(env: WorkActivationEnvironment,
     const contribution = row.contribution?.value, author = row.author?.value;
     if (!contribution || !author || !unique.includes(contribution)
       || authors.has(contribution) || row.epoch?.value !== position.dataEpoch
-      || row.sequence?.value !== position.sequence) {
+      || !/^\d+$/.test(row.sequence?.value ?? '')
+      || !selectedBasis && row.sequence?.value !== position.sequence) {
       throw new PublicQueryUnavailable('search author hydration is incomplete');
     }
     authors.set(contribution, author);

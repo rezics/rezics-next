@@ -267,7 +267,7 @@ export async function fenceListCard(session: WorkReadSession, card: Extract<Feed
   summaries: ReadonlyMap<string, ResourceSummary>) {
   const read = listReads.get(card);
   if (!read) throw new WorkReadMoved('List card was not read on this page');
-  if (!session.graphSnapshotFenced && (await readCompositionHeader(session.deps.environment, read.structure))?.head !== read.revision) {
+  if ((await readCompositionHeader(session.deps.environment, read.structure))?.head !== read.revision) {
     throw new WorkReadMoved('List changed');
   }
   for (const work of card.works) {

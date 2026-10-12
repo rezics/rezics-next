@@ -2,7 +2,7 @@ import { ObjectIntegrityError, ObjectUnavailable, type ImmutableObjects } from '
 import { collectionTargetBatchReader } from '../composition/visible-targets.ts';
 import { compositionSummaryReader, compositionTargetReader } from '../composition/disclosure-read.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
-import { readResourceSummaries, SummaryGraphMoved } from '../media/summary.ts';
+import { readResourceSummaries, SummaryGraphMoved, type SummaryBatch } from '../media/summary.ts';
 import { recordTree, structureObjects } from '../structure/change.ts';
 import { checkOccurrenceRecord, checkStructureManifest, InvalidStructureObject, STRUCTURE_LIMITS,
   type OccurrenceRecord } from '../structure/format.ts';
@@ -55,10 +55,18 @@ async function visibleTargets(session: WorkReadSession, profile: StructureProfil
   }
   if (profile.id === 'book-composition') {
     try {
-      const result = await readResourceSummaries(session.deps.environment, session.deps.media?.store,
+      const read = () => readResourceSummaries(session.deps.environment, session.deps.media?.store,
         compositionSummaryReader(session), { resources: targets, context: DEFAULT_MEDIA_CONTEXT,
+          localBasis: session.fencesSelectedUnits,
           language: null, languages: session.displayLanguages, includeCollections: true });
-      if (result.generation.graph !== `${session.position.dataEpoch}:${session.position.sequence}`) {
+      const result = await read();
+      if (session.fencesSelectedUnits) {
+        const token = (batch: SummaryBatch) => [batch.generation.graph,
+          batch.generation.media?.split(':')[0] ?? null, batch.summaries];
+        session.observeDependency(`progress-targets:${JSON.stringify(targets)}`, token(result),
+          async () => token(await read()));
+      }
+      if (!session.fencesSelectedUnits && result.generation.graph !== `${session.position.dataEpoch}:${session.position.sequence}`) {
         throw new WorkReadMoved('Progress targets changed during disclosure');
       }
       return new Set(result.summaries.filter(summary => summary.status === 'available').map(summary => summary.reference));

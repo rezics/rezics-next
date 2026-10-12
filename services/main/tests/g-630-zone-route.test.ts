@@ -5,8 +5,6 @@ import { resolve } from 'node:path';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import type { SparqlResult } from '../src/infrastructure/fuseki.ts';
 import { RV, prepareComponent } from '../src/modules/work/activate.ts';
-import { WorkReadUnavailable } from '../src/modules/work/read-session.ts';
-import { WORK_READ_COST } from '../src/modules/work/read-contract.ts';
 import { ZONE_CONFIG_FORMAT, ZONE_PROFILE } from '../src/modules/zone/config-format.ts';
 import { parseZonePath, ZONE_RESERVED_SEGMENTS } from '../src/modules/zone/route-path.ts';
 import { resolveZoneRoute, ZoneRouteMissing, ZONE_ROUTE_COST } from '../src/modules/zone/route.ts';
@@ -108,7 +106,8 @@ function fixture(input: { member: boolean; readable: boolean; adopted?: boolean;
       if (input.deniedWorkScope && required.includes('work:read')) throw new Error('OAuth scope denied');
       return { issuer: 'test', subject: 'reader' };
     } },
-    access: { canReadWork: async () => input.granted === true,
+    access: { activePrincipalId: async () => 'reader', assertRecoveryOpen: async () => undefined,
+      canReadWork: async () => input.granted === true,
       canReadSemanticResource: async () => input.granted === true
         && (!input.revoked || ++semanticChecks === 1) } } as unknown as MainWorkDependencies;
   const request = new Request('http://main.local/v1/zones/test/routes');
@@ -127,9 +126,10 @@ test('G630 class guard: paths × membership × disclosure; a readable non-member
           collection: f.collection, resource: { id: f.resource }, tab: tab ? tab.slice(1) : null });
         else await expect(result).rejects.toBeInstanceOf(ZoneRouteMissing);
       }
-      expect(f.queries.filter(query => query.includes('ASK') && query.includes('rv:MemberRole'))).toHaveLength(3);
-      // The three tab reads include one canonical Space address batch each.
-      expect(f.queries.length).toBeLessThanOrEqual(51);
+      expect(f.queries.filter(query => query.includes('ASK') && query.includes('rv:MemberRole'))).toHaveLength(6);
+      // Three tab reads, including their bounded selected-input fences and
+      // one canonical Space address batch per successful route.
+      expect(f.queries.length).toBeLessThanOrEqual(108);
     } finally { f.close(); }
   }
 });
@@ -177,12 +177,12 @@ test('G630: private mounts and members require current grants, while Work mounts
   } finally { document.close(); }
 });
 
-test('G630: a graph write retries the route against fresh population and repeats OAuth scopes', async () => {
+test('an unrelated graph write preserves the Zone route and its opening position without replaying OAuth', async () => {
   const f = fixture({ member: true, readable: true, moved: 'once', granted: true });
   try {
     expect(await resolveZoneRoute(f.work, f.request, { zone: f.zone, actingSubject: id(),
-      path: `/picks/${f.resource.slice(-36)}` })).toMatchObject({ kind: 'detail', sourcePosition: { sequence: '8' } });
-    expect(f.scopes).toEqual([['semantic:read'], ['work:read'], ['semantic:read'], ['work:read']]);
+      path: `/picks/${f.resource.slice(-36)}` })).toMatchObject({ kind: 'detail', sourcePosition: { sequence: '7' } });
+    expect(f.scopes).toEqual([['semantic:read'], ['work:read']]);
     expect(f.queries.filter(query => query.includes('rv:MemberRole'))).toHaveLength(2);
   } finally { f.close(); }
   const removed = fixture({ member: true, readable: true, moved: 'once', removedDuringRead: true });
@@ -192,12 +192,12 @@ test('G630: a graph write retries the route against fresh population and repeats
   } finally { removed.close(); }
 });
 
-test('G630: continuous graph writes exhaust the bounded retries without returning a route conflict', async () => {
+test('continuous unrelated graph writes do not consume Zone retries', async () => {
   const f = fixture({ member: true, readable: true, moved: 'always' });
   try {
-    await expect(resolveZoneRoute(f.work, f.request, { zone: f.zone,
-      path: `/picks/${f.resource.slice(-36)}` })).rejects.toBeInstanceOf(WorkReadUnavailable);
-    expect(f.queries.filter(query => query.includes('rv:MemberRole'))).toHaveLength(WORK_READ_COST.attempts);
+    expect(await resolveZoneRoute(f.work, f.request, { zone: f.zone,
+      path: `/picks/${f.resource.slice(-36)}` })).toMatchObject({ kind: 'detail', sourcePosition: { sequence: '8' } });
+    expect(f.queries.filter(query => query.includes('rv:MemberRole'))).toHaveLength(2);
     expect(ZONE_ROUTE_COST).toMatchObject({ pageSize: 24, maxNavigation: 50, membershipQueries: 1, immutableRangeRows: 101 });
   } finally { f.close(); }
 });

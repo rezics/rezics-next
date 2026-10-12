@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import type { MainWorkDependencies } from '../src/app.ts';
 import { FusekiClient, type SparqlResult } from '../src/infrastructure/fuseki.ts';
-import { readProjectionViews } from '../src/modules/projection/read.ts';
+import { listProjections, readProjectionViews } from '../src/modules/projection/read.ts';
 import { resolveTargets, targetSummaries, TargetNotBound } from '../src/modules/target/resolve.ts';
 import { WorkReadMoved, WorkReadSession } from '../src/modules/work/read-session.ts';
 
@@ -14,7 +14,8 @@ interface Work { resource: string; name: string; public?: boolean }
 interface Projection { resource: string; subject: string; frames: string[] }
 
 /** A graph holding Works and projections of them, answering the summary and exact-head probes. */
-function fixture(works: Work[], projections: Projection[], options: { hidden?: string[]; movedAfter?: number } = {}) {
+function fixture(works: Work[], projections: Projection[], options: {
+  hidden?: string[]; movedAfter?: number; projectionRevision?: string } = {}) {
   const queries: string[] = [];
   const graph = new FusekiClient('http://graph.invalid');
   let summaryReads = 0;
@@ -38,10 +39,10 @@ function fixture(works: Work[], projections: Projection[], options: { hidden?: s
     }
     if (query.includes('SELECT ?epoch ?sequence ?r ?revision ?type')) {
       return { results: { bindings: requested(query).map((resource, index) => ({ epoch: literal('epoch'),
-        sequence: literal('1'), r: uri(resource), revision: uri(id(1000 + index)), type: uri(`${RV}Projection`) })) } };
+        sequence: literal('1'), r: uri(resource), revision: uri(options.projectionRevision ?? id(1000 + index)), type: uri(`${RV}Projection`) })) } };
     }
     if (query.includes('SELECT ?p ?revision')) {
-      return { results: { bindings: requested(query).map((resource, index) => ({ p: uri(resource), revision: uri(id(1000 + index)) })) } };
+      return { results: { bindings: requested(query).map((resource, index) => ({ p: uri(resource), revision: uri(options.projectionRevision ?? id(1000 + index)) })) } };
     }
     if (query.includes('SELECT ?epoch ?sequence WHERE')) {
       return { results: { bindings: [{ epoch: literal('epoch'), sequence: literal('1') }] } };
@@ -117,9 +118,32 @@ test('a batch of projections costs one summary page and one page of parts, share
     [three, railgun, [season], 'public'], [one, misaka, [railgun, season].sort(), 'public']]);
 });
 
-test('parts read at another graph position than the projection are read again, not mixed', async () => {
+test('unrelated dataset drift between projection and parts does not reject selected summaries or views', async () => {
   const { session } = fixture(works, [{ resource: one, subject: misaka, frames: [railgun] }], { movedAfter: 1 });
-  await expect(targetSummaries(session, [one])).rejects.toBeInstanceOf(WorkReadMoved);
+  expect((await targetSummaries(session, [one])).summaries[0]?.status).toBe('available');
+  expect(await readProjectionViews(session, [one])).toMatchObject([{ id: one, revision: id(1000) }]);
+  await session.fenceDependencies();
+});
+
+test('projection listing admits local selector summaries without comparing their hash to the dataset sequence', async () => {
+  const { session } = fixture(works, [{ resource: one, subject: misaka, frames: [railgun] }], { movedAfter: 0 });
+  const store = { list: async () => [one], listByFrame: async () => [one] };
+  const page = await listProjections(session, store, { subject: misaka, cursor: null, limit: 2 });
+  expect(page.items).toMatchObject([{ id: one, subject: misaka, revision: id(1000) }]);
+  expect(page.nextCursor).toBeNull();
+  await session.fenceDependencies();
+});
+
+test('selected projection heads and frame names remain fenced after hydration', async () => {
+  for (const changed of ['head', 'frame'] as const) {
+    const selectedWorks = works.map(work => ({ ...work }));
+    const options = { projectionRevision: id(1000) };
+    const { session } = fixture(selectedWorks, [{ resource: one, subject: misaka, frames: [railgun] }], options);
+    expect(await readProjectionViews(session, [one])).toMatchObject([{ id: one, revision: id(1000) }]);
+    if (changed === 'head') options.projectionRevision = id(1001);
+    else selectedWorks.find(work => work.resource === railgun)!.name = 'Changed selected frame';
+    await expect(session.fenceDependencies()).rejects.toBeInstanceOf(WorkReadMoved);
+  }
 });
 
 test('target resolution reports base projection for its capabilities and refuses the grains it lacks', async () => {

@@ -220,12 +220,31 @@ test('G-506: private Context batch and fallback readers lazily verify context:re
   }
 });
 
-test('G-506: graph movement, ambiguous heads and excess revision rows never produce an exact pin', async () => {
+test('target pins ignore unrelated dataset sequence changes during hydration and the final fence', async () => {
   const records = [{ resource: id(1), type: 'work' as const, work: id(1) }];
-  for (const options of [{ summarySequence: '2' }, { revisionSequence: '2' }]) {
+  for (const initial of [{ summarySequence: '2' }, { revisionSequence: '2' }]) {
+    const options: { summarySequence?: string; revisionSequence?: string } = { ...initial };
     const f = fixture(records, options);
-    await expect(resolveTargets(f.session, [id(1)], 'discussion')).rejects.toBeInstanceOf(WorkReadMoved);
+    expect(await resolveTargets(f.session, [id(1)], 'discussion'))
+      .toMatchObject([{ resource: id(1), revision: id(1000) }]);
+    options.summarySequence = '3';
+    options.revisionSequence = '3';
+    await f.session.fenceDependencies();
   }
+});
+
+test('a selected target revision mutation rejects a hydrated exact pin at the final fence', async () => {
+  const row = { epoch: literal('epoch'), sequence: literal('1'), r: uri(id(1)), revision: uri(id(10)) };
+  const options = { revisionRows: [row] };
+  const f = fixture([{ resource: id(1), type: 'work', work: id(1) }], options);
+  expect(await resolveTargets(f.session, [id(1)], 'discussion'))
+    .toMatchObject([{ resource: id(1), revision: id(10) }]);
+  options.revisionRows = [{ ...row, revision: uri(id(11)) }];
+  await expect(f.session.fenceDependencies()).rejects.toBeInstanceOf(WorkReadMoved);
+});
+
+test('restored epochs, ambiguous heads and excess revision rows never produce an exact pin', async () => {
+  const records = [{ resource: id(1), type: 'work' as const, work: id(1) }];
   const restored = fixture(records);
   restored.session.deps.environment.lineage.dataEpoch = 'restored-epoch';
   await expect(resolveTargets(restored.session, [id(1)], 'discussion')).rejects.toBeInstanceOf(MediaUnavailable);

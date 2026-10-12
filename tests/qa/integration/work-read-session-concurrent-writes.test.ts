@@ -1,0 +1,483 @@
+import { expect, test } from 'bun:test';
+import assert from 'node:assert/strict';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { randomUUID } from 'node:crypto';
+import { setImmediate as nextTurn } from 'node:timers/promises';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+const short = (id: string) => id.slice(-36);
+
+/** Continuation tokens and opening positions identify a read, not its displayed units. */
+function displayed(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(displayed);
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value)
+    .filter(([key]) => key !== 'sourcePosition' && key !== 'nextCursor')
+    .map(([key, child]) => [key, displayed(child)]));
+  return value;
+}
+
+async function concurrentReadProfiles() {
+  const { startTelemetry, flushTelemetryTraces, shutdownTelemetry } =
+    await import('@rezics/observability/runtime');
+  const { profileRequest, startWorkProfileSink } = await import('../support/work-profile.ts');
+  const { decode } = await import('../../../packages/observability/tests/otlp.ts');
+  const sink = startWorkProfileSink({ settleMs: 25, maxSpans: 200_000 });
+  type WireAttempt = { name: string; traceId: string; spanId: string; parentSpanId?: string;
+    startTimeUnixNano: number; endTimeUnixNano: number; attributes?: unknown; status?: unknown; events?: unknown };
+  const wireAttempts = new Map<string, WireAttempt[]>();
+  const nativeFetch = globalThis.fetch;
+  // The shared profile decoder intentionally omits status/events. Retain their
+  // actual OTLP fields beside the standard profile when an attempt fails early.
+  const telemetryIngress = Bun.serve({ hostname: '127.0.0.1', port: 0, async fetch(request) {
+    const path = new URL(request.url).pathname;
+    const bytes = new Uint8Array(await request.arrayBuffer());
+    if (path === '/v1/traces') {
+      const message = decode('Traces', bytes) as {
+        resourceSpans?: Array<{ scopeSpans?: Array<{ spans?: WireAttempt[] }> }>;
+      };
+      for (const resource of message.resourceSpans ?? []) for (const scope of resource.scopeSpans ?? []) {
+        for (const span of scope.spans ?? []) if (span.name === 'main.work_read.attempt') {
+          const traceId = Buffer.from(span.traceId, 'base64').toString('hex');
+          const prior = wireAttempts.get(traceId) ?? [];
+          if (!prior.some(item => item.spanId === span.spanId)) prior.push(span);
+          wireAttempts.set(traceId, prior);
+        }
+      }
+    }
+    return nativeFetch(`${sink.url}${path}`, { method: 'POST', headers: request.headers, body: bytes });
+  } });
+  startTelemetry('main', { ...process.env, ...sink.env,
+    OTEL_EXPORTER_OTLP_ENDPOINT: telemetryIngress.url.origin });
+  const { startHomeStack } = await import('./feed-read-support.ts');
+  const { seedPublicProfileWork } = await import('../../../scripts/load/work-profile-work.ts');
+  const { workProfileCorpusApi } = await import('../../../scripts/load/work-profile-corpus.ts');
+  const { grantFixtureAuthority } = await import('../../../services/main/src/modules/access/fixture-authority.ts');
+  const { WorkReadSession } = await import('../../../services/main/src/modules/work/read-session.ts');
+  const { fusekiReadBudget } = await import('../../../services/main/src/infrastructure/fuseki.ts');
+  const { png, sha } = await import('./media-support.ts');
+  const { GLOBAL_CONTEXT_SCOPE } = await import('../../../services/main/src/modules/rating/global.ts');
+  const { MediaScreenStore } = await import('../../../services/main/src/modules/media-screen/store.ts');
+  const { screenVerdict } = await import('../../../services/main/src/modules/media-screen/policy.ts');
+  const home = await startHomeStack('work-read-concurrent-writes', { projectionStart: 'current' });
+  const actor = await home.provision('Concurrent read author', home.author.token);
+  const started = performance.now();
+  const evidence: unknown[] = [];
+  const directory = join(process.env.REZICS_QA_ARTIFACT_DIR ?? '.temp/work-profiles', 'concurrent-work-reads');
+  const sampleContext = new AsyncLocalStorage<{
+    path: string; attempts: number[]; opening?: { dataEpoch: string; sequence: string };
+    reached: () => void; held: Promise<void>; paused: boolean;
+    failures: Array<{ phase: string; attempt: number; query?: string; error: unknown }>;
+    prefixWalks: unknown[];
+    sessions: Map<InstanceType<typeof WorkReadSession>, { done: Promise<void>; close: () => void }>;
+  }>();
+  const trackSession = (session: InstanceType<typeof WorkReadSession>) => {
+    const sample = sampleContext.getStore();
+    if (!sample || sample.sessions.has(session)) return;
+    let close!: () => void;
+    const done = new Promise<void>(resolve => { close = resolve; });
+    sample.sessions.set(session, { done, close });
+  };
+  const failureDetail = (error: unknown): unknown => error instanceof Error
+    ? { name: error.name, message: error.message, stack: error.stack,
+      ...(error.cause ? { cause: failureDetail(error.cause) } : {}) } : String(error);
+  const originalQuery = WorkReadSession.prototype.query;
+  const originalAuthority = WorkReadSession.prototype.fenceAuthority;
+  WorkReadSession.prototype.fenceAuthority = async function () {
+    trackSession(this);
+    try { return await originalAuthority.call(this); }
+    finally { sampleContext.getStore()?.sessions.get(this)?.close(); }
+  };
+  const originalPrefixWalk = home.stack.fuseki.prefixWalk;
+  home.stack.fuseki.prefixWalk = async function (input) {
+    try {
+      const response = await originalPrefixWalk.call(this, input);
+      sampleContext.getStore()?.prefixWalks.push({ input, response });
+      return response;
+    } catch (error) {
+      sampleContext.getStore()?.failures.push({ phase: 'prefix-walk',
+        attempt: fusekiReadBudget.getStore()?.attempt ?? 1, error: failureDetail(error) });
+      throw error;
+    }
+  };
+  WorkReadSession.prototype.query = async function (...args) {
+    trackSession(this);
+    try { return await originalQuery.apply(this, args); }
+    catch (error) {
+      sampleContext.getStore()?.failures.push({ phase: 'query', attempt: this.attemptCount,
+        query: args[0], error: failureDetail(error) });
+      throw error;
+    }
+  };
+  const commandStage = new AsyncLocalStorage<{
+    ready: () => void; held: Promise<void>; committed: () => void; failed: (error: unknown) => void;
+  }>();
+  const originalCommand = home.stack.fuseki.commandWithReceipt;
+  home.stack.fuseki.commandWithReceipt = async function (envelope) {
+    const stage = commandStage.getStore();
+    if (!stage || !envelope.update.includes('rv:WorkEditedEvent')) return originalCommand.call(this, envelope);
+    stage.ready();
+    await stage.held;
+    try {
+      const result = await originalCommand.call(this, envelope);
+      assert.equal(result.status, 'committed', 'Staged API edit must commit its graph write');
+      stage.committed();
+      return result;
+    } catch (error) { stage.failed(error); throw error; }
+  };
+  const originalFence = WorkReadSession.prototype.fenceDependencies;
+  WorkReadSession.prototype.fenceDependencies = async function () {
+    trackSession(this);
+    const sample = sampleContext.getStore();
+    if (sample && new URL(this.request.url).pathname === new URL(`http://main.local${sample.path}`).pathname) {
+      sample.attempts.push(this.attemptCount);
+      sample.opening ??= { dataEpoch: this.position.dataEpoch, sequence: this.position.sequence };
+      if (!sample.paused) { sample.paused = true; sample.reached(); await sample.held; }
+    }
+    try { return await originalFence.call(this); }
+    catch (error) {
+      const failure = { phase: 'dependency-fence', attempt: this.attemptCount, error: failureDetail(error) };
+      sample?.failures.push(failure);
+      console.error(JSON.stringify({ path: this.request.url, ...failure }));
+      throw error;
+    }
+  };
+  try {
+    const grant = async (scope: string, action: string) => {
+      const client = await home.stack.accessPool.connect();
+      try {
+        await client.query('BEGIN');
+        await grantFixtureAuthority(client, { scope, requireDispatch: true,
+          representations: [{ principalId: home.author.principalId, actor, action, lifetime: '8 hours' }],
+          grant: { actor, action, lifetime: '8 hours' } });
+        await client.query('COMMIT');
+      } catch (error) { await client.query('ROLLBACK'); throw error; }
+      finally { client.release(); }
+    };
+    const command = async <T>(method: string, path: string, body: object, status = 200): Promise<T> =>
+      home.json<T>(await home.call(method, path, body, home.author.token), status);
+    const api = workProfileCorpusApi('http://main.local', home.author.token, {
+      fetch: ((input, init) => home.app.handle(new Request(input, init))) as typeof fetch,
+    });
+    const unrelatedPublic = await seedPublicProfileWork(api, `unrelated-public:${randomUUID()}`, {
+      actingSubject: actor, title: 'Distant rating target', body: 'Unrelated public words',
+    });
+    const prefix = `Concurrent${randomUUID().replaceAll('-', '')}`;
+    const shown = await seedPublicProfileWork(api, `shown:${randomUUID()}`, {
+      actingSubject: actor, title: `${prefix} shown Work`, body: 'The selected public words',
+    });
+    await grant(`work:edit:${shown.work}`, 'work.edit');
+    const unrelated: Array<{ work: string; revision: string; next: 'unknown' | 'no-value' }> = [];
+    for (let index = 0; index < 32; index++) {
+      const created = await command<{ work: string }>('POST', '/v1/works', {
+        profile: 'metadata-only-v1', authoring: 'own-work', title: `Unshown draft ${index}`,
+        language: 'en', actingSubject: actor,
+      }, 201);
+      await grant(`work:edit:${created.work}`, 'work.edit');
+      const head = await home.json<{ revision: string }>(await home.call('GET',
+        `/v1/works/${short(created.work)}?actingSubject=${encodeURIComponent(actor)}`, undefined, home.author.token));
+      unrelated.push({ work: created.work, revision: head.revision, next: 'unknown' });
+    }
+    await grant('space:create:root', 'space.create');
+    const space = await command<{ space: string }>('POST', '/v1/spaces', {
+      profile: 'space-realm-v1', name: 'Concurrent community', language: 'en',
+      capabilities: ['realm'], actingSubject: actor,
+    }, 201);
+    const zone = { zone: `https://rezics.com/id/${randomUUID()}` };
+    await grant(`zone:edit:${zone.zone}`, 'zone.edit');
+    const zoneCreated = await command<{ revision: string }>('POST', '/v1/zones', {
+      ...zone, space: space.space, name: 'Concurrent Zone', language: 'en',
+      disclosure: 'public', actingSubject: actor,
+    }, 201);
+    const collection = `https://rezics.com/id/${randomUUID()}`;
+    await grant(`collection:edit:${collection}`, 'collection.edit');
+    const list = await command<{ structure: string; revision: string }>('POST', '/v1/collections', {
+      collection, name: 'Concurrent reading list', disclosure: 'public', actingSubject: actor,
+    }, 201);
+    const firstList = await command<{ revision: string }>('POST', `/v1/collections/${short(collection)}/changes`, {
+      expectedHead: list.revision, actingSubject: actor,
+      operations: [{ op: 'insert', role: 'member', parent: list.structure, position: 'last',
+        target: shown.work, selection: { mode: 'follow-context' } }],
+    });
+    await command('POST', `/v1/zones/${short(zone.zone)}/mounts`, {
+      expectedHead: zoneCreated.revision, target: collection, routeSegment: 'catalogue',
+      disclosure: 'public', position: 'last', actingSubject: actor,
+    });
+    await grant(GLOBAL_CONTEXT_SCOPE, 'rating.context.create');
+    const context = await command<{ context: string }>('POST', '/v1/global-rating-contexts', {
+      profile: 'global-rating-standing-context-v1', question: 'Concurrent unrelated rating', actingSubject: actor,
+    }, 201);
+    let ratingHead: string | null = null;
+    let ratingValue = 1;
+    const rateElsewhere = async () => {
+      const result = await command<{ observationRevision: string }>('POST', '/v1/global-rating-observations', {
+        profile: 'global-rating-standing-observation-v1', context: context.context,
+        work: unrelatedPublic.work, mainVersion: unrelatedPublic.mainVersion,
+        expectedRevisionHead: ratingHead, value: ratingValue++ % 5 + 1, actingSubject: actor,
+      }, 201);
+      ratingHead = result.observationRevision;
+    };
+    await home.project();
+    assert(performance.now() - started < 600_000, 'Live preparation exceeded ten minutes');
+
+    const surfaces = [
+      { name: 'work', path: `/v1/resources/${short(shown.work)}/page`, resource: shown.work },
+      { name: 'zone', path: `/v1/zones/${short(zone.zone)}/routes?path=%2Fcatalogue`, resource: shown.work },
+      { name: 'home', path: '/v1/feed?sort=new&kinds=work&limit=1', resource: shown.work },
+      { name: 'typeahead', path: `/v1/search/typeahead?prefix=${prefix}`, resource: shown.work },
+    ];
+    const nativeSearchState = async () => {
+      const health = await home.stack.fuseki.commandHealth();
+      return { instanceId: health.instanceId, publicSearchWriteEpoch: health.publicSearchWriteEpoch,
+        publicSearchWriteActive: health.publicSearchWriteActive, prefixWalkAvailable: health.prefixWalkAvailable };
+    };
+    const measure = async (path: string, mutate: () => Promise<unknown> = async () => {}) => {
+      const searchBefore = path.startsWith('/v1/search/typeahead') ? await nativeSearchState() : undefined;
+      let reached!: () => void, release!: () => void;
+      const entered = new Promise<void>(resolve => { reached = resolve; });
+      const held = new Promise<void>(resolve => { release = resolve; });
+      const sample = { path, attempts: [] as number[], reached, held, paused: false,
+        failures: [] as Array<{ phase: string; attempt: number; query?: string; error: unknown }>,
+        prefixWalks: [] as unknown[],
+        sessions: new Map<InstanceType<typeof WorkReadSession>, { done: Promise<void>; close: () => void }>(),
+        opening: undefined as { dataEpoch: string; sequence: string } | undefined };
+      const measured = profileRequest(sink, headers => sampleContext.run(sample, async () => {
+        const response = await home.app.handle(new Request(`http://main.local${path}`, { headers }));
+        const text = await response.text();
+        // A search deadline can return HTTP while the canceled attempt closes
+        // its mandatory authority checks. Export only after those attempts end.
+        for (;;) {
+          const count = sample.sessions.size;
+          await Promise.all([...sample.sessions.values()].map(session => session.done));
+          await nextTurn();
+          if (sample.sessions.size === count) break;
+        }
+        return { status: response.status, body: JSON.parse(text) as Record<string, unknown> };
+      }), { service: 'main', flush: flushTelemetryTraces });
+      let heldMs = 0;
+      try {
+        await Promise.race([entered, measured.then(result => {
+          throw new Error(`Read completed before hydration hook: ${JSON.stringify(result.result)}`);
+        })]);
+        // This sibling operation starts outside the request's trace and budget.
+        const heldAt = performance.now();
+        try { await mutate(); }
+        finally { heldMs = Math.round(performance.now() - heldAt); }
+      } finally { release(); }
+      const result = await measured;
+      const searchAfter = searchBefore ? await nativeSearchState() : undefined;
+      const attempts = result.profile.spans.filter(span => span.name === 'main.work_read.attempt').length;
+      const attemptSpans = wireAttempts.get(result.profile.traceId) ?? [];
+      const diagnostic = { path, result: result.result, attempts, fenceAttempts: sample.attempts,
+        failures: sample.failures, attemptSpans, prefixWalks: sample.prefixWalks,
+        searchBefore, searchAfter, opening: sample.opening, heldMs };
+      evidence.push({ ...diagnostic, profile: result.profile });
+      mkdirSync(directory, { recursive: true });
+      writeFileSync(join(directory, 'profiles.json'), JSON.stringify(evidence, null, 2) + '\n');
+      wireAttempts.delete(result.profile.traceId);
+      console.info(JSON.stringify({ path, attempts, heldMs,
+        status: result.result.status, fusekiRequests: result.profile.fusekiRequests }));
+      assert.equal(attempts, Math.max(...sample.attempts),
+        `Attempt profile must describe the real sessions: ${JSON.stringify(diagnostic)}`);
+      assert(result.profile.fusekiRequests !== null && result.profile.fusekiRequests > 0,
+        'Request profile must include measured Fuseki calls');
+      return { ...result, attempts, opening: sample.opening };
+    };
+    const scalarEdit = async (target: { work: string; revision: string }, value: 'unknown' | 'no-value') => {
+      const changed = await command<{ revision: string }>('POST', `/v1/works/${short(target.work)}/scalar-value`, {
+        profile: 'work-scalar-state-v1', expectedHead: target.revision,
+        scalarValue: { kind: value }, actingSubject: actor,
+      });
+      assert.notEqual(changed.revision, target.revision, 'Unrelated edit must actually commit a new Work head');
+      target.revision = changed.revision;
+    };
+    const stageEdits = async (count: number) => {
+      const gates = unrelated.slice(0, count).map(target => {
+        let ready!: () => void, release!: () => void, committed!: () => void, failed!: (error: unknown) => void;
+        const prepared = new Promise<void>(resolve => { ready = resolve; });
+        const held = new Promise<void>(resolve => { release = resolve; });
+        const durable = new Promise<void>((resolve, reject) => { committed = resolve; failed = reject; });
+        const settled = commandStage.run({ ready, held, committed, failed }, async () => {
+          await scalarEdit(target, target.next);
+          target.next = target.next === 'unknown' ? 'no-value' : 'unknown';
+        });
+        return { prepared, durable, settled, release };
+      });
+      const finished = Promise.all(gates.map(gate => gate.settled));
+      const committed = Promise.all(gates.map(gate => gate.durable));
+      // Admission, manifests and validation preparation precede the measured read;
+      // every actual native dispatch remains blocked until hydration has finished.
+      try {
+        await Promise.race([Promise.all(gates.map(gate => gate.prepared)), finished.then(() => {
+          throw new Error('API edit completed before its graph-dispatch barrier');
+        })]);
+      } catch (error) { gates.forEach(gate => gate.release()); throw error; }
+      return { release: () => gates.forEach(gate => gate.release()), committed, finished };
+    };
+    for (const surface of surfaces) {
+      // Warm retained manifests before measuring the request's physical calls.
+      await home.json(await home.call('GET', surface.path));
+      const baseline = await measure(surface.path);
+      assert.equal(baseline.result.status, 200, JSON.stringify(baseline.result.body));
+      assert.equal(baseline.attempts, 1);
+      const text = JSON.stringify(baseline.result.body);
+      assert(text.includes(surface.resource), `${surface.name} must show the selected resource`);
+      if (surface.name === 'zone') assert(text.includes(zone.zone), 'Zone must show its mounted index');
+      if (surface.name === 'home') {
+        assert(text.includes(prefix), 'Home must hydrate the shown Work, not an empty inventory');
+      }
+      for (const count of [8, 32]) {
+        const staged = await stageEdits(count);
+        let moved: Awaited<ReturnType<typeof measure>>;
+        try {
+          moved = await measure(surface.path, async () => { staged.release(); await staged.committed; });
+        } finally { staged.release(); await staged.finished; }
+        assert.equal(moved.result.status, 200, JSON.stringify(moved.result.body));
+        assert.equal(moved.attempts, 1, `${surface.name}, ${count} unrelated writes must never replay`);
+        assert.equal(moved.profile.fusekiRequests, baseline.profile.fusekiRequests,
+          `${surface.name} call count must stay constant under unrelated writes`);
+        assert.deepEqual(displayed(moved.result.body), displayed(baseline.result.body));
+        const sourcePosition = moved.result.body.sourcePosition as { dataEpoch: string; sequence: string };
+        assert.deepEqual({ dataEpoch: sourcePosition.dataEpoch, sequence: sourcePosition.sequence }, moved.opening,
+          'sourcePosition must remain the position where this attempt started');
+      }
+      const rated = await measure(surface.path, rateElsewhere);
+      assert.equal(rated.result.status, 200, JSON.stringify(rated.result.body));
+      assert.equal(rated.attempts, 1, `${surface.name} must ignore another Work's rating`);
+      assert.equal(rated.profile.fusekiRequests, baseline.profile.fusekiRequests);
+      assert.deepEqual(displayed(rated.result.body), displayed(baseline.result.body));
+    }
+
+    const assertAffected = (sample: Awaited<ReturnType<typeof measure>>, fresh: string) => {
+      if (sample.result.status === 200) {
+        assert(sample.attempts > 1, 'A changed shown unit must replay its hydrated attempt');
+        assert(JSON.stringify(sample.result.body).includes(fresh), 'Successful replay must show the fresh unit');
+      } else {
+        assert([409, 503].includes(sample.result.status), JSON.stringify(sample.result));
+        assert(['read_basis_changed', 'work_read_unavailable', 'search_index_unavailable', 'query_unavailable',
+          'zone_route_stale', 'zone_route_unavailable']
+          .includes(String(sample.result.body.code)), 'Affected read must return a typed consistency answer');
+      }
+    };
+    // A Work head is itself a shown unit even when an edit preserves its title.
+    const head = await home.json<{ revision: string }>(await home.call('GET', `/v1/works/${short(shown.work)}`));
+    const current = { work: shown.work, revision: head.revision };
+    const edited = await measure(surfaces[0]!.path, () => scalarEdit(current, 'unknown'));
+    assertAffected(edited, current.revision);
+    const zoneEdited = await measure(surfaces[1]!.path, () => scalarEdit(current, 'no-value'));
+    assertAffected(zoneEdited, current.revision);
+    // Home and typeahead render the head's title, so verify the replacement text itself.
+    for (const surface of surfaces.slice(2)) {
+      const basis = await home.json<import('../../../services/main/src/modules/work/title-control.ts').TitleControlState>(
+        await home.call('GET', `/v1/works/${short(shown.work)}/title-control?actingSubject=${encodeURIComponent(actor)}`,
+          undefined, home.author.token));
+      const title = `${prefix} refreshed ${surface.name}`;
+      const titled = await measure(surface.path, () => command('POST', '/v1/content-edits', {
+        profile: 'metadata-only-v1', work: shown.work, expectedHead: basis.contentHead,
+        titleControl: basis.basis, title, actingSubject: actor,
+      }));
+      assertAffected(titled, title);
+    }
+    const zoneState = await home.json<{ revision: string }>(await home.call('GET',
+      `/v1/zones/${short(zone.zone)}/configuration?actingSubject=${encodeURIComponent(actor)}`,
+      undefined, home.author.token));
+    const zoneName = 'Concurrent Zone renamed during hydration';
+    const renamed = await measure(surfaces[1]!.path, () => command('PUT',
+      `/v1/zones/${short(zone.zone)}/configuration`, {
+        expectedHead: zoneState.revision, name: zoneName, language: 'en', actingSubject: actor,
+      }));
+    assertAffected(renamed, zoneName);
+
+    // Every surface draws its selected cover; changing that row must never return the old image.
+    const selectionHeads = new Map<string, string>();
+    const prepareImage = async () => {
+      const bytes = png(256, 256);
+      await grant(`media:owner:${actor}`, 'media.upload');
+      await grant(`media:owner:${actor}`, 'media.manage');
+      const reserved = await command<{ asset: string; upload: string }>('POST', '/v1/media/uploads', {
+        profile: 'media-image-upload-v1', asset: null, mediaType: 'image/png', byteLength: bytes.length,
+        sha256: sha(bytes), disclosure: 'public', actingSubject: actor,
+      }, 201);
+      await home.json(await home.stack.call('PUT', `/v1/media/uploads/${reserved.upload}/bytes`, {
+        token: home.author.token, raw: bytes,
+      }), 201);
+      const screens = new MediaScreenStore(home.stack.contentPool);
+      for (let index = 0; index < 100; index++) {
+        const lease = await screens.leaseNext();
+        if (!lease) break;
+        await screens.settle(lease, screenVerdict({ Drawing: 0.05, Hentai: 0.01,
+          Neutral: 0.9, Porn: 0.01, Sexy: 0.03 }));
+      }
+      return reserved.asset;
+    };
+    for (const surface of surfaces) {
+      const asset = await prepareImage();
+      await grant(`media:avatar:${surface.resource}`, 'media.avatar');
+      let selection = '';
+      const covered = await measure(surface.path, async () => {
+        const changed = await command<{ selection: string }>('PUT', `/v1/resources/${short(surface.resource)}/avatar`, {
+          profile: 'resource-avatar-selection-v1', expectedSelection: selectionHeads.get(surface.resource) ?? null,
+          asset, crop: null, actingSubject: actor,
+        }, 201);
+        selection = changed.selection;
+        selectionHeads.set(surface.resource, selection);
+      });
+      assertAffected(covered, selection);
+    }
+    // The mounted index and Home list read the same selected Structure independently of Work heads.
+    let listHead = firstList.revision, insertedOccurrence = '';
+    const changedIndex = await measure(surfaces[1]!.path, async () => {
+      const changed = await command<{ revision: string; occurrences: string[] }>('POST',
+        `/v1/collections/${short(collection)}/changes`, {
+          expectedHead: listHead, actingSubject: actor,
+          operations: [{ op: 'insert', role: 'member', parent: list.structure, position: 'last',
+            target: unrelatedPublic.work, selection: { mode: 'follow-context' } }],
+        });
+      listHead = changed.revision;
+      insertedOccurrence = changed.occurrences[0]!;
+    });
+    assertAffected(changedIndex, unrelatedPublic.work);
+    const listPath = '/v1/feed?sort=new&kinds=collection&limit=1';
+    await home.project();
+    const initialList = await measure(listPath);
+    assert.equal(initialList.result.status, 200);
+    assert(JSON.stringify(initialList.result.body).includes(shown.work), 'List must show its hydrated first member');
+    assert(JSON.stringify(initialList.result.body).includes(unrelatedPublic.work), 'List must show its added member');
+    const changedList = await measure(listPath, () => command('POST', `/v1/collections/${short(collection)}/changes`, {
+      expectedHead: listHead, actingSubject: actor,
+      operations: [{ op: 'remove', occurrence: insertedOccurrence }],
+    }));
+    assertAffected(changedList, shown.work);
+    if (changedList.result.status === 200) {
+      assert(!JSON.stringify(changedList.result.body).includes(unrelatedPublic.work),
+        'Home must omit the member removed during hydration');
+    }
+  } finally {
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(join(directory, 'profiles.json'), JSON.stringify(evidence, null, 2) + '\n');
+    WorkReadSession.prototype.fenceDependencies = originalFence;
+    WorkReadSession.prototype.query = originalQuery;
+    WorkReadSession.prototype.fenceAuthority = originalAuthority;
+    home.stack.fuseki.commandWithReceipt = originalCommand;
+    home.stack.fuseki.prefixWalk = originalPrefixWalk;
+    await home.stop();
+    await shutdownTelemetry();
+    await telemetryIngress.stop(true);
+    await sink.stop();
+  }
+}
+
+if (process.env.WORK_READ_CONCURRENT_PROFILE === '1') {
+  await concurrentReadProfiles();
+} else {
+  test('shown-unit read fences ignore unrelated API writes at 0/8/32 and retain affected head, cover and Structure fences', async () => {
+    if (!process.env.REZICS_QA_RUN_ID) throw new Error('Run through goalctl test');
+    // Start the SDK before loading Main; another shard test may already own the process tracer.
+    const child = Bun.spawn([process.execPath, import.meta.path], {
+      env: { ...process.env, WORK_READ_CONCURRENT_PROFILE: '1' }, stdout: 'pipe', stderr: 'pipe',
+    });
+    const [exit, output, errors] = await Promise.all([child.exited,
+      new Response(child.stdout).text(), new Response(child.stderr).text()]);
+    expect(exit, `${errors}\n${output.slice(-4000)}`).toBe(0);
+  }, 600_000);
+}

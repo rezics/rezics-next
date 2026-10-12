@@ -1,6 +1,6 @@
 import type { Static } from 'typebox';
 import { AccountAssertionDenied } from '../account/verify-assertion.ts';
-import { MAX_SUMMARY_BATCH, readResourceSummaries } from '../media/summary.ts';
+import { MAX_SUMMARY_BATCH, readResourceSummaries, type SummaryBatch } from '../media/summary.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
 import { capabilityBases, type Base, type ResolvedTarget } from '../target/contract.ts';
 import { resolveTargets, targetSummaryReader } from '../target/resolve.ts';
@@ -10,7 +10,6 @@ import { readWorkRating } from '../work/read-rating.ts';
 import {
   decodeReadCursor, encodeReadCursor, WorkReadMissing,
   WorkReadInvalid,
-  WorkReadMoved,
   WorkReadUnavailable,
   type WorkReadSession,
 } from '../work/read-session.ts';
@@ -191,14 +190,24 @@ export async function readEntityPage(
   };
 }
 
+function observeSummary(session: WorkReadSession, name: string, batch: SummaryBatch,
+  read: () => Promise<SummaryBatch>) {
+  // Media writes elsewhere move its sequence, but only its recovery epoch and
+  // the selected summaries can change this page's presentation or admission.
+  const token = (value: SummaryBatch) => [value.generation.graph,
+    value.generation.media?.split(':')[0] ?? null, value.summaries];
+  session.observeDependency(name, token(batch), async () => token(await read()));
+}
+
 export async function resolveSummary(session: WorkReadSession, resource: string) {
   // A target-only resolve intentionally returns no presentation metadata. Reuse
   // the same summary owner with semantic authority rather than Work-only summaries.
-  const result = await readResourceSummaries(
+  const read = () => readResourceSummaries(
     session.deps.environment,
     session.deps.media?.store,
     { ...targetSummaryReader(session), visibleRecords: records => readingBoundary(session).visible(records) },
     {
+      localBasis: true,
       resources: [resource],
       context: DEFAULT_MEDIA_CONTEXT,
       language: session.options.language ?? null,
@@ -206,9 +215,8 @@ export async function resolveSummary(session: WorkReadSession, resource: string)
       settleNonAgentNameOwners: 'includingAbsent',
     },
   );
-  if (result.generation.graph !== `${session.position.dataEpoch}:${session.position.sequence}`) {
-    throw new WorkReadMoved('Graph changed during page summary hydration');
-  }
+  const result = await read();
+  observeSummary(session, `entity-summary:${resource}`, result, read);
   const summary = result.summaries[0]!;
   if (summary.status !== 'available') throw new WorkReadMissing('Resource is unavailable');
   return summary;
@@ -227,7 +235,8 @@ export async function visibleResourceReferences(
   const privateContext = reader.canReadPrivateContext;
   const privateContexts = reader.canReadPrivateContexts;
   for (let start = 0; start < resources.length; start += MAX_SUMMARY_BATCH) {
-    const batch = await readResourceSummaries(
+    const selected = resources.slice(start, start + MAX_SUMMARY_BATCH);
+    const read = () => readResourceSummaries(
       session.deps.environment,
       session.deps.media?.store,
       {
@@ -255,16 +264,16 @@ export async function visibleResourceReferences(
           : undefined,
       },
       {
-        resources: resources.slice(start, start + MAX_SUMMARY_BATCH),
+        localBasis: true,
+        resources: selected,
         context: DEFAULT_MEDIA_CONTEXT,
         language: session.options.language ?? null,
         languages: session.displayLanguages,
         settleNonAgentNameOwners: 'includingAbsent',
       },
     );
-    if (batch.generation.graph !== `${session.position.dataEpoch}:${session.position.sequence}`) {
-      throw new WorkReadMoved('Graph changed during reference hydration');
-    }
+    const batch = await read();
+    observeSummary(session, `entity-references:${JSON.stringify(selected)}`, batch, read);
     for (const summary of batch.summaries)
       if (summary.status === 'available') visible.add(summary.reference);
   }

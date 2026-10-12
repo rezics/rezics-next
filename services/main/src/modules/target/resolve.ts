@@ -7,7 +7,7 @@ import { MAX_SUMMARY_BATCH, readResourceSummaries, SummaryGraphMoved, type Summa
   type SummaryReader } from '../media/summary.ts';
 import { DATASET, GRAPHS, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { READ_PREFIX, workRead, WorkReadInvalid, WorkReadMissing, WorkReadMoved, WorkReadUnavailable,
-  type WorkReadSession } from '../work/read-session.ts';
+  type ReadRow, type WorkReadSession } from '../work/read-session.ts';
 import { capabilityBases, MAX_TARGET_TYPES, resolvedTarget, targetRef, type Base, type Capability, type ResolvedTarget } from './contract.ts';
 import { disclosureViewer } from '../disclosure/viewer.ts';
 import type { Viewer } from '../suitability/policy.ts';
@@ -40,8 +40,8 @@ export type ReportTargets<Session extends TargetReadSession = WorkReadSession> =
 
 /** Graph-only baseline proofs have no principal or optional hydration owners. */
 export type TargetReadSession = Pick<WorkReadSession, 'query' | 'checkDeadline' | 'request'
-  | 'options' | 'position' | 'displayLanguages' | 'principal'> & {
-  observeDependency?: WorkReadSession['observeDependency'];
+  | 'options' | 'position' | 'displayLanguages' | 'principal'>
+  & Partial<Pick<WorkReadSession, 'fencesSelectedUnits' | 'observeDependency'>> & {
   /** Owner-supplied evidence only; public request fields never set this value. */
   viewer?: Viewer;
   deps: Pick<WorkReadSession['deps'], 'environment'>
@@ -136,6 +136,10 @@ const revisionPatterns = {
 const requiresWork = { work: true, realization: true, release: true, occurrence: true,
   resource: false, projection: false } satisfies Record<Base, boolean>;
 
+// The target probe also returns a dataset diagnostic. Its epoch remains a
+// recovery fence; its sequence is not part of the selected target's identity.
+const selectedTargetRows = (rows: readonly ReadRow[]) => rows.map(({ sequence: _sequence, ...row }) => row);
+
 /** Command identity proof: no names, bodies, media or audience admission. Call
  * only from a command owner that establishes its own authority before exposing
  * a result. Shares the reader's structural revision paths and position fences.
@@ -172,9 +176,10 @@ export async function resolveCommandTarget(session: TargetReadSession, resource:
       OPTIONAL { { GRAPH ${iri(GRAPHS.current)} { ?r a ?type } }
         UNION { GRAPH ${iri(GRAPHS.revisions)} { ?r a rv:FixedRelease } BIND(rv:FixedRelease AS ?type) } }
     }
-  } LIMIT ${TARGET_RESOLVE_COST.typesPerTarget + 1}`, TARGET_RESOLVE_COST.typesPerTarget);
+  } LIMIT ${TARGET_RESOLVE_COST.typesPerTarget + 1}`, TARGET_RESOLVE_COST.typesPerTarget,
+  session.fencesSelectedUnits ? selectedTargetRows : undefined);
   if (!rows.length || rows.some(row => row.epoch?.value !== session.position.dataEpoch
-    || row.sequence?.value !== session.position.sequence)) throw new WorkReadMoved('Graph changed during command target resolution');
+    || !session.fencesSelectedUnits && row.sequence?.value !== session.position.sequence)) throw new WorkReadMoved('Graph changed during command target resolution');
   const exact = rows.filter(row => row.r?.value === resource && row.base);
   if (!exact.length) throw new TargetUnavailable();
   const bases = new Set(exact.map(row => row.base!.value));
@@ -238,12 +243,13 @@ export async function targetSummaries(session: TargetReadSession, resources: rea
     const read = () => readResourceSummaries(session.deps.environment, session.deps.media?.store,
       targetSummaryReader(session), { resources, context: DEFAULT_MEDIA_CONTEXT,
         resolveMerges: options.resolveMerges ?? false, includeCollections: options.includeCollections,
-        localBasis: session.options.localBasis,
+        localBasis: session.fencesSelectedUnits ?? session.options.localBasis,
         language: session.options.language?.toLowerCase() ?? null, languages: session.displayLanguages,
         settleNonAgentNameOwners: 'includingAbsent' }, session.deps.access?.client);
     const result = await read();
-    if (session.options.localBasis && session.observeDependency) {
+    if ((session.fencesSelectedUnits ?? session.options.localBasis) && session.observeDependency) {
       const selected = (batch: SummaryBatch) => ({ graph: batch.generation.graph,
+        mediaEpoch: batch.generation.media?.split(':')[0] ?? null,
         summaries: batch.summaries, workRevisions: [...batch.workRevisions].sort(([left], [right]) => left.localeCompare(right)) });
       session.observeDependency(`target-summary:${JSON.stringify([resources, options])}`,
         selected(result), async () => selected(await read()));
@@ -360,7 +366,7 @@ export async function resolveVisibleTargets(session: TargetReadSession, resource
 
 async function resolveSummarizedTargets(session: TargetReadSession, summaries: SummaryBatch,
   capability: Capability, inventory: boolean, redirects?: Map<string, string>): Promise<Map<string, ResolvedTarget>> {
-  if (session.options.localBasis
+  if ((session.fencesSelectedUnits ?? session.options.localBasis)
     ? !summaries.generation.graph.startsWith(`${session.position.dataEpoch}:`)
     : summaries.generation.graph !== `${session.position.dataEpoch}:${session.position.sequence}`) {
     throw new WorkReadMoved('Graph changed during target resolution');
@@ -393,9 +399,10 @@ async function resolveSummarizedTargets(session: TargetReadSession, summaries: S
         UNION { GRAPH ${iri(GRAPHS.revisions)} { ?r a rv:FixedRelease }
           BIND(rv:FixedRelease AS ?type) } }
     }
-  } LIMIT ${TARGET_RESOLVE_COST.revisionRows + 1}`, TARGET_RESOLVE_COST.revisionRows);
+  } LIMIT ${TARGET_RESOLVE_COST.revisionRows + 1}`, TARGET_RESOLVE_COST.revisionRows,
+  session.fencesSelectedUnits ? selectedTargetRows : undefined);
   if (!rows.length || rows.some(row => row.epoch?.value !== session.position.dataEpoch
-    || row.sequence?.value !== session.position.sequence)) throw new WorkReadMoved('Graph changed during target resolution');
+    || !session.fencesSelectedUnits && row.sequence?.value !== session.position.sequence)) throw new WorkReadMoved('Graph changed during target resolution');
   const byResource = new Map<string, typeof rows>();
   for (const row of rows) {
     if (!row.r) continue;

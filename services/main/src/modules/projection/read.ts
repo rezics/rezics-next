@@ -12,7 +12,7 @@ import type { ReadingBoundary } from '../reading-position/boundary.ts';
 export async function readProjectionViews(session: TargetReadSession, ids: readonly string[], boundary?: ReadingBoundary): Promise<ProjectionView[]> {
   if (!ids.length) return [];
   const batch = await targetSummaries(session, ids);
-  if (batch.generation.graph !== `${session.position.dataEpoch}:${session.position.sequence}`) {
+  if (!session.fencesSelectedUnits && batch.generation.graph !== `${session.position.dataEpoch}:${session.position.sequence}`) {
     throw new WorkReadMoved('Graph changed during projection hydration');
   }
   const disclosed = batch.summaries.flatMap(summary =>
@@ -59,7 +59,7 @@ export async function listProjections(session: TargetReadSession, store: Pick<Pr
   const selectors = [input.subject, input.frame].filter((ref): ref is string => ref !== undefined);
   if (!selectors.length) throw new Error('Projection listing requires a subject or frame');
   const selected = await targetSummaries(session, selectors);
-  if (selected.generation.graph !== `${session.position.dataEpoch}:${session.position.sequence}`) {
+  if (!session.fencesSelectedUnits && selected.generation.graph !== `${session.position.dataEpoch}:${session.position.sequence}`) {
     throw new WorkReadMoved('Graph changed during projection selector hydration');
   }
   const revealed = boundary ? await boundary.visible(selectors) : null;

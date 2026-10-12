@@ -79,13 +79,22 @@ export async function readWorkRating(session: WorkReadSession, work: string, sel
   }
   const principal = scope.kind === 'mine' ? await access.activePrincipalId(session.principal!) : null;
   if (scope.kind === 'mine' && !principal) throw new WorkReadMissing('Reader is unavailable');
-  const result = await queryWorkStandingRating(session.deps.environment, {
+  const readAggregate = () => queryWorkStandingRating(session.deps.environment, {
     readRatingAggregateInventory: (ctx, main, signal) => access.readRatingAggregateInventory!(ctx, main, signal),
     checkRatingAggregateFence: (generation, signal) => access.checkRatingAggregateFence!(generation, signal),
   }, { kind: scope.kind === 'realm' ? 'realm' : 'global', context, work: basis.work, mainVersion: basis.mainVersion,
     ...(principal ? { onlySlot: standingRatingSlotIri(principal, context, basis.mainVersion) } : {}) });
-  if (result.sourcePosition.sequence !== session.position.sequence
-    || result.sourcePosition.dataEpoch !== session.position.dataEpoch) throw new WorkReadUnavailable('Rating basis moved');
+  const result = await readAggregate();
+  if (result.sourcePosition.dataEpoch !== session.position.dataEpoch
+    || !session.fencesSelectedUnits && result.sourcePosition.sequence !== session.position.sequence) {
+    throw new WorkReadUnavailable('Rating basis moved');
+  }
+  const selected = ({ sourcePosition: { sequence: _sequence, ...sourcePosition }, ...aggregate }: typeof result) =>
+    ({ ...aggregate, sourcePosition });
+  // The aggregate owner still verifies sealed evidence and recovery on every
+  // read. Only the unrelated dataset diagnostic is absent from this page token.
+  session.observeDependency(`work-rating:${context}:${basis.mainVersion}:${principal ?? 'all'}`,
+    selected(result), async () => selected(await readAggregate()));
   await fenceRatingTarget(session, work, basis.revision);
   return { profile: 'work-rating-read-v1' as const, work, mainVersion: basis.mainVersion, scope,
     context, status: 'available' as const, scale: { ...result.scale, step: 1 as const },

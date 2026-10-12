@@ -548,10 +548,14 @@ export class SerialStatisticsProjection {
       compareRelayPositions(
         { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: first.graph_epoch, sequence: first.sequence },
         head,
-      ) !== 0
+      ) > 0
     ) {
-      return new Map(); // Unknown until Main stream coverage and its materialization agree.
+      return new Map(); // A foreign or future checkpoint cannot certify this generation.
     }
+    // Each row is the selected Work's materialization at the checkpoint's own
+    // batch position. Later unrelated relay batches cannot make it unknown.
+    // A Work with no materialized row remains absent (the caller's incomplete
+    // result); disclosure below still qualifies every published aggregate.
     const summaries = new Map(
       result.rows.flatMap((row) =>
         row.work

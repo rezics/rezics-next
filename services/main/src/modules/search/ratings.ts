@@ -40,15 +40,28 @@ export async function searchPageRatings(session: WorkReadSession,
     if (!target.mainVersion) throw new WorkReadUnavailable('Search rating target is incomplete');
     return { work: target.work, mainVersion: target.mainVersion };
   });
-  const batch = await queryWorkStandingRatings(session.deps.environment, {
+  const readBatch = () => queryWorkStandingRatings(session.deps.environment, {
       readRatingAggregateInventory: (ctx, main, signal) => access.readRatingAggregateInventory!(ctx, main, signal),
       checkRatingAggregateFence: (generation, signal) => access.checkRatingAggregateFence!(generation, signal),
     }, { targets: completeTargets, kind: realm ? 'realm' : 'global', context: selected, preview: true });
+  const batch = await readBatch();
+  const selectedBatch = (values: typeof batch) => completeTargets.map(target => {
+    const rating = values.get(target.work);
+    if (!rating) return [target.work, null];
+    if (rating.sourcePosition.dataEpoch !== session.position.dataEpoch
+      || !session.fencesSelectedUnits && rating.sourcePosition.sequence !== session.position.sequence) {
+      throw new SearchSnapshotMoved('Search rating moved');
+    }
+    const { sourcePosition: { sequence: _sequence, ...sourcePosition }, ...aggregate } = rating;
+    return [target.work, { ...aggregate, sourcePosition }];
+  });
+  // Keep absent/unavailable previews in the selected batch token, so a newly
+  // available or changed aggregate cannot escape the page's delivery fence.
+  session.observeDependency(`search-ratings:${JSON.stringify([realm, selected, completeTargets])}`,
+    selectedBatch(batch), async () => selectedBatch(await readBatch()));
   for (const target of completeTargets) {
     const rating = batch.get(target.work);
     if (!rating) { unavailable.add(target.work); continue; }
-    if (rating.sourcePosition.dataEpoch !== session.position.dataEpoch
-      || rating.sourcePosition.sequence !== session.position.sequence) throw new SearchSnapshotMoved('Search rating moved');
     if (rating.count) ratings.set(target.work, { context: selected, count: rating.count,
       sum: rating.histogram.reduce((sum, count, i) => sum + count * (rating.scale.min + i), 0),
       mean: rating.mean!, scale: rating.scale as { min: 1; max: 5 | 10 } });

@@ -1,4 +1,5 @@
 import { setTimeout as delay } from 'node:timers/promises';
+import { withTelemetrySpan } from '@rezics/observability/runtime';
 import { fusekiReadBudget, FusekiReadBudgetExceeded, FusekiQueryResponseTooLarge,
   type SparqlResult } from '../../infrastructure/fuseki.ts';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
@@ -22,7 +23,7 @@ import { readZonePublication, readZoneHomeDocument, type ZonePublicPage } from '
 import { ZoneUnavailable } from './configuration.ts';
 import { parseZonePath } from './route-path.ts';
 import { ZONE_ROUTE_COST } from './route-cost.ts';
-import { collectionPopulation, realmPopulation, readZonePopulation, ZONE_POPULATION_COST }
+import { collectionPopulation, realmPopulation, readZonePopulation }
   from './route-population.ts';
 import { ReadingBoundary } from '../reading-position/boundary.ts';
 import { identityKeyUuid, uuidToSid } from '@rezics/model/address/sid';
@@ -113,26 +114,88 @@ class RouteRead {
   readonly requiredSemantics = new Set<string>();
   readonly privateZones = new Set<string>();
   readonly scopeSession: WorkReadSession;
+  readonly boundarySession: WorkReadSession;
+  private readonly cardSessions = new Set<WorkReadSession>();
   constructor(readonly work: MainWorkDependencies, readonly request: Request,
-    readonly viewer: ZoneRouteViewer, readonly position: ReadPosition) {
-    const session = new WorkReadSession(work, request, { actingSubject: viewer.actingSubject }, position);
+    readonly viewer: ZoneRouteViewer, readonly position: ReadPosition, readonly attemptCount: number) {
+    const session = new WorkReadSession(work, request, { actingSubject: viewer.actingSubject }, position, false, attemptCount);
     session.principal = viewer.workPrincipal;
-    this.scopeSession = new WorkReadSession(work, request, { actingSubject: viewer.actingSubject }, position);
+    this.boundarySession = session;
+    this.scopeSession = new WorkReadSession(work, request, { actingSubject: viewer.actingSubject }, position, false, attemptCount);
     this.scopeSession.principal = viewer.principal;
     this.boundary = new ReadingBoundary(session);
     this.reader = { ...summaryReader(work, viewer), visibleRecords: records => this.boundary.visible(records) };
+  }
+  query(body: string, limit: number) { return this.scopeSession.query(body, limit); }
+  async dependency<T>(name: string, read: () => Promise<T>): Promise<T> {
+    const value = await read();
+    this.scopeSession.observeDependency(name, value, read);
+    return value;
+  }
+  async ask(body: string) {
+    const read = async () => (await this.work.environment.fuseki.query(body, 1024)).boolean === true;
+    const answer = await read();
+    this.scopeSession.observeDependency(`zone-population:${body}`, answer, read);
+    return answer;
+  }
+  retain(session: WorkReadSession) { this.cardSessions.add(session); }
+  async header(structure: string, pinned = false) {
+    const selected = (header: CompositionHeader | null) => pinned && header ? {
+      structure: header.structure, profile: header.profile, owner: header.owner, component: header.component,
+    } : header;
+    const header = await readCompositionHeader(this.work.environment, structure);
+    // A published navigation revision is immutable. Its owner's live identity
+    // still matters, while an editor's unshown draft head does not.
+    this.scopeSession.observeDependency(`zone-structure:${structure}:${pinned}`, selected(header),
+      async () => selected(await readCompositionHeader(this.work.environment, structure)));
+    return header;
+  }
+  async fenceDependencies() {
+    await this.scopeSession.fenceDependencies();
+    await this.boundarySession.fenceDependencies();
+    for (const session of this.cardSessions) await session.fenceDependencies();
+  }
+  async fenceAuthority() {
+    try {
+      for (const resource of this.requiredSemantics) await this.semantic(resource);
+      for (const zone of this.privateZones) await this.privateZone(zone);
+      await this.scopeSession.fenceRealms();
+      await this.boundary.fence();
+    } finally {
+      try { await this.scopeSession.fenceAuthority(); }
+      finally {
+        try { await this.boundarySession.fenceAuthority(); }
+        finally {
+          const checks = await Promise.allSettled([...this.cardSessions].map(session => session.fenceAuthority()));
+          for (const check of checks) if (check.status === 'rejected') throw check.reason;
+        }
+      }
+    }
   }
   async targets(targets: readonly string[]) {
     if (!targets.length) return [];
     const summaries: Array<Available | null> = [];
     for (let at = 0; at < targets.length; at += 50) {
-      const batch = await readResourceSummaries(this.work.environment, this.work.media?.store, this.reader,
-      { resources: targets.slice(at,at + 50), context: DEFAULT_MEDIA_CONTEXT, language: null, includeCollections: true,
+      const resources = targets.slice(at,at + 50);
+      const input = { resources, context: DEFAULT_MEDIA_CONTEXT, language: null, includeCollections: true,
+        localBasis: true,
         languages: readerLanguages(this.request.headers.get('x-rezics-display-languages'),
-          this.request.headers.get('accept-language')) });
-    if (batch.generation.graph !== `${this.position.dataEpoch}:${this.position.sequence}`) {
-      throw new WorkReadMoved('Zone population changed during the read');
-    }
+          this.request.headers.get('accept-language')) };
+      const media = this.work.media?.store;
+      const summaryMedia = media ? { avatarRows: async (...args: Parameters<typeof media.avatarRows>) => {
+        const snapshot = (row: Awaited<ReturnType<typeof media.avatarRows>>) => [row.generation.dataEpoch,
+          args[0].map(target => [target, row.rows.get(target) ?? null])];
+        const row = await media.avatarRows(...args);
+        this.scopeSession.observeDependency(`zone-avatar:${args[1]}:${JSON.stringify(args[0])}`, snapshot(row),
+          async () => snapshot(await media.avatarRows(...args)));
+        return row;
+      } } : undefined;
+      const read = () => readResourceSummaries(this.work.environment, summaryMedia, this.reader, input);
+      const batch = await read();
+      const selected = (value: typeof batch) => [value.generation.graph,
+        value.generation.media?.split(':')[0] ?? null, value.summaries];
+      this.scopeSession.observeDependency(`zone-summaries:${JSON.stringify(resources)}`, selected(batch),
+        async () => selected(await read()));
       for (const summary of batch.summaries) {
         const available = summary.status === 'available' ? summary : null;
         this.summaries.set(summary.reference,available);
@@ -146,12 +209,15 @@ class RouteRead {
     return this.summaries.get(target)!;
   }
   async zone(state: Publication) {
-    const current = await this.work.environment.fuseki.query(`PREFIX rv: <${RV}> SELECT ?spaceDisclosure WHERE {
+    const selected = ({ currentRevision: _currentRevision, ...value }: Publication) =>
+      state.documentSite || state.bundle ? value : { ...value, currentRevision: _currentRevision };
+    this.scopeSession.observeDependency(`zone-publication:${state.zone}`, selected(state),
+      async () => selected(await readZonePublication(this.work.environment, state.zone)));
+    const rows = await this.query(`PREFIX rv: <${RV}> SELECT ?spaceDisclosure WHERE {
       GRAPH ${iri(GRAPHS.current)} { ${iri(state.zone)} a rv:Zone ; rv:zoneState rv:Active ;
-        rv:zoneHead ${iri(state.currentRevision)} ; rv:space ${iri(state.configuration.space)} .
+        rv:space ${iri(state.configuration.space)} .
         ${iri(state.configuration.space)} a rv:Space ; rv:disclosure ?spaceDisclosure . }
-    } LIMIT 2`, 1024);
-    const rows = current.results?.bindings ?? [];
+    } LIMIT 2`, 2);
     if (rows.length !== 1 || ![RV + 'Public',RV + 'Private'].includes(rows[0]?.spaceDisclosure?.value ?? '')) {
       throw new ZoneRouteMissing('Zone route is unavailable');
     }
@@ -175,15 +241,18 @@ class RouteRead {
   }
 }
 
-/** All probes and hydration share one request budget. The position fence also
- * prevents a removed mount/member or changed disclosure from surviving hydration. */
+/** All probes, hydration and selected-unit fences share the Zone's own budget.
+ * An unrelated dataset sequence change cannot replay a completed attempt. */
 async function boundedRead<T>(work: MainWorkDependencies, request: Request, actingSubject: string | undefined,
-  operation: (read: RouteRead) => Promise<T>): Promise<T> {
+  operation: (read: RouteRead) => Promise<T>,
+  graphBasis: 'selected-units' | 'presentation-cut' = 'selected-units'): Promise<T> {
   const outer = fusekiReadBudget.getStore();
   const deadline = AbortSignal.timeout(ZONE_ROUTE_COST.deadlineMs);
   const signal = outer ? AbortSignal.any([outer.signal, deadline]) : deadline;
   let calls: number = ZONE_ROUTE_COST.maxGraphReads, bytes: number = ZONE_ROUTE_COST.maxGraphBytes;
   const budget = { signal,
+    attempt: 1, diagnostics: outer?.diagnostics,
+    deadline: Math.min(performance.now() + ZONE_ROUTE_COST.deadlineMs, outer?.deadline ?? Infinity),
     get callsLeft() { return Math.min(calls, outer?.callsLeft ?? calls); },
     set callsLeft(value: number) { const used = this.callsLeft - value; calls -= used; if (outer) outer.callsLeft -= used; },
     get bytesLeft() { return Math.min(bytes, outer?.bytesLeft ?? bytes); },
@@ -193,35 +262,48 @@ async function boundedRead<T>(work: MainWorkDependencies, request: Request, acti
     // Only read callbacks are replayed. All attempts share the same budget and
     // repeat scope, population and disclosure checks against fresh state.
     for (let attempt = 0; ; attempt++) {
+      const callsBefore = budget.callsLeft, bytesBefore = budget.bytesLeft;
+      budget.attempt = attempt + 1;
       try {
+        return await withTelemetrySpan('main.work_read.attempt', async () => {
         const before = await position(work);
         const viewer = await zoneRouteViewer(work, request, actingSubject);
-        const read = new RouteRead(work, request, viewer, before);
+        const read = new RouteRead(work, request, viewer, before, attempt + 1);
         let result: T;
-        try { result = await operation(read); }
-        catch (error) {
-          // A mount/head removed between probes is a moved read, not a stable 404.
-          if (error instanceof ZoneRouteMissing && (await position(work)).sequence !== before.sequence) {
-            throw new WorkReadMoved('Zone population changed during the read', { cause: error });
+        try {
+          try { result = await operation(read); }
+          catch (error) {
+            // Distinguish a removed selected mount/head from a stable 404 using
+            // those exact dependencies, including when another Work was edited.
+            if (error instanceof ZoneRouteMissing) {
+              await read.fenceDependencies();
+              if (graphBasis === 'presentation-cut' && (await position(work)).sequence !== before.sequence) {
+                throw new WorkReadMoved('Zone presentation changed during the read', { cause: error });
+              }
+            }
+            throw error;
           }
-          throw error;
+          const after = await position(work);
+          if (before.dataEpoch !== after.dataEpoch) throw new WorkReadMoved('Zone recovery epoch changed');
+          if (graphBasis === 'presentation-cut' && before.sequence !== after.sequence) {
+            throw new WorkReadMoved('Zone presentation changed during the read');
+          }
+          await read.fenceDependencies();
+        } finally {
+          try { await read.fenceAuthority(); }
+          catch (error) {
+            if (error instanceof WorkReadMissing) throw new ZoneRouteMissing('Zone route is unavailable');
+            throw error;
+          }
         }
-        for (const resource of read.requiredSemantics) await read.semantic(resource);
-        for (const zone of read.privateZones) await read.privateZone(zone);
-        try { await read.scopeSession.fenceRealms(); }
-        catch (error) {
-          if (error instanceof WorkReadMissing) throw new ZoneRouteMissing('Zone route is unavailable');
-          throw error;
-        }
-        await read.boundary.fence();
-        const after = await position(work);
-        if (before.sequence !== after.sequence) throw new WorkReadMoved('Zone population changed during the read');
         signal.throwIfAborted();
         return result;
+        });
       } catch (error) {
         if (!(error instanceof WorkReadMoved || error instanceof SearchSnapshotMoved)
           || error instanceof WorkReadExpired) throw error;
-        if (attempt + 1 === WORK_READ_COST.attempts) {
+        const callsUsed = callsBefore - budget.callsLeft, bytesUsed = bytesBefore - budget.bytesLeft;
+        if (attempt + 1 === WORK_READ_COST.attempts || budget.callsLeft < callsUsed || budget.bytesLeft < bytesUsed) {
           throw new WorkReadUnavailable('A consistent Zone read could not be obtained within its budget', { cause: error });
         }
         await delay(Math.min(WORK_READ_COST.retryDelayMs * 2 ** attempt,
@@ -238,7 +320,7 @@ async function boundedRead<T>(work: MainWorkDependencies, request: Request, acti
 }
 
 async function navigationHeader(read: RouteRead, state: Publication) {
-  const header = await readCompositionHeader(read.work.environment, state.configuration.navigation);
+  const header = await read.header(state.configuration.navigation, !!state.bundle);
   if (!header || header.profile !== 'zone-navigation' || header.owner !== state.zone) {
     throw new ZoneRouteMissing('Zone route is unavailable');
   }
@@ -252,6 +334,9 @@ export function readZonePresentation<T>(work: MainWorkDependencies, request: Req
   present: (state: Publication, navigation: ZoneNavigationItem[], viewer: ZoneRouteViewer,
     visibleSlides: (slides: Publication['presentation']['slides']) => Promise<Publication['presentation']['slides']>,
     continuation: ZoneNavigationContinuation) => Promise<T>, after?: string) {
+  // The caller also hydrates live module, campaign-art and theme owners. Their
+  // cross-unit cut has no selected-token API yet, so this read retains its
+  // narrow dataset fence until those owner dependencies can join RouteRead.
   return boundedRead(work, request, actingSubject, async read => {
     const state = await readZonePublication(work.environment, zone);
     await read.zone(state);
@@ -290,7 +375,7 @@ export function readZonePresentation<T>(work: MainWorkDependencies, request: Req
       slides => visibleZoneSlides(read, slides), { navigationRevision: page.revision,
         navigationNext: page.next ? encodeReadCursor(binding, navigationPosition, page.next) : null,
         navigationComplete: page.next === null });
-  });
+  }, 'presentation-cut');
 }
 
 async function visibleZonePresentation(read: RouteRead, state: Publication): Promise<Publication> {
@@ -323,7 +408,7 @@ async function mountAt(read: RouteRead, state: Publication, header: CompositionH
     if (qualifier.disclosure !== 'public') await read.semantic(state.zone);
     return { occurrence: mount.occurrence, target: mount.target, segment, key: qualifier.key ?? 'id' };
   }
-  const rows = (await read.work.environment.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+  const rows = await read.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     SELECT ?occurrence ?target ?disclosure ?key WHERE { GRAPH ${iri(GRAPHS.current)} {
       ${iri(header.structure)} rv:structureHead ${iri(header.head)} ; rv:selectedGeneration ${iri(header.generation)} .
       ?placement a rv:OccurrencePlacement ; rv:generation ${iri(header.generation)} ;
@@ -331,7 +416,7 @@ async function mountAt(read: RouteRead, state: Publication, header: CompositionH
       ?q a rv:ZoneMount ; rv:zone ${iri(state.zone)} ; rv:routeSegment ${lit(segment)} ; rv:disclosure ?disclosure .
       OPTIONAL { ?q rv:routeKey ?key }
       FILTER NOT EXISTS { ?placement rv:removedBy ?removed }
-    } } LIMIT 2`, 8192)).results?.bindings ?? [];
+    } } LIMIT 2`, 2);
   const row = rows[0];
   if (rows.length !== 1 || !row?.occurrence || !row.target || !row.disclosure
     || ![`${RV}Public`, `${RV}Private`].includes(row.disclosure.value)) {
@@ -351,10 +436,10 @@ async function resourceTypeBatch(read: RouteRead, targets: readonly string[]) {
   const result = new Map<string,ResourceBinding>();
   if (!targets.length) return result;
   const limit = targets.length * ZONE_ROUTE_COST.typeRowsPerResource;
-  const rows = (await read.work.environment.fuseki.query(`SELECT DISTINCT ?resource ?type WHERE {
+  const rows = await read.query(`SELECT DISTINCT ?resource ?type WHERE {
     VALUES ?resource { ${targets.map(iri).join(' ')} }
     GRAPH ${iri(GRAPHS.current)} { ?resource a ?type }
-  } ORDER BY STR(?resource) STR(?type) LIMIT ${limit + 1}`, 64 * 1024)).results?.bindings ?? [];
+  } ORDER BY STR(?resource) STR(?type) LIMIT ${limit + 1}`, limit + 1);
   if (rows.length > limit) throw new WorkReadUnavailable('Zone resource types exceed their bound');
   for (const target of targets) {
     const found = rows.filter(row => row.resource?.value === target);
@@ -369,11 +454,11 @@ async function resourceTypeBatch(read: RouteRead, targets: readonly string[]) {
 }
 
 async function collectionHeader(read: RouteRead, collection: string) {
-  const rows = (await read.work.environment.fuseki.query(`PREFIX rv: <${RV}> SELECT ?structure WHERE {
+  const rows = await read.query(`PREFIX rv: <${RV}> SELECT ?structure WHERE {
     GRAPH ${iri(GRAPHS.current)} { ${iri(collection)} a rv:Collection ; rv:collectionState rv:Active ;
-      rv:structure ?structure } } LIMIT 2`, 4096)).results?.bindings ?? [];
+      rv:structure ?structure } } LIMIT 2`, 2);
   const header = rows.length === 1 && rows[0]?.structure
-    ? await readCompositionHeader(read.work.environment, rows[0].structure.value) : null;
+    ? await read.header(rows[0].structure.value) : null;
   if (!header || header.profile !== 'collection-membership' || header.owner !== collection) {
     throw new ZoneRouteMissing('Zone route is unavailable');
   }
@@ -383,34 +468,42 @@ async function collectionHeader(read: RouteRead, collection: string) {
 /** One exact ASK, independent of Collection size. Tombstones, group targets and
  * placements in a staged/old generation cannot establish population membership. */
 async function collectionMember(read: RouteRead, header: CompositionHeader, resource: string) {
-  return (await read.work.environment.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+  return read.ask(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     ASK { ${collectionPopulation(iri(header.structure), iri(header.head),
-      iri(header.generation), iri(resource))} }`, 1024)).boolean === true;
+      iri(header.generation), iri(resource))} }`);
 }
 
 /** The exact Work's current public Realm selection, never a browse window. */
 async function publiclyAdopted(read: RouteRead, realm: string, resource: string) {
-  return (await read.work.environment.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
-    ASK { ${realmPopulation(realm, iri(resource))} }`, 1024)).boolean === true;
+  return read.ask(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+    ASK { ${realmPopulation(realm, iri(resource))} }`);
 }
 
 async function indexItems(read: RouteRead, targets: string[]): Promise<Array<WorkCard | ResourceBinding>> {
   const summaries = targets.map(target => read.summaries.get(target) ?? null);
   const resources = await resourceTypeBatch(read,[...new Set(targets.filter((_,index) => summaries[index]?.type !== 'work'))]);
   const works = [...new Set(targets.filter((_, index) => summaries[index]?.type === 'work'))];
-  const rows: Row[] = works.length ? (await read.work.environment.fuseki.query(`PREFIX rv: <${RV}>
+  const rows: Row[] = works.length ? await read.query(`PREFIX rv: <${RV}>
     SELECT ?work ?head ?main ?type WHERE {
       VALUES ?work { ${works.map(iri).join(' ')} }
       GRAPH ${iri(GRAPHS.current)} { ?work rv:head ?head ; rv:mainVersion ?main .
         OPTIONAL { ?work a ?type . VALUES ?type { ${WORK_SEMANTIC_TYPES.map(type => `<${type}>`).join(' ')} } } }
-    } LIMIT ${works.length * 8 + 1}`, 64 * 1024)).results?.bindings ?? [] : [];
+    } LIMIT ${works.length * 8 + 1}`, works.length * 8 + 1) : [];
   if (rows.length > works.length * 8) throw new WorkReadUnavailable('Zone Work card types exceed their bound');
-  const session = new WorkReadSession(read.work, read.request, {}, read.position);
+  const session = new WorkReadSession(read.work, read.request, {}, read.position, false, read.attemptCount);
   session.principal = read.viewer.principal;
+  read.retain(session);
   const serial = await readSerialSummaries(session, works.slice(0, 20));
   for (let at = 20; at < works.length; at += 20) {
     for (const [id, value] of await readSerialSummaries(session, works.slice(at, at + 20))) serial.set(id, value);
   }
+  session.observeDependency(`zone-serial:${JSON.stringify(works)}`, works.map(work => [work, serial.get(work) ?? null]), async () => {
+    const current = await readSerialSummaries(session, works.slice(0, 20));
+    for (let at = 20; at < works.length; at += 20) {
+      for (const [id, value] of await readSerialSummaries(session, works.slice(at, at + 20))) current.set(id, value);
+    }
+    return works.map(work => [work, current.get(work) ?? null]);
+  });
   const result: Array<WorkCard | ResourceBinding> = [];
   for (const [index, target] of targets.entries()) {
     const summary = summaries[index];
@@ -446,8 +539,9 @@ export async function resolveZoneRoute(work: MainWorkDependencies, request: Requ
       throw new ZoneRouteMissing('Zone site has not been published');
     }
     if (path.kind === 'home') {
-      const page = await readZoneHomeDocument(work, request, await visibleZonePresentation(read, state),
-        undefined, undefined, slides => visibleZoneSlides(read, slides));
+      const visible = await visibleZonePresentation(read, state);
+      const page = await read.dependency(`zone-home:${state.zone}`, () => readZoneHomeDocument(work, request, visible,
+        undefined, undefined, slides => visibleZoneSlides(read, slides)));
       return { ...basis, kind: 'home', ...(page ? { page } : {}) };
     }
     if (path.kind === 'work') {
@@ -471,7 +565,8 @@ export async function resolveZoneRoute(work: MainWorkDependencies, request: Requ
     if (path.resource !== null) {
       const uuid = identityKeyUuid(path.resource);
       const identified = uuid ? { holder: `https://rezics.com/id/${uuid}`,alias: null }
-        : mount.key === 'alias' ? await work.environment.addresses?.identify(`zone:${state.configuration.space}`,path.resource) : null;
+        : mount.key === 'alias' ? await read.dependency(`zone-route-identity:${state.configuration.space}:${path.resource}`,
+          async () => await work.environment.addresses?.identify(`zone:${state.configuration.space}`,path.resource!) ?? null) : null;
       if (!identified?.holder) throw new ZoneRouteMissing('Zone route is unavailable');
       const resource = identified.holder;
       if (!await collectionMember(read, header, resource) || !await read.target(resource)) {
@@ -480,10 +575,12 @@ export async function resolveZoneRoute(work: MainWorkDependencies, request: Requ
       if (identified.alias?.state === 'retired') throw new ZoneRouteRetired('Zone title is retired');
       const binding = await resourceTypes(read, resource);
       const aliases = work.environment.addresses;
-      const spaceKey = (await canonicalAddresses(work.environment,[{ reference: state.configuration.space,
-        type: 'space',name: { value: state.name ?? '' } }])).get(state.configuration.space)!.key;
-      const routeAlias = mount.key === 'alias' && aliases ? (await aliases.pool.query<{ key: string }>(`SELECT key FROM access.alias_registry
-        WHERE scope = $1 AND holder = $2 AND state = 'current'`, [`zone:${state.configuration.space}`,resource])).rows[0]?.key : null;
+      const spaceKey = await read.dependency(`zone-space-address:${state.configuration.space}`,
+        async () => (await canonicalAddresses(work.environment,[{ reference: state.configuration.space,
+          type: 'space',name: { value: state.name ?? '' } }])).get(state.configuration.space)!.key);
+      const routeAlias = mount.key === 'alias' && aliases ? await read.dependency(`zone-route-alias:${resource}`,
+        async () => (await aliases.pool.query<{ key: string }>(`SELECT key FROM access.alias_registry
+          WHERE scope = $1 AND holder = $2 AND state = 'current'`, [`zone:${state.configuration.space}`,resource])).rows[0]?.key ?? null) : null;
       binding.address = { prefix: `/z/${spaceKey}/${mount.segment}/`,key: routeAlias ?? uuidToSid(resource.slice(-36)),
         suffixSource: (await read.target(resource))?.disclosure === 'public' ? binding.name.value : '' };
       const fenced = await read.targets([mount.target, resource]);
@@ -504,8 +601,7 @@ export async function resolveZoneRoute(work: MainWorkDependencies, request: Requ
         .flatMap(summary => summary ? [summary.reference] : [])),
       visible: item => item.role === 'member' && !!item.target && NATIVE_ID.test(item.target) });
     const cards = await indexItems(read, page.occurrences.map(item => item.target!));
-    const members = await readZonePopulation(async query =>
-      (await work.environment.fuseki.query(query, ZONE_POPULATION_COST.graphBytes)).results?.bindings ?? [],
+    const members = await readZonePopulation((query, limit) => read.query(query, limit),
     { collection: header }, cards.map(card => card.id));
     const items = cards.map(card => ({ ...card, inZone: members.has(card.id) }));
     const fenced = await read.targets([mount.target, ...items.map(item => item.id)]);

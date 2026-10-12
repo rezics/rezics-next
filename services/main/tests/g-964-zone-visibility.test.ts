@@ -51,7 +51,8 @@ function fixture(input: { spacePrivate: boolean; zonePrivate: boolean; member: b
       if (input.deniedWorkScope && scopes.includes('work:read')) throw new Error('Work read scope denied');
       return { issuer: 'test', subject: 'reader' };
     } },
-    access: { realmReadProof: async () => {
+    access: { activePrincipalId: async () => 'reader', assertRecoveryOpen: async () => undefined,
+      realmReadProof: async () => {
       proofs++;
       return input.member && !(input.revoke === 'member' && proofs > 1
         || input.revoke === 'member-fence' && proofs > 2) ? 'episode-1' : null;

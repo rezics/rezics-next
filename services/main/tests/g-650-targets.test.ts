@@ -24,7 +24,7 @@ const directory = mkdtempSync('.temp/g-650-unit-');
 afterAll(() => rmSync(directory, { recursive: true, force: true }));
 
 function fixture(type: 'work' | 'release' | 'occurrence' | 'character' | 'realization', options: {
-  public?: boolean; allowed?: boolean; draft?: boolean; moved?: boolean; erasedRoot?: boolean } = {}) {
+  public?: boolean; allowed?: boolean; draft?: boolean; moved?: boolean; erasedRoot?: boolean; targetRevision?: string } = {}) {
   const queries: string[] = [];
   const graph = new FusekiClient('http://graph.invalid');
   const semanticManifest = prepareComponent(directory, id(1), { component: 'resource', lifecycle: 'active',
@@ -39,7 +39,7 @@ function fixture(type: 'work' | 'release' | 'occurrence' | 'character' | 'realiz
       public: literal(String(options.public ?? true)), erased: literal('false'),
       label: { type: 'literal', value: 'SAO', 'xml:lang': 'en' } }];
     else if (query.includes('SELECT ?epoch ?sequence ?r ?revision')) rows = [{ epoch: literal('epoch'),
-      sequence: literal(options.moved ? '2' : '1'), r: uri(id(1)), revision: uri(id(2)),
+      sequence: literal(options.moved ? '2' : '1'), r: uri(id(1)), revision: uri(options.targetRevision ?? id(2)),
       type: uri('https://example.test/DescriptiveType') }];
     else if (query.includes('SELECT ?epoch ?sequence WHERE')) rows = [{ epoch: literal('epoch'), sequence: literal('1') }];
     else if (query.includes('SELECT DISTINCT ?main ?realm')) rows = [{ main: uri(id(3)) }];
@@ -107,14 +107,31 @@ test('G-650: exact occurrence, release, character and metadata Work roots preser
   expect(published.queries.at(-1)).toContain('rv:disclosure rv:Public');
 });
 
-test('G-650: anonymous private occurrences, erased/unavailable roots and moved snapshots fail closed', async () => {
+test('anonymous private occurrences and erased or unavailable roots fail closed', async () => {
   const privateRoot = fixture('occurrence', { public: false });
   expect(await publicReplyRoot(privateRoot.graph, id(1), id(2))).toBe(false);
   await expect(replyRoot(privateRoot.session, id(1), id(2))).rejects.toBeInstanceOf(TargetUnavailable);
   await expect(readWorkDiscussion(privateRoot.session, id(1))).rejects.toBeInstanceOf(TargetUnavailable);
   expect(privateRoot.queries.some(query => query.includes('RealmReplySlot'))).toBe(false);
+});
+
+test('reply roots ignore unrelated dataset sequence drift while preserving the exact target revision', async () => {
+  const options = { moved: false };
+  const f = fixture('release', options);
+  expect(await replyRoot(f.session, id(1), id(2))).toBe(true);
+  options.moved = true;
+  await f.session.fenceDependencies();
   const moved = fixture('release', { moved: true });
-  await expect(replyRoot(moved.session, id(1), id(2))).rejects.toBeInstanceOf(WorkReadMoved);
+  expect(await replyRoot(moved.session, id(1), id(2))).toBe(true);
+  await moved.session.fenceDependencies();
+});
+
+test('reply roots reject a selected target revision mutation at the final fence', async () => {
+  const options = { targetRevision: id(2) };
+  const f = fixture('release', options);
+  expect(await replyRoot(f.session, id(1), id(2))).toBe(true);
+  options.targetRevision = id(8);
+  await expect(f.session.fenceDependencies()).rejects.toBeInstanceOf(WorkReadMoved);
 });
 
 test('G-650: Collection membership resolves resources without a Content selection', async () => {

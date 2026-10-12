@@ -272,7 +272,7 @@ test('Work reads: native public/private/erased disclosure, fallback, scoped rati
     expect(header).toMatchObject({ id: first.work, mainVersion: first.mainVersion,
       title: { value: first.title, language: 'en', basis: 'fallback' }, originalTitle: null, selectedLanguage: null });
     expect(header.links.credits).toBe(`${root}/credits`);
-    expect(stack.fuseki.queries - before).toBe(9);
+    expect(stack.fuseki.queries - before).toBe(11);
     expect((await get(`/v1/works/${short(restricted.work)}`)).status).toBe(404);
     expect((await get(`/v1/works/${short(unreviewed.work)}`)).status).toBe(404);
     expect((await get(`/v1/works/${randomUUID()}`)).status).toBe(404);
@@ -288,7 +288,7 @@ test('Work reads: native public/private/erased disclosure, fallback, scoped rati
     const chapterBefore = stack.fuseki.queries;
     expect(await json(await get(root))).toMatchObject({
       types: ['https://schema.org/Book', 'https://schema.org/DigitalDocument'] });
-    expect(stack.fuseki.queries - chapterBefore).toBe(9);
+    expect(stack.fuseki.queries - chapterBefore).toBe(11);
     await stack.fuseki.update(`PREFIX schema: <https://schema.org/> DELETE DATA {
       GRAPH ${iri(GRAPHS.current)} { ${iri(first.work)} schema:isPartOf ${iri(second.work)} ;
         a schema:DigitalDocument, schema:Book . } }`);
@@ -300,7 +300,16 @@ test('Work reads: native public/private/erased disclosure, fallback, scoped rati
     expect(discover.nextCursor).toBeString();
     const next = await json<Page<{ id: string }>>(await get(`/v1/works?limit=1&cursor=${discover.nextCursor}`));
     expect(next.items.map(item => item.id)).toEqual([first.work]);
-    expect(next.nextCursor).toBeNull();
+    // Other files sharing this QA stack may have admitted public Works. The
+    // cursor must still exhaust them without repeating either fixture Work.
+    const seen = new Set([second.work, first.work]);
+    let tailCursor = next.nextCursor;
+    for (let page = 0; tailCursor && page < 20; page++) {
+      const tail = await json<Page<{ id: string }>>(await get(`/v1/works?limit=1&cursor=${tailCursor}`));
+      for (const item of tail.items) { expect(seen.has(item.id)).toBe(false); seen.add(item.id); }
+      tailCursor = tail.nextCursor;
+    }
+    expect(tailCursor).toBeNull();
     expect((await get(`/v1/works?language=ja&cursor=${discover.nextCursor}`)).status).toBe(400);
     expect((await get('/v1/works?limit=21')).status).toBe(400);
     expect((await get('/v1/works?cursor=invalid')).status).toBe(400);

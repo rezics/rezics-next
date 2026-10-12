@@ -56,7 +56,7 @@ function retainedProjection(options: { missingEvent?: boolean; missingBatch?: bo
     return { rows: [] };
   }, release: () => {} };
   const access = { query: async (sql: string) => ({
-    rows: sql.includes('LEFT JOIN access.serial_summary') ? [{ ...checkpoint(), work,
+    rows: sql.includes('LEFT JOIN access.serial_summary') ? [{ ...checkpoint(), work: sequence === '0' ? null : work,
       chapter_count: 2, word_count: '480', last_updated_at: new Date('2026-10-01T00:00:00Z') }]
       : [checkpoint()],
   }), connect: async () => client } as unknown as Pool;
@@ -69,7 +69,9 @@ test('serial coverage advances through an empty header after an event batch with
   expect((await fixture.projection.batch([work], '77')).size).toBe(0);
   expect(await fixture.projection.tick()).toBe(1);
   expect(fixture.sequence()).toBe('1');
-  expect((await fixture.projection.batch([work], '77')).size).toBe(0);
+  expect((await fixture.projection.batch([work], '77')).get(work)).toEqual({
+    chapterCount: 2, wordCount: 480, lastUpdatedAt: '2026-10-01T00:00:00.000Z',
+  });
   expect(await fixture.projection.tick()).toBe(1);
   expect(fixture.sequence()).toBe('2');
   expect((await fixture.projection.batch([work], '77')).get(work)).toEqual({

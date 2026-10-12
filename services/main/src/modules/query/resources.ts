@@ -10,7 +10,7 @@ import {
   type ReadPosition,
   type WorkReadSession,
 } from '../work/read-session.ts';
-import { readResourceSummaries } from '../media/summary.ts';
+import { readResourceSummaries, type SummaryBatch } from '../media/summary.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
 import { readAgentCards, publicAgent } from '../profiles/read.ts';
 import { direction } from '../display-language/select.ts';
@@ -207,6 +207,7 @@ export async function resourceCards(
       { viewer: session.viewer },
       {
         resources: refs,
+        localBasis: session.fencesSelectedUnits,
         context: DEFAULT_MEDIA_CONTEXT,
         language: null,
         languages: session.displayLanguages,
@@ -215,8 +216,14 @@ export async function resourceCards(
       },
     );
   const summaries = refs.length ? await readSummaries() : null;
+  if (summaries && session.fencesSelectedUnits) {
+    const token = (batch: SummaryBatch) => [batch.generation.graph,
+      batch.generation.media?.split(':')[0] ?? null, batch.summaries];
+    session.observeDependency(`resource-cards:${JSON.stringify(refs)}`, token(summaries),
+      async () => token(await readSummaries()));
+  }
   if (
-    summaries &&
+    summaries && !session.fencesSelectedUnits &&
     summaries.generation.graph !== `${session.position.dataEpoch}:${session.position.sequence}`
   )
     throw new WorkReadMoved('Resources changed');
