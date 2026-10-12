@@ -142,7 +142,7 @@ test('Person command and completion query execute against retained TDB2 data', a
   }
   writeFileSync(join(build, 'fixture.trig'), `@prefix rv: <${RV}> .
 @prefix schema: <https://schema.org/> . @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-<${GRAPHS.control}> { <${DATASET}> rv:dataEpoch "${lineage.dataEpoch}" ; rv:routingEpoch "1" ; rv:sequence 1 . }
+<${GRAPHS.control}> { <${DATASET}> rv:dataEpoch "${lineage.dataEpoch}" ; rv:routingEpoch "1" ; rv:sequence 1 ; rv:textIndexGeneration "${uuid(40)}" . }
 <${GRAPHS.current}> {
   <${person}> a rv:Agent ; rv:agentKind rv:PersonAgent ; rv:head <${head}> ; rv:publicProfileHead <${head}> ;
     rdfs:label "ExactIdentifying" ; schema:name "Exact identifying name" ; rv:profileBio "Identifying biography" .
