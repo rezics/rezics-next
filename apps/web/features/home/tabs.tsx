@@ -77,11 +77,14 @@ export function HomeTabs({ state, defaults, locale, messages, actingSubject, fil
   const gate = givenGate ?? shellGate;
   const gateRef = useRef(gate);
   gateRef.current = gate;
-  const can = { edit: gate('patchV1MeSaved-filtersById'), order: gate('putV1MeSaved-filtersOrder'),
-    delete: gate('deleteV1MeSaved-filtersById') };
+  const visibleFilters = gate('getV1MeSaved-filters') ? filters : null;
+  const can = { edit: gate('getV1MeSaved-filters') && gate('patchV1MeSaved-filtersById'),
+    order: gate('getV1MeSaved-filters') && gate('putV1MeSaved-filtersOrder'),
+    delete: gate('getV1MeSaved-filters') && gate('deleteV1MeSaved-filtersById') };
   const api = useRef<SavedFilterApi | null>(given ?? null);
-  const client = () => api.current ??= mainSavedFilterApi(actingSubject, undefined, operation => gateRef.current(operation));
-  const server = filters?.pinned.map(filter => filter.id) ?? [];
+  const client = () => api.current ??= mainSavedFilterApi(actingSubject, undefined,
+    operation => gateRef.current('getV1MeSaved-filters') && gateRef.current(operation));
+  const server = visibleFilters?.pinned.map(filter => filter.id) ?? [];
   // The order shown: the server's, or a reorder waiting for Main's answer.
   const [order, setOrder] = useState<string[] | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -113,7 +116,7 @@ export function HomeTabs({ state, defaults, locale, messages, actingSubject, fil
   const visibleTopics = visibleConceptTabs(followed, fit ?? followed.length, currentTopic);
   const moreTopics = followsCursor !== null || visibleTopics.length < followed.length;
   // A followed topic has its own tab. The saved filter that only named that topic is not shown beside it.
-  const shown = filtersBesideTopics((order ?? server).flatMap(id => filters?.pinned.find(filter => filter.id === id) ?? []),
+  const shown = filtersBesideTopics((order ?? server).flatMap(id => visibleFilters?.pinned.find(filter => filter.id === id) ?? []),
     followed);
   const href = (next: FeedState) => localizedPath(`/${feedSearch(next, defaults)}`, locale);
   const serverKey = server.join();
@@ -296,7 +299,7 @@ export function HomeTabs({ state, defaults, locale, messages, actingSubject, fil
   </nav>
   {status ? <p role="status" className="border-border/60 border-b bg-warning/10 px-4 py-2 text-sm
     text-warning-foreground">{status}</p> : null}
-  {renaming ? <RenameDialog t={t} filter={renaming} onClose={() => setRenaming(null)}
+  {renaming && can.edit ? <RenameDialog t={t} filter={renaming} onClose={() => setRenaming(null)}
     onSave={name => settle(client().update(renaming, { name }), () => setRenaming(null))} /> : null}
   {moreOpen ? <MoreTopics t={t} topics={followed} cursor={followsCursor} notice={topicsNotice} loading={topicsLoading}
     hrefFor={tab => href(pinnedTab(state, tab))} onClose={() => setMoreOpen(false)}

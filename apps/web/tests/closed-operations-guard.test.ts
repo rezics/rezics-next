@@ -155,6 +155,9 @@ const entries: readonly { file: string; function: string; operations: readonly P
   { file: 'features/home/pin-picker.tsx', function: 'PinPicker', operations: [
     'getV1MeSaved-filters', 'postV1MeSaved-filters', 'patchV1MeSaved-filtersById',
   ] },
+  { file: 'features/home/tabs.tsx', function: 'HomeTabs', operations: [
+    'getV1MeSaved-filters', 'patchV1MeSaved-filtersById', 'putV1MeSaved-filtersOrder', 'deleteV1MeSaved-filtersById',
+  ] },
   { file: 'features/post-composer/api.ts', function: 'banned', operations: ['getV1RealmsByRealmMember-ban'], request: true },
   { file: 'features/zones/about-discussion.tsx', function: 'AboutDiscussionEntry', operations: ['postV1RealmsByRealmAbout-posts'] },
 ];

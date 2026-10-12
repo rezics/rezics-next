@@ -77,8 +77,10 @@ export function PinPicker({ state, defaults, locale, messages, actingSubject, fi
   const [open, setOpen] = useState(defaultOpen);
   const [busy, setBusy] = useState<string | null>(null);
   const [failure, setFailure] = useState<CommandFailure | null>(null);
-  const full = (filters?.pinned.length ?? 0) >= MAX_PINNED;
-  const empty = !filters?.pinned.length && !concepts.length;
+  const visibleFilters = gate('getV1MeSaved-filters') ? filters : null;
+  const full = (visibleFilters?.pinned.length ?? 0) >= MAX_PINNED;
+  const empty = !visibleFilters?.pinned.length && !concepts.length;
+  const addLabel = canCreate || canPin ? t.pinMore : t.pinTopic;
 
   const go = (id: string) => {
     setOpen(false);
@@ -112,7 +114,7 @@ export function PinPicker({ state, defaults, locale, messages, actingSubject, fi
   }
 
   return <Dialog open={open} onOpenChange={details => { setOpen(details.open); if (!details.open) setFailure(null); }}>
-    <DialogTrigger aria-label={empty ? undefined : t.pinMore} title={empty ? undefined : t.pinMore}
+    <DialogTrigger aria-label={empty ? undefined : addLabel} title={empty ? undefined : addLabel}
       className={cn('flex h-12 shrink-0 items-center gap-1.5 border-border/60 border-s px-3.5 font-medium text-sm',
         'text-primary outline-none transition-colors hover:bg-foreground/[0.03] focus-visible:ring-2 focus-visible:ring-ring',
         'focus-visible:ring-inset')}>
@@ -120,7 +122,7 @@ export function PinPicker({ state, defaults, locale, messages, actingSubject, fi
       {empty ? <span className="whitespace-nowrap">{t.pinTopic}</span> : null}
     </DialogTrigger>
     <DialogContent size="md">
-      <DialogHeader title={t.pinTitle} description={t.pinBody} />
+      <DialogHeader title={t.pinTitle} description={canCreate || canPin ? t.pinBody : undefined} />
       <DialogBody className="grid gap-5">
         {failure && !(full && failure === 'full') ? <p role="alert" className="rounded-xl bg-destructive/10 px-3 py-2
           text-destructive-foreground text-sm">{failure === 'full' ? t.tabsFull : failure === 'unsupported'
@@ -128,7 +130,7 @@ export function PinPicker({ state, defaults, locale, messages, actingSubject, fi
         <TopicSearch t={t} locale={locale} api={client} disabled={full} busy={busy}
           pinned={concepts.map(concept => concept.id)}
           known={concepts.map(concept => concept.id)}
-          unpinned={canPin ? filters?.unpinned ?? [] : []} onPin={topic => void pinConcept(topic)} onPinFilter={filter => void pinFilter(filter)} />
+          unpinned={canPin ? visibleFilters?.unpinned ?? [] : []} onPin={topic => void pinConcept(topic)} onPinFilter={filter => void pinFilter(filter)} />
         {current && canCreate ? <SaveCurrent t={t} labels={current.labels} disabled={full} busy={busy === 'current'}
           onSave={name => void saveCurrent(name)} /> : null}
       </DialogBody>
@@ -191,7 +193,7 @@ function TopicSearch({ t, locale, api, disabled, busy, pinned, known, unpinned, 
   }
 
   return <div className="grid gap-4">
-    <EntityPicker<TopicItem> label={t.searchTopics} locale={locale} value={[]} onValueChange={next => {
+    <EntityPicker<TopicItem> label={t.searchTopics} placeholder={t.searchTopics} locale={locale} value={[]} onValueChange={next => {
       const item = next[0]?.item;
       if (item) setSelected({ id: item.value, name: { value: item.label, language: item.language } });
     }} load={async ({ q, cursor }) => {
