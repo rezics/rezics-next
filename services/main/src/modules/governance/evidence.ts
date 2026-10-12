@@ -4,7 +4,8 @@ import type { VerifiedPrincipal } from '../access/admission.ts';
 import type { RealmReplyStore } from '../realm-reply/store.ts';
 import { GLOBAL_CONTEXT } from './schema.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../media/contract.ts';
-import { GRAPHS, iri, type WorkActivationEnvironment } from '../work/activate.ts';
+import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
+import { resolveRealmProfile } from '../space/policy.ts';
 import { readExactMainRevision, readExactWorkRevision, RevisionNotFound } from '../work/history.ts';
 import { CompositionCorrupt, CompositionUnavailable, readCompositionHeader } from '../structure/graph.ts';
 import { readCompositionPage } from '../structure/read.ts';
@@ -15,6 +16,9 @@ import { type CapturedEvidence, type EvidenceCapture, type EvidenceTarget, Gover
 const agent = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const graphAnchor = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}(?:-agent-revision)?$/;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const graphTargetKinds = ['https://schema.org/CreativeWork', ...[
+  'Realm', 'MainVersion', 'Agent', 'Space', 'Zone', 'Structure',
+].map(kind => `${RV}${kind}`)];
 const sourceId = (value: string): string | null => {
   const id = value.startsWith('https://rezics.com/id/') ? value.slice('https://rezics.com/id/'.length) : value;
   return uuid.test(id) ? id : null;
@@ -314,9 +318,38 @@ export function ownerEvidenceCapture(owners: EvidenceOwners): EvidenceCapture & 
   };
 }
 
-/** Current heads for staleness: graph `rv:head` of a Work/Main Version and a Content variant draft head. */
+/** Current heads for staleness: graph `rv:head` of a Realm/Work/Main Version and a Content variant draft head. */
 export function ownerTargetHeads(owners: { graph?: WorkActivationEnvironment; content?: Pool }): TargetHeads {
   return {
+    async realmBasis(target) {
+      if (target.owner !== 'graph') return null;
+      if (!agent.test(target.resource)) throw new GovernanceInvalid('Graph target identity is invalid');
+      if (!owners.graph) throw new GovernanceUnavailable('Graph target classification is unavailable');
+      try {
+        // Work semantic types refine CreativeWork; only primary owner kinds
+        // classify the resource. Missing or competing kinds cannot admit a fallback.
+        const rows = (await owners.graph.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+          SELECT DISTINCT ?kind ?head WHERE { GRAPH ${iri(GRAPHS.current)} {
+            VALUES ?kind { ${graphTargetKinds.map(iri).join(' ')} }
+            ${iri(target.resource)} a ?kind .
+            OPTIONAL { ${iri(target.resource)} rv:head ?head }
+          } } LIMIT 2`, 2048)).results?.bindings ?? [];
+        if (rows.length !== 1 || rows[0]?.kind?.type !== 'uri'
+          || !graphTargetKinds.includes(rows[0].kind.value)) {
+          throw new GovernanceUnavailable('Graph target kind or head is unavailable or ambiguous');
+        }
+        const row = rows[0]!;
+        if (row.kind!.value !== `${RV}Realm`) return null;
+        if (row.head?.type !== 'uri' || !row.head.value) {
+          throw new GovernanceUnavailable('Realm current head is unavailable');
+        }
+        const profile = await resolveRealmProfile(owners.graph, target.resource);
+        return { ...profile, head: row.head.value };
+      } catch (error) {
+        if (error instanceof GovernanceUnavailable || error instanceof GovernanceInvalid) throw error;
+        throw new GovernanceUnavailable(error instanceof Error ? error.message : 'Realm basis is unavailable');
+      }
+    },
     async current(target) {
       if (target.owner === 'graph' && owners.graph && agent.test(target.resource)) {
         const result = await owners.graph.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>

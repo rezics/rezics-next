@@ -15,6 +15,8 @@ export interface RealmPolicyDelivery { realm: string; receipt_id: string; genera
   visibility: RealmVisibility; review_mode: RealmReviewMode;
   listing?: ResourceListing; history?: RealmHistory; admission?: RealmAdmission;
   policy_head?: string | null }
+export interface RealmProfile { realm: string; space: string; profile: string;
+  profileId: 'space-realm-v1' | 'space-realm-v2' | 'space-realm-v3'; legacy: boolean }
 export const policyHead = (id: string) => `urn:rezics:receipt:${hash(`${id}\0realm-policy-publish-v1`)}`;
 
 /** A missing stored head identifies a legacy delivery, including one whose
@@ -71,6 +73,28 @@ export async function readRealmPolicy(env: WorkActivationEnvironment, realm: str
     space: row.space!.value, realmRevision: row.realmRevision?.value ?? null };
 }
 
+/** Resolve the reciprocal Realm/Space pair and its authored profile in at most two rows. */
+export async function resolveRealmProfile(env: WorkActivationEnvironment, realm: string): Promise<RealmProfile> {
+  const spaces = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?space ?spaceProfile ?realmProfile WHERE {
+    GRAPH ${iri(GRAPHS.current)} { ${iri(realm)} a rv:Realm ; rv:space ?space .
+      ?space a rv:Space ; rv:realmCapability ${iri(realm)} .
+      OPTIONAL { ${iri(realm)} rv:definitionProfile ?realmProfile }
+      OPTIONAL { ?space rv:definitionProfile ?spaceProfile } }
+  } LIMIT 2`, 2048)).results?.bindings ?? [];
+  if (spaces.length !== 1 || !spaces[0]?.space) throw new Error('Realm Space is unavailable');
+  const space = spaces[0].space.value;
+  const spaceProfile = spaces[0].spaceProfile?.value;
+  const realmProfile = spaces[0].realmProfile?.value;
+  const profile = spaceProfile === realmProfile
+    && [SPACE_REALM_PROFILE, SPACE_REALM_PROFILE_V2, SPACE_REALM_PROFILE_V1].includes(spaceProfile ?? '')
+    ? spaceProfile : spaceProfile === undefined && realmProfile === undefined
+    ? SPACE_REALM_PROFILE_V1 : null;
+  if (!profile) throw new Error('Realm Space profile is inconsistent');
+  const profileId = profile === SPACE_REALM_PROFILE ? 'space-realm-v3'
+    : profile === SPACE_REALM_PROFILE_V2 ? 'space-realm-v2' : 'space-realm-v1';
+  return { realm, space, profile, profileId, legacy: spaceProfile === undefined && realmProfile === undefined };
+}
+
 /** The committed Access receipt authorizes this idempotent graph delivery.
  * One atomic graph position invalidates public indexes, discovery generations
  * and read/search cursors. No history/body rewrite: independently published
@@ -86,23 +110,7 @@ export async function deliverRealmPolicy(env: WorkActivationEnvironment, op: Rea
       FILTER(?digest = ${lit(digest)}) }
   }`, 1024)).boolean === true;
   if (await committed()) return;
-  const spaces = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?space ?spaceProfile ?realmProfile WHERE {
-    GRAPH ${iri(GRAPHS.current)} { ${iri(op.realm)} a rv:Realm ; rv:space ?space .
-      ?space a rv:Space ; rv:realmCapability ${iri(op.realm)} .
-      OPTIONAL { ${iri(op.realm)} rv:definitionProfile ?realmProfile }
-      OPTIONAL { ?space rv:definitionProfile ?spaceProfile } }
-  } LIMIT 2`, 2048)).results?.bindings ?? [];
-  if (spaces.length !== 1 || !spaces[0]?.space) throw new Error('Realm Space is unavailable');
-  const space = spaces[0].space.value;
-  const spaceProfile = spaces[0].spaceProfile?.value;
-  const realmProfile = spaces[0].realmProfile?.value;
-  const profile = spaceProfile === realmProfile
-    && [SPACE_REALM_PROFILE, SPACE_REALM_PROFILE_V2, SPACE_REALM_PROFILE_V1].includes(spaceProfile ?? '')
-    ? spaceProfile : spaceProfile === undefined && realmProfile === undefined
-    ? SPACE_REALM_PROFILE_V1 : null;
-  if (!profile) throw new Error('Realm Space profile is inconsistent');
-  const profileId = profile === SPACE_REALM_PROFILE ? 'space-realm-v3'
-    : profile === SPACE_REALM_PROFILE_V2 ? 'space-realm-v2' : 'space-realm-v1';
+  const { space, profile, profileId } = await resolveRealmProfile(env, op.realm);
   const validations = await profileValidations(env.fuseki, profileId, [
     { shape: `${profile}/space-shape`, focus: [space], graphs: [GRAPHS.current] },
     { shape: `${profile}/realm-shape`, focus: [op.realm], graphs: [GRAPHS.current] },

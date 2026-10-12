@@ -76,6 +76,12 @@ export interface EvidenceCapture {
 export interface TargetHeads {
   current(target: { owner: GovernanceOwner; resource: string; component: GovernanceComponent;
     revision: string | null; locator: string | null }): Promise<string | null>;
+  realmBasis(target: EvidenceTarget): Promise<RealmTargetBasis | null>;
+}
+export interface RealmTargetBasis {
+  realm: string; space: string; head: string; profile: string;
+  profileId: 'space-realm-v1' | 'space-realm-v2' | 'space-realm-v3';
+  legacy?: boolean;
 }
 /** Current revision and digest of a governance rule; null when unknown or retired. */
 export interface RuleBasis {
@@ -164,6 +170,20 @@ export interface StepInput {
 const restricting = new Set<DecisionOutcome>(['reject', 'restrict', 'interim_restrict', 'final_restrict']);
 const releasing = new Set<DecisionOutcome>(['restore', 'reverse']);
 
+const wholeRealmGrain = (target: DecisionTargetInput) => target.owner === 'graph'
+  && target.component === 'record' && target.scopeKind === 'component'
+  && target.revision === null && target.effect === 'disclosure';
+
+function assertRealmJurisdiction(basis: { authority_kind: string; authority_scope_id: string; context: string },
+  target: DecisionTargetInput, realm: { realm: string } | null, outcome: DecisionOutcome) {
+  if (!realm || !wholeRealmGrain(target) || (!restricting.has(outcome) && !releasing.has(outcome))) return;
+  if (target.locator !== null || realm.realm !== target.resource)
+    throw new GovernanceInvalid('whole-Realm disclosure requires the exact Realm record');
+  if (basis.authority_kind !== 'platform' || basis.authority_scope_id !== 'governance:platform'
+    || basis.context !== GLOBAL_CONTEXT)
+    throw new GovernanceDenied('whole-Realm disclosure requires platform/global jurisdiction');
+}
+
 async function rollback(client: PoolClient): Promise<void> {
   try { await client.query('ROLLBACK'); } catch { /* preserve the original failure */ }
 }
@@ -192,7 +212,8 @@ function validTarget(target: { owner: string; resource: string; component: strin
 export class GovernanceStore {
   readonly disclosure: DisclosureStore;
   constructor(private readonly pool: Pool, private readonly evidence: EvidenceCapture,
-    private readonly heads: TargetHeads, private readonly rules: RuleBasis,
+    private readonly heads: Pick<TargetHeads, 'current'> & Partial<Pick<TargetHeads, 'realmBasis'>>,
+    private readonly rules: RuleBasis,
     private readonly effects?: ModerationEffects, private readonly reviews?: ReviewReportOwner,
     private readonly clock: () => Date = () => new Date(),
   ) {
@@ -204,6 +225,24 @@ export class GovernanceStore {
         this.decider(client, principal, actor, 'governance:platform', action, lock),
       clock,
     );
+  }
+
+  private async realmBasis(target: EvidenceTarget): Promise<RealmTargetBasis | null> {
+    if (target.owner !== 'graph' || target.component !== 'record') return null;
+    if (!this.heads.realmBasis) throw new GovernanceUnavailable('Realm target classification is unavailable');
+    return this.heads.realmBasis(target);
+  }
+
+  private async assertStoredRealmJurisdiction(
+    decision: { authority_kind: string; authority_scope_id: string; context: string; outcome: DecisionOutcome },
+    target: DecisionTargetInput, plan: import('./effects.ts').EffectPlan,
+  ) {
+    const realm = plan.realm === undefined ? await this.realmBasis(target) : plan.realm;
+    if (realm && wholeRealmGrain(target) && plan.realm === undefined)
+      throw new GovernanceUnavailable('Realm decision has no saved owner basis');
+    assertRealmJurisdiction(decision, target, realm, decision.outcome);
+    if (realm && releasing.has(decision.outcome) && !plan.restorationRestrictionId)
+      throw new GovernanceUnavailable('Realm release has no saved original restriction');
   }
 
   readonly safety: SafetyQueue;
@@ -594,27 +633,41 @@ export class GovernanceStore {
     // Do not expose rule or target-head changes to a caller lacking this case's
     // current decision authority. The write transaction checks it again.
     const caseScope = await this.transaction(async client => {
-      const row = (await client.query<{ kind: 'content_report' | 'rights_complaint'; scope: string; urgent: boolean }>(
-        `SELECT kind, authority_scope_id AS scope, urgent FROM access.governance_case WHERE id = $1`,
+      const row = (await client.query<{ kind: 'content_report' | 'rights_complaint'; scope: string; urgent: boolean;
+        authority_kind: string; authority_scope_id: string; context: string }>(
+        `SELECT kind, authority_scope_id AS scope, urgent,authority_kind,authority_scope_id,context
+         FROM access.governance_case WHERE id = $1`,
       [input.caseId])).rows[0];
       if (!row) throw new GovernanceDenied('case is unavailable');
       await this.decider(client, principal, input.actingSubject, row.scope, DECIDE_ACTION[row.kind]);
       if (row.urgent) await this.decider(client, principal, input.actingSubject, row.scope,
         'governance.safety.evidence');
-      return row.scope;
+      return row;
     });
     const existing = await this.replayDecision(principal, input, request);
     if (existing)
       return this.resumeDecision(principal, input.actingSubject, existing.decisionId, true);
     if (!input.reasons) throw new GovernanceInvalid('notifying decisions require a statement of reasons');
     // Owner reads happen before the transaction; the transaction compares them with the reviewed basis.
-    const rule = await this.rules.current(input.rule.ref, caseScope);
+    const rule = await this.rules.current(input.rule.ref, caseScope.scope);
     if (!rule || rule.revision !== input.rule.revision || rule.digest !== input.rule.digest) {
       const replay = await this.replayDecision(principal, input, request);
       if (replay) return replay;
       throw new GovernanceStale('rule revision changed since review');
     }
+    const reviewedRealms = new Map<DecisionTargetInput, RealmTargetBasis | null>();
     for (const target of input.targets) {
+      try {
+        const realm = await this.realmBasis(target);
+        reviewedRealms.set(target, realm);
+        assertRealmJurisdiction(caseScope, target, realm, input.outcome);
+        if (realm && realm.head !== target.expectedHead)
+          throw new GovernanceStale('Realm head changed since review');
+      } catch (error) {
+        const replay = await this.replayDecision(principal, input, request);
+        if (replay) return this.resumeDecision(principal, input.actingSubject, replay.decisionId, true);
+        throw error;
+      }
       const head = await this.heads.current(target);
       if (head !== target.expectedHead) {
         const replay = await this.replayDecision(principal, input, request);
@@ -695,7 +748,8 @@ export class GovernanceStore {
         if (!restriction) throw new GovernanceStale('Restoration has no original restriction');
         restorationRestrictionId = restriction;
         await assertCounterNoticeRestoration(client, caseRow.id, restriction, this.clock());
-        for (const target of input.targets) await assertNoParallelRestriction(client, target, restriction);
+        for (const target of input.targets) await assertNoParallelRestriction(client, target, restriction,
+          reviewedRealms.get(target) && wholeRealmGrain(target) ? 'disclosure' : undefined);
       }
       const allowed: readonly DecisionOutcome[] = kind === 'rights_disposition'
         ? ['interim_restrict', 'final_restrict', 'dismiss', 'restore', 'reverse']
@@ -738,9 +792,9 @@ export class GovernanceStore {
       if (new Set(identities).size !== identities.length)
         throw new GovernanceInvalid('decision targets must be distinct');
       const basisReportId = await validateDecisionEvidence(client, input);
-      if (input.reversesDecisionId) {
+      if (restorationRestrictionId) {
         const reversed = (await client.query<{ outcome: DecisionOutcome }>(`SELECT outcome
-          FROM access.moderation_decision WHERE id = $1 AND case_id = $2`, [input.reversesDecisionId, caseRow.id])).rows[0];
+          FROM access.moderation_decision WHERE id = $1 AND case_id = $2`, [restorationRestrictionId, caseRow.id])).rows[0];
         if (!reversed || !restricting.has(reversed.outcome)) throw new GovernanceStale('nothing to reverse');
         const original = (await client.query<{ owner: string; resource: string; component: string;
           locator: string | null; scope_kind: string; revision: string | null; effect: string }>(
@@ -748,12 +802,12 @@ export class GovernanceStore {
            FROM access.moderation_decision_target t WHERE decision_id = $1
              AND (NOT EXISTS (SELECT 1 FROM access.safety_decision_operation o WHERE o.decision_id = t.decision_id)
                OR EXISTS (SELECT 1 FROM access.safety_decision_effect e WHERE e.decision_id = t.decision_id
-                 AND e.ordinal = t.ordinal AND e.state = 'confirmed'))`, [input.reversesDecisionId])).rows;
+                 AND e.ordinal = t.ordinal AND e.state = 'confirmed'))`, [restorationRestrictionId])).rows;
         const same = (a: (typeof original)[number], b: DecisionTargetInput) => a.owner === b.owner
           && a.resource === b.resource && a.component === b.component && a.locator === b.locator
           && a.scope_kind === b.scopeKind && a.revision === b.revision && a.effect === b.effect;
-        if (original.length !== input.targets.length
-          || original.some(target => !input.targets.some(candidate => same(target, candidate)))) {
+        if ((input.outcome === 'reverse' && original.length !== input.targets.length)
+          || input.targets.some(candidate => !original.some(target => same(target, candidate)))) {
           throw new GovernanceStale('reversal does not match the original targets');
         }
       }
@@ -762,7 +816,13 @@ export class GovernanceStore {
       // between preflight and this transaction cannot receive a stale fence.
       // Target writers remain authoritative for their own state; this check
       // rejects a basis that changed before the decision writes begin.
+      const realmTargets = new Map<DecisionTargetInput, RealmTargetBasis | null>();
       for (const target of input.targets) {
+        const realm = await this.realmBasis(target);
+        assertRealmJurisdiction(caseRow, target, realm, input.outcome);
+        if (realm && realm.head !== target.expectedHead)
+          throw new GovernanceStale('Realm head changed since review');
+        realmTargets.set(target, realm);
         if (await this.heads.current(target) !== target.expectedHead) {
           throw new GovernanceStale('target changed since review');
         }
@@ -810,6 +870,11 @@ export class GovernanceStore {
           ncii, appealUpheld, copyright,
           restorationAuthorized: releasing.has(input.outcome),
         })) ?? {};
+        if (target.owner === 'graph' && target.component === 'record') {
+          const realm = realmTargets.get(target);
+          plan.realm = realm ? { realm: realm.realm, space: realm.space } : null;
+        }
+        if (restorationRestrictionId) plan.restorationRestrictionId = restorationRestrictionId;
         if (ncii && plan.media) plan.ncii = true;
         if (['participation', 'capability'].includes(target.effect) && !plan.participant) {
           throw new GovernanceInvalid('reported target has no participation owner');
@@ -1075,8 +1140,9 @@ export class GovernanceStore {
       // presents a possibly committed owner effect as undispatched acceptance.
       await this.transaction(async client => {
         const decision = (
-          await client.query<{ authority_scope_id: string; kind: string; urgent: boolean }>(
-            `SELECT d.authority_scope_id,d.kind,c.urgent FROM access.moderation_decision d
+          await client.query<{ authority_scope_id: string; authority_kind: string; context: string;
+            outcome: DecisionOutcome; kind: string; urgent: boolean }>(
+            `SELECT d.authority_scope_id,d.authority_kind,d.context,d.outcome,d.kind,c.urgent FROM access.moderation_decision d
              JOIN access.governance_case c ON c.id = d.case_id WHERE d.id = $1`,
             [decisionId],
           )
@@ -1093,6 +1159,12 @@ export class GovernanceStore {
         );
         if (decision.urgent) await this.decider(client, principal, actor,
           decision.authority_scope_id, 'governance.safety.evidence');
+        const saved = (await client.query<DecisionTargetInput & { plan: import('./effects.ts').EffectPlan }>(`
+          SELECT t.owner,t.resource,t.component,t.locator,t.scope_kind AS "scopeKind",t.revision,
+            t.expected_head AS "expectedHead",t.effect,e.plan
+          FROM access.moderation_decision_target t JOIN access.safety_decision_effect e USING (decision_id,ordinal)
+          WHERE t.decision_id = $1 AND t.ordinal = $2`, [decisionId, ordinal])).rows[0];
+        if (saved) await this.assertStoredRealmJurisdiction(decision, saved, saved.plan);
         const op = (
           await client.query<{ cancelled: boolean }>(
             'SELECT cancelled FROM access.safety_decision_operation WHERE decision_id = $1 FOR UPDATE',
@@ -1111,6 +1183,7 @@ export class GovernanceStore {
           await client.query<{
             case_id: string;
             context: string;
+            authority_kind: string;
             authority_scope_id: string;
             outcome: DecisionOutcome;
             reverses_decision_id: string | null;
@@ -1162,7 +1235,6 @@ export class GovernanceStore {
           )
         ).rows[0];
         if (!row) return false;
-        if (row.state === 'confirmed') return true;
         const target: DecisionTargetInput = {
           owner: row.owner,
           resource: row.resource,
@@ -1174,26 +1246,37 @@ export class GovernanceStore {
           effect: row.effect,
           expiresAt: row.expires_at?.toISOString() ?? null,
         };
+        await this.assertStoredRealmJurisdiction(decision, target, row.plan);
+        if (row.state === 'confirmed') return true;
         await client.query('SAVEPOINT effect_dispatch');
         try {
           // Every restricting/releasing writer takes the same target lock before
           // reading fences or invoking an owner, including across case scopes.
           await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 512))',
             [canonical([target.owner, target.resource, target.component])]);
+          let restorationSource: string | null = null;
           if (releasing.has(decision.outcome)) {
             const stepRestriction = decision.answers_step_id && (await client.query<{ decision_id: string | null }>(`
               SELECT decision_id FROM access.governance_process_step WHERE id = $1 AND case_id = $2`,
             [decision.answers_step_id, decision.case_id])).rows[0]?.decision_id;
-            const source = decision.reverses_decision_id ?? stepRestriction ?? (await client.query<{ id: string }>(`
+            if (row.plan.restorationRestrictionId &&
+              ((decision.reverses_decision_id && decision.reverses_decision_id !== row.plan.restorationRestrictionId)
+                || (stepRestriction && stepRestriction !== row.plan.restorationRestrictionId)))
+              throw new GovernanceStale('Restoration source differs from the reviewed restriction');
+            const source = row.plan.restorationRestrictionId ?? decision.reverses_decision_id ?? stepRestriction ?? (await client.query<{ id: string }>(`
               SELECT prior.id FROM access.moderation_decision prior JOIN access.moderation_decision current
                 ON current.case_id = prior.case_id AND prior.case_sequence < current.case_sequence
               WHERE current.id = $1 AND prior.outcome IN ('reject','restrict','interim_restrict','final_restrict')
               ORDER BY prior.case_sequence DESC LIMIT 1`, [decisionId])).rows[0]?.id;
             if (!source) throw new GovernanceStale('Restoration has no original restriction');
+            // Legacy non-Realm restores retain their prior fence behavior;
+            // every newly accepted release saves its reviewed original source.
+            restorationSource = row.plan.restorationRestrictionId ?? decision.reverses_decision_id;
             await assertCounterNoticeRestoration(client, decision.case_id, source, this.clock());
             // Earlier confirmed targets of this same restoration are released,
             // and never count as an unrelated restriction.
-            await assertNoParallelRestriction(client, target, source);
+            await assertNoParallelRestriction(client, target, source,
+              row.plan.realm && wholeRealmGrain(target) ? 'disclosure' : undefined);
           }
           if (row.owner === 'review') {
             if (!this.reviews)
@@ -1220,8 +1303,7 @@ export class GovernanceStore {
           if (
             releasing.has(decision.outcome) &&
             (fence?.state !== 'restricted' ||
-              (decision.reverses_decision_id &&
-                fence.decision_id !== decision.reverses_decision_id))
+              (restorationSource && fence.decision_id !== restorationSource))
           ) {
             throw new GovernanceStale('release target is absent or superseded');
           }
@@ -1485,10 +1567,11 @@ export class GovernanceStore {
       const row = (await client.query<{ case_id: string; restriction_id: string; not_before: Date | null;
         principal_id: string; account_issuer: string; account_subject: string; acting_subject: string;
         generation: string; decision_head: string; state: string; authority_kind: string; authority_scope_id: string;
+        context: string;
         rule_ref: string; rule_revision: string; rule_digest: string; evidence_digest: string;
         statement_of_reasons: StatementOfReasons; disclosure: DecisionInput['disclosure'] }>(`
         SELECT j.case_id,j.restriction_id,j.not_before,d.principal_id,p.account_issuer,p.account_subject,
-          d.acting_subject,c.generation::text,c.decision_head,c.state,c.authority_kind,c.authority_scope_id,
+          d.acting_subject,c.generation::text,c.decision_head,c.state,c.authority_kind,c.authority_scope_id,c.context,
           d.rule_ref,d.rule_revision,d.rule_digest,d.evidence_digest,d.statement_of_reasons,d.disclosure
         FROM access.rights_counter_notice j JOIN access.governance_case c ON c.id = j.case_id
         JOIN access.moderation_decision d ON d.id = j.restriction_id
@@ -1543,8 +1626,11 @@ export class GovernanceStore {
       [row.restriction_id])).rows;
       if (!targets.length) throw new GovernanceStale('The restriction has no confirmed effects');
       for (const target of targets) {
-        await assertNoParallelRestriction(client, target, row.restriction_id);
         target.expectedHead = await this.heads.current(target);
+        const realm = await this.realmBasis(target);
+        assertRealmJurisdiction(row, target, realm, 'restore');
+        await assertNoParallelRestriction(client, target, row.restriction_id,
+          realm && wholeRealmGrain(target) ? 'disclosure' : undefined);
       }
       const input: DecisionInput = { caseId: row.case_id, expectedGeneration: row.generation,
         actingSubject: row.acting_subject, outcome: 'restore', targets,

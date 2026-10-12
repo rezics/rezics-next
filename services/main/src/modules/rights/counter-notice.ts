@@ -3,7 +3,7 @@ import type { PoolClient } from 'pg';
 import { Value } from 'typebox/value';
 import { counterDeclaration, validContentLanguage } from '../public-report/contract.ts';
 import type { Static } from 'typebox';
-import { GovernanceDenied, GovernanceInvalid, GovernanceStale } from '../governance/store.ts';
+import { GovernanceDenied, GovernanceInvalid, GovernanceStale, type EnforcementEffect } from '../governance/store.ts';
 import { mintPartyCredential } from '../public-report/store.ts';
 
 export type CounterDeclaration = Static<typeof counterDeclaration>;
@@ -186,14 +186,17 @@ export async function assertNoParallelRestriction(
     revision: string | null;
   },
   restrictionId: string,
+  exactEffect?: EnforcementEffect,
 ): Promise<void> {
   if (
     (
       await client.query(
         `SELECT 1 FROM access.governance_enforcement
     WHERE owner = $1 AND resource = $2 AND component = $3 AND state = 'restricted'
-      AND (revision IS NULL OR $4::text IS NULL OR revision = $4) AND decision_id <> $5 LIMIT 1`,
-        [target.owner, target.resource, target.component, target.revision, restrictionId],
+      AND (revision IS NULL OR $4::text IS NULL OR revision = $4) AND decision_id <> $5${exactEffect
+        ? ' AND effect = $6 AND revision IS NOT DISTINCT FROM $4' : ''} LIMIT 1`,
+        [target.owner, target.resource, target.component, target.revision, restrictionId,
+          ...(exactEffect ? [exactEffect] : [])],
       )
     ).rowCount
   ) {

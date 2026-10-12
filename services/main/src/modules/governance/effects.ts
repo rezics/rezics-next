@@ -8,8 +8,12 @@ import type { Pool } from 'pg';
 import { MediaStore, MediaStale, copySuppressionId,
   type CopySuppression, type CopySuppressionLift, type CopySuppressionScope } from '../media/store.ts';
 import type { ContentCore } from '../../../../content/src/core.ts';
+import { ownerTargetHeads } from './evidence.ts';
 
 export interface EffectPlan {
+  /** Owner-established identity; null is a positively classified non-Realm record. */
+  realm?: { realm: string; space: string } | null;
+  restorationRestrictionId?: string;
   participant?: string;
   media?: { source: string; state: string; digest: string };
   ncii?: boolean;
@@ -68,6 +72,7 @@ export function graphNoticeParticipants(env: WorkActivationEnvironment): Pick<Mo
         UNION { ?contribution a rv:TextContribution ; rv:work ${iri(target.resource)} ; rv:author ?author }
         UNION { ${iri(target.resource)} rv:work ?work . ?credit a rv:NativeAgentCredit ; rv:work ?work ; rv:agent ?author }
         UNION { ${iri(target.resource)} rv:owner ?author }
+        UNION { ${iri(target.resource)} a rv:Realm ; rv:space ?space . ?space rv:owner ?author }
         UNION { ${iri(target.resource)} a rv:Agent . BIND(${iri(target.resource)} AS ?author) }
       }
       ${after ? `FILTER(STR(?author) > ${lit(after)})` : ''}
@@ -241,7 +246,7 @@ export function ownerModerationEffects(content: ContentModeration, env: WorkActi
           GRAPH ${iri(GRAPHS.revisions)} { ${iri(effect)} a rv:ModerationEffect ;
             rv:moderationTarget ?target ; rv:expectedHead ?head ;
             rv:moderationOperation ${lit(operationId)} ; rv:moderationEffect ${lit(target.effect)} . }
-        }`);
+        } LIMIT 2`, 4096);
         const rows = result.results?.bindings ?? [];
         if (!rows.length) return false;
         if (rows.length !== 1 || rows[0]?.digest?.value !== requestDigest
@@ -251,6 +256,9 @@ export function ownerModerationEffects(content: ContentModeration, env: WorkActi
         return true;
       };
       if (await observed()) return { receipt };
+      const realm = await ownerTargetHeads({ graph: env }).realmBasis(target);
+      if (realm && ['body', 'structure'].includes(target.component))
+        throw new GovernanceStale('Realm moderation has no body or structure grain');
       const profile = target.component === 'structure' ? 'structure-composition-v1'
         : 'work-metadata-v1';
       const shape = target.component === 'structure'
@@ -258,11 +266,31 @@ export function ownerModerationEffects(content: ContentModeration, env: WorkActi
         : target.component === 'body'
           ? 'https://rezics.com/definition/work-metadata-v1/main-version-shape'
           : 'https://rezics.com/definition/work-metadata-v1/work-shape';
-      const validations = await profileValidations(env.fuseki, profile, [{
+      const validations = realm ? await profileValidations(env.fuseki, realm.profileId, [
+        { shape: `${realm.profile}/space-shape`, focus: [realm.space], graphs: [GRAPHS.current] },
+        { shape: `${realm.profile}/realm-shape`, focus: [realm.realm], graphs: [GRAPHS.current] },
+      ]) : await profileValidations(env.fuseki, profile, [{
         shape, focus: [target.resource], graphs: [GRAPHS.current, GRAPHS.revisions],
       }]);
       const headPredicate = target.component === 'structure' ? 'rv:structureHead' : 'rv:head';
-      const result = await env.fuseki.commandWithReceipt({ receipt, digest: requestDigest,
+      const realmGuard = realm ? `GRAPH ${iri(GRAPHS.current)} {
+        ${iri(realm.realm)} a rv:Realm ; rv:realmState rv:Active ; rv:space ${iri(realm.space)} .
+        ${iri(realm.space)} a rv:Space ; rv:realmCapability ${iri(realm.realm)} .
+        FILTER NOT EXISTS { ${iri(realm.realm)} rv:space ?otherSpace . FILTER(?otherSpace != ${iri(realm.space)}) }
+        FILTER NOT EXISTS { ?otherSpace rv:realmCapability ${iri(realm.realm)} . FILTER(?otherSpace != ${iri(realm.space)}) }
+        FILTER NOT EXISTS { ${iri(realm.realm)} rv:head ?otherHead . FILTER(?otherHead != ${iri(target.expectedHead)}) }
+        ${realm.legacy ? `
+            FILTER NOT EXISTS { ${iri(realm.realm)} rv:definitionProfile ?realmProfile }
+            FILTER NOT EXISTS { ${iri(realm.space)} rv:definitionProfile ?spaceProfile }
+          ` : `
+          ${iri(realm.realm)} rv:definitionProfile ${iri(realm.profile)} .
+          ${iri(realm.space)} rv:definitionProfile ${iri(realm.profile)} .`}
+        FILTER NOT EXISTS { ${iri(realm.realm)} rv:definitionProfile ?otherProfile . FILTER(?otherProfile != ${iri(realm.profile)}) }
+        FILTER NOT EXISTS { ${iri(realm.space)} rv:definitionProfile ?otherProfile . FILTER(?otherProfile != ${iri(realm.profile)}) }
+      }` : '';
+      let result: Awaited<ReturnType<typeof env.fuseki.commandWithReceipt>> | undefined;
+      let cause: unknown;
+      try { result = await env.fuseki.commandWithReceipt({ receipt, digest: requestDigest,
         validations, deadlineMs: 10_000, update: `PREFIX rv: <${RV}>
           PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
           DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
@@ -289,16 +317,17 @@ export function ownerModerationEffects(content: ContentModeration, env: WorkActi
             GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
               rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
             GRAPH ${iri(GRAPHS.current)} { ${iri(target.resource)} ${headPredicate} ${iri(target.expectedHead)} }
+            ${realmGuard}
             FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
             FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
             BIND(?n + 1 AS ?next)
-          }` });
-      if (result.status === 'invalid' || result.status === 'unknown-profile') {
+          }` }); } catch (error) { cause = error; }
+      if (await observed()) return { receipt };
+      if (result?.status === 'invalid' || result?.status === 'unknown-profile') {
         throw new GovernanceUnavailable('moderation graph profile is unavailable');
       }
-      if (await observed()) return { receipt };
-      if (result.status === 'guard-unmatched') throw new GovernanceStale('graph head changed');
-      throw new GovernanceUnavailable('moderation graph outcome requires retry');
+      if (result?.status === 'guard-unmatched') throw new GovernanceStale('graph head changed');
+      throw new GovernanceUnavailable('moderation graph outcome requires retry', { cause });
     },
   };
 }

@@ -226,6 +226,8 @@ export class RealmDirectoryIndex {
       { { GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:realm ?realm } }
         UNION { GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:space ?space }
           GRAPH ${iri(GRAPHS.current)} { ?realm rv:space ?space } }
+        UNION { GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:moderationTarget ?realm }
+          GRAPH ${iri(GRAPHS.current)} { ?realm a rv:Realm } }
         UNION { GRAPH ${iri(GRAPHS.receipts)} { ?receipt ?property ?work .
           VALUES ?property { rv:work rv:resource } }
           GRAPH ${iri(GRAPHS.current)} { ?slot a rv:RealmPublicationSlot ; rv:realm ?realm ; rv:work ?work } } }

@@ -56,6 +56,7 @@ export function governanceServices(accessPool: Pool, contentPool: Pool, content:
       : evidence.capture(principal, actingSubject, target),
   }, {
     current: (target) => target.owner === 'review' ? reviews.current(target) : heads.current(target),
+    realmBasis: (target) => heads.realmBasis(target),
   }, rules, ownerModerationEffects(new ContentModeration(contentPool), env, {
       pool: contentPool,
       core: content,
