@@ -6,7 +6,7 @@ import { newBaselineProof } from './baseline.ts';
 import { ensureBaselineScopeGate } from './scope-gates.ts';
 import { publicCatalogueWork, roleWorkProof, type RoleWorkProof } from './role-proof.ts';
 import { representedWorkProof } from './represented-work-proof.ts';
-import { accessClient, inExplicitTransaction, withAccessClient } from './topology-control.ts';
+import { withAccessClient } from './topology-control.ts';
 
 export interface WorkEditAuthorityProof {
   principalId: string; principalEpoch: string; actingSubject: string;
@@ -27,19 +27,17 @@ export interface WorkEditAuthorityProof {
 export async function withWorkEditAuthority<T>(pool: Pool, principal: VerifiedPrincipal,
   actingSubject: string, work: string, commit: (proof: WorkEditAuthorityProof) => Promise<T>,
   graph?: Pick<FusekiClient, 'query'>): Promise<T> {
-  const borrowed = accessClient(pool);
-  return withAccessClient(pool, async client => {
-    const ownsTransaction = !borrowed || !await inExplicitTransaction(client);
-    try {
-      if (ownsTransaction) await client.query('BEGIN');
-      const result = await workEditAuthority(client, principal, actingSubject, work, commit, graph, ownsTransaction);
-      if (ownsTransaction) await client.query('COMMIT');
-      return result;
-    } catch (error) {
-      if (ownsTransaction) await client.query('ROLLBACK').catch(() => {});
-      throw error;
-    }
-  }, borrowed);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await workEditAuthority(client, principal, actingSubject, work,
+      proof => withAccessClient(pool, () => commit(proof), client), graph);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally { client.release(); }
 }
 
 /** Reuses the caller's Access transaction and retains every authority lock
@@ -47,12 +45,12 @@ export async function withWorkEditAuthority<T>(pool: Pool, principal: VerifiedPr
 export async function withWorkEditAuthorityInTransaction<T>(client: PoolClient, principal: VerifiedPrincipal,
   actingSubject: string, work: string, commit: (proof: WorkEditAuthorityProof) => Promise<T>,
   graph?: Pick<FusekiClient, 'query'>): Promise<T> {
-  return workEditAuthority(client, principal, actingSubject, work, commit, graph, false);
+  return workEditAuthority(client, principal, actingSubject, work, commit, graph);
 }
 
 async function workEditAuthority<T>(client: PoolClient, principal: VerifiedPrincipal,
   actingSubject: string, work: string, commit: (proof: WorkEditAuthorityProof) => Promise<T>,
-  graph: Pick<FusekiClient, 'query'> | undefined, ownsLimits: boolean): Promise<T> {
+  graph: Pick<FusekiClient, 'query'> | undefined): Promise<T> {
   const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
   if (!native.test(work) || !native.test(actingSubject) || !principal.issuer || !principal.subject) {
     throw new AdmissionDenied('invalid Work edit authority');
@@ -69,13 +67,23 @@ async function workEditAuthority<T>(client: PoolClient, principal: VerifiedPrinc
     }
   }
   try {
-    if (ownsLimits) {
-      await client.query("SET LOCAL lock_timeout = '2s'");
-      await client.query("SET LOCAL statement_timeout = '5s'");
-      // Statement/lock timeouts bound admission work; the idle lease starts afresh
-      // after the final proof query and exceeds the five-second Source transaction.
-      await client.query("SET LOCAL idle_in_transaction_session_timeout = '15s'");
-    }
+    // Keep this proof's bounds even on a caller that only issued BEGIN. Zero
+    // means unlimited; a stricter parent bound must survive every callback.
+    // DO retains the original three statements without selecting extra rows.
+    await client.query(`DO $$ BEGIN PERFORM set_config('lock_timeout',
+      CASE WHEN current_setting('lock_timeout') = '0'
+        OR current_setting('lock_timeout')::interval > interval '2 seconds'
+      THEN '2s' ELSE current_setting('lock_timeout') END, true); END $$`);
+    await client.query(`DO $$ BEGIN PERFORM set_config('statement_timeout',
+      CASE WHEN current_setting('statement_timeout') = '0'
+        OR current_setting('statement_timeout')::interval > interval '5 seconds'
+      THEN '5s' ELSE current_setting('statement_timeout') END, true); END $$`);
+    // The idle lease starts afresh after each proof query and exceeds the
+    // five-second Source transaction unless the parent requires less.
+    await client.query(`DO $$ BEGIN PERFORM set_config('idle_in_transaction_session_timeout',
+      CASE WHEN current_setting('idle_in_transaction_session_timeout') = '0'
+        OR current_setting('idle_in_transaction_session_timeout')::interval > interval '15 seconds'
+      THEN '15s' ELSE current_setting('idle_in_transaction_session_timeout') END, true); END $$`);
     const recovery = (await client.query<{ open: boolean; generation: string }>(
       'SELECT open, generation FROM access.recovery_fence WHERE id = true FOR SHARE')).rows[0];
     if (!recovery?.open) throw new AdmissionUnavailable('Access is held for recovery');

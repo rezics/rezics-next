@@ -1,6 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
+import { withAccessClient } from './topology-control.ts';
 import type { VerifiedPrincipal } from './admission.ts';
-import { accessClient, inExplicitTransaction, withAccessClient } from './topology-control.ts';
 import { RealmAdminConflict, RealmAdminDenied, RealmAdminInvalid, RealmAdminLimit,
   RealmAdminStale, RealmAdminUnavailable } from '../realm-admin/contract.ts';
 
@@ -16,37 +16,30 @@ export interface RealmManager extends RealmActor { grant: string; grantGeneratio
 export async function realmTransaction<T>(pool: Pool, realm: string | null, write: boolean,
   run: (client: PoolClient) => Promise<T>): Promise<T> {
   if (realm !== null && !realmIdPattern.test(realm)) throw new RealmAdminInvalid('Invalid Realm');
-  const borrowed = accessClient(pool);
-  return withAccessClient(pool, async client => {
-    const ownsTransaction = !borrowed || !await inExplicitTransaction(client);
-    try {
-      if (ownsTransaction) await client.query('BEGIN');
-      if (ownsTransaction) await client.query("SET LOCAL lock_timeout = '2s'");
-      // statement_timeout rides the recovery fence this transaction already reads.
-      // A separate round trip would put the public roster over its request cap.
-      if (!(await client.query(`SELECT ${ownsTransaction ? "set_config('statement_timeout', '5s', true)" : '1'}
-        FROM access.recovery_fence WHERE id AND open FOR SHARE`)).rowCount) {
-        throw new RealmAdminUnavailable('Access recovery is in progress');
-      }
-      if (realm && !(await client.query(`SELECT 1 FROM access.scope_gate WHERE id = $1
-        AND open AND dispatch_open FOR ${write ? 'UPDATE' : 'SHARE'}`, [`governance:realm:${realm}`])).rowCount) {
-        throw new RealmAdminDenied('Realm is unavailable');
-      }
-      const result = await run(client);
-      if (ownsTransaction) await client.query('COMMIT');
-      return result;
-    } catch (error) {
-      if (ownsTransaction) await client.query('ROLLBACK').catch(() => {});
-      if (error instanceof RealmAdminDenied || error instanceof RealmAdminInvalid || error instanceof RealmAdminStale
-        || error instanceof RealmAdminConflict || error instanceof RealmAdminLimit || error instanceof RealmAdminUnavailable) throw error;
-      if ((error as { code?: string }).code === '23505') throw new RealmAdminConflict('The command conflicts with an existing record');
-      throw new RealmAdminUnavailable('Realm operation is unavailable');
+  const client = await pool.connect().catch(() => { throw new RealmAdminUnavailable('Access is unavailable'); });
+  try {
+    await client.query('BEGIN');
+    await client.query("SET LOCAL lock_timeout = '2s'");
+    // statement_timeout rides the recovery fence this transaction already reads.
+    // A separate round trip would put the public roster over its request cap.
+    if (!(await client.query(`SELECT set_config('statement_timeout', '5s', true)
+      FROM access.recovery_fence WHERE id AND open FOR SHARE`)).rowCount) {
+      throw new RealmAdminUnavailable('Access recovery is in progress');
     }
-  }, borrowed).catch(error => {
+    if (realm && !(await client.query(`SELECT 1 FROM access.scope_gate WHERE id = $1
+      AND open AND dispatch_open FOR ${write ? 'UPDATE' : 'SHARE'}`, [`governance:realm:${realm}`])).rowCount) {
+      throw new RealmAdminDenied('Realm is unavailable');
+    }
+    const result = await withAccessClient(pool, run, client);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
     if (error instanceof RealmAdminDenied || error instanceof RealmAdminInvalid || error instanceof RealmAdminStale
       || error instanceof RealmAdminConflict || error instanceof RealmAdminLimit || error instanceof RealmAdminUnavailable) throw error;
-    throw new RealmAdminUnavailable('Access is unavailable');
-  });
+    if ((error as { code?: string }).code === '23505') throw new RealmAdminConflict('The command conflicts with an existing record');
+    throw new RealmAdminUnavailable('Realm operation is unavailable');
+  } finally { client.release(); }
 }
 
 export async function realmActor(client: PoolClient, principal: VerifiedPrincipal, actor: string, action: string): Promise<RealmActor> {

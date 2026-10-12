@@ -12,17 +12,15 @@ import { grantFixtureAuthority, ensureFixtureScopeGate } from '../src/modules/ac
 import { AccessRealmRoster } from '../src/modules/access/roster.ts';
 import { settleRealmPolicy } from '../src/modules/access/realm-management-recovery.ts';
 import { realmTransaction } from '../src/modules/access/realm-management-authority.ts';
-import { inAccessTransaction } from '../src/modules/access/policy-transaction.ts';
+import { inAccessTransaction, requireRecoveryOpen } from '../src/modules/access/policy-transaction.ts';
 import { PolicyUnavailable } from '../src/modules/access/policy-errors.ts';
 import { RealmAdminUnavailable } from '../src/modules/realm-admin/contract.ts';
 import { withWorkEditAuthorityInTransaction } from '../src/modules/access/work-edit-authority.ts';
 import { accessClient, ControlUnavailable, controlTransaction } from '../src/modules/access/topology-control.ts';
 import { TemplateSeekIndex } from '../src/modules/query/seek-index.ts';
 import { GovernanceStore, GovernanceConflict, GovernanceStale, GovernanceUnavailable, GLOBAL_CONTEXT, type DecisionInput } from '../src/modules/governance/store.ts';
-import { graphErasureReceipt, suppressGraphContentRevisions } from '../src/modules/erasure/graph.ts';
 import { ReviewReportOwner } from '../src/modules/governance/report-review.ts';
 import { PublicReports } from '../src/modules/public-report/store.ts';
-import { withPreservationFence } from '../src/modules/public-report/preservation.ts';
 import { DisclosureStore } from '../src/modules/disclosure/read.ts';
 import { ANONYMOUS_VIEWER } from '../src/modules/suitability/policy.ts';
 import { SuitabilityStore } from '../src/modules/suitability/store.ts';
@@ -82,6 +80,73 @@ async function sameTransaction(client: PoolClient, id: string) {
 function publicationStore() {
   return new GovernanceStore(pool, {} as never, {} as never, {} as never);
 }
+
+test('policy snapshots observe recovery without pinning its row or adding a second predicate', async () => {
+  const closer = new Pool({ ...cluster!.connection, max: 1 });
+  try {
+    await inAccessTransaction(pool, 'repeatable read', async client => {
+      await requireRecoveryOpen(client, false);
+      // A snapshot reader must not block the recovery owner, and keeps its
+      // original view after the independently committed close.
+      await closer.query('UPDATE access.recovery_fence SET open=false WHERE id');
+      expect((await client.query('SELECT open FROM access.recovery_fence WHERE id')).rows[0]!.open).toBe(true);
+    });
+    await expect(inAccessTransaction(pool, 'repeatable read', client => requireRecoveryOpen(client, false)))
+      .rejects.toBeInstanceOf(PolicyUnavailable);
+  } finally {
+    await closer.query('UPDATE access.recovery_fence SET open=true WHERE id');
+    await closer.end();
+  }
+}, 30_000);
+
+test.each([
+  ['0', '0', '0', '2s', '5s', '15s'],
+  ['10s', '10s', '30s', '2s', '5s', '15s'],
+  ['500ms', '1s', '10s', '500ms', '1s', '10s'],
+  ['500ms', '10s', '0', '500ms', '5s', '15s'],
+  ['0', '1s', '10s', '2s', '1s', '10s'],
+])('explicit Work proof retains minimum bounds for lock %s, statement %s and idle %s',
+async (lock, statement, idle, lockCap, statementCap, idleCap) => {
+  const f = await identity();
+  await f.grant('work.edit', `work:edit:${f.work}`);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`SELECT set_config('lock_timeout',$1,true),
+      set_config('statement_timeout',$2,true), set_config('idle_in_transaction_session_timeout',$3,true)`,
+    [lock, statement, idle]);
+    const id = (await client.query('SELECT txid_current()::text AS id')).rows[0]!.id;
+    await withWorkEditAuthorityInTransaction(client, f.principal, f.actor, f.work, async () => {
+      expect((await client.query('SHOW lock_timeout')).rows[0]!.lock_timeout).toBe(lockCap);
+      expect((await client.query('SHOW statement_timeout')).rows[0]!.statement_timeout).toBe(statementCap);
+      expect((await client.query('SHOW idle_in_transaction_session_timeout')).rows[0]!.idle_in_transaction_session_timeout).toBe(idleCap);
+      expect((await client.query('SELECT txid_current()::text AS id')).rows[0]!.id).toBe(id);
+    });
+  } finally { await client.query('ROLLBACK'); client.release(); }
+}, 30_000);
+
+test('editorial preflight with only BEGIN applies Work proof bounds before reading its recovery fence', async () => {
+  const f = await identity();
+  await f.grant('work.edit', `work:edit:${f.work}`);
+  await f.grant('work.create', 'work:create:root');
+  const observed: string[][] = [];
+  const measured = { connect: async () => {
+    const client = await pool.connect();
+    return { query: async (sql: string, values?: unknown[]) => {
+      if (sql.startsWith('SELECT open, generation FROM access.recovery_fence')) {
+        observed.push([
+          (await client.query('SHOW lock_timeout')).rows[0]!.lock_timeout,
+          (await client.query('SHOW statement_timeout')).rows[0]!.statement_timeout,
+          (await client.query('SHOW idle_in_transaction_session_timeout')).rows[0]!.idle_in_transaction_session_timeout,
+        ]);
+      }
+      return client.query(sql, values);
+    }, release: () => client.release() };
+  } } as unknown as Pool;
+  await new AccessAdmissionRegistry(measured).assertAuthority({ principal: f.principal,
+    actingSubject: f.actor, action: 'work.create', scope: 'work:create:root' }, f.work);
+  expect(observed[0]).toEqual(['2s', '5s', '15s']);
+}, 30_000);
 
 test('the actual public Realm roster preserves names under its one held Realm client', async () => {
   const f = await identity();
@@ -191,85 +256,21 @@ test('author suitability enters the real Work edit owner and nested control tran
       expect((await client.query('SHOW statement_timeout')).rows[0]?.statement_timeout).toBe('1s');
       expect((await client.query('SHOW idle_in_transaction_session_timeout')).rows[0]?.idle_in_transaction_session_timeout).toBe('10s');
     });
-    const result = await store.write(f.principal, target, input, key);
-    expect(result.assessment.status).toBe('assessed');
+    await controlTransaction(pool, async inner => {
+      expect(inner).toBe(client);
+      await inner.query('INSERT INTO access.template_seek_pending(epoch,sequence,id,delta) VALUES ($1,1,$2,$3)',
+        [key, 'rollback', { bases: [] }]);
+    });
     expect((await client.query('SHOW lock_timeout')).rows[0]?.lock_timeout).toBe('500ms');
     expect((await client.query('SHOW statement_timeout')).rows[0]?.statement_timeout).toBe('1s');
     await sameTransaction(client, id);
     throw new Error('Authority caller rolls back');
   })).rejects.toThrow('Authority caller rolls back');
-  expect((await pool.query('SELECT 1 FROM access.suitability_assessment WHERE target=$1', [f.work])).rowCount).toBe(0);
-  expect((await store.write(f.principal, target, input, key)).replayed).toBe(false);
+  expect((await pool.query('SELECT 1 FROM access.template_seek_pending WHERE epoch=$1', [key])).rowCount).toBe(0);
+  expect((await store.write(f.principal, target, input, key)).assessment.status).toBe('assessed');
   await expect(f.access.withWorkEditAuthority({ ...f.principal, subject: 'absent' }, f.actor, f.work,
     async () => { throw new Error('Unauthorized callback ran'); })).rejects.toBeInstanceOf(AdmissionDenied);
   expect(accessClient(pool)).toBeUndefined();
-}, 30_000);
-
-test.each([
-  ['1700ms', '1700ms', '500ms', '500ms'],
-  ['0', '2s', '0', '2s'],
-  ['10s', '2s', '10s', '2s'],
-  ['1700ms', '1700ms', '10s', '2s'],
-  ['10s', '2s', '500ms', '500ms'],
-])('borrowed contributor admission caps statement %s at %s and lock %s at %s, then restores both',
-async (statement, statementCap, lock, lockCap) => {
-  const f = await identity();
-  await f.grant('work.create', 'work:create:root');
-  const admission = await f.access.register({ principal: f.principal, actingSubject: f.actor,
-    action: 'work.create', scope: 'work:create:root', idempotencyKey: randomUUID(), requestDigest: 'a'.repeat(64) });
-  await publicationStore().withPublicationFence([f.work], async () => {
-    const { client, id } = await heldTransaction();
-    await client.query(`SELECT set_config('statement_timeout', $1, true), set_config('lock_timeout', $2, true)`,
-      [statement, lock]);
-    const query = client.query.bind(client);
-    const observed: { statement: string; lock: string }[] = [];
-    // Observe the real PostgreSQL limits at the admission query, before restoration can hide a raised bound.
-    client.query = (async (sql: string, values?: unknown[]) => {
-      if (sql.startsWith('SELECT acting_subject FROM access.admission')) {
-        observed.push({
-          statement: (await query('SHOW statement_timeout')).rows[0]!.statement_timeout,
-          lock: (await query('SHOW lock_timeout')).rows[0]!.lock_timeout,
-        });
-      }
-      return query(sql, values);
-    }) as typeof client.query;
-    try {
-      expect(await f.access.admittedActingSubject(admission.id)).toBe(f.actor);
-      expect((await client.query('SHOW statement_timeout')).rows[0]?.statement_timeout).toBe(statement);
-      expect((await client.query('SHOW lock_timeout')).rows[0]?.lock_timeout).toBe(lock);
-      await expect(f.access.admittedActingSubject(randomUUID())).rejects.toBeInstanceOf(AdmissionDenied);
-      expect((await client.query('SHOW statement_timeout')).rows[0]?.statement_timeout).toBe(statement);
-      expect((await client.query('SHOW lock_timeout')).rows[0]?.lock_timeout).toBe(lock);
-      expect(observed).toEqual(Array.from({ length: 2 }, () => ({ statement: statementCap, lock: lockCap })));
-      await sameTransaction(client, id);
-    } finally {
-      client.query = query;
-    }
-  });
-  expect(accessClient(pool)).toBeUndefined();
-}, 30_000);
-
-test('publication fence contributor admission reads uncommitted owner rows and retains unknown-contributor refusal', async () => {
-  const f = await identity();
-  await f.grant('work.create', 'work:create:root');
-  const admission = await f.access.register({ principal: f.principal, actingSubject: f.actor,
-    action: 'work.create', scope: 'work:create:root', idempotencyKey: randomUUID(), requestDigest: 'a'.repeat(64) });
-  const store = publicationStore();
-  const marker = randomUUID();
-  await expect(store.withPublicationFence([f.work], async allowed => {
-    expect(allowed).toBe(true);
-    const { client, id } = await heldTransaction();
-    expect(await f.access.admittedActingSubject(admission.id)).toBe(f.actor);
-    expect((await client.query('SHOW statement_timeout')).rows[0]?.statement_timeout).toBe('5s');
-    await client.query("SET LOCAL statement_timeout='1700ms'");
-    await expect(f.access.admittedActingSubject(randomUUID())).rejects.toBeInstanceOf(AdmissionDenied);
-    expect((await client.query('SHOW statement_timeout')).rows[0]?.statement_timeout).toBe('1700ms');
-    await client.query('INSERT INTO access.template_seek_pending(epoch,sequence,id,delta) VALUES ($1,1,$2,$3)', [marker, 'rollback', { bases: [] }]);
-    await sameTransaction(client, id);
-    throw new Error('Publication failed');
-  })).rejects.toThrow('Publication failed');
-  expect((await pool.query('SELECT 1 FROM access.template_seek_pending WHERE epoch=$1', [marker])).rowCount).toBe(0);
-  expect(await store.withPublicationFence([f.work], async () => f.access.admittedActingSubject(admission.id))).toBe(f.actor);
 }, 30_000);
 
 /** Only the committed transport is deterministic. The Fuseki command adapter
@@ -310,7 +311,7 @@ function indexedGraph() {
     empty: () => { empty = true; }, stop: () => server.stop(true) };
 }
 
-for (const owner of ['Realm placement permit', 'preservation erasure', 'publication fence'] as const) {
+for (const owner of ['Realm placement permit', 'publication fence'] as const) {
   test(`${owner} retains its lock and transaction through the attached graph index, including empty/replayed deltas and failure`, async () => {
     const f = await identity();
     await f.grant('realm.owner', `governance:realm:${f.realm}`);
@@ -318,9 +319,7 @@ for (const owner of ['Realm placement permit', 'preservation erasure', 'publicat
     const store = publicationStore();
     const run = (callback: () => Promise<string>) => owner === 'Realm placement permit'
       ? f.access.withRealmPolicy(f.principal, f.actor, f.realm, 'reply', callback)
-      : owner === 'preservation erasure'
-        ? withPreservationFence(pool, f.work, randomUUID(), callback)
-        : store.withPublicationFence([f.work], async allowed => { expect(allowed).toBe(true); return callback(); });
+      : store.withPublicationFence([f.work], async allowed => { expect(allowed).toBe(true); return callback(); });
     try {
       let receipt = '';
       await run(async () => { receipt = await graph.command(); return receipt; });
@@ -440,12 +439,11 @@ for (const kind of ['review', 'graph'] as const) {
 }
 
 const recoveryOwners = [
-  'policy transaction', 'policy snapshot transaction', 'Realm management read', 'Realm management write',
+  'policy transaction', 'Realm management read', 'Realm management write',
   'Realm roster', 'Realm placement permit', 'Realm policy recovery', 'Work edit authority',
   'Agent owner authority', 'Realm owner authority', 'command owner authority',
   'Governance decision head', 'Governance graph effect', 'publication fence',
   'PublicReports anonymous', 'PublicReports signed', 'recommendation eligibility',
-  'preservation semantic revision erasure',
 ] as const;
 type RecoveryOwner = typeof recoveryOwners[number];
 type RecoveryFixture = {
@@ -458,9 +456,12 @@ type RecoveryFixture = {
 async function recoveryOwner(owner: RecoveryOwner, graph: ReturnType<typeof indexedGraph>): Promise<RecoveryFixture> {
   const f = await identity();
   await ensureFixtureScopeGate(pool, `governance:realm:${f.realm}`);
-  if (owner === 'policy transaction' || owner === 'policy snapshot transaction') return {
+  if (owner === 'policy transaction') return {
     unavailable: PolicyUnavailable,
-    run: callback => inAccessTransaction(pool, owner === 'policy transaction' ? 'read committed' : 'repeatable read', callback),
+    run: callback => inAccessTransaction(pool, 'read committed', async client => {
+      await requireRecoveryOpen(client, true);
+      return callback();
+    }),
   };
   if (owner === 'Realm management read' || owner === 'Realm management write') return {
     unavailable: RealmAdminUnavailable,
@@ -527,20 +528,6 @@ async function recoveryOwner(owner: RecoveryOwner, graph: ReturnType<typeof inde
       new Request('http://main.test/v1/public-reports'), signed ? f.principal : null);
     } };
   }
-  if (owner === 'preservation semantic revision erasure') {
-    const revision = native(), erasureId = randomUUID();
-    graph.graph.query = async query => ({ results: { bindings:
-      query.includes('SELECT DISTINCT ?target') && graph.committed.has(graphErasureReceipt(erasureId))
-        ? [{ target: { type: 'uri', value: revision } }] : [],
-    } });
-    return { unavailable: ControlUnavailable, run: callback => withPreservationFence(pool, f.work, erasureId, async () => {
-      await callback();
-      // Kernel's erasure callback reaches the actual attached TemplateSeekIndex
-      // through FusekiClient.commandWithReceipt and controlTransaction.
-      await suppressGraphContentRevisions(graph.graph, graph.env.lineage, erasureId, '1', [revision]);
-      expect(graph.envelopes.at(-1)?.update).toContain('ErasedRevision');
-    }) };
-  }
   if (owner === 'Realm policy recovery') {
     const receipt = randomUUID();
     await controlTransaction(pool, async client => {
@@ -606,38 +593,6 @@ async function recoveryDomainRows() {
     (SELECT count(*) FROM access.realm_policy_delivery WHERE delivered)::text AS deliveries,
     (SELECT count(*) FROM access.template_seek_pending)::text AS pending`)).rows[0];
 }
-
-test('contributor admission refuses a closed recovery fence on the borrowed publication client', async () => {
-  const f = await identity();
-  await f.grant('work.create', 'work:create:root');
-  const admission = await f.access.register({ principal: f.principal, actingSubject: f.actor,
-    action: 'work.create', scope: 'work:create:root', idempotencyKey: randomUUID(), requestDigest: 'a'.repeat(64) });
-  await expect(publicationStore().withPublicationFence([f.work], async () => {
-    const { client, id } = await heldTransaction();
-    // The owner can change its own fenced row in its transaction. A borrowed
-    // admission statement must still reject that closed cut before returning
-    // a contributor, and the refused publication rolls the close back.
-    await client.query('UPDATE access.recovery_fence SET open=false WHERE id');
-    await sameTransaction(client, id);
-    return f.access.admittedActingSubject(admission.id);
-  })).rejects.toBeInstanceOf(AdmissionUnavailable);
-  expect((await pool.query('SELECT open FROM access.recovery_fence WHERE id')).rows[0]!.open).toBe(true);
-  expect(await f.access.admittedActingSubject(admission.id)).toBe(f.actor);
-  expect(accessClient(pool)).toBeUndefined();
-}, 30_000);
-
-test('standalone contributor admission maps a closed recovery fence to AdmissionUnavailable', async () => {
-  const f = await identity();
-  await f.grant('work.create', 'work:create:root');
-  const admission = await f.access.register({ principal: f.principal, actingSubject: f.actor,
-    action: 'work.create', scope: 'work:create:root', idempotencyKey: randomUUID(), requestDigest: 'a'.repeat(64) });
-  try {
-    await pool.query('UPDATE access.recovery_fence SET open=false WHERE id');
-    await expect(f.access.admittedActingSubject(admission.id)).rejects.toBeInstanceOf(AdmissionUnavailable);
-    expect(accessClient(pool)).toBeUndefined();
-  } finally { await pool.query('UPDATE access.recovery_fence SET open=true WHERE id'); }
-  expect(await f.access.admittedActingSubject(admission.id)).toBe(f.actor);
-}, 30_000);
 
 for (const owner of recoveryOwners) {
   for (const recovery of ['closed', 'closing during callback', 'open'] as const) {

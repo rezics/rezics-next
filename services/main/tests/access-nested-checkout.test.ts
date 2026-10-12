@@ -9,10 +9,6 @@ import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/su
 import { boundedPool, NestedPoolCheckoutError, nestedPoolCheckoutMode, setNestedPoolCheckoutMode } from '../src/infrastructure/pg-pool.ts';
 import type { FusekiClient, TemplateIndexDelta, TemplateIndexKey } from '../src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry, AdmissionUnavailable, type VerifiedPrincipal } from '../src/modules/access/admission.ts';
-import { readReferenceDisclosure } from '../src/modules/access/semantic-disclosure.ts';
-import { PolicyUnavailable } from '../src/modules/access/policy-errors.ts';
-import { inAccessTransaction } from '../src/modules/access/policy-transaction.ts';
-import { realmTransaction } from '../src/modules/access/realm-management-authority.ts';
 import { GovernanceRules, realmRulesRef } from '../src/modules/governance/rules.ts';
 import { GovernanceUnavailable } from '../src/modules/governance/store.ts';
 import { AccountAssertionDenied } from '../src/modules/account/verify-assertion.ts';
@@ -59,39 +55,7 @@ beforeAll(async () => {
   admission = new AccessAdmissionRegistry(pool);
 }, 120_000);
 
-test('Alias-held semantic batches and private Realm proofs borrow the parent transaction and rollback', async () => {
-  const aliases = new AliasRegistry(pool);
-  const graph = { query: async () => ({ results: { bindings: [] } }) };
-  expect(await readReferenceDisclosure({ pool, graph }, principal, actor, [semantic])).toEqual(new Set([semantic]));
-  expect(await admission.realmReadProof(principal, actor, realm)).toBeNull();
-  await expect(aliases.withRead(async client => {
-    await client.query('BEGIN');
-    const id = (await client.query('SELECT txid_current()::text AS id')).rows[0]!.id;
-    await grantFixtureAuthority(client, { scope: `governance:realm:${realm}`, requireDispatch: true,
-      representations: [{ principalId, actor, action: 'realm.owner', lifetime: 'infinity' }],
-      grant: { actor, action: 'realm.owner', lifetime: 'infinity' } });
-    try {
-      expect(await readReferenceDisclosure({ pool, graph }, principal, actor, [semantic])).toEqual(new Set([semantic]));
-      expect(await readReferenceDisclosure({ pool, graph }, absent, actor, [semantic])).toEqual(new Set());
-      await client.query("SET LOCAL lock_timeout='500ms'");
-      await client.query("SET LOCAL statement_timeout='1s'");
-      expect(await admission.realmReadProof(principal, actor, realm)).toBeString();
-      expect(await admission.realmReadProof(absent, actor, realm)).toBeNull();
-      await realmTransaction(pool, realm, false, async inner => expect(inner).toBe(client));
-      expect((await client.query('SHOW lock_timeout')).rows[0]?.lock_timeout).toBe('500ms');
-      expect((await client.query('SHOW statement_timeout')).rows[0]?.statement_timeout).toBe('1s');
-      expect((await client.query('SELECT txid_current()::text AS id')).rows[0]!.id).toBe(id);
-      await client.query('UPDATE access.recovery_fence SET open=false WHERE id');
-      await expect(readReferenceDisclosure({ pool, graph }, principal, actor, [semantic])).rejects.toBeInstanceOf(PolicyUnavailable);
-      await expect(admission.realmReadProof(principal, actor, realm)).rejects.toBeInstanceOf(AdmissionUnavailable);
-      // A denied borrowed child leaves the parent's transaction usable.
-      expect((await client.query('SELECT txid_current()::text AS id')).rows[0]!.id).toBe(id);
-      throw new Error('Alias caller rolls back');
-    } finally { await client.query('ROLLBACK'); }
-  })).rejects.toThrow('Alias caller rolls back');
-  expect(await admission.realmReadProof(principal, actor, realm)).toBeNull();
-  await admission.assertRecoveryOpen();
-}, 30_000);
+
 
 test('Alias-held WorkRead identity, recovery, Rules and count/admin leaves observe uncommitted parent state', async () => {
   const aliases = new AliasRegistry(pool);
@@ -139,25 +103,7 @@ test('Alias-held WorkRead identity, recovery, Rules and count/admin leaves obser
   expect((await admission.publicRealmCount(realm)).value).toBe(0);
 }, 30_000);
 
-test('a borrowed policy snapshot refuses weaker isolation without ending its parent transaction', async () => {
-  await controlTransaction(pool, async client => {
-    const id = (await client.query('SELECT txid_current()::text AS id')).rows[0]!.id;
-    await expect(inAccessTransaction(pool, 'repeatable read', async () => 'unreachable')).rejects.toBeInstanceOf(PolicyUnavailable);
-    expect((await client.query('SELECT txid_current()::text AS id')).rows[0]!.id).toBe(id);
-    expect((await client.query('SHOW transaction_isolation')).rows[0]?.transaction_isolation).toBe('read committed');
-  });
-  await new AliasRegistry(pool).withRead(async client => {
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
-    try {
-      const id = (await client.query('SELECT txid_current()::text AS id')).rows[0]!.id;
-      await inAccessTransaction(pool, 'repeatable read', async inner => {
-        expect(inner).toBe(client);
-        expect((await inner.query('SELECT txid_current()::text AS id')).rows[0]!.id).toBe(id);
-      });
-      expect((await client.query('SELECT txid_current()::text AS id')).rows[0]!.id).toBe(id);
-    } finally { await client.query('ROLLBACK'); }
-  });
-}, 30_000);
+
 
 afterAll(async () => {
   await other?.end();

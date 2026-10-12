@@ -41,7 +41,7 @@ import { checkEditorialAdmission, registerEditorialAdmission, withCommandOwnerAu
 import { platformAdministratorAction, platformAdministratorTargetAllowed, platformAdministratorProof,
   savedPlatformAdministratorProof, savePlatformAdministratorProof,
   platformAdministratorProofCurrent } from './platform-administrator.ts';
-import { accessClient,withAccessClient,inExplicitTransaction,publishAccessHoldingBehindRecoveryFence,controlTransaction,requirePrincipal,requireMandate,ControlConflict,ControlDenied,ControlUnavailable } from './topology-control.ts';
+import { accessClient,withAccessClient,controlTransaction,requirePrincipal,requireMandate,ControlConflict,ControlDenied,ControlUnavailable } from './topology-control.ts';
 import { realmTransaction,realmManager } from './realm-management-authority.ts';
 import { RealmAdminDenied,RealmAdminUnavailable } from '../realm-admin/contract.ts';
 import { realmRatingProof, savedRealmRatingProof, saveRealmRatingProof, ratingConfigurationAction } from './realm-roles-rating.ts';
@@ -1053,18 +1053,13 @@ export class AccessAdmissionRegistry {
     const borrowed = accessClient(this.pool);
     return withAccessClient(this.pool, async client => {
       try {
-        if (!borrowed) {
-          await client.query('BEGIN');
-          await client.query("SET LOCAL lock_timeout = '2s'");
-          await client.query("SET LOCAL statement_timeout = '5s'");
-        }
+        if (!borrowed) await client.query('BEGIN');
         const probe = { ...request, idempotencyKey: `authority:${Bun.randomUUIDv7()}`, requestDigest: '0'.repeat(64) };
-        const result = await publishAccessHoldingBehindRecoveryFence(this.pool, client,
-          () => withCommandOwnerAuthority(client, probe, this.baselineGraph, async () => {
-            try { await this.registerRequest(probe, client, true); }
-            catch (error) { if (!(error instanceof AuthorityChecked)) throw error; }
-            return operation(client);
-          }), () => new AdmissionUnavailable('Access is held for recovery'));
+        const result = await withCommandOwnerAuthority(client, probe, this.baselineGraph, async () => {
+          try { await this.registerRequest(probe, client, true); }
+          catch (error) { if (!(error instanceof AuthorityChecked)) throw error; }
+          return operation(client);
+        });
         if (!borrowed) await client.query('COMMIT');
         return result;
       } catch (error) { if (!borrowed) await rollback(client); throw error; }
@@ -2005,52 +2000,26 @@ export class AccessAdmissionRegistry {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(admissionId)) {
       throw new AdmissionDenied('unknown admission');
     }
-    const borrowed = accessClient(this.pool);
-    let connected = false;
-    return withAccessClient(this.pool, async client => {
-      connected = true;
-      const ownsTransaction = !borrowed || !await inExplicitTransaction(client);
-      let parentTimeouts: { statement: string; lock: string } | undefined;
-      try {
-        if (ownsTransaction) {
-          await client.query('BEGIN');
-          await client.query("SET LOCAL lock_timeout = '2s'");
-          await client.query("SET LOCAL statement_timeout = '2s'");
-        } else {
-          parentTimeouts = {
-            statement: (await client.query<{ statement_timeout: string }>('SHOW statement_timeout')).rows[0]!.statement_timeout,
-            lock: (await client.query<{ lock_timeout: string }>('SHOW lock_timeout')).rows[0]!.lock_timeout,
-          };
-          // Zero is unlimited; a borrowed statement may only tighten its owner's bounds.
-          await client.query(`SELECT
-            set_config('statement_timeout', CASE WHEN $1 = '0' OR $1::interval > interval '2 seconds' THEN '2s' ELSE $1 END, true),
-            set_config('lock_timeout', CASE WHEN $2 = '0' OR $2::interval > interval '2 seconds' THEN '2s' ELSE $2 END, true)`,
-          [parentTimeouts.statement, parentTimeouts.lock]);
-        }
-        const result = await publishAccessHoldingBehindRecoveryFence(this.pool, client,
-          held => held.query<{ acting_subject: unknown }>(
-            'SELECT acting_subject FROM access.admission WHERE id = $1::uuid LIMIT 1', [admissionId]),
-          () => new AdmissionUnavailable('Access is held for recovery'));
-        if (ownsTransaction) await client.query('COMMIT');
-        const subject = result.rows[0]?.acting_subject;
-        if (result.rows.length !== 1 || typeof subject !== 'string') {
-          throw new AdmissionDenied('unknown admission');
-        }
-        return subject;
-      } catch (error) {
-        if (ownsTransaction) await rollback(client);
-        if (error instanceof AdmissionDenied || error instanceof AdmissionUnavailable) throw error;
-        throw admissionError(error);
-      } finally {
-        if (parentTimeouts) await client.query(`SELECT
-          set_config('statement_timeout', $1, true), set_config('lock_timeout', $2, true)`,
-        [parentTimeouts.statement, parentTimeouts.lock]).catch(() => {});
+    const client = await admissionClient(this.pool);
+    try {
+      await client.query('BEGIN');
+      await client.query("SET LOCAL lock_timeout = '2s'");
+      await client.query("SET LOCAL statement_timeout = '2s'");
+      const result = await client.query<{ acting_subject: unknown }>(
+        'SELECT acting_subject FROM access.admission WHERE id = $1::uuid LIMIT 1', [admissionId]);
+      await client.query('COMMIT');
+      const subject = result.rows[0]?.acting_subject;
+      if (result.rows.length !== 1 || typeof subject !== 'string') {
+        throw new AdmissionDenied('unknown admission');
       }
-    }, borrowed).catch(error => {
-      if (!connected) throw new AdmissionUnavailable('Access admission store could not be reached');
+      return subject;
+    } catch (error) {
+      await rollback(client);
       if (error instanceof AdmissionDenied || error instanceof AdmissionUnavailable) throw error;
       throw admissionError(error);
-    });
+    } finally {
+      client.release();
+    }
   }
 
   async listUnsealedPrincipal(principalId: string, limit = 100): Promise<RegisteredAdmission[]> {
