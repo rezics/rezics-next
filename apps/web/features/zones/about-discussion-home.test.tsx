@@ -3,6 +3,7 @@ import { fromPlainText } from '@rezics/document';
 import { direction } from '@rezics/main/language';
 import { cloneElement, createElement, isValidElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import * as navigation from 'next/navigation';
 import type { RealmView } from '../realm/realm-page.tsx';
 import type { ZonePresentationRead } from '../realm/types.ts';
 import { messages } from '../realm/messages.ts';
@@ -21,6 +22,7 @@ void mock.module('next/headers', () => ({
   headers: async () => new Headers(),
 }));
 void mock.module('next/navigation', () => ({
+  ...navigation,
   usePathname: () => `/en/z/${zone}`,
   useParams: () => ({ locale: 'en' }),
   useSearchParams: () => new URLSearchParams(),
