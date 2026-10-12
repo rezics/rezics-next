@@ -26,11 +26,13 @@ const { GovernanceRules } = await import('../src/modules/governance/rules.ts');
 const { GovernanceStore } = await import('../src/modules/governance/store.ts');
 const { AccessRealmManagement } = await import('../src/modules/access/realm-management.ts');
 const { workRead } = await import('../src/modules/work/read-session.ts');
+const { readRealmThreads } = await import('../src/modules/realm-reply/thread-read.ts');
 const { bestKey } = await import('../src/modules/feed/ranking.ts');
 const { GRAPHS, iri } = await import('../src/modules/work/activate.ts');
 const { grantFixtureAuthority } = await import('../src/modules/access/fixture-authority.ts');
 const { realmTopWindow } = await import('./g-1034-fixture.ts');
-const { REALM_RANK_COST, realmRankSeek } = await import('../src/modules/rankings/realm-threads.ts');
+const { REALM_RANK_COST, RealmRankingsIncomplete, realmRankSeek } =
+  await import('../src/modules/rankings/realm-threads.ts');
 const {
   explainUnavailableCorpus,
   readRealmRankingCorpus,
@@ -403,26 +405,88 @@ try {
       { key, realm: targetRealm },
     );
   const opening = corpus.identity.opening;
-  await timeRealmRankingStage('header-setup', async () => {
-    // A newly-created Realm with no placed reply is empty under every order,
-    // even when its ranking index has not caught up yet.
-    const emptyRealm = (
-      await api.command<{ realm: string }>('g1034:empty-realm', {
-        method: 'POST',
-        path: '/v1/spaces',
-        body: {
-          profile: 'space-realm-v1',
-          name: 'Unranked',
-          capabilities: ['realm'],
-          actingSubject: actor,
+  await timeRealmRankingStage(
+    'pending-public-projection',
+    async () => {
+      const pendingRealm = (
+        await api.command<{ realm: string }>('ranking-public-projection:realm', {
+          method: 'POST',
+          path: '/v1/spaces',
+          body: {
+            profile: 'space-realm-v1',
+            name: 'Pending public ranking',
+            capabilities: ['realm'],
+            actingSubject: actor,
+          },
+        })
+      ).realm;
+      for (const [scope, action] of [
+        [`review:decide:${pendingRealm}`, 'review.decide'],
+        [`reply:place:${pendingRealm}`, 'reply.place'],
+      ] as const)
+        await grant(scope, action);
+      const projected = await post('ranking-public-projection:projected', undefined, pendingRealm);
+      const request = (sort: 'best' | 'top') =>
+        new Request(
+          `http://main.local/v1/realms/${pendingRealm.slice(-36)}/threads?sort=${sort}&window=all&limit=2`,
+        );
+      const assertCompletePage = async (sort: 'best' | 'top', replies: string[]) => {
+        const response = await app.handle(request(sort));
+        assert.equal(response.status, 200, await response.clone().text());
+        const page = (await response.json()) as {
+          items: { reply: string }[];
+          nextCursor: string | null;
+        };
+        assert.deepEqual(page.items.map((item) => item.reply).sort(), [...replies].sort());
+        assert.equal(page.nextCursor, null);
+      };
+      await project();
+      for (const sort of ['best', 'top'] as const)
+        await assertCompletePage(sort, [projected.reply]);
+      const pending = await post('ranking-public-projection:pending', undefined, pendingRealm);
+      // Launch's admission fix will serve the last complete cut without pending
+      // replies (kernel's gated-reads rule); that assertion must still reject a partial ranking.
+      for (const sort of ['best', 'top'] as const) {
+        const query: Parameters<typeof readRealmThreads>[2] = { sort, window: 'all', limit: 2 };
+        await assert.rejects(
+          () =>
+            workRead(home.deps, request(sort), query, (session) =>
+              readRealmThreads(session, pendingRealm, query),
+            ),
+          RealmRankingsIncomplete,
+        );
+        const response = await app.handle(request(sort));
+        assert.equal(
+          response.status,
+          503,
+          'A pending public projection must never return a partial ranking',
+        );
+        assert.match(response.headers.get('content-type') ?? '', /^application\/problem\+json/);
+        assert.deepEqual(await response.json(), {
+          type: 'https://rezics.com/problems/work_read_unavailable',
+          title: 'Work read is unavailable',
+          status: 503,
+          code: 'work_read_unavailable',
+        });
+      }
+      await project();
+      for (const sort of ['best', 'top'] as const)
+        await assertCompletePage(sort, [projected.reply, pending.reply]);
+      evidence.push({
+        pendingPublicProjection: {
+          realm: pendingRealm,
+          projectedReply: projected.reply,
+          pendingReply: pending.reply,
+          orders: ['best', 'top'],
+          refusal: 'RealmRankingsIncomplete',
+          status: 503,
+          recoveredReplies: [projected.reply, pending.reply],
         },
-      })
-    ).realm;
-    const emptyPage = await app.handle(
-      new Request(`http://main.local/v1/realms/${emptyRealm.slice(-36)}/threads?sort=top&limit=2`),
-    );
-    assert.equal(emptyPage.status, 200);
-    assert.deepEqual(((await emptyPage.json()) as { items: unknown[] }).items, []);
+      });
+    },
+    { threads: 100, target: restored.target },
+  );
+  await timeRealmRankingStage('header-setup', async () => {
     const allRules = Array.from({ length: 12 }, (_, index) => ({
       id: `rule-${index}`,
       title: { original: 'en', labels: { en: `Rule ${index}` } },
