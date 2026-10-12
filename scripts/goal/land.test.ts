@@ -6,6 +6,9 @@ import { describe, expect, test } from 'bun:test';
 import { blocksLanding, findingsFromText, handoffResult, land, REVIEW_LENSES, reviewBranch, reviewEngine } from './land.ts';
 import { parseBrief, validateBrief, type Ledger, type Task } from './goalctl.ts';
 
+// A refused review pass is run again after a wait; the tests do not wait.
+process.env.GOAL_REVIEW_RETRY_MS = '1';
+
 function repo(options: { result?: string; auto?: boolean; files?: Record<string, string>; paths?: string[] } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'goal-land-'));
   const git = (cwd: string, ...args: string[]) => {
@@ -85,7 +88,9 @@ ${drift}
 const child = Bun.spawn(['bun', 'test', ...args.slice(2)], { stdout: 'inherit', stderr: 'inherit' });
 process.exit(await child.exited);
 `);
-  for (const binary of ['codex', 'task']) chmodSync(join(dir, '.temp/bin', binary), 0o755);
+  // The last try of a refused review pass runs on the other account: the same stand-in, never the real CLI.
+  writeFileSync(join(dir, '.temp/bin/codex-1'), readFileSync(join(dir, '.temp/bin/codex')));
+  for (const binary of ['codex', 'codex-1', 'task']) chmodSync(join(dir, '.temp/bin', binary), 0o755);
   const log = join(dir, '.temp/reviewer.log');
   const run = (command = 'land', overrides: NodeJS.ProcessEnv = {}) => {
     const env: NodeJS.ProcessEnv = { ...process.env, GOAL_ID: 'alpha', REVIEW_LOG: log, LEDGER_PATH: ledgerPath,
@@ -283,6 +288,34 @@ cat "${reply}" > "$out"
     return { answer: (findings: unknown[]) => writeFileSync(reply, JSON.stringify({ findings })),
       cleanup: () => { process.env.PATH = path; rmSync(bin, { recursive: true, force: true }); } };
   }
+
+  test('a review pass the service refuses is run again, last on the other account', async () => {
+    const r = repo();
+    const bin = mkdtempSync(join(tmpdir(), 'goal-review-bin-'));
+    const path = process.env.PATH;
+    try {
+      // `codex` always refuses; `codex-1` answers. Each records that it ran.
+      const calls = join(bin, 'calls.log');
+      writeFileSync(join(bin, 'codex'), `#!/bin/sh\ncat > /dev/null\necho codex >> "${calls}"\necho "ERROR: Selected model is at capacity." >&2\nexit 1\n`);
+      writeFileSync(join(bin, 'codex-1'), `#!/bin/sh
+out=""; prev=""
+for arg in "$@"; do [ "$prev" = "--output-last-message" ] && out="$arg"; prev="$arg"; done
+cat > /dev/null
+echo codex-1 >> "${calls}"
+echo '{"findings":[]}' > "$out"
+`);
+      for (const name of ['codex', 'codex-1']) chmodSync(join(bin, name), 0o755);
+      process.env.PATH = `${bin}:${path}`;
+      const directory = join(r.runDir, 'review-1000-first');
+      expect(await reviewBranch({ directory, worktree: r.worktree, brief: 'brief', handoff: 'RESULT: done',
+        base: r.base, head: r.git(r.worktree, 'rev-parse', 'HEAD') }, 'codex')).toEqual([]);
+      const ran = readFileSync(calls, 'utf8').trim().split('\n');
+      expect(ran.filter(name => name === 'codex')).toHaveLength(2 * REVIEW_LENSES.length);
+      expect(ran.filter(name => name === 'codex-1')).toHaveLength(REVIEW_LENSES.length);
+      // The refused tries stay in the pass's log.
+      expect(readFileSync(join(directory, REVIEW_LENSES[0].name, 'stderr.log'), 'utf8').match(/at capacity/g)).toHaveLength(2);
+    } finally { process.env.PATH = path; rmSync(bin, { recursive: true, force: true }); r.cleanup(); }
+  }, 30_000);
 
   test('what blocks a landing is decided from severity and origin', () => {
     expect(blocksLanding({ text: 'x', severity: 'P2', origin: 'first' })).toBe(true);

@@ -68,9 +68,10 @@ export function findingsFromText(text: string): unknown {
   return JSON.parse(trimmed.slice(start, end + 1));
 }
 
-function runReviewer(program: string, args: string[], request: LandReview, prompt: string): Promise<void> {
-  const stdout = openSync(join(request.directory, 'stdout.log'), 'w');
-  const stderr = openSync(join(request.directory, 'stderr.log'), 'w');
+function runReviewer(program: string, args: string[], request: LandReview, prompt: string, again = false): Promise<void> {
+  // A pass that is run again keeps the output of the try that failed.
+  const stdout = openSync(join(request.directory, 'stdout.log'), again ? 'a' : 'w');
+  const stderr = openSync(join(request.directory, 'stderr.log'), again ? 'a' : 'w');
   const child = spawn(program, args, { cwd: request.worktree, stdio: ['pipe', stdout, stderr] });
   const exited = new Promise<number | null>((resolve, reject) => {
     child.once('error', reject);
@@ -243,6 +244,12 @@ const FINDINGS_SCHEMA = { type: 'object', additionalProperties: false, required:
       severity: { type: 'string', enum: ['P1', 'P2', 'P3'] },
       origin: { type: 'string', enum: ['first', 'earlier', 'fix', 'old'] } } } } } };
 
+/** Waits before a refused pass runs again; `GOAL_REVIEW_RETRY_MS` overrides them (tests use 1). */
+function reviewRetryDelayMs(attempt: number, env: NodeJS.ProcessEnv = process.env): number {
+  const override = Number(env.GOAL_REVIEW_RETRY_MS);
+  return Number.isSafeInteger(override) && override >= 0 ? override : [15_000, 45_000][attempt] ?? 45_000;
+}
+
 async function reviewPass(request: LandReview, engine: ReviewEngine, prompt: string): Promise<ReviewFinding[]> {
   mkdirSync(request.directory, { recursive: true });
   const schema = join(request.directory, 'schema.json');
@@ -271,8 +278,21 @@ async function reviewPass(request: LandReview, engine: ReviewEngine, prompt: str
     writeFileSync(output, JSON.stringify(result));
   } else {
     writeFileSync(join(request.directory, 'prompt.md'), prompt);
-    await runReviewer(engine, ['exec', '-m', 'gpt-6.1-sol', '-c', 'model_reasoning_effort=high',
-      '-s', 'read-only', '--output-schema', schema, '--output-last-message', output, '-'], request, prompt);
+    // The service refuses a request now and then ("Selected model is at capacity" stopped a landing on
+    // 2026-10-12), and one refused pass of several must not cost the whole review: the same account is
+    // tried again, then the other one. A reviewer needs no MCP server; an unreachable one only adds errors.
+    const accounts: ReviewEngine[] = [engine, engine, engine === 'codex' ? 'codex-1' : 'codex'];
+    for (const [attempt, account] of accounts.entries()) {
+      try {
+        await runReviewer(account, ['exec', '-m', 'gpt-6.1-sol', '-c', 'model_reasoning_effort=high',
+          '-s', 'read-only', '-c', 'mcp_servers={}', '--output-schema', schema, '--output-last-message', output, '-'], request, prompt, attempt > 0);
+        break;
+      } catch (error) {
+        if (attempt === accounts.length - 1) throw error;
+        console.log(`review pass failed on ${account} (try ${attempt + 1} of ${accounts.length}): ${String(error)}`);
+        await new Promise(resolve => setTimeout(resolve, reviewRetryDelayMs(attempt)));
+      }
+    }
     result = JSON.parse(readFileSync(output, 'utf8'));
   }
   const items = result && typeof result === 'object' && 'findings' in result && Array.isArray(result.findings)
