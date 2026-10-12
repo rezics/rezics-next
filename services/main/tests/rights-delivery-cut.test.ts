@@ -34,6 +34,8 @@ async function fixture() {
     expectedHead: null, model: 'content-shape-v1', sourceRevision: null,
     provenance: { kind: 'admitted-public-domain-v1', rightsAssessmentId: head.assessmentId },
     serializedJson: JSON.stringify({ body: text }) });
+  if (!saved.revisionId) throw new Error('Delivery fixture draft was not saved');
+  const revisionId = saved.revisionId;
   const target = { resourceId: work.work, rights };
   const moveRights = async (outcome: 'supported' | 'not_supported' = 'supported') => {
     head = await rights.assess(authority.principal, { ...input, outcome,
@@ -61,14 +63,14 @@ async function fixture() {
       const cut = await withDeliveryCut(target, async () => {
       attempts++;
       const response = await member.send('GET',
-        `/v1/content-revisions/${saved.revisionId}?actingSubject=${encodeURIComponent(member.actor)}`);
+        `/v1/content-revisions/${revisionId}?actingSubject=${encodeURIComponent(member.actor)}`);
       if (response.status !== 200) return response;
       const published = await stack.fuseki.query(`# final-publication-delivery
         ASK { GRAPH ${iri(GRAPHS.current)} {
         ${iri(work.work)} a <https://schema.org/CreativeWork> } }`);
       if (published.boolean !== true) return problem(404, 'revision_unavailable', 'Revision is unavailable');
       await stack.access.assertRecoveryOpen();
-      const erased = await graphErasedContentRevisions(stack.fuseki, [saved.revisionId]);
+      const erased = await graphErasedContentRevisions(stack.fuseki, [revisionId]);
       await stack.access.assertRecoveryOpen();
       return erased.has(saved.revisionId)
         ? problem(404, 'revision_unavailable', 'Revision is unavailable') : response;
@@ -77,7 +79,7 @@ async function fixture() {
       : problem(503, 'delivery_cut_unavailable', 'Delivery is unavailable; retry', { 'retry-after': '1' });
     } finally { interceptor.mockRestore(); }
   };
-  return { target, text, saved, hold, moveRights, deliver, attempts: () => attempts };
+  return { target, text, revisionId, hold, moveRights, deliver, attempts: () => attempts };
 }
 
 async function withheld(response: Response, text: string) {
@@ -115,7 +117,7 @@ test('graph erasure during the final query is caught by the existing erasure che
   const before = await f.target.rights.deliveryCutSnapshot(f.target.resourceId);
   await withheld(await f.deliver(async () => {
     await suppressGraphContentRevisions(stack.fuseki, stack.env.lineage,
-      randomUUID(), '1', [f.saved.revisionId]);
+      randomUUID(), '1', [f.revisionId]);
   }), f.text);
   expect(await f.target.rights.deliveryCutSnapshot(f.target.resourceId)).toEqual(before);
   expect(f.attempts()).toBe(1);
@@ -186,9 +188,10 @@ test('token reads cost one indexed statement per store per snapshot, with and wi
         && query.includes('FROM access.governance_preservation_delivery_head'));
       expect(contentReads).toHaveLength(moving ? 4 : 2);
       expect(accessReads).toHaveLength(moving ? 4 : 2);
-      for (const [query, parameters] of [...contentReads, ...accessReads]) {
+      for (const [query, actualParameters] of [...contentReads, ...accessReads]) {
         expect(query).not.toMatch(/\b(COUNT|SUM|ORDER BY)\b/i);
-        expect(parameters).toEqual([f.target.resourceId]);
+        const parameters = [f.target.resourceId];
+        expect(actualParameters).toEqual(parameters);
         const client = await (query.includes('AS assessment_head') ? stack.contentPool : stack.accessPool).connect();
         try {
           await client.query('BEGIN');
