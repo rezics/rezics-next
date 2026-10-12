@@ -1154,7 +1154,7 @@ export async function createRetainedErasureRestoreScenario() {
         sequence: event.native_sequence }).not.toEqual({ streamScope: event.relay_scope,
         dataEpoch: event.relay_data_epoch, sequence: event.relay_sequence });
       const report = await readErasure(relay, entry.erasureId);
-      expect(report).toMatchObject({ erasureEpoch: entry.erasureEpoch, stage: 'inventory_complete',
+      expect(report).toMatchObject({ erasureEpoch: entry.erasureEpoch, stage: 'reconciling',
         suppression: 'suppressed', destruction: 'retained',
         targets: [{ kind: 'content_revision', ref: revisionId }] });
       expect((await access.query<{ count: string }>(
