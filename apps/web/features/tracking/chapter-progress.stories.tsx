@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { PageContainer } from '../shell/page.tsx';
 import { ChapterProgress } from './chapter-progress.tsx';
 import type { EpisodeProgress } from './episode-api.ts';
-import type { ChapterStanding, MediaApi, PositionPage } from './media-api.ts';
+import { chapterCompletionOf, type ChapterStanding, type MediaApi, type PositionPage } from './media-api.ts';
 import type { Place } from './media.ts';
 import { copyOf } from './messages.ts';
 
@@ -22,19 +22,26 @@ function memoryChapters(read: string[] = [], stale = false, failRead = false): M
     const index = places.reduce((found, item, at) => rows.get(item.occurrence)?.completed ? at : found, -1);
     if (index < 0) return { last: null, next: places[0] ?? null, caughtUp: false, opened: null };
     const next = places[index + 1] ?? null;
-    return { last: places[index] ?? null, next, caughtUp: next === null, opened: null };
+    return { last: places[index] ?? null, next, caughtUp: false, opened: null };
   };
   const page = (cursor?: string): PositionPage => cursor
-    ? { items: places.slice(4), next: null }
-    : { items: places.slice(0, 4), next: 'more' };
-  return {
+    ? { items: places.slice(4), next: null, complete: true }
+    : { items: places.slice(0, 4), next: 'more', complete: false };
+  const api: MediaApi = {
     types: async () => ({ ok: true, data: ['https://schema.org/BookSeries'] }),
     volumes: async () => ({ ok: true, data: [] }),
     chapters: async () => ({ ok: true, data: null }),
     routes: async () => ({ ok: true, data: { items: [], next: null } }),
-    standing: async () => ({ ok: true, data: standing() }),
+    standing: async work => {
+      const read = standing();
+      if (!read.last || read.next) return { ok: true, data: read };
+      const coverage = await chapterCompletionOf(api, work);
+      return coverage.ok ? { ok: true, data: { ...read, caughtUp: coverage.data } } : coverage;
+    },
     positions: async (_work, cursor) => ({ ok: true, data: page(cursor) }),
-    completions: async () => ({ ok: true, data: { occurrences: [], next: null, complete: true } }),
+    completions: async () => ({ ok: true, data: {
+      occurrences: [...rows].filter(([, progress]) => progress.completed).map(([id]) => id), next: null, complete: true,
+    } }),
     progress: async part => failRead
       ? { ok: false, failure: 'unavailable' }
       : { ok: true, data: rows.get(part.occurrence) ?? { completed: false, position: null, version: 0 } },
@@ -52,6 +59,7 @@ function memoryChapters(read: string[] = [], stale = false, failRead = false): M
     workStanding: async () => ({ ok: true, data: { standing: 'not-started', version: 0 } }),
     markWork: async () => ({ ok: true, data: { standing: 'not-started', version: 1 } }),
   };
+  return api;
 }
 
 function Sheet({ api }: { api: MediaApi }) {
@@ -123,5 +131,56 @@ export const ReadFailed: Story = {
     await userEvent.click(view.getByRole('button', { name: 'Volume 1, chapter 1' }));
     await view.findByText('Couldn’t save. Try again.');
     await expect(view.queryByText('Not read')).toBeNull();
+  },
+};
+
+export const SparseFinalChapter: Story = {
+  args: { api: memoryChapters([occurrence(1, 1), occurrence(2, 4)]) },
+  async play({ canvasElement }) {
+    const view = within(canvasElement);
+    await view.findByText('Last read: Volume 2, chapter 4');
+    await expect(canvasElement.querySelector('[data-caught-up]')).toBeNull();
+    await expect(canvasElement.querySelector('[data-next]')).toBeNull();
+    await expect(view.getByRole('button', { name: 'Show more' })).toBeVisible();
+  },
+};
+
+export const SparseMiddleChapter: Story = {
+  args: { api: memoryChapters([occurrence(1, 1), occurrence(2, 2)]) },
+  async play({ canvasElement }) {
+    const view = within(canvasElement);
+    await view.findByText('Last read: Volume 2, chapter 2');
+    await expect(view.getByText('Continue from Volume 2, chapter 3')).toBeVisible();
+    await expect(canvasElement.querySelector('[data-caught-up]')).toBeNull();
+  },
+};
+
+export const UnmarkEarlierChapter: Story = {
+  args: { api: memoryChapters(places.map(item => item.occurrence)) },
+  async play({ canvasElement }) {
+    const view = within(canvasElement);
+    await view.findByText(copyOf('en').allChaptersRead);
+    await userEvent.click(view.getByRole('button', { name: 'Volume 1, chapter 2' }));
+    await userEvent.click(await view.findByRole('button', { name: 'Mark not read' }));
+    await view.findByRole('button', { name: /^Mark read$/ });
+    await expect(view.getByText('Last read: Volume 2, chapter 4')).toBeVisible();
+    await waitFor(() => expect(canvasElement.querySelector('[data-caught-up]')).toBeNull());
+  },
+};
+
+export const UnknownChapterCoverage: Story = {
+  args: { api: (() => {
+    const api = memoryChapters(places.map(item => item.occurrence));
+    const positions = api.positions;
+    api.positions = async (work, cursor) => {
+      const read = await positions(work, cursor);
+      return read.ok ? { ok: true, data: { ...read.data, complete: false } } : read;
+    };
+    return api;
+  })() },
+  async play({ canvasElement }) {
+    const view = within(canvasElement);
+    await view.findByText('Last read: Volume 2, chapter 4');
+    await expect(canvasElement.querySelector('[data-caught-up]')).toBeNull();
   },
 };
