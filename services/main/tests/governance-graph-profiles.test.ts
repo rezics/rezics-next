@@ -195,7 +195,6 @@ for (const kind of semanticOwnerTypes) {
     const first = selectCommandProfile(manifest, [kind], path =>
       routes[0]?.when.filter(condition => condition.path === path).map(condition => condition.value) ?? []);
     const f = graph(kind, Object.fromEntries(first?.when.map(condition => [condition.path, condition.value]) ?? []));
-    if (!first) f.target.expectedHead = null;
     const operation = randomUUID();
     const result = await f.effects.apply(operation, 1, f.target);
     if (first) expect(f.commands[0]?.validations).toContainEqual(expect.objectContaining({ profile: first.profile, shape: first.shape }));
@@ -213,11 +212,23 @@ test('a new PRIMARY kind without a registry route remains eligible for Access-on
   try {
     const f = graph(kind), operation = randomUUID();
     expect(selectCommandProfile(manifest, [kind], () => [])).toBeNull();
-    expect(await f.effects.apply(operation, 1, { ...f.target, expectedHead: null }))
+    expect(await f.effects.apply(operation, 1, f.target))
       .toEqual({ receipt: `access:governance-enforcement:${operation}:1` });
     expect(f.commands).toHaveLength(0);
+    expect(f.reads.some(query => query.includes('SELECT ?head'))).toBe(true);
   } finally { (CANONICAL_TYPES as Set<string>).delete(kind); (semanticOwnerTypes as Set<string>).delete(kind); }
 });
+
+for (const head of [native(), '']) {
+  test(`a graph kind without a profile refuses an Access-only receipt when its reviewed head is ${head ? 'moved' : 'missing'}`, async () => {
+    const f = graph(`${RV}Character`);
+    expect(selectCommandProfile(manifest, f.state.kinds, () => [])).toBeNull();
+    f.state.head = head;
+    await expect(f.effects.apply(randomUUID(), 1, f.target)).rejects.toBeInstanceOf(GovernanceStale);
+    expect(f.commands).toHaveLength(0);
+    expect(f.receipts.size).toBe(0);
+  });
+}
 
 test('a non-Realm record becoming a Realm between classification and profile selection is stale', async () => {
   const f = graph(`${RV}Agent`);

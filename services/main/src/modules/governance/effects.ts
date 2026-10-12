@@ -399,10 +399,7 @@ export function ownerModerationEffects(content: ContentModeration, env: WorkActi
       const realm = await validateGraphTarget(target, plan);
       const selected = realm ? null : await graphModerationProfile(env, target);
       if (!realm && !selected) {
-        const result = await accessReceipt(operationId, ordinal, target);
-        if (target.expectedHead !== null)
-          throw new GovernanceUnavailable('Reviewed graph command profile disappeared');
-        return result;
+        return accessReceipt(operationId, ordinal, target);
       }
       if (!target.expectedHead) throw new GovernanceStale('Graph moderation needs an exact owner head');
       const bound = selected ? await graphBindingValidations(env, target.resource, selected) : null;
