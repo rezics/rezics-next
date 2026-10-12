@@ -8,7 +8,7 @@ import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/su
 import type { VerifiedPrincipal } from '../src/modules/access/admission.ts';
 import { grantFixtureAuthority } from '../src/modules/access/fixture-authority.ts';
 import { KnownEffectFailure, type EffectPlan } from '../src/modules/governance/effects.ts';
-import { DECIDE_ACTION, GLOBAL_CONTEXT, GovernanceStale, GovernanceStore, GovernanceUnavailable,
+import { DECIDE_ACTION, GLOBAL_CONTEXT, GovernanceDenied, GovernanceStale, GovernanceStore, GovernanceUnavailable,
   type DecisionInput, type DecisionResult, type DecisionTargetInput, type ReportInput,
 } from '../src/modules/governance/store.ts';
 import { recordCounterNotice } from '../src/modules/rights/counter-notice.ts';
@@ -63,6 +63,8 @@ async function fixture(options: {
   let now = new Date('2026-10-01T14:37:12Z');
   let rejectOwner = false, loseOwnerAck = false, loseAccessAck = false;
   let persistPlan: ((plan: EffectPlan) => EffectPlan) | undefined;
+  let scheduledJurisdiction: { authority_kind: string; authority_scope_id: string; context: string } | undefined;
+  let scheduledBasisReads = 0;
   let rendezvous: (() => Promise<void>) | undefined;
   let ownerCalls = 0;
   const ownerReceipts = new Map<string, string>();
@@ -88,7 +90,13 @@ async function fixture(options: {
             loseAccessAck = false;
             throw new Error('Access acknowledgement lost after owner commit');
           }
-          return Reflect.apply(connection.query, connection, args);
+          const result = await Reflect.apply(connection.query, connection, args);
+          if (scheduledJurisdiction && typeof args[0] === 'string'
+            && args[0].includes('FROM access.rights_counter_notice j JOIN access.governance_case c')) {
+            scheduledBasisReads++;
+            return { ...result, rows: result.rows.map((row: Record<string, unknown>) => ({ ...row, ...scheduledJurisdiction })) };
+          }
+          return result;
         };
         const value = Reflect.get(connection, member);
         return typeof value === 'function' ? value.bind(connection) : value;
@@ -159,6 +167,8 @@ async function fixture(options: {
     rejectOwner() { rejectOwner = true; }, loseOwnerAck() { loseOwnerAck = true; },
     loseAccessAck() { loseAccessAck = true; }, ownerCalls: () => ownerCalls,
     committedOwners: () => ownerReceipts.size, seenPlans,
+    readScheduledJurisdiction(basis: NonNullable<typeof scheduledJurisdiction>) { scheduledJurisdiction = basis; },
+    scheduledBasisReads: () => scheduledBasisReads,
     omitPersistedSource() { persistPlan = plan => {
       const { restorationRestrictionId: _source, ...old } = plan;
       return old;
@@ -534,3 +544,27 @@ test('scheduled eligible Realm restoration uses the original source and current 
   expect(await closureFence(f)).toEqual([{ decision_id: restored.decisionId, state: 'released', fence_epoch: '2' }]);
   expect(f.seenPlans.at(-1)?.restorationRestrictionId).toBe(original.decisionId);
 });
+
+for (const corruption of ['local authority', 'wrong scope', 'nonglobal context'] as const) {
+  test(`scheduled Realm restoration rejects retained ${corruption} despite valid current action authority`, async () => {
+    const f = await fixture({ kind: 'rights_complaint', process: 'dmca_512' });
+    const original = await f.store.decide(f.principal, f.input);
+    const notice = await counterNotice(f, original);
+    f.setClock(notice.notBefore);
+    const scope = corruption === 'wrong scope' ? `governance:resource:${f.realm}` : 'governance:platform';
+    await grantFixtureAuthority(pool, { scope, requireDispatch: true,
+      representations: [{ principalId: f.principalId, actor: f.actor,
+        action: DECIDE_ACTION.rights_complaint, lifetime: 'infinity' }],
+      grant: { actor: f.actor, action: DECIDE_ACTION.rights_complaint, lifetime: 'infinity' } });
+    // Retained legacy jurisdiction is observed at the scheduler's own durable
+    // read boundary; the correct live case and its immutable decisions remain intact.
+    f.readScheduledJurisdiction({ authority_kind: corruption === 'local authority' ? 'resource_owner' : 'platform',
+      authority_scope_id: scope, context: corruption === 'nonglobal context' ? f.realm : GLOBAL_CONTEXT });
+    await expect(f.store.restoreCounterNotice(notice.stepId)).rejects.toBeInstanceOf(GovernanceDenied);
+    expect(f.scheduledBasisReads()).toBe(1);
+    await assertRestricted(f, original);
+    expect(f.ownerCalls()).toBe(1);
+    expect((await pool.query('SELECT 1 FROM access.moderation_decision WHERE case_id=$1',
+      [f.report.caseId])).rowCount).toBe(1);
+  });
+}
