@@ -1,4 +1,4 @@
-import { afterAll, expect, test } from 'bun:test';
+import { afterAll, expect, spyOn, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import sharp from 'sharp';
 import { SourceIntakeStore } from '../../../services/main/src/modules/source/intake.ts';
@@ -206,22 +206,28 @@ test('SOURCE-COVER-READ carries revision-pinned copyright credit through public 
   const use = workRead.cover.use!;
   expect(use).toBeString();
 
-  const summary = await json<{
-    summaries: Array<{ avatar: { kind: string; coverCredit?: unknown } }>;
-    cost: { mediaQueries: number };
-  }>(
-    await f.call('POST', '/v1/resources/summaries', {
-      body: {
-        profile: 'resource-summary-batch-v1',
-        resources: [created.work],
-      },
-    }),
-  );
-  expect(summary.summaries[0]?.avatar).toMatchObject({
-    kind: 'image',
-    coverCredit: expectedCredit,
-  });
-  expect(summary.cost.mediaQueries).toBe(1);
+  const avatarReads = spyOn(f.store, 'avatarRows');
+  try {
+    const summary = await json<{
+      summaries: Array<{ avatar: { kind: string; coverCredit?: unknown } }>;
+      cost: { mediaQueries: number };
+    }>(
+      await f.call('POST', '/v1/resources/summaries', {
+        body: {
+          profile: 'resource-summary-batch-v1',
+          resources: [created.work],
+        },
+      }),
+    );
+    expect(summary.summaries[0]?.avatar).toMatchObject({
+      kind: 'image',
+      coverCredit: expectedCredit,
+    });
+    // The public cost contract hides owner counters. Still prove that actual
+    // avatar hydration is one bounded Media read instead of per-item reads.
+    expect(summary.cost.mediaQueries).toBe(0);
+    expect(avatarReads).toHaveBeenCalledTimes(1);
+  } finally { avatarReads.mockRestore(); }
 
   const quick = await json<{
     items: Array<{ work: string; cover: { kind: string; coverCredit?: unknown } }>;
