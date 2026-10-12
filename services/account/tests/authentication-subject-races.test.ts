@@ -268,7 +268,7 @@ test(`post-provider subject replacement retires issuance with ${retirementLookup
           [token])).rows;
         failuresBeforeCleanup = (await f.pool.query(`SELECT user_id FROM rezics_account_security_event
           WHERE user_id IN ($1, $2) AND action = 'sign_in_failed'
-            AND detail->>'reason' = 'provider_subject_changed' ORDER BY user_id`,
+            AND detail->>'reason' = 'provider_subject_changed' ORDER BY user_id COLLATE "C"`,
         [a.id, b.id])).rows;
         if (retirementLookup === 'pool-exhausted') {
           // Native retirement has committed on the request's held client.
