@@ -2,6 +2,10 @@
 import type { ZoneEditorMessages } from '../messages.ts';
 
 const messages: ZoneEditorMessages = {
+  pageSearchUnavailable: 'ページ候補を読み込めませんでした。検索内容はここに残っています。',
+  pageSearchPartial: '一部のページ候補を読み取れませんでした。もう一度お試しください。',
+  pageSearchDenied: 'ページ候補を利用できません。',
+  pageSearchRefine: 'ほかにも一致するページがあります。名前を詳しく入力して候補を絞り込んでください。',
   collectionLink: 'Collectionのリソースリンク',
   collectionFind: 'Collectionを検索',
   collectionInvalidLink: 'https://rezics.com/id/… のようなCollectionのリソースリンクを入力してください。',

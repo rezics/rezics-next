@@ -2,6 +2,10 @@
 import type { ZoneEditorMessages } from '../messages.ts';
 
 const messages: ZoneEditorMessages = {
+  pageSearchUnavailable: '无法加载页面建议。您的搜索内容仍保留在此处。',
+  pageSearchPartial: '部分页面建议无法读取。请重试。',
+  pageSearchDenied: '您无法访问页面建议。',
+  pageSearchRefine: '还有更多匹配页面。请完善名称以缩小建议范围。',
   collectionLink: 'Collection 资源链接',
   collectionFind: '查找 Collection',
   collectionInvalidLink: '请输入 Collection 资源链接，例如 https://rezics.com/id/…',

@@ -574,13 +574,13 @@ function navigationClient(
       };
     },
     async findPages(query) {
-      return query.toLowerCase().startsWith('ha')
+      return { ok: true, data: { choices: query.toLowerCase().startsWith('ha')
         ? [
             { target: charts, name: 'Harbor charts' },
             { target: tides, name: 'Harbor tides' },
             ...(mode === 'paths' ? [{ target: unsavedMount.target, name: unsavedMount.name }] : []),
           ]
-        : [];
+        : [], hasMore: false } };
     },
   };
 }

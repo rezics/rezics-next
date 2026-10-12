@@ -2,6 +2,10 @@
 import type { ZoneEditorMessages } from '../messages.ts';
 
 const messages: ZoneEditorMessages = {
+  pageSearchUnavailable: '페이지 추천을 불러오지 못했습니다. 검색 내용은 그대로 남아 있습니다.',
+  pageSearchPartial: '일부 페이지 추천을 읽지 못했습니다. 다시 시도하세요.',
+  pageSearchDenied: '페이지 추천을 사용할 수 없습니다.',
+  pageSearchRefine: '일치하는 페이지가 더 있습니다. 이름을 더 구체적으로 입력하여 추천을 좁혀 보세요.',
   collectionLink: 'Collection 리소스 링크',
   collectionFind: 'Collection 찾기',
   collectionInvalidLink: 'https://rezics.com/id/… 형식의 Collection 리소스 링크를 입력하세요.',

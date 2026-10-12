@@ -108,6 +108,56 @@ describe('Collection resource-link lookup', () => {
   });
 });
 
+describe('page suggestion outcomes', () => {
+  const work = iri(910);
+  const item = { work, matchedField: 'title', title: { value: 'Harbor charts' } };
+  function suggestions(answer: Answer | Error) {
+    const queries: unknown[] = [];
+    const main = { v1: { search: { typeahead: { get: async (options: unknown) => {
+      queries.push(options);
+      if (answer instanceof Error) throw answer;
+      return answer;
+    } } } } };
+    return { api: browserZoneNavigation(main as never), queries };
+  }
+
+  test('retains hasMore and the selected Works rather than calling a bounded page complete', async () => {
+    const fake = suggestions({ data: { items: [item], hasMore: true }, error: null });
+    expect(await fake.api.findPages('Harbor', 'en')).toEqual({ ok: true,
+      data: { choices: [{ target: work, name: 'Harbor charts' }], hasMore: true } });
+    expect(fake.queries).toEqual([{ query: { prefix: 'Harbor', language: 'en' } }]);
+  });
+
+  test('a successful empty terminal result remains distinct from failure', async () => {
+    const fake = suggestions({ data: { items: [], hasMore: false }, error: null });
+    expect(await fake.api.findPages('Harbor', 'en')).toEqual({ ok: true, data: { choices: [], hasMore: false } });
+  });
+
+  test.each([
+    { status: 401, failure: 'sign-in' },
+    { status: 403, failure: 'denied' },
+    { status: 503, failure: 'unavailable' },
+  ])('preserves suggestion read refusal ($failure)', async ({ status, failure }) => {
+    const fake = suggestions({ data: null, error: { status, value: {} } });
+    expect(await fake.api.findPages('Harbor', 'en')).toEqual({ ok: false, failure });
+  });
+
+  test('a thrown read remains unavailable', async () => {
+    const fake = suggestions(new Error('Connection lost'));
+    expect(await fake.api.findPages('Harbor', 'en')).toEqual({ ok: false, failure: 'unavailable' });
+  });
+
+  test.each([
+    { items: [item] },
+    { items: [item], hasMore: false, complete: false },
+    { items: [item], hasMore: false, partial: true },
+    { items: [item, { matchedField: 'title', work }], hasMore: false },
+  ])('retains partial source failure instead of showing ready suggestions (%j)', async data => {
+    const fake = suggestions({ data, error: null });
+    expect(await fake.api.findPages('Harbor', 'en')).toEqual({ ok: false, failure: 'partial' });
+  });
+});
+
 describe('complete authorized preview navigation', () => {
   test('an empty saved navigation is a complete inventory', async () => {
     const fake = fakeMain(() => ({ data: page(0, 1, 0), error: null }));

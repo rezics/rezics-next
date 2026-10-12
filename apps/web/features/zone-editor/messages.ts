@@ -10,6 +10,10 @@ import zhHant from './messages/zh-Hant.ts';
 
 // Interface copy for writing a Zone's home page. The page the author writes is theirs, never this catalog.
 const en = {
+  pageSearchUnavailable: 'Page suggestions could not be loaded. Your search is still here.',
+  pageSearchPartial: 'Some page suggestions could not be read. Try again.',
+  pageSearchDenied: 'Page suggestions are not available to you.',
+  pageSearchRefine: 'More pages match. Refine the name to narrow the suggestions.',
   collectionLink: 'Collection resource link',
   collectionFind: 'Find Collection',
   collectionInvalidLink: 'Enter a Collection resource link such as https://rezics.com/id/…',

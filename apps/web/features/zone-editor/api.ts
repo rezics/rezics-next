@@ -259,6 +259,9 @@ function record(value: unknown): Record<string, unknown> | null {
 
 export interface PageChoice { target: string; name: string }
 
+export interface PageSearchData { choices: PageChoice[]; hasMore: boolean }
+export type PageSearchResult = WriteResult<PageSearchData> | { ok: false; failure: 'partial' };
+
 export interface ZoneCollectionLookupClient {
   findCollection(resourceLink: string, actingSubject: string): Promise<WriteResult<PageChoice>>;
 }
@@ -304,7 +307,7 @@ export interface ZoneNavigationClient {
   insertMount(zoneId: string, body: MountBody, key: string): Promise<NavWriteResult | NavWriteFailure>;
   removeMount(zoneId: string, occurrenceId: string, body: { expectedHead: string; actingSubject: string }, key: string): Promise<NavWriteResult | NavWriteFailure>;
   moveMount(navigation: string, body: MoveBody, key: string): Promise<NavWriteResult | NavWriteFailure>;
-  findPages(query: string, locale: string): Promise<PageChoice[]>;
+  findPages(query: string, locale: string): Promise<PageSearchResult>;
 }
 
 export interface MountBody {
@@ -561,24 +564,31 @@ function pagePrefix(value: string): string | null {
   return length >= (isWideText(phrase) ? 1 : 2) ? phrase : null;
 }
 
-async function findZonePages(main: MainClient, query: string, locale: string): Promise<PageChoice[]> {
+async function findZonePages(main: MainClient, query: string, locale: string): Promise<PageSearchResult> {
   const prefix = pagePrefix(query);
-  if (!prefix) return [];
-  try {
-    const { data } = await main.v1.search.typeahead.get({ query: { prefix, language: locale } });
-    const seen = new Set<string>();
-    const pages: PageChoice[] = [];
-    for (const item of data?.items ?? []) {
-      if (item.matchedField !== 'title' || seen.has(item.work)) continue;
-      const name = pageNameOf(item.title);
-      if (!name) continue;
-      seen.add(item.work);
-      pages.push({ target: item.work, name });
-    }
-    return pages;
-  } catch {
-    return [];
+  if (!prefix) return { ok: true, data: { choices: [], hasMore: false } };
+  const answer = await post(() => main.v1.search.typeahead.get({ query: { prefix, language: locale } }));
+  if (!answer.ok) return answer;
+  const row = record(answer.data);
+  if (!Array.isArray(row?.items) || typeof row.hasMore !== 'boolean') {
+    return { ok: false, failure: 'partial' };
   }
+  if (row.complete === false || row.partial === true) return { ok: false, failure: 'partial' };
+  const seen = new Set<string>();
+  const choices: PageChoice[] = [];
+  for (const value of row.items) {
+    const item = record(value);
+    if (!item || typeof item.matchedField !== 'string') return { ok: false, failure: 'partial' };
+    if (item.matchedField !== 'title') continue;
+    const name = pageNameOf(item.title);
+    if (typeof item.work !== 'string' || !iriPattern.test(item.work) || !name) {
+      return { ok: false, failure: 'partial' };
+    }
+    if (seen.has(item.work)) continue;
+    seen.add(item.work);
+    choices.push({ target: item.work, name });
+  }
+  return { ok: true, data: { choices, hasMore: row.hasMore } };
 }
 
 function mountOf(result: WriteResult<unknown>): NavWriteResult | NavWriteFailure {

@@ -2,6 +2,10 @@
 import type { ZoneEditorMessages } from '../messages.ts';
 
 const messages: ZoneEditorMessages = {
+  pageSearchUnavailable: 'No se pudieron cargar las sugerencias de páginas. Tu búsqueda sigue aquí.',
+  pageSearchPartial: 'No se pudieron leer algunas sugerencias de páginas. Inténtalo de nuevo.',
+  pageSearchDenied: 'Las sugerencias de páginas no están disponibles para ti.',
+  pageSearchRefine: 'Hay más páginas que coinciden. Precisa el nombre para reducir las sugerencias.',
   collectionLink: 'Enlace del recurso Collection',
   collectionFind: 'Buscar Collection',
   collectionInvalidLink: 'Introduce un enlace al recurso Collection, como https://rezics.com/id/…',

@@ -12,7 +12,6 @@ import {
   browserZoneNavigation,
   browserZoneTheme,
   commitCommand,
-  pageSearchReady,
   type PageChoice,
   type WriteResult,
   type ZoneAuthoringClient,
@@ -21,6 +20,7 @@ import {
 } from './api.ts';
 import { EditorActions } from './editor-actions.tsx';
 import { CollectionPageLookup } from './collection-page-lookup.tsx';
+import { PageSearchPicker } from './page-search-picker.tsx';
 import { useZoneEditorDraft, useZoneEditorRef, useZoneEditorSessionState } from './draft-provider.tsx';
 import { confirmPublicationReview, readSavedPublicationSelection, reviewedPublicationChoice, stagePublicationReview,
   type PublicationReview } from './publication-review.ts';
@@ -89,12 +89,10 @@ export function ZoneNavigationEditor({
   const [busy, setBusy] = useZoneEditorSessionState<null | 'save' | 'publish' | 'load' | 'continue'>('navigation-busy', null);
   const [intent, setIntent] = useZoneEditorSessionState<null | 'save' | 'publish' | 'load' | 'continue' | 'review'>('navigation-intent', null);
   const [review, setReview] = useZoneEditorSessionState<PublicationReview | null>('navigation-review', null);
-  const [query, setQuery] = useState('');
-  const [choices, setChoices] = useState<PageChoice[]>([]);
-  const [picked, setPicked] = useState<PageChoice | null>(null);
+  const [query, setQuery] = useZoneEditorSessionState('navigation-query', '');
+  const [picked, setPicked] = useZoneEditorSessionState<PageChoice | null>('navigation-picked', null);
   const [paths, setPaths] = useState<Record<string, string>>({});
   const [addNotice, setAddNotice] = useState<string | null>(null);
-  const [searched, setSearched] = useState<string | null>(null);
   const [saveCompleted, setSaveCompleted] = useZoneEditorSessionState('navigation-save-completed', 0);
   const saveSession = useZoneEditorRef<{ choice: NavigationState; progress?: NavigationSaveProgress } | null>(
     'navigation-save-session', null,
@@ -145,28 +143,6 @@ export function ZoneNavigationEditor({
     window.addEventListener('beforeunload', ask);
     return () => window.removeEventListener('beforeunload', ask);
   }, [dirty]);
-
-  useEffect(() => {
-    if (picked && query === picked.name) return;
-    if (!pageSearchReady(query)) {
-      setChoices([]);
-      setSearched(null);
-      return;
-    }
-    let cancel = false;
-    setSearched(null);
-    const handle = setTimeout(() => {
-      void client.current!.findPages(query, locale).then((found) => {
-        if (cancel) return;
-        setChoices(found);
-        setSearched(query);
-      });
-    }, 200);
-    return () => {
-      cancel = true;
-      clearTimeout(handle);
-    };
-  }, [query, picked, locale]);
 
   function track(kind: 'save' | 'publish' | 'load' | 'continue', work: Promise<unknown>) {
     inflight.current += 1;
@@ -440,7 +416,6 @@ export function ZoneNavigationEditor({
     });
     setPicked(null);
     setQuery('');
-    setChoices([]);
   }
 
   function onPath(link: SiteLink, value: string) {
@@ -643,52 +618,12 @@ export function ZoneNavigationEditor({
         <p className="text-pretty text-muted-foreground text-sm">{copy.emptyLinks}</p>
       )}
       <CollectionPageLookup actingSubject={actingSubject} copy={copy} disabled={editingDisabled} signInHref={signInHref}
-        onChoose={choice => { setPicked(choice); setQuery(choice.name); setChoices([]); setAddNotice(null); }} />
+        onChoose={choice => { setPicked(choice); setQuery(choice.name); setAddNotice(null); }} />
       <div className="grid max-w-md gap-2">
-        <label className="grid gap-1 text-sm">
-          <span className="font-medium">{copy.addPage}</span>
-          <input
-            className={fieldClass}
-            value={query}
-            placeholder={copy.addPagePlaceholder}
-            disabled={editingDisabled}
-            onChange={(event) => {
-              setPicked(null);
-              setAddNotice(null);
-              setQuery(event.target.value);
-            }}
-          />
-        </label>
-        {searched === query && pageSearchReady(query) && !picked && choices.length === 0 ? (
-          <p className="text-muted-foreground text-sm">{copy.noPageMatches}</p>
-        ) : null}
-        {choices.length && !picked ? (
-          <ul
-            role="listbox"
-            aria-label={copy.addPage}
-            className="grid rounded-md border border-border/60"
-          >
-            {choices.map((choice) => (
-              <li key={choice.target}>
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={false}
-                  className="w-full px-3 py-2 text-left text-sm hover:bg-accent"
-                  disabled={editingDisabled}
-                  onClick={() => {
-                    setPicked(choice);
-                    setQuery(choice.name);
-                    setChoices([]);
-                    setAddNotice(null);
-                  }}
-                >
-                  {choice.name}
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : null}
+        <PageSearchPicker query={query} picked={picked} locale={locale} copy={copy} disabled={editingDisabled}
+          signInHref={signInHref} api={client.current!}
+          onQueryChange={value => { setPicked(null); setAddNotice(null); setQuery(value); }}
+          onChoose={choice => { setPicked(choice); setQuery(choice.name); setAddNotice(null); }} />
         {addNotice ? <p className="text-destructive text-sm">{addNotice}</p> : null}
         <Button
           variant="secondary"
