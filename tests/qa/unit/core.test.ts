@@ -1,9 +1,10 @@
 import { expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { processRunning } from '../support/process-liveness.ts';
 import { execFileSync } from 'node:child_process';
-import { acquireFullLock, acquireQaSlots, admissionIntervalMs, commandAsync, concurrencyGate, estimatedDurations, expandTestPaths, expectedFusekiModuleVersion,
+import { configuredQaSlots, acquireFullLock, acquireQaSlots, admissionIntervalMs, commandAsync, concurrencyGate, estimatedDurations, expandTestPaths, expectedFusekiModuleVersion,
   isolatedFaultFiles, isolatedIntegrationFiles, isolationCandidates, junitSuites, matchedNoTests, maximumShards,
   mergeJUnit, parseArgs, planShards, planStackProjects,
   artifactRoots, recordedFileDurations, selfManagedFaultAdmission, selfManagedFaultFiles, shardCount, stackPlanBudgetWarning, shardResolved, splitTestArgs,
@@ -823,4 +824,19 @@ test('a run deadline destroys its leased warm stack before releasing the QA slot
     await child.exited;
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('a run without GOAL_QA_SLOTS takes the host slot count from the file beside the slots', () => {
+  const root = mkdtempSync(join(tmpdir(), 'qa-slot-count-'));
+  try {
+    const slots = join(root, 'qa-slots');
+    mkdirSync(slots, { recursive: true });
+    expect(configuredQaSlots(slots, {})).toBe(3);
+    writeFileSync(join(root, 'qa-slot-count'), '8\n');
+    expect(configuredQaSlots(slots, {})).toBe(8);
+    expect(configuredQaSlots(slots, { GOAL_QA_SLOTS: '2' })).toBe(2);
+    writeFileSync(join(root, 'qa-slot-count'), 'many\n');
+    expect(configuredQaSlots(slots, {})).toBe(3);
+    expect(configuredQaSlots(undefined, {})).toBe(3);
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });

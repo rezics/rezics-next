@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { redactCommandOutput } from '../fixture/command-output.ts';
 import {
   acquireFullLock,
-  acquireQaSlots,
+  acquireQaSlots, configuredQaSlots,
   admissionIntervalMs,
   artifactRoots,
   backendTiers,
@@ -159,7 +159,7 @@ if (qaSlotDirectory) process.env.GOAL_QA_WAIT_DIR ??= join(qaSlotDirectory, 'wai
 process.env.GOAL_QA_COMMAND ??= ['bun', ...process.argv.slice(1)].join(' ');
 const heavyQaRun = process.env.GOAL_QA_HEAVY_RUN === '1';
 const stackPool = createQaStackPool({ root, slotDirectory: qaSlotDirectory,
-  slots: /^[1-9]\d*$/.test(process.env.GOAL_QA_SLOTS ?? '') ? Number(process.env.GOAL_QA_SLOTS) : 3 });
+  slots: configuredQaSlots(qaSlotDirectory) });
 
 async function integrationInfrastructureFingerprint(environment: NodeJS.ProcessEnv): Promise<string | undefined> {
   // Schemas and graph seeds are planned from imported code. Whole source trees
@@ -895,7 +895,7 @@ async function runStackTier(tier: StackTier): Promise<void> {
       : shardCount(estimates, budget, maximum);
   // Plan bounded workers without reserving leases for projects still awaiting admission.
   const capacity = heavyQaRun || !qaSlotDirectory ? wanted
-    : Math.min(wanted, /^[1-9]\d*$/.test(process.env.GOAL_QA_SLOTS ?? '') ? Number(process.env.GOAL_QA_SLOTS) : 3);
+    : Math.min(wanted, configuredQaSlots(qaSlotDirectory));
   mkdirSync(join(directory, 'shards'), { recursive: true });
   {
     const prefix = tier === 'integration' ? '' : 'f';

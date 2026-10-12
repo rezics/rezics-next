@@ -1173,6 +1173,21 @@ export interface QaSlotOptions {
 }
 
 // Share goalctl's directory leases. An inherited slot stays the caller's; extra
+/** Ordinary QA runs share this many slots. The program sets the count for the host in `qa-slot-count`
+ * beside the slots; `GOAL_QA_SLOTS` overrides it for one process. A run started without the variable, as
+ * the merge gate and a direct `task test` are, used to see three whatever the host was set to, so those
+ * runs queued for three slots while five stood free. */
+export function configuredQaSlots(directory: string | undefined, env: NodeJS.ProcessEnv = process.env): number {
+  if (/^[1-9]\d*$/.test(env.GOAL_QA_SLOTS ?? '')) return Number(env.GOAL_QA_SLOTS);
+  if (directory) {
+    try {
+      const stored = readFileSync(join(dirname(directory), 'qa-slot-count'), 'utf8').trim();
+      if (/^[1-9]\d*$/.test(stored) && Number.isSafeInteger(Number(stored))) return Number(stored);
+    } catch { /* no host setting */ }
+  }
+  return 3;
+}
+
 // shards take only free slots. A direct run must wait for at least one real lease.
 export async function acquireQaSlots(
   directory: string | undefined,
@@ -1182,7 +1197,7 @@ export async function acquireQaSlots(
   options: QaSlotOptions = {},
 ): Promise<{ count: number; release: () => void }> {
   if (!directory) return { count: wanted, release: () => {} };
-  const total = /^[1-9]\d*$/.test(env.GOAL_QA_SLOTS ?? '') ? Number(env.GOAL_QA_SLOTS) : 3;
+  const total = configuredQaSlots(directory, env);
   const now = options.now ?? Date.now;
   const deadline = options.deadline ?? now() + 3_600_000;
   const sleep = options.sleep ?? (ms => Bun.sleep(ms));
