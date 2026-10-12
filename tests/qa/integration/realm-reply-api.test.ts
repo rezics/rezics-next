@@ -10,6 +10,8 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry, type RegisteredAdmission }
   from '../../../services/main/src/modules/access/admission.ts';
+import { grantFixtureAuthority, type FixtureLifetime } from '../../../services/main/src/modules/access/fixture-authority.ts';
+import { configureDisclosure, DisclosureStore } from '../../../services/main/src/modules/disclosure/read.ts';
 import { RealmReplyContentStore } from '../../../services/main/src/modules/realm-reply/content-store.ts';
 import { RealmReplyStore } from '../../../services/main/src/modules/realm-reply/store.ts';
 import { readMainOutboxEnvelope } from '../../../services/main/src/modules/outbox/relay.ts';
@@ -18,6 +20,7 @@ import { activateMetadataWork, GRAPHS, ID, iri, metadataWorkRequestDigest, RV }
   from '../../../services/main/src/modules/work/activate.ts';
 import { captureContentRecoveryCoverage, graphContentReferences }
   from '../../../services/main/src/modules/work/content-recovery-coverage.ts';
+import { provisionFixtureAuthor } from '../fixtures/authored-work.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const sha = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -49,12 +52,22 @@ test('SUB05/SUB06: exact reviewed revisions place independently in two Realms an
       lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
       objectDirectory: join(state, 'objects') };
     const author = ID + randomUUID();
-    const principal = { issuer: 'https://qa-realm-reply.test', subject: randomUUID() };
+    const principal = { issuer: 'https://qa-realm-reply.test', subject: randomUUID(), emailVerified: true };
     const principalId = randomUUID();
     await accessPool.query('INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1,$2,$3)',
       [principalId, principal.issuer, principal.subject]);
     await accessPool.query('INSERT INTO access.authority_subject (id, kind) VALUES ($1,$2)', [author, 'agent']);
     const access = new AccessAdmissionRegistry(accessPool);
+    access.configureBaseline(env.fuseki);
+    configureDisclosure(env, new DisclosureStore(accessPool));
+    await provisionFixtureAuthor(env, author);
+    const control = await grant(`agent:control:${author}`, 'agent.control', 'infinity');
+    const provision = randomUUID();
+    await accessPool.query(`INSERT INTO access.agent_provision
+      (id, principal_id, idempotency_key, request_digest, agent_id, agent_kind, display_name,
+       principal_epoch, state, graph_data_epoch, graph_sequence, representation_id)
+      VALUES ($1::uuid,$2,$1::text,$3,$4,'person','QA fixture author',0,'active',$5,1,$6)`,
+    [provision, principalId, sha(author), author, env.lineage.dataEpoch, control.representationIds[0]!]);
     const admitted = (scope: string, action: string, requestDigest: string): RegisteredAdmission => ({
       id: randomUUID(), principalId, actingSubject: author, scope, action,
       idempotencyKey: `fixture-${randomUUID()}`, requestDigest, authorityEpoch: '0',
@@ -82,16 +95,21 @@ test('SUB05/SUB06: exact reviewed revisions place independently in two Realms an
       expect(saved.status, JSON.stringify(saved.body)).toBe(201);
       return { revisionId: saved.body.revisionId as string, revisionDigest: saved.body.revisionDigest as string };
     }
-    async function grant(scope: string, action: string) {
-      await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [scope]);
-      await accessPool.query(`INSERT INTO access.representation
-        (id, principal_id, subject_id, action, valid_until)
-        VALUES ($1,$2,$3,$4,now() + interval '1 hour')`,
-      [randomUUID(), principalId, author, action]);
-      await accessPool.query(`INSERT INTO access.permission_grant
-        (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
-        VALUES ($1,$2,$2,$3,$4,now() + interval '1 hour')`,
-      [randomUUID(), author, scope, action]);
+    async function grant(scope: string, action: string, lifetime: FixtureLifetime = '8 hours') {
+      const client = await accessPool.connect();
+      try {
+        await client.query('BEGIN');
+        const authority = await grantFixtureAuthority(client, {
+          scope, requireDispatch: true,
+          representations: [{ principalId, actor: author, action, lifetime }],
+          grant: { actor: author, action, lifetime },
+        });
+        await client.query('COMMIT');
+        return authority;
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally { client.release(); }
     }
     await grant(`reply:create:${work.work}`, 'reply.create');
     await grant(`work:read:${work.work}`, 'work.read');
@@ -100,9 +118,10 @@ test('SUB05/SUB06: exact reviewed revisions place independently in two Realms an
       await grant(`reply:place:${realmId}`, 'reply.place');
     }
     await grant(`content:draft:${reply}`, 'content.draft');
-    const store = new RealmReplyStore(owner, content, access, env);
+    const store = new RealmReplyStore(owner, content, access, env, accessPool);
     const app = createMainApp(env.fuseki, { environment: env, access,
-      account: { verify: async () => principal }, realmReplies: store, content, contentAuthoring: content });
+      account: { verify: async () => ({ ...principal, currentAssertion: async () => principal }) },
+      realmReplies: store, content, contentAuthoring: content });
     async function post(path: string, body: Record<string, unknown>, key = randomUUID()) {
       const response = await app.handle(new Request(`http://main.local${path}`, { method: 'POST',
         headers: { authorization: 'Bearer qa', 'content-type': 'application/json',

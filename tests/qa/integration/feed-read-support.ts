@@ -165,7 +165,7 @@ export async function startHomeStack(label: string, options: {
     contextSelections: new PrivateContextSelections(stack.accessPool),
     platformAccess: new AccessExposure(stack.accessPool), account, feed,
     follows: new FollowsStore(stack.accessPool), feedViewerState: new FeedViewerStateReader(),
-    realmReplies: new RealmReplyStore(new RealmReplyContentStore(stack.contentPool), stack.content, stack.access, stack.env),
+    realmReplies: new RealmReplyStore(new RealmReplyContentStore(stack.contentPool), stack.content, stack.access, stack.env, stack.accessPool),
     realmReplyThreads: new RealmReplyThreadStore(stack.contentPool, stack.accessPool),
     reviews: new ReaderReviews(stack.accessPool), homePersonal: new HomePersonalStore(stack.accessPool),
     savedFilters: new SavedFilterStore(stack.accessPool),

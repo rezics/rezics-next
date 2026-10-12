@@ -103,24 +103,21 @@ export class RealmReplyThreadStore {
   get rankingContent() {
     return this.content;
   }
-  /** Source readiness is checked before and after a window; an incomplete projection is never an empty branch. */
-  async assertThreadProjection(session: WorkReadSession): Promise<void> {
+  /** The published branch remains usable while unrelated work and absent additions
+   * wait. Existing dependencies and owner epochs are checked on both sides of hydration. */
+  async assertThreadProjection(session: WorkReadSession, realm: string, focus: string,
+    population?: string): Promise<void> {
+    if (!native.test(realm) || !native.test(focus)) throw new RealmReplyInvalid('Invalid thread scope');
     // The projector checkpoints the acknowledged Main stream. A graph cut
     // can advance independently and is never a position in that stream.
     const main = requireMainFeedCoverage(await session.deps.relayPosition?.read(), session.position.dataEpoch);
     const source = (await this.content.query<{ data_epoch: string; sequence: string }>(
       'SELECT data_epoch::text,sequence::text FROM content.owner_control WHERE singleton')).rows[0];
     if (!source) throw new WorkReadUnavailable('Thread source is unavailable');
-    const ready = (await this.access.query<{ ready: boolean }>(`SELECT f.open AND
-      c.content_epoch=$2::uuid AND c.content_sequence=$3::bigint AND c.sequence=$4::numeric
-      AND c.after_event='￿'
-      AND NOT EXISTS(SELECT 1 FROM access.feed_item WHERE data_epoch=$1
-        AND kind IN ('reply','discussion') AND NOT realm_thread_indexed LIMIT 1)
-      AND COALESCE((SELECT false FROM access.realm_thread_dirty WHERE data_epoch=$1 AND kind<>'population'
-        ORDER BY kind,resource LIMIT 1),true)
-      AS ready FROM access.recovery_fence f
-      LEFT JOIN access.realm_thread_checkpoint c ON c.data_epoch=$1 WHERE f.id`,
-    [session.position.dataEpoch, source.data_epoch, source.sequence, main.sequence])).rows[0];
+    const ready = (await this.access.query<{ ready: boolean }>(`SELECT ready
+      FROM access.read_realm_thread_scope_cut($1,$5,$6,$2::uuid,$3::bigint,$4::numeric,$7)`,
+    [session.position.dataEpoch, source.data_epoch, source.sequence, main.sequence,
+      realm, focus, population ?? null])).rows[0];
     if (!ready?.ready) throw new WorkReadUnavailable('Realm replies are projecting');
   }
 
@@ -173,11 +170,13 @@ export class RealmReplyThreadStore {
     [epoch, realm, focus])).rows[0] ?? null;
   }
   /** At most one indexed row per explored parent; scores never require a sibling population scan. */
-  async siblingOrderRevisions(epoch: string, realm: string, parents: readonly string[]): Promise<Map<string, string>> {
+  async siblingOrderRevisions(epoch: string, realm: string, parents: readonly string[],
+    sort: 'best' | 'new' | 'top' = 'best'): Promise<Map<string, string>> {
     if (!native.test(realm) || parents.length > REALM_THREAD_COST.replies + 1
       || parents.some(parent => !native.test(parent))) throw new RealmReplyInvalid('Invalid sibling order batch');
     if (!parents.length) return new Map();
-    const rows = await this.access.query<{ reply: string; revision: string }>(`SELECT reply,sibling_rank_revision::text AS revision
+    const revision = sort === 'new' ? 'sibling_population_revision' : 'sibling_rank_revision';
+    const rows = await this.access.query<{ reply: string; revision: string }>(`SELECT reply,${revision}::text AS revision
       FROM access.realm_thread_reference WHERE data_epoch COLLATE "C"=$1 AND realm COLLATE "C"=$2
         AND reply COLLATE "C"=ANY($3::text[])`,
     [epoch, realm, [...parents]]);

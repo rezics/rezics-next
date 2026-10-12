@@ -9,6 +9,7 @@ import {
 } from '../src/modules/rankings/realm-threads.ts';
 import { WorkReadMoved, WorkReadSession } from '../src/modules/work/read-session.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
+import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts';
 
 const epoch = '11111111-1111-4111-8111-111111111111';
 const ownerEpoch = '22222222-2222-4222-8222-222222222222';
@@ -93,7 +94,7 @@ function fixture(options: { contentSequence?: string; moved?: boolean } = {}) {
     },
     content: {},
     realmReplyThreads: { rankingContent: content },
-    relayPosition: { read: async () => ({ dataEpoch: epoch, sequence: '1' }) },
+    relayPosition: { read: async () => ({ streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: epoch, sequence: '1' }) },
   } as unknown as MainWorkDependencies;
   const session = new WorkReadSession(
     deps,

@@ -285,7 +285,6 @@
   "tests/qa/integration/realm-create-intent.test.ts",
   "tests/qa/integration/realm-discussion-pool.test.ts",
   "tests/qa/integration/realm-member-search.test.ts",
-  "tests/qa/integration/realm-reply-api.test.ts",
   "tests/qa/integration/realm-reply-members.test.ts",
   "tests/qa/integration/realm-submission-api.test.ts",
   "tests/qa/integration/realm-submission-targets.test.ts",

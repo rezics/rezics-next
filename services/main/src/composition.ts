@@ -590,7 +590,7 @@ export async function composeMain(input: ComposeMainInput) {
       sourceAdoptions, environment, access),
     readerPreferences: new ReaderVariantPreferenceStore(pool),
     realmRecommendations: new RealmVariantRecommendationStore(pool),
-    realmReplies: new RealmReplyStore(new RealmReplyContentStore(contentPool), content, access, environment),
+    realmReplies: new RealmReplyStore(new RealmReplyContentStore(contentPool), content, access, environment, pool),
     realmReplyThreads: new RealmReplyThreadStore(contentPool, pool),
     maintainers: new WorkMaintainers(pool, environment),
     verification: new VerificationStore(contentPool),
@@ -614,7 +614,7 @@ export async function composeMain(input: ComposeMainInput) {
   libraryImport.setDispatch(request => app.handle(request));
   const savedViewNotifications = new SavedViewNotifications(pool, { environment, account, access, media, content,
     judgments: new AccessJudgments(pool),
-    realmReplies: new RealmReplyStore(new RealmReplyContentStore(contentPool), content, access, environment),
+    realmReplies: new RealmReplyStore(new RealmReplyContentStore(contentPool), content, access, environment, pool),
     governance: governanceServices(pool, contentPool, content, sourceIntake, access, environment) } as MainWorkDependencies,
   notificationStore);
   notificationProducerWorker.setSavedViews(savedViewNotifications);

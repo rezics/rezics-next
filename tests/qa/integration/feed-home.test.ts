@@ -78,7 +78,7 @@ test('G282: follows and home feed use real receipts, relay progress, public read
       return new Map(targets.filter(target => target.work === viewerWork).map(target => [target.activity,
         { status: 'available', ...(viewerNextUnread ? { nextUnread: viewerNextUnread } : {}), shelf: null, progress: null, spoiler: { policy: 'hide-unread', hidden: true } }]));
     } };
-    const realmReplies = new RealmReplyStore(new RealmReplyContentStore(stack.contentPool), stack.content, stack.access, stack.env);
+    const realmReplies = new RealmReplyStore(new RealmReplyContentStore(stack.contentPool), stack.content, stack.access, stack.env, stack.accessPool);
     const realmReplyThreads = new RealmReplyThreadStore(stack.contentPool, stack.accessPool);
     const deps = { environment: stack.env, access: stack.access,
       platformAccess: new AccessExposure(stack.accessPool), account, feed, follows, realmReplies, realmReplyThreads,

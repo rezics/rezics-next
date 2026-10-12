@@ -419,8 +419,7 @@ test('a manager creates a role, assigns it to a member, and sees the public team
   await expect(team.getByRole('link', { name: member.publicName, exact: true })).toBeVisible();
 });
 
-// Epoch-wide admission refuses the newly posted thread read with realm_replies_are_projecting.
-test.fixme('a member opens a thread and nested replies that another person sees after reload', async ({ page, browser }, info) => {
+test('a member opens a thread and nested replies that another person sees after reload', async ({ page, browser }, info) => {
   test.setTimeout(600_000);
   page.setDefaultTimeout(30_000);
   const manager = await managerSession(page);
@@ -470,8 +469,7 @@ test.fixme('a member opens a thread and nested replies that another person sees 
   await expect(page.getByText(nested, { exact: true })).toBeVisible();
 });
 
-// Epoch-wide admission refuses New with RealmRankingsIncomplete after a vote and leaves Best selected.
-test.fixme('Best, Top and New reorder every Realm discussion after a reader votes', async ({ page, browser }, info) => {
+test('Best, Top and New reorder every Realm discussion after a reader votes', async ({ page, browser }, info) => {
   test.setTimeout(600_000);
   page.setDefaultTimeout(30_000);
   const manager = await managerSession(page);

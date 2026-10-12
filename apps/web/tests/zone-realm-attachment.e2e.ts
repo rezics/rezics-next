@@ -427,8 +427,7 @@ test.fixme('two Persons recover and settle concurrent Zone-page discussion posts
   await settledZonePosts(page, browser, info);
 });
 
-// The epoch-wide thread admission gate refuses reopening while reply and ranking projections are incomplete.
-test.fixme('a Zone page reopens its discussion and keeps the thread after Realm withdrawal', async ({ page, browser }, info) => {
+test('a Zone page reopens its discussion and keeps the thread after Realm withdrawal', async ({ page, browser }, info) => {
   test.setTimeout(600_000);
   const { zoneUrl, zoneSpace, realmSpace, about, actingSubject, secondPerson, firstBody, secondBody }
     = await settledZonePosts(page, browser, info);

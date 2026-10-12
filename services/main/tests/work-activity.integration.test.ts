@@ -33,7 +33,7 @@ test('Work activity: reviewed body, public history, pagination, revocation, eras
     const realm = await createRealm('Activity Realm');
     const realmId = realm.realm as string;
     const replyStore = new RealmReplyStore(new RealmReplyContentStore(stack.contentPool),
-      stack.content, stack.access, stack.env);
+      stack.content, stack.access, stack.env, stack.accessPool);
     const app = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access,
       content: stack.content, media: stack.media, realmReplies: replyStore,
       account: { verify: async () => member.principal } });

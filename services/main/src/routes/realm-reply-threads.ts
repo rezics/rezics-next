@@ -64,7 +64,7 @@ export function realmReplyThreadRoutes(work: MainWorkDependencies) {
       detail: { security: [{}, { bearerAuth: [] }] }, response: { 200: realmThreadsPage, ...workReadProblems },
     }, async ({ request, params, query }) => {
       try {
-        return Response.json(await workRead(work, request, query, session => readRealmThreads(session,
+        return Response.json(await workRead(work, request, { ...query, localBasis: true, retainedBasis: true }, session => readRealmThreads(session,
           id(params.realm), query)), { headers });
       } catch (error) { return threadError(error); }
     })
@@ -73,7 +73,7 @@ export function realmReplyThreadRoutes(work: MainWorkDependencies) {
       response: { 200: realmThread, ...workReadProblems },
     }, async ({ request, params, query }) => {
       try {
-        return Response.json(await workRead(work, request, query, session => readRealmThread(session,
+        return Response.json(await workRead(work, request, { ...query, localBasis: true, retainedBasis: true }, session => readRealmThread(session,
           id(params.realm), id(params.reply), query.sort, query.cursor)), { headers });
       } catch (error) { return threadError(error); }
     });

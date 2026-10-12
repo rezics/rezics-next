@@ -4,6 +4,11 @@
 CREATE INDEX realm_thread_scoped_backfill ON access.feed_item(data_epoch,realm,id)
   WHERE kind IN ('reply','discussion') AND NOT realm_thread_indexed;
 
+ALTER TABLE access.realm_thread_dirty DROP CONSTRAINT realm_thread_dirty_kind_check;
+ALTER TABLE access.realm_thread_dirty ADD CHECK(kind IN ('reply','work','realm','parent','population','placement'));
+CREATE INDEX realm_thread_placement_effect ON access.realm_thread_dirty(data_epoch,resource COLLATE "C")
+  WHERE kind='placement';
+
 CREATE FUNCTION access.read_realm_thread_rank_cut(
   _epoch text,_realm text,_sort text,_period text,
   _rank double precision,_time bigint,_placement text,_limit integer,
@@ -38,6 +43,10 @@ BEGIN
           JOIN access.realm_thread_dirty d ON d.data_epoch=r.data_epoch AND d.kind='reply' AND d.resource=r.reply
           WHERE r.data_epoch=$1 AND r.realm=$2 %3$s)
         AND NOT EXISTS(SELECT 1 FROM access.realm_thread_reference r
+          JOIN access.realm_thread_dirty d ON d.data_epoch=r.data_epoch AND d.kind='placement'
+            AND d.resource COLLATE "C">=r.realm||'|'||r.reply AND d.resource COLLATE "C"<=r.realm||'|'||r.reply||'|￿'
+          WHERE r.data_epoch=$1 AND r.realm=$2 %3$s)
+        AND NOT EXISTS(SELECT 1 FROM access.realm_thread_reference r
           JOIN access.realm_thread_dirty d ON d.data_epoch=r.data_epoch AND d.kind='work' AND d.resource=r.work
           WHERE r.data_epoch=$1 AND r.realm=$2 %3$s)
         AND NOT EXISTS(SELECT 1 FROM access.realm_thread_reference r
@@ -58,3 +67,100 @@ BEGIN
     $query$,_order,_sort,_dependency,_population_ready,_population_key)
     USING _epoch,_realm,_period,_rank,_time,_placement,_limit,_content_epoch,_content_sequence,_main_sequence,_population;
 END $$;
+
+-- A command may publish its exact reference before Home receives the relay
+-- activity. That later insert must retain the already settled index delta.
+CREATE FUNCTION access.realm_thread_feed_arrived() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.kind IN ('reply','discussion') THEN
+    NEW.realm_thread_indexed:=EXISTS(SELECT 1 FROM access.realm_thread_reference r
+      WHERE r.data_epoch=NEW.data_epoch AND r.placement=NEW.id);
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER realm_thread_feed_arrived BEFORE INSERT ON access.feed_item
+  FOR EACH ROW EXECUTE FUNCTION access.realm_thread_feed_arrived();
+
+-- Parent propagation belongs to this Realm's placement, whereas a Content
+-- availability change still uses the existing cross-Realm reply/parent jobs.
+CREATE OR REPLACE FUNCTION access.realm_thread_parent_changed() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP='UPDATE' THEN
+    IF (OLD.thread,OLD.active) IS NOT DISTINCT FROM (NEW.thread,NEW.active) THEN RETURN NULL; END IF;
+  END IF;
+  INSERT INTO access.realm_thread_dirty(data_epoch,kind,resource,after_key)
+    SELECT NEW.data_epoch,'placement',NEW.realm||'|'||NEW.reply,'children:'
+    WHERE EXISTS(SELECT 1 FROM access.realm_thread_reference child
+      WHERE child.data_epoch=NEW.data_epoch AND child.realm=NEW.realm AND child.parent=NEW.reply LIMIT 1)
+    ON CONFLICT(data_epoch,kind,resource) DO UPDATE SET after_key=CASE
+      WHEN access.realm_thread_dirty.after_key LIKE 'pending:%' THEN access.realm_thread_dirty.after_key
+      ELSE 'children:' END;
+  RETURN NULL;
+END $$;
+
+-- A thread bookmark can retain a readable placed branch under an inactive
+-- opener. Its admission index therefore covers inactive references as well.
+CREATE INDEX realm_thread_scope ON access.realm_thread_reference(data_epoch,realm,thread,reply);
+
+CREATE FUNCTION access.read_realm_thread_scope_cut(
+  _epoch text,_realm text,_focus text,_content_epoch uuid,_content_sequence bigint,
+  _main_sequence numeric,_population text DEFAULT NULL)
+RETURNS TABLE(ready boolean)
+LANGUAGE sql VOLATILE SET enable_bitmapscan=off SET enable_seqscan=off AS $$
+  WITH fence AS MATERIALIZED (SELECT open FROM access.recovery_fence WHERE id FOR SHARE),
+  focus AS MATERIALIZED (SELECT thread FROM access.realm_thread_reference
+    WHERE data_epoch=_epoch AND realm=_realm AND reply=_focus),
+  dependencies AS MATERIALIZED (SELECT r.reply,r.work,r.parent,r.placement
+    FROM access.realm_thread_reference r WHERE r.data_epoch=_epoch AND r.realm=_realm
+      AND r.thread=(SELECT thread FROM focus)
+      AND (_population IS NULL OR EXISTS(SELECT 1 FROM access.realm_thread_population_admission a
+        WHERE a.data_epoch=_epoch AND a.realm=_realm AND a.population=_population
+          AND a.reply=r.reply AND a.admitted)))
+  SELECT fence.open AND c.content_epoch=_content_epoch
+    AND c.content_sequence<=_content_sequence AND c.sequence<=_main_sequence
+    AND (s.realm IS NOT NULL OR NOT EXISTS(SELECT 1 FROM access.feed_item
+      WHERE data_epoch=_epoch AND realm=_realm AND kind IN ('reply','discussion')
+        AND NOT realm_thread_indexed LIMIT 1))
+    AND (_population IS NULL OR EXISTS(SELECT 1 FROM access.realm_thread_population p
+      WHERE p.data_epoch=_epoch AND p.realm=_realm AND p.population=_population AND p.ready))
+    AND NOT EXISTS(SELECT 1 FROM access.realm_thread_dirty
+      WHERE data_epoch=_epoch AND kind='realm' AND resource=_realm)
+    AND NOT EXISTS(SELECT 1 FROM dependencies r JOIN access.realm_thread_dirty d
+      ON d.data_epoch=_epoch AND d.kind='reply' AND d.resource=r.reply)
+    AND NOT EXISTS(SELECT 1 FROM dependencies r JOIN access.realm_thread_dirty d
+      ON d.data_epoch=_epoch AND d.kind='placement' AND d.resource COLLATE "C">=_realm||'|'||r.reply
+        AND d.resource COLLATE "C"<=_realm||'|'||r.reply||'|￿')
+    AND NOT EXISTS(SELECT 1 FROM dependencies r JOIN access.realm_thread_dirty d
+      ON d.data_epoch=_epoch AND d.kind='work' AND d.resource=r.work)
+    AND NOT EXISTS(SELECT 1 FROM dependencies r JOIN access.realm_thread_dirty d
+      ON d.data_epoch=_epoch AND d.kind='parent' AND d.resource=r.parent)
+    AND NOT EXISTS(SELECT 1 FROM dependencies r JOIN access.feed_item f
+      ON f.data_epoch=_epoch AND f.id=r.placement WHERE NOT f.realm_thread_indexed) AS ready
+  FROM fence LEFT JOIN access.realm_thread_checkpoint c ON c.data_epoch=_epoch
+    LEFT JOIN access.realm_thread_state s ON s.data_epoch=_epoch AND s.realm=_realm;
+$$;
+
+-- New order is insensitive to votes, but a newly published sibling cannot
+-- silently fall before an older walk's saved anchor. Removal keeps the anchor
+-- useful; current placement admission continues to exclude removed material.
+ALTER TABLE access.realm_thread_reference
+  ADD COLUMN sibling_population_revision uuid NOT NULL DEFAULT gen_random_uuid();
+CREATE INDEX realm_reply_sibling_population_revision ON access.realm_thread_reference
+  (data_epoch COLLATE "C",realm COLLATE "C",reply COLLATE "C") INCLUDE(sibling_population_revision);
+
+CREATE FUNCTION access.realm_reply_sibling_population_changed() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.parent IS NULL THEN RETURN NULL; END IF;
+  IF TG_OP='UPDATE' THEN
+    IF OLD.placement IS NOT DISTINCT FROM NEW.placement
+      AND OLD.parent IS NOT DISTINCT FROM NEW.parent
+      AND (OLD.active OR NOT NEW.active) THEN RETURN NULL; END IF;
+  END IF;
+  UPDATE access.realm_thread_reference SET sibling_population_revision=gen_random_uuid(),
+    sibling_rank_revision=gen_random_uuid()
+    WHERE data_epoch=NEW.data_epoch AND realm=NEW.realm AND reply=NEW.parent;
+  RETURN NULL;
+END $$;
+CREATE TRIGGER realm_reply_sibling_population_changed
+  AFTER INSERT OR UPDATE OF placement,parent,active ON access.realm_thread_reference
+  FOR EACH ROW EXECUTE FUNCTION access.realm_reply_sibling_population_changed();

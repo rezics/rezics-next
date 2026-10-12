@@ -9,7 +9,9 @@ import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts
 import { AccessAdmissionRegistry, type RegisteredAdmission } from '../src/modules/access/admission.ts';
 import { RealmRankingsIncomplete, realmRankPage } from '../src/modules/rankings/realm-threads.ts';
 import { RealmReplyStore } from '../src/modules/realm-reply/store.ts';
-import type { RealmReplyContentStore } from '../src/modules/realm-reply/content-store.ts';
+import { RealmReplyStale, RealmReplyUnavailable, type PlacementPreparation,
+  type RealmReplyContentStore } from '../src/modules/realm-reply/content-store.ts';
+import { replyReceiptIri } from '../src/modules/realm-reply/graph.ts';
 import { RealmReplyThreadStore } from '../src/modules/realm-reply/thread-store.ts';
 import { RV, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { WorkReadMoved, WorkReadUnavailable, type WorkReadSession } from '../src/modules/work/read-session.ts';
@@ -150,6 +152,8 @@ test('uninitialized and reset placements never masquerade as a complete empty po
   const indexedRealm = (await access.query<{ realm: string }>(
     'SELECT realm FROM access.realm_thread_reference WHERE reply=$1', [existing.reply])).rows[0]!.realm;
   await pending(indexedRealm, existing.placement);
+  await access.query('UPDATE access.feed_item SET realm_thread_indexed=false WHERE data_epoch=$1 AND id=$2',
+    [epoch, existing.placement]);
   await expect(realmRankPage(access, reader().session, indexedRealm, 'best', 'all', 20))
     .rejects.toBeInstanceOf(RealmRankingsIncomplete);
   expect((await realmRankPage(access, reader().session, native(), 'best', 'all', 20)).rows).toEqual([]);
@@ -227,11 +231,31 @@ test('recovery and revision changes refuse both first pages and continuations', 
 
 test('thread admission also survives unrelated Realm additions at established stream cuts', async () => {
   const a = native(), b = native();
-  await reference(a);
+  const item = await reference(a);
   await pending(b);
   const { session } = reader('8', '4');
   // The writer-owned thread gate is part of the same acceptance rule.
-  await expect(session.deps.realmReplyThreads!.assertThreadProjection(session)).resolves.toBeUndefined();
+  await expect(session.deps.realmReplyThreads!.assertThreadProjection(session, a, item.reply)).resolves.toBeUndefined();
+});
+
+test('thread admission fences only the affected root inside one Realm', async () => {
+  const a = native(), b = native();
+  const first = await reference(a), second = await reference(a), other = await reference(b);
+  const firstChild = await reference(a, first.reply, first.work);
+  const secondChild = await reference(a, second.reply, second.work);
+  const { session } = reader('8', '4');
+  const ready = (realm: string, reply: string) => session.deps.realmReplyThreads!
+    .assertThreadProjection(session, realm, reply);
+  await dirty('reply', secondChild.reply);
+  await expect(ready(a, first.reply)).resolves.toBeUndefined();
+  await expect(ready(a, firstChild.reply)).resolves.toBeUndefined();
+  await expect(ready(b, other.reply)).resolves.toBeUndefined();
+  await expect(ready(a, second.reply)).rejects.toBeInstanceOf(WorkReadUnavailable);
+  await access.query('DELETE FROM access.realm_thread_dirty WHERE data_epoch=$1', [epoch]);
+  await dirty('reply', firstChild.reply);
+  await expect(ready(a, first.reply)).rejects.toBeInstanceOf(WorkReadUnavailable);
+  await expect(ready(a, second.reply)).resolves.toBeUndefined();
+  await expect(ready(b, other.reply)).resolves.toBeUndefined();
 });
 
 for (const aggregate of [false, true]) {
@@ -239,6 +263,12 @@ for (const aggregate of [false, true]) {
     const a = native(), b = native();
     const item = await reference(a), other = await reference(b);
     const removed = aggregate ? await reference(a, item.reply, item.work) : item;
+    // A Realm-local review of one Content identity must not fence that
+    // identity's independent approved placement in another Realm.
+    await access.query(`INSERT INTO access.realm_thread_reference
+      (data_epoch,realm,reply,placement,parent,thread,work,occurred_at,activity_at,active)
+      VALUES($1,$2,$3,$4,NULL,$3,$5,clock_timestamp(),clock_timestamp(),true)`,
+    [epoch, b, removed.reply, native(), native()]);
     if (aggregate) await access.query(`UPDATE access.realm_thread_reference SET replies=1
       WHERE data_epoch=$1 AND realm=$2 AND reply=$3`, [epoch, a, item.reply]);
     const admission: RegisteredAdmission = {
@@ -250,14 +280,25 @@ for (const aggregate of [false, true]) {
     // Keep the actual registry's owner pool. Only admission and the external
     // Content/graph boundaries are deterministic in this owner-level proof.
     const registry = new AccessAdmissionRegistry(access);
+    let fencedBeforeContent = false, fencedThroughAcknowledgement = false;
+    const exactFence = async () => (await access.query(`SELECT 1 FROM access.realm_thread_dirty
+      WHERE data_epoch=$1 AND kind='placement' AND resource=$2`,
+    [epoch, `${a}|${removed.reply}|${admission.id}`])).rowCount === 1;
     Object.assign(registry, {
       register: async () => admission, claim: async () => admission,
-      recordGraphOutcome: async () => undefined,
+      recordGraphOutcome: async () => {
+        fencedThroughAcknowledgement = await exactFence();
+        expect(fencedThroughAcknowledgement).toBe(true);
+        await expect(realmRankPage(access, reader('8', '4').session, a, 'top', 'all', 20))
+          .rejects.toBeInstanceOf(RealmRankingsIncomplete);
+      },
     });
     let terminal = false, revoked = false;
     const content = {
       hasReceipt: async () => false,
       decideReview: async () => {
+        fencedBeforeContent = await exactFence();
+        expect(fencedBeforeContent).toBe(true);
         revoked = true;
         return { decisionId: randomUUID(), realm: a, reply: removed.reply, revisionId: randomUUID(),
           generation: '2', outcome: 'revoked', revisionDigest: 'b'.repeat(64), replayed: false };
@@ -276,15 +317,17 @@ for (const aggregate of [false, true]) {
         commandWithReceipt: async () => { terminal = true; },
       },
     } as unknown as WorkActivationEnvironment;
-    await new RealmReplyStore(content, {} as ConstructorParameters<typeof RealmReplyStore>[1], registry, env)
+    await new RealmReplyStore(content, {} as ConstructorParameters<typeof RealmReplyStore>[1], registry, env, access)
       .review({ issuer: 'https://account.test', subject: admission.principalId }, admission.actingSubject, {
         realm: a, reply: removed.reply, revisionId: randomUUID(), revisionDigest: 'b'.repeat(64),
         expectedGeneration: '1', supersedes: randomUUID(), outcome: 'revoked', method: 'human',
         methodRevision: 'human-review-v1', dependencyDigest: 'c'.repeat(64), reasonReference: 'withdrawn',
       }, admission.idempotencyKey, admission.requestDigest);
     expect(revoked).toBe(true);
+    expect(fencedBeforeContent).toBe(true);
+    expect(fencedThroughAcknowledgement).toBe(true);
     const unaffected = await realmRankPage(access, reader('8', '4').session, b, 'top', 'all', 20);
-    expect(unaffected.rows.map(row => row.reply)).toEqual([other.reply]);
+    expect(new Set(unaffected.rows.map(row => row.reply))).toEqual(new Set([other.reply, removed.reply]));
     // A root surviving its child's removal still needs a settled aggregate.
     let affected;
     try { affected = await realmRankPage(access, reader('8', '4').session, a, 'top', 'all', 20); }
@@ -303,6 +346,248 @@ for (const aggregate of [false, true]) {
     }
   });
 }
+
+test('a refused concurrent review preserves the pending removal owned by another admission', async () => {
+  const a = native(), b = native(), item = await reference(a), other = await reference(b);
+  const admissions = [0, 1].map((): RegisteredAdmission => ({
+    id: randomUUID(), principalId: randomUUID(), actingSubject: native(),
+    scope: `review:decide:${a}`, action: 'review.decide', idempotencyKey: randomUUID(),
+    requestDigest: 'a'.repeat(64), authorityEpoch: '1', expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    state: 'claimed', dispatchEligible: true, replayed: false,
+  }));
+  const first = admissions[0]!, second = admissions[1]!;
+  let enterContent!: () => void, releaseContent!: () => void;
+  const entered = new Promise<void>(resolveEntered => { enterContent = resolveEntered; });
+  const blocked = new Promise<void>(resolveBlocked => { releaseContent = resolveBlocked; });
+  const content = {
+    hasReceipt: async () => false,
+    decideReview: async (admission: RegisteredAdmission) => {
+      if (admission.id === second.id) throw new RealmReplyStale('Review generation changed');
+      enterContent();
+      await blocked;
+      return { decisionId: randomUUID(), realm: a, reply: item.reply, revisionId: randomUUID(),
+        generation: '2', outcome: 'revoked', revisionDigest: 'b'.repeat(64), replayed: false };
+    },
+  } as unknown as RealmReplyContentStore;
+  const terminals = new Set<string>();
+  const env = {
+    lineage: { dataEpoch: epoch, routingEpoch: contentEpoch },
+    fuseki: {
+      query: async (sql: string) => {
+        if (sql.includes('ASK')) return { boolean: true };
+        const admission = admissions.find(candidate => sql.includes(replyReceiptIri(candidate)));
+        if (!admission) throw new Error('Review read an unrelated graph inventory');
+        const values = { outcome: `${RV}Succeeded`, digest: admission.requestDigest, id: admission.id,
+          epoch: admission.authorityEpoch, scope: admission.scope, dataEpoch: epoch, sequence: '101' };
+        return { results: { bindings: terminals.has(admission.id) ? [Object.fromEntries(Object.entries(values)
+          .map(([key, value]) => [key, { type: 'literal', value }]))] : [] } };
+      },
+      commandWithReceipt: async ({ receipt }: { receipt: string }) => {
+        const admission = admissions.find(candidate => replyReceiptIri(candidate) === receipt);
+        if (!admission) throw new Error('Review dispatched an unrelated graph command');
+        terminals.add(admission.id);
+      },
+    },
+  } as unknown as WorkActivationEnvironment;
+  const registry = new AccessAdmissionRegistry(access);
+  Object.assign(registry, {
+    register: async ({ idempotencyKey }: { idempotencyKey: string }) =>
+      admissions.find(admission => admission.idempotencyKey === idempotencyKey)!,
+    claim: async (id: string) => admissions.find(admission => admission.id === id)!,
+    recordGraphOutcome: async () => undefined,
+  });
+  const store = new RealmReplyStore(content, {} as ConstructorParameters<typeof RealmReplyStore>[1], registry, env, access);
+  const review = (admission: RegisteredAdmission) => store.review({ issuer: 'https://account.test', subject: admission.principalId },
+    admission.actingSubject, { realm: a, reply: item.reply, revisionId: randomUUID(), revisionDigest: 'b'.repeat(64),
+      expectedGeneration: '1', supersedes: randomUUID(), outcome: 'revoked', method: 'human',
+      methodRevision: 'human-review-v1', dependencyDigest: 'c'.repeat(64), reasonReference: 'withdrawn' },
+    admission.idempotencyKey, admission.requestDigest);
+  const firstOutcome = review(first).then(value => ({ value }), error => ({ error }));
+  let outcome: Awaited<typeof firstOutcome> | undefined;
+  try {
+    await Promise.race([entered, firstOutcome.then(result => {
+      throw 'error' in result ? result.error : new Error('First review never reached its Content transition');
+    })]);
+    await expect(review(second)).rejects.toBeInstanceOf(RealmReplyStale);
+    const jobs = (await access.query<{ resource: string; after_key: string }>(`SELECT resource,after_key
+      FROM access.realm_thread_dirty WHERE data_epoch=$1 AND kind='placement'`, [epoch])).rows;
+    expect(jobs).toEqual([{ resource: `${a}|${item.reply}|${first.id}`, after_key: `pending:${first.id}` }]);
+    await expect(realmRankPage(access, reader().session, a, 'top', 'all', 20))
+      .rejects.toBeInstanceOf(RealmRankingsIncomplete);
+    expect((await realmRankPage(access, reader().session, b, 'top', 'all', 20)).rows.map(row => row.reply))
+      .toEqual([other.reply]);
+    const { session } = reader();
+    await expect(session.deps.realmReplyThreads!.assertThreadProjection(session, a, item.reply))
+      .rejects.toBeInstanceOf(WorkReadUnavailable);
+    await expect(session.deps.realmReplyThreads!.assertThreadProjection(session, b, other.reply))
+      .resolves.toBeUndefined();
+  } finally {
+    releaseContent();
+    outcome = await firstOutcome;
+  }
+  expect(outcome && 'error' in outcome ? outcome.error : undefined).toBeUndefined();
+  expect((await access.query<{ resource: string; after_key: string }>(`SELECT resource,after_key
+    FROM access.realm_thread_dirty WHERE data_epoch=$1 AND kind='placement'`, [epoch])).rows)
+    .toEqual([{ resource: `${a}|${item.reply}|${first.id}`, after_key: `ready:${first.id}` }]);
+  await expect(realmRankPage(access, reader().session, a, 'top', 'all', 20))
+    .rejects.toBeInstanceOf(RealmRankingsIncomplete);
+  expect((await realmRankPage(access, reader().session, b, 'top', 'all', 20)).rows.map(row => row.reply))
+    .toEqual([other.reply]);
+});
+
+/** The graph already accepted this admission. Retrying the actual owner
+ * command must finish its local publication without dispatching or draining
+ * other Realm jobs. Access remains real, including ranking triggers. */
+function placementReplay(realm: string, parent: string | null, work: string, owner = access) {
+  const reply = native(), placement = native(), revisionId = randomUUID();
+  const admission: RegisteredAdmission = {
+    id: randomUUID(), principalId: randomUUID(), actingSubject: native(),
+    scope: `reply:place:${realm}`, action: 'reply.place', idempotencyKey: randomUUID(),
+    requestDigest: 'd'.repeat(64), authorityEpoch: '1', expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    state: 'claimed', dispatchEligible: true, replayed: true,
+  };
+  const prepared: PlacementPreparation = {
+    operationId: admission.id, realm, reply, revisionId, revisionDigest: 'e'.repeat(64),
+    reviewDecisionId: randomUUID(), reviewGeneration: '1', reviewDigest: 'f'.repeat(64),
+    author: admission.actingSubject, ownerDataEpoch: contentEpoch, ownerSequence: '8',
+    rootTarget: work, rootRevision: native(), parentReply: parent,
+    parentRevision: parent ? randomUUID() : null, contextRevision: null, replayed: true,
+  };
+  let graphRequests = 0, contentSettlements = 0;
+  const content = {
+    hasReceipt: async () => true,
+    readPlacement: async () => prepared,
+  } as unknown as RealmReplyContentStore;
+  const env = {
+    lineage: { dataEpoch: epoch, routingEpoch: contentEpoch },
+    fuseki: {
+      query: async (sql: string) => {
+        graphRequests++;
+        if (sql.includes('ASK')) return { boolean: true };
+        if (sql.includes('?outcome ?digest ?id ?epoch')) {
+          const values = { outcome: `${RV}Succeeded`, digest: admission.requestDigest, id: admission.id,
+            epoch: admission.authorityEpoch, scope: admission.scope, dataEpoch: epoch, sequence: '101',
+            placement, revision: `urn:rezics:content:revision:${revisionId}`, realm, reply };
+          return { results: { bindings: [Object.fromEntries(Object.entries(values)
+            .map(([key, value]) => [key, { type: 'literal', value }]))] } };
+        }
+        if (sql.includes('SELECT ?space ?realmRevision ?disclosure')) return { results: { bindings: [{
+          space: { type: 'uri', value: native() }, disclosure: { type: 'uri', value: `${RV}Public` },
+        }] } };
+        throw new Error('Placement performed an unrelated graph inventory read');
+      },
+      commandWithReceipt: async () => {
+        graphRequests++;
+        throw new Error('A known terminal placement must not dispatch another graph command');
+      },
+    },
+  } as unknown as WorkActivationEnvironment;
+  const registry = {
+    register: async () => admission, claim: async () => ({ ...admission, claimedAt: new Date().toISOString() }),
+    recordGraphOutcome: async () => undefined,
+  };
+  const store = new RealmReplyStore(content, {
+    settlePublication: async () => { contentSettlements++; },
+  } as unknown as ConstructorParameters<typeof RealmReplyStore>[1], registry, env, owner);
+  const place = () => store.place({ issuer: 'https://account.test', subject: admission.principalId },
+    admission.actingSubject, { realm, reply, revisionId, revisionDigest: prepared.revisionDigest,
+      reviewDecisionId: prepared.reviewDecisionId, expectedHead: null }, admission.idempotencyKey, admission.requestDigest);
+  return { place, reply, placement, graphRequests: () => graphRequests,
+    contentSettlements: () => contentSettlements };
+}
+
+test('an acknowledged first root placement is immediately present in its Best and Top populations', async () => {
+  const realm = native(), command = placementReplay(realm, null, native());
+  await pending(realm, command.placement);
+  await expect(command.place()).resolves.toMatchObject({ placement: command.placement });
+  for (const sort of ['best', 'top'] as const) {
+    expect((await realmRankPage(access, reader('8', '4').session, realm, sort, 'all', 20))
+      .rows.map(row => row.reply)).toEqual([command.reply]);
+  }
+  const { session } = reader('8', '4');
+  await expect(session.deps.realmReplyThreads!.assertThreadProjection(session, realm, command.reply))
+    .resolves.toBeUndefined();
+});
+
+test('acknowledged placement publishes its exact index, aggregate, order and revision with bounded work', async () => {
+  const unrelated = native();
+  const costs: { statements: number; graphRequests: number }[] = [];
+  let previous = 0;
+  for (const size of [100, 400, 1600]) {
+    await access.query(`INSERT INTO access.realm_thread_reference
+      (data_epoch,realm,reply,placement,parent,thread,work,occurred_at,activity_at,active)
+      SELECT $1,$2,id,id,NULL,id,$2,clock_timestamp(),clock_timestamp(),true
+      FROM (SELECT 'https://rezics.com/id/'||gen_random_uuid() AS id FROM generate_series(1,$3::integer)) refs`,
+    [epoch, unrelated, size - previous]);
+    await access.query(`INSERT INTO access.realm_thread_dirty(data_epoch,kind,resource)
+      SELECT data_epoch,'reply',reply FROM access.realm_thread_reference WHERE data_epoch=$1 AND realm=$2
+      ON CONFLICT DO NOTHING`, [epoch, unrelated]);
+    const realm = native(), parent = await reference(realm);
+    const before = await realmRankPage(access, reader().session, realm, 'top', 'all', 20);
+    let statements = 0;
+    const owner = {
+      query: async (sql: string, values?: unknown[]) => {
+        statements++;
+        return access.query(sql, values);
+      },
+      connect: async () => {
+        const client = await access.connect();
+        return { query: async (sql: string, values?: unknown[]) => {
+          statements++;
+          return client.query(sql, values);
+        }, release: () => client.release() };
+      },
+    } as unknown as Pool;
+    const command = placementReplay(realm, parent.reply, parent.work, owner);
+    await pending(realm, command.placement);
+    const acknowledged = await command.place();
+    costs.push({ statements, graphRequests: command.graphRequests() });
+    expect(acknowledged.placement).toBe(command.placement);
+    const references = (await access.query<{ reply: string; placement: string; thread: string;
+      parent: string | null; active: boolean; replies: number }>(`SELECT reply,placement,thread,parent,active,replies
+      FROM access.realm_thread_reference WHERE data_epoch=$1 AND realm=$2 ORDER BY reply`, [epoch, realm])).rows;
+    expect(references).toHaveLength(2);
+    expect(references.find(row => row.reply === command.reply)).toMatchObject({
+      placement: command.placement, thread: parent.reply, parent: parent.reply, active: true,
+    });
+    expect(references.find(row => row.reply === parent.reply)?.replies).toBe(1);
+    expect((await access.query<{ indexed: boolean }>(`SELECT realm_thread_indexed AS indexed
+      FROM access.feed_item WHERE data_epoch=$1 AND id=$2`, [epoch, command.placement])).rows[0]?.indexed).toBe(true);
+    for (const sort of ['best', 'top'] as const) {
+      const page = await realmRankPage(access, reader('8', '4').session, realm, sort, 'all', 20);
+      expect(page.rows.map(row => row.reply)).toEqual([parent.reply]);
+      expect(BigInt(page.revision)).toBeGreaterThan(BigInt(before.revision));
+    }
+    const after = await realmRankPage(access, reader('8', '4').session, realm, 'top', 'all', 20);
+    await expect(command.place()).resolves.toEqual(acknowledged);
+    expect(await realmRankPage(access, reader('8', '4').session, realm, 'top', 'all', 20)).toEqual(after);
+    expect((await access.query<{ replies: number }>(`SELECT replies FROM access.realm_thread_reference
+      WHERE data_epoch=$1 AND realm=$2 AND reply=$3`, [epoch, realm, parent.reply])).rows[0]!.replies).toBe(1);
+    expect(command.contentSettlements()).toBe(2);
+    expect((await access.query(`SELECT 1 FROM access.realm_thread_dirty
+      WHERE data_epoch=$1 AND kind='reply'`, [epoch])).rowCount).toBe(size);
+    previous = size;
+  }
+  expect(costs[0]!.statements).toBeGreaterThan(0);
+  expect(costs[0]!.graphRequests).toBeGreaterThan(0);
+  expect(costs).toEqual([costs[0], costs[0], costs[0]]);
+});
+
+test('a terminal placement withheld by Access recovery resumes its same exact index on retry', async () => {
+  const realm = native(), parent = await reference(realm);
+  const command = placementReplay(realm, parent.reply, parent.work);
+  await access.query('UPDATE access.recovery_fence SET open=false WHERE id');
+  await expect(command.place()).rejects.toBeInstanceOf(RealmReplyUnavailable);
+  expect((await access.query(`SELECT 1 FROM access.realm_thread_reference
+    WHERE data_epoch=$1 AND realm=$2 AND reply=$3`, [epoch, realm, command.reply])).rowCount).toBe(0);
+  await access.query('UPDATE access.recovery_fence SET open=true WHERE id');
+  await expect(command.place()).resolves.toMatchObject({ placement: command.placement });
+  expect((await access.query<{ active: boolean; replies: number }>(`SELECT child.active,root.replies
+    FROM access.realm_thread_reference child JOIN access.realm_thread_reference root
+      ON root.data_epoch=child.data_epoch AND root.realm=child.realm AND root.reply=child.thread
+    WHERE child.data_epoch=$1 AND child.realm=$2 AND child.reply=$3`, [epoch, realm, command.reply])).rows[0])
+    .toEqual({ active: true, replies: 1 });
+});
 
 interface Plan {
   'Actual Rows': number;

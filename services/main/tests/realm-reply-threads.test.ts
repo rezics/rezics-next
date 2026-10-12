@@ -16,7 +16,7 @@ import { decodeReadCursor, WorkReadMissing, WorkReadMoved, WorkReadUnavailable, 
 // shows, in what order, and that each read stays a fixed number of batches.
 
 export const realm = 'https://rezics.com/id/00000000-0000-4000-8000-00000000000a';
-const work = 'https://rezics.com/id/00000000-0000-4000-8000-00000000000b';
+export const work = 'https://rezics.com/id/00000000-0000-4000-8000-00000000000b';
 const n = (value: number) => value.toString(16).padStart(12, '0');
 export const reply = (value: number) => `https://rezics.com/id/00000000-0000-4000-8000-${n(value)}`;
 // UUIDv7 placements carry their time: `minutes` after a fixed start.
@@ -44,7 +44,7 @@ export function world(placed: Placed[], options: { privateRealm?: boolean; votes
     (_, index) => ({ id: 1000 + index, parent: placed[0]!.id, author: 1 }))];
   const calls = { graph: 0, admitted: 0, votes: 0, bodies: 0, counts: 0, store: 0 };
   const byId = new Map(placed.map((item) => [item.id, item]));
-  const siblingOrders = new Map<string, { scores: string; revision: number }>();
+  const siblingOrders = new Map<string, { scores: string; revision: number; arrivals: Set<number> }>();
   const node = (item: Placed): ThreadNode => ({ reply: reply(item.id), parent: item.parent ? reply(item.parent) : null,
     author: agent(item.author), origin: null, rootTarget: work, rootRevision: item.rootRevision ?? reply(900),
     createdAt: new Date(start) });
@@ -123,13 +123,16 @@ export function world(placed: Placed[], options: { privateRealm?: boolean; votes
       } },
       realmReplyThreads: {
         assertThreadProjection: async () => {},
-        siblingOrderRevisions: async (_epoch: string, _realm: string, parents: readonly string[]) =>
+        siblingOrderRevisions: async (_epoch: string, _realm: string, parents: readonly string[], sort = 'best') =>
           new Map(parents.map(parent => {
-            const scores = JSON.stringify([...byId.values()].filter(item => item.parent && reply(item.parent) === parent)
+            const children = placed.filter(item => item.parent && reply(item.parent) === parent);
+            const scores = sort === 'new' ? '' : JSON.stringify(children
               .map(item => [item.id, options.votes?.[item.id]?.score ?? 0]));
-            const previous = siblingOrders.get(parent);
-            const revision = previous ? previous.revision + (previous.scores === scores ? 0 : 1) : 0;
-            siblingOrders.set(parent, { scores, revision });
+            const scope = `${sort}:${parent}`, previous = siblingOrders.get(scope);
+            const arrivals = new Set([...(previous?.arrivals ?? []), ...children.map(item => item.id)]);
+            const revision = previous ? previous.revision
+              + (previous.scores === scores && previous.arrivals.size === arrivals.size ? 0 : 1) : 0;
+            siblingOrders.set(scope, { scores, revision, arrivals });
             return [parent, `00000000-0000-4000-8000-${n(revision)}`];
           })),
         identities: async (ids: readonly string[]) => placed.filter(item => ids.includes(reply(item.id))).map(node),
@@ -441,7 +444,8 @@ function projectionReadiness(mainSequence = '3', contentSequence = '7') {
   const access = { query: async (_sql: string, values: unknown[]) => {
     positions.push(values);
     return { rows: [{ ready: values[0] === 'epoch' && values[1] === 'content-epoch'
-      && values[2] === contentSequence && values[3] === mainSequence }] };
+      && BigInt(contentSequence) <= BigInt(values[2] as string)
+      && BigInt(mainSequence) <= BigInt(values[3] as string) }] };
   } } as unknown as Pool;
   const session = { position: { dataEpoch: 'epoch', sequence: '100' },
     deps: { relayPosition: { read: async () => coverage } } } as unknown as WorkReadSession;
@@ -451,19 +455,24 @@ function projectionReadiness(mainSequence = '3', contentSequence = '7') {
 
 test('thread readiness admits Main stream 3 and Content 7 when the graph cut is 100', async () => {
   const fixture = projectionReadiness();
-  await fixture.store.assertThreadProjection(fixture.session);
-  expect(fixture.positions).toEqual([['epoch', 'content-epoch', '7', '3']]);
+  await fixture.store.assertThreadProjection(fixture.session, realm, reply(1));
+  expect(fixture.positions).toEqual([['epoch', 'content-epoch', '7', '3', realm, reply(1), null]]);
   fixture.session.position.sequence = '101';
-  await fixture.store.assertThreadProjection(fixture.session);
+  await fixture.store.assertThreadProjection(fixture.session, realm, reply(1));
   expect(fixture.positions[1]).toEqual(fixture.positions[0]);
 });
 
-test('thread readiness refuses incomplete Main or Content coverage', async () => {
-  for (const [main, content] of [['2', '7'], ['4', '7'], ['3', '6']]) {
+test('thread readiness refuses coverage beyond the observed Main or Content source', async () => {
+  for (const [main, content] of [['4', '7'], ['3', '8']]) {
     const fixture = projectionReadiness(main, content);
-    await expect(fixture.store.assertThreadProjection(fixture.session))
+    await expect(fixture.store.assertThreadProjection(fixture.session, realm, reply(1)))
       .rejects.toThrow('Realm replies are projecting');
   }
+});
+
+test('thread readiness admits established Main and Content cuts behind pending additions', async () => {
+  const fixture = projectionReadiness('2', '6');
+  await expect(fixture.store.assertThreadProjection(fixture.session, realm, reply(1))).resolves.toBeUndefined();
 });
 
 test('thread readiness refuses absent, foreign and malformed Main coverage before reading its index', async () => {
@@ -473,15 +482,15 @@ test('thread readiness refuses absent, foreign and malformed Main coverage befor
     { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: 'epoch', sequence: 'invalid' }]) {
     const fixture = projectionReadiness();
     fixture.cover(coverage);
-    await expect(fixture.store.assertThreadProjection(fixture.session)).rejects.toBeInstanceOf(WorkReadUnavailable);
+    await expect(fixture.store.assertThreadProjection(fixture.session, realm, reply(1))).rejects.toBeInstanceOf(WorkReadUnavailable);
     expect(fixture.positions).toEqual([]);
   }
 });
 
 test('thread readiness rechecks acknowledged coverage when the window closes', async () => {
   const fixture = projectionReadiness();
-  await fixture.store.assertThreadProjection(fixture.session);
+  await fixture.store.assertThreadProjection(fixture.session, realm, reply(1));
   fixture.cover({ streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: 'epoch', sequence: '4' });
-  await expect(fixture.store.assertThreadProjection(fixture.session)).rejects.toThrow('Realm replies are projecting');
+  await expect(fixture.store.assertThreadProjection(fixture.session, realm, reply(1))).resolves.toBeUndefined();
   expect(fixture.positions.map(position => position[3])).toEqual(['3', '4']);
 });

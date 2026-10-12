@@ -39,7 +39,7 @@ test('a projection page links its real ratings, reviews and discussion through t
     const app = createMainApp(stack.fuseki, { ...stack.composition.dependencies, environment: stack.env, access: stack.access,
       content: stack.content, contentAuthoring: stack.content, media: stack.media, mediaAccess: stack.mediaAccess,
       reviews: new ReaderReviews(stack.accessPool), targetRatingInventory: new TargetRatingInventoryStore(stack.accessPool),
-      realmReplies: new RealmReplyStore(new RealmReplyContentStore(stack.contentPool), stack.content, stack.access, stack.env),
+      realmReplies: new RealmReplyStore(new RealmReplyContentStore(stack.contentPool), stack.content, stack.access, stack.env, stack.accessPool),
       account: { verify: async () => ({ ...owner.principal, emailVerified: true }) },
     });
     const call = (method: string, path: string, body?: object) => {

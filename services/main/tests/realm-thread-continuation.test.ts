@@ -4,9 +4,10 @@ import { authoredDocumentBody } from '../../content/src/document-body.ts';
 import { readRealmThread } from '../src/modules/realm-reply/thread-read.ts';
 import { REALM_THREAD_COST } from '../src/modules/realm-reply/thread-contract.ts';
 import type { ThreadVote } from '../src/modules/realm-reply/thread-store.ts';
-import { WorkReadExpired, WorkReadInvalid, WorkReadMissing, WorkReadUnavailable }
+import { WorkReadExpired, WorkReadInvalid, WorkReadMissing, WorkReadMoved, WorkReadSession, WorkReadUnavailable }
   from '../src/modules/work/read-session.ts';
-import { realm, reply, world } from './realm-reply-threads.test.ts';
+import { realm, reply, work, world } from './realm-reply-threads.test.ts';
+import { targetSummaries } from '../src/modules/target/resolve.ts';
 
 const siblings = (count: number) => [{ id: 1, author: 1 },
   ...Array.from({ length: count }, (_, index) => ({ id: index + 2, parent: 1, author: 1 }))];
@@ -165,6 +166,61 @@ test('a new reply invalidates the old walk explicitly and is reachable after res
   const second = await readRealmThread(session, realm, rest.reply, 'new', rest.cursor);
   const reached = [...restarted.items.slice(1), ...second.items.slice(1)].map(item => item.reply);
   expect(new Set(reached).size).toBe(193);
+});
+
+test('sibling continuations retain their published scope across unrelated graph writes', async () => {
+  for (const sort of ['best', 'top', 'new'] as const) {
+    const { session } = world(siblings(192));
+    const first = await readRealmThread(session, realm, reply(1), sort);
+    const next = siblingCursor(first);
+    session.position.sequence = '1000';
+    const last = await readRealmThread(session, realm, reply(1), sort, next.cursor);
+    expect(last.complete).toBe(true);
+    expect(new Set([...first.items.slice(1), ...last.items.slice(1)].map(item => item.reply)).size).toBe(192);
+  }
+});
+
+test('unrelated graph movement during hydration does not mint an expired sibling continuation', async () => {
+  const { session } = world(siblings(192));
+  session.options.localBasis = true;
+  const batch = session.deps.content!.readExactBatch.bind(session.deps.content!);
+  Object.assign(session.deps.content!, { readExactBatch: async (ids: string[]) => {
+    const result = await batch(ids, async ids => new Set(ids));
+    session.position.sequence = String(Number(session.position.sequence) + 1);
+    return result;
+  } });
+  const first = await readRealmThread(session, realm, reply(1), 'new');
+  const next = siblingCursor(first);
+  const last = await readRealmThread(session, realm, reply(1), 'new', next.cursor);
+  expect(last.complete).toBe(true);
+  expect(new Set([...first.items.slice(1), ...last.items.slice(1)].map(item => item.reply)).size).toBe(192);
+});
+
+test('local thread target summaries fence their selected root rather than unrelated graph movement', async () => {
+  const { session } = world(siblings(2));
+  const owner = new WorkReadSession(session.deps, session.request, { localBasis: true }, session.position);
+  await targetSummaries(owner, [work]);
+  session.position.sequence = '1000';
+  await expect(owner.fenceDependencies()).resolves.toBeUndefined();
+  const query = session.deps.environment.fuseki.query.bind(session.deps.environment.fuseki);
+  session.deps.environment.fuseki.query = async (...args) => {
+    const result = await query(...args);
+    for (const row of result.results?.bindings ?? []) if (row.r?.value === work && row.label) {
+      row.label = { ...row.label, value: 'A changed selected root title' };
+    }
+    return result;
+  };
+  await expect(owner.fenceDependencies()).rejects.toBeInstanceOf(WorkReadMoved);
+});
+
+test('thread projection fences receive the same Realm and focused branch before and after hydration', async () => {
+  const { session } = world(siblings(2));
+  const scopes: unknown[][] = [];
+  Object.assign(session.deps.realmReplyThreads!, { assertThreadProjection: async (...args: unknown[]) => {
+    scopes.push(args.slice(1));
+  } });
+  await readRealmThread(session, realm, reply(1), 'new');
+  expect(scopes).toEqual([[realm, reply(1), undefined], [realm, reply(1), undefined]]);
 });
 
 test('a removed cursor anchor leaves no gap in a keyset seek', async () => {

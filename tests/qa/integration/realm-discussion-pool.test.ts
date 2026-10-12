@@ -141,7 +141,7 @@ test('one guarded Access connection projects and reads mandatory-review Realm di
       personPreferences: new PersonPreferencesStore(accessPool),
       agentProvisioning: new AgentProvisioning(accessPool, env),
       agentHandles: new AgentVanityHandles(accessPool),
-      realmReplies: new RealmReplyStore(replyOwner, content, access, env),
+      realmReplies: new RealmReplyStore(replyOwner, content, access, env, accessPool),
       realmReplyThreads: new RealmReplyThreadStore(contentPool, accessPool),
       relayPosition: new RelayHandoffPositions(relayPool, consumer),
     };

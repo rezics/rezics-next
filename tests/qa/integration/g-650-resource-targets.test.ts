@@ -35,7 +35,7 @@ test('G-650: API discussions keep SAO occurrence, character, release and metadat
     accessKeyId: Bun.env.MAIN_S3_ACCESS_KEY!, secretAccessKey: Bun.env.MAIN_S3_SECRET_KEY!,
     prefix: 'semantic/structure/' });
   await structureObjects.initialize();
-  const replies = new RealmReplyStore(new RealmReplyContentStore(f.pool), content, f.access, f.env);
+  const replies = new RealmReplyStore(new RealmReplyContentStore(f.pool), content, f.access, f.env, f.accessPool);
   const relayPool = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL });
   const consumer = `resource-targets-${randomUUID()}`;
   const feed = new FeedStore(f.accessPool);

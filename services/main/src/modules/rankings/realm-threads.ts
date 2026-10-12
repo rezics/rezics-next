@@ -13,6 +13,7 @@ import {
 import { hash } from '../work/activate.ts';
 import { realmHistoryOriginCutFilter, type RealmHistoryFloor } from '../realm-admin/history.ts';
 import { retireRealmPopulation } from './retirement.ts';
+import type { PlacementPreparation } from '../realm-reply/content-store.ts';
 
 export const REALM_RANK_COST = {
   projectBatch: 20,
@@ -49,6 +50,36 @@ interface Reference {
 }
 const BATCH = REALM_RANK_COST.projectBatch;
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
+
+/** An accepted, pinned placement already carries the Content identity and the
+ * native command proof. Publishing it needs no graph or inventory reread. */
+export async function settleRealmThreadPlacement(
+  access: Pool, epoch: string,
+  preparation: Pick<PlacementPreparation, 'realm' | 'reply' | 'rootTarget' | 'parentReply' | 'ownerDataEpoch' | 'ownerSequence'>,
+  placement: string, client?: PoolClient,
+) {
+  const { realm, reply, rootTarget: work, parentReply: parent } = preparation;
+  await applyRealmThreadReferences(access, epoch, [{ realm, reply }], [{
+    realm, reply, placement, parent, thread: parent ?? reply, work,
+    occurred_at: activityTime(placement, new Date(0)).time, active: true,
+  }], [{ id: placement, occurred_at: new Date(0) }], client,
+  { dataEpoch: preparation.ownerDataEpoch, sequence: preparation.ownerSequence });
+}
+
+/** Fence the exact placement before its Content decision can remove it. The
+ * existing resumable ledger retains unknown outcomes until receipt recovery.
+ * Operation keys prevent one refused review from clearing another's fence. */
+export async function fenceRealmThreadRemoval(access: Pool, epoch: string, realm: string, reply: string, operation: string) {
+  await controlTransaction(access, client => client.query(`INSERT INTO access.realm_thread_dirty(data_epoch,kind,resource,after_key)
+    VALUES($1,'placement',$2,$3) ON CONFLICT(data_epoch,kind,resource) DO UPDATE SET after_key=EXCLUDED.after_key`,
+  [epoch, `${realm}|${reply}|${operation}`, `pending:${operation}`]));
+}
+
+export async function finishRealmThreadRemoval(access: Pool, epoch: string, realm: string, reply: string, operation: string) {
+  await controlTransaction(access, client => client.query(`UPDATE access.realm_thread_dirty SET after_key=$3
+    WHERE data_epoch=$1 AND kind='placement' AND resource=$2 AND after_key=$4`,
+  [epoch, `${realm}|${reply}|${operation}`, `ready:${operation}`, `pending:${operation}`]));
+}
 async function contentPosition(session: WorkReadSession) {
   const row = (
     await session.deps.realmReplyThreads!.rankingContent.query<{
@@ -262,7 +293,7 @@ export class RealmThreadRankingProjection {
     }
     const dirty = (
       await this.access.query<{
-        kind: 'reply' | 'work' | 'realm' | 'parent' | 'population';
+        kind: 'reply' | 'work' | 'realm' | 'parent' | 'population' | 'placement';
         resource: string;
         after_key: string;
       }>(
@@ -272,6 +303,32 @@ export class RealmThreadRankingProjection {
       )
     ).rows[0];
     if (dirty) {
+      if (dirty.kind === 'placement') {
+        const [realm, reply] = dirty.resource.split('|');
+        if (!realm || !reply || !native.test(realm) || !native.test(reply))
+          throw new WorkReadUnavailable('Realm placement job is malformed');
+        if (dirty.after_key.startsWith('pending:')) {
+          const committed = await this.accessContent(session).query(
+            'SELECT 1 FROM content.receipt WHERE operation_id=$1', [dirty.after_key.slice(8)]);
+          if (!committed.rowCount) return this.projectPopulation(session, epoch);
+        }
+        const after = dirty.after_key.startsWith('children:') ? dirty.after_key.slice(9) : '';
+        const children = (await this.access.query<{ reply: string }>(`SELECT reply
+          FROM access.realm_thread_reference WHERE data_epoch=$1 AND realm=$2 AND parent=$3 AND reply>$4
+          ORDER BY reply LIMIT $5`, [epoch, realm, reply, after, BATCH - 1])).rows;
+        await this.project(session, [
+          ...(dirty.after_key.startsWith('children:') ? [] : [{ realm, reply }]),
+          ...children.map(child => ({ realm, reply: child.reply })),
+        ]);
+        await this.access.query(children.length === BATCH - 1
+          ? `UPDATE access.realm_thread_dirty SET after_key=$4 WHERE data_epoch=$1 AND kind='placement'
+            AND resource=$2 AND after_key=$3`
+          : `DELETE FROM access.realm_thread_dirty WHERE data_epoch=$1 AND kind='placement' AND resource=$2 AND after_key=$3`,
+        children.length === BATCH - 1
+          ? [epoch, dirty.resource, dirty.after_key, `children:${children.at(-1)!.reply}`]
+          : [epoch, dirty.resource, dirty.after_key]);
+        return true;
+      }
       if (dirty.kind === 'population') {
         await retireRealmPopulation(this.access, session, epoch, dirty.resource, dirty.after_key);
         return true;
@@ -304,9 +361,12 @@ export class RealmThreadRankingProjection {
           sequence: string;
           reply: string | null;
           resource: string | null;
+          realm: string | null;
         }>(
           `
-        SELECT o.sequence::text,p.id AS reply,v.resource_id AS resource FROM content.outbox o
+        SELECT o.sequence::text,p.id AS reply,v.resource_id AS resource,
+          CASE WHEN o.event_type='content.realm-review.decided' THEN o.payload->>'realm' ELSE NULL END AS realm
+          FROM content.outbox o
         JOIN content.receipt r ON r.operation_id=o.operation_id
         LEFT JOIN content.variant v ON v.id=r.variant_id
         LEFT JOIN content.reply p ON p.variant_id=v.id
@@ -323,7 +383,9 @@ export class RealmThreadRankingProjection {
       await controlTransaction(this.access, async (client) => {
         await this.lock(client, epoch, position);
         for (const event of events) {
-          if (event.reply) await this.dirty(client, epoch, 'reply', event.reply);
+          if (event.reply && event.realm) await client.query(`INSERT INTO access.realm_thread_dirty(data_epoch,kind,resource,after_key)
+            VALUES($1,'placement',$2,'ready:replay') ON CONFLICT DO NOTHING`, [epoch, `${event.realm}|${event.reply}`]);
+          else if (event.reply) await this.dirty(client, epoch, 'reply', event.reply);
           else if (event.resource) await this.dirty(client, epoch, 'work', event.resource);
         }
         await client.query(
@@ -357,7 +419,9 @@ export class RealmThreadRankingProjection {
       await controlTransaction(this.access, async (client) => {
         await this.lock(client, epoch, position);
         for (const event of events) {
-          if (event.reply) await this.dirty(client, epoch, 'reply', event.reply);
+          if (event.reply && event.realm) await client.query(`INSERT INTO access.realm_thread_dirty(data_epoch,kind,resource,after_key)
+            VALUES($1,'placement',$2,'ready:replay') ON CONFLICT DO NOTHING`, [epoch, `${event.realm}|${event.reply}`]);
+          else if (event.reply) await this.dirty(client, epoch, 'reply', event.reply);
           else if (event.work) await this.dirty(client, epoch, 'work', event.work);
           else if (event.realm) await this.dirty(client, epoch, 'realm', event.realm);
         }
@@ -584,8 +648,25 @@ export class RealmThreadRankingProjection {
         active: admitted.has(`${row.realm!.value}|${reply}`),
       });
     }
-    await controlTransaction(this.access, async (client) => {
+    await applyRealmThreadReferences(this.access, session.position.dataEpoch, keys, references, pending);
+  }
+}
+
+
+/** One owner applies the command delta and background replay with the same lock
+ * order, root aggregate and order triggers. No caller drains unrelated work. */
+async function applyRealmThreadReferences(
+  access: Pool, epoch: string, keys: { realm: string; reply: string }[],
+  references: (Reference & { thread: string })[], pending: { id: string; occurred_at: Date }[] = [],
+  borrowed?: PoolClient,
+  source?: { dataEpoch: string; sequence: string },
+) {
+  await controlTransaction(access, async (client) => {
+      if (source) await client.query(`INSERT INTO access.realm_thread_checkpoint
+        (data_epoch,content_epoch,content_sequence,sequence,after_event) VALUES($1,$2,$3,0,'￿') ON CONFLICT DO NOTHING`,
+      [epoch, source.dataEpoch, source.sequence]);
       const affected = new Map<string, { realm: string; thread: string; delta: number }>();
+      const changedRealms = new Set<string>();
       const changed = (realm: string, thread: string, delta: number) => {
         const key = `${realm}|${thread}`;
         affected.set(key, { realm, thread, delta: (affected.get(key)?.delta ?? 0) + delta });
@@ -601,7 +682,7 @@ export class RealmThreadRankingProjection {
             await client.query<{ thread: string; active: boolean }>(
               `SELECT thread,active
             FROM access.realm_thread_reference WHERE data_epoch=$1 AND realm=$2 AND reply=$3`,
-              [session.position.dataEpoch, ref.realm, ref.parent],
+              [epoch, ref.realm, ref.parent],
             )
           ).rows[0];
           ref.thread = above?.thread ?? ref.parent;
@@ -614,7 +695,7 @@ export class RealmThreadRankingProjection {
               await client.query<{ score: number }>(
                 `SELECT score FROM access.feed_item
           WHERE data_epoch=$1 AND id=$2 FOR SHARE`,
-                [session.position.dataEpoch, ref.placement],
+                [epoch, ref.placement],
               )
             ).rows[0]
           : null;
@@ -624,17 +705,20 @@ export class RealmThreadRankingProjection {
             occurred_at: Date;
             parent: string | null;
             active: boolean;
+            placement: string;
           }>(
-            `SELECT thread,occurred_at,parent,active
+            `SELECT thread,occurred_at,parent,active,placement
           FROM access.realm_thread_reference WHERE data_epoch=$1 AND realm=$2 AND reply=$3 FOR UPDATE`,
-            [session.position.dataEpoch, key.realm, key.reply],
+            [epoch, key.realm, key.reply],
           )
         ).rows[0];
+        if (ref ? !prior || prior.placement !== ref.placement || prior.parent !== ref.parent
+          || prior.thread !== ref.thread || prior.active !== ref.active : prior) changedRealms.add(key.realm);
         if (prior) changed(key.realm, prior.thread, prior.parent && prior.active ? -1 : 0);
         if (!ref) {
           await client.query(
             `DELETE FROM access.realm_thread_reference WHERE data_epoch=$1 AND realm=$2 AND reply=$3`,
-            [session.position.dataEpoch, key.realm, key.reply],
+            [epoch, key.realm, key.reply],
           );
           continue;
         }
@@ -647,7 +731,7 @@ export class RealmThreadRankingProjection {
             thread=EXCLUDED.thread,work=EXCLUDED.work,occurred_at=EXCLUDED.occurred_at,
             active=EXCLUDED.active,score=EXCLUDED.score`,
           [
-            session.position.dataEpoch,
+            epoch,
             ref.realm,
             ref.reply,
             ref.placement,
@@ -671,14 +755,15 @@ export class RealmThreadRankingProjection {
             WHERE child.data_epoch=$1 AND child.realm=$2 AND child.thread=$3 AND child.active AND child.parent IS NOT NULL
             ORDER BY occurred_at DESC LIMIT 1),root.occurred_at))
         WHERE root.data_epoch=$1 AND root.realm=$2 AND root.reply=$3`,
-          [session.position.dataEpoch, realm, thread, delta],
+          [epoch, realm, thread, delta],
         );
       if (pending.length)
         await client.query(
           `UPDATE access.feed_item SET realm_thread_indexed=true
         WHERE data_epoch=$1 AND id=ANY($2::text[])`,
-          [session.position.dataEpoch, pending.map((row) => row.id)],
+          [epoch, pending.map((row) => row.id)],
         );
-    });
-  }
+      for (const realm of changedRealms) await client.query(`INSERT INTO access.realm_thread_state VALUES($1,$2,1)
+        ON CONFLICT(data_epoch,realm) DO UPDATE SET revision=access.realm_thread_state.revision+1`, [epoch, realm]);
+  }, false, borrowed);
 }

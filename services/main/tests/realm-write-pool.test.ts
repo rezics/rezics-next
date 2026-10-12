@@ -184,7 +184,34 @@ function placement(
     stamp: 'current',
     historyFloor: null,
   };
-  const client = {} as PoolClient;
+  const indexQuery = async (sql: string) => {
+    if (sql.includes('txid_current()')) return { rows: [{ id: '1' }], rowCount: 1 };
+    if (sql.includes('FROM access.recovery_fence')) return { rows: [{ open: true }], rowCount: 1 };
+    if (sql.includes('INSERT INTO access.realm_thread_reference')) {
+      expect(events.at(-1)).toBe('settle');
+      events.push('index');
+      return { rows: [], rowCount: 1 };
+    }
+    if (/^\s*(?:BEGIN|SET|COMMIT|ROLLBACK)\b/.test(sql)
+      || sql.includes('INSERT INTO access.realm_thread_checkpoint')
+      || sql.includes('INSERT INTO access.realm_thread_state')
+      || sql.includes('SELECT score FROM access.feed_item')
+      || sql.includes('SELECT thread,occurred_at,parent,active')
+      || sql.includes('UPDATE access.realm_thread_reference root')
+      || sql.includes('UPDATE access.feed_item SET realm_thread_indexed')) {
+      return { rows: [], rowCount: 0 };
+    }
+    throw new Error(`Unexpected placement index statement: ${sql}`);
+  };
+  const client = { query: indexQuery, release: () => {
+    throw new Error('Index must not release the Realm permit client');
+  } } as unknown as PoolClient;
+  const rankingAccess = { connect: async () => {
+    expect(held).toBe(false);
+    return { query: indexQuery, release: () => {
+      expect(held).toBe(false);
+    } };
+  } } as unknown as Pool;
   const snapshot = (): RegisteredAdmission => ({
     ...admission,
     state: durableState,
@@ -356,6 +383,7 @@ function placement(
     contentCore as unknown as ConstructorParameters<typeof RealmReplyStore>[1],
     access as unknown as ConstructorParameters<typeof RealmReplyStore>[2],
     env,
+    rankingAccess,
   );
   return { store, events, terminal: () => terminal, state: () => durableState, held: () => held };
 }
@@ -373,6 +401,7 @@ test('Realm placement commits registration and claim before preparation, then fe
     'fence',
     'graph.place',
     'settle',
+    'index',
     'permit.release',
     'seal',
   ]);
@@ -399,6 +428,7 @@ test.each([false, true])(
     ).rejects.toBeInstanceOf(AdmissionDenied);
     expect(f.events).not.toContain('prepare');
     expect(f.events).not.toContain('graph.place');
+    expect(f.events).not.toContain('index');
     expect(f.events).toContain('fence');
     expect(f.events).toContain('graph.cancel');
     expect(f.events.indexOf('seal')).toBeGreaterThan(f.events.indexOf('permit.release'));
@@ -416,6 +446,7 @@ test('unknown Realm graph outcomes remain pending without a fabricated cancellat
   expect(f.events).not.toContain('graph.cancel');
   expect(f.events).not.toContain('seal');
   expect(f.events).not.toContain('settle');
+  expect(f.events).not.toContain('index');
   expect(f.terminal()).toBeNull();
   expect(f.state()).toBe('claimed');
   expect(f.held()).toBe(false);
@@ -426,6 +457,6 @@ test('an exact terminal placement replays settlement and sealing without request
   expect(
     await f.store.place(principal, actor, input, admission.idempotencyKey, digest),
   ).toMatchObject({ realm, reply, replayed: true });
-  expect(f.events).toEqual(['register.commit', 'settle', 'seal']);
+  expect(f.events).toEqual(['register.commit', 'settle', 'index', 'seal']);
   expect(f.state()).toBe('sealed');
 });

@@ -35,7 +35,7 @@ export async function memberFixture(options: { liveContentEvidence?: boolean } =
   Object.assign(h.env,{ addresses:new AliasRegistry(h.accessPool) });
   access.configureBaseline(h.fuseki);
   const owner = new RealmReplyContentStore(contentPool);
-  const replies = new RealmReplyStore(owner, content, access, h.env);
+  const replies = new RealmReplyStore(owner, content, access, h.env, h.accessPool);
   const maintainers = new WorkMaintainers(h.accessPool, h.env);
   const suitability = options.liveContentEvidence ? new SuitabilityStore(h.accessPool, access) : undefined;
   const app = createMainApp(h.fuseki, { environment: h.env, account: h.verifier,

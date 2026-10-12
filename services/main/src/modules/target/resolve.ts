@@ -41,6 +41,7 @@ export type ReportTargets<Session extends TargetReadSession = WorkReadSession> =
 /** Graph-only baseline proofs have no principal or optional hydration owners. */
 export type TargetReadSession = Pick<WorkReadSession, 'query' | 'checkDeadline' | 'request'
   | 'options' | 'position' | 'displayLanguages' | 'principal'> & {
+  observeDependency?: WorkReadSession['observeDependency'];
   /** Owner-supplied evidence only; public request fields never set this value. */
   viewer?: Viewer;
   deps: Pick<WorkReadSession['deps'], 'environment'>
@@ -234,11 +235,20 @@ export function targetSummaryReader(session: TargetReadSession): SummaryReader {
 export async function targetSummaries(session: TargetReadSession, resources: readonly string[],
   options: { resolveMerges?: boolean; includeCollections?: boolean } = {}) {
   try {
-    return await readResourceSummaries(session.deps.environment, session.deps.media?.store,
+    const read = () => readResourceSummaries(session.deps.environment, session.deps.media?.store,
       targetSummaryReader(session), { resources, context: DEFAULT_MEDIA_CONTEXT,
         resolveMerges: options.resolveMerges ?? false, includeCollections: options.includeCollections,
+        localBasis: session.options.localBasis,
         language: session.options.language?.toLowerCase() ?? null, languages: session.displayLanguages,
         settleNonAgentNameOwners: 'includingAbsent' }, session.deps.access?.client);
+    const result = await read();
+    if (session.options.localBasis && session.observeDependency) {
+      const selected = (batch: SummaryBatch) => ({ graph: batch.generation.graph,
+        summaries: batch.summaries, workRevisions: [...batch.workRevisions].sort(([left], [right]) => left.localeCompare(right)) });
+      session.observeDependency(`target-summary:${JSON.stringify([resources, options])}`,
+        selected(result), async () => selected(await read()));
+    }
+    return result;
   } catch (error) {
     if (error instanceof SummaryGraphMoved) throw new WorkReadMoved(error.message);
     throw error;
@@ -350,7 +360,9 @@ export async function resolveVisibleTargets(session: TargetReadSession, resource
 
 async function resolveSummarizedTargets(session: TargetReadSession, summaries: SummaryBatch,
   capability: Capability, inventory: boolean, redirects?: Map<string, string>): Promise<Map<string, ResolvedTarget>> {
-  if (summaries.generation.graph !== `${session.position.dataEpoch}:${session.position.sequence}`) {
+  if (session.options.localBasis
+    ? !summaries.generation.graph.startsWith(`${session.position.dataEpoch}:`)
+    : summaries.generation.graph !== `${session.position.dataEpoch}:${session.position.sequence}`) {
     throw new WorkReadMoved('Graph changed during target resolution');
   }
   // Availability is checked for the entire batch before revealing any grain mismatch.

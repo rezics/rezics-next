@@ -7,6 +7,7 @@ import { READ_BASIS_RETENTION_MS } from './retention.ts';
 export const retainedMembershipFamilies = {
   'home-feed-v1': { owner: 'Access', revisions: ['population', 'following', 'target', 'personal'] },
   'realm-threads-v1': { owner: 'Access', revisions: ['population', 'history-admission'] },
+  'realm-thread-siblings-v1': { owner: 'Access', revisions: ['sibling-population', 'sibling-order', 'history-admission'] },
 } as const;
 
 /** A registered family keeps the first page's deadline across every continuation.
@@ -25,7 +26,7 @@ export function retainedMembershipBasis(family: keyof typeof retainedMembershipF
       throw new WorkReadExpired('Read basis expired; restart from the first page');
     }
   };
-  return { cursor, assertLive, encode: (after: string, order: string) => {
+  return { cursor, expiresAt, assertLive, encode: (after: string, order: string) => {
     assertLive();
     return encodeReadCursor(binding, position, after, order, expiresAt);
   } };

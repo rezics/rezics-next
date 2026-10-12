@@ -1,6 +1,6 @@
 import { readCurrentProfile } from '../realm-profile/commands.ts';
 import { createHash } from 'node:crypto';
-import type { PoolClient } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import type { ContentCore } from '../../../../content/src/core.ts';
 import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry, type RegisteredAdmission, type VerifiedPrincipal } from '../access/admission.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
@@ -21,6 +21,8 @@ import { realmHistoryOriginCutFilter } from '../realm-admin/history.ts';
 import { GRAPHS, RV, iri } from '../work/activate.ts';
 import { RatingTargetNotAccepted } from '../rating/acceptance.ts';
 import { RatingTargetGrainMismatch } from '../rating/release.ts';
+import { fenceRealmThreadRemoval, finishRealmThreadRemoval, settleRealmThreadPlacement } from '../rankings/realm-threads.ts';
+import { ControlUnavailable, controlTransaction } from '../access/topology-control.ts';
 
 export type { RealmReplyDispatchBasis } from './graph.ts';
 
@@ -43,7 +45,7 @@ export function realmReplyDigest(value: unknown): string {
  * are `AdmissionExpired` or `AdmissionDenied`; the caller seals those. */
 const unavailableReply = (error: unknown): RealmReplyUnavailable | null => {
   if (error instanceof RealmReplyUnavailable) return error;
-  if (error instanceof WorkReadUnavailable || error instanceof TargetUnavailable) {
+  if (error instanceof WorkReadUnavailable || error instanceof TargetUnavailable || error instanceof ControlUnavailable) {
     return new RealmReplyUnavailable(error.message);
   }
   return null;
@@ -120,7 +122,9 @@ export class RealmReplyStore {
     private readonly access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>
       & Partial<Pick<AccessAdmissionRegistry, 'fenceClaim' | 'hasRealmMemberAdmission' | 'withRealmPolicy' | 'realmReadProof'
         | 'canReadWork' | 'canReadSemanticResource' | 'realmHistoryFloor'>>,
-    private readonly env: WorkActivationEnvironment) {}
+    private readonly env: WorkActivationEnvironment,
+    /** Read-only adapters omit this owner; commands require its exact index. */
+    private readonly rankingAccess?: Pool) {}
 
   private async admission(principal: VerifiedPrincipal, actingSubject: string, action: string,
     scope: string, key: string, requestDigest: string, sourceRevision?: string): Promise<{
@@ -297,10 +301,24 @@ export class RealmReplyStore {
     key: string, digest: string) {
     const opened = await this.admission(principal, actingSubject, 'review.decide',
       `review:decide:${input.realm}`, key, digest);
-    const result = await this.content.decideReview(opened.registered, input);
-    const terminal = await acknowledgeContentDecision(this.env, opened.registered, opened.graph);
-    await this.seal(opened.registered, terminal);
-    return result;
+    if (!this.rankingAccess) throw new RealmReplyUnavailable('Realm ranking owner is unavailable');
+    const removes = input.outcome !== 'approved' || input.supersedes !== null;
+    try {
+      if (removes) await fenceRealmThreadRemoval(this.rankingAccess, this.env.lineage.dataEpoch,
+        input.realm, input.reply, opened.registered.id);
+      const result = await this.content.decideReview(opened.registered, input);
+      if (removes) await finishRealmThreadRemoval(this.rankingAccess, this.env.lineage.dataEpoch,
+        input.realm, input.reply, opened.registered.id);
+      const terminal = await acknowledgeContentDecision(this.env, opened.registered, opened.graph);
+      await this.seal(opened.registered, terminal);
+      return result;
+    } catch (error) {
+      if (removes && (error instanceof RealmReplyStale || error instanceof RealmReplyDenied || error instanceof RealmReplyInvalid))
+        await controlTransaction(this.rankingAccess, client => client.query(`DELETE FROM access.realm_thread_dirty
+          WHERE data_epoch=$1 AND kind='placement' AND resource=$2 AND after_key=$3`,
+        [this.env.lineage.dataEpoch, `${input.realm}|${input.reply}|${opened.registered.id}`, `pending:${opened.registered.id}`]));
+      throw unavailableReply(error) ?? error;
+    }
   }
 
   async place(principal: VerifiedPrincipal, actingSubject: string, input: PlacementInput,
@@ -351,6 +369,7 @@ export class RealmReplyStore {
   private async placeAdmitted(principal: VerifiedPrincipal, input: PlacementInput,
     admission: RegisteredAdmission, memberAdmission: boolean, observed: ReplyGraphReceipt | null,
     permit?: RealmPermit, client?: PoolClient, basis?: RealmReplyDispatchBasis) {
+    if (!this.rankingAccess) throw new RealmReplyUnavailable('Realm ranking owner is unavailable');
     const unified = await readRealmPolicy(this.env, input.realm);
     if (permit && (!unified || unified.visibility !== 'public' && !permit.member)) {
       throw new RealmReplyDenied('Realm membership is required');
@@ -406,6 +425,7 @@ export class RealmReplyStore {
       outcome: 'active', revisionId: input.revisionId, receipt: terminal.receipt,
       dataEpoch: terminal.dataEpoch, sequence: terminal.sequence,
     });
+    await settleRealmThreadPlacement(this.rankingAccess, terminal.dataEpoch, prepared, terminal.placement, client);
     return { terminal, body: { placement: terminal.placement, reply: input.reply, realm: input.realm,
       revisionId: input.revisionId, reviewDecisionId: prepared.reviewDecisionId, reviewGeneration: prepared.reviewGeneration,
       replayed: admission.replayed || prepared.replayed } };
