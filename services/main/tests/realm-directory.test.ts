@@ -152,14 +152,16 @@ test('Realm directory is a public typed Main route', () => {
 
 test('community topics use the current shared vocabulary and match both languages', async () => {
   const id = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
+  const head = 'https://rezics.com/id/00000000-0000-4000-8000-000000000002';
   const environment = { fuseki: {} } as WorkActivationEnvironment;
   const reader = { read: async (targets: readonly unknown[]) => targets.map(() => 'visible' as const) };
   configureDisclosure(environment, reader);
   const session = { deps: { environment }, displayLanguages: ['zh-CN'],
     disclosure: reader.read, query: async (sparql: string) => {
     expect(sparql).toContain('rv:VocabularyDefinition');
-    return [{ concept: { value: id }, label: { value: 'Mystery', 'xml:lang': 'en' } },
-      { concept: { value: id }, label: { value: '悬疑', 'xml:lang': 'zh-Hans' } }];
+    expect(sparql).toContain('rv:head ?head');
+    return [{ concept: { value: id }, head: { value: head }, label: { value: 'Mystery', 'xml:lang': 'en' } },
+      { concept: { value: id }, head: { value: head }, label: { value: '悬疑', 'xml:lang': 'zh-Hans' } }];
   } } as never;
   expect((await readSharedVocabulary(session, 'Myst')).items).toEqual([{ id, label: '悬疑' }]);
   expect((await readSharedVocabulary(session, '悬疑')).items).toEqual([{ id, label: '悬疑' }]);

@@ -82,6 +82,8 @@ function fixture(concepts: Concept[]) {
       rows = concepts.filter(value => query.includes(`<${value.id}>`))
         .map(value => ({ work: binding(value.id), head: binding(value.head) }));
     } else if (query.includes('skos:prefLabel')) {
+      expect(query).toMatch(/SELECT[^{}]*\?head/);
+      expect(query).toContain('rv:head ?head');
       const exact = concepts.filter(value => query.includes(`<${value.id}>`));
       const selected = /<https:\/\/rezics\.com\/id\/[0-9a-f-]{36}>/.test(query)
         || query.includes('VALUES') ? exact : concepts;
@@ -193,6 +195,80 @@ test('restricted-concept-name: an exact name search fence hides both vocabulary 
     profile: 'shared-vocabulary-v1', items: [], hasMore: false });
   expect(await topicFailure(f.session, hidden.id)).toEqual({
     error: 'WorkReadInvalid', message: 'Topic is unavailable' });
+});
+
+for (const component of ['record', 'name'] as const) {
+  test(`restricted-concept-${component}-revision: an old head restriction preserves the current labels in both resolvers`, async () => {
+    const value = concept('Restricted old Concept label');
+    const f = fixture([value]);
+    await f.restrict(value, component);
+    value.head = native();
+    value.label = 'Current Concept label';
+
+    const classify = f.session.disclosure.bind(f.session);
+    f.session.disclosure = async (targets, ...args) => {
+      for (const target of targets) expect(target.revision).toBe(value.head);
+      return classify(targets, ...args);
+    };
+    expect(await readSharedVocabulary(f.session, value.label)).toEqual({
+      profile: 'shared-vocabulary-v1', items: [{ id: value.id, label: value.label }], hasMore: false });
+    const directory = await readRealmDirectory(f.session, { sort: 'newest', topic: value.id });
+    expect(directory.topic?.id).toBe(value.id);
+    expect(directory.topic?.label.value).toBe(value.label);
+
+    await f.restrict(value, component);
+    expect(await readSharedVocabulary(f.session, value.label)).toEqual({
+      profile: 'shared-vocabulary-v1', items: [], hasMore: false });
+    expect(await topicFailure(f.session, value.id)).toEqual({
+      error: 'WorkReadInvalid', message: 'Topic is unavailable' });
+  });
+}
+
+test('restricted-concept-selected-revision: a new head cannot release the restricted name selected by either resolver', async () => {
+  for (const resolver of ['vocabulary', 'topic'] as const) {
+    const value = concept('Restricted selected Concept name');
+    const f = fixture([value]);
+    await f.restrict(value, 'name');
+    const selectedRevision = value.head;
+    const query = f.session.query.bind(f.session);
+    f.session.query = async (...args) => {
+      const rows = await query(...args);
+      if (args[0].includes('skos:prefLabel')) {
+        value.head = native();
+        value.label = 'New unrestricted Concept name';
+      }
+      return rows;
+    };
+    const classify = f.session.disclosure.bind(f.session);
+    f.session.disclosure = async (targets, ...args) => {
+      for (const target of targets) expect(target.revision).toBe(selectedRevision);
+      return classify(targets, ...args);
+    };
+    if (resolver === 'vocabulary') expect((await readSharedVocabulary(f.session)).items).toEqual([]);
+    else expect(await topicFailure(f.session, value.id)).toEqual({
+      error: 'WorkReadInvalid', message: 'Topic is unavailable' });
+    expect(value.head).not.toBe(selectedRevision);
+  }
+});
+
+test('concept-disclosure-invalid-revision: missing or conflicting label heads fail closed in both resolvers', async () => {
+  for (const invalid of ['missing', 'conflicting'] as const) {
+    const value = concept('Concept with invalid label revision');
+    const f = fixture([value]);
+    const query = f.session.query.bind(f.session);
+    f.session.query = async (...args) => {
+      const rows = await query(...args);
+      if (!args[0].includes('skos:prefLabel')) return rows;
+      return invalid === 'missing' ? rows.map(row => {
+        const withoutHead = { ...row };
+        delete withoutHead.head;
+        return withoutHead;
+      })
+        : [...rows, { ...rows[0]!, head: binding(native()) }];
+    };
+    await expect(readSharedVocabulary(f.session)).rejects.toBeInstanceOf(WorkReadUnavailable);
+    await expect(readRealmDirectory(f.session, { sort: 'newest', topic: value.id })).rejects.toBeInstanceOf(WorkReadUnavailable);
+  }
 });
 
 test('restricted-concept-vocabulary-final-fence: a committed restriction after opening classification withholds the label', async () => {

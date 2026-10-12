@@ -27,16 +27,20 @@ export async function readRealmDirectory(session: WorkReadSession,
     throw new WorkReadInvalid('Topic must be a Concept identity');
   }
   let topic = null;
+  let topicBasis: { id: string; revision: string } | null = null;
   if (input.topic) {
     const labels = await session.query(`PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
-      SELECT ?label WHERE { GRAPH ${iri(GRAPHS.current)} {
-        ${iri(input.topic)} a skos:Concept ; skos:prefLabel ?label .
+      SELECT ?head ?label WHERE { GRAPH ${iri(GRAPHS.current)} {
+        ${iri(input.topic)} a skos:Concept ; skos:prefLabel ?label ; rv:head ?head .
         FILTER NOT EXISTS { ${iri(input.topic)} rv:conceptRealm ?realm }
         FILTER NOT EXISTS { ${iri(input.topic)} rv:conceptState rv:Retired }
         FILTER NOT EXISTS { ${iri(input.topic)} rv:protectionHead ?protection }
       } } LIMIT 20`, 20);
     if (!labels.length) throw new WorkReadInvalid('Topic is unavailable');
-    if (!(await visibleSharedConcepts(session, [input.topic])).has(input.topic)) throw new WorkReadInvalid('Topic is unavailable');
+    const revision = labels[0]!.head?.value;
+    if (!revision || labels.some(row => row.head?.value !== revision)) throw new WorkReadUnavailable('Topic revision is unavailable');
+    topicBasis = { id: input.topic, revision };
+    if (!(await visibleSharedConcepts(session, [topicBasis])).has(input.topic)) throw new WorkReadInvalid('Topic is unavailable');
     const names = new Map(labels.flatMap(row => row.label?.['xml:lang']
       ? [[row.label['xml:lang'].toLowerCase(), row.label.value] as const] : []));
     const label = selectDisplayName(names, session.displayLanguages);
@@ -123,7 +127,7 @@ export async function readRealmDirectory(session: WorkReadSession,
         || row.mode?.value !== prior.mode?.value;
     })) throw new WorkReadMoved('Realm identity changed');
   const final = await classify();
-  if (input.topic && !(await visibleSharedConcepts(session, [input.topic])).has(input.topic)) {
+  if (topicBasis && !(await visibleSharedConcepts(session, [topicBasis])).has(topicBasis.id)) {
     throw new WorkReadInvalid('Topic is unavailable');
   }
   const visible = new Set(page.rows.filter((_, ordinal) => opening[ordinal] === 'visible'
