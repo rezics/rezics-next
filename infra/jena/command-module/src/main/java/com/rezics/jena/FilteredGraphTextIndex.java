@@ -194,6 +194,10 @@ public final class FilteredGraphTextIndex implements TextIndex {
         requireValue(data, CURRENT_GRAPH, variant, "contentPublicationHead", decision);
         requireValue(data, CURRENT_GRAPH, variant, "publicSearchEligibilityHead", eligibility);
         requireType(data, revisions, decision, "ContentPublicationDecision");
+        if (!CommandService.contentPublicationPublishable(data, decision))
+            throw new IllegalStateException(data.contains(revisions, decision,
+                org.apache.jena.vocabulary.RDF.type.asNode(), uri(RV + "ContentWithdrawalDecision"))
+                ? "Content publication source is withdrawn" : "Content publication source is erased");
         requireValue(data, revisions, decision, "component", variant);
         requireValue(data, revisions, decision, "resource", resource);
         requireValue(data, revisions, decision, "contentRevision", revision);

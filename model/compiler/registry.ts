@@ -17,7 +17,7 @@ const creativeWork: Term = '<https://schema.org/CreativeWork>';
  */
 export const canonicalTypeOrder: readonly Term[] = [
   rv('EditorialControlRevision'), rv('AuthorCredit'), rv('AuthorCreditRevision'), creativeWork,
-  rv('MainVersion'), rv('ContentVariant'), rv('ContentPublicationDecision'),
+  rv('MainVersion'), rv('ContentVariant'), rv('ContentPublicationDecision'), rv('ContentWithdrawalDecision'),
   rv('ContentSearchEligibilityDecision'), rv('ContentProjection'), rv('Space'), rv('Realm'),
   rv('ExperienceRatingContext'), rv('ExperienceRatingObservation'),
   rv('ExperienceRatingObservationRevision'), rv('RatingPolicyRevision'), rv('DailyRatingContext'),

@@ -51,12 +51,13 @@ test(focused ? `the image Maven invocation verifies ${focused}`
       ...(focused ? [`-Dtest=${focused}`] : []), 'package',
     // Allow the aggregate image suite to finish under concurrent host load;
     // every original JUnit timeout and JVM limit remains in force.
-    ], { cwd: root, encoding: 'utf8', timeout: 2_700_000, maxBuffer: 8 * 1024 * 1024 });
+    ], { cwd: root, encoding: 'utf8', timeout: 1_920_000, maxBuffer: 8 * 1024 * 1024 });
     const evidence = join(root, '.temp/goal/occurrence-label-native',
       focused === 'OccurrenceLabelIndexGrowthTest' ? 'growth' : focused ? 'focused' : 'suite');
     mkdirSync(evidence, { recursive: true });
     writeFileSync(join(evidence, 'maven.log'), `${result.stdout ?? ''}\n${result.stderr ?? ''}`);
     const reports = join(build, 'target/surefire-reports');
+    rmSync(join(evidence, 'surefire-reports'), { recursive: true, force: true });
     try { cpSync(reports, join(evidence, 'surefire-reports'), { recursive: true }); } catch { /* Compilation may fail before tests. */ }
     if (result.status !== 0)
       throw new Error(`native suite failed (${result.status}); see ${evidence.slice(root.length + 1)}/maven.log\n`
@@ -69,4 +70,4 @@ test(focused ? `the image Maven invocation verifies ${focused}`
   } finally {
     rmSync(build, { recursive: true, force: true });
   }
-}, 2_740_000);
+}, 1_960_000);

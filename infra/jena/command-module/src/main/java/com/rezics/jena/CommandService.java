@@ -8,10 +8,12 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.HexFormat;
 import javax.crypto.Mac;
@@ -1249,6 +1251,7 @@ final class CommandService extends ActionService {
             OccurrenceLabelIndex.Capture occurrenceLabels = new OccurrenceLabelIndex.Capture(dataset);
             List<TemplateIndexService.Entity> templateBefore = slim ? List.of() : TemplateIndexService.capture(dataset,plan);
             Set<String> publicationHeads = workStructurePublicationHeadChanges(dataset, plan);
+            Map<String, Node> contentHeads = contentPublicationHeadsBefore(dataset, plan);
             CommandWork.enter("update");
             // Inspect the bounded actual primary delta, not the declared
             // template size. Apply through the existing observation chain so
@@ -1290,7 +1293,7 @@ final class CommandService extends ActionService {
                     Node.ANY, Node.ANY).hasNext()) retiredCurrent.add(subject);
             }
             Map<String, Object> scope = validateScope(dataset, receipt, plan, validations, retiredCurrent,
-                membership.validatedLists(), publicationHeads);
+                membership.validatedLists(), publicationHeads, contentHeads);
             if (scope != null) return scope;
             String sourceBinding = SourceProjectionPolicy.check(dataset, receipt, plan);
             if (sourceBinding != null) return invalid(sourceBinding);
@@ -1367,7 +1370,8 @@ final class CommandService extends ActionService {
         if (System.nanoTime() >= deadline) return Map.of("status", "deadline");
         DatasetGraph logical = snapshot.logical();
         Map<String, Object> scope = validateScope(logical, receipt, snapshot.plan(), validations, Set.of(), Set.of(),
-            workStructurePublicationHeadChanges(logical, snapshot.plan()));
+            workStructurePublicationHeadChanges(logical, snapshot.plan()),
+            contentPublicationHeadsBefore(physical, snapshot.plan()));
         if (scope != null) return scope;
         record Instance(String profile, Map<String, String> binding) {}
         Map<Instance, List<Validation>> grouped = new LinkedHashMap<>();
@@ -1417,6 +1421,7 @@ final class CommandService extends ActionService {
         boolean restoring = StatementUpgradePolicy.restoringReceipt(receipt);
         CommandPolicy.Plan validationPlan = restoring ? StatementRestorePolicy.nativePlan(plan, receipt) : plan;
         Set<String> publicationHeads = workStructurePublicationHeadChanges(dataset, validationPlan);
+        Map<String, Node> contentHeads = contentPublicationHeadsBefore(dataset, validationPlan);
         CommandWork.enter("update");
         CommandOverlay primary = new CommandOverlay(CommandWork.observe(delta == null ? dataset : delta.observed()));
         UpdateAction.execute(plan.request(), DatasetFactory.wrap(primary));
@@ -1434,7 +1439,7 @@ final class CommandService extends ActionService {
         if (restoring && validations.stream().anyMatch(entry -> !Set.of("statement-v1", "statement-decision-v1")
             .contains(entry.profileId()))) return invalid("classification restore validates only native representation profiles");
         Map<String, Object> scope = validateScope(dataset, receipt, validationPlan, validations, Set.of(),
-            membership.validatedLists(), publicationHeads);
+            membership.validatedLists(), publicationHeads, contentHeads);
         if (scope != null) return scope;
         record Instance(String profile, Map<String, String> binding) {}
         Map<Instance, List<Validation>> grouped = new LinkedHashMap<>();
@@ -1467,7 +1472,7 @@ final class CommandService extends ActionService {
 
     private Map<String, Object> validateScope(DatasetGraph dataset, String receipt, CommandPolicy.Plan plan,
                                               List<Validation> validations, Set<String> retiredCoverage, Set<Node> membershipLists,
-                                              Set<String> publicationHeads) {
+                                              Set<String> publicationHeads, Map<String, Node> contentHeads) {
         boolean productData = !plan.current().isEmpty() || !plan.revisions().isEmpty()
             || !plan.source().isEmpty()
             || plan.graphs().contains(CommandPolicy.PUBLIC_SEARCH) && !plan.bootstrap();
@@ -1495,7 +1500,8 @@ final class CommandService extends ActionService {
         Node revisionGraph = NodeFactory.createURI(CommandPolicy.REVISIONS);
         Node component = NodeFactory.createURI(RV + "component");
         boolean freshPublication = plan.revisions().stream().anyMatch(subject ->
-            hasType(dataset, CommandPolicy.REVISIONS, subject, "ContentPublicationDecision"));
+            hasType(dataset, CommandPolicy.REVISIONS, subject, "ContentPublicationDecision")
+                || hasType(dataset, CommandPolicy.REVISIONS, subject, "ContentWithdrawalDecision"));
         for (String subject : plan.current()) {
             if (retiredCoverage.contains(subject)) continue;
             boolean covered = directCurrent.contains(subject);
@@ -1514,9 +1520,9 @@ final class CommandService extends ActionService {
                 : CanonicalPolicy.validate(profiles, dataset, subject, false);
             if (canonical != null) return canonical;
             if (hasType(dataset, CommandPolicy.CURRENT, subject, "ContentVariant")) {
-                if (!hasContentFocus(validations, subject, "variant-shape", CommandPolicy.CURRENT))
+                if (!hasContentFocus(dataset, validations, subject, "variant-shape", CommandPolicy.CURRENT))
                     return invalid("Content variant focus omitted: " + subject);
-                String link = contentPublicationLinks(dataset, receipt, subject, false, freshPublication);
+                String link = contentPublicationLinks(dataset, receipt, subject, false, freshPublication, contentHeads);
                 if (link != null) return invalid(link);
             }
             String publication = workStructurePublicationHeadScope(dataset, subject, validations, publicationHeads);
@@ -1532,10 +1538,11 @@ final class CommandService extends ActionService {
             if (ModelMutationPolicy.erasureMarker(dataset, plan, receipt, subject)) continue;
             Map<String, Object> canonical = CanonicalPolicy.validate(profiles, dataset, subject, true);
             if (canonical != null) return canonical;
-            if (hasType(dataset, CommandPolicy.REVISIONS, subject, "ContentPublicationDecision")) {
-                if (!hasContentFocus(validations, subject, "decision-shape", CommandPolicy.REVISIONS))
+            if (hasType(dataset, CommandPolicy.REVISIONS, subject, "ContentPublicationDecision")
+                || hasType(dataset, CommandPolicy.REVISIONS, subject, "ContentWithdrawalDecision")) {
+                if (!hasContentFocus(dataset, validations, subject, "decision-shape", CommandPolicy.REVISIONS))
                     return invalid("Content publication decision focus omitted: " + subject);
-                String link = contentPublicationLinks(dataset, receipt, subject, true, true);
+                String link = contentPublicationLinks(dataset, receipt, subject, true, true, contentHeads);
                 if (link != null) return invalid(link);
             }
             if (hasType(dataset, CommandPolicy.REVISIONS, subject, "WorkStructurePublicationDecision")) {
@@ -1572,7 +1579,7 @@ final class CommandService extends ActionService {
             if (boundProfile != null && !boundFocus(validations, boundProfile, subject))
                 return invalid("bound profile focus omitted: " + subject);
             Node node = NodeFactory.createURI(subject);
-            for (String type : List.of("PublicationDecision", "ContentPublicationDecision",
+            for (String type : List.of("PublicationDecision", "ContentPublicationDecision", "ContentWithdrawalDecision",
                 "WorkStructurePublicationDecision",
                 "ContentSearchEligibilityDecision", "ContentProjection", "PublicationSelection",
                 "RealmPublicationRejection", "ClassificationDecision", "RatingObservationRevision",
@@ -1766,9 +1773,14 @@ final class CommandService extends ActionService {
         return dataset.contains(NodeFactory.createURI(graph), NodeFactory.createURI(subject),
             org.apache.jena.vocabulary.RDF.type.asNode(), NodeFactory.createURI("https://schema.org/" + type));
     }
-    private static boolean hasContentFocus(List<Validation> validations, String subject, String shape,
+    static boolean hasContentFocus(DatasetGraph dataset, List<Validation> validations, String subject, String shape,
                                            String graph) {
-        return hasNamedFocus(validations, "content-publication-v1", shape, subject, graph);
+        Node decision = graph.equals(CommandPolicy.CURRENT)
+            ? exactlyOne(dataset, NodeFactory.createURI(graph), NodeFactory.createURI(subject), "contentPublicationHead")
+            : NodeFactory.createURI(subject);
+        String profile = decision != null && decision.isURI() && hasType(dataset, CommandPolicy.REVISIONS,
+            decision.getURI(), "ContentWithdrawalDecision") ? "content-withdrawal-v1" : "content-publication-v1";
+        return hasNamedFocus(validations, profile, shape, subject, graph);
     }
     private static boolean hasNamedFocus(List<Validation> validations, String profile, String shape,
                                          String subject, String graph) {
@@ -1786,8 +1798,34 @@ final class CommandService extends ActionService {
         } finally { Iter.close(values); }
     }
     /** Fixed poststate link and position checks; request-supplied focus cannot redirect them. */
-    private static String contentPublicationLinks(DatasetGraph dataset, String receipt, String subject,
-                                                  boolean revision, boolean fresh) {
+    static Map<String, Node> contentPublicationHeadsBefore(DatasetGraph dataset, CommandPolicy.Plan plan) {
+        Map<String, Node> heads = new HashMap<>();
+        Node current = NodeFactory.createURI(CommandPolicy.CURRENT);
+        Node predicate = NodeFactory.createURI(RV + "contentPublicationHead");
+        for (var operation : plan.request().getOperations()) {
+            List<Quad> inserts = operation instanceof org.apache.jena.sparql.modify.request.UpdateModify modify
+                ? modify.getInsertQuads() : operation instanceof org.apache.jena.sparql.modify.request.UpdateDataInsert insert
+                    ? insert.getQuads() : List.of();
+            for (Quad quad : inserts) {
+                if (!current.equals(quad.getGraph()) || !predicate.equals(quad.getPredicate())
+                    || !quad.getSubject().isURI() || heads.containsKey(quad.getSubject().getURI())) continue;
+                Node head = exactlyOne(dataset, current, quad.getSubject(), "contentPublicationHead");
+                // Retain absence too, so selecting a withdrawal on a fresh
+                // variant cannot be mistaken for an unchanged retained head.
+                heads.put(quad.getSubject().getURI(), head == null ? Node.ANY : head);
+            }
+        }
+        return Map.copyOf(heads);
+    }
+    /** A withdrawal is an exact retained head, but never a source of public Content. */
+    static boolean contentPublicationPublishable(DatasetGraph dataset, Node decision) {
+        return decision != null && decision.isURI()
+            && hasType(dataset, CommandPolicy.REVISIONS, decision.getURI(), "ContentPublicationDecision")
+            && !hasType(dataset, CommandPolicy.REVISIONS, decision.getURI(), "ContentWithdrawalDecision")
+            && !hasType(dataset, CommandPolicy.REVISIONS, decision.getURI(), "ErasedRevision");
+    }
+    static String contentPublicationLinks(DatasetGraph dataset, String receipt, String subject,
+        boolean revision, boolean fresh, Map<String, Node> previousHeads) {
         Node current = NodeFactory.createURI(CommandPolicy.CURRENT);
         Node revisions = NodeFactory.createURI(CommandPolicy.REVISIONS);
         Node variant = NodeFactory.createURI(subject);
@@ -1795,7 +1833,8 @@ final class CommandService extends ActionService {
         if (revision) variant = exactlyOne(dataset, revisions, decision, "component");
         if (variant == null || !variant.isURI() || decision == null || !decision.isURI()
             || !hasType(dataset, CommandPolicy.CURRENT, variant.getURI(), "ContentVariant")
-            || !hasType(dataset, CommandPolicy.REVISIONS, decision.getURI(), "ContentPublicationDecision"))
+            || hasType(dataset, CommandPolicy.REVISIONS, decision.getURI(), "ContentPublicationDecision")
+                == hasType(dataset, CommandPolicy.REVISIONS, decision.getURI(), "ContentWithdrawalDecision"))
             return "Content publication component/head missing or mistyped: " + subject;
         Node head = exactlyOne(dataset, current, variant, "contentPublicationHead");
         Node component = exactlyOne(dataset, revisions, decision, "component");
@@ -1804,7 +1843,25 @@ final class CommandService extends ActionService {
         if (!decision.equals(head) || !variant.equals(component) || currentResource == null
             || !currentResource.equals(revisionResource))
             return "Content publication reciprocal head/resource mismatch: " + subject;
-        if (!fresh) return null;
+        boolean withdrawal = hasType(dataset, CommandPolicy.REVISIONS, decision.getURI(), "ContentWithdrawalDecision");
+        Node previous = previousHeads.get(variant.getURI());
+        if (!fresh && (!withdrawal || !previousHeads.containsKey(variant.getURI()) || decision.equals(previous)))
+            return null;
+        if (withdrawal) {
+            // Capture the active head before the command: a retained historical
+            // publication alone cannot authorize a first or repeated withdrawal.
+            if (!contentPublicationPublishable(dataset, previous)
+                || !previous.equals(exactlyOne(dataset, revisions, decision, "predecessor"))
+                || !variant.equals(exactlyOne(dataset, revisions, previous, "component"))
+                || !currentResource.equals(exactlyOne(dataset, revisions, previous, "resource")))
+                return "Content withdrawal requires the active publication predecessor: " + subject;
+            for (String property : List.of("contentRevision", "contentPreparation", "byteDigest", "contentFormat",
+                "contentModel", "contentLanguageKind", "contentLanguage", "contentDirection", "ownerDataEpoch", "ownerSequence")) {
+                if (!Objects.equals(exactlyOne(dataset, revisions, decision, property),
+                    exactlyOne(dataset, revisions, previous, property)))
+                    return "Content withdrawal source differs from publication: " + property;
+            }
+        }
         Node product = NodeFactory.createURI("urn:rezics:dataset:product");
         Node control = NodeFactory.createURI(CommandPolicy.CONTROL);
         Node graphEpoch = exactlyOne(dataset, revisions, decision, "dataEpoch");
@@ -1821,6 +1878,9 @@ final class CommandService extends ActionService {
             || !NodeFactory.createURI(RV + "Succeeded").equals(
                 exactlyOne(dataset, receipts, receiptNode, "outcome")))
             return "Content publication receipt identity/outcome mismatch: " + subject;
+        if (withdrawal && (!previous.equals(exactlyOne(dataset, receipts, receiptNode, "predecessor"))
+            || !previous.equals(exactlyOne(dataset, receipts, receiptNode, "expectedHead"))))
+            return "Content withdrawal receipt predecessor mismatch: " + subject;
         for (String property : List.of("operation", "contentRevision", "contentPreparation",
             "resource", "byteDigest", "ownerDataEpoch", "ownerSequence", "datasetId",
             "dataEpoch", "sequence")) {
@@ -1845,7 +1905,7 @@ final class CommandService extends ActionService {
             default -> null;
         };
     }
-    private static String contentEligibilityLinks(DatasetGraph dataset, String receipt, String subject,
+    static String contentEligibilityLinks(DatasetGraph dataset, String receipt, String subject,
                                                   boolean fresh) {
         Node current = NodeFactory.createURI(CommandPolicy.CURRENT);
         Node revisions = NodeFactory.createURI(CommandPolicy.REVISIONS);
@@ -1857,7 +1917,7 @@ final class CommandService extends ActionService {
         if (variant == null || !variant.isURI() || !variant.equals(component)
             || resource == null || !resource.isURI() || publication == null || !publication.isURI()
             || !hasType(dataset, CommandPolicy.CURRENT, variant.getURI(), "ContentVariant")
-            || !hasType(dataset, CommandPolicy.REVISIONS, publication.getURI(), "ContentPublicationDecision")
+            || !contentPublicationPublishable(dataset, publication)
             || !decision.equals(exactlyOne(dataset, current, variant, "publicSearchEligibilityHead"))
             || !publication.equals(exactlyOne(dataset, current, variant, "contentPublicationHead"))
             || !resource.equals(exactlyOne(dataset, current, variant, "resource"))
@@ -1933,7 +1993,7 @@ final class CommandService extends ActionService {
             || publication == null || !publication.isURI() || eligibility == null || !eligibility.isURI()
             || unit == null || !unit.isURI()
             || !hasType(dataset, CommandPolicy.CURRENT, variant.getURI(), "ContentVariant")
-            || !hasType(dataset, CommandPolicy.REVISIONS, publication.getURI(), "ContentPublicationDecision")
+            || !contentPublicationPublishable(dataset, publication)
             || !hasType(dataset, CommandPolicy.REVISIONS, eligibility.getURI(), "ContentSearchEligibilityDecision")
             || !resource.equals(exactlyOne(dataset, current, variant, "resource"))
             || !publication.equals(exactlyOne(dataset, current, variant, "contentPublicationHead"))
