@@ -1136,6 +1136,11 @@ test('lost publish acknowledgement replays one receipt and original page, route,
   try {
     const key = randomUUID();
     const before = await readZoneConfiguration(f.env, f.zone);
+    const selection = structuredClone(f.selection);
+    const body = { ...selection, expectedHead: before.revision, actingSubject: f.actor };
+    const publicPresentation = async () => f.json<{ revision: string; presentation: ZonePresentation;
+      navigation: Array<{ segment: string }>; home: Home['page'] }>(
+      await f.call('GET', `${f.path}/presentation`, undefined, randomUUID(), null), 200);
     const original = f.env.fuseki;
     let commands = 0, lost = false;
     f.env.fuseki = new Proxy(original, { get(target, property) {
@@ -1151,12 +1156,57 @@ test('lost publish acknowledgement replays one receipt and original page, route,
       return typeof value === 'function' ? value.bind(target) : value;
     } });
     const first = await f.json<ZoneSitePublicationReceipt & { replayed: boolean }>(
-      await f.publish(f.selection.pages, key, before.revision), 201);
+      await f.call('POST', `${f.path}/site-publications`, body, key), 201);
     expect(lost).toBe(true);
+    expect(first).toMatchObject({ pages: boundPages(selection.pages), routesRevision: selection.routesRevision,
+      navigationRevision: selection.navigationRevision, themeRevision: before.revision });
+    const publicBefore = await publicPresentation();
+
+    // A competing editor advances all saved heads while the original request
+    // still names the immutable selections whose acknowledgement was lost.
+    const page = selection.pages[0]!;
+    const draftDocument = fromPlainText('Competing unpublished home', 'blocks');
+    const draftPage = await f.save(draftDocument, page.revisionId, page.variantId);
+    expect(draftPage.revisionId).not.toBe(page.revisionId);
+    const collection = nativeId();
+    await f.grant(`collection:edit:${collection}`, 'collection.edit');
+    await f.grant(`semantic:read:${collection}`, 'semantic.read');
+    await f.json(await f.call('POST', '/v1/collections', {
+      collection, name: 'Competing draft library', disclosure: 'public', actingSubject: f.actor,
+    }), 201);
+    const draftNavigation = await f.json<{ revision: string }>(await f.call('POST', `${f.path}/mounts`, {
+      expectedHead: selection.navigationRevision, target: collection, routeSegment: 'draft-library',
+      disclosure: 'public', actingSubject: f.actor,
+    }), 200);
+    expect(draftNavigation.revision).not.toBe(selection.navigationRevision);
+    const draftPresentation: ZonePresentation = { ...DEFAULT_ZONE_PRESENTATION,
+      tokens: { ...DEFAULT_ZONE_PRESENTATION.tokens, density: 'compact', pageSurface: 'cards' } };
+    const draftConfiguration = await f.json<{ revision: string }>(await f.call('PUT', `${f.path}/configuration`, {
+      expectedHead: first.revision, presentation: draftPresentation, actingSubject: f.actor,
+    }), 200);
+    expect(draftConfiguration.revision).not.toBe(first.revision);
+    expect(await publicPresentation()).toEqual(publicBefore);
+
     const replay = await f.json<ZoneSitePublicationReceipt & { replayed: boolean }>(
-      await f.publish(f.selection.pages, key, before.revision), 200);
+      await f.call('POST', `${f.path}/site-publications`, body, key), 200);
     expect(replay).toEqual({ ...first, replayed: true });
     expect(commands).toBe(1);
+    expect(f.selection).toEqual(selection);
+    const savedConfiguration = await readZoneConfiguration(f.env, f.zone);
+    expect(savedConfiguration.revision).toBe(draftConfiguration.revision);
+    expect(savedConfiguration.configuration.presentation).toEqual(draftPresentation);
+    const editorQuery = `?actingSubject=${encodeURIComponent(f.actor)}`;
+    const savedNavigation = await f.json<{ revision: string; mounts: Array<{ target: string; qualifier: { routeSegment: string } }> }>(
+      await f.call('GET', `${f.path}${editorQuery}`), 200);
+    expect(savedNavigation.revision).toBe(draftNavigation.revision);
+    expect(savedNavigation.mounts).toMatchObject([{ target: collection, qualifier: { routeSegment: 'draft-library' } }]);
+    expect((await f.json<{ draft: { revisionId: string } }>(
+      await f.call('GET', `${f.path}/showcase-editor${editorQuery}`), 200)).draft.revisionId).toBe(draftPage.revisionId);
+    expect((await f.json<{ body: { document: DocumentSnapshot } }>(await f.exact(draftPage.revisionId, true), 200))
+      .body.document).toEqual(draftDocument);
+    expect(await publicPresentation()).toEqual(publicBefore);
+    expect((await readZonePublication(f.env, f.zone)).publicationRevision).toBe(first.revision);
+    expect((await f.call('GET', `${f.path}/routes?path=%2Fdraft-library`, undefined, randomUUID(), null)).status).toBe(404);
     const { replayed: _replayed, ...firstProof } = first;
     expect(await readZoneSitePublicationReceipt(f.env, first.receipt)).toEqual(firstProof);
     const receipts = await f.env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> SELECT ?receipt WHERE {
@@ -1164,8 +1214,10 @@ test('lost publish acknowledgement replays one receipt and original page, route,
         rv:structureOwner ${iri(f.zone)} . }
     } LIMIT 3`, 4096);
     expect(receipts.results?.bindings).toHaveLength(1);
-    expect((await f.publish([{ ...f.selection.pages[0]!, revisionId: randomUUID() }], key, before.revision)).status).toBe(409);
-    expect((await f.home()).page).toMatchObject({ reference: { revisionId: f.selection.pages[0]!.revisionId },
+    expect((await f.call('POST', `${f.path}/site-publications`, {
+      ...body, pages: [{ ...page, revisionId: randomUUID() }],
+    }, key)).status).toBe(409);
+    expect((await f.home()).page).toMatchObject({ reference: { revisionId: page.revisionId },
       document: f.initialDocument });
   } finally { await f.close(); }
 }, 120_000);

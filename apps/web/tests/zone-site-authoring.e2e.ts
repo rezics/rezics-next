@@ -18,6 +18,7 @@ const desktop = { width: 1280, height: 900 };
 const morning = 'Morning edition of the harbor';
 const evening = 'Evening edition of the harbor';
 const otherNote = 'A note from the other tab';
+const competingNote = 'A saved page from the competing editor';
 const baselinePresentation = defaultPresentation({
   picks: 'Staff picks', latest: 'Latest', newChapters: 'New chapters', newlyAdded: 'Newly added',
   recentlyCompleted: 'Recently completed', rankings: 'Top reads', quotes: 'Reader quotes',
@@ -439,6 +440,52 @@ async function saveShowcaseHome(page: Page, site: SiteFixture, actingSubject: st
   expect([200, 201]).toContain(saved.status());
 }
 
+async function advanceSavedSiteHeads(page: Page, zone: string, actingSubject: string) {
+  const zoneId = uuidOf(zone);
+  const editor = await page.request.get(`/api/main/v1/zones/${zoneId}/showcase-editor?actingSubject=${encodeURIComponent(actingSubject)}`);
+  expect(editor.ok()).toBe(true);
+  const { draft } = await editor.json() as { draft: {
+    variantId: string; revisionId: string; language: { kind: 'tag'; tag: string; originalTag: string };
+    direction: 'ltr' | 'rtl' | 'none';
+  } };
+  const savedPage = await page.request.post('/api/main/v1/content-drafts', {
+    headers: { 'idempotency-key': randomUUID() },
+    data: { profile: 'content-text-v1', resourceId: zone, variantId: draft.variantId,
+      expectedHead: draft.revisionId, language: draft.language, direction: draft.direction,
+      document: fromPlainText(competingNote, 'blocks'), actingSubject },
+  });
+  expect([200, 201]).toContain(savedPage.status());
+  const pageRevision = (await savedPage.json() as { revisionId: string }).revisionId;
+  expect(pageRevision).not.toBe(draft.revisionId);
+
+  const navigation = await page.request.get(`/api/main/v1/zones/${zoneId}?actingSubject=${encodeURIComponent(actingSubject)}`);
+  expect(navigation.ok()).toBe(true);
+  const savedNavigation = await navigation.json() as { navigation: string; revision: string;
+    mounts: Array<{ occurrence: string }> };
+  expect(savedNavigation.mounts).toHaveLength(2);
+  const moved = await page.request.post(`/api/main/v1/compositions/${uuidOf(savedNavigation.navigation)}/changes`, {
+    headers: { 'idempotency-key': randomUUID() },
+    data: { profile: 'zone-navigation', expectedHead: savedNavigation.revision, actingSubject,
+      operations: [{ op: 'move', occurrence: savedNavigation.mounts[1]!.occurrence,
+        parent: savedNavigation.navigation, position: 'first' }] },
+  });
+  expect(moved.status()).toBe(200);
+  const navigationRevision = (await moved.json() as { revision: string }).revision;
+  expect(navigationRevision).not.toBe(savedNavigation.revision);
+
+  const current = await zoneConfiguration(page, zoneId, actingSubject);
+  const presentation = current.configuration.presentation as typeof baselinePresentation;
+  const theme = await page.request.put(`/api/main/v1/zones/${zoneId}/configuration`, {
+    headers: { 'idempotency-key': randomUUID() },
+    data: { expectedHead: current.revision, actingSubject,
+      presentation: { ...presentation, tokens: { ...presentation.tokens, density: 'comfortable' } } },
+  });
+  expect(theme.status()).toBe(200);
+  const themeRevision = (await theme.json() as { revision: string }).revision;
+  expect(themeRevision).not.toBe(current.revision);
+  return { pageRevision, navigationRevision, themeRevision };
+}
+
 async function savePresentationLinks(page: Page, site: SiteFixture, actingSubject: string, label: string) {
   const current = await zoneConfiguration(page, site.zoneId, actingSubject);
   const presentation = { ...baselinePresentation, navigation: [{ label, href: '/harbor-guide' }],
@@ -785,9 +832,15 @@ test('Navigation and theme: a Realm-less Zone publishes the saved home, navigati
     const publishKeys: string[] = [];
     const publishBodies: string[] = [];
     let committedReceipt: string | undefined;
+    let committedCut: Record<string, unknown> | undefined;
+    let replayedCut: Record<string, unknown> | undefined;
+    let competingHeads: Awaited<ReturnType<typeof advanceSavedSiteHeads>> | undefined;
     let replayedReceipt: string | undefined;
     let replayedResponse = false;
     let dropPublish = true;
+    const competingEditor = await context.newPage();
+    await competingEditor.goto(editorPath);
+    await expect(competingEditor.getByRole('textbox', { name: 'Home page' })).toContainText(morning);
     await page.route('**/v1/zones/*/site-publications', async (route) => {
       publishKeys.push(route.request().headers()['idempotency-key'] ?? '');
       publishBodies.push(route.request().postData() ?? '');
@@ -796,20 +849,25 @@ test('Navigation and theme: a Realm-less Zone publishes the saved home, navigati
         const upstream = await route.fetch();
         expect([200, 201]).toContain(upstream.status());
         const body = await upstream.text();
-        const result = JSON.parse(body) as { receipt?: string; replayed?: boolean };
+        const result = JSON.parse(body) as Record<string, unknown> & { receipt?: string; replayed?: boolean };
         committedReceipt = result.receipt;
+        const { replayed: _replayed, ...cut } = result;
+        committedCut = cut;
+        competingHeads = await advanceSavedSiteHeads(competingEditor, zone, actingSubject);
         await route.abort('failed');
         return;
       }
       const upstream = await route.fetch();
       const body = await upstream.text();
-      const result = JSON.parse(body) as { receipt?: string; replayed?: boolean };
+      const result = JSON.parse(body) as Record<string, unknown> & { receipt?: string; replayed?: boolean };
+      const { replayed: _replayed, ...cut } = result;
+      replayedCut = cut;
       replayedReceipt = result.receipt;
       replayedResponse = result.replayed === true;
       await route.fulfill({ status: upstream.status(), contentType: 'application/json', body });
     });
     await page.getByRole('button', { name: 'Publish', exact: true }).click();
-    await expect(page.getByText(/^Published\./)).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/^Published\./)).toBeVisible({ timeout: 90_000 });
     expect(publishKeys.slice(0, 2)).toEqual([publishKeys[0], publishKeys[0]]);
     expect(publishKeys[0]).toMatch(/^[A-Za-z0-9:_./-]{1,128}$/);
     expect(publishBodies[0]).toBeTruthy();
@@ -817,7 +875,17 @@ test('Navigation and theme: a Realm-less Zone publishes the saved home, navigati
     expect(committedReceipt).toBeTruthy();
     expect(replayedReceipt).toBe(committedReceipt);
     expect(replayedResponse).toBe(true);
+    expect(replayedCut).toEqual(committedCut);
+    const captured = JSON.parse(publishBodies[0]!) as { pages: Array<{ revisionId: string }>; navigationRevision: string };
+    expect(competingHeads!.pageRevision).not.toBe(captured.pages[0]!.revisionId);
+    expect(competingHeads!.navigationRevision).not.toBe(captured.navigationRevision);
+    expect((await zoneConfiguration(competingEditor, uuidOf(zone), actingSubject)).revision).toBe(competingHeads!.themeRevision);
+    const currentSaved = await competingEditor.request.get(`/api/main/v1/zones/${uuidOf(zone)}/showcase-editor?actingSubject=${encodeURIComponent(actingSubject)}`);
+    expect(currentSaved.ok()).toBe(true);
+    expect(await currentSaved.json()).toMatchObject({ draft: { revisionId: competingHeads!.pageRevision },
+      preview: { navigation: { revision: competingHeads!.navigationRevision } } });
     await page.unroute('**/v1/zones/*/site-publications');
+    await competingEditor.close();
 
     await expect(async () => {
       await reader.goto(siteHref!);
@@ -833,12 +901,15 @@ test('Navigation and theme: a Realm-less Zone publishes the saved home, navigati
     });
     expect(publishedTheme.tiles).toBe('6');
     expect(publishedTheme.panel).not.toBe('transparent');
+    await expect(reader.locator('.rezics-document')).not.toContainText(competingNote);
     await shoot(reader, 'zone-home-published', info);
 
+    await page.goto(editorPath);
+    await expect(page.getByRole('textbox', { name: 'Home page' })).toContainText(competingNote);
     const second = await context.newPage();
     await second.setViewportSize(desktop);
     await second.goto(editorPath);
-    await expect(second.getByRole('textbox', { name: 'Home page' })).toContainText(morning);
+    await expect(second.getByRole('textbox', { name: 'Home page' })).toContainText(competingNote);
     await writeHome(page, evening);
     await expect(page.getByRole('textbox', { name: 'Home page' })).not.toContainText(morning);
     await page.getByRole('button', { name: 'Save draft' }).click();
