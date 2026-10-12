@@ -11,6 +11,7 @@ import { AccessAdmissionRegistry, AdmissionDenied, type VerifiedPrincipal } from
 import { grantFixtureAuthority, ensureFixtureScopeGate } from '../src/modules/access/fixture-authority.ts';
 import { AccessRealmRoster } from '../src/modules/access/roster.ts';
 import { settleRealmPolicy } from '../src/modules/access/realm-management-recovery.ts';
+import { withWorkEditAuthorityInTransaction } from '../src/modules/access/work-edit-authority.ts';
 import { accessClient, controlTransaction } from '../src/modules/access/topology-control.ts';
 import { TemplateSeekIndex } from '../src/modules/query/seek-index.ts';
 import { GovernanceStore, GovernanceConflict, GovernanceStale, GLOBAL_CONTEXT, type DecisionInput } from '../src/modules/governance/store.ts';
@@ -178,6 +179,13 @@ test('author suitability enters the real Work edit owner and nested control tran
     const { client, id } = await heldTransaction();
     await client.query("SET LOCAL lock_timeout='500ms'");
     await client.query("SET LOCAL statement_timeout='1s'");
+    await client.query("SET LOCAL idle_in_transaction_session_timeout='10s'");
+    await withWorkEditAuthorityInTransaction(client, f.principal, f.actor, f.work, async () => {
+      await sameTransaction(client, id);
+      expect((await client.query('SHOW lock_timeout')).rows[0]?.lock_timeout).toBe('500ms');
+      expect((await client.query('SHOW statement_timeout')).rows[0]?.statement_timeout).toBe('1s');
+      expect((await client.query('SHOW idle_in_transaction_session_timeout')).rows[0]?.idle_in_transaction_session_timeout).toBe('10s');
+    });
     const result = await store.write(f.principal, target, input, key);
     expect(result.assessment.status).toBe('assessed');
     expect((await client.query('SHOW lock_timeout')).rows[0]?.lock_timeout).toBe('500ms');
@@ -189,6 +197,50 @@ test('author suitability enters the real Work edit owner and nested control tran
   expect((await store.write(f.principal, target, input, key)).replayed).toBe(false);
   await expect(f.access.withWorkEditAuthority({ ...f.principal, subject: 'absent' }, f.actor, f.work,
     async () => { throw new Error('Unauthorized callback ran'); })).rejects.toBeInstanceOf(AdmissionDenied);
+  expect(accessClient(pool)).toBeUndefined();
+}, 30_000);
+
+test.each([
+  ['1700ms', '1700ms', '500ms', '500ms'],
+  ['0', '2s', '0', '2s'],
+  ['10s', '2s', '10s', '2s'],
+  ['1700ms', '1700ms', '10s', '2s'],
+  ['10s', '2s', '500ms', '500ms'],
+])('borrowed contributor admission caps statement %s at %s and lock %s at %s, then restores both',
+async (statement, statementCap, lock, lockCap) => {
+  const f = await identity();
+  await f.grant('work.create', 'work:create:root');
+  const admission = await f.access.register({ principal: f.principal, actingSubject: f.actor,
+    action: 'work.create', scope: 'work:create:root', idempotencyKey: randomUUID(), requestDigest: 'a'.repeat(64) });
+  await publicationStore().withPublicationFence([f.work], async () => {
+    const { client, id } = await heldTransaction();
+    await client.query(`SELECT set_config('statement_timeout', $1, true), set_config('lock_timeout', $2, true)`,
+      [statement, lock]);
+    const query = client.query.bind(client);
+    const observed: { statement: string; lock: string }[] = [];
+    // Observe the real PostgreSQL limits at the admission query, before restoration can hide a raised bound.
+    client.query = (async (sql: string, values?: unknown[]) => {
+      if (sql.startsWith('SELECT acting_subject FROM access.admission')) {
+        observed.push({
+          statement: (await query('SHOW statement_timeout')).rows[0]!.statement_timeout,
+          lock: (await query('SHOW lock_timeout')).rows[0]!.lock_timeout,
+        });
+      }
+      return query(sql, values);
+    }) as typeof client.query;
+    try {
+      expect(await f.access.admittedActingSubject(admission.id)).toBe(f.actor);
+      expect((await client.query('SHOW statement_timeout')).rows[0]?.statement_timeout).toBe(statement);
+      expect((await client.query('SHOW lock_timeout')).rows[0]?.lock_timeout).toBe(lock);
+      await expect(f.access.admittedActingSubject(randomUUID())).rejects.toBeInstanceOf(AdmissionDenied);
+      expect((await client.query('SHOW statement_timeout')).rows[0]?.statement_timeout).toBe(statement);
+      expect((await client.query('SHOW lock_timeout')).rows[0]?.lock_timeout).toBe(lock);
+      expect(observed).toEqual(Array.from({ length: 2 }, () => ({ statement: statementCap, lock: lockCap })));
+      await sameTransaction(client, id);
+    } finally {
+      client.query = query;
+    }
+  });
   expect(accessClient(pool)).toBeUndefined();
 }, 30_000);
 

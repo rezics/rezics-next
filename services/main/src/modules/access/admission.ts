@@ -2005,13 +2005,23 @@ export class AccessAdmissionRegistry {
     return withAccessClient(this.pool, async client => {
       connected = true;
       const ownsTransaction = !borrowed || !await inExplicitTransaction(client);
-      let parentTimeout: string | undefined;
+      let parentTimeouts: { statement: string; lock: string } | undefined;
       try {
-        if (ownsTransaction) await client.query('BEGIN');
-        else parentTimeout = (await client.query<{ timeout: string }>(
-          "SELECT current_setting('statement_timeout') AS timeout")).rows[0]!.timeout;
-        if (ownsTransaction) await client.query("SET LOCAL lock_timeout = '2s'");
-        await client.query("SET LOCAL statement_timeout = '2s'");
+        if (ownsTransaction) {
+          await client.query('BEGIN');
+          await client.query("SET LOCAL lock_timeout = '2s'");
+          await client.query("SET LOCAL statement_timeout = '2s'");
+        } else {
+          parentTimeouts = {
+            statement: (await client.query<{ statement_timeout: string }>('SHOW statement_timeout')).rows[0]!.statement_timeout,
+            lock: (await client.query<{ lock_timeout: string }>('SHOW lock_timeout')).rows[0]!.lock_timeout,
+          };
+          // Zero is unlimited; a borrowed statement may only tighten its owner's bounds.
+          await client.query(`SELECT
+            set_config('statement_timeout', CASE WHEN $1 = '0' OR $1::interval > interval '2 seconds' THEN '2s' ELSE $1 END, true),
+            set_config('lock_timeout', CASE WHEN $2 = '0' OR $2::interval > interval '2 seconds' THEN '2s' ELSE $2 END, true)`,
+          [parentTimeouts.statement, parentTimeouts.lock]);
+        }
         const result = await client.query<{ acting_subject: unknown }>(
           'SELECT acting_subject FROM access.admission WHERE id = $1::uuid LIMIT 1', [admissionId]);
         if (ownsTransaction) await client.query('COMMIT');
@@ -2025,8 +2035,9 @@ export class AccessAdmissionRegistry {
         if (error instanceof AdmissionDenied || error instanceof AdmissionUnavailable) throw error;
         throw admissionError(error);
       } finally {
-        if (parentTimeout !== undefined) await client.query(
-          "SELECT set_config('statement_timeout', $1, true)", [parentTimeout]).catch(() => {});
+        if (parentTimeouts) await client.query(`SELECT
+          set_config('statement_timeout', $1, true), set_config('lock_timeout', $2, true)`,
+        [parentTimeouts.statement, parentTimeouts.lock]).catch(() => {});
       }
     }, borrowed).catch(error => {
       if (!connected) throw new AdmissionUnavailable('Access admission store could not be reached');

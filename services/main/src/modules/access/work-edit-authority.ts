@@ -47,7 +47,7 @@ export async function withWorkEditAuthority<T>(pool: Pool, principal: VerifiedPr
 export async function withWorkEditAuthorityInTransaction<T>(client: PoolClient, principal: VerifiedPrincipal,
   actingSubject: string, work: string, commit: (proof: WorkEditAuthorityProof) => Promise<T>,
   graph?: Pick<FusekiClient, 'query'>): Promise<T> {
-  return workEditAuthority(client, principal, actingSubject, work, commit, graph, true);
+  return workEditAuthority(client, principal, actingSubject, work, commit, graph, false);
 }
 
 async function workEditAuthority<T>(client: PoolClient, principal: VerifiedPrincipal,
