@@ -563,28 +563,20 @@ public class RealmTargetOwnerContractTest {
       String digest = command.get("digest").getAsString().value();
       String update = command.get("update").getAsString().value();
       String expected = scenario.get("expected").getAsString().value();
+      phase(name + " seed-start");
+      data.begin(ReadWrite.WRITE);
       try {
-        phase(name + " seed-start");
-        data.begin(ReadWrite.WRITE);
-        try {
           data.clear();
           UpdateAction.parseExecute(scenario.get("seed").getAsString().value(), DatasetFactory.wrap(data));
           String mutation = scenario.get("mutation").getAsString().value();
           if (!mutation.isEmpty()) UpdateAction.parseExecute(mutation, DatasetFactory.wrap(data));
-          data.commit();
-        } finally { data.end(); }
         Set<org.apache.jena.sparql.core.Quad> preserved = new HashSet<>();
-        data.begin(ReadWrite.READ);
-        try {
           data.find(iri("${GRAPHS.current}"), Node.ANY, Node.ANY, Node.ANY).forEachRemaining(preserved::add);
           data.find(iri("${GRAPHS.revisions}"), iri("urn:realm-native:detached-attachment"), Node.ANY, Node.ANY)
             .forEachRemaining(preserved::add);
-        } finally { data.end(); }
         phase(name + " command-parse");
         var plan = CommandPolicy.parse(update, receipt);
         String outcome = "guard-unmatched";
-        data.begin(ReadWrite.WRITE);
-        try {
           var before = CommandInvariant.readControl(data);
           var staged = new CommandOverlay(data);
           phase(name + " command-execute");
@@ -606,13 +598,10 @@ public class RealmTargetOwnerContractTest {
             if (outcome.equals("committed")) {
               phase(name + " receipt-invariant");
               assertNull(name, CommandInvariant.check(staged, receipt, digest, plan, before));
-              staged.apply(); data.commit();
-            } else data.abort();
-          } else data.abort();
-        } finally { data.end(); }
+              staged.apply();
+            }
+          }
         assertEquals(name, expected, outcome);
-        data.begin(ReadWrite.READ);
-        try {
           assertEquals(name, expected.equals("committed"),
             data.contains(iri(CommandPolicy.RECEIPTS), iri(receipt), Node.ANY, Node.ANY));
           assertEquals(name, expected.equals("committed") ? java.math.BigInteger.ONE : java.math.BigInteger.ZERO,
@@ -626,9 +615,12 @@ public class RealmTargetOwnerContractTest {
             iri("${GRAPHS.current}"), iri("urn:realm-native:detached-zone"), iri("${RV}defaultRealm"), iri("${realm}")));
           if (expected.equals("committed")) assertTrue(name, data.contains(iri(CommandPolicy.RECEIPTS),
             iri(receipt), iri("${RV}work"), iri("${realm}")));
-        } finally { data.end(); }
+        // A refused command never needs a fixture commit. Abort its isolated
+        // mutation after asserting the guard, receipt and graph preservation;
+        // accepted commands still cross the physical TDB2 commit boundary.
+        if (outcome.equals("committed")) data.commit(); else data.abort();
         System.out.println("REALM_NATIVE_CASE " + name + " " + outcome);
-      } finally { phase(name + " case-end"); }
+      } finally { data.end(); phase(name + " case-end"); }
     } } finally { data.close(); }
   }
 }
