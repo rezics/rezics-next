@@ -439988,6 +439988,9 @@
                                   "null"
                                 ]
                               },
+                              "resumable": {
+                                "type": "boolean"
+                              },
                               "state": {
                                 "enum": [
                                   "confirmed",
@@ -440007,7 +440010,8 @@
                               "state",
                               "receipt",
                               "continuation",
-                              "error"
+                              "error",
+                              "resumable"
                             ],
                             "type": "object"
                           },
