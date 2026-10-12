@@ -1,4 +1,5 @@
-import type { PoolClient } from 'pg';
+import type { Pool, PoolClient } from 'pg';
+import type { VerifiedPrincipal } from './admission.ts';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { selectedGroupWorkProof } from './groups.ts';
 import { publicCatalogueWork, selectedRoleWorkProof } from './role-proof.ts';
@@ -38,6 +39,48 @@ export interface SavedRepresentedWorkProof {
   role_revision: string | null;
 }
 
+/** A controller can represent its Agent for a granted action; every limited
+ * mandate must name that action. Parameters here are authored SQL placeholders. */
+function representedMandateAction(actionParameter: string): string {
+  return `r.action IN (${actionParameter},'agent.control')`;
+}
+
+export interface RepresentedGrantProof {
+  principalId: string;
+  grantId: string;
+  grantGeneration: string;
+  validUntil: Date;
+}
+
+/** One indexed live principal/mandate/grant proof. Consumers do not decide
+ * representation or membership authority themselves. A membership-backed
+ * grant belongs to its current joined episode; owner participation requires
+ * a direct grant. Transactional consumers hold the selected rows. */
+export async function representedGrantProof(client: Pick<Pool | PoolClient, 'query'>,
+  principal: VerifiedPrincipal | string, actor: string, scope: string, action: string,
+  options: { lock?: boolean; directOnly?: boolean } = {}): Promise<RepresentedGrantProof | null> {
+  const row = (await client.query<RepresentedGrantProof>(`SELECT p.id AS "principalId",
+    g.id AS "grantId",g.generation::text AS "grantGeneration",
+    LEAST(r.valid_until,g.valid_until) AS "validUntil"
+    FROM access.principal p
+    JOIN access.representation r ON r.principal_id = p.id AND r.subject_id = $3
+      AND ${representedMandateAction('$5')} AND r.active AND r.valid_until > clock_timestamp()
+    JOIN access.authority_subject a ON a.id = r.subject_id AND a.kind = 'agent' AND a.active
+    JOIN access.permission_grant g ON g.recipient_subject = a.id AND g.scope_id = $4
+      AND g.action = $5 AND g.active AND g.valid_until > clock_timestamp()
+      AND (g.membership_id IS NULL OR NOT $6 AND EXISTS (
+        SELECT 1 FROM access.membership m WHERE m.id = g.membership_id
+          AND m.state = 'joined' AND m.generation = g.membership_generation))
+    JOIN access.scope_gate gate ON gate.id = g.scope_id AND gate.open AND gate.dispatch_open
+    WHERE ${typeof principal === 'string' ? 'p.id = $1::uuid AND $2::text IS NULL'
+      : 'p.account_issuer = $1 AND p.account_subject = $2'} AND p.active
+      AND (SELECT open FROM access.recovery_fence WHERE id)
+    ORDER BY LEAST(r.valid_until,g.valid_until) DESC,g.id,r.id LIMIT 1${options.lock ? ' FOR SHARE OF p,r,a,g,gate' : ''}`,
+  [typeof principal === 'string' ? principal : principal.issuer,
+    typeof principal === 'string' ? null : principal.subject,actor,scope,action,options.directOnly ?? false])).rows[0];
+  return row ?? null;
+}
+
 /** Select one indexed mandate and the lowest-id live direct grant. That is
  * the first grant a decision records. A live controller is sufficient
  * representation of its Agent, but grants no Work
@@ -55,7 +98,7 @@ export async function representedWorkProof(client: PoolClient, principalId: stri
     FROM access.representation r
     JOIN access.authority_subject s ON s.id = r.subject_id
     WHERE r.principal_id = $1 AND r.subject_id = $2
-      AND r.action IN ($3,'agent.control')
+      AND ${representedMandateAction('$3')}
       AND r.active AND r.valid_until > statement_timestamp()
       AND s.kind = 'agent' AND s.active
     ORDER BY r.action, r.valid_until LIMIT 1 FOR SHARE OF r, s`, [principalId, actingSubject, action]);
@@ -209,7 +252,7 @@ export async function selectedRepresentedWorkProof(client: PoolClient,
   const mandate = await client.query(`SELECT r.id FROM access.representation r
     JOIN access.authority_subject s ON s.id = r.subject_id
     WHERE r.id = $1 AND r.principal_id = $2 AND r.subject_id = $3
-      AND r.action IN ($6,'agent.control') AND r.active
+      AND ${representedMandateAction('$6')} AND r.active
       AND r.valid_until > clock_timestamp() AND r.generation = $4
       AND s.kind = 'agent' AND s.active AND s.generation = $5
     FOR SHARE OF r, s`, [saved.represented_representation_id,
