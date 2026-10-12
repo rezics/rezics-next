@@ -1,5 +1,4 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { canonicalLanguage } from '../modules/display-language/select.ts';
 
 export type FusekiReadCallFamily = 'health' | 'delta-proof' | 'query' | 'template-query';
 export type FusekiReadPhase = 'read' | 'writer-wait';
@@ -379,7 +378,7 @@ export class FusekiClient {
       || request.names.length > 192 || request.names.some(name => name.sourceKey !== request.sourceKey
         || !name.displayName.trim() || name.displayName.length > 200
         || /[\u0000-\u001f\u007f]/u.test(name.displayName)
-        || (name.language !== null && !canonicalLanguage(name.language)))) {
+        || (name.language !== null && typeof name.language !== 'string'))) {
       throw new Error('invalid source author name publication');
     }
     if (!this.commandCapability?.match(/^[0-9a-f]{64}$/u)) throw new CommandForbidden('Fuseki admitted command capability is required');

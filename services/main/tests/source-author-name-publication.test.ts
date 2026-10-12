@@ -6,6 +6,7 @@ import { SourceAuthorNameStore } from '../src/modules/source/author-name.ts';
 import { publishSourceAuthorName } from '../src/modules/source/author-name-publication.ts';
 import type { SourceIntakeStore } from '../src/modules/source/intake.ts';
 import { normalizedSearchText } from '../src/modules/search/fields.ts';
+import { SourceIntakeUnavailable } from '../src/modules/source/intake.ts';
 
 const sourceKey = '/authors/OL1A';
 const id = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${n.toString().padStart(12, '0')}`;
@@ -60,6 +61,20 @@ test('source name publication adds, replaces, removes and replays exact bounded 
     run.tooMany();
     await expect(publishSourceAuthorName(run.client, reader, sourceKey)).rejects.toThrow('exceed their bound');
     expect(run.commands).toHaveLength(4);
+  } finally { await run.stop(); }
+});
+
+test('source name publication refuses invalid languages before calling the native client', async () => {
+  const run = fixture();
+  try {
+    for (const language of ['not a language', 'en--US', ' en ']) {
+      await expect(publishSourceAuthorName(run.client, { read: async () => ({ sourcePosition: '1',
+        name: { displayName: 'Author', language } }) }, sourceKey)).rejects.toBeInstanceOf(SourceIntakeUnavailable);
+    }
+    expect(run.commands).toHaveLength(0);
+    await publishSourceAuthorName(run.client, { read: async () => ({ sourcePosition: '1',
+      name: { displayName: 'Author', language: 'en-US' } }) }, sourceKey);
+    expect(run.commands[0]?.names[0]?.language).toBe('en-US');
   } finally { await run.stop(); }
 });
 

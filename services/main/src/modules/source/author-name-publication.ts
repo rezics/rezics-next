@@ -2,10 +2,11 @@ import { createHash } from 'node:crypto';
 import type { FusekiClient, SourceAuthorNamesRequest } from '../../infrastructure/fuseki.ts';
 import { GRAPHS, RV, iri, lit } from '../work/activate.ts';
 import { SourceIntakeUnavailable } from './intake.ts';
+import { canonicalLanguage } from '../display-language/select.ts';
 
 export const SOURCE_NAME_PUBLICATION_COST = { works: 64, credits: 128,
   responseBytes: 65_536 } as const;
-interface NameHead { sourcePosition: string; name: { displayName: string } | null }
+interface NameHead { sourcePosition: string; name: { displayName: string; language?: string | null } | null }
 interface NameReader { read(author: string): Promise<NameHead | null> }
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/u;
 
@@ -56,7 +57,10 @@ async function publishPages(fuseki: Pick<FusekiClient, 'query' | 'sourceAuthorNa
       const head = await reader.read(sourceKey);
       if (!head) continue;
       const payload = { target: work, sourceKey, sourcePosition: head.sourcePosition, credits,
-        names: head.name ? [{ sourceKey, displayName: head.name.displayName, language: null }] : [] };
+        names: head.name ? [{ sourceKey, displayName: head.name.displayName, language: head.name.language ?? null }] : [] };
+      if (payload.names.some(name => name.language !== null && !canonicalLanguage(name.language))) {
+        throw new SourceIntakeUnavailable('Source name publication language is invalid');
+      }
       const idempotencyKey = createHash('sha256').update(JSON.stringify(payload)).digest('hex');
       await fuseki.sourceAuthorNames({ ...payload, idempotencyKey } satisfies SourceAuthorNamesRequest);
     }
