@@ -137,7 +137,13 @@ test('anonymous status hides another report target and its receipts without expo
   const staff = await f.store.resumeDecision(f.principal, f.actor, f.decision.decisionId);
   expect(staff.operation).toEqual(f.decision.operation);
   const ownReport = await f.reports.status(f.anonymous.caseId, f.reporter);
-  expect(ownReport.operation).toEqual(f.decision.operation);
+  expect(ownReport.operation).toEqual({
+    operationId: f.decision.decisionId, status: 'completed', continuation: null,
+    items: [
+      { ordinal: 1, target: f.b.resource, state: 'confirmed', receipt: 'private-receipt', continuation: null, error: null },
+      { ordinal: 2, target: f.a.resource, state: 'confirmed', receipt: 'public-receipt', continuation: null, error: null },
+    ],
+  });
 });
 
 for (const hiddenState of ['pending', 'failed'] as const) {
