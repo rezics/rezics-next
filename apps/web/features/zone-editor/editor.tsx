@@ -203,7 +203,7 @@ export function ZoneHomeEditor({ zoneId, zoneIri, actingSubject, locale, copy, i
     </Alert> : null}
     <EditorNotice copy={copy} state={state} busy={busy} signInHref={signInHref} review={review}
       onSaveOver={saveOver} onLoad={loadTheirs} onRefresh={refreshAndPublish} onPublishReviewed={publishReviewed} onRetry={tryAgain} />
-    {canEdit ? <BodyEditor key={generation} label={copy.editorLabel} locale={locale} allowAdvanced disabled={!draftReady} value={state.value}
+    {canEdit ? <BodyEditor key={generation} label={copy.editorLabel} locale={locale} allowAdvanced disabled={!draftReady || busy === 'load'} value={state.value}
       lang={state.language.tag === 'und' ? undefined : state.language.tag}
       dir={state.direction === 'none' ? undefined : state.direction}
       onChange={value => put({ type: 'edit', value })} />

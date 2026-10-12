@@ -282,6 +282,44 @@ export const StaleChoicesOnAPhone: Story = {
   },
 };
 
+let finishSavedPageLoad: (() => void) | undefined;
+
+/** The destructive read suspends writing until its selected saved page arrives. */
+export const DelayedSavedPageLoadKeepsTypingSafe: Story = {
+  render() {
+    const document = fromPlainText('Local unsaved paragraph', 'blocks');
+    const initial = opening(document, '00000000-0000-4000-8000-000000000311');
+    initial.notice = { kind: 'stale', currentHead: '00000000-0000-4000-8000-000000000307' };
+    const api = clientOf([], 'save');
+    api.readDraft = () => new Promise(resolve => {
+      finishSavedPageLoad = () => resolve({ ok: true, data: {
+        ...initial, value: opening(fromPlainText('Server saved paragraph', 'blocks'), initial.expectedHead).value,
+        editable: true, document: fromPlainText('Server saved paragraph', 'blocks'),
+      } });
+    });
+    return <main className="mx-auto max-w-3xl p-6">
+      <ZoneHomeEditor zoneId={zoneId} zoneIri={zoneIri} actingSubject={actor} locale="en" copy={messages.en}
+        initial={initial} editable document={document} previewHref="/manage/z/harbor/preview"
+        siteHref={sitePath} signInHref="/auth/start" api={api} />
+    </main>;
+  },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Load the saved page' }));
+    const body = canvas.getByRole('textbox', { name: 'Home page' });
+    await expect(body).toHaveAttribute('contenteditable', 'false');
+    await userEvent.click(body);
+    await userEvent.keyboard('Typing during the saved-page load');
+    await expect(body).toHaveTextContent('Local unsaved paragraph');
+    finishSavedPageLoad?.();
+    await waitFor(() => expect(canvas.getByRole('textbox', { name: 'Home page' })).toHaveTextContent('Server saved paragraph'));
+    await expect(canvas.getByRole('textbox', { name: 'Home page' })).toHaveAttribute('contenteditable', 'true');
+    await userEvent.click(canvas.getByRole('textbox', { name: 'Home page' }));
+    await userEvent.keyboard(' New typing after load');
+    await expect(canvas.getByRole('textbox', { name: 'Home page' })).toHaveTextContent('New typing after load');
+  },
+};
+
 /** The first publish response is lost. The retry uses the same key and ends published once. */
 export const LostPublishUsesTheSameKey: Story = {
   args: {
