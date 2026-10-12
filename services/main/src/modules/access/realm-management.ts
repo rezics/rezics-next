@@ -22,6 +22,7 @@ import { settleRealmPolicy } from './realm-management-recovery.ts';
 import { deliverZoneSpacePolicy, policyHead, readZoneSpaceDisclosure, type ZoneSpacePolicyDelivery } from '../space/policy.ts';
 import { zoneSpaceCreatorAllowed } from '../space/create-authority.ts';
 import { platformAdministratorProof, platformAdministratorTargetAllowed } from './platform-administrator.ts';
+import { representedGrantProof } from './represented-work-proof.ts';
 import { maintainerControllerProof } from '../work/maintainer-proof.ts';
 import { DATASET, GRAPHS, iri, lit, RV, type WorkActivationEnvironment } from '../work/activate.ts';
 
@@ -243,22 +244,10 @@ export class AccessRealmManagement {
   private async authorize(client: PoolClient, principal: VerifiedPrincipal, realm: string,
     actor: string, action: string): Promise<{ id: string; validUntil: Date }> {
     if (!native.test(actor)) throw new RealmAdminInvalid('Invalid acting subject');
-    const row = (await client.query<{ id: string; valid_until: Date }>(`SELECT p.id,
-      LEAST(r.valid_until, g.valid_until) AS valid_until FROM access.principal p
-      JOIN access.representation r ON r.principal_id = p.id AND r.subject_id = $3
-        AND r.active AND r.valid_until > clock_timestamp() AND r.action IN ($5, 'realm.owner', 'agent.control')
-      JOIN access.authority_subject a ON a.id = r.subject_id AND a.kind = 'agent' AND a.active
-      JOIN access.permission_grant g ON g.recipient_subject = a.id AND g.scope_id = $4
-        AND g.action = $5 AND g.active AND g.valid_until > clock_timestamp()
-        AND (g.membership_id IS NULL OR EXISTS (SELECT 1 FROM access.membership m
-          WHERE m.id = g.membership_id AND m.state = 'joined' AND m.generation = g.membership_generation))
-      JOIN access.scope_gate gate ON gate.id = g.scope_id AND gate.open AND gate.dispatch_open
-      WHERE p.account_issuer = $1 AND p.account_subject = $2 AND p.active
-      ORDER BY LEAST(r.valid_until, g.valid_until) DESC LIMIT 1 FOR SHARE OF p, r, a, g, gate`,
-    [principal.issuer, principal.subject, actor,
-      realmPermissionScope(realm, action), action])).rows[0];
+    const row = await representedGrantProof(client, principal, actor,
+      realmPermissionScope(realm, action), action, { lock: true });
     if (!row) throw new RealmAdminDenied('Realm permission is missing');
-    return { id: row.id, validUntil: row.valid_until };
+    return { id: row.principalId, validUntil: row.validUntil };
   }
 
   /** Whether `action` is granted. A missing grant is false; any other failure still aborts the read. */

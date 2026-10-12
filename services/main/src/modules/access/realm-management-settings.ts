@@ -6,6 +6,7 @@ import { realmSettings, RealmAdminInvalid, RealmAdminStale, RealmAdminConflict, 
   type SettingsCommand, spaceSettings, zoneSpaceSettings, type SpaceSettings, type ZoneSpaceSettings } from '../realm-admin/contract.ts';
 import { AdmissionDenied } from './admission.ts';
 import { realmMemberProof } from '../realm-reply/member-policy.ts';
+import { representedGrantProof } from './represented-work-proof.ts';
 import { currentRealmRulesDocument, realmRulesRef, publishRuleRevision } from '../governance/rules.ts';
 import { checkedCommunityRules } from '../realm-profile/schema.ts';
 import { GovernanceConflict, GovernanceDenied, GovernanceInvalid, GovernanceStale } from '../governance/store.ts';
@@ -143,10 +144,9 @@ export async function requireRealmSubmissionPolicy(client: PoolClient, realm: st
     || submission && policy?.who_may_submit === 'members';
   if (submission && policy?.who_may_submit === 'closed') throw new AdmissionDenied('Realm submission policy denies this request');
   if (!needsMember) return [];
-  const owner = (await client.query<{ id: string; generation: string }>(`SELECT id,generation FROM access.permission_grant WHERE scope_id = $1
-    AND recipient_subject = $2 AND action = 'realm.owner' AND active AND valid_until > clock_timestamp()
-    AND membership_id IS NULL ORDER BY id LIMIT 1 FOR SHARE`, [`governance:realm:${realm}`, actor])).rows[0];
-  if (owner) return [{ table: 'permission_grant', id: owner.id, generation: owner.generation }];
+  const owner = await representedGrantProof(client, principal, actor,
+    `governance:realm:${realm}`, 'realm.owner', { lock: true, directOnly: true });
+  if (owner) return [{ table: 'permission_grant', id: owner.grantId, generation: owner.grantGeneration }];
   const member = await realmMemberProof(client, realm, principal, actor);
   if (!member) throw new AdmissionDenied('Realm submission policy denies this request');
   const [kind,id,generation] = member.split(':');

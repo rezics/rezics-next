@@ -1,4 +1,5 @@
 import type { PoolClient } from 'pg';
+import { representedGrantProof } from '../access/composition.ts';
 
 /** Two membership point probes plus two ban probes. A stable identity and
  * generation pin prevents leave/rejoin from reviving an old admission. */
@@ -35,9 +36,7 @@ export async function realmApprovedProof(client: PoolClient, realm: string,
     UNION ALL SELECT 1 FROM access.private_membership_ban WHERE kind = 'realm'
       AND owner_subject = $1 AND principal_id = $3 AND active LIMIT 1`, [realm, actor, principal]);
   if (banned.rowCount) return null;
-  const owner = (await client.query(`SELECT id,generation::text FROM access.permission_grant
-    WHERE scope_id = $1 AND recipient_subject = $2 AND action = 'realm.owner'
-      AND active AND valid_until > clock_timestamp() AND membership_id IS NULL
-    ORDER BY id LIMIT 1 FOR SHARE`, [`governance:realm:${realm}`, actor])).rows[0];
-  return owner ? `owner:${owner.id}:${owner.generation}` : null;
+  const owner = await representedGrantProof(client, principal, actor,
+    `governance:realm:${realm}`, 'realm.owner', { lock: true, directOnly: true });
+  return owner ? `owner:${owner.grantId}:${owner.grantGeneration}` : null;
 }

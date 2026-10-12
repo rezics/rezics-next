@@ -5,6 +5,7 @@ import { realmPolicyDeliveryHead, type RealmReviewMode, type RealmVisibility } f
 import { spaceCreationReceiptIri } from '../space/create.ts';
 import type { RealmHistoryFloor } from '../realm-admin/history.ts';
 import { withAccessClient } from './topology-control.ts';
+import { representedGrantProof } from './represented-work-proof.ts';
 
 export interface RealmPermit { visibility: RealmVisibility; reviewMode: RealmReviewMode;
   member: boolean; revision: string | null; stamp: string; historyFloor: RealmHistoryFloor | null }
@@ -41,14 +42,12 @@ export async function realmPermit(client: PoolClient, principal: VerifiedPrincip
       AND owner_subject = $1 AND principal_id = $3 AND active LIMIT 1`, [realm, actor, identity.id]);
   if (ban.rowCount) throw new AdmissionDenied('Realm member is banned');
   const member = await realmMemberProof(client, realm, identity.id, actor);
-  const owner = (await client.query(`SELECT id,generation::text FROM access.permission_grant
-    WHERE scope_id = $1 AND recipient_subject = $2 AND action = 'realm.owner'
-      AND active AND valid_until > clock_timestamp() AND membership_id IS NULL
-    ORDER BY id LIMIT 1 FOR SHARE`, [`governance:realm:${realm}`, actor])).rows[0];
-  const approved = member ?? (owner ? `owner:${owner.id}:${owner.generation}` : null);
+  const owner = await representedGrantProof(client, identity.id, actor,
+    `governance:realm:${realm}`, 'realm.owner', { lock: true, directOnly: true });
+  const approved = member ?? (owner ? `owner:${owner.grantId}:${owner.grantGeneration}` : null);
   const visibility = settings?.visibility ?? 'public';
-  // Read permits are deliberately membership-only: the graph decides whether
-  // one is needed. A pending private->public Access value cannot grant a read.
+  // The graph decides whether an approved episode is needed. A pending
+  // private->public Access value cannot grant a read.
   if ((purpose === 'read' || visibility !== 'public') && !approved
     || purpose === 'submission' && (settings?.who_may_submit === 'closed'
       || settings?.who_may_submit === 'members' && !approved)) throw new AdmissionDenied('Realm membership is required');
