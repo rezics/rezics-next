@@ -21,12 +21,19 @@ async function json<T>(response: Response, status = 200): Promise<T> {
   return JSON.parse(body) as T;
 }
 
-/** Main keeps projecting earlier writes while the seed goes on; a write told to restart is sent again. */
-async function settled(send: () => Promise<Response>): Promise<Response> {
+/** Reconciliation replays one command; a moved read basis starts a fresh admission. */
+async function settled(send: (key: string) => Promise<Response>): Promise<Response> {
+  let key = randomUUID();
   for (let attempt = 0; ; attempt++) {
-    const response = await send();
-    if (response.status !== 409 || attempt === 40 || !(await response.clone().text()).includes('read_basis_changed')) return response;
-    await new Promise(done => setTimeout(done, 500));
+    const response = await send(key);
+    const body = await response.clone().json().catch(() => null) as {
+      code?: string; status?: string; retry?: { allowed?: boolean; afterMs?: number };
+    } | null;
+    const moved = response.status === 409 && body?.code === 'read_basis_changed';
+    const pending = response.status === 202 && body?.status === 'reconciling' && body.retry?.allowed === true;
+    if ((!moved && !pending) || attempt === 40) return response;
+    if (moved) key = randomUUID();
+    await new Promise(done => setTimeout(done, pending ? body?.retry?.afterMs ?? 1000 : 500));
   }
 }
 
@@ -70,11 +77,11 @@ export async function seedSeries(stack: MediaStack, reader: { principalId: strin
   for (let index = 0; index < total; index++) {
     const special = index >= plan.episodes;
     const number = special ? index - plan.episodes + 1 : index + 1;
-    const episode = await json<{ component: string }>(await settled(() => editor.send('POST', '/v1/semantic/changes', {
+    const episode = await json<{ component: string }>(await settled(key => editor.send('POST', '/v1/semantic/changes', {
       profile: 'semantic-change-v1', expectedHead: null, actingSubject: editor.actor,
       state: { component: 'resource', types: ['https://schema.org/Episode'], properties: [
         { predicate: 'https://schema.org/name', value: { kind: 'language-string', lexical: `${special ? 'Special' : 'Episode'} ${number}`, language: 'en' } },
-        { predicate: 'https://schema.org/episodeNumber', value: { kind: 'integer', lexical: String(number) } }] } })), 201);
+        { predicate: 'https://schema.org/episodeNumber', value: { kind: 'integer', lexical: String(number) } }] } }, key)), 201);
     resources.push(episode.component);
   }
   const scopes = resources.map(resource => `semantic:read:${resource}`);
@@ -84,13 +91,13 @@ export async function seedSeries(stack: MediaStack, reader: { principalId: strin
   const resourceAt = (index: number) => resources[index]!;
 
   /** The series' Structure: the main run in order, then a Specials group. */
-  const composition = await json<{ structure: string; revision: string }>(await settled(() => editor.send('POST', '/v1/compositions', {
-    profile: 'work-composition', work: created.work, mainVersion: created.mainVersion, actingSubject: editor.actor })), 201);
+  const composition = await json<{ structure: string; revision: string }>(await settled(key => editor.send('POST', '/v1/compositions', {
+    profile: 'work-composition', work: created.work, mainVersion: created.mainVersion, actingSubject: editor.actor }, key)), 201);
   const path = `/v1/compositions/${short(composition.structure)}/changes`;
   let head = composition.revision;
   const change = async (operations: object[]) => {
-    const written = await json<{ revision: string; occurrences: string[] }>(await settled(() => editor.send('POST', path, {
-      profile: 'work-composition', expectedHead: head, actingSubject: editor.actor, operations })));
+    const written = await json<{ revision: string; occurrences: string[] }>(await settled(key => editor.send('POST', path, {
+      profile: 'work-composition', expectedHead: head, actingSubject: editor.actor, operations }, key)));
     head = written.revision;
     return written;
   };

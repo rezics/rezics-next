@@ -31,12 +31,19 @@ async function json<T>(response: Response, status = 200): Promise<T> {
   return JSON.parse(body) as T;
 }
 
-/** Main keeps projecting earlier writes; a write told to restart is sent again. */
-async function settled(send: () => Promise<Response>): Promise<Response> {
+/** Reconciliation replays one command; a moved read basis starts a fresh admission. */
+async function settled(send: (key: string) => Promise<Response>): Promise<Response> {
+  let key = randomUUID();
   for (let attempt = 0; ; attempt++) {
-    const response = await send();
-    if (response.status !== 409 || attempt === 40 || !(await response.clone().text()).includes('read_basis_changed')) return response;
-    await new Promise(done => setTimeout(done, 500));
+    const response = await send(key);
+    const body = await response.clone().json().catch(() => null) as {
+      code?: string; status?: string; retry?: { allowed?: boolean; afterMs?: number };
+    } | null;
+    const moved = response.status === 409 && body?.code === 'read_basis_changed';
+    const pending = response.status === 202 && body?.status === 'reconciling' && body.retry?.allowed === true;
+    if ((!moved && !pending) || attempt === 40) return response;
+    if (moved) key = randomUUID();
+    await new Promise(done => setTimeout(done, pending ? body?.retry?.afterMs ?? 1000 : 500));
   }
 }
 
@@ -67,11 +74,11 @@ export async function seedMedia(stack: MediaStack): Promise<MediaFixture> {
 
   const compose = async (profile: 'work-composition' | 'book-composition', owner: { work: string; mainVersion: string },
     operations: (structure: string) => object[]) => {
-    const base = await json<{ structure: string; revision: string }>(await settled(() => editor.send('POST', '/v1/compositions', {
-      profile, work: owner.work, mainVersion: owner.mainVersion, actingSubject: editor.actor })), 201);
-    const changed = await json<{ revision: string; occurrences: string[] }>(await settled(() => editor.send('POST',
+    const base = await json<{ structure: string; revision: string }>(await settled(key => editor.send('POST', '/v1/compositions', {
+      profile, work: owner.work, mainVersion: owner.mainVersion, actingSubject: editor.actor }, key)), 201);
+    const changed = await json<{ revision: string; occurrences: string[] }>(await settled(key => editor.send('POST',
       `/v1/compositions/${short(base.structure)}/changes`,
-      { profile, expectedHead: base.revision, actingSubject: editor.actor, operations: operations(base.structure) })));
+      { profile, expectedHead: base.revision, actingSubject: editor.actor, operations: operations(base.structure) }, key)));
     return { structure: base.structure, revision: changed.revision, occurrences: changed.occurrences };
   };
 
@@ -178,26 +185,26 @@ export async function seedMedia(stack: MediaStack): Promise<MediaFixture> {
   await editor.grant('semantic:create:root', 'semantic.change');
   const episodes: string[] = [];
   for (let index = 0; index < 4; index++) {
-    const episode = await json<{ component: string }>(await settled(() => editor.send('POST', '/v1/semantic/changes', {
+    const episode = await json<{ component: string }>(await settled(key => editor.send('POST', '/v1/semantic/changes', {
       profile: 'semantic-change-v1', expectedHead: null, actingSubject: editor.actor,
       state: { component: 'resource', types: ['https://schema.org/Episode'], properties: [
         { predicate: 'https://schema.org/name', value: { kind: 'language-string', lexical: `Harbour episode ${index + 1}`, language: 'en' } },
         { predicate: 'https://rezics.com/vocab/semanticWork', value: { kind: 'resource', ref: show.work } },
-      ] } })), 201);
+      ] } }, key)), 201);
     episodes.push(episode.component);
   }
   await grantEditor('semantic.read', episodes.map(resource => `semantic:read:${resource}`));
-  const composition = await json<{ structure: string; revision: string }>(await settled(() => editor.send('POST', '/v1/compositions', {
-    profile: 'work-composition', work: show.work, mainVersion: show.mainVersion, actingSubject: editor.actor })), 201);
+  const composition = await json<{ structure: string; revision: string }>(await settled(key => editor.send('POST', '/v1/compositions', {
+    profile: 'work-composition', work: show.work, mainVersion: show.mainVersion, actingSubject: editor.actor }, key)), 201);
   let head = composition.revision;
   const occurrences: string[] = [];
   for (let at = 0; at < EPISODES; at += OPERATIONS) {
     const count = Math.min(OPERATIONS, EPISODES - at);
-    const written = await json<{ revision: string; occurrences: string[] }>(await settled(() => editor.send('POST',
+    const written = await json<{ revision: string; occurrences: string[] }>(await settled(key => editor.send('POST',
       `/v1/compositions/${short(composition.structure)}/changes`, {
         profile: 'work-composition', expectedHead: head, actingSubject: editor.actor,
         operations: Array.from({ length: count }, (_, index) => part(composition.structure,
-          episodes[(at + index) % episodes.length]!, `Episode ${at + index + 1}`)) })));
+          episodes[(at + index) % episodes.length]!, `Episode ${at + index + 1}`)) }, key)));
     head = written.revision;
     occurrences.push(...written.occurrences);
   }
