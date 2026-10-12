@@ -9,6 +9,11 @@ import { requirePlatformParticipation } from '../../../services/main/src/modules
 import { SAFETY_QUEUE_COST } from '../../../services/main/src/modules/safety-queue/store.ts';
 import { createMainApp, type MainWorkDependencies } from '../../../services/main/src/app.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
+import type { VerifiedPrincipal } from '../../../services/main/src/modules/access/admission.ts';
+import {
+  ensureFixtureScopeGate,
+  grantFixtureAuthority,
+} from '../../../services/main/src/modules/access/fixture-authority.ts';
 import {
   GovernanceStore,
   GovernanceUnavailable,
@@ -89,8 +94,11 @@ test('G-565: platform queue, exclusive claims, immutable reasons, resumable owne
         'governance.rule.publish',
       ])
         await member.grant('governance:platform', action);
-    const tokenMap = new Map(
-      [staff, other, author, former, expired].map((member) => [member.token, member.principal]),
+    const tokenMap = new Map<string, VerifiedPrincipal>(
+      [staff, other, author, former, expired].map((member) => [
+        member.token,
+        member === author ? { ...member.principal, emailVerified: true } : member.principal,
+      ]),
     );
     let clock = new Date();
     let interruptOrdinal: number | null = null;
@@ -193,7 +201,7 @@ test('G-565: platform queue, exclusive claims, immutable reasons, resumable owne
             request.headers.get('authorization')?.replace('Bearer ', '') ?? '',
           );
           if (!principal) throw new AccountAssertionDenied('unknown test bearer');
-          return principal;
+          return { ...principal, currentAssertion: async () => principal };
         },
       },
     };
@@ -687,7 +695,22 @@ test('G-565: platform queue, exclusive claims, immutable reasons, resumable owne
       requestDigest: contentDraftIntentDigest(command, author.actor),
     };
     const saved = await stack.content.saveDraft(command);
-    await author.grant(`reply:create:${work.work}`, 'reply.create');
+    // Reply authoring requires a verified Person and its live direct controller,
+    // so the participation sanction is the only authority this test varies.
+    const control = await grantFixtureAuthority(stack.accessPool, {
+      scope: `agent:control:${author.actor}`,
+      requireDispatch: false,
+      representations: [{ principalId: author.principalId, actor: author.actor,
+        action: 'agent.control', lifetime: 'infinity' }],
+      grant: { actor: author.actor, action: 'agent.control', lifetime: 'infinity' },
+    });
+    await stack.accessPool.query(`INSERT INTO access.agent_provision
+      (id, principal_id, idempotency_key, request_digest, agent_id, agent_kind, display_name,
+       principal_epoch, state, graph_data_epoch, graph_sequence, representation_id)
+      VALUES ($1,$2,$3,$4,$5,'person','Affected author',0,'active',$6,1,$7)`,
+    [randomUUID(), author.principalId, randomUUID(), sha(author.actor), author.actor,
+      stack.env.lineage.dataEpoch, control.representationIds[0]!]);
+    await ensureFixtureScopeGate(stack.accessPool, `reply:create:${work.work}`);
     const replyBody = {
       profile: 'realm-reply-identity-v1',
       reply,
@@ -700,8 +723,12 @@ test('G-565: platform queue, exclusive claims, immutable reasons, resumable owne
       parentRevision: null,
       contextRevision: null,
     };
+    await expect(requirePlatformParticipation(stack.accessPool, author.principalId))
+      .rejects.toThrow('platform participation is restricted');
     expect((await call('POST', '/v1/realm-replies', replyBody, author.token)).status).toBe(403);
     await Bun.sleep(Math.max(0, Date.parse(sanction.targets[0]!.expiresAt!) - Date.now() + 100));
+    await expect(requirePlatformParticipation(stack.accessPool, author.principalId))
+      .resolves.toBeUndefined();
     await json(await call('POST', '/v1/realm-replies', replyBody, author.token), 201);
 
     // Copy closure includes original, existing uploads, and later activation.
