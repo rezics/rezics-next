@@ -56,14 +56,15 @@ test('ordinary exact query rows still fence every returned selected head', async
   await expect(f.session.fenceDependencies()).rejects.toBeInstanceOf(WorkReadMoved);
 });
 
+const nativeId = (value: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(value).padStart(12, '0')}`;
 function realmFixture() {
   const f = fixture();
   for (const row of f.rows) Object.assign(row, {
     main: term(`main-${row.work!.value}`), selection: term(`selection-${row.work!.value}`),
     contribution: term(`contribution-${row.work!.value}`), language: term('en'),
   });
-  for (const row of f.rows) for (const key of ['work', 'head', 'main', 'selection', 'contribution'])
-    row[key] = term(`urn:rezics:${key}:${row[key]!.value}`);
+  f.rows.forEach((row, index) => ['work', 'head', 'main', 'selection', 'contribution']
+    .forEach((key, owner) => { row[key] = term(nativeId((owner + 1) * 1000 + index)); }));
   f.session.deps.environment.fuseki.query = async body => ({ results: { bindings:
     body.includes('SELECT DISTINCT ?work ?head ?main') ? f.rows.map(row => ({ ...row })) : [] } });
   const pool = { query: async (sql: string, args?: unknown[]) => ({ rows: sql.includes('jsonb_to_recordset')
@@ -81,21 +82,21 @@ function realmFixture() {
 
 test('Realm Work reader excludes unshown candidate and lookahead heads from its delivery fence', async () => {
   const f = realmFixture();
-  const page = await readRealmWorks(f.session, 'urn:rezics:realm:test');
-  expect(page.items.map(item => item.id)).toEqual(['urn:rezics:work:001']);
+  const page = await readRealmWorks(f.session, nativeId(9000));
+  expect(page.items.map(item => item.id)).toEqual([nativeId(1000)]);
   expect(page.nextCursor).not.toBeNull();
-  f.rows[2]!.head = term('edited-third-candidate');
-  f.rows[1]!.head = term('edited-lookahead');
+  f.rows[2]!.head = term(nativeId(12000));
+  f.rows[1]!.head = term(nativeId(12001));
   await f.session.fenceDependencies();
 });
 
 for (const change of ['shown head', 'earlier member', 'continuation'] as const) {
   test(`Realm Work reader fences its selected ${change}`, async () => {
     const f = realmFixture();
-    await readRealmWorks(f.session, 'urn:rezics:realm:test');
-    if (change === 'shown head') f.rows[0]!.head = term('fresh-shown-head');
+    await readRealmWorks(f.session, nativeId(9000));
+    if (change === 'shown head') f.rows[0]!.head = term(nativeId(12002));
     if (change === 'earlier member') {
-      f.rows.unshift({ ...f.rows[0], work: term('urn:rezics:work:000') });
+      f.rows.unshift({ ...f.rows[0], work: term(nativeId(999)) });
       f.rows.length = 64;
     }
     if (change === 'continuation') f.rows.splice(1);
