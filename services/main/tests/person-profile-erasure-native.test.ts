@@ -173,6 +173,14 @@ public class PersonProfileCallerContractTest {
   }
   @Test public void omittedHistoricalRevisionRefusesBeforeAnyDeletion() throws Exception {refused("omitted");}
   @Test public void foreignSearchUnitRefusesBeforeAnyDeletion() throws Exception {refused("foreign");}
+  @Test public void mixedPersonAndForeignWorkUnitRefusesBeforeAnyDeletion() throws Exception {
+    var data=fixture();try {var command=body("complete");
+      execute(data,"PREFIX rv: <${RV}> INSERT DATA { GRAPH <${publicGraph}> { <${directUnit}> rv:resource <${foreignWork}> } }");
+      var before=snapshot(data);execute(data,command.get("update").getAsString().value());
+      assertEquals("a Person reference cannot authorize destruction of a shared foreign Work unit",before,snapshot(data));
+      assertFalse(complete(data,command));
+    }finally{data.close();}
+  }
   @Test public void fullClosureRemovesProfileHistoryButRetainsAttributionAndUnrelatedWork() throws Exception {
     var data=fixture();try {var command=body("complete");assertFalse(complete(data,command));
       execute(data,command.get("update").getAsString().value());assertTrue(complete(data,command));
@@ -197,6 +205,15 @@ public class PersonProfileCallerContractTest {
       execute(data,"DELETE WHERE { GRAPH <${publicGraph}> { <${prefixEntry}> ?p ?o } }");
       assertTrue(complete(data,command));
     }finally {data.close();}
+  }
+  @Test public void unexpectedCreditedWorkPrefixOnNewUnitBlocksCompletion() throws Exception {
+    var data=fixture();try {var command=body("complete");execute(data,command.get("update").getAsString().value());
+      assertTrue(complete(data,command));
+      execute(data,"PREFIX rv: <${RV}> INSERT DATA { GRAPH <${publicGraph}> { <urn:rezics:search:directory:prefix:RXhhY3Q:*:1fresh> rv:prefixWork <${work}> ; rv:prefixUnit <${resource(16)}> ; rv:prefixField \\\"credit\\\" ; rv:publicTitle \\\"rezicsprefixdirectory\\\" . <${resource(16)}> a rv:MatchUnit ; rv:resource <${work}> ; rv:publicTitle \\\"Surviving Work\\\" } }");
+      assertFalse("a new Work unit outside the sealed author-unit list still carries an identifying prefix",complete(data,command));
+      execute(data,"DELETE WHERE { GRAPH <${publicGraph}> { <urn:rezics:search:directory:prefix:RXhhY3Q:*:1fresh> ?p ?o } }");
+      assertTrue(complete(data,command));
+    }finally{data.close();}
   }
   private void eventContract(int count) throws Exception {
     var data=fixture();try {var command=body("events-"+count);
@@ -243,7 +260,7 @@ public class PersonProfileCallerContractTest {
     writeFileSync(join(root, '.temp/goal/person-profile-native.log'), `${result.stdout}\n${result.stderr}`);
     if (result.status !== 0) throw new Error(`Native Person RDF proof failed: ${result.stdout}\n${result.stderr}`
       + `${result.error ? `\n${result.error.message}` : ''}`);
-    expect(result.stdout).toContain('Tests run: 7, Failures: 0, Errors: 0');
+    expect(result.stdout).toContain('Tests run: 9, Failures: 0, Errors: 0');
     for (const count of [0, 1, 2]) {
       const actual = JSON.parse(readFileSync(join(build, `events-${count}-result.json`), 'utf8')) as {
         batchId: string; eventIds: string[]; events: { id: string; relay: SparqlResult; facts: SparqlResult }[];
