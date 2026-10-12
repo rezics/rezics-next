@@ -272,7 +272,8 @@ async function productionFixture(kind: 'content_report' | 'rights_complaint' = '
   }`)).results!.bindings[0]!.head!.value;
   const report = await productionJson<{ caseId: string; reportId: string; credential: string }>(
     await member.send('POST', '/v1/public-reports', { profile: 'public-report-v1', target: resource,
-      category: kind === 'rights_complaint' ? 'copyright' : 'spam_or_manipulation',
+      category: authority === 'realm' ? 'realm_rules'
+        : kind === 'rights_complaint' ? 'copyright' : 'spam_or_manipulation',
       statement: 'Please review this public record.', contentLanguage: 'en',
       actingSubject: member.actor,
       ...(authority === 'realm' ? { realm: created.realm } : {}),
