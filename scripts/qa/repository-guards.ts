@@ -6,6 +6,10 @@ import { existsSync } from 'node:fs';
  * their normal affected tiers; these entries enforce an inventory-wide rule. */
 export const repositoryGuards = [
   {
+    file: 'scripts/qa/raw-sparql-integration-files.test.ts',
+    reason: 'No new test file may write raw SPARQL; a new test selects only itself, never this inventory.',
+  },
+  {
     file: 'packages/observability/tests/http-measurement.test.ts',
     reason: 'Every counter the native module reports must be on the HTTP measurement allowlist; a Java change does not select this test.',
   },
