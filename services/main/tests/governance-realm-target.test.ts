@@ -566,23 +566,23 @@ public class RealmTargetOwnerContractTest {
       phase(name + " seed-start");
       data.begin(ReadWrite.WRITE);
       try {
-          data.clear();
-          UpdateAction.parseExecute(scenario.get("seed").getAsString().value(), DatasetFactory.wrap(data));
-          String mutation = scenario.get("mutation").getAsString().value();
-          if (!mutation.isEmpty()) UpdateAction.parseExecute(mutation, DatasetFactory.wrap(data));
+        data.clear();
+        UpdateAction.parseExecute(scenario.get("seed").getAsString().value(), DatasetFactory.wrap(data));
+        String mutation = scenario.get("mutation").getAsString().value();
+        if (!mutation.isEmpty()) UpdateAction.parseExecute(mutation, DatasetFactory.wrap(data));
         Set<org.apache.jena.sparql.core.Quad> preserved = new HashSet<>();
-          data.find(iri("${GRAPHS.current}"), Node.ANY, Node.ANY, Node.ANY).forEachRemaining(preserved::add);
-          data.find(iri("${GRAPHS.revisions}"), iri("urn:realm-native:detached-attachment"), Node.ANY, Node.ANY)
-            .forEachRemaining(preserved::add);
+        data.find(iri("${GRAPHS.current}"), Node.ANY, Node.ANY, Node.ANY).forEachRemaining(preserved::add);
+        data.find(iri("${GRAPHS.revisions}"), iri("urn:realm-native:detached-attachment"), Node.ANY, Node.ANY)
+          .forEachRemaining(preserved::add);
         phase(name + " command-parse");
         var plan = CommandPolicy.parse(update, receipt);
         String outcome = "guard-unmatched";
-          var before = CommandInvariant.readControl(data);
-          var staged = new CommandOverlay(data);
-          phase(name + " command-execute");
-          UpdateAction.execute(plan.request(), DatasetFactory.wrap(staged));
-          phase(name + " command-executed");
-          if (staged.contains(iri(CommandPolicy.RECEIPTS), iri(receipt), Node.ANY, Node.ANY)) {
+        var before = CommandInvariant.readControl(data);
+        var staged = new CommandOverlay(data);
+        phase(name + " command-execute");
+        UpdateAction.execute(plan.request(), DatasetFactory.wrap(staged));
+        phase(name + " command-executed");
+        if (staged.contains(iri(CommandPolicy.RECEIPTS), iri(receipt), Node.ANY, Node.ANY)) {
             outcome = "committed";
             for (JsonValue raw : command.get("validations").getAsArray()) {
               JsonObject entry = raw.getAsObject();
@@ -600,7 +600,7 @@ public class RealmTargetOwnerContractTest {
               assertNull(name, CommandInvariant.check(staged, receipt, digest, plan, before));
               staged.apply();
             }
-          }
+        }
         assertEquals(name, expected, outcome);
           assertEquals(name, expected.equals("committed"),
             data.contains(iri(CommandPolicy.RECEIPTS), iri(receipt), Node.ANY, Node.ANY));
@@ -621,6 +621,15 @@ public class RealmTargetOwnerContractTest {
         if (outcome.equals("committed")) data.commit(); else data.abort();
         System.out.println("REALM_NATIVE_CASE " + name + " " + outcome);
       } finally { data.end(); phase(name + " case-end"); }
+      if (expected.equals("committed")) {
+        data.begin(ReadWrite.READ);
+        try {
+          assertTrue(name + " durable receipt", data.contains(iri(CommandPolicy.RECEIPTS),
+            iri(receipt), iri("${RV}work"), iri("${realm}")));
+          assertEquals(name + " durable sequence", java.math.BigInteger.ONE,
+            CommandInvariant.readControl(data).sequence());
+        } finally { data.end(); }
+      }
     } } finally { data.close(); }
   }
 }
