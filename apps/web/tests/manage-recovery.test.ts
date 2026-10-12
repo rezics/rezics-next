@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import { decideReport, decisionStatus } from '../features/manage/commands.ts';
+import { decideReport, decideSubmission, decisionStatus } from '../features/manage/commands.ts';
 import { basisFor, queue, realm, acting } from '../features/manage/fixtures.ts';
 import { commonActions, initialTriage, targetIds, triage, visibleIds, type Decision } from '../features/manage/queue-state.ts';
 import { decisionReceipt, isolatedAttemptStorage as isolatedStorage, recoveryReasons } from '../features/manage/recovery-fixtures.ts';
 import { performCommand, readCommand, readReportAttempt, reportAttempts, type CommandAttempt } from '../features/manage/safety-pending.ts';
-import type { MainClient, ModerationItem } from '../features/manage/types.ts';
+import type { MainClient } from '../features/manage/types.ts';
 
 const reasons = recoveryReasons;
 const report = queue.find(item => item.kind === 'content_report')!;
@@ -19,7 +19,7 @@ describe('one recoverable Realm decision', () => {
       const calls: { body: unknown; options: unknown }[] = [];
       const post = async (body: unknown, options: unknown) => {
         // The request must already be recoverable before the network call starts.
-        expect(readReportAttempt(realm, acting.iri, item.id, store)?.input).not.toBeNull();
+        expect(body).toEqual(readReportAttempt(realm, acting.iri, item.id, store)?.input);
         calls.push({ body, options });
         if (calls.length === 1) throw new Error('receipt lost after commit');
         expect(calls[1]).toEqual(calls[0]);
@@ -104,7 +104,7 @@ for (const operation of ['role:assignment', 'role:definition', 'settings']) {
     const calls: CommandAttempt<typeof original.input>[] = [];
     const dispatch = async (attempt: CommandAttempt<typeof original.input>) => {
       expect(readCommand(realm, acting.iri, operation, store)?.key).toBe('first-key');
-      calls.push(attempt);
+      calls.push({ ...attempt, uncertain: undefined });
       return calls.length === 1 ? { ok: false as const, failure: 'unavailable' as const }
         : { ok: true as const, data: { receiptId: 'original-receipt', replayed: true } };
     };
@@ -116,3 +116,66 @@ for (const operation of ['role:assignment', 'role:definition', 'settings']) {
     expect(readCommand(realm, acting.iri, operation, store)).toBeNull();
   });
 }
+
+test('submission acceptance also retains its selection basis after a lost response', async () => {
+  const store = isolatedStorage();
+  const item = queue.find(entry => entry.kind === 'work_submission')!;
+  let basisReads = 0;
+  const requests: unknown[] = [];
+  const main = { v1: { realms: () => ({
+    'submitted-publications': { get: async () => {
+      basisReads++; return { data: { items: [], nextCursor: null }, error: null };
+    } },
+    submissions: () => ({ decisions: { post: async (input: unknown, options: unknown) => {
+      requests.push({ input, options });
+      if (requests.length === 1) throw new Error('receipt lost');
+      return { data: { replayed: true }, error: null };
+    } } }),
+  }) } } as unknown as MainClient;
+  const decision: Decision = { action: 'approve', reason: null, note: null };
+  await decideSubmission(main, realm, item, decision, acting.iri, 'accept-key', store);
+  await decideSubmission(main, realm, { ...item, generation: '99' }, decision, acting.iri, 'new-key', store);
+  expect(basisReads).toBe(1);
+  expect(requests[1]).toEqual(requests[0]);
+});
+
+test('an access refusal after a lost decision response does not erase the committed intent', async () => {
+  const store = isolatedStorage();
+  let sends = 0;
+  const main = { v1: { realms: () => ({ moderation: () => ({ get: async () => ({ data: basisFor(report), error: null }) }) }),
+    moderation: { decisions: { post: async () => {
+      sends++;
+      if (sends === 1) throw new Error('receipt lost after commit');
+      if (sends === 2) return { data: null, error: { status: 403, value: { code: 'denied' } } };
+      return { data: receipt(report, 'completed'), error: null };
+    } } } } } as unknown as MainClient;
+  const decision: Decision = { action: 'remove', reason: null, note: null, reasons };
+  await decideReport(main, realm, report, decision, acting.iri, 'original', store);
+  await decideReport(main, realm, report, decision, acting.iri, 'different', store);
+  expect(readReportAttempt(realm, acting.iri, report.id, store)?.key).toBe('original');
+  await decideReport(main, realm, report, decision, acting.iri, 'third', store);
+  expect(readReportAttempt(realm, acting.iri, report.id, store)).toBeNull();
+});
+
+test('reload during an in-flight dispatch retains uncertainty before any response handler runs', async () => {
+  const store = isolatedStorage();
+  let started!: () => void;
+  const dispatched = new Promise<void>(resolve => { started = resolve; });
+  let finish!: () => void;
+  const answer = new Promise<{ data: ReturnType<typeof receipt>; error: null }>(resolve => {
+    finish = () => resolve({ data: receipt(report, 'completed'), error: null });
+  });
+  const firstMain = { v1: { realms: () => ({ moderation: () => ({ get: async () => ({ data: basisFor(report), error: null }) }) }),
+    moderation: { decisions: { post: () => { started(); return answer; } } } } } as unknown as MainClient;
+  const decision: Decision = { action: 'remove', reason: null, note: null, reasons };
+  const first = decideReport(firstMain, realm, report, decision, acting.iri, 'in-flight-key', store);
+  await dispatched;
+  expect(readReportAttempt(realm, acting.iri, report.id, store)?.uncertain).toBe(true);
+  const afterReload = { v1: { moderation: { decisions: { post: async () => ({ data: null,
+    error: { status: 403, value: { code: 'denied' } } }) } } } } as unknown as MainClient;
+  await decideReport(afterReload, realm, report, decision, acting.iri, 'new-key', store);
+  expect(readReportAttempt(realm, acting.iri, report.id, store)?.key).toBe('in-flight-key');
+  finish();
+  await first;
+  expect(readReportAttempt(realm, acting.iri, report.id, store)).toBeNull();
+});

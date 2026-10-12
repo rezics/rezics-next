@@ -128,9 +128,6 @@ export function QueueView({ realm, address = realm, actingSubject, authority = f
   const committed = useRef(new Set<string>());
   const latest = useRef(state);
   latest.current = state;
-  useEffect(() => {
-    dispatch({ type: 'recover', items: reportAttempts(realm, actingSubject) });
-  }, [realm, actingSubject]);
 
   const visible = visibleIds(state);
   const current = state.current ? state.items[state.current] ?? null : null;
@@ -143,6 +140,11 @@ export function QueueView({ realm, address = realm, actingSubject, authority = f
     const found = await api.names(items, namesRef.current);
     setNames(known => mergeNames(known, found));
   }, [api]);
+  useEffect(() => {
+    const attempts = reportAttempts(realm, actingSubject);
+    dispatch({ type: 'recover', items: attempts });
+    if (attempts.length) void learn(attempts.map(attempt => attempt.item));
+  }, [realm, actingSubject, learn]);
 
   const reload = useCallback(async () => {
     const read = await api.page(view, null);
@@ -163,7 +165,9 @@ export function QueueView({ realm, address = realm, actingSubject, authority = f
       return outcome;
     }
     const result = await api.commit(attempt.item, attempt.decision, attempt.key);
-    const outcome: Settled = report && saved?.status === 'pending' && !result.ok ? { kind: 'pending' } : outcomeOf(result, report);
+    const retained = report ? readReportAttempt(realm, actingSubject, item.id) : null;
+    const outcome: Settled = report && !result.ok && retained?.status === 'pending' ? { kind: 'pending' }
+      : report && !result.ok && retained?.uncertain ? { kind: 'recorded' } : outcomeOf(result, report);
     if (report) {
       if (outcome.kind === 'recorded' || outcome.kind === 'pending') {
         // The command adapter has retained the prepared body; preserve it with the UI status.
@@ -371,6 +375,7 @@ export function QueueView({ realm, address = realm, actingSubject, authority = f
   }
 
   const detail = (className?: string) => <QueueDetail item={current} names={names}
+    unresolved={current !== null && (state.settled[current.id]?.kind === 'recorded' || state.settled[current.id]?.kind === 'pending')}
     draft={current ? drafts[current.id] : undefined} basis={current ? bases[current.id] : undefined}
     allowed={current && visible.includes(current.id) && state.settled[current.id]?.kind !== 'recorded'
       && state.settled[current.id]?.kind !== 'pending' ? actionsFor(current, effective) : new Set()}

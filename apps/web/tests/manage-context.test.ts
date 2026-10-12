@@ -1,7 +1,10 @@
 import { uuidToSid } from '@rezics/model/address';
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { materializeData } from 'native-i18n';
-import { decideSubmission } from '../features/manage/commands.ts';
+import { decideSubmission as sendSubmission } from '../features/manage/commands.ts';
+import { isolatedAttemptStorage } from '../features/manage/recovery-fixtures.ts';
+const decideSubmission: typeof sendSubmission = (main, realm, item, decision, actor, key) =>
+  sendSubmission(main, realm, item, decision, actor, key, isolatedAttemptStorage());
 import {
   book,
   chapterOne,

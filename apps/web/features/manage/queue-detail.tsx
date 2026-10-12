@@ -79,8 +79,9 @@ function Reports({ basis, agents, now, locale, messages }: { basis: Loaded<Decis
  * each with its key.
  */
 export function QueueDetail({ item, names, draft, basis, allowed, authority, rules, realmRules = [], rulesHref, onAct,
-  now, locale, messages, className }: {
+  now, locale, messages, className, unresolved = false }: {
   item: ModerationItem | null; names: QueueNames;
+  unresolved?: boolean;
   draft: Loaded<{ text: string; language: string }> | 'loading' | undefined;
   /** A report's decision basis: its reports' words and the rules a decision cites. */
   basis?: Loaded<DecisionBasis> | 'loading';
@@ -112,7 +113,7 @@ export function QueueDetail({ item, names, draft, basis, allowed, authority, rul
     className)}>
     <header className="flex flex-wrap items-center gap-2 text-sm">
       <Badge variant={report ? 'secondary' : 'soft'}>{kindLabel(item.kind, t)}</Badge>
-      <span className="text-muted-foreground">{stateLabel(item, t)}</span>
+      <span className="text-muted-foreground">{unresolved ? t.decisionPendingTitle : stateLabel(item, t)}</span>
       {isSpoilerReason(item.reasonCode) ? <Badge variant="outline">{t.spoilerBadge}</Badge> : null}
       {item.escalation ? <Badge variant="outline" className="gap-1"><SirenIcon aria-hidden="true" />{t.escalatedBadge}</Badge>
         : null}

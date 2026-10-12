@@ -61,8 +61,13 @@ export const refusedForGood = (failure: CommandFailure) => failure !== 'unavaila
 export interface CommandAttempt<Input> {
   realm: string; actingSubject: string; key: string; input: Input;
   status: 'recorded' | 'pending';
+  /** A dispatch lost its response, so a later access refusal cannot disprove that it committed. */
+  uncertain?: boolean;
 }
-export interface ReportAttempt extends CommandAttempt<ModerationDecisionCommand | null> {
+export type ReportInput = Omit<ModerationDecisionCommand, 'profile'> & {
+  profile: 'moderation-decision-v1' | 'rights-restriction-v1';
+};
+export interface ReportAttempt extends CommandAttempt<ReportInput | null> {
   item: ModerationItem; decision: Decision;
 }
 export type AttemptStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem' | 'key' | 'length'>;
@@ -95,22 +100,30 @@ export function forgetCommand(realm: string, actor: string, operation: string, s
 export const authoritativeRefusal = (failure: CommandFailure) => failure === 'stale' || failure === 'invalid'
   || failure === 'denied' || failure === 'missing' || failure === 'budget';
 
+export const refusalProvesNoCommit = (attempt: CommandAttempt<unknown>, failure: CommandFailure) =>
+  attempt.status !== 'pending' && authoritativeRefusal(failure)
+  && (!attempt.uncertain || failure !== 'denied' && failure !== 'missing');
+
 /** Retains a management write before dispatch; a lost response never creates a new intent. */
 export async function performCommand<Input, Receipt>(operation: string, proposed: CommandAttempt<Input>,
   send: (attempt: CommandAttempt<Input>) => Promise<Outcome<Receipt>>,
   store: AttemptStorage | null = storage()): Promise<Outcome<Receipt>> {
   const attempt = readCommand<Input>(proposed.realm, proposed.actingSubject, operation, store) ?? proposed;
-  if (!retainCommand(operation, attempt, store)) return { ok: false, failure: 'unavailable' };
+  // A reload may end the response handler without producing a network error.
+  // Mark the dispatch unknown durably before starting it, while this live call
+  // can still recognise its own first authoritative refusal.
+  if (!retainCommand(operation, { ...attempt, uncertain: true }, store)) return { ok: false, failure: 'unavailable' };
   let result: Outcome<Receipt>;
   try { result = await send(attempt); } catch { result = { ok: false, failure: 'unavailable' }; }
-  if (result.ok || attempt.status !== 'pending' && authoritativeRefusal(result.failure))
+  if (result.ok || refusalProvesNoCommit(attempt, result.failure))
     forgetCommand(attempt.realm, attempt.actingSubject, operation, store);
   else if (result.failure === 'pending') retainCommand(operation, { ...attempt, status: 'pending' }, store);
+  else retainCommand(operation, { ...attempt, uncertain: true }, store);
   return result;
 }
 
 export function readReportAttempt(realm: string, actor: string, id: string, store: AttemptStorage | null = storage()): ReportAttempt | null {
-  const found = readCommand<ModerationDecisionCommand | null>(realm, actor, `report:${id}`, store) as ReportAttempt | null;
+  const found = readCommand<ReportInput | null>(realm, actor, `report:${id}`, store) as ReportAttempt | null;
   return found?.item?.id === id && found.decision ? found : null;
 }
 

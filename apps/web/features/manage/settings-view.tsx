@@ -199,9 +199,10 @@ function PublishDialog({ realm, open, current, changes, whoMaySubmit, whoChanged
     setPending(true); setError(null);
     let basis = current;
     for (let attempt = 0; attempt < 2; attempt++) {
-      const result = await performCommand('settings', { realm, actingSubject, key: newKey(), status: 'recorded',
+      const attempt = readCommand<SettingsCommand>(realm, actingSubject, 'settings') ?? { realm, actingSubject, key: newKey(), status: 'recorded' as const,
         input: { actingSubject, expectedGeneration: basis.generation, reason: reason.trim(),
-          settings: { ...basis.settings, whoMaySubmit, rules }, expectedRulesRevision: basis.ruleBasis.revision } },
+          settings: { ...basis.settings, whoMaySubmit, rules }, expectedRulesRevision: basis.ruleBasis.revision } };
+      const result = await performCommand('settings', attempt,
         attempt => api.saveSettings(attempt.input, attempt.key));
       const retained = !result.ok && readCommand(realm, actingSubject, 'settings') !== null;
       setRecovering(retained); onRecovery(retained);
@@ -213,7 +214,7 @@ function PublishDialog({ realm, open, current, changes, whoMaySubmit, whoChanged
       }
       if (result.failure !== 'stale') {
         setPending(false);
-        setError(result.failure === 'denied' ? t.settingsDenied : result.failure === 'invalid' ? t.settingsInvalid
+        setError(retained ? t.decisionStillPending : result.failure === 'denied' ? t.settingsDenied : result.failure === 'invalid' ? t.settingsInvalid
           : t.failedNotice);
         return;
       }

@@ -1,9 +1,9 @@
 import type { Decision } from './queue-state.ts';
 import { automationOf } from './reason-presets.ts';
-import { authoritativeRefusal, type AttemptStorage, forgetCommand, readReportAttempt, retainCommand } from './safety-pending.ts';
+import { type AttemptStorage, forgetCommand, performCommand, readCommand, readReportAttempt, refusalProvesNoCommit, retainCommand, type ReportAttempt } from './safety-pending.ts';
 import { readDecisionBasis, readMembers, readRoles, readSettings, readSubmission } from './read.ts';
 import { type DecisionBasis, type InvitationCommand, type MainClient, type MemberCommand, type ModerationDecisionCommand,
-  type ModerationItem, problemCode, type ReadFailure, type RoleCommand, type SettingsView, uuidOf } from './types.ts';
+  type ModerationItem, problemCode, type ReadFailure, type RoleCommand, type SettingsView, type SubmissionDecision, uuidOf } from './types.ts';
 
 // Commands from the browser through the BFF. Each intent carries one
 // Idempotency-Key, so a retry after a lost response replays the same receipt
@@ -91,7 +91,12 @@ async function acceptBasis(main: MainClient, realm: string, item: ModerationItem
 
 /** One submission decision. `key` stays the same for every retry of this decision. */
 export async function decideSubmission(main: MainClient, realm: string, item: ModerationItem, decision: Decision,
-  actingSubject: string, key: string): Promise<Outcome<unknown>> {
+  actingSubject: string, key: string, store?: AttemptStorage): Promise<Outcome<unknown>> {
+  const operation = `submission:${item.id}`;
+  const retained = readCommand<SubmissionDecision>(realm, actingSubject, operation, store);
+  const dispatch = (attempt: { input: SubmissionDecision; key: string }) => send(() =>
+    main.v1.realms({ realm }).submissions({ submission: item.id }).decisions.post(attempt.input, keyed(attempt.key)));
+  if (retained) return performCommand(operation, retained, dispatch, store);
   if (!item.submission) return { ok: false, failure: 'invalid' };
   const outcome = decision.action === 'approve' ? 'accept' as const
     : decision.action === 'reject' ? 'reject' as const : 'request-changes' as const;
@@ -101,9 +106,9 @@ export async function decideSubmission(main: MainClient, realm: string, item: Mo
     if (!basis.ok) return basis;
     expectedSelectionHead = basis.data;
   }
-  return send(() => main.v1.realms({ realm }).submissions({ submission: item.id }).decisions.post({
-    actingSubject, expectedRevision: item.submission!.revision, outcome, expectedSelectionHead,
-    publicReason: decision.reason?.trim() || null, internalNote: decision.note?.trim() || null }, keyed(key)));
+  return performCommand(operation, { realm, actingSubject, key, status: 'recorded', input: {
+    actingSubject, expectedRevision: item.submission.revision, outcome, expectedSelectionHead,
+    publicReason: decision.reason?.trim() || null, internalNote: decision.note?.trim() || null } }, dispatch, store);
 }
 
 type DecisionTarget = ModerationDecisionCommand['targets'][number];
@@ -208,8 +213,9 @@ export async function decideReport(main: MainClient, realm: string, item: Modera
     decision.details ?? null, actingSubject, key);
   // Everything reported is already hidden: another decision got there first.
   if (!command) return { ok: false, failure: 'stale' };
-  const attempt = { realm, actingSubject, item, decision, key: retained?.key ?? key,
-    input: { ...command, reasons, idempotencyKey: retained?.key ?? key }, status: 'recorded' as const };
+  const attempt: ReportAttempt = { realm, actingSubject, item, decision, key: retained?.key ?? key,
+    input: { ...command, reasons, idempotencyKey: retained?.key ?? key,
+      profile: item.kind === 'rights_complaint' ? 'rights-restriction-v1' : 'moderation-decision-v1' }, status: 'recorded' };
   if (!retainCommand(`report:${item.id}`, attempt, store)) return { ok: false, failure: 'unavailable' };
   return sendReport(main, attempt, store);
 }
@@ -217,19 +223,21 @@ export async function decideReport(main: MainClient, realm: string, item: Modera
 async function sendReport(main: MainClient, attempt: NonNullable<ReturnType<typeof readReportAttempt>>,
   store?: AttemptStorage): Promise<Outcome<DecisionReceipt>> {
   const command = attempt.input!;
-  const result = attempt.item.kind === 'rights_complaint'
-    ? await send(() => main.v1.rights.restrictions.post({ ...command, profile: 'rights-restriction-v1',
+  if (!retainCommand(`report:${attempt.item.id}`, { ...attempt, uncertain: true }, store))
+    return { ok: false, failure: 'unavailable' };
+  const result = command.profile === 'rights-restriction-v1'
+    ? await send(() => main.v1.rights.restrictions.post({ ...command, profile: command.profile as 'rights-restriction-v1',
       // Main's `literals()` helper currently reads as `never` through Eden.
       outcome: command.outcome as never }, keyed(attempt.key)))
-    : await send(() => main.v1.moderation.decisions.post(command, keyed(attempt.key)));
+    : await send(() => main.v1.moderation.decisions.post({ ...command, profile: command.profile as 'moderation-decision-v1' }, keyed(attempt.key)));
   if (result.ok && decisionStatus(result.data) === 'completed') {
     forgetCommand(attempt.realm, attempt.actingSubject, `report:${attempt.item.id}`, store);
   } else if (result.ok) {
     retainCommand(`report:${attempt.item.id}`, { ...attempt, status: 'pending' }, store);
-  } else if (attempt.status !== 'pending' && authoritativeRefusal(result.failure)) {
+  } else if (refusalProvesNoCommit(attempt, result.failure)) {
     // These are authoritative refusals. A key conflict does not establish that nothing committed.
     forgetCommand(attempt.realm, attempt.actingSubject, `report:${attempt.item.id}`, store);
-  }
+  } else retainCommand(`report:${attempt.item.id}`, { ...attempt, uncertain: true }, store);
   return result;
 }
 

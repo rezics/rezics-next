@@ -45,6 +45,12 @@ export function RolesView({ realm, address = realm, actingSubject, list: serverL
     savedList?.realm === realm && savedList.actingSubject === actingSubject ? savedList.list : null);
   const name = (iri: string) => agentLabel(agents[iri], iri, id => t.agentFallback({ id }));
   const atCap = list.roles.length >= list.cap;
+  async function saved() {
+    const refreshed = await api.roles();
+    if (refreshed.ok) setSavedList(current => ({ realm, actingSubject, list: newestRoleList(refreshed.data,
+      current?.realm === realm && current.actingSubject === actingSubject ? current.list : null) }));
+    setEditing(null); setStatus(t.roleSaved); router.refresh();
+  }
   return <div className="grid gap-5">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div className="space-y-1">
@@ -59,7 +65,8 @@ export function RolesView({ realm, address = realm, actingSubject, list: serverL
       <Alert key={entry.operation} variant="warning"><AlertDescription className="flex items-center justify-between gap-3">
         <span>{entry.attempt.input.command.change.kind === 'role' ? entry.attempt.input.command.change.name : ''}: {t.decisionStillPending}</span>
         <Button size="sm" variant="outline" isLoading={recovery.pending} onClick={() => void recovery.resume(entry.operation)
-          .then(result => { if (result.ok) { setStatus(t.roleSaved); router.refresh(); } else setStatus(t.failedNotice); })}>
+          .then(result => { if (result.ok) void saved(); else setStatus('unconfirmed' in result && result.unconfirmed
+            ? t.decisionStillPending : t.failedNotice); })}>
           {t.decisionResume}</Button>
       </AlertDescription></Alert>)}
     {!list.roles.length ? <EmptyState icon={ShieldIcon} title={t.noRolesTitle} description={t.noRolesHelp} />
@@ -100,12 +107,7 @@ export function RolesView({ realm, address = realm, actingSubject, list: serverL
       </ul>}
     {editing ? <RoleEditor realm={realm} role={editing === 'new' ? null : editing} generation={list.generation} api={api}
       actingSubject={actingSubject} agents={agents} locale={locale} messages={messages} onClose={() => setEditing(null)}
-      onSaved={async () => {
-        const refreshed = await api.roles();
-        if (refreshed.ok) setSavedList(current => ({ realm, actingSubject, list: newestRoleList(refreshed.data,
-          current?.realm === realm && current.actingSubject === actingSubject ? current.list : null) }));
-        setEditing(null); setStatus(t.roleSaved); router.refresh();
-      }} /> : null}
+      onSaved={saved} /> : null}
   </div>;
 }
 
@@ -133,7 +135,8 @@ function RoleEditor({ realm, role, generation, api, actingSubject, agents, local
     if (!recovering && !reason.trim()) { setError(t.reasonRequired); return; }
     setPending(true); setError(null);
     const result = await save(reason);
-    if (!result.ok) { setPending(false); setError(failureText(result.failure, t, 'role')); return; }
+    if (!result.ok) { setPending(false); setError('unconfirmed' in result && result.unconfirmed
+      ? t.decisionStillPending : failureText(result.failure, t, 'role')); return; }
     await onSaved();
   }
 

@@ -143,7 +143,8 @@ export function MembersView({ realm, address = realm, actingSubject, first, agen
       return <Alert key={entry.operation} variant="warning"><AlertDescription className="flex items-center justify-between gap-3">
         <span>{change.kind === 'assignment' ? nameOf(change.member) : ''}: {t.decisionStillPending}</span>
         <Button size="sm" variant="outline" isLoading={recovery.pending} onClick={() => void recovery.resume(entry.operation)
-          .then(result => { if (result.ok) void done(t.roleSaved); else setStatus(t.failedNotice); })}>{t.decisionResume}</Button>
+          .then(result => { if (result.ok) void done(t.roleSaved); else setStatus('unconfirmed' in result && result.unconfirmed
+            ? t.decisionStillPending : t.failedNotice); })}>{t.decisionResume}</Button>
       </AlertDescription></Alert>;
     })}
     <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -405,7 +406,7 @@ function RoleDialog({ realm, open, generation, roles, api, actingSubject, agents
     const result = await save(reason);
     setPending(false);
     if (!result.ok) {
-      setError(failureText(result.failure, t, 'role'));
+      setError('unconfirmed' in result && result.unconfirmed ? t.decisionStillPending : failureText(result.failure, t, 'role'));
       return;
     }
     onDone(open.kind === 'give' ? t.roleGiven({ name, role: roleName }) : t.roleTaken({ name, role: roleName }));
