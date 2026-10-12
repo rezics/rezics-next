@@ -137,6 +137,6 @@ test('export metadata and intake refusal carry the same structured importability
     let error: unknown;
     try { parseRecipeFile(bytes, 'application/ld+json'); } catch (caught) { error = caught; }
     expect(error).toBeInstanceOf(RecipeNotImportable);
-    expect((error as RecipeNotImportable).importability).toEqual(exported.importability);
+    expect(exported.importability).toEqual((error as RecipeNotImportable).importability);
   }
 });
