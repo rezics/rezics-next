@@ -1,7 +1,8 @@
 export type NamedProof = { file: string; test: string; evidence?: string };
 export type JourneyProof = NamedProof & { journey: string };
-export type Proof = NamedProof | JourneyProof | { missing: string };
-type ApiProof = NamedProof | { missing: string };
+type MissingProof = { missing: string; reason?: string };
+export type Proof = NamedProof | JourneyProof | MissingProof;
+type ApiProof = NamedProof | MissingProof;
 
 export interface LaunchCoverage {
   kind: 'books' | 'recipes' | 'visual-novels' | 'anime' | 'manga' | 'games' | 'realm' | 'zone';
@@ -22,7 +23,7 @@ export interface LaunchCoverage {
 const api = (file: string, test: string, evidence?: string): ApiProof => ({ file, test, evidence });
 const browser = api;
 const journeyBrowser = (file: string, journey: string, test: string, evidence?: string): JourneyProof => ({ file, journey, test, evidence });
-const missing = (item: string): Proof => ({ missing: item });
+const missing = (item: string, reason?: string): MissingProof => ({ missing: item, reason });
 
 export const launchCoverage: readonly LaunchCoverage[] = [
   {
@@ -69,9 +70,7 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/g-854-library-bundle.test.ts',
       'API review, own-person denial, private retention, interrupted apply and resumable complete bundle re-import',
       'Exports imported Goodreads book statements through Main under one snapshot, re-imports into another reader and compares restored library state.'),
-    browser: browser('apps/web/tests/g-743-library.e2e.ts',
-      'library-import-progress-export: import, progress on two devices and the download, by keyboard, in the Latin locale',
-      'Imports book rows, starts the Library download by keyboard and reads the saved export bundle with a nonempty record list.'),
+    browser: missing('L21', 'the identified Book export journey skips when the Library is closed; the separate export journey uses untyped retained records'),
   },
   {
     kind: 'books',
@@ -85,7 +84,8 @@ export const launchCoverage: readonly LaunchCoverage[] = [
   },
   {
     kind: 'recipes',
-    capability: 'Work hub and edition choice',
+    // Recipes have no editions; this row covers opening the Work hub and reading it.
+    capability: 'Work hub and reading',
     api: missing('L21'),
     browser: missing('L21'),
   },
@@ -127,7 +127,9 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/recipe-structure.test.ts',
       'RECIPE01/RECIPE02/RECIPE03: recipe Structure retains duplicate lines, scales exactly and imports source',
       'Imports retained Schema.org recipe source through Main and exports ingredients, sectioned instructions, residuals and source provenance.'),
-    browser: missing('L20'),
+    browser: browser('apps/web/tests/recipe-exchange.e2e.ts',
+      'a cook imports, edits, exports, and reimports a Schema.org recipe with its supported representation',
+      'Imports a French Schema.org Recipe, edits a step, downloads its JSON and reimports that file into another Recipe, preserving duplicate ingredients, sections, steps and language.'),
   },
   {
     kind: 'visual-novels',
@@ -158,8 +160,12 @@ export const launchCoverage: readonly LaunchCoverage[] = [
   {
     kind: 'anime',
     capability: 'Work hub and edition choice',
-    api: missing('L13'),
-    browser: missing('L13'),
+    api: api('tests/qa/integration/anime-manga-hub.test.ts',
+      'anime and manga hubs show recorded and missing publication dates, name chosen releases per reader, and settle concurrent replayed saves',
+      'Reads dated and undated Anime hubs through Main, saves a named release per reader and verifies replay, concurrent saves and another reader’s unchanged default.'),
+    browser: browser('apps/web/tests/anime-manga-hub.e2e.ts',
+      'anime-manga-hub: a reader chooses named anime and manga releases by keyboard, keeps them after reload, and another reader retains defaults',
+      'Chooses a named Anime release by keyboard, reloads its saved edition label and checks another reader retains the default release.'),
   },
   {
     kind: 'anime',
@@ -184,8 +190,12 @@ export const launchCoverage: readonly LaunchCoverage[] = [
   {
     kind: 'manga',
     capability: 'Work hub and edition choice',
-    api: missing('L13'),
-    browser: missing('L13'),
+    api: api('tests/qa/integration/anime-manga-hub.test.ts',
+      'anime and manga hubs show recorded and missing publication dates, name chosen releases per reader, and settle concurrent replayed saves',
+      'Reads dated and undated Manga hubs through Main, saves a named release per reader and verifies replay, concurrent saves and another reader’s unchanged default.'),
+    browser: browser('apps/web/tests/anime-manga-hub.e2e.ts',
+      'anime-manga-hub: a reader chooses named anime and manga releases by keyboard, keeps them after reload, and another reader retains defaults',
+      'Chooses a named Manga release by keyboard, reloads its saved edition label and checks another reader retains the default release.'),
   },
   {
     kind: 'manga',
@@ -200,9 +210,12 @@ export const launchCoverage: readonly LaunchCoverage[] = [
   {
     kind: 'manga',
     capability: 'Collection tracking and progress',
-    // The chapter journey uses an unclassified BookSeries with text chapters, not identified manga.
-    api: missing('L19'),
-    browser: missing('L19'),
+    api: api('tests/qa/integration/typed-progress.test.ts',
+      'identified manga chapter progress resumes across volumes and an omnibus with stale-write recovery through the API',
+      'Accepts the Manga classification through Main, records chapter progress across volumes and rereads its continuation through separate sessions and an omnibus.'),
+    browser: browser('apps/web/tests/tracking-media.e2e.ts',
+      'identified manga chapter progress resumes across volumes and devices',
+      'Opens the classified Manga, marks chapters read across two volumes on a phone and checks desktop and omnibus continuation before resolving a stale phone write against the desktop’s winning progress.'),
   },
   {
     kind: 'games',
@@ -224,7 +237,7 @@ export const launchCoverage: readonly LaunchCoverage[] = [
       'Creates identified VideoGames through Main, reads required and extra parts, records played and completed progress, verifies replay and reader isolation, and undoes both part and partless completion.'),
     browser: browser('apps/web/tests/tracking-media.e2e.ts',
       'game progress resumes across required and extra routes and a partless game on another device',
-      'Completes the VideoGame Harbour Route on a phone and reads Completed on a separate desktop context before clearing it.'),
+      'Marks the required VideoGame route played on a phone, completes it on desktop while the extra route stays untouched, rejects stale progress and resets route and partless-game completion.'),
   },
   {
     kind: 'realm',
@@ -284,8 +297,8 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     kind: 'realm',
     capability: 'Ranking',
     api: api('tests/qa/integration/g-1034-realm-ranking.test.ts',
-      'complete Realm Best/Top and fixed header work at 100/1000/10000 real threads with retained history',
-      'Reads Realm Best and Top through Main at 100, 1000 and 10000 real threads and checks ordering, disclosure and bounded hydration.'),
+      'complete Realm Best/Top and fixed header work at 100/400/1600 real threads with retained history',
+      'Reads Realm Best and Top through Main at 100, 400 and 1600 real threads, checking constant request and statement counts and bounded hydration for anonymous and member reads.'),
     browser: missing('gap'),
   },
   {
@@ -305,7 +318,7 @@ export const launchCoverage: readonly LaunchCoverage[] = [
       'Realm-less site binds exact revisions; drafts stay outside and republishing moves public membership',
       'Saves, previews, publishes and replaces exact Zone page revisions through Main, keeping unpublished drafts unavailable to readers.'),
     browser: browser('apps/web/tests/zone-site-authoring.e2e.ts',
-      'an author writes, previews and publishes a zone home page, and a second tab keeps a stale draft',
+      'Navigation and theme: a Realm-less Zone publishes the saved home, navigation, and layout as one site',
       'Writes and previews a Zone home page through UI, publishes it for an anonymous reader and preserves a second tab’s stale draft.'),
   },
   {
@@ -314,7 +327,9 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/zone-document-home.test.ts',
       'Navigation and theme publish together with home Content; drafts, stale cuts and non-editors cannot change the public bundle',
       'Saves structural theme tokens, reorders navigation mounts and edits home Content through Main; anonymous delivery changes all three only on publication, while stale cuts and non-editor writes are refused.'),
-    browser: missing('L17'),
+    browser: browser('apps/web/tests/zone-site-authoring.e2e.ts',
+      'Navigation and theme: a Realm-less Zone publishes the saved home, navigation, and layout as one site',
+      'Saves home Content, navigation and layout, checks their preview, publishes one bundle and verifies anonymous delivery retains its exact cuts through replay and later private edits.'),
   },
   {
     kind: 'zone',
@@ -323,7 +338,7 @@ export const launchCoverage: readonly LaunchCoverage[] = [
       'lost publish acknowledgement replays one receipt and original page, route, navigation and theme cuts',
       'Replays a lost Main publication acknowledgement as one receipt with its original page, route, navigation and theme revision cuts.'),
     browser: browser('apps/web/tests/zone-site-authoring.e2e.ts',
-      'an author writes, previews and publishes a zone home page, and a second tab keeps a stale draft',
+      'Navigation and theme: a Realm-less Zone publishes the saved home, navigation, and layout as one site',
       'Retries an interrupted publish with one key and checks anonymous readers see the published page and later replacement.'),
   },
   {
@@ -333,8 +348,58 @@ export const launchCoverage: readonly LaunchCoverage[] = [
       'Realm-less site binds exact revisions; drafts stay outside and republishing moves public membership',
       'Creates a Zone-only Space through Main, checks its Realm is null and publishes a home page readable anonymously.'),
     browser: browser('apps/web/tests/zone-site-authoring.e2e.ts',
-      'an author writes, previews and publishes a zone home page, and a second tab keeps a stale draft',
+      'Navigation and theme: a Realm-less Zone publishes the saved home, navigation, and layout as one site',
       'Creates a Zone-only Space, edits and publishes its home page through UI and checks anonymous readers see the content.'),
+  },
+  {
+    kind: 'zone',
+    capability: 'Home rendering',
+    api: api('tests/qa/integration/zone-document-home.test.ts',
+      'public home resolves published Showcase and unknown placeholders while draft presentation and navigation stay private',
+      'Reads the published Zone home through Main, resolves Showcase modules and unknown placeholders and keeps later presentation and navigation drafts outside the public bundle.'),
+    browser: browser('apps/web/tests/zone-site-authoring.e2e.ts',
+      "Zone home rendering: a ${withRealm ? 'Realm-backed' : 'Realm-less'} Zone previews a new Showcase and publishes modules with saved presentation navigation",
+      'Both Realm-less and Realm-backed Zones preview a new Showcase, publish its modules and navigation for anonymous readers and keep later saved drafts private.'),
+  },
+  {
+    kind: 'zone',
+    capability: 'Lifecycle',
+    api: api('tests/qa/integration/zone-document-home.test.ts',
+      'configuration, retirement and recovery retain the bundle; revoked publication and stale cuts do not switch it',
+      'Retires and recovers a populated Zone through Main, retaining the exact publication receipt, page revision and navigation while stale cuts and revoked publication are refused.'),
+    browser: browser('apps/web/tests/zone-site-authoring.e2e.ts',
+      'Zone lifecycle: a populated site retires and recovers the same published cuts through the editor',
+      'Retires a populated Zone through its status editor, reviews a stale action after a concurrent edit and recovers the same published home, navigation and layout for anonymous readers.'),
+  },
+  {
+    kind: 'zone',
+    capability: 'Attach a Realm',
+    api: api('tests/qa/integration/zone-realm-attachment.test.ts',
+      'a Zone attaches a Realm from another Space only with both authorities, and either side ends it at once',
+      'Attaches a Realm from another Space through Main only with both authorities, publishes its binding and refuses an outsider’s attachment.'),
+    browser: browser('apps/web/tests/zone-realm-attachment.e2e.ts',
+      'a Realm steward can attach, list, and withdraw a Zone',
+      'A Realm steward attaches a Zone through its editor, sees the attached Realm after publication and finds the Zone in the steward’s list.'),
+  },
+  {
+    kind: 'zone',
+    capability: 'List attached Zones',
+    api: api('tests/qa/integration/zone-realm-attachment.test.ts',
+      'a steward lists attached Zones page by page; anyone else gets the missing Realm, at the same cost for 1 and 50',
+      'Pages the Realm steward’s attached Zones through Main, checks complete membership and withdrawal links and refuses anonymous and outsider reads without revealing the Realm.'),
+    browser: browser('apps/web/tests/zone-realm-attachment.e2e.ts',
+      'a Realm steward can attach, list, and withdraw a Zone',
+      'Reloads Attached Zones at phone width, reads the attached Zone and its withdrawal control and confirms the row disappears after withdrawal.'),
+  },
+  {
+    kind: 'zone',
+    capability: 'Withdraw a Realm attachment',
+    api: api('tests/qa/integration/zone-realm-attachment.test.ts',
+      'a Zone attaches a Realm from another Space only with both authorities, and either side ends it at once',
+      'Withdraws a Realm attachment through Main as its steward, replays one receipt, checks public and editor reads immediately lose the binding and refuses unauthorized withdrawal.'),
+    browser: browser('apps/web/tests/zone-realm-attachment.e2e.ts',
+      'a Realm steward can attach, list, and withdraw a Zone',
+      'Withdraws a Zone from the steward’s list, checks its row disappears and reloads the Zone editor to confirm no Realm remains attached.'),
   },
   {
     kind: 'zone',
@@ -342,7 +407,7 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/zone-realm-discussion.test.ts',
       'a published Zone page opens one canonical discussion and preserves independent concurrent contributions',
       'Posts independent concurrent contributions through Main, resumes a pending child and checks replay, stale bindings and retained-root recovery.'),
-    browser: missing('L10'),
+    browser: missing('L10', 'missing until the Zone resource page passes under concurrent writes; posting and reopen tests are fixme'),
   },
   {
     kind: 'books',
@@ -394,7 +459,9 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/zone-document-home.test.ts',
       'revocation after the Content pin prevents the final site bundle switch',
       'Revokes Zone editing authority after the Content pin; Main refuses publication and leaves the public bundle unchanged.'),
-    browser: missing('L17'),
+    browser: browser('apps/web/tests/zone-site-authoring.e2e.ts',
+      'Zone publication: a revoked editor keeps saved work, cannot publish, and cannot reopen preview',
+      'Revokes the editor after saving later drafts, refuses publication and reopened preview, preserves the saved draft and leaves anonymous readers on the original published cuts.'),
   },
   {
     kind: 'books',
@@ -411,9 +478,10 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/long-series-progress.test.ts',
       'a chapter inside a volume resumes and discloses across the series, and a deeper nest is refused',
       'Writes chapter progress for a Book volume through Main, rereads the saved position across its series and verifies later updates and undo.'),
-    browser: browser('apps/web/tests/g-743-library.e2e.ts',
-      'library-import-progress-export: import, progress on two devices and the download, by keyboard, in the Latin locale',
-      'Starts a Sword Art Online Book reading session on one browser context and opens another context to see the saved First read session.'),
+    browser: journeyBrowser('apps/web/tests/g-838-tracking.e2e.ts',
+      'apps/web/tests/journeys/reading-progress.ts',
+      'attempts on two devices, series progress and the offered correspondence',
+      'Starts a Sword Art Online Book attempt on desktop, reloads it on a phone, resolves stale pause and completion changes across both devices and checks the completed series totals.'),
   },
   {
     kind: 'books',
@@ -452,9 +520,12 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     kind: 'manga',
     capability: 'Continue progress across devices',
     hardCase: 'two-device-progress',
-    // The chapter journey uses an unclassified BookSeries with text chapters, not identified manga.
-    api: missing('L19'),
-    browser: missing('L19'),
+    api: api('tests/qa/integration/typed-progress.test.ts',
+      'identified manga chapter progress resumes across volumes and an omnibus with stale-write recovery through the API',
+      'Separate Manga reader sessions share chapter progress across volumes and an omnibus, propagate undo and preserve the winning state after a stale update.'),
+    browser: browser('apps/web/tests/tracking-media.e2e.ts',
+      'identified manga chapter progress resumes across volumes and devices',
+      'A phone records Manga chapter progress, desktop resumes it across volumes and an omnibus, and a delayed stale phone write exposes the desktop’s winner before the reader keeps their change.'),
   },
   {
     kind: 'games',
@@ -465,7 +536,7 @@ export const launchCoverage: readonly LaunchCoverage[] = [
       'Writes played progress through Main, rejects a later same-reader request with a cached version as stale, rereads the saved state, completes from the current version and undoes completion.'),
     browser: browser('apps/web/tests/tracking-media.e2e.ts',
       'game progress resumes across required and extra routes and a partless game on another device',
-      'Completes the VideoGame Harbour Route on a phone and reads Completed on a separate desktop context before clearing it.'),
+      'Phone and desktop share required-route and partless-game progress, reject stale writes after desktop completion and propagate reset on phone reload while the extra route remains untouched.'),
   },
   {
     kind: 'anime',

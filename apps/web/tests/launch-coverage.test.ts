@@ -43,14 +43,70 @@ function escaped(value: string): string {
 }
 
 function namedTestExists(source: string, title: string): boolean {
-  const declaration = /\b(?:test|it)\s*\(\s*(['"`])((?:\\.|(?!\1)[\s\S])*?)\1\s*,/g;
+  const parsed = ts.createSourceFile('proof.ts', source, ts.ScriptTarget.Latest, true);
   // Older test titles open with a task tag (a G, an optional hyphen, digits and a colon or space); the registry names the
   // exact source title after it, so no task identifier is copied into the registry.
   const matches = (candidate: string) => candidate.replace(/^G-?\d+(?::\s*|\s+)/, '') === title;
-  if ([...source.matchAll(declaration)].some((match) => matches(match[2]!))) return true;
+
+  function disablesTest(call: ts.CallExpression): boolean {
+    let expression: ts.Expression = call;
+    let disabled = false;
+    while (ts.isPropertyAccessExpression(expression) || ts.isCallExpression(expression)) {
+      if (ts.isCallExpression(expression) && ts.isPropertyAccessExpression(expression.expression) &&
+        ['skip', 'skipIf', 'fixme'].includes(expression.expression.name.text)) {
+        // Read the condition at the modifier, including Bun's curried describe.skipIf(condition)(...).
+        disabled ||= expression.arguments[0]?.kind !== ts.SyntaxKind.FalseKeyword;
+      }
+      expression = expression.expression;
+    }
+    return disabled && ts.isIdentifier(expression) && ['test', 'it', 'describe'].includes(expression.text);
+  }
+
+  function activeTest(call: ts.CallExpression): boolean {
+    function scopeDisablesTest(scope: ts.Node): boolean {
+      let disabled = false;
+      const visit = (node: ts.Node): void => {
+        // A sibling test's skip affects that test, not the suite being inspected.
+        if (ts.isFunctionLike(node)) return;
+        if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) &&
+          ['skip', 'fixme'].includes(node.expression.name.text) &&
+          !ts.isStringLiteralLike(node.arguments[0] ?? node) && disablesTest(node)) disabled = true;
+        ts.forEachChild(node, visit);
+      };
+      visit(scope);
+      return disabled;
+    }
+    for (let parent: ts.Node | undefined = call; parent; parent = parent.parent) {
+      if (ts.isCallExpression(parent) && disablesTest(parent)) return false;
+      if ((ts.isBlock(parent) || ts.isSourceFile(parent)) && scopeDisablesTest(parent)) return false;
+    }
+    // Playwright also disables a test from inside its body. Unknown runtime conditions cannot prove it runs.
+    let disabled = false;
+    const visit = (node: ts.Node): void => {
+      if (ts.isCallExpression(node) && disablesTest(node)) disabled = true;
+      ts.forEachChild(node, visit);
+    };
+    const callback = call.arguments[1];
+    if (callback) visit(callback);
+    return !disabled;
+  }
+
+  let found = false;
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) &&
+      ['test', 'it'].includes(node.expression.text)) {
+      const [argument, callback] = node.arguments;
+      const candidate = argument && (ts.isStringLiteralLike(argument) ? argument.text
+        : ts.isTemplateExpression(argument) ? argument.getText(parsed).slice(1, -1) : undefined);
+      if (candidate !== undefined && matches(candidate) && callback &&
+        (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback)) && activeTest(node)) found = true;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(parsed);
+  if (found) return true;
 
   // A table title is evidence only when that table registers tests through its loop variable.
-  const parsed = ts.createSourceFile('proof.ts', source, ts.ScriptTarget.Latest, true);
   const tables = new Map<string, ts.ArrayLiteralExpression>();
   for (const statement of parsed.statements) {
     if (!ts.isVariableStatement(statement) || !(statement.declarationList.flags & ts.NodeFlags.Const)) continue;
@@ -74,7 +130,7 @@ function namedTestExists(source: string, title: string): boolean {
     if (!ts.isIdentifier(call.expression) || !['test', 'it'].includes(call.expression.text) ||
       !argument || !ts.isPropertyAccessExpression(argument) || !ts.isIdentifier(argument.expression) ||
       argument.expression.text !== binding.text || argument.name.text !== 'title' ||
-      !callback || (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback))) continue;
+      !callback || (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) || !activeTest(call)) continue;
     for (const entry of tables.get(loop.expression.text)?.elements ?? []) {
       if (!ts.isObjectLiteralExpression(entry) || entry.properties.some(property => ts.isSpreadAssignment(property) ||
         (property.name && ts.isComputedPropertyName(property.name)))) continue;
@@ -121,9 +177,11 @@ function missingForRow(row: (typeof launchCoverage)[number]): string[] {
 }
 
 function missingSlots(row: (typeof launchCoverage)[number]): string[] {
+  const label = (tier: string, proof: Extract<Proof, { missing: string }>) =>
+    `${tier} ${proof.missing}${proof.reason ? ` (${proof.reason})` : ''}`;
   return [
-    ...(proofMissing(row.api) ? [`API ${row.api.missing}`] : []),
-    ...(proofMissing(row.browser) ? [`browser ${row.browser.missing}`] : []),
+    ...(proofMissing(row.api) ? [label('API', row.api)] : []),
+    ...(proofMissing(row.browser) ? [label('browser', row.browser)] : []),
   ];
 }
 
@@ -146,6 +204,9 @@ test('launch coverage names existing tests and reports remaining rows', () => {
     for (const proof of [row.api, row.browser]) {
       if (proofMissing(proof)) {
         if (!missingItems.has(proof.missing)) errors.push(`${rowLabel(row)}: unknown missing item ${proof.missing}`);
+        if (proof.reason !== undefined && (!proof.reason.trim() || /[\r\n]/.test(proof.reason))) {
+          errors.push(`${rowLabel(row)}: missing reason must be one nonempty line`);
+        }
         continue;
       }
 
@@ -175,10 +236,10 @@ test('launch coverage names existing tests and reports remaining rows', () => {
         }
         const journeySource = readFileSync(journeyPath, 'utf8');
         if (!namedTestExists(journeySource, proof.test)) {
-          errors.push(`${rowLabel(row)}: test not found in journey ${proof.journey}: ${proof.test}`);
+          errors.push(`${rowLabel(row)}: runnable test not found in journey ${proof.journey}: ${proof.test}`);
         }
       } else if (!namedTestExists(source, proof.test)) {
-        errors.push(`${rowLabel(row)}: test not found in ${proof.file}: ${proof.test}`);
+        errors.push(`${rowLabel(row)}: runnable test not found in ${proof.file}: ${proof.test}`);
       }
     }
 
@@ -212,6 +273,30 @@ test('proof titles preserve the exact title after a leading task tag', () => {
   expect(namedTestExists("test('a reader saves a choice', () => {});", 'a reader saves a choice')).toBe(true);
 });
 
+test('proof titles require runnable tests rather than skipped declarations or suites', () => {
+  const title = 'a reader resumes on another device';
+  const declaration = `test('${title}', () => {});`;
+  expect(namedTestExists(declaration, title)).toBe(true);
+  for (const disabled of ['skip', 'skipIf', 'fixme']) {
+    expect(namedTestExists(`test.${disabled}('${title}', () => {});`, title)).toBe(false);
+    expect(namedTestExists(`describe.${disabled}(true)('suite', () => { ${declaration} });`, title)).toBe(false);
+    expect(namedTestExists(`test.describe.${disabled}('suite', () => { ${declaration} });`, title)).toBe(false);
+    expect(namedTestExists(`describe.${disabled}('suite', () => { ${declaration} });`, title)).toBe(false);
+    expect(namedTestExists(`test('${title}', () => { test.${disabled}(process.env.PROOF_DISABLED); });`, title)).toBe(false);
+  }
+  expect(namedTestExists(`describe.skipIf(!reviewUrl || !authPath)('shared stack', () => { ${declaration} });`, title)).toBe(false);
+  expect(namedTestExists(`describe('outer', () => { describe.skip('inner', () => { ${declaration} }); });`, title)).toBe(false);
+  expect(namedTestExists(`describe.skipIf(false)('suite', () => { ${declaration} });`, title)).toBe(true);
+  expect(namedTestExists(`test('${title}', () => { test.skip(false); });`, title)).toBe(true);
+  expect(namedTestExists(`test.skip(true); ${declaration}`, title)).toBe(false);
+  expect(namedTestExists(`describe('suite', () => { if (disabled) test.fixme(true); ${declaration} });`, title)).toBe(false);
+  expect(namedTestExists(`test.skip('unrelated journey', () => {}); ${declaration}`, title)).toBe(true);
+  expect(namedTestExists(`test('unrelated journey', () => { test.skip(true); }); ${declaration}`, title)).toBe(true);
+  expect(namedTestExists(`// ${declaration}`, title)).toBe(false);
+  expect(namedTestExists(`const example = ${JSON.stringify(declaration)};`, title)).toBe(false);
+  expect(namedTestExists(`test('${title}');`, title)).toBe(false);
+});
+
 test('proof titles in a table must be registered by that table’s test loop', () => {
   const source = `
     const unused = [{ title: 'an unused journey' }];
@@ -234,6 +319,7 @@ test('proof titles in a table must be registered by that table’s test loop', (
   expect(namedTestExists(source.replace('choices: [{', '...unused[0], choices: [{'), 'a reader chooses an edition')).toBe(false);
   expect(namedTestExists(source.replace('choices: [{', "['title']: 'another title', choices: [{"), 'a reader chooses an edition')).toBe(false);
   expect(namedTestExists(source.replace('test(journey.title', 'it(journey.title'), 'a reader chooses a format')).toBe(true);
+  expect(namedTestExists(source.replace('async () => {}', 'async () => { test.skip(true); }'), 'a reader chooses a format')).toBe(false);
 });
 
 test('every launch kind and hard case has a coverage row', () => {
