@@ -145,9 +145,9 @@ export function PinPicker({ state, defaults, locale, messages, actingSubject, fi
         <TopicSearch t={t} locale={locale} api={client} disabled={full} busy={busy}
           pinned={concepts.map(concept => concept.id)}
           known={concepts.map(concept => concept.id)}
-          unpinned={canPin ? visibleFilters?.unpinned ?? [] : []} onPin={topic => void pinConcept(topic)} onPinFilter={filter => void pinFilter(filter)} />
-        {current && canCreate ? <SaveCurrent t={t} labels={current.labels} disabled={full || busy !== null && busy !== 'current'} busy={busy === 'current'}
-          onSave={name => void saveCurrent(name)} /> : null}
+          unpinned={gate('getV1MeSaved-filters') ? gate('patchV1MeSaved-filtersById') ? filters?.unpinned ?? [] : [] : []} onPin={topic => void pinConcept(topic)} onPinFilter={filter => void pinFilter(filter)} />
+        {gate('getV1MeSaved-filters') ? gate('postV1MeSaved-filters') ? current ? <SaveCurrent t={t} labels={current.labels} disabled={full || busy !== null && busy !== 'current'} busy={busy === 'current'}
+          onSave={name => void saveCurrent(name)} /> : null : null : null}
       </DialogBody>
     </DialogContent>
   </Dialog>;

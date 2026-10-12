@@ -149,14 +149,16 @@ export async function readRecipeWorkPage(href: string, servings?: number): Promi
 
 /** A Work's prompt or skill section, read from the link its projection gave. */
 export async function readHubWorkPage(href: string): Promise<Loaded<HubWorkPage | null> | null> {
-  if (!operationOpen('getV1HubWorksById', await readPlatformAccess())) return null;
-  const { main, actingSubject } = await reader();
-  try {
-    const { data, error } = await followHref<HubWorkPage | null>(main, href, { actingSubject })();
-    // The grant may have been revoked after the request's access summary was read.
-    if (error && platformClosed(error.status, error.value)) return null;
-    return error ? { ok: false, failure: failureOf(error.status) } : { ok: true, data };
-  } catch { return { ok: false, failure: 'unavailable' }; }
+  if (operationOpen('getV1HubWorksById', await readPlatformAccess())) {
+    const { main, actingSubject } = await reader();
+    try {
+      const { data, error } = await followHref<HubWorkPage | null>(main, href, { actingSubject })();
+      // The grant may have been revoked after the request's access summary was read.
+      if (error && platformClosed(error.status, error.value)) return null;
+      return error ? { ok: false, failure: failureOf(error.status) } : { ok: true, data };
+    } catch { return { ok: false, failure: 'unavailable' }; }
+  }
+  return null;
 }
 
 /** A chapter Post with the Books that place it, as Main's Post read gives them. */

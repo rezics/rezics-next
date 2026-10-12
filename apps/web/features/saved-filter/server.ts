@@ -15,8 +15,12 @@ import type { SavedFilters } from './types.ts';
 export const readSavedFilters = cache(async (locale: string): Promise<SavedFilters | null> => {
   const reader = await shellReader();
   if (!reader.actingSubject) return null;
-  if (!operationOpen('getV1MeSaved-filters', await readPlatformAccess())) return null;
-  const read = await settle(() => reader.main.v1.me['saved-filters'].get({ query: {
-    actingSubject: reader.actingSubject!, language: locale } }));
+  const read = await settle(async () => {
+    if (operationOpen('getV1MeSaved-filters', await readPlatformAccess())) {
+      return reader.main.v1.me['saved-filters'].get({ query: {
+        actingSubject: reader.actingSubject!, language: locale } });
+    }
+    return { data: null, error: { status: 403, value: { code: 'platform_closed' } } };
+  });
   return read.ok ? splitFilters(read.data) : null;
 });

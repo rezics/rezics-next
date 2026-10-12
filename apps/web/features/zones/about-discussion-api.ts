@@ -37,29 +37,31 @@ const uuid = (iri: string) => iri.slice(-36);
 export function mainAboutDiscussionApi(main: () => MainClient = browserMainApi,
   operationOpen: OperationGate = () => true): AboutDiscussionApi {
   return { async post(intent) {
-    if (!operationOpen('postV1RealmsByRealmAbout-posts')) return { kind: 'closed' };
-    try {
-      const { realm, ...basis } = intent.basis;
-      const answer = await main().v1.realms({ realm: uuid(realm) })['about-posts'].post({
-        profile: 'realm-about-post-v1', ...basis, actingSubject: intent.actingSubject,
-        body: intent.body, language: intent.language, direction: direction(intent.language, intent.body),
-        spoiler: intent.spoiler,
-      }, { headers: { 'idempotency-key': intent.key } });
-      // 202 carries no receipt: a successful transport is not a settled post.
-      if (answer.response.status === 202) return { kind: 'pending' };
-      if (answer.error) {
-        // The grant gate runs before the intent owner. Its refusal cannot
-        // establish the outcome of a previous attempt under this key.
-        if (platformClosed(answer.error.status, answer.error.value)) return { kind: 'closed' };
-        if (answer.error.status === 409) return { kind: 'stale' };
-        // Expired authentication does not establish the previous attempt's
-        // outcome. Keep its key for recovery after signing in again.
-        if ([400, 403, 404, 410, 422].includes(answer.error.status)) return { kind: 'refused' };
-        return { kind: 'recovery' };
-      }
-      return answer.data && 'reply' in answer.data
-        ? { kind: 'posted', reply: answer.data.reply } : { kind: 'recovery' };
-    } catch { return { kind: 'recovery' }; }
+    if (operationOpen('postV1RealmsByRealmAbout-posts')) {
+      try {
+        const { realm, ...basis } = intent.basis;
+        const answer = await main().v1.realms({ realm: uuid(realm) })['about-posts'].post({
+          profile: 'realm-about-post-v1', ...basis, actingSubject: intent.actingSubject,
+          body: intent.body, language: intent.language, direction: direction(intent.language, intent.body),
+          spoiler: intent.spoiler,
+        }, { headers: { 'idempotency-key': intent.key } });
+        // 202 carries no receipt: a successful transport is not a settled post.
+        if (answer.response.status === 202) return { kind: 'pending' };
+        if (answer.error) {
+          // The grant gate runs before the intent owner. Its refusal cannot
+          // establish the outcome of a previous attempt under this key.
+          if (platformClosed(answer.error.status, answer.error.value)) return { kind: 'closed' };
+          if (answer.error.status === 409) return { kind: 'stale' };
+          // Expired authentication does not establish the previous attempt's
+          // outcome. Keep its key for recovery after signing in again.
+          if ([400, 403, 404, 410, 422].includes(answer.error.status)) return { kind: 'refused' };
+          return { kind: 'recovery' };
+        }
+        return answer.data && 'reply' in answer.data
+          ? { kind: 'posted', reply: answer.data.reply } : { kind: 'recovery' };
+      } catch { return { kind: 'recovery' }; }
+    }
+    return { kind: 'closed' };
   } };
 }
 

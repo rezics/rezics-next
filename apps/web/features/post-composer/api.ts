@@ -53,7 +53,6 @@ async function placedReplyIsVisible(
   actingSubject: string,
   main: ReturnType<typeof browserMainApi>,
 ): Promise<boolean> {
-  if (typeof main.v1.realms !== 'function') return false;
   for (let attempt = 0; attempt < projectionReadAttempts; attempt++) {
     try {
       const threads = main.v1.realms({ realm: realm.slice(-36) }).threads;
@@ -148,21 +147,24 @@ export async function submitPost(
     );
   };
   const banned = async (status: number | undefined): Promise<boolean> => {
-    if (status !== 403 || !operationOpen('getV1RealmsByRealmMember-ban')) return false;
-    // A generic denial does not identify its cause. Only the member's own ban read can.
-    try {
-      const { data } = await main.v1.realms({ realm: intent.realm.slice(-36) })['member-ban'].get({
-        query: { actingSubject: intent.actingSubject },
-      });
-      return (
-        !!data &&
-        data.realm === intent.realm &&
-        !(data.appeal.state === 'decided' && data.appeal.outcome === 'reversed') &&
-        banSchedule(data, Date.now()) !== 'ended'
-      );
-    } catch {
-      return false;
+    if (status !== 403) return false;
+    if (operationOpen('getV1RealmsByRealmMember-ban')) {
+      // A generic denial does not identify its cause. Only the member's own ban read can.
+      try {
+        const { data } = await main.v1.realms({ realm: intent.realm.slice(-36) })['member-ban'].get({
+          query: { actingSubject: intent.actingSubject },
+        });
+        return (
+          !!data &&
+          data.realm === intent.realm &&
+          !(data.appeal.state === 'decided' && data.appeal.outcome === 'reversed') &&
+          banSchedule(data, Date.now()) !== 'ended'
+        );
+      } catch {
+        return false;
+      }
     }
+    return false;
   };
   try {
     const document = postDocument(intent, step);

@@ -60,27 +60,46 @@ async function command<T>(call: () => Promise<Answer<T>>): Promise<CommandResult
 export function mainSavedFilterApi(actingSubject: string, main: MainClient = browserMainApi(),
   operationOpen: OperationGate = () => true): SavedFilterApi {
   const headers = () => ({ headers: { 'idempotency-key': crypto.randomUUID() } });
-  const filters = main.v1.me['saved-filters'];
-  const closed = { ok: false, failure: 'closed' } as const;
+  const closed = { data: null, error: { status: 403, value: { code: 'platform_closed' } } } as const;
   return {
-    list: async locale => operationOpen('getV1MeSaved-filters')
-      ? settle(() => filters.get({ query: { actingSubject, language: locale } })) : closed,
+    list: async locale => settle(async () => {
+      if (operationOpen('getV1MeSaved-filters')) {
+        return main.v1.me['saved-filters'].get({ query: { actingSubject, language: locale } });
+      }
+      return closed;
+    }),
 
-    create: async input => operationOpen('postV1MeSaved-filters')
-      ? command(() => filters.post({ profile: 'saved-filter-create-v1', actingSubject,
-        context: 'global', ...input }, headers())) : closed,
+    create: async input => command(async () => {
+      if (operationOpen('postV1MeSaved-filters')) {
+        return main.v1.me['saved-filters'].post({ profile: 'saved-filter-create-v1', actingSubject,
+          context: 'global', ...input }, headers());
+      }
+      return closed;
+    }),
 
-    update: async (filter, change) => operationOpen('patchV1MeSaved-filtersById')
-      ? command(() => filters({ id: filter.id }).patch({ profile: 'saved-filter-update-v1',
-        actingSubject, expectedRevision: filter.revision, ...change }, headers())) : closed,
+    update: async (filter, change) => command(async () => {
+      if (operationOpen('patchV1MeSaved-filtersById')) {
+        return main.v1.me['saved-filters']({ id: filter.id }).patch({ profile: 'saved-filter-update-v1',
+          actingSubject, expectedRevision: filter.revision, ...change }, headers());
+      }
+      return closed;
+    }),
 
-    reorder: async (pinned, revision) => operationOpen('putV1MeSaved-filtersOrder')
-      ? command(() => filters.order.put({ profile: 'saved-filter-order-v1', actingSubject,
-        expectedRevision: revision, pinned: [...pinned] }, headers())) : closed,
+    reorder: async (pinned, revision) => command(async () => {
+      if (operationOpen('putV1MeSaved-filtersOrder')) {
+        return main.v1.me['saved-filters'].order.put({ profile: 'saved-filter-order-v1', actingSubject,
+          expectedRevision: revision, pinned: [...pinned] }, headers());
+      }
+      return closed;
+    }),
 
-    remove: async filter => operationOpen('deleteV1MeSaved-filtersById')
-      ? command(() => filters({ id: filter.id }).delete(undefined, {
-        query: { actingSubject, expectedRevision: filter.revision }, ...headers() })) : closed,
+    remove: async filter => command(async () => {
+      if (operationOpen('deleteV1MeSaved-filtersById')) {
+        return main.v1.me['saved-filters']({ id: filter.id }).delete(undefined, {
+          query: { actingSubject, expectedRevision: filter.revision }, ...headers() });
+      }
+      return closed;
+    }),
 
     async followConcept(concept, following) {
       const state = await settle(() => main.v1.follows({ id: concept.slice(-36) })

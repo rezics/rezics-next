@@ -56,8 +56,8 @@ export function RealmBanPanel({ reading, realm, locale, messages, actions, class
   };
 
   async function submit() {
-    if (!operationOpen('postV1RealmsByRealmMember-receiptsByReceiptIdAppeal') ||
-      !operationOpen('getV1RealmsByRealmMember-receiptsByReceiptIdAppeal')) return;
+    if (!operationOpen('postV1RealmsByRealmMember-receiptsByReceiptIdAppeal')) return;
+    if (!operationOpen('getV1RealmsByRealmMember-receiptsByReceiptIdAppeal')) return;
     const problem = statementProblem(statement);
     if (problem) {
       setError(problems[problem]);
@@ -115,7 +115,7 @@ export function RealmBanPanel({ reading, realm, locale, messages, actions, class
           <h3 className="font-medium text-sm">{t.reasonLabel}</h3>
           <blockquote className="text-sm whitespace-pre-wrap [overflow-wrap:anywhere]">{current.reason}</blockquote>
         </div>
-        {appeal.kind === 'appeal' ? (operationOpen('postV1RealmsByRealmMember-receiptsByReceiptIdAppeal') &&
+        {appeal.kind === 'appeal' ? (operationOpen('postV1RealmsByRealmMember-receiptsByReceiptIdAppeal') ?
           operationOpen('getV1RealmsByRealmMember-receiptsByReceiptIdAppeal') ? <form noValidate className="space-y-3" onSubmit={event => {
           event.preventDefault();
           void submit();
@@ -133,7 +133,7 @@ export function RealmBanPanel({ reading, realm, locale, messages, actions, class
           {error ? <Alert variant="destructive" role="alert">
             <CircleAlertIcon aria-hidden="true" /><AlertDescription>{error}</AlertDescription></Alert> : null}
           <Button type="submit" isLoading={pending} className="w-full sm:w-auto">{t.send}</Button>
-        </form> : null) : <div className="space-y-2">
+        </form> : null : null) : <div className="space-y-2">
           {appeal.kind === 'received' ? <>
             <h3 className="font-medium text-sm">{t.receivedTitle}</h3>
             <p className="text-sm">{t.receivedBody}</p>

@@ -297,12 +297,12 @@ export const readFacets = cache(async (): Promise<Loaded<FacetList>> =>
 
 /** A mod Work's disclosed releases, newest first; `closed` while the platform has not opened the read. */
 export const readModReleases = cache(async (work: string): Promise<Loaded<ModReleasePage>> => {
-  if (!operationOpen('getV1Mod-releasesByWork', await readPlatformAccess())) return { ok: false, failure: 'closed' };
-  return settle(() =>
-    main()
-      .v1['mod-releases']({ work })
-      .get({ query: { limit: 20 } }),
-  );
+  return settle(async () => {
+    if (operationOpen('getV1Mod-releasesByWork', await readPlatformAccess())) {
+      return main().v1['mod-releases']({ work }).get({ query: { limit: 20 } });
+    }
+    return { data: null, error: { status: 403, value: { code: 'platform_closed' } } };
+  });
 });
 
 /** A few active public Realms, for "Other communities". */

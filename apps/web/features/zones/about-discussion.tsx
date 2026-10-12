@@ -166,7 +166,7 @@ function AboutDiscussionEntry({ read, locale, href, api, retain = true, recovery
       : !postingOpen || (mode === 'unavailable' && !retained) ? <p role="status">{t.postingUnavailable}</p> : null}
     {postingOpen && outcome ? <p role={outcome.kind === 'refused' || outcome.kind === 'stale' ? 'alert' : 'status'}>
       {outcome.kind === 'stale' ? t.reload : t[outcome.kind]}</p> : null}
-    {canWrite || canRecover ? opened ? <form onSubmit={event => { event.preventDefault(); void post(); }} className="grid gap-3">
+    {operationOpen('postV1RealmsByRealmAbout-posts') ? canWrite || canRecover ? opened ? <form onSubmit={event => { event.preventDefault(); void post(); }} className="grid gap-3">
       <label htmlFor={`${id}-body`} className="font-medium text-sm">{t.body}</label>
       <textarea id={`${id}-body`} value={body} onChange={event => setBody(event.target.value)} disabled={locked}
         {...textAttributes(language, body)} aria-describedby={tooLong ? `${id}-limit` : undefined}
@@ -178,6 +178,6 @@ function AboutDiscussionEntry({ read, locale, href, api, retain = true, recovery
       </div>
       <Button type="submit" disabled={busy || !hydrated || !body.trim() || tooLong}>{busy ? t.sending : retained ? t.retry : t.send}</Button>
       {outcome?.kind === 'stale' ? <Button type="button" variant="outline" onClick={() => router.refresh()}>{t.refresh}</Button> : null}
-    </form> : <Button variant="outline" onClick={() => setOpened(true)}>{thread ? t.reply : t.start}</Button> : null}
+    </form> : <Button variant="outline" onClick={() => setOpened(true)}>{thread ? t.reply : t.start}</Button> : null : null}
   </section>;
 }

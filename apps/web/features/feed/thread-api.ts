@@ -132,11 +132,10 @@ export function mainThreadApi(main: () => MainClient = browserMainApi): ThreadAp
   return {
     withdraw,
     async reply(input, progress) {
-      const api = main().v1;
       let step = { ...progress };
       try {
         if (step.originRealm === undefined) {
-          const { data } = await api['member-replies']({
+          const { data } = await main().v1['member-replies']({
             reply: input.parent.reply.slice(-36),
           }).get({
             query: { actingSubject: input.actingSubject },
@@ -173,7 +172,7 @@ export function mainThreadApi(main: () => MainClient = browserMainApi): ThreadAp
         }
         if (!step.revisionId || !step.digest) return { kind: 'failed', progress: step };
         if (!step.identified) {
-          const { data, error } = await api['realm-replies'].post(
+          const { data, error } = await main().v1['realm-replies'].post(
             {
               profile: 'realm-reply-identity-v1',
               reply: step.reply,
@@ -193,7 +192,7 @@ export function mainThreadApi(main: () => MainClient = browserMainApi): ThreadAp
           if (!data) return { kind: 'failed', progress: step };
           step.identified = true;
         }
-        const { data, error } = await api['realm-reply-placements'].post(
+        const { data, error } = await main().v1['realm-reply-placements'].post(
           {
             profile: 'realm-reply-placement-v1',
             realm: input.realm,

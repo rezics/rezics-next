@@ -20,49 +20,56 @@ export function appealClient(realm: string, receiptId: string, fetchImpl: typeof
   operationOpen: OperationGate = gateFor(null)): {
   submit(statement: string, key: string): Promise<AppealSubmit>;
 } {
-  const path = `${BFF_PREFIX}/v1/realms/${realmId(realm)}/member-receipts/${encodeURIComponent(receiptId)}/appeal`;
   const headers = () => {
     const result = new Headers({ accept: 'application/json' });
     if (typeof window !== 'undefined') result.set('x-rezics-page-url', window.location.href);
     return result;
   };
   async function read(): Promise<BanReading | null | 'closed'> {
-    if (!operationOpen('getV1RealmsByRealmMember-receiptsByReceiptIdAppeal')) return 'closed';
-    const response = await fetchImpl(path, { headers: headers(), credentials: 'same-origin', cache: 'no-store' });
-    if (!response.ok) {
-      const code = await problemCode(response);
-      if (platformClosed(response.status, { code })) return 'closed';
-      return null;
+    if (operationOpen('getV1RealmsByRealmMember-receiptsByReceiptIdAppeal')) {
+      const response = await fetchImpl(
+        `${BFF_PREFIX}/v1/realms/${realmId(realm)}/member-receipts/${encodeURIComponent(receiptId)}/appeal`,
+        { headers: headers(), credentials: 'same-origin', cache: 'no-store' });
+      if (!response.ok) {
+        const code = await problemCode(response);
+        if (platformClosed(response.status, { code })) return 'closed';
+        return null;
+      }
+      return parseBanReading(await response.json());
     }
-    return parseBanReading(await response.json());
+    return 'closed';
   }
   return {
     async submit(statement, key) {
-      if (!operationOpen('postV1RealmsByRealmMember-receiptsByReceiptIdAppeal') ||
-        !operationOpen('getV1RealmsByRealmMember-receiptsByReceiptIdAppeal')) return { kind: 'closed' };
-      const outgoing = headers();
-      outgoing.set('content-type', 'application/json');
-      outgoing.set('idempotency-key', key);
-      const response = await fetchImpl(path, {
-        method: 'POST', headers: outgoing, credentials: 'same-origin', cache: 'no-store',
-        body: JSON.stringify({ statement }),
-      });
-      if (response.ok) {
-        await response.body?.cancel();
-        const reading = await read();
-        if (reading === 'closed') return { kind: 'closed' };
-        return reading ? { kind: 'sent', reading } : { kind: 'failed', reuseKey: true };
+      if (operationOpen('postV1RealmsByRealmMember-receiptsByReceiptIdAppeal')) {
+        if (operationOpen('getV1RealmsByRealmMember-receiptsByReceiptIdAppeal')) {
+          const outgoing = headers();
+          outgoing.set('content-type', 'application/json');
+          outgoing.set('idempotency-key', key);
+          const response = await fetchImpl(
+            `${BFF_PREFIX}/v1/realms/${realmId(realm)}/member-receipts/${encodeURIComponent(receiptId)}/appeal`, {
+              method: 'POST', headers: outgoing, credentials: 'same-origin', cache: 'no-store',
+              body: JSON.stringify({ statement }),
+            });
+          if (response.ok) {
+            await response.body?.cancel();
+            const reading = await read();
+            if (reading === 'closed') return { kind: 'closed' };
+            return reading ? { kind: 'sent', reading } : { kind: 'failed', reuseKey: true };
+          }
+          const code = await problemCode(response);
+          if (platformClosed(response.status, { code })) return { kind: 'closed' };
+          if (code === 'appeal_already_open' || code === 'stale_appeal') {
+            const reading = await read();
+            if (reading === 'closed') return { kind: 'closed' };
+            if (reading && reading.appeal.state !== 'none') return { kind: 'sent', reading };
+          }
+          if (code === 'invalid_appeal') return { kind: 'invalid' };
+          const reuseKey = code !== 'idempotency_conflict' && code !== 'invalid_idempotency_key';
+          return { kind: 'failed', reuseKey };
+        }
       }
-      const code = await problemCode(response);
-      if (platformClosed(response.status, { code })) return { kind: 'closed' };
-      if (code === 'appeal_already_open' || code === 'stale_appeal') {
-        const reading = await read();
-        if (reading === 'closed') return { kind: 'closed' };
-        if (reading && reading.appeal.state !== 'none') return { kind: 'sent', reading };
-      }
-      if (code === 'invalid_appeal') return { kind: 'invalid' };
-      const reuseKey = code !== 'idempotency_conflict' && code !== 'invalid_idempotency_key';
-      return { kind: 'failed', reuseKey };
+      return { kind: 'closed' };
     },
   };
 }

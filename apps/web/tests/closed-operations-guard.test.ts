@@ -8,8 +8,23 @@ import {
 } from '../../../generated/openapi/main/exposure.ts';
 import { escape, operationPattern, readWebSources, sources } from './support/eden-calls.ts';
 
-// A refused request cannot protect the control that offered it. Inventory closed calls and their UI
-// predicates separately; Main's generated exposure remains the only source of platform policy.
+/**
+ * Canonical request rule (deliberately conservative; false positives must be rewritten):
+ * - An inline request is lexically in the block consequent of
+ *   if (operationOpen('<same operation>', …)) { … }, or the true arm of
+ *   operationOpen('<same operation>', …) ? <request> : …, in the SAME function.
+ *   The hook's gate('<same operation>') is the equivalent direct predicate.
+ * - A component effect/handler may instead START its own body with
+ *   if (!operationOpen('<same operation>', …)) return; (or direct gate(...)).
+ * - No other form proves a request: held/conditionally assigned gate results,
+ *   logical expressions, JSX OperationGate children (evaluated eagerly), returned
+ *   callbacks and unresolved aliases are intentionally rejected. Every closed
+ *   client reference counts, including aliases, destructuring, shorthand properties
+ *   and returned clients; only an inline final-method call can satisfy the rule.
+ *   No client, path, boolean or component-prop data flow is modelled.
+ * Pure UI controls are inventoried separately. OperationGate can suppress a control,
+ * but never proves a request. Main's generated exposure is the policy source.
+ */
 
 const closedIds = (Object.keys(operationExposures) as PlatformOperationId[]).filter(
   (id) => operationExposures[id] !== 'public',
@@ -18,9 +33,10 @@ const publicIds = Object.keys(operationExposures);
 const spec = JSON.parse(readFileSync(join(import.meta.dir, '../../../generated/openapi/main/public.json'), 'utf8')) as {
   paths: Record<string, Record<string, { operationId?: string }>>;
 };
-const closedRoutes = Object.entries(spec.paths).flatMap(([path, methods]) => Object.entries(methods)
-  .filter(([, value]) => value.operationId && closedIds.includes(value.operationId as PlatformOperationId))
+const routes = Object.entries(spec.paths).flatMap(([path, methods]) => Object.entries(methods)
+  .filter(([, value]) => value.operationId)
   .map(([method, value]) => ({ method, segments: path.split('/').slice(2), operation: value.operationId as PlatformOperationId })));
+const closedRoutes = routes.filter(route => closedIds.includes(route.operation));
 
 export interface Call {
   /** Where the operation was recognised, for the failure message. */
@@ -28,119 +44,60 @@ export interface Call {
   operations: PlatformOperationId[];
 }
 
-interface LocatedCall extends Call { node: ts.Node }
+interface LocatedCall extends Call { node: ts.Node; inline: boolean }
 
 function parse(text: string): ts.SourceFile {
   return ts.createSourceFile('source.tsx', text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 }
 
-/** Resolve only the named binding/property; a gate in a neighbouring object member is unrelated. */
-const scopeBindings = new WeakMap<ts.Node, Map<string, { value?: ts.Expression; position: number; assigned: boolean }[]>>();
-function binding(node: ts.Identifier): ts.Expression | undefined {
-  let scope: ts.Node | undefined = node.parent;
-  while (scope) {
-    if (ts.isBlock(scope) || ts.isSourceFile(scope) || ts.isFunctionLike(scope)) {
-      let bindings = scopeBindings.get(scope);
-      if (!bindings) {
-        bindings = new Map();
-        const add = (name: string, value: ts.Expression | undefined, position: number, assigned = false) =>
-          bindings!.set(name, [...bindings!.get(name) ?? [], { value, position, assigned }]);
-        function visit(child: ts.Node) {
-          if (child !== scope && ts.isBlock(child)) return;
-          if (child !== scope && ts.isFunctionLike(child)) {
-            if (ts.isFunctionDeclaration(child) && child.name) add(child.name.text, child as unknown as ts.Expression, child.pos);
-            return;
-          }
-          if (ts.isVariableDeclaration(child) && ts.isIdentifier(child.name)) add(child.name.text, child.initializer, child.pos);
-          if (ts.isParameter(child) && ts.isIdentifier(child.name)) add(child.name.text, undefined, child.pos);
-          if (ts.isBinaryExpression(child) && child.operatorToken.kind === ts.SyntaxKind.EqualsToken && ts.isIdentifier(child.left))
-            add(child.left.text, child.right, child.getStart(), true);
-          ts.forEachChild(child, visit);
-        }
-        visit(scope);
-        scopeBindings.set(scope, bindings);
-      }
-      const candidates = bindings.get(node.text)?.filter(item => !item.assigned || item.position < node.getStart());
-      if (candidates?.length) return candidates.at(-1)!.value;
-    }
-    scope = scope.parent;
-  }
-  return undefined;
-}
-
-function resolved(node: ts.Expression, seen = new Set<ts.Node>(), props = new Map<string, ts.Expression>()): ts.Expression {
-  if (seen.has(node)) return node;
-  seen.add(node);
-  if (ts.isParenthesizedExpression(node) || ts.isAsExpression(node) || ts.isNonNullExpression(node) || ts.isSatisfiesExpression(node))
-    return resolved(node.expression, seen, props);
-  if (ts.isIdentifier(node)) {
-    const value = props.get(node.text) ?? binding(node);
-    if (value) return resolved(value, seen, props);
-  }
-  if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
-    const value = resolved(node.expression, seen, props);
-    const name = ts.isPropertyAccessExpression(node) ? node.name.text :
-      node.argumentExpression && ts.isStringLiteralLike(node.argumentExpression) ? node.argumentExpression.text : null;
-    if (name && ts.isObjectLiteralExpression(value)) {
-      const property = value.properties.find(item => item.name?.getText().replace(/^['"]|['"]$/g, '') === name);
-      if (property && ts.isPropertyAssignment(property)) return resolved(property.initializer, seen, props);
-    }
-  }
-  return node;
-}
-
-/** Eden routes are followed through bindings, assignments, returned clients and parameter calls. */
-function route(node: ts.Expression, seen = new Set<ts.Node>()): (string | null)[] | null {
-  if (seen.has(node)) return null;
-  seen.add(node);
-  const value = resolved(node);
-  if (value !== node) return route(value, seen);
+/** Read only the written chain; never resolve a binding, assignment or returned client. */
+function route(node: ts.Expression): (string | null)[] | null {
   if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
     const name = ts.isPropertyAccessExpression(node) ? node.name.text :
       node.argumentExpression && ts.isStringLiteralLike(node.argumentExpression) ? node.argumentExpression.text : null;
     if (name === 'v1') return [];
-    const parent = route(node.expression, seen);
+    const parent = route(node.expression);
     return parent && name ? [...parent, name] : null;
   }
   if (ts.isCallExpression(node)) {
-    const target = resolved(node.expression);
-    if (ts.isArrowFunction(target) || ts.isFunctionExpression(target) || ts.isFunctionDeclaration(target)) {
-      const body = target.body;
-      if (body && !ts.isBlock(body)) return route(body, seen);
-      const returned: ts.Expression[] = [];
-      function visit(child: ts.Node) {
-        if (child !== body && ts.isFunctionLike(child)) return;
-        if (ts.isReturnStatement(child) && child.expression) returned.push(child.expression);
-        ts.forEachChild(child, visit);
-      }
-      if (body) visit(body);
-      const routes = returned.map(item => route(item, new Set(seen)));
-      if (routes.length && routes.every(item => JSON.stringify(item) === JSON.stringify(routes[0]))) return routes[0]!;
-      return null;
-    }
-    const parent = route(node.expression, seen);
+    const parent = route(node.expression);
     return parent ? [...parent, null] : null;
   }
   return null;
 }
 
+/** Every closed reference counts, including a route before a dynamic member or method continuation. */
 function closedCalls(source: ts.SourceFile): LocatedCall[] {
   const calls: LocatedCall[] = [];
+  function reference(node: ts.Expression) {
+    const invoked = ts.isCallExpression(node);
+    const endpoint = route(invoked ? node.expression : node);
+    if (!endpoint) return null;
+    const method = endpoint.at(-1);
+    const isMethod = typeof method === 'string' && ['get', 'post', 'put', 'patch', 'delete'].includes(method);
+    const path = isMethod ? endpoint.slice(0, -1) : route(node);
+    if (!path) return null;
+    const matched = routes.filter(item => (!isMethod || item.method === method) &&
+      (isMethod ? item.segments.length === path.length : item.segments.length >= path.length) &&
+      path.every((segment, index) => /^\{[^}]+\}$/.test(item.segments[index]!) ? segment === null : segment === item.segments[index]));
+    return { matched, inline: invoked && isMethod };
+  }
   function visit(node: ts.Node) {
-    if (ts.isCallExpression(node)) {
-      const endpoint = resolved(node.expression);
-      if (!ts.isPropertyAccessExpression(endpoint) && !ts.isElementAccessExpression(endpoint)) { ts.forEachChild(node, visit); return; }
-      const method = ts.isPropertyAccessExpression(endpoint) ? endpoint.name.text :
-        endpoint.argumentExpression && ts.isStringLiteralLike(endpoint.argumentExpression) ? endpoint.argumentExpression.text : null;
-      const segments = route(endpoint.expression);
-      if (method && ['get', 'post', 'put', 'patch', 'delete'].includes(method) && segments) {
-        const operations = closedRoutes.filter(item => item.method === method && item.segments.length === segments.length &&
-          item.segments.every((segment, index) => /^\{[^}]+\}$/.test(segment) ? segments[index] === null : segment === segments[index]))
-          .map(item => item.operation);
-        if (operations.length) {
-          const text = node.getText().replace(/\s+/g, '');
-          calls.push({ source: text.includes('.v1') ? text.slice(text.indexOf('.v1')) : text, operations, node });
-        }
+    if (ts.isTypeNode(node)) return;
+    if (ts.isObjectBindingPattern(node) && node.elements.some(item => {
+      const name = item.propertyName ?? item.name;
+      const literal = ts.isComputedPropertyName(name) ? name.expression : name;
+      return (ts.isIdentifier(literal) || ts.isStringLiteralLike(literal)) && literal.text === 'v1';
+    }))
+      calls.push({ source: node.getText(), operations: closedIds, node, inline: false });
+    if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node) || ts.isCallExpression(node)) {
+      const found = reference(node);
+      const parent = node.parent;
+      const continued = (ts.isPropertyAccessExpression(parent) || ts.isElementAccessExpression(parent) || ts.isCallExpression(parent)) &&
+        parent.expression === node && Boolean(reference(parent)?.matched.length);
+      if (found && !continued) {
+        const operations = found.matched.filter(item => closedIds.includes(item.operation)).map(item => item.operation);
+        if (operations.length) calls.push({ source: node.getText().replace(/\s+/g, ''), operations, node, inline: found.inline });
       }
     }
     ts.forEachChild(node, visit);
@@ -152,20 +109,8 @@ function closedCalls(source: ts.SourceFile): LocatedCall[] {
 const literal =
   /(?<quote>['"])(?<single>(?:\/api\/main)?\/v1\/[^'"\s]*)\k<quote>|`(?:\$\{[^}]*\})?(?<template>(?:\/api\/main)?\/v1\/(?:[^`$]|\$\{[^}]*\})*)`/g;
 
-/** HTTP methods named right after a path literal (`method: 'POST'`, a `'PUT'` argument); a bare path is a GET. */
-function methodsAfter(text: string, end: number): string[] {
-  const window = text.slice(end, end + 250);
-  const next = window.indexOf('/v1/');
-  const found = [
-    ...(next < 0 ? window : window.slice(0, next)).matchAll(
-      /method:\s*['"](\w+)['"]|['"](GET|POST|PUT|PATCH|DELETE)['"]/g,
-    ),
-  ].map((item) => (item[1] ?? item[2]!).toLowerCase());
-  return found.length ? found : ['get'];
-}
-
 /** Operations named by a path literal such as `'/v1/me/saved-filters'` or `` `/v1/realms/${id}/join-page` ``. */
-function pathCalls(text: string): Call[] {
+function pathCalls(text: string, reference = false, method = 'get'): Call[] {
   const calls: Call[] = [];
   for (const found of text.matchAll(literal)) {
     const path = (found.groups!.single ?? found.groups!.template!)
@@ -174,7 +119,8 @@ function pathCalls(text: string): Call[] {
     // `/v1/media/` is a prefix test, not a request.
     if (path.endsWith('/')) continue;
     const segments = path.split('/').slice(2);
-    const operations = methodsAfter(text, found.index + found[0].length).flatMap((method) =>
+    const methods = reference ? [...new Set(closedRoutes.map(route => route.method))] : [method];
+    const operations = methods.flatMap((method) =>
       closedRoutes.filter(route => route.method === method && route.segments.length === segments.length &&
         route.segments.every((segment, index) => /^\{[^}]+\}$/.test(segment) || segment === segments[index]))
         .map(route => route.operation),
@@ -221,15 +167,32 @@ function locatedCalls(text: string, projected = new Map<string, PlatformOperatio
     if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
       const name = node.expression.getText();
       if (/^(?:fetch|fetchImpl|serverRead|URL)$/.test(name) && node.arguments?.[0]) {
-        const path = resolved(node.arguments[0]);
-        const scanned = pathCalls(path.getText() + ', ' + (node.arguments[1]?.getText() ?? ''));
-        calls.push(...scanned.map(call => ({ ...call, node })));
+        const path = node.arguments[0];
+        const options = node.arguments[1];
+        const fields = options && ts.isObjectLiteralExpression(options) ? options.properties : [];
+        const methodField = fields.find(item => item.name?.getText().replace(/^['"]|['"]$/g, '') === 'method');
+        const method = methodField && ts.isPropertyAssignment(methodField) && ts.isStringLiteralLike(methodField.initializer)
+          ? methodField.initializer.text.toLowerCase() : 'get';
+        const unknownOptions = name !== 'URL' && Boolean(options && !ts.isObjectLiteralExpression(options) ||
+          fields.some(ts.isSpreadAssignment) || methodField && !(ts.isPropertyAssignment(methodField) && ts.isStringLiteralLike(methodField.initializer)));
+        const scanned = pathCalls(path.getText(), unknownOptions, method);
+        const parent = node.parent;
+        const urlArgument = name === 'URL' && ts.isCallExpression(parent) &&
+          /^(?:fetch|fetchImpl|serverRead)$/.test(parent.expression.getText()) && parent.arguments[0] === node;
+        if (!urlArgument) calls.push(...scanned.map(call => ({ ...call, node, inline: name !== 'URL' && !unknownOptions })));
       }
       if (ts.isCallExpression(node) && name === 'followHref') {
         const types = node.typeArguments?.map(item => item.getText()).join(' ') ?? '';
         const operations = [...projected].filter(([type]) => new RegExp(`\\b${escape(type)}\\b`).test(types)).flatMap(([, ids]) => ids);
-        if (operations.length) calls.push({ source: `followHref<${types}>`, operations, node });
+        if (operations.length) calls.push({ source: `followHref<${types}>`, operations, node, inline: true });
       }
+    }
+    if (ts.isTypeNode(node)) return;
+    if (ts.isStringLiteralLike(node) || ts.isTemplateExpression(node)) {
+      const parent = node.parent;
+      const direct = (ts.isCallExpression(parent) || ts.isNewExpression(parent)) &&
+        /^(?:fetch|fetchImpl|serverRead|URL)$/.test(parent.expression.getText()) && parent.arguments?.[0] === node;
+      if (!direct) calls.push(...pathCalls(node.getText(), true).map(call => ({ ...call, node, inline: false })));
     }
     ts.forEachChild(node, visit);
   }
@@ -241,79 +204,59 @@ export function callsIn(text: string, projected = new Map<string, PlatformOperat
   return locatedCalls(text, projected).map(({ source, operations }) => ({ source, operations }));
 }
 
-/** Possible boolean results with this operation denied. Unknown predicates may be either value. */
-function deniedValues(node: ts.Expression, operation: string, seen = new Set<ts.Node>(), props = new Map<string, ts.Expression>()): Set<boolean> {
-  if (seen.has(node)) return new Set([true, false]);
-  seen.add(node);
-  const value = resolved(node, new Set(), props);
-  if (value !== node) return deniedValues(value, operation, seen, props);
-  if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && ['operationOpen', 'gate'].includes(node.expression.text) &&
-    node.arguments[0] && ts.isStringLiteralLike(node.arguments[0]) && node.arguments[0].text === operation) return new Set([false]);
-  if (node.kind === ts.SyntaxKind.TrueKeyword) return new Set([true]);
-  if (node.kind === ts.SyntaxKind.FalseKeyword || node.kind === ts.SyntaxKind.NullKeyword) return new Set([false]);
-  if (ts.isPrefixUnaryExpression(node) && node.operator === ts.SyntaxKind.ExclamationToken)
-    return new Set([...deniedValues(node.operand, operation, new Set(seen), props)].map(item => !item));
-  if (ts.isBinaryExpression(node)) {
-    const left = deniedValues(node.left, operation, new Set(seen), props);
-    const right = deniedValues(node.right, operation, new Set(seen), props);
-    if (node.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken)
-      return new Set([...left].flatMap(a => [...right].map(b => a && b)));
-    if (node.operatorToken.kind === ts.SyntaxKind.BarBarToken)
-      return new Set([...left].flatMap(a => [...right].map(b => a || b)));
-    if ([ts.SyntaxKind.EqualsEqualsEqualsToken, ts.SyntaxKind.EqualsEqualsToken].includes(node.operatorToken.kind) &&
-      (node.right.kind === ts.SyntaxKind.TrueKeyword || node.right.kind === ts.SyntaxKind.FalseKeyword))
-      return new Set([...left].map(item => item === (node.right.kind === ts.SyntaxKind.TrueKeyword)));
+/** Exact syntactic whitelist; parentheses do not change the written condition. */
+function directGate(node: ts.Expression, operation: string): boolean {
+  if (ts.isParenthesizedExpression(node)) return directGate(node.expression, operation);
+  return ts.isCallExpression(node) && ts.isIdentifier(node.expression) &&
+    ['operationOpen', 'gate'].includes(node.expression.text) && Boolean(node.arguments[0] &&
+      ts.isStringLiteralLike(node.arguments[0]) && node.arguments[0].text === operation);
+}
+
+function componentHandler(fn: ts.SignatureDeclaration): boolean {
+  for (let parent = fn.parent; parent; parent = parent.parent) {
+    if (ts.isFunctionDeclaration(parent)) return Boolean(parent.name && /^[A-Z]/.test(parent.name.text));
+    if (ts.isArrowFunction(parent) || ts.isFunctionExpression(parent)) {
+      return ts.isVariableDeclaration(parent.parent) && ts.isIdentifier(parent.parent.name) &&
+        /^[A-Z]/.test(parent.parent.name.text);
+    }
   }
-  return new Set([true, false]);
-}
-
-function entailsOpen(condition: ts.Expression, operation: string, branch: boolean, props = new Map<string, ts.Expression>()): boolean {
-  return !deniedValues(condition, operation, new Set(), props).has(branch);
-}
-
-function terminates(node: ts.Node): boolean {
-  if (ts.isReturnStatement(node) || ts.isThrowStatement(node)) return true;
-  if (ts.isBlock(node)) return node.statements.some(terminates);
-  if (ts.isIfStatement(node)) return Boolean(node.elseStatement && terminates(node.thenStatement) && terminates(node.elseStatement));
   return false;
 }
 
-/** Only ancestor branches and preceding exits can dominate this exact request expression. */
-function requestGuarded(node: ts.Node, operation: string, props = new Map<string, ts.Expression>()): boolean {
+function leadingRefusal(fn: ts.SignatureDeclaration, operation: string, site: ts.Node): boolean {
+  if (!componentHandler(fn) || !('body' in fn) || !fn.body || !ts.isBlock(fn.body as ts.Node)) return false;
+  const first = (fn.body as ts.Block).statements[0];
+  return Boolean(first && site.getStart() >= first.end && ts.isIfStatement(first) && !first.elseStatement &&
+    ts.isPrefixUnaryExpression(first.expression) && first.expression.operator === ts.SyntaxKind.ExclamationToken &&
+    directGate(first.expression.operand, operation) && ts.isReturnStatement(first.thenStatement) && !first.thenStatement.expression);
+}
+
+/** Requests stop at EVERY function boundary, including inline callbacks and JSX event handlers. */
+function requestGuarded(node: ts.Node, operation: string): boolean {
   let child = node;
   for (let parent = node.parent; parent; child = parent, parent = parent.parent) {
-    if (ts.isJsxElement(parent) && child !== parent.openingElement) {
-      const opening = parent.openingElement;
-      if (opening.tagName.getText() === 'OperationGate') {
-        const attribute = opening.attributes.properties.find(item => ts.isJsxAttribute(item) && item.name.getText() === 'operation');
-        if (attribute && ts.isJsxAttribute(attribute) && attribute.initializer && ts.isStringLiteral(attribute.initializer) &&
-          attribute.initializer.text === operation) return true;
-      }
+    if (ts.isFunctionLike(parent)) return leadingRefusal(parent, operation, node);
+    if (ts.isIfStatement(parent) && child === parent.thenStatement && ts.isBlock(parent.thenStatement) &&
+      directGate(parent.expression, operation)) return true;
+    if (ts.isConditionalExpression(parent) && child === parent.whenTrue && directGate(parent.condition, operation)) return true;
+  }
+  return false;
+}
+
+/** Pure controls can use OperationGate; an eagerly evaluated request cannot. No binding/prop tracing. */
+function uiGuarded(node: ts.Node, operation: string): boolean {
+  let child = node;
+  for (let parent = node.parent; parent; child = parent, parent = parent.parent) {
+    if (ts.isConditionalExpression(parent) && child === parent.whenTrue && directGate(parent.condition, operation)) return true;
+    if (ts.isIfStatement(parent) && child === parent.thenStatement && directGate(parent.expression, operation)) return true;
+    if (ts.isJsxElement(parent) && child !== parent.openingElement && parent.openingElement.tagName.getText() === 'OperationGate') {
+      const attribute = parent.openingElement.attributes.properties.find(item => ts.isJsxAttribute(item) && item.name.getText() === 'operation');
+      if (attribute && ts.isJsxAttribute(attribute) && attribute.initializer && ts.isStringLiteral(attribute.initializer) &&
+        attribute.initializer.text === operation) return true;
     }
-    if (ts.isConditionalExpression(parent)) {
-      if (child === parent.whenTrue && entailsOpen(parent.condition, operation, true, props)) return true;
-      if (child === parent.whenFalse && entailsOpen(parent.condition, operation, false, props)) return true;
-    }
-    if (ts.isIfStatement(parent)) {
-      if (child === parent.thenStatement && entailsOpen(parent.expression, operation, true, props)) return true;
-      if (child === parent.elseStatement && entailsOpen(parent.expression, operation, false, props)) return true;
-    }
-    if (ts.isBinaryExpression(parent) && child === parent.right) {
-      const branch = parent.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken ? true :
-        parent.operatorToken.kind === ts.SyntaxKind.BarBarToken ? false : null;
-      if (branch !== null && entailsOpen(parent.left, operation, branch, props)) return true;
-    }
-    if (ts.isBlock(parent) || ts.isSourceFile(parent)) {
-      for (const statement of parent.statements) {
-        if (statement === child || statement.end > child.pos) break;
-        if (ts.isIfStatement(statement)) {
-          if (terminates(statement.thenStatement) && entailsOpen(statement.expression, operation, false, props)) return true;
-          if (statement.elseStatement && terminates(statement.elseStatement) && entailsOpen(statement.expression, operation, true, props)) return true;
-        }
-      }
-    }
-    // A separately declared function can be called from anywhere; its caller's lexical body is no proof.
-    if (ts.isFunctionDeclaration(parent) || (ts.isArrowFunction(parent) && ts.isVariableDeclaration(parent.parent))) break;
+    // A map callback constructs pure controls; event handlers and unrelated functions are separate.
+    if (ts.isFunctionLike(parent) && !(ts.isArrowFunction(parent) && ts.isCallExpression(parent.parent) &&
+      ts.isPropertyAccessExpression(parent.parent.expression) && parent.parent.expression.name.text === 'map')) return false;
   }
   return false;
 }
@@ -321,7 +264,7 @@ function requestGuarded(node: ts.Node, operation: string, props = new Map<string
 export function violations(files: Readonly<Record<string, string>>): string[] {
   const projected = projectedTypes(files);
   return Object.entries(files).flatMap(([file, text]) => locatedCalls(text, projected).flatMap(call =>
-    call.operations.filter(operation => !requestGuarded(call.node, operation)).map(operation =>
+    call.operations.filter(operation => !call.inline || !requestGuarded(call.node, operation)).map(operation =>
       `${file}: ${call.source} reaches ${operation} (${operationExposures[operation]})`)));
 }
 
@@ -338,17 +281,17 @@ type Target =
   | { attribute: readonly [string, string] }
   | { call: readonly [string, string] }
   | { binding: string }
+  | { expression: string }
   | { branch: readonly [string, string] };
 interface Entry {
   file: string;
   function: string;
   operations: readonly PlatformOperationId[];
-  request?: boolean;
   targets?: Partial<Record<PlatformOperationId, readonly Target[]>>;
 }
 const entries: readonly Entry[] = [
   { file: 'features/work-page/work-views.tsx', function: 'WorkOverview', operations: ['getV1HubWorksById'],
-    targets: { getV1HubWorksById: [{ branch: ["experience.kind === 'prompt'", 'specialist'] }] } },
+    targets: { getV1HubWorksById: [{ branch: ["experience.kind === 'prompt'", 'TypeExperience'] }] } },
   { file: 'features/feed/actions.tsx', function: 'PrimaryAction', operations: ['getV1HubWorksById'],
     targets: { getV1HubWorksById: [{ call: ['link', 'install'] }, { call: ['link', 'usePrompt'] }] } },
   { file: 'features/showcase/work-action.tsx', function: 'PrimaryAction', operations: ['getV1HubWorksById'],
@@ -369,152 +312,64 @@ const entries: readonly Entry[] = [
     'patchV1MeSaved-filtersById': [{ attribute: ['TopicSearch', 'unpinned'] }],
   } },
   { file: 'features/home/tabs.tsx', function: 'HomeTabs', operations: [
+    'getV1MeSaved-filters', 'patchV1MeSaved-filtersById', 'putV1MeSaved-filtersOrder',
+  ], targets: {
+    'getV1MeSaved-filters': [{ expression: 'shown.map' }, { jsx: 'RenameDialog' }],
+    'patchV1MeSaved-filtersById': [{ jsx: 'RenameDialog' }],
+    'putV1MeSaved-filtersOrder': [{ attribute: ['li', 'draggable'] }],
+  } },
+  { file: 'features/home/tabs.tsx', function: 'TabMenu', operations: [
     'getV1MeSaved-filters', 'patchV1MeSaved-filtersById', 'putV1MeSaved-filtersOrder', 'deleteV1MeSaved-filtersById',
   ], targets: {
-    'getV1MeSaved-filters': [{ binding: 'visibleFilters' }],
-    'patchV1MeSaved-filtersById': [{ jsx: 'RenameDialog' }, { jsx: 'MenuItem', prop: 'value', value: 'rename' }, { jsx: 'MenuItem', prop: 'value', value: 'unpin' }],
-    'putV1MeSaved-filtersOrder': [{ attribute: ['li', 'draggable'] }, { jsx: 'MenuItem', prop: 'value', value: 'left' }, { jsx: 'MenuItem', prop: 'value', value: 'right' }],
+    'getV1MeSaved-filters': [{ jsx: 'Menu' }],
+    'patchV1MeSaved-filtersById': [{ jsx: 'MenuItem', prop: 'value', value: 'rename' }, { jsx: 'MenuItem', prop: 'value', value: 'unpin' }],
+    'putV1MeSaved-filtersOrder': [{ jsx: 'MenuItem', prop: 'value', value: 'left' }, { jsx: 'MenuItem', prop: 'value', value: 'right' }],
     'deleteV1MeSaved-filtersById': [{ jsx: 'MenuItem', prop: 'value', value: 'delete' }],
   } },
-  { file: 'features/post-composer/api.ts', function: 'banned', operations: ['getV1RealmsByRealmMember-ban'], request: true },
   { file: 'features/zones/about-discussion.tsx', function: 'AboutDiscussionEntry', operations: ['postV1RealmsByRealmAbout-posts'],
     targets: { 'postV1RealmsByRealmAbout-posts': [{ jsx: 'form' }, { jsx: 'Button', prop: 'onClick', text: 'setOpened' }] } },
 ];
 
-function hasPredicate(body: ts.Node, operation: string, request = false, props = new Map<string, ts.Expression>(), visited = new Set<string>()): boolean {
-  const nestedFunction = (node: ts.Node) => ts.isFunctionLike(node);
+/** Match every concrete inventoried payload; a protected sibling does not protect this one. */
+function targetProof(body: ts.Node, operation: string, target: Target): boolean {
+  const proofs: boolean[] = [];
   function absent(node: ts.Expression): boolean {
-    const value = resolved(node, new Set(), props);
-    return value.kind === ts.SyntaxKind.NullKeyword || value.kind === ts.SyntaxKind.FalseKeyword ||
-      (ts.isIdentifier(value) && value.text === 'undefined') || (ts.isArrayLiteralExpression(value) && !value.elements.length);
+    return node.kind === ts.SyntaxKind.NullKeyword || node.kind === ts.SyntaxKind.FalseKeyword ||
+      ts.isArrayLiteralExpression(node) && !node.elements.length;
   }
-  function payload(node: ts.Node, seen = new Set<ts.Node>()): boolean {
-    if (seen.has(node)) return false;
-    seen.add(node);
-    if (ts.isIdentifier(node)) {
-      const value = resolved(node, new Set(), props);
-      if (value !== node) return payload(value, seen);
+  function payload(node: ts.Expression): boolean {
+    if (absent(node)) return true;
+    if (ts.isConditionalExpression(node)) {
+      if (directGate(node.condition, operation) && absent(node.whenFalse)) return true;
+      return payload(node.whenTrue) && payload(node.whenFalse);
     }
-    if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node) || ts.isJsxFragment(node)) return true;
-    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'link') return true;
-    if (nestedFunction(node)) return false;
-    return ts.forEachChild(node, child => payload(child, new Set(seen)) || undefined) ?? false;
-  }
-  function rendered(node: ts.Node): boolean {
-    for (let parent = node.parent; parent; parent = parent.parent) {
-      if (ts.isReturnStatement(parent) || ts.isJsxExpression(parent) || ts.isJsxAttribute(parent)) return true;
-      if (ts.isVariableDeclaration(parent) || ts.isFunctionLike(parent)) return false;
-    }
-    return false;
-  }
-  function walk(node: ts.Node): boolean {
-    const mapped = ts.isArrowFunction(node) && ts.isCallExpression(node.parent) &&
-      ts.isPropertyAccessExpression(node.parent.expression) && node.parent.expression.name.text === 'map' && rendered(node.parent);
-    if (nestedFunction(node) && !mapped) return false;
-    if (request && (ts.isCallExpression(node) || ts.isNewExpression(node)) && requestGuarded(node, operation)) return true;
-    if (ts.isConditionalExpression(node) && rendered(node)) {
-      const attribute = ts.isJsxExpression(node.parent) && ts.isJsxAttribute(node.parent.parent);
-      if (entailsOpen(node.condition, operation, true, props) && absent(node.whenFalse) && (payload(node.whenTrue) || attribute)) return true;
-      if (entailsOpen(node.condition, operation, false, props) && absent(node.whenTrue) && (payload(node.whenFalse) || attribute)) return true;
-    }
-    if (ts.isBinaryExpression(node) && rendered(node) && node.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken &&
-      entailsOpen(node.left, operation, true, props) && payload(node.right)) return true;
-    // Boolean attributes control enablement; a denied gate must make the exact attribute false.
-    if (ts.isJsxAttribute(node) && ['disabled', 'draggable'].includes(node.name.getText()) && node.initializer &&
-      ts.isJsxExpression(node.initializer) && node.initializer.expression &&
-      entailsOpen(node.initializer.expression, operation, node.name.getText() === 'draggable', props)) return true;
-    if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
-      const name = node.tagName.getText();
-      if (!visited.has(name)) {
-        let component: ts.FunctionDeclaration | undefined;
-        function find(child: ts.Node) {
-          if (ts.isFunctionDeclaration(child) && child.name?.text === name) component = child;
-          ts.forEachChild(child, find);
-        }
-        find(body.getSourceFile());
-        if (component?.body && component.parameters[0] && ts.isObjectBindingPattern(component.parameters[0].name)) {
-          const supplied = new Map<string, ts.Expression>();
-          for (const item of component.parameters[0].name.elements) {
-            if (!ts.isIdentifier(item.name)) continue;
-            const propName = item.propertyName?.getText() ?? item.name.text;
-            const attribute = node.attributes.properties.find(item => ts.isJsxAttribute(item) && item.name.getText() === propName);
-            if (attribute && ts.isJsxAttribute(attribute) && attribute.initializer && ts.isJsxExpression(attribute.initializer) && attribute.initializer.expression)
-              supplied.set(item.name.text, resolved(attribute.initializer.expression, new Set(), props));
-          }
-          if (hasPredicate(component.body, operation, false, supplied, new Set([...visited, name]))) return true;
-        }
-      }
-    }
-    if (ts.isJsxOpeningElement(node) && node.tagName.getText() === 'OperationGate') {
-      const prop = node.attributes.properties.find(item => ts.isJsxAttribute(item) && item.name.getText() === 'operation');
-      if (prop && ts.isJsxAttribute(prop) && prop.initializer && ts.isStringLiteral(prop.initializer) && prop.initializer.text === operation) return true;
-    }
-    return ts.forEachChild(node, child => walk(child) || undefined) ?? false;
-  }
-  return walk(body);
-}
-
-/** Every inventoried closed payload proves its own suppression; public siblings are not targets. */
-function targetProof(body: ts.Node, operation: string, target: Target, props = new Map<string, ts.Expression>(), visited = new Set<string>(), proofs: boolean[] = []): boolean {
-  function expressionProof(node: ts.Node): boolean {
-    return requestGuarded(node, operation, props);
-  }
-  function absent(node: ts.Expression): boolean {
-    const value = resolved(node, new Set(), props);
-    return value.kind === ts.SyntaxKind.NullKeyword || value.kind === ts.SyntaxKind.FalseKeyword ||
-      ts.isArrayLiteralExpression(value) && value.elements.length === 0;
+    return uiGuarded(node, operation);
   }
   function refs(node: ts.Node, name: string) {
-    if (ts.isIdentifier(node) && node.text === name) proofs.push(expressionProof(node));
+    if (ts.isIdentifier(node) && node.text === name) proofs.push(uiGuarded(node, operation));
     if (!ts.isFunctionLike(node)) ts.forEachChild(node, child => refs(child, name));
   }
   function walk(node: ts.Node) {
-    const mapped = ts.isArrowFunction(node) && ts.isCallExpression(node.parent) &&
-      ts.isPropertyAccessExpression(node.parent.expression) && node.parent.expression.name.text === 'map';
-    if (ts.isFunctionLike(node) && !mapped) return;
-    if ('binding' in target && ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === target.binding && node.initializer) {
-      const value = resolved(node.initializer, new Set(), props);
-      proofs.push(ts.isConditionalExpression(value) && absent(value.whenFalse) && expressionProof(value.whenTrue));
-    }
+    if (ts.isFunctionLike(node) && !(ts.isArrowFunction(node) && ts.isCallExpression(node.parent) &&
+      ts.isPropertyAccessExpression(node.parent.expression) && node.parent.expression.name.text === 'map')) return;
+    if ('expression' in target && ts.isCallExpression(node) && node.expression.getText() === target.expression) proofs.push(uiGuarded(node, operation));
+    if ('binding' in target && ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === target.binding && node.initializer)
+      proofs.push(payload(node.initializer));
     if ('branch' in target && ts.isConditionalExpression(node) && node.condition.getText().includes(target.branch[0])) refs(node.whenTrue, target.branch[1]);
     if ('call' in target && ts.isCallExpression(node) && node.expression.getText() === target.call[0] &&
-      node.arguments.some(item => ts.isPropertyAccessExpression(item) && item.name.text === target.call[1])) proofs.push(expressionProof(node));
+      node.arguments.some(item => ts.isPropertyAccessExpression(item) && item.name.text === target.call[1])) proofs.push(uiGuarded(node, operation));
     if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
       const opening = ts.isJsxElement(node) ? node.openingElement : node;
       if ('jsx' in target && opening.tagName.getText() === target.jsx) {
         const attr = target.prop ? opening.attributes.properties.find(item => ts.isJsxAttribute(item) && item.name.getText() === target.prop) : null;
         const value = attr && ts.isJsxAttribute(attr) ? attr.initializer : null;
         if ((!target.prop || value) && (!target.value || value && ts.isStringLiteral(value) && value.text === target.value) &&
-          (!target.text || value?.getText().includes(target.text) || !target.prop && node.getText().includes(target.text))) proofs.push(expressionProof(node));
+          (!target.text || value?.getText().includes(target.text) || !target.prop && node.getText().includes(target.text))) proofs.push(uiGuarded(node, operation));
       }
       if ('attribute' in target && opening.tagName.getText() === target.attribute[0]) {
         const attr = opening.attributes.properties.find(item => ts.isJsxAttribute(item) && item.name.getText() === target.attribute[1]);
-        if (attr && ts.isJsxAttribute(attr) && attr.initializer && ts.isJsxExpression(attr.initializer) && attr.initializer.expression) {
-          const value = attr.initializer.expression;
-          if (target.attribute[1] === 'draggable') proofs.push(entailsOpen(value, operation, true, props));
-          else proofs.push(ts.isConditionalExpression(value) && absent(value.whenFalse) && expressionProof(value.whenTrue));
-        }
-      }
-      const name = opening.tagName.getText();
-      if (!visited.has(name)) {
-        let component: ts.FunctionDeclaration | undefined;
-        function find(child: ts.Node) {
-          if (ts.isFunctionDeclaration(child) && child.name?.text === name) component = child;
-          ts.forEachChild(child, find);
-        }
-        find(body.getSourceFile());
-        if (component?.body && component.parameters[0] && ts.isObjectBindingPattern(component.parameters[0].name)) {
-          const supplied = new Map<string, ts.Expression>();
-          for (const item of component.parameters[0].name.elements) {
-            if (!ts.isIdentifier(item.name)) continue;
-            const propName = item.propertyName?.getText() ?? item.name.text;
-            const attr = opening.attributes.properties.find(item => ts.isJsxAttribute(item) && item.name.getText() === propName);
-            if (attr && ts.isJsxAttribute(attr) && attr.initializer && ts.isJsxExpression(attr.initializer) && attr.initializer.expression)
-              supplied.set(item.name.text, resolved(attr.initializer.expression, new Set(), props));
-          }
-          // The inventory's target can be owned by a child, such as a tab's delete menu item.
-          targetProof(component.body, operation, target, supplied, new Set([...visited, name]), proofs);
-        }
+        if (attr && ts.isJsxAttribute(attr) && attr.initializer && ts.isJsxExpression(attr.initializer) && attr.initializer.expression)
+          proofs.push(payload(attr.initializer.expression));
       }
     }
     ts.forEachChild(node, walk);
@@ -534,9 +389,7 @@ function entryViolations(files: Readonly<Record<string, string>>, inventory: rea
       ts.forEachChild(node, find);
     }
     find(source);
-    return entry.operations.filter(operation => !body || (entry.targets?.[operation]
-      ? !entry.targets[operation]!.every(target => targetProof(body!, operation, target))
-      : !hasPredicate(body, operation, entry.request)))
+    return entry.operations.filter(operation => !body || !entry.targets?.[operation]?.every(target => targetProof(body!, operation, target)))
       .map(operation => `${entry.file}: ${entry.function} must gate its entry on ${operation}`);
   });
 }
@@ -566,152 +419,122 @@ test('closed requests have explicit operation gates and the swept UI entries hav
   expect(entryViolations(webSources)).toEqual([]);
 });
 
-test('the scan rejects an ungated call to a closed operation, by Eden chain and by path', () => {
-  expect(
-    violations({
-      eden: "const read = () => main.v1.me['saved-filters'].get({ query: {} });",
-      alias: "const filters = main.v1.me['saved-filters']; filters.order.put({});",
-      works: 'await main.v1.works({ id }).releases({ release }).put({});',
-      mods: "main().v1['mod-releases']({ work }).get({ query: {} });",
-      path: "const response = await fetch(`${origin}/v1/types`, { method: 'POST' });",
-    }),
-  ).toEqual([
-    "eden: .v1.me['saved-filters'].get({query:{}}) reaches getV1MeSaved-filters (platform:saved-views)",
-    "alias: filters.order.put({}) reaches putV1MeSaved-filtersOrder (platform:saved-views)",
-    "mods: .v1['mod-releases']({work}).get({query:{}}) reaches getV1Mod-releasesByWork (platform:developer-extras)",
-    'path: /v1/types reaches postV1Types (platform:platform-admin)',
-  ]);
+
+const savedOperation = 'getV1MeSaved-filters';
+const savedRequest = "main.v1.me['saved-filters'].get({})";
+const savedGate = `operationOpen('${savedOperation}', access)`;
+const rejects = (source: string) => expect(violations({ fixture: source }).some(item => item.includes(savedOperation))).toBe(true);
+const accepts = (source: string) => expect(violations({ fixture: source })).toEqual([]);
+
+test('canonical positive block and ternary accept only the same operation in the same function', () => {
+  accepts(`function read() { if (${savedGate}) { return ${savedRequest}; } return null; }`);
+  accepts(`${savedGate} ? ${savedRequest} : null;`);
+  accepts(`gate('${savedOperation}') ? ${savedRequest} : null;`);
+  for (const source of [
+    `if (operationOpen('postV1MeSaved-filters', access)) { ${savedRequest}; }`,
+    `if (${savedGate}) ${savedRequest};`,
+    `${savedGate} && ${savedRequest};`,
+    `!${savedGate} ? null : ${savedRequest};`,
+    `if (!${savedGate}) return; ${savedRequest};`,
+    `if (${savedGate}) { return () => ${savedRequest}; }`,
+    `${savedGate} ? () => ${savedRequest} : null;`,
+    `if (${savedGate}) { function read() { return ${savedRequest}; } }`,
+    `if (${savedGate}) { (() => ${savedRequest})(); }`,
+    `if (${savedGate}) { const callback = function () { return ${savedRequest}; }; }`,
+    `${savedGate} ? ${savedRequest} : ${savedRequest};`,
+  ]) rejects(source);
 });
 
-test('the scan accepts an explicit operation gate and ignores public requests', () => {
-  expect(
-    violations({
-      asked:
-        "if (operationOpen('getV1MeSaved-filters', access)) main.v1.me['saved-filters'].get({ query: {} });",
-      open: 'main.v1.works({ id }).releases.get({});',
-    }),
-  ).toEqual([]);
+test('component effect and handler must start with the direct canonical refusal', () => {
+  accepts(`function Component() { useEffect(() => { if (!${savedGate}) return; ${savedRequest}; }, []); }`);
+  accepts(`function Component() { const handler = () => { if (!gate('${savedOperation}')) return; ${savedRequest}; }; }`);
+  rejects(`function Component() { const handler = () => { if (!${savedGate}) return ${savedRequest}; ${savedRequest}; }; }`);
+  rejects(`function Component() { const handler = () => { ready(); if (!${savedGate}) return; ${savedRequest}; }; }`);
+  rejects(`function Component() { const handler = () => { if (!${savedGate}) { if (ready) return; } ${savedRequest}; }; }`);
+  rejects(`function Component() { if (!${savedGate}) return; const handler = () => ${savedRequest}; }`);
+  rejects(`function Component() { useEffect(() => { if (!${savedGate}) return; return () => ${savedRequest}; }, []); }`);
 });
 
-test('an unrelated closed literal or a refusal after the call cannot substitute for an operation gate', () => {
-  for (const suffix of ["const status = 'closed';", "if (read.failure === 'closed') hide();"]) {
-    expect(violations({ read: `const read = await main().v1['mod-releases']({ work }).get({}); ${suffix}` })).toHaveLength(1);
+test('reviewer gate-variable, eager JSX-child and escaped callback examples are rejected', () => {
+  rejects(`let allowed = false; if (ready) allowed = ${savedGate}; if (allowed) { ${savedRequest}; }`);
+  rejects(`return <OperationGate operation="${savedOperation}">{${savedRequest}}</OperationGate>;`);
+  rejects(`function factory() { if (${savedGate}) { return () => ${savedRequest}; } } factory()();`);
+  rejects(`const allowed = ${savedGate}; if (allowed) { ${savedRequest}; }`);
+  rejects(`const can = { read: ${savedGate} }; can.read ? ${savedRequest} : null;`);
+  rejects(`${savedGate}; ${savedRequest}; const status = 'closed';`);
+});
+
+test('every closed client reference is inventoried, with no alias resolution', () => {
+  for (const source of [
+    "const { v1 } = main; v1.me['saved-filters'].get({});",
+    "const { v1: client } = main; client.me['saved-filters'].get({});",
+    "const { 'v1': client } = main; client.me['saved-filters'].get({});",
+    "const { ['v1']: client } = main; client.me['saved-filters'].get({});",
+    "const v1 = main.v1; v1.me['saved-filters'].get({});",
+    "main.v1.me['saved-filters'].get.call(null, {});",
+    "main.v1.me['saved-filters'].get.bind(null);",
+    "main.v1.me['saved-filters'][method]({});",
+    "const filters = main.v1.me['saved-filters']; filters.get({});",
+    "let filters; filters = main.v1.me['saved-filters']; filters.get({});",
+    "const { get } = main.v1.me['saved-filters']; get({});",
+    "const get = main.v1.me['saved-filters'].get; const client = { get }; client.get({});",
+    "function client() { return main.v1.me['saved-filters']; } client().get({});",
+    "const client = () => main.v1.me['saved-filters']; client().get({});",
+    `if (${savedGate}) { const get = main.v1.me['saved-filters'].get; return { get }; }`,
+    `if (${savedGate}) { return main.v1.me['saved-filters']; }`,
+  ]) {
+    expect(callsIn(source).some(call => call.operations.includes(savedOperation))).toBe(true);
+    rejects(source);
   }
+  rejects(`${savedRequest}.then(handle);`);
+  accepts(`if (${savedGate}) { ${savedRequest}.then(handle); }`);
+  accepts('main.v1.works({ id }).releases.get({});');
+  accepts('await main.v1.works({ id }).releases({ release }).put({});');
 });
 
-test('projected closed reads are discovered from their owning Eden response type', () => {
-  const files = {
-    types: "export type HubWorkPage = NonNullable<Ok<ReturnType<Main['v1']['hub']['works']>['get']>>;",
-    read: 'const read = followHref<HubWorkPage | null>(main, section.href);',
-  };
-  expect(violations(files)).toEqual(['read: followHref<HubWorkPage | null> reaches getV1HubWorksById (platform:developer-extras)']);
-  expect(violations({ ...files, read: "if (!operationOpen('getV1HubWorksById', access)) return null; " + files.read })).toEqual([]);
-});
-
-test('closed path inventory recognises multiword parameter names', () => {
-  const text = 'fetch(`/v1/realms/${realm}/member-receipts/${receipt}/appeal`, { method: "POST" });';
-  expect(callsIn(text)).toEqual([{ source: '/v1/realms/${realm}/member-receipts/${receipt}/appeal',
-    operations: ['postV1RealmsByRealmMember-receiptsByReceiptIdAppeal'] }]);
-});
-
-test('property existence checks and public parameterised paths do not invent closed calls', () => {
-  expect(callsIn("if (typeof main.v1.realms !== 'function') return false;")).toEqual([]);
+test('HTTP literals and projected followers require the same canonical gate', () => {
+  const admin = "operationOpen('postV1Types', access)";
+  const http = "fetch('/v1/types', { method: 'POST' })";
+  expect(violations({ request: `${admin} ? ${http} : null;` })).toEqual([]);
+  expect(violations({ request: `${admin}; ${http};` })).toHaveLength(1);
+  expect(violations({ request: `${admin} ? ${http} : ${http};` })).toHaveLength(1);
+  expect(violations({ request: "const path = '/v1/me/saved-filters'; fetch(path);" }).length).toBeGreaterThan(0);
+  rejects(`if (${savedGate}) { fetch('/v1/me/saved-filters', options); }`);
+  rejects(`if (${savedGate}) { fetch('/v1/me/saved-filters', { method: verb }); }`);
+  rejects(`let url; if (${savedGate}) { url = new URL('/v1/me/saved-filters', base); } fetch(url);`);
+  accepts(`if (${savedGate}) { serverRead(new URL('/v1/me/saved-filters', base)); }`);
+  const types = "export type HubWorkPage = NonNullable<Ok<ReturnType<Main['v1']['hub']['works']>['get']>>;";
+  const projected = 'followHref<HubWorkPage | null>(main, href)';
+  const hubGate = "operationOpen('getV1HubWorksById', access)";
+  expect(violations({ types, read: `${hubGate} ? ${projected} : null;` })).toEqual([]);
+  expect(violations({ types, read: `if (${hubGate}) { return () => ${projected}; }` })).toHaveLength(1);
+  expect(violations({ types, read: `${hubGate}; ${projected};` })).toHaveLength(1);
+  expect(callsIn('fetch(`/v1/realms/${realm}/member-receipts/${receipt}/appeal`, { method: "POST" });')[0]?.operations)
+    .toEqual(['postV1RealmsByRealmMember-receiptsByReceiptIdAppeal']);
+  expect(callsIn('// Main owns `/v1/me/saved-filters`.')).toEqual([]);
   expect(callsIn('fetch(`/v1/compositions/${id}`);')).toEqual([]);
-  expect(callsIn('// Main owns `/v1/compositions/{id}`.')).toEqual([]);
 });
 
-test('each UI entry loses its proof when any required operation predicate is removed', () => {
+test('each UI entry loses its proof when a required direct predicate is removed', () => {
   for (const entry of entries) for (const operation of entry.operations) {
     expect(entryViolations({ [entry.file]: webSources[entry.file]!.replaceAll(operation, 'getV1Types') }, [entry]))
       .toContain(`${entry.file}: ${entry.function} must gate its entry on ${operation}`);
   }
 });
 
-test('an unused gate or a closed error string is not a UI predicate', () => {
-  const parse = (text: string) => ts.createSourceFile('entry.tsx', text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-  expect(hasPredicate(parse("const ignored = operationOpen('getV1HubWorksById'); return <button>Retry</button>;"), 'getV1HubWorksById')).toBe(false);
-  expect(hasPredicate(parse("const status = 'closed'; return <button>Retry</button>;"), 'getV1HubWorksById')).toBe(false);
-  expect(hasPredicate(parse("const submit = () => { if (!operationOpen('getV1HubWorksById')) return; }; return <button onClick={submit}>Retry</button>;"), 'getV1HubWorksById')).toBe(false);
-  expect(hasPredicate(parse("const allowed = operationOpen('getV1HubWorksById') && ready; return <button>Retry</button>;"), 'getV1HubWorksById')).toBe(false);
-  expect(hasPredicate(parse("return operationOpen('getV1HubWorksById') ? <button>Retry</button> : null;"), 'getV1HubWorksById')).toBe(true);
-});
-
-test('request gates dominate each invocation, not the file or a neighbouring expression', () => {
-  const call = "main.v1.me['saved-filters'].get({})";
-  const gate = "operationOpen('getV1MeSaved-filters', access)";
+test('pure UI wrappers are accepted, but held booleans and protected siblings are rejected', () => {
+  const fixture: Entry = { file: 'entry.tsx', function: 'Entry', operations: [savedOperation],
+    targets: { [savedOperation]: [{ jsx: 'button', text: 'Install' }] } };
   for (const source of [
-    `${gate}; ${call};`,
-    `const unused = ${gate}; ${call};`,
-    `${gate} ? ${call} : ${call};`,
-    `!${gate} ? ${call} : null;`,
-    `if (!${gate}) { ${call}; }`,
-    `if (${gate}) {} ${call};`,
-    `${gate} && ${call}; ${call};`,
-    `function allowed() { if (!${gate}) return; return ${call}; } function denied() { return ${call}; }`,
-    `if (!${gate}) { if (ready) return; } ${call};`,
-  ]) expect(violations({ fixture: source }).some(item => item.includes('getV1MeSaved-filters'))).toBe(true);
+    `return <>{${savedGate} ? <span>Unrelated</span> : null}<button>Install</button></>;`,
+    `return <>{${savedGate} ? <button>Install</button> : null}<button>Install</button></>;`,
+    `return ${savedGate} ? <button>Install</button> : <button>Install</button>;`,
+    `return !${savedGate} ? <button>Install</button> : null;`,
+    `const allowed = ${savedGate}; return allowed ? <button>Install</button> : null;`,
+    `const unused = ${savedGate}; return <button>Install</button>;`,
+  ]) expect(entryViolations({ 'entry.tsx': `function Entry() { ${source} }` }, [fixture])).toHaveLength(1);
   for (const source of [
-    `if (!${gate}) return null; ${call};`,
-    `${gate} ? ${call} : null;`,
-    `!${gate} ? null : ${call};`,
-    `const can = { read: ${gate}, edit: operationOpen('postV1MeSaved-filters') }; can.read && ${call};`,
-  ]) expect(violations({ fixture: source })).toEqual([]);
-});
-
-test('Eden aliases retain the exact operation across assignments, returns and multiline declarations', () => {
-  for (const source of [
-    "let filters; filters = main.v1.me['saved-filters']; filters.get({});",
-    "const client = () => main.v1.me['saved-filters']; client().get({});",
-    "function client() { return main.v1.me['saved-filters']; } client().get({});",
-    "const filters =\n main.v1.me['saved-filters'];\n filters.get({});",
-    "const filters = main.v1.me['saved-filters']; const alias = filters; alias.get({});",
-    "const filters = main.v1.me['saved-filters']; const read = filters.get; read({});",
-  ]) {
-    expect(violations({ fixture: source })).toHaveLength(1);
-    expect(violations({ fixture: source })[0]).toContain('getV1MeSaved-filters');
-  }
-  expect(callsIn("let filters; filters = main.v1.me['saved-filters']; if (typeof filters.get === 'function') ready();")).toEqual([]);
-});
-
-test('UI fixtures reject inverted, identical and unused predicates and unrelated object members', () => {
-  const operation = 'getV1HubWorksById';
-  const gate = `operationOpen('${operation}')`;
-  for (const source of [
-    `return ${gate} ? <button>Install</button> : <button>Install</button>;`,
-    `return !${gate} ? <button>Install</button> : null;`,
-    `const unused = ${gate}; return <button>Install</button>;`,
-    `const unused = ${gate} ? <button>Install</button> : null; return <button>Install</button>;`,
-    `const can = { install: ready, unrelated: ${gate} }; return can.install ? <button>Install</button> : null;`,
-    `if (!${gate}) return <button>Install</button>; return null;`,
-  ]) expect(hasPredicate(parse(source), operation)).toBe(false);
-  expect(hasPredicate(parse(`const can = { install: ${gate}, unrelated: ready }; return can.install ? <button>Install</button> : null;`), operation)).toBe(true);
-});
-
-test('HTTP paths and projected reads require a gate dominating their own expression', () => {
-  const http = "fetch('/v1/types', { method: 'POST' })";
-  const adminGate = "operationOpen('postV1Types', access)";
-  expect(violations({ request: `${adminGate}; ${http};` })).toHaveLength(1);
-  expect(violations({ request: `${adminGate} ? ${http} : ${http};` })).toHaveLength(1);
-  expect(violations({ request: `${adminGate} && ${http}; ${http};` })).toHaveLength(1);
-  expect(violations({ request: `${adminGate} ? ${http} : null;` })).toEqual([]);
-  const types = "export type HubWorkPage = NonNullable<Ok<ReturnType<Main['v1']['hub']['works']>['get']>>;";
-  const projected = 'followHref<HubWorkPage>(main, href)';
-  const hubGate = "operationOpen('getV1HubWorksById', access)";
-  expect(violations({ types, read: `${hubGate}; ${projected};` })).toHaveLength(1);
-  expect(violations({ types, read: `${hubGate} && ${projected}; ${projected};` })).toHaveLength(1);
-  expect(violations({ types, read: `!${hubGate} ? ${projected} : null;` })).toHaveLength(1);
-  expect(violations({ types, read: `${hubGate} ? ${projected} : null;` })).toEqual([]);
-});
-
-test('a gated unrelated sibling cannot protect the inventoried closed action', () => {
-  const fixture: Entry = { file: 'entry.tsx', function: 'Entry', operations: ['getV1HubWorksById'],
-    targets: { getV1HubWorksById: [{ jsx: 'button', text: 'Install' }] } };
-  const gate = "operationOpen('getV1HubWorksById')";
-  for (const source of [
-    `function Entry() { return <>{${gate} ? <span>Unrelated</span> : null}<button>Install</button></>; }`,
-    `function Entry() { return <>{${gate} ? <button>Install</button> : null}<button>Install</button></>; }`,
-    `function Entry() { return ${gate} ? <button>Install</button> : <button>Install</button>; }`,
-    `function Entry() { return !${gate} ? <button>Install</button> : null; }`,
-  ]) expect(entryViolations({ 'entry.tsx': source }, [fixture])).toHaveLength(1);
-  expect(entryViolations({ 'entry.tsx': `function Entry() { return <><button>Copy</button>{${gate} ? <button>Install</button> : null}</>; }` }, [fixture])).toEqual([]);
+    `return ${savedGate} ? <button>Install</button> : null;`,
+    `return <OperationGate operation="${savedOperation}"><button>Install</button></OperationGate>;`,
+  ]) expect(entryViolations({ 'entry.tsx': `function Entry() { ${source} }` }, [fixture])).toEqual([]);
 });

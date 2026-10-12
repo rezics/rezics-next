@@ -78,9 +78,6 @@ export function HomeTabs({ state, defaults, locale, messages, actingSubject, fil
   const gateRef = useRef(gate);
   gateRef.current = gate;
   const visibleFilters = gate('getV1MeSaved-filters') ? filters : null;
-  const can = { edit: gate('getV1MeSaved-filters') && gate('patchV1MeSaved-filtersById'),
-    order: gate('getV1MeSaved-filters') && gate('putV1MeSaved-filtersOrder'),
-    delete: gate('getV1MeSaved-filters') && gate('deleteV1MeSaved-filtersById') };
   const api = useRef<SavedFilterApi | null>(given ?? null);
   const client = () => api.current ??= mainSavedFilterApi(actingSubject, undefined,
     operation => gateRef.current('getV1MeSaved-filters') && gateRef.current(operation));
@@ -204,7 +201,7 @@ export function HomeTabs({ state, defaults, locale, messages, actingSubject, fil
   }
 
   function reorder(next: string[]) {
-    if (!can.order || !filters?.revision || next.join() === (order ?? server).join()) return;
+    if (!gate('getV1MeSaved-filters') || !gate('putV1MeSaved-filtersOrder') || !filters?.revision || next.join() === (order ?? server).join()) return;
     setOrder(next);
     void settle(client().reorder(next, filters.revision));
   }
@@ -268,18 +265,18 @@ export function HomeTabs({ state, defaults, locale, messages, actingSubject, fil
         <button type="button" className={tabLink} aria-haspopup="dialog" onClick={() => setMoreOpen(true)}>
           {t.moreTopics}</button>
       </li> : null}
-      {shown.map((filter, index) => {
+      {gate('getV1MeSaved-filters') ? shown.map((filter, index) => {
         const title = filterTitle(filter);
         const name = title?.value ?? t.untitledTab;
         const current = state.tab === 'pinned' && state.filter === filter.id;
-        return <li key={filter.id} draggable={can.order && shown.length > 1} data-dragging={dragging === filter.id || undefined}
+        return <li key={filter.id} draggable={gate('putV1MeSaved-filtersOrder') ? shown.length > 1 : false} data-dragging={dragging === filter.id || undefined}
           className="group/tab relative flex shrink-0 snap-start items-stretch data-dragging:opacity-50"
           onDragStart={event => { event.dataTransfer.setData('text/plain', filter.id); setDragging(filter.id); }}
           onDragEnd={() => setDragging(null)}
           onDragOver={event => { if (dragging && dragging !== filter.id) event.preventDefault(); }}
           onDrop={event => {
             event.preventDefault();
-            if (dragging && can.order) reorder(droppedOn(order ?? server, dragging, filter.id));
+            if (dragging && gate('putV1MeSaved-filtersOrder')) reorder(droppedOn(order ?? server, dragging, filter.id));
             setDragging(null);
           }}>
           <Link href={href(pinnedTab(state, filter.id))} aria-current={current ? 'page' : undefined}
@@ -287,21 +284,21 @@ export function HomeTabs({ state, defaults, locale, messages, actingSubject, fil
             className={cn(tabLink, 'max-w-56 sm:pe-10', current && 'pe-9')}>
             <span className="truncate">{name}</span></Link>
           <TabMenu t={t} name={name} filter={filter} first={index === 0} last={index === shown.length - 1}
-            can={can} visible={current} onSelect={action => {
+            gate={gate} visible={current} onSelect={action => {
               if (action === 'rename') { setStatus(null); setRenaming(filter); }
               else if (action === 'left' || action === 'right') {
                 reorder(moved(order ?? server, filter.id, action === 'left' ? -1 : 1));
               } else remove(filter, action);
             }} />
         </li>;
-      })}
+      }) : null}
     </ul>
     {picker}
   </nav>
   {status && !renaming ? <p role="status" className="border-border/60 border-b bg-warning/10 px-4 py-2 text-sm
     text-warning-foreground">{status}</p> : null}
-  {renaming && can.edit ? <RenameDialog t={t} filter={renaming} failure={status} onClose={() => setRenaming(null)}
-    onSave={name => settle(client().update(renaming, { name }), () => setRenaming(null))} /> : null}
+  {gate('getV1MeSaved-filters') ? gate('patchV1MeSaved-filtersById') ? renaming ? <RenameDialog t={t} filter={renaming} failure={status} onClose={() => setRenaming(null)}
+    onSave={name => settle(client().update(renaming, { name }), () => setRenaming(null))} /> : null : null : null}
   {moreOpen ? <MoreTopics t={t} topics={followed} cursor={followsCursor} notice={topicsNotice} loading={topicsLoading}
     hrefFor={tab => href(pinnedTab(state, tab))} onClose={() => setMoreOpen(false)}
     onMore={() => void pageTopics(false)} onRestart={() => void pageTopics(true)} /> : null}
@@ -311,13 +308,13 @@ export function HomeTabs({ state, defaults, locale, messages, actingSubject, fil
 type TabAction = 'rename' | 'left' | 'right' | 'unpin' | 'unfollow' | 'delete';
 
 /** A pinned tab's own menu: shown on the current tab, and on hover or focus for the others. */
-function TabMenu({ t, name, filter, first, last, can, visible, onSelect }: { t: T; name: string; filter: SavedFilter;
-  first: boolean; last: boolean; can: { edit: boolean; order: boolean; delete: boolean }; visible: boolean;
+function TabMenu({ t, name, filter, first, last, gate, visible, onSelect }: { t: T; name: string; filter: SavedFilter;
+  first: boolean; last: boolean; gate: OperationGate; visible: boolean;
   onSelect: (action: TabAction) => void }) {
   // A follow is its own public operation; every other action needs its Saved Filter operation open.
-  const removable = filter.concept ? true : can.delete;
-  if (!can.edit && !can.order && !removable) return null;
-  return <Menu onSelect={({ value }) => onSelect(value as TabAction)} positioning={{ placement: 'bottom-end' }}>
+  const removable = filter.concept ? true : gate('deleteV1MeSaved-filtersById');
+  if (!gate('patchV1MeSaved-filtersById') && !gate('putV1MeSaved-filtersOrder') && !removable) return null;
+  return gate('getV1MeSaved-filters') ? <Menu onSelect={({ value }) => onSelect(value as TabAction)} positioning={{ placement: 'bottom-end' }}>
     <MenuTrigger aria-label={t.tabOptions({ tab: name })} className={cn('absolute end-1.5 top-1/2 grid size-7',
       '-translate-y-1/2 place-items-center rounded-full text-muted-foreground outline-none transition-opacity',
       'hover:bg-foreground/[0.06] hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2',
@@ -327,19 +324,19 @@ function TabMenu({ t, name, filter, first, last, can, visible, onSelect }: { t: 
       <EllipsisIcon aria-hidden="true" className="size-4" />
     </MenuTrigger>
     <MenuContent className="w-60">
-      {can.edit ? <MenuItem value="rename"><PencilIcon aria-hidden="true" />{t.renameTab}</MenuItem> : null}
-      {can.order && !first ? <MenuItem value="left"><ArrowLeftIcon aria-hidden="true" className="rtl:rotate-180" />
-        {t.moveLeft}</MenuItem> : null}
-      {can.order && !last ? <MenuItem value="right"><ArrowRightIcon aria-hidden="true" className="rtl:rotate-180" />
-        {t.moveRight}</MenuItem> : null}
-      {can.edit && (can.order || removable) ? <MenuSeparator /> : null}
-      {can.edit ? <MenuItem value="unpin"><PinOffIcon aria-hidden="true" />{t.unpinTab}</MenuItem> : null}
+      {gate('patchV1MeSaved-filtersById') ? <MenuItem value="rename"><PencilIcon aria-hidden="true" />{t.renameTab}</MenuItem> : null}
+      {gate('putV1MeSaved-filtersOrder') ? !first ? <MenuItem value="left"><ArrowLeftIcon aria-hidden="true" className="rtl:rotate-180" />
+        {t.moveLeft}</MenuItem> : null : null}
+      {gate('putV1MeSaved-filtersOrder') ? !last ? <MenuItem value="right"><ArrowRightIcon aria-hidden="true" className="rtl:rotate-180" />
+        {t.moveRight}</MenuItem> : null : null}
+      {gate('patchV1MeSaved-filtersById') && (gate('putV1MeSaved-filtersOrder') || removable) ? <MenuSeparator /> : null}
+      {gate('patchV1MeSaved-filtersById') ? <MenuItem value="unpin"><PinOffIcon aria-hidden="true" />{t.unpinTab}</MenuItem> : null}
       {filter.concept ? <MenuItem value="unfollow" variant="destructive"><UserMinusIcon aria-hidden="true" />
         {t.unfollowTopic({ topic: filter.concept.name?.value ?? name })}</MenuItem>
-        : can.delete ? <MenuItem value="delete" variant="destructive"><Trash2Icon aria-hidden="true" />{t.deleteFilter}</MenuItem>
+        : gate('deleteV1MeSaved-filtersById') ? <MenuItem value="delete" variant="destructive"><Trash2Icon aria-hidden="true" />{t.deleteFilter}</MenuItem>
           : null}
     </MenuContent>
-  </Menu>;
+  </Menu> : null;
 }
 
 /** Every followed topic, in follow order. Show more asks for the next follows cursor. */

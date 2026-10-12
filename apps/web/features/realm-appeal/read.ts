@@ -20,20 +20,22 @@ export async function readOwnRealmBan(realm: string, actingSubject: string): Pro
   const id = realm.slice(-36);
   if (!/^[0-9a-f-]{36}$/.test(id)) return null;
   try {
-    if (!operationOpen('getV1RealmsByRealmMember-ban', await readPlatformAccess())) return null;
-    const token = (await cookies()).get(ACCESS_COOKIE)?.value;
-    if (!token) return null;
-    const url = new URL(`/v1/realms/${id}/member-ban`, serviceOrigin('MAIN_ORIGIN'));
-    url.searchParams.set('actingSubject', actingSubject);
-    const response = await serverRead(url, {
-      headers: await mainReadHeaders({ authorization: `Bearer ${token}` }),
-      cache: 'no-store',
-    }, { timeoutMs: SERVER_READ_LIMITS.metadata });
-    if (response.status !== 200) {
-      await response.body?.cancel();
-      return null;
+    if (operationOpen('getV1RealmsByRealmMember-ban', await readPlatformAccess())) {
+      const token = (await cookies()).get(ACCESS_COOKIE)?.value;
+      if (!token) return null;
+      const response = await serverRead(
+        new URL(`/v1/realms/${id}/member-ban?actingSubject=${encodeURIComponent(actingSubject)}`,
+          serviceOrigin('MAIN_ORIGIN')), {
+          headers: await mainReadHeaders({ authorization: `Bearer ${token}` }),
+          cache: 'no-store',
+        }, { timeoutMs: SERVER_READ_LIMITS.metadata });
+      if (response.status !== 200) {
+        await response.body?.cancel();
+        return null;
+      }
+      return readingFromBanResponse(response.status, await response.json());
     }
-    return readingFromBanResponse(response.status, await response.json());
+    return null;
   } catch {
     return null;
   }

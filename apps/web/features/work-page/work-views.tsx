@@ -357,7 +357,9 @@ export async function WorkOverview({ workRef, id, work, scope, context, locale, 
     // Specialist reading or cooking leads; the description and tags follow.
     // A recipe's description reads straight under its title, before the method.
     type={experience.kind === 'prompt' || experience.kind === 'skill'
-      ? operationOpen('getV1HubWorksById', access) ? specialist : null
+      ? operationOpen('getV1HubWorksById', access) ? <Suspense fallback={<RegionSkeleton
+        id="work-type-loading" title={work.title.value} label={loading} lines={5} />}>
+        <TypeExperience id={id} work={work} experience={experience} locale={locale} messages={messages} /></Suspense> : null
       : experience.kind === 'book' || experience.kind === 'plain' ? null : <>
       {experience.kind === 'recipe' ? <WorkAbout work={work} locale={locale} messages={messages} /> : null}
       {specialist}</>}
