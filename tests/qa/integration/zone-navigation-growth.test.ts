@@ -18,7 +18,7 @@ import {
   type WorkProfile,
 } from '../support/work-profile.ts';
 import type { RetainedSeedCut } from '../support/seed-checkpoints.ts';
-import type { CorpusApi, CorpusCommand } from '../../../scripts/load/work-profile-corpus.ts';
+import type { CorpusApi, CorpusCommand, CorpusDimensions } from '../../../scripts/load/work-profile-corpus.ts';
 import type { MediaStack } from './media-support.ts';
 
 type ScaledProfile = WorkProfile & { unrelatedWorks: number };
@@ -277,6 +277,7 @@ async function measureControlZone(
   writeProfileDump('zone-control-route-profile', profileDump('route', 'control', routePath, route.profile, restored.apps));
   writeProfileDump('zone-control-presentation-profile',
     profileDump('presentation', 'control', presentationPath, presentation.profile, restored.apps));
+  return { route: route.profile, presentation: presentation.profile };
 }
 
 test('Zone navigation reads stay within their cost class as unrelated Works grow', async () => {
@@ -307,6 +308,7 @@ test('Zone navigation reads stay within their cost class as unrelated Works grow
   const routeProfiles: ScaledProfile[] = [];
   const presentationProfiles: ScaledProfile[] = [];
   let verifying: RetainedSeedCut | undefined;
+  let control: Awaited<ReturnType<typeof measureControlZone>> | undefined;
 
   const driver = createCorpusBackupDriver({
     sourceRunId: retained.sourceRunId,
@@ -380,7 +382,7 @@ test('Zone navigation reads stay within their cost class as unrelated Works grow
             }
           },
         };
-        expect(await seedCensus(censusApi, cut)).toEqual(cut.manifest.dimensions);
+        expect(await seedCensus(censusApi, cut)).toEqual(cut.manifest.dimensions as Required<CorpusDimensions>);
         smokeCopies.set(input.target, { stack, fusekiUrl: input.apps.FUSEKI_URL!, apps: input.apps, api, member });
         return async () => {
           smokeCopies.delete(input.target);
@@ -452,6 +454,15 @@ test('Zone navigation reads stay within their cost class as unrelated Works grow
           inZone: true,
         })),
       );
+      if (cut.manifest.scale === 'large') {
+        // Own entries: the route pages at most pageSize items and stays within the Zone site's graph caps.
+        expect(routePage.items).toHaveLength(
+          Math.min(cut.manifest.dimensions.zoneNavigationEntries!, ZONE_ROUTE_COST.pageSize),
+        );
+        expect(route.profile.fusekiRequests).toBeLessThanOrEqual(ZONE_ROUTE_COST.maxGraphReads);
+        expect(route.profile.fusekiSentBytes).toBeLessThanOrEqual(ZONE_ROUTE_COST.maxGraphBytes);
+        expect(route.profile.fusekiReceivedBytes).toBeLessThanOrEqual(ZONE_ROUTE_COST.maxGraphBytes);
+      }
 
       const zonePresentation = presentation.result as {
         navigation: Array<{ segment: string; target: string; kind: string }>;
@@ -472,7 +483,7 @@ test('Zone navigation reads stay within their cost class as unrelated Works grow
         profileDump('presentation', cut.manifest.scale, presentationPath, presentation.profile, restored.apps));
       // The control runs after the large cut's reads, so its writes cannot change those counters.
       if (cut.manifest.scale === 'large')
-        await measureControlZone(sink, restored, cut, retained.cuts[0]!.manifest.dimensions, retained.actor, scale);
+        control = await measureControlZone(sink, restored, cut, retained.cuts[0]!.manifest.dimensions, retained.actor, scale);
       routeProfiles.push(route.profile);
       presentationProfiles.push(presentation.profile);
       console.log('Zone navigation checkpoint counters', JSON.stringify({
@@ -494,8 +505,12 @@ test('Zone navigation reads stay within their cost class as unrelated Works grow
 
     const cost = zoneSiteReadCost(ZONE_ROUTE_COST);
     const failures: unknown[] = [];
+    if (!control) throw new Error('The within-cut control Zone was not measured');
+    // The cuts co-grow the Zone's own entries with unrelated Works, so only the control, which keeps the
+    // small cut's 4 own entries among 64 unrelated Works, isolates the unrelated axis for the route.
+    const routeAgainstControl = [routeProfiles[0]!, control.route];
     for (const [label, profiles] of [
-      ['zone-route-growth', routeProfiles],
+      ['zone-route-growth', routeAgainstControl],
       ['zone-presentation-growth', presentationProfiles],
     ] as const) {
       console.log('Zone navigation checkpoint ratios', JSON.stringify({
