@@ -8,8 +8,8 @@ import { cookies, recoveryProof } from './recovery-fixture.ts';
 const link = (text: string) => /https?:\/\/\S+/.exec(text)![0];
 type Fixture = Awaited<ReturnType<typeof accountFixture>>;
 
-for (const initialOwner of ['original', 'absent'] as const) {
-  test(`verification rejects replacement registered after admission saw ${initialOwner}`, async () => {
+for (const initialOwner of ['original', 'absent', 'provider-lookup'] as const) {
+  test(`verification rejects email reuse across the ${initialOwner} lookup boundary`, async () => {
     const f = await accountFixture();
     let resume = () => {};
     try {
@@ -27,9 +27,21 @@ for (const initialOwner of ['original', 'absent'] as const) {
       const paused = Promise.withResolvers<void>();
       const resumed = Promise.withResolvers<void>();
       resume = () => resumed.resolve();
+      let pausedOnce = false;
+      const findUser = context.internalAdapter.findUserByEmail;
+      if (initialOwner === 'provider-lookup') context.internalAdapter.findUserByEmail = async (...args) => {
+        const selected = await findUser(...args);
+        if (args[0] === email && !pausedOnce) {
+          pausedOnce = true;
+          paused.resolve();
+          await resumed.promise;
+        }
+        return selected;
+      };
       context.options.hooks!.before = createAuthMiddleware(async ctx => {
         const result = await before({ ...ctx, returnHeaders: false });
-        if (ctx.path === '/verify-email' && ctx.query?.token === new URL(retained).searchParams.get('token')) {
+        if (initialOwner !== 'provider-lookup' && ctx.path === '/verify-email'
+          && ctx.query?.token === new URL(retained).searchParams.get('token')) {
           paused.resolve();
           await resumed.promise;
         }
@@ -37,7 +49,7 @@ for (const initialOwner of ['original', 'absent'] as const) {
       });
       const pending = f.request(retained);
       await paused.promise;
-      if (initialOwner === 'original') await releaseAddress();
+      if (initialOwner !== 'absent') await releaseAddress();
       expect((await f.request('/api/auth/sign-up/email', { ...body, name: 'Replacement' })).status).toBe(200);
       const replacementId = (await f.pool.query('SELECT id FROM "user" WHERE email = $1', [email])).rows[0].id;
       resume();
@@ -50,6 +62,44 @@ for (const initialOwner of ['original', 'absent'] as const) {
     } finally { resume(); await f.close(); }
   }, 60_000);
 }
+
+test('verification holds the resolved email binding and recovery generation through session creation', async () => {
+  const f = await accountFixture();
+  let resume = () => {};
+  try {
+    const member = await f.signup('locked-verification@example.test');
+    const guardian = await f.signup('guardian@example.test');
+    await recoveryProof(f, member, guardian);
+    await f.pool.query('UPDATE "user" SET "emailVerified" = false WHERE id = $1', [member.id]);
+    expect((await f.request('/api/auth/send-verification-email', { email: member.email, callbackURL: '/' })).status).toBe(200);
+    await f.email.drain();
+    const retained = link(f.messages.at(-1)!.text);
+    const context = await f.auth.$context;
+    const update = context.internalAdapter.updateUserByEmail;
+    const paused = Promise.withResolvers<void>();
+    const resumed = Promise.withResolvers<void>();
+    resume = () => resumed.resolve();
+    context.internalAdapter.updateUserByEmail = async (...args) => {
+      paused.resolve();
+      await resumed.promise;
+      return update(...args);
+    };
+    const pending = f.request(retained);
+    await paused.promise;
+    const writer = await f.pool.connect();
+    try {
+      await writer.query("SET lock_timeout = '100ms'");
+      await expect(writer.query('UPDATE "user" SET email = $2 WHERE id = $1', [member.id, 'moved@example.test']))
+        .rejects.toMatchObject({ code: '55P03' });
+      await expect(writer.query('UPDATE rezics_account_recovery_policy SET generation = generation + 1 WHERE id = $1', [member.id]))
+        .rejects.toMatchObject({ code: '55P03' });
+    } finally { await writer.query('RESET lock_timeout'); writer.release(); }
+    resume();
+    const verified = await pending;
+    expect(await (await f.request('/api/auth/get-session', undefined, cookies(verified))).json())
+      .toMatchObject({ user: { id: member.id, emailVerified: true } });
+  } finally { resume(); await f.close(); }
+}, 60_000);
 
 async function resendByOperator(f: Fixture, userId: string, cookie: string) {
   const resent = await f.request(`/api/account/admin/users/${userId}/actions`, {

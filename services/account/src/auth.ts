@@ -2,10 +2,10 @@ import { betterAuth } from 'better-auth';
 import { getAdapter } from 'better-auth/db/adapter';
 import { registerSchemaCheck, schemaCheckFor } from '@better-auth/core/db/internal';
 import { Kysely, PostgresDialect, sql } from 'kysely';
-import { defineRequestState, getCurrentAdapter, getCurrentDBAdapterAsyncLocalStorage, queueAfterTransactionHook } from '@better-auth/core/context';
+import { defineRequestState, getCurrentAdapter, getCurrentDBAdapterAsyncLocalStorage, queueAfterTransactionHook, runWithTransaction } from '@better-auth/core/context';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { APIError, createAuthMiddleware, getAuthoritativeSessionFromCtx, getSessionFromCtx, originCheckMiddleware } from 'better-auth/api';
+import { APIError, createAuthEndpoint, createAuthMiddleware, getAuthoritativeSessionFromCtx, getSessionFromCtx, originCheckMiddleware, verifyEmail } from 'better-auth/api';
 import { jwtVerify } from 'jose';
 import { captcha, jwt, openAPI, twoFactor } from 'better-auth/plugins';
 import { getAuthenticatorName, passkey } from '@better-auth/passkey';
@@ -70,6 +70,66 @@ type SessionFenceRow = { id: string; userId: string; rezicsGeneration?: number |
 type SessionTokenRow = { sessionId?: string | null; clientId?: string; scopes?: string[] };
 
 type SessionOwners = WeakMap<object, Kysely<unknown>>;
+
+/** Keep the provider's verification flow, but bind its actual lookup and all
+ * subsequent effects to one locked identity on the provider transaction. */
+function accountVerification(config: AccountConfig, owners: SessionOwners) {
+  return { id: 'account-verification', endpoints: {
+    verifyEmail: createAuthEndpoint(verifyEmail.path, verifyEmail.options, async ctx => {
+      const verified = await jwtVerify(ctx.query.token, new TextEncoder().encode(config.secret),
+        { algorithms: ['HS256'] }).catch(() => null);
+      const reject = () => {
+        if (typeof ctx.query.callbackURL === 'string') {
+          const callback = new URL(ctx.query.callbackURL, config.baseURL);
+          if (callback.origin === new URL(config.baseURL).origin) {
+            callback.searchParams.set('error', 'INVALID_TOKEN');
+            throw ctx.redirect(callback.toString());
+          }
+        }
+        throw new APIError('FORBIDDEN', { code: 'INVALID_TOKEN', message: 'Verification link is unavailable' });
+      };
+      const result = await runWithTransaction(ctx.context.adapter, async () => {
+        const adapter = await getCurrentAdapter(ctx.context.adapter);
+        const ownerDb = owners.get(adapter);
+        if (!ownerDb?.isTransaction) throw new APIError('SERVICE_UNAVAILABLE');
+        await sql`SET LOCAL lock_timeout = '2s'`.execute(ownerDb);
+        await sql`SET LOCAL statement_timeout = '5s'`.execute(ownerDb);
+        const internalAdapter = { ...ctx.context.internalAdapter,
+          findUserByEmail: async (...args: Parameters<typeof ctx.context.internalAdapter.findUserByEmail>) => {
+            const selected = await ctx.context.internalAdapter.findUserByEmail(...args);
+            if (!selected) return selected;
+            // Recovery locks policy before identity. Hold both through the
+            // provider's email-keyed update and immutable-id session insertion.
+            await sql`SELECT id FROM rezics_account_recovery_policy
+              WHERE id = ${selected.user.id} FOR SHARE`.execute(ownerDb);
+            const locked = await sql<{ email: string }>`SELECT email FROM "user"
+              WHERE id = ${selected.user.id} FOR UPDATE`.execute(ownerDb);
+            // Read again after the identity lock: a first recovery policy may
+            // have been created while the initial policy lookup found no row.
+            const generation = await sql<{ generation: string }>`SELECT generation
+              FROM rezics_account_recovery_policy WHERE id = ${selected.user.id}`.execute(ownerDb);
+            if (verified?.payload[VERIFICATION_USER_ID_CLAIM] !== selected.user.id
+              || locked.rows[0]?.email !== verified?.payload.email
+              || verified?.payload[RECOVERY_GENERATION_CLAIM] !== (generation.rows[0]?.generation ?? '0')) reject();
+            return selected;
+          },
+        };
+        try {
+          return await verifyEmail({ ...ctx, context: { ...ctx.context, internalAdapter },
+            asResponse: false, returnHeaders: true, returnStatus: true });
+        } catch (error) {
+          // Better Auth signals successful callback navigation with an APIError.
+          // Commit verification/session effects before forwarding that redirect.
+          if (error instanceof APIError && error.statusCode === 302) return error;
+          throw error;
+        }
+      });
+      if (result instanceof APIError) throw result;
+      result.headers.forEach((value, key) => ctx.responseHeaders.append(key, value));
+      return result.response;
+    }),
+  } };
+}
 
 /** Re-read the actual session terminal stamp and owner epoch in one bounded
  * statement. A provider-held transaction sees its own signup/admission rows
@@ -247,34 +307,6 @@ export function accountAuthOptions(config: AccountConfig) {
         await deletionConsent.set(leaveOwnedAgentsStanding ?? false);
       }
       await operatorHooks.before(ctx);
-      if (ctx.path === '/verify-email' && typeof ctx.query?.token === 'string') {
-        // Email verification links are stateless JWTs, so deleting verification
-        // rows cannot revoke them. Bind them to the immutable identity as well
-        // as its recovery generation, including rejecting unbound legacy links.
-        const verified = await jwtVerify(ctx.query.token, new TextEncoder().encode(config.secret),
-          { algorithms: ['HS256'] }).catch(() => null);
-        // Let the provider keep its normal invalid/expired-link redirects.
-        const user = typeof verified?.payload.email === 'string'
-          ? (await config.pool.query<{ id: string }>('SELECT id FROM public."user" WHERE email = $1',
-            [verified.payload.email])).rows[0] : undefined;
-        if (user && (verified!.payload[VERIFICATION_USER_ID_CLAIM] !== user.id
-          || (verified!.payload[RECOVERY_GENERATION_CLAIM] ?? '0')
-            !== await currentRecoveryGeneration(config.pool, user.id))) {
-          // This hook precedes the provider's origin middleware. Redirect only
-          // to this issuer; never let an invalidated link become an open redirect.
-          if (typeof ctx.query.callbackURL === 'string') {
-            const callback = new URL(ctx.query.callbackURL, config.baseURL);
-            if (callback.origin === new URL(config.baseURL).origin) {
-              callback.searchParams.set('error', 'INVALID_TOKEN');
-              throw ctx.redirect(callback.toString());
-            }
-          }
-          throw new APIError('FORBIDDEN', {
-            code: 'INVALID_TOKEN',
-            message: 'Verification link is unavailable',
-          });
-        }
-      }
       if (ctx.path === '/sign-up/email') {
         try { signupPolicyInput(ctx.body as Record<string, unknown>,
           ctx.headers?.get('x-rezics-request-country'), config.policyVersions); }
@@ -454,6 +486,7 @@ export function accountAuthOptions(config: AccountConfig) {
       },
     } },
     plugins: [
+      accountVerification(config, sessionOwners),
       enrollmentChallenge(config),
       openAPI({ disableDefaultReference: true }),
       twoFactor({ issuer: 'REZICS', allowPasswordless: true,
