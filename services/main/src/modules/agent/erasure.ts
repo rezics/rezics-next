@@ -208,7 +208,7 @@ export async function inventoryPersonProfileGraph(fuseki: QueryClient, objectDir
     VALUES ?work { ${creditedWorks.map(iri).join(' ')} }
     {
     {
-      GRAPH ${iri(PUBLIC)} { ?entry rv:prefixWork ?work ; rv:prefixUnit ?matchUnit }
+      GRAPH ${iri(PUBLIC)} { ?entry rv:prefixWork ?work ; rv:prefixUnit ?matchUnit ; rv:prefixField "credit" }
       { BIND(?entry AS ?unit) } UNION { BIND(?matchUnit AS ?unit) }
     } UNION {
       GRAPH ${iri(GRAPHS.current)} { ?work rv:mainVersion ?main . ?main rv:selectionHead ?selection }
@@ -418,7 +418,7 @@ export async function personProfileGraphErased(fuseki: QueryClient, proof: Perso
       VALUES ?work { ${inventory.creditedWorks.map(iri).join(' ')} }
       VALUES ?authorUnit { ${inventory.authorUnits.map(iri).join(' ')} }
       GRAPH ${iri(PUBLIC)} { ?entry rv:prefixWork ?work ; rv:prefixUnit ?authorUnit ; rv:prefixField "credit" }
-      FILTER(?entry IN (${inventory.authorUnits.map(iri).join(', ')})) }` : ''}
+      }` : ''}
   }`, 8192);
   return result.boolean === true;
 }

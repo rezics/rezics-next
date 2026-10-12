@@ -68,7 +68,7 @@ test('inventory captures both original immutable objects and direct/credited pro
   expect(inventory.creditedWorks).toEqual([`https://rezics.com/id/${id('8')}`]);
   expect(shared.graphRevisionsLeft).toBe(63);
   expect(shared.indexedUnitsLeft).toBe(62);
-  expect(shared.journalTargetsLeft).toBe(252);
+  expect(shared.journalTargetsLeft).toBe(248);
   expect(shared.bytesLeft).toBeLessThan(8 * 1024 * 1024);
 });
 
