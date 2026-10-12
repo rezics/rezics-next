@@ -330,7 +330,7 @@ export function ownerTargetHeads(owners: { graph?: WorkActivationEnvironment; co
         // classify the resource. Missing or competing kinds cannot admit a fallback.
         const rows = (await owners.graph.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
           SELECT DISTINCT ?kind ?head WHERE { GRAPH ${iri(GRAPHS.current)} {
-            VALUES ?kind { ${graphTargetKinds.map(iri).join(' ')} }
+            VALUES ?kind { ${graphTargetKinds.map(kind => `<${kind}>`).join(' ')} }
             ${iri(target.resource)} a ?kind .
             OPTIONAL { ${iri(target.resource)} rv:head ?head }
           } } LIMIT 2`, 2048)).results?.bindings ?? [];

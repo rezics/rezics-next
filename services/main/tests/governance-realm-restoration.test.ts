@@ -360,7 +360,7 @@ test('whole-Realm release preserves exact-revision, search, publication, title, 
   // Ordinary disputes still require a recorded process step for restoration.
   const step = await f.store.recordStep(f.principal, { caseId: f.report.caseId,
     decisionId: original.decisionId, actingSubject: f.actor, process: 'ordinary_dispute',
-    step: 'restoration_window', partySubject: null, statement: 'Review the original closure.',
+    step: 'appeal', partySubject: null, statement: 'Review the original closure.',
     documentDigest: null, occurredAt: '2026-10-01T14:37:12Z', dueAt: null, idempotencyKey: randomUUID() });
   const restored = await f.store.decide(f.principal, await f.release(original, 'restore', step.stepId));
   expect(restored.operation.status).toBe('completed');

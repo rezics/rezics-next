@@ -180,8 +180,12 @@ export function ownerModerationEffects(content: ContentModeration, env: WorkActi
       return plan;
     },
     async apply(operationId, ordinal, target, plan, continuation) {
-      if (restrictionOwners[target.effect] === 'access')
+      if (restrictionOwners[target.effect] === 'access') {
+        if (target.owner === 'graph' && ['body', 'structure'].includes(target.component)
+          && await ownerTargetHeads({ graph: env }).realmBasis(target))
+          throw new GovernanceStale('Realm moderation has no body or structure grain');
         return { receipt: `access:governance-enforcement:${operationId}:${ordinal}` };
+      }
       if (plan?.media && store) {
         const receipt = `${operationId}:${ordinal}`;
         const restricted = !['restore', 'reverse'].includes(plan.outcome ?? 'restrict');

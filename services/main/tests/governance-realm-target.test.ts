@@ -7,7 +7,7 @@ import { profileRegistry } from '../../../packages/model/src/generated/profiles.
 import { loadDockerEnvironment } from '../../../scripts/load/docker-env.ts';
 import type { ContentModeration } from '../../content/src/moderation.ts';
 import type { CommandEnvelope } from '../src/infrastructure/fuseki.ts';
-import { graphNoticeParticipants, ownerModerationEffects } from '../src/modules/governance/effects.ts';
+import { graphNoticeParticipants, ownerModerationEffects, restrictionOwners } from '../src/modules/governance/effects.ts';
 import { ownerTargetHeads } from '../src/modules/governance/evidence.ts';
 import { prepareDecisionNotices, unrecordedReasons } from '../src/modules/governance/notices.ts';
 import { GovernanceConflict, GovernanceStale, GovernanceUnavailable,
@@ -178,6 +178,19 @@ for (const component of ['body', 'structure'] as const) {
     expect(f.commands).toHaveLength(0);
     expect(f.receipts.size).toBe(0);
   });
+}
+
+for (const [effect, effectOwner] of Object.entries(restrictionOwners)) {
+  if (effectOwner !== 'access') continue;
+  for (const component of ['body', 'structure'] as const) {
+    test(`Realm ${component} cannot receive an Access-owned ${effect} effect receipt`, async () => {
+      const f = graph();
+      await expect(f.effects.apply(operation, 1, { ...target(), component,
+        effect: effect as DecisionTargetInput['effect'] })).rejects.toBeInstanceOf(GovernanceStale);
+      expect(f.commands).toHaveLength(0);
+      expect(f.receipts.size).toBe(0);
+    });
+  }
 }
 
 for (const [name, mutate] of [
