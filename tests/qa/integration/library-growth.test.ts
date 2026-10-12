@@ -3,13 +3,8 @@ import { join } from 'node:path';
 import { startTelemetry, flushTelemetryTraces, shutdownTelemetry } from '@rezics/observability/runtime';
 import { dockerEnvironment, root, stream } from '../../../scripts/fixture/stack.ts';
 import { readEnv } from '../../../scripts/dev/config.ts';
-import {
-  createCorpusBackupDriver,
-  type CorpusRestoreSmokeInput,
-} from '../../../scripts/load/corpus-backup-driver.ts';
+import type { CorpusRestoreSmokeInput } from '../../../scripts/load/corpus-backup-driver.ts';
 import { restoreWorkProfileCorpus, type CorpusDimensions } from '../../../scripts/load/work-profile-corpus.ts';
-import { READER_LIBRARY_COST } from '../../../services/main/src/modules/library/read.ts';
-import { STATUS_SHELF_COST } from '../../../services/main/src/modules/library/status.ts';
 import {
   assertWorkCostAtScales,
   profileRequest,
@@ -114,25 +109,6 @@ async function profileRead(
   return { result, profile };
 }
 
-const readerCost = {
-  fusekiRequests: READER_LIBRARY_COST.graphCalls,
-  fusekiReceivedBytes: READER_LIBRARY_COST.responseBytes,
-  postgresStatements: READER_LIBRARY_COST.sqlReads,
-  accountCalls: 0,
-  otherFetches: 0,
-  unclassifiedFetches: 0,
-} satisfies Omit<WorkCostContract, 'growth'>;
-
-// The shelf's SQL budget composes the reader read budget with its indexed candidate batches.
-const shelfCost = {
-  fusekiRequests: READER_LIBRARY_COST.graphCalls,
-  fusekiReceivedBytes: READER_LIBRARY_COST.responseBytes,
-  postgresStatements: READER_LIBRARY_COST.sqlReads + STATUS_SHELF_COST.candidateBatches,
-  accountCalls: 0,
-  otherFetches: 0,
-  unclassifiedFetches: 0,
-} satisfies Omit<WorkCostContract, 'growth'>;
-
 function costContract(maxima: Omit<WorkCostContract, 'growth'>, axis: GrowthAxis, operation: Operation): WorkCostContract {
   // Own-shelf card hydration grows with P up to the 40-candidate window cap; the
   // indexed seek is O(log N + P). A single Work and unrelated data stay constant.
@@ -176,8 +152,32 @@ test('Reader library shelf and Work status costs follow unrelated Work and own-s
     ...sink.env,
     OTEL_TRACES_SAMPLER_ARG: '1',
   });
-  // Telemetry must initialize before the in-process product composition imports pg.
-  const { startMediaStack } = await import('./media-support.ts');
+  // The backup driver also imports pg; defer it along with product composition
+  // until the SDK can instrument SQL. Delaying only media-support misses it.
+  const [
+    { createCorpusBackupDriver },
+    { READER_LIBRARY_COST },
+    { STATUS_SHELF_COST },
+    { startMediaStack },
+  ] = await Promise.all([
+    import('../../../scripts/load/corpus-backup-driver.ts'),
+    import('../../../services/main/src/modules/library/read.ts'),
+    import('../../../services/main/src/modules/library/status.ts'),
+    import('./media-support.ts'),
+  ]);
+  const readerCost = {
+    fusekiRequests: READER_LIBRARY_COST.graphCalls,
+    fusekiReceivedBytes: READER_LIBRARY_COST.responseBytes,
+    postgresStatements: READER_LIBRARY_COST.sqlReads,
+    accountCalls: 0,
+    otherFetches: 0,
+    unclassifiedFetches: 0,
+  } satisfies Omit<WorkCostContract, 'growth'>;
+  // The shelf's SQL budget composes reader reads and indexed candidate batches.
+  const shelfCost = {
+    ...readerCost,
+    postgresStatements: READER_LIBRARY_COST.sqlReads + STATUS_SHELF_COST.candidateBatches,
+  } satisfies Omit<WorkCostContract, 'growth'>;
   let activeCut: RetainedSeedCut | undefined;
   const restored = new Map<string, RestoredContext>();
   const targets: string[] = [];
