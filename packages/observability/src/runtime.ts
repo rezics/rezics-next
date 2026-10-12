@@ -267,8 +267,55 @@ let sdk: NodeSDK | undefined;
 let stopPromise: Promise<void> | undefined;
 let restoreFetch: (() => void) | undefined;
 let traceProcessor: BatchSpanProcessor | undefined;
+type TelemetryPeer = 'fuseki' | 'account' | 'main';
+let telemetryPeers: {
+  origins: Set<string>;
+  configuredOrigins: ReadonlySet<string>;
+  peers: Map<string, TelemetryPeer>;
+  registrations: Map<string, number>;
+} | undefined;
 export function telemetryEnabled() {
   return sdk !== undefined;
+}
+
+/** Register a stack for its lifetime; overlapping stacks retain their shared peers. */
+export function registerTelemetryPeers(env: Record<string, string | undefined>): () => void {
+  const active = telemetryPeers;
+  if (!active) return () => {};
+  const added = new Map<string, TelemetryPeer>();
+  for (const [name, service] of [
+    ['FUSEKI_URL', 'fuseki'],
+    ['ACCOUNT_JWKS_URL', 'account'],
+    ['ACCOUNT_INTROSPECT_URL', 'account'],
+    ['ACCOUNT_ORIGIN', 'account'],
+    ['MAIN_ORIGIN', 'main'],
+  ] as const) {
+    if (env[name]) added.set(new URL(env[name]!).origin, service);
+  }
+  // Refuse conflicting owners before mutating either classification or propagation.
+  for (const [origin, service] of added) {
+    const existing = active.peers.get(origin);
+    if (existing && existing !== service) throw new Error('Telemetry origin already has a different peer service');
+  }
+  for (const [origin, service] of added) {
+    active.peers.set(origin, service);
+    active.origins.add(origin);
+    active.registrations.set(origin, (active.registrations.get(origin) ?? 0) + 1);
+  }
+  let removed = false;
+  return () => {
+    if (removed) return;
+    removed = true;
+    for (const origin of added.keys()) {
+      const remaining = active.registrations.get(origin)! - 1;
+      if (remaining) active.registrations.set(origin, remaining);
+      else {
+        active.registrations.delete(origin);
+        active.peers.delete(origin);
+        if (!active.configuredOrigins.has(origin)) active.origins.delete(origin);
+      }
+    }
+  };
 }
 
 /** Bun's fetch is not Undici. Fuseki body counts follow the consumer's pulls. */
@@ -469,16 +516,15 @@ export function startTelemetry(
     ],
   });
   sdk.start();
+  telemetryPeers = {
+    origins: new Set(config.propagationOrigins),
+    configuredOrigins: config.propagationOrigins,
+    peers: new Map(),
+    registrations: new Map(),
+  };
   // Internal owner calls may carry W3C context; credentials, query text and paths are never recorded.
-  for (const name of ['FUSEKI_URL', 'ACCOUNT_JWKS_URL', 'ACCOUNT_INTROSPECT_URL'] as const) {
-    if (env[name]) config.propagationOrigins.add(new URL(env[name]!).origin);
-  }
-  const peers = new Map<string, 'fuseki' | 'account' | 'main'>();
-  if (env.FUSEKI_URL) peers.set(new URL(env.FUSEKI_URL).origin, 'fuseki');
-  for (const name of ['ACCOUNT_JWKS_URL', 'ACCOUNT_INTROSPECT_URL', 'ACCOUNT_ORIGIN'] as const)
-    if (env[name]) peers.set(new URL(env[name]!).origin, 'account');
-  if (env.MAIN_ORIGIN) peers.set(new URL(env.MAIN_ORIGIN).origin, 'main');
-  restoreFetch = instrumentFetch(config.propagationOrigins, new URL(base).origin, peers);
+  registerTelemetryPeers(env);
+  restoreFetch = instrumentFetch(telemetryPeers.origins, new URL(base).origin, telemetryPeers.peers);
   process.once('beforeExit', () => {
     void shutdownTelemetry();
   });
@@ -508,6 +554,7 @@ export function shutdownTelemetry(): Promise<void> {
   if (stopPromise) return stopPromise;
   if (!sdk) return Promise.resolve();
   restoreFetch?.();
+  telemetryPeers = undefined;
   const shuttingDown = sdk.shutdown();
   stopPromise = new Promise<void>((resolve) => {
     const timer = setTimeout(resolve, 6000);

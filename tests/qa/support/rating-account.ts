@@ -1,4 +1,5 @@
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
+import { registerTelemetryPeers } from '@rezics/observability/runtime';
 import { signIn } from '../../../scripts/lib/oauth-client.ts';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
@@ -48,6 +49,8 @@ export async function ratingAccount(apps: Record<string, string>,
   await installConsentRefreshFence(pool);
   const auth = createAccountAuth(config);
   const account = createAccountApp(auth, pool).listen({ hostname: '127.0.0.1', port });
+  const unregisterTelemetryPeers = registerTelemetryPeers({ ...apps, ACCOUNT_ORIGIN: base,
+    ACCOUNT_JWKS_URL: `${base}/api/auth/jwks`, ACCOUNT_INTROSPECT_URL: `${base}/api/auth/oauth2/introspect` });
   try {
     async function signUp(name: string) {
       const email = `rating-${name}-${randomUUID()}@example.test`;
@@ -91,7 +94,8 @@ export async function ratingAccount(apps: Record<string, string>,
 
     const a = await signUp('a'), b = await signUp('b');
     let stopped = false;
-    const stop = async () => { if (!stopped) { stopped = true; await account.stop(true); } };
+    const stop = async () => { if (!stopped) { stopped = true;
+      try { await account.stop(true); } finally { unregisterTelemetryPeers(); } } };
     const closePool = async () => { releasePool = true; await endPool(); };
     return { issuer: `${base}/api/auth`, a, b, tokenFor,
       expireSessions: async (id: string) => { await pool.query('DELETE FROM session WHERE "userId" = $1', [id]); },
@@ -102,5 +106,5 @@ export async function ratingAccount(apps: Record<string, string>,
         introspectUrl: `${base}/api/auth/oauth2/introspect`,
         clientId: verifierClient.client_id, clientSecret: verifierClient.client_secret! }),
       close: async () => { await stop(); await closePool(); } };
-  } catch (error) { await account.stop(true); releasePool = true; await endPool(); throw error; }
+  } catch (error) { unregisterTelemetryPeers(); await account.stop(true); releasePool = true; await endPool(); throw error; }
 }
