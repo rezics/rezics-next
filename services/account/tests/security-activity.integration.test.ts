@@ -44,11 +44,21 @@ test('authentication failure activity follows the session or signed challenge, n
     expect(await failures()).toHaveLength(6);
     const invalidPasskey = { response: { id: 'unknown-credential' }, ...forged };
     expect((await f.request('/api/auth/passkey/verify-authentication', invalidPasskey, signedCookie)).ok).toBe(false);
-    expect((await failures()).at(-1)).toEqual({ user_id: member.id, method: 'verify-authentication' });
+    expect(await failures()).toHaveLength(6);
+    await f.pool.query(`INSERT INTO passkey (id, name, "publicKey", "userId", "credentialID", counter, "deviceType", "backedUp", "createdAt")
+      VALUES ('activity-credential', 'Peer credential', 'invalid-proof-fixture', $1, 'peer-credential', 0, 'singleDevice', false, now())`, [peer.id]);
+    expect((await f.request('/api/auth/passkey/verify-authentication', {
+      response: { id: 'peer-credential' }, email: member.email,
+    }, signedCookie)).ok).toBe(false);
+    expect((await failures()).at(-1)).toEqual({ user_id: peer.id, method: 'verify-authentication' });
     expect((await f.request('/api/auth/passkey/verify-authentication', invalidPasskey)).ok).toBe(false);
     expect(await failures()).toHaveLength(7);
     expect((await f.request('/api/auth/sign-in/email', { email: peer.email, password: 'incorrect password', userId: member.id })).status).toBe(401);
-    expect((await failures()).filter(row => row.user_id === peer.id)).toEqual([{ user_id: peer.id, method: 'email' }]);
+    expect((await f.request('/api/auth/sign-in/email', { email: peer.email, password: 'incorrect password' }, signedCookie)).status).toBe(401);
+    expect((await failures()).filter(row => row.user_id === peer.id)).toEqual([
+      { user_id: peer.id, method: 'verify-authentication' }, { user_id: peer.id, method: 'email' },
+      { user_id: peer.id, method: 'email' },
+    ]);
   } finally { await f.close(); }
 }, 60_000);
 

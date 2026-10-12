@@ -15,6 +15,43 @@ async function expireUserBudget(f: Awaited<ReturnType<typeof accountFixture>>, u
     [userBudgetKey(f.secret, userId)]);
 }
 
+for (const max of [1, 4]) {
+  for (const path of ['/api/account/reauthenticate', '/api/auth/two-factor/verify-totp', '/api/auth/two-factor/verify-backup-code']) {
+    test(`${path} preserves proofs and attempts with pool max ${max}`, async () => {
+      const f = await accountFixture({}, '127.0.0.1', { max, connectionTimeoutMillis: 250 });
+      try {
+        const member = await f.signup('bounded-pool@example.test');
+        let cookie = member.cookie;
+        let code = '';
+        if (path !== '/api/account/reauthenticate') {
+          const enabled = await f.request('/api/auth/two-factor/enable', { password: member.password }, cookie);
+          expect(enabled.status).toBe(200);
+          const backupCodes = (await enabled.json()).backupCodes as string[];
+          const secret = await symmetricDecrypt({ key: f.secret,
+            data: (await f.pool.query('SELECT secret FROM "twoFactor" WHERE "userId" = $1', [member.id])).rows[0].secret });
+          const verified = await f.request('/api/auth/two-factor/verify-totp', { code: await createOTP(secret).totp() }, cookie);
+          expect(verified.status).toBe(200);
+          cookie = cookies(verified);
+          code = path.endsWith('verify-totp') ? await createOTP(secret).totp() : backupCodes[0]!;
+          await expireUserBudget(f, member.id);
+        }
+        const proof = path === '/api/account/reauthenticate' ? { password: member.password } : { code };
+        expect((await f.request(path, proof, cookie)).status).toBe(200);
+        expect((await f.pool.query('SELECT count FROM rezics_account_rate_limit WHERE key = $1',
+          [userBudgetKey(f.secret, member.id)])).rows[0].count).toBe(1);
+        await expireUserBudget(f, member.id);
+        const invalid = path === '/api/account/reauthenticate' ? { password: 'incorrect' } : { code: 'invalid' };
+        const responses = await Promise.all(Array.from({ length: 8 }, () => f.request(path, invalid, cookie)));
+        expect(responses.map(response => response.status).sort()).toEqual([
+          ...Array.from({ length: 5 }, () => path === '/api/account/reauthenticate' ? 403 : 401), 429, 429, 429,
+        ].sort());
+        expect((await f.pool.query('SELECT count FROM rezics_account_rate_limit WHERE key = $1',
+          [userBudgetKey(f.secret, member.id)])).rows[0].count).toBe(5);
+      } finally { await f.close(); }
+    }, 60_000);
+  }
+}
+
 // The unfenced implementation pauses after its stale read. Once verification
 // is serialized, pause before admission so enrollment can finish first.
 function pauseFactorAdmission(userId: string) {
