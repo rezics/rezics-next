@@ -15,7 +15,7 @@ import { acquireHeavy, acquireSharedLifecycle, archiveFiles, areaConflicts, bala
   parseBrief, parseCodexUsage, pathsOverlap, prepareCompositionMerge, preserveWorktreeArtifacts, rangesOverlap, removeFromTree, retryGitIndexLock, SONNET_MODEL,
   addGateWorktree, branchOnlyRefusal, classifyBranchOnlyFailures, codexHoursUntil100, coordinatorEnrollmentOptions, failingTestFiles, gateTreeRefusal, infrastructureStep, introducedUnitFailureFiles, introducedUnitFailures, landClaimScope, loadCodexResetStatus, markHeavyCommandStarted, memoryFloorRefusal, REGENERATION_COMMIT_SUBJECT,
   planUnitGateShards, qaWaitStatusLines, sharedLifecycleEnvironment, sharedLifecycleStatus, sharedLifecycleWaiters, runOwnerShard, runUnitGate as measuredUnitGate, runUnitSide as measuredUnitSide, shardTimeoutFiles, streamSelectionFiles, streamUnitBaseline, timedOutTestFiles, transferSharedLifecycleOwnership, UNIT_GATE_FILE_CAP, UNIT_JUNIT_MARKER, unitFailureDetails, unitFileErrorDetails, unitFileEvidence, unitGateRefusal, writeUnitEvidence, withRecovery, withSlot,
-  dependencyInstallIsStale, gateLaneStatus, gateLaneWaiters, qaSlotCount, withGateLane,
+  dependencyInstallIsStale, missingPinnedImage, gateLaneStatus, gateLaneWaiters, qaSlotCount, withGateLane,
   mailCommand, mechanismSectionErrors, type AccountUsage, type Ledger, type Task, type UnitFailureDetail, type UnitRunEvidence, type UnitShardResult, treeMentions, usageLevel, validateBrief,
   workerSessionEnvironment } from './goalctl.ts';
 import { fastForwardMain, introducedTypecheckDiagnostics, typecheckDiagnostics, typecheckGate, typecheckWorkspaces, TYPECHECK_WORKSPACES, unclassifiedTypecheckLines,
@@ -4751,6 +4751,26 @@ test('the QA slot count comes from the file beside the slots unless the environm
     writeFileSync(join(root, 'qa-slot-count'), 'many\n');
     expect(qaSlotCount(slots, {})).toBe(3);
     expect(Number.isNaN(qaSlotCount(slots, { GOAL_QA_SLOTS: 'x' }))).toBe(true);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('a branch that moves the pinned image does not merge before the image is built here', () => {
+  const root = mkdtempSync(join(tmpdir(), 'pinned-image-'));
+  try {
+    const compose = (tag: string) => `services:\n  fuseki:\n    image: rezics/fuseki:6.2.0-cmd0.5.39-${tag}\n`;
+    for (const [checkout, tag] of [['main', 'aaaaaaaaaaaa'], ['same', 'aaaaaaaaaaaa'], ['moved', 'bbbbbbbbbbbb']] as const) {
+      mkdirSync(join(root, checkout, 'infra/dev'), { recursive: true });
+      writeFileSync(join(root, checkout, 'infra/dev/compose.yaml'), compose(tag));
+    }
+    const asked: string[] = [];
+    const absent = (image: string) => { asked.push(image); return false; };
+    expect(missingPinnedImage(join(root, 'same'), join(root, 'main'), absent)).toBeUndefined();
+    expect(asked).toEqual([]);
+    expect(missingPinnedImage(join(root, 'moved'), join(root, 'main'), absent))
+      .toContain('rezics/fuseki:6.2.0-cmd0.5.39-bbbbbbbbbbbb, which is not built on this host');
+    expect(asked).toEqual(['rezics/fuseki:6.2.0-cmd0.5.39-bbbbbbbbbbbb']);
+    expect(missingPinnedImage(join(root, 'moved'), join(root, 'main'), () => true)).toBeUndefined();
+    expect(missingPinnedImage(join(root, 'absent'), join(root, 'main'), absent)).toBeUndefined();
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

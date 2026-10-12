@@ -10,6 +10,7 @@ import { pathToFileURL } from 'node:url';
 import { decodeXml, parseJUnit, testArgs, unitHarnessFiles, type TestResult } from '../qa/acceptance.ts';
 import { affectedOwnerTierEntries, affectedPlanForChanges, affectedUnitTierEntries, typecheckWorkspaces, TYPECHECK_WORKSPACES, type AffectedPlan } from '../qa/affected.ts';
 import { newReapScope, reapScopeChain, reapSettleMs, removeScopedContainers, sweepOrphanContainers } from '../qa/container-reaper.ts';
+import { fusekiImageFromCompose } from '../load/image.ts';
 import { processAlive } from '../qa/process/identity.ts';
 import { directoryLeaseHeld, readDirectoryLease, transferDirectoryLease, tryAcquireDirectoryLease,
   updateDirectoryLeaseNote, type AcquiredDirectoryLease, type DirectoryLeaseRecord } from '../qa/process/lease.ts';
@@ -4175,6 +4176,22 @@ export function dependencyInstallIsStale(worktree: string): boolean {
   return inputs.some(file => existsSync(file) && statSync(file).mtimeMs > installedAt);
 }
 
+/** A branch that moves the pinned Fuseki image must not reach main before that image exists on this host.
+ * Every stack started from main in between tries to build it inside its own run and fails: on 2026-10-12
+ * browser runs could not start for half an hour after a pin landed. */
+export function missingPinnedImage(worktree: string, mainRoot: string,
+  present: (image: string) => boolean = image =>
+    spawnSync('docker', ['image', 'inspect', image], { stdio: 'ignore', timeout: 30_000 }).status === 0): string | undefined {
+  const pinned = (checkout: string) => {
+    try { return fusekiImageFromCompose(readFileSync(join(checkout, 'infra/dev/compose.yaml'), 'utf8')).image; }
+    catch { return undefined; }
+  };
+  const image = pinned(worktree);
+  if (!image || image === pinned(mainRoot) || present(image)) return;
+  return `This branch pins ${image}, which is not built on this host. Build it from the task worktree first `
+    + '(start one stack there, or run the image build), then merge; a pin on main without its image stops every stack';
+}
+
 /** A rebase past a dependency change leaves the worktree's installed packages behind the tree it now holds,
  * and the gate would test new code against old packages. Install again before any gate runs. */
 function reinstallStaleDependencies(worktree: string): string | undefined {
@@ -4912,6 +4929,8 @@ async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
   const gate = async (merge: PreparedMerge): Promise<string | undefined> => {
     const installed = reinstallStaleDependencies(merge.worktree);
     if (installed) return installed;
+    const unbuilt = missingPinnedImage(merge.worktree, root);
+    if (unbuilt) return unbuilt;
     const generated = regenerateGeneratedOutputs(merge);
     if (generated) return generated;
     const run = () => typecheck(merge).then(refusal => refusal ?? unitGate(merge));
