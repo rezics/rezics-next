@@ -556,7 +556,9 @@ test('emitted Realm commands enforce authored SHACL and atomic guards in native 
   writeFileSync(join(selectorDirectory, 'manifest.json'), JSON.stringify({ ...manifest, profiles: selectorProfiles }));
   const selectorCases = [...semanticOwnerTypes].flatMap(kind => {
     const routes = manifest.canonical.find(entry => entry.type === kind)?.routes ?? [];
-    const cuts = [[], ...routes.map(route => route.when)] as { path: string; value: string }[][];
+    const cuts = [[], ...routes.map(route => route.when), ...routes.flatMap(route =>
+      route.when[0] && /^(?:https?:|urn:)/.test(route.when[0].value)
+        ? [[...route.when, { ...route.when[0], literal: true }]] : [])] as { path: string; value: string; literal?: boolean }[][];
     return cuts.map(values => ({ kind, values, selected: selectCommandProfile(manifest, [kind],
       path => values.filter(value => value.path === path).map(value => value.value)) }));
   });
@@ -601,7 +603,7 @@ public class RealmTargetOwnerContractTest {
         for (JsonValue value : scenario.get("values").getAsArray()) {
           var term = value.getAsObject();
           String lexical = term.get("value").getAsString().value();
-          Node object = lexical.startsWith("https://") || lexical.startsWith("http://") || lexical.startsWith("urn:")
+          Node object = term.get("literal") == null && (lexical.startsWith("https://") || lexical.startsWith("http://") || lexical.startsWith("urn:"))
             ? iri(lexical) : NodeFactory.createLiteralString(lexical);
           data.add(new org.apache.jena.sparql.core.Quad(graph, subject,
             iri(term.get("path").getAsString().value()), object));

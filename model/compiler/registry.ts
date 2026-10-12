@@ -50,7 +50,9 @@ export interface CommandRegistry {
   bindings: ReadonlyMap<string, RegistryBinding>;
 }
 /** The same ordered, single-value selector consumed by native CanonicalPolicy.select.
- * Classification belongs to callers; profile and shape selection belongs here. */
+ * Classification belongs to callers; profile and shape selection belongs here.
+ * Values are lexical forms of distinct RDF terms: equal lexical forms can still
+ * be two terms (an IRI and a literal), which never satisfy a single-value route. */
 export function selectCommandProfile(registry: Pick<CommandRegistry, 'canonical'>,
   types: Iterable<string>, values: (path: string) => readonly string[]) {
   const present = new Set(types);
@@ -58,7 +60,7 @@ export function selectCommandProfile(registry: Pick<CommandRegistry, 'canonical'
   if (!canonical) return null;
   const selectors = [...new Set(canonical.routes.flatMap(route => route.when.map(condition => condition.path)))];
   const route = canonical.routes.find(candidate => candidate.when.every(condition => {
-    const selected = [...new Set(values(condition.path))];
+    const selected = values(condition.path);
     return selected.length === 1 && selected[0] === condition.value;
   }));
   return route ? { ...route, kind: canonical.type, selectors } : null;
@@ -250,10 +252,13 @@ export function commandBindingRead(profile: string, binding: RegistryBinding, sh
     if (binding.roles.includes('work')) {
       triple('work', 'mainVersion', 'main');
       triple('main', 'work', 'work');
-      triple('observation', 'targetMainVersion', 'main');
+      if (binding.roles.includes('release')) {
+        triple('release', 'work', 'work');
+        triple('release', 'mainVersion', 'main');
+      } else triple('observation', 'targetMainVersion', 'main');
     }
     fields('observation', { context: 'ratingContext', slot: 'ratingSlot', revision: 'observationHead',
-      target: 'ratingTarget', release: 'targetRelease', occasion: 'ratingOccasion',
+      target: 'target', release: 'targetRelease', occasion: 'ratingOccasion',
       day: 'ratingDay', timeZone: 'ratingTimeZone', periodStart: 'periodStart', periodEnd: 'periodEnd' });
     fields('revision', { observation: 'observation', availability: 'ratingAvailability',
       value: 'ratingValue', predecessor: 'predecessor' });
@@ -275,7 +280,7 @@ export function commandBindingRead(profile: string, binding: RegistryBinding, sh
     triple('slot', 'replyPlacementHead', 'placement');
     fields('placement', { realm: 'realm', reply: 'reply', root: 'rootTarget', revision: 'contentRevision',
       review: 'reviewDecision', author: 'author', actor: 'decidedBy' });
-    receipt('placement', 'replyPlacement');
+    receipt('placement', 'placement');
   } else if (profile === 'work-author-credit-v1') {
     triple('credit', 'creditRevision', 'revision');
     triple('revision', 'component', 'credit');
@@ -299,7 +304,7 @@ export function commandBindingRead(profile: string, binding: RegistryBinding, sh
   // Catch newly declared roles or required arguments at the owning registry.
   const pattern = patterns.join('\n');
   for (const key of [...binding.roles, ...binding.required]) {
-    if (!pattern.includes(variable(key))) throw new Error(`${profile} has no structural read for ${key}`);
+    if (!new RegExp(`\\?${variables[key]}\\b`).test(pattern)) throw new Error(`${profile} has no structural read for ${key}`);
   }
   return { keys, variables, anchor: variable(role), pattern, derived };
 }

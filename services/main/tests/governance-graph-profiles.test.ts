@@ -1,7 +1,10 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
 import manifest from '../../../generated/model/manifest.json';
+import { authoredProfiles } from '../../../model/compiler/generate.ts';
+import { expand } from '../../../model/compiler/outputs.ts';
 import { commandBindingRead, selectCommandProfile } from '../../../model/compiler/registry.ts';
 import type { ContentModeration } from '../../content/src/moderation.ts';
 import type { CommandEnvelope } from '../src/infrastructure/fuseki.ts';
@@ -237,6 +240,42 @@ for (const effect of ['disclosure', 'search'] as const) {
   });
 }
 
+const nativeBindingPolicy = readFileSync(new URL('../../../infra/jena/command-module/src/main/java/com/rezics/jena/BindingPolicy.java',
+  import.meta.url), 'utf8');
+for (const definition of authoredProfiles.filter(profile => profile.binding)) {
+  test(`binding reads for ${definition.id} use authored role predicates`, () => {
+    const binding = manifest.profiles.find(profile => profile.id === definition.id)!.binding!;
+    const selected = definition.shapes.find(shape => shape.iri.endsWith(`/${binding.roles[0]}-shape`))!;
+    const read = commandBindingRead(definition.id, binding, selected.iri, ['urn:rezics:graph:current']);
+    const prefixes = new Map(definition.prefixes);
+    for (const role of binding.roles) {
+      const shape = definition.shapes.find(shape => shape.iri.endsWith(`/${role}-shape`))!;
+      const properties = [shape.properties, ...shape.or ?? []].flat();
+      const paths = new Set(properties.filter(property => property.maxCount !== 0)
+        .map(property => expand(property.path, prefixes)));
+      const types = properties.filter(property => property.path === 'rdf:type' && property.hasValue)
+        .map(property => expand(property.hasValue!, prefixes));
+      // Partial bound roles also consume the canonical owner's authored envelope.
+      for (const owner of authoredProfiles) for (const ownerShape of owner.shapes) {
+        const ownerPrefixes = new Map(owner.prefixes);
+        if (!ownerShape.canonical?.types.some(type => types.includes(expand(type, ownerPrefixes)))) continue;
+        for (const property of [ownerShape.properties, ...ownerShape.or ?? []].flat())
+          if (property.maxCount !== 0) paths.add(expand(property.path, ownerPrefixes));
+      }
+      // rv:head is the shared Resource envelope, also checked by native bindings.
+      paths.add(`${RV}head`);
+      for (const [, predicate] of nativeBindingPolicy.matchAll(new RegExp(`(?:exact|has)\\("${role}", RV \\+ "([^"]+)"`, 'g')))
+        paths.add(`${RV}${predicate}`);
+      const reads = [...read.pattern.matchAll(new RegExp(`\\?${read.variables[role]} <([^>]+)>`, 'g'))];
+      for (const [, path] of reads) {
+        expect(paths.has(path!), `${definition.id}/${role}: ${path}`).toBe(true);
+        expect(shape.properties.some(property => property.maxCount === 0 && expand(property.path, prefixes) === path),
+          `${definition.id}/${role} forbids ${path}`).toBe(false);
+      }
+    }
+  });
+}
+
 for (const profile of manifest.profiles.filter(entry => entry.binding)) {
   for (const role of profile.binding!.roles) {
     test(`bound registry profile ${profile.id}/${role} constructs every declared role and argument`, async () => {
@@ -259,3 +298,13 @@ for (const profile of manifest.profiles.filter(entry => entry.binding)) {
     });
   }
 }
+
+test('registry selection preserves distinct RDF terms with the same lexical value', () => {
+  const condition = manifest.canonical.flatMap(entry => entry.routes).find(route => route.when.length)!.when[0]!;
+  const registry = { canonical: [{ type: 'urn:selector:kind', routes: [
+    { profile: 'specific', shape: 'urn:selector:specific', when: [condition] },
+    { profile: 'fallback', shape: 'urn:selector:fallback', when: [] },
+  ] }] };
+  expect(selectCommandProfile(registry, ['urn:selector:kind'], () => [condition.value])?.profile).toBe('specific');
+  expect(selectCommandProfile(registry, ['urn:selector:kind'], () => [condition.value, condition.value])?.profile).toBe('fallback');
+});
