@@ -1,0 +1,202 @@
+// Surface                         anonymous  member  manager  case-party
+// All/Following, New/Best/Top      omit       omit    omit     omit
+// Every retained continuation     omit       omit    omit     omit
+// Group/rank/count attribution    omit       omit    omit     omit
+// Realm scope (closed/missing)    same 404   same 404 same 404  same 404
+// Closure during card hydration   omit       omit    omit     omit
+// Independent original            preserve   preserve preserve preserve
+// These tests exercise the adapter boundary; route wiring is a separate claim.
+import { createHash } from 'node:crypto';
+import { expect, test } from 'bun:test';
+import {
+  configureDisclosure, configureDisclosureAncestrySource, DisclosureUnavailable,
+  type DisclosureAncestryEvidence, type DisclosureRelationshipBasis, type DisclosureTarget,
+} from '../src/modules/disclosure/read.ts';
+import { disclosureViewer } from '../src/modules/disclosure/viewer.ts';
+import {
+  captureClosedRealmFeedScope, captureClosedRealmFeedSources, readClosedRealmFeedSources,
+} from '../src/modules/feed/closed-realm-feed.ts';
+import { rankCandidates } from '../src/modules/feed/ranking.ts';
+import type { FeedSource } from '../src/modules/feed/source.ts';
+import { retainedMembershipBasis } from '../src/modules/read-basis/membership.ts';
+import { WorkReadMissing, type WorkReadSession } from '../src/modules/work/read-session.ts';
+import { RV, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
+import { fixtureDisclosureCut } from './support/disclosure-ancestry.ts';
+
+export type ClosedFeedReader = 'anonymous' | 'member' | 'manager' | 'case-party';
+const native = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+const realm = native(1), work = native(2), head = 'urn:rezics:revision:feed-parent:1';
+const binding = (value: string) => ({ type: 'uri' as const, value });
+
+export function closedFeedOwner(actor: ClosedFeedReader) {
+  const state = { closed: false, workHidden: false, contentHidden: false, ancestry: true,
+    realmParent: true, preparation: true, approval: true, placement: 'current', parentHead: head,
+    generation: '0', available: true, hydrate: () => {} };
+  const sources: FeedSource[] = Array.from({ length: 6 }, (_, index) => ({
+    id: native(10 + index), sequence: String(index + 1), kind: index % 2 === 0 ? 'discussion' : 'work',
+    target: index % 2 === 0 ? native(30 + index) : work, work, actor: native(40 + index),
+    realm: index % 2 === 0 ? realm : null, zone: null, language: 'en', excerpt: `Body ${index}`,
+    title: null, occurrence: null, contentTarget: null, reply: index % 2 === 0 ? native(30 + index) : null,
+    contentRevision: index % 2 === 0 ? `urn:rezics:content:revision:revision-${index}` : null, review: null,
+  }));
+  const calls: { targets: readonly DisclosureTarget[]; channel: string; signedIn: boolean }[] = [];
+  const selected = new Map<string, DisclosureTarget>();
+  const env = { lineage: { dataEpoch: 'closed-feed-epoch', routingEpoch: 'routing' },
+    fuseki: { query: async (query: string) => {
+      if (query.includes('SELECT ?space ?realmRevision')) return { results: { bindings:
+        query.includes(`<${realm}>`) ? [{ space: binding(native(3)), realmRevision: binding(head),
+          disclosure: binding(`${RV}Public`) }] : [] } };
+      if (query.includes('SELECT ?resource ?head')) return { results: { bindings:
+        [work, realm].filter(id => query.includes(`<${id}>`)).map(id => ({ resource: binding(id), head: binding(state.parentHead) })) } };
+      if (query.includes('SELECT DISTINCT ?id ?sequence ?kind ?target')) {
+        state.hydrate();
+        return { results: { bindings: sources.filter(source => query.includes(`<${source.id}>`)).map(source => ({
+          id: binding(source.id), sequence: binding(source.sequence), kind: binding(source.kind),
+          target: binding(source.target), work: binding(work), actor: binding(source.actor),
+          ...(source.realm ? { realm: binding(source.realm), reply: binding(source.reply!),
+            contentRevision: binding(source.contentRevision!) } : {}),
+        })) } };
+      }
+      throw new Error('Unexpected feed owner query');
+    } },
+  } as unknown as WorkActivationEnvironment;
+  const evidence = (target: DisclosureTarget): DisclosureAncestryEvidence => {
+    const direct = target.resource === realm;
+    const source = direct ? undefined : sources.find(source => source.id === target.occurrence?.resource);
+    if (!direct && !source) throw new Error('Unknown selected occurrence');
+    const basis: DisclosureRelationshipBasis = {
+      owner: target.occurrence?.owner ?? 'graph', kind: target.occurrence?.kind ?? 'identity',
+      resource: target.occurrence?.resource ?? realm,
+      revision: target.occurrence?.revision ?? head,
+      targetResource: target.resource, targetRevision: target.revision ?? null,
+      token: createHash('sha256').update(JSON.stringify([target, state.placement])).digest('hex'),
+      dataEpoch: env.lineage.dataEpoch,
+    };
+    selected.set(basis.token, target);
+    return { resource: target.resource, resourceKind: direct ? 'realm' : 'other', relationshipBasis: basis,
+      status: state.ancestry && (!source?.realm || state.approval && state.preparation) ? 'complete' : 'unavailable',
+      parents: direct ? [] : source?.realm && state.realmParent
+        ? [{ owner: 'graph', kind: 'work', resource: work, head, relationshipBasis: basis },
+          { owner: 'graph', kind: 'realm', resource: realm, head, relationshipBasis: basis }]
+        : [{ owner: 'graph', kind: 'work', resource: work, head, relationshipBasis: basis }],
+    };
+  };
+  const ancestry = { read: async (targets: readonly DisclosureTarget[]) => targets.map(evidence),
+    reread: async (bases: readonly DisclosureRelationshipBasis[]) => bases.map(basis => evidence(selected.get(basis.token)!)) };
+  for (const owner of ['graph', 'content', 'review'] as const) configureDisclosureAncestrySource(env, owner, ancestry);
+  configureDisclosure(env, {
+    read: async () => { throw new Error('A feed must capture an Access cut'); },
+    readAtCut: async (targets, viewer, channel) => {
+      if (!state.available) throw new DisclosureUnavailable('Access unavailable');
+      calls.push({ targets, channel, signedIn: viewer.signedIn });
+      return { decisions: targets.map(target => state.closed && (target.resource === realm
+        || target.ancestry?.parents.some(parent => parent.kind === 'realm' && parent.resource === realm))
+        || state.workHidden && target.ancestry?.parents.some(parent => parent.resource === work)
+        || state.contentHidden && target.owner === 'content' ? 'hidden' as const : 'visible' as const),
+      anonymousNames: [], fenceBasis: { ...fixtureDisclosureCut, recoveryGeneration: state.generation } };
+    },
+  });
+  const viewer = disclosureViewer(actor === 'anonymous' ? null : { issuer: 'account.test', subject: actor } as never);
+  const session = { deps: { environment: env }, viewer,
+    query: async (query: string) => (await env.fuseki.query(query)).results!.bindings,
+  } as unknown as WorkReadSession;
+  return { state, session, sources, calls, realm, work };
+}
+
+export function closedFeedCases(actor: ClosedFeedReader) {
+  for (const scope of actor === 'anonymous' ? ['all'] : ['all', 'following']) {
+    for (const order of scope === 'following' ? ['new', 'best'] as const : ['new', 'best', 'top'] as const) {
+      test(`closed-feed-${actor}: ${scope}/${order} omits every Realm occurrence across continuations`, async () => {
+        const owner = closedFeedOwner(actor);
+        const position = { dataEpoch: 'closed-feed-epoch', sequence: '1' }, filter = ['home-feed-v1', actor, scope, order];
+        let cursor: string | undefined;
+        const delivered: string[] = [];
+        owner.state.closed = true;
+        for (let start = 0; start < owner.sources.length; start += 2) {
+          const retained = retainedMembershipBasis('home-feed-v1', cursor, filter, position);
+          const batch = await captureClosedRealmFeedSources(owner.session, owner.sources.slice(start, start + 2));
+          const visible = await batch.fence();
+          expect(visible).toEqual([owner.sources[start + 1]!]);
+          const ranked = order === 'new' ? visible : rankCandidates(visible.map(source => ({ ...source, score: 1, time: 0 })), order);
+          delivered.push(...ranked.map(source => source.id));
+          const last = owner.sources[start + 1]!;
+          cursor = retained.encode(last.id, JSON.stringify({ recentRealms: visible.map(source => source.realm), count: visible.length }));
+          const next = retainedMembershipBasis('home-feed-v1', cursor, filter, position);
+          expect(next.cursor?.order).not.toContain(owner.realm);
+        }
+        expect(delivered).toEqual(owner.sources.filter(source => !source.realm).map(source => source.id));
+        expect(owner.calls.every(call => call.signedIn === (actor !== 'anonymous'))).toBe(true);
+      });
+    }
+  }
+  test(`closed-feed-${actor}: capture precedes grouping and count attribution`, async () => {
+    const owner = closedFeedOwner(actor);
+    owner.state.closed = true;
+    const batch = await captureClosedRealmFeedSources(owner.session, owner.sources, 'count');
+    expect(batch.sources.length).toBe(3);
+    expect((await batch.fence()).map(source => source.actor)).toEqual(owner.sources.filter(source => !source.realm).map(source => source.actor));
+    expect(owner.calls.every(call => call.channel === 'count')).toBe(true);
+  });
+  test(`closed-feed-${actor}: closure during hydration discards cards and their continuation attribution`, async () => {
+    const owner = closedFeedOwner(actor);
+    const batch = await captureClosedRealmFeedSources(owner.session, owner.sources);
+    expect(batch.sources).toEqual(owner.sources);
+    const hydrated = new Map(batch.sources.map(source => [source.id, { body: source.excerpt, realm: source.realm, actor: source.actor }]));
+    owner.state.closed = true;
+    const delivered = (await batch.fence()).map(source => hydrated.get(source.id));
+    expect(delivered.length).toBe(3);
+    expect(JSON.stringify(delivered)).not.toContain(owner.realm);
+    expect(delivered).toEqual(owner.sources.filter(source => !source.realm).map(source => hydrated.get(source.id)));
+  });
+  test(`closed-feed-${actor}: Realm scope is missing before selection and fenced after hydration`, async () => {
+    const owner = closedFeedOwner(actor);
+    const fence = await captureClosedRealmFeedScope(owner.session, realm);
+    owner.state.closed = true;
+    await expect(fence()).rejects.toBeInstanceOf(WorkReadMissing);
+    const missing = async (id: string) => {
+      try { await captureClosedRealmFeedScope(owner.session, id); return null; }
+      catch (error) { expect(error).toBeInstanceOf(WorkReadMissing); return { status: 404, body: 'Realm unavailable' }; }
+    };
+    expect(await missing(realm)).toEqual(await missing(native(999)));
+  });
+  test(`closed-feed-${actor}: missing ancestry, approval and preparation cannot expose a retained event`, async () => {
+    for (const key of ['ancestry', 'approval', 'preparation', 'realmParent', 'available'] as const) {
+      const owner = closedFeedOwner(actor);
+      owner.state[key] = false;
+      await expect(captureClosedRealmFeedSources(owner.session, owner.sources)).rejects.toBeInstanceOf(DisclosureUnavailable);
+    }
+  });
+  test(`closed-feed-${actor}: changed placement, approval, preparation, parent and recovery discard captured hydration`, async () => {
+    for (const change of ['placement', 'approval', 'preparation', 'parent', 'recovery'] as const) {
+      const owner = closedFeedOwner(actor);
+      const batch = await captureClosedRealmFeedSources(owner.session, owner.sources);
+      if (change === 'placement') owner.state.placement = 'replaced';
+      if (change === 'approval' || change === 'preparation') owner.state[change] = false;
+      if (change === 'parent') owner.state.parentHead = 'urn:rezics:revision:feed-parent:2';
+      if (change === 'recovery') owner.state.generation = '1';
+      await expect(batch.fence()).rejects.toBeInstanceOf(DisclosureUnavailable);
+    }
+  });
+  test(`closed-feed-${actor}: restoration preserves independent Work and Content restrictions`, async () => {
+    const owner = closedFeedOwner(actor);
+    owner.state.closed = true;
+    const closed = await captureClosedRealmFeedSources(owner.session, owner.sources);
+    owner.state.closed = false;
+    expect((await closed.fence()).map(source => source.id)).toEqual(owner.sources.filter(source => !source.realm).map(source => source.id));
+    owner.state.workHidden = true;
+    expect((await captureClosedRealmFeedSources(owner.session, owner.sources)).sources).toEqual([]);
+    owner.state.workHidden = false;
+    owner.state.contentHidden = true;
+    expect((await captureClosedRealmFeedSources(owner.session, owner.sources)).sources).toEqual([]);
+    owner.state.contentHidden = false;
+    expect((await captureClosedRealmFeedSources(owner.session, owner.sources)).sources).toEqual(owner.sources);
+  });
+  test(`closed-feed-${actor}: closure in current source hydration is captured before selection`, async () => {
+    const owner = closedFeedOwner(actor);
+    owner.state.hydrate = () => { owner.state.closed = true; };
+    const batch = await readClosedRealmFeedSources(owner.session, owner.sources);
+    expect((await batch.fence()).map(source => source.id)).toEqual(owner.sources.filter(source => !source.realm).map(source => source.id));
+  });
+}
+
+closedFeedCases('anonymous');
