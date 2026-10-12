@@ -43,7 +43,7 @@ export class ContentProjectionWorker {
         'error.code': 'main_relay_handoff_incomplete',
         'rezics.relay.data_epoch': error.dataEpoch,
         'rezics.relay.requested_sequence': error.sequence,
-        'rezics.projection.retry_ms': this.intervalMs,
+        'rezics.projection.recovery_retry_ms': this.intervalMs,
       });
       return { result: null, deferred: true };
     }

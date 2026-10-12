@@ -110,7 +110,7 @@ test('the live Content loop counts incomplete restored coverage as deferred and 
     expect(faults).toEqual([]);
     expect(lines.map(line => JSON.parse(line))).toEqual([1, 2].map(() => expect.objectContaining({
       event: 'worker_run_deferred', 'error.code': 'main_relay_handoff_incomplete',
-      'rezics.relay.requested_sequence': '2', 'rezics.projection.retry_ms': 100,
+      'rezics.relay.requested_sequence': '2', 'rezics.projection.recovery_retry_ms': 100,
     })));
   } finally { clearTimeout(timer); await worker.stop(); warn.mockRestore(); }
   expect(new RelayHandoffIncomplete('epoch', '2')).not.toBeInstanceOf(RelayCheckpointConflict);

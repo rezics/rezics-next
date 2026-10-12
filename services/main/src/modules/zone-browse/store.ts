@@ -458,7 +458,7 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
             'error.code': 'main_relay_handoff_incomplete',
             'rezics.relay.data_epoch': batchPosition.dataEpoch,
             'rezics.relay.requested_sequence': expected,
-            'rezics.projection.retry_ms': ZONE_BROWSE_PROJECTION_COST.pollMs,
+            'rezics.projection.recovery_retry_ms': ZONE_BROWSE_PROJECTION_COST.pollMs,
           });
           return 0;
         }
