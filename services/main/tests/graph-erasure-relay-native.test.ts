@@ -91,7 +91,10 @@ public class GraphErasureRelayContractTest {
           .addLiteral(p("requestDigest"),"${'a'.repeat(64)}").addLiteral(p("dataEpoch"),"${batch.dataEpoch}")
           .addLiteral(p("sequence"),2).addLiteral(p("erasureId"),"${erasureId}").addLiteral(p("erasureEpoch"),7);
         for(var w:fixture.get("receiptWorks").getAsArray())receipt.addProperty(p("work"),receipts.createResource(w.getAsString().value()));
-        var batch=outbox.createResource("${batch.batchId}");var ids=new JsonArray();int ordinal=0;
+        var batch=outbox.createResource("${batch.batchId}");
+        batch.addProperty(RDF.type,outbox.createResource(RV+"OutboxBatch"))
+          .addLiteral(p("dataEpoch"),"${batch.dataEpoch}").addLiteral(p("sequence"),2);
+        var ids=new JsonArray();int ordinal=0;
         for(var works:fixture.get("eventWorks").getAsArray()){
           String id="${eventPlaceholder}:"+ordinal;ids.add(id);var event=outbox.createResource(id);
           batch.addProperty(p("event"),event);
