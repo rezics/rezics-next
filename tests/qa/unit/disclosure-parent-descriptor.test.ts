@@ -379,19 +379,38 @@ test('disclosure ancestry: independent publication needs an explicit complete em
   );
 });
 
-test('disclosure ancestry: relationship kinds refuse unresolved required parents before capture', async () => {
-  for (const kind of ['realm-placement', 'realm-selection', 'realm-module'] as const) {
-    for (const parents of [[], [parent('work')]] as OwnerEstablishedGraphParents[]) {
+const requiredParentsByRelationship = {
+  identity: [],
+  'work-ownership': ['work'],
+  'work-in-realm': ['work', 'realm'],
+  'realm-placement': ['realm'],
+  'realm-selection': ['realm'],
+  'realm-module': ['realm'],
+  publication: [],
+  'media-use': [],
+} as const satisfies Record<DisclosureRelationshipBasis['kind'], readonly ('work' | 'realm')[]>;
+
+test.each(Object.entries(requiredParentsByRelationship))(
+  'disclosure ancestry: %s rejects every incomplete parent set and accepts complete evidence', async (kind, required) => {
+    const sets: OwnerEstablishedGraphParents[] = [[], [parent('work')], [parent('realm')],
+      [parent('work'), parent('realm')]];
+    for (const parents of sets) {
       const f = fixture(parents);
-      f.setEvidence([{ ...evidence(target, parents), relationshipBasis: { ...basis(), kind } }]);
-      await expect(captured(f)).rejects.toBeInstanceOf(DisclosureUnavailable);
-      expect(f.headQueries).toHaveLength(0);
-      expect(f.ownerReads).toHaveLength(0);
+      f.setEvidence([{ ...evidence(target, parents), relationshipBasis: {
+        ...basis(), kind: kind as DisclosureRelationshipBasis['kind'],
+      } }]);
+      if (required.every(expected => parents.some(parent => parent.kind === expected))) {
+        expect((await captured(f))[0]!.decision).toBe('visible');
+      } else {
+        await expect(captured(f)).rejects.toBeInstanceOf(DisclosureUnavailable);
+        expect(f.headQueries).toHaveLength(0);
+        expect(f.ownerReads).toHaveLength(0);
+      }
     }
-  }
-  const f = fixture([]);
-  f.setEvidence([{ ...evidence(target), relationshipBasis: { ...basis(), kind: 'work-ownership' } }]);
-  await expect(captured(f)).rejects.toBeInstanceOf(DisclosureUnavailable);
+  },
+);
+
+test('disclosure ancestry: every individual parent basis must establish its required relationship', async () => {
   const unresolvedWork = { ...parent('work'), relationshipBasis: basis() };
   const unresolvedParent = fixture([unresolvedWork]);
   unresolvedParent.setEvidence([{ ...evidence(target, [unresolvedWork]),
