@@ -81,7 +81,8 @@ async function classifyAccountDeletionStep(client: PoolClient, principal: string
     ), roots AS MATERIALIZED (
       SELECT r.id, r.subject_id FROM access.representation r, state p
       WHERE NOT p.roots_done AND r.principal_id = $1 AND r.action = 'agent.control' AND r.active
-        AND r.id > coalesce(p.root_cursor, '00000000-0000-0000-0000-000000000000'::uuid)
+        AND r.id >= coalesce(p.root_cursor, '00000000-0000-0000-0000-000000000000'::uuid)
+        AND (p.root_cursor IS NULL OR r.id > p.root_cursor)
       ORDER BY r.id LIMIT ${ACCOUNT_DELETION_CLASSIFICATION_COST.subjectsPerStep}
     ), awakened AS MATERIALIZED (
       SELECT f.agent_id FROM access.account_deletion_classification_frontier f, state p
@@ -233,7 +234,8 @@ async function refreshAccountDeletionBoundary(client: PoolClient, principal: str
   do {
     const result = (await client.query<{ cursor: string; count: number; pending: boolean }>(`WITH roots AS MATERIALIZED (
       SELECT id, subject_id FROM access.representation WHERE principal_id = $1 AND active
-        AND action = 'agent.control' AND id > coalesce(nullif($2, '')::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+        AND action = 'agent.control' AND id >= coalesce(nullif($2, '')::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+        AND ($2 = '' OR id > nullif($2, '')::uuid)
       ORDER BY id LIMIT $4
     ), refreshed AS MATERIALIZED (
       SELECT access.queue_account_deletion_candidate(r.subject_id) AS pending FROM roots r
@@ -279,7 +281,8 @@ export async function assertAccountDeletionContinuity(client: PoolClient, princi
   do {
     const result = (await client.query<{ cursor: string; count: number; allowed: boolean }>(`WITH roots AS MATERIALIZED (
       SELECT id, subject_id FROM access.representation WHERE principal_id = $1 AND active
-        AND action = 'agent.control' AND id > coalesce(nullif($2, '')::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+        AND action = 'agent.control' AND id >= coalesce(nullif($2, '')::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+        AND ($2 = '' OR id > nullif($2, '')::uuid)
       ORDER BY id LIMIT $3
     ) SELECT (SELECT id::text FROM roots ORDER BY id DESC LIMIT 1) AS cursor,
       (SELECT count(*)::integer FROM roots) AS count,
