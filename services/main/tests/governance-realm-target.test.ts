@@ -682,7 +682,7 @@ test('production Realm ownership rejects an extra nonreciprocal Space before dis
     await expect(ownerTargetHeads({ graph: f.stack.env }).realmBasis!(f.input.targets[0]!)).rejects.toThrow();
     await expect(graphNoticeParticipants(f.stack.env).participants!(f.input.targets[0]!, null, 1))
       .rejects.toThrow();
-    await expect(f.governance.store.acceptDecision(f.staff.principal, f.input)).rejects.toThrow();
+    await expect(f.governance.store.decide(f.staff.principal, f.input, true)).rejects.toThrow();
     expect((await f.stack.accessPool.query('SELECT 1 FROM access.moderation_decision WHERE case_id=$1',
       [f.report.caseId])).rowCount).toBe(0);
     expect((await f.stack.accessPool.query('SELECT 1 FROM access.safety_party_notice WHERE case_id=$1',
@@ -717,7 +717,7 @@ test('production Realm decision creates owner-controller notices and replays one
       expectedMembershipGeneration: '0', action: 'add', consent: consent.consentReference,
       durationSeconds: null, reason: 'Join the Realm without controlling its Space owner',
     }, randomUUID(), f.stack.env);
-    const accepted = await f.governance.store.acceptDecision(f.staff.principal, f.input);
+    const accepted = await f.governance.store.decide(f.staff.principal, f.input, true);
     expect(accepted.operation.status).toBe('accepted');
     expect((await f.stack.accessPool.query('SELECT 1 FROM access.safety_notice_job WHERE decision_id=$1',
       [accepted.decisionId])).rowCount).toBe(1);
