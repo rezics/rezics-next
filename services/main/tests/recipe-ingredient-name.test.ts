@@ -50,14 +50,14 @@ test('imported quantity prefixes keep ingredient names through naming, display a
   });
 });
 
-test('name extraction reads only recorded spans, never a supplied whole-line lexical', () => {
+test('name extraction uses recorded spans or the previous whole-line lexical derivation', () => {
   const [imported] = importRecipe({ recipeIngredient: ['1½ cups flour'] }, 'recipe').ingredients;
   const qualifier = { ...imported!.qualifier };
   const legacy = record(0, qualifier);
 
   expect(ingredientName(qualifier)).toBe('flour');
   expect(ingredientName({ ...qualifier, textParts: undefined, amountLexical: qualifier.originalText.value }))
-    .toBe('1½ cups flour');
+    .toBe('flour');
   expect(scaleIngredients([legacy], factor)[0]?.line.endsWith(' flour')).toBe(true);
   const exported = exportRecipe([legacy], structure).recipe.recipeIngredient;
   expect(exported).toMatchObject([{ text: '1½ cups flour', value: '3/2',

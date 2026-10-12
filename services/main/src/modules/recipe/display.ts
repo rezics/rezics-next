@@ -5,7 +5,10 @@
 // of those cups (480 mL) and a pound is sixteen of those ounces (448 g).
 
 import { exactRational, type ExactRational } from './quantity.ts';
+import { ingredientAmountLexical } from './importer.ts';
 import type { OccurrenceRecord } from '../structure/format.ts';
+type IngredientLine = Extract<NonNullable<OccurrenceRecord['qualifier']>, { type: 'ingredient-line' }>;
+type TextSpan = NonNullable<IngredientLine['textParts']>['amount'];
 
 export interface IngredientPresentation {
   /** Full ingredient in the unit system the recipe was written in. */
@@ -47,7 +50,7 @@ const kilogram: Unit = { singular: 'kg', plural: 'kg', kind: 'mass', system: 'me
 const count = (singular: string, plural = `${singular}s`): Unit =>
   ({ singular, plural, kind: 'count', system: 'us' });
 
-const units = new Map<string, Unit>([
+const storedWrittenUnits = new Map<string, Unit>([
   ['cup', cup], ['cups', cup],
   ['tablespoon', tablespoon], ['tablespoons', tablespoon], ['tbsp', tablespoon], ['tbs', tablespoon],
   ['teaspoon', teaspoon], ['teaspoons', teaspoon], ['tsp', teaspoon],
@@ -77,6 +80,8 @@ const units = new Map<string, Unit>([
   ['rasher', count('rasher')], ['rashers', count('rasher')],
   ['link', count('link')], ['links', count('link')],
   ['pat', count('pat')], ['pats', count('pat')],
+]);
+const units = new Map<string, Unit>([...storedWrittenUnits,
   ['克', gram], ['千克', kilogram], ['毫升', milliliter], ['升', liter],
 ]);
 
@@ -123,9 +128,9 @@ const snaps = [
   [5n, 8n, '⅝'], [2n, 3n, '⅔'], [3n, 4n, '¾'], [7n, 8n, '⅞'], [1n, 1n, '1'],
 ] as const;
 
-export function recognizeUnit(unitText: string | undefined): Unit | undefined {
+export function recognizeUnit(unitText: string | undefined, storedDisplay = false): Unit | undefined {
   if (!unitText) return undefined;
-  return units.get(unitText.trim().toLowerCase().replace(/\.$/, ''));
+  return (storedDisplay ? storedWrittenUnits : units).get(unitText.trim().toLowerCase().replace(/\.$/, ''));
 }
 
 /** More than double, or less than half. A straight doubling still scales. */
@@ -140,11 +145,62 @@ export function judgmentOf(name: string): 'seasoning' | 'leavening' | undefined 
   return undefined;
 }
 
-/** A structured name is source text; a parsed name is the recorded source span. */
-export function ingredientName(line: Extract<NonNullable<OccurrenceRecord['qualifier']>, { type: 'ingredient-line' }>): string {
+/**
+ * One source locator for parse-time spans and stored lines without them. Supplied parse
+ * positions are facts; absent positions retain the previous stored-line derivation,
+ * including its fallback when wording or a unit cannot be located.
+ */
+export function deriveIngredientTextParts(source: string, lexical: string | undefined,
+  unitText?: string, parsedAmount?: TextSpan): { name: string; textParts?: NonNullable<IngredientLine['textParts']> } {
+  const afterSpace = (offset: number) => {
+    while (offset < source.length && /\s/u.test(source[offset]!)) offset++;
+    return offset;
+  };
+  let start = afterSpace(0);
+  const end = parsedAmount ? source.length : source.trimEnd().length;
+  let amount = parsedAmount;
+  if (!amount) {
+    const written = source.slice(start, end);
+    const storedLead = lexical?.trim();
+    const lead = storedLead?.toLowerCase() === written.toLowerCase()
+      ? ingredientAmountLexical(written) : storedLead;
+    if (lead && written.toLowerCase().startsWith(lead.toLowerCase())) {
+      amount = { start, end: start + lead.length };
+    }
+  }
+  if (amount) start = afterSpace(amount.end);
+  let unit: TextSpan | undefined;
+  if (parsedAmount) {
+    unit = matchRecipeUnit(source, start);
+    if (unit) start = afterSpace(unit.end);
+  } else {
+    const forms = new Set<string>();
+    if (unitText?.trim()) forms.add(unitText.trim());
+    const known = recognizeUnit(unitText, true);
+    if (known) forms.add(known.singular).add(known.plural);
+    for (const form of [...forms].sort((a, b) => b.length - a.length)) {
+      // This boundary is the old stored-line contract, not the parser's Unicode registry rule.
+      const escaped = form.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const matched = new RegExp(`^${escaped}\\b`, 'i').exec(source.slice(start, end));
+      if (matched) {
+        unit = { start: unit?.start ?? start, end: start + matched[0].length };
+        start = afterSpace(unit.end);
+      }
+    }
+    const of = /^of\s+/i.exec(source.slice(start, end));
+    if (of) start += of[0].length;
+  }
+  const name = { start: Math.min(start, end), end };
+  return { name: source.slice(name.start, name.end),
+    ...(amount ? { textParts: { amount, ...(unit ? { unit } : {}), name } } : {}) };
+}
+
+/** Structured names and recorded spans win; older stored lines use the same source locator. */
+export function ingredientName(line: IngredientLine): string {
   if (line.name !== undefined) return line.name;
   const span = line.textParts?.name;
-  return span ? line.originalText.value.slice(span.start, span.end) : line.originalText.value;
+  return span ? line.originalText.value.slice(span.start, span.end)
+    : deriveIngredientTextParts(line.originalText.value, line.amountLexical, line.unitText).name;
 }
 
 function atLeast(quantity: ExactRational, whole: bigint): boolean {
@@ -256,10 +312,11 @@ function converted(amount: ExactRational, upper: ExactRational | undefined, unit
 
 export function presentQuantity(input: {
   original: string; name: string; unitText?: string; unit?: Unit; amount?: ExactRational;
-  amountUpper?: ExactRational; changed: boolean; judgment?: 'seasoning' | 'leavening';
+  amountUpper?: ExactRational; changed: boolean; judgment?: 'seasoning' | 'leavening'; preserveUnitText?: boolean;
 }): IngredientPresentation {
   if (!input.amount) return { line: input.original, ...(input.judgment ? { judgment: input.judgment } : {}) };
-  const line = phrase(input.amount, input.amountUpper, input.unit, input.unitText, input.name);
+  const rawUnit = input.preserveUnitText === false && input.unit ? undefined : input.unitText;
+  const line = phrase(input.amount, input.amountUpper, input.unit, rawUnit, input.name);
   const alternate = input.unit ? converted(input.amount, input.amountUpper, input.unit, input.name) : null;
   return {
     line,

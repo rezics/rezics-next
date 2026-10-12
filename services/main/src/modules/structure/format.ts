@@ -441,11 +441,11 @@ export function checkOccurrenceQualifier(value: unknown): NonNullable<Occurrence
   if (checked.type === 'ingredient-line' && checked.textParts) {
     const parts = checked.textParts, source = checked.originalText.value;
     const spans = [parts.amount, parts.name, ...(parts.unit ? [parts.unit] : [])];
-    if (!checked.amount || checked.name !== undefined || spans.some(span => span.start > span.end || span.end > source.length)
+    if (spans.some(span => span.start > span.end || span.end > source.length)
       || parts.amount.start === parts.amount.end || parts.amount.end > (parts.unit?.start ?? parts.name.start)
       || (parts.unit?.end ?? parts.amount.end) > parts.name.start
-      || checked.amountLexical !== source.slice(parts.amount.start, parts.amount.end)
-      || (parts.unit && checked.unitText !== source.slice(parts.unit.start, parts.unit.end))) {
+      || (checked.amountLexical !== undefined && checked.amountLexical !== source.slice(parts.amount.start, parts.amount.end))
+      || (parts.unit && checked.unitText !== undefined && checked.unitText !== source.slice(parts.unit.start, parts.unit.end))) {
       throw new InvalidStructureObject('ingredient text spans differ from their retained source');
     }
   }

@@ -39,7 +39,8 @@ export function scaleIngredients(records: readonly OccurrenceRecord[], factor: E
     const sourceAmount = line.amount ? rational(line.amount) : undefined;
     const sourceUpper = line.amountUpper ? rational(line.amountUpper) : undefined;
     const unitText = line.unitText ?? (line.unit ? RECIPE_UNIT_DEFINITIONS.get(line.unit) : undefined);
-    const unit = recognizeUnit(unitText);
+    const storedDisplay = line.name === undefined && line.textParts === undefined;
+    const unit = recognizeUnit(unitText, storedDisplay);
     const name = ingredientName(line);
     const judgment = judgmentOf(name);
     const countOverride = line.scaling === 'not-scalable' && unit?.kind === 'count'
@@ -62,6 +63,7 @@ export function scaleIngredients(records: readonly OccurrenceRecord[], factor: E
       ...(reason ? { reason } : {}),
       ...presentQuantity({ original: line.originalText.value, name, ...(unitText ? { unitText } : {}),
         ...(unit ? { unit } : {}), ...(amount ? { amount } : {}), ...(amountUpper ? { amountUpper } : {}),
+        preserveUnitText: !storedDisplay,
         changed: apply && checkedFactor.numerator !== checkedFactor.denominator,
         ...(holdJudgment && judgment ? { judgment } : {}) }) }];
   });

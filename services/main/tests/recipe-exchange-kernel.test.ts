@@ -42,7 +42,7 @@ test('serialized recipe intake preserves ingredient lines, quantities, units, fl
     line(5, '香菜（可选）', 'zh', { optional: true, parseStatus: 'unparsed' }),
     line(6, ' a handful of herbs ', 'en', { parseStatus: 'unparsed' }),
     line(7, 'about half cup flour', 'en', { amount: { numerator: 1, denominator: 2 },
-      unitText: 'cup' }),
+      amountLexical: 'about half', unitText: 'cup' }),
     line(8, '200 g butter', 'en', { optional: true, parseStatus: 'unparsed' }),
     line(9, '½ cup farine', 'fr', { amount: { numerator: 1, denominator: 3 },
       amountLexical: '½', textParts: { amount: { start: 0, end: 1 }, unit: { start: 2, end: 5 }, name: { start: 6, end: 12 } }, unitText: 'cup' }),

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { OccurrenceRecord } from '../structure/format.ts';
 import { isStructureUnitReference, checkOccurrenceQualifier, checkIngredientTextParts } from '../structure/format.ts';
-import { matchRecipeUnit, type RecipeUnitImportability } from './display.ts';
+import { deriveIngredientTextParts, type RecipeUnitImportability } from './display.ts';
 
 export interface ImportedIngredient {
   sourceKey: string;
@@ -117,10 +117,14 @@ const vulgarFractions: Readonly<Record<string, readonly [number, number]>> = {
   '⅕': [1, 5], '⅖': [2, 5], '⅗': [3, 5], '⅘': [4, 5], '⅙': [1, 6],
   '⅚': [5, 6], '⅛': [1, 8], '⅜': [3, 8], '⅝': [5, 8], '⅞': [7, 8],
 };
-const amountToken = String.raw`(?:\d+\s+\d+[\/⁄]\d+|\d+[\/⁄]\d+|\d+\s*[¼-¾⅐-⅞]|[¼-¾⅐-⅞]|\d+\.\d+|\d+)`;
+const fractionToken = String.raw`\d+\s+\d+[\/⁄]\d+|\d+[\/⁄]\d+|\d+\s*[¼-¾⅐-⅞]|[¼-¾⅐-⅞]`;
+const amountToken = String.raw`(?:${fractionToken}|\d+\.\d+|\d+)`;
 const amountEnd = String.raw`(?=$|[^\p{L}\p{N}])`;
 const amountPrefix = new RegExp(String.raw`^(\s*)(${amountToken})${amountEnd}`, 'u');
 const rangePrefix = new RegExp(String.raw`^(\s*)(${amountToken})(?:\s+(?:to|or)\s+|\s*[-–]\s*)(${amountToken})${amountEnd}`, 'u');
+const storedToken = String.raw`(?:${fractionToken}|\d+)`;
+const storedAmountPrefix = new RegExp(String.raw`^(\s*)(${storedToken})(?=\s|$)`, 'u');
+const storedRangePrefix = new RegExp(String.raw`^(\s*)(${storedToken})(?:\s+(?:to|or)\s+|\s*[-–]\s*)(${storedToken})(?=\s|$)`, 'u');
 
 interface ExactAmount { numerator: number; denominator: number }
 interface ParsedAmount {
@@ -157,8 +161,8 @@ function exactAmount(lexical: string): ExactAmount | undefined {
   return { numerator: Number(numerator / divisor), denominator: Number(denominator / divisor) };
 }
 
-function ingredientAmount(lexical: string): ParsedAmount | undefined {
-  const range = rangePrefix.exec(lexical);
+function ingredientAmount(lexical: string, storedWholeLine = false): ParsedAmount | undefined {
+  const range = (storedWholeLine ? storedRangePrefix : rangePrefix).exec(lexical);
   if (range) {
     const amount = exactAmount(range[2]!);
     const amountUpper = exactAmount(range[3]!);
@@ -168,7 +172,7 @@ function ingredientAmount(lexical: string): ParsedAmount | undefined {
     return { amount, amountUpper, span, amountLexical: lexical.slice(span.start, span.end),
       remainder: lexical.slice(span.end) };
   }
-  const match = amountPrefix.exec(lexical);
+  const match = (storedWholeLine ? storedAmountPrefix : amountPrefix).exec(lexical);
   if (!match) return undefined;
   // A failed range must not fall back to its lower endpoint as a scalar amount.
   const remainder = lexical.slice(match[0].length);
@@ -178,16 +182,16 @@ function ingredientAmount(lexical: string): ParsedAmount | undefined {
   return amount ? { amount, span, amountLexical: lexical.slice(span.start, span.end), remainder } : undefined;
 }
 
+/** Locate a quantity in old whole-line lexicals using the owner's former whitespace grammar. */
+export function ingredientAmountLexical(value: string): string | undefined {
+  return ingredientAmount(value, true)?.amountLexical;
+}
+
 function ingredient(value: string, sourceKey: string): ImportedIngredient {
   const parsed = ingredientAmount(value);
-  const afterSpace = (start: number) => {
-    while (start < value.length && /\s/u.test(value[start]!)) start++;
-    return start;
-  };
-  const unitSpan = parsed ? matchRecipeUnit(value, afterSpace(parsed.span.end)) : undefined;
-  const unitText = unitSpan ? value.slice(unitSpan.start, unitSpan.end) : undefined;
-  const textParts = parsed ? { amount: parsed.span, ...(unitSpan ? { unit: unitSpan } : {}),
-    name: { start: afterSpace(unitSpan?.end ?? parsed.span.end), end: value.length } } : undefined;
+  const located = parsed ? deriveIngredientTextParts(value, parsed.amountLexical, undefined, parsed.span) : undefined;
+  const textParts = located?.textParts;
+  const unitText = textParts?.unit ? value.slice(textParts.unit.start, textParts.unit.end) : undefined;
   return { sourceKey, qualifier: { type: 'ingredient-line', originalText: { value, language: 'en' },
     ...(parsed ? { amountLexical: parsed.amountLexical, textParts } : {}),
     ...(parsed ? { amount: parsed.amount, ...(parsed.amountUpper ? { amountUpper: parsed.amountUpper } : {}) } : {}),
@@ -214,10 +218,14 @@ function structuredIngredient(value: Record<string, unknown>, sourceKey: string,
   const fields = quantity !== undefined ? ingredientAmount(quantity) : undefined;
   const parsed = fields && !fields.remainder.trim() ? fields : undefined;
   const textParts = value.textParts === undefined ? undefined : checkIngredientTextParts(value.textParts);
-  const amountLexical = textParts ? original.slice(textParts.amount.start, textParts.amount.end) : undefined;
+  const amountLexical = typeof value.amountLexical === 'string' ? value.amountLexical : undefined;
+  if (value.amountLexical !== undefined && amountLexical === undefined) {
+    throw new Error('ingredient amount lexical must be text');
+  }
   const qualifier: ImportedIngredient['qualifier'] = { type: 'ingredient-line', originalText: { value: original, language },
     ...(name !== undefined ? { name } : {}),
-    ...(textParts ? { textParts, amountLexical } : {}),
+    ...(textParts ? { textParts } : {}),
+    ...(amountLexical !== undefined ? { amountLexical } : {}),
     ...(parsed ? { amount: parsed.amount, ...(parsed.amountUpper ? { amountUpper: parsed.amountUpper } : {}) } : {}),
     ...(unit ? { unit } : {}), ...(unitText ? { unitText } : {}), optional: value.optional === true,
     scaling: 'linear', substituteFor: [], parseStatus: quantity !== undefined && !parsed ? 'unparsed'

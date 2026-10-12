@@ -35,7 +35,7 @@ export function exportRecipe(records: readonly OccurrenceRecord[], structure: st
       ...(line.amount ? { value: line.amount.denominator === 1 ? String(line.amount.numerator)
         : `${line.amount.numerator}/${line.amount.denominator}` } : {}),
       ...(line.amountUpper ? { maxValue: `${line.amountUpper.numerator}/${line.amountUpper.denominator}` } : {}),
-      ...(line.textParts ? { amountLexical: line.originalText.value.slice(line.textParts.amount.start, line.textParts.amount.end) } : {}),
+      ...(line.amountLexical !== undefined ? { amountLexical: line.amountLexical } : {}),
       ...(line.name !== undefined ? { name: line.name } : {}),
       ...(line.textParts ? { textParts: line.textParts } : {}),
       ...(line.unit ? { unitCode: line.unit } : {}), ...(line.unitText ? { unitText: line.unitText } : {}),

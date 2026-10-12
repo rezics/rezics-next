@@ -1,6 +1,7 @@
 import { expect, spyOn, test } from 'bun:test';
 import * as display from '../src/modules/recipe/display.ts';
 import { exportRecipe } from '../src/modules/recipe/export.ts';
+import * as exchange from '../src/modules/recipe/export.ts';
 import { parseRecipeFile } from '../src/modules/recipe/file-intake.ts';
 import { importRecipe } from '../src/modules/recipe/importer.ts';
 import { scaleIngredients } from '../src/modules/recipe/operations.ts';
@@ -56,7 +57,7 @@ const corpus: readonly IngredientCase[] = [
   { input: '1 fluid ounce milk', amount: [1, 1], unit: 'fluid ounce', name: 'milk', lexical: '1', shown: '1 fluid ounce milk', doubled: '2 fluid ounces milk' },
   { input: 'salt to taste', name: 'salt to taste', shown: 'salt to taste', doubled: 'salt to taste' },
   { input: 'a handful of herbs', name: 'a handful of herbs', shown: 'a handful of herbs', doubled: 'a handful of herbs' },
-  { input: '  salt to taste\t', name: '  salt to taste\t', shown: '  salt to taste\t', doubled: '  salt to taste\t' },
+  { input: '  salt to taste\t', name: 'salt to taste', shown: '  salt to taste\t', doubled: '  salt to taste\t' },
   { input: '3 to 2 cups flour', name: '3 to 2 cups flour', shown: '3 to 2 cups flour', doubled: '3 to 2 cups flour' },
   { input: '1/0 cup flour', name: '1/0 cup flour', shown: '1/0 cup flour', doubled: '1/0 cup flour' },
   { input: '200 克糖', amount: [200, 1], name: '克糖', lexical: '200', shown: '200 克糖', doubled: '400 克糖' },
@@ -72,6 +73,15 @@ const corpus: readonly IngredientCase[] = [
   { input: { name: '½–¾ cup flour', value: '½–¾', unitText: 'cup' }, amount: [1, 2], upper: [3, 4], unit: 'cup', name: '½–¾ cup flour', shown: '½–¾ cup ½–¾ cup flour', doubled: '1–1 ½ cups ½–¾ cup flour' },
   { input: { name: '1.50 cups cream', value: 1.5, unitText: 'cups' }, amount: [3, 2], unit: 'cups', name: '1.50 cups cream', shown: '1 ½ cups 1.50 cups cream', doubled: '3 cups 1.50 cups cream' },
   { input: { name: '1.50cups cream', value: '1.5', unitText: 'cups' }, amount: [3, 2], unit: 'cups', name: '1.50cups cream', shown: '1 ½ cups 1.50cups cream', doubled: '3 cups 1.50cups cream' },
+  { input: { text: 'about half cup flour', value: '1/2', amountLexical: 'about half', unitText: 'cup' }, amount: [1, 2], lexical: 'about half', unit: 'cup', name: 'flour', shown: '½ cup flour', doubled: '1 cup flour' },
+  { input: { text: 'flour', value: '1/2', amountLexical: 'about half', unitText: 'cup' }, amount: [1, 2], lexical: 'about half', unit: 'cup', name: 'flour', shown: '½ cup flour', doubled: '1 cup flour' },
+  { input: { text: '200 g butter', value: 200, amountLexical: '200', unitText: 'g' }, amount: [200, 1], lexical: '200', unit: 'g', name: 'butter', shown: '200 g butter', doubled: '400 g butter' },
+  { input: { text: '1 tbsp butter', value: 1, amountLexical: '1', unitText: 'tbsp' }, amount: [1, 1], lexical: '1', unit: 'tbsp', name: 'butter', shown: '1 tablespoon butter', doubled: '2 tablespoons butter' },
+  { input: { text: '1 splash vanilla', value: 1, amountLexical: '1', unitText: 'splash' }, amount: [1, 1], lexical: '1', unit: 'splash', name: 'vanilla', shown: '1 splash vanilla', doubled: '2 splash vanilla' },
+  { input: { text: '1 cup of flour', value: 1, amountLexical: '1', unitText: 'cup' }, amount: [1, 1], lexical: '1', unit: 'cup', name: 'flour', shown: '1 cup flour', doubled: '2 cups flour' },
+  { input: { text: '1½ cups flour', value: '3/2', amountLexical: '1½ cups flour', unitText: 'cups' }, amount: [3, 2], lexical: '1½ cups flour', unit: 'cups', name: 'flour', shown: '1 ½ cups flour', doubled: '3 cups flour' },
+  { input: { text: '1.50 cups cream', value: '3/2', amountLexical: '1.50 cups cream', unitText: 'cups' }, amount: [3, 2], lexical: '1.50 cups cream', unit: 'cups', name: '1.50 cups cream', shown: '1 ½ cups 1.50 cups cream', doubled: '3 cups 1.50 cups cream' },
+  { input: { text: '200 克 牛奶', value: 200, amountLexical: '200', unitText: '克' }, amount: [200, 1], lexical: '200', unit: '克', name: '克 牛奶', shown: '200 克 克 牛奶', doubled: '400 克 克 牛奶' },
 ];
 const root = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
 const exact = (amount: Amount | undefined) => amount ? { numerator: amount[0], denominator: amount[1] } : undefined;
@@ -144,4 +154,75 @@ test('native projection and hydration retain text spans and empty structured nam
     })) } }) } } as unknown as WorkActivationEnvironment;
     expect(await profile.hydrateQualifier!(environment, state)).toEqual(qualifier);
   }
+});
+
+type IngredientLine = Extract<NonNullable<OccurrenceRecord['qualifier']>, { type: 'ingredient-line' }>;
+const storedLine = (qualifier: IngredientLine): OccurrenceRecord => ({ occurrence: root.replace(/001$/, '002'),
+  parent: root, state: 'active', role: 'ingredient', labels: [], introducedBy: root, qualifier });
+
+function assertIndependentFields() {
+  const fields: readonly Partial<IngredientLine>[] = [
+    { amountLexical: '200' },
+    { amount: { numerator: 200, denominator: 1 }, amountUpper: { numerator: 300, denominator: 1 } },
+    { unit: 'https://qudt.org/vocab/unit/GM' },
+    { unitText: 'g' },
+    { name: 'butter' },
+    { textParts: { amount: { start: 0, end: 3 }, unit: { start: 4, end: 5 }, name: { start: 6, end: 12 } } },
+  ];
+  // Every subset proves absence of every other independent field, not just a full new qualifier.
+  for (let mask = 0; mask < 2 ** fields.length; mask++) {
+    const qualifier: IngredientLine = { type: 'ingredient-line', originalText: { value: '200 g butter', language: 'en' },
+      optional: false, scaling: 'linear', substituteFor: [], parseStatus: 'partial' };
+    fields.forEach((field, index) => { if (mask & (1 << index)) Object.assign(qualifier, field); });
+    checkOccurrenceQualifier(qualifier);
+    const exported = exchange.exportRecipe([storedLine(qualifier)], root).recipe;
+    expect(exported.recipeIngredient[0]?.amountLexical).toBe(qualifier.amountLexical);
+    expect(parseRecipeFile(Buffer.from(JSON.stringify(exported)), 'application/ld+json').preview.ingredients[0]?.qualifier)
+      .toEqual(qualifier);
+    const doubled = scaleIngredients([storedLine(qualifier)], { numerator: 2n, denominator: 1n })[0]!;
+    expect(doubled.sourceLexical).toBe(qualifier.amountLexical);
+    expect(doubled.amount).toEqual(qualifier.amount ? { numerator: 400n, denominator: 1n } : undefined);
+    expect(doubled.amountUpper).toEqual(qualifier.amountUpper ? { numerator: 600n, denominator: 1n } : undefined);
+  }
+}
+
+test('the qualifier field table survives every combination of independent field absence', assertIndependentFields);
+
+test('the independent field table kills an exporter that gates lexical wording on spans', () => {
+  assertIndependentFields();
+  const actualExport = exchange.exportRecipe;
+  const mutation = spyOn(exchange, 'exportRecipe').mockImplementation((records, structure) => {
+    const result = actualExport(records, structure);
+    for (const ingredient of result.recipe.recipeIngredient) {
+      if (!ingredient.textParts) delete ingredient.amountLexical;
+    }
+    return result;
+  });
+  try { expect(assertIndependentFields).toThrow(); }
+  finally { mutation.mockRestore(); }
+});
+
+test('a literal qualifier written by previous Main keeps its display and exact exchange fields', () => {
+  // Generated by importRecipe({ recipeIngredient: ['200 g butter'] }, 'previous-main') from
+  // Main 952e290702fc6718f15a4bfe574846b34015b917, before source spans were introduced.
+  // This JSON is deliberately not rebuilt with the current importer or a new-shape factory.
+  const qualifier = JSON.parse(`{
+    "type": "ingredient-line",
+    "originalText": { "value": "200 g butter", "language": "en" },
+    "amountLexical": "200",
+    "amount": { "numerator": 200, "denominator": 1 },
+    "unitText": "g",
+    "optional": false,
+    "scaling": "linear",
+    "substituteFor": [],
+    "parseStatus": "partial"
+  }`) as IngredientLine;
+  const record = storedLine(qualifier);
+  expect(scaleIngredients([record], { numerator: 1n, denominator: 1n })[0]?.line).toBe('200 g butter');
+  expect(scaleIngredients([record], { numerator: 2n, denominator: 1n })[0]?.line).toBe('400 g butter');
+  const recipe = exportRecipe([record], root).recipe;
+  expect(recipe.recipeIngredient[0]).toMatchObject({ text: '200 g butter', amountLexical: '200', value: '200', unitText: 'g' });
+  expect(recipe.recipeIngredient[0]).not.toHaveProperty('textParts');
+  expect(parseRecipeFile(Buffer.from(JSON.stringify(recipe)), 'application/ld+json').preview.ingredients[0]?.qualifier)
+    .toEqual(qualifier);
 });

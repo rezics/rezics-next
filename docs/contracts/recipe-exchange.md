@@ -28,7 +28,7 @@ Foreign ingredient strings remain text. Every native ingredient is a
 | `textParts` | Source spans `{ amount, unit?, name }`, each `{ start, end }` using half-open UTF-16 offsets into `text`; recorded when free text is parsed. |
 | `value` | Exact lower amount as an integer or numerator/denominator string; absent when no amount is stored. |
 | `maxValue` | Exact upper endpoint for a range, as a numerator/denominator string. |
-| `amountLexical` | Original quantity wording, independent of the exact value; absent when no wording is stored. |
+| `amountLexical` | Quantity wording as supplied or parsed, independent of the exact value and the optional spans; always emitted and retained when stored. |
 | `unitCode` | Registered inert unit IRI, preserved exactly. |
 | `unitText` | Written or unresolved unit text, preserved exactly, including whitespace, separately from its IRI. |
 | `optional` | `true` for an optional ingredient; omission means false. |
@@ -49,15 +49,31 @@ supplied `text`, or the unchanged name when no text was supplied. Both endpoints
 accept finite numbers or strings and use the same exact scalar/range validator.
 Invalid ranges admit neither endpoint; their retained source remains available.
 
+The subsequent review made field independence explicit:
+
+| Qualifier field | Stored when | Export | Intake | Display and scaling use |
+| --- | --- | --- | --- | --- |
+| `amountLexical` | Supplied or parsed | Emit whenever stored, regardless of spans | Keep supplied wording | Locate its source substring when spans are absent |
+| `amount`, `amountUpper` | Supplied or parsed | Emit exact values | One scalar/range validator | Derive the scaled amount |
+| `unitCode`, `unitText` | Supplied or parsed | Emit; registry determines inert unit importability | Validate the unit | Use its display label |
+| `name` | Structured name supplied verbatim | Emit when present, including empty | Keep verbatim | Use as the food name when present |
+| `textParts` | Recorded when parsing retained text | Emit when present | Keep when valid for source text | Use the recorded food-name remainder |
+
+Spans are an optimization, not a prerequisite for any other field. Qualifier
+validation permits valid spans without lexical, amount or unit fields, and a
+verbatim name can coexist with them. Supplied fields are neither manufactured
+from spans nor silently omitted because spans are absent.
+
 Free text is parsed only when its leading quantity token ends at whitespace or a
 non-letter boundary. Thus `7up soda`, `3M tape`, `200g butter` and `½cup flour`
 remain unparsed. The written-unit registry matches its complete labels, longest
 first, at Unicode token boundaries; it recognizes `克` and `fluid ounces` rather
 than guessing from the first word. Parsing records `textParts` once. For a parsed
-line, `amountLexical` is exactly `text.slice(amount.start, amount.end)`; the food
+line, parsed `amountLexical` is exactly `text.slice(amount.start, amount.end)`; the food
 name is exactly its recorded name span. An unparsed line retains the whole text
 only in `originalText`, with no amount or amount lexical. Structured quantities
-do not manufacture a lexical from `value` or interpret numbers in `name`.
+do not manufacture a lexical from `value` or interpret numbers in `name`; they
+do retain an independently supplied `amountLexical`, such as `about half`.
 
 Display and scaling derive quantities from exact amounts and names from these
 spans or the verbatim structured name. Doubling `1.50 cups cream` displays
@@ -72,8 +88,18 @@ no-op save preserves it, and editing the quantity does not remove food text.
 Native qualifier storage and exchange preserve `name` and `textParts`; Structure
 validates span bounds and their correspondence to source lexical and unit text.
 The Recipe projection retains these as `rv:ingredientName` and the bounded
-`rv:ingredientTextParts` JSON literal. No text-matching fallback infers spans for
-stored lines that do not have them; their retained text remains their food name.
+`rv:ingredientTextParts` JSON literal. One source locator produces spans at parse
+time and derives offsets for older stored lines when recorded spans are absent:
+locate the stored lexical, then the written unit. When they cannot be located,
+the same locator retains the previous stored-line name derivation. It never
+rewrites retained text or a supplied structured name. Inference retains the
+old stored-line prefix, unit-alias and fallback semantics, including its former
+whitespace grammar for a lexical containing the whole line. Older qualifiers
+also retain their existing unit-label display, rather than acquiring a different
+label just because new registry aliases were added. Thus `200 g butter` with
+lexical `200` and unit `g`, but no name/spans, doubles to `400 g butter`;
+`about half cup flour` with lexical `about half` retains that exact wording
+through exchange while displaying `½ cup flour` and doubling to `1 cup flour`.
 
 The exporter returns `{ recipe, residuals, sourceObservations, importability }`; the file is
 `recipe`. Residuals and original source observation identifiers are sidecar
