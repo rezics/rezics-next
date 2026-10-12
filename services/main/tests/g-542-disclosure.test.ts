@@ -283,7 +283,7 @@ test('G-542: each composed channel has a final shared gate; optional legacy fenc
     ['modules/media/summary.ts', 'await discloseInventory('],
     ['modules/disclosure/assembly.ts', 'discloseContent(env, await target.readExactBatch('],
     ['modules/feed/read.ts', "session.disclosure(fenceTargets, 'feed')"],
-    ['modules/realm-reply/thread-read.ts', 'await discloseInventory(session.deps.environment, heads.map('],
+    ['modules/realm-reply/thread-read.ts', "() => discloseInventory(session.deps.environment, targets, disclosureViewer(session.principal), 'thread')"],
     ['modules/realm-reply/store.ts', 'await discloseInventory('],
     ['modules/realm-reply/thread-store.ts', 'await reader.read('],
     ['modules/search/fields.ts', 'await discloseSearchMatches('],
@@ -297,6 +297,9 @@ test('G-542: each composed channel has a final shared gate; optional legacy fenc
     ['modules/notification/digest.ts', 'resolveDigestSubjects(inputs)'],
     ['modules/export/readers.ts', 'return discloseExportPlan('],
   ]) expect(source(path!)).toContain(call!);
+  const threadRead = source('modules/realm-reply/thread-read.ts');
+  expect(threadRead).toContain("selectedOwnerRead(session, ['body-disclosure', realm, targets]");
+  expect(threadRead).toContain('async () => selected(await read())');
   expect(source('app.ts')).toContain('if (work) composeDisclosure(work)');
   expect(source('routes/resources.ts')).toContain('await readSitemap(work.environment, query.after)');
   expect(source('modules/disclosure/read.ts')).toContain("const owner = Symbol('disclosureOwner')");
