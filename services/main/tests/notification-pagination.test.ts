@@ -134,28 +134,42 @@ async function inbox() {
   let generation = '1';
 
   async function insert(items: Omit<FixtureRow, 'id'>[], head = items.at(-1)?.sequence ?? '0',
-    options = { triage: true, context: true, erase: true }) {
+    options: { triage: boolean; context: boolean; erase: boolean; splitTriage?: boolean }
+      = { triage: true, context: true, erase: true }) {
     const client = await pool.connect();
+    const data = items.map(item => ({ ...item, id: randomUUID() }));
+    const triage = async () => {
+      if (options.triage) await client.query(`INSERT INTO access.notification_item_triage (principal_id,item_id,saved,done)
+        SELECT $1,d.id,d.saved,d.done FROM jsonb_to_recordset($2::jsonb) AS d(id uuid,saved boolean,done boolean)`,
+      [id, JSON.stringify(data)]);
+    };
+    const erase = async () => {
+      // Erased owner records need no external subject resolver; their private triage remains pageable.
+      if (options.erase) await client.query(`UPDATE access.notification_item SET state = 'erased',state_changed_at = now()
+        WHERE principal_id = $1 AND generation = $2 AND state = 'active'`, [id, generation]);
+    };
     try {
       await client.query('BEGIN');
       await client.query(`UPDATE access.notification_stream SET head_sequence = $2
         WHERE principal_id = $1 AND stream = 'inbox'`, [id, head]);
-      const data = items.map(item => ({ ...item, id: randomUUID() }));
       await client.query(`INSERT INTO access.notification_item (id,principal_id,stream,generation,sequence,
         purpose,topic,source_owner,source_event,subject_owner,subject_ref,disclosure_basis)
         SELECT d.id,$1,'inbox',$2,d.sequence,'governance','proposal-revised','access',d.id::text,
           'access','fixture','proposal' FROM jsonb_to_recordset($3::jsonb) AS d(id uuid,sequence bigint)`,
       [id, generation, JSON.stringify(data)]);
-      if (options.triage) await client.query(`INSERT INTO access.notification_item_triage (principal_id,item_id,saved,done)
-        SELECT $1,d.id,d.saved,d.done FROM jsonb_to_recordset($2::jsonb) AS d(id uuid,saved boolean,done boolean)`,
-      [id, JSON.stringify(data)]);
+      if (!options.splitTriage) await triage();
       if (options.context) await client.query(`INSERT INTO access.notification_proposal_context (item_id,proposal,revision,reason)
         SELECT d.id,$1,1,d.reason FROM jsonb_to_recordset($2::jsonb) AS d(id uuid,reason text)`,
       [proposal, JSON.stringify(data)]);
-      // Erased owner records need no external subject resolver; their private triage remains pageable.
-      if (options.erase) await client.query(`UPDATE access.notification_item SET state = 'erased',state_changed_at = now()
-        WHERE principal_id = $1 AND generation = $2 AND state = 'active'`, [id, generation]);
+      if (!options.splitTriage) await erase();
       await client.query('COMMIT');
+      if (options.splitTriage) {
+        // A person saves or completes notifications after enqueue has committed.
+        await client.query('BEGIN');
+        await triage();
+        await erase();
+        await client.query('COMMIT');
+      }
       rows.push(...data);
     } catch (error) { await client.query('ROLLBACK'); throw error; }
     finally { client.release(); }
@@ -350,20 +364,60 @@ type Plan = { 'Node Type': string; 'Index Name'?: string; 'Actual Rows': number;
   'Shared Hit Blocks': number; 'Shared Read Blocks': number; Plans?: Plan[] };
 function planNodes(plan: Plan): Plan[] { return [plan, ...(plan.Plans ?? []).flatMap(planNodes)]; }
 
-test('actual forward and descending filtered statements use bounded seeks at three history sizes', async () => {
+test('live filter bounds retain memberships across extrema removal, empty views and later recovery', async () => {
+  const f = await inbox();
+  await f.insert([
+    { sequence: '1', saved: true, done: false, reason: 'manual' },
+    { sequence: '2', saved: false, done: false, reason: 'manual' },
+    { sequence: '3', saved: true, done: false, reason: 'reviewer' },
+  ], '3', { triage: true, context: true, erase: false, splitTriage: true });
+  const bounds = async (view: string, reason = '') => (await pool.query(`
+    SELECT lower_sequence::text AS lower, upper_sequence::text AS upper FROM access.notification_filter_bounds
+    WHERE principal_id = $1 AND generation = 1 AND view = $2 AND reason = $3`, [f.id, view, reason])).rows[0];
+  const page = (view: Selection['view'], descending: boolean, reason?: Selection['reason']) =>
+    f.store.readStream(f.principal, null, 5, { view, reason }, descending ? 'latest' : undefined);
+  expect(await bounds('saved')).toEqual({ lower: '1', upper: '3' });
+  await f.store.setItemTriage(f.principal, f.rows[2]!.id, { saved: false, expectedRevision: '1' });
+  expect(await bounds('saved')).toEqual({ lower: '1', upper: '1' });
+  expect(await bounds('saved', 'reviewer')).toEqual({ lower: null, upper: null });
+  await f.store.setItemTriage(f.principal, f.rows[0]!.id, { done: true, expectedRevision: '1' });
+  expect(await bounds('inbox')).toEqual({ lower: '2', upper: '3' });
+  await f.store.setItemTriage(f.principal, f.rows[2]!.id, { done: true, expectedRevision: '2' });
+  expect(await bounds('inbox')).toEqual({ lower: '2', upper: '2' });
+  await f.store.setItemTriage(f.principal, f.rows[1]!.id, { done: true, expectedRevision: '1' });
+  expect(await bounds('inbox')).toEqual({ lower: null, upper: null });
+  for (const descending of [false, true]) expect((await page('inbox', descending)).items).toEqual([]);
+  await f.store.setItemTriage(f.principal, f.rows[1]!.id, { done: false, expectedRevision: '2' });
+  expect(await bounds('inbox', 'manual')).toEqual({ lower: '2', upper: '2' });
+  for (const descending of [false, true]) {
+    expect((await page('inbox', descending, 'manual')).items.map(item => item.sequence)).toEqual(['2']);
+    expect((await page('inbox', descending, 'reviewer')).items).toEqual([]);
+    expect((await page('saved', descending, 'manual')).items.map(item => item.sequence)).toEqual(['1']);
+  }
+  await Promise.all([
+    f.store.setItemTriage(f.principal, f.rows[0]!.id, { saved: false, expectedRevision: '2' }),
+    f.store.setItemTriage(f.principal, f.rows[2]!.id, { saved: true, expectedRevision: '3' }),
+  ]);
+  expect(await bounds('saved')).toEqual({ lower: '3', upper: '3' });
+  expect(await bounds('saved', 'manual')).toEqual({ lower: null, upper: null });
+  expect(await bounds('saved', 'reviewer')).toEqual({ lower: '3', upper: '3' });
+});
+
+test('production-shaped committed enqueue then triage uses bounded filtered seeks at three history sizes', async () => {
   const proof: unknown[] = [];
   for (const view of ['inbox', 'saved', 'done'] as const) for (const withReason of [false, true]) {
     const f = await inbox();
     const selection: Selection = { view, ...(withReason ? { reason: 'manual' as const } : {}) };
     const old = { sequence: '1', saved: view === 'saved', done: view === 'done', reason: 'manual' };
-    await f.insert([old]);
+    const splitTriage = { triage: true, context: true, erase: true, splitTriage: true };
+    await f.insert([old], undefined, splitTriage);
     const metrics: Record<string, { visited: number; buffers: number }[]> = { forward: [], descending: [] };
     let inserted = 0;
     for (const history of [1000, 4000, 16000]) {
       await f.insert(Array.from({ length: history - inserted }, (_, offset) => ({
         sequence: String(inserted + offset + 2), saved: withReason ? old.saved : false,
         done: withReason ? old.done : view === 'inbox', reason: 'reviewer',
-      })));
+      })), undefined, splitTriage);
       inserted = history;
       for (const descending of [false, true]) {
         const page = await f.store.readStream(f.principal, null, 2, selection, descending ? 'latest' : undefined);

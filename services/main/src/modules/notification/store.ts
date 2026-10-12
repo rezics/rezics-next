@@ -54,7 +54,7 @@ export interface NotificationAgentReader {
     Promise<ReadonlyMap<string, NotificationAgentSummary>>;
 }
 
-/** Fixed bounds of the first notification profile; every operation is O(bound). */
+/** Request bounds of the first notification profile. */
 export const NOTIFICATION_LIMITS = {
   recipientsPerEvent: 256,
   endpointsPerRecipient: 8,
@@ -663,6 +663,9 @@ export class NotificationStore {
       const parameters: unknown[] = [principalId, stream.generation, from, limit + 1];
       const reason = selection.reason ? `$${parameters.push(selection.reason)}::text` : null;
       const head = descending ? `$${parameters.push(stream.head_sequence)}::bigint` : '9223372036854775807::bigint';
+      const liveBound = (column: 'lower_sequence' | 'upper_sequence') => `(SELECT ${column}
+        FROM access.notification_filter_bounds WHERE principal_id = $1 AND generation = $2
+          AND view = '${selection.view ?? 'inbox'}' AND reason = ${reason ?? "''"})`;
       // Keep reason in the seek's sort keys. Scalar equality lets the planner
       // prefer a sequence-only index and scan unrelated reasons under skew.
       const seekPredicate = reason
@@ -698,6 +701,7 @@ export class NotificationStore {
         LEFT JOIN access.notification_display_context c ON c.item_id = i.id
         WHERE f.principal_id = $1 AND i.stream = 'inbox' AND f.generation = $2
           AND ${seekPredicate} AND ${viewPredicate}
+          AND f.sequence BETWEEN ${liveBound('lower_sequence')} AND ${liveBound('upper_sequence')}
         ORDER BY ${reason ? `f.reason ${descending ? 'DESC' : 'ASC'}, ` : ''}f.sequence ${descending ? 'DESC' : 'ASC'} LIMIT $4`, parameters)).rows;
       const watermark = (await client.query<{ read_through: string }>(`SELECT read_through::text
         FROM access.notification_read_watermark WHERE principal_id = $1 AND stream = 'inbox' AND generation = $2`,
