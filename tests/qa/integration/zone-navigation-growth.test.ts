@@ -241,6 +241,17 @@ test('Zone navigation reads stay within their cost class as unrelated Works grow
                 finally { span.end(); }
               });
             };
+            // The Zone page admits its mounted targets in one batch read.
+            const originalBatch = stack.access.canReadZoneNavigationTargets;
+            stack.access.canReadZoneNavigationTargets = async (...args) => {
+              const targets = args[3];
+              return trace.getTracer('zone-census').startActiveSpan('zone-census.mounted-target-admission', async span => {
+                try {
+                  for (const target of targets) mountedTargets.add(target);
+                  return await originalBatch.apply(stack.access, args);
+                } finally { span.end(); }
+              });
+            };
             try {
               sink.clear();
               const { result, profile } = await profileRequest(sink, async headers => {
@@ -248,18 +259,24 @@ test('Zone navigation reads stay within their cost class as unrelated Works grow
                 const response = await stack.main.handle(new Request('http://main.local' + path, { headers, signal }));
                 return { status: response.status, body: await response.text() };
               }, { service: 'main', peers: { fuseki: input.apps.FUSEKI_URL! }, flush: flushTelemetryTraces });
+              const visibleMounts = result.status === 200
+                ? (JSON.parse(result.body) as { mounts: unknown[] }).mounts.length : null;
               const evidence = { scale: cut.manifest.scale, dimensions: cut.manifest.dimensions,
-                path, distinctMountedTargets: mountedTargets.size, stages: censusStages(profile), profile };
+                path, distinctMountedTargets: mountedTargets.size, visibleMounts, stages: censusStages(profile), profile };
               const artifact = join(root, '.temp', 'zone-navigation-census-' + qaRunId + '-' + cut.manifest.scale + '.json');
               writeFileSync(artifact, JSON.stringify(evidence, null, 2) + '\n');
               console.log('Zone census read counters', JSON.stringify({ scale: evidence.scale, artifact,
-                path, distinctMountedTargets: mountedTargets.size, stages: evidence.stages,
+                path, distinctMountedTargets: mountedTargets.size, visibleMounts, stages: evidence.stages,
                 counters: measuredCounters({ ...profile, unrelatedWorks: cut.manifest.dimensions.unrelatedWorks }) }));
               if (result.status !== 200)
                 throw new Error('Corpus verification returned HTTP ' + result.status + ' for ' + path + ': ' + result.body);
+              // The page lists every Zone navigation entry up to its page limit.
+              const pageLimit = Number(new URL(path, 'http://main.local').searchParams.get('limit'));
+              expect(visibleMounts).toBe(Math.min(cut.manifest.dimensions.zoneNavigationEntries, pageLimit));
               return JSON.parse(result.body) as T;
             } finally {
               stack.access.canReadSemanticResource = original;
+              stack.access.canReadZoneNavigationTargets = originalBatch;
             }
           },
         };
