@@ -380,7 +380,9 @@ if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
       profiles.flatMap((smaller, index) => profiles.slice(index + 1).map(larger => ({
         scales: [smaller.dimensions.threads, larger.dimensions.threads],
         counters: Object.fromEntries(Object.keys(growth!).map(key => {
-          const field = key as keyof NonNullable<typeof growth>;
+          // Recipe declares direct counters; the shared contract also permits
+          // dotted native-visit fields that cannot index a WorkProfile.
+          const field = key as Extract<keyof NonNullable<typeof growth>, keyof WorkProfile>;
           const before = smaller[field], after = larger[field];
           return [key, before === null || after === null ? null
             : before === 0 ? after === 0 ? 1 : 'Infinity' : after / before];

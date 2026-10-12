@@ -31,6 +31,7 @@ const profile = (changes: Partial<WorkProfile> = {}): WorkProfile => ({
   mainCalls: 0, fusekiRequests: 27, fusekiSentBytes: 50_981, fusekiReceivedBytes: 11_744,
   fusekiEngineMs: 0, postgresStatements: 76, accountCalls: 0, otherFetches: 0,
   unclassifiedFetches: 0, serverLatencyMs: 1, totalLatencyMs: 1,
+  nativeVisits: {}, nativeVisitTotal: 0,
   fusekiCalls: [], postgres: [], unobserved: [], spans: [], ...changes,
 });
 const samples = (scales: number[], changes: Partial<WorkProfile>[] = []) =>
