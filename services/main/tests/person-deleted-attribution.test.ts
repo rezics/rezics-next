@@ -144,3 +144,34 @@ test('a local Work read fences its retained tombstone proof at delivery', async 
   proofs.set(deleted, { ...proof, erasureEpoch: '13' });
   await expect(session.fenceDependencies()).rejects.toBeInstanceOf(WorkReadMoved);
 });
+
+test('optional deleted attribution failure keeps healthy live credits on every preview adapter', async () => {
+  const { session } = fixture();
+  session.deps.personAttributionTombstones = { read: async () => { throw new WorkReadUnavailable('Recovery held'); } };
+  session.deps.discovery!.resourceCardPayloads = async () => new Map([['credits:1',
+    new Map([[work, { primaryCredits: [credit(deleted), credit(live, 11)], rating: null }]])]]) as never;
+  const cards = await readCreditAttributionCards(session, [live, deleted], 'preview');
+  expect([...cards.keys()]).toEqual([live]);
+  expect(cards.get(live)).toMatchObject({ identityStatus: 'active', displayName: 'Continuing author' });
+  const named = await namedDiscoveryCredits(session, [credit(deleted), credit(live, 11)], 20, true);
+  expect([...named.keys()]).toEqual([live]);
+  expect((await resourceWorkCards(session, [work])).get(work)?.primaryCredits)
+    .toEqual([expect.objectContaining({ agent: live, identityStatus: 'active' })]);
+  await expect(readCreditAttributionCards(session, [live, deleted])).rejects.toThrow('Recovery held');
+});
+
+for (const adapter of ['cards', 'discovery'] as const) {
+  test(`optional ${adapter} attribution does not make tombstone recovery a required delivery fence`, async () => {
+    const { session } = fixture({ localBasis: true });
+    let reads = 0;
+    session.deps.personAttributionTombstones = { read: async () => {
+      if (++reads > 2) throw new WorkReadUnavailable('Recovery held');
+      return new Map([[deleted, proof]]);
+    } };
+    const result = adapter === 'cards' ? await readCreditAttributionCards(session, [deleted], 'preview')
+      : await namedDiscoveryCredits(session, [credit(deleted)], 20, true);
+    expect(result.get(deleted)).toEqual(neutral);
+    await session.fenceDependencies();
+    expect(reads).toBe(2);
+  });
+}

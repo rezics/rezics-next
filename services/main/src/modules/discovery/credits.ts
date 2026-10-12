@@ -107,7 +107,7 @@ export async function namedDiscoveryCredits(session: WorkReadSession,
   }
   for (const agent of damaged) named.delete(agent);
   const missing = agents.filter(agent => !named.has(agent));
-  const readDeleted = () => readDeletedPersonAttributions(session, missing);
+  const readDeleted = () => readDeletedPersonAttributions(session, missing, preview ? 'preview' : 'required');
   const deleted = preview ? await optionalPreview(session, readDeleted) : await readDeleted();
   for (const [agent, attribution] of deleted ?? []) named.set(agent, attribution);
   return named;

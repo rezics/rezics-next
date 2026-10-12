@@ -3,6 +3,7 @@ import type { DisplayName } from '../display-language/select.ts';
 import { WorkReadMissing, WorkReadMoved, WorkReadUnavailable,
   type ReadPosition, type WorkReadSession } from '../work/read-session.ts';
 import { readAgent, readAgentCards } from './read.ts';
+import { optionalPreview } from '../query/optional-preview.ts';
 
 /** The erasure owner supplies only Person tombstones bound to the retained
  * Account closure journal. Missing/private Agents and provision compensation
@@ -40,7 +41,8 @@ export type CreditAttribution = {
 /** Credit-only identity: it never makes a deleted Person a readable profile,
  * directory entry or feed actor. Until the erasure owner is wired, absence of
  * that owner leaves unavailable identities missing. */
-export async function readDeletedPersonAttributions(session: WorkReadSession, agents: readonly string[]) {
+export async function readDeletedPersonAttributions(session: WorkReadSession, agents: readonly string[],
+  mode: 'required' | 'preview' = 'required') {
   const result = new Map<string, CreditAttribution>();
   const ids = [...new Set(agents)];
   if (ids.length > 192) throw new WorkReadUnavailable('Deleted Person attribution batch is out of bounds');
@@ -62,7 +64,9 @@ export async function readDeletedPersonAttributions(session: WorkReadSession, ag
   })) throw new WorkReadMoved('Deleted Person attribution changed');
   const signature = (proofs: ReadonlyMap<string, DeletedPersonAttributionProof>) =>
     [...proofs].sort(([a], [b]) => a.localeCompare(b));
-  session.observeDependency(`deleted-person-attribution:${JSON.stringify(ids)}`, signature(before),
+  // Optional enrichment settles its own proof without making owner recovery a
+  // mandatory page-delivery dependency. Required attribution retains the fence.
+  if (mode === 'required') session.observeDependency(`deleted-person-attribution:${JSON.stringify(ids)}`, signature(before),
     async () => signature(await owner.read(ids, session.position)));
   return result;
 }
@@ -89,6 +93,8 @@ export async function readCreditAttributionCards(session: WorkReadSession, agent
     { identityStatus: 'active', displayName: card.displayName, handle: card.handle,
       address: card.address, ...(card.displayNameInfo ? { displayNameInfo: card.displayNameInfo } : {}) }]));
   const missing = [...new Set(agents)].filter(agent => !live.has(agent));
-  for (const [agent, attribution] of await readDeletedPersonAttributions(session, missing)) result.set(agent, attribution);
+  const readDeleted = () => readDeletedPersonAttributions(session, missing, mode);
+  const deleted = mode === 'preview' ? await optionalPreview(session, readDeleted) : await readDeleted();
+  for (const [agent, attribution] of deleted ?? []) result.set(agent, attribution);
   return result;
 }
