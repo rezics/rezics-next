@@ -81,14 +81,6 @@ CREATE FUNCTION access.alias_person_erased(person text) RETURNS boolean LANGUAGE
     OR EXISTS (SELECT 1 FROM access.alias_graph_import_report WHERE holder = person AND profile_erasure_id IS NOT NULL)
 $$;
 
-CREATE OR REPLACE VIEW access.agent_handle AS
-  SELECT key AS handle,holder AS agent_id,
-    CASE WHEN state = 'current' THEN 'current' ELSE 'retired' END AS state,
-    claimed_at,CASE WHEN state = 'current' THEN NULL ELSE 'infinity'::timestamptz END AS retired_until,
-    skeleton FROM access.alias_registry WHERE scope = 'agent' AND profile_erasure_id IS NULL
-  UNION ALL
-  SELECT NULL::text,NULL::text,NULL::text,NULL::timestamptz,NULL::timestamptz,NULL::text WHERE false;
-
 -- One authority owner qualifies every narrow exception. This function only
 -- checks sanitation shape and the proof stamps; Access decides authorization.
 CREATE FUNCTION access.assert_alias_person_erasure(person text, erasure uuid, epoch bigint)

@@ -50,22 +50,22 @@ BEGIN
   context := nullif(current_setting('rezics.person_profile_erasure', true), '')::jsonb;
   IF context IS NULL OR context->>'person' IS DISTINCT FROM person
     OR NOT EXISTS (SELECT 1 FROM access.agent_provision a
-      WHERE a.id::text = context->>'provisionId' AND a.agent_id = person
-        AND a.principal_id::text = context->>'principalId'
+      WHERE a.id = (context->>'provisionId')::uuid AND a.agent_id = person
+        AND a.principal_id = (context->>'principalId')::uuid
         AND a.agent_kind = 'person' AND a.state = 'active'
         AND (a.profile_erasure_id IS NULL OR (
-          a.profile_erasure_id::text = context->>'erasureId'
-          AND a.profile_erasure_epoch::text = context->>'erasureEpoch'
-          AND a.account_erasure_id::text = context->>'accountErasureId'
-          AND a.deletion_intent_id::text = context->>'deletionIntentId'
-          AND a.deletion_enforcement_epoch::text = context->>'deletionEnforcementEpoch'
-          AND a.subject_epoch::text = context->>'subjectEpoch')))
+          a.profile_erasure_id = (context->>'erasureId')::uuid
+          AND a.profile_erasure_epoch = (context->>'erasureEpoch')::bigint
+          AND a.account_erasure_id = (context->>'accountErasureId')::uuid
+          AND a.deletion_intent_id = (context->>'deletionIntentId')::uuid
+          AND a.deletion_enforcement_epoch = (context->>'deletionEnforcementEpoch')::bigint
+          AND a.subject_epoch = (context->>'subjectEpoch')::bigint)))
     OR NOT EXISTS (SELECT 1 FROM access.recovery_fence WHERE id = true AND open)
     OR NOT access.person_profile_erasure_qualified(person,
       (context->>'principalId')::uuid, (context->>'deletionIntentId')::uuid,
       (context->>'deletionEnforcementEpoch')::bigint, (context->>'subjectEpoch')::bigint)
     OR EXISTS (SELECT 1 FROM access.governance_preservation_hold h
-      JOIN access.principal p ON p.id::text = context->>'principalId'
+      JOIN access.principal p ON p.id = (context->>'principalId')::uuid
       WHERE h.released_at IS NULL AND (h.target_resource = person OR h.author_subject = person
         OR (h.account_issuer = p.account_issuer AND h.account_subject = p.account_subject))) THEN
     RAISE EXCEPTION 'Person profile sanitation requires exact ended Account authority' USING ERRCODE = '23514';
