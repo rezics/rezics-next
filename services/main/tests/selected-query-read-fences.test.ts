@@ -62,6 +62,8 @@ function realmFixture() {
     main: term(`main-${row.work!.value}`), selection: term(`selection-${row.work!.value}`),
     contribution: term(`contribution-${row.work!.value}`), language: term('en'),
   });
+  for (const row of f.rows) for (const key of ['work', 'head', 'main', 'selection', 'contribution'])
+    row[key] = term(`urn:rezics:${key}:${row[key]!.value}`);
   f.session.deps.environment.fuseki.query = async body => ({ results: { bindings:
     body.includes('SELECT DISTINCT ?work ?head ?main') ? f.rows.map(row => ({ ...row })) : [] } });
   const pool = { query: async (sql: string, args?: unknown[]) => ({ rows: sql.includes('jsonb_to_recordset')
@@ -79,8 +81,8 @@ function realmFixture() {
 
 test('Realm Work reader excludes unshown candidate and lookahead heads from its delivery fence', async () => {
   const f = realmFixture();
-  const page = await readRealmWorks(f.session, 'realm');
-  expect(page.items.map(item => item.id)).toEqual(['001']);
+  const page = await readRealmWorks(f.session, 'urn:rezics:realm:test');
+  expect(page.items.map(item => item.id)).toEqual(['urn:rezics:work:001']);
   expect(page.nextCursor).not.toBeNull();
   f.rows[2]!.head = term('edited-third-candidate');
   f.rows[1]!.head = term('edited-lookahead');
@@ -90,10 +92,10 @@ test('Realm Work reader excludes unshown candidate and lookahead heads from its 
 for (const change of ['shown head', 'earlier member', 'continuation'] as const) {
   test(`Realm Work reader fences its selected ${change}`, async () => {
     const f = realmFixture();
-    await readRealmWorks(f.session, 'realm');
+    await readRealmWorks(f.session, 'urn:rezics:realm:test');
     if (change === 'shown head') f.rows[0]!.head = term('fresh-shown-head');
     if (change === 'earlier member') {
-      f.rows.unshift({ ...f.rows[0], work: term('000') });
+      f.rows.unshift({ ...f.rows[0], work: term('urn:rezics:work:000') });
       f.rows.length = 64;
     }
     if (change === 'continuation') f.rows.splice(1);
