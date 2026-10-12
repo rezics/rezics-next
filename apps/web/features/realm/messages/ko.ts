@@ -73,7 +73,7 @@ export default {
   membersTitle: '회원',
   membersShown: plural({ one: insert('공개 목록 회원 {{count}}명 표시 중'),
     other: insert('공개 목록 회원 {{count}}명 표시 중') }, { count: asValue(number()) }),
-  communityMembership: insert('커뮤니티 회원 수: {{members}}', { members: String }),
+  communityMembership: insert('커뮤니티 회원 수: {{members}} (이 목록과 별도로 집계)', { members: String }),
   memberUnnamed: '회원',
   membersNone: '아직 공개 목록에 표시하기로 선택한 회원이 없어요.',
   featured: '추천',

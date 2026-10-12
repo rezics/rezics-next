@@ -68,7 +68,7 @@ export default {
   moderatorsNone: '还没有公开的版主。',
   membersTitle: '成员',
   membersShown: plural({ other: insert('显示 {{count}} 位公开列名的成员') }, { count: asValue(number()) }),
-  communityMembership: insert('社区成员数：{{members}}', { members: String }),
+  communityMembership: insert('社区成员数：{{members}}（与此列表分开统计）', { members: String }),
   memberUnnamed: '成员',
   membersNone: '还没有成员选择公开。',
   featured: '推荐',

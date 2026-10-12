@@ -73,7 +73,7 @@ export default {
   membersTitle: 'Membres',
   membersShown: plural({ one: insert('{{count}} membre de la liste affiché'),
     other: insert('{{count}} membres de la liste affichés') }, { count: asValue(number()) }),
-  communityMembership: insert('Effectif de la communauté : {{members}}', { members: String }),
+  communityMembership: insert('Effectif de la communauté : {{members}} (compté séparément de cette liste)', { members: String }),
   memberUnnamed: 'Membre',
   membersNone: 'Aucun membre n’a choisi d’apparaître dans la liste pour le moment.',
   featured: 'À la une',

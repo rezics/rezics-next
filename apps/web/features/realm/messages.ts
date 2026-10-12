@@ -74,7 +74,7 @@ export const messages = {
   membersTitle: 'Members',
   membersShown: plural({ one: insert('Showing {{count}} listed member'),
     other: insert('Showing {{count}} listed members') }, { count: asValue(number()) }),
-  communityMembership: insert('Community membership: {{members}}', { members: String }),
+  communityMembership: insert('Community membership: {{members}} (counted separately from this list)', { members: String }),
   memberUnnamed: 'Member',
   membersNone: 'No members have chosen to be listed yet.',
   featured: 'Featured',

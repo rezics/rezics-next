@@ -71,7 +71,7 @@ export default {
   membersTitle: '成員',
   membersShown: plural({ one: insert('顯示 {{count}} 位公開列名的成員'),
     other: insert('顯示 {{count}} 位公開列名的成員') }, { count: asValue(number()) }),
-  communityMembership: insert('社群成員數：{{members}}', { members: String }),
+  communityMembership: insert('社群成員數：{{members}}（與此清單分開統計）', { members: String }),
   memberUnnamed: '成員',
   membersNone: '目前沒有選擇公開列名的成員。',
   featured: '精選',

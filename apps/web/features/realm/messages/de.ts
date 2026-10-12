@@ -73,7 +73,7 @@ export default {
   membersTitle: 'Mitglieder',
   membersShown: plural({ one: insert('{{count}} gelistetes Mitglied angezeigt'),
     other: insert('{{count}} gelistete Mitglieder angezeigt') }, { count: asValue(number()) }),
-  communityMembership: insert('Mitgliedschaft in der Gemeinschaft: {{members}}', { members: String }),
+  communityMembership: insert('Mitgliedschaft in der Gemeinschaft: {{members}} (getrennt von dieser Liste gezählt)', { members: String }),
   memberUnnamed: 'Mitglied',
   membersNone: 'Noch niemand hat sich für einen Eintrag in der Liste entschieden.',
   featured: 'Empfohlen',

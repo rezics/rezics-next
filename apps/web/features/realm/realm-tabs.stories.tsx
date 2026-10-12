@@ -258,7 +258,7 @@ export const Members: Story = {
     await expect(canvas.queryByRole('heading', { name: 'Community rules' })).toBeNull();
     await expect(canvas.queryByRole('heading', { name: 'Moderators' })).toBeNull();
     // The header's membership is labelled as the community's, never as the roster's length.
-    await expect(canvas.getByText('Showing 4 listed members · Community membership: 12,408 members')).toBeVisible();
+    await expect(canvas.getByText('Showing 4 listed members · Community membership: 12,408 members (counted separately from this list)')).toBeVisible();
     await captureSection('members');
   },
 };
@@ -335,7 +335,7 @@ export const About: Story = {
     // The roster says what it shows; the Realm's membership stays in the About section above.
     await expect(within(members).getByText('Showing 4 listed members')).toBeVisible();
     await expect(within(members).queryByText(/12,408/)).toBeNull();
-    await expect(canvas.getByText('Community membership: 12,408 members')).toBeVisible();
+    await expect(canvas.getByText('Community membership: 12,408 members (counted separately from this list)')).toBeVisible();
     await expect(canvas.getByRole('link', { name: /Classic Literature/ })).toHaveAttribute(
       'href',
       localizedPath(spaceHref('classics', 'community'), 'en'),

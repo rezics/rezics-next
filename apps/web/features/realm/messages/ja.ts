@@ -71,7 +71,7 @@ export default {
   membersTitle: 'メンバー',
   membersShown: plural({ one: insert('一覧表示のメンバーを{{count}}人表示中'),
     other: insert('一覧表示のメンバーを{{count}}人表示中') }, { count: asValue(number()) }),
-  communityMembership: insert('コミュニティの参加者数：{{members}}', { members: String }),
+  communityMembership: insert('コミュニティの参加者数：{{members}}（この一覧とは別に集計）', { members: String }),
   memberUnnamed: 'メンバー',
   membersNone: '一覧表示を選んだメンバーはまだいません。',
   featured: '注目',
