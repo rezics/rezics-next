@@ -17,6 +17,7 @@ import { classifyImage } from '../document-editor/image-inference.ts';
 import { WebImageSettings } from '../document-editor/image-settings.tsx';
 import type { SettingsMessages } from './messages.ts';
 import { PersonListingControl } from './listing-control.tsx';
+import { profilePosts } from './profile-post.ts';
 
 export function ProfileEditForm({ agent, profile, locale, t, ownPerson, operationKey }: {
   agent: string;
@@ -56,8 +57,7 @@ export function ProfileEditForm({ agent, profile, locale, t, ownPerson, operatio
           byte => byte.toString(16).padStart(2, '0')).join('');
         form.set('imageInference', JSON.stringify(await classifyImage(avatar, sha256)));
       }
-      const response = await fetch(action, { method: 'POST', body: form,
-        credentials: 'same-origin' });
+      const response = await profilePosts[locale](form);
       const result = new URL(response.url);
       if (response.redirected && result.origin === window.location.origin
         && result.searchParams.get('updated') === 'profile') {

@@ -203,3 +203,27 @@ export const HeldJapanese: Story = {
     );
   },
 };
+
+/** The production availability reader sends the typed Main query and can settle after editing. */
+export const MainAvailability: Story = {
+  args: { checkAvailability: undefined },
+  beforeEach() {
+    const prior = globalThis.fetch;
+    globalThis.fetch = (async (input, init) => {
+      const url = new URL(String(input));
+      await expect(url.pathname).toBe('/api/main/v1/addresses/availability');
+      await expect(url.searchParams.get('scope')).toBe('agent');
+      await expect(init).toMatchObject({ method: 'GET', cache: 'no-store', credentials: 'same-origin' });
+      return Response.json({ available: url.searchParams.get('alias') === 'ada-reader', reason: 'taken' });
+    }) as typeof fetch;
+    return () => { globalThis.fetch = prior; };
+  },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await waitFor(() => expect(canvas.getByRole('status')).toHaveTextContent('already in use'));
+    await userEvent.clear(canvas.getByRole('textbox', { name: 'Your handle' }));
+    await userEvent.type(canvas.getByRole('textbox', { name: 'Your handle' }), 'ada-reader');
+    await waitFor(() => expect(canvas.getByRole('status')).toHaveTextContent('available'));
+    await expect(canvas.getByRole('button', { name: 'Continue' })).toBeEnabled();
+  },
+};

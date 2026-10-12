@@ -11,14 +11,15 @@ export const BFF_PREFIX = '/api/main';
  * signed in, and from the content-language cookie only when they are not. */
 export function browserMainApi(
   origin: string = window.location.origin,
-  { anonymous = false }: { anonymous?: boolean } = {},
+  { anonymous = false, cache, fetcher }: { anonymous?: boolean; cache?: RequestCache; fetcher?: typeof fetch } = {},
 ) {
   return treaty<MainApp>(`${origin}${BFF_PREFIX}`, {
     headers: () =>
       typeof window === 'undefined' ? {} : { 'x-rezics-page-url': window.location.href },
     // A public reader without an eligible Agent must not send an authenticated
     // request with no actingSubject (Main rejects that ambiguous authority).
-    fetch: { credentials: anonymous ? 'omit' : 'same-origin' },
+    fetch: { credentials: anonymous ? 'omit' : 'same-origin', ...(cache ? { cache } : {}) },
+    fetcher,
     // Date-shaped JSON stays text. A literal's lexical form is the string Main recorded.
     parseDate: false,
   });

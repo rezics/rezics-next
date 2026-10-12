@@ -2,6 +2,7 @@
 
 import { Button } from '@rezics/ui/button';
 import { useEffect, useId, useState } from 'react';
+import { browserMainApi } from '../api/browser.ts';
 import { currentVanityHandle, normalizedHandle, suggestedHandle } from './handle.ts';
 import type { OnboardingMessages } from './messages.ts';
 
@@ -10,10 +11,11 @@ import type { OnboardingMessages } from './messages.ts';
 export type HandleAvailability = 'available' | 'taken' | 'reserved' | 'held';
 
 async function checkHandle(handle: string, signal: AbortSignal): Promise<HandleAvailability> {
-  const response = await fetch(`/api/main/v1/addresses/availability?${new URLSearchParams({ scope: 'agent', alias: handle })}`, {
-    signal, cache: 'no-store', credentials: 'same-origin' });
-  if (!response.ok) throw new Error('Handle availability is unavailable');
-  const answer = await response.json() as { available?: boolean; reason?: string };
+  const response = await browserMainApi().v1.addresses.availability.get({
+    query: { scope: 'agent', alias: handle }, fetch: { signal, cache: 'no-store' },
+  });
+  if (response.error || !response.data) throw new Error('Handle availability is unavailable');
+  const answer = response.data;
   return answer.available ? 'available'
     : answer.reason === 'reserved' || answer.reason === 'invalid' ? 'reserved'
       : answer.reason === 'retained' || answer.reason === 'confusable' ? 'held' : 'taken';

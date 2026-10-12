@@ -22,6 +22,9 @@ import { escape, operationPattern, readWebSources, sources } from './support/ede
  *   client reference counts, including aliases, destructuring, shorthand properties
  *   and returned clients; only an inline final-method call can satisfy the rule.
  *   No client, path, boolean or component-prop data flow is modelled.
+ * Fetch calls also require a plain string URL and a literal method property
+ * (omitted method means GET). Computed keys, variable methods/options and spreads
+ * cannot identify the operation conservatively. Dynamic Main requests use Eden.
  * Pure UI controls are inventoried separately. OperationGate can suppress a control,
  * but never proves a request. Main's generated exposure is the policy source.
  */
@@ -261,11 +264,38 @@ function uiGuarded(node: ts.Node, operation: string): boolean {
   return false;
 }
 
+/** Fetch syntax is checked even when an unresolved URL/method hides its operation. */
+function fetchViolations(text: string): string[] {
+  const failures: string[] = [];
+  function visit(node: ts.Node) {
+    if (ts.isTypeNode(node)) return;
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) &&
+      ['fetch', 'fetchImpl'].includes(node.expression.text)) {
+      if (!node.arguments[0] || !ts.isStringLiteral(node.arguments[0]))
+        failures.push(`${node.expression.text} URL must be a string literal`);
+      const options = node.arguments[1];
+      if (options) {
+        const fields = ts.isObjectLiteralExpression(options) ? options.properties : null;
+        if (!fields || fields.some(field => ts.isSpreadAssignment(field) || field.name && ts.isComputedPropertyName(field.name) ||
+          field.name?.getText().replace(/^['"]|['"]$/g, '') === 'method' &&
+          !(ts.isPropertyAssignment(field) && ts.isStringLiteral(field.initializer))))
+          failures.push(`${node.expression.text} method must be a plain literal property (or omitted GET)`);
+      }
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(parse(text));
+  return failures;
+}
+
 export function violations(files: Readonly<Record<string, string>>): string[] {
   const projected = projectedTypes(files);
-  return Object.entries(files).flatMap(([file, text]) => locatedCalls(text, projected).flatMap(call =>
-    call.operations.filter(operation => !call.inline || !requestGuarded(call.node, operation)).map(operation =>
-      `${file}: ${call.source} reaches ${operation} (${operationExposures[operation]})`)));
+  return Object.entries(files).flatMap(([file, text]) => [
+    ...fetchViolations(text).map(failure => `${file}: ${failure}`),
+    ...locatedCalls(text, projected).flatMap(call =>
+      call.operations.filter(operation => !call.inline || !requestGuarded(call.node, operation)).map(operation =>
+        `${file}: ${call.source} reaches ${operation} (${operationExposures[operation]})`)),
+  ]);
 }
 
 const webRoot = join(import.meta.dir, '..');
@@ -512,7 +542,7 @@ test('HTTP literals and projected followers require the same canonical gate', ()
   expect(callsIn('fetch(`/v1/realms/${realm}/member-receipts/${receipt}/appeal`, { method: "POST" });')[0]?.operations)
     .toEqual(['postV1RealmsByRealmMember-receiptsByReceiptIdAppeal']);
   expect(callsIn('// Main owns `/v1/me/saved-filters`.')).toEqual([]);
-  expect(callsIn('fetch(`/v1/compositions/${id}`);')).toEqual([]);
+  expect(callsIn("fetch('/v1/compositions/one');")).toEqual([]);
 });
 
 test('each UI entry loses its proof when a required direct predicate is removed', () => {
@@ -537,4 +567,25 @@ test('pure UI wrappers are accepted, but held booleans and protected siblings ar
     `return ${savedGate} ? <button>Install</button> : null;`,
     `return <OperationGate operation="${savedOperation}"><button>Install</button></OperationGate>;`,
   ]) expect(entryViolations({ 'entry.tsx': `function Entry() { ${source} }` }, [fixture])).toEqual([]);
+});
+
+
+test('fetch methods must be plain literal properties, including for a canonically gated request', () => {
+  for (const options of ["{ ['method']: 'POST' }", "{ [key]: 'POST' }", '{ method }',
+    '{ method: verb }', "{ ...options, method: 'POST' }", 'options']) {
+    expect(violations({ fixture: `if (${savedGate}) { fetch('/v1/me/saved-filters', ${options}); }` }))
+      .toContain('fixture: fetch method must be a plain literal property (or omitted GET)');
+  }
+  accepts(`if (${savedGate}) { fetch('/v1/me/saved-filters', { method: 'GET', cache: 'no-store' }); }`);
+  accepts("fetch('/auth/session', { method: 'GET' });");
+});
+
+test('fetch URLs must be plain string literals, including for a canonically gated request', () => {
+  for (const url of ["new URL('/v1/me/saved-filters', origin)", 'url', '`/v1/me/${path}`',
+    "'/v1/me/' + path", '`/v1/me/saved-filters`']) {
+    expect(violations({ fixture: `if (${savedGate}) { fetch(${url}); }` }))
+      .toContain('fixture: fetch URL must be a string literal');
+  }
+  accepts(`if (${savedGate}) { fetch('/v1/me/saved-filters'); }`);
+  accepts("fetch('/auth/session');");
 });

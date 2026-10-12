@@ -18,11 +18,12 @@ function reading(appeal: Record<string, unknown>) {
 }
 
 function responder(steps: { status: number; body: unknown }[]) {
-  const seen: { method: string; key: string | null; body: unknown }[] = [];
+  const seen: { method: string; key: string | null; body: unknown; url: string; cache: RequestCache | undefined; credentials: RequestCredentials | undefined }[] = [];
   const fetchImpl = (async (_input: RequestInfo | URL, init?: RequestInit) => {
     const headers = new Headers(init?.headers);
     seen.push({
       method: init?.method ?? 'GET',
+      url: String(_input), cache: init?.cache, credentials: init?.credentials,
       key: headers.get('idempotency-key'),
       body: typeof init?.body === 'string' ? JSON.parse(init.body) as unknown : null,
     });
@@ -48,7 +49,9 @@ test('a sent appeal is read back without the decider, and a lost response can re
   if (sent.kind !== 'sent') return;
   expect(sent.reading.appeal).toEqual({ state: 'open', caseId, statement: 'I posted it once.' });
   expect(JSON.stringify(sent.reading)).not.toContain(moderator);
-  expect(seen[0]).toMatchObject({ method: 'POST', key: 'key-1', body: { statement: 'I posted it once.' } });
+  expect(seen[0]).toMatchObject({ method: 'POST', key: 'key-1', body: { statement: 'I posted it once.' },
+    url: `http://localhost/api/main/v1/realms/${realm.slice(-36)}/member-receipts/${receiptId}/appeal`,
+    cache: 'no-store', credentials: 'same-origin' });
   expect(await client.submit('I posted it once.', 'key-1')).toEqual({ kind: 'failed', reuseKey: true });
   expect(await client.submit('I posted it once.', 'key-2')).toEqual({ kind: 'failed', reuseKey: false });
 });

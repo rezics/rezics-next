@@ -3,7 +3,6 @@
 import { Card, CardContent } from '@rezics/ui/card';
 import { Switch } from '@rezics/ui/switch';
 import { useEffect, useState } from 'react';
-import { BFF_PREFIX } from '../api/browser.ts';
 import type { SettingsMessages } from './messages.ts';
 
 export const notificationChannels = ['inbox', 'push', 'email'] as const;
@@ -88,14 +87,14 @@ function labelFor(topic: string, t: SettingsMessages): string {
     ? t[notificationTopicLabel[topic as SettingsNotificationTopic]]
     : topic;
 }
-async function read<T>(path: string): Promise<T> {
-  const response = await fetch(`${BFF_PREFIX}${path}`, { cache: 'no-store' });
+async function read<T>(): Promise<T> {
+  const response = await fetch('/api/main/v1/me/notification-preferences', { cache: 'no-store' });
   if (!response.ok) throw new Error(String(response.status));
   return response.json() as Promise<T>;
 }
-async function write<T>(path: string, body: Record<string, unknown>, bodyKey = false): Promise<T> {
+async function write<T>(body: Record<string, unknown>, bodyKey = false): Promise<T> {
   const key = crypto.randomUUID();
-  const response = await fetch(`${BFF_PREFIX}${path}`, {
+  const response = await fetch('/api/main/v1/me/notification-preferences', {
     method: 'PUT',
     headers: { 'content-type': 'application/json', 'idempotency-key': key },
     body: JSON.stringify(bodyKey ? { ...body, idempotencyKey: key } : body),
@@ -129,7 +128,7 @@ export function NotificationSettings({
   useEffect(() => {
     if (preview) return;
     let active = true;
-    void read<{ items: NotificationChoice[] }>('/v1/me/notification-preferences')
+    void read<{ items: NotificationChoice[] }>()
       .then((value) => {
         if (active) setChoices(value.items);
       })
@@ -146,7 +145,6 @@ export function NotificationSettings({
     setStatus('');
     try {
       const result = await write<{ state: NotificationChoice['state']; revision: string }>(
-        '/v1/me/notification-preferences',
         {
           profile: 'notification-preference-v1',
           purpose: choice.purpose,

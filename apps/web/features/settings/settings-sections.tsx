@@ -7,7 +7,7 @@ import { Switch } from '@rezics/ui/switch';
 import { materializeData } from 'native-i18n';
 import { useEffect, useState, type ReactNode } from 'react';
 import { localeNames, uiLocales, type UiLocale } from '../../i18n/define.ts';
-import { BFF_PREFIX } from '../api/browser.ts';
+import { browserMainApi } from '../api/browser.ts';
 import { forgetReadingLanguages } from '../content-language/use-reading-languages.ts';
 import { LanguagePicker } from '../onboarding/language-picker.tsx';
 import { messages as onboardingMessages } from '../onboarding/messages.ts';
@@ -28,19 +28,12 @@ const previewPerson: PersonPreferences = { profile: 'person-preferences-v1', pro
   followPolicy: 'everyone', hideReadingActivity: false, contentLanguages: [],
   spoilerPolicy: 'hide-unread', version: 0, blockedPeople: [] };
 
-async function read<T>(path: string): Promise<T> {
-  const response = await fetch(`${BFF_PREFIX}${path}`, { cache: 'no-store' });
-  if (!response.ok) throw new Error(String(response.status));
-  return response.json() as Promise<T>;
+async function responseData<T>(request: Promise<{ data: T | null; error: unknown; status: number }>): Promise<T> {
+  const response = await request;
+  if (response.error || response.data === null) throw new Error(String(response.status));
+  return response.data;
 }
-async function write<T>(path: string, body: Record<string, unknown>, bodyKey = false): Promise<T> {
-  const key = crypto.randomUUID();
-  const response = await fetch(`${BFF_PREFIX}${path}`, { method: 'PUT',
-    headers: { 'content-type': 'application/json', 'idempotency-key': key },
-    body: JSON.stringify(bodyKey ? { ...body, idempotencyKey: key } : body) });
-  if (!response.ok) throw new Error(String(response.status));
-  return response.json() as Promise<T>;
-}
+const commandOptions = () => ({ headers: { 'idempotency-key': crypto.randomUUID() } });
 
 function Section({ id, title, help, children }: { id: string; title: string; help: string;
   children: ReactNode }) {
@@ -57,20 +50,22 @@ function Privacy({ agent, t, preview = false, extra }: { agent: string | null; t
   const [draft, setDraft] = useState<Library['visibility']>('private');
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
-  const path = agent ? `/v1/agents/${agent.slice(-36)}/library-visibility` : null;
   useEffect(() => {
-    if (!path || preview) return;
+    if (!agent || preview) return;
     let active = true;
-    void read<Library>(path).then(value => { if (active) {
+    void responseData(browserMainApi().v1.agents({ id: agent.slice(-36) })['library-visibility'].get({
+      fetch: { cache: 'no-store' },
+    })).then(value => { if (active) {
       setCurrent(value); setDraft(value.visibility);
     } }).catch(() => { if (active) setStatus(t.libraryUnavailable); });
     return () => { active = false; };
-  }, [path, preview, t]);
+  }, [agent, preview, t]);
   const save = async () => {
-    if (!path || !current || draft === 'followers') return;
+    if (!agent || !current || draft === 'followers') return;
     setBusy(true); setStatus('');
     try {
-      const value = await write<Library>(path, { visibility: draft, expectedVersion: current.version });
+      const value = await responseData(browserMainApi().v1.agents({ id: agent.slice(-36) })['library-visibility']
+        .put({ visibility: draft, expectedVersion: current.version }, commandOptions()));
       setCurrent(value); setStatus(t.librarySaved);
     } catch (error) { setStatus(String(error).includes('409') ? t.sectionStale : t.sectionFailed); }
     setBusy(false);
@@ -100,7 +95,9 @@ function Reading({ agent, t, preview = false, extra }: { agent: string | null; t
   useEffect(() => {
     if (!agent || preview) return;
     let active = true;
-    void read<Reader>(`/v1/reader/settings?actingSubject=${encodeURIComponent(agent)}`)
+    void responseData(browserMainApi().v1.reader.settings.get({
+      query: { actingSubject: agent }, fetch: { cache: 'no-store' },
+    }))
       .then(value => { if (active) { setCurrent(value); setDraft(value); } })
       .catch(() => { if (active) setStatus(t.readerUnavailable); });
     return () => { active = false; };
@@ -110,8 +107,8 @@ function Reading({ agent, t, preview = false, extra }: { agent: string | null; t
     setBusy(true); setStatus('');
     try {
       const { profile: _profile, version: _version, ...values } = draft;
-      const value = await write<Reader>('/v1/reader/settings', { actingSubject: agent,
-        expectedVersion: current.version, ...values });
+      const value = await responseData(browserMainApi().v1.reader.settings.put({ actingSubject: agent,
+        expectedVersion: current.version, ...values }, commandOptions()));
       setCurrent(value); setDraft(value); setStatus(t.readerSaved);
     } catch (error) { setStatus(String(error).includes('409') ? t.sectionStale : t.sectionFailed); }
     setBusy(false);
@@ -159,9 +156,11 @@ function PersonControls({ agent, locale, t, preview = false, previewLanguages = 
   const [languages, setLanguages] = useState<string[]>(preview ? [...previewLanguages] : []);
   const [suggested, setSuggested] = useState<string[]>(preview
     ? ['en', 'zh-Hans', 'zh-Hant', 'ja', 'ko', 'de', 'fr', 'es'] : []);
-  const path = `/v1/me/person-preferences?actingSubject=${encodeURIComponent(agent)}`;
+  const readPreferences = () => responseData(browserMainApi().v1.me['person-preferences'].get({
+    query: { actingSubject: agent }, fetch: { cache: 'no-store' },
+  }));
   const reload = async () => {
-    const value = await read<PersonPreferences>(path);
+    const value = await readPreferences();
     setCurrent(value);
     setLanguages(value.contentLanguages);
     return value;
@@ -169,25 +168,29 @@ function PersonControls({ agent, locale, t, preview = false, previewLanguages = 
   useEffect(() => {
     if (preview) return;
     let active = true;
-    void read<PersonPreferences>(path).then(value => {
+    void responseData(browserMainApi().v1.me['person-preferences'].get({
+      query: { actingSubject: agent }, fetch: { cache: 'no-store' },
+    })).then(value => {
       if (!active) return;
       setCurrent(value); setLanguages(value.contentLanguages);
     }).catch(() => { if (active) setStatus(t.personUnavailable); });
-    void fetch(`${BFF_PREFIX}/v1/onboarding/choices?locale=${encodeURIComponent(locale)}`, { cache: 'no-store' })
-      .then(response => response.ok ? response.json() as Promise<{ languages?: unknown }> : null)
+    void responseData(browserMainApi().v1.onboarding.choices.get({
+      query: { locale }, fetch: { cache: 'no-store' },
+    }))
       .then(value => {
         if (!active || !value || !Array.isArray(value.languages)) return;
         setSuggested(value.languages.filter((language): language is string => typeof language === 'string'));
       }).catch(() => { /* suggestions are optional; any tag can still be typed */ });
     return () => { active = false; };
-  }, [path, preview, t, locale]);
+  }, [agent, preview, t, locale]);
   const save = async (patch: Partial<PersonPreferences>) => {
     if (!current || busy || preview) return;
     setBusy(true); setStatus('');
     try {
       const { profile: _profile, version: _version, blockedPeople: _blocked, ...prior } = current;
-      const next = await write<PersonPreferences>('/v1/me/person-preferences', {
-        actingSubject: agent, expectedVersion: current.version, ...prior, contentLanguages: languages, ...patch });
+      const next = await responseData(browserMainApi().v1.me['person-preferences'].put({
+        actingSubject: agent, expectedVersion: current.version, ...prior, contentLanguages: languages, ...patch },
+      commandOptions()));
       setCurrent(next); setLanguages(next.contentLanguages); setStatus(t.personSaved);
       // Writing surfaces suggest these languages first; the next one opened reads them again.
       forgetReadingLanguages();
@@ -202,8 +205,9 @@ function PersonControls({ agent, locale, t, preview = false, previewLanguages = 
     if (busy || preview) return;
     setBusy(true); setStatus('');
     try {
-      await write('/v1/me/blocked-people', { actingSubject: agent, target: target.trim(), blocked });
-      const next = await read<PersonPreferences>(path);
+      await responseData(browserMainApi().v1.me['blocked-people'].put({
+        actingSubject: agent, target: target.trim(), blocked }, commandOptions()));
+      const next = await readPreferences();
       setCurrent(next); setBlockName(''); setStatus(blocked ? t.personBlocked : t.personUnblocked);
     } catch { setStatus(t.sectionFailed); }
     setBusy(false);
