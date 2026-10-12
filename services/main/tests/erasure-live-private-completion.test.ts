@@ -1129,7 +1129,7 @@ test('erasure holds the digest fence while a cooperating Content writer waits fo
     const writerPool = boundedPool({ ...cluster!.connection, database: f.pool.options.database, max: 2 });
     const observed = referenceFenceObserver(writerPool, contribution.payload, attempted);
     f.objects.beforeDelete = async () => {
-      expect((await f.accessPool.query<{ locked: boolean }>(
+      expect((await writerPool.query<{ locked: boolean }>(
         "SELECT pg_try_advisory_xact_lock(hashtextextended('rezics-payload-reference:' || $1,0)) AS locked",
         [contribution.payload])).rows[0]?.locked).toBe(false);
       writer = withReferenceFence(observed, contribution.payload, async () => {
