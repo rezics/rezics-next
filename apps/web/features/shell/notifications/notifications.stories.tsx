@@ -80,7 +80,7 @@ export const Latest: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Mark all as read' }));
     await waitFor(() => expect(canvas.queryAllByText('Unread')).toHaveLength(0));
     await expect(canvas.queryByRole('button', { name: 'Mark all as read' })).toBeNull();
-    await expect(args.calls).toEqual(['read-through:108', 'count']);
+    await expect(args.calls).toEqual(['read-through:1:108', 'count']);
   },
 };
 
@@ -145,7 +145,7 @@ export const ContinuationReset: Story = {
     await expect(canvas.queryByRole('button', { name: 'Show more' })).toBeNull();
     await userEvent.click(canvas.getByRole('button', { name: 'Mark all as read' }));
     await waitFor(() => expect(canvas.queryByText('Unread')).toBeNull());
-    await expect(args.calls).toEqual(['page:older:1:104:50', 'read-through:1', 'count']);
+    await expect(args.calls).toEqual(['page:older:1:104:50', 'count', 'read-through:2:1', 'count']);
   },
 };
 

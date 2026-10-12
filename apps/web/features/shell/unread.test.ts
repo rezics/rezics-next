@@ -6,6 +6,7 @@ const originalFetch = globalThis.fetch;
 const originalDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
 const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
 const cleanup: (() => void)[] = [];
+let focus: (() => void) | undefined;
 let snapshot: () => Unread | null = () => null;
 
 await mock.module('react', () => ({ ...originalReact,
@@ -16,9 +17,10 @@ Object.defineProperty(globalThis, 'document', { configurable: true, value: {
   visibilityState: 'visible', addEventListener() {}, removeEventListener() {},
 } });
 Object.defineProperty(globalThis, 'window', { configurable: true, value: {
-  addEventListener() {}, removeEventListener() {},
+  addEventListener(name: string, listener: () => void) { if (name === 'focus') focus = listener; },
+  removeEventListener() { focus = undefined; },
 } });
-const { setUnread, setUnreadGeneration, useUnread } = await import('./unread.ts');
+const { setUnread, setUnreadGeneration, useUnread, beginNotificationRequest, isNotificationRequestCurrent } = await import('./unread.ts');
 
 beforeEach(() => {
   for (const stop of cleanup.splice(0)) stop();
@@ -68,4 +70,39 @@ test('an older same-generation poll cannot overwrite a count just applied by a c
   setUnread({ generation: '2', count: 1, overflow: false });
   await release('2', 4);
   expect(snapshot()).toMatchObject({ generation: '2', count: 1 });
+});
+
+for (const olderFirst of [true, false]) test(`overlapping polls keep the newest count (older first: ${olderFirst})`, async () => {
+  setUnreadGeneration('2');
+  const pending: ((response: Response) => void)[] = [];
+  globalThis.fetch = (() => new Promise<Response>(resolve => pending.push(resolve))) as unknown as typeof fetch;
+  useUnread(true);
+  focus!();
+  const release = async (index: number, count: number) => {
+    pending[index]!(Response.json({ profile: 'notification-unread-count-v1', generation: '2', count, overflow: false }));
+    await new Promise(done => setTimeout(done, 0));
+  };
+  if (olderFirst) { await release(0, 0); await release(1, 1); }
+  else { await release(1, 1); await release(0, 0); }
+  expect(snapshot()).toMatchObject({ generation: '2', count: 1 });
+});
+
+test('a delayed view count cannot replace a newer badge poll through the shared fence', async () => {
+  setUnreadGeneration('2');
+  const view = beginNotificationRequest();
+  const release = pendingPoll();
+  await release('2', 1);
+  setUnread({ generation: '2', count: 0, overflow: false }, view);
+  expect(snapshot()).toMatchObject({ generation: '2', count: 1 });
+});
+
+test('page and mark completions share count request order and generation fences', () => {
+  setUnreadGeneration('1');
+  const page = beginNotificationRequest();
+  const mark = beginNotificationRequest();
+  expect(isNotificationRequestCurrent(page, '1')).toBe(false);
+  expect(isNotificationRequestCurrent(mark, '2')).toBe(false);
+  expect(isNotificationRequestCurrent(mark, '1')).toBe(true);
+  setUnreadGeneration('2');
+  expect(isNotificationRequestCurrent(mark, '1')).toBe(false);
 });

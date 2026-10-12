@@ -39,15 +39,18 @@ function scripted(options: {
   triage?: () => Answer | Promise<Answer>; invitation?: () => Answer | Promise<Answer>;
 }) {
   const calls: string[] = [];
+  let generation = '1';
   const notifications = Object.assign(({ item }: { item: string }) => ({
     read: { put: async () => { calls.push(`read:${item}`); return options.read?.() ?? answer({ readAt: NOW }); } },
     triage: { put: async () => { calls.push('triage'); return options.triage?.() ?? answer({ saved: true, done: false, revision: '1' }); } },
   }), {
     get: async ({ query }: { query: Query }) => {
       calls.push(`page:${query.before}:${query.view ?? 'inbox'}:${query.reason ?? 'all'}`);
-      return options.page(query);
+      const response = await options.page(query);
+      if (response.data) generation = (response.data as NotificationWindow).generation;
+      return response;
     },
-    'unread-count': { get: async () => { calls.push('count'); return options.count?.() ?? count('1', 0); } },
+    'unread-count': { get: async () => { calls.push('count'); return options.count?.() ?? count(generation, generation === '2' ? 5 : 0); } },
   });
   const main = { v1: { me: { notifications, 'notification-read-watermarks': { inbox: {
     put: async (body: { generation: string; readThrough: string }) => {
@@ -86,7 +89,6 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 const base = { now: NOW, avatarQuery: '' };
 const resetPage = () => page(windowOf([notice(1)], '2'), true);
-const seedNewBadge = () => setUnread({ count: 5, overflow: false, generation: '2' });
 const resetVisible = (canvas: ReturnType<typeof within>) => waitFor(() =>
   expect(canvas.getByRole('link', { name: 'A correction was revised' }))
     .toHaveAttribute('href', `/en/proposals/${streamId(1001)}?revision=2`));
@@ -118,11 +120,10 @@ export const LateMarkAfterReset: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Mark all as read' }));
     await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
     await resetVisible(canvas);
-    seedNewBadge();
     await args.release!();
     await expect(canvas.getByText('Unread')).toBeVisible();
     await expect(canvas.getByLabelText('Unread badge')).toHaveTextContent('5');
-    await expect(args.calls).not.toContain('count');
+    await expect(args.calls.filter(call => call === 'count')).toHaveLength(1);
   },
 };
 
@@ -135,8 +136,10 @@ async function readLink(canvas: ReturnType<typeof within>) {
 export const LateCountAfterReset: Story = {
   args: (() => {
     const pending = deferred();
+    let counts = 0;
     return { ...base, initial: windowOf([notice(100)], '1', '100', 'reset'),
-      ...scripted({ page: resetPage, count: () => pending.promise }), release: () => pending.release(count('1', 0)) };
+      ...scripted({ page: resetPage, count: () => ++counts === 1 ? pending.promise : count('2', 5) }),
+      release: () => pending.release(count('1', 0)) };
   })(),
   async play({ canvasElement, args }) {
     const canvas = within(canvasElement);
@@ -144,9 +147,74 @@ export const LateCountAfterReset: Story = {
     await waitFor(() => expect(args.calls).toContain('count'));
     await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
     await resetVisible(canvas);
-    seedNewBadge();
     await args.release!();
     await expect(canvas.getByLabelText('Unread badge')).toHaveTextContent('5');
+  },
+};
+
+export const NewerBadgePollWins: Story = {
+  args: (() => {
+    const pending = deferred();
+    return { ...base, initial: windowOf([notice(100)]),
+      ...scripted({ page: () => page(windowOf([])), count: () => pending.promise }),
+      release: () => pending.release(count('1', 0)) };
+  })(),
+  async play({ canvasElement, args }) {
+    const canvas = within(canvasElement);
+    await readLink(canvas);
+    await waitFor(() => expect(args.calls).toContain('count'));
+    const poll = spyOn(window, 'fetch').mockResolvedValueOnce(Response.json({
+      profile: 'notification-unread-count-v1', generation: '1', count: 1, overflow: false }));
+    try {
+      window.dispatchEvent(new Event('focus'));
+      await waitFor(() => expect(canvas.getByLabelText('Unread badge')).toHaveTextContent('1'));
+      await args.release!();
+      await expect(canvas.getByLabelText('Unread badge')).toHaveTextContent('1');
+    } finally { poll.mockRestore(); }
+  },
+};
+
+export const LatePageAfterNewerPoll: Story = {
+  args: (() => {
+    const pending = deferred();
+    return { ...base, initial: windowOf([notice(100)], '1', '100', 'older'),
+      ...scripted({ page: () => pending.promise }),
+      release: () => pending.release(page(windowOf([notice(50)]))) };
+  })(),
+  async play({ canvasElement, args }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
+    const poll = spyOn(window, 'fetch').mockResolvedValueOnce(Response.json({
+      profile: 'notification-unread-count-v1', generation: '1', count: 1, overflow: false }));
+    try {
+      window.dispatchEvent(new Event('focus'));
+      await waitFor(() => expect(canvas.getByLabelText('Unread badge')).toHaveTextContent('1'));
+      await args.release!();
+      await expect(canvas.getAllByRole('listitem')).toHaveLength(1);
+      await expect(canvas.getByRole('button', { name: 'Show more' })).toBeEnabled();
+    } finally { poll.mockRestore(); }
+  },
+};
+
+export const LateMarkAfterNewerPoll: Story = {
+  args: (() => {
+    const pending = deferred();
+    return { ...base, initial: windowOf([notice(100)]),
+      ...scripted({ page: () => page(windowOf([])), mark: () => pending.promise }),
+      release: () => pending.release(watermark('1', '100')) };
+  })(),
+  async play({ canvasElement, args }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Mark all as read' }));
+    const poll = spyOn(window, 'fetch').mockResolvedValueOnce(Response.json({
+      profile: 'notification-unread-count-v1', generation: '1', count: 1, overflow: false }));
+    try {
+      window.dispatchEvent(new Event('focus'));
+      await waitFor(() => expect(canvas.getByLabelText('Unread badge')).toHaveTextContent('1'));
+      await args.release!();
+      await expect(canvas.getByText('Unread')).toBeVisible();
+      await expect(args.calls).not.toContain('count');
+    } finally { poll.mockRestore(); }
   },
 };
 
@@ -161,9 +229,8 @@ export const LateReadAfterReset: Story = {
     await readLink(canvas);
     await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
     await resetVisible(canvas);
-    seedNewBadge();
     await args.release!();
-    await expect(args.calls).not.toContain('count');
+    await expect(args.calls.filter(call => call === 'count')).toHaveLength(1);
     await expect(canvas.getByLabelText('Unread badge')).toHaveTextContent('5');
   },
 };
@@ -198,7 +265,6 @@ export const LateInvitationAfterReset: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Join' }));
     await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
     await waitFor(() => expect(canvas.queryByRole('button', { name: 'Join' })).toBeNull());
-    seedNewBadge();
     await args.release!();
     await expect(args.calls.some(call => call.startsWith('read:'))).toBe(false);
     await expect(canvas.getByLabelText('Unread badge')).toHaveTextContent('5');
@@ -220,7 +286,6 @@ export const OlderGenerationPage: Story = {
       .toHaveAttribute('href', `/en/proposals/${streamId(1002)}?revision=2`));
     const replacement = canvas.getByRole('link', { name: 'A correction was revised' }).getAttribute('href');
     await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
-    seedNewBadge();
     await args.release!();
     await expect(canvas.getByRole('link', { name: 'A correction was revised' })).toHaveAttribute('href', replacement);
     await expect(canvas.getByLabelText('Unread badge')).toHaveTextContent('5');
@@ -268,7 +333,7 @@ export const FailedRestartRetriesNewest: Story = {
     await expect(await canvas.findByRole('alert')).toHaveTextContent('Couldn’t load more notifications.');
     await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
     await waitFor(() => expect(canvas.queryByRole('button', { name: 'Show more' })).toBeNull());
-    await expect(args.calls).toEqual(['page:expired:saved:manual', 'page:latest:saved:manual', 'page:latest:saved:manual']);
+    await expect(args.calls).toEqual(['page:expired:saved:manual', 'page:latest:saved:manual', 'page:latest:saved:manual', 'count']);
     await expect(canvas.getByRole('link', { name: 'A correction was revised' }))
       .toHaveAttribute('href', `/en/proposals/${streamId(1200)}?revision=2`);
   },

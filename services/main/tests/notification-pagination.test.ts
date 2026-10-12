@@ -51,7 +51,7 @@ beforeAll(async () => {
 afterAll(async () => { await pool?.end(); cluster?.remove(); });
 
 /** Record the statement sent to PostgreSQL, without evaluating or replacing any SQL. */
-function recordingPool(statements: Statement[], afterHead?: () => Promise<void>) {
+function recordingPool(statements: Statement[], afterHead?: () => Promise<void>, afterGeneration?: () => Promise<void>) {
   let arrived = false;
   return new Proxy(pool, { get(target, property) {
     if (property === 'connect') return async () => {
@@ -63,6 +63,10 @@ function recordingPool(statements: Statement[], afterHead?: () => Promise<void>)
           if (afterHead && !arrived && sql.includes('head_sequence::text FROM access.notification_stream')) {
             arrived = true;
             await afterHead();
+          }
+          if (afterGeneration && !arrived && sql.includes('generation::text') && sql.includes('FROM access.notification_stream')) {
+            arrived = true;
+            await afterGeneration();
           }
           return result;
         };
@@ -278,6 +282,38 @@ test('HTTP exposes newest-first continuations and fences unread counts with the 
   expect(await (await count()).json()).toMatchObject({ generation: '2', count: 0 });
 });
 
+test('unread count keeps one generation snapshot across a concurrent stream reset', async () => {
+  const f = await inbox();
+  await f.insert([{ sequence: '1', saved: false, done: false, reason: 'manual' }], '1',
+    { triage: true, context: true, erase: false });
+  let attempted = false, reset = false;
+  const store = new NotificationStore(recordingPool([], undefined, async () => {
+    attempted = true;
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      // A snapshot that locks the stream may defer the reset until its read ends.
+      await client.query("SELECT 1 FROM access.notification_stream WHERE principal_id = $1 AND stream = 'inbox' FOR UPDATE NOWAIT", [f.id]);
+      await client.query("UPDATE access.notification_stream SET generation = generation + 1,head_sequence = 0,reset_at = now() WHERE principal_id = $1 AND stream = 'inbox'", [f.id]);
+      await client.query('COMMIT');
+      reset = true;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      if (!error || typeof error !== 'object' || !('code' in error) || error.code !== '55P03') throw error;
+    } finally { client.release(); }
+  }));
+  store.setDefaultReadSubjectReader({ resolve: async () => ({ status: 'available', subject: { fields: {}, private: true } }) });
+  expect(await store.unreadCount(f.principal)).toEqual({ generation: '1', count: 1, overflow: false });
+  expect(attempted).toBe(true);
+  if (!reset) await f.reset();
+  expect(await store.unreadCount(f.principal)).toEqual({ generation: '2', count: 0, overflow: false });
+});
+
+test('pagination fixtures obtain Agents and editorial records through their owners', () => {
+  const source = readFileSync(import.meta.path, 'utf8');
+  expect(source).not.toMatch(/\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+access\.(?:authority_subject|agent_provision|editorial_proposal|editorial_revision)\b/i);
+});
+
 type Plan = { 'Node Type': string; 'Index Name'?: string; 'Actual Rows': number; 'Actual Loops': number;
   'Rows Removed by Filter'?: number; 'Rows Removed by Index Recheck'?: number;
   'Shared Hit Blocks': number; 'Shared Read Blocks': number; Plans?: Plan[] };
@@ -298,12 +334,6 @@ test('actual forward and descending filtered statements use bounded seeks at thr
         done: withReason ? old.done : view === 'inbox', reason: 'reviewer',
       })));
       inserted = history;
-      // Measure settled unrelated history, rather than the dead index versions
-      // created when the fixture inserts an Inbox item and then changes its triage.
-      await pool.query('VACUUM (ANALYZE) access.notification_item, access.notification_item_triage, access.notification_proposal_context');
-      if ((await pool.query("SELECT to_regclass('access.notification_filter_seek') AS relation")).rows[0]!.relation) {
-        await pool.query('VACUUM (ANALYZE) access.notification_filter_seek');
-      }
       for (const descending of [false, true]) {
         const page = await f.store.readStream(f.principal, null, 2, selection, descending ? 'latest' : undefined);
         expect(page.items.map(item => item.sequence)).toEqual(['1']);
