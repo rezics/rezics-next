@@ -172,7 +172,6 @@ const ceiling = new Set<string>([
   'tests/qa/integration/work-address-api.test.ts',
   'tests/qa/integration/model-generation-refusal.test.ts',
   // Landed on 2026-10-12 while no handoff check ran this guard; their owners owe the migration to commands.
-  'services/main/tests/governance-realm-authority.test.ts',
   'services/main/tests/governance-realm-restoration.test.ts',
   'services/main/tests/governance-realm-target.test.ts',
   'tests/qa/integration/structured-work-publication-native.test.ts',

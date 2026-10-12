@@ -265,17 +265,11 @@ async function productionFixture(kind: 'content_report' | 'rights_complaint' = '
   let resource = resourceKind === 'Space' ? created.space : resourceKind === 'Agent' ? member.actor : created.realm;
   if (resourceKind === 'Concept') {
     await grant('classification:define:global', 'classification.proposition.define');
+    // The vocabulary operation gives the Concept its own retained head, as an imported one has.
     resource = (await productionJson<{ concept: string }>(await member.send('POST',
-      '/v1/classification-propositions', { profile: 'classification-proposition-v1',
-        label: 'Authority Concept', actingSubject: member.actor }))).concept;
-    // Imported Concept records have their own retained head; the proposition
-    // producer gives only its ClassificationSense a head.
-    const conceptHead = native();
-    await stack.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA {
-      GRAPH ${iri(GRAPHS.current)} { ${iri(resource)} rv:head ${iri(conceptHead)} }
-      GRAPH ${iri(GRAPHS.revisions)} { ${iri(conceptHead)} a rv:RevisionAnchor ;
-        rv:component ${iri(resource)} }
-    }`);
+      '/v1/classification-vocabulary', { profile: 'classification-proposition-v2', scheme: null,
+        labels: [{ language: 'en', value: 'Authority Concept' }], alternativeLabels: [],
+        broader: [], narrower: [], actingSubject: member.actor }))).concept;
   }
   const head = (await stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head WHERE {
     GRAPH ${iri(GRAPHS.current)} { ${iri(resource)} rv:head ?head }
