@@ -3,7 +3,7 @@ import { canonicalLanguage } from '../display-language/tag.ts';
 import { pixelCrop, RENDITION_LIMITS, type RenditionCandidate } from '../media-rendition/policy.ts';
 import { zoneCampaignUses, type ZoneCampaignArt, type ZoneSlide } from './presentation-format.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
-import { discloseInventory } from '../disclosure/read.ts';
+import { disclose, discloseInventory } from '../disclosure/read.ts';
 import { currentDisclosureViewer } from '../disclosure/viewer.ts';
 import type { MediaDependencies } from '../media/commands.ts';
 import { requestUseRenditions } from '../media-rendition/request.ts';
@@ -65,14 +65,19 @@ export async function readZoneCampaignArt(store: CampaignMediaStore | undefined,
   const items = await readZoneCampaignItems(store, realm, slides);
   if (disclosure && items.size) {
     const uses = [...items.keys()];
-    const decisions = await discloseInventory(disclosure.environment, uses.flatMap(use => [
-      { owner: 'media' as const, resource: `https://rezics.com/id/${items.get(use)!.asset}`,
-        component: 'cover' as const, context: items.get(use)!.context ?? DEFAULT_MEDIA_CONTEXT, work: realm },
-      { owner: 'media' as const, resource: `https://rezics.com/id/${use}`,
-        component: 'media_use' as const, context: items.get(use)!.context ?? DEFAULT_MEDIA_CONTEXT, work: realm },
-    ]), currentDisclosureViewer(), 'media');
+    const viewer = currentDisclosureViewer();
+    // The Use proves its Asset state and exact attachment. Asset governance
+    // still applies, without asking visibility about every other attachment.
+    const assetDecisions = await disclose(disclosure.environment, uses.map(use => ({
+      owner: 'media' as const, resource: `https://rezics.com/id/${items.get(use)!.asset}`,
+      component: 'cover' as const, context: items.get(use)!.context ?? DEFAULT_MEDIA_CONTEXT, work: realm,
+    })), viewer, 'media');
+    const useDecisions = await discloseInventory(disclosure.environment, uses.map(use => ({
+      owner: 'media' as const, resource: `https://rezics.com/id/${use}`,
+      component: 'media_use' as const, context: items.get(use)!.context ?? DEFAULT_MEDIA_CONTEXT, work: realm,
+    })), viewer, 'media');
     uses.forEach((use, index) => {
-      if (decisions[index * 2] !== 'visible' || decisions[index * 2 + 1] !== 'visible') items.delete(use);
+      if (assetDecisions[index] !== 'visible' || useDecisions[index] !== 'visible') items.delete(use);
     });
   }
   const candidates: Map<string, RenditionCandidate[]> = store && items.size

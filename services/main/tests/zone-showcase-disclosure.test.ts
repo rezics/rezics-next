@@ -37,14 +37,17 @@ test('campaign disclosure hides a held Asset or Use before advertising source UR
   renditions: { candidatesBatch: async () => { candidateReads++; return new Map(); } } } as unknown as MediaStore;
   const slides = [{ id: 'campaign', href: '/launch', title: 'Launch', art: { landscape: { use: `https://rezics.com/id/${use}` } } }];
   for (const held of [asset, use]) {
+    const checked: string[] = [];
     configureDisclosure(environment, { read: async targets => {
-      expect(targets).toHaveLength(2);
+      expect(targets).toHaveLength(1);
       expect(targets.every(target => target.context === 'urn:rezics:media:context:default')).toBe(true);
+      checked.push(...targets.map(target => target.resource));
       return targets.map(target => target.resource.endsWith(held) ? 'hidden' : 'visible');
     } });
     expect(await readZoneCampaignArt(store, realm, slides, { environment, zone })).toEqual([
       { id: 'campaign', art: { landscape: null, portrait: null, cutout: null, logos: [] } },
     ]);
+    expect(checked).toEqual([`https://rezics.com/id/${asset}`, `https://rezics.com/id/${use}`]);
   }
   expect(candidateReads).toBe(0);
   expect(slides[0]!.title).toBe('Launch');
