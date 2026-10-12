@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { createMemoryEpisodes, memoryEpisodeApi, type MemoryEpisodes } from '../features/tracking/episode-memory.ts';
-import { episodeProgressCompletion, episodeProgressWhere } from '../features/tracking/episode-progress.tsx';
-import { MAX_COMPLETION_READS, MAX_PAGES, standingOf, totalOf, type Standing } from '../features/tracking/episodes.ts';
+import { episodeProgressWhere } from '../features/tracking/episode-progress.tsx';
+import { standingOf, type Standing } from '../features/tracking/episodes.ts';
 import { episodeSeries, iri, saoOne } from '../features/tracking/fixtures.ts';
 import { copyOf } from '../features/tracking/messages.ts';
 
@@ -18,7 +18,7 @@ const finish = (memory: MemoryEpisodes, ...numbers: number[]) => {
 async function where(memory: MemoryEpisodes) {
   const read = await standingOf(memoryEpisodeApi(memory), saoOne);
   if (!read.ok || !read.data) throw new Error('no standing');
-  return episodeProgressWhere(read.data, totalOf(read.data), t);
+  return episodeProgressWhere(read.data, t);
 }
 
 const labelled = (labels: string[]) => createMemoryEpisodes({
@@ -28,28 +28,55 @@ const labelled = (labels: string[]) => createMemoryEpisodes({
 });
 
 describe('episode progress summary', () => {
-  for (const page of [1, MAX_COMPLETION_READS + 1]) {
-    test(`a bounded proof with page size ${page} reports an unknown prefix`, async () => {
-      const memory = store(MAX_COMPLETION_READS + 1, page);
-      finish(memory, ...Array.from({ length: memory.mains.length }, (_, index) => index + 1));
-      const result = await standingOf(memoryEpisodeApi(memory), saoOne);
-      if (!result.ok || !result.data) throw new Error('no standing');
-      expect(result.data.through).toBeNull();
-      expect(episodeProgressWhere(result.data, totalOf(result.data), t)).toBe(`Last watched: Episode ${MAX_COMPLETION_READS + 1}`);
-      expect(episodeProgressCompletion(result.data, totalOf(result.data))).toEqual({ percent: null, allWatched: false });
-      expect(memory.calls.filter(call => call.startsWith('progress')).length).toBeLessThanOrEqual(MAX_COMPLETION_READS);
-      expect(result.data.mains.pages).toBeLessThanOrEqual(MAX_PAGES);
-    });
-  }
-
-  test('a failure inside the prefix does not turn a completed endpoint into proof', async () => {
-    const memory = store(12);
-    finish(memory, 1, 12);
+  test('201 completed episodes with a failed resume are unavailable', async () => {
+    const memory = store(201);
+    finish(memory, ...Array.from({ length: 201 }, (_, index) => index + 1));
     const api = memoryEpisodeApi(memory);
-    const progress = api.progress;
-    api.progress = episode => episode.occurrence === memory.mains[1]!.occurrence
-      ? Promise.resolve({ ok: false, failure: 'unavailable' }) : progress(episode);
+    api.resume = async () => ({ ok: false, failure: 'unavailable' });
     expect(await standingOf(api, saoOne)).toEqual({ ok: false, failure: 'unavailable' });
+    expect(memory.calls.filter(call => call.startsWith('progress:'))).toHaveLength(0);
+  });
+
+  test('another device unmarking 1 and marking 2 cannot produce a mixed prefix', async () => {
+    const memory = store(2);
+    finish(memory, 1);
+    const api = memoryEpisodeApi(memory);
+    const resume = api.resume;
+    api.resume = async work => {
+      memory.progress.delete(memory.mains[0]!.occurrence);
+      finish(memory, 2);
+      return resume(work);
+    };
+    const read = await standingOf(api, saoOne);
+    if (!read.ok || !read.data) throw new Error('no standing');
+    expect(episodeProgressWhere(read.data, t)).toBe('Last watched: Episode 2');
+    expect(read.data).not.toHaveProperty('through');
+    expect(memory.calls.filter(call => call.startsWith('progress:'))).toHaveLength(0);
+    expect(memory.calls.filter(call => call === 'resume')).toHaveLength(1);
+  });
+
+  test('a selected-revision completion uses Main\'s resume semantics', async () => {
+    const memory = store(2);
+    finish(memory, 1);
+    const api = memoryEpisodeApi(memory);
+    // The null-revision row is unfinished; the owner's resume includes the completed selection.
+    api.resume = async () => ({ ok: true, data: { occurrence: memory.mains[1]!.occurrence, label: 'Episode 2' } });
+    const read = await standingOf(api, saoOne);
+    if (!read.ok || !read.data) throw new Error('no standing');
+    expect(episodeProgressWhere(read.data, t)).toBe('Last watched: Episode 2');
+    expect(read.data).not.toHaveProperty('through');
+    expect(memory.calls.filter(call => call.startsWith('progress:'))).toHaveLength(0);
+  });
+
+  test('2020 episodes with resume at 2019 never fall back to episode 1', async () => {
+    const memory = store(2020, 20);
+    finish(memory, 2019);
+    const read = await standingOf(memoryEpisodeApi(memory), saoOne);
+    if (!read.ok || !read.data) throw new Error('no standing');
+    expect(episodeProgressWhere(read.data, t)).toBe('Last watched: Episode 2019');
+    expect(read.data.next).toBeNull();
+    expect(memory.calls.filter(call => call.startsWith('page:root:'))).toHaveLength(1);
+    expect(memory.calls.filter(call => call.startsWith('progress:'))).toHaveLength(0);
   });
 
   for (const last of [6, 12]) {
@@ -59,10 +86,10 @@ describe('episode progress summary', () => {
       const result = await standingOf(memoryEpisodeApi(memory), saoOne);
       if (!result.ok || !result.data) throw new Error('no standing');
       const read = result.data;
-      expect(episodeProgressWhere(read, totalOf(read), t)).toBe('Watched through episode 1 of 12');
-      expect(episodeProgressCompletion(read, totalOf(read))).toEqual({ percent: 8, allWatched: false });
+      expect(episodeProgressWhere(read, t)).toBe(`Last watched: Episode ${last}`);
+      expect(read).not.toHaveProperty('through');
       expect(read.furthest?.occurrence).toBe(memory.mains[last - 1]!.occurrence);
-      expect(read.next?.number ?? null).toBe(last === 12 ? null : 7);
+      expect(read.next).toBeNull();
     });
   }
 
@@ -71,29 +98,13 @@ describe('episode progress summary', () => {
     finish(memory, ...Array.from({ length: 12 }, (_, index) => index + 1));
     const api = memoryEpisodeApi(memory);
     await api.mark({ structure: memory.structure, occurrence: memory.mains[1]!.occurrence }, { completed: false });
-    expect(await where(memory)).toBe('Watched through episode 1 of 12');
+    expect(await where(memory)).toBe('Last watched: Episode 12');
   });
 
   test('a completed page endpoint cannot hide a gap across pages', async () => {
     const memory = store(12, 3);
     finish(memory, 1, 2, 3, 5, 6, 12);
-    expect(await where(memory)).toBe('Watched through episode 3 of 12');
-  });
-
-  test('an incomplete run never rounds to 100 percent', async () => {
-    const memory = store(200, 200);
-    finish(memory, ...Array.from({ length: 199 }, (_, index) => index + 1));
-    const result = await standingOf(memoryEpisodeApi(memory), saoOne);
-    if (!result.ok || !result.data) throw new Error('no standing');
-    expect(episodeProgressCompletion(result.data, totalOf(result.data))).toEqual({ percent: 99, allWatched: false });
-  });
-
-  test('a fully verified run is 100 percent and all watched', async () => {
-    const memory = store(12);
-    finish(memory, ...Array.from({ length: 12 }, (_, index) => index + 1));
-    const result = await standingOf(memoryEpisodeApi(memory), saoOne);
-    if (!result.ok || !result.data) throw new Error('no standing');
-    expect(episodeProgressCompletion(result.data, totalOf(result.data))).toEqual({ percent: 100, allWatched: true });
+    expect(await where(memory)).toBe('Last watched: Episode 12');
   });
 
   test('none watched', async () => {
@@ -103,7 +114,7 @@ describe('episode progress summary', () => {
   test('an unbroken run', async () => {
     const memory = store(12);
     finish(memory, 1, 2, 3, 4, 5, 6, 7);
-    expect(await where(memory)).toBe('Watched through episode 7 of 12');
+    expect(await where(memory)).toBe('Last watched: Episode 7');
   });
 
   test('only episode 1001 watched', async () => {
@@ -115,7 +126,7 @@ describe('episode progress summary', () => {
   test('a run plus a later episode', async () => {
     const memory = store(12);
     finish(memory, 1, 2, 3, 9);
-    expect(await where(memory)).toBe('Watched through episode 3 of 12');
+    expect(await where(memory)).toBe('Last watched: Episode 9');
   });
 
   test('non-dense labels name the watched part, not an ordinal neighbour', async () => {
@@ -132,10 +143,10 @@ describe('episode progress summary', () => {
     const read = {
       structure: iri('e00'),
       mains: { structure: iri('e00'), parent: null, special: false, items: [], groups: [], next: null, pages: 0 },
-      specials: [], through: null, next: null,
+      specials: [], next: null,
       furthest: { occurrence: iri('e199'), label: null },
     } satisfies Standing;
-    expect(episodeProgressWhere(read, null, t)).toBe('Some episodes watched');
+    expect(episodeProgressWhere(read, t)).toBe('Some episodes watched');
   });
 
   test('an episode labelled some is last watched, not the unnamed line', async () => {

@@ -20,24 +20,22 @@ const finish = (memory: MemoryEpisodes, ...numbers: number[]) => {
 };
 
 describe('where the reader stands in a series', () => {
-  test('a reader who has finished nothing continues from the first main episode', async () => {
+  test('a reader without a named resume has no inferred continuation', async () => {
     const memory = store(12, 2);
     const read = await standing(memory);
-    expect(read.through).toBeNull();
-    expect(read.next?.number).toBe(1);
+    expect(read.next).toBeNull();
     expect(read.mains.items).toHaveLength(12);
     expect(read.specials.map(group => [group.label, group.walk.items.length])).toEqual([['Specials', 2]]);
-    // One read for the first episode, nothing past it.
-    expect(memory.calls.filter(call => call.startsWith('progress'))).toHaveLength(1);
+    // Inventory does not establish progress; only resume supplies that fact.
+    expect(memory.calls.filter(call => call.startsWith('progress'))).toHaveLength(0);
   });
 
-  test('episode 7 finished continues from episode 8 after proving every earlier occurrence', async () => {
+  test('episode 7 is named by resume without proving or inferring neighbours', async () => {
     const memory = store(12, 2);
     finish(memory, 1, 2, 3, 4, 5, 6, 7);
     const read = await standing(memory);
-    expect(read.through?.number).toBe(7);
-    expect(read.next?.number).toBe(8);
-    expect(memory.calls.filter(call => call.startsWith('progress'))).toHaveLength(8);
+    expect(read.next).toBeNull();
+    expect(memory.calls.filter(call => call.startsWith('progress'))).toHaveLength(0);
   });
 
   test('a special finished does not move the main run', async () => {
@@ -46,33 +44,29 @@ describe('where the reader stands in a series', () => {
     const special = memory.groups[0]!.parts[0]!;
     memory.progress.set(special.occurrence, { completed: true, position: 'special:1', version: 1 });
     const read = await standing(memory);
-    expect(read.through?.number).toBe(7);
-    expect(read.next?.number).toBe(8);
+    expect(read.next).toBeNull();
   });
 
   test('only a special finished leaves the main run at its start', async () => {
     const memory = store(12, 2);
     memory.progress.set(memory.groups[0]!.parts[0]!.occurrence, { completed: true, position: 'special:1', version: 1 });
     const read = await standing(memory);
-    expect(read.through).toBeNull();
-    expect(read.next?.number).toBe(1);
+    expect(read.next).toBeNull();
   });
 
   test('the last episode finished leaves nothing to continue', async () => {
     const memory = store(3);
     finish(memory, 1, 2, 3);
     const read = await standing(memory);
-    expect(read.through?.number).toBe(3);
     expect(read.next).toBeNull();
   });
 
-  test('a run past the first page reads pages only as far as it goes', async () => {
+  test('a resume past the first page never triggers an inventory walk', async () => {
     const memory = store(400, 0, 100);
     finish(memory, ...Array.from({ length: 150 }, (_, index) => index + 1));
     const read = await standing(memory);
-    expect(read.through?.number).toBe(150);
-    expect(read.next?.number).toBe(151);
-    expect(memory.calls.filter(call => call.startsWith('page:root'))).toEqual(['page:root:first', 'page:root:100']);
+    expect(read.next).toBeNull();
+    expect(memory.calls.filter(call => call.startsWith('page:root'))).toEqual(['page:root:first']);
   });
 
   test('episode 1000 of a thousand is reached by its number, a page at a time', async () => {
@@ -92,17 +86,16 @@ describe('where the reader stands in a series', () => {
     const memory = store(MAX_PAGES * 2 + 5, 0, 2);
     const api = memoryEpisodeApi(memory);
     const read = await standing(memory);
-    expect(await reach(api, read.mains, MAX_PAGES * 2 + 1)).toBeNull();
+    await expect(reach(api, read.mains, MAX_PAGES * 2 + 1)).rejects.toThrow('budget');
     expect(read.mains.pages).toBe(MAX_PAGES);
   });
 
-  test('marking episode 1001 of 1002 continues from episode 1002', async () => {
+  test('marking episode 1001 of 1002 does not infer a successor', async () => {
     const memory = store(1002, 0, 20);
     finish(memory, 1001);
     const read = await standing(memory);
-    expect(read.through).toBeNull();
-    expect(read.next?.number).toBe(1002);
-    expect(memory.calls.filter(call => call.startsWith('progress'))).toHaveLength(1);
+    expect(read.next).toBeNull();
+    expect(memory.calls.filter(call => call.startsWith('progress'))).toHaveLength(0);
     expect(memory.calls.filter(call => call.startsWith('page:root')).length).toBeLessThanOrEqual(MAX_PAGES);
   });
 

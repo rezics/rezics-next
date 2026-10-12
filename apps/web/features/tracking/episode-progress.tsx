@@ -4,11 +4,10 @@ import { Alert, AlertDescription } from '@rezics/ui/alert';
 import { Button } from '@rezics/ui/button';
 import { Field, FieldLabel } from '@rezics/ui/field';
 import { Input } from '@rezics/ui/input';
-import { Progress } from '@rezics/ui/progress';
 import { CheckIcon } from 'lucide-react';
 import { useEffect, useId, useState } from 'react';
 import type { EpisodeApi, EpisodeProgress as Mark } from './episode-api.ts';
-import { type Episode, type Standing, markPosition, reach, standingOf, totalOf } from './episodes.ts';
+import { type Episode, type Standing, markPosition, reach, standingOf } from './episodes.ts';
 import type { Copy } from './messages.ts';
 
 const nameOf = (episode: Episode, t: Copy) =>
@@ -16,54 +15,17 @@ const nameOf = (episode: Episode, t: Copy) =>
 
 type Selected = { episode: Episode; mark: Mark | 'loading' | 'failed' };
 
-type LastWatched = { kind: 'named'; label: string } | { kind: 'unnamed' };
-
-/**
- * The furthest watched main part when there is no unbroken run: resume's part (same source as
- * continue), else the ordered episode immediately before `next`. Episode numbers are labels, so this
- * never subtracts from `next.number`.
- */
-function lastWatchedPlace(read: Standing, t: Copy): LastWatched | null {
-  if (read.furthest) {
-    const held = read.mains.items.find(item => item.occurrence === read.furthest!.occurrence);
-    if (held) return { kind: 'named', label: nameOf(held, t) };
-    if (read.furthest.label) return { kind: 'named', label: read.furthest.label };
-    return { kind: 'unnamed' };
-  }
-  if (!read.next) return null;
-  const index = read.mains.items.findIndex(item => item.occurrence === read.next!.occurrence);
-  return index > 0 ? { kind: 'named', label: nameOf(read.mains.items[index - 1]!, t) } : null;
+/** Without an occurrence-count summary, only the name in Main's resume response is known. */
+export function episodeProgressWhere(read: Standing, t: Copy): string {
+  if (!read.furthest) return t.noneWatched;
+  return read.furthest.label ? t.lastWatched({ place: read.furthest.label }) : t.someWatched;
 }
 
 /**
- * The line under Episodes: an unbroken run from episode 1, or the furthest watched when that run is
- * empty, or none yet.
- */
-export function episodeProgressWhere(read: Standing, total: number | null, t: Copy): string {
-  if (read.through) {
-    return total !== null
-      ? t.watchedThroughOf({ number: String(read.through.number), total: String(total) })
-      : t.watchedThrough({ number: String(read.through.number) });
-  }
-  const place = lastWatchedPlace(read, t);
-  if (place === null) return t.noneWatched;
-  return place.kind === 'unnamed' ? t.someWatched : t.lastWatched({ place: place.label });
-}
-
-export function episodeProgressCompletion(read: Standing, total: number | null) {
-  const allWatched = total !== null && total > 0 && read.through?.number === total;
-  return {
-    percent: total !== null && total > 0 && read.through
-      ? allWatched ? 100 : Math.min(99, Math.round((read.through.number / total) * 100)) : null,
-    allWatched,
-  };
-}
-
-/**
- * Where the reader stands in a series' episodes, and the ways to move: mark the next one in a tap,
- * jump to any by number, and keep a special apart from the main run. Everything shown is Main's;
+ * Main's last watched episode, a jump to an episode by number, and specials kept apart.
+ * The resume response supplies progress; inventory pages supply choices;
  * after each write the standing is read again, so a second device that loads the page sees the same.
- * "Watched through N" means the episodes from the first to N are all marked watched.
+ * Main currently exposes no episode coverage counts, so this panel makes no coverage claim.
  */
 export function EpisodeProgress({ work, api, t, className }: { work: string; api: EpisodeApi; t: Copy; className?: string }) {
   const headingId = useId();
@@ -83,7 +45,11 @@ export function EpisodeProgress({ work, api, t, className }: { work: string; api
     return () => { current = false; };
   }, [api, work, reload]);
 
-  if (!standing) return null;
+  if (!standing) return <section aria-labelledby={headingId} data-episode-progress data-pending
+    className={className ?? 'grid gap-4 rounded-2xl border border-border/60 p-4 sm:p-5'}>
+    <h2 id={headingId} className="font-semibold text-xl tracking-tight">{t.episodes}</h2>
+    <p role="status" className="text-muted-foreground text-sm">{t.unknown}</p>
+  </section>;
   if (!standing.ok) {
     return standing.failure === 'missing' || standing.failure === 'sign-in' ? null
       : <section aria-labelledby={headingId} className={className}>
@@ -92,8 +58,6 @@ export function EpisodeProgress({ work, api, t, className }: { work: string; api
   }
   const read = standing.data;
   if (!read) return null;
-  const total = totalOf(read);
-  const completion = episodeProgressCompletion(read, total);
   const typedNumber = /^[1-9]\d*$/.test(typed.trim()) ? Number(typed.trim()) : null;
 
   async function select(episode: Episode) {
@@ -110,7 +74,8 @@ export function EpisodeProgress({ work, api, t, className }: { work: string; api
     setSaving(false);
     if (!written.ok) { setFailed(true); return; }
     setSelected(now => (now?.episode.occurrence === episode.occurrence ? { episode, mark: written.data } : now));
-    // Re-prove the prefix after every mark or unmark; a write says nothing about other occurrences.
+    // A successful write invalidates the old Main response before refresh can start.
+    setStanding(null);
     setReload(count => count + 1);
   }
 
@@ -127,23 +92,13 @@ export function EpisodeProgress({ work, api, t, className }: { work: string; api
   }
 
   const mark = selected && typeof selected.mark === 'object' ? selected.mark : null;
-  return <section aria-labelledby={headingId} data-episode-progress data-through={read.through?.number ?? ''}
-    data-continue={read.next?.number ?? ''}
+  return <section aria-labelledby={headingId} data-episode-progress
     className={className ?? 'grid gap-4 rounded-2xl border border-border/60 p-4 sm:p-5'}>
     <h2 id={headingId} className="font-semibold text-xl tracking-tight">{t.episodes}</h2>
 
     <div className="grid gap-2">
-      <p className="font-medium text-base" data-where>{episodeProgressWhere(read, total, t)}</p>
-      {completion.percent !== null
-        ? <Progress value={completion.percent} aria-label={t.episodes} /> : null}
+      <p className="font-medium text-base" data-where>{episodeProgressWhere(read, t)}</p>
     </div>
-
-    {read.next ? <div className="grid gap-2" data-next>
-      <p className="text-muted-foreground text-sm">{t.continueFrom({ number: String(read.next.number) })}</p>
-      <div><Button type="button" className="min-h-11 w-full sm:w-auto" disabled={saving}
-        onClick={() => void write(read.next!, true)}>
-        <CheckIcon aria-hidden="true" />{saving ? t.episodeSaving : t.markNext({ number: String(read.next.number) })}</Button></div>
-    </div> : completion.allWatched ? <p className="text-muted-foreground text-sm" data-caught-up>{t.allWatched}</p> : null}
 
     <form className="flex items-end gap-2 sm:max-w-sm" onSubmit={event => { event.preventDefault(); void jump(); }}>
       <Field className="min-w-0 flex-1 gap-1">

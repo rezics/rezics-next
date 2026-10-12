@@ -105,8 +105,9 @@ export function mainEpisodeApi(actingSubject: string, main: () => MainClient = b
       const read = await restarted(() => settle(() => main().v1['reading-positions']({ work: uuidOf(work) }).get({
         query: { actingSubject, position: 'mine', limit: 1 } })));
       if (!read.ok) return read;
-      const page = read.data as { scope?: string; resolved?: string; items?: {
+      const page = read.data as { scope?: string; resolved?: string; complete?: boolean; items?: {
         occurrence?: string; displayLabel?: string; labels?: { value: string }[] }[] };
+      if (page.scope === 'resume' && page.complete === false) return { ok: false, failure: 'budget' };
       const named = page.scope === 'resume' || page.resolved?.startsWith('https://') === true;
       if (!named) return { ok: true, data: null };
       const item = page.items?.[0];

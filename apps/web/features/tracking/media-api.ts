@@ -6,22 +6,17 @@ import { type EpisodeProgress, type ProgressStale, mainEpisodeApi } from './epis
 import { resumeName, type ChapterRef, type Place, type RouteRef } from './media.ts';
 
 // The same occurrence progress episodes use. A manga is placed by one resume read and one page of
-// the Work's positions; all chapters read requires bounded proof across positions and completions.
+// the Work's positions. No client-side read combines chapter completion coverage.
 // A game is read by bounded pages through all levels of its parts.
 // A read that fails is a failure rather than an empty place.
 
-export interface PositionPage {
-  items: Place[]; next: string | null;
-  /** Only a terminal complete page proves the whole chapter inventory was enumerated. */
-  complete?: boolean;
-}
+export interface PositionPage { items: Place[]; next: string | null }
 
 /** Last read, and the chapter after it when that same resume read, or its one neighbour lookup, names it. */
 export interface ChapterStanding {
   last: Place | null;
-  next: Place | null;
-  /** Every chapter is proved completed; null when the coverage budget cannot establish it. */
-  caughtUp: boolean | null;
+  /** No successor is present in the current Main resume response. */
+  next: null;
   /** The opening page, when the resume read was that page. Null once the reader has a place. */
   opened: PositionPage | null;
 }
@@ -46,7 +41,7 @@ export interface MediaApi {
   chapters(work: string): Promise<Loaded<ChapterRef[] | null>>;
   /** One page of the Work's parts, including grouped children. Pass the opaque `next` to continue. */
   routes(work: string, after?: string): Promise<Loaded<PartPage>>;
-  /** Resume and its neighbour, plus completion coverage before claiming all chapters read. */
+  /** Chapter facts from one Main resume response; no separate coverage or neighbour read. */
   standing(work: string): Promise<Loaded<ChapterStanding>>;
   /** One page of the Work's positions. `cursor` is the previous page's next. */
   positions(work: string, cursor?: string): Promise<Loaded<PositionPage>>;
@@ -74,51 +69,9 @@ export function workProgressConflict(status: number, body: unknown): 'parts' | '
 const PAGE = 20;
 /** One automatic whole-game action reads at most this many additional pages; manual paging can continue. */
 export const GAME_PART_PAGE_LIMIT = 100;
-/** Shared request budget for chapter inventory and private completion pages. */
-export const CHAPTER_COVERAGE_PAGE_LIMIT = 100;
 const MOVED_RESTARTS = 4;
 const MOVED_DELAY_MS = 250;
 const wait = (ms: number) => new Promise(done => setTimeout(done, ms));
-
-/** Resume names a furthest completion. It cannot prove coverage across earlier chapters or volumes. */
-export async function chapterCompletionOf(api: Pick<MediaApi, 'positions' | 'completions'>, work: string): Promise<Loaded<boolean | null>> {
-  let requests = 0;
-  let chapters = 0;
-  let cursor: string | undefined;
-  const visited = new Set<string>();
-  const coverage = new Map<string, { completed: Set<string>; cursor?: string; complete: boolean; visited: Set<string> }>();
-  for (;;) {
-    if (requests >= CHAPTER_COVERAGE_PAGE_LIMIT || visited.has(cursor ?? '')) return { ok: true, data: null };
-    visited.add(cursor ?? '');
-    requests++;
-    const page = await api.positions(work, cursor);
-    if (!page.ok) return page;
-    for (const place of page.data.items) {
-      chapters++;
-      let held = coverage.get(place.structure);
-      if (!held) {
-        held = { completed: new Set(), complete: false, visited: new Set() };
-        coverage.set(place.structure, held);
-      }
-      // A series can place chapters from several volume structures. Completed revision selections
-      // also count, so use the owner's completed-occurrence pages rather than a null-revision mark.
-      while (!held.completed.has(place.occurrence) && !held.complete) {
-        if (requests >= CHAPTER_COVERAGE_PAGE_LIMIT || held.visited.has(held.cursor ?? '')) return { ok: true, data: null };
-        held.visited.add(held.cursor ?? '');
-        requests++;
-        const completed = await api.completions(place.structure, held.cursor);
-        if (!completed.ok) return completed;
-        for (const occurrence of completed.data.occurrences) held.completed.add(occurrence);
-        held.complete = completed.data.next === null && completed.data.complete;
-        held.cursor = completed.data.next ?? undefined;
-        if (!completed.data.next && !held.complete) return { ok: true, data: null };
-      }
-      if (!held.completed.has(place.occurrence)) return { ok: true, data: false };
-    }
-    if (!page.data.next) return { ok: true, data: page.data.complete === true ? chapters > 0 : null };
-    cursor = page.data.next;
-  }
-}
 
 type WorkProgressBody = { parts?: boolean; standing?: WorkStanding; version?: number };
 type WorkProgressAnswer = { data: WorkProgressBody | null; error: { status: number; value: unknown } | null };
@@ -210,7 +163,7 @@ export function mainMediaApi(actingSubject: string, main: () => MainClient = bro
   const positionsOf = (work: string, query: { position: 'mine' | 'start'; limit?: number; cursor?: string; around?: string }) =>
     restarted(() => settle(() => main().v1['reading-positions']({ work: uuidOf(work) }).get({ query: { actingSubject, ...query } })));
 
-  const api: MediaApi = {
+  return {
     async types(work) {
       const read = await restarted(() => settle(() => main().v1.works({ id: uuidOf(work) }).get({ query: { actingSubject } })));
       if (!read.ok) return read.failure === 'missing' ? { ok: true, data: null } : read;
@@ -277,28 +230,22 @@ export function mainMediaApi(actingSubject: string, main: () => MainClient = bro
     async standing(work) {
       const read = await positionsOf(work, { position: 'mine', limit: PAGE });
       if (!read.ok) return read;
+      if (read.data.scope === 'resume' && !read.data.complete) return { ok: false, failure: 'budget' };
       const resumed = read.data.scope === 'resume' || read.data.resolved.startsWith('https://');
       if (!resumed) {
         const items = chaptersOf(read.data.items);
-        return { ok: true, data: { last: null, next: items[0] ?? null, caughtUp: false,
-          opened: { items, next: read.data.nextCursor, complete: read.data.complete } } };
+        return { ok: true, data: { last: null, next: null,
+          opened: { items, next: read.data.nextCursor } } };
       }
       const item = read.data.items[0];
       if (!item) return { ok: false, failure: 'unavailable' };
-      const last = placeOf(item);
-      const around = await positionsOf(work, { position: 'mine', around: last.occurrence });
-      if (!around.ok) return around;
-      const step = around.data.neighbours?.next;
-      const next = step?.status === 'found'
-        ? chaptersOf(around.data.items).find(place => place.occurrence === step.occurrence) ?? null : null;
-      const coverage = step?.status === 'none' ? await chapterCompletionOf(api, work) : { ok: true as const, data: false };
-      if (!coverage.ok) return coverage;
-      return { ok: true, data: { last, next, caughtUp: coverage.data, opened: null } };
+      // Resume names one completed occurrence. Its response has no successor or chapter counts.
+      return { ok: true, data: { last: placeOf(item), next: null, opened: null } };
     },
     async positions(work, cursor) {
       const read = await positionsOf(work, { position: 'start', limit: PAGE, ...(cursor ? { cursor } : {}) });
       if (!read.ok) return read;
-      return { ok: true, data: { items: chaptersOf(read.data.items), next: read.data.nextCursor, complete: read.data.complete } };
+      return { ok: true, data: { items: chaptersOf(read.data.items), next: read.data.nextCursor } };
     },
     async completions(structure, cursor) {
       const read = await restarted(() => settle(() => main().v1.compositions({ id: uuidOf(structure) }).progress.get({
@@ -352,5 +299,4 @@ export function mainMediaApi(actingSubject: string, main: () => MainClient = bro
       return { ok: false, failure: 'moved' };
     },
   };
-  return api;
 }

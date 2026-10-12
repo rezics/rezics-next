@@ -2,8 +2,7 @@
 
 import { Alert, AlertDescription } from '@rezics/ui/alert';
 import { Button } from '@rezics/ui/button';
-import { CheckIcon } from 'lucide-react';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { ProgressConflict } from './conflict-panel.tsx';
 import type { EpisodeProgress, ProgressStale } from './episode-api.ts';
 import type { ChapterStanding, MediaApi } from './media-api.ts';
@@ -15,15 +14,8 @@ type Read = { status: 'loading' } | { status: 'failed' } | { status: 'ready'; pr
 
 const named = (place: Place, t: Copy) => place.label || t.unnamedPart;
 
-/** The resume item carries its own name. A page supplies one only when that item has none. */
-function withLabel(place: Place | null, known: readonly Place[]): Place | null {
-  if (!place || place.label) return place;
-  const label = known.find(item => item.occurrence === place.occurrence)?.label;
-  return label ? { ...place, label } : place;
-}
-
 /**
- * Where the reader is in a manga. Last read and continue come from one resume read. Another chapter
+ * Main's last read chapter comes from one resume response. Another chapter
  * is chosen from a page of the Work's positions, and that chapter's own progress is read only then.
  */
 export function ChapterProgress({ work, api, t, className }: { work: string; api: MediaApi; t: Copy; className?: string }) {
@@ -38,8 +30,6 @@ export function ChapterProgress({ work, api, t, className }: { work: string; api
   const [saving, setSaving] = useState(false);
   const [failed, setFailed] = useState(false);
   const [conflict, setConflict] = useState<Conflict | null>(null);
-  const known = useRef<Place[]>([]);
-  known.current = places;
 
   useEffect(() => {
     let current = true;
@@ -54,7 +44,7 @@ export function ChapterProgress({ work, api, t, className }: { work: string; api
       }
       if (!current) return;
       setFailedLoad(false);
-      setStanding({ ...found.data, last: withLabel(found.data.last, page.items), next: withLabel(found.data.next, page.items) });
+      setStanding(found.data);
       setPlaces(page.items);
       setCursor(page.next);
     })();
@@ -68,7 +58,8 @@ export function ChapterProgress({ work, api, t, className }: { work: string; api
       const found = await api.standing(work);
       if (!current) return;
       if (!found.ok) { setFailedLoad(true); return; }
-      setStanding({ ...found.data, last: withLabel(found.data.last, known.current), next: withLabel(found.data.next, known.current) });
+      setFailedLoad(false);
+      setStanding(found.data);
     })();
     return () => { current = false; };
   }, [api, reload, work]);
@@ -103,6 +94,7 @@ export function ChapterProgress({ work, api, t, className }: { work: string; api
     setConflict(null);
     setSelected(place);
     setRead({ status: 'ready', progress: written.data });
+    setStanding(null);
     setReload(count => count + 1);
   }
 
@@ -111,19 +103,18 @@ export function ChapterProgress({ work, api, t, className }: { work: string; api
       <h2 id={headingId} className="sr-only">{t.chapters}</h2>
       <Alert variant="destructive" role="alert"><AlertDescription>{t.trackedUnavailable}</AlertDescription></Alert></section>;
   }
-  if (!standing) return null;
+  if (!standing) return <section aria-labelledby={headingId} data-chapter-progress data-pending
+    className={className ?? 'grid gap-4 rounded-2xl border border-border/60 p-4 sm:p-5'}>
+    <h2 id={headingId} className="font-semibold text-xl tracking-tight">{t.chapters}</h2>
+    <p role="status" className="text-muted-foreground text-sm">{t.unknown}</p>
+  </section>;
   if (!standing.last && !standing.next && places.length === 0 && !cursor) return null;
   const ready = read?.status === 'ready' ? read.progress : null;
   return <section aria-labelledby={headingId} data-chapter-progress
-    data-last={standing.last?.occurrence ?? ''} data-continue={standing.next?.occurrence ?? ''}
+    data-last={standing.last?.occurrence ?? ''}
     className={className ?? 'grid gap-4 rounded-2xl border border-border/60 p-4 sm:p-5'}>
     <h2 id={headingId} className="font-semibold text-xl tracking-tight">{t.chapters}</h2>
     <p className="font-medium text-base" data-where>{standing.last ? t.lastRead({ place: named(standing.last, t) }) : t.noneRead}</p>
-    {standing.next ? <div className="grid gap-2" data-next>
-      <p className="text-muted-foreground text-sm">{t.continueChapter({ place: named(standing.next, t) })}</p>
-      <div><Button type="button" className="min-h-11 w-full sm:w-auto" disabled={saving} onClick={() => void write(standing.next!, true)}>
-        <CheckIcon aria-hidden="true" />{saving ? t.episodeSaving : t.markChapter({ place: named(standing.next, t) })}</Button></div>
-    </div> : standing.caughtUp === true && standing.last ? <p className="text-muted-foreground text-sm" data-caught-up>{t.allChaptersRead}</p> : null}
 
     {places.length ? <ul className="grid gap-2">
       {places.map(place => <li key={place.occurrence}>
@@ -147,7 +138,7 @@ export function ChapterProgress({ work, api, t, className }: { work: string; api
     {conflict ? <ProgressConflict label={t.status} mine={conflict.submitted.completed ? t.chapterRead : t.chapterUnread}
       theirs={conflict.current.completed ? t.chapterRead : t.chapterUnread} t={t} busy={saving} failed={failed}
       onKeep={() => void write(conflict.place, conflict.submitted.completed)}
-      onUse={() => { setConflict(null); setReload(count => count + 1); }} /> : null}
+      onUse={() => { setConflict(null); setStanding(null); setReload(count => count + 1); }} /> : null}
     <p role="status" className="text-destructive-foreground text-xs">{failed || read?.status === 'failed' ? t.saveFailed : null}</p>
   </section>;
 }

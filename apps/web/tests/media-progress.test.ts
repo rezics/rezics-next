@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { progressControl } from '../features/tracking/medium-progress.tsx';
 import type { MainClient } from '../features/discover/types.ts';
-import { CHAPTER_COVERAGE_PAGE_LIMIT, chapterCompletionOf, mainMediaApi, type MediaApi, workProgressConflict } from '../features/tracking/media-api.ts';
+import { mainMediaApi, workProgressConflict } from '../features/tracking/media-api.ts';
 import { chapterPosition, flattenChapters, gameStatus, mediumOf, resumeAt, resumeName, type ChapterRef } from '../features/tracking/media.ts';
 
 const chapter = (volume: number, number: number, id = `${volume}-${number}`): ChapterRef => ({
@@ -10,7 +10,6 @@ const chapter = (volume: number, number: number, id = `${volume}-${number}`): Ch
 });
 
 describe('chapter completion coverage', () => {
-  const place = (volume: number, number: number) => ({ ...chapter(volume, number), label: `Chapter ${number}` });
   const work = 'https://rezics.com/id/00000000-0000-7000-8000-000000000001';
   const structure = 'https://rezics.com/id/00000000-0000-7000-8000-000000000002';
   const occurrence = (number: number) => `https://rezics.com/id/00000000-0000-7000-8000-${String(number + 100).padStart(12, '0')}`;
@@ -28,7 +27,7 @@ describe('chapter completion coverage', () => {
         if (query.around) return { data: { items: items.slice(last + 1, last + 2),
           neighbours: { next: last === 11 ? { status: 'none' } : { status: 'found', occurrence: items[last + 1]!.occurrence } } }, error: null };
         if (query.position === 'mine' && last >= 0) return { data: { scope: 'resume', resolved: items[last]!.occurrence,
-          items: [items[last]!] }, error: null };
+          items: [items[last]!], complete: true }, error: null };
         const from = Number(query.cursor ?? 0);
         const next = from + page < items.length ? String(from + page) : null;
         return { data: { scope: 'positions', resolved: 'start', items: items.slice(from, from + page), nextCursor: next, complete: next === null }, error: null };
@@ -48,68 +47,54 @@ describe('chapter completion coverage', () => {
     test(`chapters 1 and ${last} retain resume without claiming all chapters read`, async () => {
       const { api } = main([1, last]);
       const read = await api.standing(work);
-      expect(read).toMatchObject({ ok: true, data: { caughtUp: false, last: { occurrence: occurrence(last) },
-        next: last === 12 ? null : { occurrence: occurrence(7) } } });
+      expect(read).toMatchObject({ ok: true, data: { last: { occurrence: occurrence(last) },
+        next: null } });
     });
   }
 
   test('unmarking chapter 2 invalidates previously complete coverage', async () => {
-    const { api, rows } = main(Array.from({ length: 12 }, (_, index) => index + 1));
-    expect(await api.standing(work)).toMatchObject({ ok: true, data: { caughtUp: true } });
+    const { api, rows, calls } = main(Array.from({ length: 12 }, (_, index) => index + 1));
+    expect(await api.standing(work)).toMatchObject({ ok: true, data: { last: { occurrence: occurrence(12) }, next: null } });
     rows.delete(occurrence(2));
-    expect(await api.standing(work)).toMatchObject({ ok: true, data: { caughtUp: false, last: { occurrence: occurrence(12) } } });
+    calls.length = 0;
+    expect(await api.standing(work)).toMatchObject({ ok: true, data: { last: { occurrence: occurrence(12) } } });
+    expect(calls).toEqual(['mine']);
   });
 
   test('a gap after a completed position page breaks coverage', async () => {
     const { api } = main([1, 2, 3, 5, 6, 12]);
-    expect(await api.standing(work)).toMatchObject({ ok: true, data: { caughtUp: false } });
+    const read = await api.standing(work);
+    expect(read).toMatchObject({ ok: true, data: { last: { occurrence: occurrence(12) }, next: null } });
+    if (read.ok) expect(read.data).not.toHaveProperty('caughtUp');
   });
 
-  test('proof crosses empty continuation pages and volume structures', async () => {
-    const api: Pick<MediaApi, 'positions' | 'completions'> = {
-      positions: async (_work, cursor) => ({ ok: true, data: cursor
-        ? { items: [place(2, 1)], next: null, complete: true }
-        : { items: [], next: 'volume', complete: false } }),
-      completions: async (_structure, cursor) => ({ ok: true, data: cursor
-        ? { occurrences: [chapter(2, 1).occurrence], next: null, complete: true }
-        : { occurrences: [], next: 'readable', complete: false } }),
-    };
-    expect(await chapterCompletionOf(api, work)).toEqual({ ok: true, data: true });
-    const both = { ...api, positions: async () => ({ ok: true as const, data: {
-      items: [{ ...place(1, 1), structure: 'volume-one' }, { ...place(2, 1), structure: 'volume-two' }], next: null, complete: true,
-    } }), completions: async (volume: string) => ({ ok: true as const, data: {
-      occurrences: [chapter(volume === 'volume-one' ? 1 : 2, 1).occurrence], next: null, complete: true,
-    } }) };
-    expect(await chapterCompletionOf(both, work)).toEqual({ ok: true, data: true });
+  test('concurrent unmark and mark across volumes cannot mix separate coverage reads', async () => {
+    const calls: string[] = [];
+    const chapterOne = { structure: 'https://example.test/volume-one', occurrence: 'https://example.test/chapter-one',
+      role: 'chapter', displayLabel: 'Volume 1, chapter 1' };
+    const chapterTwo = { ...chapterOne, structure: 'https://example.test/volume-two', occurrence: 'https://example.test/chapter-two',
+      displayLabel: 'Volume 2, chapter 1' };
+    let furthest = chapterOne;
+    const client = { v1: {
+      'reading-positions': () => ({ get: async ({ query }: { query: { around?: string; position: string } }) => {
+        calls.push(query.around ? 'neighbour' : query.position);
+        if (query.around) {
+          furthest = chapterTwo;
+          return { data: { items: [], neighbours: { next: { status: 'none' } } }, error: null };
+        }
+        return { data: { scope: 'resume', resolved: furthest.occurrence, items: [furthest], complete: true }, error: null };
+      } }),
+      compositions: () => ({ progress: { get: async () => {
+        calls.push('completions');
+        return { data: { items: [{ occurrence: chapterTwo.occurrence }], nextCursor: null, complete: true }, error: null };
+      } } }),
+    } } as unknown as MainClient;
+    const read = await mainMediaApi(work, () => client).standing(work);
+    expect(read).toMatchObject({ ok: true, data: { last: { occurrence: chapterOne.occurrence }, next: null } });
+    if (read.ok) expect(read.data).not.toHaveProperty('caughtUp');
+    expect(calls).toEqual(['mine']);
   });
 
-  test('budget exhaustion and a terminal incomplete inventory leave coverage unknown', async () => {
-    let calls = 0;
-    const api: Pick<MediaApi, 'positions' | 'completions'> = {
-      positions: async () => ({ ok: true, data: { items: [], next: String(++calls), complete: false } }),
-      completions: async () => { throw new Error('No chapters were enumerated'); },
-    };
-    expect(await chapterCompletionOf(api, work)).toEqual({ ok: true, data: null });
-    expect(calls).toBe(CHAPTER_COVERAGE_PAGE_LIMIT);
-    expect(await chapterCompletionOf({ ...api, positions: async () => ({ ok: true,
-      data: { items: [], next: null, complete: false } }) }, work)).toEqual({ ok: true, data: null });
-  });
-
-  test('completion-page bounds, cycles and denied reads cannot establish coverage', async () => {
-    let calls = 0;
-    const api: Pick<MediaApi, 'positions' | 'completions'> = {
-      positions: async () => ({ ok: true, data: { items: [place(1, 1)], next: null, complete: true } }),
-      completions: async () => ({ ok: true, data: { occurrences: [], next: String(++calls), complete: false } }),
-    };
-    expect(await chapterCompletionOf(api, work)).toEqual({ ok: true, data: null });
-    expect(calls).toBe(CHAPTER_COVERAGE_PAGE_LIMIT - 1);
-    expect(await chapterCompletionOf({ ...api, completions: async () => ({ ok: true,
-      data: { occurrences: [], next: 'cycle', complete: false } }) }, work)).toEqual({ ok: true, data: null });
-    expect(await chapterCompletionOf({ ...api, completions: async () => ({ ok: true,
-      data: { occurrences: [], next: null, complete: false } }) }, work)).toEqual({ ok: true, data: null });
-    expect(await chapterCompletionOf({ ...api, completions: async () => ({ ok: false, failure: 'closed' }) }, work))
-      .toEqual({ ok: false, failure: 'closed' });
-  });
 });
 
 describe('medium progress', () => {

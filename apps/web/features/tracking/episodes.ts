@@ -1,16 +1,11 @@
 import type { Loaded } from '../feed/types.ts';
 import type { EpisodeApi, EpisodeGroup, EpisodePart } from './episode-api.ts';
 
-// Where a reader stands in a series of episodes, from what Main holds: the Structure's occurrences in
-// order and each one's completion. "Watched through" is the run from the first episode, found by
-// walking only as far as that run goes. Continue is the episode after the furthest one completed,
-// which the progress order index names in one resume read; the pages after the run are read only to
-// place that occurrence, and only up to the walk bound.
+// Inventory pages supply the episode chooser. Progress facts come from Main's one resume read.
+// No inventory window, occurrence scan or client completion set establishes coverage.
 
 /** A series' page walk is bounded, so a number far past the end is refused instead of read forever. */
 export const MAX_PAGES = 100;
-/** Per-occurrence proof must not make loading a long completed series unbounded. */
-export const MAX_COMPLETION_READS = 200;
 
 export interface Episode extends EpisodePart {
   structure: string;
@@ -36,12 +31,10 @@ export interface Standing {
   structure: string;
   mains: Walk;
   specials: { label: string | null; walk: Walk }[];
-  /** The last main episode of a proved run; null when the first is not completed or proof is bounded. */
-  through: Episode | null;
-  /** The episode to continue from: the one after the furthest completed, or after that run when none is. */
-  next: Episode | null;
+  /** Main exposes no episode successor in its resume response; inventory is never used to infer it. */
+  next: null;
   /**
-   * The furthest main occurrence completed, from the same resume read that places `next`.
+   * The furthest main occurrence completed, named by one authoritative resume response.
    * Null when the reader has not completed any main episode.
    */
   furthest: EpisodePart | null;
@@ -50,9 +43,6 @@ export interface Standing {
 /** What marking an occurrence leaves in its position. */
 export const markPosition = (episode: Pick<Episode, 'number' | 'special'>) =>
   `${episode.special ? 'special' : 'episode'}:${episode.number}`;
-
-/** Every main episode there is, when all pages are read. */
-export const totalOf = (standing: Pick<Standing, 'mains'>) => (standing.mains.next === null ? standing.mains.items.length : null);
 
 /** Reads the next page of a walk. Returns false when there is none, or the walk is at its bound. */
 export async function advance(api: EpisodeApi, walk: Walk): Promise<boolean> {
@@ -68,56 +58,18 @@ export async function advance(api: EpisodeApi, walk: Walk): Promise<boolean> {
   return true;
 }
 
-/** The episode with this number, reading pages until it is there; null when the series ends first or is too long to reach. */
+/** The episode with this number, reading pages until it is there; null when the series ends first; budget exhaustion is a failure. */
 export async function reach(api: EpisodeApi, walk: Walk, number: number): Promise<Episode | null> {
   while (walk.items.length < number) {
-    if (!await advance(api, walk)) break;
+    if (!await advance(api, walk)) {
+      if (walk.next !== null) throw new Error('budget');
+      break;
+    }
   }
   return walk.items[number - 1] ?? null;
 }
 
 const walkOf = (structure: string, parent: string | null): Walk => ({ structure, parent, special: parent !== null, items: [], groups: [], next: null, pages: 0 });
-
-/**
- * The main episode after this occurrence. Null when it is the last one.
- * Undefined when the pages this walk may read do not contain it, so the caller keeps the run's next.
- */
-async function episodeAfter(api: EpisodeApi, walk: Walk, occurrence: string): Promise<Episode | null | undefined> {
-  for (;;) {
-    const index = walk.items.findIndex(item => item.occurrence === occurrence);
-    if (index >= 0) {
-      const following = walk.items[index + 1];
-      if (following) return following;
-      if (!await advance(api, walk)) return null;
-      return walk.items[index + 1] ?? null;
-    }
-    if (!await advance(api, walk)) return undefined;
-  }
-}
-
-async function finished(api: EpisodeApi, episode: Episode): Promise<boolean> {
-  const state = await api.progress(episode);
-  if (!state.ok) throw new Error(state.failure);
-  return state.data.completed;
-}
-
-/**
- * Prove every occurrence before the first gap. Sparse marks and unmarks make page endpoints and
- * binary search unsafe. Null means the read budget ended before the gap or the series end was known.
- */
-async function runLength(api: EpisodeApi, walk: Walk): Promise<number | null> {
-  let known = 0;
-  for (;;) {
-    if (known === walk.items.length) {
-      if (walk.next === null) return known;
-      if (known >= MAX_COMPLETION_READS || !await advance(api, walk)) return null;
-      continue;
-    }
-    if (known >= MAX_COMPLETION_READS) return null;
-    if (!await finished(api, walk.items[known]!)) return known;
-    known++;
-  }
-}
 
 /** The series a Work has as episodes, with where the reader stands; null when it has none to track. */
 export async function standingOf(api: EpisodeApi, work: string): Promise<Loaded<Standing | null>> {
@@ -135,24 +87,10 @@ export async function standingOf(api: EpisodeApi, work: string): Promise<Loaded<
       return { label: group.label, walk };
     }));
     const present = specials.filter(entry => entry.walk.items.length);
-    if (!mains.items.length && !present.length) return { ok: true, data: null };
-    const length = await runLength(api, mains);
-    let next: Episode | null = mains.items[length ?? 0] ?? null;
-    let furthest: EpisodePart | null = null;
     const resumed = await api.resume(work);
-    if (resumed.ok && resumed.data) {
-      furthest = { occurrence: resumed.data.occurrence, label: resumed.data.label };
-      const following = await episodeAfter(api, mains, resumed.data.occurrence);
-      if (following !== undefined) next = following;
-      // The resume item names the episode even when this walk has not reached its page.
-      const stopped = mains.items.find(item => item.occurrence === resumed.data!.occurrence);
-      if (stopped) {
-        if (resumed.data.label) stopped.label = resumed.data.label;
-        furthest = { occurrence: stopped.occurrence, label: stopped.label };
-      }
-    }
-    return { ok: true, data: { structure, mains, specials: present,
-      through: length === null ? null : mains.items[length - 1] ?? null, next, furthest } };
+    if (!resumed.ok) return resumed;
+    if (!mains.items.length && !present.length && !resumed.data) return { ok: true, data: null };
+    return { ok: true, data: { structure, mains, specials: present, next: null, furthest: resumed.data } };
   } catch {
     return { ok: false, failure: 'unavailable' };
   }
