@@ -2775,6 +2775,39 @@ child.on('close', code => process.exit(code ?? 1));
     } finally { r.cleanup(); }
   });
 
+  test('wait resumes the same Codex session after a capacity refusal', async () => {
+    const r = repo();
+    const script = join(r.dir, '.temp/worker-script.json');
+    const log = join(r.dir, '.temp/worker-launches.jsonl');
+    const refused = `${JSON.stringify({ type: 'thread.started', thread_id: 'thread-capacity-1' })}\n`
+      + `${JSON.stringify({ type: 'turn.failed', error: { message: 'Selected model is at capacity. Please try a different model.' } })}\n`;
+    writeFileSync(script, JSON.stringify([{ stdout: refused }, { stdout: `${JSON.stringify({ type: 'turn.completed' })}\n` }]));
+    try {
+      const env = { GOAL_WORKER_SCRIPT: script, GOAL_WORKER_LOG: log };
+      const dispatched = r.run(['dispatch', r.brief('G-001', { engine: 'codex' })], env);
+      expect(dispatched.stderr).toBe('');
+      expect(dispatched.status).toBe(0);
+      const waiter = spawn('bun', ['-e', `import { waitFor } from ${JSON.stringify(join(import.meta.dir, 'goalctl.ts'))}; await waitFor('G-001', { pollMs: 50, settleMs: 50, capacityWaitMs: 1 });`], {
+        cwd: r.dir, env: { ...r.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      let printed = '';
+      waiter.stdout?.on('data', chunk => { printed += String(chunk); });
+      waiter.stderr?.on('data', chunk => { printed += String(chunk); });
+      expect(await new Promise<number | null>((resolve, reject) => { waiter.on('error', reject); waiter.on('exit', resolve); })).toBe(0);
+      expect(printed).toContain('resumed by itself after a capacity refusal');
+      const launches = readFileSync(log, 'utf8').trim().split('\n').map(line => JSON.parse(line) as { argv: string[] });
+      expect(launches).toHaveLength(2);
+      expect(launches[1]!.argv).toContain('resume');
+      expect(launches[1]!.argv).toContain('thread-capacity-1');
+      expect(launches[1]!.argv.join(' ')).toContain('The service refused your last request for capacity');
+      const task = r.ledger().tasks['G-001']!;
+      expect(task.state).toBe('exited');
+      expect(task.attempts).toHaveLength(2);
+      expect(task.attempts[1]!.continuedFor).toBe('capacity');
+      expect(task.attempts[1]!.session).toBe('thread-capacity-1');
+    } finally { r.cleanup(); }
+  }, 60_000);
+
   test('wait stops after two transport continuations and status names the repeated drop', async () => {
     const r = repo();
     const script = join(r.dir, '.temp/worker-script.json');

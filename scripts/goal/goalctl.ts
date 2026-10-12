@@ -43,7 +43,7 @@ export interface Attempt {
   n: number; effort: string; engine?: Engine; pid: number; session: string; output: string; lastMessage?: string;
   startedAt: string; endedAt?: string;
   /** Wait started this attempt because the previous session lost its connection. */
-  continuedFor?: 'transport';
+  continuedFor?: 'transport' | 'capacity';
 }
 export interface Task extends Omit<Brief, 'worktree'> {
   brief: string; worktree: string; branch: string; base: string; state: State; attempts: Attempt[];
@@ -128,6 +128,10 @@ const ENGINES = Object.keys(ENGINE_EFFORTS) as Engine[];
 // Quota, limit and authentication failures stay off this list, so those exits are left as they are.
 const TRANSPORT_ERRORS: readonly RegExp[] = [/^RetriableError: /];
 const MAX_TRANSPORT_CONTINUATIONS = 2;
+// "Selected model is at capacity" ends a Codex turn with its session intact (four Sol sessions in twenty
+// minutes on 2026-10-12, each waiting for a manager to resume it). Wait resumes the same session itself.
+const MAX_CAPACITY_CONTINUATIONS = 4;
+const CAPACITY_WAIT_MS = 60_000;
 export const DEFAULT_ENGINE: Engine = (process.env.GOAL_ENGINE as Engine | undefined) ?? 'claude';
 // `codex` (Sol) and `luna` use the default Codex account; `codex-1` runs Sol on the second account in a
 // separate CODEX_HOME (the `codex-1` wrapper sets the same directory), so Sol work can continue on
@@ -1399,13 +1403,22 @@ function elapsed(fromIso: string): string {
 }
 
 /** Trailing attempts wait started after a dropped connection. A later manual resume breaks the streak. */
-function transportContinuations(task: Task): number {
+function transportContinuations(task: Task, reason: NonNullable<Attempt['continuedFor']> = 'transport'): number {
   let count = 0;
   for (const attempt of [...task.attempts].reverse()) {
-    if (attempt.continuedFor !== 'transport') break;
+    if (attempt.continuedFor !== reason) break;
     count++;
   }
   return count;
+}
+
+/** The last event of a Codex attempt is a turn the service refused for capacity. */
+export function capacityRefusal(attempt: Attempt): boolean {
+  if (!isCodex(engineOf(attempt))) return false;
+  try {
+    const last = readFileSync(attempt.output, 'utf8').trimEnd().split(/\r?\n/).at(-1) ?? '';
+    return /"type":"turn\.failed"/.test(last) && /at capacity/i.test(last);
+  } catch { return false; }
 }
 
 /** No result, and the error output's last line is a connection drop. Any other failure is left exited. */
@@ -1496,7 +1509,7 @@ async function dispatch(briefPath: string, flags: Set<string>): Promise<void> {
   });
 }
 
-export async function waitFor(id: string, options: { pollMs?: number; settleMs?: number } = {}): Promise<void> {
+export async function waitFor(id: string, options: { pollMs?: number; settleMs?: number; capacityWaitMs?: number } = {}): Promise<void> {
   // A killed waiter must never record the worker as ended (an expired monitor once marked live workers exited).
   for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const) process.on(signal, () => process.exit(143));
   let watching = lastAttempt(taskOf(readLedger(), id));
@@ -1504,6 +1517,8 @@ export async function waitFor(id: string, options: { pollMs?: number; settleMs?:
     const alive = () => pidAlive(watching.pid, programOf(engineOf(watching)));
     while (alive() || (await Bun.sleep(options.settleMs ?? 3000), alive())) await Bun.sleep(options.pollMs ?? 5000);
     const result = readResult(watching);
+    const refusedTurn = capacityRefusal(watching);
+    if (refusedTurn) await Bun.sleep(options.capacityWaitMs ?? CAPACITY_WAIT_MS);
     const outcome = await withLedger(ledger => {
       const current = taskOf(ledger, id);
       const last = lastAttempt(current);
@@ -1514,6 +1529,23 @@ export async function waitFor(id: string, options: { pollMs?: number; settleMs?:
       const open = current.state === 'running' || current.state === 'exited';
       const drop = transportDrop(last);
       let refused: string | undefined;
+      if (refusedTurn && open && last.session && transportContinuations(current, 'capacity') < MAX_CAPACITY_CONTINUATIONS) {
+        const engine = engineOf(last);
+        try {
+          launchGates(Object.values(ledger.tasks), engine, false);
+          const next = launch(current, last.effort, last.session,
+            'The service refused your last request for capacity; nothing else changed. Continue where you stopped.',
+            true, managerOf(ledger, current.goal), engine);
+          next.continuedFor = 'capacity';
+          current.attempts.push(next);
+          current.engine = engine;
+          current.state = 'running';
+          clearRefusal(current);
+          return { kind: 'continued' as const, task: current, next };
+        } catch (error) {
+          refused = error instanceof Error ? error.message : String(error);
+        }
+      }
       if (drop && open && transportContinuations(current) < MAX_TRANSPORT_CONTINUATIONS) {
         const engine = engineOf(last);
         const effort = last.effort;
@@ -1543,8 +1575,10 @@ export async function waitFor(id: string, options: { pollMs?: number; settleMs?:
       + `${result.error ? ' WITH ERROR' : ''}${result.cost !== undefined ? `; cost $${result.cost.toFixed(2)}` : ''}`
       + `${result.tokens ? `; ${modelOf(engineOf(watching))} tokens ${result.tokens}` : ''}`);
     if (outcome.kind === 'continued') {
-      console.log(`${task.id} continued by itself after a transport error; fresh ${modelOf(engineOf(outcome.next))}/`
-        + `${outcome.next.effort} session, pid ${outcome.next.pid}`);
+      console.log(outcome.next.continuedFor === 'capacity'
+        ? `${task.id} resumed by itself after a capacity refusal; same ${modelOf(engineOf(outcome.next))} session, pid ${outcome.next.pid}`
+        : `${task.id} continued by itself after a transport error; fresh ${modelOf(engineOf(outcome.next))}/`
+          + `${outcome.next.effort} session, pid ${outcome.next.pid}`);
       watching = outcome.next;
       continue;
     }
