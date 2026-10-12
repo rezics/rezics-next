@@ -197977,6 +197977,19 @@
                                   "additionalProperties": false,
                                   "properties": {
                                     "kind": {
+                                      "const": "publication-year",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "kind": {
                                       "const": "credit",
                                       "type": "string"
                                     },
@@ -484061,7 +484074,10 @@
                                           {
                                             "properties": {
                                               "facet": {
-                                                "const": "length",
+                                                "enum": [
+                                                  "length",
+                                                  "publicationYear"
+                                                ],
                                                 "type": "string"
                                               },
                                               "range": {
@@ -484085,7 +484101,7 @@
                                           }
                                         ]
                                       },
-                                      "maxItems": 6,
+                                      "maxItems": 7,
                                       "type": "array"
                                     }
                                   },
@@ -484093,6 +484109,9 @@
                                     "all"
                                   ],
                                   "type": "object"
+                                },
+                                "publicationYear": {
+                                  "type": "string"
                                 },
                                 "sort": {
                                   "enum": [
@@ -540856,6 +540875,15 @@
           },
           {
             "in": "query",
+            "name": "publicationYear",
+            "required": false,
+            "schema": {
+              "pattern": "^[1-9][0-9]{0,3}(-[1-9][0-9]{0,3})?$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "type",
             "required": false,
             "schema": {
@@ -541965,7 +541993,10 @@
                                   {
                                     "properties": {
                                       "facet": {
-                                        "const": "length",
+                                        "enum": [
+                                          "length",
+                                          "publicationYear"
+                                        ],
                                         "type": "string"
                                       },
                                       "range": {
@@ -541989,7 +542020,7 @@
                                   }
                                 ]
                               },
-                              "maxItems": 6,
+                              "maxItems": 7,
                               "type": "array"
                             }
                           },
@@ -541997,6 +542028,9 @@
                             "all"
                           ],
                           "type": "object"
+                        },
+                        "publicationYear": {
+                          "type": "string"
                         },
                         "sort": {
                           "enum": [

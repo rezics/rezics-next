@@ -256,6 +256,49 @@ export const facetRegistry = {
     "digest": "e9e5794ed99df79c9599e318717da495e6ebcc14422137a67f88433a14055208",
     "current": true
   },
+  "https://rezics.com/definition/facet-publication-year-v1": {
+    "id": "https://rezics.com/definition/facet-publication-year-v1",
+    "name": "publicationYear",
+    "version": 1,
+    "appliesTo": "resource",
+    "subject": "https://schema.org/CreativeWork",
+    "path": [
+      {
+        "kind": "publication-year"
+      }
+    ],
+    "values": [
+      {
+        "kind": "datatype",
+        "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+        "min": "1",
+        "max": "9999"
+      }
+    ],
+    "operators": [
+      "range"
+    ],
+    "source": "global",
+    "parameters": [],
+    "qualifiers": [],
+    "occurrence": false,
+    "labels": {
+      "en": "Publication year",
+      "zh-Hant": "出版年份",
+      "zh-Hans": "出版年份",
+      "ja": "公開年",
+      "ko": "발행 연도",
+      "de": "Veröffentlichungsjahr",
+      "fr": "Année de publication",
+      "es": "Año de publicación"
+    },
+    "cost": {
+      "maxValues": 2,
+      "graphReads": 1
+    },
+    "digest": "eb8bbc7b6ad8dac2cddabd3b54dc8c98178b5956cc8c52abbddd52d6d61fb32e",
+    "current": true
+  },
   "https://rezics.com/definition/facet-rating-v1": {
     "id": "https://rezics.com/definition/facet-rating-v1",
     "name": "rating",
@@ -962,4 +1005,4 @@ export const facetRegistry = {
 } as const;
 export type FacetRef = keyof typeof facetRegistry;
 /** Changes whenever any admitted Facet does. */
-export const facetRegistryDigest = "58731d3f6c76831716bce55a8d8e56652d8de89f9e9342c57bb84e8cac606b9e";
+export const facetRegistryDigest = "67aa1dbfabeec816a2c859bbfe9f16f2df35dc4cafa6672c5b85d7cf8bb1ed82";
