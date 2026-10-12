@@ -13,6 +13,11 @@ import type { SearchContinuation } from '../../../services/main/src/modules/work
 
 const phrase = 'Checkpoint selected text';
 const pageSize = 2;
+// One isolated diagnostic cut uses the same restore and requests as the growth
+// qualification, without pretending it is a three-scale verdict.
+const isolatedLarge = process.env.REZICS_RANKED_SEARCH_CUT === 'large';
+if (process.env.REZICS_RANKED_SEARCH_CUT && !isolatedLarge)
+  throw new Error('REZICS_RANKED_SEARCH_CUT only accepts large');
 const requestCounters = [
   'mainCalls', 'fusekiRequests', 'fusekiSentBytes', 'fusekiReceivedBytes',
   'postgresStatements', 'accountCalls', 'otherFetches', 'unclassifiedFetches',
@@ -26,6 +31,9 @@ type Page = { httpStatus: number; complete?: boolean; relationComplete?: boolean
   results: { work: string; mainVersion: string }[]; next: SearchContinuation | null };
 type Evidence = { matchingWorks: number; restoreMs: number;
   first: MeasuredProfile; continuation: MeasuredProfile };
+type Refusal = { status: number; code?: string; responseStatus?: string | number; body: string };
+type Attempt = { matchingWorks: number; page: string; profile: WorkProfile;
+  hostLoad: string; refusal?: Refusal; candidateRead?: CandidateRead };
 
 /** Project the request's existing native span counters into numeric verdict fields.
  * CommandWork initializes mutation counters, but emits visit keys sparsely.
@@ -62,12 +70,16 @@ async function profileRankedSearch() {
   startTelemetry('main', { ...process.env, ...sink.env, OTEL_SERVICE_NAME: 'main' });
   const { startMediaStack } = await import('./media-support.ts');
   const { createCorpusBackupDriver } = await import('../../../scripts/load/corpus-backup-driver.ts');
-  const { restoreWorkProfileCorpus } = await import('../../../scripts/load/work-profile-corpus.ts');
+  const { restoreWorkProfileCorpus, CorpusCommandError } = await import('../../../scripts/load/work-profile-corpus.ts');
   const { root, stream, dockerEnvironment } = await import('../../../scripts/fixture/stack.ts');
   const { readRetainedSeed } = await import('../support/seed-checkpoints.ts');
   const { assertPublicContentSearchReady } = await import('../../../services/main/src/modules/content-publication/search.ts');
   const retained = readRetainedSeed();
   expect(retained.cuts.map(cut => cut.works.length)).toEqual([4, 16, 64]);
+  const cuts = isolatedLarge ? retained.cuts.filter(cut => cut.works.length === 64) : retained.cuts;
+  const hostLoadAtStart = readFileSync('/proc/loadavg', 'utf8').trim();
+  console.log(JSON.stringify({ event: 'ranked-profile-start', hostLoadAtStart,
+    cuts: cuts.map(cut => cut.works.length) }));
   const qaRunId = process.env.REZICS_QA_RUN_ID;
   if (!qaRunId) throw new Error('Run through goalctl integration QA');
   // Release the unused harness stack before admitting the first restored copy.
@@ -77,7 +89,7 @@ async function profileRankedSearch() {
   let copy: MediaStack | undefined;
   const targets: string[] = [];
   const evidence: Evidence[] = [];
-  const attempts: { matchingWorks: number; page: string; profile: WorkProfile }[] = [];
+  const attempts: Attempt[] = [];
   let blind: { matchingWorks: number; page: string; profile: WorkProfile } | undefined;
   let candidateReads: CandidateRead[] = [];
   const assertMeter = (matchingWorks: number, page: string, profile: WorkProfile) => {
@@ -89,6 +101,7 @@ async function profileRankedSearch() {
   };
   const request = async (stack: MediaStack, path: string, body: object, headers = new Headers(), captureFailure = false) => {
     candidateReads = [];
+    const hostLoad = readFileSync('/proc/loadavg', 'utf8').trim();
     headers.set('content-type', 'application/json');
     const response = await stack.main.handle(new Request(`http://main.local${path}`, {
       method: 'POST', headers, body: JSON.stringify(body),
@@ -97,10 +110,15 @@ async function profileRankedSearch() {
     const value = JSON.parse(text) as Page;
     if (captureFailure) expect([200, 503]).toContain(response.status);
     else expect(response.status, JSON.stringify(value)).toBe(200);
-    if (response.status === 503) expect(value).toMatchObject({ status: 503, code: 'search_index_unavailable' });
+    let refusal: Refusal | undefined;
+    if (response.status === 503) {
+      expect(value).toMatchObject({ status: 503, code: 'search_index_unavailable' });
+      const error = new CorpusCommandError('ranked-page', `POST ${path}`, verifying.manifest.scale, response.status, text);
+      refusal = { status: error.status, code: error.code, responseStatus: error.responseStatus, body: error.body };
+    }
     if (response.status === 200) expect(candidateReads).toHaveLength(1);
     return { ...value, httpStatus: response.status, responseBytes: Buffer.byteLength(text),
-      candidateRead: candidateReads[0] };
+      candidateRead: candidateReads[0], hostLoad, refusal };
   };
   const backups = createCorpusBackupDriver({
     sourceRunId: retained.sourceRunId,
@@ -161,7 +179,7 @@ async function profileRankedSearch() {
     },
   });
   try {
-    for (const cut of retained.cuts) {
+    for (const cut of cuts) {
       verifying = cut;
       const target = `ranked-growth-${qaRunId.replaceAll('-', '').slice(0, 24)}-${cut.manifest.scale}`;
       targets.push(target);
@@ -177,14 +195,16 @@ async function profileRankedSearch() {
         const body = { profile: 'public-main-phrase-page-v1', phrase, language: 'en', pageSize };
         const first = await profileRequest(sink, headers => request(copy!, '/v1/queries/page', body, headers, true),
           { flush: flushTelemetryTraces });
-        attempts.push({ matchingWorks: count, page: 'first', profile: first.profile });
+        attempts.push({ matchingWorks: count, page: 'first', profile: first.profile,
+          hostLoad: first.result.hostLoad, refusal: first.result.refusal, candidateRead: first.result.candidateRead });
         assertMeter(count, 'first', first.profile);
         if (first.result.httpStatus !== 200) continue;
         expect(first.result.next).not.toBeNull();
         const continuation = await profileRequest(sink, headers => request(copy!, '/v1/queries/page', {
           ...body, continuation: first.result.next,
         }, headers, true), { flush: flushTelemetryTraces });
-        attempts.push({ matchingWorks: count, page: 'continuation', profile: continuation.profile });
+        attempts.push({ matchingWorks: count, page: 'continuation', profile: continuation.profile,
+          hostLoad: continuation.result.hostLoad, refusal: continuation.result.refusal, candidateRead: continuation.result.candidateRead });
         assertMeter(count, 'continuation', continuation.profile);
         if (continuation.result.httpStatus !== 200) continue;
         for (const result of [first.result, continuation.result]) {
@@ -202,7 +222,7 @@ async function profileRankedSearch() {
     }
   } finally {
     mkdirSync(dirname(process.env.REZICS_WORK_PROFILE_RESULT!), { recursive: true });
-    writeFileSync(process.env.REZICS_WORK_PROFILE_RESULT!, JSON.stringify({ evidence, attempts, blind }, null, 2));
+    writeFileSync(process.env.REZICS_WORK_PROFILE_RESULT!, JSON.stringify({ evidence, attempts, blind, hostLoadAtStart }, null, 2));
     const errors: unknown[] = [];
     for (const target of targets) {
       try { await backups.stop(target); } catch (error) { errors.push(error); }
@@ -218,7 +238,7 @@ if (process.env.REZICS_RANKED_SEARCH_PROFILE_CHILD === '1') {
 } else {
   const { PUBLIC_SEARCH_PAGE_COST } = await import('../../../services/main/src/modules/work/search-continuation.ts');
   let evidence: Evidence[];
-  let attempts: { matchingWorks: number; page: string; profile: WorkProfile }[];
+  let attempts: Attempt[];
   beforeAll(async () => {
     const measured = await runWorkProfileChild('tests/qa/integration/search-ranked-growth.test.ts', {
       env: { REZICS_RANKED_SEARCH_PROFILE_CHILD: '1' }, timeoutMs: 450_000,
@@ -227,7 +247,8 @@ if (process.env.REZICS_RANKED_SEARCH_PROFILE_CHILD === '1') {
       evidence: Evidence[]; attempts: typeof attempts });
     console.log(`Ranked search work profiles: ${measured.resultPath}`);
     console.log(JSON.stringify(attempts.map(row => ({ works: row.matchingWorks, page: row.page,
-      status: row.profile.request.status, fuseki: row.profile.fusekiRequests, sql: row.profile.postgresStatements })), null, 2));
+      status: row.profile.request.status, fuseki: row.profile.fusekiRequests, sql: row.profile.postgresStatements,
+      hostLoad: row.hostLoad, refusal: row.refusal, candidateRead: row.candidateRead })), null, 2));
     console.log(JSON.stringify(evidence.map(row => ({ matchingWorks: row.matchingWorks, restoreMs: row.restoreMs,
       ...Object.fromEntries(['first', 'continuation'].map(page => [page,
         Object.fromEntries([...counters, 'candidateRows', 'candidateCount', 'candidateReceivedBytes', 'responseBytes']
@@ -235,9 +256,9 @@ if (process.env.REZICS_RANKED_SEARCH_PROFILE_CHILD === '1') {
     })), null, 2));
   }, 460_000);
 
-  test('SEARCH18/SEARCH16: ranked first and continuation pages cover restored 4/16/64 matching Works', () => {
+  test(`SEARCH18/SEARCH16: ranked first and continuation pages cover restored ${isolatedLarge ? '64' : '4/16/64'} matching Works`, () => {
     for (const attempt of attempts) expect(attempt.profile.request.status).toBe(200);
-    expect(evidence.map(row => row.matchingWorks)).toEqual([4, 16, 64]);
+    expect(evidence.map(row => row.matchingWorks)).toEqual(isolatedLarge ? [64] : [4, 16, 64]);
     for (const row of evidence) for (const profile of [row.first, row.continuation]) {
       expect(profile.request.route).toBe('/v1/queries/page');
       expect(profile.request.status).toBe(200);
@@ -252,7 +273,7 @@ if (process.env.REZICS_RANKED_SEARCH_PROFILE_CHILD === '1') {
       expect(profile.candidateCount).toBeLessThanOrEqual(PUBLIC_SEARCH_PAGE_COST.candidates);
     }
   });
-  for (const page of ['first', 'continuation'] as const) {
+  if (!isolatedLarge) for (const page of ['first', 'continuation'] as const) {
     test(`SEARCH18/SEARCH16: ranked ${page} page obeys the bounded candidate-pool formulas`, () => {
       const profiles = evidence.map(row => row[page]);
       const smallest = profiles[0]!;
