@@ -1,140 +1,274 @@
-import { expect, test } from 'bun:test';
-import type { Pool } from 'pg';
+import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { createHash, randomUUID } from 'node:crypto';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { Pool, type PoolClient } from 'pg';
+import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
+import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { NotificationDenied, NotificationInvalid, NotificationStale, NotificationStore }
   from '../src/modules/notification/store.ts';
 import { notificationRoutes } from '../src/routes/notifications.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 
-const principal = { issuer: 'https://account.rezics.test', subject: 'reader' };
-const selections = [{ view: 'saved' }, { view: 'done' }, { reason: 'reviewer' },
-  { view: 'saved', reason: 'manual' }] as const;
+const root = resolve(import.meta.dir, '../../..');
+let cluster: PostgresCluster | undefined;
+let pool: Pool;
+type Selection = { view?: 'inbox' | 'saved' | 'done'; reason?: 'manual' | 'reviewer' };
+const selections: Selection[] = [{ view: 'saved' }, { view: 'done' }, { reason: 'reviewer' },
+  { view: 'saved', reason: 'manual' }, { view: 'done', reason: 'manual' }];
+type Statement = { sql: string; args: unknown[] };
+type FixtureRow = { id: string; sequence: string; saved: boolean; done: boolean; reason: string };
 
-function inbox() {
-  let generation = '7';
-  let active = true;
-  let absent = false;
-  let sequenceHead = '20000';
-  const statements: string[] = [];
-  const rows = Array.from({ length: 246 }, (_, index) => ({ id: `notice-${index}`,
-    sequence: String((index + 1) * 71), purpose: 'governance', topic: 'proposal-revised',
-    state: 'erased', subject_owner: 'access', subject_ref: 'proposal', subject_revision: null,
-    disclosure_basis: 'proposal', kind: null, actor_agent: null, realm: null, group_key: null,
-    saved: index % 2 === 0, done: index % 2 === 0,
-    reason: index % 2 === 0 ? 'manual' : 'reviewer', triage_revision: null,
-    proposal: null, proposal_revision: null, created_at: new Date('2026-10-12T00:00:00Z'),
-    individually_read: false,
-  }));
-  const query = async (sql: string, args: unknown[] = []) => {
-    statements.push(sql);
-    if (sql.includes('FROM access.recovery_fence')) return { rows: [{ open: true }] };
-    if (sql.includes('SELECT id, active FROM access.principal')) return { rows: absent ? [] : [{ id: 'reader', active }] };
-    if (sql.includes('FROM access.notification_stream')) return { rows: [{ generation, head_sequence: sequenceHead }] };
-    if (sql.includes('FROM access.notification_item i')) {
-      const descending = /ORDER BY i.sequence DESC/.test(sql);
-      const selected = rows.filter(row => args[0] !== null
-        && (!sql.includes('i.sequence <= $7') || BigInt(row.sequence) <= BigInt(String(args[6])))
-        && (args[2] === null || (descending ? BigInt(row.sequence) < BigInt(String(args[2]))
-          : BigInt(row.sequence) > BigInt(String(args[2]))))
-        && (args[4] === 'saved' ? row.saved : args[4] === 'done' ? row.done : !row.done)
-        && (args[5] === null || row.reason === args[5]));
-      selected.sort((a, b) => Number(BigInt(a.sequence) - BigInt(b.sequence)) * (descending ? -1 : 1));
-      return { rows: selected.slice(0, Number(args[3])) };
+beforeAll(async () => {
+  cluster = await startPostgresCluster();
+  pool = new Pool({ ...cluster.connection, max: 4, connectionTimeoutMillis: 1000 });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const file of schemaFiles(root, 'access')) {
+      await client.query(readFileSync(join(root, 'services/main/migrations/access', file), 'utf8'));
     }
-    return { rows: [] };
-  };
-  const client = { query, release() {} };
-  const store = new NotificationStore({ connect: async () => client, query } as unknown as Pool);
-  return { store, rows, statements, reset: () => { generation = '8'; }, deny: () => { active = false; },
-    missing: () => { absent = true; }, shrink: () => { sequenceHead = '1'; },
-    concurrentArrival: () => { rows.push({ ...rows[0]!, id: 'concurrent', sequence: '20001' }); } };
+    await client.query('COMMIT');
+  } catch (error) { await client.query('ROLLBACK'); throw error; }
+  finally { client.release(); }
+}, 90_000);
+
+afterAll(async () => { await pool?.end(); cluster?.remove(); });
+
+/** Record the statement sent to PostgreSQL, without evaluating or replacing any SQL. */
+function recordingPool(statements: Statement[], afterHead?: () => Promise<void>) {
+  let arrived = false;
+  return new Proxy(pool, { get(target, property) {
+    if (property === 'connect') return async () => {
+      const client = await target.connect();
+      return new Proxy(client, { get(connection, member) {
+        if (member === 'query') return async (sql: string, args: unknown[] = []) => {
+          const result = await connection.query(sql, args);
+          if (sql.includes('AS individually_read')) statements.push({ sql, args: [...args] });
+          if (afterHead && !arrived && sql.includes('head_sequence::text FROM access.notification_stream')) {
+            arrived = true;
+            await afterHead();
+          }
+          return result;
+        };
+        const value = Reflect.get(connection, member);
+        return typeof value === 'function' ? value.bind(connection) : value;
+      } }) as PoolClient;
+    };
+    const value = Reflect.get(target, property);
+    return typeof value === 'function' ? value.bind(target) : value;
+  } });
 }
 
-for (const selection of selections) {
-  test(`descending ${JSON.stringify(selection)} begins at newest and reaches every sparse match once`, async () => {
-    const { store, rows, statements } = inbox();
-    const matching = rows.filter(row => ('view' in selection && selection.view === 'saved' ? row.saved
-      : 'view' in selection && selection.view === 'done' ? row.done : !row.done)
-      && (!('reason' in selection) || row.reason === selection.reason)).reverse();
+async function inbox() {
+  const id = randomUUID(), proposal = randomUUID(), actor = `https://rezics.com/id/${randomUUID()}`;
+  const principal = { issuer: 'https://account.rezics.test', subject: randomUUID() };
+  await pool.query('INSERT INTO access.principal (id,account_issuer,account_subject) VALUES ($1,$2,$3)',
+    [id, principal.issuer, principal.subject]);
+  await pool.query("INSERT INTO access.notification_stream (principal_id,stream) VALUES ($1,'inbox')", [id]);
+  await pool.query("INSERT INTO access.authority_subject (id,kind) VALUES ($1,'agent')", [actor]);
+  await pool.query(`INSERT INTO access.editorial_proposal (id,kind,target,resource,context,
+    proposer_principal,proposer_agent,proposer_key,proposer_controllers)
+    VALUES ($1,'title','{}','fixture','fixture',$2,$3,$4,ARRAY[$2::uuid])`,
+  [proposal, id, actor, '0'.repeat(64)]);
+  await pool.query(`INSERT INTO access.editorial_revision (proposal,n,candidate,candidate_digest,
+    before_state,base_heads,evidence,author_agent) VALUES ($1,1,'{}',$2,'{}','[{}]','[]',$3)`,
+  [proposal, createHash('sha256').update('{}').digest('hex'), actor]);
+  const statements: Statement[] = [];
+  const rows: FixtureRow[] = [];
+  let generation = '1';
+
+  async function insert(items: Omit<FixtureRow, 'id'>[], head = items.at(-1)?.sequence ?? '0') {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(`UPDATE access.notification_stream SET head_sequence = $2
+        WHERE principal_id = $1 AND stream = 'inbox'`, [id, head]);
+      const data = items.map(item => ({ ...item, id: randomUUID() }));
+      await client.query(`INSERT INTO access.notification_item (id,principal_id,stream,generation,sequence,
+        purpose,topic,source_owner,source_event,subject_owner,subject_ref,disclosure_basis)
+        SELECT d.id,$1,'inbox',$2,d.sequence,'governance','proposal-revised','access',d.id::text,
+          'access','fixture','proposal' FROM jsonb_to_recordset($3::jsonb) AS d(id uuid,sequence bigint)`,
+      [id, generation, JSON.stringify(data)]);
+      await client.query(`INSERT INTO access.notification_item_triage (principal_id,item_id,saved,done)
+        SELECT $1,d.id,d.saved,d.done FROM jsonb_to_recordset($2::jsonb) AS d(id uuid,saved boolean,done boolean)`,
+      [id, JSON.stringify(data)]);
+      await client.query(`INSERT INTO access.notification_proposal_context (item_id,proposal,revision,reason)
+        SELECT d.id,$1,1,d.reason FROM jsonb_to_recordset($2::jsonb) AS d(id uuid,reason text)`,
+      [proposal, JSON.stringify(data)]);
+      // Erased owner records need no external subject resolver; their private triage remains pageable.
+      await client.query(`UPDATE access.notification_item SET state = 'erased',state_changed_at = now()
+        WHERE principal_id = $1 AND generation = $2 AND state = 'active'`, [id, generation]);
+      await client.query('COMMIT');
+      rows.push(...data);
+    } catch (error) { await client.query('ROLLBACK'); throw error; }
+    finally { client.release(); }
+  }
+  const sparse = () => Array.from({ length: 246 }, (_, index) => ({ sequence: String((index + 1) * 71),
+    saved: index % 2 === 0, done: index % 2 === 0, reason: index % 2 === 0 ? 'manual' : 'reviewer' }));
+  return { id, principal, statements, rows, insert, sparse,
+    store: new NotificationStore(recordingPool(statements)),
+    async reset() {
+      await pool.query(`UPDATE access.notification_stream SET generation = generation + 1,
+        head_sequence = 0,reset_at = now() WHERE principal_id = $1 AND stream = 'inbox'`, [id]);
+      generation = String(BigInt(generation) + 1);
+      rows.length = 0;
+      await insert(sparse(), '20000');
+    },
+    deny: () => pool.query('UPDATE access.principal SET active = false WHERE id = $1', [id]),
+  };
+}
+
+function matches(row: FixtureRow, selection: Selection) {
+  return (selection.view === 'saved' ? row.saved : selection.view === 'done' ? row.done : !row.done)
+    && (!selection.reason || row.reason === selection.reason);
+}
+
+for (const selection of selections) for (const descending of [true, false]) {
+  test(`${descending ? 'descending' : 'forward'} ${JSON.stringify(selection)} reaches every sparse match once in PostgreSQL`, async () => {
+    const f = await inbox();
+    await f.insert(f.sparse(), '20000');
+    const matching = f.rows.filter(row => matches(row, selection));
+    if (descending) matching.reverse();
     const seen: string[] = [];
-    let before = 'latest';
+    let continuation: string | null = descending ? 'latest' : null;
     for (let pages = 0; pages < 4; pages++) {
-      const page = await store.readStream(principal, null, 50, selection, before);
+      const after = !descending && continuation ? { generation: continuation.split(':')[0]!,
+        sequence: continuation.split(':')[1]! } : null;
+      const page = await f.store.readStream(f.principal, after, 50, selection, descending ? continuation! : undefined);
       expect(page.items.map(item => item.id)).toEqual(matching.slice(seen.length, seen.length + 50).map(row => row.id));
       seen.push(...page.items.map(item => item.id));
-      if (page.next === null) break;
-      expect(page.next).not.toMatch(/^\d+:\d+$/);
-      before = page.next;
+      continuation = page.next;
+      if (continuation === null) break;
+      if (descending) expect(continuation).not.toMatch(/^\d+:\d+$/);
     }
+    expect(continuation).toBeNull();
     expect(seen).toHaveLength(123);
     expect(new Set(seen).size).toBe(123);
     expect(seen.at(-1)).toBe(matching.at(-1)!.id);
-    expect(statements.filter(sql => sql.includes('FROM access.notification_item i'))).toHaveLength(3);
+    expect(f.statements).toHaveLength(3);
   });
 }
 
 test('descending cursors bind recipient and filters, reject malformed input and mixing directions', async () => {
-  const { store } = inbox();
-  const page = await store.readStream(principal, null, 2, { view: 'saved' }, 'latest');
+  const f = await inbox(); await f.insert(f.sparse(), '20000');
+  const page = await f.store.readStream(f.principal, null, 2, { view: 'saved' }, 'latest');
   expect(page.next).not.toBeNull();
-  await expect(store.readStream(principal, null, 2, { view: 'done' }, page.next!)).rejects.toBeInstanceOf(NotificationInvalid);
-  await expect(store.readStream({ ...principal, subject: 'other' }, null, 2, { view: 'saved' }, page.next!))
+  await expect(f.store.readStream(f.principal, null, 2, { view: 'done' }, page.next!)).rejects.toBeInstanceOf(NotificationInvalid);
+  await expect(f.store.readStream({ ...f.principal, subject: 'other' }, null, 2, { view: 'saved' }, page.next!))
     .rejects.toBeInstanceOf(NotificationInvalid);
-  await expect(store.readStream(principal, null, 2, {}, 'bad-cursor')).rejects.toBeInstanceOf(NotificationInvalid);
-  await expect(store.readStream(principal, { generation: '7', sequence: '0' }, 2, {}, 'latest'))
+  await expect(f.store.readStream(f.principal, null, 2, {}, 'bad-cursor')).rejects.toBeInstanceOf(NotificationInvalid);
+  await expect(f.store.readStream(f.principal, { generation: '1', sequence: '0' }, 2, {}, 'latest'))
     .rejects.toBeInstanceOf(NotificationInvalid);
 });
 
 test('descending continuation resets from newest in a new generation, and stale or denied reads fail', async () => {
-  const fixture = inbox();
-  const first = await fixture.store.readStream(principal, null, 2, {}, 'latest');
-  fixture.reset();
-  const reset = await fixture.store.readStream(principal, null, 2, {}, first.next!);
+  const f = await inbox(); await f.insert(f.sparse(), '20000');
+  const first = await f.store.readStream(f.principal, null, 2, {}, 'latest');
+  await f.reset();
+  const reset = await f.store.readStream(f.principal, null, 2, {}, first.next!);
   expect(reset.reset).toBe(true);
-  expect(reset.generation).toBe('8');
-  expect(reset.items.map(item => item.id)).toEqual(first.items.map(item => item.id));
-  fixture.deny();
-  await expect(fixture.store.readStream(principal, null, 2, {}, 'latest')).rejects.toBeInstanceOf(NotificationDenied);
-  const stale = inbox();
-  const cursor = (await stale.store.readStream(principal, null, 2, {}, 'latest')).next!;
-  stale.shrink();
-  await expect(stale.store.readStream(principal, null, 2, {}, cursor)).rejects.toBeInstanceOf(NotificationStale);
-  const missing = inbox(); missing.missing();
-  expect(await missing.store.readStream(principal, null, 50, {}, 'latest')).toMatchObject({ items: [], next: null });
+  expect(reset.generation).toBe('2');
+  expect(reset.items.map(item => item.sequence)).toEqual(first.items.map(item => item.sequence));
+  await f.deny();
+  await expect(f.store.readStream(f.principal, null, 2, {}, 'latest')).rejects.toBeInstanceOf(NotificationDenied);
+  const stale = await inbox(); await stale.insert(stale.sparse(), '20000');
+  await expect(stale.store.readStream(stale.principal, { generation: '2', sequence: '0' }, 2))
+    .rejects.toBeInstanceOf(NotificationStale);
+  expect(await f.store.readStream({ ...f.principal, subject: 'missing' }, null, 50, {}, 'latest'))
+    .toMatchObject({ items: [], next: null });
 });
 
-test('forward sync preserves ascending sequence and generation cursors', async () => {
-  const { store } = inbox();
-  const first = await store.readStream(principal, null, 2);
-  expect(first.items.map(item => item.sequence)).toEqual(['142', '284']);
-  expect(first.next).toBe('7:284');
-  const next = await store.readStream(principal, { generation: '7', sequence: '284' }, 2);
-  expect(next.items.map(item => item.sequence)).toEqual(['426', '568']);
-});
-
-test('a concurrent arrival above the reported head waits for the next newest traversal', async () => {
-  const fixture = inbox();
-  fixture.concurrentArrival();
-  const first = await fixture.store.readStream(principal, null, 2, { view: 'saved' }, 'latest');
+test('a real concurrent arrival above the captured head waits for the next newest traversal', async () => {
+  const f = await inbox(); await f.insert(f.sparse(), '20000');
+  const store = new NotificationStore(recordingPool(f.statements, async () => {
+    await f.insert([{ sequence: '20001', saved: true, done: false, reason: 'manual' }]);
+  }));
+  const first = await store.readStream(f.principal, null, 2, { view: 'saved' }, 'latest');
   expect(first.head).toBe('20000');
   expect(first.items.map(item => item.sequence)).toEqual(['17395', '17253']);
-  fixture.reset();
-  const reset = await fixture.store.readStream(principal, null, 2, { view: 'saved' }, first.next!);
-  expect(reset.reset).toBe(true);
-  expect(reset.items.map(item => item.sequence)).toEqual(['17395', '17253']);
+  const newest = await store.readStream(f.principal, null, 2, { view: 'saved' }, 'latest');
+  expect(newest.items[0]!.sequence).toBe('20001');
 });
 
-test('HTTP exposes newest-first pages and returns a continuation that pages older', async () => {
-  const { store } = inbox();
-  const app = notificationRoutes({ account: { verify: async () => principal }, notifications: { store } } as unknown as MainWorkDependencies);
+test('HTTP exposes newest-first continuations and fences unread counts with the current generation', async () => {
+  const f = await inbox(); await f.insert(f.sparse(), '20000');
+  const app = notificationRoutes({ account: { verify: async () => f.principal }, notifications: { store: f.store } } as unknown as MainWorkDependencies);
   const request = (before: string) => app.handle(new Request(
     `http://localhost/v1/me/notifications?view=saved&limit=2&before=${encodeURIComponent(before)}`));
-  const first = await request('latest');
-  expect(first.status).toBe(200);
+  const first = await request('latest'); expect(first.status).toBe(200);
   const body = await first.json();
   expect(body.items.map((item: { sequence: string }) => item.sequence)).toEqual(['17395', '17253']);
-  const next = await request(body.next);
-  expect(next.status).toBe(200);
+  const next = await request(body.next); expect(next.status).toBe(200);
   expect((await next.json()).items.map((item: { sequence: string }) => item.sequence)).toEqual(['17111', '16969']);
-  const invalid = await app.handle(new Request('http://localhost/v1/me/notifications?after=7:0&before=latest'));
-  expect(invalid.status).toBe(400);
+  expect((await app.handle(new Request('http://localhost/v1/me/notifications?after=1:0&before=latest'))).status).toBe(400);
+  const count = () => app.handle(new Request('http://localhost/v1/me/notifications/unread-count'));
+  expect(await (await count()).json()).toMatchObject({ generation: '1', count: 0 });
+  await f.reset();
+  expect(await (await count()).json()).toMatchObject({ generation: '2', count: 0 });
+});
+
+type Plan = { 'Node Type': string; 'Index Name'?: string; 'Actual Rows': number; 'Actual Loops': number;
+  'Rows Removed by Filter'?: number; 'Rows Removed by Index Recheck'?: number;
+  'Shared Hit Blocks': number; 'Shared Read Blocks': number; Plans?: Plan[] };
+function planNodes(plan: Plan): Plan[] { return [plan, ...(plan.Plans ?? []).flatMap(planNodes)]; }
+
+test('actual forward and descending filtered statements use bounded seeks at three history sizes', async () => {
+  const proof: unknown[] = [];
+  for (const view of ['inbox', 'saved', 'done'] as const) for (const withReason of [false, true]) {
+    const f = await inbox();
+    const selection: Selection = { view, ...(withReason ? { reason: 'manual' as const } : {}) };
+    const old = { sequence: '1', saved: view === 'saved', done: view === 'done', reason: 'manual' };
+    await f.insert([old]);
+    const metrics: Record<string, { visited: number; buffers: number }[]> = { forward: [], descending: [] };
+    let inserted = 0;
+    for (const history of [1000, 4000, 16000]) {
+      await f.insert(Array.from({ length: history - inserted }, (_, offset) => ({
+        sequence: String(inserted + offset + 2), saved: withReason ? old.saved : false,
+        done: withReason ? old.done : view === 'inbox', reason: 'reviewer',
+      })));
+      inserted = history;
+      await pool.query('ANALYZE access.notification_item');
+      await pool.query('ANALYZE access.notification_item_triage');
+      await pool.query('ANALYZE access.notification_proposal_context');
+      if ((await pool.query("SELECT to_regclass('access.notification_filter_seek') AS relation")).rows[0]!.relation) {
+        await pool.query('ANALYZE access.notification_filter_seek');
+      }
+      for (const descending of [false, true]) {
+        const page = await f.store.readStream(f.principal, null, 2, selection, descending ? 'latest' : undefined);
+        expect(page.items.map(item => item.sequence)).toEqual(['1']);
+        const statement = f.statements.at(-1)!;
+        const plan = (await pool.query(`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${statement.sql}`, statement.args))
+          .rows[0]!['QUERY PLAN'][0].Plan as Plan;
+        const nodes = planNodes(plan);
+        const visited = nodes.reduce((sum, node) => sum + (node['Actual Rows']
+          + (node['Rows Removed by Filter'] ?? 0) + (node['Rows Removed by Index Recheck'] ?? 0)) * node['Actual Loops'], 0);
+        const buffers = plan['Shared Hit Blocks'] + plan['Shared Read Blocks'];
+        const direction = descending ? 'descending' : 'forward';
+        metrics[direction]!.push({ visited, buffers });
+        proof.push({ selection, direction, history, visited, buffers, statement, plan });
+        writeFileSync(join(root, '.temp/notification-filter-seek-plans.json'), JSON.stringify(proof, null, 2));
+        expect(nodes.map(node => node['Index Name'])).toContain(`notification_filter_${view}${withReason ? '_reason' : ''}`);
+        expect(visited).toBeLessThanOrEqual(40);
+        expect(buffers).toBeLessThanOrEqual(60);
+      }
+    }
+    for (const direction of ['forward', 'descending']) {
+      const measurements = metrics[direction]!;
+      expect(Math.max(...measurements.map(m => m.visited)) - Math.min(...measurements.map(m => m.visited))).toBeLessThanOrEqual(4);
+      expect(Math.max(...measurements.map(m => m.buffers)) - Math.min(...measurements.map(m => m.buffers))).toBeLessThanOrEqual(8);
+    }
+  }
+}, 90_000);
+
+test('a non-strict descending seek duplicates the previous page boundary in real SQL', async () => {
+  const f = await inbox(); await f.insert(f.sparse(), '20000');
+  const first = await f.store.readStream(f.principal, null, 2, { view: 'saved' }, 'latest');
+  const second = await f.store.readStream(f.principal, null, 2, { view: 'saved' }, first.next!);
+  expect(second.items.some(item => item.id === first.items.at(-1)!.id)).toBe(false);
+  const statement = f.statements.at(-1)!;
+  const nonStrict = statement.sql.replace(/([if]\.sequence) < \$3\b/, '$1 <= $3');
+  expect(nonStrict).not.toBe(statement.sql);
+  const mutant = await pool.query(nonStrict, statement.args);
+  expect(mutant.rows[0]!.id).toBe(first.items.at(-1)!.id);
 });
