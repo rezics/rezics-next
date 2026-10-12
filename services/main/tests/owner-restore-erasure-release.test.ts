@@ -27,7 +27,7 @@ import * as restoreBinding from '../src/modules/owner/restore-release-binding.ts
 import * as erasureReconciliation from '../src/modules/erasure/reconcile.ts';
 import { OwnerOperations, OwnerOperationUnavailable } from '../src/modules/owner/operations.ts';
 import { readExactModelGeneration } from '../src/modules/semantic/model-custody.ts';
-import { MODEL_COMPONENT, PROFILES } from '../src/modules/semantic/schema.ts';
+import { PROFILES } from '../src/modules/semantic/schema.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { releaseRestoredGraphHold, RestoreInterrupted, RestoreLineageConflict,
   type AuthenticatedRecoveryCoverage, type RecoveryCoverage } from '../src/modules/work/restore-lineage.ts';
@@ -498,10 +498,10 @@ function seedRetainedModelCustody(objects: Map<string, Uint8Array>, store: S3Imm
     profiles: [{ id: 'owner-test', sha256: shapeDigest, file: 'shapes/owner-test.ttl' }] }));
   const manifestDigest = hash(manifest);
   const generation = `urn:rezics:model-generation:${manifestDigest}`;
-  const payload = Buffer.from(JSON.stringify({ format: 'rezics-component-v1', component: MODEL_COMPONENT,
+  const payload = Buffer.from(JSON.stringify({ format: 'rezics-component-v1', component: generation,
     state: { modelManifestSha256: manifestDigest, commandModule: COMMAND_MODULE_VERSION, entailment: 'none' } }));
   const payloadDigest = hash(payload);
-  const componentManifest = Buffer.from(JSON.stringify({ format: 'rezics-manifest-v1', component: MODEL_COMPONENT,
+  const componentManifest = Buffer.from(JSON.stringify({ format: 'rezics-manifest-v1', component: generation,
     payload: `sha256:${payloadDigest}`, payloadBytes: payload.length, mediaType: 'application/json',
     model: PROFILES.generation, shape: PROFILES.generation }));
   const componentManifestDigest = hash(componentManifest);
