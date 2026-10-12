@@ -76,3 +76,6 @@ test (`tests/qa/integration/semantic-change.test.ts:209–223`) need a deliberat
 owner change preserving indistinguishability apart from echoed input.
 The remaining measurement question is the completed 1,191-episode import's cost
 after correcting fixture provisioning; it was not measured here.
+
+The open bulk-reference recovery question is investigated in
+[Bulk semantic reference loss and pending recovery](semantic-bulk-pending-reference.md).
