@@ -2,7 +2,8 @@ import { expect, spyOn, test } from 'bun:test';
 import { createHmac } from 'node:crypto';
 import { symmetricDecrypt } from 'better-auth/crypto';
 import { createOTP } from '@better-auth/utils/otp';
-import { createInternalContext } from 'better-call';
+import { createInternalContext, serializeSignedCookie } from 'better-call';
+import { APIError } from 'better-auth/api';
 import { accountFixture } from './account-fixture.ts';
 import { cookies, recoveryProof, type RecoveryFixture, type RecoveryMember } from './recovery-fixture.ts';
 
@@ -163,8 +164,9 @@ for (const issuer of ['http://issuer.test', 'https://issuer.test', 'HTTPS://issu
         `${a.cookie}; ${bChallenge.cookie}`);
       const admitted = await Promise.race([admission.entered, pending.then(() => 'finished')]);
       if (admitted === 'finished') {
+        expect(provider.mock.calls.filter(([request]) =>
+          new URL((request as Request).url).pathname === '/api/auth/two-factor/verify-totp')).toHaveLength(0);
         await deniedWithoutSession(f, await pending);
-        expect(provider).toHaveBeenCalledTimes(0);
         return;
       }
       // Run the review's actual interleaving on the retained implementation.
@@ -264,6 +266,67 @@ test('post-provider subject replacement denies issuance, charges both users and 
     admission.resume();
     await pending?.catch(() => {});
     provider?.mockRestore();
+    await f.close();
+  }
+}, 60_000);
+
+test('post-provider creation evidence survives a later provider error and retires its actual session', async () => {
+  const f = await issuerFixture('HTTPS://issuer.test');
+  const admission = pause();
+  const context = await f.auth.$context;
+  const createSession = context.internalAdapter.createSession;
+  let pending: Promise<Response> | undefined;
+  let provider: ReturnType<typeof spyOn> | undefined;
+  let created: { token: string; userId: string } | undefined;
+  try {
+    const a = await f.signup('late-error-a@example.test');
+    const b = await f.signup('late-error-b@example.test');
+    await enroll(f, a);
+    const bSecret = await enroll(f, b);
+    const credential = await challenge(f, a);
+    const key = (id: string) => createHmac('sha256', f.secret).update(`reauth:${id}`).digest('hex');
+    await f.pool.query(`UPDATE rezics_account_rate_limit SET started_at = now() - interval '301 seconds'
+      WHERE key IN ($1, $2)`, [key(a.id), key(b.id)]);
+    const handler = f.auth.handler;
+    provider = spyOn(f.auth, 'handler').mockImplementation(async request => {
+      if (new URL(request.url).pathname === '/api/auth/two-factor/verify-totp') {
+        admission.enter();
+        await admission.released;
+      }
+      return handler(request);
+    });
+    context.internalAdapter.createSession = async (...args) => {
+      const session = await createSession(...args);
+      if (args[0] === b.id && session) {
+        created = session;
+        // The provider really inserted B's session. No success body/newSession
+        // has been produced yet; its database hook must retain this evidence.
+        throw new APIError('SERVICE_UNAVAILABLE', { message: 'late provider completion unavailable' });
+      }
+      return session;
+    };
+    pending = f.request('/api/auth/two-factor/verify-totp', { code: await createOTP(bSecret).totp() }, credential.cookie);
+    expect(await Promise.race([admission.entered, pending.then(() => 'finished')])).toBe('paused');
+    expect((await f.pool.query('UPDATE verification SET value=$2 WHERE identifier=$1',
+      [credential.identifier, b.id])).rowCount).toBe(1);
+    admission.resume();
+    const response = await pending;
+    expect(created?.userId).toBe(b.id);
+    expect(response.status).toBe(403);
+    expect(await response.clone().json()).toMatchObject({ error: 'stale_request' });
+    await deniedWithoutSession(f, response);
+    const cookie = await serializeSignedCookie(context.authCookies.sessionToken.name, created!.token, context.secret);
+    expect(await f.auth.api.getSession({ headers: new Headers({ cookie }) })).toBeNull();
+    for (const userId of [a.id, b.id]) {
+      expect((await f.pool.query('SELECT count FROM rezics_account_rate_limit WHERE key=$1', [key(userId)])).rows[0]?.count).toBe(1);
+      expect((await f.pool.query(`SELECT user_id FROM rezics_account_security_event
+        WHERE user_id=$1 AND action='authentication_subject_changed'`, [userId])).rows).toEqual([{ user_id: userId }]);
+    }
+  } finally {
+    admission.resume();
+    await pending?.catch(() => {});
+    provider?.mockRestore();
+    context.internalAdapter.createSession = createSession;
     await f.close();
   }
 }, 60_000);

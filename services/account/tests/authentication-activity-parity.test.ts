@@ -118,7 +118,8 @@ test('P20: verify-email records exactly one response-session sign-in and replay 
       email: 'verify-event@example.test', password: 'correct horse battery staple', name: 'Verified event',
     });
     expect(created.status).toBe(200);
-    const { user } = await created.json() as { user: { id: string } };
+    expect(await created.json()).toEqual({ status: true });
+    const user = (await f.pool.query<{ id: string }>('SELECT id FROM "user" WHERE email=$1', ['verify-event@example.test'])).rows[0]!;
     expect(await signInEvents(f, user.id)).toEqual([]);
     await f.email.drain();
     const mail = f.messages.find(message => message.to === 'verify-event@example.test')!;

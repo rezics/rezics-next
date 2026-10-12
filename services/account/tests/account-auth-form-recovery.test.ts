@@ -155,6 +155,7 @@ for (const scheme of ['https', 'http'])
                 )
               ).rows;
             expect(await failures()).toEqual([{ user_id: b.id }]);
+            const foreignChallenge = await challenge(a);
 
             // Provider parsing chooses the first exact value. Account refuses
             // a second live owner's credential before proof work or attribution.
@@ -163,14 +164,14 @@ for (const scheme of ['https', 'http'])
                 await request(
                   '/api/auth/two-factor/verify-totp',
                   { code: 'invalid' },
-                  `invalid=unused; ${bChallenge}; ${aChallenge.replace(other, exact)}`,
+                  `invalid=unused; ${bChallenge}; ${foreignChallenge}`,
                 )
               ).status,
             ).toBe(400);
             expect(await failures()).toEqual([{ user_id: b.id }]);
             const repeated = new Headers({ origin: issuer, 'content-type': 'application/json' });
             repeated.append('cookie', bChallenge);
-            repeated.append('cookie', aChallenge.replace(other, exact));
+            repeated.append('cookie', foreignChallenge);
             const native = await createInternalContext(
               { headers: repeated },
               { options: { method: 'POST' } },

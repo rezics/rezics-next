@@ -5,7 +5,7 @@ import { passkey } from '@better-auth/passkey';
 import type { GenericEndpointContext } from '@better-auth/core';
 import { getEndpoints } from 'better-auth/api';
 import { createInternalContext, serializeSignedCookie } from 'better-call';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { createHmac } from 'node:crypto';
 import type { Pool } from 'pg';
 import { authenticationCookies } from '../src/authentication-cookies.ts';
@@ -337,32 +337,27 @@ test('P10/P18: stale, missing and deleted-user challenges have no activity subje
 });
 
 test('P21: embedded mail admission validates the effective schema and session-first matching email', async () => {
-  const { auth, context } = await provider();
-  const cookie = `${context.authCookies.sessionToken.name}=${await signed('session-A')}`;
-  for (const email of ['A@example.test', 'b@example.test', ' a@example.test ', 42]) {
-    const raw = await createInternalContext({ headers: new Headers({ cookie }),
-      body: { email }, query: {}, method: 'POST' }, { options: { method: 'POST' } });
-    const providerContext = { ...raw, path: '/send-verification-email', context } as unknown as GenericEndpointContext;
-    const prepared = await prepareAuthentication(auth, { kind: 'provider-context', context: providerContext });
-    const db = projection();
-    if (email === 'A@example.test') {
-      expect(prepared.kind).toBe('prepared');
-      if (prepared.kind === 'prepared') {
-        expect(await resolveAuthenticationSubject(auth, db.pool, prepared.input)).toMatchObject({
-          purpose: 'email', candidateUserId: 'A', target: 'a@example.test',
-        });
-      }
-    } else if (email === 'b@example.test') {
-      expect(prepared.kind).toBe('prepared');
-      if (prepared.kind === 'prepared') await expect(resolveAuthenticationSubject(auth, db.pool, prepared.input))
-        .rejects.toEqual(new AccountProblem('invalid_request', 400));
-      expect(db.queries).toEqual([]);
-    } else {
-      expect(prepared.kind).toBe('reject');
-      expect(db.queries).toEqual([]);
+  const f = await accountFixture({ requireEmailVerification: false });
+  try {
+    const peer = await f.signup('embedded-peer@example.test');
+    const address = 'embedded-mail@example.test';
+    const created = await f.request('/api/auth/sign-up/email', { email: address,
+      password: 'correct horse battery staple', name: 'Embedded mail' });
+    expect(created.status).toBe(200);
+    const cookie = created.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
+    const headers = new Headers({ cookie, origin: f.baseURL });
+    const count = async (email: string) => (await f.pool.query('SELECT count FROM rezics_account_rate_limit WHERE key=$1',
+      [createHmac('sha256', f.secret).update(`/api/auth/send-verification-email:${email}`).digest('hex')])).rows;
+    expect(await f.auth.api.sendVerificationEmail({ headers, body: { email: address.toUpperCase() } })).toEqual({ status: true });
+    expect(await count(address)).toEqual([{ count: 1 }]);
+    expect(await count(peer.email)).toEqual([]);
+    for (const email of [peer.email, ` ${address} `]) {
+      await expect(f.auth.api.sendVerificationEmail({ headers, body: { email } })).rejects.toMatchObject({ statusCode: 400 });
+      expect(await count(address)).toEqual([{ count: 1 }]);
+      expect(await count(peer.email)).toEqual([]);
     }
-  }
-});
+  } finally { await f.close(); }
+}, 60_000);
 
 test('P12/P21: embedded provider session-store outage refuses without charging a mail target', async () => {
   const { auth, context } = await provider();
@@ -522,7 +517,8 @@ test('P30: provider-created user and session identities ignore forged signup and
     const signup = await f.request('/api/auth/sign-up/email', { email, password, name: 'Provider-created owner',
       userId: peer.id, actorId: peer.id, sessionId: 'forged-session' });
     expect(signup.status).toBe(200);
-    const { user } = await signup.json() as { user: { id: string } };
+    expect(await signup.json()).toEqual({ status: true });
+    const user = (await f.pool.query<{ id: string }>('SELECT id FROM "user" WHERE email=$1', [email])).rows[0]!;
     expect(user.id).not.toBe(peer.id);
     await f.email.drain();
     const mail = [...f.messages].reverse().find(message => message.to === email)!;
@@ -562,6 +558,7 @@ test('P24: effective provider endpoint methods define the credential purpose mat
     if (wrong.kind === 'prepared') expect((await resolveAuthenticationSubject(auth, projection().pool, wrong.input)).purpose).toBe('provider-owned');
   }
   for (const [name, endpoint] of Object.entries(api)) {
+    if (!endpoint.path) continue; // server-only APIs have no HTTP admission surface
     const input = { kind: 'http' as const, path: `/api/auth${endpoint.path}`,
       endpointPath: endpoint.path, method: Array.isArray(endpoint.options.method)
         ? endpoint.options.method[0]! : endpoint.options.method,
@@ -587,6 +584,11 @@ test('P24: effective provider endpoint methods define the credential purpose mat
 
 test('authentication wrappers have one admitted subject capability and no legacy derivation', () => {
   const directory = new URL('../src/', import.meta.url);
+  const cookieParsers = readdirSync(directory, { recursive: true })
+    .filter(file => typeof file === 'string' && file.endsWith('.ts'))
+    .filter(file => /\.get\(\s*['"]cookie['"]\s*\)|\bparseCookies\s*\(/.test(
+      readFileSync(new URL(String(file), directory), 'utf8')));
+  expect(cookieParsers).toEqual(['authentication-cookies.ts']);
   for (const file of ['recovery-auth.ts', 'security-activity.ts', 'methods.ts', 'account-settings.ts']) {
     const source = readFileSync(new URL(file, directory), 'utf8');
     expect(source).not.toMatch(/\bauthenticationSubject(?:Rule)?\s*\(|\bchallengeIdentifier\b|\bdecodeJwt\b|\bcreateCookieGetter\b/);
