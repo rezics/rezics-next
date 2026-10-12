@@ -35,6 +35,60 @@ const serviceName = 'library-growth-cost';
 const readerName = 'Library growth measurement reader';
 type SqlEvidence = { text: string; callSites: string[] };
 
+// Calibrated at 80cf2a520: two seven-statement baseline admission transactions
+// plus three principal resolutions for status, or two for the shelf.
+const MEMBERSHIP_SESSION_SQL_COST = { 'reader-state': 17, 'status-shelf': 16 } as const;
+// Calibrated at 80cf2a520: ten agent-fence statements plus preferences, recovery,
+// disclosure and addresses; the 20-item shelf can hydrate two candidate batches.
+const ACCESS_DISCLOSURE_SQL_COST = { 'reader-state': 15, 'status-shelf': 24 } as const;
+// Calibrated at 80cf2a520: one avatar read for status; two per shelf hydration,
+// bounded by its two candidate batches at the 20-item page size.
+const CONTENT_SQL_COST = { 'reader-state': 1, 'status-shelf': 4 } as const;
+const NON_STORE_SQL_COST = {
+  'membership/session': MEMBERSHIP_SESSION_SQL_COST,
+  'Access/authority/disclosure': ACCESS_DISCLOSURE_SQL_COST,
+  Content: CONTENT_SQL_COST,
+} as const;
+const SQL_GROUP_OWNER = {
+  'library-revision': 'library store',
+  'library-entries': 'library store',
+  'baseline-member-admission': 'membership/session',
+  'active-principal': 'membership/session',
+  'agent-fence': 'Access/authority/disclosure',
+  disclosure: 'Access/authority/disclosure',
+  'canonical-address': 'Access/authority/disclosure',
+  preferences: 'Access/authority/disclosure',
+  'recovery-readiness': 'Access/authority/disclosure',
+  'avatar-hydration': 'Content',
+} as const;
+type SqlGroup = keyof typeof SQL_GROUP_OWNER;
+type SqlCounts = Record<SqlGroup, number>;
+const sqlGroups = Object.keys(SQL_GROUP_OWNER) as SqlGroup[];
+
+function sqlGroup(statement: SqlEvidence): SqlGroup {
+  // Store budgets apply to these tables, regardless of the PostgreSQL owner.
+  if (/\breader\.library_status_revision\b/.test(statement.text)) return 'library-revision';
+  if (/\breader\.library_status\b/.test(statement.text)) return 'library-entries';
+  const caller = statement.callSites[0] ?? '';
+  // Transaction controls inherit the initiating admission/fence owner's scope.
+  if (/baselineMemberDecision|baselineMemberProof|requireRecoveryOpen/.test(caller)
+    || caller.includes('/access/admission.ts') && /^(BEGIN|SET LOCAL|COMMIT)\b/.test(statement.text.trim()))
+    return 'baseline-member-admission';
+  if (caller.includes('activePrincipalId')) return 'active-principal';
+  if (caller.includes('/profiles/access.ts')) return 'agent-fence';
+  if (caller.includes('/disclosure/read.ts')) return 'disclosure';
+  if (caller.includes('/address/registry.ts')) return 'canonical-address';
+  if (caller.includes('/preferences/store.ts')) return 'preferences';
+  if (caller.includes('assertRecoveryOpen')) return 'recovery-readiness';
+  if (/\b(content|media)\./.test(statement.text)) return 'avatar-hydration';
+  throw new Error(`Unclassified library request SQL: ${caller}: ${statement.text.slice(0, 160)}`);
+}
+
+function sqlCount(counts: SqlCounts, owner: typeof SQL_GROUP_OWNER[SqlGroup]): number {
+  return sqlGroups.filter(group => SQL_GROUP_OWNER[group] === owner)
+    .reduce((total, group) => total + counts[group], 0);
+}
+
 async function reportSqlStatements() {
   // Pair local query text with the existing pg spans, without bound values or
   // changes to exported telemetry. No additional instrumentation or spans are added.
@@ -77,7 +131,8 @@ async function reportSqlStatements() {
       return profile.postgres.map(statement => {
         const query = evidence.get(`${profile.traceId}:${statement.spanId}`);
         if (!query?.text) throw new Error(`SQL reporting lacks text for ${statement.spanId}`);
-        return { ...statement, ...query };
+        const group = sqlGroup(query);
+        return { ...statement, ...query, group, owner: SQL_GROUP_OWNER[group] };
       });
     },
     clear: () => evidence.clear(),
@@ -255,6 +310,8 @@ test('Reader library shelf and Work status costs follow unrelated Work and own-s
     axis: GrowthAxis;
     operation: Operation;
     profile: WorkProfile;
+    sql: SqlCounts;
+    pageBatches: number;
   }> = [];
   const driver = createCorpusBackupDriver({
     sourceRunId: retained.sourceRunId,
@@ -382,6 +439,13 @@ test('Reader library shelf and Work status costs follow unrelated Work and own-s
           const { result, profile } = await profileRead(context, sink, request.path, token);
           const statements = sqlReporter.statements(profile);
           expect(statements).toHaveLength(profile.postgresStatements!);
+          const sql = Object.fromEntries(sqlGroups.map(group => [group, 0])) as SqlCounts;
+          for (const statement of statements) sql[statement.group]++;
+          // A full first candidate batch triggers bounded lookahead. Derive the
+          // expected step from the seeded shelf size, never from observed costs.
+          const pageBatches = ownShelf && request.operation === 'status-shelf'
+            ? Math.min(STATUS_SHELF_COST.candidateBatches, 1 + Math.floor(size / STATUS_SHELF_COST.candidateBatch))
+            : 1;
           sqlReports.push({ axis, size, operation: request.operation, traceId: profile.traceId, statements });
           writeFileSync(reportPath, JSON.stringify(sqlReports, null, 2) + '\n', { mode: 0o600 });
           console.log('Library SQL report', { axis, size, operation: request.operation,
@@ -409,6 +473,8 @@ test('Reader library shelf and Work status costs follow unrelated Work and own-s
             axis,
             operation: request.operation,
             profile: { ...profile, mainCalls: size },
+            sql,
+            pageBatches,
           });
           console.log('Library growth counters', {
             dimension: axis,
@@ -419,6 +485,10 @@ test('Reader library shelf and Work status costs follow unrelated Work and own-s
             fusekiReceivedBytes: profile.fusekiReceivedBytes,
             postgresStatements: profile.postgresStatements,
           });
+          console.log('Library SQL owner counters', { dimension: axis, size, operation: request.operation,
+            pageBatches, libraryStore: sqlCount(sql, 'library store'),
+            membershipSession: sqlCount(sql, 'membership/session'),
+            accessDisclosure: sqlCount(sql, 'Access/authority/disclosure'), content: sqlCount(sql, 'Content') });
           sink.clear();
         }
       }
@@ -426,23 +496,42 @@ test('Reader library shelf and Work status costs follow unrelated Work and own-s
     }
 
     const failures: string[] = [];
+    const check = (group: WorkProfile[], contract: WorkCostContract, label: string, owner: string) => {
+      try {
+        assertWorkCostAtScales(group, contract, label);
+        console.log('Library growth verdict', { label, owner, verdict: 'pass' });
+      } catch (error) {
+        const failure = `${label}, owner ${owner}: ${error instanceof Error ? error.message : String(error)}`;
+        console.log('Library growth verdict', { label, owner, verdict: 'fail', failure });
+        failures.push(failure);
+      }
+    };
     for (const axis of [workAxis, shelfAxis]) {
       for (const operation of ['status-shelf', 'reader-state'] as const) {
         const maxima = operation === 'status-shelf' ? shelfCost : readerCost;
-        const group = profiles
+        const measured = profiles
           .filter((item) => item.operation === operation && item.axis === axis)
-          .sort((a, b) => a.scale - b.scale)
-          .map((item) => item.profile);
-        try {
-          assertWorkCostAtScales(group, costContract(maxima, axis, operation), `library-${operation}-${axis}`);
-          console.log('Library growth verdict', { dimension: axis, operation, verdict: 'pass' });
-        } catch (error) {
-          const owner = operation === 'status-shelf'
-            ? 'Main library/read.ts::readStatusShelf and shelf-page.ts::readShelfPage; Content library/status.ts::sortedPage'
-            : 'Main library/read.ts::readReaderStates';
-          const failure = `${operation} by ${axis}, owner ${owner}: ${error instanceof Error ? error.message : String(error)}`;
-          console.log('Library growth verdict', { dimension: axis, operation, verdict: 'fail', failure });
-          failures.push(failure);
+          .sort((a, b) => a.scale - b.scale);
+        const group = measured.map(item => ({ ...item.profile, postgresStatements: sqlCount(item.sql, 'library store') }));
+        const label = `library-${operation}-${axis}`;
+        check(group, costContract(maxima, axis, operation), label,
+          operation === 'status-shelf' ? 'library/read.ts::readStatusShelf and library/status.ts::sortedPage'
+            : 'library/read.ts::readReaderStates');
+        for (const owner of ['membership/session', 'Access/authority/disclosure', 'Content'] as const) {
+          const scoped = measured.map(item => ({ ...item.profile, postgresStatements: sqlCount(item.sql, owner) }));
+          check(scoped, { postgresStatements: NON_STORE_SQL_COST[owner][operation] },
+            `${label}-${owner.replaceAll(/[^a-zA-Z]/g, '-')}-budget`, owner);
+        }
+        for (const sqlGroup of sqlGroups.filter(group => SQL_GROUP_OWNER[group] !== 'library store')) {
+          const owner = SQL_GROUP_OWNER[sqlGroup];
+          if (owner === 'library store') continue;
+          const scoped = measured.map(item => ({ ...item.profile,
+            // Only these hydration groups can take the shelf's own page-fill
+            // step. Their cost per seeded candidate batch must remain flat.
+            postgresStatements: item.sql[sqlGroup] / (['disclosure', 'canonical-address', 'avatar-hydration'].includes(sqlGroup)
+              ? item.pageBatches : 1) }));
+          check(scoped, { growth: { postgresStatements: { class: 'constant', dimension: 'mainCalls' } } },
+            `${label}-${sqlGroup}-growth`, owner);
         }
         for (const counter of ['fusekiRequests', 'fusekiSentBytes', 'fusekiReceivedBytes', 'postgresStatements'] as const) {
           const ratio = (from: number, to: number) => {
