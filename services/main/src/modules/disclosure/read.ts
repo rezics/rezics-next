@@ -157,6 +157,9 @@ export class DisclosureUnavailable extends MediaUnavailable {}
 export const DISCLOSURE_COST = { batch: 64, ownerStatements: 1, recoveryStatements: 1,
   graphParents: 2, parentEdges: 128, parentHeadBatch: 64,
   nameOwnerQueries: 1, namePreferenceStatements: 1 } as const;
+function requireBatch(items: readonly unknown[]): void {
+  if (items.length > DISCLOSURE_COST.batch) throw new DisclosureUnavailable('Disclosure batch is invalid');
+}
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const ownerReference = /^(?:https:\/\/rezics\.com\/id\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|urn:rezics:[A-Za-z0-9:._/-]{1,480})$/;
 const effects = (channel: DisclosureChannel) => ['disclosure',
@@ -211,7 +214,8 @@ export class DisclosureStore implements DisclosureReader {
   private async readDecisions(targets: readonly DisclosureTarget[], viewer: Viewer,
     channel: DisclosureChannel, anonymousNames: boolean, client?: PoolClient):
     Promise<DisclosureWithAnonymousNames & { fenceBasis: DisclosureFenceBasis }> {
-    if (targets.length > DISCLOSURE_COST.batch || !DISCLOSURE_CHANNELS.includes(channel)
+    requireBatch(targets);
+    if (!DISCLOSURE_CHANNELS.includes(channel)
       || targets.some(target => !ownerReference.test(target.resource)
         || !governanceOwners.includes(target.owner) || !governanceComponents.includes(target.component)
         || target.work != null && !native.test(target.work)
@@ -419,7 +423,7 @@ export function disclose(env: WorkActivationEnvironment, targets: readonly Discl
   return discloseInventory(env, targets, viewer, channel, client);
 }
 
-/** Bounded inventories may exceed the transport batch, never the owner's query bound. */
+/** Each caller bounds its inventory before owner or graph work begins. */
 export async function discloseInventory(env: WorkActivationEnvironment, targets: readonly DisclosureTarget[],
   viewer: Viewer, channel: DisclosureChannel, client?: PoolClient): Promise<DisclosureDecision[]> {
   return (await readInventory(env, targets, viewer, channel, false, client)).decisions;
@@ -532,7 +536,7 @@ function requireReader(env: WorkActivationEnvironment): DisclosureReader & Requi
  * may positively establish that result, including the current source revision. */
 export async function resolveDisclosureSelections(env: WorkActivationEnvironment,
   targets: readonly DisclosureTarget[]): Promise<readonly DisclosureSelection[]> {
-  if (targets.length > DISCLOSURE_COST.batch) throw new DisclosureUnavailable('Disclosure selection batch is invalid');
+  requireBatch(targets);
   const state = ancestryState(env);
   const selected: DisclosureSelection[] = [];
   try {
@@ -567,7 +571,8 @@ export async function resolveDisclosureSelections(env: WorkActivationEnvironment
   }
 }
 function requireSelections(env: WorkActivationEnvironment, selections: readonly DisclosureSelection[]): void {
-  if (selections.length > DISCLOSURE_COST.batch || selections.some(selection => !selection
+  requireBatch(selections);
+  if (selections.some(selection => !selection
     || ancestryState(env).selections.get(selection.ancestry) !== selection)) {
     throw new DisclosureUnavailable('Disclosure selection was not established by its owner');
   }
@@ -672,7 +677,7 @@ async function rereadRelationships(env: WorkActivationEnvironment, selections: r
  * placement. A failed reread cannot turn a confirmed hidden cut into visible. */
 export async function fenceDisclosure(env: WorkActivationEnvironment, cuts: readonly DisclosureReadCut[],
   viewer: Viewer, channel: DisclosureChannel, client?: PoolClient): Promise<DisclosureDecision[]> {
-  if (cuts.length > DISCLOSURE_COST.batch) throw new DisclosureUnavailable('Disclosure fence batch is invalid');
+  requireBatch(cuts);
   const state = ancestryState(env), reader = requireReader(env);
   const saved = cuts.map(cut => {
     const saved = state.cuts.get(cut);
@@ -707,6 +712,7 @@ export async function fenceDisclosure(env: WorkActivationEnvironment, cuts: read
 async function readInventory(env: WorkActivationEnvironment, targets: readonly DisclosureTarget[],
   viewer: Viewer, channel: DisclosureChannel, anonymousNames: boolean, client?: PoolClient):
   Promise<DisclosureWithAnonymousNames & { anonymousNameProbes: number }> {
+  requireBatch(targets);
   requireReader(env);
   const decisions: DisclosureDecision[] = [], names: DisclosureDecision[] = [];
   for (let offset = 0; offset < targets.length; offset += DISCLOSURE_COST.batch) {
