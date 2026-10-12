@@ -210,7 +210,7 @@ async function createV1Concept(objectDirectory: string) {
   const environment = { fuseki: graph, objectDirectory,
     lineage: { dataEpoch: position.dataEpoch, routingEpoch: 'routing' } };
   const app = classificationRoutes(graph, { environment, account: { verify: async () => principal },
-    access: new AccessAdmissionRegistry(pool) } as unknown as MainWorkDependencies).compile();
+    access: new AccessAdmissionRegistry(pool) } as unknown as MainWorkDependencies);
   const label = 'Concept created through the v1 propositions API';
   const response = await app.handle(new Request('http://main.test/v1/classification-propositions', {
     method: 'POST', headers: { 'content-type': 'application/json', 'idempotency-key': randomUUID() },
