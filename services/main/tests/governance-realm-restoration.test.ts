@@ -573,7 +573,7 @@ test('production Realm release recovers its native receipt after Access acknowle
       profile: 'realm-public-profile-v2', expectedHead: null, actingSubject: staff.actor,
       publication: { name: { original: 'en', labels: { en: 'Receipt recovery public Realm' } },
         description: { original: 'en', labels: { en: 'A retained public record for receipt recovery.' } },
-        iconSelection: null, bannerSelection: null, rules: [], moderators: [],
+        iconSelection: null, bannerSelection: null, moderators: [],
         count: { kind: 'unknown', value: null } },
     }));
     const head = (await stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head WHERE {

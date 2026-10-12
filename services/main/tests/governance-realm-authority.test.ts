@@ -259,7 +259,7 @@ async function productionFixture(kind: 'content_report' | 'rights_complaint' = '
       profile: 'realm-public-profile-v2', expectedHead: null, actingSubject: member.actor,
       publication: { name: { original: 'en', labels: { en: 'Authority public profile' } },
         description: { original: 'en', labels: { en: 'The retained public record.' } },
-        iconSelection: null, bannerSelection: null, rules: [], moderators: [],
+        iconSelection: null, bannerSelection: null, moderators: [],
         count: { kind: 'unknown', value: null } },
     }));
   let resource = resourceKind === 'Space' ? created.space : resourceKind === 'Agent' ? member.actor : created.realm;

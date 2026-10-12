@@ -732,7 +732,7 @@ async function productionRealm(label: string) {
         expectedHead: null, actingSubject: editor.actor, publication: {
           name: { original: 'en', labels: { en: label } },
           description: { original: 'en', labels: { en: 'A community Realm for governance review.' } },
-          iconSelection: null, bannerSelection: null, rules: [], moderators: [],
+          iconSelection: null, bannerSelection: null, moderators: [],
           count: { kind: 'unknown', value: null },
         } }), 201);
     const heads = (await stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head ?public WHERE {

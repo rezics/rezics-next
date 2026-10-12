@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
-import { grantFixtureAuthority } from '../src/modules/access/fixture-authority.ts';
+import { grantFixtureAuthority, registerFixtureIdentity } from '../src/modules/access/fixture-authority.ts';
 import { GLOBAL_CONTEXT, GovernanceInvalid, GovernanceStore, type ReportInput } from '../src/modules/governance/store.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -25,9 +25,13 @@ afterAll(async () => { await pool?.end(); cluster?.remove(); });
 async function fixture(kind: ReportInput['kind'], evidenceDisclosure: string) {
   const principalId = randomUUID(), actor = native(), resource = native();
   const principal = { issuer: 'https://account.home-evidence.test', subject: randomUUID() };
-  await pool.query('INSERT INTO access.principal (id,account_issuer,account_subject) VALUES ($1,$2,$3)',
-    [principalId, principal.issuer, principal.subject]);
-  await pool.query("INSERT INTO access.authority_subject (id,kind) VALUES ($1,'agent')", [actor]);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await registerFixtureIdentity(client, { principalId, actor, ...principal });
+    await client.query('COMMIT');
+  } catch (error) { await client.query('ROLLBACK'); throw error; }
+  finally { client.release(); }
   await grantFixtureAuthority(pool, { scope: 'governance:platform', requireDispatch: true,
     representations: [{ principalId, actor, action: 'governance.moderate', lifetime: 'infinity' }],
     grant: { actor, action: 'governance.moderate', lifetime: 'infinity' } });
