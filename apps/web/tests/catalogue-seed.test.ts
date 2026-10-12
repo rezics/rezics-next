@@ -2,6 +2,7 @@ import { describe, expect, spyOn, test } from 'bun:test';
 import { appendCatalogueParts, createCatalogueWork } from './g-838-catalogue.ts';
 import {
   catalogueCommandResult,
+  readCatalogueCommandBasis,
   reviewedCatalogueLexicon,
   settledCatalogueSend,
 } from './g-837-catalogue.ts';
@@ -130,6 +131,179 @@ describe('catalogue labels follow Main presentation review', () => {
 });
 
 describe('catalogue seed pending commands', () => {
+  test('refreshes each affected catalogue owner through its current public read', async () => {
+    const workPath = `/v1/works/${actor.slice(-36)}`;
+    const structurePath = `/v1/compositions/${structure.slice(-36)}`;
+    for (const [path, body, expected] of [
+      [
+        '/v1/lexicon/presentations',
+        { state: { definition: actor } },
+        [`/v1/semantic/resources/${actor.slice(-36)}`],
+      ],
+      ['/v1/compositions', { work: actor, mainVersion: structure }, [workPath]],
+      [`${structurePath}/changes`, { expectedHead: 'pinned-head' }, [structurePath]],
+      [
+        `/v1/resources/${actor.slice(-36)}/derivations`,
+        { sourceWork: parts[0]!.work },
+        [workPath, `/v1/works/${parts[0]!.work.slice(-36)}`],
+      ],
+      [
+        '/v1/relations/changes',
+        {
+          participations: [
+            { participant: { kind: 'resource', ref: actor } },
+            { participant: { kind: 'resource', ref: actor } },
+          ],
+        },
+        [workPath],
+      ],
+      [
+        `/v1/collections/${structure.slice(-36)}/changes`,
+        {},
+        [`/v1/collections/${structure.slice(-36)}`],
+      ],
+      [`${workPath}/realizations/${structure.slice(-36)}`, {}, [workPath]],
+      [`${workPath}/releases/${structure.slice(-36)}`, {}, [workPath]],
+    ] as const) {
+      const reads: string[] = [];
+      await readCatalogueCommandBasis(
+        async (current) => {
+          reads.push(current);
+          return Response.json({ revision: 'current-basis' });
+        },
+        'POST',
+        path,
+        body,
+      );
+      expect(reads).toEqual([...expected]);
+    }
+  });
+
+  test('a moving basis read must settle before resubmission, and a denied read stops it', async () => {
+    let reads = 0;
+    await readCatalogueCommandBasis(
+      async () => (++reads < 3 ? conflict() : Response.json({ revision: 'current' })),
+      'POST',
+      '/v1/lexicon/presentations',
+      { state: { definition: actor } },
+    );
+    expect(reads).toBe(3);
+    for (const status of [403, 409]) {
+      reads = 0;
+      await expect(
+        readCatalogueCommandBasis(
+          async () => {
+            reads += 1;
+            return Response.json(
+              { code: status === 409 ? 'read_basis_changed' : 'denied' },
+              { status },
+            );
+          },
+          'POST',
+          '/v1/lexicon/presentations',
+          { state: { definition: actor } },
+        ),
+      ).rejects.toThrow(`Expected 200, got ${status}`);
+      expect(reads).toBe(status === 409 ? 4 : 1);
+    }
+  });
+
+  for (const suppliedKey of [undefined, 'original-command']) {
+    test(`refreshes a moved read basis and preserves the ${suppliedKey ? 'supplied' : 'generated'} command key through pending replay`, async () => {
+      const events: string[] = [];
+      const writes: { body: unknown; key: string | undefined }[] = [];
+      const body = { work: actor, mainVersion: structure, actingSubject: actor };
+      const send = settledCatalogueSend(
+        async (_method, _path, value, key) => {
+          events.push('write');
+          writes.push({ body: value, key });
+          if (writes.length === 1) return conflict();
+          if (writes.length === 2)
+            return Response.json({ operationId: key, retry: { afterMs: 0 } }, { status: 202 });
+          return Response.json({ structure, revision: 'saved', replayed: true });
+        },
+        async (method, path, value) => {
+          expect(method).toBe('POST');
+          expect(path).toBe('/v1/compositions');
+          expect(value).toBe(body);
+          events.push('read-current-basis');
+        },
+      );
+      expect(
+          await catalogueCommandResult<{ structure: string; revision: string; replayed: boolean }>(
+          await send('POST', '/v1/compositions', body, suppliedKey),
+          201,
+        ),
+      ).toEqual({ structure, revision: 'saved', replayed: true });
+      expect(events).toEqual(['write', 'read-current-basis', 'write', 'write']);
+      expect(writes[0]!.key).toBeString();
+      if (suppliedKey) expect(writes[0]!.key).toBe(suppliedKey);
+      expect(writes.every((write) => write.key === writes[0]!.key && write.body === body)).toBe(
+        true,
+      );
+    });
+  }
+
+  test('bounds repeated read-basis movement without replacing the command key', async () => {
+    const keys: (string | undefined)[] = [];
+    let reads = 0;
+    const send = settledCatalogueSend(
+      async (_method, _path, _body, key) => {
+        keys.push(key);
+        return conflict();
+      },
+      async () => {
+        reads += 1;
+      },
+    );
+    const response = await send('POST', '/v1/compositions', {}, 'original-command');
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ code: 'read_basis_changed' });
+    expect(keys).toEqual(Array(4).fill('original-command'));
+    expect(reads).toBe(3);
+  });
+
+  test('does not retry when refreshing the current basis is denied', async () => {
+    let writes = 0;
+    const send = settledCatalogueSend(
+      async () => {
+        writes += 1;
+        return conflict();
+      },
+      async () => {
+        throw new Error('basis read denied');
+      },
+    );
+    await expect(send('POST', '/v1/compositions', {}, 'original-command')).rejects.toThrow(
+      'basis read denied',
+    );
+    expect(writes).toBe(1);
+  });
+
+  test('only read_basis_changed authorizes a basis refresh', async () => {
+    for (const response of [
+      conflict('stale_composition_head'),
+      conflict('idempotency_conflict'),
+      Response.json({ code: 'read_basis_changed' }, { status: 403 }),
+      new Response('invalid JSON', { status: 409 }),
+    ]) {
+      let writes = 0;
+      let reads = 0;
+      const send = settledCatalogueSend(
+        async () => {
+          writes += 1;
+          return response;
+        },
+        async () => {
+          reads += 1;
+        },
+      );
+      expect(await send('POST', '/v1/compositions', {}, 'original-command')).toBe(response);
+      expect(writes).toBe(1);
+      expect(reads).toBe(0);
+    }
+  });
+
   test('accepts the replayed creation receipt after observing its pending operation', async () => {
     const keys: (string | undefined)[] = [];
     const send = settledCatalogueSend(async (_method, _path, _body, key) => {
@@ -207,11 +381,11 @@ describe('catalogue seed pending commands', () => {
       calls.push(key);
       return calls.length === 1
         ? Response.json({ operationId: 'same-operation', retry: { afterMs: 0 } }, { status: 202 })
-        : Response.json({ code: 'read_basis_changed' }, { status: 409 });
+        : Response.json({ code: 'stale_composition_head' }, { status: 409 });
     });
     const response = await send('POST', '/v1/compositions/structure/changes', {}, 'original-key');
     expect(response.status).toBe(409);
-    expect(await response.json()).toEqual({ code: 'read_basis_changed' });
+    expect(await response.json()).toEqual({ code: 'stale_composition_head' });
     expect(calls).toEqual(['original-key', 'original-key']);
   });
 });

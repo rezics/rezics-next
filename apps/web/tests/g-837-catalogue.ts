@@ -43,16 +43,81 @@ export interface Catalogue {
   volumeOne: { work: Work; release: string; omnibus: string; isbn: string };
 }
 
-export function settledCatalogueSend(send: CataloguePort['send']): CataloguePort['send'] {
+type RefreshBasis = (method: string, path: string, body: unknown) => Promise<void>;
+
+export function settledCatalogueSend(
+  send: CataloguePort['send'],
+  refreshBasis?: RefreshBasis,
+): CataloguePort['send'] {
   return async (method, path, body, key = randomUUID()) => {
     // The product client owns pending observation. Bind the command key once,
     // outside its polling callback, so a retry observes the original operation.
-    const answer = await settled(async () => {
-      const response = await send(method, path, body, key);
-      return { response, data: response.status === 202 ? await response.clone().json() : null };
-    }, 64);
-    return answer.response;
+    for (let attempt = 0; ; attempt++) {
+      const answer = await settled(async () => {
+        const response = await send(method, path, body, key);
+        return { response, data: response.status === 202 ? await response.clone().json() : null };
+      }, 64);
+      const response = answer.response;
+      if (!refreshBasis || response.status !== 409 || attempt === 3) return response;
+      const problem = (await response
+        .clone()
+        .json()
+        .catch(() => null)) as { code?: string } | null;
+      if (problem?.code !== 'read_basis_changed') return response;
+      // The read snapshot moved before the command could proceed. This is
+      // still the same intent, unlike a stale edit head or a cancelled command.
+      await refreshBasis(method, path, body);
+    }
   };
+}
+
+/** Refresh the owner reads a catalogue command depends on, preserving its pinned edit intent. */
+export async function readCatalogueCommandBasis(
+  read: CataloguePort['read'],
+  method: string,
+  path: string,
+  body: unknown,
+): Promise<void> {
+  const input = body as {
+    work?: string;
+    sourceWork?: string;
+    state?: { definition?: string };
+    participations?: { participant: { kind: string; ref?: string } }[];
+  };
+  const paths = new Set<string>();
+  const composition = /^\/v1\/compositions\/([^/]+)\/changes$/.exec(path);
+  const work =
+    /^\/v1\/(?:resources\/([^/]+)\/derivations|works\/([^/]+)\/(?:realizations|releases)\/[^/]+)$/.exec(
+      path,
+    );
+  const collection = /^\/v1\/collections\/([^/]+)\/changes$/.exec(path);
+  if (composition) paths.add(`/v1/compositions/${composition[1]}`);
+  if (collection) paths.add(`/v1/collections/${collection[1]}`);
+  if (work) paths.add(`/v1/works/${work[1] ?? work[2]}`);
+  if (input.work) paths.add(`/v1/works/${short(input.work)}`);
+  if (input.sourceWork) paths.add(`/v1/works/${short(input.sourceWork)}`);
+  if (path === '/v1/lexicon/presentations' && input.state?.definition)
+    paths.add(`/v1/semantic/resources/${short(input.state.definition)}`);
+  if (path === '/v1/relations/changes')
+    for (const { participant } of input.participations ?? [])
+      if (participant.kind === 'resource' && participant.ref)
+        paths.add(`/v1/works/${short(participant.ref)}`);
+  if (!paths.size) throw new Error(`No catalogue basis reader for ${method} ${path}`);
+  for (const basisPath of paths) {
+    for (let attempt = 0; ; attempt++) {
+      const response = await read(basisPath);
+      const problem =
+        response.status === 409
+          ? ((await response
+              .clone()
+              .json()
+              .catch(() => null)) as { code?: string } | null)
+          : null;
+      if (problem?.code === 'read_basis_changed' && attempt < 3) continue;
+      await json(response);
+      break;
+    }
+  }
 }
 
 export function reviewedCatalogueLexicon(client: SeedLexiconClient,
@@ -74,7 +139,8 @@ export function reviewedCatalogueLexicon(client: SeedLexiconClient,
 
 export async function seedCatalogue(stack: MediaStack, reader: SeedReader, scratch: string): Promise<Catalogue> {
   const member = await stack.member('catalogue');
-  const editor = { ...member, send: settledCatalogueSend(member.send) };
+  const editor = { ...member, send: settledCatalogueSend(member.send,
+    (method, path, body) => readCatalogueCommandBasis(member.read, method, path, body)) };
   // Lexicon presentations require platform exposure in addition to scoped edit authority.
   await openActorPlatformGroup(editor.principalId, 'platform-admin');
   const structureObjects = stack.objects('semantic/structure/');
