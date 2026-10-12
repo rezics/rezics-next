@@ -255,7 +255,7 @@ async function personChain(owner: Principal, edges: number) {
   return persons;
 }
 
-for (const edges of [3, MAX_PATH_EDGES]) {
+for (const edges of [3, MAX_PATH_EDGES, MAX_PATH_EDGES + 1]) {
   test(`a ${edges}-edge control path names its Organization and completes with consent`, async () => {
     const owner = await principal();
     const original = await principal();
@@ -358,6 +358,15 @@ test('a controller inventory beyond 256 is a bounded refusal followed by complet
   for (let index = 0; index < 257; index++) {
     organizations.push(await provision(owner, 'organization', `Organization ${index}`));
   }
+  const original = await principal();
+  const intermediate = await provision(original, 'person');
+  // The shortcut makes shortest-path depth unsuitable for effect ordering.
+  for (const [representative, represented] of [
+    [person, intermediate], [person, organizations[0]!], [intermediate, organizations[0]!],
+  ] as const) await grantFixtureControllerEdge(pool, {
+    principalId: original.id, representative, represented,
+  });
+  await removeController(original, intermediate);
   let refusal: unknown;
   try { await deletion(owner); } catch (error) { refusal = error; }
   expect(refusal).toBeInstanceOf(AccountHasOwnedAgents);
@@ -395,6 +404,8 @@ test('a controller inventory beyond 256 is a bounded refusal followed by complet
   expect(batchSizes).toEqual([CONTROLLER_CONTINUITY_COST.maxSubjects]);
   expect(await principalState(owner)).toEqual({ active: false, enforcement_epoch: '1' });
   expect(await fenceRows(owner)).toEqual([]);
+  expect(await subjectState(person)).toEqual({ active: true, controllers: 0 });
+  expect(await subjectState(intermediate)).toEqual({ active: true, controllers: 1 });
   const progress = (await pool.query<{ operation_id: string; completed: boolean }>(`SELECT operation_id,completed
     FROM access.account_deletion_progress WHERE principal_id = $1`, [owner.id])).rows[0]!;
   expect(progress.completed).toBe(false);
@@ -410,6 +421,7 @@ test('a controller inventory beyond 256 is a bounded refusal followed by complet
   expect((await fenceRows(owner))[0]?.id).toBe(progress.operation_id);
   expect((await orphanRows(owner)).every(row => row.operation_id === progress.operation_id)).toBe(true);
   expect(await subjectState(person)).toEqual({ active: false, controllers: 0 });
+  expect(await subjectState(intermediate)).toEqual({ active: false, controllers: 0 });
   const standing = await pool.query<{ count: string }>(`SELECT count(*) AS count
     FROM access.authority_subject WHERE id = ANY($1::text[]) AND active
       AND access.agent_controller_count(id) = 0`, [organizations]);

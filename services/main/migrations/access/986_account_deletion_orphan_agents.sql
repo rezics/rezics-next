@@ -86,13 +86,12 @@ CREATE TABLE access.account_deletion_progress (
 CREATE TABLE access.account_deletion_progress_agent (
     operation_id text NOT NULL REFERENCES access.account_deletion_progress(operation_id),
     agent_id text NOT NULL REFERENCES access.authority_subject(id),
-    depth integer NOT NULL CHECK (depth >= 0),
     effect text NOT NULL CHECK (effect IN ('keep', 'end', 'orphan')),
     completed boolean NOT NULL DEFAULT false,
     PRIMARY KEY (operation_id, agent_id)
 );
 CREATE INDEX account_deletion_progress_agent_pending
-    ON access.account_deletion_progress_agent (operation_id, depth DESC, agent_id) WHERE NOT completed;
+    ON access.account_deletion_progress_agent (operation_id, agent_id) WHERE NOT completed;
 CREATE INDEX account_deletion_progress_agent_subject
     ON access.account_deletion_progress_agent (agent_id, operation_id);
 

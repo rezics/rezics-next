@@ -1,5 +1,5 @@
 import { assertControllerContinuity, lockControllerContinuity, principalControllerSubjects } from './controller-continuity.ts';
-import { applyAccountDeletionAgents, continueAccountDeletionAgents, lockAccountDeletionAgents, lockAccountDeletionTopology,
+import { applyAccountDeletionAgents, continueAccountDeletionAgents, collectAccountDeletionAgents, lockAccountDeletionTopology,
   type AccountDeletionOptions } from './account-deletion-agents.ts';
 import { captureAuthorityWitness, authorityWitnessCurrent, authorityWitnessDeadline,
   type AuthoritySource, type AuthorityWitness } from './authority-witness.ts';
@@ -1931,7 +1931,7 @@ export class AccessAdmissionRegistry {
       let deletionPending = false;
       if (principal.active) {
         const controlled = accountDeletion ? [] : await principalControllerSubjects(client, principalId);
-        const hasDeletionAgents = accountDeletion && await lockAccountDeletionAgents(client, principalId);
+        const hasDeletionAgents = accountDeletion && await collectAccountDeletionAgents(client, principalId);
         if (!accountDeletion) await lockControllerContinuity(client, controlled);
         if (enforcementEpoch !== expectedEpoch) throw new AdmissionConflict('principal epoch changed');
         const changed = await client.query<{ enforcement_epoch: string }>(
