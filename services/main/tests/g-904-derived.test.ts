@@ -28,6 +28,7 @@ import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { RV } from '../src/modules/work/activate.ts';
 import { fallbackAvatar, type ResourceSummary } from '../src/modules/media/summary.ts';
 import type { Labels } from '../src/modules/suitability/policy.ts';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureCut } from './support/disclosure-ancestry.ts';
 
 const id = (n: number) =>
   `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -58,8 +59,10 @@ function fixture(signed = false) {
         rows: targets.map((target) => ({
           open: true,
           ordinal: target.ordinal,
-          restricted: [target.resource, target.work].some(ref => ref && restricted.has(ref)),
-          assessments: [...new Set([target.resource, target.work])].flatMap((ref) =>
+          restricted: [target.resource, ...(target.ancestry?.parents.map(parent => parent.resource) ?? [])]
+            .some(ref => restricted.has(ref)),
+          realmClosed: false, ...fixtureDisclosureCut,
+          assessments: [...new Set([target.resource, ...(target.ancestry?.parents.map(parent => parent.resource) ?? [])])].flatMap((ref) =>
             ref && labels.has(ref) ? [labels.get(ref)!] : [],
           ),
         })),
@@ -69,7 +72,9 @@ function fixture(signed = false) {
   const graph = new FusekiClient('http://graph.invalid');
   graph.query = async (query) => ({
     results: {
-      bindings: query.includes('SELECT ?work ?head')
+      bindings: query.includes('SELECT ?resource ?head')
+        ? [...new Set(refs(query))].map(resource => row({ resource, head: id(900) }))
+        : query.includes('SELECT ?work ?head')
         ? [...new Set(refs(query))].map((work) =>
             row({
               work,
@@ -86,6 +91,10 @@ function fixture(signed = false) {
     objectDirectory: '.temp/g-904',
   };
   configureDisclosure(environment, new DisclosureStore(pool));
+  configureFixtureDisclosureAncestry(environment, target => {
+    const parent = target.work ?? parents.get(target.resource);
+    return parent ? { resource: parent, head: id(900), protectedRevision: target.workRevision } : undefined;
+  });
   const session = new WorkReadSession(
     { environment, access: {
       activePrincipalId: async () => 'reader', assertRecoveryOpen: async () => {},
@@ -455,7 +464,8 @@ test('G-904: sitemap fills after hidden identities and ends without a hidden con
   works.slice(0, 65).forEach((work) => f.labels.set(work, ['r18']));
   const headQuery = f.graph.query.bind(f.graph);
   f.graph.query = async (query) => {
-    if (query.includes('SELECT ?work ?head ?owningWork') || query.includes('SELECT ?work ?head ?nameOwner'))
+    if (query.includes('SELECT ?work ?head ?owningWork') || query.includes('SELECT ?work ?head ?nameOwner')
+      || query.includes('SELECT ?resource ?head'))
       return headQuery(query);
     if (!query.includes('SELECT ?sequence ?work ?head'))
       return { results: { bindings: [row({ sequence: '1' })] } };

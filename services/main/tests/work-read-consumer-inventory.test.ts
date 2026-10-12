@@ -137,6 +137,11 @@ if (process.argv.includes('--inventory')) {
   // Read-only inventory discovery, without invoking the test runner.
   for (const read of scan()) console.info(JSON.stringify(read));
 } else {
+  test('resource summary and preview routes hydrate through the session that closes their delivery', () => {
+    const source = readFileSync(resolve(root, 'services/main/src/routes/resources.ts'), 'utf8');
+    expect(source).not.toMatch(/\breadResourceSummaries\s*\(/);
+    expect(source).toContain('session.summaryBatch(');
+  });
   test('every session consumer routes direct graph and SQL reads through a named delivery owner', () => {
     const actual = scan();
     const uncovered = actual.filter(read => ownerReads[read.site]?.count !== read.count

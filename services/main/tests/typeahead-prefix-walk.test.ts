@@ -2,10 +2,10 @@ import { expect, test } from 'bun:test';
 import { FusekiClient, FusekiPrefixWalkRestart, FusekiPrefixWalkUnavailable, FusekiReadBudgetExceeded,
   createFusekiReadDiagnostics, fusekiReadBudget, snapshotFusekiReadDiagnostics,
   type SparqlResult, type FusekiReadBudget } from '../src/infrastructure/fuseki.ts';
-import { queryTypeaheadCandidates, readPublicTypeahead } from '../src/modules/search/typeahead.ts';
+import { discloseTypeaheadMatches, queryTypeaheadCandidates, readPublicTypeahead } from '../src/modules/search/typeahead.ts';
 import { prefixWalkCursor, prefixWalkDirectoryKey, prefixWalkExaminedLimit,
   type PrefixWalkEntry, type PrefixWalkRequest, type PrefixWalkResponse } from '../src/modules/search/prefix-walk.ts';
-import { SEARCH_FIELD_COST } from '../src/modules/search/fields.ts';
+import { SEARCH_FIELD_COST, type FieldMatch } from '../src/modules/search/fields.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import type { SourceAuthorNameStore } from '../src/modules/source/author-name.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
@@ -14,6 +14,10 @@ import { SearchSnapshotMoved, withStableSearchSnapshot } from '../src/modules/wo
 import { WorkReadUnavailable } from '../src/modules/work/read-session.ts';
 import { WORK_READ_COST } from '../src/modules/work/read-contract.ts';
 import { searchRoutes } from '../src/routes/search.ts';
+import { configureDisclosure, configureDisclosureAncestrySource, type DisclosureAncestryEvidence,
+  type DisclosureTarget } from '../src/modules/disclosure/read.ts';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
+import { createHash } from 'node:crypto';
 
 const id = (number: number) => `https://rezics.com/id/00000000-0000-4000-8000-${number.toString(16).padStart(12, '0')}`;
 const value = (text: string) => ({ type: 'literal' as const, value: text });
@@ -26,7 +30,7 @@ function nativeEntry(number: number, matchedField: 'title' | 'credit' = 'title',
 }
 function candidate(entry: PrefixWalkEntry, text = 'Bounded title'): Row {
   return { unit: value(entry.matchUnit), main: value(entry.mainVersion), work: value(id(Number.parseInt(entry.mainVersion.slice(-12), 16) + 2_000)),
-    contribution: value(id(3_001)), revision: value(id(3_002)), selection: value(id(3_003)),
+    head: value(id(4_001)), contribution: value(id(3_001)), revision: value(id(3_002)), selection: value(id(3_003)),
     language: value('en'), field: value(entry.matchedField), kind: value('label'),
     text: { ...value(text), 'xml:lang': 'en' } };
 }
@@ -54,13 +58,16 @@ function fixture(entries: PrefixWalkEntry[], rows = entries.filter(entry => !ent
     query: async (sparql: string) => {
       queries.push(sparql);
       let bindings: Row[];
-      if (sparql.includes('SELECT ?unit ?work ?main')) {
+      if (sparql.includes('SELECT ?unit ?work')) {
         bindings = rows.filter(row => sparql.includes(`<${row.unit!.value}>`)).reverse();
       } else if (sparql.includes('SELECT DISTINCT ?work ?field')) {
         bindings = rows.filter(row => sparql.includes(`<${row.work!.value}>`)).reverse();
       } else if (sparql.includes('SELECT ?epoch ?sequence ?work ?type')) {
         bindings = rows.filter(row => sparql.includes(`<${row.work!.value}>`))
           .map(row => ({ ...control(), work: row.work! }));
+      } else if (sparql.includes('SELECT ?resource ?head')) {
+        bindings = [...new Map(rows.filter(row => sparql.includes(`<${row.work!.value}>`))
+          .map(row => [row.work!.value, { resource: row.work!, head: value(id(4_001)) }])).values()];
       } else if (sparql.includes('SELECT ?work ?head ?type')) {
         bindings = rows.filter(row => sparql.includes(`<${row.work!.value}>`))
           .map(row => ({ work: row.work!, head: value(id(4_001)) }));
@@ -79,12 +86,55 @@ function fixture(entries: PrefixWalkEntry[], rows = entries.filter(entry => !ent
     },
   };
   const env = { fuseki, lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } } as unknown as WorkActivationEnvironment;
+  configureFixtureDisclosureAncestry(env, target => target.work
+    ? { resource: target.work, head: id(4_001), protectedRevision: target.workRevision } : undefined);
+  configureDisclosure(env, fixtureDisclosureReader(async targets => targets.map(() => 'visible')));
   const work = { environment: env, access: { assertRecoveryOpen: async () => undefined,
     canReadWorks: async () => new Set<string>() } } as unknown as MainWorkDependencies;
   return { env, work, state, queries, walks, fuseki };
 }
 const request = () => new Request('http://main.test/v1/search/typeahead?prefix=bounded');
 const present: Parameters<typeof readPublicTypeahead>[3] = async relation => relation;
+
+test('typeahead resolves placed Work ancestry before capture, preserving order in bounded open and closed Realm batches', async () => {
+  const f = fixture([]), realm = id(9_000), realmHead = id(9_001), workHead = id(4_001);
+  const selected = new Map<string, DisclosureTarget>(), batches: number[] = [];
+  let closed = false, incomplete = false, parentQueries = 0;
+  const establish = (target: DisclosureTarget): DisclosureAncestryEvidence => {
+    const token = createHash('sha256').update(JSON.stringify(target)).digest('hex'); selected.set(token, target);
+    const relationshipBasis = { owner: 'graph' as const, kind: 'work-in-realm' as const,
+      resource: target.resource, revision: target.revision!, targetResource: target.resource,
+      targetRevision: target.revision ?? null, token, dataEpoch: 'epoch' };
+    return { resource: target.resource, resourceKind: 'work', status: 'complete', relationshipBasis,
+      parents: incomplete ? [] : [
+        { owner: 'graph', kind: 'work', resource: target.resource, head: workHead,
+          protectedRevision: target.workRevision, relationshipBasis },
+        { owner: 'graph', kind: 'realm', resource: realm, head: realmHead, relationshipBasis },
+      ] };
+  };
+  configureDisclosureAncestrySource(f.env, 'graph', { read: async targets => {
+    batches.push(targets.length); return targets.map(establish);
+  }, reread: async bases => bases.map(basis => establish(selected.get(basis.token)!)) });
+  configureDisclosure(f.env, fixtureDisclosureReader(async targets => targets.map(target =>
+    closed && target.ancestry!.parents.some(parent => parent.resource === realm) ? 'hidden' : 'visible')));
+  f.fuseki.query = async query => {
+    expect(query).toContain('SELECT ?resource ?head'); parentQueries++;
+    const refs = [...query.match(/VALUES \?resource \{([^}]+)\}/)![1]!.matchAll(/<([^>]+)>/g)].map(match => match[1]!);
+    return { results: { bindings: refs.map(resource => ({ resource: value(resource),
+      head: value(resource === realm ? realmHead : workHead) })) } };
+  };
+  const matches: FieldMatch[] = Array.from({ length: 65 }, (_, n) => ({ work: id(10_000 + Math.floor(n / 2)),
+    mainVersion: id(11_000 + n), matchUnit: id(12_000 + n), contribution: id(13_000 + n),
+    revision: id(14_000 + n), selection: id(15_000 + n), language: 'en', score: 1,
+    matchedField: 'title', matchedText: `Selected ${n}`, matchedLanguage: 'en' }));
+  const heads = new Map(matches.map(match => [match.work, workHead]));
+  expect(await discloseTypeaheadMatches(f.env, matches, heads)).toEqual(matches);
+  expect(batches).toEqual([64, 1]); expect(parentQueries).toBe(2);
+  closed = true;
+  expect(await discloseTypeaheadMatches(f.env, matches, heads)).toEqual([]);
+  incomplete = true;
+  await expect(discloseTypeaheadMatches(f.env, matches, heads)).rejects.toThrow('Disclosure ancestry is incomplete');
+});
 
 test('native prefix transport sends the command envelope and accounts visits, failures and byte limits', async () => {
   const capability = 'b'.repeat(64);
@@ -141,7 +191,7 @@ test('candidate hydration follows native title/credit ordering and contains only
     .toEqual([[id(2), 'title', 'Bounded title'], [id(3), 'title', 'Bounded second'],
       [id(1), 'credit', 'Bounded native author']]);
   expect(matches[2]?.nameOwner).toBe(id(5_001));
-  expect(f.queries).toHaveLength(2);
+  expect(f.queries).toHaveLength(3);
   const sparql = f.queries[0]!;
   expect(sparql).toContain('VALUES');
   for (const entry of entries) expect(sparql).toContain(`<${entry.matchUnit}>`);

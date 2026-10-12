@@ -3,7 +3,15 @@ import type { Pool } from 'pg';
 import { SerialStatisticsProjection } from '../src/modules/work/serial-projection.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts';
-import { publishedSerialStructure, serialId, serialWork } from './serial-selected-fixture.ts';
+import { publishedSerialStructure, selectedSerialFixture, serialId, serialWork } from './serial-selected-fixture.ts';
+
+test('a private draft head cannot drop selected publication statistics or change their displayed date', async () => {
+  const f = selectedSerialFixture();
+  const before = (await f.projection.batch([serialWork])).get(serialWork);
+  expect(before).toEqual({ chapterCount: 2, wordCount: 480, lastUpdatedAt: '2026-10-01T00:00:00.000Z' });
+  f.state.draftHead = serialId(99);
+  expect((await f.projection.batch([serialWork])).get(serialWork)).toEqual(before);
+});
 
 test('serial projection reads numeric batch 9 before 10 and advances its checkpoint', async () => {
   let advanced = '';

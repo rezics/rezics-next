@@ -4,6 +4,7 @@ import { WorkReadSession, WorkReadMoved, type ReadRow } from '../src/modules/wor
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import type { Pool } from 'pg';
 import { configureDisclosure, DisclosureStore } from '../src/modules/disclosure/read.ts';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureCut } from './support/disclosure-ancestry.ts';
 import { readRealmWorks } from '../src/modules/realm-reads/read-works.ts';
 import type { ResourceSummary } from '../src/modules/media/summary.ts';
 
@@ -59,6 +60,7 @@ test('ordinary exact query rows still fence every returned selected head', async
 const nativeId = (value: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(value).padStart(12, '0')}`;
 function realmFixture() {
   const f = fixture();
+  f.session.deps.environment.lineage = { dataEpoch: 'epoch', routingEpoch: 'routing' };
   for (const row of f.rows) Object.assign(row, {
     main: term(`main-${row.work!.value}`), selection: term(`selection-${row.work!.value}`),
     contribution: term(`contribution-${row.work!.value}`), language: term('en'),
@@ -67,6 +69,8 @@ function realmFixture() {
     .forEach((key, owner) => { row[key] = term(nativeId((owner + 1) * 1000 + index)); }));
   f.session.deps.environment.fuseki.query = async body => ({ results: { bindings:
     body.includes('SELECT DISTINCT ?work ?head ?main') ? f.rows.map(row => ({ ...row }))
+      : body.includes('SELECT ?resource ?head') ? f.rows.filter(row => body.includes(`<${row.work!.value}>`))
+        .map(row => ({ resource: row.work!, head: row.head! }))
       : body.includes('SELECT ?work ?head ?nameOwner') || body.includes('SELECT ?work ?head ?owningWork')
         ? f.rows.filter(row => body.includes(`<${row.work!.value}>`))
           .map(row => ({ work: row.work!, head: row.head! }))
@@ -75,8 +79,12 @@ function realmFixture() {
   const pool = { query: async (sql: string, args?: unknown[]) => ({ rows: sql.includes('jsonb_to_recordset')
     ? (JSON.parse(String(args![0])) as Array<{ ordinal: number }>).map(target => ({
       open: true, ordinal: target.ordinal, restricted: false, assessments: [],
+      realmClosed: false, ...fixtureDisclosureCut,
     })) : [] }) } as unknown as Pool;
   configureDisclosure(f.session.deps.environment, new DisclosureStore(pool));
+  configureFixtureDisclosureAncestry(f.session.deps.environment, target => target.work
+    ? { resource: target.work, head: f.rows.find(row => row.work!.value === target.work)!.head!.value,
+      protectedRevision: target.workRevision } : undefined);
   f.session.realm = async realm => ({ realmRevision: 'realm-head', space: realm, visibility: 'public',
     reviewMode: 'open', revision: null }) as never;
   f.session.summaries = async resources => resources.map(reference => ({ reference, status: 'available',

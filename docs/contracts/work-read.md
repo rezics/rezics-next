@@ -161,7 +161,7 @@ selection, not the entire repository or the entire dataset.
 | `routes/health.ts`; `modules/feed/refresh.ts`, `modules/discovery/refresh.ts`, `modules/discovery/management.ts`, `modules/realm-directory/worker.ts`, `modules/notification-producers/saved-views.ts` | Owner health/build generation, selected bounded source inventory and notification eligibility. Owner checkpoints and selected dependencies; internal builders/commands are single-attempt. Explicit moving-graph builds preserve their own stale policy. |
 | `modules/address/resolution.ts` | Selected address holder, Realm landing or Post placement, Book summary and alias head. Selected graph/summary/placement and admission fences; alias registry heads remain the address owner's responsibility. |
 | `modules/zone/route.ts`; `routes/zones.ts` | Zone route resolution retains its semantic reader and separate Work authority. Selected publication, mount/member queries, Structure headers, aliases, summaries/media and serial sessions close under the Zone's own budget and attempt telemetry. Published navigation fences the retained revision, excluding unshown draft heads. Presentation callbacks still require their narrow cut described below. |
-| `modules/export/readers.ts`, `modules/reading-position/read.ts`; `routes/resources.ts` | Independently managed target, reading-position and summary envelopes, including manually constructed sessions. Their owners close their own selected Structure/publication/summary and authority fences; changes to `workRead` alone do not replace those envelopes. |
+| `modules/export/readers.ts`, `modules/reading-position/read.ts`; `routes/resources.ts` | Independently managed target and reading-position envelopes, including manually constructed sessions. Resource summary and preview routes hydrate and close each returned summary, media selection and Realm proof through that envelope's same session with local basis, including merged-source and survivor summaries. |
 
 `publicWorkRead` delegates to the same session envelope. Nested sessions are
 created in `also-enjoyed/read`, `continue/read`, `feed/read`, `feed/new-since`,
@@ -171,6 +171,18 @@ must survive, while their consumed dependencies participate in the enclosing
 attempt's final fence. Independent sessions in `zone/route`,
 `reading-position/read` and `export/readers` need their owning envelope to close
 the fence; construction alone does not perform it.
+
+Session queries preserve each caller's declared response byte ceiling on both
+hydration and delivery reread. The default remains 512 KiB; Statement support,
+classification and search field owners retain their 1 MiB ceilings. A shared
+request budget still accounts for every response, including retries.
+
+Serial statistics qualify the selected public Work publication decision,
+MainVersion and immutable Structure revision, together with each selected
+child publication and eligibility. Structure membership and its update date
+come from that publication; processing an unpublished draft cannot change
+public statistics or their date. Retained relay coverage still qualifies the
+materialization's own checkpoint and selected child body cut.
 
 Zone routes retain their own 2048-call, 8 MiB, ten-second envelope and the same
 measured-cost retry rule. They do not substitute Work OAuth scope for semantic

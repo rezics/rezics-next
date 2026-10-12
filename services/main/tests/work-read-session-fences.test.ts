@@ -24,6 +24,8 @@ import { SearchIndexUnavailable, SearchSnapshotMoved } from '../src/modules/work
 import { DEFAULT_MEDIA_CONTEXT, type AvatarRow } from '../src/modules/media/store.ts';
 import { readWorkHeader } from '../src/modules/work/read-header.ts';
 import { readRealmThreads } from '../src/modules/realm-reply/thread-read.ts';
+import { configureDisclosure } from '../src/modules/disclosure/read.ts';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
 import { realm as threadRealm, world as threadWorld } from './realm-reply-threads.test.ts';
 
 const id = (number: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(number).padStart(12, '0')}`;
@@ -50,6 +52,7 @@ function fixture() {
         head: term(state.head, 'uri'), public: term(String(state.public)),
         label: { ...term(state.title), 'xml:lang': 'en' } }]);
       if (query.includes('SELECT ?epoch ?sequence')) return result([control]);
+      if (query.includes('SELECT ?resource ?head')) return result([{ resource: term(work, 'uri'), head: term(state.head, 'uri') }]);
       if (query.includes(selected)) return result(state.erased ? [] : [{
         head: term(state.head, 'uri'), structure: term(state.structure, 'uri'),
         main: term(state.main, 'uri'), publication: term(state.publication, 'uri') }]);
@@ -65,6 +68,9 @@ function fixture() {
   media: { store: { avatarRows: async () => ({ rows: new Map(state.mediaRows),
     generation: { dataEpoch: state.mediaEpoch, sequence: String(state.mediaSequence) } }) } },
   } as unknown as MainWorkDependencies;
+  configureFixtureDisclosureAncestry(deps.environment, target => target.work
+    ? { resource: target.work, head: state.head, protectedRevision: target.workRevision } : undefined);
+  configureDisclosure(deps.environment, fixtureDisclosureReader(async targets => targets.map(() => 'visible')));
   return { state, graph, deps, request: new Request('http://main.test/v1/resources/' + work.slice(-36) + '/page') };
 }
 
@@ -92,6 +98,7 @@ function headerFixture() {
         structuredStructure: term(f.state.structure, 'uri'),
         structuredProfile: term(`${RV}RecipeComposition`, 'uri'),
         structuredRevision: term(id(15), 'uri'), structuredGeneration: term(id(16), 'uri'),
+        structuredExact: term('true'),
         structuredRoot: term(`urn:rezics:sha256:${'c'.repeat(64)}`, 'uri') }] : []);
     }
     if (body.includes('SELECT ?work ?parent')) {
@@ -159,11 +166,16 @@ test('a nonempty Realm thread inventory consumes selected root summaries through
   const baseline = threaded.session;
   const originalSummaryQuery = baseline.deps.environment.fuseki.query.bind(baseline.deps.environment.fuseki);
   const graph = new FusekiClient('http://graph.invalid/thread');
-  graph.query = async body => body.includes('SELECT ?epoch ?sequence ?hold')
-    ? originalSummaryQuery(body) : result(await baseline.query(body, 512));
+  graph.query = async body => body.includes('SELECT ?resource ?head')
+    ? result([{ resource: term('https://rezics.com/id/00000000-0000-4000-8000-00000000000b', 'uri'),
+      head: term('thread-head', 'uri') }])
+    : body.includes('SELECT ?epoch ?sequence ?hold') ? originalSummaryQuery(body) : result(await baseline.query(body, 512));
   const session = new WorkReadSession({ ...baseline.deps,
     environment: { ...baseline.deps.environment, fuseki: graph } }, baseline.request,
   baseline.options, baseline.position);
+  configureFixtureDisclosureAncestry(session.deps.environment, target => target.work
+    ? { resource: target.work, head: 'thread-head', protectedRevision: target.workRevision } : undefined);
+  configureDisclosure(session.deps.environment, fixtureDisclosureReader(async targets => targets.map(() => 'visible')));
   session.realm = baseline.realm.bind(baseline);
   const page = await readRealmThreads(session, threadRealm, { sort: 'new' });
   expect(session.fencesSelectedUnits).toBe(true);

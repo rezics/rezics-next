@@ -14,6 +14,7 @@ import { readResourceSummaries } from '../src/modules/media/summary.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../src/modules/media/store.ts';
 import { ANONYMOUS_VIEWER } from '../src/modules/suitability/policy.ts';
 import { migrateTracked } from '../../../scripts/ops/migrate.ts';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 
@@ -38,6 +39,9 @@ test('G-940: a collection summary stays constant in cost at 19 and 1000 chapter 
     structure = id(),
     generation = id();
   const occurrences = Array.from({ length: 1000 }, () => ({ occurrence: id(), placement: id() }));
+  const ownedOccurrences = new Set(occurrences.map(item => item.occurrence));
+  configureFixtureDisclosureAncestry(env, target => ownedOccurrences.has(target.resource)
+    ? { resource: work, head, protectedRevision: target.workRevision } : undefined);
   try {
     await graph.update(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/> INSERT DATA {
       GRAPH ${iri(GRAPHS.current)} {
@@ -106,14 +110,13 @@ test('G-940: a collection summary stays constant in cost at 19 and 1000 chapter 
     expect(large).toBeLessThan(small * 3 + 150);
     expect(large).toBeLessThan(750);
 
-    // Scoped OPTIONALs must still infer an occurrence's owner and preserve absent/non-Work targets.
+    // The occurrence owner supplies its exact Work parent. Collection and
+    // missing references have explicit independent fixture publications.
     const captured: unknown[] = [];
-    configureDisclosure(env, {
-      read: async (targets) => {
-        captured.push(...targets);
-        return targets.map(() => 'visible');
-      },
-    });
+    configureDisclosure(env, fixtureDisclosureReader(async (targets) => {
+      captured.push(...targets);
+      return targets.map(() => 'visible');
+    }));
     const missing = id();
     expect(
       await discloseInventory(
@@ -129,7 +132,8 @@ test('G-940: a collection summary stays constant in cost at 19 and 1000 chapter 
     ).toEqual(['visible', 'visible', 'visible']);
     expect(captured).toMatchObject([
       { resource: collection },
-      { resource: occurrences[999]!.occurrence, work, workRevision: head },
+      { resource: occurrences[999]!.occurrence,
+        ancestry: { parents: [{ kind: 'work', resource: work, head }] } },
       { resource: missing },
     ]);
     expect(captured[0]).not.toHaveProperty('work');

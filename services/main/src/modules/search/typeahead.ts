@@ -14,7 +14,8 @@ import { SearchSnapshotMoved } from '../work/search-readiness.ts';
 import { phraseWorkTypes } from '../work/search-facets.ts';
 import { WorkReadMoved, workRead, type WorkReadSession } from '../work/read-session.ts';
 import { currentDisclosureViewer } from '../disclosure/viewer.ts';
-import { discloseSearchMatches } from '../disclosure/search.ts';
+import { captureDisclosure, resolveDisclosureSelections, DISCLOSURE_COST,
+  type DisclosureDecision, type DisclosureTarget } from '../disclosure/read.ts';
 import { publicLanguageRequest } from '../display-language/public-request.ts';
 import { optionalPreview } from '../query/optional-preview.ts';
 import { searchPageAuthors } from './result-cards.ts';
@@ -34,14 +35,15 @@ export async function queryTypeaheadCandidates(env: WorkActivationEnvironment, p
   const query = async (body: string, maxBytes: number, limit: number) => session
     ? session.query(body, limit, undefined, maxBytes) : (await env.fuseki.query(body, maxBytes)).results?.bindings ?? [];
   const identities = await query(`PREFIX rv: <${RV}>
-    SELECT ?unit ?work ?main ?contribution ?revision ?selection ?language ?resultWork ?resultMain ?chapterTitle WHERE {
+    SELECT ?unit ?work ?head ?main ?contribution ?revision ?selection ?language ?resultWork ?resultHead ?resultMain ?chapterTitle WHERE {
       VALUES ?unit { ${units.map(iri).join(' ')} }
       GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?unit a rv:MatchUnit ; rv:disclosure rv:Public ;
         rv:work ?work ; rv:mainVersion ?main ; rv:contribution ?contribution ;
         rv:revision ?revision ; rv:selection ?selection ; rv:language ?language .
         OPTIONAL { ?unit rv:searchResultWork ?resultWork ; rv:searchResultMain ?resultMain ;
           rv:searchChapterTitle ?chapterTitle . } }
-      GRAPH ${iri(GRAPHS.current)} { ?work rv:mainVersion ?main . ?main rv:selectionHead ?selection }
+      GRAPH ${iri(GRAPHS.current)} { ?work rv:mainVersion ?main ; rv:head ?head . ?main rv:selectionHead ?selection
+        OPTIONAL { FILTER(BOUND(?resultMain)) ?resultWork rv:head ?resultHead } }
       FILTER(!BOUND(?resultWork) || EXISTS {
         GRAPH ${iri(GRAPHS.current)} { ?resultWork rv:mainVersion ?resultMain } })
     } LIMIT ${units.length + 1}`, 65_536, units.length + 1);
@@ -49,9 +51,9 @@ export async function queryTypeaheadCandidates(env: WorkActivationEnvironment, p
     throw new PublicQueryUnavailable('Typeahead candidate identity is ambiguous');
   }
   for (const row of identities) {
-    if (!row.unit || !units.includes(row.unit.value) || !row.work || !row.main || !row.contribution
+    if (!row.unit || !units.includes(row.unit.value) || !row.work || !row.head || !row.main || !row.contribution
       || !row.revision || !row.selection || !row.language
-      || row.resultWork && (!row.resultMain || !row.chapterTitle)) {
+      || row.resultWork && (!row.resultHead || !row.resultMain || !row.chapterTitle)) {
       throw new PublicQueryUnavailable('Typeahead candidate selection is incomplete');
     }
   }
@@ -114,7 +116,9 @@ export async function queryTypeaheadCandidates(env: WorkActivationEnvironment, p
     }
   }
   // Keep alternate credited-name witnesses until their own disclosure is known.
-  const readDisclosed = () => discloseSearchMatches(env, matches, 'typeahead');
+  const heads = new Map(identities.flatMap(row => [[row.work!.value, row.head!.value] as const,
+    ...(row.resultWork ? [[row.resultWork.value, row.resultHead!.value] as const] : [])]));
+  const readDisclosed = () => discloseTypeaheadMatches(env, matches, heads);
   const disclosed = await readDisclosed();
   session?.observeDependency(`typeahead-disclosure:${JSON.stringify(units)}`, disclosed, readDisclosed);
   const seen = new Set<string>();
@@ -124,6 +128,28 @@ export async function queryTypeaheadCandidates(env: WorkActivationEnvironment, p
     seen.add(key);
     return true;
   });
+}
+
+/** Names are selected graph units. Their owners establish Work/Realm ancestry
+ * before capture; expanded chapter witnesses retain their original ordinals. */
+export async function discloseTypeaheadMatches(environment: WorkActivationEnvironment,
+  matches: readonly FieldMatch[], heads: ReadonlyMap<string, string>): Promise<FieldMatch[]> {
+  const targets: DisclosureTarget[] = [], ranges: number[][] = [];
+  for (const match of matches) {
+    const selected = [{ owner: 'graph' as const, resource: match.work, component: 'name' as const,
+      revision: heads.get(match.work), work: match.work, workRevision: heads.get(match.work), nameOwner: match.nameOwner },
+      ...(match.matchedChapter ? [{ owner: 'graph' as const, resource: match.matchedChapter.post,
+        component: 'name' as const, revision: heads.get(match.matchedChapter.post),
+        work: match.matchedChapter.post, workRevision: heads.get(match.matchedChapter.post) }] : [])];
+    ranges.push(selected.map((_, index) => targets.length + index)); targets.push(...selected);
+  }
+  const decisions: DisclosureDecision[] = [];
+  for (let offset = 0; offset < targets.length; offset += DISCLOSURE_COST.batch) {
+    const selections = await resolveDisclosureSelections(environment, targets.slice(offset, offset + DISCLOSURE_COST.batch));
+    const cuts = await captureDisclosure(environment, selections, currentDisclosureViewer(), 'typeahead');
+    decisions.push(...cuts.map(cut => cut.decision));
+  }
+  return matches.filter((_, index) => ranges[index]!.every(ordinal => decisions[ordinal] === 'visible'));
 }
 
 export interface TypeaheadRelation {

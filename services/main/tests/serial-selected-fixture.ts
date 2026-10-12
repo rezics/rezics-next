@@ -20,7 +20,7 @@ const term = (value: string) => ({ type: 'uri', value });
 export function selectedSerialFixture() {
   const state = { relayHead: '3', checkpoint: '3', checkpointEpoch: 'epoch', scope: MAIN_RELAY_STREAM_SCOPE,
     relayEpoch: 'epoch', retained: true, projected: true, projectedHead: serialId(5), currentHead: serialId(5),
-    graphCut: '40', bodySequence: '30', bodyEpoch: 'epoch', publication: serialId(8), savedPublication: serialId(8),
+    draftHead: serialId(5), graphCut: '40', bodySequence: '30', bodyEpoch: 'epoch', publication: serialId(8), savedPublication: serialId(8),
     eligibility: serialId(9), savedEligibility: serialId(9), revision: serialId(10), savedRevision: serialId(10),
     count: 2, children: 2, advanceDuringAccess: false };
   const publication = serialId(50);
@@ -39,7 +39,8 @@ export function selectedSerialFixture() {
   } } as unknown as Pool;
   const graph = new FusekiClient('http://graph.invalid/serial');
   graph.query = async query => ({ results: { bindings: query.includes('SELECT ?work ?head')
-    ? [{ work: term(serialWork), head: term(state.currentHead), publication: term(publication) }]
+    ? [{ work: term(serialWork), head: term(query.includes('rv:workStructurePublicationHead')
+      ? state.currentHead : state.draftHead), publication: term(publication) }]
     : Array.from({ length: state.children }, (_, n) => ({ occurrence: term(serialId(20 + n)), variant: term(serialId(40 + n)),
       revision: term(state.revision), publication: term(state.publication), eligibility: term(state.eligibility),
       epoch: term(state.bodyEpoch), sequence: term(state.bodySequence), public: term('true') })) } });

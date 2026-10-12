@@ -3,8 +3,8 @@ import { configureFixtureDisclosureAncestry, fixtureDisclosureCut } from './supp
 import type { Pool } from 'pg';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import {
-  configureDisclosure, DisclosureStore, discloseInventoryWithAnonymousNames,
-  type DisclosureDecision, type DisclosureTarget,
+  configureDisclosure, configureDisclosureAncestrySource, DisclosureStore, discloseInventoryWithAnonymousNames,
+  type DisclosureAncestryEvidence, type DisclosureDecision, type DisclosureTarget,
 } from '../src/modules/disclosure/read.ts';
 import { disclosureViewer } from '../src/modules/disclosure/viewer.ts';
 import { readResourceSummaries, MAX_SUMMARY_BATCH } from '../src/modules/media/summary.ts';
@@ -12,6 +12,7 @@ import { DEFAULT_MEDIA_CONTEXT, type AvatarRow } from '../src/modules/media/stor
 import { configureMediaVisibility } from '../src/modules/media/visibility.ts';
 import { ANONYMOUS_VIEWER, type Labels, type Viewer } from '../src/modules/suitability/policy.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
+import { createHash } from 'node:crypto';
 
 const id = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const term = (value: string) => ({ type: 'literal', value });
@@ -111,6 +112,50 @@ const media = (hydrate: () => void = () => {}) => ({
     return { rows: new Map(resources.map(reference => [reference, avatar(reference)])),
       generation: { owner: 'content' as const, dataEpoch: 'media', sequence: '1' } };
   },
+});
+
+test('captured occurrence summaries carry selected Work and placed Realm parents into both name gates', async () => {
+  const f = fixture(), occurrence = id(60), work = id(1), head = id(1001), realm = id(61), realmHead = id(62);
+  const graph = f.environment.fuseki, query = graph.query.bind(graph);
+  graph.query = async body => {
+    if (body.includes('SELECT ?epoch ?sequence ?hold ?r')) {
+      f.graphCalls.push(body);
+      return { results: { bindings: [{ epoch: term('epoch'), sequence: term('7'), r: uri(occurrence),
+        type: term('occurrence'), work: uri(work), head: uri(head), public: term('true'),
+        label: { ...term('Selected chapter'), 'xml:lang': 'en' } }] } };
+    }
+    if (body.includes('SELECT ?resource ?head')) {
+      f.graphCalls.push(body);
+      return { results: { bindings: [
+        { resource: uri(work), head: uri(head) }, { resource: uri(realm), head: uri(realmHead) },
+      ] } };
+    }
+    return query(body);
+  };
+  const targets = new Map<string, DisclosureTarget>();
+  const evidence = (target: DisclosureTarget): DisclosureAncestryEvidence => {
+    expect(target.work).toBe(work); expect(target.workRevision).toBe(head);
+    const token = createHash('sha256').update(JSON.stringify(target)).digest('hex'); targets.set(token, target);
+    const relationshipBasis = { owner: 'graph' as const, kind: 'work-in-realm' as const,
+      resource: occurrence, revision: id(63), targetResource: target.resource,
+      targetRevision: target.revision ?? null, token, dataEpoch: 'epoch' };
+    return { resource: occurrence, resourceKind: 'other', status: 'complete', relationshipBasis,
+      parents: [{ owner: 'graph', kind: 'work', resource: work, head, protectedRevision: head, relationshipBasis },
+        { owner: 'graph', kind: 'realm', resource: realm, head: realmHead, relationshipBasis }] };
+  };
+  configureDisclosureAncestrySource(f.environment, 'graph', { read: async batch => batch.map(evidence),
+    reread: async bases => bases.map(basis => evidence(targets.get(basis.token)!)) });
+  const input = { ...f.input, resources: [occurrence] };
+  const shown = await readResourceSummaries(f.environment, undefined, {}, input);
+  expect(shown.summaries[0]).toMatchObject({ reference: occurrence, status: 'available', work });
+  expect(f.ownerCalls).toHaveLength(2);
+  for (const call of f.ownerCalls) expect(call.targets[0]!.ancestry!.parents).toMatchObject([
+    { kind: 'work', resource: work, head }, { kind: 'realm', resource: realm, head: realmHead },
+  ]);
+  expect(shown.cost.graphQueries).toBe(f.graphCalls.length);
+  f.restrict(target => target.ancestry!.parents.some(parent => parent.resource === realm));
+  expect((await readResourceSummaries(f.environment, undefined, {}, input)).summaries)
+    .toEqual([{ reference: occurrence, status: 'unavailable' }]);
 });
 
 test('Summary classifies a controller-visible private Agent name as restricted and withholds it from other audiences', async () => {
@@ -271,7 +316,8 @@ test('Anonymous name classification does not replace a signed-in viewers private
     visibilityFacts: async (resources: readonly string[]) => {
       visibilityReads++;
       return new Map(resources.map(reference => [reference, {
-        owner: id(1), disclosure: 'private', pending: false, blocked: false, attachments: [],
+        owner: id(1), disclosure: 'private', pending: false, blocked: false,
+        attachments: [{ target: id(1), context: DEFAULT_MEDIA_CONTEXT }],
       }]));
     },
   } } } as unknown as MainWorkDependencies);

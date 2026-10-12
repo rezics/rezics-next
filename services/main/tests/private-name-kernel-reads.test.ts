@@ -18,6 +18,7 @@ import { discloseParticipantName, participantReadName } from '../src/modules/wor
 import { disclosedRelationParticipations, relationRoutes } from '../src/routes/relations.ts';
 import type { VerifiedPrincipal } from '../src/modules/access/admission.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureCut } from './support/disclosure-ancestry.ts';
 
 const id = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const privateAgent = id(1);
@@ -58,6 +59,8 @@ function policyGraph(summary: (query: string) => Row[] | null, manifest?: string
   graph.query = async query => {
     queries.push(query);
     if (query.includes('ASK')) return { boolean: true };
+    if (query.includes('SELECT ?resource ?head')) return { results: { bindings: iris(query)
+      .map(resource => ({ resource: uri(resource), head: uri(id(11)) })) } };
     if (query.includes('rv:provisional')) return { results: { bindings: [] } };
     if (query.includes('?manifest') && manifest) return { results: { bindings: [{
       type: uri(`${RV}SemanticRevision`), manifest: uri(`urn:rezics:sha256:${manifest}`),
@@ -80,11 +83,14 @@ function policyGraph(summary: (query: string) => Row[] | null, manifest?: string
     const targets = JSON.parse(String(args?.[0])) as (DisclosureTarget & { ordinal: number; nameOwner: string | null })[];
     return { rows: targets.map(target => ({ ordinal: target.ordinal, open: true, restricted: false, assessments: [],
       nameVisible: nameVisible(target.nameOwner, args?.[4], args?.[5], published),
-      publicNameVisible: publicNameVisible(target.nameOwner, published) })) };
+      publicNameVisible: publicNameVisible(target.nameOwner, published), realmClosed: false,
+      ...fixtureDisclosureCut })) };
   } } as unknown as Pool;
   const environment = { fuseki: graph, objectDirectory: directory,
     lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } } as WorkActivationEnvironment;
   configureDisclosure(environment, new DisclosureStore(pool));
+  configureFixtureDisclosureAncestry(environment, target => target.work
+    ? { resource: target.work, head: id(11), protectedRevision: target.workRevision } : undefined);
   return { environment, queries, publish: () => { published = true; } };
 }
 
@@ -167,7 +173,8 @@ test('both relation reads preserve private Agent identities and public non-Agent
   });
   let principal = stranger;
   const work = { environment: closed.environment, account: { verify: async () => principal },
-    access: { canReadSemanticResource: async (_principal: unknown, _acting: string, resource: string) => resource !== denied,
+    access: { activePrincipalId: async () => 'reader', assertRecoveryOpen: async () => {},
+      canReadSemanticResource: async (_principal: unknown, _acting: string, resource: string) => resource !== denied,
       canReadWork: async () => false } } as unknown as MainWorkDependencies;
   const app = relationRoutes(closed.environment.fuseki, work);
   for (const suffix of ['', `/revisions/${revision.slice(-36)}`]) {
@@ -215,8 +222,8 @@ test('semantic readability does not restore a private name', async () => {
       ? { results: { bindings: [control] } }
       : { results: { bindings: [] } };
   const canRead = async () => true;
-  expect([...(await referenceDisclosure(open, { principal: stranger, actingSubject: id(9), access: {} }, canRead)(
-    [privateAgent, concept]))]).toEqual([privateAgent, concept]);
+  await expect(referenceDisclosure(open, { principal: stranger, actingSubject: id(9), access: {} }, canRead)(
+    [privateAgent, concept])).rejects.toThrow('Disclosure cut reader is unavailable');
   const closed = policyGraph(query => query.includes('?hold') ? [control] : null);
   const strangerRefs = await referenceDisclosure(closed.environment,
     { principal: stranger, actingSubject: id(9), access: {} }, canRead)([privateAgent, concept]);
@@ -327,11 +334,9 @@ test('an authorized private-name summary is restricted, and an anonymous one sta
   const bare = { fuseki: new FusekiClient('http://graph.invalid'), objectDirectory: directory,
     lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } } as WorkActivationEnvironment;
   bare.fuseki.query = async () => ({ results: { bindings: [publicRow()] } });
-  const unconfigured = await readResourceSummaries(bare, undefined, {}, {
-    resources: [publicAgent], context: DEFAULT_MEDIA_CONTEXT, language: 'en' });
-  expect(unconfigured.summaries[0]).toMatchObject({ status: 'available', disclosure: 'public',
-    name: { value: publicName } });
-  expect(unconfigured.cost.graphQueries).toBe(1);
+  await expect(readResourceSummaries(bare, undefined, {}, {
+    resources: [publicAgent], context: DEFAULT_MEDIA_CONTEXT, language: 'en' }))
+    .rejects.toThrow('Disclosure cut reader is unavailable');
   let kind: 'private' | 'public' = 'private';
   const closed = policyGraph(query => query.includes('?hold') ? [kind === 'private' ? agentRow() : publicRow()] : null);
   const input = { context: DEFAULT_MEDIA_CONTEXT, language: 'en' as const };

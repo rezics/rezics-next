@@ -11,7 +11,7 @@ import { currentProfile } from '../realm-profile/schema.ts';
 import { checkedCollectionName } from '../collection/names.ts';
 import { publicWork } from '../work/public-patterns.ts';
 import type { SemanticDisclosure } from '../access/semantic-disclosure.ts';
-import { DISCLOSURE_COST, discloseInventory, discloseInventoryWithAnonymousNames, hasDisclosure, type DisclosureChannel, type DisclosureDecision, type DisclosureTarget } from '../disclosure/read.ts';
+import { DISCLOSURE_COST, discloseInventoryWithCost, discloseInventoryWithAnonymousNames, hasDisclosure, type DisclosureChannel, type DisclosureDecision, type DisclosureTarget } from '../disclosure/read.ts';
 import { ANONYMOUS_VIEWER, type Viewer } from '../suitability/policy.ts';
 import { direction, readerLanguages, selectDisplayName, type DisplayName, type LocalizedText } from '../display-language/select.ts';
 import type { Base } from '../target/contract.ts';
@@ -514,8 +514,10 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
       workRevision: row?.head, context: input.context === DEFAULT_MEDIA_CONTEXT ? undefined : input.context,
       ...settledNameOwner(reference, row) };
   });
-  const initialDecisions = await discloseInventory(env, initialTargets, reader.viewer ?? ANONYMOUS_VIEWER,
+  const initial = await discloseInventoryWithCost(env, initialTargets, reader.viewer ?? ANONYMOUS_VIEWER,
     input.channel ?? 'summary', client);
+  const initialDecisions = initial.decisions;
+  cost.graphQueries += initial.parentHeadQueries;
   if (hasDisclosure(env)) cost.accessQueries += Math.ceil(unique.length / MAX_SUMMARY_BATCH);
   noteNameProbe(initialTargets);
   for (const [index, reference] of unique.entries()) {
@@ -745,14 +747,26 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
     const asset = avatars.get(reference)?.asset;
     if (asset) {
       assetIndexes.set(reference, targets.length);
-      targets.push({ owner: 'media', resource: `https://rezics.com/id/${asset}`, component: 'cover' });
+      const use = avatars.get(reference)?.use;
+      targets.push({ owner: 'media', resource: `https://rezics.com/id/${asset}`, component: 'cover',
+        work: row.work, workRevision: row.head,
+        context: input.context === DEFAULT_MEDIA_CONTEXT ? undefined : input.context,
+        ...(use ? { occurrence: { owner: 'media' as const, kind: 'media-use' as const,
+          resource: `https://rezics.com/id/${use}`, revision: `https://rezics.com/id/${use}` } } : {}) });
     }
   }
   // Names, covers and the anonymous-name decision, after avatars exist.
-  const final = reader.viewer?.signedIn
-    ? await discloseInventoryWithAnonymousNames(env, targets, reader.viewer, input.channel ?? 'summary', client)
-    : { decisions: await discloseInventory(env, targets, reader.viewer ?? ANONYMOUS_VIEWER,
-      input.channel ?? 'summary', client), anonymousNames: [] as DisclosureDecision[], anonymousNameProbes: 0 };
+  const final = { decisions: [] as DisclosureDecision[], anonymousNames: [] as DisclosureDecision[], anonymousNameProbes: 0 };
+  for (let offset = 0; offset < targets.length; offset += DISCLOSURE_COST.batch) {
+    const batch = targets.slice(offset, offset + DISCLOSURE_COST.batch);
+    const evaluated = reader.viewer?.signedIn
+      ? await discloseInventoryWithAnonymousNames(env, batch, reader.viewer, input.channel ?? 'summary', client)
+      : await discloseInventoryWithCost(env, batch, reader.viewer ?? ANONYMOUS_VIEWER, input.channel ?? 'summary', client);
+    final.decisions.push(...evaluated.decisions);
+    final.anonymousNames.push(...evaluated.anonymousNames);
+    final.anonymousNameProbes += evaluated.anonymousNameProbes;
+    cost.graphQueries += evaluated.parentHeadQueries;
+  }
   const decisions = final.decisions;
   if (hasDisclosure(env)) cost.accessQueries += Math.ceil(targets.length / MAX_SUMMARY_BATCH);
   noteNameProbe(targets);
