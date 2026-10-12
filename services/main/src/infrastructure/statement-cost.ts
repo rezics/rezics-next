@@ -33,14 +33,18 @@ export function observeStatementPool(pool: Pool): void {
   pool.connect = function (this: Pool, ...args: unknown[]) {
     const callback = args[0];
     const counters = measurements.getStore();
-    if (typeof callback === 'function') return Reflect.apply(connect, this, [
-      (error: Error | undefined, client: PoolClient | undefined, release: unknown) => {
+    if (typeof callback === 'function') {
+      const callbackConnect = connect as (this: Pool, ready: (error: Error | undefined, client: PoolClient | undefined,
+        release: unknown) => void) => void;
+      return callbackConnect.call(this,
+      (error: Error | undefined, client: PoolClient | undefined, release: unknown): void => {
         if (client) observeStatementClient(client);
         // Idle-client queues may deliver in the releasing caller's async
         // context. Attribute SQL to the scope that requested this checkout.
-        return measurements.run(counters ?? [], () => callback(error, client, release));
+        measurements.run(counters ?? [], () => callback(error, client, release));
       },
-    ]);
+      );
+    }
     return (Reflect.apply(connect, this, args) as Promise<PoolClient>).then(client => {
       observeStatementClient(client);
       return client;
