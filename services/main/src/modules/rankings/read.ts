@@ -6,6 +6,7 @@ import {
   publicWork,
   WorkReadMoved,
   WorkReadUnavailable,
+  readDependencyToken,
   type ReadRow,
   type WorkReadSession,
 } from '../work/read-session.ts';
@@ -29,8 +30,11 @@ export async function readRankingPage(
   },
 ) {
   if (options.realm) await readRealmBasis(session, options.realm);
-  const checkpoint = await projection.current();
   const bucket = rankingBuckets(new Date(), options.interval).current;
+  const limit = session.options.limit ?? RANKING_COST.pageSize;
+  let capture = await projection.capture(options.metric, options.interval, bucket,
+    options.order, null, limit + 1, options.realm);
+  const checkpoint = capture.checkpoint;
   const binding = [
     'read-rankings-v1',
     options.realm,
@@ -39,26 +43,31 @@ export async function readRankingPage(
     options.order,
     bucket,
     checkpoint.generation,
-    checkpoint.contentSequence,
-    checkpoint.reviewPosition,
     session.options.language ?? null,
   ];
-  const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
-  type Candidate = Awaited<ReturnType<ReadRankingProjection['candidates']>>[number];
+  // Ranking continuation follows its published population, while the graph
+  // epoch remains a recovery fence. The graph's global sequence is diagnostic.
+  const cursorPosition = { ...session.position,
+    dependencyToken: readDependencyToken([binding, capture.revision]) };
+  const cursor = decodeReadCursor(session.options.cursor, binding, cursorPosition);
+  type Candidate = typeof capture.rows[number];
   const heads = new Map<string, ReadRow>();
-  const limit = session.options.limit ?? RANKING_COST.pageSize;
-  const candidates = await projection.candidates(
-        checkpoint.generation,
+  if (cursor) {
+    const continuation = await projection.capture(
         options.metric,
         options.interval,
         bucket,
         options.order,
-        cursor
-          ? { value: cursor.order, work: cursor.after }
-          : null,
+        { value: cursor.order, work: cursor.after },
         limit + 1,
         options.realm,
       );
+    if (continuation.checkpoint.generation !== checkpoint.generation || continuation.revision !== capture.revision) {
+      throw new WorkReadMoved('Ranking population changed; restart from the first page');
+    }
+    capture = continuation;
+  }
+  const candidates = capture.rows;
   // The extra row proves continuation only; never resolve its disclosure or
   // hydrate it. A rejected row still advances the owner's ordered seek.
   const examined = candidates.slice(0, limit);
@@ -179,12 +188,8 @@ export async function readRankingPage(
     ];
   });
   if (options.realm) await readRealmBasis(session, options.realm);
-  const end = await projection.current();
   if (
-    end.generation !== checkpoint.generation ||
-    end.contentSequence !== checkpoint.contentSequence ||
-    end.contentEpoch !== checkpoint.contentEpoch ||
-    end.reviewPosition !== checkpoint.reviewPosition ||
+    !await projection.fence(capture) ||
     rankingBuckets(new Date(), options.interval).current !== bucket
   ) {
     throw new WorkReadMoved('Ranking changed; restart from the first page');
@@ -204,7 +209,7 @@ export async function readRankingPage(
       selected.lookahead && last
         ? encodeReadCursor(
             binding,
-            session.position,
+            cursorPosition,
             last.work,
             options.order === 'score' ? last.score : last.growth,
           )

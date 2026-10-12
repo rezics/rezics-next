@@ -283,15 +283,15 @@ for (const signed of [false, true]) {
           ? serialHeads(query)
           : [];
     const projection = {
-      current: async () => ({
-        generation: 'g',
-        contentEpoch: 'c',
-        contentSequence: '1',
-        reviewPosition: '1',
-      }),
       // The projection seeks admitted scores; denied raw rows never consume
       // the page or its lookahead. The reader still fences these identities.
-      candidates: async () => candidates.filter(candidate => !f.restricted.has(candidate.work)),
+      capture: async (...args: Parameters<ReadRankingProjection['capture']>) => ({
+        checkpoint: { generation: 'g', contentEpoch: 'c', contentSequence: '1',
+          graphEpoch: 'epoch', reviewPosition: '1' }, revision: '1', removalRevision: '0',
+        rows: candidates.filter(candidate => !f.restricted.has(candidate.work)),
+        population: { metric: args[0], interval: args[1], bucket: args[2],
+          context: args[6] ?? 'urn:rezics:context:global' } }),
+      fence: async () => true,
     } as unknown as ReadRankingProjection;
     const page = await readRankings(f.session, projection, {
       realm: null,

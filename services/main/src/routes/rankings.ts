@@ -1,6 +1,6 @@
 import { Elysia, t } from 'elysia';
 import { rankingInterval, rankingMetric, rankingPage } from '../modules/rankings/contract.ts';
-import { RankingProjectionUnavailable } from '../modules/rankings/projection.ts';
+import { RankingProjectionIncomplete, RankingProjectionUnavailable } from '../modules/rankings/projection.ts';
 import { readRankings } from '../modules/rankings/read.ts';
 import { pageQuery, readLanguage, readUuid } from '../modules/work/read-contract.ts';
 import { publicWorkRead } from '../modules/work/read-session.ts';
@@ -25,10 +25,13 @@ export function rankingRoutes(work: MainWorkDependencies) {
   realm: string | null, order: 'score' | 'growth') => {
     if (!work.readRankings) return problem(503, 'rankings_unavailable', 'Rankings are unavailable');
     try {
-      return Response.json(await publicWorkRead(work, request, options,
+      return Response.json(await publicWorkRead(work, request, { ...options, localBasis: true },
         session => readRankings(session, work.readRankings!, { realm,
           metric: options.metric ?? 'reads', interval: options.interval ?? 'week', order })), { headers });
     } catch (error) {
+      if (error instanceof RankingProjectionIncomplete) {
+        return problem(503, 'rankings_incomplete', error.message);
+      }
       if (error instanceof RankingProjectionUnavailable) {
         return problem(503, 'rankings_unavailable', error.message);
       }

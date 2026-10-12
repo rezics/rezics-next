@@ -7,6 +7,8 @@ import type { ContentCore, ContentOutboxEvent } from '../../../../content/src/co
 import { readProgressSignal, type ProgressSignal } from '../structure/progress-outbox.ts';
 import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { refreshReadRankingAdmissions } from '../feed/ranking-admission.ts';
+import { captureRankingPopulation, fenceRankingPopulation,
+  type RankingCaptureRow, type RankingPopulation, type RankingPopulationCapture } from './store.ts';
 
 export const RANKING_COST = { sourceEvents: 32, retryEvents: 8, graphRowsPerEvent: 2,
   pageCandidates: 100, pageSize: 20, cleanupRows: 500, deadlineMs: 10_000 } as const;
@@ -16,6 +18,11 @@ const intervals: readonly RankingInterval[] = ['day', 'week', 'month'];
 const ID = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 
 export class RankingProjectionUnavailable extends Error {}
+export class RankingProjectionIncomplete extends RankingProjectionUnavailable {
+  constructor(readonly population: RankingPopulation) {
+    super('The selected ranking population has a pending removal');
+  }
+}
 
 /** What one progress signal adds to the rankings. A row whose structure is the
  * occurrence is the Work itself: there is no Structure to look up, and the Work
@@ -263,11 +270,12 @@ export class ReadRankingProjection {
       const generation = reset ? randomUUID() : latest!.generation;
       if (reset) {
         await client.query(`INSERT INTO access.read_ranking_checkpoint
-          (singleton, generation, content_epoch, content_sequence, graph_epoch)
-          VALUES (true,$1,$2,0,$3) ON CONFLICT (singleton) DO UPDATE SET
+          (singleton, generation, content_epoch, content_sequence, graph_epoch, review_rebuild_position)
+          VALUES (true,$1,$2,0,$3,$4) ON CONFLICT (singleton) DO UPDATE SET
           generation = EXCLUDED.generation, content_epoch = EXCLUDED.content_epoch,
           content_sequence = 0, content_scan_sequence = 0, review_position = 0, review_scan_position = 0, graph_epoch = EXCLUDED.graph_epoch,
-          updated_at = clock_timestamp()`, [generation, owner.dataEpoch, this.env.lineage.dataEpoch]);
+          review_rebuild_position = EXCLUDED.review_rebuild_position,
+          updated_at = clock_timestamp()`, [generation, owner.dataEpoch, this.env.lineage.dataEpoch,reviewHead.position]);
       }
 
       // Savepoints isolate a target's graph/admission/score failure. Retention and
@@ -295,6 +303,8 @@ export class ReadRankingProjection {
           } else {
             for (const interval of intervals) await this.changeReview(client, generation, work, interval,
               new Date(review.occurred_at), review.delta);
+            if (review.delta < 0) await client.query(`DELETE FROM access.read_ranking_removal
+              WHERE event_id=(SELECT id FROM access.reader_review_rank_change WHERE position=$1)`, [position]);
           }
           if (retry) {
             await client.query(`DELETE FROM access.read_ranking_pending
@@ -305,6 +315,12 @@ export class ReadRankingProjection {
           }
         } catch {
           await client.query('ROLLBACK TO SAVEPOINT ranking_target');
+          // A generation replay can fail a negative event that an earlier
+          // generation applied. Restore that source-owned removal fence too.
+          if (source === 'review' && (sourceEvent as { delta: number }).delta < 0) {
+            await client.query(`SELECT access.register_read_ranking_removal(id,work,occurred_at)
+              FROM access.reader_review_rank_change WHERE position=$1`, [position]);
+          }
           await client.query(`INSERT INTO access.read_ranking_pending
             (generation, source, position, target, source_event) VALUES ($1,$2,$3,$4,$5::jsonb)
             ON CONFLICT (generation, source, position) DO NOTHING`,
@@ -338,6 +354,10 @@ export class ReadRankingProjection {
         SELECT ctid FROM access.read_ranking_score
         WHERE generation <> $1 OR bucket < (date_trunc('month', now() AT TIME ZONE 'UTC')
           - interval '3 months')::date LIMIT $2)`, [generation, RANKING_COST.cleanupRows]);
+      await client.query(`DELETE FROM access.read_ranking_publication WHERE ctid IN (
+        SELECT ctid FROM access.read_ranking_publication
+        WHERE generation <> $1 OR bucket < (date_trunc('month', now() AT TIME ZONE 'UTC')
+          - interval '3 months')::date LIMIT $2)`, [generation, RANKING_COST.cleanupRows]);
       await client.query('COMMIT');
       return events.length + reviewEvents.length + pending.length;
     } catch (error) {
@@ -346,6 +366,7 @@ export class ReadRankingProjection {
     } finally { client.release(); }
   }
 
+  /** Strict source-progress diagnostic; admitted pages use capture instead. */
   async current(): Promise<RankingCheckpoint> {
     // The same reads the projection worker uses. A copied predicate here would
     // let this fence and that worker disagree about which head is current.
@@ -379,6 +400,47 @@ export class ReadRankingProjection {
     return { generation: row.generation, contentEpoch: row.content_epoch,
       contentSequence: row.content_sequence, graphEpoch: row.graph_epoch,
       reviewPosition: row.review_position };
+  }
+
+  private async validateCapture(row: RankingCaptureRow | undefined, population: RankingPopulation) {
+    const owner = await this.content.ownerPosition();
+    if (!row || !row.coverage_intact || row.content_epoch !== owner.dataEpoch
+      || row.graph_epoch !== this.env.lineage.dataEpoch
+      || row.rows.length > 0 && row.revision === '0'
+      || BigInt(row.content_scan_sequence) > BigInt(owner.sequence)
+      || row.review_head === null || BigInt(row.review_scan_position) > BigInt(row.review_head)) {
+      throw new RankingProjectionUnavailable('Ranking population integrity is unavailable');
+    }
+    if (row.removal_pending) throw new RankingProjectionIncomplete(population);
+    return row;
+  }
+
+  async capture(metric: RankingMetric, interval: RankingInterval, bucket: string,
+    order: 'score' | 'growth', after: { value: string; work: string } | null, limit: number,
+    realm: string | null = null): Promise<RankingPopulationCapture> {
+    if (!['reads','finished-chapters','reviews'].includes(metric) || !intervals.includes(interval)
+      || !/^\d{4}-\d{2}-\d{2}$/.test(bucket) || !['score','growth'].includes(order)
+      || !Number.isInteger(limit) || limit < 1 || limit > RANKING_COST.pageCandidates
+      || realm !== null && !ID.test(realm)
+      || after && (!/^-?\d+$/.test(after.value) || !ID.test(after.work))) {
+      throw new RankingProjectionUnavailable('Invalid ranking window');
+    }
+    const population = { metric,interval,bucket,context: realm ?? 'urn:rezics:context:global' };
+    const row = await this.validateCapture(await captureRankingPopulation(this.access,population,order,after,limit),population);
+    return { checkpoint: { generation: row.generation,contentEpoch: row.content_epoch,
+      contentSequence: row.content_sequence,graphEpoch: row.graph_epoch,reviewPosition: row.review_position },
+    revision: row.revision,removalRevision: row.removal_revision,rows: row.rows,population };
+  }
+
+  async fence(capture: RankingPopulationCapture): Promise<boolean> {
+    const row = await this.validateCapture(await fenceRankingPopulation(this.access,capture),capture.population);
+    if (row.generation !== capture.checkpoint.generation) {
+      throw new RankingProjectionUnavailable('Ranking generation changed');
+    }
+    if (row.removal_revision !== capture.removalRevision) {
+      throw new RankingProjectionIncomplete(capture.population);
+    }
+    return !row.removed;
   }
 
   /** Two index probes, independent of the number of unrelated Content events. */

@@ -161,9 +161,12 @@ test('home does not label a signed-in-only name public', async () => {
 test('ranking withholds a cover the viewer may not see', async () => {
   const f = page('cover');
   const ranking = await readRankings(f.session, {
-    current: async () => ({ generation: id(90).slice(-36), contentEpoch: 'epoch', contentSequence: '1',
-      graphEpoch: 'epoch', reviewPosition: '1' }),
-    candidates: async () => [{ work, score: '3', growth: '1' }],
+    capture: async (...args: Parameters<ReadRankingProjection['capture']>) => ({
+      checkpoint: { generation: id(90).slice(-36), contentEpoch: 'epoch', contentSequence: '1',
+        graphEpoch: 'epoch', reviewPosition: '1' }, revision: '1', removalRevision: '0', rows: [{ work, score: '3', growth: '1' }],
+      population: { metric: args[0], interval: args[1], bucket: args[2],
+        context: args[6] ?? 'urn:rezics:context:global' } }),
+    fence: async () => true,
   } as unknown as ReadRankingProjection, { realm: null, metric: 'reads', interval: 'day', order: 'score' });
   expect(ranking.items).toHaveLength(1);
   expect(ranking.items[0]!.cover.kind).toBe('fallback');
@@ -175,9 +178,12 @@ test('ranking withholds a cover the viewer may not see', async () => {
 test('ranking does not label a signed-in-only name public', async () => {
   const f = page('name');
   await expect(readRankings(f.session, {
-    current: async () => ({ generation: id(90).slice(-36), contentEpoch: 'epoch', contentSequence: '1',
-      graphEpoch: 'epoch', reviewPosition: '1' }),
-    candidates: async () => [{ work, score: '3', growth: '1' }],
+    capture: async (...args: Parameters<ReadRankingProjection['capture']>) => ({
+      checkpoint: { generation: id(90).slice(-36), contentEpoch: 'epoch', contentSequence: '1',
+        graphEpoch: 'epoch', reviewPosition: '1' }, revision: '1', removalRevision: '0', rows: [{ work, score: '3', growth: '1' }],
+      population: { metric: args[0], interval: args[1], bucket: args[2],
+        context: args[6] ?? 'urn:rezics:context:global' } }),
+    fence: async () => true,
   } as unknown as ReadRankingProjection, { realm: null, metric: 'reads', interval: 'day', order: 'score' })).rejects.toBeInstanceOf(WorkReadMoved);
   const summaries = delivered(f.captured);
   expect(summaries.some(summary => summary.disclosure === 'restricted' && summary.name.value === title)).toBe(true);

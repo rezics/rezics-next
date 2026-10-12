@@ -124,7 +124,11 @@ test('Realm-to-Zone reads follow the Space; a stale Zone node is not a second ad
 
 test('G-964: Zone-scoped trending retains private-Space membership through its ranking session and fences Zone grants', async () => {
   const projection = { current: async () => ({ generation: '1', contentSequence: '7', reviewPosition: '1', contentEpoch: 'epoch' }),
-    candidates: async () => [] } as unknown as ReadRankingProjection;
+    capture: async (...args: Parameters<ReadRankingProjection['capture']>) => ({
+      checkpoint: { generation: '1', contentSequence: '7', reviewPosition: '1', contentEpoch: 'epoch', graphEpoch: 'epoch' },
+      revision: '1', removalRevision: '0', rows: [], population: { metric: args[0], interval: args[1], bucket: args[2],
+        context: args[6] ?? 'urn:rezics:context:global' } }),
+    fence: async () => true } as unknown as ReadRankingProjection;
   for (const member of [false, true]) for (const grant of [false, true]) {
     const f = fixture({ spacePrivate: true, zonePrivate: true, member, grant });
     try {

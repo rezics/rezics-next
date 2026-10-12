@@ -28,7 +28,7 @@ function fixture(count: number, rejected = 0, rejection: Rejection = 'hide') {
   const known = new Set(candidates.map(row => row.work));
   const head = derivedId('trending-refill-head'), main = derivedId('trending-refill-main');
   const hydration: string[][] = [], admissions: string[][] = [], placements: string[][] = [];
-  const seeks: { after: { value: string; work: string } | null; limit: number; works: string[] }[] = [];
+  const seeks: { after: { value: string; work: string } | null; limit: number; works: string[]; preflight?: boolean }[] = [];
   const state = {
     checkpoint: { generation: '00000000-0000-4000-8000-000000000001', contentEpoch: position.dataEpoch,
       contentSequence: '1', graphEpoch: position.dataEpoch, reviewPosition: '1' } satisfies RankingCheckpoint,
@@ -75,16 +75,24 @@ function fixture(count: number, rejected = 0, rejection: Rejection = 'hide') {
     rejection === 'denied' && rejects.has(target.resource) ? 'hidden' : 'visible') });
   const projection = {
     current: async () => ({ ...state.checkpoint }),
-    candidates: async (_generation: string, _metric: string, _interval: string, _bucket: string,
-      order: 'score' | 'growth', after: { value: string; work: string } | null, limit: number) => {
+    capture: async (...args: Parameters<ReadRankingProjection['capture']>) => {
+      const [metric, interval, bucket, order, after, limit, realm] = args;
+      const checkpoint = { ...state.checkpoint };
       const key = order === 'growth' ? 'growth' : 'score';
       const sorted = [...candidates].sort((a, b) => Number(b[key]) - Number(a[key]) || a.work.localeCompare(b.work));
       const page = sorted.filter(row => !after || BigInt(row[key]) < BigInt(after.value)
         || row[key] === after.value && row.work > after.work).slice(0, limit);
+      // A continuation first captures its revision before issuing the seek.
+      if (after && seeks.at(-1)?.after === null) seeks.at(-1)!.preflight = true;
       seeks.push({ after, limit, works: page.map(row => row.work) });
       state.onSeek?.();
-      return page;
+      return { checkpoint, revision: '1', removalRevision: '0', rows: page,
+        population: { metric, interval, bucket, context: realm ?? 'urn:rezics:context:global' } };
     },
+    fence: async (cut: Awaited<ReturnType<ReadRankingProjection['capture']>>) =>
+      cut.checkpoint.generation === state.checkpoint.generation
+      && cut.checkpoint.contentEpoch === state.checkpoint.contentEpoch
+      && cut.checkpoint.graphEpoch === state.checkpoint.graphEpoch,
   } as unknown as ReadRankingProjection;
   const deps = { environment, access: {}, homePersonal: {
     read: async () => ({ owner: 'reader', revision: state.personalRevision,
@@ -115,7 +123,8 @@ for (const rejection of ['hide', 'absent', 'denied'] as const) {
       expect(first.items.map(item => item.work)).toEqual(rejected < TRENDING_COST.examinedLimit ? expected.slice(0, 1) : []);
       expect(first.hasMore).toBe(true);
       expect(first.cursor).toEqual(expect.any(String));
-      const examined = f.seeks.reduce((total, seek) => total + Math.min(seek.limit - 1, seek.works.length), 0);
+      const examined = f.seeks.filter(seek => !seek.preflight)
+        .reduce((total, seek) => total + Math.min(seek.limit - 1, seek.works.length), 0);
       expect(examined).toBe(TRENDING_COST.examinedLimit);
       expect(f.seeks.every(seek => seek.limit <= TRENDING_COST.chunkSize + 1)).toBe(true);
       for (const work of f.rejects) expect(JSON.stringify(first)).not.toContain(work);
@@ -194,14 +203,16 @@ for (const filter of ['person', 'realm', 'language', 'follow'] as const) {
 }
 
 for (const field of ['generation', 'contentSequence', 'contentEpoch', 'reviewPosition'] as const) {
-  test(`G1034: Ranking and Trending reject real ${field} movement during admission`, async () => {
+  test(`G1034: Ranking and Trending fence their own ${field} movement during admission`, async () => {
     for (const owner of ['ranking', 'trending'] as const) {
       const f = fixture(7);
       f.state.onSeek = () => { f.state.checkpoint[field] = field === 'generation'
         ? '00000000-0000-4000-8000-000000000002' : '2'; };
       const operation = owner === 'trending' ? f.read() : readRankings(f.session({ limit: 3 }), f.projection,
         { realm: null, metric: 'reads', interval: 'week', order: 'growth' });
-      await expect(operation).rejects.toBeInstanceOf(WorkReadMoved);
+      if (owner === 'ranking' && (field === 'contentSequence' || field === 'reviewPosition'))
+        await expect(operation).resolves.toMatchObject({ count: { kind: 'exact-page' } });
+      else await expect(operation).rejects.toBeInstanceOf(WorkReadMoved);
     }
   });
 }
