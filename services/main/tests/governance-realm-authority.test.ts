@@ -318,7 +318,7 @@ test('production Realm authority can restrict exact-revision record disclosure w
   expect(result.enforcement).toMatchObject([{ resource: f.realm,
     revision: f.publicProfileHead, effect: 'disclosure', state: 'restricted' }]);
   expect((await f.stack.accessPool.query(`SELECT 1 FROM access.governance_enforcement
-    WHERE resource=$1 AND scope_kind='component' AND revision IS NULL AND effect='disclosure'`,
+    WHERE resource=$1 AND component='record' AND revision IS NULL AND effect='disclosure'`,
   [f.realm])).rowCount).toBe(0);
 });
 
