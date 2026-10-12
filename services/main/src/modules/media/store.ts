@@ -552,7 +552,9 @@ export class MediaStore {
           ELSE '[]'::jsonb END
         ELSE COALESCE(to_jsonb(attachment.items[1:64]),'[]'::jsonb) END AS attachments,
         COALESCE(cardinality(attachment.items)>64,false) AS attachment_overflow
-      FROM requested q LEFT JOIN media.use requested_use ON requested_use.id=q.id
+      FROM requested q LEFT JOIN LATERAL (
+        SELECT u.* FROM media.use u WHERE u.id=q.id LIMIT 1
+      ) requested_use ON true
       JOIN media.asset a ON a.id=COALESCE(requested_use.asset_id,q.id)
       JOIN media.asset_state s ON s.id=a.state_head
       LEFT JOIN LATERAL (

@@ -181,8 +181,10 @@ test('exact Use database work does not grow with unrelated Uses', async () => {
       while (count < size) { await f.attach(); count++; }
       await f.pool.query('ANALYZE media.use');
       const plan = await f.visibilityPlan(iri(ownUse));
-      expect(planNodes(plan).some(node => node['Index Name'] === 'use_pkey'
-        && node['Index Cond']?.includes('id ='))).toBe(true);
+      const useScans = planNodes(plan).filter(node => node['Relation Name'] === 'use'
+        && node['Actual Loops'] > 0);
+      expect(useScans).toHaveLength(1);
+      expect(useScans[0]).toMatchObject({ 'Index Cond': expect.stringContaining('id =') });
       samples.push(examinedRows(plan));
     }
     expect(samples).toEqual([1, 1]);
