@@ -612,7 +612,7 @@ async function buildRecipesApiBackup() {
           fetch: (async (request, init) => opened.main.handle(new Request(request, init))) as typeof fetch,
         });
         const page = await api.read<{ items: { id: string }[]; nextCursor: string | null }>(
-          `/v1/realms/${short(corpus!.realm)}/modules/browse?limit=20&language=en`);
+          `/v1/realms/${short(corpus!.realm)}/modules/browse?limit=20`);
         if (page.items.length !== 20 || !page.nextCursor)
           throw new Error('Restored recipes backup did not expose its first complete browse page');
         return { stack: opened, stop: async () => opened.stop() };
@@ -804,9 +804,9 @@ export async function restoreBrowserRecipes(input: { runId: string; webOrigin: s
         const api = workProfileCorpusApi('http://main.local', importer.token, {
           fetch: ((request, init) => stack!.main.handle(new Request(request, init))) as typeof fetch });
         const page = await api.read<{ items: { id: string }[]; nextCursor: string | null }>(
-          `/v1/realms/${short(corpus.realm)}/modules/browse?limit=20&language=en`);
+          `/v1/realms/${short(corpus.realm)}/modules/browse?limit=20`);
         if (page.items.length !== 20 || !page.nextCursor)
-          throw new Error('Restored browser recipes did not expose a complete first catalogue page');
+          throw new Error(`Restored browser recipes did not expose a complete first catalogue page: ${page.items.length} items, continuation ${Boolean(page.nextCursor)}`);
       } finally {
         await stack?.stop();
         for (const [key, value] of previous) {
