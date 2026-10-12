@@ -746,6 +746,64 @@ for (const status of [503, 400, 404]) {
   });
 }
 
+test('qualified restore expectation-read TimeoutError leaves the same key resumable without duplicate effects', async () => {
+  const run = fixture();
+  const owner = outerRestore(run);
+  const readGraph = run.fuseki.query.bind(run.fuseki);
+  let armed = false, timeoutReads = 0, timeoutClientUsed = true;
+  let resolveExpectationRead!: () => void;
+  const expectationRead = new Promise<void>(resolve => { resolveExpectationRead = resolve; });
+  const server = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: async request => {
+    const sparql = await request.text();
+    if (armed && sparql.includes('SELECT ?savedMainSequence ?reconciledMainSequence ?savedSequence')) {
+      timeoutReads++;
+      resolveExpectationRead();
+      return new Promise<Response>(() => {});
+    }
+    return Response.json(await readGraph(sparql));
+  } });
+  const http = new FusekiClient(server.url.href);
+  const network = spyOn(run.fuseki, 'query').mockImplementation(async sparql => {
+    if (armed && timeoutClientUsed
+      && sparql.includes('SELECT ?savedMainSequence ?reconciledMainSequence ?savedSequence')) {
+      timeoutClientUsed = false;
+      return new FusekiClient(server.url.href, undefined, undefined, AbortSignal.timeout(250)).query(sparql);
+    }
+    return http.query(sparql);
+  });
+  try {
+    await owner.qualify();
+    armed = true;
+    const interrupted = owner.attempt();
+    await expectationRead;
+    let failure: unknown;
+    try { await interrupted; throw new Error('expectation-read timeout unexpectedly settled'); }
+    catch (error) { failure = error; }
+    expect(failure).toBeInstanceOf(OwnerOperationUnavailable);
+    expect((failure as Error).cause).toBeInstanceOf(RestoreInterrupted);
+    let cause: unknown = failure;
+    while (cause instanceof Error && cause.cause !== undefined) cause = cause.cause;
+    expect(cause).toMatchObject({ name: 'TimeoutError' });
+    expect(timeoutReads).toBe(1);
+    expect(owner.row).toMatchObject({ state: 'running', hold_reason: null });
+    expectBothHeld(run);
+
+    armed = false;
+    expect(await owner.attempt()).toMatchObject({ state: 'reconciled', disposition: 'matched', replayed: true });
+    expect(run.access.open).toBe(true);
+    expect(run.access.generation).toBe('6');
+    expect(run.fuseki.commands).toHaveLength(1);
+    expect(run.trace.filter(event => event === 'graph:release')).toHaveLength(1);
+    const releases = owner.releaseSpy.mock.calls.length;
+    expect(await owner.attempt()).toMatchObject({ state: 'reconciled', replayed: true });
+    expect(owner.releaseSpy).toHaveBeenCalledTimes(releases);
+    expect(run.fuseki.commands).toHaveLength(1);
+    expect(owner.qualifications).toBe(1);
+  } finally {
+    network.mockRestore(); await server.stop(true); owner.stop(); run.stop();
+  }
+}, 10_000);
+
 for (const status of [408, 429, 502, 503, 504, 400, 404, 500, '503', NaN]) {
   test(`qualified HTTP classifier uses numeric status evidence: ${status}`, () => {
     const original = { status };

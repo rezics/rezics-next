@@ -25,6 +25,7 @@ export function isOwnerTransientFailure(error: unknown): boolean {
       cause?: unknown;
       message?: unknown;
     };
+    if (failure.name === 'TimeoutError') return true;
     if (typeof failure.status === 'number' && [408, 429, 502, 503, 504].includes(failure.status))
       return true;
     if (
