@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { matchesSearchText, rankedSearchMatches, querySearchFields, fenceSearchFields,
   type SearchFieldOwners } from '../src/modules/search/fields.ts';
-import { workRead, WorkReadLimit, type WorkReadSession } from '../src/modules/work/read-session.ts';
+import { workRead, WorkReadUnavailable, type WorkReadSession } from '../src/modules/work/read-session.ts';
 import { FusekiClient, fusekiReadBudget, type FusekiReadBudget } from '../src/infrastructure/fuseki.ts';
 import { SearchRequestTimedOut, withStableSearchSnapshot } from '../src/modules/work/search-readiness.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
@@ -65,7 +65,8 @@ test('nested card reads debit the search budget and cannot outlive its wall dead
     await session.query('SELECT', 1);
   }));
   expect(inside).toBeDefined();
-  expect(outer.callsLeft).toBe(7);
+  // The fence re-reads the selected inputs once.
+  expect(outer.callsLeft).toBe(6);
   await expect(withStableSearchSnapshot(undefined, () => workRead(deps, new Request('http://test'), {}, async () => {
     await Bun.sleep(50);
   }), 10)).rejects.toBeInstanceOf(SearchRequestTimedOut);
@@ -115,9 +116,10 @@ test('first-page and retained-continuation retries share the outer budget and re
       expect(verifies).toBe(2);
       expect(authorities).toBe(4);
       expect(nameReads).toBe(4);
-      expect(calls).toBe(6);
-      expect(outer.callsLeft).toBe(4);
-      expect(outer.bytesLeft).toBe(100_000 - 6 * Buffer.byteLength(payload));
+      // The fence re-reads the selected inputs once.
+      expect(calls).toBe(8);
+      expect(outer.callsLeft).toBe(2);
+      expect(outer.bytesLeft).toBe(100_000 - 8 * Buffer.byteLength(payload));
     }
   } finally { await server.stop(true); }
 });
@@ -140,16 +142,17 @@ test('SearchSnapshotMoved retries cannot replenish an enclosing search call or b
       let attempts = 0;
       const outer = { signal: AbortSignal.timeout(2_000),
         callsLeft: limit === 'calls' ? 3 : 10, bytesLeft: limit === 'bytes' ? 2 * bytes : 100_000 };
+      // Retry admission answers unavailable.
       await expect(fusekiReadBudget.run(outer, () => workRead(deps, new Request('http://main.test/v1/queries/page'), {},
         async session => {
           attempts++;
           await session.query('SELECT ?x WHERE {}', 1);
           throw new SearchSnapshotMoved('Injected movement after a paid read');
-        }))).rejects.toBeInstanceOf(WorkReadLimit);
-      expect(calls).toBe(3);
-      expect(attempts).toBe(limit === 'calls' ? 2 : 1);
-      expect(outer.callsLeft).toBe(limit === 'calls' ? 0 : 7);
-      expect(outer.bytesLeft).toBe(limit === 'bytes' ? 0 : 100_000 - 3 * bytes);
+        }))).rejects.toBeInstanceOf(WorkReadUnavailable);
+      expect(calls).toBe(2);
+      expect(attempts).toBe(1);
+      expect(outer.callsLeft).toBe(limit === 'calls' ? 1 : 8);
+      expect(outer.bytesLeft).toBe(limit === 'bytes' ? 0 : 100_000 - 2 * bytes);
     }
   } finally { await server.stop(true); }
 });
