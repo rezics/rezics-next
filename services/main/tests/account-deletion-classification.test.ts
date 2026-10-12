@@ -499,8 +499,13 @@ test('owned refusal cleans a persisted long closure in bounded statements and re
   expect(refusal).toBeInstanceOf(AccountHasOwnedAgents);
   expect(refusal).toMatchObject({ agents: [{ id: organization, kind: 'organization', displayName: 'Long closure consent' }],
     hasMore: false, moreCount: 0 });
-  const deletes = Map.groupBy(cost.plans.filter(plan => /DELETE FROM access\.account_deletion_progress_agent/.test(plan.Statement)),
-    plan => plan.StatementInstance);
+  const deletes = new Map<number, RecordedPlan[]>();
+  for (const plan of cost.plans) {
+    if (!/DELETE FROM access\.account_deletion_progress_agent/.test(plan.Statement)) continue;
+    const statements = deletes.get(plan.StatementInstance) ?? [];
+    statements.push(plan);
+    deletes.set(plan.StatementInstance, statements);
+  }
   expect(deletes.size).toBeGreaterThanOrEqual(3);
   for (const plans of deletes.values()) {
     const reads = plans.reduce((sum, plan) => sum + planRows(plan.Plan), 0);

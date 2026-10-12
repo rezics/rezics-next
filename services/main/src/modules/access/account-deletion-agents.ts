@@ -45,6 +45,15 @@ export const ACCOUNT_DELETION_CLASSIFICATION_COST = {
   controllerRowsPerStep: MAX_EDGE_DEGREE * CONTROLLER_CONTINUITY_COST.controllerRowsPerSide * 3,
 } as const;
 
+interface DeletionEffectPage {
+  count: string;
+  retired: number;
+  released: number;
+  end_cursor: string | null;
+  release_cursor: string | null;
+  retirement_cursor: string | null;
+}
+
 interface DeletionProgress {
   operation_id: string;
   classification_done: boolean;
@@ -227,7 +236,7 @@ export async function applyAccountDeletionAgents(client: PoolClient, principal: 
   let retirementCursor: string | null = null;
   let more: boolean;
   do {
-    const result = (await client.query<{ count: string; retired: number; released: number; end_cursor: string | null; release_cursor: string | null; retirement_cursor: string | null }>(`/* account_deletion_person_effect_step */ WITH batch AS MATERIALIZED (
+    const result: DeletionEffectPage = (await client.query<DeletionEffectPage>(`/* account_deletion_person_effect_step */ WITH batch AS MATERIALIZED (
       SELECT agent_id, ctid FROM access.account_deletion_progress_agent
       WHERE operation_id >= $1 AND operation_id <= $1 AND effect >= 'end' AND effect <= 'end'
         AND NOT completed AND agent_id > $4 ORDER BY operation_id, effect, agent_id LIMIT $2
