@@ -276,7 +276,10 @@ export async function extendErasureTargets(relay: Pool, erasureId: string, erasu
     const retained = (await client.query<{ target_kind: ErasureTargetKind; target_ref: string }>(
       'SELECT target_kind, target_ref FROM relay.erasure_target WHERE erasure_id=$1 ORDER BY ordinal LIMIT 257',
       [erasureId])).rows.map(row => ({ kind: row.target_kind, ref: row.target_ref }));
-    const additions = selected.filter(target => !retained.some(prior => prior.kind === target.kind && prior.ref === target.ref));
+    // A native H already resolved under its specific kind is the same graph
+    // identity that closure discovery names as a semantic revision.
+    const additions = selected.filter(target => !retained.some(prior =>
+      ERASURE_TARGET_OWNERS[prior.kind] === 'graph' && prior.ref === target.ref));
     const combined = [...retained, ...additions];
     if (!isValidErasureTargetList(combined) || combined.filter(target =>
       target.kind === 'content_revision' || ERASURE_TARGET_OWNERS[target.kind] === 'graph').length > 64) {

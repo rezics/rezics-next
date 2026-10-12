@@ -9,7 +9,7 @@ import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
 import { FusekiClient, type CommandEnvelope, type CommandResult, type SparqlResult } from '../src/infrastructure/fuseki.ts';
 import { completeErasureTarget, ErasureUnavailable, journalErasure, readErasure,
-  sha256 } from '../src/modules/erasure/journal.ts';
+  extendErasureTargets, sha256 } from '../src/modules/erasure/journal.ts';
 import { verifyErasure } from '../src/modules/erasure/reconcile.ts';
 import { contentErasureDigest, ErasureService, requestContentErasure,
   type ContentErasureInput } from '../src/modules/erasure/request.ts';
@@ -271,3 +271,20 @@ test('request records exact target completion, fails closed on missing Content p
   expect(retryVerification.state).toBe('reconciled');
   expect((await readErasure(pool!, journaled.erasureId)).stage).toBe('verified');
 }, 120_000);
+
+
+test('a home closure reread retains one native graph target and its original kind on retry', async () => {
+  const head = randomUUID(), admission = randomUUID();
+  const entry = await journalErasure(pool!, { operationId: `erasure:${admission}`, requestDigest: 'a'.repeat(64),
+    kind: 'revision', principalId: randomUUID(), admissionId: admission, authorityEpoch: '1',
+    targets: [{ kind: 'home_document_revision', ref: head }] });
+  const before = await readErasure(pool!, entry.erasureId);
+  for (let retry = 0; retry < 2; retry++) {
+    await extendErasureTargets(pool!, entry.erasureId, entry.erasureEpoch, admission,
+      [{ kind: 'semantic_revision', ref: head }]);
+    const current = await readErasure(pool!, entry.erasureId);
+    expect(current.targets).toEqual(before.targets);
+    expect(current.targets).toHaveLength(1);
+    expect(current.targets[0]!.kind).toBe('home_document_revision');
+  }
+});

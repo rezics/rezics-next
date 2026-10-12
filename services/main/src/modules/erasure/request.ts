@@ -634,8 +634,9 @@ async function requestFencedContentErasure(service: ErasureService, graph: WorkA
     }
     const targets: ErasureTargetInput[] = [
       ...resolved.map(revision => ({ kind: revision.kind, ref: revision.ref })),
-      ...await selectingHomeTargets(graph, input.resourceId,
-        resolved.filter(revision => revision.kind === 'content_revision').map(revision => revision.ref), resolved.length),
+      ...(await selectingHomeTargets(graph, input.resourceId,
+        resolved.filter(revision => revision.kind === 'content_revision').map(revision => revision.ref), resolved.length))
+        .filter(home => !resolved.some(revision => isGraphErasureKind(revision.kind) && revision.ref === home.ref)),
       ...[...new Set([...privatePayloads.map(payload => payload.payloadRef),
         ...custody.map(target => `sha256:${target.payloadSha256}`)])]
         .map(ref => ({ kind: 'object' as const, ref })),
