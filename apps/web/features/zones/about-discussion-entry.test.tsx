@@ -1,6 +1,7 @@
 import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import * as platformAccess from '../api/platform-access.ts';
 
 const actingSubject = 'https://rezics.com/id/00000000-0000-4000-8000-000000000004';
 
@@ -9,7 +10,7 @@ void mock.module('../work-page/read.ts', () => ({
   reader: async () => ({ main: {}, signedIn: true, actingSubject }),
 }));
 void mock.module('../api/main.ts', () => ({ readPlatformAccess: async () => ({}) }));
-void mock.module('../api/platform-access.ts', () => ({ operationOpen: () => true }));
+void mock.module('../api/platform-access.ts', () => ({ ...platformAccess, operationOpen: () => true }));
 void mock.module('./about-discussion-api.ts', () => ({
   readAboutDiscussion: async () => { throw new Error('DisclosureUnavailable'); },
 }));
