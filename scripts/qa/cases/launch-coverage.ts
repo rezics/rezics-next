@@ -187,6 +187,19 @@ export const launchCoverage: readonly LaunchCoverage[] = [
   },
   {
     kind: 'anime',
+    capability: 'Anime, manga and VN hub parts, wholes and relations',
+    api: api('services/main/tests/g-829-public-reads.test.ts',
+      'Work composition reads share public disclosure, preserve private grants and hide absent/protected Works',
+      'Checks Main’s public composition disclosure, private grants, absent and protected Works.'),
+    browser: {
+      file: 'apps/web/tests/g-837-work-levels.e2e.ts',
+      test: 'parts, connections and editions read from Main for the franchise records',
+      missing: 'gap',
+      reason: 'pending a quiet rerun; runs 20261012t082439-67c0df, 20261012t084022-7efe8f and 20261012t095133-3772eb',
+    },
+  },
+  {
+    kind: 'anime',
     capability: 'Catalogue browse and search in its Zone',
     api: api('tests/qa/integration/anime-manga-zones.test.ts',
       'Anime and manga Zones: format and status filters page, an unclassified Work stays out of a format it was not given, and publication years page newest first',

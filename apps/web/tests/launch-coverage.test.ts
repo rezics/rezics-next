@@ -720,10 +720,25 @@ test('launch outcomes retain landed proofs, the recipe reading name and all five
   const missingRows = launchCoverage.filter(row => proofMissing(row.api) || proofMissing(row.browser));
   const missingProofs = launchCoverage.flatMap(row => [row.api, row.browser]).filter(proofMissing);
   expect({ rows: launchCoverage.length, provedPairs: provedPairs.length, missingRows: missingRows.length, missingProofs: missingProofs.length })
-    .toEqual({ rows: 66, provedPairs: 42, missingRows: 24, missingProofs: 40 });
+    .toEqual({ rows: 67, provedPairs: 42, missingRows: 25, missingProofs: 41 });
   expect(Object.fromEntries([...missingItems].map(item => [item,
     missingRows.filter(row => missingForRow(row).includes(item)).length,
-  ]))).toEqual({ L10: 1, L11: 1, L12: 2, L13: 0, L17: 0, L19: 0, L20: 0, L21: 8, L26: 0, gap: 12 });
+  ]))).toEqual({ L10: 1, L11: 1, L12: 2, L13: 0, L17: 0, L19: 0, L20: 0, L21: 8, L26: 0, gap: 13 });
+});
+
+test('hub structure browser coverage remains unproved pending a quiet rerun', () => {
+  const rows = launchCoverage.filter(row => 'file' in row.browser &&
+    row.browser.file === 'apps/web/tests/g-837-work-levels.e2e.ts');
+  expect(rows).toHaveLength(1);
+  const row = rows[0]!;
+  expect(row.capability).toBe('Anime, manga and VN hub parts, wholes and relations');
+  expect(row.browser).toMatchObject({
+    missing: 'gap',
+    reason: 'pending a quiet rerun; runs 20261012t082439-67c0df, 20261012t084022-7efe8f and 20261012t095133-3772eb',
+  });
+  expect(proofMissing(row.browser)).toBe(true);
+  expect(launchCoverage.filter(candidate => !proofMissing(candidate.api) && !proofMissing(candidate.browser)))
+    .not.toContain(row);
 });
 
 test('literal loops and registered journeys retain all nine browser citations', () => {
