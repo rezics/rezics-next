@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { AsyncResource } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { Pool } from 'pg';
@@ -7,8 +8,9 @@ import { ContentCore } from '../../../services/content/src/core.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { grantFixtureAuthority, ensureFixtureScopeGate } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import { AccessRealmManagement } from '../../../services/main/src/modules/access/realm-management.ts';
-import { createAgentGraph } from '../../../services/main/src/modules/agent/graph.ts';
-import { AgentProvisioning, agentProvisionDigest } from '../../../services/main/src/modules/agent/provision.ts';
+import { AccessAgentControl } from '../../../services/main/src/modules/access/agent-control.ts';
+import { groupChangeIntentDigest } from '../../../services/main/src/modules/access/scope-gates.ts';
+import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
 import { applyContentErasure, checkContentErasureTargets } from '../../../services/main/src/modules/erasure/content.ts';
 import { resolveErasureRevisions } from '../../../services/main/src/modules/erasure/revision-kind.ts';
 import { ErasureService } from '../../../services/main/src/modules/erasure/request.ts';
@@ -19,7 +21,7 @@ import { resolveContentTarget } from '../../../services/main/src/modules/content
 import { WorkMaintainers } from '../../../services/main/src/modules/work/maintainers.ts';
 import { readZoneConfiguration, readZoneSitePublicationReceipt, type ZoneSitePublicationReceipt } from '../../../services/main/src/modules/zone/configuration.ts';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
-import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credit.ts';
+import { authorCreditFixture, shortId } from '../fixtures/author-credit.ts';
 
 interface SavedDraft { revisionId: string; byteDigest: string; sourcePosition: { dataEpoch: string } }
 interface SelectedPage { page: string; variantId: string; revisionId: string; byteDigest: string; contentEpoch: string }
@@ -31,6 +33,7 @@ async function fixture(reserve = true, erasure = false) {
   const f = await authorCreditFixture(Bun.env as Record<string, string>,
     resolve('.temp', `zone-home-identity-${randomUUID()}`),
     'openid agent:create work:create work:edit work:read space:create zone:edit access:manage');
+  const revocationContext = new AsyncResource('zone-editor-revocation');
   const relay = erasure ? new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL, max: 1 }) : undefined;
   try {
     const accountPool = new Pool({ connectionString: Bun.env.ACCOUNT_DATABASE_URL });
@@ -51,7 +54,7 @@ async function fixture(reserve = true, erasure = false) {
       representations: [{ principalId: f.principalId, actor: f.actor, action, lifetime: 'infinity' }],
       grant: { actor: f.actor, action, lifetime: 'infinity' },
     });
-    await grant(`agent:control:${f.actor}`, 'agent.control');
+    const editorControl = await grant(`agent:control:${f.actor}`, 'agent.control');
     await grant('work:create:root', 'work.create');
     const objects = new S3ImmutableObjects({ endpoint: Bun.env.MAIN_S3_ENDPOINT!,
       bucket: Bun.env.MAIN_S3_BUCKET!, region: Bun.env.MAIN_S3_REGION!,
@@ -73,18 +76,30 @@ async function fixture(reserve = true, erasure = false) {
       } });
     }
     let failSettlement = false, revokeBeforeSwitch = false;
-    let siteSpace: string | undefined, zone: string | undefined;
-    const revokeEditor = async () => {
-      const replacement = nativeId();
-      const profile = { kind: 'person' as const, displayName: 'Replacement site owner' };
-      await createAgentGraph(f.env, { id: randomUUID(), agent: replacement,
-        ...profile, digest: agentProvisionDigest(profile) });
-      await f.env.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/>
-        DELETE { GRAPH ${iri(GRAPHS.current)} { ${iri(siteSpace!)} rv:owner ${iri(f.actor)} } }
-        INSERT { GRAPH ${iri(GRAPHS.current)} { ${iri(siteSpace!)} rv:owner ${iri(replacement)} } }
-        WHERE { GRAPH ${iri(GRAPHS.current)} { ${iri(siteSpace!)} rv:owner ${iri(f.actor)} } }`);
+    let zone: string | undefined;
+    const revokeEditor = () => revocationContext.runInAsyncScope(async () => {
+      // Keep the Agent's controller floor while withdrawing the editor's live mandate.
+      await grantFixtureAuthority(f.accessPool, {
+        scope: `agent:control:${f.actor}`, requireDispatch: true,
+        representations: [{ principalId: f.otherPrincipal, actor: f.actor,
+          action: 'agent.control', lifetime: 'infinity' }],
+        grant: { actor: f.actor, action: 'agent.control', lifetime: 'infinity' },
+      });
+      const replacement = await f.account.verifier.verify(new Request('http://fixture.test', {
+        headers: { authorization: `Bearer ${f.account.tokenB}` },
+      }), ['access:manage']);
+      const controller = (await f.accessPool.query<{ generation: string }>(
+        'SELECT generation::text FROM access.representation WHERE id = $1',
+        [editorControl.representationIds[0]])).rows[0]!;
+      const change = { subjectId: f.actor, representationId: editorControl.representationIds[0]!,
+        expectedGeneration: controller.generation };
+      const result = await new AccessAgentControl(f.accessPool).removeController(replacement, {
+        idempotencyKey: randomUUID(), requestDigest: groupChangeIntentDigest(change),
+      }, change);
+      expect(result.liveControllers).toBe(1);
+      expect(result.revocationIds).toHaveLength(1);
       await ensureFixtureScopeGate(f.accessPool, `zone:edit:${zone!}`, { open: false });
-    };
+    });
     const content = new Proxy(core, { get(target, property) {
       if (property === 'settlePublication') return async (...args: Parameters<typeof target.settlePublication>) => {
         if (failSettlement) { failSettlement = false; throw new Error('interrupted before Content settlement'); }
@@ -118,7 +133,7 @@ async function fixture(reserve = true, erasure = false) {
     const created = await f.json<{ space: string; zone: string; navigationRevision: string }>(
       await call('POST', '/v1/spaces', { profile: 'space-zone-v1', name: 'Home identity site',
         capabilities: ['zone'], actingSubject: f.actor, visibility: 'public' }), 201);
-    siteSpace = created.space; zone = created.zone;
+    zone = created.zone;
     await grant(`zone:edit:${zone}`, 'zone.edit');
     const path = `/v1/zones/${shortId(zone)}`;
     const prepare = async () => {
@@ -158,10 +173,10 @@ async function fixture(reserve = true, erasure = false) {
       ? `?actingSubject=${encodeURIComponent(f.actor)}` : ''}`, undefined, randomUUID(), editor ? f.account.tokenA : null);
     expect((await normalizeStoredMembership(f.env)).complete).toBe(true);
     return { ...f, ...created, path, homeDocument, authoredBody, grant, prepare, draftBody, call, save, publish, home, exact, core,
-      close: async () => { await relay?.end(); await f.close(); },
+      close: async () => { revocationContext.emitDestroy(); await relay?.end(); await f.close(); },
       failSettlement: () => { failSettlement = true; },
       revokeBeforeSwitch: () => { revokeBeforeSwitch = true; }, revokeEditor };
-  } catch (error) { await relay?.end(); await f.close(); throw error; }
+  } catch (error) { revocationContext.emitDestroy(); await relay?.end(); await f.close(); throw error; }
 }
 
 async function anchor(f: Awaited<ReturnType<typeof fixture>>, revision: string) {
@@ -284,6 +299,8 @@ test('Work authority cannot edit a home document after Zone stewardship ends', a
       await f.authoredBody({ profile: 'metadata-only-v1', title: 'Retained Work authority', language: 'en', actingSubject: f.actor })), 201);
     await f.grant(`work:edit:${f.homeDocument!}`, 'work.edit');
     await f.grant(`content:draft:${f.homeDocument!}`, 'content.draft');
+    await f.grant(`work:edit:${work.work}`, 'work.edit');
+    await f.grant(`content:draft:${work.work}`, 'content.draft');
     await f.revokeEditor();
     expect((await f.call('POST', '/v1/content-drafts', f.draftBody(f.homeDocument!))).status).toBe(403);
     const workPage = await f.save('Authorized Work body', null, undefined, work.work);
@@ -392,6 +409,8 @@ test('erasure inventories every selecting H and makes its document cut absent wi
     interface Report { suppression: string; targets: { kind: string; ref: string }[]; replayed: boolean }
     const erased = await f.json<Report>(await f.call('POST', '/v1/erasures', request, key), 200);
     expect(erased.suppression).toBe('suppressed');
+    expect(erased.targets.filter(target => [shortId(first.homeRevision), shortId(second.homeRevision)].includes(target.ref)))
+      .toHaveLength(2);
     expect(erased.targets.filter(target => target.kind === 'home_document_revision').map(target => target.ref).sort())
       .toEqual([shortId(first.homeRevision), shortId(second.homeRevision)].sort());
     const tombstones = (await f.env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> SELECT ?revision WHERE {
