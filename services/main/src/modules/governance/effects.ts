@@ -1,4 +1,5 @@
-import { profileValidations } from '../../infrastructure/profile.ts';
+import manifest from '../../../../../generated/model/manifest.json';
+import { profileValidations, type ProfileId } from '../../infrastructure/profile.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { ContentModeration, ContentModerationConflict, ContentModerationStale }
   from '../../../../content/src/moderation.ts';
@@ -10,6 +11,7 @@ import { MediaStore, MediaStale, copySuppressionId,
 import type { ContentCore } from '../../../../content/src/core.ts';
 import { ownerTargetHeads } from './evidence.ts';
 import { semanticOwnerTypes, semanticResourceTypeRole } from '../semantic/change.ts';
+import type { SparqlResult } from '../../infrastructure/fuseki.ts';
 
 export interface EffectPlan {
   /** Owner-established identity; null is a positively classified non-Realm record. */
@@ -62,6 +64,69 @@ const receiptIri = (operationId: string, ordinal: number) =>
 const effectIri = (operationId: string, ordinal: number) =>
   `urn:rezics:moderation:${hash(`${operationId}:${ordinal}`)}`;
 const typed = (value: number) => `${lit(String(value))}^^<http://www.w3.org/2001/XMLSchema#integer>`;
+
+interface GraphModerationProfile {
+  profile: string;
+  shape: string;
+  when: readonly { path: string; value: string }[];
+}
+
+type GraphTerm = NonNullable<SparqlResult['results']>['bindings'][number][string];
+function graphTerm(value: GraphTerm): string {
+  if (value.type === 'uri') return iri(value.value);
+  if (value.type !== 'literal') throw new GovernanceUnavailable('Graph profile selector is not a retained RDF term');
+  return `${lit(value.value)}${value['xml:lang'] ? `@${value['xml:lang']}`
+    : value.datatype ? `^^${iri(value.datatype)}` : ''}`;
+}
+
+/** The semantic owner determines primary kinds; the authored model determines
+ * their ordered profile/shape routes. Reserved kinds without a shape stay Access-only. */
+export const graphModerationProfiles: ReadonlyMap<string, readonly GraphModerationProfile[]> = new Map(
+  [...semanticOwnerTypes].map(kind => [kind, manifest.canonical.find(entry => entry.type === kind)?.routes ?? []]),
+);
+
+async function graphModerationProfile(env: WorkActivationEnvironment, target: DecisionTargetInput) {
+  // This structural probe must work while P or its current H is restricted.
+  const home = target.component === 'record' && (await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+    GRAPH ${iri(GRAPHS.current)} { ${iri(target.resource)} a rv:ZoneHomeDocument }
+  }`, 1024)).boolean === true;
+  const selectors = [...new Set([...graphModerationProfiles.values()].flatMap(routes => routes
+    .flatMap(route => route.when.map(condition => condition.path))))];
+  const rows = home ? [] : (await env.fuseki.query(`PREFIX rv: <${RV}>
+    SELECT DISTINCT ?kind ?head ?selector ?value WHERE { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(target.resource)} a ?kind .
+      OPTIONAL { VALUES ?selector { ${selectors.map(iri).join(' ')} }
+        ${iri(target.resource)} ?selector ?value }
+    } } LIMIT 257`, 32_768)).results?.bindings ?? [];
+  if (rows.length >= 257 || rows.some(row => row.kind?.type !== 'uri'))
+    throw new GovernanceUnavailable('Graph target profile is unavailable or ambiguous');
+  const kinds = home ? [`${RV}ZoneHomeDocument`] : [...new Set(rows.map(row => row.kind!.value)
+    .filter(kind => semanticResourceTypeRole(kind) === 'PRIMARY'))];
+  if (kinds.length > 1) throw new GovernanceUnavailable('Graph target profile is unavailable or ambiguous');
+  const kind = kinds[0];
+  const routes = kind ? graphModerationProfiles.get(kind) : undefined;
+  if (!routes?.length) return null;
+  const values = (path: string) => [...new Map(rows.filter(row => row.selector?.value === path)
+    .map(row => row.value).filter(value => value !== undefined)
+    .map(value => [graphTerm(value), value])).values()];
+  const route = routes.find(candidate => candidate.when.every(condition => {
+    const selected = values(condition.path);
+    return selected.length === 1 && selected[0]!.value === condition.value;
+  }));
+  if (!route) throw new GovernanceUnavailable('Graph target has no matching reviewed profile');
+  // Bind the complete selector cut, including absence and earlier unmatched
+  // routes, so a concurrent profile change cannot weaken the selected validation.
+  const selectorGuard = [...new Set(routes.flatMap(candidate => candidate.when.map(condition => condition.path)))].map(path => {
+    const selected = rows.filter(row => row.selector?.value === path).map(row => row.value)
+      .filter(value => value !== undefined);
+    const triples = [...new Set(selected.map(graphTerm))];
+    return `${triples.map(value => `${iri(target.resource)} ${iri(path)} ${value} .`).join('\n')}
+      FILTER NOT EXISTS { ${iri(target.resource)} ${iri(path)} ?otherSelector
+        ${triples.length ? `FILTER(?otherSelector NOT IN (${triples.join(', ')}))` : ''} }`;
+  }).join('\n');
+  return { ...route, kind, selectorGuard,
+    headPredicate: home ? 'rv:homeDocumentHead' : target.component === 'structure' ? 'rv:structureHead' : 'rv:head' };
+}
 
 function assertGraphOwnerBasis(plan: EffectPlan | undefined, realm: { realm: string; space: string } | null) {
   if (plan?.realm === undefined) return;
@@ -253,7 +318,7 @@ export function ownerModerationEffects(content: ContentModeration, env: WorkActi
         }
         return { receipt: `content:receipt:${operationId}:${ordinal}` };
       }
-      if (target.owner !== 'graph' || !target.expectedHead) {
+      if (target.owner !== 'graph') {
         throw new GovernanceUnavailable('moderation owner CAS is unavailable for this target');
       }
       const receipt = receiptIri(operationId, ordinal);
@@ -280,20 +345,24 @@ export function ownerModerationEffects(content: ContentModeration, env: WorkActi
       };
       if (await observed()) return { receipt };
       const realm = await validateGraphTarget(target, plan);
-      const profile = target.component === 'structure' ? 'structure-composition-v1'
-        : 'work-metadata-v1';
-      const shape = target.component === 'structure'
-        ? 'https://rezics.com/definition/structure-composition-v1/structure-shape'
-        : target.component === 'body'
-          ? 'https://rezics.com/definition/work-metadata-v1/main-version-shape'
-          : 'https://rezics.com/definition/work-metadata-v1/work-shape';
+      const selected = realm ? null : await graphModerationProfile(env, target);
+      if (!realm && !selected)
+        return { receipt: `access:governance-enforcement:${operationId}:${ordinal}` };
+      if (!target.expectedHead) throw new GovernanceStale('Graph moderation needs an exact owner head');
       const validations = realm ? await profileValidations(env.fuseki, realm.profileId, [
         { shape: `${realm.profile}/space-shape`, focus: [realm.space], graphs: [GRAPHS.current] },
         { shape: `${realm.profile}/realm-shape`, focus: [realm.realm], graphs: [GRAPHS.current] },
-      ]) : await profileValidations(env.fuseki, profile, [{
-        shape, focus: [target.resource], graphs: [GRAPHS.current, GRAPHS.revisions],
+      ]) : await profileValidations(env.fuseki, selected!.profile as ProfileId, [{
+        shape: selected!.shape, focus: [target.resource], graphs: [GRAPHS.current, GRAPHS.revisions],
       }]);
-      const headPredicate = target.component === 'structure' ? 'rv:structureHead' : 'rv:head';
+      const headPredicate = realm ? 'rv:head' : selected!.headPredicate;
+      const profileGuard = selected ? `GRAPH ${iri(GRAPHS.current)} {
+        ${iri(target.resource)} a ${iri(selected.kind)} .
+        ${selected.selectorGuard}
+        FILTER NOT EXISTS { ${iri(target.resource)} a ?otherKind .
+          FILTER(?otherKind IN (${[...semanticOwnerTypes].filter(kind => kind !== selected.kind
+            && semanticResourceTypeRole(kind) === 'PRIMARY').map(iri).join(', ')})) }
+      }` : '';
       const realmGuard = realm ? `GRAPH ${iri(GRAPHS.current)} {
         ${iri(realm.realm)} a rv:Realm ; rv:realmState rv:Active ; rv:space ${iri(realm.space)} .
         ${iri(realm.space)} a rv:Space ; rv:realmCapability ${iri(realm.realm)} .
@@ -344,6 +413,7 @@ export function ownerModerationEffects(content: ContentModeration, env: WorkActi
               rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
             GRAPH ${iri(GRAPHS.current)} { ${iri(target.resource)} ${headPredicate} ${iri(target.expectedHead)} }
             ${realmGuard}
+            ${profileGuard}
             FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
             FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
             BIND(?n + 1 AS ?next)

@@ -115,6 +115,8 @@ function graph(version = 3, declared = true) {
     objectDirectory: '', fuseki: {
       query: async (sql: string, maximum?: number) => {
         reads.push({ sql, maximum });
+        if (sql.includes('ASK') && sql.includes('a rv:ZoneHomeDocument'))
+          return { boolean: state.kind === `${RV}ZoneHomeDocument` };
         if (sql.includes('SELECT ?digest ?target ?head')) {
           const receipt = [...receipts].find(([id]) => sql.includes(`<${id}>`))?.[1];
           return { results: { bindings: receipt ? [{ digest: literal(receipt.digest),
