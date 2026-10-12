@@ -4,7 +4,7 @@ import { appendFileSync, mkdirSync, rmSync } from 'node:fs';
 import { createServer as createHttpServer, type Server as HttpServer } from 'node:http';
 import { createServer as createTcpServer } from 'node:net';
 import { join, resolve } from 'node:path';
-import { Pool } from 'pg';
+import { Pool, type PoolClient } from 'pg';
 import { CommandOutcomeUnknown, FusekiClient, FusekiHttpError, type CommandEnvelope,
   type CommandResult, type SparqlResult } from '../src/infrastructure/fuseki.ts';
 import { isOwnerTransientFailure } from '../src/infrastructure/owner-failure.ts';
@@ -180,7 +180,7 @@ test('a real FusekiClient preserves CommandOutcomeUnknown through an absent rece
 test('a real pg Pool observes PostgreSQL terminating an idle-in-transaction backend as transient', async () => {
   const clientPool = new Pool({ ...connection!, max: 1, connectionTimeoutMillis: 2_000 });
   const administrator = new Pool({ ...connection!, max: 1, connectionTimeoutMillis: 2_000 });
-  let client: Awaited<ReturnType<typeof clientPool.connect>> | undefined;
+  let client: PoolClient | undefined;
   try {
     client = await clientPool.connect();
     const backendFailure = new Promise<Error>(resolveError => client!.once('error', resolveError));
