@@ -114,7 +114,8 @@ async function restriction(
     );
     fenceId = recorded.rows[0]!.id;
     await client.query(
-      `UPDATE access.governance_case SET decision_head=$2,generation=1 WHERE id=$1`,
+      `UPDATE access.governance_case SET decision_head=$2,generation=1,
+        state='closed',closed_at=clock_timestamp() WHERE id=$1`,
       [caseId, decisionId],
     );
     await client.query('COMMIT');
@@ -125,19 +126,28 @@ async function restriction(
     client.release();
   }
   return async () => {
-    const restored = randomUUID(),
+    const restored = randomUUID(), restoreCaseId = randomUUID(),
       release = await pool.connect();
     try {
       await release.query('BEGIN');
+      // Closed cases are immutable. Restoration records a new reviewed case
+      // while releasing the original exact enforcement fence.
+      await release.query(
+        `INSERT INTO access.governance_case
+        (id,kind,authority_kind,authority_scope_id,context,target_owner,target_resource,target_component,disclosure)
+        SELECT $1,kind,authority_kind,authority_scope_id,context,target_owner,target_resource,target_component,disclosure
+        FROM access.governance_case WHERE id=$2`,
+        [restoreCaseId, caseId],
+      );
       await release.query(
         `INSERT INTO access.moderation_decision
         (id,kind,outcome,context,case_id,case_sequence,principal_id,acting_subject,authority_kind,authority_scope_id,
         authority_epoch,authority_proof_digest,idempotency_key,request_digest,rule_ref,rule_revision,rule_digest,
         evidence_digest,disclosure,statement_of_reasons)
-        SELECT $1::uuid,kind,'restore',context,case_id,case_sequence+1,principal_id,acting_subject,authority_kind,
+        SELECT $1::uuid,kind,'restore',context,$3,1,principal_id,acting_subject,authority_kind,
         authority_scope_id,authority_epoch,authority_proof_digest,$1::text,request_digest,rule_ref,rule_revision,
         rule_digest,evidence_digest,disclosure,statement_of_reasons FROM access.moderation_decision WHERE id=$2`,
-        [restored, decisionId],
+        [restored, decisionId, restoreCaseId],
       );
       await release.query(
         `INSERT INTO access.moderation_decision_target
@@ -147,9 +157,9 @@ async function restriction(
         [restored, decisionId],
       );
       await release.query(
-        `UPDATE access.governance_case SET decision_head=$2,generation=2,
+        `UPDATE access.governance_case SET decision_head=$2,generation=1,
         state='closed',closed_at=clock_timestamp() WHERE id=$1`,
-        [caseId, restored],
+        [restoreCaseId, restored],
       );
       await release.query(
         `UPDATE access.governance_enforcement SET state='released',decision_id=$2,
