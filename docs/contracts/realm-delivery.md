@@ -23,3 +23,28 @@ attributed. Hosting or membership does not confer institutional authorship.
 Root readability alone does not authorize every reply. Shared links must retain
 the selected semantic revision across viewer preferences. Deletion/reorganization
 must preserve other authors' original references.
+
+## Publication-year browse
+
+`GET /v1/realms/{realm}/modules/browse` accepts `publicationYear`, either a
+calendar year (`1995`) or an inclusive bounded range (`1990-2000`), within
+1..9999. It uses the same active, globally accepted date-published Statements
+as `work-publication-years`; missing, withdrawn or unaccepted dates do not
+match. Multiple matching Statements still yield one Work.
+
+The admitted `publicationYear` Facet represents this global calendar-year
+path. GET compiles the year into the same inclusive range Condition that
+`POST /v1/query` accepts, so programs can combine it with other browse Facets
+without a client-only vocabulary.
+
+The filter applies inside the browse graph read, alongside Realm adoption and
+public disclosure. `query.publicationYear` echoes the applied condition. Items,
+`matches`, Facet counts and `nextCursor` come from that read; the cursor binds
+the year as well as the other query inputs. A request budget can produce an
+empty page with a continuation, never a fixed member-population cap. Counts
+remain lower bounds until traversal finishes with a current projection.
+
+Anime and Manga pass their selected year to this read. Their all-years view
+uses `1-9999`; both views keep the API continuation and counts. The reason to
+apply the year here is that intersecting separately paged member and year
+lists loses eligible Works beyond whichever list the client stopped reading.
