@@ -1631,7 +1631,8 @@
   {
     "operation": "GET /v1/realms/{realm}/join-page",
     "ids": [
-      "path:realm"
+      "path:realm",
+      "query:actingSubject"
     ],
     "status": "unregistered"
   },
