@@ -822,10 +822,10 @@ async function fenceDisclosureChunk(env: WorkActivationEnvironment, cuts: readon
     }
     const evaluated = await evaluateSelections(env, selections, viewer, channel, client, false);
     return costedResults(evaluated.decisions.map((decision, index) => {
-      if (cuts[index]!.decision === 'hidden') return 'hidden';
       if (JSON.stringify(evaluated.fenceBases[index]) !== JSON.stringify(cuts[index]!.fenceBasis)) {
         throw new DisclosureUnavailable('Disclosure enforcement cut moved');
       }
+      if (cuts[index]!.decision === 'hidden') return 'hidden';
       return decision;
     }), { ...evaluated.cost, parentHeadQueries: graphQueries,
       ancestryReads: new Set(selections.map(selection => selection.target.owner)).size });

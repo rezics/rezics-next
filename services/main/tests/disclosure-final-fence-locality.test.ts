@@ -485,3 +485,29 @@ test('resolve reports all source SQL, and inventory includes real media visibili
     expect(result.decisions).toEqual(['hidden']);
   } finally { await mediaPool.end(); }
 });
+
+
+for (const change of ['restoration', 'recovery generation'] as const) {
+  test(`hidden search captures still refuse a changed ${change}`, async () => {
+    const input = target(), selection = await select(input);
+    const { decision } = await restrict(input, { effect: 'search' });
+    const cuts = await captureDisclosure(environment, [selection], ANONYMOUS_VIEWER, 'search');
+    expect(cuts[0]!.decision).toBe('hidden');
+    if (change === 'recovery generation') {
+      const held = await engageAccessRecoveryFence(pool);
+      await releaseAccessRecoveryFence(pool, held);
+    } else {
+      const report = await governance.submitReport(principal, {
+        kind: 'content_report', actingSubject: actor, authority: { kind: 'platform', scopeId: 'governance:platform' },
+        context: GLOBAL_CONTEXT, target: decision.targets[0]!, disclosure: 'private',
+        reasonCode: 'disclosure', statement: 'Reconsider retained evidence',
+        evidence: [{ ...decision.targets[0]!, locator: null }], idempotencyKey: randomUUID(),
+      });
+      await governance.safety.claim(principal, actor, report.caseId);
+      await governance.decide(principal, { ...decision, outcome: 'restore', expectedGeneration: report.caseGeneration,
+        evidenceDigest: report.evidenceDigest, idempotencyKey: randomUUID() });
+    }
+    await expect(fenceDisclosure(environment, cuts, ANONYMOUS_VIEWER, 'search'))
+      .rejects.toThrow('Disclosure enforcement cut moved');
+  });
+}
