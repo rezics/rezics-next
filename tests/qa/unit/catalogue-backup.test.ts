@@ -162,6 +162,89 @@ test('catalogue backup: disposable source stores are rejected before creating a 
     rmSync(directory, { recursive: true, force: true });
   }
 });
+test('catalogue backup: new capture resumes PostgreSQL and cached reuse never stops it', async () => {
+  const directory = mkdtempSync(join(root, '.temp/catalogue-capture-'));
+  const runId = directory.split('/').at(-1)!.toLowerCase();
+  const source = join(root, '.temp/stack', `rezics-qa-${runId}`);
+  const backup = join(directory, 'backup');
+  const objects = join(directory, 'objects');
+  let running = true;
+  const events: string[] = [];
+  try {
+    mkdirSync(source, { recursive: true });
+    mkdirSync(objects);
+    writeFileSync(join(objects, 'retained'), 'immutable object');
+    writeFileSync(join(source, 'compose.env'), 'REZICS_STACK_STORAGE=persistent\n');
+    writeFileSync(join(source, 'apps.env'), `MAIN_OBJECT_DIRECTORY=${objects}\n`);
+    const options = {
+      stopSourcePostgres: async () => { events.push('postgres-stop'); running = false; },
+    };
+    const dependencies = {
+      dockerEnvironment: () => ({}),
+      projectRunning: () => running,
+      task: async (args: string[]) => {
+        events.push(args[0]!);
+        running = args[0] === 'stack:up';
+        return '';
+      },
+      copyVolume: async () => { expect(running).toBe(false); events.push('copy'); },
+    };
+    for (let call = 0; call < 2; call += 1) {
+      expect(await retainStoppedOwnerBackup(runId, 'cut', backup, Date.now(), options, dependencies))
+        .toBe(join(backup, 'backup.json'));
+      expect(running).toBe(true);
+    }
+    expect(events).toEqual(['postgres-stop', 'stack:down', ...VOLUME_KINDS.map(() => 'copy'), 'stack:up']);
+    expect(readFileSync(join(backup, 'objects/retained'), 'utf8')).toBe('immutable object');
+  } finally {
+    rmSync(source, { recursive: true, force: true });
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+test('catalogue backup: failed shutdown certification resumes source even when capture requested it stopped', async () => {
+  const directory = mkdtempSync(join(root, '.temp/catalogue-failure-'));
+  const runId = directory.split('/').at(-1)!.toLowerCase();
+  const source = join(root, '.temp/stack', `rezics-qa-${runId}`);
+  const backup = join(directory, 'backup');
+  const objects = join(directory, 'objects');
+  const failure = new Error('shutdown control file could not be certified');
+  const events: string[] = [];
+  let running = true;
+  try {
+    mkdirSync(source, { recursive: true });
+    mkdirSync(objects);
+    writeFileSync(join(objects, 'retained'), 'immutable object');
+    writeFileSync(join(source, 'compose.env'), 'REZICS_STACK_STORAGE=persistent\n');
+    writeFileSync(join(source, 'apps.env'), `MAIN_OBJECT_DIRECTORY=${objects}\n`);
+    await expect(retainStoppedOwnerBackup(runId, 'cut', backup, Date.now(), {
+      resumeSource: false,
+      stopSourcePostgres: async () => {
+        events.push('postgres-stop');
+        running = false;
+        throw failure;
+      },
+    }, {
+      dockerEnvironment: () => ({}),
+      run: (_program, args) => {
+        expect(args.slice(0, 3)).toEqual(['volume', 'ls', '-q']);
+        return '';
+      },
+      task: async args => {
+        events.push(args[0]!);
+        running = args[0] === 'stack:up';
+        return '';
+      },
+      copyVolume: async () => { events.push('copy'); },
+    })).rejects.toBe(failure);
+    expect(events).toEqual(['postgres-stop', 'stack:up']);
+    expect(running).toBe(true);
+    expect(existsSync(backup)).toBe(false);
+    expect(readFileSync(join(objects, 'retained'), 'utf8')).toBe('immutable object');
+  } finally {
+    rmSync(source, { recursive: true, force: true });
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
 test('catalogue restore: exceeding the budget after startup removes the stack, volumes and target', async () => {
   await restoreScenario('budget');
 });

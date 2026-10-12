@@ -93,8 +93,9 @@ function driverScenario(failure?: 'shutdown' | 'capture' | 'migration' | 'smoke'
       if (failure === 'shutdown') throw new Error('shutdown unverified');
     },
     retainStoppedOwnerBackup: async (_runId, _id, directory, _startedAt, captureOptions) => {
-      events.push('capture');
       expect(captureOptions?.resumeSource).toBe(false);
+      await captureOptions?.stopSourcePostgres?.();
+      events.push('capture');
       if (failure === 'capture') throw new Error('capture failed');
       return join(directory, 'backup.json');
     },
@@ -119,10 +120,42 @@ test('corpus driver certifies shutdown before capture and keeps retained source 
   expect(events).toEqual(['quiesce', 'shutdown', 'capture']);
 });
 
+test('corpus driver backup twice with default resume leaves PostgreSQL running after cached reuse', async () => {
+  let running = true;
+  let retained = false;
+  let shutdowns = 0;
+  let writersRunning = true;
+  const driver = createCorpusBackupDriver({
+    sourceRunId: 'retained-source', directory: join(root, '.temp/corpus-driver-unit'),
+    quiesce: async () => {
+      writersRunning = false;
+      return async () => { writersRunning = true; };
+    },
+    smokeRead: async () => {},
+  }, {
+    stopSourcePostgres: async () => { running = false; shutdowns += 1; },
+    retainStoppedOwnerBackup: async (_runId, _id, directory, _startedAt, options) => {
+      if (!retained) {
+        await options?.stopSourcePostgres?.();
+        retained = true;
+        if (options?.resumeSource !== false) running = true;
+      }
+      return join(directory, 'backup.json');
+    },
+  });
+  for (let call = 0; call < 2; call += 1) {
+    expect(await driver.backup('retained-cut', signal()))
+      .toBe(join(root, '.temp/corpus-driver-unit/retained-cut/backup.json'));
+    expect(running).toBe(true);
+    expect(writersRunning).toBe(true);
+  }
+  expect(shutdowns).toBe(1);
+});
+
 test('corpus driver fails closed before capture when shutdown is unverified', async () => {
   const { events, driver } = driverScenario('shutdown');
   await expect(driver.backup('retained-cut', signal())).rejects.toThrow('shutdown unverified');
-  // Writer cleanup is distinct from storage startup: uncertified storage remains stopped.
+  // Writer cleanup still runs when capture's shutdown certification fails.
   expect(events).toEqual(['quiesce', 'shutdown', 'resume-writer']);
 });
 

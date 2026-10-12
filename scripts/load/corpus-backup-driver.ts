@@ -112,14 +112,13 @@ export function createCorpusBackupDriver(options: CorpusBackupDriverOptions,
       let failed = false;
       try {
         signal.throwIfAborted();
-        // Certify shutdown before Compose removes the container and capture copies its volume.
-        await runtime.stopSourcePostgres(options.sourceRunId, signal);
-        signal.throwIfAborted();
         return await runtime.retainStoppedOwnerBackup(options.sourceRunId, id, backupDirectory, Date.now(), {
           purpose: 'work-profile',
           resumeSource: options.resumeSource,
           signal,
           onSourceStartup: options.onSourceStartup,
+          // Reuse must be decided before certification stops the source container.
+          stopSourcePostgres: () => runtime.stopSourcePostgres(options.sourceRunId, signal),
         });
       } catch (error) {
         failed = true;

@@ -75,7 +75,11 @@ export interface RetainStoppedBackupOptions {
   signal?: AbortSignal;
   purpose?: 'g1038' | 'work-profile' | 'corpus';
   onSourceStartup?: (elapsedMs: number) => void;
+  /** Certify PostgreSQL shutdown only when capturing a new copy, after reuse checks. */
+  stopSourcePostgres?: () => Promise<void>;
 }
+
+const retainRuntime = { task, run, copyVolume, projectRunning, dockerEnvironment };
 
 /** Stop every storage owner before copying; resume the source after the cut by default. */
 export async function retainStoppedOwnerBackup(
@@ -84,7 +88,9 @@ export async function retainStoppedOwnerBackup(
   directory: string,
   startedAt: number,
   options: RetainStoppedBackupOptions = {},
+  dependencies: Partial<typeof retainRuntime> = {},
 ): Promise<string> {
+  const { task, run, copyVolume, projectRunning, dockerEnvironment } = { ...retainRuntime, ...dependencies };
   const compatibility = loadCompatibility(root);
   const target = privateDirectory(directory);
   const project = stoppedBackupProject(runId, identity, compatibility, options.purpose ?? 'corpus');
@@ -123,6 +129,8 @@ export async function retainStoppedOwnerBackup(
   try {
     checkSignal();
     downAttempted = true;
+    await options.stopSourcePostgres?.();
+    checkSignal();
     await task(['stack:down', '--', '--profile', 'qa', '--run-id', runId, '--persistent']);
     checkSignal();
     if (projectRunning(source, docker)) throw new Error('Catalogue source is still running');
