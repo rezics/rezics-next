@@ -147,7 +147,8 @@ test('Realm directory: public profiles, activity/member/newest pages, CJK search
     // the public API never receives either private principal or membership IDs.
     await stack.accessPool.query("INSERT INTO access.authority_subject (id,kind) VALUES ($1,'institution') ON CONFLICT DO NOTHING", [second.realm]);
     await stack.accessPool.query(`INSERT INTO access.membership_policy
-      (kind, owner_subject, revision, terms_revision) VALUES ('realm',$1,1,'terms-1')`, [second.realm]);
+      (kind, owner_subject, revision, terms_revision) VALUES ('realm',$1,1,'terms-1')
+      ON CONFLICT (kind, owner_subject) DO UPDATE SET terms_revision = EXCLUDED.terms_revision`, [second.realm]);
     const beforeGrowth = await json<DirectoryPage>(await get('/v1/realms?sort=growing&limit=1'));
     expect(beforeGrowth.nextCursor).toBeString();
     const privateMembership = randomUUID();

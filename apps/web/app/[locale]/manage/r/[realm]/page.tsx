@@ -32,6 +32,10 @@ export default async function RealmQueueRoute({ params, searchParams }: {
     return <ManageFailure failure={page.failure} locale={locale} messages={messages} signInHref={signInHref}
       retryHref={localizedPath(queueHref(address, view), locale)} />;
   }
+  if (!header.ok || header.data.rules === null) {
+    return <ManageFailure failure={header.ok ? 'unavailable' : header.failure} locale={locale}
+      messages={messages} signInHref={signInHref} retryHref={localizedPath(queueHref(address, view), locale)} />;
+  }
   const names = await readQueueNames(main, realm, page.data.items, { language: locale, actingSubject }, undefined,
     anonymous);
   // Rules are published from Settings, which needs both permissions Main checks there.
@@ -39,7 +43,7 @@ export default async function RealmQueueRoute({ params, searchParams }: {
     && permissions.includes('realm.settings.manage');
   return <QueueView key={`${view.state}:${view.type ?? ''}:${view.reason ?? ''}`} realm={realm} address={address}
     actingSubject={actingSubject} view={view} initial={page.data} names={names}
-    realmRules={header.ok ? header.data.rules ?? [] : []} authority={authorityFrom(permissions)}
+    realmRules={header.data.rules} authority={authorityFrom(permissions)}
     rulesHref={publishesRules ? realmHref(address, 'settings') : null} now={Date.now()} locale={locale}
     messages={messages} />;
 }

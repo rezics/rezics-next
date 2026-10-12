@@ -5,6 +5,8 @@ import { DiscoveryProjection } from '../src/modules/discovery/store.ts';
 import { createMainApp } from '../src/app.ts';
 import { AccessRealmManagement } from '../src/modules/access/realm-management.ts';
 import { RealmSubmissionStore } from '../src/modules/realm-submission/store.ts';
+import { GovernanceRules } from '../src/modules/governance/rules.ts';
+import { GovernanceStore } from '../src/modules/governance/store.ts';
 import type { RealmVisibility, RealmReviewMode } from '../src/modules/space/policy.ts';
 
 export async function realmVisibilityFixture() {
@@ -20,9 +22,14 @@ export async function realmVisibilityFixture() {
   const admin = new AccessRealmManagement(h.accessPool);
   await admin.initialize(principal, realm, h.actor, h.env);
   const submissions = new RealmSubmissionStore(h.accessPool, h.access, h.env);
+  const rules = new GovernanceRules(h.accessPool);
+  const governance = new GovernanceStore(h.accessPool,
+    { capture: async () => { throw new Error('Evidence capture is outside this fixture'); } },
+    { current: async () => { throw new Error('Decision targets are outside this fixture'); } }, rules);
   const app = createMainApp(h.fuseki, { environment: h.env, account: { verify: request => h.verifier.verify(request, ['work:read']) }, access: h.access,
     contentAuthoring: h.content, content: h.content, realmReplies: h.replies, realmAdmin: admin,
-    realmSubmissions: submissions, discovery: new DiscoveryProjection(h.accessPool) });
+    realmSubmissions: submissions, discovery: new DiscoveryProjection(h.accessPool),
+    governance: { store: governance, rules } });
   const root = `/v1/realms/${realm.slice(-36)}`;
   const call = async (method: string, path: string, body?: object, actor: string | null = h.actor, key = randomUUID()) => {
     const url = new URL(`http://main.local${path}`);
