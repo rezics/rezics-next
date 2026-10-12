@@ -164,14 +164,15 @@ async function concurrentReadProfiles() {
     }
   };
   try {
-    const grant = async (scope: string, action: string) => {
+    const grant = async (scope: string, action: string,
+      holder: { principalId: string; actor: string } = { principalId: home.author.principalId, actor }) => {
       const lifetime = action === 'agent.control' ? 'infinity' : '8 hours';
       const client = await home.stack.accessPool.connect();
       try {
         await client.query('BEGIN');
         await grantFixtureAuthority(client, { scope, requireDispatch: true,
-          representations: [{ principalId: home.author.principalId, actor, action, lifetime }],
-          grant: { actor, action, lifetime } });
+          representations: [{ principalId: holder.principalId, actor: holder.actor, action, lifetime }],
+          grant: { actor: holder.actor, action, lifetime } });
         await client.query('COMMIT');
       } catch (error) { await client.query('ROLLBACK'); throw error; }
       finally { client.release(); }
@@ -640,11 +641,55 @@ async function concurrentReadProfiles() {
     assert(privateRealm.result.status !== 200 || privateRealm.attempts > 1,
       'The changed Realm summary must replay or return a typed refusal');
 
-    // The redirect fixture represents an already committed merge. Both the
-    // summary request and the concurrent unrelated edit use the product API.
-    await home.stack.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA {
-      GRAPH <urn:rezics:graph:current> { <${shown.work}> rv:mergedInto <${unrelatedPublic.work}> } }`);
-    const mergedSummary = { resources: [shown.work], phase: 'survivor' as const, survivor: unrelatedPublic.work };
+    // The redirect is a committed Work merge: a reviewed editorial proposal the
+    // product applies through its ordered owner stages. Both the summary request
+    // and the concurrent unrelated edit then use the product API. The merged
+    // source is a fresh public Work: the title control on `shown` makes the
+    // graph command refuse any later write to that Work, a merge included.
+    const mergedSource = await seedPublicProfileWork(api, `merged-source:${randomUUID()}`, {
+      actingSubject: actor, title: `${prefix} merged source Work`, body: 'The merged source words',
+    });
+    const reviewer = { member: await home.member('Concurrent merge reviewer'), actor: '' };
+    const decider = { member: await home.member('Concurrent merge decider'), actor: '' };
+    reviewer.actor = await home.provision('Concurrent merge reviewer', reviewer.member.token);
+    decider.actor = await home.provision('Concurrent merge decider', decider.member.token);
+    const mergeWorks = [mergedSource.work, unrelatedPublic.work];
+    const holders = [{ principalId: home.author.principalId, actor },
+      { principalId: reviewer.member.principalId, actor: reviewer.actor },
+      { principalId: decider.member.principalId, actor: decider.actor }];
+    for (const holder of holders) {
+      await grant('editorial:review:urn:rezics:context:global', 'work.review', holder);
+      for (const work of mergeWorks) {
+        await grant(`work:read:${work}`, 'work.read', holder);
+        await grant(`work:edit:${work}`, 'work.edit', holder);
+      }
+    }
+    // Heads come from the graph, which is what the proposal pins.
+    const headRows = (await home.stack.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> SELECT ?work ?head WHERE {
+      GRAPH <urn:rezics:graph:current> { VALUES ?work { ${mergeWorks.map(work => `<${work}>`).join(' ')} } ?work rv:head ?head } }`))
+      .results!.bindings;
+    const heads = headRows.map(row => ({ component: row.work!.value, head: row.head!.value }));
+    assert.equal(heads.length, mergeWorks.length, 'Both merged Works must have a current head');
+    const pinned = (work: string) => ({ resource: work, revision: heads.find(head => head.component === work)!.head });
+    const mergeEvidence = [{ ...pinned(mergedSource.work), locator: 'matching title and grain' }];
+    const proposalPath = (id: string, suffix = '') => `/v1/editorial/proposals/${id}${suffix}`;
+    const proposed = await home.json<{ proposal: string }>(await home.call('POST', '/v1/editorial/proposals', {
+      profile: 'editorial-proposal-create-v1', kind: 'merge', target: { ...pinned(mergedSource.work), context: 'urn:rezics:context:global' },
+      candidate: { operation: 'merge', source: pinned(mergedSource.work), survivor: pinned(unrelatedPublic.work), evidence: mergeEvidence },
+      evidence: mergeEvidence, actingSubject: actor, baseHeads: heads }, home.author.token), 201);
+    await home.json(await home.call('POST', proposalPath(proposed.proposal, '/reviews'), {
+      profile: 'editorial-proposal-review-v1', revision: 1, outcome: 'approve',
+      message: 'Checked the matching identities', actingSubject: reviewer.actor }, reviewer.member.token));
+    const decisionKey = randomUUID();
+    for (let attempt = 0; ; attempt++) {
+      if (attempt === 16) throw new Error('Bounded native merge stages did not finish');
+      const response = await home.call('POST', proposalPath(proposed.proposal, '/decisions'), {
+        profile: 'editorial-proposal-decide-v1', revision: 1, outcome: 'applied', approve: true,
+        message: 'Apply reviewed merge', actingSubject: decider.actor }, decider.member.token, decisionKey);
+      if (response.status === 200) break;
+      await home.json(response, 202);
+    }
+    const mergedSummary = { resources: [mergedSource.work], phase: 'survivor' as const, survivor: unrelatedPublic.work };
     const mergedBaseline = await measure('/v1/resources/summaries', undefined, undefined, undefined, mergedSummary);
     const mergedRace = await measure('/v1/resources/summaries', () => scalarEdit(unrelated[0]!, unrelated[0]!.next),
       undefined, undefined, mergedSummary);
