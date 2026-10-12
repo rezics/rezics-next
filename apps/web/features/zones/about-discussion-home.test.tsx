@@ -7,6 +7,7 @@ import * as navigation from 'next/navigation';
 import type { RealmView } from '../realm/realm-page.tsx';
 import type { ZonePresentationRead } from '../realm/types.ts';
 import { messages } from '../realm/messages.ts';
+import { siteHref } from '../realm/route.ts';
 import { fictionZone, zoneMessagesFor } from './fixtures.ts';
 
 const zone = '00000000-0000-4000-8000-000000000001';
@@ -23,7 +24,7 @@ void mock.module('next/headers', () => ({
 }));
 void mock.module('next/navigation', () => ({
   ...navigation,
-  usePathname: () => `/en/z/${zone}`,
+  usePathname: () => siteHref('en', zone, []),
   useParams: () => ({ locale: 'en' }),
   useSearchParams: () => new URLSearchParams(),
   useRouter: () => ({ refresh: () => {}, push: () => {}, replace: () => {} }),
