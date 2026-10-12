@@ -3,6 +3,8 @@ import { classifyContentEligibilityState, type ContentEligibilityDecisionProof,
   type ContentEligibilityPublicationProof, type ContentEligibilityStateEvidence }
   from '../src/modules/content-publication/eligibility-state.ts';
 import { RV } from '../src/modules/work/activate.ts';
+import { contentSearchEligibilityDigest }
+  from '../src/modules/content-publication/eligibility.ts';
 
 const graphEpoch = '11111111-1111-4111-8111-111111111111';
 const ownerEpoch = '22222222-2222-4222-8222-222222222222';
@@ -20,7 +22,10 @@ function publication(id: string, ownerSequence: string, graphSequence: string): 
 
 function eligibility(id: string, approvedPublication: string, graphSequence: string): ContentEligibilityDecisionProof {
   return { id, variant, resource, publicationDecision: approvedPublication, graphSequence,
-    rightsBasis: `${RV}OriginalContribution` };
+    rightsBasis: `${RV}OriginalContribution`, requestDigest: contentSearchEligibilityDigest({
+      resourceId: resource, variantId: variant, publicationDecision: approvedPublication,
+      expectedEligibilityHead: null, actingSubject: resource, disclosure: 'public',
+      rightsBasis: 'original-contribution' }) };
 }
 
 function evidence(overrides: Partial<ContentEligibilityStateEvidence> = {}): ContentEligibilityStateEvidence {

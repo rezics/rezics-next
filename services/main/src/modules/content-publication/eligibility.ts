@@ -85,9 +85,40 @@ function checkedInput(input: ContentSearchEligibilityInput): void {
   }
 }
 
-export function contentSearchEligibilityDigest(input: ContentSearchEligibilityInput): string {
+const DIGEST_IDENTITY_FIELDS = ['resourceId', 'variantId', 'publicationDecision',
+  'expectedEligibilityHead', 'actingSubject'] as const;
+
+export const RETAINED_DIGEST_FORMS = [
+  // Direct-owner QA and load-corpus receipts put rights before disclosure.
+  { name: 'owner-v1', rightsBasis: 'original-contribution',
+    fields: [...DIGEST_IDENTITY_FIELDS, 'rightsBasis', 'disclosure'] },
+  // The previous reader also recognized an explicit v1 profile appended to that order.
+  { name: 'owner-v1-explicit-profile', rightsBasis: 'original-contribution',
+    fields: [...DIGEST_IDENTITY_FIELDS, 'rightsBasis', 'disclosure', 'profile'] },
+  // The v2 owner test extends the v1 input with profile, then assessmentId.
+  { name: 'owner-v2', rightsBasis: 'public-domain',
+    fields: [...DIGEST_IDENTITY_FIELDS, 'rightsBasis', 'disclosure', 'profile', 'assessmentId'] },
+] as const;
+
+export function contentSearchEligibilityDigest(input: ContentSearchEligibilityInput,
+  retainedForm?: typeof RETAINED_DIGEST_FORMS[number]['name']): string {
   checkedInput(input);
-  return hash(JSON.stringify({ family: profileId(input), ...input }));
+  const family = profileId(input);
+  // Canonical API receipt order: family, resourceId, variantId, publicationDecision,
+  // expectedEligibilityHead, actingSubject, disclosure, rightsBasis; v2 appends
+  // assessmentId, profile. V1 omits profile, including when explicitly supplied.
+  const canonicalFields = [...DIGEST_IDENTITY_FIELDS, 'disclosure', 'rightsBasis',
+    ...(input.rightsBasis === 'public-domain' ? ['assessmentId', 'profile'] as const : [])] as const;
+  const retained = retainedForm === undefined ? undefined
+    : RETAINED_DIGEST_FORMS.find(form => form.name === retainedForm);
+  if (retainedForm !== undefined && (!retained || retained.rightsBasis !== input.rightsBasis)) {
+    throw new InvalidContentEligibility('invalid retained eligibility digest form');
+  }
+  const serialized: Record<string, unknown> = { family };
+  for (const field of retained?.fields ?? canonicalFields) {
+    serialized[field] = field === 'profile' ? family : input[field];
+  }
+  return hash(JSON.stringify(serialized));
 }
 
 export function contentSearchEligibilityReceiptIri(admissionId: string): string {

@@ -3,7 +3,7 @@ import { profileRegistry } from '../../../../../packages/model/src/generated/pro
 import { DATASET, GRAPHS, RV, hash, iri, lit,
   type WorkActivationEnvironment } from '../work/activate.ts';
 import { contentSearchEligibilityDecisionIri, contentSearchEligibilityDigest,
-  contentSearchEligibilityReceiptIri, type ContentSearchEligibilityInput }
+  contentSearchEligibilityReceiptIri, RETAINED_DIGEST_FORMS, type ContentSearchEligibilityInput }
   from './eligibility.ts';
 
 const NONE = 'urn:rezics:none';
@@ -498,8 +498,8 @@ function eligibilityDigestMatches(record: {
       ? { profile: 'content-search-eligibility-v2' as const, assessmentId: record.assessmentId } : {}) };
   try {
     if (contentSearchEligibilityDigest(base) === record.digest) return true;
-    return record.rightsBasis === 'original-contribution'
-      && contentSearchEligibilityDigest({ ...base, profile: 'content-search-eligibility-v1' }) === record.digest;
+    return RETAINED_DIGEST_FORMS.some(form => form.rightsBasis === base.rightsBasis
+      && contentSearchEligibilityDigest(base, form.name) === record.digest);
   } catch { return false; }
 }
 

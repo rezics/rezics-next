@@ -13,6 +13,8 @@ import { EmptyContentPublicationBody } from '../modules/content-publication/publ
 import { publishAdmittedContent } from '../modules/content-publication/publish-admitted.ts';
 import { selectAdmittedPublicContentSearch }
   from '../modules/content-publication/eligibility-admitted.ts';
+import type { ContentSearchEligibilityInput }
+  from '../modules/content-publication/eligibility.ts';
 import { pendingOperation, problemResult } from '../api-contract.ts';
 import { authorizedReadProblems, contentCommentPageResult, contentCommentResult,
   contentDraftWriteResult, contentEditWriteResult, contentEligibilityWriteResult,
@@ -357,12 +359,11 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
       }
       try {
-        const { profile, ...input } = body;
+        const input: ContentSearchEligibilityInput = body;
         const result = await selectAdmittedPublicContentSearch(work.environment,
           work.contentAuthoring, work.account,
           work.access as Required<MainWorkDependencies['access']>, request,
-          { ...input, ...(profile === 'content-search-eligibility-v2' ? { profile } : {}),
-            idempotencyKey }, work.rights?.store);
+          { ...input, idempotencyKey }, work.rights?.store);
         return Response.json(result, { status: result.replayed ? 200 : 201,
           headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
