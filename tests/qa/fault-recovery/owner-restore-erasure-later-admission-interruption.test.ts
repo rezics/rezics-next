@@ -12,6 +12,10 @@ import * as relayCoverage from '../../../services/main/src/modules/outbox/relay.
 import * as journalCoverage from '../../../services/main/src/modules/erasure/core-journal-coverage.ts';
 import * as erasureAuthority from '../../../services/main/src/modules/erasure/authority.ts';
 import * as custody from '../../../services/main/src/modules/erasure/custody.ts';
+import * as graphErasure from '../../../services/main/src/modules/erasure/graph.ts';
+import * as graphReplay from '../../../services/main/src/modules/erasure/replay-graph.ts';
+import * as modelCustody from '../../../services/main/src/modules/semantic/model-custody.ts';
+import { ObjectUnavailable } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { RestoreLineageConflict } from '../../../services/main/src/modules/work/restore-lineage.ts';
 import { readGraphErasureProof } from '../../../services/main/src/modules/erasure/graph.ts';
 import { readErasure } from '../../../services/main/src/modules/erasure/journal.ts';
@@ -389,29 +393,54 @@ test(
           ['Commerce', () => spyOn(commerceCoverage, 'assertCommerceRecoveryCoverageOnClient')],
           ['Account WAL', () => spyOn(pgCoverage, 'assertPgRecoveryFrontier')],
           ['Account rows', () => spyOn(accountCoverage, 'assertAccountRecoveryCoverage')],
-          ['Account absent subjects', () => spyOn(subjectDeletion, 'assertAccountSubjectDeletionsAbsent')],
+          [
+            'Account absent subjects',
+            () => spyOn(subjectDeletion, 'assertAccountSubjectDeletionsAbsent'),
+          ],
           ['captured relay scan', () => spyOn(relayCoverage, 'relayCoverageOnClient')],
-          ['captured journal scan', () => spyOn(journalCoverage, 'captureErasureJournalCoreCoverage')],
-          ['retained two-cut journal scan', () => {
-            const actual = journalCoverage.captureErasureJournalCoreCoverage;
-            return spyOn(journalCoverage, 'captureErasureJournalCoreCoverage').mockImplementationOnce(actual);
-          }, 2],
+          [
+            'captured journal scan',
+            () => spyOn(journalCoverage, 'captureErasureJournalCoreCoverage'),
+          ],
+          [
+            'retained two-cut journal scan',
+            () => {
+              const actual = journalCoverage.captureErasureJournalCoreCoverage;
+              return spyOn(
+                journalCoverage,
+                'captureErasureJournalCoreCoverage',
+              ).mockImplementationOnce(actual);
+            },
+            2,
+          ],
           ['retained relay prefix', () => spyOn(relayCoverage, 'relayPrefixCoverageOnClient')],
-          ['retained relay scan', () => {
-            const actual = relayCoverage.relayCoverageOnClient;
-            return spyOn(relayCoverage, 'relayCoverageOnClient').mockImplementationOnce(actual);
-          }, 2],
-          ['retained suppression originals', () => spyOn(custody, 'readRetainedNativeGraphSuppressionProof')],
+          [
+            'retained relay scan',
+            () => {
+              const actual = relayCoverage.relayCoverageOnClient;
+              return spyOn(relayCoverage, 'relayCoverageOnClient').mockImplementationOnce(actual);
+            },
+            2,
+          ],
+          [
+            'retained suppression originals',
+            () => spyOn(custody, 'readRetainedNativeGraphSuppressionProof'),
+          ],
           ['retained authority', () => spyOn(erasureAuthority, 'assertRetainedAuthorityCapture')],
           ['retained reconciliation / Content basis', () => spyOn(binding, 'captureReleaseBasis')],
           ['native graph release', () => spyOn(qualified.fuseki, 'commandWithReceipt')],
         ] as const;
         for (const [site, install, calls = 1] of qualifiedSites) {
           for (const code of ['ECONNRESET', '57P01', 'integrity']) {
-            const failure = code === 'integrity'
-              ? new RestoreLineageConflict('integrity mismatch: connection timeout ECONNRESET 57P01')
-              : Object.assign(new Error('owner unavailable'), { code });
-            const injected = install().mockImplementationOnce(async () => { throw failure; });
+            const failure =
+              code === 'integrity'
+                ? new RestoreLineageConflict(
+                    'integrity mismatch: connection timeout ECONNRESET 57P01',
+                  )
+                : Object.assign(new Error('owner unavailable'), { code });
+            const injected = install().mockImplementationOnce(async () => {
+              throw failure;
+            });
             try {
               await expect(attempt(qualified, key)).rejects.toBeInstanceOf(RecoveryRefusal);
               expect(injected).toHaveBeenCalledTimes(calls);
@@ -431,6 +460,163 @@ test(
               injected.mockRestore();
               // A terminal mismatch is deliberately isolated just like the
               // binding-denial matrix; ordinary transport retries need no repair.
+              if (code === 'integrity') await restoreOuter();
+            }
+          }
+        }
+
+        // Inject inside the adapters, so replacing their original cause or
+        // swallowing it as a proof mismatch is observable in the outer state.
+        const innerSites = [
+          'custody command inventory SQL',
+          'historical receipt custody SQL',
+          'Structure group custody SQL',
+          'Structure qualifier custody SQL',
+          'held graph proof query',
+          'erased graph assertion query',
+          'model manifest object GET',
+          'model state object GET',
+        ] as const;
+        for (const site of innerSites) {
+          for (const code of ['ECONNRESET', '57P01', 'integrity']) {
+            const failure =
+              code === 'integrity'
+                ? new RestoreLineageConflict(
+                    'integrity mismatch: connection timeout ECONNRESET 57P01',
+                  )
+                : Object.assign(new Error('owner unavailable'), { code });
+            let hits = 0;
+            const stop: (() => void)[] = [];
+            const fail = () => {
+              hits++;
+              throw failure;
+            };
+            if (
+              site === 'custody command inventory SQL' ||
+              site === 'historical receipt custody SQL'
+            ) {
+              const actual = custody.restoredCustodyDigests;
+              const outer = spyOn(custody, 'restoredCustodyDigests').mockImplementationOnce(
+                async (...args) => {
+                  const client = args[3]!;
+                  const query = client.query.bind(client);
+                  const injected = spyOn(client, 'query').mockImplementation(((
+                    sql: string,
+                    values?: unknown[],
+                  ) => {
+                    if (
+                      sql.includes(
+                        site === 'custody command inventory SQL'
+                          ? 'FROM access.command_custody WHERE receipt >'
+                          : 'FROM access.command_custody WHERE data_epoch=',
+                      )
+                    )
+                      fail();
+                    return query(sql, values);
+                  }) as typeof client.query);
+                  try {
+                    return await actual(...args);
+                  } finally {
+                    injected.mockRestore();
+                  }
+                },
+              );
+              stop.push(() => outer.mockRestore());
+            } else if (
+              site === 'Structure group custody SQL' ||
+              site === 'Structure qualifier custody SQL'
+            ) {
+              const pool = qualified.resources.contentPool;
+              const query = pool.query.bind(pool);
+              const injected = spyOn(pool, 'query').mockImplementation(((
+                sql: string,
+                values?: unknown[],
+              ) => {
+                if (
+                  sql.includes(
+                    site === 'Structure group custody SQL'
+                      ? 'FROM structure.group_root ORDER BY'
+                      : 'FROM structure.qualifier_root ORDER BY',
+                  )
+                )
+                  fail();
+                return query(sql, values);
+              }) as typeof pool.query);
+              stop.push(() => injected.mockRestore());
+            } else if (
+              site === 'held graph proof query' ||
+              site === 'erased graph assertion query'
+            ) {
+              const enter = async <T>(operation: () => Promise<T>): Promise<T> => {
+                const injected = spyOn(qualified.fuseki, 'query').mockImplementation(async () =>
+                  fail(),
+                );
+                try {
+                  return await operation();
+                } finally {
+                  injected.mockRestore();
+                }
+              };
+              if (site === 'held graph proof query') {
+                const actual = graphErasure.readGraphErasureProof;
+                const injected = spyOn(
+                  graphErasure,
+                  'readGraphErasureProof',
+                ).mockImplementationOnce(async (...args) => enter(() => actual(...args)));
+                stop.push(() => injected.mockRestore());
+              } else {
+                const actual = graphReplay.assertGraphErasure;
+                const injected = spyOn(graphReplay, 'assertGraphErasure').mockImplementationOnce(
+                  async (...args) => enter(() => actual(...args)),
+                );
+                stop.push(() => injected.mockRestore());
+              }
+            } else {
+              const actual = modelCustody.readExactModelGeneration;
+              const outer = spyOn(modelCustody, 'readExactModelGeneration').mockImplementationOnce(
+                async (env, generation) => {
+                  const objects = env.workObjects!;
+                  const get = objects.get.bind(objects);
+                  const injected = spyOn(objects, 'get').mockImplementation(async (...args) => {
+                    const manifest = args[0] === generation.slice(-64);
+                    if (manifest === (site === 'model manifest object GET')) {
+                      hits++;
+                      throw new ObjectUnavailable('model object owner is unavailable', {
+                        cause: failure,
+                      });
+                    }
+                    return get(...args);
+                  });
+                  try {
+                    return await actual(env, generation);
+                  } finally {
+                    injected.mockRestore();
+                  }
+                },
+              );
+              stop.push(() => outer.mockRestore());
+            }
+            try {
+              await expect(attempt(qualified, key)).rejects.toBeInstanceOf(RecoveryRefusal);
+              expect(hits).toBe(1);
+              const failed = await outerOperation(qualified, key);
+              expect(failed.state).toBe(code === 'integrity' ? 'held' : 'running');
+              if (code !== 'integrity') expect(failed.hold_reason).toBeNull();
+              expect(failed.erasures).toEqual(interrupted.erasures);
+              expect(failed.qualifications).toEqual(interrupted.qualifications);
+              expect(failed.releases).toHaveLength(0);
+              expect(await liveAccess(qualified)).toEqual(current);
+              expect(maintenance).not.toHaveBeenCalled();
+              expect(imported).not.toHaveBeenCalled();
+              expect(requalified).not.toHaveBeenCalled();
+              await closed(qualified);
+              console.info('qualified inner owner boundary proved', {
+                site,
+                code,
+                state: failed.state,
+              });
+            } finally {
+              for (const restore of stop.reverse()) restore();
               if (code === 'integrity') await restoreOuter();
             }
           }

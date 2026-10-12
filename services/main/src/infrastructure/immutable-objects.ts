@@ -323,7 +323,7 @@ function xmlRawText(element: Element, name: string): string {
 function parseS3Xml(bytes: Uint8Array, rootName: string): Element {
   let source: string;
   try { source = new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
-  catch { throw new ObjectListingUnavailable('immutable object listing response is not UTF-8'); }
+  catch (error) { throw new ObjectListingUnavailable('immutable object listing response is not UTF-8', { cause: error }); }
   if (/<!DOCTYPE|<!ENTITY/i.test(source)) {
     throw new ObjectListingUnavailable('immutable object listing response contains a declaration');
   }
@@ -332,8 +332,8 @@ function parseS3Xml(bytes: Uint8Array, rootName: string): Element {
   try {
     root = new DOMParser({ onError: () => { malformed = true; } })
       .parseFromString(source, 'application/xml').documentElement;
-  } catch {
-    throw new ObjectListingUnavailable('immutable object listing response is malformed');
+  } catch (error) {
+    throw new ObjectListingUnavailable('immutable object listing response is malformed', { cause: error });
   }
   if (malformed || !root || root.localName !== rootName || root.namespaceURI !== S3_XML_NAMESPACE) {
     throw new ObjectListingUnavailable('immutable object listing response is malformed');
@@ -369,7 +369,7 @@ async function readS3ResponseWithinBudget(response: Response, budget: number): P
     }
   } catch (error) {
     if (error instanceof ObjectReadBudgetExceeded) throw error;
-    throw new ObjectListingUnavailable('immutable object listing response could not be read');
+    throw new ObjectListingUnavailable('immutable object listing response could not be read', { cause: error });
   } finally {
     reader.releaseLock();
   }
@@ -420,13 +420,13 @@ export class S3ImmutableObjects implements ImmutableObjects {
   async initialize(): Promise<void> {
     let response: Response;
     try { response = await this.signer.fetch(this.bucketUrl, { method: 'PUT' }); }
-    catch { throw new ObjectUnavailable('cannot reach immutable object bucket'); }
+    catch (error) { throw new ObjectUnavailable('cannot reach immutable object bucket', { cause: error }); }
     if (!response.ok && response.status !== 409) {
       throw new ObjectUnavailable(`cannot initialize immutable object bucket (${response.status})`);
     }
     let readable: Response;
     try { readable = await this.signer.fetch(this.bucketUrl, { method: 'HEAD' }); }
-    catch { throw new ObjectUnavailable('cannot verify immutable object bucket'); }
+    catch (error) { throw new ObjectUnavailable('cannot verify immutable object bucket', { cause: error }); }
     if (!readable.ok) throw new ObjectUnavailable(`cannot access immutable object bucket (${readable.status})`);
   }
 
@@ -456,8 +456,8 @@ export class S3ImmutableObjects implements ImmutableObjects {
         body,
         aws: { allHeaders: true },
       });
-    } catch {
-      throw new ObjectUnavailable('immutable object create response is unavailable');
+    } catch (error) {
+      throw new ObjectUnavailable('immutable object create response is unavailable', { cause: error });
     }
     if (!response.ok && response.status !== 412 && response.status !== 409) {
       throw new ObjectUnavailable(`immutable object create failed (${response.status})`);
@@ -515,7 +515,7 @@ export class S3ImmutableObjects implements ImmutableObjects {
     let response: Response;
     try { response = await this.signer.fetch(`${this.bucketUrl}/${key}`,
       { method: 'HEAD', signal: signal ?? this.readSignal?.() }); }
-    catch { throw new ObjectUnavailable('committed immutable object probe is unavailable'); }
+    catch (error) { throw new ObjectUnavailable('committed immutable object probe is unavailable', { cause: error }); }
     if (response.status === 404) {
       if (response.headers.get('x-amz-delete-marker')?.toLowerCase() === 'true') {
         throw new ObjectVersioningUnsupported('an S3 delete marker does not prove immutable object absence');
@@ -530,8 +530,8 @@ export class S3ImmutableObjects implements ImmutableObjects {
     try {
       response = await this.signer.fetch(`${this.bucketUrl}?versioning`,
         { method: 'GET', signal: signal ?? this.readSignal?.() });
-    } catch {
-      throw new ObjectListingUnavailable('immutable object versioning capability is unavailable');
+    } catch (error) {
+      throw new ObjectListingUnavailable('immutable object versioning capability is unavailable', { cause: error });
     }
     if (!response.ok) {
       throw new ObjectListingUnavailable(`immutable object versioning capability is unavailable (${response.status})`);
@@ -582,7 +582,7 @@ export class S3ImmutableObjects implements ImmutableObjects {
 
     let response: Response;
     try { response = await this.signer.fetch(url.toString(), { method: 'GET', signal: signal ?? this.readSignal?.() }); }
-    catch { throw new ObjectListingUnavailable('immutable object namespace listing is unavailable'); }
+    catch (error) { throw new ObjectListingUnavailable('immutable object namespace listing is unavailable', { cause: error }); }
     if (!response.ok) {
       throw new ObjectListingUnavailable(`immutable object namespace listing is unavailable (${response.status})`);
     }
@@ -622,7 +622,7 @@ export class S3ImmutableObjects implements ImmutableObjects {
     const seen = new Set<string>();
     for (const key of keys) {
       try { checkedListingPrefix(key, prefix); }
-      catch { throw new ObjectListingUnavailable('immutable object listing returned a key outside its prefix'); }
+      catch (error) { throw new ObjectListingUnavailable('immutable object listing returned a key outside its prefix', { cause: error }); }
       if (seen.has(key)) throw new ObjectListingUnavailable('immutable object listing contains a duplicate key');
       seen.add(key);
     }
@@ -664,7 +664,7 @@ export class S3ImmutableObjects implements ImmutableObjects {
     try { response = await this.signer.fetch(`${this.bucketUrl}/${key}`,
       { method: 'GET', signal: signal ?? this.readSignal?.(),
         ...(maxBytes === undefined ? {} : { headers: { range: `bytes=0-${maxBytes}` } }) }); }
-    catch { throw new ObjectUnavailable('committed immutable object is unavailable'); }
+    catch (error) { throw new ObjectUnavailable('committed immutable object is unavailable', { cause: error }); }
     if (response.status === 404) throw new ObjectNotFound('committed immutable object was not found (404)');
     if (!response.ok) throw new ObjectUnavailable(`committed immutable object is unavailable (${response.status})`);
     let bytes: Uint8Array;
@@ -698,7 +698,7 @@ export class S3ImmutableObjects implements ImmutableObjects {
     }
     catch (error) {
       if (error instanceof ObjectReadBudgetExceeded) throw error;
-      throw new ObjectUnavailable('committed immutable object could not be read');
+      throw new ObjectUnavailable('committed immutable object could not be read', { cause: error });
     }
     if (sha256(bytes) !== digest) throw new ObjectIntegrityError('immutable object digest differs');
     return bytes;
@@ -712,7 +712,7 @@ export class S3ImmutableObjects implements ImmutableObjects {
       let response: Response;
       try { response = await this.signer.fetch(`${this.bucketUrl}/${key}`,
         { method: 'DELETE', signal: signal ?? this.readSignal?.() }); }
-      catch { throw new ObjectUnavailable('immutable object delete response is unavailable'); }
+      catch (error) { throw new ObjectUnavailable('immutable object delete response is unavailable', { cause: error }); }
       if (!response.ok && response.status !== 404) {
         throw new ObjectUnavailable(`immutable object delete failed (${response.status})`);
       }

@@ -23,7 +23,7 @@ export async function assertRetainedAuthorityCapture(relay: Pool | PoolClient,
   let coverage: RecoveryCoverage;
   try { coverage = openRecoveryPayload<RecoveryCoverage>(
     evidence.sealedCoverage, evidence.hmacKey, 'graph-recovery-coverage'); }
-  catch { throw new ErasureAuthorityCoverageConflict('signed Access coverage is unavailable'); }
+  catch (error) { throw new ErasureAuthorityCoverageConflict('signed Access coverage is unavailable', { cause: error }); }
   if (coverage?.relay?.consumer !== consumer
     || !/^[0-9]+$/.test(coverage.accessOutboxCount ?? '')
     || !/^[0-9a-f]{64}$/.test(coverage.accessOutboxDigest ?? '')

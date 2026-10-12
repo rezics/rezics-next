@@ -306,7 +306,7 @@ export class OwnerOperations {
       let coverage: RecoveryCoverage;
       try { coverage = openRecoveryPayload<RecoveryCoverage>(
         input.sealedCoverage, resources.hmacKey, 'graph-recovery-coverage'); }
-      catch { throw new OwnerOperationInvalid('signed restore coverage is invalid'); }
+      catch (error) { throw new OwnerOperationInvalid('signed restore coverage is invalid', { cause: error }); }
       if (!coverage?.objects || !coverage.content || !coverage.relay?.consumer) {
         throw new OwnerOperationInvalid('signed restore coverage lacks owner evidence');
       }
@@ -332,7 +332,7 @@ export class OwnerOperations {
           [id, operationId, requestDigest, coverage.relay.consumer]); }
           catch (error) {
             if ((error as { code?: string }).code === '23505') {
-              throw new OwnerOperationBusy('restore reconciliation is running');
+              throw new OwnerOperationBusy('restore reconciliation is running', { cause: error });
             }
             throw error;
           }
@@ -709,8 +709,8 @@ export class OwnerOperations {
     if (!pool) throw new OwnerOperationUnavailable('Access consumer rebuild owner is unavailable');
     try { return await rebuildRelayGap(this.relay, pool, input, key); }
     catch (error) {
-      if (error instanceof RelayGapInvalid) throw new OwnerOperationInvalid(error.message);
-      if (error instanceof RelayGapConflict) throw new OwnerOperationBusy(error.message);
+      if (error instanceof RelayGapInvalid) throw new OwnerOperationInvalid(error.message, { cause: error });
+      if (error instanceof RelayGapConflict) throw new OwnerOperationBusy(error.message, { cause: error });
       throw error;
     } finally {
       if (!this.consumerAccessPool && !this.restoreResources) await pool.end();
@@ -732,7 +732,7 @@ export class OwnerOperations {
         ...(structureObjects ? { structureObjects, structureGroupRoots: this.environment.structureGroupRoots,
           structureQualifierRoots: this.environment.structureQualifierRoots } : {}) }, key); }
     catch (error) {
-      if (error instanceof RetentionGcConflict) throw new OwnerOperationBusy(error.message);
+      if (error instanceof RetentionGcConflict) throw new OwnerOperationBusy(error.message, { cause: error });
       throw error;
     }
   }
@@ -766,7 +766,7 @@ export class OwnerOperations {
       try {
         outcome = (await remediateErasedContentEntry(this.erasures, this.environment, input.erasureId, client)).outcome;
       } catch (error) {
-        if (error instanceof ErasureNotFound) throw new OwnerOperationMissing('erasure is unavailable');
+        if (error instanceof ErasureNotFound) throw new OwnerOperationMissing('erasure is unavailable', { cause: error });
         throw error;
       }
       if (outcome === 'held') throw new OwnerOperationBusy('erasure is held by a preservation hold');
@@ -784,8 +784,8 @@ export class OwnerOperations {
         await client.query('COMMIT');
       } catch (error) {
         await client.query('ROLLBACK').catch(() => undefined);
-        if (error instanceof ErasureNotFound) throw new OwnerOperationMissing('erasure is unavailable');
-        if (error instanceof ErasureUnavailable) throw new OwnerOperationInvalid(error.message);
+        if (error instanceof ErasureNotFound) throw new OwnerOperationMissing('erasure is unavailable', { cause: error });
+        if (error instanceof ErasureUnavailable) throw new OwnerOperationInvalid(error.message, { cause: error });
         throw error;
       }
       const recorded = (await client.query<Pick<OwnerReconciliationRow, 'id'>>(
@@ -822,7 +822,7 @@ export class OwnerOperations {
           [id, operationId, requestDigest, input.revision]);
         } catch (error) {
           if ((error as { code?: string }).code === '23505') {
-            throw new OwnerOperationBusy('revision reconciliation is running');
+            throw new OwnerOperationBusy('revision reconciliation is running', { cause: error });
           }
           throw error;
         }
@@ -904,7 +904,7 @@ export class OwnerOperations {
       replayed = result.rowCount === 0;
     } catch (error) {
       if ((error as { code?: string }).code === '23505') {
-        throw new OwnerOperationBusy('owner dataset already has an active relocation');
+        throw new OwnerOperationBusy('owner dataset already has an active relocation', { cause: error });
       }
       throw error;
     }
@@ -968,7 +968,7 @@ export class OwnerOperations {
       return { id: result.id, owner: result.owner, datasetId: result.dataset_id,
         state: result.state, replayed: before.state === 'activated' || before.state === 'retaining' };
     } catch (error) {
-      if (error instanceof RelocationConflict) throw new OwnerOperationBusy(error.message);
+      if (error instanceof RelocationConflict) throw new OwnerOperationBusy(error.message, { cause: error });
       throw error;
     } finally { await temporaryPool?.end(); }
   }

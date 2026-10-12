@@ -17,8 +17,10 @@ test('relay retries timeouts and connection loss with bounded backoff, then resu
   expect(calls).toBe(3);
   expect(delays).toEqual([250, 500, 100]);
   expect(logs.map(line => JSON.parse(line).event)).toEqual(['main_relay_retry', 'main_relay_retry']);
-  expect(isRelayTransientFailure(new Error('Fuseki query returned 503'))).toBe(true);
-  expect(isRelayTransientFailure(new Error('The operation timed out.'))).toBe(true);
+  expect(isRelayTransientFailure(Object.assign(new Error('owner unavailable'), { code: 'ECONNRESET' }))).toBe(true);
+  expect(isRelayTransientFailure(Object.assign(new Error('owner unavailable'), { code: 'ETIMEDOUT' }))).toBe(true);
+  expect(isRelayTransientFailure(new Error('Fuseki query returned 503'))).toBe(false);
+  expect(isRelayTransientFailure(new Error('The operation timed out.'))).toBe(false);
   expect(isRelayTransientFailure(new Error('invalid event receipt'))).toBe(false);
 });
 

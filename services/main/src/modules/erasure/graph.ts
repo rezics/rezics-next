@@ -17,6 +17,7 @@ import { readComponentState, RevisionCorrupt, RevisionReadBudgetExceeded, Revisi
   type RevisionReadBudget } from '../work/history.ts';
 import type { ResolvedErasureRevision } from './revision-kind.ts';
 import { isValidErasureTargetList } from './journal.ts';
+import { isRelayTransientFailure } from '../outbox/relay.ts';
 
 const PUBLIC = 'urn:rezics:search:public';
 const PRIVATE = 'urn:rezics:search:private';
@@ -194,7 +195,7 @@ function checkedContributionState(state: Record<string, unknown>): 'body' | 'doc
     throw new GraphErasureUnavailable('Contribution payload does not match its authored profile');
   }
   try { retainedDocumentBody(state); }
-  catch { throw new GraphErasureUnavailable('Contribution payload does not match its authored profile'); }
+  catch (error) { throw new GraphErasureUnavailable('Contribution payload does not match its authored profile', { cause: error }); }
   return contentForm;
 }
 
@@ -297,7 +298,7 @@ export async function inventoryContributionPayloads(
     } catch (error) {
       if (error instanceof RevisionUnavailable || error instanceof RevisionCorrupt
         || error instanceof RevisionReadBudgetExceeded) {
-        throw new GraphErasureUnavailable('Contribution manifest or payload bytes are unavailable');
+        throw new GraphErasureUnavailable('Contribution manifest or payload bytes are unavailable', { cause: error });
       }
       throw error;
     }
@@ -445,7 +446,8 @@ export async function graphRevisionSuppressed(
         (await probeHeldGraphErasureProof(fuseki, erasureId, epoch, held.revisionIds, held)) !==
         null
       );
-    } catch {
+    } catch (error) {
+      if (isRelayTransientFailure(error)) throw error;
       return false;
     }
   }
@@ -618,6 +620,7 @@ export async function suppressGraphContentRevisions(
   }
   throw new GraphErasureUnavailable(
     `graph erasure did not produce an exact suppression receipt: ${String(lastFailure)}`,
+    { cause: lastFailure },
   );
 }
 
@@ -1156,9 +1159,9 @@ export async function suppressHeldGraphContentRevisions(
     } catch (error) {
       if (error instanceof GraphErasureConflict) throw error;
       if (error instanceof CommandForbidden)
-        throw new GraphErasureUnavailable('native held erasure maintenance capability unavailable');
+        throw new GraphErasureUnavailable('native held erasure maintenance capability unavailable', { cause: error });
       if (!(error instanceof CommandOutcomeUnknown))
-        throw new GraphErasureUnavailable('native held erasure request was not accepted');
+        throw new GraphErasureUnavailable('native held erasure request was not accepted', { cause: error });
       lastFailure = error;
     }
     await authorize();
@@ -1174,5 +1177,6 @@ export async function suppressHeldGraphContentRevisions(
   }
   throw new GraphErasureUnavailable(
     `native held erasure proof is unavailable: ${String(lastFailure)}`,
+    { cause: lastFailure },
   );
 }

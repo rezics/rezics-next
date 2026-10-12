@@ -55,7 +55,7 @@ export async function readRetainedNativeGraphSuppressionProof(relayClient: PoolC
   try { targets = canonicalErasureTargets(revisionIds); }
   catch (error) {
     if (error instanceof GraphErasureConflict) {
-      throw new GraphErasureUnavailable('retained native erasure proof input is invalid');
+      throw new GraphErasureUnavailable('retained native erasure proof input is invalid', { cause: error });
     }
     throw error;
   }

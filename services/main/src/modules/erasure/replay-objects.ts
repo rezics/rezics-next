@@ -94,7 +94,7 @@ export async function protectedObjectDigests(fuseki: FusekiClient,
   const protectedDigests = new Set<string>();
   try { await captureObjectRecoveryCoverage(fuseki, store, protectedDigests); }
   catch (error) {
-    if (error instanceof ObjectRecoveryConflict) throw new ObjectErasureConflict(error.message);
+    if (error instanceof ObjectRecoveryConflict) throw new ObjectErasureConflict(error.message, { cause: error });
     throw error;
   }
   return protectedDigests;

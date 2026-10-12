@@ -40,7 +40,7 @@ function generationDigest(generation: string): string {
 function checkedManifest(bytes: Uint8Array): ModelManifest {
   let value: unknown;
   try { value = JSON.parse(Buffer.from(bytes).toString('utf8')); }
-  catch { throw new RevisionCorrupt('model manifest is not JSON'); }
+  catch (error) { throw new RevisionCorrupt('model manifest is not JSON', { cause: error }); }
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new RevisionCorrupt('model manifest is not an object');
   }
@@ -96,7 +96,7 @@ class DirectoryModelObjects implements ImmutableObjects {
       bytes = readFileSync(path);
     } catch (error) {
       if (error instanceof ObjectReadBudgetExceeded) throw error;
-      throw new ObjectUnavailable('committed model artifact is unavailable');
+      throw new ObjectUnavailable('committed model artifact is unavailable', { cause: error });
     }
     if (bytes.byteLength > MODEL_CUSTODY_BACKFILL_COST.artifactBytes) {
       throw new ObjectReadBudgetExceeded('model artifact exceeds its byte bound');
@@ -121,9 +121,9 @@ async function exactObject(objects: ImmutableObjects, digest: string): Promise<U
     if (hash(bytes) !== digest) throw new RevisionCorrupt('model artifact digest differs');
     return bytes;
   } catch (error) {
-    if (error instanceof ObjectUnavailable) throw new RevisionUnavailable(error.message);
-    if (error instanceof ObjectIntegrityError) throw new RevisionCorrupt(error.message);
-    if (error instanceof ObjectReadBudgetExceeded) throw new RevisionCorrupt(error.message);
+    if (error instanceof ObjectUnavailable) throw new RevisionUnavailable(error.message, { cause: error });
+    if (error instanceof ObjectIntegrityError) throw new RevisionCorrupt(error.message, { cause: error });
+    if (error instanceof ObjectReadBudgetExceeded) throw new RevisionCorrupt(error.message, { cause: error });
     throw error;
   }
 }
@@ -164,7 +164,7 @@ function originalArtifact(path: string): Uint8Array {
     return bytes;
   } catch (error) {
     if (error instanceof RevisionCorrupt) throw error;
-    throw new RevisionUnavailable(`original model artifact is unavailable: ${path}`);
+    throw new RevisionUnavailable(`original model artifact is unavailable: ${path}`, { cause: error });
   }
 }
 
@@ -302,10 +302,10 @@ export async function backfillRetainedModelCustody(env: WorkActivationEnvironmen
           if (!(error instanceof RevisionUnavailable)) throw error;
           checkDeadline();
           try {
-            if (await objects.put(artifact.bytes) !== artifact.digest) throw new RevisionCorrupt('custodied original model digest differs');
+            if (await objects.put(artifact.bytes) !== artifact.digest) throw new RevisionCorrupt('custodied original model digest differs', { cause: error });
           } catch (error) {
-            if (error instanceof ObjectUnavailable) throw new RevisionUnavailable(error.message);
-            if (error instanceof ObjectIntegrityError) throw new RevisionCorrupt(error.message);
+            if (error instanceof ObjectUnavailable) throw new RevisionUnavailable(error.message, { cause: error });
+            if (error instanceof ObjectIntegrityError) throw new RevisionCorrupt(error.message, { cause: error });
             throw error;
           }
           await exactObject(objects, artifact.digest);

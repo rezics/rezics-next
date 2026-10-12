@@ -18,7 +18,7 @@ import { exportAccessErasureRecoveryAttachment,
 import { assertErasureJournalCoreCoverage, createPublicRevisionJournalDeltaVerifier,
   captureErasureJournalCoreCoverage,
   type ErasureJournalCoreCoverage } from '../erasure/core-journal-coverage.ts';
-import { relayCoverage, relayCoverageOnClient, relayPrefixCoverageOnClient, type RelayCoverage } from '../outbox/relay.ts';
+import { isRelayTransientFailure as isRestoreTransientFailure, relayCoverage, relayCoverageOnClient, relayPrefixCoverageOnClient, type RelayCoverage } from '../outbox/relay.ts';
 import { MAIN_RELAY_STREAM_SCOPE, type RelayHandoffPosition } from '../outbox/relay-position.ts';
 import { assertAccountDeletionJournalCoverage } from
   '../outbox/account-deletion-journal.ts';
@@ -334,27 +334,8 @@ export interface RestoredReleaseClients {
  * the operation is not definitively held and may be resumed with the same key. */
 export class RestoreInterrupted extends Error {}
 
-/** Only owner transport evidence can make a durable qualification retryable. */
-export function isRestoreTransientFailure(error: unknown): boolean {
-  const seen = new Set<object>();
-  while (error !== null && typeof error === 'object' && !seen.has(error)) {
-    seen.add(error);
-    const failure = error as { code?: unknown; cause?: unknown; message?: unknown; stack?: unknown };
-    if (typeof failure.code === 'string' && (/^08[0-9A-Z]{3}$/.test(failure.code)
-      || ['57P01', '57P02', '57P03', '40001', '40P01', '53300',
-        'ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EPIPE'].includes(failure.code))) return true;
-    // pg-pool emits uncoded checkout/connect timeouts and replaces their stack
-    // at its promise boundary. Require that driver provenance as well as its
-    // exact timeout signatures; integrity messages alone never decide a retry.
-    if (error instanceof Error && !(error instanceof RestoreLineageConflict)
-      && failure.code === undefined && typeof failure.stack === 'string'
-      && /\n\s+at [^\n]*[/\\]pg-pool[/\\]index\.js:\d+:\d+/.test(failure.stack)
-      && (failure.message === 'timeout exceeded when trying to connect'
-        || failure.message === 'Connection terminated due to connection timeout')) return true;
-    error = failure.cause;
-  }
-  return false;
-}
+// Restore and relay interpret the same owner transport evidence.
+export { isRelayTransientFailure as isRestoreTransientFailure } from "../outbox/relay.ts";
 
 export { accessOutboxCoverage, accessStateCoverage } from './access-recovery-coverage.ts';
 

@@ -832,7 +832,7 @@ async function assertRestoredErasuresCurrent(relay: PoolClient, restored: Restor
   }
   let protectedDigests: Set<string>;
   try { protectedDigests = await restoredCustodyDigests(restored.access, restored.graph, restored.objects, accessClient); }
-  catch { throw new ErasureRestoreHold('restored command or model custody is unavailable or divergent'); }
+  catch (error) { throw new ErasureRestoreHold('restored command or model custody is unavailable or divergent', { cause: error }); }
   await requireRecordedItem(relay, reconciliationId, custodyEvidenceItem(protectedDigests));
   const unresolved = await relay.query(`SELECT 1 FROM relay.erasure
     WHERE suppression_status <> 'suppressed' LIMIT 1`);
@@ -885,7 +885,7 @@ async function assertRestoredErasuresCurrent(relay: PoolClient, restored: Restor
         }
         try { graphProof = await readGraphErasureProof(restored.graph.fuseki,
           restored.graph.lineage, entry.id, entry.epoch, graphIds, proof); }
-        catch { throw new ErasureRestoreHold('restored graph erasure receipt is unavailable'); }
+        catch (error) { throw new ErasureRestoreHold('restored graph erasure receipt is unavailable', { cause: error }); }
       }
       if (!await publicationSupersessionsMatch(restored.content, entry.refs,
         entry.id, entry.epoch, graphProof)) {
@@ -918,7 +918,7 @@ async function assertRestoredErasuresCurrent(relay: PoolClient, restored: Restor
       }
       try { await readGraphErasureProof(restored.graph.fuseki, restored.graph.lineage,
         entry.id, entry.epoch, graphIds, proof); }
-      catch { throw new ErasureRestoreHold('restored graph erasure receipt is unavailable'); }
+      catch (error) { throw new ErasureRestoreHold('restored graph erasure receipt is unavailable', { cause: error }); }
     }
     if (entries.length < JOURNAL_PAGE) break;
     after = entries[entries.length - 1]!.epoch;
@@ -989,7 +989,7 @@ export async function assertReleasedErasuresCurrent(relay: Pool, restored: Resto
       reconciliationId, fenceGeneration, authority, released, outerReconciliationId);
     try { await assertAccountDeletionJournalCoverage(restored.access, relay, accessClient, relayClient); }
     catch (error) {
-      if (error instanceof AccountDeletionJournalConflict) throw new ErasureRestoreHold(error.message);
+      if (error instanceof AccountDeletionJournalConflict) throw new ErasureRestoreHold(error.message, { cause: error });
       throw error;
     }
     await assertRestoredErasuresCurrent(relayClient, restored, accessClient, reconciliationId, released);
@@ -1017,7 +1017,7 @@ export async function releaseErasureRestoreHold(relay: Pool, restored: RestoredO
     let coverage: RecoveryCoverage;
     try { coverage = openRecoveryPayload<RecoveryCoverage>(authority.sealedCoverage,
       authority.hmacKey, 'graph-recovery-coverage'); }
-    catch { throw new ErasureRestoreHold('signed release authority is unavailable'); }
+    catch (error) { throw new ErasureRestoreHold('signed release authority is unavailable', { cause: error }); }
     const effective = graphRelease.effective;
     if (!restored.ownerRestore && (effective.dataEpoch !== coverage.priorDataEpoch || effective.graphSequence !== coverage.priorSequence
       || effective.main && (effective.main.streamScope !== coverage.relay?.streamScope
@@ -1051,7 +1051,7 @@ export async function releaseErasureRestoreHold(relay: Pool, restored: RestoredO
       reconciliationId, fenceGeneration, authority, released);
     try { await assertAccountDeletionJournalCoverage(restored.access, relay, accessClient, client); }
     catch (error) {
-      if (error instanceof AccountDeletionJournalConflict) throw new ErasureRestoreHold(error.message);
+      if (error instanceof AccountDeletionJournalConflict) throw new ErasureRestoreHold(error.message, { cause: error });
       throw error;
     }
     await assertRestoredErasuresCurrent(client, restored, accessClient, reconciliationId, released);

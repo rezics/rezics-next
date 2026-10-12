@@ -9,6 +9,7 @@ import { checkedWorkScalarValue, InvalidWorkScalarValue,
   type WorkScalarValue } from './scalar-value.ts';
 import { readMergedIdentity, type MergedIdentity } from '../identity-merge/resolution.ts';
 import { MergeUnavailable } from '../identity-merge/contract.ts';
+import { isRelayTransientFailure } from '../outbox/relay.ts';
 
 export class RevisionNotFound extends Error {}
 export class RevisionUnavailable extends Error {}
@@ -78,7 +79,7 @@ function objectBytes(directory: string, digest: string, budget?: RevisionReadBud
     }
   } catch (error) {
     if (error instanceof RevisionReadBudgetExceeded) throw error;
-    throw new RevisionUnavailable('committed revision bytes are unavailable');
+    throw new RevisionUnavailable('committed revision bytes are unavailable', { cause: error });
   }
   if (hash(bytes) !== digest) throw new RevisionCorrupt('immutable object digest differs');
   remember?.(digest, bytes);
@@ -93,7 +94,7 @@ export function readComponentState(
   let manifest: Record<string, unknown>;
   try { manifest = JSON.parse(objectBytes(objectDirectory, manifestIri.slice(-64), budget, remember).toString('utf8')); }
   catch (error) { if (error instanceof RevisionUnavailable || error instanceof RevisionCorrupt || error instanceof RevisionReadBudgetExceeded) throw error;
-    throw new RevisionCorrupt('manifest is not JSON'); }
+    throw new RevisionCorrupt('manifest is not JSON', { cause: error }); }
   if (manifest.format !== 'rezics-manifest-v1' || manifest.component !== component
     || manifest.model !== profile || manifest.shape !== profile
     || manifest.mediaType !== 'application/json'
@@ -104,7 +105,7 @@ export function readComponentState(
   if (manifest.payloadBytes !== payload.length) throw new RevisionCorrupt('payload byte count differs');
   let stored: Record<string, unknown>;
   try { stored = JSON.parse(payload.toString('utf8')); }
-  catch { throw new RevisionCorrupt('payload is not JSON'); }
+  catch (error) { throw new RevisionCorrupt('payload is not JSON', { cause: error }); }
   const state = stored.state as Record<string, unknown> | undefined;
   if (stored.format !== 'rezics-component-v1' || stored.component !== component || !state
     || Array.isArray(state)) throw new RevisionCorrupt('payload does not match component profile');
@@ -118,8 +119,8 @@ async function storedObjectBytes(objects: ImmutableObjects, digest: string): Pro
     if (hash(bytes) !== digest) throw new RevisionCorrupt('immutable object digest differs');
     return bytes;
   } catch (error) {
-    if (error instanceof ObjectIntegrityError) throw new RevisionCorrupt(error.message);
-    if (error instanceof ObjectUnavailable) throw new RevisionUnavailable(error.message);
+    if (error instanceof ObjectIntegrityError) throw new RevisionCorrupt(error.message, { cause: error });
+    if (error instanceof ObjectUnavailable) throw new RevisionUnavailable(error.message, { cause: error });
     throw error;
   }
 }
@@ -131,7 +132,7 @@ async function readComponentStateFromObjects(
   let manifest: Record<string, unknown>;
   try { manifest = JSON.parse((await storedObjectBytes(objects, manifestIri.slice(-64))).toString('utf8')); }
   catch (error) { if (error instanceof RevisionUnavailable || error instanceof RevisionCorrupt) throw error;
-    throw new RevisionCorrupt('manifest is not JSON'); }
+    throw new RevisionCorrupt('manifest is not JSON', { cause: error }); }
   if (manifest.format !== 'rezics-manifest-v1' || manifest.component !== component
     || manifest.model !== profile || manifest.shape !== profile
     || manifest.mediaType !== 'application/json'
@@ -142,7 +143,7 @@ async function readComponentStateFromObjects(
   if (manifest.payloadBytes !== payload.length) throw new RevisionCorrupt('payload byte count differs');
   let stored: Record<string, unknown>;
   try { stored = JSON.parse(payload.toString('utf8')); }
-  catch { throw new RevisionCorrupt('payload is not JSON'); }
+  catch (error) { throw new RevisionCorrupt('payload is not JSON', { cause: error }); }
   const state = stored.state as Record<string, unknown> | undefined;
   if (stored.format !== 'rezics-component-v1' || stored.component !== component || !state
     || Array.isArray(state)) throw new RevisionCorrupt('payload does not match component profile');
@@ -163,7 +164,7 @@ export async function readWorkComponentState(
   if (env.workObjects) {
     try { return await readComponentStateFromObjects(env.workObjects, manifestIri, component, profile); }
     catch (error) {
-      if (!(error instanceof RevisionUnavailable)) throw error;
+      if (!(error instanceof RevisionUnavailable) || isRelayTransientFailure(error)) throw error;
     }
     return readComponentState(env.objectDirectory, manifestIri, component, profile, undefined,
       rememberVerifiedImmutableObject);
@@ -193,7 +194,7 @@ function checkedScalarPayload(state: Record<string, unknown>): { scalarValue?: W
     const value = checkedWorkScalarValue(state.scalarValue);
     if (value === undefined) throw new InvalidWorkScalarValue('undefined scalar payload');
     return { scalarValue: value };
-  } catch { throw new RevisionCorrupt('Work scalar manifest state is invalid'); }
+  } catch (error) { throw new RevisionCorrupt('Work scalar manifest state is invalid', { cause: error }); }
 }
 
 function checkedRecordedDetails(state: Record<string, unknown>) {
@@ -224,7 +225,7 @@ function checkedWorkSemanticTypes(value: unknown): string[] {
   }
   let normalized: string[];
   try { normalized = normalizeWorkSemanticTypes(value, true); }
-  catch { throw new RevisionCorrupt('Work semantic types are unsupported'); }
+  catch (error) { throw new RevisionCorrupt('Work semantic types are unsupported', { cause: error }); }
   if (normalized.some((type, index) => type !== value[index])) {
     throw new RevisionCorrupt('Work semantic types are not canonical');
   }
@@ -400,7 +401,7 @@ async function disclosedRevisionMerge(env: WorkActivationEnvironment, work: stri
       return true;
     });
   } catch (error) {
-    if (error instanceof MergeUnavailable) throw new RevisionUnavailable('Identity resolution is unavailable');
+    if (error instanceof MergeUnavailable) throw new RevisionUnavailable('Identity resolution is unavailable', { cause: error });
     throw error;
   }
 }

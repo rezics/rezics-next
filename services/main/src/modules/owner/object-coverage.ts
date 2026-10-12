@@ -11,6 +11,7 @@ import {
 } from '../../infrastructure/immutable-objects.ts';
 import { GRAPHS, RV } from '../work/activate.ts';
 import { RevisionCorrupt } from '../work/history.ts';
+import { isRelayTransientFailure } from '../outbox/relay.ts';
 import { visitModelGenerationArtifacts } from '../semantic/model-custody.ts';
 import { MODEL_COMPONENT, PROFILES } from '../semantic/schema.ts';
 import {
@@ -37,8 +38,9 @@ export class ObjectRecoveryConflict extends Error {
   constructor(
     message: string,
     readonly kind: 'unavailable' | 'corrupt' | 'mismatch' = 'mismatch',
+    options?: ErrorOptions,
   ) {
-    super(message);
+    super(message, options);
   }
 }
 
@@ -210,15 +212,17 @@ async function exactBytes(
         throw new ObjectRecoveryConflict(
           'Structure immutable object exceeds its byte bound',
           'corrupt',
+          { cause: error },
         );
       }
       if (error instanceof ObjectIntegrityError) {
-        throw new ObjectRecoveryConflict('Structure immutable object is corrupt', 'corrupt');
+        throw new ObjectRecoveryConflict('Structure immutable object is corrupt', 'corrupt', { cause: error });
       }
       if (error instanceof ObjectUnavailable) {
         throw new ObjectRecoveryConflict(
           'Structure immutable object is unavailable',
           'unavailable',
+          { cause: error },
         );
       }
       throw error;
@@ -240,8 +244,8 @@ async function exactBytes(
       return Buffer.from(bytes);
     } catch (error) {
       if (error instanceof ObjectIntegrityError)
-        throw new ObjectRecoveryConflict('immutable object is corrupt', 'corrupt');
-      if (!(error instanceof ObjectUnavailable)) throw error;
+        throw new ObjectRecoveryConflict('immutable object is corrupt', 'corrupt', { cause: error });
+      if (!(error instanceof ObjectUnavailable) || isRelayTransientFailure(error)) throw error;
     }
   }
   let bytes: Buffer;
@@ -249,9 +253,9 @@ async function exactBytes(
     bytes = signal
       ? await readFile(join(store.directory, digest), { signal })
       : await readFile(join(store.directory, digest));
-  } catch {
+  } catch (error) {
     signal?.throwIfAborted();
-    throw new ObjectRecoveryConflict('committed immutable object is unavailable', 'unavailable');
+    throw new ObjectRecoveryConflict('committed immutable object is unavailable', 'unavailable', { cause: error });
   }
   signal?.throwIfAborted();
   if (sha(bytes) !== digest)
@@ -355,8 +359,8 @@ async function captureCoverage(
     let parsed: Record<string, unknown>;
     try {
       parsed = JSON.parse(bytes.toString('utf8')) as Record<string, unknown>;
-    } catch {
-      throw new ObjectRecoveryConflict('committed manifest is corrupt', 'corrupt');
+    } catch (error) {
+      throw new ObjectRecoveryConflict('committed manifest is corrupt', 'corrupt', { cause: error });
     }
     objects.set(digest, bytes.length);
     retainedDigests?.add(digest);
@@ -371,8 +375,8 @@ async function captureCoverage(
       let body: Record<string, unknown>;
       try {
         body = JSON.parse(bytes.toString('utf8')) as Record<string, unknown>;
-      } catch {
-        throw new ObjectRecoveryConflict('committed payload is corrupt', 'corrupt');
+      } catch (error) {
+        throw new ObjectRecoveryConflict('committed payload is corrupt', 'corrupt', { cause: error });
       }
       const parsed = {
         length: bytes.length,
@@ -414,6 +418,7 @@ async function captureCoverage(
           throw new ObjectRecoveryConflict(
             'Structure association byte budget exceeded',
             'unavailable',
+            { cause: error },
           );
         }
         throw error;
@@ -565,7 +570,7 @@ async function captureCoverage(
       }
     } catch (error) {
       if (error instanceof InvalidStructureObject) {
-        throw new ObjectRecoveryConflict('Structure page is corrupt', 'corrupt');
+        throw new ObjectRecoveryConflict('Structure page is corrupt', 'corrupt', { cause: error });
       }
       throw error;
     }
@@ -601,7 +606,7 @@ async function captureCoverage(
       manifest = checkStructureManifest(suppliedBytes ?? (await structureObject(digest)));
     } catch (error) {
       if (error instanceof InvalidStructureObject) {
-        throw new ObjectRecoveryConflict('Structure manifest is corrupt', 'corrupt');
+        throw new ObjectRecoveryConflict('Structure manifest is corrupt', 'corrupt', { cause: error });
       }
       throw error;
     }
@@ -732,8 +737,8 @@ async function captureCoverage(
       let format: unknown;
       try {
         format = (JSON.parse(new TextDecoder().decode(bytes)) as { format?: unknown }).format;
-      } catch {
-        throw new ObjectRecoveryConflict('Structure root is corrupt', 'corrupt');
+      } catch (error) {
+        throw new ObjectRecoveryConflict('Structure root is corrupt', 'corrupt', { cause: error });
       }
       if (format === STRUCTURE_SEAL_FORMAT) {
         let seal;
@@ -741,7 +746,7 @@ async function captureCoverage(
           seal = checkStructureSealManifest(bytes);
         } catch (error) {
           if (error instanceof InvalidStructureObject) {
-            throw new ObjectRecoveryConflict('Structure seal manifest is corrupt', 'corrupt');
+            throw new ObjectRecoveryConflict('Structure seal manifest is corrupt', 'corrupt', { cause: error });
           }
           throw error;
         }
@@ -821,7 +826,7 @@ async function captureCoverage(
         }
       } catch (error) {
         if (error instanceof RevisionCorrupt)
-          throw new ObjectRecoveryConflict(error.message, 'corrupt');
+          throw new ObjectRecoveryConflict(error.message, 'corrupt', { cause: error });
         throw error;
       }
       checkedModelGenerations.add(manifest.component);
@@ -839,6 +844,7 @@ async function captureCoverage(
     throw new ObjectRecoveryConflict(
       'Structure group custody owner is unavailable or corrupt',
       error instanceof StructureObjectCorrupt ? 'corrupt' : 'unavailable',
+      { cause: error },
     );
   }
   prepared.sort((a, b) =>
@@ -850,7 +856,7 @@ async function captureCoverage(
       source = checkStructureManifest(await structureObject(checkpoint.manifestDigest));
     } catch (error) {
       if (error instanceof InvalidStructureObject) {
-        throw new ObjectRecoveryConflict('prepared group source manifest is corrupt', 'corrupt');
+        throw new ObjectRecoveryConflict('prepared group source manifest is corrupt', 'corrupt', { cause: error });
       }
       throw error;
     }
@@ -884,6 +890,7 @@ async function captureCoverage(
     throw new ObjectRecoveryConflict(
       'Qualifier custody is unavailable or corrupt',
       error instanceof StructureObjectCorrupt ? 'corrupt' : 'unavailable',
+      { cause: error },
     );
   }
   preparedQualifiers.sort((a, b) => a.manifestDigest.localeCompare(b.manifestDigest));

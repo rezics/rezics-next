@@ -582,7 +582,7 @@ function titleCustodyPayload(row: RetainedCustodyRow): PreparedTitleCandidate {
   }
   let value: unknown;
   try { value = JSON.parse(Buffer.from(payload).toString('utf8')); }
-  catch { throw new ObjectIntegrityError('Title custody is not JSON'); }
+  catch (error) { throw new ObjectIntegrityError('Title custody is not JSON', { cause: error }); }
   if (!exactKeys(value, ['format', 'frame']) || value.format !== 'rezics-human-title-candidate-custody-v1') {
     throw new ObjectIntegrityError('Title custody discriminant differs');
   }
@@ -775,7 +775,7 @@ export class ReceiptCustody implements CustodiedOutboxSource {
     if (sha256(manifestBytes) !== manifestSha256) throw new ObjectIntegrityError('Retained component manifest differs');
     let manifest: unknown;
     try { manifest = JSON.parse(Buffer.from(manifestBytes).toString('utf8')); }
-    catch { throw new ObjectIntegrityError('Retained component manifest is not JSON'); }
+    catch (error) { throw new ObjectIntegrityError('Retained component manifest is not JSON', { cause: error }); }
     const manifestRecord = manifest && typeof manifest === 'object' && !Array.isArray(manifest)
       ? manifest as Record<string, unknown> : null;
     if (!manifestRecord || typeof manifestRecord.model !== 'string' || typeof manifestRecord.payload !== 'string'
