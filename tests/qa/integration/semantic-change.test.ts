@@ -10,6 +10,7 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { SemanticStageStore } from '../../../services/main/src/modules/semantic/staging.ts';
 import { readCurrentComponent } from '../../../services/main/src/modules/semantic/change.ts';
+import { assertGraphSubjectAbsent } from './support/graph-reads.ts';
 
 // Compare the complete response surface, including any future rate-limit headers.
 const volatileHeaders = new Set(['date', 'request-id', 'x-request-id', 'trace-id', 'x-trace-id']);
@@ -44,8 +45,9 @@ async function createAfterAbsentProbe(f: Awaited<ReturnType<typeof authorCreditF
             .map(match => match[1]!));
           expect(components.size).toBe(1);
           component = [...components][0]!;
-          expect(await readCurrentComponent(f.env, component, 'resource')).toBeNull();
+          await assertGraphSubjectAbsent(f.env.fuseki, component);
           absent = await probe(component);
+          await assertGraphSubjectAbsent(f.env.fuseki, component);
         } catch (error) {
           probeFailure = error;
           throw error;
@@ -285,7 +287,7 @@ test('MODEL01/MODEL03/MODEL04/MODEL08/MODEL10/MODEL14: semantic change write, ex
     expect(comparableHeaders(absent)).toEqual(refused[0]!.headers);
     expect(await absent.text()).toBe(refused[0]!.text);
     expect(await admissions()).toBe(before);
-    expect(await readCurrentComponent(f.env, missing, 'resource')).toBeNull();
+    await assertGraphSubjectAbsent(f.env.fuseki, missing);
     const readGrant = await f.grant(`semantic:read:${hidden.component}`, 'semantic.read');
     const linked = await f.json<Write>(await change(edit(moved.revision, privileged, [
       { predicate: 'https://schema.org/knows', value: { kind: 'resource', ref: hidden.component } },
