@@ -414,7 +414,10 @@ test(
         const key = randomUUID();
         const stopBeforeRelease = spyOn(binding, 'captureReleaseBasis').mockImplementation(
           async () => {
-            throw new Error('fault: interrupted after durable qualification before native release');
+            throw Object.assign(
+              new Error('fault: interrupted after durable qualification before native release'),
+              { code: 'ECONNRESET' },
+            );
           },
         );
         try {

@@ -219,6 +219,7 @@ test(
           restore: () => void | Promise<unknown>,
           input = body,
           expectedGate?: string,
+          expectedQualifications = 0,
         ) => {
           maintenance.mockClear();
           commands.mockClear();
@@ -231,7 +232,7 @@ test(
             const held = await outerOperation(copy, key);
             expect(held.hold_reason).toBeString();
             if (expectedGate) expect(held.hold_reason).toContain(expectedGate);
-            expect(held.qualifications).toHaveLength(0);
+            expect(held.qualifications).toHaveLength(expectedQualifications);
             expect(held.releases).toHaveLength(0);
             expect(maintenance).not.toHaveBeenCalled();
             expect(commands).not.toHaveBeenCalled();
@@ -597,7 +598,7 @@ test(
               captured.mockRestore();
             }
           }
-          // Covered but unsupported writes cannot be admitted into an older cut.
+          // A covered but unsupported Access mutation cannot pass the two-cut release proof.
           const originalProof = binding.proveReleaseTransition;
           const unrelatedAuthority = spyOn(binding, 'proveReleaseTransition').mockImplementation(
             async (pool, client, basis, generation) => {
@@ -612,6 +613,7 @@ test(
               noChange,
               body,
               'scope_gate',
+              1,
             );
           } finally {
             unrelatedAuthority.mockRestore();
