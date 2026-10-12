@@ -179,11 +179,15 @@ export async function observeAuthentication(auth: AccountAuth, pool: Pool, reque
       network: coarseNetwork(request.headers.get('x-rezics-client-ip')) });
   } else if (signingIn && !response.ok) {
     try {
-      const userId = typeof input.email === 'string'
-        ? (await pool.query<{ id: string }>('SELECT id FROM "user" WHERE email = $1', [input.email.toLowerCase()])).rows[0]?.id
-        : path === '/api/auth/passkey/verify-authentication' && typeof input.response?.id === 'string'
-          ? (await pool.query<{ id: string }>('SELECT "userId" AS id FROM passkey WHERE "credentialID" = $1', [input.response.id])).rows[0]?.id
-          : before?.user.id ?? challengeUser;
+      // A session or signed challenge identifies the person the factor
+      // provider checks. Ignore unrelated identity fields on those requests;
+      // unsigned sign-ins use only the identifier their provider consumes.
+      let userId = before?.user.id ?? challengeUser;
+      if (!userId && path === '/api/auth/sign-in/email' && typeof input.email === 'string') {
+        userId = (await pool.query<{ id: string }>('SELECT id FROM "user" WHERE email = $1', [input.email.toLowerCase()])).rows[0]?.id;
+      } else if (!userId && path === '/api/auth/passkey/verify-authentication' && typeof input.response?.id === 'string') {
+        userId = (await pool.query<{ id: string }>('SELECT "userId" AS id FROM passkey WHERE "credentialID" = $1', [input.response.id])).rows[0]?.id;
+      }
       if (userId) await securityEvent(pool, userId, 'sign_in_failed', { method: path.split('/').at(-1) });
     } catch {
       // Failure logging must not turn a storage fault into an address oracle.
