@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToReadableStream } from 'react-dom/server';
 import * as fixture from './fixtures.ts';
+import type { Loaded } from './types.ts';
 import { messages } from '../work-page/messages.ts';
 
 const originalReader = { ...(await import('../work-page/read.ts')) };
@@ -15,10 +16,14 @@ let signedIn = false;
 let actingSubject: string | undefined;
 let answer: (operation: Operation, query: Query) => Answer;
 let collectionCalls = 0;
+function disclosed<T>(page: Loaded<T>): T {
+  if (!page.ok) throw new Error('The public fixture must be disclosed');
+  return page.data;
+}
 const pages = {
-  parts: fixture.parts.ok ? fixture.parts.data : null,
-  wholes: fixture.wholes.ok ? fixture.wholes.data : null,
-  relations: fixture.relations.ok ? fixture.relations.data : null,
+  parts: disclosed(fixture.parts),
+  wholes: disclosed(fixture.wholes),
+  relations: disclosed(fixture.relations),
 };
 const main = {
   v1: {
@@ -75,7 +80,13 @@ afterAll(async () => {
 
 const { readParts, readWholes, readRelations, readCollectionMembers } = await import('./read.ts');
 const { Parts } = await import('../work-page/hub-sections.tsx');
-const reads = { parts: readParts, wholes: readWholes, relations: readRelations };
+const reads: Record<
+  Operation,
+  (
+    id: string,
+    query: { after?: string; limit?: number },
+  ) => Promise<Loaded<(typeof pages)[Operation]>>
+> = { parts: readParts, wholes: readWholes, relations: readRelations };
 const visitors = [
   { name: 'anonymous', signedIn: false },
   // An expired bearer leaves a cookie, but reader() supplies the public client without an Agent.
