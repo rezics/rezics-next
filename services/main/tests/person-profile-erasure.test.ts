@@ -16,8 +16,8 @@ import {
 import { erasePersonProfileAliases, listPersonProfileAliases, personProfileAliasesErased } from '../src/modules/address/person-profile-erasure.ts';
 import { erasePersonProfileGraph, PersonGraphErasureConflict, type PersonProfileGraphInventory } from '../src/modules/agent/erasure.ts';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
-import { PublicReports } from '../src/modules/public-report/store.ts';
-import { GovernanceUnavailable } from '../src/modules/governance/store.ts';
+import { PublicReports, type ReportTarget } from '../src/modules/public-report/store.ts';
+import { GovernanceConflict, GovernanceDenied, GovernanceUnavailable } from '../src/modules/governance/store.ts';
 import { AliasRegistry, AliasConflict } from '../src/modules/address/registry.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -93,14 +93,16 @@ async function provision(owner: Principal, kind: 'person' | 'organization' = 'pe
   return { id, person, displayName };
 }
 
-async function endedFixture(options: { principalActive?: boolean; subjectActive?: boolean; kind?: 'person' | 'organization' } = {}) {
+async function endedFixture(options: { principalActive?: boolean; subjectActive?: boolean;
+  kind?: 'person' | 'organization'; sibling?: boolean } = {}) {
   const owner = await principal();
   const profile = await provision(owner, options.kind);
+  const sibling = options.sibling ? await provision(owner) : undefined;
   const deletionIntentId = randomUUID();
   await access.query('UPDATE access.principal SET active = $2, enforcement_epoch = 1 WHERE id = $1',
     [owner.id, options.principalActive ?? false]);
-  await access.query('UPDATE access.authority_subject SET active = $2, generation = 1 WHERE id = $1',
-    [profile.person, options.subjectActive ?? false]);
+  await access.query('UPDATE access.authority_subject SET active = $2, generation = 1 WHERE id = ANY($1::text[])',
+    [[profile.person, ...(sibling ? [sibling.person] : [])], options.subjectActive ?? false]);
   await access.query(`INSERT INTO access.outbox (id, kind, principal_id, authority_epoch)
     VALUES ($1,'account.deletion_fenced',$2,1)`, [deletionIntentId, owner.id]);
   const proof: PersonProfileErasureProof = {
@@ -109,7 +111,7 @@ async function endedFixture(options: { principalActive?: boolean; subjectActive?
     deletionIntentId, deletionEnforcementEpoch: '1', subjectEpoch: '1',
   };
   await sealFixtureJournal(owner, proof);
-  return { owner, profile, proof };
+  return { owner, profile, proof, sibling };
 }
 
 async function sealFixtureJournal(owner: Principal, proof: PersonProfileErasureProof) {
@@ -527,4 +529,106 @@ test('report intake cannot commit an author or Account hold while the Person gra
     expect((await access.query(`SELECT 1 FROM access.governance_preservation_hold
       WHERE target_resource = $1 AND released_at IS NULL`, [resource])).rowCount).toBe(0);
   });
+});
+
+function preservedTarget(author: string, resource = native()): ReportTarget {
+  return { evidence: { owner: 'content', resource, component: 'body', locator: null,
+    revision: randomUUID(), state: 'available', representation: 'content-body-v1',
+    revisionDigest: 'b'.repeat(64), provenance: {} }, author, realm: null };
+}
+function submitSafetyReport(reports: PublicReports, target: string, key = randomUUID()) {
+  return reports.submit({ profile: 'public-report-v1', category: 'child_exploitation', target,
+    statement: 'Preserve reported material.', contentLanguage: 'en' }, key,
+  new Request('http://main.test/v1/public-reports'), null);
+}
+async function materialHolds(resource: string) {
+  return (await access.query(`SELECT author_subject, account_issuer, account_subject
+    FROM access.governance_preservation_hold WHERE target_resource = $1 AND released_at IS NULL`, [resource])).rows;
+}
+
+test('intake first commits its exact author and Account hold and refuses the Person destruction decision', async () => {
+  const { owner, profile, proof } = await endedFixture();
+  const target = preservedTarget(proof.person);
+  let entered!: () => void;
+  let release!: () => void;
+  const locked = new Promise<void>(resolve => { entered = resolve; });
+  const proceed = new Promise<void>(resolve => { release = resolve; });
+  let reads = 0;
+  const reports = new PublicReports(access, { resolve: async () => {
+    if (++reads === 2) { entered(); await proceed; }
+    return target;
+  } });
+  const intake = submitSafetyReport(reports, target.evidence.resource);
+  await locked;
+  let dispatched = false;
+  const erasure = withPersonProfileErasureAuthority(access, relay, proof, async () => { dispatched = true; })
+    .then(() => null, (error: unknown) => error);
+  release();
+  const receipt = await intake;
+  expect(await erasure).toBeInstanceOf(PersonProfileErasureDenied);
+  expect(dispatched).toBe(false);
+  expect(await materialHolds(target.evidence.resource)).toEqual([{ author_subject: proof.person,
+    account_issuer: owner.issuer, account_subject: owner.subject }]);
+  expect((await provisionRow(profile.id)).display_name).toBe(profile.displayName);
+  expect((await access.query('SELECT 1 FROM access.governance_report WHERE id=$1', [receipt.reportId])).rowCount).toBe(1);
+});
+
+test('erasure first wins an in-flight Person intake and the re-admission refuses erased material without a hold', async () => {
+  const { profile, proof } = await endedFixture();
+  const target = preservedTarget(proof.person, proof.person);
+  let reads = 0;
+  const reports = new PublicReports(access, { resolve: async () => {
+    const erased = (await provisionRow(profile.id)).profile_erasure_id !== null;
+    if (++reads === 1) {
+      expect(erased).toBe(false);
+      // Finish the real owner after intake's initial read, before it has a fence.
+      await erasePersonProvisionProfile(access, relay, proof);
+    }
+    return { ...target, evidence: { ...target.evidence, state: erased ? 'erased' : 'available' } };
+  } });
+  await expect(submitSafetyReport(reports, proof.person)).rejects.toBeInstanceOf(GovernanceConflict);
+  expect(reads).toBe(2);
+  expect(await personProvisionProfileErased(access, proof)).toBe(true);
+  expect(await materialHolds(proof.person)).toEqual([]);
+  expect((await access.query('SELECT 1 FROM access.governance_case WHERE target_resource=$1', [proof.person])).rowCount).toBe(0);
+});
+
+test('a surviving Work can acquire an author hold after Person sanitation without restoring the erased profile', async () => {
+  const { owner, proof } = await endedFixture();
+  await erasePersonProvisionProfile(access, relay, proof);
+  const target = preservedTarget(proof.person);
+  const reports = new PublicReports(access, { resolve: async () => target });
+  await submitSafetyReport(reports, target.evidence.resource);
+  expect(await personProvisionProfileErased(access, proof)).toBe(true);
+  expect(await materialHolds(target.evidence.resource)).toEqual([{ author_subject: proof.person,
+    account_issuer: owner.issuer, account_subject: owner.subject }]);
+});
+
+test('an Account hold through another Person waits for the original Person destruction decision', async () => {
+  const { proof, sibling } = await endedFixture({ sibling: true });
+  const target = preservedTarget(sibling!.person);
+  const reports = new PublicReports(access, { resolve: async () => target });
+  await withPersonProfileErasureAuthority(access, relay, proof, async () => {
+    await expect(submitSafetyReport(reports, target.evidence.resource)).rejects.toBeInstanceOf(GovernanceUnavailable);
+    expect(await materialHolds(target.evidence.resource)).toEqual([]);
+  });
+});
+
+test('safety intake refuses an already erased target and changed author, revision or Realm before inserting a hold', async () => {
+  const { proof } = await endedFixture();
+  const target = preservedTarget(proof.person);
+  const changed: ReportTarget[] = [
+    { ...target, author: native() },
+    { ...target, evidence: { ...target.evidence, revision: randomUUID() } },
+    { ...target, realm: native() },
+  ];
+  for (const current of changed) {
+    let reads = 0;
+    const reports = new PublicReports(access, { resolve: async () => ++reads === 1 ? target : current });
+    await expect(submitSafetyReport(reports, target.evidence.resource)).rejects.toBeInstanceOf(GovernanceConflict);
+  }
+  const erased: ReportTarget = { ...target, evidence: { ...target.evidence, state: 'erased' } };
+  await expect(submitSafetyReport(new PublicReports(access, { resolve: async () => erased }),
+    target.evidence.resource)).rejects.toBeInstanceOf(GovernanceDenied);
+  expect(await materialHolds(target.evidence.resource)).toEqual([]);
 });

@@ -13,7 +13,7 @@ export async function lockPreservationTarget(client: PoolClient, resource: strin
 }
 
 /** Recovery is already shared by intake. Match the Person owner's order:
- * author advisory, principal, authority, provision, then the material advisory.
+ * author advisory, principal, authority, provision, deletion intent, then material.
  * The principal write lock also fences erasure of other Persons of this Account. */
 export async function lockPreservationNeighborhood(client: PoolClient, author: string | null,
   resource: string): Promise<string | null> {
@@ -37,6 +37,9 @@ export async function lockPreservationNeighborhood(client: PoolClient, author: s
           WHERE id = $1 AND subject_id = $2 AND principal_id = $3 FOR SHARE`,
         [owner.representation_id, author, owner.principal_id]);
     if (!retained.rowCount) throw new GovernanceConflict('Report author ownership changed');
+    await client.query(`SELECT id FROM access.outbox WHERE principal_id = $1
+      AND kind = 'account.deletion_fenced' AND authority_epoch = (
+        SELECT enforcement_epoch FROM access.principal WHERE id = $1) FOR SHARE`, [owner.principal_id]);
   }
   if (resource !== author) await lockPreservationTarget(client, resource);
   return owner?.principal_id ?? null;
