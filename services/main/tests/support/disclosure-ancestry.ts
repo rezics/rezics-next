@@ -47,6 +47,6 @@ export function fixtureDisclosureReader(read: DisclosureReader['read']): Disclos
   return { read, readAtCut: async (targets, viewer, channel, client, anonymousNames) => ({
     decisions: await read(targets, viewer, channel, client),
     anonymousNames: anonymousNames ? targets.map(() => 'visible') : [],
-    fenceBasis: fixtureDisclosureCut,
+    fenceBases: targets.map(() => ({ ...fixtureDisclosureCut })),
   }) };
 }

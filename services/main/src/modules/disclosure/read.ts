@@ -19,7 +19,10 @@
  * DisclosureReadCut[]> reads current parent heads and direct/parent policy in one
  * Access snapshot. A cut holds selection, parents and decision; parent descriptors
  * add fenceBasis { recoveryGeneration, enforcementCut }, obtained ONLY from Access
- * recovery_fence and site_moderation_basis(). fenceDisclosure(env, cuts, viewer,
+ * recovery_fence and enforcement rows applying to the selection and its Work
+ * and Realm parents, including whole-Realm closure. Unrelated restrictions do
+ * not replay or refuse a read; global recovery generation still fences all cuts.
+ * fenceDisclosure(env, cuts, viewer,
  * channel, client?): Promise<DisclosureDecision[]> rereads those exact owner bases,
  * heads and Access policy on a fresh statement snapshot; a lent snapshot-isolated
  * transaction is refused. Stale proof/cut discards hydration as unavailable.
@@ -28,8 +31,11 @@
  *
  * DISCLOSURE_COST: batch=64, graphParents=2, parentEdges=128, parentHeadBatch=64,
  * ownerStatements=1, recoveryStatements=1 per batch; no descendant traversal.
- * Every public entry bounds input before owner work. Inventory cost includes
- * the actual parentHeadQueries; expanded adapters submit separate bounded batches.
+ * Every public submission accepts at most 1,024 targets before owner work and
+ * processes ceil(N/64) chunks sequentially under the existing snapshot/client
+ * rules. One result preserves input order and duplicates; one cost report sums
+ * measured chunk costs. Cuts belong to each capture; fences recheck every chunk.
+ * Inventory cost includes actual parentHeadQueries and optional name probes.
  * All adapters must preserve the selected occurrence through capture/hydration/
  * final fence: threads/replies/counts carry discussed Work plus Realm; Content
  * carries exact revision and publication/placement; media carries exact use and
@@ -51,6 +57,8 @@ import { nameOwnerPolicySql } from '../preferences/store.ts';
 import { BASELINE_MEMBER_POLICY } from '../access/baseline.ts';
 import { accessClient } from '../access/topology-control.ts';
 import { namePolicyViewerPrincipal } from './name-policy.ts';
+import { chunkDisclosureSubmission } from './contract-batching.ts';
+import { SCOPED_ENFORCEMENT_BASIS_SQL } from './fence-scope.ts';
 
 export type DisclosureChannel = 'read' | 'summary' | 'thread' | 'feed' | 'search' | 'typeahead'
   | 'count' | 'inbox' | 'digest' | 'preview' | 'seo' | 'sitemap' | 'export' | 'media' | 'email' | 'push';
@@ -153,7 +161,9 @@ export interface DisclosureReader {
     channel: DisclosureChannel, client?: PoolClient): Promise<DisclosureWithAnonymousNames>;
   readAtCut?(targets: readonly DisclosureTarget[], viewer: Viewer, channel: DisclosureChannel,
     client?: PoolClient, anonymousNames?: boolean): Promise<DisclosureWithAnonymousNames & {
-      fenceBasis: DisclosureFenceBasis;
+      /** Missing or incomplete cut evidence is unavailable to strict entries. */
+      fenceBases?: readonly DisclosureFenceBasis[];
+      cost?: Readonly<Record<string, number>>;
     }>;
 }
 export class DisclosureUnavailable extends MediaUnavailable {}
@@ -205,24 +215,37 @@ export class DisclosureStore implements DisclosureReader {
   async read(targets: readonly DisclosureTarget[], viewer: Viewer, channel: DisclosureChannel,
     client?: PoolClient) {
     if (!targets.length) return [];
-    return (await this.readDecisions(targets, viewer, channel, false, client)).decisions;
+    return (await this.readSubmission(targets, viewer, channel, false, client)).decisions;
   }
 
   async readWithAnonymousNames(targets: readonly DisclosureTarget[], viewer: Viewer, channel: DisclosureChannel,
     client?: PoolClient): Promise<DisclosureWithAnonymousNames> {
     if (!targets.length) return { decisions: [], anonymousNames: [] };
-    const { decisions, anonymousNames } = await this.readDecisions(targets, viewer, channel, true, client);
+    const { decisions, anonymousNames } = await this.readSubmission(targets, viewer, channel, true, client);
     return { decisions, anonymousNames };
   }
 
   readAtCut(targets: readonly DisclosureTarget[], viewer: Viewer, channel: DisclosureChannel,
     client?: PoolClient, anonymousNames = false) {
-    return this.readDecisions(targets, viewer, channel, anonymousNames, client);
+    return this.readSubmission(targets, viewer, channel, anonymousNames, client);
+  }
+
+  private async readSubmission(targets: readonly DisclosureTarget[], viewer: Viewer,
+    channel: DisclosureChannel, anonymousNames: boolean, client?: PoolClient) {
+    const submission = await chunkDisclosureSubmission(targets, async chunk => {
+      const evaluated = await this.readDecisions(chunk, viewer, channel, anonymousNames, client);
+      return { results: evaluated.decisions.map((decision, index) => ({ decision,
+        name: evaluated.anonymousNames[index], fenceBasis: evaluated.fenceBases[index]! })), cost: evaluated.cost };
+    });
+    return { decisions: submission.results.map(result => result.decision),
+      anonymousNames: anonymousNames ? submission.results.map(result => result.name!) : [],
+      fenceBases: submission.results.map(result => result.fenceBasis), cost: submission.cost };
   }
 
   private async readDecisions(targets: readonly DisclosureTarget[], viewer: Viewer,
     channel: DisclosureChannel, anonymousNames: boolean, client?: PoolClient):
-    Promise<DisclosureWithAnonymousNames & { fenceBasis: DisclosureFenceBasis }> {
+    Promise<DisclosureWithAnonymousNames & { fenceBases: readonly DisclosureFenceBasis[];
+      cost: Readonly<Record<string, number>> }> {
     requireBatch(targets);
     if (!DISCLOSURE_CHANNELS.includes(channel)
       || targets.some(target => !ownerReference.test(target.resource)
@@ -239,12 +262,14 @@ export class DisclosureStore implements DisclosureReader {
     if (!targets.length) throw new DisclosureUnavailable('An empty batch has no Access cut');
     const suitabilityDefault = usesSuitabilityDefault(channel);
     const source = client ?? accessClient(this.pool) ?? this.pool;
+    let nameOwnerQueries = 0, nameOwnerStatements = 0;
     try {
       const nameOwners = new Map<string, string>();
       const resources = [...new Set(targets.filter(target => target.owner === 'graph'
         && ['name', 'title'].includes(target.component) && !target.nameOwner
         && !target.nameOwnerResolved).map(target => target.resource))];
       if (resources.length && this.environment) {
+        nameOwnerQueries++;
         // Resolve only the exact named resources. Never walk credits, Works or
         // dependent Concepts to discover whether an Agent's name is private.
         const rows = (await this.environment.fuseki.query(`PREFIX rv: <${RV}>
@@ -265,6 +290,7 @@ export class DisclosureStore implements DisclosureReader {
         }
         for (const row of rows) if (row.nameOwner) nameOwners.set(row.work!.value, row.nameOwner.value);
       } else if (resources.length) {
+        nameOwnerStatements++;
         // Pool-only owner consumers still enforce privacy. Include inactive
         // Agents so they cannot inherit a public name after revocation.
         const rows = (await source.query<{ agent: string }>(`SELECT id AS agent
@@ -285,8 +311,8 @@ export class DisclosureStore implements DisclosureReader {
           -- The boolean primary key/check makes this a singleton. Spell out its
           -- bound before joining the batch: fresh owner statistics otherwise
           -- estimate thousands of fence rows and trigger costly per-read JIT.
-          WITH fence AS MATERIALIZED (SELECT open, generation::text AS generation,
-            access.site_moderation_basis() AS cut FROM access.recovery_fence WHERE id LIMIT 1 FOR SHARE),
+          WITH fence AS MATERIALIZED (SELECT open, generation::text AS generation
+            FROM access.recovery_fence WHERE id LIMIT 1 FOR SHARE),
           requested AS (SELECT * FROM jsonb_to_recordset($1::jsonb) AS wanted(
             ordinal int, owner text, resource text, component text, revision text, context text,
             "resourceKind" text, parents jsonb, "nameOwner" text)),
@@ -296,7 +322,8 @@ export class DisclosureStore implements DisclosureReader {
           realm_candidates AS MATERIALIZED (SELECT ordinal,resource FROM requested WHERE "resourceKind" = 'realm'
             UNION ALL SELECT ordinal,resource FROM parent_edges WHERE kind = 'realm'),
           name_policy AS MATERIALIZED (${nameOwnerPolicySql(4, 5, 6, 7)})
-          SELECT wanted.ordinal, fence.open, fence.generation AS "recoveryGeneration", fence.cut AS "enforcementCut",
+          SELECT wanted.ordinal, fence.open, fence.generation AS "recoveryGeneration",
+            ${SCOPED_ENFORCEMENT_BASIS_SQL} AS "enforcementCut",
             EXISTS (SELECT 1 FROM realm_candidates realm CROSS JOIN LATERAL (
               SELECT 1 FROM access.governance_enforcement e
               JOIN access.moderation_decision d ON d.id = e.decision_id
@@ -375,7 +402,7 @@ export class DisclosureStore implements DisclosureReader {
             row.ordinal !== index
           || typeof row.restricted !== 'boolean' || !Array.isArray(row.assessments)
           || typeof row.realmClosed !== 'boolean' || !validFenceBasis(row)
-          || row.recoveryGeneration !== rows[0]?.recoveryGeneration || row.enforcementCut !== rows[0]?.enforcementCut
+          || row.recoveryGeneration !== rows[0]?.recoveryGeneration
           || anonymousNames && owners[index] !== undefined && typeof row.publicNameVisible !== 'boolean'
           || row.assessments.some(labels => !validLabels(labels)))) {
           throw new DisclosureUnavailable('Disclosure result is incomplete');
@@ -392,7 +419,9 @@ export class DisclosureStore implements DisclosureReader {
           return ['read', 'summary', 'thread', 'feed', 'inbox'].includes(channel) ? 'tombstone' : 'hidden';
         };
         return {
-          fenceBasis: { recoveryGeneration: rows[0]!.recoveryGeneration, enforcementCut: rows[0]!.enforcementCut },
+          fenceBases: rows.map(row => ({ recoveryGeneration: row.recoveryGeneration, enforcementCut: row.enforcementCut })),
+          cost: { ownerStatements: 1, recoveryStatements: 1, statements: 1 + nameOwnerStatements,
+            nameOwnerQueries, nameOwnerStatements },
           decisions: rows.map((row, index) => decision(row, index, viewer, row.nameVisible)),
           anonymousNames: anonymousNames ? rows.map((row, index) =>
             targets[index]!.owner === 'graph' && ['name', 'title'].includes(targets[index]!.component)
@@ -439,7 +468,7 @@ export function disclose(env: WorkActivationEnvironment, targets: readonly Discl
   return discloseInventory(env, targets, viewer, channel, client);
 }
 
-/** Each caller bounds its inventory before owner or graph work begins. */
+/** The contract bounds and chunks the complete caller inventory before work. */
 export async function discloseInventory(env: WorkActivationEnvironment, targets: readonly DisclosureTarget[],
   viewer: Viewer, channel: DisclosureChannel, client?: PoolClient): Promise<DisclosureDecision[]> {
   return (await discloseInventoryWithCost(env, targets, viewer, channel, client)).decisions;
@@ -580,6 +609,12 @@ function requireReader(env: WorkActivationEnvironment): DisclosureReader & Requi
  * may positively establish that result, including the current source revision. */
 export async function resolveDisclosureSelections(env: WorkActivationEnvironment,
   targets: readonly DisclosureTarget[]): Promise<readonly DisclosureSelection[]> {
+  return (await chunkDisclosureSubmission(targets, async chunk => ({
+    results: await resolveDisclosureSelectionChunk(env, chunk), cost: {},
+  }))).results;
+}
+async function resolveDisclosureSelectionChunk(env: WorkActivationEnvironment,
+  targets: readonly DisclosureTarget[]): Promise<readonly DisclosureSelection[]> {
   requireBatch(targets);
   const state = ancestryState(env);
   const selected: DisclosureSelection[] = [];
@@ -671,13 +706,15 @@ async function evaluateSelections(env: WorkActivationEnvironment, selections: re
   try {
     const evaluated = await reader.readAtCut(targets, viewer, channel, client, anonymousNames);
     if (mediaAllowed.length !== targets.length || mediaAllowed.some(allowed => typeof allowed !== 'boolean')
-      || evaluated.decisions.length !== targets.length || !validFenceBasis(evaluated.fenceBasis)
+      || evaluated.decisions.length !== targets.length || !Array.isArray(evaluated.fenceBases)
+      || evaluated.fenceBases.length !== targets.length || evaluated.fenceBases.some(basis => !validFenceBasis(basis))
       || evaluated.decisions.some(decision => !['visible', 'hidden', 'tombstone'].includes(decision))
       || anonymousNames && (evaluated.anonymousNames.length !== targets.length
         || evaluated.anonymousNames.some(decision => !['visible', 'hidden', 'tombstone'].includes(decision)))) {
       throw new DisclosureUnavailable('Disclosure cut result is incomplete');
     }
-    return { ...evaluated, decisions: evaluated.decisions.map((decision, index) => mediaAllowed[index] ? decision : 'hidden'),
+    return { ...evaluated, fenceBases: evaluated.fenceBases,
+      decisions: evaluated.decisions.map((decision, index) => mediaAllowed[index] ? decision : 'hidden'),
       anonymousNames: evaluated.anonymousNames.map((decision, index) => mediaAllowed[index] ? decision : 'hidden') };
   } catch (cause) {
     if (cause instanceof DisclosureUnavailable) throw cause;
@@ -686,15 +723,21 @@ async function evaluateSelections(env: WorkActivationEnvironment, selections: re
 }
 export async function captureDisclosure(env: WorkActivationEnvironment, selections: readonly DisclosureSelection[],
   viewer: Viewer, channel: DisclosureChannel, client?: PoolClient): Promise<readonly DisclosureReadCut[]> {
+  return (await chunkDisclosureSubmission(selections, async chunk => ({
+    results: await captureDisclosureChunk(env, chunk, viewer, channel, client), cost: {},
+  }))).results;
+}
+async function captureDisclosureChunk(env: WorkActivationEnvironment, selections: readonly DisclosureSelection[],
+  viewer: Viewer, channel: DisclosureChannel, client?: PoolClient): Promise<readonly DisclosureReadCut[]> {
   requireSelections(env, selections);
   requireReader(env);
   if (!selections.length) return [];
   await rereadRelationships(env, selections);
   const { heads } = await currentHeads(env, selections);
   const evaluated = await evaluateSelections(env, selections, viewer, channel, client, false);
-  const fenceBasis = Object.freeze({ ...evaluated.fenceBasis });
   const state = ancestryState(env);
   return Object.freeze(selections.map((selection, index) => {
+    const fenceBasis = Object.freeze({ ...evaluated.fenceBases[index]! });
     const cut = Object.freeze({ selection, parents: Object.freeze(selection.ancestry.parents.map(parent =>
       Object.freeze({ ...parent, fenceBasis }))), fenceBasis, decision: evaluated.decisions[index]! });
     const dependencies = new Set(headDependencies(selection));
@@ -730,6 +773,12 @@ async function rereadRelationships(env: WorkActivationEnvironment, selections: r
  * placement. A failed reread cannot turn a confirmed hidden cut into visible. */
 export async function fenceDisclosure(env: WorkActivationEnvironment, cuts: readonly DisclosureReadCut[],
   viewer: Viewer, channel: DisclosureChannel, client?: PoolClient): Promise<DisclosureDecision[]> {
+  return [...(await chunkDisclosureSubmission(cuts, async chunk => ({
+    results: await fenceDisclosureChunk(env, chunk, viewer, channel, client), cost: {},
+  }))).results];
+}
+async function fenceDisclosureChunk(env: WorkActivationEnvironment, cuts: readonly DisclosureReadCut[],
+  viewer: Viewer, channel: DisclosureChannel, client?: PoolClient): Promise<DisclosureDecision[]> {
   requireBatch(cuts);
   const state = ancestryState(env), reader = requireReader(env);
   const saved = cuts.map(cut => {
@@ -753,7 +802,7 @@ export async function fenceDisclosure(env: WorkActivationEnvironment, cuts: read
     const evaluated = await evaluateSelections(env, selections, viewer, channel, client, false);
     return evaluated.decisions.map((decision, index) => {
       if (cuts[index]!.decision === 'hidden' || decision === 'hidden') return 'hidden';
-      if (JSON.stringify(evaluated.fenceBasis) !== JSON.stringify(cuts[index]!.fenceBasis)) {
+      if (JSON.stringify(evaluated.fenceBases[index]) !== JSON.stringify(cuts[index]!.fenceBasis)) {
         throw new DisclosureUnavailable('Disclosure enforcement cut moved');
       }
       return decision;
@@ -772,17 +821,18 @@ async function requireFreshSnapshot(client?: PoolClient): Promise<void> {
 }
 async function readInventory(env: WorkActivationEnvironment, targets: readonly DisclosureTarget[],
   viewer: Viewer, channel: DisclosureChannel, anonymousNames: boolean, client?: PoolClient):
-  Promise<DisclosureWithAnonymousNames & { anonymousNameProbes: number; parentHeadQueries: number }> {
-  requireBatch(targets);
-  requireReader(env);
-  const decisions: DisclosureDecision[] = [], names: DisclosureDecision[] = [];
-  let parentHeadQueries = 0;
-  for (let offset = 0; offset < targets.length; offset += DISCLOSURE_COST.batch) {
-    const selections = await resolveDisclosureSelections(env, targets.slice(offset, offset + DISCLOSURE_COST.batch));
-    parentHeadQueries += (await currentHeads(env, selections)).graphQueries;
+  Promise<DisclosureWithAnonymousNames & { anonymousNameProbes: number; parentHeadQueries: number;
+    cost: Readonly<Record<string, number>> }> {
+  const submission = await chunkDisclosureSubmission(targets, async chunk => {
+    requireReader(env);
+    const selections = await resolveDisclosureSelectionChunk(env, chunk);
+    const parentHeadQueries = (await currentHeads(env, selections)).graphQueries;
     const evaluated = await evaluateSelections(env, selections, viewer, channel, client, anonymousNames);
-    decisions.push(...evaluated.decisions);
-    names.push(...evaluated.anonymousNames);
-  }
-  return { decisions, anonymousNames: names, anonymousNameProbes: 0, parentHeadQueries };
+    return { results: evaluated.decisions.map((decision, index) => ({ decision, name: evaluated.anonymousNames[index] })),
+      cost: { ...evaluated.cost, parentHeadQueries, anonymousNameProbes: 0 } };
+  });
+  return { decisions: submission.results.map(result => result.decision),
+    anonymousNames: anonymousNames ? submission.results.map(result => result.name!) : [],
+    anonymousNameProbes: submission.cost.anonymousNameProbes ?? 0,
+    parentHeadQueries: submission.cost.parentHeadQueries ?? 0, cost: submission.cost };
 }

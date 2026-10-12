@@ -123,13 +123,13 @@ function fixture(parents: OwnerEstablishedGraphParents = [parent('work'), parent
     },
   } as unknown as WorkActivationEnvironment;
   const source: DisclosureAncestrySource = {
-    read: async () => {
+    read: async inputs => {
       if (unavailable) throw new Error('owner source offline');
-      return rows;
+      return inputs.flatMap(input => rows.filter(row => row.resource === input.resource));
     },
-    reread: async () => {
+    reread: async bases => {
       if (unavailable) throw new Error('owner source offline');
-      return rows;
+      return bases.flatMap(basis => rows.filter(row => row.relationshipBasis.token === basis.token));
     },
   };
   const reader: DisclosureReader = {
@@ -140,7 +140,7 @@ function fixture(parents: OwnerEstablishedGraphParents = [parent('work'), parent
       return {
         decisions: decisions ?? inputs.map(() => 'visible'),
         anonymousNames: inputs.map(() => 'hidden'),
-        fenceBasis,
+        fenceBases: inputs.map(() => ({ ...fenceBasis })),
       };
     },
   };
@@ -442,7 +442,7 @@ test('disclosure final fence compares only a cut’s established dependencies in
   expect(await fenceDisclosure(f.env, [cuts[0]!], ANONYMOUS_VIEWER, 'read')).toEqual(['visible']);
 });
 
-test('disclosure public batch entries reject 65 targets before any owner or graph work', async () => {
+test('disclosure public batch entries reject 1,025 targets before any owner or graph work', async () => {
   for (const entry of [disclose, discloseInventory, discloseInventoryWithCost, discloseInventoryWithAnonymousNames]) {
     const f = fixture();
     let sourceReads = 0;
@@ -450,7 +450,7 @@ test('disclosure public batch entries reject 65 targets before any owner or grap
       read: async targets => { sourceReads++; return targets.map(input => evidence(input, [parent('realm', input)])); },
       reread: f.source.reread,
     });
-    const inputs = Array.from({ length: 65 }, () => target);
+    const inputs = Array.from({ length: 1_025 }, () => target);
     await expect(entry(f.env, inputs, ANONYMOUS_VIEWER, 'read')).rejects.toBeInstanceOf(DisclosureUnavailable);
     expect(sourceReads).toBe(0);
     expect(f.headQueries).toHaveLength(0);
@@ -626,7 +626,7 @@ test('disclosure assembly: direct media retains use/target ancestry and requires
     readAtCut: async (inputs) => ({
       decisions: inputs.map(() => 'hidden'),
       anonymousNames: [],
-      fenceBasis: { recoveryGeneration: '1', enforcementCut: hash('fixture-cut-1') },
+      fenceBases: inputs.map(() => ({ recoveryGeneration: '1', enforcementCut: hash('fixture-cut-1') })),
     }),
   };
   configureDisclosure(blocked.env, hiddenReader);
@@ -726,7 +726,7 @@ test('disclosure assembly: batch media preserves owner rows and order while boun
     read: async inputs => inputs.map(() => 'visible'),
     readAtCut: async inputs => ({
       decisions: inputs.map(input => input.resource.endsWith(hiddenAsset) ? 'hidden' : 'visible'),
-      anonymousNames: [], fenceBasis: { recoveryGeneration: '1', enforcementCut: hash('fixture-cut-1') },
+      anonymousNames: [], fenceBases: inputs.map(() => ({ recoveryGeneration: '1', enforcementCut: hash('fixture-cut-1') })),
     }),
   };
   configureDisclosure(f.env, hiddenReader);
@@ -793,7 +793,7 @@ test('disclosure ancestry: a hidden capture never becomes visible after an incom
   }
 });
 
-test('disclosure ancestry: direct batch accepts 64 targets, rejects 65 and bounds 128 parent edges', async () => {
+test('disclosure ancestry: chunks bound 128 parent edges and inventory reports measured head queries', async () => {
   const f = fixture();
   const inputs = Array.from({ length: 64 }, (_, index): DisclosureTarget => ({
     ...target,
@@ -831,15 +831,6 @@ test('disclosure ancestry: direct batch accepts 64 targets, rejects 65 and bound
     expect(values).toBeDefined();
     expect(values!.match(/<https:\/\/rezics\.com\/id\//g)!.length).toBeLessThanOrEqual(64);
   }
-  await expect(resolveDisclosureSelections(f.env, [...inputs, target])).rejects.toBeInstanceOf(
-    DisclosureUnavailable,
-  );
-  await expect(
-    captureDisclosure(
-      f.env,
-      [...selections, selections[0]!] as DisclosureSelection[],
-      ANONYMOUS_VIEWER,
-      'read',
-    ),
-  ).rejects.toBeInstanceOf(DisclosureUnavailable);
+  expect(await resolveDisclosureSelections(f.env, [...inputs, inputs[0]!])).toHaveLength(65);
+  expect(await captureDisclosure(f.env, [...selections, selections[0]!], ANONYMOUS_VIEWER, 'read')).toHaveLength(65);
 });
