@@ -147,6 +147,8 @@ export function parseAffectedArgs(args: string[]): { ref?: string; list: boolean
   return { ...(ref ? { ref } : {}), list };
 }
 
+import { nativeProofOwnerBatches } from './acceptance.ts';
+
 export function affectedCommands(plan: AffectedPlan): { label: string; command: [string, string[]] }[] {
   const commands: { label: string; command: [string, string[]] }[] = [];
   for (const { task } of plan.tasks) commands.push({ label: task, command: ['task', [task]] });
@@ -165,6 +167,14 @@ export function affectedCommands(plan: AffectedPlan): { label: string; command: 
       }
       if (files.length) commands.push({ label: `unit (${files.length} files)`,
         command: ['bun', tierBunTestArgs('unit', files.map(file => `./${file}`))] });
+      continue;
+    }
+    if (tier === 'owner') {
+      if (widened) commands.push({ label: 'owner (whole tier)', command: ['bun', ['scripts/qa/cli.ts', '--tier', 'owner']] });
+      for (const batch of nativeProofOwnerBatches(files)) {
+        commands.push({ label: `owner (${batch.length} files)`,
+          command: ['bun', ['scripts/qa/cli.ts', '--tier', 'owner', ...batch.flatMap(file => ['--file', file])]] });
+      }
       continue;
     }
     if (widened) {

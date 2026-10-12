@@ -11,6 +11,7 @@ import {
   erasureCampaignNativeTest,
   heldReplayNativeTest,
   inputSelectedNativeTests,
+  nativeProofDeclarations,
   legacyHostJenaGateFiles,
   nativeIntegerPreservationTest,
   nativeUnionTest,
@@ -22,6 +23,7 @@ import {
 } from './acceptance.ts';
 import { expandTestPaths } from './core.ts';
 import { WORK_PROFILE_SEED_BUILD_FILE } from './preparation-selection.ts';
+import { dockerfileCopySources } from '../dev/fuseki-image.ts';
 
 export { affectedOwnerTierEntries };
 
@@ -81,7 +83,7 @@ export interface AffectedPlan {
   widened: { tier: AffectedTier; because: string }[];
   deferred: { file: string; reason: string }[];
   ignored: { path: string; reason: string }[];
-  /** Set when the Dockerfile text is available: whether module COPY inputs selected native proofs. */
+  /** Set when Dockerfile text is available: whether declared image COPY inputs selected native proofs. */
   nativeModuleCopySelection?: 'selected' | 'not selected' | 'unsupported COPY syntax, selected';
 }
 
@@ -127,11 +129,13 @@ function copySourceCovers(path: string, copies: readonly NativeModuleCopy[]): bo
   });
 }
 
-/** Each registry file uses the module-stage COPY set. A change to one file selects only that file. */
-function nativeFilesTouchedBy(path: string, copies: readonly NativeModuleCopy[]): readonly string[] {
+/** Each proof follows its declared image scope. A change to one proof selects only that file. */
+function nativeFilesTouchedBy(path: string, copies: readonly NativeModuleCopy[], runtimeSources: readonly string[]): readonly string[] {
   if (inputSelectedNative.has(path)) return [path];
-  if (path === nativeModuleDockerfile || copySourceCovers(path, copies)) return inputSelectedNativeTests;
-  return [];
+  return nativeProofDeclarations.filter(proof => path === nativeModuleDockerfile
+    || copySourceCovers(path, copies)
+    || (proof.imageInputs === 'fuseki' && copySourceCovers(path,
+      runtimeSources.map(source => ({ source, destination: '' }))))).map(proof => proof.file);
 }
 
 /** Registered unit files a widened tier runs. Registry files are omitted; they are listed only when their COPY rule matched. */
@@ -346,22 +350,25 @@ export function planAffected(input: {
     return checks;
   };
   const seeds = new Set<string>();
-  // These tests reproduce the Dockerfile's first-stage COPY set inside Docker.
+  // Proofs consume their declared module or complete-image COPY set.
   // Stack-tier widening for infra/jena stays in place. An unreadable COPY line
   // fails closed by selecting every registry file, so planning itself still finishes.
   let nativeCopies: readonly NativeModuleCopy[] | undefined;
+  let runtimeSources: readonly string[] = [];
   let nativeModuleCopyUnsupported = false;
   if (input.nativeModuleDockerfile !== undefined) {
     try {
       nativeCopies = nativeModuleCopies(input.nativeModuleDockerfile);
+      runtimeSources = /^\s*COPY\s/m.test(input.nativeModuleDockerfile)
+        ? dockerfileCopySources(input.nativeModuleDockerfile) : [];
     } catch (error) {
-      if (!(error instanceof Error) || !error.message.startsWith('unsupported native module COPY:')) throw error;
+      if (!(error instanceof Error) || !/unsupported native module COPY:|JSON-form COPY|Malformed COPY:/.test(error.message)) throw error;
       nativeModuleCopyUnsupported = true;
     }
   }
   const matchedNative = new Set<string>();
   for (const path of plan.changed) {
-    if (nativeCopies) for (const file of nativeFilesTouchedBy(path, nativeCopies)) matchedNative.add(file);
+    if (nativeCopies) for (const file of nativeFilesTouchedBy(path, nativeCopies, runtimeSources)) matchedNative.add(file);
     if (jenaCheckInput.test(path) && !plan.tasks.some(check => check.task === 'jena:check'))
       plan.tasks.push({ task: 'jena:check', because: `${path}: pinned Jena CLI input` });
     for (const workspace of typecheckWorkspaces([path])) {

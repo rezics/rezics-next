@@ -2,7 +2,9 @@ import { expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { testArgs } from '../../../scripts/qa/acceptance.ts';
+import { failedSelection, nativeProofBatchDeadline, nativeProofDeclaration, nativeProofDeclarations, testArgs } from '../../../scripts/qa/acceptance.ts';
+import { NativeProofImageUnavailable, runPreparedNativeProofBatch } from '../../../scripts/qa/native-proof-execution.ts';
+import { fusekiBuildInputs } from '../../../scripts/dev/fuseki-image.ts';
 import { classify, erasureCampaignNativeTest, formatPlan, heldReplayNativeTest, inputSelectedNativeTests, nativeIntegerPreservationTest, nativeModuleCopies, nativeModuleCopyInputs, nativeUnionTest, needsGraph, planAffected, routeTest, workNameScopeBasisTest, type GraphModule } from '../../../scripts/qa/affected.ts';
 import { mergeUnitFiles, ownerFilesFromPlan, unitFilesFromPlan } from '../../../scripts/goal/goalctl.ts';
 import { regressionBatchCommand, regressionRegistry } from '../../../scripts/goal/regress.ts';
@@ -316,6 +318,115 @@ FROM maven:pinned AS distribution
 COPY infra/jena/fuseki-text-qa.ttl /opt/qa.ttl
 `.trim();
 
+test('runtime-image proofs follow every Fuseki build input, including later-stage scripts and patches', () => {
+  const root = resolve(import.meta.dir, '../../..');
+  const dockerfile = readFileSync(join(root, 'infra/jena/Dockerfile'), 'utf8');
+  const exists = (path: string) => files.has(path) || inputSelectedNativeTests.includes(path);
+  const restart = 'infra/jena/tests/search-journal-restart.test.ts';
+  for (const path of fusekiBuildInputs(root)) {
+    const result = plan([path], { nativeModuleDockerfile: dockerfile, exists });
+    expect(result.tests.owner, path).toContain(restart);
+    expect(result.tests.owner, path).toContain(nativeIntegerPreservationTest);
+  }
+  for (const path of ['infra/jena/fuseki-owner.sh', 'infra/jena/patches/ThriftConvert.java',
+    'infra/jena/fuseki-text-qa.ttl']) {
+    expect(plan([path], { nativeModuleDockerfile: dockerfile, exists }).tests.owner)
+      .toEqual([nativeIntegerPreservationTest, restart]);
+  }
+});
+
+test('a copy-free Dockerfile has an empty input set while its own change still selects proofs', () => {
+  const dockerfile = 'FROM eclipse-temurin:21\n';
+  const exists = (path: string) => path === nativeUnionTest;
+  const ordinary = plan(['services/main/src/access.ts'], { nativeModuleDockerfile: dockerfile, exists });
+  expect(ordinary.nativeModuleCopySelection).toBe('not selected');
+  expect(ordinary.tests.owner).toEqual([]);
+  const image = plan(['infra/jena/Dockerfile'], { nativeModuleDockerfile: dockerfile, exists });
+  expect(image.nativeModuleCopySelection).toBe('selected');
+  expect(image.tests.owner).toEqual([nativeUnionTest]);
+});
+
+test('a 700-second prefix proof completes under its declared owner deadline', async () => {
+  const prefix = 'infra/jena/tests/prefix-walk-native.test.ts';
+  const result = await runPreparedNativeProofBatch('.', [prefix], 600_000, async budget => {
+    const activeElapsedMs = 700_000;
+    return { ok: activeElapsedMs <= budget, budget };
+  }, { imageTag: () => { throw new Error('a module proof must not require a Fuseki image'); } });
+  expect(result).toEqual({ ok: true, budget: 1_240_000 });
+  expect(nativeProofBatchDeadline(['infra/jena/tests/occurrence-label-growth.test.ts'], 600_000)).toBe(1_960_000);
+  expect(nativeProofBatchDeadline(['services/main/tests/read-snapshot-native.test.ts'], 600_000)).toBe(1_200_000);
+  expect(nativeProofBatchDeadline([prefix, 'infra/jena/tests/occurrence-label-growth.test.ts'], 600_000)).toBe(3_200_000);
+  expect(nativeProofBatchDeadline([prefix, 'services/main/tests/ordinary.test.ts'], 600_000)).toBe(1_840_000);
+});
+
+test('affected owner batches isolate every native declaration and preserve ordinary grouping', () => {
+  const ordinary = ['services/main/tests/ordinary-a.test.ts', 'services/main/tests/ordinary-b.test.ts'];
+  const result = plan([], {});
+  result.tests.owner = [...ordinary, ...nativeProofs];
+  const commands = affectedCommands(result);
+  expect(commands[0]!.command).toEqual(['bun', ['scripts/qa/cli.ts', '--tier', 'owner',
+    ...ordinary.flatMap(file => ['--file', file])]]);
+  expect(commands.slice(1).map(item => item.command[1])).toEqual(
+    nativeProofs.map(file => ['scripts/qa/cli.ts', '--tier', 'owner', '--file', file]));
+  expect(new Set(nativeProofDeclarations.map(proof => proof.file)).size).toBe(nativeProofs.length);
+  for (const file of nativeProofs) {
+    expect(nativeProofBatchDeadline([file], 600_000)).toBeGreaterThanOrEqual(nativeProofDeclaration(file)!.deadlineMs);
+  }
+});
+
+test('a missing current Fuseki image refuses explicitly before any native test executes', async () => {
+  const restart = 'infra/jena/tests/search-journal-restart.test.ts';
+  const events: string[] = [];
+  const execute = async () => { events.push('execute'); return true; };
+  const preparation = { imageTag: () => 'rezics/fuseki:changed-inputs',
+    inspect: async (_root: string, image: string) => {
+      events.push(`inspect:${image}`);
+      return { ok: false, output: 'No such image' };
+    } };
+  const execution = runPreparedNativeProofBatch('.', [restart], 600_000, execute, preparation);
+  await expect(execution).rejects.toBeInstanceOf(NativeProofImageUnavailable);
+  await expect(execution).rejects.toMatchObject({ kind: 'native-proof-image-unavailable',
+    image: 'rezics/fuseki:changed-inputs', files: [restart],
+    message: `build rezics/fuseki:changed-inputs first before running ${restart}: No such image` });
+  expect(events).toEqual(['inspect:rezics/fuseki:changed-inputs']);
+});
+
+test('complete-image proof batches verify one current tag before execution', async () => {
+  const restart = 'infra/jena/tests/search-journal-restart.test.ts';
+  const events: string[] = [];
+  const result = await runPreparedNativeProofBatch('.', [restart, nativeIntegerPreservationTest], 600_000,
+    async budget => { events.push('execute'); return budget; }, {
+      imageTag: () => 'rezics/fuseki:current-inputs',
+      inspect: async (_root, image) => { events.push(`inspect:${image}`); return { ok: true, output: 'sha256:present' }; },
+    });
+  expect(events).toEqual(['inspect:rezics/fuseki:current-inputs', 'execute']);
+  expect(result).toBe(1_140_000);
+});
+
+test('prior unit and model native failures rerun only in their current owner registration', () => {
+  const scratch = resolve(import.meta.dir, '../../../.temp');
+  mkdirSync(scratch, { recursive: true });
+  const artifacts = mkdtempSync(join(scratch, 'native-failure-selection-'));
+  const prior = join(artifacts, 'prior-one');
+  mkdirSync(prior);
+  try {
+    writeFileSync(join(prior, 'acceptance.json'), JSON.stringify({ tiers: [
+      { name: 'unit', status: 'failed' }, { name: 'model', status: 'failed' },
+    ] }));
+    const visit = 'infra/jena/tests/native-visit-profile.test.ts';
+    const snapshot = 'services/main/tests/read-snapshot-native.test.ts';
+    writeFileSync(join(prior, 'unit.xml'), `<testsuite><testcase name="native unit failure" file="${visit}"><failure /></testcase></testsuite>`);
+    writeFileSync(join(prior, 'model.xml'), `<testsuite><testcase name="native model failure" file="${snapshot}"><failure /></testcase></testsuite>`);
+    const selection = failedSelection(artifacts, 'prior-one');
+    expect(selection.tiers).toEqual(['owner']);
+    expect(selection.tests.map(test => [test.file, test.tier])).toEqual([[visit, 'owner'], [snapshot, 'owner']]);
+    expect(testArgs('owner', selection)).toEqual([visit, snapshot, '-t',
+      '^.*(?:native unit failure|native model failure)$']);
+    rmSync(join(prior, 'model.xml'));
+    expect(failedSelection(artifacts, 'prior-one').tiers).toEqual(['model', 'owner']);
+  } finally { rmSync(artifacts, { recursive: true, force: true }); }
+});
+
 test('native module proofs follow the Dockerfile COPY inputs into the owner tier', () => {
   const real = readFileSync(new URL('../../../infra/jena/Dockerfile', import.meta.url), 'utf8');
   const copied = nativeModuleCopies(real).map(copy => copy.source);
@@ -380,8 +491,8 @@ test('native module proofs follow the Dockerfile COPY inputs into the owner tier
     .toEqual(['bun', ['scripts/qa/cli.ts', '--tier', 'model']]);
   expect(dockerfile.tests.unit).toEqual([]);
   expect(dockerfile.tests.owner).toEqual(nativeProofs);
-  expect(affectedCommands(dockerfile).find(item => item.label === `owner (${nativeProofs.length} files)`)!.command[1])
-    .toEqual(['scripts/qa/cli.ts', '--tier', 'owner', ...nativeProofs.flatMap(file => ['--file', file])]);
+  expect(affectedCommands(dockerfile).filter(item => item.label === 'owner (1 files)').map(item => item.command[1]))
+    .toEqual(nativeProofs.map(file => ['scripts/qa/cli.ts', '--tier', 'owner', '--file', file]));
   for (const file of inputSelectedNativeTests) expect(testArgs('owner')).not.toContain(file);
   expect(dockerfile.tasks[0]!.task).toBe('jena:check');
 });
@@ -476,8 +587,8 @@ test('a widened unit tier omits input-selected native files unless their COPY ru
   expect(widenedCommands.some(item => item.label === 'owner (whole tier)')).toBe(true);
   const broadOwnerCommand = widenedCommands.find(item => item.label === 'owner (whole tier)')!.command[1];
   for (const file of inputSelectedNativeTests) expect(broadOwnerCommand).not.toContain(file);
-  expect(widenedCommands.find(item => item.label === `owner (${nativeProofs.length} files)` )!.command[1])
-    .toEqual(['scripts/qa/cli.ts', '--tier', 'owner', ...nativeProofs.flatMap(file => ['--file', file])]);
+  expect(widenedCommands.filter(item => item.label === 'owner (1 files)').map(item => item.command[1]))
+    .toEqual(nativeProofs.map(file => ['scripts/qa/cli.ts', '--tier', 'owner', '--file', file]));
   expect(widenedCommands.some(item => item.label === 'unit (1 files)'
     && item.command[1].includes(`./${erasureCampaignNativeTest}`))).toBe(false);
   expect(testArgs('unit')).not.toContain(erasureCampaignNativeTest);

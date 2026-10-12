@@ -1017,19 +1017,23 @@ try {
   }
   for (const tier of selected) {
     if (tier === 'static') await runTier(tier, 'bun', ['scripts/research/storage_architecture/check.ts', ...(options.backend ? ['--backend'] : [])], 120_000);
-    if (tier === 'unit' || tier === 'owner')
-      await runBunTier(
-        tier,
-        'bun',
-        tierBunTestArgs(tier, [
-          ...testArgs(tier, selection, chosenFor(tier)),
-          ...(tier === 'unit' && !selection && !chosenFor(tier) ? unitHarnessFiles : []),
-          '--reporter=junit',
-          `--reporter-outfile=${join(directory, `${tier}.xml`)}`,
-          ...(options.timeoutArgs ?? []),
-        ]),
-        tier === 'owner' ? ownerTierBudgetMs() : 180_000,
-      );
+    if (tier === 'unit' || tier === 'owner') {
+      const { runPreparedNativeProofBatch } = await import('./native-proof-execution.ts');
+      const args = testArgs(tier, selection, chosenFor(tier));
+      await runPreparedNativeProofBatch(root, splitTestArgs(args).paths,
+        tier === 'owner' ? ownerTierBudgetMs() : 180_000, budget => runBunTier(
+          tier,
+          'bun',
+          tierBunTestArgs(tier, [
+            ...args,
+            ...(tier === 'unit' && !selection && !chosenFor(tier) ? unitHarnessFiles : []),
+            '--reporter=junit',
+            `--reporter-outfile=${join(directory, `${tier}.xml`)}`,
+            ...(options.timeoutArgs ?? []),
+          ]),
+          budget,
+        ));
+    }
     if (tier === 'model') {
       const projectRunId = `${runId}-m`;
       startedProjects.push(projectRunId);

@@ -243,20 +243,43 @@ export const nativeIntegerPreservationTest = 'infra/jena/tests/native-integer-pr
 export const nativeUnionTest = 'infra/jena/tests/semantic-source-readiness-union.test.ts';
 export const workNameScopeBasisTest = 'infra/jena/tests/work-name-scope-basis.test.ts';
 export const heldReplayNativeTest = 'services/main/tests/erasure-held-replay-native.test.ts';
-/** Docker/Maven proofs selected by image inputs or explicitly, outside ordinary tier batches. */
-export const inputSelectedNativeTests = [
-  nativeUnionTest,
-  erasureCampaignNativeTest,
-  nativeIntegerPreservationTest,
-  workNameScopeBasisTest,
-  heldReplayNativeTest,
-  'infra/jena/tests/command-module-startup.test.ts',
-  'infra/jena/tests/native-visit-profile.test.ts',
-  'infra/jena/tests/occurrence-label-growth.test.ts',
-  'infra/jena/tests/prefix-walk-native.test.ts',
-  'infra/jena/tests/search-journal-restart.test.ts',
-  'services/main/tests/read-snapshot-native.test.ts',
-] as const;
+export interface NativeProofDeclaration {
+  file: string;
+  /** Whole-file execution budget, including every serial case and optional probe. */
+  deadlineMs: number;
+  imageInputs: 'module' | 'fuseki';
+  preparedImage: 'fuseki' | null;
+}
+/** A moved proof carries its selection, preparation and execution contract. */
+export const nativeProofDeclarations: readonly NativeProofDeclaration[] = [
+  { file: nativeUnionTest, deadlineMs: 910_000, imageInputs: 'module', preparedImage: null },
+  { file: erasureCampaignNativeTest, deadlineMs: 310_000, imageInputs: 'module', preparedImage: null },
+  { file: nativeIntegerPreservationTest, deadlineMs: 420_000, imageInputs: 'fuseki', preparedImage: 'fuseki' },
+  { file: workNameScopeBasisTest, deadlineMs: 310_000, imageInputs: 'module', preparedImage: null },
+  { file: heldReplayNativeTest, deadlineMs: 310_000, imageInputs: 'module', preparedImage: null },
+  { file: 'infra/jena/tests/command-module-startup.test.ts', deadlineMs: 610_000, imageInputs: 'module', preparedImage: null },
+  { file: 'infra/jena/tests/native-visit-profile.test.ts', deadlineMs: 310_000, imageInputs: 'module', preparedImage: null },
+  { file: 'infra/jena/tests/occurrence-label-growth.test.ts', deadlineMs: 1_960_000, imageInputs: 'module', preparedImage: null },
+  { file: 'infra/jena/tests/prefix-walk-native.test.ts', deadlineMs: 1_240_000, imageInputs: 'module', preparedImage: null },
+  { file: 'infra/jena/tests/search-journal-restart.test.ts', deadlineMs: 3 * 240_000, imageInputs: 'fuseki', preparedImage: 'fuseki' },
+  { file: 'services/main/tests/read-snapshot-native.test.ts', deadlineMs: 1_200_000, imageInputs: 'module', preparedImage: null },
+];
+export function nativeProofDeclaration(file: string): NativeProofDeclaration | undefined {
+  return nativeProofDeclarations.find(proof => proof.file === file.replace(/^\.\//, ''));
+}
+export const inputSelectedNativeTests = nativeProofDeclarations.map(proof => proof.file);
+/** Affected native proofs run alone so an earlier build cannot spend another proof's deadline. */
+export function nativeProofOwnerBatches(files: readonly string[]): string[][] {
+  const ordinary = files.filter(file => !nativeProofDeclaration(file));
+  return [...(ordinary.length ? [ordinary] : []),
+    ...files.filter(file => nativeProofDeclaration(file)).map(file => [file])];
+}
+/** Explicit serial selections need all declared budgets, plus the ordinary batch if present. */
+export function nativeProofBatchDeadline(files: readonly string[], ordinaryBudgetMs: number): number {
+  const proofs = [...new Set(files)].map(nativeProofDeclaration);
+  const nativeBudget = proofs.reduce((total, proof) => total + (proof?.deadlineMs ?? 0), 0);
+  return Math.max(ordinaryBudgetMs, nativeBudget + (proofs.some(proof => !proof) ? ordinaryBudgetMs : 0));
+}
 export const nativeProofOwnerFiles = inputSelectedNativeTests;
 const nativeProofOwnerFileSet: ReadonlySet<string> = new Set(nativeProofOwnerFiles);
 export function isQaOwnerPath(path: string): boolean {
@@ -325,11 +348,15 @@ export function failedSelection(artifactRoot: string, runId: string): FailedSele
   // Diagnostics follow current registrations when an owner file moves tiers.
   // Keep prior failed tiers too: a missing JUnit file still needs a full rerun.
   const tests = failed.filter(test => !isRetiredQaTest(test)).map(test => {
+    if (nativeProofDeclaration(test.file)) return { ...test, tier: 'owner' as const };
     if (isQaFaultPath(test.file)) return { ...test, tier: 'fault/recovery' as const };
     if (isQaIntegrationPath(test.file)) return { ...test, tier: 'integration' as const };
     return test;
   });
-  return { sourceRunId: runId, tiers: [...new Set([...tiers, ...tests.map(test => test.tier)])], tests,
+  const retainedTiers = tiers.filter(tier => !failed.some(test => test.tier === tier
+    && nativeProofDeclaration(test.file)) || failed.some(test => test.tier === tier
+    && !nativeProofDeclaration(test.file)));
+  return { sourceRunId: runId, tiers: [...new Set([...retainedTiers, ...tests.map(test => test.tier)])], tests,
     retiredTests: failed.filter(isRetiredQaTest) };
 }
 
