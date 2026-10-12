@@ -162,42 +162,56 @@ describe('places a subject can be rated in', () => {
   describe('a title search over pages that do not match', () => {
     const work = 'https://rezics.com/id/019a5c00-0000-7000-8000-0000000000c1';
     const releaseId = (n: number) => `https://rezics.com/id/019a5c00-0000-7000-8000-${String(n).padStart(12, '0')}`;
-    /** `titles` is one page per entry; the token of a page is its index. */
-    function pagedReleases(pages: string[][], failAt?: number) {
+    /**
+     * One page of titles per entry. A token names the entry's index and the read it came from, which changes each time a
+     * call is refused, as Main's cursors change with the basis they were issued on. `refuse` answers a call with an error.
+     */
+    function pagedReleases(pages: string[][], refuse?: (call: number, cursor: string | undefined) => { status: number; value: unknown } | null) {
       const cursors: (string | undefined)[] = [];
+      let read = 0;
       const main = (() => ({ v1: { works: () => ({ releases: { get: async ({ query }: { query: { cursor?: string } }) => {
+        const refused = refuse?.(cursors.length, query.cursor);
         cursors.push(query.cursor);
-        const index = query.cursor ? Number(query.cursor) : 0;
-        if (index === failAt) return { data: null, error: { status: 503, value: null } };
+        if (refused) {
+          read++;
+          return { data: null, error: refused };
+        }
+        const index = query.cursor ? Number.parseInt(query.cursor, 10) : 0;
         return { data: { items: pages[index]!.map((title, at) => ({ id: releaseId(index * 100 + at), title: { value: title, language: 'en' } })),
-          nextCursor: index + 1 < pages.length ? String(index + 1) : null }, error: null };
+          nextCursor: index + 1 < pages.length ? `${index + 1}.${read}` : null }, error: null };
       } } }) } })) as unknown as () => MainClient;
       return { cursors, source: releaseSource({ work, main }) };
     }
+    const unavailable = { status: 503, value: null };
+    const moved = { status: 409, value: { code: 'read_basis_changed' } };
+    const invalidCursor = { status: 400, value: { code: 'invalid_work_read' } };
+    const manyPages = () => {
+      const pages = Array.from({ length: MAX_RELEASE_PAGES + 2 }, (_, index) => [`Page ${index}`]);
+      pages[MAX_RELEASE_PAGES + 1] = ['Summer balance'];
+      return pages;
+    };
 
     test('a first page with no match is followed by the page that has one', async () => {
       const { cursors, source } = pagedReleases([['Alpha', 'Beta'], ['Gamma', 'Summer balance']]);
       const loaded = await source.load({ q: 'balance', cursor: null });
       expect(loaded.items.map(item => item.label)).toEqual(['Summer balance']);
       expect(loaded.complete).toBe(true);
-      expect(cursors).toEqual([undefined, '1']);
+      expect(cursors).toEqual([undefined, '1.0']);
     });
 
     test('an empty filter reads one page and keeps the next token', async () => {
       const { cursors, source } = pagedReleases([['Alpha'], ['Beta']]);
       const loaded = await source.load({ q: '', cursor: null });
       expect(loaded.items.map(item => item.label)).toEqual(['Alpha']);
-      expect([loaded.nextCursor, loaded.complete]).toEqual(['1', false]);
+      expect([loaded.nextCursor, loaded.complete]).toEqual(['1.0', false]);
       expect(cursors).toEqual([undefined]);
     });
 
     test('past the bound the picker is left with the next token, and offering it reaches the match', async () => {
-      const pages = Array.from({ length: MAX_RELEASE_PAGES + 2 }, (_, index) => [`Page ${index}`]);
-      pages[MAX_RELEASE_PAGES + 1] = ['Summer balance'];
-      const { cursors, source } = pagedReleases(pages);
+      const { cursors, source } = pagedReleases(manyPages());
       const picker = new EntityPickerSource(source.load);
       await picker.search('balance');
-      expect(picker.getSnapshot()).toMatchObject({ items: [], complete: false, nextCursor: String(MAX_RELEASE_PAGES), error: false });
+      expect(picker.getSnapshot()).toMatchObject({ items: [], complete: false, nextCursor: `${MAX_RELEASE_PAGES}.0`, error: false });
       expect(cursors).toHaveLength(MAX_RELEASE_PAGES);
       await picker.more();
       expect(picker.getSnapshot().items.map(item => item.label)).toEqual(['Summer balance']);
@@ -205,12 +219,38 @@ describe('places a subject can be rated in', () => {
     });
 
     test('a page that cannot be read is an error to retry, not an empty result', async () => {
-      await expect(pagedReleases([['Alpha']], 0).source.load({ q: 'x', cursor: null })).rejects.toThrow();
-      const midway = pagedReleases([['Alpha'], ['Beta'], ['Summer balance']], 1);
-      await expect(midway.source.load({ q: 'zzz', cursor: null })).rejects.toThrow();
+      await expect(pagedReleases([['Alpha']], () => unavailable).source.load({ q: 'x', cursor: null })).rejects.toThrow();
+      const midway = pagedReleases([['Alpha'], ['Beta'], ['Summer balance']], call => call === 1 ? unavailable : null);
       const picker = new EntityPickerSource(midway.source.load);
       await picker.search('zzz');
       expect(picker.getSnapshot()).toMatchObject({ items: [], error: true });
+    });
+
+    test.each([['moved under the read', moved], ['no longer accepts the cursor', invalidCursor]])(
+      'a read Main %s restarts from the first page, never from the stale cursor', async (_reason, answer) => {
+        const stale = `${MAX_RELEASE_PAGES}.0`;
+        let refusals = 0;
+        const { cursors, source } = pagedReleases(manyPages(), (_call, cursor) => cursor === stale && refusals++ === 0 ? answer : null);
+        const picker = new EntityPickerSource(source.load);
+        await picker.search('balance');
+        expect(picker.getSnapshot().nextCursor).toBe(stale);
+        const before = cursors.length;
+        await picker.more();
+        // The refused cursor is sent once; the same call then reads again from the first page.
+        expect(cursors.slice(before, before + 2)).toEqual([stale, undefined]);
+        expect(cursors.filter(cursor => cursor === stale)).toHaveLength(1);
+        expect(picker.getSnapshot()).toMatchObject({ error: false, nextCursor: `${MAX_RELEASE_PAGES}.1` });
+        await picker.more();
+        expect(picker.getSnapshot().items.map(item => item.label)).toEqual(['Summer balance']);
+      });
+
+    test('a read that is refused again after its restart is an error, and an invalid first page is not retried', async () => {
+      const always = pagedReleases(manyPages(), () => moved);
+      await expect(always.source.load({ q: 'balance', cursor: null })).rejects.toThrow();
+      expect(always.cursors).toEqual([undefined, undefined]);
+      const first = pagedReleases(manyPages(), () => invalidCursor);
+      await expect(first.source.load({ q: 'balance', cursor: null })).rejects.toThrow();
+      expect(first.cursors).toEqual([undefined]);
     });
   });
 });

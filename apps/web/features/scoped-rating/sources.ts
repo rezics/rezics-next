@@ -53,6 +53,12 @@ export function readingPositionSource({ work, actingSubject, position, locale, l
   } };
 }
 
+/** Main's answers that ask for a read to restart from its first page: it moved (409), or no longer accepts the cursor (400). */
+function restartRequired(error: { status: unknown; value?: unknown } | null, cursor: string | null): boolean {
+  if (error?.status === 409) return true;
+  return cursor !== null && error?.status === 400 && (error.value as { code?: string } | null)?.code === 'invalid_work_read';
+}
+
 /** A search that matches nothing on a page reads at most this many pages before it offers the next one to the person. */
 export const MAX_RELEASE_PAGES = 5;
 
@@ -70,10 +76,22 @@ export function releaseSource({ work, actingSubject, label, main = () => browser
     const needle = q.trim().toLocaleLowerCase();
     const items: FrameOption[] = [];
     let next = cursor;
-    for (let pages = 0; pages < MAX_RELEASE_PAGES; pages++) {
-      const { data } = await main().v1.works({ id }).releases.get({ query: { limit: 20, ...next ? { cursor: next } : {}, ...actingSubject ? { actingSubject } : {} } });
-      // A failed page is an error the picker can retry, not an empty result.
-      if (!data) throw new Error('Releases could not be read');
+    let restarted = false;
+    let pages = 0;
+    while (pages < MAX_RELEASE_PAGES) {
+      const { data, error } = await main().v1.works({ id }).releases.get({ query: { limit: 20, ...next ? { cursor: next } : {}, ...actingSubject ? { actingSubject } : {} } });
+      if (!data) {
+        // Main asks for a read it moved under, or whose cursor it no longer accepts, to start again from the first page:
+        // the stale cursor is never sent twice. Any other failure is an error the picker can retry, not an empty result.
+        if (!restarted && restartRequired(error, next)) {
+          restarted = true;
+          next = null;
+          pages = 0;
+          continue;
+        }
+        throw new Error('Releases could not be read');
+      }
+      pages++;
       items.push(...data.items.filter(release => !needle || release.title.value.toLocaleLowerCase().includes(needle)).map(release =>
         option({ iri: release.id, dimension: 'release', work, name: { value: release.title.value, language: release.title.language,
           direction: direction(release.title.language, release.title.value) } })));

@@ -7,7 +7,8 @@ import { editionName } from '../features/tracking/display.ts';
 import * as fixture from '../features/tracking/fixtures.ts';
 import { copyOf } from '../features/tracking/messages.ts';
 import { editionListed, editionOptions } from '../features/tracking/model.ts';
-import { applyEditionPage, EditionContinuation, EditionFilterNote, editionContinuation } from '../features/tracking/tracking-sheet.tsx';
+import { AttemptCard } from '../features/tracking/attempt-card.tsx';
+import { applyEditionPage, EditionContinuation, EditionFilterNote, editionContinuation, editionPickers } from '../features/tracking/tracking-sheet.tsx';
 import type { Editions, Realization, Release } from '../features/tracking/types.ts';
 
 const t = copyOf('en');
@@ -94,7 +95,7 @@ describe('edition pages', () => {
     const first = await api.editions(work);
     if (!first.ok) throw new Error('first page failed');
     const note = (editions: Editions, failed = false) => renderToStaticMarkup(createElement(EditionFilterNote,
-      { work, editions, failed, locale: 'en', t, query: 'Release 21' }));
+      { work, editions, failed, locale: 'en', t, query: 'Release 21', pickers: [null] }));
     expect(names(first.data, 'Release 21')).toEqual([]);
     expect(note(first.data)).toContain(t.noMatchingEditionsYet);
     expect(note(first.data, true)).toContain(t.noMatchingEditionsYet);
@@ -107,12 +108,49 @@ describe('edition pages', () => {
     expect(note(joined)).toBe('');
   });
 
+  test('an edition an attempt already holds is no match for it, so the note and the next page still follow', async () => {
+    const all = releases(21);
+    all[0] = { ...all[0]!, title: { ...all[0]!.title, value: 'Balance' } };
+    all[20] = { ...all[20]!, title: { ...all[20]!.title, value: 'Balance patch' } };
+    const { api } = pagedApi({ realizations: [], releases: all });
+    const first = await api.editions(work);
+    if (!first.ok) throw new Error('first page failed');
+    const holding = fixture.session({ selections: [
+      ...fixture.session().selections,
+      { target: { ...fixture.session().target, resource: all[0]!.id, base: 'release' }, language: 'en', format: null, progress: 'locator' }] });
+    const note = (pickers: Parameters<typeof editionPickers>[0]) => renderToStaticMarkup(createElement(EditionFilterNote,
+      { work, editions: first.data, failed: false, locale: 'en', t, query: 'Balance', pickers: editionPickers(pickers) }));
+    // Only the open attempt shows a picker, and it holds the one loaded match.
+    expect(editionPickers([holding])).toEqual([holding]);
+    expect(note([holding])).toContain(t.noMatchingEditionsYet);
+    expect(control(first.data)).toContain(t.moreEditions);
+    // Once it ends, the form that starts an attempt offers the match again.
+    const ended = { ...holding, state: 'finished' as const, finishedOn: '2026-10' };
+    expect(editionPickers([ended])).toEqual([ended, null]);
+    expect(note([ended])).toBe('');
+  });
+
+  test('an existing attempt lists only the filtered editions, and the one on the next page once it is loaded', async () => {
+    const { api } = pagedApi({ realizations: [], releases: releases(21) });
+    const first = await api.editions(work);
+    if (!first.ok) throw new Error('first page failed');
+    const second = await api.editions(work, { releases: first.data.releasesCursor! });
+    if (!second.ok) throw new Error('second page failed');
+    const joined = appendEditionPage(first.data, second.data, { realizations: false, releases: true });
+    const card = (editions: Editions, editionQuery: string) => renderToStaticMarkup(createElement(AttemptCard,
+      { session: fixture.session(), title: 'First read', work, editions, editionQuery, api, locale: 'en', t, onChange: () => {} }));
+    expect(card(first.data, '')).toContain('Release 1 ');
+    expect(card(first.data, 'Release 21')).not.toContain('Release 1 ');
+    expect(card(joined, 'Release 21')).toContain('Release 21 ');
+    expect(card(joined, 'Release 21')).not.toContain('Release 1 ');
+  });
+
   test('a filter with no match on the last page says none exists', async () => {
     const { api } = pagedApi({ realizations: [], releases: releases(3) });
     const read = await api.editions(work);
     if (!read.ok) throw new Error('page failed');
     const markup = renderToStaticMarkup(createElement(EditionFilterNote,
-      { work, editions: read.data, failed: false, locale: 'en', t, query: 'nothing like this' }));
+      { work, editions: read.data, failed: false, locale: 'en', t, query: 'nothing like this', pickers: [null] }));
     expect(markup).toContain(t.noMatchingEditions);
     expect(markup).not.toContain(t.noMatchingEditionsYet);
   });

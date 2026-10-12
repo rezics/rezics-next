@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
+import { chooseOption } from '../stories/choose-option.ts';
 import * as fixture from './fixtures.ts';
 import { createMemoryMain, memoryTracking } from './memory.ts';
 import { copyOf } from './messages.ts';
@@ -38,9 +39,15 @@ function pagingApi(count: number, failOnce: boolean): TrackingApi {
   };
 }
 
-function OpenSheet({ count, failOnce }: { count: number; failOnce: boolean }) {
+/** `attempt` opens the sheet on a Work that already has an active attempt, so no form to start one is shown. */
+function OpenSheet({ count, failOnce, attempt = false }: { count: number; failOnce: boolean; attempt?: boolean }) {
   const [api] = useState(() => pagingApi(count, failOnce));
   const [open, setOpen] = useState(true);
+  const [ready, setReady] = useState(!attempt);
+  useEffect(() => {
+    if (attempt) void api.start(fixture.saoOne, { state: 'active' }).then(() => setReady(true));
+  }, [api, attempt]);
+  if (!ready) return null;
   return <TrackingSheet work={fixture.saoOne} title={fixture.saoOneTitle} api={api} locale="en" open={open}
     onOpenChange={setOpen} />;
 }
@@ -48,10 +55,11 @@ function OpenSheet({ count, failOnce }: { count: number; failOnce: boolean }) {
 const t = copyOf('en');
 const releaseName = (number: number) => `Release ${number} · paperback`;
 
-async function openDialog() {
+async function openDialog(attempt = false) {
   const dialog = await screen.findByRole('dialog');
   await waitFor(() => expect(dialog).toBeVisible());
-  await within(dialog).findByRole('region', { name: 'Start an attempt' });
+  if (attempt) await within(dialog).findByRole('article', { name: t.firstRead });
+  else await within(dialog).findByRole('region', { name: 'Start an attempt' });
   return dialog;
 }
 
@@ -143,6 +151,28 @@ export const FilterBeforeLoaded: Story = {
     await userEvent.click(sheet.getByRole('button', { name: t.moreEditions }));
     await waitFor(() => expect(sheet.queryByText(t.noMatchingEditionsYet)).toBeNull());
     await expect(await editionLabels(dialog)).toEqual([releaseName(45)]);
+  },
+};
+
+/** An attempt that has begun filters its own edition list the same way: the match on page 3 is added from there. */
+export const FilterOnExistingAttempt: Story = {
+  args: { attempt: true },
+  globals: { viewport: { value: 'phone' } },
+  async play() {
+    const dialog = await openDialog(true);
+    const sheet = within(dialog);
+    await userEvent.type(sheet.getByRole('textbox', { name: t.filterEditions }), 'Release 45');
+    await expect(await sheet.findByText(t.noMatchingEditionsYet)).toBeVisible();
+    await expect(sheet.queryByRole('combobox', { name: t.edition })).toBeNull();
+    await userEvent.click(sheet.getByRole('button', { name: t.moreEditions }));
+    await userEvent.click(sheet.getByRole('button', { name: t.moreEditions }));
+    await waitFor(() => expect(sheet.queryByText(t.noMatchingEditionsYet)).toBeNull());
+    const attempt = sheet.getByRole('article', { name: t.firstRead });
+    await userEvent.click(within(attempt).getByRole('combobox', { name: t.edition }));
+    await chooseOption(within(attempt), releaseName(45));
+    await userEvent.click(within(attempt).getByRole('button', { name: t.addEdition }));
+    await waitFor(() => expect(within(attempt).getByText(releaseName(45))).toBeVisible());
+    await fits(dialog);
   },
 };
 
