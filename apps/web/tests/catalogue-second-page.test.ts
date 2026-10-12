@@ -11,7 +11,8 @@ import { messages } from '../features/zones/messages.ts';
 // Every ordinary catalogue browse reads through the realm browse adapter, so each case runs the
 // route's own sequence: the URL's state, the Main query, the page read, the model, then the link
 // the reader follows to the next page. Main is a fetch stub that answers from two pages keyed by
-// cursor, so a case fails when the second request drops the cursor or a filter.
+// cursor and echoes the sort it receives, so a case fails when a request drops the cursor, a
+// filter or the sort. The second page is fetched from the route the first page's link names.
 
 const MAIN_ORIGIN = 'https://main.test';
 const nativeFetch = globalThis.fetch;
@@ -36,13 +37,18 @@ const CATALOGUES: Catalogue[] = [
   { name: 'Franchise wiki', ref: 'franchise-wiki' },
 ];
 
-// Two statuses, so the repeated parameter has to survive the Main query intact.
-const FILTERS: SearchParams = { status: ['ongoing', 'hiatus'], sort: 'newest' };
+// Two statuses, so the repeated parameter has to survive the Main query intact. The sort is not
+// the `newest` default, so an echoed sort proves the sort was passed rather than defaulted.
+const FILTERS: SearchParams = { status: ['ongoing', 'hiatus'], sort: 'updated' };
 const NO_FACETS = { type: [], concept: [], status: [], length: [] };
 
 const uuid = (block: string, n: number) => `00000000-0000-4000-${block}-${String(n).padStart(12, '0')}`;
 const realmOf = (index: number) => uuid('9000', index + 1);
 const work = (index: number, n: number) => `https://rezics.com/id/${uuid('8000', index * 10 + n)}`;
+const routeOf = (row: Catalogue) => spaceHref(row.ref, 'site', ['browse']);
+
+// Each catalogue's browse route, so the link a page produces can be resolved to its Realm.
+const ROUTES = new Map(CATALOGUES.map((row, index) => [routeOf(row), { row, index }] as const));
 
 function card(id: string) {
   return {
@@ -53,7 +59,7 @@ function card(id: string) {
 
 function body(ids: string[], nextCursor: string | null) {
   return {
-    items: ids.map(card), nextCursor, query: { sort: 'newest' },
+    items: ids.map(card), nextCursor,
     matches: { value: ids.length, kind: 'exact' }, window: { scanned: ids.length, complete: nextCursor === null },
     tags: 'current',
   };
@@ -62,7 +68,7 @@ function body(ids: string[], nextCursor: string | null) {
 function view(row: Catalogue, index: number) {
   return {
     kind: 'view',
-    zone: { name: { value: row.name }, links: { browse: spaceHref(row.ref, 'site', ['browse']) } },
+    zone: { name: { value: row.name }, links: { browse: routeOf(row) } },
     context: { locale: 'en', ref: row.ref, realm: realmOf(index) },
     zoneMessages: messages,
     pkg: null,
@@ -93,16 +99,23 @@ function searchOf(href: string): SearchParams {
   return search;
 }
 
+function currentSort(model: { sorts: { sort: string; current: boolean }[] }) {
+  return model.sorts.find(item => item.current)?.sort;
+}
+
 const requests: URL[] = [];
 
 // Answers Main's browse endpoint for one realm with the given pages, keyed by the cursor it receives.
+// The page's query echoes the sort of the request, as Main does.
 function serveMain(realm: string, pages: Record<string, unknown>) {
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
     requests.push(url);
     if (url.pathname !== `/v1/realms/${realm}/modules/browse`) return new Response('no route', { status: 404 });
     const page = pages[url.searchParams.get('cursor') ?? ''];
-    return page ? Response.json(page) : new Response('no page', { status: 404 });
+    return page
+      ? Response.json({ ...page, query: { sort: url.searchParams.get('sort') } })
+      : new Response('no page', { status: 404 });
   }) as unknown as typeof fetch;
 }
 
@@ -124,7 +137,7 @@ afterEach(() => {
 });
 
 CATALOGUES.forEach((row, index) => {
-  test(`${row.name} browse reaches its second page through the Main cursor`, async () => {
+  test(`${row.name} browse reaches its second page through the link the first page produces`, async () => {
     const cursor = `${row.ref}-page-2`;
     serveMain(realmOf(index), {
       '': body([work(index, 1), work(index, 2)], cursor),
@@ -133,16 +146,25 @@ CATALOGUES.forEach((row, index) => {
 
     const first = await browse(row, index, FILTERS);
     expect(first.items.map(item => item.id)).toEqual([work(index, 1), work(index, 2)]);
+    expect(currentSort(first)).toBe('updated');
     expect(first.next).not.toBeNull();
+    const link = new URL(first.next!, 'https://rezics.local');
+    expect(link.pathname).toBe(routeOf(row));
     expect(searchOf(first.next!).cursor).toEqual([cursor]);
 
-    const second = await browse(row, index, searchOf(first.next!));
+    // The second page is read from the Realm of the route the link names, not from this row.
+    const target = ROUTES.get(link.pathname);
+    if (!target) throw new Error(`no catalogue route at ${link.pathname}`);
+    const second = await browse(target.row, target.index, searchOf(first.next!));
     expect(second.items.map(item => item.id)).toEqual([work(index, 3), work(index, 4)]);
+    expect(currentSort(second)).toBe('updated');
     expect(second.next).toBeNull();
 
     const [firstCall, secondCall] = requests;
     expect(firstCall!.searchParams.has('cursor')).toBe(false);
     expect(secondCall!.searchParams.get('cursor')).toBe(cursor);
+    expect(firstCall!.searchParams.getAll('sort')).toEqual(['updated']);
+    expect(secondCall!.searchParams.getAll('sort')).toEqual(['updated']);
     expect(secondCall!.searchParams.getAll('status')).toEqual(['ongoing', 'hiatus']);
     expect(withoutCursor(secondCall!)).toBe(withoutCursor(firstCall!));
   });
