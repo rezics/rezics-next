@@ -1,8 +1,9 @@
 import type { AuthContext } from 'better-auth';
-import { createInternalContext, parseCookies } from 'better-call';
+import { createCookieGetter } from 'better-auth/cookies';
+import { createInternalContext, parseCookies, serializeSignedCookie } from 'better-call';
 
 type AuthenticationCookie = 'session_token' | 'two_factor' | 'better-auth-passkey' | 'trust_device';
-type CookieContext = Pick<AuthContext, 'createAuthCookie' | 'secret' | 'getPlugin'>;
+type CookieContext = Pick<AuthContext, 'createAuthCookie' | 'secret' | 'getPlugin' | 'options' | 'baseURL'>;
 
 /** Use the provider's issuer name and actual signed-cookie reader. Its request
  * parser selects the first exact name; the cookies package's parser does not.
@@ -14,12 +15,31 @@ export async function authenticationCookies(
   const passkey = provider.getPlugin('passkey') as { options?: {
     advanced?: { webAuthnChallengeCookie?: string };
   } } | undefined;
-  const name = (cookie: AuthenticationCookie) => provider.createAuthCookie(
-    cookie === 'better-auth-passkey'
+  const key = (cookie: AuthenticationCookie) => cookie === 'better-auth-passkey'
       ? passkey?.options?.advanced?.webAuthnChallengeCookie ?? 'better-auth-passkey'
-      : cookie,
-  ).name;
+      : cookie;
+  const name = (cookie: AuthenticationCookie) => provider.createAuthCookie(key(cookie)).name;
+  // Canonical selection always uses createAuthCookie above. Admission also
+  // inventories credentials carried under either provider-derived security
+  // variant: an inactive cookie cannot supply a second request subject.
+  const variants = [false, true].map(useSecureCookies => createCookieGetter({ ...provider.options,
+    baseURL: provider.baseURL, advanced: { ...provider.options.advanced, useSecureCookies } }));
   const context = await createInternalContext({ headers }, { options: { method: 'GET' } });
+  const candidates = async (cookie: AuthenticationCookie) => {
+    const names = new Set([name(cookie), ...variants.map(create => create(key(cookie)).name)]);
+    const values = new Set<string>();
+    for (const fragment of (headers.get('cookie') ?? '').split(';')) {
+      const parsed = parseCookies(fragment);
+      const reader = await createInternalContext({ headers: new Headers({ cookie: fragment }) },
+        { options: { method: 'GET' } });
+      for (const exact of names) {
+        if (!parsed.has(exact)) continue;
+        const value = await reader.getSignedCookie(exact, provider.secret);
+        if (typeof value === 'string') values.add(value);
+      }
+    }
+    return [...values];
+  };
   return {
     name,
     signed: async (cookie: AuthenticationCookie): Promise<string | undefined> => {
@@ -28,28 +48,18 @@ export async function authenticationCookies(
     },
     /** Inventory repeated credentials without changing the provider's first
      * exact-name selection. Each fragment uses its public parser and verifier. */
-    signedCandidates: async (cookie: AuthenticationCookie): Promise<string[]> => {
-      const values: string[] = [];
-      for (const fragment of (headers.get('cookie') ?? '').split(';')) {
-        if (!parseCookies(fragment).has(name(cookie))) continue;
-        const reader = await createInternalContext({ headers: new Headers({ cookie: fragment }) },
-          { options: { method: 'GET' } });
-        const value = await reader.getSignedCookie(name(cookie), provider.secret);
-        if (typeof value === 'string') values.push(value);
-      }
-      return [...new Set(values)];
-    },
+    signedCandidates: candidates,
     candidateHeaders: async (cookie: AuthenticationCookie) => {
-      const candidates: { value: string; headers: Headers }[] = [];
-      for (const fragment of (headers.get('cookie') ?? '').split(';')) {
-        if (!parseCookies(fragment).has(name(cookie))) continue;
+      const selections: { value: string; headers: Headers }[] = [];
+      for (const value of await candidates(cookie)) {
         const selectedHeaders = new Headers(headers);
-        selectedHeaders.set('cookie', fragment.trim());
-        const reader = await createInternalContext({ headers: selectedHeaders }, { options: { method: 'GET' } });
-        const value = await reader.getSignedCookie(name(cookie), provider.secret);
-        if (typeof value === 'string') candidates.push({ value, headers: selectedHeaders });
+        // This value was verified by the provider's signed-cookie helper.
+        // Re-present it under the active name to ask its session endpoint for
+        // the credential's live subject; never infer that user from the token.
+        selectedHeaders.set('cookie', await serializeSignedCookie(name(cookie), value, provider.secret));
+        selections.push({ value, headers: selectedHeaders });
       }
-      return candidates;
+      return selections;
     },
     remove: (cookie: AuthenticationCookie) => {
       // Drop every occurrence of the selected name so an old duplicate cannot

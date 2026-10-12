@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import { accountFixture } from './account-fixture.ts';
 import { symmetricDecrypt } from 'better-auth/crypto';
 import { createOTP } from '@better-auth/utils/otp';
@@ -6,18 +6,33 @@ import { createOTP } from '@better-auth/utils/otp';
 const cookies = (response: Response) => response.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
 
 for (const provider of ['email', 'passkey'] as const) {
-  test(`${provider} failure for B with A's session records only B`, async () => {
+  test(`${provider} refuses B's proof with A's session before provider and records only B for a sole proof`, async () => {
     const f = await accountFixture();
     try {
       const a = await f.signup('activity-cookie-owner@example.test');
       const b = await f.signup('activity-provider-owner@example.test');
       if (provider === 'passkey') await f.pool.query(`INSERT INTO passkey (id, name, "publicKey", "userId", "credentialID", counter, "deviceType", "backedUp", "createdAt")
         VALUES ('provider-credential', 'Provider owner', 'invalid-proof-fixture', $1, 'credential-B', 0, 'singleDevice', false, now())`, [b.id]);
-      const response = provider === 'email'
-        ? await f.request('/api/auth/sign-in/email', { email: b.email, password: 'incorrect password', userId: a.id }, a.cookie)
-        : await f.request('/api/auth/passkey/verify-authentication', { response: { id: 'credential-B', rawId: 'credential-B', type: 'public-key',
-          response: { clientDataJSON: 'invalid', authenticatorData: 'invalid', signature: 'invalid' }, clientExtensionResults: {} }, email: a.email }, a.cookie);
-      expect(response.ok).toBe(false);
+      const path = provider === 'email' ? '/api/auth/sign-in/email' : '/api/auth/passkey/verify-authentication';
+      const proof = provider === 'email'
+        ? { email: b.email, password: 'incorrect password', userId: a.id }
+        : { response: { id: 'credential-B', rawId: 'credential-B', type: 'public-key',
+          response: { clientDataJSON: 'invalid', authenticatorData: 'invalid', signature: 'invalid' }, clientExtensionResults: {} }, email: a.email };
+      const budgets = async () => (await f.pool.query('SELECT * FROM rezics_account_rate_limit ORDER BY key')).rows;
+      const before = await budgets();
+      const handler = spyOn(f.auth, 'handler');
+      try {
+        const refused = await f.request(path, proof, a.cookie);
+        expect(refused.status).toBe(400);
+        expect(refused.headers.getSetCookie()).toEqual([]);
+        expect(handler).not.toHaveBeenCalled();
+        expect(await budgets()).toEqual(before);
+        expect((await f.pool.query('SELECT user_id FROM rezics_account_security_event WHERE action = \'sign_in_failed\' AND user_id IN ($1, $2)',
+          [a.id, b.id])).rows).toEqual([]);
+        const response = await f.request(path, proof);
+        expect(response.ok).toBe(false);
+        expect(handler).toHaveBeenCalledTimes(1);
+      } finally { handler.mockRestore(); }
       expect((await f.pool.query('SELECT user_id FROM rezics_account_security_event WHERE action = \'sign_in_failed\' AND user_id IN ($1, $2)',
         [a.id, b.id])).rows).toEqual([{ user_id: b.id }]);
     } finally { await f.close(); }
@@ -66,17 +81,31 @@ test('authentication failure activity follows the session or signed challenge, n
     expect(await failures()).toHaveLength(6);
     await f.pool.query(`INSERT INTO passkey (id, name, "publicKey", "userId", "credentialID", counter, "deviceType", "backedUp", "createdAt")
       VALUES ('activity-credential', 'Peer credential', 'invalid-proof-fixture', $1, 'peer-credential', 0, 'singleDevice', false, now())`, [peer.id]);
-    expect((await f.request('/api/auth/passkey/verify-authentication', {
-      response: { id: 'peer-credential' }, email: member.email,
-    }, signedCookie)).ok).toBe(false);
+    const peerPasskey = { response: { id: 'peer-credential', rawId: 'peer-credential', type: 'public-key',
+      response: { clientDataJSON: 'invalid', authenticatorData: 'invalid', signature: 'invalid' }, clientExtensionResults: {} }, email: member.email };
+    const budgets = async () => (await f.pool.query('SELECT * FROM rezics_account_rate_limit ORDER BY key')).rows;
+    const before = await budgets();
+    const handler = spyOn(f.auth, 'handler');
+    try {
+      for (const [path, proof] of [
+        ['/api/auth/passkey/verify-authentication', peerPasskey],
+        ['/api/auth/sign-in/email', { email: peer.email, password: 'incorrect password' }],
+      ] as const) {
+        const refused = await f.request(path, proof, signedCookie);
+        expect(refused.status).toBe(400);
+        expect(refused.headers.getSetCookie()).toEqual([]);
+        expect(handler).not.toHaveBeenCalled();
+        expect(await budgets()).toEqual(before);
+        expect(await failures()).toHaveLength(6);
+      }
+    } finally { handler.mockRestore(); }
+    expect((await f.request('/api/auth/passkey/verify-authentication', peerPasskey)).ok).toBe(false);
     expect((await failures()).at(-1)).toEqual({ user_id: peer.id, method: 'verify-authentication' });
     expect((await f.request('/api/auth/passkey/verify-authentication', invalidPasskey)).ok).toBe(false);
     expect(await failures()).toHaveLength(7);
     expect((await f.request('/api/auth/sign-in/email', { email: peer.email, password: 'incorrect password', userId: member.id })).status).toBe(401);
-    expect((await f.request('/api/auth/sign-in/email', { email: peer.email, password: 'incorrect password' }, signedCookie)).status).toBe(401);
     expect((await failures()).filter(row => row.user_id === peer.id)).toEqual([
       { user_id: peer.id, method: 'verify-authentication' }, { user_id: peer.id, method: 'email' },
-      { user_id: peer.id, method: 'email' },
     ]);
   } finally { await f.close(); }
 }, 60_000);

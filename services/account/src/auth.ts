@@ -31,7 +31,7 @@ import { signupPolicyInput, policyAcceptanceRequired } from './policy-acceptance
 import { SignupPolicyProblem } from './market-policy.ts';
 import type { PolicyVersion } from './policy-versions.ts';
 import { AccountHasOwnedAgents } from '../../main/src/modules/access/admission.ts';
-import { prepareAuthentication, recordAuthenticatedSubject } from './authentication-input.ts';
+import { prepareAuthentication, recordAuthenticatedSubject, recordProviderPasskey, recordVerifiedPasskey } from './authentication-input.ts';
 import { resolveAuthenticationSubject } from './authentication-subject.ts';
 import { AccountProblem } from './http.ts';
 
@@ -208,6 +208,7 @@ function fencedSessionAdapter<T extends AccountAdapter>(adapter: T, db: Kysely<u
     findOne: async <R>(data: Parameters<AccountAdapter['findOne']>[0]): Promise<R | null> => {
       const row = await adapter.findOne<R>({ ...data, select: readFields(data.model, data.select) });
       if (!row) return null;
+      if (data.model === 'passkey') recordProviderPasskey(row);
       const visible = (await visibleRows(data.model, [row]))[0];
       return visible ? originalFields(visible, data.select) : null;
     },
@@ -388,10 +389,10 @@ export function accountAuthOptions(config: AccountConfig) {
       if (!(ctx.context.returned instanceof APIError)) {
         const output = ctx.context.returned as { user?: { id?: unknown } } | undefined;
         if (typeof output?.user?.id === 'string') recordAuthenticatedSubject(output.user.id);
-        if (ctx.context.newSession) recordAuthenticatedSubject(ctx.context.newSession.user.id,
-          ctx.context.newSession.session.token);
         if (ctx.path === '/verify-password' && ctx.context.session) recordAuthenticatedSubject(ctx.context.session.user.id);
       }
+      if (ctx.context.newSession) recordAuthenticatedSubject(ctx.context.newSession.user.id,
+        ctx.context.newSession.session.token);
       // Embedded discovery calls run endpoint hooks; HTTP discovery is served
       // by the provider's onRequest hook instead.
       if (discoveryEndpoints.has(ctx.path) && ctx.context.returned && !(ctx.context.returned instanceof APIError)) {
@@ -424,6 +425,10 @@ export function accountAuthOptions(config: AccountConfig) {
         throw new APIError('FORBIDDEN', { code: 'ACCOUNT_UNAVAILABLE', message: 'Sign-in is unavailable for this account' });
       }
       return { data: session };
+    }, after: async (session: { userId: string; token: string }) => {
+      // A later provider lookup/hook can fail after insertion. Keep the actual
+      // issued identity and token even when no success response is produced.
+      recordAuthenticatedSubject(session.userId, session.token);
     } }, delete: { before: (session: { id: string; userId: string }, context: { path?: string } | null) =>
       beforeSessionDelete(config.pool, session, context) } } },
     emailAndPassword: { enabled: true,
@@ -536,6 +541,9 @@ export function accountAuthOptions(config: AccountConfig) {
           if (!verification.authenticationInfo.userVerified) {
             throw new APIError('FORBIDDEN', { code: 'USER_VERIFICATION_REQUIRED', message: 'Verify on your device' });
           }
+          if (!recordVerifiedPasskey(clientData.id)) throw new APIError('SERVICE_UNAVAILABLE', {
+            message: 'Provider passkey subject unavailable',
+          });
           await afterPasskeyAssertion(config.pool, clientData.id, verification.authenticationInfo.newCounter);
         } },
       }),

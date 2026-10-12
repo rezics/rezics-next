@@ -183,8 +183,10 @@ for (const [issuer, customTrustName] of [
         expect(typeof value).toBe('string');
         return { cookie, value: value as string, identifier: (value as string).split('!')[1]! };
       };
-      const decoy = await trust(a, aSecret);
+      const foreignTrust = await trust(a, aSecret);
       const stale = await trust(b, bSecret);
+      expect((await f.request('/api/auth/sign-in/email', { email: b.email, password: b.password },
+        `${foreignTrust.cookie.replace(exact, opposite)}; ${stale.cookie}`)).status).toBe(400);
       const saved = (await f.pool.query<{
         id: string; identifier: string; value: string; createdAt: Date; updatedAt: Date; expiresAt: Date;
       }>('SELECT * FROM verification WHERE identifier=$1', [stale.identifier])).rows[0]!;
@@ -194,7 +196,10 @@ for (const [issuer, customTrustName] of [
       const replacement = await f.request('/api/auth/sign-in/email', { email: b.email, password: b.password });
       expect(replacement.status).toBe(200);
       b.cookie = cookies(replacement);
-      await enroll(f, b);
+      const replacementSecret = await enroll(f, b);
+      // Admission has one subject. The inactive fresh B credential stays in
+      // the request while the provider-selected stale B trust is suppressed.
+      const decoy = await trust(b, replacementSecret);
       // Simulate a restored pre-recovery proof after the real owner completed
       // cleanup. Its original epoch remains stale even with valid signatures.
       await f.pool.query(`INSERT INTO verification (id, identifier, value, "createdAt", "updatedAt", "expiresAt")

@@ -1,4 +1,4 @@
-import { getEndpoints, getSessionFromCtx } from 'better-auth/api';
+import { getEndpoints, getSession } from 'better-auth/api';
 import type { AuthContext, BetterAuthOptions } from 'better-auth';
 import type { GenericEndpointContext } from '@better-auth/core';
 import { createInternalContext, type EndpointOptions } from 'better-call';
@@ -189,14 +189,21 @@ export function prepareSessionAuthentication(request: Request, session: Authenti
 
 export async function authenticationSession(auth: AuthenticationProvider, input: PreparedAuthentication) {
   if (input.kind === 'session') return input.session ?? null;
-  if (input.providerContext) return getSessionFromCtx(input.providerContext);
+  if (input.providerContext) {
+    if (input.providerContext.context.session) return input.providerContext.context.session;
+    // Use the helper's own endpoint with its real initialized context. The
+    // helper catches storage errors as null; admission must preserve outages.
+    return getSession()({ ...input.providerContext, headers: input.headers, method: 'GET', asResponse: false,
+      returnHeaders: false, returnStatus: false, query: input.sessionQuery });
+  }
   // Direct provider errors stay visible: a session-store outage cannot turn
   // into anonymous challenge authorization through the helper's null catch.
   if (!auth.api) throw new Error('HTTP authentication needs the provider session API');
   return auth.api.getSession({ headers: input.headers, query: input.sessionQuery });
 }
 
-type AuthenticationEvidence = { authenticatedUserIds: Set<string>; issuedTokens: Set<string> };
+type AuthenticationEvidence = { authenticatedUserIds: Set<string>; issuedTokens: Set<string>;
+  providerPasskeys: Map<string, string> };
 const exchanges = new AsyncLocalStorage<AuthenticationEvidence>();
 const proofResponses = new WeakSet<Response>();
 
@@ -207,8 +214,26 @@ export function recordAuthenticatedSubject(userId: string, issuedToken?: string)
   evidence?.authenticatedUserIds.add(userId);
   if (issuedToken) evidence?.issuedTokens.add(issuedToken);
 }
+/** Keep the provider adapter's returned row until its verification callback.
+ * This snapshot reports the provider's own computation; no second lookup can
+ * substitute a different owner between verified assertion and session issue. */
+export function recordProviderPasskey(row: unknown) {
+  if (!row || typeof row !== 'object') return;
+  const key = row as { credentialID?: unknown; userId?: unknown };
+  if (typeof key.credentialID === 'string' && typeof key.userId === 'string') {
+    exchanges.getStore()?.providerPasskeys.set(key.credentialID, key.userId);
+  }
+}
+export function recordVerifiedPasskey(credentialId: string): boolean {
+  const evidence = exchanges.getStore();
+  if (!evidence) return true;
+  const owner = evidence.providerPasskeys.get(credentialId);
+  if (!owner) return false;
+  evidence.authenticatedUserIds.add(owner);
+  return true;
+}
 export async function runAuthenticationExchange<T>(work: () => Promise<T>) {
-  const evidence: AuthenticationEvidence = { authenticatedUserIds: new Set(), issuedTokens: new Set() };
+  const evidence: AuthenticationEvidence = { authenticatedUserIds: new Set(), issuedTokens: new Set(), providerPasskeys: new Map() };
   const result = await exchanges.run(evidence, work);
   return { result, ...evidence };
 }

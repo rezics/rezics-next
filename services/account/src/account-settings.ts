@@ -138,7 +138,7 @@ const assertionJson = t.Object({ id: base64url(1024), rawId: base64url(1024), ty
   clientExtensionResults: t.Record(t.String(), t.Unknown()),
   authenticatorAttachment: t.Optional(t.Union([t.Literal('platform'), t.Literal('cross-platform')])) });
 
-export function accountSettingsApi(auth: AccountAuth, guard: () => Pool) {
+export function accountSettingsApi(auth: AccountAuth, pool: Pool, guard: () => Pool) {
   const secret = String(auth.options.secret);
   return new Elysia()
     // The same five-per-five-minutes budget as password step-up. The challenge
@@ -150,7 +150,7 @@ export function accountSettingsApi(auth: AccountAuth, guard: () => Pool) {
     }, async ({ request, body }) => {
       try {
         const session = await accountSession(auth, request);
-        const subject = await resolveAuthenticationSubject(auth, guard(), prepareSessionAuthentication(request, session, body));
+        const subject = await resolveAuthenticationSubject(auth, pool, prepareSessionAuthentication(request, session, body));
         if (subject.candidateUserId !== session.user.id) throw new AccountProblem('forbidden', 403);
         await reauthenticate(guard(), session, secret, new URL(request.url).pathname, async () => {
           const proof = { userId: session.user.id, verified: false };

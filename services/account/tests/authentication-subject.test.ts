@@ -6,12 +6,14 @@ import type { GenericEndpointContext } from '@better-auth/core';
 import { getEndpoints } from 'better-auth/api';
 import { createInternalContext, serializeSignedCookie } from 'better-call';
 import { readFileSync } from 'node:fs';
+import { createHmac } from 'node:crypto';
 import type { Pool } from 'pg';
 import { authenticationCookies } from '../src/authentication-cookies.ts';
 import { prepareAuthentication, type AuthenticationProvider } from '../src/authentication-input.ts';
-import { resolveAuthenticationSubject } from '../src/authentication-subject.ts';
-import { AccountProblem } from '../src/http.ts';
-import { accountFixture } from './account-fixture.ts';
+import { resolveAuthenticationSubject, authenticationPurpose, sensitiveAuthPaths } from '../src/authentication-subject.ts';
+import { AccountProblem, accountSession } from '../src/http.ts';
+import { accountFixture, freePort } from './account-fixture.ts';
+import { createAccountApp } from '../src/app.ts';
 
 const secret = 'cookie-selection-secret-at-least-32-characters';
 const createdAt = new Date();
@@ -49,6 +51,9 @@ function projection() {
     ['reset-password:A', { value: 'A', createdAt, expiresAt }],
     ['reset-password:B', { value: 'B', createdAt, expiresAt }],
     ['passkey-B', { value: JSON.stringify({ userData: { id: 'B' } }), createdAt, expiresAt }],
+    ['passkey-A', { value: JSON.stringify({ userData: { id: 'A' } }), createdAt, expiresAt }],
+    ['trust-A', { value: 'A', createdAt, expiresAt }],
+    ['trust-B', { value: 'B', createdAt, expiresAt }],
   ]);
   const pool = { query: async (sql: string, values: unknown[] = []) => {
     queries.push({ sql, values });
@@ -219,7 +224,7 @@ test('P11/P12: exact provider session resolution and query coercion stay authori
   const opposite = exact.slice('__Secure-'.length);
   const { api } = getEndpoints(auth.$context as unknown as Promise<AuthContext>, auth.options);
   for (const query of ['', 'disableRefresh=true', 'disableCookieCache=false&disableRefresh=false', 'disableRefresh=invalid', 'disableRefresh=true&disableRefresh=false']) {
-    const cookie = `${opposite}=${await signed('session-B')}; ${exact}=${await signed('session-A')}`;
+    const cookie = `${opposite}=${await signed('session-A')}; ${exact}=${await signed('session-A')}`;
     const params: Record<string, string | string[]> = {};
     for (const [key, value] of new URLSearchParams(query)) {
       const previous = params[key];
@@ -232,6 +237,65 @@ test('P11/P12: exact provider session resolution and query coercion stay authori
     expect(actual.candidateUserId).toBe('A');
   }
 });
+
+for (const issuer of ['http://issuer.test', 'https://issuer.test', 'HTTPS://issuer.test'])
+  for (const reverse of [false, true])
+    for (const kind of ['session_token', 'two_factor', 'better-auth-passkey', 'trust_device'] as const)
+      test(`P08/P09/P11/P16/P17: ${issuer} ${kind} both-name owners conflict in ${reverse ? 'reverse' : 'forward'} order`, async () => {
+        const { auth, context } = await provider(issuer);
+        const name = kind === 'session_token' ? context.authCookies.sessionToken.name : context.createAuthCookie(kind).name;
+        const opposite = name.startsWith('__Secure-') ? name.slice('__Secure-'.length) : `__Secure-${name}`;
+        const value = (owner: string) => kind === 'session_token' ? `session-${owner}`
+          : kind === 'better-auth-passkey' ? `passkey-${owner}`
+          : kind === 'trust_device' ? `${createHmac('sha256', secret).update(`${owner}!trust-${owner}`).digest('base64url')}!trust-${owner}` : `challenge-${owner}`;
+        const pairs = [`${opposite}=${await signed(value('A'))}`, `${name}=${await signed(value('B'))}`];
+        if (reverse) pairs.reverse();
+        const path = kind === 'better-auth-passkey' ? '/api/auth/passkey/verify-registration'
+          : kind === 'trust_device' ? '/api/auth/sign-in/email' : '/api/auth/two-factor/verify-totp';
+        const body = kind === 'better-auth-passkey' ? { response: {} }
+          : kind === 'trust_device' ? { email: 'b@example.test', password: 'wrong' } : { code: 'wrong' };
+        await expect(resolve(auth, projection().pool, request(path, body, { cookie: pairs.join('; ') })))
+          .rejects.toEqual(new AccountProblem('invalid_request', 400));
+      });
+
+for (const issuer of ['http://issuer.test', 'https://issuer.test', 'HTTPS://issuer.test'])
+  for (const kind of ['session_token', 'two_factor', 'better-auth-passkey', 'trust_device'] as const)
+    test(`P08/P16/P17: ${issuer} wrong-prefix-only ${kind} never becomes the primary candidate`, async () => {
+      const { auth, context } = await provider(issuer);
+      const name = kind === 'session_token' ? context.authCookies.sessionToken.name : context.createAuthCookie(kind).name;
+      const opposite = name.startsWith('__Secure-') ? name.slice('__Secure-'.length) : `__Secure-${name}`;
+      const value = kind === 'session_token' ? 'session-A' : kind === 'better-auth-passkey' ? 'passkey-A'
+        : kind === 'trust_device' ? `${createHmac('sha256', secret).update('A!trust-A').digest('base64url')}!trust-A` : 'challenge-A';
+      const path = kind === 'better-auth-passkey' ? '/api/auth/passkey/verify-registration'
+        : kind === 'trust_device' ? '/api/auth/sign-in/email' : '/api/auth/two-factor/verify-totp';
+      const body = kind === 'better-auth-passkey' ? { response: {} }
+        : kind === 'trust_device' ? { email: 'absent@example.test', password: 'wrong' } : { code: 'wrong' };
+      const subject = await resolve(auth, projection().pool, request(path, body, { cookie: `${opposite}=${await signed(value)}` }));
+      expect(subject.candidateUserId).toBeUndefined();
+      expect(subject.activityUserId).toBeUndefined();
+      expect(subject.trust).toBeUndefined();
+      expect(subject.verification).toBeUndefined();
+    });
+
+for (const reverse of [false, true])
+  test(`P09/P12: exact-name session owners conflict in ${reverse ? 'reverse' : 'forward'} order`, async () => {
+    const { auth, context } = await provider();
+    const name = context.authCookies.sessionToken.name;
+    const pairs = [`${name}=${await signed('session-A')}`, `${name}=${await signed('session-B')}`];
+    if (reverse) pairs.reverse();
+    await expect(resolve(auth, projection().pool, request('/api/auth/two-factor/verify-totp', { code: 'wrong' }, { cookie: pairs.join('; ') })))
+      .rejects.toEqual(new AccountProblem('invalid_request', 400));
+  });
+
+for (const path of ['/api/auth/sign-in/email', '/api/auth/passkey/verify-authentication'])
+  test(`P04/P05/P06: ${path} refuses a target B proof with a live session A`, async () => {
+    const { auth, context } = await provider();
+    const cookie = `${context.authCookies.sessionToken.name}=${await signed('session-A')}`;
+    const body = path.endsWith('/email') ? { email: 'b@example.test', password: 'wrong' }
+      : { response: { id: 'credential-B' } };
+    await expect(resolve(auth, projection().pool, request(path, body, { cookie })))
+      .rejects.toEqual(new AccountProblem('invalid_request', 400));
+  });
 
 test('P11: provider-selected session A and signed challenge B refuse before proof', async () => {
   const { auth, context } = await provider();
@@ -300,6 +364,20 @@ test('P21: embedded mail admission validates the effective schema and session-fi
   }
 });
 
+test('P12/P21: embedded provider session-store outage refuses without charging a mail target', async () => {
+  const { auth, context } = await provider();
+  context.internalAdapter.findSession = async () => { throw new Error('session store unavailable'); };
+  const cookie = `${context.authCookies.sessionToken.name}=${await signed('session-A')}`;
+  const raw = await createInternalContext({ headers: new Headers({ cookie }), body: { email: 'a@example.test' },
+    query: {}, method: 'POST' }, { options: { method: 'POST' } });
+  const providerContext = { ...raw, path: '/send-verification-email', context } as unknown as GenericEndpointContext;
+  const prepared = await prepareAuthentication(auth, { kind: 'provider-context', context: providerContext });
+  expect(prepared.kind).toBe('prepared');
+  const db = projection();
+  if (prepared.kind === 'prepared') await expect(resolveAuthenticationSubject(auth, db.pool, prepared.input)).rejects.toThrow();
+  expect(db.queries).toEqual([]);
+});
+
 test('P16: registration keeps its provider session without charging a proof attempt', async () => {
   const { auth, context } = await provider();
   const cookie = `${context.authCookies.sessionToken.name}=${await signed('session-B')}; ${context.createAuthCookie('better-auth-passkey').name}=${await signed('passkey-B')}`;
@@ -341,6 +419,127 @@ test('P19: verify-email is provider-owned and unsigned tokens cannot select an o
   }
 });
 
+test('P22: operator audit keeps the provider-context actor and returned client id despite forged actor fields', async () => {
+  const f = await accountFixture();
+  try {
+    const operator = await f.signup('provider-operator@example.test');
+    const peer = await f.signup('forged-operator@example.test');
+    f.operators.add(operator.id);
+    const headers = new Headers({ cookie: operator.cookie, origin: f.baseURL });
+    headers.append('x-account-reason', 'First reason');
+    headers.append('x-account-reason', 'Second reason');
+    const body = { client_name: 'Provider custody', token_endpoint_auth_method: 'none' as const,
+      grant_types: ['authorization_code' as const], redirect_uris: ['https://app.example.test/callback'], scope: 'openid',
+      actorId: peer.id, userId: peer.id, sessionId: 'forged-session' };
+    const created = await f.auth.api.adminCreateOAuthClient({ headers, body });
+    const audit = (await f.pool.query<{ actor_id: string; target_id: string; outcome: string; reason: string }>(
+      `SELECT actor_id,target_id,outcome,reason FROM rezics_account_operator_audit
+       WHERE action='/admin/oauth2/create-client'`,
+    )).rows;
+    expect(audit).toHaveLength(2);
+    expect(audit.every(row => row.actor_id === operator.id && row.reason === headers.get('x-account-reason'))).toBe(true);
+    expect(audit.find(row => row.outcome === 'attempted')?.target_id).toBe('new-client');
+    expect(audit.find(row => row.outcome === 'succeeded')?.target_id).toBe(created.client_id);
+    const client = (await f.pool.query('SELECT "userId" FROM "oauthClient" WHERE "clientId"=$1', [created.client_id])).rows[0];
+    expect(client.userId).toBe(operator.id);
+  } finally { await f.close(); }
+}, 60_000);
+
+test('P23: trusted ingress normalizes repeated metadata without changing the provider subject', async () => {
+  const f = await accountFixture();
+  const handler = f.auth.handler;
+  let trustedApp: ReturnType<typeof createAccountApp> | undefined;
+  try {
+    const member = await f.signup('ingress-subject@example.test');
+    const peer = await f.signup('ingress-forged@example.test');
+    const port = await freePort();
+    trustedApp = createAccountApp(f.auth, f.pool, { trustedProxyPeers: new Set(['127.0.0.1', '::ffff:127.0.0.1']) })
+      .listen({ hostname: '127.0.0.1', port });
+    const observed: { ip: string | null; country: string | null }[] = [];
+    f.auth.handler = request => {
+      observed.push({ ip: request.headers.get('x-rezics-client-ip'), country: request.headers.get('x-rezics-request-country') });
+      return handler(request);
+    };
+    for (const scenario of ['untrusted', 'trusted', 'repeated'] as const) {
+      const headers = new Headers({ origin: f.baseURL, 'content-type': 'application/json',
+        'x-rezics-client-ip': '203.0.113.250', 'x-rezics-request-country': 'ZZ',
+        'x-forwarded-for': '192.0.2.25', 'cf-ipcountry': 'US' });
+      if (scenario === 'repeated') {
+        headers.append('x-forwarded-for', '198.51.100.2');
+        headers.append('cf-ipcountry', 'CA');
+      }
+      const origin = scenario === 'untrusted' ? f.baseURL : `http://127.0.0.1:${port}`;
+      const response = await fetch(`${origin}/api/auth/sign-in/email`, { method: 'POST', headers,
+        body: JSON.stringify({ email: member.email, password: member.password, userId: peer.id }) });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ user: { id: member.id } });
+      const metadata = observed.at(-1)!;
+      if (scenario === 'trusted') expect(metadata).toEqual({ ip: '192.0.2.25', country: 'US' });
+      else {
+        expect(metadata.country).toBeNull();
+        expect(metadata.ip === '127.0.0.1' || metadata.ip === '::ffff:127.0.0.1').toBe(true);
+      }
+    }
+    expect(observed).toHaveLength(3);
+    const events = (await f.pool.query('SELECT user_id,detail FROM rezics_account_security_event WHERE user_id=$1 AND action=\'sign_in\'', [member.id])).rows;
+    expect(events.every(event => event.user_id === member.id && !JSON.stringify(event.detail).includes('203.0.113.250'))).toBe(true);
+  } finally {
+    f.auth.handler = handler;
+    await trustedApp?.stop();
+    await f.close();
+  }
+}, 60_000);
+
+test('P29: Account origin admission and custom proof retain the provider actor despite injected session fields', async () => {
+  const f = await accountFixture();
+  try {
+    const member = await f.signup('account-actor@example.test');
+    const peer = await f.signup('account-forged-actor@example.test');
+    const actor = await f.auth.api.getSession({ headers: new Headers({ cookie: member.cookie }) });
+    const other = await f.auth.api.getSession({ headers: new Headers({ cookie: peer.cookie }) });
+    expect(actor).not.toBeNull();
+    expect(other).not.toBeNull();
+    const headers = new Headers({ cookie: member.cookie, origin: f.baseURL });
+    headers.append('origin', f.baseURL);
+    await expect(accountSession(f.auth, request('/api/account/reauthenticate', { password: member.password }, headers)))
+      .rejects.toEqual(new AccountProblem('invalid_origin', 403));
+    const beforePeer = (await f.pool.query('SELECT verified_at FROM rezics_account_step_up WHERE session_id=$1', [other!.session.id])).rows;
+    const result = await f.request('/api/account/reauthenticate', { password: member.password,
+      userId: peer.id, actorId: peer.id, sessionId: other!.session.id }, member.cookie);
+    expect(result.status).toBe(200);
+    expect((await f.pool.query('SELECT session_id FROM rezics_account_step_up WHERE session_id=$1', [actor!.session.id])).rows)
+      .toEqual([{ session_id: actor!.session.id }]);
+    expect((await f.pool.query('SELECT verified_at FROM rezics_account_step_up WHERE session_id=$1', [other!.session.id])).rows).toEqual(beforePeer);
+  } finally { await f.close(); }
+}, 60_000);
+
+test('P30: provider-created user and session identities ignore forged signup and sign-in user ids', async () => {
+  const f = await accountFixture();
+  try {
+    const peer = await f.signup('provider-created-peer@example.test');
+    const email = 'provider-created-owner@example.test';
+    const password = 'correct horse battery staple';
+    const signup = await f.request('/api/auth/sign-up/email', { email, password, name: 'Provider-created owner',
+      userId: peer.id, actorId: peer.id, sessionId: 'forged-session' });
+    expect(signup.status).toBe(200);
+    const { user } = await signup.json() as { user: { id: string } };
+    expect(user.id).not.toBe(peer.id);
+    await f.email.drain();
+    const mail = [...f.messages].reverse().find(message => message.to === email)!;
+    const verification = new URL(/https?:\/\/\S+/.exec(mail.text)![0]);
+    expect((await f.request(`${verification.pathname}${verification.search}`)).status).toBe(302);
+    const signin = await f.request('/api/auth/sign-in/email', { email, password,
+      userId: peer.id, actorId: peer.id, sessionId: 'forged-session' });
+    expect(signin.status).toBe(200);
+    expect(await signin.clone().json()).toMatchObject({ user: { id: user.id } });
+    const cookie = signin.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
+    const actual = await f.auth.api.getSession({ headers: new Headers({ cookie }) });
+    expect(actual).toMatchObject({ user: { id: user.id }, session: { userId: user.id } });
+    expect((await f.pool.query('SELECT "userId" FROM "session" WHERE id=$1', [actual!.session.id])).rows)
+      .toEqual([{ userId: user.id }]);
+  } finally { await f.close(); }
+}, 60_000);
+
 test('P24: effective provider endpoint methods define the credential purpose matrix', async () => {
   const { auth } = await provider();
   const { api } = getEndpoints(auth.$context as unknown as Promise<AuthContext>, auth.options);
@@ -363,6 +562,12 @@ test('P24: effective provider endpoint methods define the credential purpose mat
     if (wrong.kind === 'prepared') expect((await resolveAuthenticationSubject(auth, projection().pool, wrong.input)).purpose).toBe('provider-owned');
   }
   for (const [name, endpoint] of Object.entries(api)) {
+    const input = { kind: 'http' as const, path: `/api/auth${endpoint.path}`,
+      endpointPath: endpoint.path, method: Array.isArray(endpoint.options.method)
+        ? endpoint.options.method[0]! : endpoint.options.method,
+      body: {}, query: {}, sessionQuery: {}, headers: new Headers() };
+    if (endpoint.path.startsWith('/two-factor/verify-')) expect(authenticationPurpose(input), name).toBe('session-proof');
+    else if (sensitiveAuthPaths.has(input.path)) expect(['registration', 'session-mutation']).toContain(authenticationPurpose(input));
     if (!endpoint.path || !['/sign-out', '/change-password', '/set-password', '/update-user',
       '/two-factor/enable', '/two-factor/disable', '/revoke-session', '/revoke-sessions',
       '/revoke-other-sessions', '/passkey/delete-passkey', '/passkey/update-passkey'].includes(endpoint.path)) continue;
@@ -380,6 +585,23 @@ test('P24: effective provider endpoint methods define the credential purpose mat
   }
 });
 
+test('authentication wrappers have one admitted subject capability and no legacy derivation', () => {
+  const directory = new URL('../src/', import.meta.url);
+  for (const file of ['recovery-auth.ts', 'security-activity.ts', 'methods.ts', 'account-settings.ts']) {
+    const source = readFileSync(new URL(file, directory), 'utf8');
+    expect(source).not.toMatch(/\bauthenticationSubject(?:Rule)?\s*\(|\bchallengeIdentifier\b|\bdecodeJwt\b|\bcreateCookieGetter\b/);
+    expect(source).not.toMatch(/request(?:\.clone\(\))?\.(?:json|text|formData)\s*\(/);
+  }
+  const source = readFileSync(new URL('authentication-subject.ts', directory), 'utf8');
+  expect(source).not.toMatch(/consumeVerification|deleteVerification|decodeJwt|\.searchParams\b/);
+  expect(source).toContain('ORDER BY "createdAt" DESC LIMIT 2');
+  const app = readFileSync(new URL('app.ts', directory), 'utf8');
+  const guard = app.slice(app.indexOf('const guardedAuthHandler'), app.indexOf('const app ='));
+  expect(guard).not.toMatch(/getSession|authenticationBody|request\.(?:json|text|formData)\s*\(/);
+  expect(app).toContain('prepareAuthentication(auth, request)');
+  expect(app).toContain('guardedAuthHandler(request, subject, db)');
+});
+
 // Table rows whose policy is unchanged remain attached to exact owning tests.
 // These inventory checks prove the evidence exists; the Goal batch runs owners.
 const ownerParity = [
@@ -387,8 +609,8 @@ const ownerParity = [
   ['P02', 'account-auth-form-recovery.test.ts', 'every JSON authentication admission rejects ambiguous keys before lock or provider selection'],
   ['P03', 'account-auth-form-recovery.test.ts', 'strict authentication parsing preserves provider values and binds the same email lock owner'],
   ['P04', 'security-activity.integration.test.ts', 'authentication failure activity follows the session or signed challenge, never ignored identity fields'],
-  ['P05', 'security-activity.integration.test.ts', '${provider} failure for B with A\'s session records only B'],
-  ['P06', 'security-activity.integration.test.ts', '${provider} failure for B with A\'s session records only B'],
+  ['P05', 'security-activity.integration.test.ts', '${provider} refuses B\'s proof with A\'s session before provider and records only B for a sole proof'],
+  ['P06', 'security-activity.integration.test.ts', '${provider} refuses B\'s proof with A\'s session before provider and records only B for a sole proof'],
   ['P10', 'security-activity.integration.test.ts', 'authentication failure activity follows the session or signed challenge, never ignored identity fields'],
   ['P11', 'account-totp-budget.test.ts', 'signed-in TOTP guesses share the immutable user reauthentication budget'],
   ['P13', 'methods.integration.test.ts', 'G205 methods: recovery fences credential writes already waiting on the old session'],

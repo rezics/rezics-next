@@ -1,5 +1,6 @@
 import { createHmac } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
+import { AccountProblem } from './http.ts';
 
 /** One atomic primary-key upsert: concurrent requests cannot overspend a
  * fixed window. Keys never retain plaintext email, IP or session tokens. */
@@ -13,4 +14,11 @@ export async function consumeAccountLimit(pool: Pool | PoolClient, secret: strin
     WHERE r.count < $3 OR r.started_at <= now() - $2 * interval '1 second'
     RETURNING count`, [opaque, seconds, maximum]);
   return result.rowCount === 1;
+}
+
+/** Signed-in factor proofs and reauthentication share one immutable user key. */
+export async function consumeStepUpAttempt(pool: Pool | PoolClient, secret: string, userId: string): Promise<void> {
+  if (!await consumeAccountLimit(pool, secret, `reauth:${userId}`, 5, 300)) {
+    throw new AccountProblem('rate_limited', 429);
+  }
 }

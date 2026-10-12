@@ -3,6 +3,7 @@ import { AccountProblem } from './http.ts';
 import { authenticationCookies } from './authentication-cookies.ts';
 import { authenticationSession, type AuthenticationProvider, type AuthenticationSession,
   type PreparedAuthentication } from './authentication-input.ts';
+import { createHMAC } from '@better-auth/utils/hmac';
 
 export const sensitiveAuthPaths = new Set([
   '/api/auth/change-password', '/api/auth/set-password', '/api/auth/change-email', '/api/auth/delete-user',
@@ -58,41 +59,28 @@ export async function resolveAuthenticationSubject(auth: AuthenticationProvider,
   let verification: AuthenticationSubject['verification'];
   let trust: AuthenticationSubject['trust'];
   let target = 'anonymous';
+  let sessionRead: ReturnType<typeof authenticationSession> | undefined;
+  const readSession = () => sessionRead ??= authenticationSession(auth, input);
+  const proofs = new Map<string, Verification | undefined>();
   const proof = async (identifier?: string) => {
     if (!identifier) return undefined;
+    if (proofs.has(identifier)) return proofs.get(identifier);
     if (provider.options.secondaryStorage || (provider.options.verification?.storeIdentifier
       && provider.options.verification.storeIdentifier !== 'plain')) throw new AccountProblem('temporarily_unavailable', 503);
     const rows = (await database.query<Verification>(`SELECT value, "createdAt", "expiresAt"
       FROM public.verification WHERE identifier = $1 ORDER BY "createdAt" DESC LIMIT 2`, [identifier])).rows;
     if (rows[0] && rows[1] && rows[0].createdAt.getTime() === rows[1].createdAt.getTime()) throw new AccountProblem('invalid_request', 400);
+    proofs.set(identifier, rows[0]);
     return rows[0];
   };
   const liveUser = async (id: string) => (await database.query<{ id: string }>(
     'SELECT id FROM public."user" WHERE id = $1', [id])).rows[0]?.id;
   if (['session-proof', 'registration', 'session-mutation'].includes(purpose)) {
-    session = await authenticationSession(auth, input);
+    session = await readSession();
     if (session) { candidateUserId = session.user.id; activityUserId = candidateUserId; target = candidateUserId; }
-    const credentialOwners = new Set<string>(session ? [session.user.id] : []);
-    const selectedSessionToken = await cookies.signed('session_token');
-    for (const candidate of await cookies.candidateHeaders('session_token')) {
-      if (candidate.value === selectedSessionToken) continue;
-      const candidateInput = { ...input, headers: candidate.headers,
-        ...(input.providerContext ? { providerContext: { ...input.providerContext, headers: candidate.headers,
-          context: { ...input.providerContext.context, session: null } } } : {}),
-        ...(input.kind === 'session' ? { kind: 'http' as const, session: undefined } : {}) };
-      const other = await authenticationSession(auth, candidateInput);
-      if (other) credentialOwners.add(other.user.id);
-    }
     if (purpose === 'session-proof' && input.path !== '/api/account/reauthenticate/passkey') {
       const identifier = await cookies.signed('two_factor');
       const row = await proof(identifier);
-      for (const candidate of await cookies.signedCandidates('two_factor')) {
-        const other = candidate === identifier ? row : await proof(candidate);
-        if (other && other.expiresAt > new Date()) {
-          const owner = await liveUser(other.value);
-          if (owner) credentialOwners.add(owner);
-        }
-      }
       if (!session && row && row.expiresAt > new Date()) {
         candidateUserId = await liveUser(row.value);
         activityUserId = candidateUserId;
@@ -104,28 +92,11 @@ export async function resolveAuthenticationSubject(auth: AuthenticationProvider,
       const identifier = await cookies.signed('better-auth-passkey');
       const row = await proof(identifier);
       if (row) verification = { identifier: identifier!, createdAt: row.createdAt, expiresAt: row.expiresAt };
-      for (const candidate of await cookies.signedCandidates('better-auth-passkey')) {
-        const other = candidate === identifier ? row : await proof(candidate);
-        if (!other || other.expiresAt <= new Date()) continue;
-        try {
-          const owner = (JSON.parse(other.value) as { userData?: { id?: unknown } }).userData?.id;
-          if (typeof owner === 'string') credentialOwners.add(owner);
-        } catch { /* malformed provider artifacts cannot prove another owner */ }
-      }
     }
-    if (input.path === '/api/account/reauthenticate/passkey') {
-      const response = input.body.response as { id?: unknown } | undefined;
-      if (typeof response?.id === 'string') {
-        const owner = (await database.query<{ userId: string }>(
-          'SELECT "userId" FROM public.passkey WHERE "credentialID" = $1', [response.id])).rows[0]?.userId;
-        if (owner) credentialOwners.add(owner);
-      }
-    }
-    if (credentialOwners.size > 1) throw new AccountProblem('invalid_request', 400);
   } else if (purpose === 'email' && typeof input.body.email === 'string') {
     target = input.body.email.toLowerCase();
     if (input.path === '/api/auth/send-verification-email') {
-      session = await authenticationSession(auth, input);
+      session = await readSession();
       if (session) {
         if (session.user.email.toLowerCase() !== target) throw new AccountProblem('invalid_request', 400);
         target = session.user.email.toLowerCase();
@@ -159,6 +130,56 @@ export async function resolveAuthenticationSubject(auth: AuthenticationProvider,
         if (row.expiresAt > new Date()) activityUserId = await liveUser(row.value);
       }
     }
+  }
+  if (['session-proof', 'registration', 'session-mutation', 'credential', 'reset-token'].includes(purpose)
+    || input.path === '/api/auth/sign-in/email') {
+    const owners = new Set<string>(candidateUserId ? [candidateUserId] : []);
+    // All carried credentials participate in admission. Provider-target routes
+    // retain their own primary subject even when another session is present.
+    const carriedSession = await readSession();
+    if (carriedSession) owners.add(carriedSession.user.id);
+    const selectedSessionToken = await cookies.signed('session_token');
+    for (const candidate of await cookies.candidateHeaders('session_token')) {
+      if (carriedSession && candidate.value === selectedSessionToken) continue;
+      const other = await authenticationSession(auth, { ...input, headers: candidate.headers,
+        ...(input.providerContext ? { providerContext: { ...input.providerContext, headers: candidate.headers,
+          context: { ...input.providerContext.context, session: null } } } : {}),
+        ...(input.kind === 'session' ? { kind: 'http' as const, session: undefined } : {}) });
+      if (other) owners.add(other.user.id);
+    }
+    for (const identifier of await cookies.signedCandidates('two_factor')) {
+      const row = await proof(identifier);
+      if (row && row.expiresAt > new Date()) {
+        const owner = await liveUser(row.value);
+        if (owner) owners.add(owner);
+      }
+    }
+    for (const identifier of await cookies.signedCandidates('better-auth-passkey')) {
+      const row = await proof(identifier);
+      if (!row || row.expiresAt <= new Date()) continue;
+      let owner: unknown;
+      try { owner = (JSON.parse(row.value) as { userData?: { id?: unknown } }).userData?.id; }
+      catch { /* malformed artifacts cannot prove another owner */ }
+      if (typeof owner === 'string' && await liveUser(owner)) owners.add(owner);
+    }
+    for (const value of await cookies.signedCandidates('trust_device')) {
+      const [token, identifier] = value.split('!');
+      const row = await proof(identifier);
+      if (!token || !identifier || !row || row.expiresAt <= new Date()) continue;
+      // This distinct inner binding has no exported decision helper. Reuse the
+      // provider's public HMAC utility and exact pinned trust-device algorithm.
+      if (token === await createHMAC('SHA-256', 'base64urlnopad').sign(provider.secret, `${row.value}!${identifier}`)
+        && await liveUser(row.value)) owners.add(row.value);
+    }
+    if (input.path === '/api/account/reauthenticate/passkey') {
+      const response = input.body.response as { id?: unknown } | undefined;
+      if (typeof response?.id === 'string') {
+        const owner = (await database.query<{ userId: string }>(
+          'SELECT "userId" FROM public.passkey WHERE "credentialID" = $1', [response.id])).rows[0]?.userId;
+        if (owner) owners.add(owner);
+      }
+    }
+    if (owners.size > 1) throw new AccountProblem(input.kind === 'session' ? 'forbidden' : 'invalid_request', input.kind === 'session' ? 403 : 400);
   }
   return Object.freeze({ purpose, candidateUserId, activityUserId, session, verification, trust, target,
     signedInBudget: purpose === 'session-proof' && !!session });

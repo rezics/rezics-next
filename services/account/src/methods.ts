@@ -3,13 +3,13 @@ import type { Pool, PoolClient } from 'pg';
 import { getAuthenticatorName } from '@better-auth/passkey';
 import { APIError } from 'better-auth/api';
 import { accountFailure, accountJson, AccountProblem, accountSession, type AccountAuth } from './http.ts';
-import { consumeAccountLimit } from './rate-limit.ts';
+import { consumeStepUpAttempt } from './rate-limit.ts';
 import { accountResponses, methodsView, statusView } from './views.ts';
 import { resolveAuthenticationSubject } from './authentication-subject.ts';
 import { prepareSessionAuthentication } from './authentication-input.ts';
 import { runAuthenticationExchange } from './authentication-input.ts';
 import type { AuthenticationSubject } from './authentication-subject.ts';
-import { rejectChangedAuthentication } from './recovery-auth.ts';
+import { authenticationSubjectChanged, settleChangedAuthentication } from './recovery-auth.ts';
 
 export { sensitiveAuthPaths } from './authentication-subject.ts';
 
@@ -24,11 +24,7 @@ export async function requireStepUp(pool: Pool | PoolClient, session: { session:
 
 /** Raw signed-in TOTP and reauthentication prove the same factor, so they
  * spend one atomic user budget even across sessions and ignored body fields. */
-export async function consumeStepUpAttempt(pool: Pool | PoolClient, secret: string, userId: string): Promise<void> {
-  if (!await consumeAccountLimit(pool, secret, `reauth:${userId}`, 5, 300)) {
-    throw new AccountProblem('rate_limited', 429);
-  }
-}
+export { consumeStepUpAttempt } from './rate-limit.ts';
 
 /** A missing factor has no row to lock. Serialize enrollment and both TOTP
  * verification entry points by user, after recovery and before session locks. */
@@ -78,14 +74,17 @@ export async function reauthenticate(guardPool: Pool, session: { session: { id: 
         return false;
       }
     });
-    if (await rejectChangedAuthentication(authentication.auth, db, authentication.subject, exchange)) return 'changed' as const;
+    if (authenticationSubjectChanged(authentication.subject, exchange)) return { changed: exchange };
     const accepted = exchange.result;
     if (accepted) await db.query(`INSERT INTO rezics_account_step_up (session_id) VALUES ($1)
       ON CONFLICT (session_id) DO UPDATE SET verified_at = now()`, [session.session.id]);
-    return accepted;
+    return { accepted };
   }, path === '/api/account/reauthenticate' ? { totpVerification: true } : {});
-  if (verified === 'changed') throw new AccountProblem('stale_request', 403);
-  if (!verified) throw new AccountProblem('forbidden', 403);
+  if ('changed' in verified && verified.changed) {
+    await settleChangedAuthentication(authentication.auth, guardPool, authentication.subject, verified.changed);
+    throw new AccountProblem('stale_request', 403);
+  }
+  if (!verified.accepted) throw new AccountProblem('forbidden', 403);
 }
 
 /** Bounded by method caps (32 passkeys, one password and one TOTP). Never

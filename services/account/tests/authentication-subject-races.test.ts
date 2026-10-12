@@ -202,6 +202,7 @@ test('post-provider subject replacement denies issuance, charges both users and 
   const f = await issuerFixture('https://issuer.test');
   const admission = pause();
   let providerAuthenticatedUser: string | undefined;
+  let providerIssuedCookie = '';
   let pending: Promise<Response> | undefined;
   let provider: ReturnType<typeof spyOn> | undefined;
   try {
@@ -213,7 +214,11 @@ test('post-provider subject replacement denies issuance, charges both users and 
     const key = (id: string) => createHmac('sha256', f.secret).update(`reauth:${id}`).digest('hex');
     await f.pool.query(`UPDATE rezics_account_rate_limit SET started_at = now() - interval '301 seconds'
       WHERE key IN ($1, $2)`, [key(a.id), key(b.id)]);
-    const sessionsBefore = (await f.pool.query('SELECT id FROM "session" WHERE "userId" = $1 ORDER BY id', [b.id])).rows;
+    const liveSessions = async () => (await f.pool.query(`SELECT s.id FROM "session" s
+      JOIN rezics_account_security p ON p.user_id = s."userId"
+      WHERE s."userId" = $1 AND s.rezics_generation = p.session_generation
+        AND s."expiresAt" > clock_timestamp() ORDER BY s.id`, [b.id])).rows;
+    const sessionsBefore = await liveSessions();
     const signInsBefore = (await f.pool.query(`SELECT id FROM rezics_account_security_event
       WHERE user_id IN ($1, $2) AND action = 'sign_in' ORDER BY id`, [a.id, b.id])).rows;
     const handler = f.auth.handler;
@@ -226,6 +231,7 @@ test('post-provider subject replacement denies issuance, charges both users and 
       if (new URL(request.url).pathname === '/api/auth/two-factor/verify-totp') {
         const output = await response.clone().json() as { user?: { id: string } };
         providerAuthenticatedUser = output.user?.id;
+        providerIssuedCookie = cookies(response);
       }
       return response;
     });
@@ -241,7 +247,12 @@ test('post-provider subject replacement denies issuance, charges both users and 
     expect(response.status).toBe(403);
     expect(await response.clone().json()).toMatchObject({ error: 'stale_request' });
     await deniedWithoutSession(f, response);
-    expect((await f.pool.query('SELECT id FROM "session" WHERE "userId" = $1 ORDER BY id', [b.id])).rows).toEqual(sessionsBefore);
+    // The native owner logically retires sessions before bounded physical
+    // cleanup. Prove its actual issued credential is unusable, and that no
+    // additional live generation-fenced session remains.
+    expect(providerIssuedCookie).not.toBe('');
+    expect(await f.auth.api.getSession({ headers: new Headers({ cookie: providerIssuedCookie }) })).toBeNull();
+    expect(await liveSessions()).toEqual(sessionsBefore);
     for (const userId of [a.id, b.id]) {
       expect((await f.pool.query('SELECT count FROM rezics_account_rate_limit WHERE key = $1', [key(userId)])).rows[0]?.count).toBe(1);
       expect((await f.pool.query(`SELECT user_id FROM rezics_account_security_event

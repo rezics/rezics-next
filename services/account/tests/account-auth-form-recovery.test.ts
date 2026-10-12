@@ -88,7 +88,9 @@ for (const scheme of ['https', 'http'])
           const other = exact.startsWith('__Secure-')
             ? 'better-auth.two_factor'
             : '__Secure-better-auth.two_factor';
-          const aChallenge = (await challenge(a)).replace(exact, other);
+          // Both cookie variants carry B so this test isolates canonical
+          // selection/locking from the separate multi-subject refusal matrix.
+          const aChallenge = (await challenge(b)).replace(exact, other);
           const bChallenge = await challenge(b);
           const retained = scenario === 'lock' ? await challenge(b) : undefined;
           const savedChallenge =
