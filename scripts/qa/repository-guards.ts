@@ -6,6 +6,10 @@ import { existsSync } from 'node:fs';
  * their normal affected tiers; these entries enforce an inventory-wide rule. */
 export const repositoryGuards = [
   {
+    file: 'packages/observability/tests/http-measurement.test.ts',
+    reason: 'Every counter the native module reports must be on the HTTP measurement allowlist; a Java change does not select this test.',
+  },
+  {
     file: 'tests/qa/unit/g-1046-sql-relations.test.ts',
     reason: 'Every SQL source relation must exist in the complete migrated relation inventory.',
   },

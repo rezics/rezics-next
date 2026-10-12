@@ -131,7 +131,7 @@ const MAX_TRANSPORT_CONTINUATIONS = 2;
 // "Selected model is at capacity" ends a Codex turn with its session intact (four Sol sessions in twenty
 // minutes on 2026-10-12, each waiting for a manager to resume it). Wait resumes the same session itself.
 const MAX_CAPACITY_CONTINUATIONS = 4;
-const CAPACITY_WAIT_MS = 60_000;
+const CAPACITY_WAIT_MS = 30_000;
 export const DEFAULT_ENGINE: Engine = (process.env.GOAL_ENGINE as Engine | undefined) ?? 'claude';
 // `codex` (Sol) and `luna` use the default Codex account; `codex-1` runs Sol on the second account in a
 // separate CODEX_HOME (the `codex-1` wrapper sets the same directory), so Sol work can continue on
@@ -1518,7 +1518,12 @@ export async function waitFor(id: string, options: { pollMs?: number; settleMs?:
     while (alive() || (await Bun.sleep(options.settleMs ?? 3000), alive())) await Bun.sleep(options.pollMs ?? 5000);
     const result = readResult(watching);
     const refusedTurn = capacityRefusal(watching);
-    if (refusedTurn) await Bun.sleep(options.capacityWaitMs ?? CAPACITY_WAIT_MS);
+    if (refusedTurn) {
+      const pause = options.capacityWaitMs ?? CAPACITY_WAIT_MS;
+      // Said before the pause: a manager that sees only the exit resumes by hand and races this.
+      console.log(`${id} attempt ${watching.n} was refused for capacity; resuming the same session in ${Math.round(pause / 1000)} s`);
+      await Bun.sleep(pause);
+    }
     const outcome = await withLedger(ledger => {
       const current = taskOf(ledger, id);
       const last = lastAttempt(current);
@@ -1584,9 +1589,10 @@ export async function waitFor(id: string, options: { pollMs?: number; settleMs?:
     }
     console.log(describe(task));
     if (outcome.kind === 'ended' && outcome.repeated) console.log(`${task.id} stopped after repeated transport errors`);
-    if (outcome.kind === 'ended' && outcome.refused) console.log(`${task.id} not continued after a transport error: ${outcome.refused}`);
+    if (outcome.kind === 'ended' && outcome.refused) console.log(`${task.id} not continued after a ${refusedTurn ? 'capacity refusal' : 'transport error'}: ${outcome.refused}`);
     console.log(`--- handoff ---\n${result.text.length > 8000 ? `${result.text.slice(0, 8000)}\n[truncated]` : result.text}`);
-    if (outcome.kind === 'ended' && task.land === 'auto' && lastAttempt(task).n === watching.n) await landTask(task.id);
+    // A session that ended on an error has handed nothing off; landing it would only report a dirty worktree.
+    if (outcome.kind === 'ended' && task.land === 'auto' && lastAttempt(task).n === watching.n && !result.error) await landTask(task.id);
     return;
   }
 }
