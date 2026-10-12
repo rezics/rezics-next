@@ -188,27 +188,28 @@ test(
               values: [sha(JSON.stringify(canonical(coverage)))],
             },
           ]);
-        const pristine = async () => {
-          expect(await accessStateCoverage(copy.owners.access)).toEqual(baseState);
-          expect(await accessOutboxCoverage(copy.owners.access)).toEqual(baseOutbox);
+        const pristine = async (candidate: Copy = copy, expectedState = baseState) => {
+          expect(await accessStateCoverage(candidate.owners.access)).toEqual(expectedState);
+          expect(await accessOutboxCoverage(candidate.owners.access)).toEqual(baseOutbox);
           expect(
-            await content.readExactBatch([fixture.revisionId, fixture.laterRevisionId], (ids) =>
-              Promise.resolve(new Set(ids)),
+            await new ContentCore(candidate.owners.content).readExactBatch(
+              [fixture.revisionId, fixture.laterRevisionId],
+              (ids) => Promise.resolve(new Set(ids)),
             ),
           ).toEqual(before);
-          expect(await graphReleased(copy)).toBe(false);
-          expect(await accessFence(copy)).toEqual([
+          expect(await graphReleased(candidate)).toBe(false);
+          expect(await accessFence(candidate)).toEqual([
             { open: false, generation: fixture.generation },
           ]);
-          expect((await copy.ready()).status).toBe(503);
-          expect((await ownerLogins(copy)).map((row) => row.rolcanlogin)).toEqual([
+          expect((await candidate.ready()).status).toBe(503);
+          expect((await ownerLogins(candidate)).map((row) => row.rolcanlogin)).toEqual([
             false,
             false,
             false,
             false,
           ]);
           await expect(
-            new admission.AccessAdmissionRegistry(copy.owners.access).activePrincipalId(
+            new admission.AccessAdmissionRegistry(candidate.owners.access).activePrincipalId(
               fixture.principal,
             ),
           ).rejects.toBeInstanceOf(admission.AdmissionUnavailable);
@@ -219,7 +220,6 @@ test(
           restore: () => void | Promise<unknown>,
           input = body,
           expectedGate?: string,
-          expectedQualifications = 0,
         ) => {
           maintenance.mockClear();
           commands.mockClear();
@@ -232,7 +232,7 @@ test(
             const held = await outerOperation(copy, key);
             expect(held.hold_reason).toBeString();
             if (expectedGate) expect(held.hold_reason).toContain(expectedGate);
-            expect(held.qualifications).toHaveLength(expectedQualifications);
+            expect(held.qualifications).toHaveLength(0);
             expect(held.releases).toHaveLength(0);
             expect(maintenance).not.toHaveBeenCalled();
             expect(commands).not.toHaveBeenCalled();
@@ -598,25 +598,44 @@ test(
               captured.mockRestore();
             }
           }
-          // A covered but unsupported Access mutation cannot pass the two-cut release proof.
-          const originalProof = binding.proveReleaseTransition;
-          const unrelatedAuthority = spyOn(binding, 'proveReleaseTransition').mockImplementation(
-            async (pool, client, basis, generation) => {
-              await ensureFixtureScopeGate(client, `work:edit:${fixture.work}`, { open: false });
-              return originalProof(pool, client, basis, generation);
-            },
-          );
+          // A new scope outside signed C1 cannot enter the older physical cut.
+          const unrelatedAuthority = await fixture.copy();
           try {
-            await controlled(
-              'unrelated-Access-authority',
-              noChange,
-              noChange,
-              body,
-              'scope_gate',
-              1,
+            const unrelatedMaintenance = spyOn(
+              unrelatedAuthority.resources.erasures!.maintenance,
+              'command',
             );
+            const unrelatedCommands = spyOn(
+              unrelatedAuthority.fuseki,
+              'commandWithReceipt',
+            );
+            const scope = `work:edit:unrelated:${randomUUID()}`;
+            await ensureFixtureScopeGate(unrelatedAuthority.owners.access, scope);
+            const changedState = await accessStateCoverage(unrelatedAuthority.owners.access);
+            expect(changedState).not.toEqual(baseState);
+            const key = 'later-denial:unrelated-Access-authority';
+            try {
+              const response = await unrelatedAuthority.request(key, undefined, body);
+              expect(response.status).toBe(201);
+              expect(await response.json()).toMatchObject({ state: 'held' });
+              const held = await outerOperation(unrelatedAuthority, key);
+              expect(held.hold_reason).toBeString();
+              expect(held.qualifications).toHaveLength(0);
+              expect(held.releases).toHaveLength(0);
+              expect(unrelatedMaintenance).not.toHaveBeenCalled();
+              expect(unrelatedCommands).not.toHaveBeenCalled();
+              await expect(attempt(unrelatedAuthority, key)).rejects.toBeInstanceOf(RecoveryRefusal);
+              await pristine(unrelatedAuthority, changedState);
+              console.info('later admission refusal proved', {
+                label: 'unrelated-Access-authority',
+                reason: held.hold_reason,
+              });
+            } finally {
+              unrelatedCommands.mockRestore();
+              unrelatedMaintenance.mockRestore();
+            }
           } finally {
-            unrelatedAuthority.mockRestore();
+            await unrelatedAuthority.dispose();
           }
           await faultAttachment(
             'auxiliary-admission-proof',
