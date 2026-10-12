@@ -78,6 +78,11 @@ export async function resolveRealmProfile(env: WorkActivationEnvironment, realm:
   const spaces = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?space ?spaceProfile ?realmProfile WHERE {
     GRAPH ${iri(GRAPHS.current)} { ${iri(realm)} a rv:Realm ; rv:space ?space .
       ?space a rv:Space ; rv:realmCapability ${iri(realm)} .
+      FILTER NOT EXISTS {
+        ${iri(realm)} rv:space ?linkedSpace .
+        FILTER NOT EXISTS { ?linkedSpace a rv:Space ; rv:realmCapability ${iri(realm)} }
+      }
+      FILTER NOT EXISTS { ?otherSpace rv:realmCapability ${iri(realm)} . FILTER(?otherSpace != ?space) }
       OPTIONAL { ${iri(realm)} rv:definitionProfile ?realmProfile }
       OPTIONAL { ?space rv:definitionProfile ?spaceProfile } }
   } LIMIT 2`, 2048)).results?.bindings ?? [];

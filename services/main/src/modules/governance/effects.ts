@@ -65,15 +65,19 @@ const typed = (value: number) => `${lit(String(value))}^^<http://www.w3.org/2001
 /** Bounded affected-Agent keyset; private Account identities never enter the graph. */
 export function graphNoticeParticipants(env: WorkActivationEnvironment): Pick<ModerationEffects, 'participants'> {
   return { async participants(target, after, limit) {
-    const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT DISTINCT ?author WHERE {
-      GRAPH ${iri(GRAPHS.current)} {
+    const realm = target.owner === 'graph' ? await ownerTargetHeads({ graph: env }).realmBasis(target) : null;
+    const authors = realm
+      ? `${iri(realm.realm)} a rv:Realm . ${iri(realm.space)} rv:owner ?author`
+      : `
         { ${iri(target.resource)} rv:author ?author }
         UNION { ?credit a rv:NativeAgentCredit ; rv:work ${iri(target.resource)} ; rv:agent ?author }
         UNION { ?contribution a rv:TextContribution ; rv:work ${iri(target.resource)} ; rv:author ?author }
         UNION { ${iri(target.resource)} rv:work ?work . ?credit a rv:NativeAgentCredit ; rv:work ?work ; rv:agent ?author }
         UNION { ${iri(target.resource)} rv:owner ?author }
-        UNION { ${iri(target.resource)} a rv:Realm ; rv:space ?space . ?space rv:owner ?author }
-        UNION { ${iri(target.resource)} a rv:Agent . BIND(${iri(target.resource)} AS ?author) }
+        UNION { ${iri(target.resource)} a rv:Agent . BIND(${iri(target.resource)} AS ?author) }`;
+    const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT DISTINCT ?author WHERE {
+      GRAPH ${iri(GRAPHS.current)} {
+        ${authors}
       }
       ${after ? `FILTER(STR(?author) > ${lit(after)})` : ''}
     } ORDER BY STR(?author) LIMIT ${limit}`, 16_384)).results?.bindings ?? [];
