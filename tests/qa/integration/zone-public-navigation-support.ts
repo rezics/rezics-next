@@ -69,6 +69,11 @@ export async function publicNavigationFixture() {
     await grant(`semantic:read:${collection}`, 'semantic.read');
     await f.json(await call('POST', '/v1/collections', { collection, name: 'Navigation collection',
       disclosure: 'public', actingSubject: actor }), 201);
+    const privateCollection = nativeId();
+    await grant(`collection:edit:${privateCollection}`, 'collection.edit');
+    await grant(`semantic:read:${privateCollection}`, 'semantic.read');
+    await f.json(await call('POST', '/v1/collections', { collection: privateCollection,
+      name: 'Private navigation collection', disclosure: 'private', actingSubject: actor }), 201);
     await grant('work:create:root', 'work.create');
     const tail = await f.json<{ work: string; mainVersion: string; workRevision: string }>(
       await call('POST', '/v1/works', { profile: 'metadata-only-v1', authoring: 'own-work',
@@ -142,6 +147,7 @@ export async function publicNavigationFixture() {
         reason: 'Exercise live navigation visibility', settings: { visibility, listing: current.settings.listing },
       }), 201);
     };
-    return { ...f, ...created, actor, path, navigation, targets, call, changeNavigation, save, publish, presentation, disclose };
+    return { ...f, ...created, actor, path, navigation, targets, privateCollection,
+      call, changeNavigation, save, publish, presentation, disclose };
   } catch (error) { await f.close(); throw error; }
 }

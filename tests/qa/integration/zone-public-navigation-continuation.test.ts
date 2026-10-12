@@ -15,12 +15,14 @@ test('public navigation traverses fifty-one published mounts with current disclo
     expect(shell).toMatchObject({ navigation: [], navigationRevision: null,
       navigationNext: null, navigationComplete: true });
     const segments = Array.from({ length: 51 }, (_, index) => `entry-${String(index + 1).padStart(2, '0')}`);
-    const operations: CompositionOperation[] = [...segments, 'private-mount'].map((segment, index) => ({
-      op: 'insert', role: 'mount', parent: f.navigation, position: 'last',
-      target: f.targets[index === 50 ? 1 : 0]!,
-      qualifier: { type: 'zone-mount', zone: f.zone, routeSegment: segment, key: 'id',
-        disclosure: index === 51 ? 'private' : 'public' },
-    }));
+    // The public mount must reach Collection disclosure, including visible lookahead at the page boundary.
+    const operations: CompositionOperation[] = [...segments.slice(0, 50), 'private-collection', segments[50]!, 'private-mount']
+      .map(segment => ({
+        op: 'insert', role: 'mount', parent: f.navigation, position: 'last',
+        target: segment === 'private-collection' ? f.privateCollection : f.targets[segment === segments[50] ? 1 : 0]!,
+        qualifier: { type: 'zone-mount', zone: f.zone, routeSegment: segment, key: 'id',
+          disclosure: segment === 'private-mount' ? 'private' : 'public' },
+      }));
     let navigationRevision = f.navigationRevision;
     const occurrences: string[] = [];
     for (let at = 0; at < operations.length; at += 16) {
@@ -35,6 +37,8 @@ test('public navigation traverses fifty-one published mounts with current disclo
     const first = await f.json<Presentation>(firstResponse, 200);
     expect(first.navigation).toHaveLength(50);
     expect(first.navigation.map(item => item.segment)).toEqual(segments.slice(0, 50));
+    expect(first.navigation.at(-1)).toMatchObject({ segment: segments[49], target: f.targets[0] });
+    expect(first.navigation.map(item => item.target)).not.toContain(f.privateCollection);
     expect(first.navigationRevision).toBe(navigationRevision);
     expect(first.navigationComplete).toBe(false);
     expect(first.navigationNext).toBeString();
@@ -43,7 +47,9 @@ test('public navigation traverses fifty-one published mounts with current disclo
     expect(second).toMatchObject({ revision: publication.revision, navigationRevision,
       navigationNext: null, navigationComplete: true });
     expect(second.navigation.map(item => item.segment)).toEqual(segments.slice(50));
-    expect([...first.navigation, ...second.navigation].map(item => item.occurrence)).toEqual(occurrences.slice(0, 51));
+    expect(second.navigation.map(item => item.target)).not.toContain(f.privateCollection);
+    expect([...first.navigation, ...second.navigation].map(item => item.occurrence))
+      .toEqual([...occurrences.slice(0, 50), occurrences[51]!]);
     expect((await f.presentation('invalid-cursor')).status).toBe(400);
     expect((await f.presentation()).headers.get('etag')).toBe(etag);
 
@@ -65,6 +71,7 @@ test('public navigation traverses fifty-one published mounts with current disclo
     expect(hiddenTail).toMatchObject({ navigation: [], navigationNext: null, navigationComplete: true });
     const onlyVisible = await f.json<Presentation>(await f.presentation(), 200);
     expect(onlyVisible.navigation).toHaveLength(50);
+    expect(onlyVisible.navigation.map(item => item.target)).not.toContain(f.privateCollection);
     expect(onlyVisible).toMatchObject({ navigationNext: null, navigationComplete: true });
     await f.disclose(f.targets[1]!, 'public');
     expect((await f.json<Presentation>(await f.presentation(cursor), 200)).navigation.map(item => item.segment)).toEqual(['entry-51']);
