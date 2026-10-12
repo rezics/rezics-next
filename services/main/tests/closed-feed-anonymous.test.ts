@@ -19,7 +19,8 @@ import {
 import { rankCandidates } from '../src/modules/feed/ranking.ts';
 import type { FeedSource } from '../src/modules/feed/source.ts';
 import { retainedMembershipBasis } from '../src/modules/read-basis/membership.ts';
-import { WorkReadMissing, type WorkReadSession } from '../src/modules/work/read-session.ts';
+import { WorkReadMissing, WorkReadSession } from '../src/modules/work/read-session.ts';
+import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import { RV, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { fixtureDisclosureCut } from './support/disclosure-ancestry.ts';
 
@@ -31,7 +32,8 @@ const binding = (value: string) => ({ type: 'uri' as const, value });
 export function closedFeedOwner(actor: ClosedFeedReader) {
   const state = { closed: false, workHidden: false, contentHidden: false, ancestry: true,
     realmParent: true, preparation: true, approval: true, placement: 'current', parentHead: head,
-    generation: '0', enforcementCut: fixtureDisclosureCut.enforcementCut, available: true, hydrate: () => {} };
+    generation: '0', enforcementCut: fixtureDisclosureCut.enforcementCut, available: true, hydrate: () => {},
+    privateRealm: false, member: true, proof: 'membership:1' };
   const sources: FeedSource[] = Array.from({ length: 6 }, (_, index) => ({
     id: native(10 + index), sequence: String(index + 1), kind: index % 2 === 0 ? 'discussion' : 'work',
     target: index % 2 === 0 ? native(30 + index) : work, work, actor: native(40 + index),
@@ -45,7 +47,7 @@ export function closedFeedOwner(actor: ClosedFeedReader) {
     fuseki: { query: async (query: string) => {
       if (query.includes('SELECT ?space ?realmRevision')) return { results: { bindings:
         query.includes(`<${realm}>`) ? [{ space: binding(native(3)), realmRevision: binding(head),
-          disclosure: binding(`${RV}Public`) }] : [] } };
+          disclosure: binding(`${RV}${state.privateRealm ? 'Private' : 'Public'}`) }] : [] } };
       if (query.includes('SELECT ?resource ?head')) return { results: { bindings:
         [work, realm].filter(id => query.includes(`<${id}>`)).map(id => ({ resource: binding(id), head: binding(state.parentHead) })) } };
       if (query.includes('SELECT DISTINCT ?id ?sequence ?kind ?target')) {
@@ -97,9 +99,12 @@ export function closedFeedOwner(actor: ClosedFeedReader) {
     },
   });
   const viewer = disclosureViewer(actor === 'anonymous' ? null : { issuer: 'account.test', subject: actor } as never);
-  const session = { deps: { environment: env }, viewer,
-    query: async (query: string) => (await env.fuseki.query(query)).results!.bindings,
-  } as unknown as WorkReadSession;
+  const session = new WorkReadSession({ environment: env, access: {
+    realmReadProof: async () => state.member ? state.proof : null,
+  } } as unknown as MainWorkDependencies, new Request('https://rezics.test/feed'),
+  { actingSubject: actor === 'anonymous' ? undefined : native(80), publicViewer: viewer },
+  { dataEpoch: env.lineage.dataEpoch, sequence: '6' });
+  session.principal = actor === 'anonymous' ? null : { issuer: 'account.test', subject: actor } as never;
   return { state, session, sources, calls, realm, work };
 }
 
@@ -168,6 +173,28 @@ export function closedFeedCases(actor: ClosedFeedReader) {
       catch (error) { expect(error).toBeInstanceOf(WorkReadMissing); return { status: 404, body: 'Realm unavailable' }; }
     };
     expect(await missing(realm)).toEqual(await missing(native(999)));
+  });
+  test(`closed-feed-${actor}: private Realm scope and occurrences preserve the Work owner's refusal`, async () => {
+    const owner = closedFeedOwner(actor);
+    owner.state.privateRealm = true;
+    owner.state.member = false;
+    await expect(owner.session.realm(realm)).rejects.toBeInstanceOf(WorkReadMissing);
+    await expect(captureClosedRealmFeedScope(owner.session, realm)).rejects.toBeInstanceOf(WorkReadMissing);
+    await expect(captureClosedRealmFeedSources(owner.session, [owner.sources[0]!])).rejects.toBeInstanceOf(WorkReadMissing);
+    expect(owner.calls).toEqual([]);
+    await expect(captureClosedRealmFeedScope(owner.session, native(999))).rejects.toBeInstanceOf(WorkReadMissing);
+  });
+  if (actor !== 'anonymous') test(`closed-feed-${actor}: private Realm revocation and changed membership fence delivery`, async () => {
+    for (const change of ['revoked', 'changed'] as const) {
+      const owner = closedFeedOwner(actor);
+      owner.state.privateRealm = true;
+      const scoped = await captureClosedRealmFeedScope(owner.session, realm);
+      const captured = await captureClosedRealmFeedSources(owner.session, [owner.sources[0]!]);
+      if (change === 'revoked') owner.state.member = false;
+      else owner.state.proof = 'membership:2';
+      await expect(scoped()).rejects.toBeInstanceOf(Error);
+      await expect(captured.fence()).rejects.toBeInstanceOf(Error);
+    }
   });
   test(`closed-feed-${actor}: missing ancestry, approval and preparation cannot expose a retained event`, async () => {
     for (const key of ['ancestry', 'approval', 'preparation', 'realmParent', 'available'] as const) {

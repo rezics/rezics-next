@@ -3,11 +3,10 @@ import {
   resolveDisclosureSelections, type DisclosureReadCut, type DisclosureTarget,
 } from '../disclosure/read.ts';
 import { WorkReadMissing, type WorkReadSession } from '../work/read-session.ts';
-import { readRealmPolicy } from '../space/policy.ts';
 import { FEED_COST } from './contract.ts';
 import { feedReviewSources, feedSources, type FeedSource } from './source.ts';
 
-type FeedSession = Pick<WorkReadSession, 'deps' | 'viewer'>;
+type FeedSession = Pick<WorkReadSession, 'deps' | 'viewer' | 'realm' | 'fenceRealms'>;
 export type FeedDisclosureOccurrence = Pick<FeedSource, 'id' | 'kind' | 'target' | 'work' | 'realm'
   | 'reply' | 'contentTarget' | 'contentRevision' | 'readerReview'>;
 
@@ -57,6 +56,8 @@ export async function captureClosedRealmFeedSources<Source extends FeedDisclosur
     throw new DisclosureUnavailable('Feed occurrence batch is invalid');
   sources = sources.map(source => snapshot(source));
   const env = session.deps.environment, viewer = session.viewer;
+  const realms = [...new Set(sources.flatMap(source => source.realm ? [source.realm] : []))];
+  for (const realm of realms) await session.realm(realm);
   const targets = sources.flatMap(source => [...closedRealmFeedTargets(source)]);
   if (targets.length > DISCLOSURE_COST.batch) throw new DisclosureUnavailable('Feed disclosure budget exceeded');
   const selections = targets.length ? await resolveDisclosureSelections(env, targets) : [];
@@ -80,6 +81,8 @@ export async function captureClosedRealmFeedSources<Source extends FeedDisclosur
      * A sparse page may advance by its retained position; it must not retain a
      * hidden Realm in continuation metadata or substitute another occurrence. */
     fence: async () => {
+      await session.fenceRealms();
+      for (const realm of realms) await session.realm(realm);
       const decisions = cuts.length ? await fenceDisclosure(env, cuts, viewer, channel) : [];
       return visible(new Map(cuts.map((cut, index) => [cut, decisions[index]!])));
     },
@@ -100,12 +103,14 @@ export async function readClosedRealmFeedSources(session: WorkReadSession,
 /** Hidden and nonexistent Realm scopes use the route's ordinary missing result. */
 export async function captureClosedRealmFeedScope(session: FeedSession, realm: string) {
   const env = session.deps.environment, viewer = session.viewer;
-  if (!await readRealmPolicy(env, realm)) throw new WorkReadMissing('Realm unavailable');
+  await session.realm(realm);
   const selections = await resolveDisclosureSelections(env, [{ owner: 'graph', resource: realm, component: 'record' }]);
   if (selections[0]?.ancestry.resourceKind !== 'realm') throw new WorkReadMissing('Realm unavailable');
   const cuts = await captureDisclosure(env, selections, viewer, 'feed');
   if (cuts[0]?.decision !== 'visible') throw new WorkReadMissing('Realm unavailable');
   return async () => {
+    await session.fenceRealms();
+    await session.realm(realm);
     if ((await fenceDisclosure(env, cuts, viewer, 'feed'))[0] !== 'visible')
       throw new WorkReadMissing('Realm unavailable');
   };
