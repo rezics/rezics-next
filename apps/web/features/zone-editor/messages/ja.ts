@@ -2,6 +2,8 @@
 import type { ZoneEditorMessages } from '../messages.ts';
 
 const messages: ZoneEditorMessages = {
+  themeCreate: '既定値からレイアウトを作成',
+  themeDefaultsBody: 'このZoneの現在の既定レイアウトから始めます。ほかの設定は保存されたままです。',
   sectionsLabel: 'サイトの項目',
   unsavedWork: '未保存の変更',
   sectionHome: 'ホーム',

@@ -2,6 +2,8 @@
 import type { ZoneEditorMessages } from '../messages.ts';
 
 const messages: ZoneEditorMessages = {
+  themeCreate: 'Layout aus den Standardwerten erstellen',
+  themeDefaultsBody: 'Beginnen Sie mit dem aktuellen Standardlayout dieser Zone. Die übrige Konfiguration bleibt gespeichert.',
   sectionsLabel: 'Bereiche der Website',
   unsavedWork: 'Ungespeicherte Änderungen',
   sectionHome: 'Start',

@@ -2,6 +2,8 @@
 import type { ZoneEditorMessages } from '../messages.ts';
 
 const messages: ZoneEditorMessages = {
+  themeCreate: '從預設設定建立版面配置',
+  themeDefaultsBody: '使用此 Zone 目前的預設版面配置開始編輯。其他設定仍保持儲存狀態。',
   sectionsLabel: '網站欄目',
   unsavedWork: '尚未儲存的變更',
   sectionHome: '首頁',

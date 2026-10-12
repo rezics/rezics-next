@@ -2,6 +2,8 @@
 import type { ZoneEditorMessages } from '../messages.ts';
 
 const messages: ZoneEditorMessages = {
+  themeCreate: 'Crear diseño con los valores predeterminados',
+  themeDefaultsBody: 'Empieza con el diseño predeterminado actual de esta Zone. El resto de la configuración sigue guardado.',
   sectionsLabel: 'Secciones del sitio',
   unsavedWork: 'Cambios sin guardar',
   sectionHome: 'Inicio',

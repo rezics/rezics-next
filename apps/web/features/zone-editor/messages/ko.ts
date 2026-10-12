@@ -2,6 +2,8 @@
 import type { ZoneEditorMessages } from '../messages.ts';
 
 const messages: ZoneEditorMessages = {
+  themeCreate: '기본값으로 레이아웃 만들기',
+  themeDefaultsBody: '이 Zone의 현재 기본 레이아웃으로 시작합니다. 다른 설정은 저장된 상태로 유지됩니다.',
   sectionsLabel: '사이트 구역',
   unsavedWork: '저장하지 않은 변경',
   sectionHome: '홈',

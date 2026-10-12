@@ -84,6 +84,28 @@ function MissingBaseline() {
   </ZoneEditorFrame>;
 }
 
+function NewZoneDefaults() {
+  const configuration = { ...opening, presentation: undefined };
+  const [api] = useState<ZoneThemeClient>(() => ({
+    async readConfiguration() {
+      return { ok: true, data: { revision: head, configuration,
+        effectivePresentation: { revision: head, presentation: baseline } } };
+    },
+    async saveConfiguration(_zone, body) {
+      expect(body.expectedHead).toBe(head);
+      expect(body.presentation).toEqual({ ...baseline, tokens: { ...baseline.tokens, density: 'compact', pageSurface: 'cards' } });
+      return { ok: true, data: { revision: nextHead, replayed: false } };
+    },
+  }));
+  return <ZoneEditorFrame name="Harbor notes" editorPath="/manage/z/harbor" agent={agent} locale="en"
+    manageMessages={manageMessages} sectionsLabel={messages.en.sectionsLabel} sectionHome={messages.en.sectionHome}
+    sectionNavigation={messages.en.sectionNavigation} sectionRealm={messages.en.sectionRealm} sectionTheme={messages.en.sectionTheme}>
+    <ZoneThemeEditor zoneId={zoneId} actingSubject={actor} copy={messages.en}
+      initial={initialThemeState(configuration, head, { revision: head, presentation: baseline })}
+      signInHref="/auth/start" api={api} />
+  </ZoneEditorFrame>;
+}
+
 const meta = {
   title: 'Zone editor/Theme',
   render: () => <ThemeWithRenderedExample />,
@@ -115,5 +137,20 @@ export const NoSavedPresentation: Story = {
   async play({ canvasElement }) {
     await expect(within(canvasElement).getByText('This Zone has no saved presentation', { exact: true })).toBeVisible();
     await expect(within(canvasElement).queryByRole('radio')).toBeNull();
+  },
+};
+
+export const CreateLayoutFromDefaults: Story = {
+  render: () => <NewZoneDefaults />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.queryByRole('radio')).toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: 'Create layout from defaults' }));
+    await expect(canvas.getByRole('button', { name: 'Save layout' })).toBeEnabled();
+    await userEvent.click(canvas.getByRole('radio', { name: 'Compact · more items per row' }));
+    await userEvent.click(canvas.getByRole('radio', { name: 'In cards' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Save layout' }));
+    await expect(canvas.getByText('Layout saved.', { exact: true })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Save layout' })).toBeDisabled();
   },
 };

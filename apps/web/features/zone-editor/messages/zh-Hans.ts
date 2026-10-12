@@ -2,6 +2,8 @@
 import type { ZoneEditorMessages } from '../messages.ts';
 
 const messages: ZoneEditorMessages = {
+  themeCreate: '从默认设置创建布局',
+  themeDefaultsBody: '使用此 Zone 当前的默认布局开始编辑。其他配置仍保持保存状态。',
   sectionsLabel: '站点栏目',
   unsavedWork: '未保存的更改',
   sectionHome: '首页',

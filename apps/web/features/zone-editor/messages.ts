@@ -10,6 +10,8 @@ import zhHant from './messages/zh-Hant.ts';
 
 // Interface copy for writing a Zone's home page. The page the author writes is theirs, never this catalog.
 const en = {
+  themeCreate: 'Create layout from defaults',
+  themeDefaultsBody: 'Start with this Zone’s current default layout. Other configuration stays saved.',
   sectionsLabel: 'Site sections',
   unsavedWork: 'Unsaved work',
   sectionHome: 'Home',

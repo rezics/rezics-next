@@ -36,6 +36,12 @@ export interface ThemeEditorState {
   choice: StructuralThemeChoice;
   notice: ThemeNotice;
   needsReview: boolean;
+  initialization: 'offered' | 'draft' | 'saved';
+}
+
+export interface EffectiveZonePresentation {
+  revision: string;
+  presentation: ZonePresentationBaseline;
 }
 
 export type ThemeEditorStart =
@@ -75,6 +81,16 @@ export function zoneThemePatch(
   return { presentation };
 }
 
+/** Only an explicit creation may replace an absent presentation with authorized defaults. */
+export function createZoneThemePatch(
+  configuration: unknown,
+  defaults: ZonePresentationBaseline,
+  choice: StructuralThemeChoice,
+): ThemeConfigurationPatch | null {
+  if (readPresentation(configuration).kind !== 'absent') return null;
+  return zoneThemePatch({ presentation: defaults }, choice);
+}
+
 /** Mirror the public configuration merge after a successful save; opaque fields stay intact. */
 export function applyZoneThemePatch(
   configuration: Record<string, unknown>,
@@ -83,9 +99,17 @@ export function applyZoneThemePatch(
   return { ...configuration, ...patch };
 }
 
-export function initialThemeState(configuration: unknown, expectedHead: string): ThemeEditorStart {
+export function initialThemeState(configuration: unknown, expectedHead: string,
+  effective?: EffectiveZonePresentation,
+): ThemeEditorStart {
   if (!isRecord(configuration)) return { kind: 'invalid' };
-  const current = readPresentation(configuration);
+  let current = readPresentation(configuration);
+  const absent = current.kind === 'absent';
+  if (absent && effective) {
+    if (effective.revision !== expectedHead) return { kind: 'invalid' };
+    current = readPresentation({ presentation: effective.presentation });
+    if (current.kind !== 'ready') return { kind: 'invalid' };
+  }
   if (current.kind !== 'ready') return current;
   const baseline = structuredClone(current.presentation);
   const choice = { ...current.choice };
@@ -99,19 +123,23 @@ export function initialThemeState(configuration: unknown, expectedHead: string):
       choice: { ...choice },
       notice: 'idle',
       needsReview: false,
+      initialization: absent ? 'offered' : 'saved',
     },
   };
 }
 
 export type ThemeEditorEvent =
+  | { type: 'create' }
   | { type: 'edit'; choice: StructuralThemeChoice }
   | { type: 'saved'; choice: StructuralThemeChoice; presentation: ZonePresentationBaseline; revision: string; replayed: boolean }
   | { type: 'stale' }
   | { type: 'failed'; failure: Exclude<ThemeNotice, 'idle' | 'saved' | 'replayed' | 'stale' | 'reviewed'> }
-  | { type: 'reviewed'; configuration: unknown; revision: string }
+  | { type: 'reviewed'; configuration: unknown; revision: string; effectivePresentation?: EffectiveZonePresentation }
   | { type: 'review-failed'; failure: 'denied' | 'sign-in' | 'unavailable' };
 
 export function reduceThemeEditor(state: ThemeEditorState, event: ThemeEditorEvent): ThemeEditorState {
+  if (event.type === 'create') return state.initialization === 'offered'
+    ? { ...state, initialization: 'draft', notice: 'idle' } : state;
   if (event.type === 'edit') return { ...state, choice: { ...event.choice }, notice: state.needsReview ? 'stale' : 'idle' };
   if (event.type === 'saved') {
     const patch = { presentation: event.presentation };
@@ -124,13 +152,14 @@ export function reduceThemeEditor(state: ThemeEditorState, event: ThemeEditorEve
       choice: { ...state.choice },
       notice: event.replayed ? 'replayed' : 'saved',
       needsReview: false,
+      initialization: 'saved',
     };
   }
   if (event.type === 'stale') return { ...state, notice: 'stale', needsReview: true };
   if (event.type === 'failed') return { ...state, notice: event.failure };
   if (event.type === 'review-failed') return { ...state, notice: event.failure };
 
-  const reviewed = initialThemeState(event.configuration, event.revision);
+  const reviewed = initialThemeState(event.configuration, event.revision, event.effectivePresentation);
   if (reviewed.kind !== 'ready') return { ...state, notice: 'unavailable' };
   return {
     ...state,
@@ -138,6 +167,8 @@ export function reduceThemeEditor(state: ThemeEditorState, event: ThemeEditorEve
     configuration: reviewed.state.configuration,
     presentation: reviewed.state.presentation,
     saved: reviewed.state.saved,
+    initialization: reviewed.state.initialization === 'offered' && state.initialization === 'draft'
+      ? 'draft' : reviewed.state.initialization,
     // Rebase only the baseline. The author’s two choices stay in the controls.
     choice: { ...state.choice },
     notice: 'reviewed',
@@ -146,7 +177,8 @@ export function reduceThemeEditor(state: ThemeEditorState, event: ThemeEditorEve
 }
 
 export function isThemeDirty(state: ThemeEditorState): boolean {
-  return state.choice.density !== state.saved.density || state.choice.pageSurface !== state.saved.pageSurface;
+  return state.initialization === 'draft'
+    || state.choice.density !== state.saved.density || state.choice.pageSurface !== state.saved.pageSurface;
 }
 
 function isDensity(value: unknown): value is ZoneDensity {

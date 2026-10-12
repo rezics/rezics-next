@@ -7,7 +7,7 @@ import { cn } from '@rezics/ui/utils';
 import { useRef, useState } from 'react';
 import { commandLane, type WriteRound } from '../api/command.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
-import { useZoneEditorDraft } from './draft-provider.tsx';
+import { useZoneEditorDraft, useZoneEditorResource } from './draft-provider.tsx';
 import {
   browserZoneTheme,
   commitCommand,
@@ -17,6 +17,7 @@ import {
 } from './api.ts';
 import type { ZoneEditorMessages } from './messages.ts';
 import {
+  createZoneThemePatch,
   isThemeDirty,
   reduceThemeEditor,
   zoneThemePatch,
@@ -64,16 +65,18 @@ function EditableThemeEditor({ zoneId, actingSubject, copy, initial, signInHref,
   const [state, setState, draftReady] = useZoneEditorDraft('theme', initial, isThemeDirty, isThemeEditorState);
   const [busy, setBusy] = useState<null | 'save' | 'review'>(null);
   const client = useRef<ZoneThemeClient | null>(null);
-  const saveLane = useRef<ReturnType<typeof commandLane<ThemeSaveIntent, WriteResult<SavedZoneTheme>>> | null>(null);
+  const saveLane = useZoneEditorResource('theme:save',
+    () => commandLane<ThemeSaveIntent, WriteResult<SavedZoneTheme>>({ ok: false, failure: 'unavailable' }));
   if (!client.current) client.current = api ?? browserZoneTheme();
-  if (!saveLane.current) saveLane.current = commandLane({ ok: false, failure: 'unavailable' });
 
   function put(event: Parameters<typeof reduceThemeEditor>[1]) {
     setState(current => reduceThemeEditor(current, event));
   }
 
   function intentFor(current: ThemeEditorState): ThemeSaveIntent | null {
-    const patch = zoneThemePatch(current.configuration, current.choice);
+    const patch = current.initialization === 'draft'
+      ? createZoneThemePatch(current.configuration, current.presentation, current.choice)
+      : zoneThemePatch(current.configuration, current.choice);
     return patch ? { expectedHead: current.expectedHead, choice: { ...current.choice }, presentation: patch.presentation } : null;
   }
 
@@ -97,7 +100,7 @@ function EditableThemeEditor({ zoneId, actingSubject, copy, initial, signInHref,
     if (!choice) return;
     setBusy('save');
     try {
-      await saveLane.current!.submit(choice, applySave);
+      await saveLane.submit(choice, applySave);
     } finally {
       setBusy(null);
     }
@@ -108,7 +111,8 @@ function EditableThemeEditor({ zoneId, actingSubject, copy, initial, signInHref,
     setBusy('review');
     try {
       const current = await client.current!.readConfiguration(zoneId, actingSubject);
-      if (current.ok) put({ type: 'reviewed', configuration: current.data.configuration, revision: current.data.revision });
+      if (current.ok) put({ type: 'reviewed', configuration: current.data.configuration, revision: current.data.revision,
+        effectivePresentation: current.data.effectivePresentation });
       else put({ type: 'review-failed', failure: reviewFailure(current.failure) });
     } catch {
       put({ type: 'review-failed', failure: 'unavailable' });
@@ -118,6 +122,15 @@ function EditableThemeEditor({ zoneId, actingSubject, copy, initial, signInHref,
   }
 
   const dirty = isThemeDirty(state);
+  if (state.initialization === 'offered') return <section className="grid min-w-0 max-w-3xl gap-3" aria-labelledby="zone-theme-title">
+    <h2 id="zone-theme-title" className="font-semibold text-lg tracking-tight sm:text-xl">{copy.themeTitle}</h2>
+    <Alert variant="info" role="status">
+      <AlertTitle>{copy.themeAbsentTitle}</AlertTitle>
+      <AlertDescription>{copy.themeDefaultsBody}</AlertDescription>
+    </Alert>
+    <Button variant="secondary" size="sm" className="justify-self-start" disabled={!draftReady}
+      onClick={() => put({ type: 'create' })}>{copy.themeCreate}</Button>
+  </section>;
   return <section className="grid min-w-0 max-w-3xl gap-5" aria-labelledby="zone-theme-title">
     <header className="grid min-w-0 gap-2">
       <h2 id="zone-theme-title" className="font-semibold text-lg tracking-tight sm:text-xl">{copy.themeTitle}</h2>

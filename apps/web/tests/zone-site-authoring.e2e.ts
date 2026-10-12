@@ -205,7 +205,7 @@ async function waitForZoneEditor(page: Page, zoneId: string, actingSubject: stri
   }, { timeout: 30_000 }).toBe(200);
 }
 
-/** New Zones have no presentation baseline; theme editing deliberately refuses to invent one. */
+/** Explicit fixture configuration; ordinary theme authoring starts without a saved presentation. */
 async function ensurePresentationBaseline(page: Page, zoneId: string, actingSubject: string,
   defaultRealm?: string | null, installPresentation = true) {
   const current = await zoneConfiguration(page, zoneId, actingSubject);
@@ -227,7 +227,7 @@ async function ensurePresentationBaseline(page: Page, zoneId: string, actingSubj
 }
 
 async function createZoneFixture(page: Page, actor: AuthorFixture, name: string, withRealm = false,
-  withPresentation = true): Promise<SiteFixture> {
+  withPresentation = false): Promise<SiteFixture> {
   const created = await createSpace(page, {
     profile: 'space-zone-v1', name, language: 'en', capabilities: ['zone'],
     visibility: 'public', listing: 'listed', actingSubject: actor.actingSubject,
@@ -266,6 +266,10 @@ async function createZoneFixture(page: Page, actor: AuthorFixture, name: string,
 async function saveThemeDraft(page: Page, site: SiteFixture, density: 'compact' | 'comfortable',
   surface: 'flat' | 'cards') {
   await page.goto(site.editorPath + '/theme');
+  const create = page.getByRole('button', { name: 'Create layout from defaults' });
+  const densityChoice = page.getByRole('radio', { name: density === 'compact' ? /Compact/ : /Comfortable/ });
+  await expect(create.or(densityChoice)).toBeAttached();
+  if (await create.isVisible()) { await expect(create).toBeEnabled(); await create.click(); }
   await selectRadio(page, density === 'compact' ? /Compact/ : /Comfortable/);
   await selectRadio(page, surface === 'cards' ? 'In cards' : 'On the page');
   await page.getByRole('button', { name: 'Save layout' }).click();
@@ -620,7 +624,7 @@ test('Navigation and theme: a Realm-less Zone publishes the saved home, navigati
   expect(space, 'the Zone space was created').toMatch(/^https:\/\/rezics\.com\/id\//);
   const address = encodeURIComponent(targetKey(space));
   await grant(`zone:edit:${zone}`, 'zone.edit', principalId, actingSubject);
-  await ensurePresentationBaseline(page, uuidOf(zone), actingSubject);
+  expect((await zoneConfiguration(page, uuidOf(zone), actingSubject)).configuration.presentation).toBeUndefined();
   const initialPresentation = await page.request.get('/api/main/v1/zones/' + uuidOf(zone) + '/presentation');
   expect(initialPresentation.ok()).toBe(true);
   expect((await initialPresentation.json() as { realm: string | null }).realm).toBeNull();
@@ -679,6 +683,7 @@ test('Navigation and theme: a Realm-less Zone publishes the saved home, navigati
   await page.unroute(typeahead, suggestions);
 
   await page.getByRole('link', { name: 'Theme', exact: true }).click();
+  await page.getByRole('button', { name: 'Create layout from defaults' }).click();
   await selectRadio(page, /Compact/);
   await selectRadio(page, 'In cards');
   await page.getByRole('button', { name: 'Save layout' }).click();

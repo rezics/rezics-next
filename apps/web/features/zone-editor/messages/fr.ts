@@ -2,6 +2,8 @@
 import type { ZoneEditorMessages } from '../messages.ts';
 
 const messages: ZoneEditorMessages = {
+  themeCreate: 'Créer la mise en page par défaut',
+  themeDefaultsBody: 'Commencez avec la mise en page par défaut actuelle de cette Zone. Les autres réglages restent enregistrés.',
   sectionsLabel: 'Sections du site',
   unsavedWork: 'Modifications non enregistrées',
   sectionHome: 'Accueil',
