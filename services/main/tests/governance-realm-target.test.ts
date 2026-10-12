@@ -12,6 +12,12 @@ import { ownerTargetHeads } from '../src/modules/governance/evidence.ts';
 import { prepareDecisionNotices, unrecordedReasons } from '../src/modules/governance/notices.ts';
 import { GovernanceConflict, GovernanceStale, GovernanceUnavailable,
   type DecisionTargetInput } from '../src/modules/governance/store.ts';
+import { startMediaStack, type MediaStack } from '../../../tests/qa/integration/media-support.ts';
+import { waitForRealmDirectory } from '../../../tests/qa/integration/support/realm-directory.ts';
+import { grantFixtureAuthority } from '../src/modules/access/fixture-authority.ts';
+import { resolveRealmProfile } from '../src/modules/space/policy.ts';
+import { SafetyDecisionMail, type SafetyNoticeMail } from '../src/modules/governance/notices-mail.ts';
+import { DECIDE_ACTION, GLOBAL_CONTEXT, type DecisionInput } from '../src/modules/governance/store.ts';
 import { GRAPHS, RV, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 
 const realm = 'https://rezics.com/id/00000000-0000-4000-8000-000000000101';
@@ -364,13 +370,20 @@ test('emitted Realm commands enforce authored SHACL and atomic guards in native 
         rv:dataEpoch "realm-target-epoch" ; rv:routingEpoch "realm-target-routing" ; rv:sequence 0 . }
       GRAPH <${GRAPHS.current}> {
         <${space}> a rv:Space ; rv:owner <${owner}> ; rv:realmCapability <${realm}> ;
-          <http://www.w3.org/2000/01/rdf-schema#label> "Native Realm"@en ; rv:disclosure rv:Public .
+          <http://www.w3.org/2000/01/rdf-schema#label> "Native Realm"@en ; rv:disclosure rv:Private ; rv:listing "unlisted" .
         <${realm}> a rv:Realm ; rv:space <${space}> ; rv:head <${realmHead}> ; rv:realmState rv:Active ;
           rv:selectionPolicy <https://rezics.com/definition/realm-manager-fixed-main-fallback-v1> ;
           rv:membershipPolicy <https://rezics.com/definition/realm-closed-v1> ;
-          rv:reviewPolicy <https://rezics.com/definition/realm-open-v1> .
+          rv:reviewPolicy <https://rezics.com/definition/realm-open-v1> ; rv:historyVisibility "from-admission" .
+        <urn:realm-native:attached-zone> a rv:Zone ; rv:defaultRealm <${realm}> ;
+          rv:realmAttachedBy <${owner}> ; rv:realmAttachment <urn:realm-native:attachment> .
+        <urn:realm-native:detached-zone> a rv:Zone ; rv:disclosure rv:Private .
         ${declared ? `<${space}> rv:definitionProfile <${profile(version)}> .
           <${realm}> rv:definitionProfile <${profile(version)}> .` : ''}
+      }
+      GRAPH <${GRAPHS.revisions}> {
+        <urn:realm-native:detached-attachment> a rv:ZoneRealmAttachment ; rv:realm <${realm}> ;
+          rv:zone <urn:realm-native:detached-zone> ; rv:attachmentState rv:Detached .
       }
     }`;
   const change = (removed: string, added = '') => `PREFIX rv: <${RV}> ${[
@@ -390,6 +403,7 @@ test('emitted Realm commands enforce authored SHACL and atomic guards in native 
     ['duplicate-head', change('', `<${realm}> rv:head <${laterHead}> .`)],
     ['retired', change(`<${realm}> rv:realmState rv:Active .`, `<${realm}> rv:realmState rv:Retired .`)],
     ['wrong-kind', change(`<${realm}> a rv:Realm .`, `<${realm}> a rv:Agent .`)],
+    ['competing-primary-kind', change('', `<${realm}> a rv:Agent .`)],
     ['nonreciprocal', change(`<${space}> rv:realmCapability <${realm}> .`)],
     ['duplicate-space', change('', `<${realm}> rv:space <${space}-other> .`)],
     ['duplicate-reciprocal-space', change('', `<${space}-other> rv:realmCapability <${realm}> .`)],
@@ -494,6 +508,13 @@ public class RealmTargetOwnerContractTest {
           if (!mutation.isEmpty()) UpdateAction.parseExecute(mutation, DatasetFactory.wrap(data));
           data.commit();
         } finally { data.end(); }
+        Set<org.apache.jena.sparql.core.Quad> preserved = new HashSet<>();
+        data.begin(ReadWrite.READ);
+        try {
+          data.find(iri("${GRAPHS.current}"), Node.ANY, Node.ANY, Node.ANY).forEachRemaining(preserved::add);
+          data.find(iri("${GRAPHS.revisions}"), iri("urn:realm-native:detached-attachment"), Node.ANY, Node.ANY)
+            .forEachRemaining(preserved::add);
+        } finally { data.end(); }
         phase(name + " command-parse");
         var plan = CommandPolicy.parse(update, receipt);
         String outcome = "guard-unmatched";
@@ -531,6 +552,13 @@ public class RealmTargetOwnerContractTest {
             data.contains(iri(CommandPolicy.RECEIPTS), iri(receipt), Node.ANY, Node.ANY));
           assertEquals(name, expected.equals("committed") ? java.math.BigInteger.ONE : java.math.BigInteger.ZERO,
             CommandInvariant.readControl(data).sequence());
+          Set<org.apache.jena.sparql.core.Quad> retained = new HashSet<>();
+          data.find(iri("${GRAPHS.current}"), Node.ANY, Node.ANY, Node.ANY).forEachRemaining(retained::add);
+          data.find(iri("${GRAPHS.revisions}"), iri("urn:realm-native:detached-attachment"), Node.ANY, Node.ANY)
+            .forEachRemaining(retained::add);
+          assertEquals(name + " preserves head, private visibility, settings and attachments", preserved, retained);
+          assertFalse(name + " must not revive detached attachment", data.contains(
+            iri("${GRAPHS.current}"), iri("urn:realm-native:detached-zone"), iri("${RV}defaultRealm"), iri("${realm}")));
           if (expected.equals("committed")) assertTrue(name, data.contains(iri(CommandPolicy.RECEIPTS),
             iri(receipt), iri("${RV}work"), iri("${realm}")));
         } finally { data.end(); }
@@ -572,3 +600,96 @@ public class RealmTargetOwnerContractTest {
     if (nativePassed) rmSync(build, { recursive: true, force: true });
   }
 }, 280_000);
+
+async function responseJson<T>(response: Response, status: number): Promise<T> {
+  const text = await response.text();
+  expect(response.status, text).toBe(status);
+  return JSON.parse(text) as T;
+}
+
+/** composeMain installs governanceServices; only Account's token verification is
+ * substituted by this isolated integration fixture. Evidence and effects read Jena. */
+async function productionRealm(label: string) {
+  const stack = await startMediaStack(label);
+  const editor = await stack.member(`${label}-owner`);
+  const staff = await stack.member(`${label}-staff`);
+  async function grant(member: typeof editor, scope: string, action: string, actor = member.actor) {
+    await grantFixtureAuthority(stack.accessPool, { scope, requireDispatch: true,
+      representations: [{ principalId: member.principalId, actor, action, lifetime: 'infinity' }],
+      grant: { actor, action, lifetime: 'infinity' } });
+  }
+  try {
+    await grant(editor, 'space:create:root', 'space.create');
+    const created = await responseJson<{ realm: string; space: string }>(await editor.send('POST',
+      '/v1/spaces', { profile: 'space-realm-v1', name: label, capabilities: ['realm'],
+        actingSubject: editor.actor }), 201);
+    await grant(editor, `realm:profile:${created.realm}`, 'realm.profile.publish');
+    const published = await responseJson<{ revision: string }>(await editor.send('PUT',
+      `/v1/realms/${created.realm.slice(-36)}/profile`, { profile: 'realm-public-profile-v2',
+        expectedHead: null, actingSubject: editor.actor, publication: {
+          name: { original: 'en', labels: { en: label } }, description: null,
+          iconSelection: null, bannerSelection: null, rules: [], moderators: [],
+          count: { kind: 'unknown', value: null },
+        } }), 201);
+    const heads = (await stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head ?public WHERE {
+      GRAPH <${GRAPHS.current}> { <${created.realm}> rv:head ?head ; rv:publicProfileHead ?public }
+    } LIMIT 2`, 4096)).results?.bindings ?? [];
+    expect(heads).toHaveLength(1);
+    const realmHead = heads[0]!.head!.value;
+    expect(heads[0]!.public!.value).toBe(published.revision);
+    expect(published.revision).not.toBe(realmHead);
+    await grant(staff, 'governance:platform', DECIDE_ACTION.content_report);
+    await grant(staff, 'governance:platform', 'governance.rule.publish');
+    const governance = stack.composition.dependencies.governance!;
+    const rule = await governance.rules.publish(staff.principal, {
+      ref: `urn:rule:${randomUUID()}`, scopeId: 'governance:platform', actingSubject: staff.actor,
+      expectedRevision: null, document: { purpose: 'Review Realm disclosure' }, idempotencyKey: randomUUID(),
+    });
+    const report = await responseJson<{ reportId: string; caseId: string }>(await stack.call('POST',
+      '/v1/public-reports', { key: randomUUID(), body: { profile: 'public-report-v1',
+        target: created.realm, category: 'harassment', statement: 'Review the published Realm profile.',
+        contentLanguage: 'en' } }), 201);
+    const basis = (await stack.accessPool.query<{ generation: string; evidence_digest: string }>(
+      `SELECT c.generation::text,r.evidence_digest FROM access.governance_case c
+       JOIN access.governance_report r ON r.case_id=c.id WHERE r.id=$1`, [report.reportId])).rows[0]!;
+    const retained = (await stack.accessPool.query<{ revision: string; state: string }>(
+      'SELECT revision,state FROM access.governance_evidence WHERE report_id=$1', [report.reportId])).rows;
+    expect(retained).toEqual([{ revision: published.revision, state: 'available' }]);
+    await governance.store.safety.claim(staff.principal, staff.actor, report.caseId);
+    const input: DecisionInput = {
+      caseId: report.caseId, expectedGeneration: basis.generation, actingSubject: staff.actor,
+      outcome: 'restrict', targets: [{ owner: 'graph', resource: created.realm, component: 'record',
+        locator: null, scopeKind: 'component', revision: null, expectedHead: realmHead, effect: 'disclosure' }],
+      rule: { ref: rule.ref, revision: rule.revision, digest: rule.digest }, evidenceDigest: basis.evidence_digest,
+      reversesDecisionId: null, answersStepId: null, rationale: null, disclosure: 'private',
+      idempotencyKey: randomUUID(), reasons: { ...unrecordedReasons, automation: false,
+        facts: 'Private retained evidence was reviewed.', scope: 'The Realm record.', duration: 'Until review.' },
+    };
+    return { stack, editor, staff, grant, governance, realmHead, published, report, input, ...created };
+  } catch (error) { await stack.stop(); throw error; }
+}
+
+test('production Realm ownership rejects an extra nonreciprocal Space before discovery or decision acceptance', async () => {
+  const f = await productionRealm('realm-reciprocal-proof');
+  try {
+    const stranger = await f.stack.member('realm-unrelated-space-owner');
+    const unrelatedSpace = `https://rezics.com/id/${randomUUID()}`;
+    await f.stack.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA { GRAPH <${GRAPHS.current}> {
+      <${f.realm}> rv:space <${unrelatedSpace}> .
+      <${unrelatedSpace}> a rv:Space ; rv:owner <${stranger.actor}> .
+    } }`);
+    await expect(resolveRealmProfile(f.stack.env, f.realm)).rejects.toThrow();
+    await expect(ownerTargetHeads({ graph: f.stack.env }).realmBasis!(f.input.targets[0]!)).rejects.toThrow();
+    await expect(graphNoticeParticipants(f.stack.env).participants!(f.input.targets[0]!, null, 1))
+      .rejects.toThrow();
+    await expect(f.governance.store.acceptDecision(f.staff.principal, f.input)).rejects.toThrow();
+    expect((await f.stack.accessPool.query('SELECT 1 FROM access.moderation_decision WHERE case_id=$1',
+      [f.report.caseId])).rowCount).toBe(0);
+    expect((await f.stack.accessPool.query('SELECT 1 FROM access.safety_party_notice WHERE case_id=$1',
+      [f.report.caseId])).rowCount).toBe(0);
+    const receipts = (await f.stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?receipt WHERE {
+      GRAPH <${GRAPHS.receipts}> { ?receipt rv:moderationTarget <${f.realm}> }
+    } LIMIT 2`, 4096)).results?.bindings ?? [];
+    expect(receipts).toHaveLength(0);
+  } finally { await f.stack.stop(); }
+}, 120_000);
