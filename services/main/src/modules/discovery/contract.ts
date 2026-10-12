@@ -76,6 +76,7 @@ export const discoveryCredit = t.Union([
     key: t.Null(),
     ordinal: t.Null(),
     agent: readId,
+    identityStatus: t.Union([t.Literal('active'), t.Literal('deleted')]),
     displayName: t.String({ minLength: 1, maxLength: 200 }),
     handle: t.Nullable(t.String({ minLength: 1, maxLength: 30 })),
     address: t.Optional(canonicalAddress),
@@ -86,12 +87,14 @@ export type DiscoveryCredit = Static<typeof discoveryCredit>;
 /** A card names an author Agent. Other roles stay on the credit read. */
 export function namedAuthorCredit(
   credit: { id: string; role: string; agent: string | null },
-  name: { displayName: string; handle: string | null; address?: Static<typeof canonicalAddress> },
+  name: { displayName: string; handle: string | null; address?: Static<typeof canonicalAddress>;
+    identityStatus?: 'active' | 'deleted' },
 ): DiscoveryCredit | undefined {
   if (credit.role !== 'author' || !credit.agent) return undefined;
   return {
     id: credit.id, role: 'author', participantKind: 'agent', provider: null, key: null, ordinal: null,
     agent: credit.agent, displayName: name.displayName, handle: name.handle,
+    identityStatus: name.identityStatus ?? 'active',
     ...(name.address ? { address: name.address } : {}),
   };
 }

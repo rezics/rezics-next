@@ -2,7 +2,7 @@ import { GRAPHS, iri } from '../work/activate.ts';
 import { WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 import { GLOBAL_RATING_POPULATION_OWNER } from '../rating/global.ts';
 import { RATING_STANDING_CADENCE } from '../rating/context.ts';
-import { readAgentCards } from '../profiles/read.ts';
+import { readCreditAttributionCards } from '../profiles/attribution.ts';
 import { conceptCountBasis } from '../discovery/concepts.ts';
 import { namedAuthorCredit, type DiscoveryCredit, type OwnedDiscoveryBasis } from '../discovery/contract.ts';
 import { RESOURCE_WORK_CARD_COST, resourceProjectedCard, type ResourceWorkCard } from './resource-contract.ts';
@@ -53,7 +53,7 @@ export async function resourceWorkCards(session: WorkReadSession, works: readonl
   const selected = [...credits.values()].flat();
   const keys = [...new Set(selected.flatMap(credit => credit.key ? [credit.key] : []))];
   const [agents, sources] = await Promise.all([
-    optionalPreview(session, () => readAgentCards(session,
+    optionalPreview(session, () => readCreditAttributionCards(session,
       selected.flatMap(credit => credit.agent ? [credit.agent] : []), 'preview')),
     optionalPreview(session, async () => keys.length ? await session.deps.sourceAuthorNames?.batch(keys) : undefined),
   ]);
@@ -75,7 +75,7 @@ export async function resourceWorkCards(session: WorkReadSession, works: readonl
         return [{ ...credit, ...name, displayName: name?.displayName ?? null }];
       }
       const agent = agents?.get(credit.agent);
-      const named = agent && namedAuthorCredit(credit, { displayName: agent.displayName, handle: agent.handle });
+      const named = agent && namedAuthorCredit(credit, agent);
       return named ? [named] : [];
     });
     // Missing data supplies a zero lower bound, never an exact empty inventory.

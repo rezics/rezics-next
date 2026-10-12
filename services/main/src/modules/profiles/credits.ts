@@ -11,7 +11,8 @@ import { fenceWorkBasis, readWorkBasis } from '../work/read-header.ts';
 import { pageResult, unerased, WorkReadInvalid, WorkReadMissing, WorkReadMoved, WorkReadUnavailable,
   type WorkReadSession } from '../work/read-session.ts';
 import { isNativeCreditRole, type NativeCreditRole } from '../work/read-contract.ts';
-import { field, nextPage, pageBasis, publicAgent, readAgent } from './read.ts';
+import { field, nextPage, pageBasis, publicAgent } from './read.ts';
+import { readCreditAttribution } from './attribution.ts';
 
 const PROFILE = 'https://rezics.com/definition/native-agent-credit-v1';
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -145,19 +146,24 @@ export async function readNativeCredits(session: WorkReadSession, work: string) 
     GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:NativeAgentCreditRevision ; rv:component ?id ;
       rv:work ${iri(work)} ; rv:agent ?agent ; schema:roleName ?role .
       FILTER NOT EXISTS { ?revision a rv:ErasedRevision } }
-    ${publicAgent('?agent')} FILTER(STR(?id) > ${lit(after)})
+    FILTER(STR(?id) > ${lit(after)})
   } ORDER BY STR(?id) LIMIT ${limit + 1}`, limit + 1);
   const items = [];
   for (const row of rows.slice(0, limit)) {
     const role = field(row, 'role');
     if (!isNativeCreditRole(role)) throw new WorkReadUnavailable('Invalid credit role');
     try {
-      const agent = await readAgent(session, field(row, 'agent'));
+      const agent = field(row, 'agent');
+      const attribution = await readCreditAttribution(session, agent);
       items.push({ id: field(row, 'id'), role: role as NativeCreditInput['role'],
-        agent: agent.id, displayName: agent.displayName, handle: agent.handle, address: agent.address });
+        agent, ...attribution });
     } catch (error) { if (!(error instanceof WorkReadMissing)) throw error; }
   }
   await fenceWorkBasis(session, workBasis);
-  for (const item of items) await readAgent(session, item.agent);
+  for (const item of items) {
+    const current = await readCreditAttribution(session, item.agent);
+    const { id: _id, role: _role, agent: _agent, ...before } = item;
+    if (JSON.stringify(current) !== JSON.stringify(before)) throw new WorkReadMoved('Agent attribution changed');
+  }
   return pageResult(session, items, nextPage(session, binding, rows.map(row => field(row, 'id')), limit));
 }

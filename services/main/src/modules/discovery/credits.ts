@@ -4,7 +4,7 @@ import { publicAgent } from '../profiles/read.ts';
 import { visibleNames } from '../disclosure/name-policy.ts';
 import { ANONYMOUS_VIEWER } from '../suitability/policy.ts';
 import { agentAddress } from '../agent/handle.ts';
-import type { CanonicalAddress } from '@rezics/model/address';
+import { readDeletedPersonAttributions, type CreditAttribution } from '../profiles/attribution.ts';
 import { sourceReportedCredits } from '../source/author-name-read.ts';
 import { DISCOVERY_COST, type ProjectedWork } from './contract.ts';
 import { optionalPreview } from '../query/optional-preview.ts';
@@ -74,7 +74,7 @@ export async function namedDiscoveryCredits(session: WorkReadSession,
   if (agents.length > maxWorks * DISCOVERY_COST.primaryCredits) {
     throw new WorkReadUnavailable('Discovery Agent credit batch is out of bounds');
   }
-  if (!agents.length) return new Map<string, { displayName: string; handle: string | null; address?: CanonicalAddress }>();
+  if (!agents.length) return new Map<string, CreditAttribution>();
   const [rows, visible] = await Promise.all([
     session.query(`SELECT ?agent ?displayName ?handle WHERE {
     VALUES ?agent { ${agents.map(iri).join(' ')} }
@@ -87,7 +87,7 @@ export async function namedDiscoveryCredits(session: WorkReadSession,
       || !row.displayName.value || row.displayName.value.length > 200))) {
     throw new WorkReadUnavailable('Discovery Agent names are ambiguous');
   }
-  const named = new Map<string, { displayName: string; handle: string | null; address?: CanonicalAddress }>();
+  const named = new Map<string, CreditAttribution>();
   const seen = new Set<string>(), damaged = new Set<string>();
   for (const row of rows) {
     if (preview && (!row.agent || !row.displayName || !agents.includes(row.agent.value)
@@ -102,9 +102,13 @@ export async function namedDiscoveryCredits(session: WorkReadSession,
     const readName = async () => ({ handle: await session.deps.agentHandles?.current(agent) ?? null });
     const name = preview ? await optionalPreview(session, readName) : await readName();
     if (name === null) continue;
-    named.set(agent, { displayName: row.displayName!.value, handle: name.handle,
+    named.set(agent, { identityStatus: 'active', displayName: row.displayName!.value, handle: name.handle,
       address: agentAddress(agent, name.handle) });
   }
   for (const agent of damaged) named.delete(agent);
+  const missing = agents.filter(agent => !named.has(agent));
+  const readDeleted = () => readDeletedPersonAttributions(session, missing);
+  const deleted = preview ? await optionalPreview(session, readDeleted) : await readDeleted();
+  for (const [agent, attribution] of deleted ?? []) named.set(agent, attribution);
   return named;
 }

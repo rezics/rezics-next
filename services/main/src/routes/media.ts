@@ -24,7 +24,7 @@ import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 import { disclosureViewer, withDisclosureViewer } from '../modules/disclosure/viewer.ts';
 import { ANONYMOUS_VIEWER } from '../modules/suitability/policy.ts';
-import { discloseInventory, type DisclosureTarget } from '../modules/disclosure/read.ts';
+import { discloseInventory, discloseInventoryWithAnonymousNames, type DisclosureTarget } from '../modules/disclosure/read.ts';
 import { bindZoneCampaignReader, currentZoneCampaignUses } from '../modules/zone/showcase-disclosure.ts';
 import { mediaVisibility } from '../modules/media/visibility.ts';
 
@@ -540,6 +540,15 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         const basis = await withDisclosureViewer(reader.viewer ?? ANONYMOUS_VIEWER,
           () => work.media!.store.avatarDelivery(params.selection));
         if (!basis || !avatarImageEligible(basis)) return unavailable();
+        // Agent avatars return before summary hydration. Settle the same final
+        // name-owner disclosure first so a retained profile cannot bypass it.
+        const names: DisclosureTarget[] = [{ owner: 'graph', resource: basis.target, component: 'name',
+          context: basis.context === DEFAULT_MEDIA_CONTEXT ? undefined : basis.context! }];
+        const nameDisclosure = reader.viewer?.signedIn
+          ? await discloseInventoryWithAnonymousNames(work.environment, names, reader.viewer, 'media')
+          : { decisions: await discloseInventory(work.environment, names,
+            reader.viewer ?? ANONYMOUS_VIEWER, 'media'), anonymousNames: [] };
+        if (nameDisclosure.decisions[0] !== 'visible') return unavailable();
         const agents = (await fuseki.query(`PREFIX rv: <${RV}>
           PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
           SELECT ?avatar WHERE {
@@ -554,7 +563,8 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           if (basis.context !== DEFAULT_MEDIA_CONTEXT || agents.length !== 1
             || agents[0]?.avatar?.value !== params.selection) return unavailable();
           return await deliver(request, work.media, { objectNamespace: basis.objectNamespace,
-            sha256: basis.sha256!, mediaType: basis.mediaType! }, true);
+            sha256: basis.sha256!, mediaType: basis.mediaType! }, !reader.viewer?.signedIn
+              || nameDisclosure.anonymousNames[0] === 'visible');
         }
         const target = (await readResourceSummaries(work.environment, undefined,
           reader, { resources: [basis.target], context: basis.context!, language: null, channel: 'media' })).summaries[0]!;

@@ -11,7 +11,8 @@ import { externalAuthorFollow, FOLLOWS_COST } from '../follows/contract.ts';
 import { FEED_COST, type FeedKind } from './contract.ts';
 import type { FeedSource } from './source.ts';
 import type { FeedReadFrame } from './frame.ts';
-import { readAgentCards } from '../profiles/read.ts';
+import { readAgentCards, type AgentCard } from '../profiles/read.ts';
+import { readDeletedPersonAttributions, type CreditAttribution } from '../profiles/attribution.ts';
 
 /** Every author credit of the Works, Agents first, then Open Library authors by position; 64 per Work at most. */
 const authorCreditsQuery = (ids: readonly string[]) => `SELECT ?work ?id ?revision ?key ?ordinal ?agent WHERE {
@@ -207,7 +208,22 @@ export async function feedWorkPresentations(session: WorkReadSession, works: rea
     ...feed.sources.map(source => source.actor), ...[...credits.values()].flatMap(rows => rows.flatMap(row => row.agent ? [row.agent] : [])),
   ], feed.sources.map(source => followIdentities(source, source.work ? credits.get(source.work) : undefined))) : null;
   const actors = access ? await readAgentCards(session, [...access.actorState.fences.keys()], 'required', access.actorState) : undefined;
-  const names = actors ?? await namedDiscoveryCredits(session, [...credits.values()].flat(), ids.length);
+  const selectedCredits = [...credits.values()].flat();
+  const creditAgents = [...new Set(selectedCredits.flatMap(credit => credit.agent ? [credit.agent] : []))];
+  const readCreditNames = async (live?: ReadonlyMap<string, AgentCard>) => {
+    if (!live) return namedDiscoveryCredits(session, selectedCredits, ids.length);
+    const named = new Map<string, CreditAttribution>();
+    for (const agent of creditAgents) {
+      const card = live.get(agent);
+      if (card) named.set(agent, { identityStatus: 'active', displayName: card.displayName,
+        ...(card.displayNameInfo ? { displayNameInfo: card.displayNameInfo } : {}),
+        handle: card.handle, address: card.address });
+    }
+    const deleted = await readDeletedPersonAttributions(session, creditAgents.filter(agent => !named.has(agent)));
+    for (const [agent, attribution] of deleted) named.set(agent, attribution);
+    return named;
+  };
+  const names = await readCreditNames(actors);
   const sourceNames = await readAuthorNames(session, [...credits.values()].flat().flatMap(credit =>
     credit.key !== null ? [credit.key] : []));
   const excerpts = new Map<string, { excerpt: string | null; language: string | null }>();
@@ -261,11 +277,12 @@ export async function feedWorkPresentations(session: WorkReadSession, works: rea
       !== JSON.stringify(originalCredits)
       || JSON.stringify(typeSignature(await session.query(typesQuery, ids.length * MAX_WORK_SEMANTIC_TYPES + 1)))
       !== JSON.stringify(originalTypes)) throw new WorkReadMoved('Feed Work presentation changed');
-    // Feed names are full Agent cards (including non-credit actors and
-    // localized names); their fence must use the same keys and adapter.
-    const currentNames = feed
-      ? await readAgentCards(session, [...names.keys()], 'required', feed.frame.actorState)
-      : await namedDiscoveryCredits(session, [...credits.values()].flat(), ids.length);
+    // Ordinary actors remain profile cards. Credit freshness compares the
+    // same live-name and deleted-attribution adapter used during hydration.
+    const currentActors = feed
+      ? await readAgentCards(session, [...feed.frame.actorState.fences.keys()], 'required', feed.frame.actorState)
+      : undefined;
+    const currentNames = await readCreditNames(currentActors);
     if (JSON.stringify([...currentNames]) !== JSON.stringify([...names])) throw new WorkReadMoved('Feed Work author changed');
   } };
 }
