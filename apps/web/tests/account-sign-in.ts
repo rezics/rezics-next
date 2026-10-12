@@ -3,18 +3,20 @@ import { i18n, matchUiLocaleTag } from '../../accounts/i18n/locale.ts';
 import { parseAddressSegment } from '../features/address/path.ts';
 import { pathLocale, withoutLocale } from '../i18n/locale.ts';
 
+const canonicalAddressRoute = /^\/(w|e|a|z|r|concepts)\/([^/]+)(\/.*)?$/;
+
 export function signInDestinationMatches(url: URL, next: string, onboard = false): boolean {
   const target = next.split(/[?#]/)[0] ?? next;
   if (url.pathname === target || (onboard && url.pathname === '/en/onboarding')) return true;
   if (pathLocale(url.pathname) !== pathLocale(target)) return false;
-  const actual = /^\/w\/([^/]+)(\/.*)?$/.exec(withoutLocale(url.pathname));
-  const expected = /^\/w\/([^/]+)(\/.*)?$/.exec(withoutLocale(target));
-  if (!actual || !expected || actual[2] !== expected[2]) return false;
+  const actual = canonicalAddressRoute.exec(withoutLocale(url.pathname));
+  const expected = canonicalAddressRoute.exec(withoutLocale(target));
+  if (!actual || !expected || actual[1] !== expected[1] || actual[3] !== expected[3]) return false;
   try {
-    // Main decorates the Work identity before its subroute. Only that segment
-    // may change; the locale and the complete route tail still identify the destination.
-    const actualAddress = parseAddressSegment(decodeURIComponent(actual[1]!));
-    const expectedAddress = parseAddressSegment(decodeURIComponent(expected[1]!));
+    // Main decorates the native identity before its subroute. Only that segment
+    // may change; the locale, owner prefix and complete tail identify the destination.
+    const actualAddress = parseAddressSegment(decodeURIComponent(actual[2]!));
+    const expectedAddress = parseAddressSegment(decodeURIComponent(expected[2]!));
     return (
       actualAddress !== null &&
       actualAddress.kind !== 'alias' &&

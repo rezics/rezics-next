@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { resourceHref } from '../features/address/path.ts';
+import { canonicalHref, resourceHref, targetKey } from '../features/address/path.ts';
 import { signInDestinationMatches } from './account-sign-in.ts';
 
 const work = '01944100-0000-7000-8000-000000000100';
@@ -9,26 +9,37 @@ const otherWorkPath = resourceHref('/w/', otherWork);
 const aliasPath = resourceHref('/w/', 'named-alias');
 const otherAliasPath = resourceHref('/w/', 'named-alias-extra');
 const at = (path: string) => new URL(path, 'https://web.rezics.test');
+const canonicalPrefixes = ['/w/', '/e/', '/a/', '/z/', '/r/', '/concepts/'] as const;
 
 describe('sign-in destination matching', () => {
-  for (const locale of ['en', 'zh-Hans', 'zh-Hant', 'ja', 'ko', 'de', 'fr', 'es']) {
-    for (const tail of [
-      '',
-      '/connections',
-      '/editions',
-      '/contents',
-      '/versions',
-      '/discussion',
-      '/history',
-      '/contents/chapter-one/notes',
-    ]) {
-      test(`accepts a canonical Work title before ${locale} ${tail || 'overview'}`, () => {
-        const next = `/${locale}${workPath}${tail}?after=page-2#parts`;
-        expect(
-          signInDestinationMatches(at(`/${locale}${workPath}-new-testament${tail}`), next),
-        ).toBe(true);
-        expect(signInDestinationMatches(at(`/${locale}${workPath}${tail}`), next)).toBe(true);
-      });
+  for (const prefix of canonicalPrefixes) {
+    for (const locale of ['en', 'zh-Hans', 'zh-Hant', 'ja', 'ko', 'de', 'fr', 'es'] as const) {
+      for (const tail of [
+        '',
+        '/connections',
+        '/editions',
+        '/contents',
+        '/versions',
+        '/discussion',
+        '/history',
+        '/contents/chapter-one/notes',
+      ]) {
+        test(`accepts canonical ${prefix} titles before ${locale} ${tail || 'overview'}`, () => {
+          const path = canonicalHref({ prefix, key: targetKey(work), suffixSource: '' }, locale);
+          for (const [actualSuffix, expectedSuffix] of [
+            ['', ''],
+            ['-new-title', ''],
+            ['', '-old-title'],
+            ['-new-title', '-old-title'],
+          ])
+            expect(
+              signInDestinationMatches(
+                at(`${path}${actualSuffix}${tail}`),
+                `${path}${expectedSuffix}${tail}?after=page-2#parts`,
+              ),
+            ).toBe(true);
+        });
+      }
     }
   }
 
@@ -71,13 +82,51 @@ describe('sign-in destination matching', () => {
     ).toBe(false);
   });
 
-  test('does not treat similarly prefixed non-Work routes or aliases as canonical identities', () => {
+  test('preserves the address owner prefix when the identity is the same', () => {
+    for (const prefix of canonicalPrefixes)
+      for (const otherPrefix of canonicalPrefixes) {
+        if (prefix === otherPrefix) continue;
+        expect(
+          signInDestinationMatches(
+            at(canonicalHref({ prefix, key: targetKey(work), suffixSource: 'Title' }, 'en')),
+            canonicalHref({ prefix: otherPrefix, key: targetKey(work), suffixSource: '' }, 'en'),
+          ),
+        ).toBe(false);
+      }
+  });
+
+  test('preserves locale, identity and the complete route tail for every canonical prefix', () => {
+    for (const prefix of canonicalPrefixes) {
+      const path = canonicalHref({ prefix, key: targetKey(work), suffixSource: '' }, 'en');
+      const other = canonicalHref({ prefix, key: targetKey(otherWork), suffixSource: '' }, 'en');
+      const next = `${path}/connections`;
+      for (const actual of [
+        path.replace('/en/', '/ja/') + '-title/connections',
+        `${other}-title/connections`,
+        `${path}-title/editions`,
+        `${path}-title/connections/extra`,
+        `${path}-title/connections-extra`,
+        `${path}-title/connections/`,
+        `${path}-title`,
+        `${path}%ZZ/connections`,
+        `${path}%2Ftitle/connections`,
+      ])
+        expect(signInDestinationMatches(at(actual), next)).toBe(false);
+      expect(
+        signInDestinationMatches(
+          at(`${path}-title/contents/chapter-two/notes`),
+          `${path}/contents/chapter-one/notes`,
+        ),
+      ).toBe(false);
+    }
+  });
+
+  test('does not treat similarly prefixed routes or aliases as canonical identities', () => {
     for (const [path, next] of [
       ['/en/manage-extra', '/en/manage'],
       ['/en/studio-extra', '/en/studio'],
       [`/en${otherAliasPath}/connections`, `/en${aliasPath}/connections`],
       [`/en${otherAliasPath}`, `/en${aliasPath}`],
-      [`/en${resourceHref('/e/', work)}-title`, `/en${resourceHref('/e/', work)}`],
     ])
       expect(signInDestinationMatches(at(path!), next!)).toBe(false);
     expect(signInDestinationMatches(at('/en/manage'), '/en/manage?sort=recent#queue')).toBe(true);
@@ -87,6 +136,13 @@ describe('sign-in destination matching', () => {
         `/en${aliasPath}/connections`,
       ),
     ).toBe(true);
+    for (const prefix of canonicalPrefixes) {
+      const alias = canonicalHref({ prefix, key: 'named-alias', suffixSource: '' }, 'en');
+      expect(
+        signInDestinationMatches(at(`${alias}-extra/connections`), `${alias}/connections`),
+      ).toBe(false);
+      expect(signInDestinationMatches(at(`${alias}/connections`), `${alias}/connections`)).toBe(true);
+    }
   });
 
   test('only accepts the onboarding destination when the journey opted in', () => {
