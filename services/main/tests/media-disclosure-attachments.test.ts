@@ -17,13 +17,14 @@ import { configureMediaVisibility } from '../src/modules/media/visibility.ts';
 import { REQUIRED_MATCH_PROFILE } from '../src/modules/media-screen/required-match-store.ts';
 import { ANONYMOUS_VIEWER } from '../src/modules/suitability/policy.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
+import { ensureFixtureAuthoritySubject, ensureFixturePrincipal } from './support/access-fixture-identity.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const iri = (value: string) => `https://rezics.com/id/${value}`;
 const sha = (value: string | Uint8Array) => createHash('sha256').update(value).digest('hex');
 const owner = iri(randomUUID()), ownTarget = iri(randomUUID()), ownUse = randomUUID();
 const principal = { issuer: 'https://account.media-disclosure.test', subject: randomUUID() };
-const principalId = randomUUID();
+let principalId: string;
 const admission = (): MediaAdmission => ({ admissionId: randomUUID(), principalId,
   actingSubject: owner, authorityEpoch: '1', requestDigest: sha(randomUUID()) });
 let cluster: PostgresCluster | undefined;
@@ -40,9 +41,8 @@ beforeAll(async () => {
     await migrateContent(pool);
     for (const file of schemaFiles(root, 'access'))
       await pool.query(readFileSync(join(root, 'services/main/migrations/access', file), 'utf8'));
-    await pool.query('INSERT INTO access.principal(id,account_issuer,account_subject) VALUES ($1,$2,$3)',
-      [principalId, principal.issuer, principal.subject]);
-    await pool.query("INSERT INTO access.authority_subject(id,kind) VALUES ($1,'agent')", [owner]);
+    principalId = await ensureFixturePrincipal(pool, principal);
+    await ensureFixtureAuthoritySubject(pool, owner);
     await grantFixtureAuthority(pool, { scope: `media:owner:${owner}`, requireDispatch: true,
       representations: [{ principalId, actor: owner, action: 'media.upload', lifetime: 'infinity' }],
       grant: { actor: owner, action: 'media.upload', lifetime: 'infinity' } });
