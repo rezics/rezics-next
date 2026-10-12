@@ -2,10 +2,11 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { Pool } from 'pg';
+import { Pool, type PoolClient } from 'pg';
+import { Value } from 'typebox/value';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
-import { grantFixtureAuthority, registerFixtureIdentity } from '../src/modules/access/fixture-authority.ts';
+import { FixtureAuthorityDenied, grantFixtureAuthority, registerFixtureIdentity } from '../src/modules/access/fixture-authority.ts';
 import { KnownEffectFailure, ownerModerationEffects, type ModerationEffects } from '../src/modules/governance/effects.ts';
 import { ContentCore, contentDraftIntentDigest, type SaveDraftCommand } from '../../content/src/core.ts';
 import { ContentModeration } from '../../content/src/moderation.ts';
@@ -18,6 +19,7 @@ import {
   GLOBAL_CONTEXT, GovernanceDenied, GovernanceStore, type DecisionInput, type EvidenceTarget,
 } from '../src/modules/governance/store.ts';
 import { mintPartyCredential, PublicReports } from '../src/modules/public-report/store.ts';
+import { CATEGORY_VERSION, publicReportStatus } from '../src/modules/public-report/contract.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const native = () => `https://rezics.com/id/${randomUUID()}`;
@@ -44,6 +46,18 @@ beforeAll(async () => {
 afterAll(async () => {
   await pool?.end();
   cluster?.remove();
+});
+
+test('fixture identity registration refuses a closed recovery fence before any identity write', async () => {
+  const statements: string[] = [];
+  const client = { query: async (sql: string) => {
+    statements.push(sql);
+    return { rows: [{ open: false }] };
+  } } as unknown as PoolClient;
+  await expect(registerFixtureIdentity(client, { principalId: randomUUID(), issuer: 'https://account.status.test',
+    subject: randomUUID(), actor: native() })).rejects.toBeInstanceOf(FixtureAuthorityDenied);
+  expect(statements).toHaveLength(1);
+  expect(statements[0]).toContain('recovery_fence');
 });
 
 async function fixture(options: {
@@ -314,6 +328,7 @@ test('production media suppression cursor at a private 100-asset boundary never 
   expect(status.operation?.status).toBe('partial');
   expect(status.operation?.items[0]).toMatchObject({ ordinal: 1, continuation: null, resumable: true });
   expect(status.operation?.items[0]?.receipt).toMatch(/^party:[a-p]{64}$/);
+  expect(Value.Check(publicReportStatus, { profile: CATEGORY_VERSION, ...status })).toBe(true);
   const body = JSON.stringify(status);
   for (const asset of assets.slice(1)) {
     for (const concealed of [asset.reserved.asset, asset.source, asset.state]) expect(body).not.toContain(concealed);
