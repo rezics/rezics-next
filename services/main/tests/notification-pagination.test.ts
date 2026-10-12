@@ -18,6 +18,7 @@ const selections: Selection[] = [{ view: 'saved' }, { view: 'done' }, { reason: 
   { view: 'saved', reason: 'manual' }, { view: 'done', reason: 'manual' }];
 type Statement = { sql: string; args: unknown[] };
 type FixtureRow = { id: string; sequence: string; saved: boolean; done: boolean; reason: string };
+let backfill: Awaited<ReturnType<typeof seedOwner>> & { itemId: string };
 
 beforeAll(async () => {
   cluster = await startPostgresCluster();
@@ -26,6 +27,20 @@ beforeAll(async () => {
   try {
     await client.query('BEGIN');
     for (const file of schemaFiles(root, 'access')) {
+      if (file.endsWith('_notification_filter_seek.sql')) {
+        const owner = await seedOwner(client), itemId = randomUUID();
+        await client.query("UPDATE access.notification_stream SET head_sequence = 1 WHERE principal_id = $1", [owner.id]);
+        await client.query(`INSERT INTO access.notification_item (id,principal_id,stream,generation,sequence,
+          purpose,topic,source_owner,source_event,subject_owner,subject_ref,disclosure_basis)
+          VALUES ($1,$2,'inbox',1,1,'governance','proposal-revised','access',$1::text,'access','fixture','proposal')`,
+        [itemId, owner.id]);
+        await client.query(`INSERT INTO access.notification_item_triage (principal_id,item_id,saved,done)
+          VALUES ($1,$2,true,true)`, [owner.id, itemId]);
+        await client.query(`INSERT INTO access.notification_proposal_context (item_id,proposal,revision,reason)
+          VALUES ($1,$2,1,'manual')`, [itemId, owner.proposal]);
+        await client.query("UPDATE access.notification_item SET state = 'erased',state_changed_at = now() WHERE id = $1", [itemId]);
+        backfill = { ...owner, itemId };
+      }
       await client.query(readFileSync(join(root, 'services/main/migrations/access', file), 'utf8'));
     }
     await client.query('COMMIT');
@@ -60,25 +75,31 @@ function recordingPool(statements: Statement[], afterHead?: () => Promise<void>)
   } });
 }
 
-async function inbox() {
+async function seedOwner(connection: Pick<PoolClient, 'query'>) {
   const id = randomUUID(), proposal = randomUUID(), actor = `https://rezics.com/id/${randomUUID()}`;
   const principal = { issuer: 'https://account.rezics.test', subject: randomUUID() };
-  await pool.query('INSERT INTO access.principal (id,account_issuer,account_subject) VALUES ($1,$2,$3)',
+  await connection.query('INSERT INTO access.principal (id,account_issuer,account_subject) VALUES ($1,$2,$3)',
     [id, principal.issuer, principal.subject]);
-  await pool.query("INSERT INTO access.notification_stream (principal_id,stream) VALUES ($1,'inbox')", [id]);
-  await pool.query("INSERT INTO access.authority_subject (id,kind) VALUES ($1,'agent')", [actor]);
-  await pool.query(`INSERT INTO access.editorial_proposal (id,kind,target,resource,context,
+  await connection.query("INSERT INTO access.notification_stream (principal_id,stream) VALUES ($1,'inbox')", [id]);
+  await connection.query("INSERT INTO access.authority_subject (id,kind) VALUES ($1,'agent')", [actor]);
+  await connection.query(`INSERT INTO access.editorial_proposal (id,kind,target,resource,context,
     proposer_principal,proposer_agent,proposer_key,proposer_controllers)
     VALUES ($1,'title','{}','fixture','fixture',$2,$3,$4,ARRAY[$2::uuid])`,
   [proposal, id, actor, '0'.repeat(64)]);
-  await pool.query(`INSERT INTO access.editorial_revision (proposal,n,candidate,candidate_digest,
+  await connection.query(`INSERT INTO access.editorial_revision (proposal,n,candidate,candidate_digest,
     before_state,base_heads,evidence,author_agent) VALUES ($1,1,'{}',$2,'{}','[{}]','[]',$3)`,
   [proposal, createHash('sha256').update('{}').digest('hex'), actor]);
+  return { id, proposal, principal };
+}
+
+async function inbox() {
+  const { id, proposal, principal } = await seedOwner(pool);
   const statements: Statement[] = [];
   const rows: FixtureRow[] = [];
   let generation = '1';
 
-  async function insert(items: Omit<FixtureRow, 'id'>[], head = items.at(-1)?.sequence ?? '0') {
+  async function insert(items: Omit<FixtureRow, 'id'>[], head = items.at(-1)?.sequence ?? '0',
+    options = { triage: true, context: true, erase: true }) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -90,14 +111,14 @@ async function inbox() {
         SELECT d.id,$1,'inbox',$2,d.sequence,'governance','proposal-revised','access',d.id::text,
           'access','fixture','proposal' FROM jsonb_to_recordset($3::jsonb) AS d(id uuid,sequence bigint)`,
       [id, generation, JSON.stringify(data)]);
-      await client.query(`INSERT INTO access.notification_item_triage (principal_id,item_id,saved,done)
+      if (options.triage) await client.query(`INSERT INTO access.notification_item_triage (principal_id,item_id,saved,done)
         SELECT $1,d.id,d.saved,d.done FROM jsonb_to_recordset($2::jsonb) AS d(id uuid,saved boolean,done boolean)`,
       [id, JSON.stringify(data)]);
-      await client.query(`INSERT INTO access.notification_proposal_context (item_id,proposal,revision,reason)
+      if (options.context) await client.query(`INSERT INTO access.notification_proposal_context (item_id,proposal,revision,reason)
         SELECT d.id,$1,1,d.reason FROM jsonb_to_recordset($2::jsonb) AS d(id uuid,reason text)`,
       [proposal, JSON.stringify(data)]);
       // Erased owner records need no external subject resolver; their private triage remains pageable.
-      await client.query(`UPDATE access.notification_item SET state = 'erased',state_changed_at = now()
+      if (options.erase) await client.query(`UPDATE access.notification_item SET state = 'erased',state_changed_at = now()
         WHERE principal_id = $1 AND generation = $2 AND state = 'active'`, [id, generation]);
       await client.query('COMMIT');
       rows.push(...data);
@@ -106,12 +127,12 @@ async function inbox() {
   }
   const sparse = () => Array.from({ length: 246 }, (_, index) => ({ sequence: String((index + 1) * 71),
     saved: index % 2 === 0, done: index % 2 === 0, reason: index % 2 === 0 ? 'manual' : 'reviewer' }));
-  return { id, principal, statements, rows, insert, sparse,
+  return { id, proposal, principal, statements, rows, insert, sparse,
     store: new NotificationStore(recordingPool(statements)),
     async reset() {
       await pool.query(`UPDATE access.notification_stream SET generation = generation + 1,
         head_sequence = 0,reset_at = now() WHERE principal_id = $1 AND stream = 'inbox'`, [id]);
-      generation = String(BigInt(generation) + 1);
+      generation = String(BigInt(generation) + 1n);
       rows.length = 0;
       await insert(sparse(), '20000');
     },
@@ -123,6 +144,55 @@ function matches(row: FixtureRow, selection: Selection) {
   return (selection.view === 'saved' ? row.saved : selection.view === 'done' ? row.done : !row.done)
     && (!selection.reason || row.reason === selection.reason);
 }
+
+test('migration preserves Saved, Done and reason matches that existed before the seek indexes', async () => {
+  expect(backfill).toBeDefined();
+  const store = new NotificationStore(pool);
+  for (const view of ['saved', 'done'] as const) for (const descending of [false, true]) {
+    const page = await store.readStream(backfill.principal, null, 2, { view, reason: 'manual' },
+      descending ? 'latest' : undefined);
+    expect(page.items.map(item => item.id)).toEqual([backfill.itemId]);
+    expect(page.items[0]).toMatchObject({ saved: true, done: true });
+    expect(page.next).toBeNull();
+  }
+});
+
+test('owner triage writes maintain filtered membership, preserve omitted flags and reject stale revisions', async () => {
+  const f = await inbox();
+  await f.insert([{ sequence: '1', saved: false, done: false, reason: 'manual' }], '1',
+    { triage: false, context: false, erase: false });
+  f.store.setDefaultReadSubjectReader({ async resolve() {
+    return { status: 'available', subject: { private: false, fields: { title: 'Proposal' } } };
+  } });
+  const itemId = f.rows[0]!.id;
+  async function membership(expected: { inbox: boolean; saved: boolean; done: boolean }, reason?: 'manual') {
+    for (const view of ['inbox', 'saved', 'done'] as const) for (const descending of [false, true]) {
+      const page = await f.store.readStream(f.principal, null, 2, { view, ...(reason ? { reason } : {}) },
+        descending ? 'latest' : undefined);
+      expect(page.items.map(item => item.id)).toEqual(expected[view] ? [itemId] : []);
+    }
+  }
+  await membership({ inbox: true, saved: false, done: false });
+  expect(await f.store.setItemTriage(f.principal, itemId, { saved: true, expectedRevision: null }))
+    .toMatchObject({ saved: true, done: false, revision: '1' });
+  await membership({ inbox: true, saved: true, done: false });
+  expect(await f.store.setItemTriage(f.principal, itemId, { done: true, expectedRevision: '1' }))
+    .toMatchObject({ saved: true, done: true, revision: '2' });
+  await membership({ inbox: false, saved: true, done: true });
+  await expect(f.store.setItemTriage(f.principal, itemId, { saved: false, done: false, expectedRevision: '1' }))
+    .rejects.toBeInstanceOf(NotificationStale);
+  await membership({ inbox: false, saved: true, done: true });
+  expect(await f.store.setItemTriage(f.principal, itemId, { saved: false, expectedRevision: '2' }))
+    .toMatchObject({ saved: false, done: true, revision: '3' });
+  await membership({ inbox: false, saved: false, done: true });
+  await membership({ inbox: false, saved: false, done: false }, 'manual');
+  await pool.query(`INSERT INTO access.notification_proposal_context (item_id,proposal,revision,reason)
+    VALUES ($1,$2,1,'manual')`, [itemId, f.proposal]);
+  await membership({ inbox: false, saved: false, done: true }, 'manual');
+  expect(await f.store.setItemTriage(f.principal, itemId, { done: false, expectedRevision: '3' }))
+    .toMatchObject({ saved: false, done: false, revision: '4' });
+  await membership({ inbox: true, saved: false, done: false }, 'manual');
+});
 
 for (const selection of selections) for (const descending of [true, false]) {
   test(`${descending ? 'descending' : 'forward'} ${JSON.stringify(selection)} reaches every sparse match once in PostgreSQL`, async () => {
