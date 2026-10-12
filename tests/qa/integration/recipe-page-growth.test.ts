@@ -28,13 +28,15 @@ if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
   const sink = startWorkProfileSink({ settleMs: 25 });
   const { trace } = await import('@opentelemetry/api');
   const fetchBeforeEvidence = globalThis.fetch;
-  // Enrich the meter's existing client spans beneath instrumentFetch. Record
-  // paths only: signed object-store query strings must never enter artifacts.
+  const fetchPaths = new Map<string, { traceId: string; origin: string; path: string }>();
+  // The telemetry exporter intentionally strips paths. Keep a test-local
+  // sidecar keyed by the meter's existing client span IDs, beneath instrumentFetch.
+  // Query strings and signed credentials never enter this evidence.
   globalThis.fetch = Object.assign(async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
-    if (url.origin !== sink.url) trace.getActiveSpan()?.setAttributes({
-      'rezics.qa.fetch.origin': url.origin,
-      'rezics.qa.fetch.path': url.pathname,
+    const span = trace.getActiveSpan()?.spanContext();
+    if (url.origin !== sink.url && span) fetchPaths.set(span.spanId, {
+      traceId: span.traceId, origin: url.origin, path: url.pathname,
     });
     return fetchBeforeEvidence(input, init);
   }, fetchBeforeEvidence);
@@ -119,11 +121,10 @@ if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
       const tag = span.attributes['rezics.peer.service'];
       const peer = typeof tag === 'string' && ['fuseki', 'account', 'main', 'other'].includes(tag)
         ? tag : 'unclassified';
-      const origin = span.attributes['rezics.qa.fetch.origin'];
-      const path = span.attributes['rezics.qa.fetch.path'];
-      expect(typeof origin).toBe('string');
-      expect(typeof path).toBe('string');
-      const entry = { peer, origin: String(origin), path: String(path),
+      const metadata = fetchPaths.get(span.spanId);
+      if (!metadata || metadata.traceId !== span.traceId)
+        throw new Error(`Missing local fetch path evidence for client span ${span.spanId}`);
+      const entry = { peer, origin: metadata.origin, path: metadata.path,
         method: String(span.attributes['http.request.method']), count: 0 };
       const key = JSON.stringify([entry.peer, entry.origin, entry.path, entry.method]);
       const existing = grouped.get(key) ?? entry;
@@ -194,8 +195,10 @@ if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
           const known = await measuredRead(seedSelection(work.mainVersion));
           expect(known.result).toMatchObject({ work: work.work, mainVersion: work.mainVersion,
             body: 'Checkpoint selected text 0' });
-          evidence.push({ meterQualification: counters(known.profile), fetches: fetchInventory(known.profile) });
+          const qualification: Record<string, unknown> = { meterQualification: counters(known.profile) };
+          evidence.push(qualification);
           console.log('recipe-page-growth-meter', JSON.stringify(counters(known.profile)));
+          qualification.fetches = fetchInventory(known.profile);
           meterQualified = true;
         } else {
           expect(await seedApi(stack, member.token).read(seedSelection(work.mainVersion)))
@@ -231,13 +234,14 @@ if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
       const row: Record<string, unknown> = {
         scale: cut.manifest.scale, cut: cut.manifest.id, dimensions: cut.manifest.dimensions, preparationMs,
         ownerOrigins: copy!.ownerOrigins,
-        firstPage: { counters: counters(first.profile), cost: first.result.cost, fetches: fetchInventory(first.profile) },
+        firstPage: { counters: counters(first.profile), cost: first.result.cost },
         continuation: null,
         sectionDepth: { measured: false, reason: 'Published Recipe contains only root ingredient lines' },
       };
       // Retain every cut before assertions that can stop the run. A failed
       // cost contract must not discard the page that demonstrated the failure.
       evidence.push(row);
+      (row.firstPage as Record<string, unknown>).fetches = fetchInventory(first.profile);
       firstProfiles.push({ ...first.profile, mainCalls: cut.manifest.dimensions.unrelatedWorks });
       if (first.result.next) {
         phase = `${cut.manifest.scale} continuation`;
@@ -250,7 +254,8 @@ if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
           .toBe(RECIPE_WORK_PAGE_OCCURRENCES * 2);
         // Keep absolute caps; two available continuations cannot provide the
         // existing verdict's required three scales. Do not invent a third cursor.
-        row.continuation = { counters: counters(next.profile), cost: next.result.cost, fetches: fetchInventory(next.profile) };
+        row.continuation = { counters: counters(next.profile), cost: next.result.cost };
+        (row.continuation as Record<string, unknown>).fetches = fetchInventory(next.profile);
         continuationProfiles.push({ scale: cut.manifest.scale,
           unrelatedWorks: cut.manifest.dimensions.unrelatedWorks, profile: next.profile });
       } else {
