@@ -626,6 +626,19 @@ test('contributor admission refuses a closed recovery fence on the borrowed publ
   expect(accessClient(pool)).toBeUndefined();
 }, 30_000);
 
+test('standalone contributor admission maps a closed recovery fence to AdmissionUnavailable', async () => {
+  const f = await identity();
+  await f.grant('work.create', 'work:create:root');
+  const admission = await f.access.register({ principal: f.principal, actingSubject: f.actor,
+    action: 'work.create', scope: 'work:create:root', idempotencyKey: randomUUID(), requestDigest: 'a'.repeat(64) });
+  try {
+    await pool.query('UPDATE access.recovery_fence SET open=false WHERE id');
+    await expect(f.access.admittedActingSubject(admission.id)).rejects.toBeInstanceOf(AdmissionUnavailable);
+    expect(accessClient(pool)).toBeUndefined();
+  } finally { await pool.query('UPDATE access.recovery_fence SET open=true WHERE id'); }
+  expect(await f.access.admittedActingSubject(admission.id)).toBe(f.actor);
+}, 30_000);
+
 for (const owner of recoveryOwners) {
   for (const recovery of ['closed', 'closing during callback', 'open'] as const) {
     test(`${owner}: recovery ${recovery} gates callback disclosure/index and retains one checkout through commit`, async () => {
