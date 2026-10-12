@@ -1,5 +1,5 @@
 import { operationOutcome, type OperationItem } from '../operation/outcome.ts';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHmac, randomBytes, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { withAccessClient } from '../access/topology-control.ts';
 import { Value } from 'typebox/value';
@@ -25,6 +25,23 @@ const canonical = (value: unknown) => JSON.stringify(value, (_key, item) =>
     ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b))) : item);
 const keyPattern = /^[A-Za-z0-9:_./-]{32,128}$/;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** Owner receipts encode case-wide ordinals, and owner cursors may name private
+ * resources. Alias only the visible position; originals remain in the effect
+ * rows for staff recovery. Include the decision so later decisions cannot reuse
+ * a token for a different effect under the same credential. */
+function partyOperationOutcome(operationId: string, effects: OperationItem[], secret: string, cancelled: boolean) {
+  const outcome = operationOutcome(operationId, effects, cancelled);
+  return { ...outcome, items: effects.map((effect, index) => ({
+    ordinal: index + 1, target: effect.target, state: effect.state,
+    receipt: effect.receipt === null ? null : `party:${createHmac('sha256', secret)
+      .update(JSON.stringify([operationId, index + 1])).digest('hex')
+      .replace(/[0-9a-f]/g, digit => 'abcdefghijklmnop'[Number.parseInt(digit, 16)]!)}`,
+    continuation: null,
+    resumable: !cancelled && effect.continuation !== null,
+    error: effect.error,
+  })) };
+}
 
 /** Server-only hook for G-565, after it authorizes the affected party.
  * Return the secret through the private notice; never put it in a URL or outbox. */
@@ -244,8 +261,7 @@ export class PublicReports {
           declarations: partyDeclarations('intake', row.declarations, credential.party === 'reporter') },
         statementOfReasons: row.statement_of_reasons,
         operation: effects?.length
-          // Ordinal gaps would disclose the position and count of hidden effects.
-          ? operationOutcome(row.decision_head!, effects.map((effect, index) => ({ ...effect, ordinal: index + 1 })), row.cancelled ?? false)
+          ? partyOperationOutcome(row.decision_head!, effects, secret, row.cancelled ?? false)
           : null,
         items: page.map((step) => ({ id: step.id, kind: step.step, occurredAt: step.occurred_at.toISOString(),
           dueAt: step.due_at?.toISOString() ?? null, statement: step.statement, contentLanguage: step.content_language,
