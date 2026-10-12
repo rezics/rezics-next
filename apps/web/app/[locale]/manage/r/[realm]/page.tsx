@@ -27,7 +27,7 @@ export default async function RealmQueueRoute({ params, searchParams }: {
   const { actingSubject, main, anonymous, signInHref } = await manager(locale, queueHref(address, view));
   const [messages, page, permissions, header] = await Promise.all([getMessages('manage', locale),
     readQueue(main, realm, { actingSubject, ...view }), permissionsIn(main, actingSubject, realm),
-    realmHeader(realm, locale)]);
+    realmHeader(main, realm, locale, actingSubject)]);
   if (!page.ok) {
     return <ManageFailure failure={page.failure} locale={locale} messages={messages} signInHref={signInHref}
       retryHref={localizedPath(queueHref(address, view), locale)} />;

@@ -111,8 +111,9 @@ export function readDecisionBasis(main: MainClient, realm: string, caseId: strin
     ...cursor ? { cursor } : {} } }), { management: true });
 }
 
-export function readRealmHeader(main: MainClient, realm: string, language: string) {
-  return settle(() => main.v1.realms({ realm }).get({ query: { language } }));
+export function readRealmHeader(main: MainClient, realm: string, language: string, actingSubject?: string) {
+  return settle(() => main.v1.realms({ realm }).get({ query: { language,
+    ...actingSubject ? { actingSubject } : {} } }));
 }
 
 export function searchRealms(main: MainClient, q: string, language: string) {

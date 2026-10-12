@@ -19,7 +19,7 @@ export default async function RealmManagementLayout({ children, params }: {
   const token = (await cookies()).get(ACCESS_COOKIE)?.value;
   const [messages, header, siteHref] = await Promise.all([
     getMessages('manage', locale),
-    realmHeader(target.id, locale),
+    realmHeader(main, target.id, locale, actingSubject),
     realmEditSite({
       zone: () => settle(() => main.v1.realms({ realm: target.id }).zone.get({ query: { actingSubject } })),
       editor: zoneId => showcaseEditorOpen(zoneId, actingSubject, token),

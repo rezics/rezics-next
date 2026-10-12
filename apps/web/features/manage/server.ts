@@ -10,10 +10,13 @@ import { readSession } from '../auth/session.ts';
 import { readManagedRealms, readRealmHeader, settle } from './read.ts';
 import { isUuid, type MainClient, uuidOf } from './types.ts';
 
+// Layout and page share a client so the header's request cache also shares its read.
+const managementMain = cache(mainApiWithToken);
+
 /**
  * Who manages. Management always acts as the session Agent, shown in every
  * page's header; without a session or a chosen Agent the page asks for one
- * first. Public reads (Realm names, profiles) go anonymously.
+ * first. Management reads carry that Agent, including private Realm headers.
  */
 export async function manager(locale: UiLocale, path: string) {
   const next = localizedPath(path, locale);
@@ -21,7 +24,7 @@ export async function manager(locale: UiLocale, path: string) {
   if (!session) redirect(signInPath(next));
   if (session.agent.status !== 'selected') redirect(`${localizedPath('/identity', locale)}?next=${encodeURIComponent(next)}`);
   const token = (await cookies()).get(ACCESS_COOKIE)?.value;
-  return { agent: session.agent.agent, actingSubject: session.agent.agent.iri, main: mainApiWithToken(token),
+  return { agent: session.agent.agent, actingSubject: session.agent.agent.iri, main: managementMain(token),
     anonymous: mainApiWithToken(undefined), signInHref: signInPath(next) };
 }
 
@@ -72,8 +75,8 @@ export async function permissionsIn(main: MainClient, actingSubject: string, rea
 }
 
 /**
- * A Realm's public header in one language, read once per request: the
+ * A Realm's header as the acting Agent, read once per request: the
  * layout names the Realm with it, and the queue cites its published rules.
  */
-export const realmHeader = cache((realm: string, language: string) =>
-  readRealmHeader(mainApiWithToken(undefined), realm, language));
+export const realmHeader = cache((main: MainClient, realm: string, language: string, actingSubject: string) =>
+  readRealmHeader(main, realm, language, actingSubject));

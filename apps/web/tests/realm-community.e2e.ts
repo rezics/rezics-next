@@ -372,7 +372,7 @@ test('a manager creates a role, assigns it to a member, and sees the public team
       name: { original: 'en', labels: { en: realm.name, 'zh-Hans': realm.name, 'zh-Hant': realm.name, ja: realm.name } },
       description: { original: 'en', labels: { en: 'A circle for conversation.', 'zh-Hans': '交流读者的社区。',
         'zh-Hant': '交流讀者的社群。', ja: '読者の会話の場です。' } },
-      iconSelection: null, bannerSelection: null, rules: [], count: { kind: 'unknown', value: null },
+      iconSelection: null, bannerSelection: null, count: { kind: 'unknown', value: null },
       moderators: [member.actor],
     },
   }, 'PUT');

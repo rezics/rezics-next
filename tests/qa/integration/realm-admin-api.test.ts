@@ -6,7 +6,7 @@ import { AccessRealmManagement, realmAdminScope } from '../../../services/main/s
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { ManagementReadStore } from '../../../services/main/src/modules/management-reads/read-store.ts';
 import { GovernanceRules } from '../../../services/main/src/modules/governance/rules.ts';
-import { GovernanceInvalid } from '../../../services/main/src/modules/governance/store.ts';
+import { GovernanceInvalid, sha256 } from '../../../services/main/src/modules/governance/store.ts';
 import { AccessMembershipConsents } from '../../../services/main/src/modules/access/membership-consents.ts';
 import { realmMemberProof } from '../../../services/main/src/modules/realm-reply/member-policy.ts';
 import type { RoleCommand, RoleImpact } from '../../../services/main/src/modules/realm-admin/contract.ts';
@@ -187,8 +187,42 @@ test('Realm settings: atomic rule CAS, localization, submission restrictions and
     expect(await external.publishedRealmRules(s.realm)).toEqual(input.settings.rules);
     expect((await s.call('PUT', '/settings', { ...input, expectedGeneration: '1', expectedRulesRevision: basis.revision })).status).toBe(409);
     expect(await external.current(basis.ref, s.scope)).toEqual({ revision: basis.revision, digest: basis.digest });
-    // Immutable legacy normalization is covered by the localized-rules owner
-    // test; generic publication cannot manufacture managed legacy revisions.
+    // Seed retained v1 storage directly: current publishers cannot create managed legacy documents.
+    for (const same of [true, false]) {
+      const document = { profile: 'realm-settings-rules-v1', public: true, rules: [{ id: 'legacy',
+        title: { en: 'Be kind', 'zh-CN': same ? 'Be kind' : '友善' },
+        body: { en: 'Respect readers', 'zh-CN': same ? 'Respect readers' : '尊重读者' }, governanceRule: null }] };
+      const prior = (await external.current(basis.ref, s.scope))!;
+      const stored = { revision: (BigInt(prior.revision) + 1n).toString(), digest: sha256(JSON.stringify(document)) };
+      const client = await s.stack.accessPool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query(`INSERT INTO access.governance_rule_revision
+          (ref,revision,scope_id,digest,document,principal_id,acting_subject,idempotency_key,request_digest)
+          VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$4)`,
+        [basis.ref, stored.revision, s.scope, stored.digest, JSON.stringify(document),
+          s.owner.principalId, s.owner.actor, randomUUID()]);
+        await client.query(`UPDATE access.governance_rule_head SET revision = $2, digest = $3 WHERE ref = $1`,
+          [basis.ref, stored.revision, stored.digest]);
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally { client.release(); }
+      const normalized = await s.call('GET', `/settings${s.actorQuery()}`);
+      expect(normalized.status).toBe(200);
+      expect(normalized.body).toMatchObject({ ruleBasis: stored, settings: { rules: [{
+        title: same ? { original: 'und', labels: { und: 'Be kind' } }
+          : { original: 'en', labels: { en: 'Be kind', 'zh-Hans': '友善' } },
+        body: same ? { original: 'und', labels: { und: 'Respect readers' } }
+          : { original: 'en', labels: { en: 'Respect readers', 'zh-Hans': '尊重读者' } },
+      }] } });
+      expect(await external.publishedRealmRules(s.realm))
+        .toEqual((normalized.body.settings as { rules: unknown[] }).rules);
+      expect(await external.read(s.owner.principal, s.owner.actor, basis.ref, s.scope))
+        .toMatchObject({ ...stored, document });
+      expect(await external.current(basis.ref, s.scope)).toEqual(stored);
+    }
     await s.outsider.grant(`submission:submit:${s.realm}`, 'submission.submit');
     const id = () => `https://rezics.com/id/${randomUUID()}`;
     const denied = await s.call('POST', '/submissions', { actingSubject: s.outsider.actor,
