@@ -20,11 +20,18 @@ function evidenceOf(value: string | undefined) {
 }
 
 export async function readPostIdentification(session: WorkReadSession, id: string) {
-  const relation = await readCurrentOccurrence(session.deps.environment, `https://rezics.com/id/${id}`);
+  const resource = `https://rezics.com/id/${id}`;
+  const readRelation = () => readCurrentOccurrence(session.deps.environment, resource);
+  const relation = await readRelation();
+  session.observeDependency(`post-identification:${resource}`, relation, readRelation);
   const evidence = evidenceOf(relation?.state.evidence);
   if (!relation || !evidence) throw new WorkReadMissing('Identification is unavailable');
   // System reader: only the definition's notation and role keys are used; no member list reaches the response.
-  const definition = await readExactDefinition(session.deps.environment, relation.state.definition, systemDisclosure);
+  const readDefinition = () => readExactDefinition(session.deps.environment, relation.state.definition, systemDisclosure);
+  const definition = await readDefinition();
+  const definitionToken = (value: typeof definition) => value ? [value.notation, value.roleKeys] : null;
+  session.observeDependency(`post-identification-definition:${relation.state.definition}`, definitionToken(definition),
+    async () => definitionToken(await readDefinition()));
   if (definition?.notation !== 'composition-part') throw new WorkReadMissing('Identification is unavailable');
   const part = relation.state.participations.find(row => definition.roleKeys[row.role] === 'part')?.participant;
   if (part?.kind !== 'resource') throw new WorkReadMissing('Identification is unavailable');
@@ -67,14 +74,17 @@ export async function readPostIdentifications(session: WorkReadSession, post: st
   for (const row of rows.slice(0, POST_IDENTIFICATION_COST.scan)) {
     if (!row.work || !row.main || !row.structure || !row.occurrence) throw new WorkReadUnavailable('Identification graph is incomplete');
     if (operation) {
-      const relations = await session.query(`SELECT ?relation WHERE { GRAPH ${iri(GRAPHS.revisions)} {
-        ?participation rv:participant ${iri(row.work.value)} ; rv:occurrence ?relation .
-      } GRAPH ${iri(GRAPHS.current)} { ?relation rv:occurrenceHead ?head } } LIMIT 101`, 101);
-      let found = false;
-      for (const candidate of relations) {
-        const state = await readCurrentOccurrence(session.deps.environment, candidate.relation!.value);
-        if (evidenceOf(state?.state.evidence)?.operation === operation) { found = true; break; }
-      }
+      const found = await session.selection(`post-identification-operation:${post}:${row.work.value}:${operation}`, async probe => {
+        const relations = await probe.query(`SELECT ?relation WHERE { GRAPH ${iri(GRAPHS.revisions)} {
+          ?participation rv:participant ${iri(row.work.value)} ; rv:occurrence ?relation .
+        } GRAPH ${iri(GRAPHS.current)} { ?relation rv:occurrenceHead ?head } } LIMIT 101`, 101);
+        for (const candidate of relations) {
+          if (!candidate.relation) throw new WorkReadUnavailable('Identification relation is incomplete');
+          const state = await readCurrentOccurrence(probe.deps.environment, candidate.relation.value);
+          if (evidenceOf(state?.state.evidence)?.operation === operation) return true;
+        }
+        return false;
+      });
       if (!found) continue;
     }
     const summary = (await session.summaries([row.work.value]))[0];
