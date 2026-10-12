@@ -5,6 +5,7 @@ import { RealmAdminInvalid, RealmAdminUnavailable } from '../realm-admin/contrac
 import { deliverRealmPolicy, type RealmPolicyDelivery } from '../space/policy.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { runWorkerTick } from '../../worker-tick.ts';
+import { withAccessClient } from './topology-control.ts';
 
 export const REALM_POLICY_RECOVERY_COST = { page: 10, maxPage: 50, lockTimeoutMs: 2_000,
   statementTimeoutMs: 5_000, graphCommandsPerRealm: 1, intervalMs: 30_000 } as const;
@@ -32,7 +33,7 @@ export async function settleRealmPolicy(pool: Pool, realm: string, env?: WorkAct
       FROM access.realm_policy_delivery WHERE realm = $1 AND NOT delivered FOR UPDATE`, [realm])).rows[0];
     if (pending) {
       if (!env) throw new RealmAdminUnavailable('Realm policy delivery needs the graph owner');
-      await deliverRealmPolicy(env, pending);
+      await withAccessClient(pool, () => deliverRealmPolicy(env, pending), client);
       await client.query(`UPDATE access.realm_policy_delivery SET delivered = true WHERE realm = $1 AND receipt_id = $2`,
         [realm, pending.receipt_id]);
     }

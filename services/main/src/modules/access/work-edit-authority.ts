@@ -6,6 +6,7 @@ import { newBaselineProof } from './baseline.ts';
 import { ensureBaselineScopeGate } from './scope-gates.ts';
 import { publicCatalogueWork, roleWorkProof, type RoleWorkProof } from './role-proof.ts';
 import { representedWorkProof } from './represented-work-proof.ts';
+import { accessClient, inExplicitTransaction, withAccessClient } from './topology-control.ts';
 
 export interface WorkEditAuthorityProof {
   principalId: string; principalEpoch: string; actingSubject: string;
@@ -26,16 +27,19 @@ export interface WorkEditAuthorityProof {
 export async function withWorkEditAuthority<T>(pool: Pool, principal: VerifiedPrincipal,
   actingSubject: string, work: string, commit: (proof: WorkEditAuthorityProof) => Promise<T>,
   graph?: Pick<FusekiClient, 'query'>): Promise<T> {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const result = await withWorkEditAuthorityInTransaction(client, principal, actingSubject, work, commit, graph);
-    await client.query('COMMIT');
-    return result;
-  } catch (error) {
-    await client.query('ROLLBACK').catch(() => {});
-    throw error;
-  } finally { client.release(); }
+  const borrowed = accessClient(pool);
+  return withAccessClient(pool, async client => {
+    const ownsTransaction = !borrowed || !await inExplicitTransaction(client);
+    try {
+      if (ownsTransaction) await client.query('BEGIN');
+      const result = await withWorkEditAuthorityInTransaction(client, principal, actingSubject, work, commit, graph);
+      if (ownsTransaction) await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      if (ownsTransaction) await client.query('ROLLBACK').catch(() => {});
+      throw error;
+    }
+  }, borrowed);
 }
 
 /** Reuses the caller's Access transaction and retains every authority lock

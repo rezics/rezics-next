@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
+import { withAccessClient } from '../access/topology-control.ts';
 import { AdmissionDenied, AdmissionUnavailable, type VerifiedPrincipal } from '../access/admission.ts';
 import { readExactContributionDraft } from '../contribution/history.ts';
 import type { DocumentSnapshot } from '@rezics/document';
@@ -219,7 +220,7 @@ export class RealmVariantRecommendationStore {
       if ((current.rows[0]?.revision ?? null) !== input.expectedRevision) {
         throw new StaleRealmVariantRecommendation('Realm recommendation revision changed');
       }
-      if (input.contribution !== null && !(await eligible())) {
+      if (input.contribution !== null && !(await withAccessClient(this.pool, eligible, client))) {
         throw new NativeVariantUnavailable('recommended native variant is unavailable');
       }
       const revision = input.contribution === null ? null : randomUUID();

@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import { accessClient, inExplicitTransaction, withAccessClient } from '../access/topology-control.ts';
 
 declare const fenceBrand: unique symbol;
 /** A live target lock, minted only while its transaction is open. */
@@ -19,18 +20,23 @@ export async function withPreservationFence<T>(access: PreservationAccess, resou
   }
   // The caller keeps this client's transaction and target lock through release.
   if ('release' in access) return writeWithPreservationFence(access, resource, operationId, write);
-  const client = await access.connect();
-  try {
-    await client.query('BEGIN');
-    await client.query("SET LOCAL lock_timeout = '2s'");
-    await client.query("SET LOCAL statement_timeout = '5s'");
-    const result = await writeWithPreservationFence(client, resource, operationId, write);
-    await client.query('COMMIT');
-    return result;
-  } catch (error) {
-    await client.query('ROLLBACK').catch(() => undefined);
-    throw error;
-  } finally { client.release(); }
+  const borrowed = accessClient(access);
+  return withAccessClient(access, async client => {
+    const ownsTransaction = !borrowed || !(await inExplicitTransaction(client));
+    try {
+      if (ownsTransaction) {
+        await client.query('BEGIN');
+        await client.query("SET LOCAL lock_timeout = '2s'");
+        await client.query("SET LOCAL statement_timeout = '5s'");
+      }
+      const result = await writeWithPreservationFence(client, resource, operationId, write);
+      if (ownsTransaction) await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      if (ownsTransaction) await client.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    }
+  }, borrowed);
 }
 
 async function writeWithPreservationFence<T>(client: PoolClient, resource: string, operationId: string,

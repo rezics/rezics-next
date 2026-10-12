@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import { accessClient } from '../access/topology-control.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import type { AccessAdmissionRegistry } from '../access/admission.ts';
 import { reviewVisibleSql } from '../review/store.ts';
@@ -51,7 +52,7 @@ export class ReviewReportOwner {
 
   async current(target: { owner: string; resource: string; component: string }): Promise<string | null> {
     if (target.owner !== 'review' || target.component !== 'body' || !uuid.test(target.resource)) return null;
-    const row = (await this.pool.query<{ revision: string }>(`
+    const row = (await (accessClient(this.pool) ?? this.pool).query<{ revision: string }>(`
       SELECT revision::text FROM access.reader_review WHERE id = $1 AND NOT deleted`,
     [target.resource])).rows[0];
     return row?.revision ?? null;

@@ -4,25 +4,40 @@ import { randomUUID } from 'node:crypto';
 import type { VerifiedPrincipal } from './admission.ts';
 import { normalizePolicyError, PolicyDenied, PolicyUnavailable } from './policy-errors.ts';
 import { REVOCATION_AFFECTED_WORK_LIMIT } from './revocation-schema.ts';
+import { accessClient, inExplicitTransaction, withAccessClient } from './topology-control.ts';
 
 export type Isolation = 'read committed' | 'repeatable read';
 
 /** One owner transaction with the common two-second lock and five-second statement limits. */
 export async function inAccessTransaction<T>(pool: Pool, isolation: Isolation,
   work: (client: PoolClient) => Promise<T>): Promise<T> {
-  const client = await pool.connect();
-  try {
-    await client.query(isolation === 'repeatable read'
-      ? 'BEGIN ISOLATION LEVEL REPEATABLE READ' : 'BEGIN');
-    await client.query("SET LOCAL lock_timeout = '2s'");
-    await client.query("SET LOCAL statement_timeout = '5s'");
-    const result = await work(client);
-    await client.query('COMMIT');
-    return result;
-  } catch (error) {
-    try { await client.query('ROLLBACK'); } catch { /* preserve the original failure */ }
-    throw normalizePolicyError(error);
-  } finally { client.release(); }
+  const borrowed = accessClient(pool);
+  return withAccessClient(pool, async client => {
+    const ownsTransaction = !borrowed || !await inExplicitTransaction(client);
+    try {
+      if (!ownsTransaction) {
+        if (isolation === 'repeatable read') {
+          const current = (await client.query<{ isolation: string }>(
+            "SELECT current_setting('transaction_isolation') AS isolation")).rows[0]?.isolation;
+          // An existing snapshot cannot be upgraded without ending its owner's transaction.
+          if (current !== 'repeatable read' && current !== 'serializable') {
+            throw new PolicyUnavailable('Access read requires a repeatable-read owner transaction');
+          }
+        }
+        return await work(client);
+      }
+      await client.query(isolation === 'repeatable read'
+        ? 'BEGIN ISOLATION LEVEL REPEATABLE READ' : 'BEGIN');
+      await client.query("SET LOCAL lock_timeout = '2s'");
+      await client.query("SET LOCAL statement_timeout = '5s'");
+      const result = await work(client);
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      if (ownsTransaction) try { await client.query('ROLLBACK'); } catch { /* preserve the original failure */ }
+      throw normalizePolicyError(error);
+    }
+  }, borrowed);
 }
 
 /** Writers share-lock the recovery fence; snapshot readers only observe it. */

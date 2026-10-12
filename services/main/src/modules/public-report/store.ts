@@ -1,6 +1,7 @@
 import { operationOutcome, type OperationItem } from '../operation/outcome.ts';
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
+import { withAccessClient } from '../access/topology-control.ts';
 import { Value } from 'typebox/value';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { GLOBAL_CONTEXT } from '../governance/schema.ts';
@@ -50,7 +51,7 @@ export class PublicReports {
         'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE')).rows[0]?.open) {
         throw new GovernanceUnavailable('Governance is held for recovery');
       }
-      const result = await work(client);
+      const result = await withAccessClient(this.pool, work, client);
       await client.query('COMMIT');
       return result;
     } catch (error) {

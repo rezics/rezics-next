@@ -41,7 +41,7 @@ import { checkEditorialAdmission, registerEditorialAdmission, withCommandOwnerAu
 import { platformAdministratorAction, platformAdministratorTargetAllowed, platformAdministratorProof,
   savedPlatformAdministratorProof, savePlatformAdministratorProof,
   platformAdministratorProofCurrent } from './platform-administrator.ts';
-import { accessClient,withAccessClient,controlTransaction,requirePrincipal,requireMandate,ControlConflict,ControlDenied,ControlUnavailable } from './topology-control.ts';
+import { accessClient,withAccessClient,inExplicitTransaction,controlTransaction,requirePrincipal,requireMandate,ControlConflict,ControlDenied,ControlUnavailable } from './topology-control.ts';
 import { realmTransaction,realmManager } from './realm-management-authority.ts';
 import { RealmAdminDenied,RealmAdminUnavailable } from '../realm-admin/contract.ts';
 import { realmRatingProof, savedRealmRatingProof, saveRealmRatingProof, ratingConfigurationAction } from './realm-roles-rating.ts';
@@ -473,7 +473,7 @@ export class AccessAdmissionRegistry {
 
   /** Anonymous reads and readiness share the same restore gate as admissions. */
   async assertRecoveryOpen(): Promise<void> {
-    const row = (await this.pool.query<{ open: boolean }>(
+    const row = (await (accessClient(this.pool) ?? this.pool).query<{ open: boolean }>(
       'SELECT open FROM access.recovery_fence WHERE id = true')).rows[0];
     if (row?.open !== true) throw new AdmissionUnavailable('Access is held for recovery');
   }
@@ -484,7 +484,7 @@ export class AccessAdmissionRegistry {
   }
 
   async publicRealmCount(realm: string): Promise<{ kind: 'exact'; value: number; revision: string }> {
-    const row = (await this.pool.query<{ value: string; revision: string }>(`
+    const row = (await (accessClient(this.pool) ?? this.pool).query<{ value: string; revision: string }>(`
       SELECT c.value, c.revision FROM access.recovery_fence f
       LEFT JOIN access.realm_member_count c ON c.realm = $1 WHERE f.id AND f.open`, [realm])).rows[0];
     if (!row) throw new AdmissionUnavailable('Realm count recovery is held');
@@ -644,8 +644,10 @@ export class AccessAdmissionRegistry {
   }
 
   async canActAsPlatformAdministrator(principal:VerifiedPrincipal,actingSubject:string):Promise<boolean> {
-    const principalId=await this.activePrincipalId(principal);
-    return !!principalId && !!await platformAdministratorProof(this.pool,principalId,actingSubject);
+    return withAccessClient(this.pool, async client => {
+      const principalId=await this.activePrincipalId(principal);
+      return !!principalId && !!await platformAdministratorProof(client,principalId,actingSubject);
+    });
   }
 
   async canManageMedia(principal: VerifiedPrincipal, actingSubject: string): Promise<boolean> {
@@ -933,7 +935,7 @@ export class AccessAdmissionRegistry {
   async activePrincipalId(principal: VerifiedPrincipal): Promise<string | null> {
     // Autocommit holds the recovery row lock through the whole statement. No
     // authority result survives this call; workRead repeats it before delivery.
-    const row = (await this.pool.query<{ open: boolean; id: string | null }>(`WITH fence AS MATERIALIZED (
+    const row = (await (accessClient(this.pool) ?? this.pool).query<{ open: boolean; id: string | null }>(`WITH fence AS MATERIALIZED (
       SELECT open FROM access.recovery_fence WHERE id FOR SHARE
     ) SELECT fence.open, p.id FROM fence LEFT JOIN access.principal p
       ON p.account_issuer = $1 AND p.account_subject = $2 AND p.active`,
@@ -1998,26 +2000,36 @@ export class AccessAdmissionRegistry {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(admissionId)) {
       throw new AdmissionDenied('unknown admission');
     }
-    const client = await admissionClient(this.pool);
-    try {
-      await client.query('BEGIN');
-      await client.query("SET LOCAL lock_timeout = '2s'");
-      await client.query("SET LOCAL statement_timeout = '2s'");
-      const result = await client.query<{ acting_subject: unknown }>(
-        'SELECT acting_subject FROM access.admission WHERE id = $1::uuid LIMIT 1', [admissionId]);
-      await client.query('COMMIT');
-      const subject = result.rows[0]?.acting_subject;
-      if (result.rows.length !== 1 || typeof subject !== 'string') {
-        throw new AdmissionDenied('unknown admission');
+    const borrowed = accessClient(this.pool);
+    return withAccessClient(this.pool, async client => {
+      const ownsTransaction = !borrowed || !await inExplicitTransaction(client);
+      let parentTimeout: string | undefined;
+      try {
+        if (ownsTransaction) await client.query('BEGIN');
+        else parentTimeout = (await client.query<{ timeout: string }>(
+          "SELECT current_setting('statement_timeout') AS timeout")).rows[0]!.timeout;
+        if (ownsTransaction) await client.query("SET LOCAL lock_timeout = '2s'");
+        await client.query("SET LOCAL statement_timeout = '2s'");
+        const result = await client.query<{ acting_subject: unknown }>(
+          'SELECT acting_subject FROM access.admission WHERE id = $1::uuid LIMIT 1', [admissionId]);
+        if (ownsTransaction) await client.query('COMMIT');
+        const subject = result.rows[0]?.acting_subject;
+        if (result.rows.length !== 1 || typeof subject !== 'string') {
+          throw new AdmissionDenied('unknown admission');
+        }
+        return subject;
+      } catch (error) {
+        if (ownsTransaction) await rollback(client);
+        if (error instanceof AdmissionDenied || error instanceof AdmissionUnavailable) throw error;
+        throw admissionError(error);
+      } finally {
+        if (parentTimeout !== undefined) await client.query(
+          "SELECT set_config('statement_timeout', $1, true)", [parentTimeout]).catch(() => {});
       }
-      return subject;
-    } catch (error) {
-      await rollback(client);
+    }, borrowed).catch(error => {
       if (error instanceof AdmissionDenied || error instanceof AdmissionUnavailable) throw error;
       throw admissionError(error);
-    } finally {
-      client.release();
-    }
+    });
   }
 
   async listUnsealedPrincipal(principalId: string, limit = 100): Promise<RegisteredAdmission[]> {

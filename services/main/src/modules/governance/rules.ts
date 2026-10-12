@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import { accessClient } from '../access/topology-control.ts';
 import { t } from 'elysia';
 import { Value } from 'typebox/value';
 import { checkedCommunityRules, communityRule, legacyRuleText, localizedCommunityRule,
@@ -110,7 +111,7 @@ export class GovernanceRules implements RuleBasis {
       throw new GovernanceInvalid('Invalid Realm header rules');
     }
     const row = (
-      await this.pool.query<{
+      await (accessClient(this.pool) ?? this.pool).query<{
         open: boolean
         document: unknown
         heads: { ref: string; revision: string; digest: string }[]
@@ -160,7 +161,7 @@ export class GovernanceRules implements RuleBasis {
    * governance documents may contain private material and never fall through.
    * Localized maps use the existing Realm profile schema and read-side fallback. */
   async publishedRealmRules(realm: string, authorizedRealmRead = false) {
-    const row = (await this.pool.query<{ open: boolean; document: unknown }>(`SELECT f.open,r.document
+    const row = (await (accessClient(this.pool) ?? this.pool).query<{ open: boolean; document: unknown }>(`SELECT f.open,r.document
       FROM access.recovery_fence f LEFT JOIN access.governance_rule_head h
         ON h.ref = $1 AND h.scope_id = $2
       LEFT JOIN access.governance_rule_revision r ON r.ref = h.ref AND r.revision = h.revision

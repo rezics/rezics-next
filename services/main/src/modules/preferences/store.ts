@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import { defaultNamePreferencesProjection, type NamePreferencesProjection } from '../search/name-preferences.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
-import { agentPattern, controlRead, controlTransaction, ControlConflict, ControlDenied,
+import { accessClient, agentPattern, controlRead, controlTransaction, ControlConflict, ControlDenied,
   ControlInvalid, ControlStale, ControlUnavailable, requirePrincipal } from '../access/topology-control.ts';
 import { baselineMemberProof, BASELINE_MEMBER_POLICY } from '../access/baseline.ts';
 import { followPrincipal } from '../follows/authority.ts';
@@ -274,7 +274,7 @@ export class PersonPreferencesStore {
     if (agents.length > PERSON_PREFERENCES_COST.nameOwners || new Set(agents).size !== agents.length
       || agents.some(agent => !agentPattern.test(agent))) throw new ControlInvalid('Name owner batch exceeds budget');
     if (!agents.length) return new Set();
-    const rows = (await this.pool.query<{ agent: string; open: boolean; visible: boolean }>(`
+    const rows = (await (accessClient(this.pool) ?? this.pool).query<{ agent: string; open: boolean; visible: boolean }>(`
       WITH fence AS MATERIALIZED (SELECT open FROM access.recovery_fence WHERE id LIMIT 1 FOR SHARE)
       SELECT * FROM (${nameOwnerPolicySql(1, 2, 3, 4)}) policy`,
     [agents, principal?.issuer ?? null, principal?.subject ?? null, BASELINE_MEMBER_POLICY])).rows;

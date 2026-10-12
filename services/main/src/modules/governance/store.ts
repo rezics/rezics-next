@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
+import { withAccessClient } from '../access/topology-control.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { platformAdministratorProof } from '../access/platform-administrator.ts';
 import { decisionOutcomes, enforcementEffects, GLOBAL_CONTEXT, governanceComponents, governanceOwners,
@@ -266,7 +267,7 @@ export class GovernanceStore {
       const fence = await client.query<{ open: boolean }>(
         'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
       if (fence.rows[0]?.open !== true) throw new GovernanceUnavailable('Access is held for recovery');
-      const result = await work(client);
+      const result = await withAccessClient(this.pool, work, client);
       await client.query('COMMIT');
       return result;
     } catch (error) {
@@ -1599,7 +1600,7 @@ export class GovernanceStore {
         WHERE owner = 'graph' AND resource = ANY($1::text[]) AND component = ANY($2::text[])
           AND effect = 'publication' AND state = 'restricted' LIMIT 1`, [unique, components]);
       dispatching = true;
-      const result = await dispatch(restricted.rowCount === 0);
+      const result = await withAccessClient(this.pool, () => dispatch(restricted.rowCount === 0), client);
       dispatching = false;
       await client.query('COMMIT');
       return result;

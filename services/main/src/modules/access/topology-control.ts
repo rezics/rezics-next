@@ -33,7 +33,7 @@ export function withAccessClient<T>(pool: Pool, work: (client: PoolClient) => Pr
   })).finally(() => { scope.emitDestroy(); });
 }
 
-async function inExplicitTransaction(client: PoolClient): Promise<boolean> {
+export async function inExplicitTransaction(client: PoolClient): Promise<boolean> {
   // Two reads share an id only inside an explicit transaction. An idle
   // connection commits each statement and returns different ids.
   const id = async () => (await client.query<{ id: string }>('SELECT txid_current()::text AS id')).rows[0]?.id;
