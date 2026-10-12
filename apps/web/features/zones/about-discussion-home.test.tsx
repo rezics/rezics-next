@@ -1,5 +1,6 @@
 import { beforeEach, expect, mock, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
+import { direction } from '@rezics/main/language';
 import { cloneElement, createElement, isValidElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import * as reads from '../realm/read.ts';
@@ -69,7 +70,7 @@ beforeEach(() => {
     presentation: { profile: 'zone-presentation-v2', preset: 'clean', tokens: fictionZone('en').tokens,
       modules: [], slides: [], navigation: [] },
     navigation: [{ occurrence: 'guide', segment: 'guide', target: zone,
-      name: { value: 'Harbor field guide', language: 'en', direction: 'ltr' } }],
+      name: { value: 'Harbor field guide', language: 'en', direction: direction('en', 'Harbor field guide') } }],
     moduleData: [], slideMedia: [], home: null,
   } as unknown as ZonePresentationRead;
   currentView = {
