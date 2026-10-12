@@ -17,7 +17,7 @@ test('ordinary Concept, Agent and Space reports confirm disclosure receipts and 
   const label = `Graph moderation ${randomUUID()}`;
   const stack = await startMediaStack('graph-owner-disclosure', { profileCredits: true });
   try {
-    const editor = await stack.member(`${label} owner`), staff = await stack.member(`${label} staff`);
+    const editor = await stack.member(`graph-owner-${randomUUID()}`), staff = await stack.member(`graph-staff-${randomUUID()}`);
     await editor.grant('space:create:root', 'space.create');
     const space = await json<{ space: string }>(await editor.send('POST', '/v1/spaces', {
       profile: 'space-realm-v1', name: label, capabilities: ['realm'], actingSubject: editor.actor,

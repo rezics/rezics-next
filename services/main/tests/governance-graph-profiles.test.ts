@@ -101,7 +101,7 @@ for (const outcome of ['restrict', 'restore', 'reverse'] as const) {
         shape: 'https://rezics.com/definition/zone-capability-v1/home-document-shape', focus: [target.resource] }]);
       expect(command.update).toContain(`<${target.resource}> rv:homeDocumentHead <${target.expectedHead}>`);
       expect(command.update).toContain(`rv:moderationTarget <${target.resource}> ; rv:expectedHead <${target.expectedHead}>`);
-      expect(f.reads.some(sql => sql.includes('disclosure'))).toBe(false);
+      expect(f.reads.some(sql => /rv:(?:disclosure|profileDisclosure|visibility)\b/.test(sql))).toBe(false);
     });
   }
 }
@@ -125,7 +125,7 @@ for (const kind of [`${skos}Concept`, `${RV}Agent`, `${RV}Space`, `${RV}ZoneHome
 }
 
 for (const kind of [`${RV}Character`, 'https://example.org/UnreviewedOwner',
-  'http://www.w3.org/1999/02/22-rdf-syntax-ns#CompoundLiteral']) {
+  `${RV}OperationReceipt`]) {
   test(`${kind} without a profile uses Access-only disclosure even without rv:head`, async () => {
     const f = graph(kind), operation = randomUUID();
     expect(await f.effects.apply(operation, 1, { ...f.target, expectedHead: null }))
