@@ -19,23 +19,26 @@ const currentRevision = fixture.iri('ed2102');
 type Kind = NonNullable<EditionChoice['edition']>['kind'];
 
 /** Catalogue revision two must not replace the reader's independently saved revision one. */
-function preferenceFixture(kind: Kind, saved = true, failOnce = false, unavailableChoice = false) {
-  const releases: Release[] = kind === 'release' ? Array.from({ length: 21 }, (_, index) => ({
+function preferenceFixture(kind: Kind, saved = true, failOnce = false, unavailableChoice = false,
+  options: { count?: number; selected?: number; invalidated?: 'moved' | 'invalid' } = {}) {
+  const count = options.count ?? 21;
+  const selected = options.selected ?? 21;
+  const releases: Release[] = kind === 'release' ? Array.from({ length: count }, (_, index) => ({
     ...fixture.editions.releases[0]!, id: fixture.iri(`ed${index + 1}`),
-    revision: index === 20 ? currentRevision : fixture.iri(`ed${index + 1}02`),
-    title: { value: `Release ${index + 1}`, language: index === 20 ? 'pl' : 'en' },
-    contentLanguages: [index === 20 ? 'pl' : 'en'],
+    revision: index + 1 === selected ? currentRevision : fixture.iri(`ed${index + 1}02`),
+    title: { value: `Release ${index + 1}`, language: index + 1 === selected ? 'pl' : 'en' },
+    contentLanguages: [index + 1 === selected ? 'pl' : 'en'],
   })) : [];
-  const realizations: Realization[] = kind === 'realization' ? Array.from({ length: 21 }, (_, index) => ({
+  const realizations: Realization[] = kind === 'realization' ? Array.from({ length: count }, (_, index) => ({
     ...fixture.editions.realizations[1]!, id: fixture.iri(`ed${index + 1}`),
-    revision: index === 20 ? currentRevision : fixture.iri(`ed${index + 1}02`),
-    language: index === 20 ? 'pl' : 'en',
+    revision: index + 1 === selected ? currentRevision : fixture.iri(`ed${index + 1}02`),
+    language: index + 1 === selected ? 'pl' : 'en',
   })) : [];
   const main = createMemoryMain({ editions: { releases, realizations, more: false }, summaries: {
     en: { ...fixture.caughtUpSummary, resource: work, language: 'en' },
     pl: { ...fixture.caughtUpSummary, resource: work, language: 'pl' },
   } });
-  const edition: NonNullable<EditionChoice['edition']> = { kind, resource: fixture.iri('ed21'), revision: savedRevision };
+  const edition: NonNullable<EditionChoice['edition']> = { kind, resource: fixture.iri(`ed${selected}`), revision: savedRevision };
   const initial: EditionPreference = { work, language: saved ? 'pl' : 'en', edition: saved ? edition : null, version: 1 };
   main.preferences.set(work, initial);
   const reads: (EditionPageQuery | undefined)[] = [];
@@ -43,6 +46,7 @@ function preferenceFixture(kind: Kind, saved = true, failOnce = false, unavailab
   const preferenceReads: string[] = [];
   const editionReads: { work: string; choice: NonNullable<EditionChoice['edition']> }[] = [];
   let failures = failOnce ? 1 : 0;
+  let firstPages = 0;
   const base = memoryTracking(main);
   const api: TrackingApi = {
     ...base,
@@ -63,12 +67,16 @@ function preferenceFixture(kind: Kind, saved = true, failOnce = false, unavailab
     async editions(_resource, page) {
       reads.push(page);
       const cursor = page?.releases ?? page?.realizations;
+      if (!cursor) firstPages++;
+      if (cursor && options.invalidated && !cursor.startsWith('renewed:')) {
+        return { ok: false, failure: options.invalidated };
+      }
       if (cursor && failures > 0) {
         failures -= 1;
         return { ok: false, failure: 'unavailable' };
       }
-      const start = cursor ? Number(cursor) : 0;
-      const next = start === 0 ? '20' : null;
+      const start = cursor ? Number(cursor.split(':').at(-1)) : 0;
+      const next = start + 20 < count ? `${options.invalidated && firstPages > 1 ? 'renewed:' : ''}${start + 20}` : null;
       const data: Editions = { releases: releases.slice(start, start + 20),
         realizations: realizations.slice(start, start + 20),
         releasesCursor: kind === 'release' ? next : null,
@@ -76,7 +84,69 @@ function preferenceFixture(kind: Kind, saved = true, failOnce = false, unavailab
       return { ok: true, data };
     },
   };
-  return { main, api, kind, edition, reads, writes, preferenceReads, editionReads, unavailableChoice };
+  return { main, api, kind, edition, reads, writes, preferenceReads, editionReads, unavailableChoice, selected };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(done => { resolve = done; });
+  return { promise, resolve };
+}
+
+function navigationFixture(kind: Kind) {
+  const source = preferenceFixture(kind);
+  const otherWork = fixture.iri('workb');
+  const otherChoice: NonNullable<EditionChoice['edition']> = {
+    kind, resource: fixture.iri('editionb'), revision: fixture.iri('revisionb'),
+  };
+  source.main.preferences.set(otherWork, { work: otherWork, language: 'de', edition: otherChoice, version: 7 });
+  const readEdition = source.api.edition;
+  const writePreference = source.api.setPreference;
+  const pending = deferred<Awaited<ReturnType<TrackingApi['setPreference']>>>();
+  let held: { work: string; version: number; choice: EditionChoice } | null = null;
+  const started: string[] = [];
+  source.api = { ...source.api,
+    async edition(resource, choice) {
+      if (resource !== otherWork) return readEdition(resource, choice);
+      return { ok: true, data: kind === 'release'
+        ? { ...fixture.editions.releases[0]!, id: otherChoice.resource, revision: otherChoice.revision,
+          title: { value: 'Release B', language: 'de' }, contentLanguages: ['de'],
+          coverage: fixture.editions.releases[0]!.coverage.map(item => ({ ...item, work: otherWork })) }
+        : { ...fixture.editions.realizations[1]!, id: otherChoice.resource, revision: otherChoice.revision,
+          work: otherWork, language: 'de' } };
+    },
+    async series(resource, language) {
+      return { ok: true, data: { ...fixture.caughtUpSummary, resource, language: language ?? 'en' } };
+    },
+    async setPreference(resource, version, choice) {
+      if (resource !== work) return writePreference(resource, version, choice);
+      held = { work: resource, version, choice };
+      started.push(resource);
+      return pending.promise;
+    },
+  };
+  return { source, otherWork, otherChoice, started,
+    async complete() {
+      if (!held) throw new Error('No save is pending.');
+      pending.resolve(await writePreference(held.work, held.version, held.choice));
+    },
+  };
+}
+
+function pendingContinuationFixture(kind: Kind) {
+  const source = preferenceFixture(kind);
+  const read = source.api.editions;
+  const pending = deferred<Awaited<ReturnType<TrackingApi['editions']>>>();
+  let held = false;
+  source.api = { ...source.api, async editions(resource, page) {
+    if (page && !held) {
+      held = true;
+      source.reads.push(page);
+      return pending.promise;
+    }
+    return read(resource, page);
+  } };
+  return { source, complete: () => pending.resolve({ ok: false, failure: 'moved' }) };
 }
 
 function languageProgressFixture(state: 'loading' | 'unavailable') {
@@ -92,21 +162,28 @@ function languageProgressFixture(state: 'loading' | 'unavailable') {
   return source;
 }
 
-interface Args { surface: 'work' | 'series'; source: ReturnType<typeof preferenceFixture> }
+interface Args {
+  surface: 'work' | 'series'; source: ReturnType<typeof preferenceFixture>;
+  navigation?: ReturnType<typeof navigationFixture>;
+  pendingContinuation?: ReturnType<typeof pendingContinuationFixture>;
+}
 
 /** Reopening discards the catalogue page while keeping only what Main persisted. */
-function EditionPreference({ surface, source }: Args) {
+function EditionPreference({ surface, source, navigation }: Args) {
   const [actions] = useState(() => ({ ...memoryReader(source.main), tracking: source.api }));
   const [opening, setOpening] = useState(0);
+  const [selectedWork, setSelectedWork] = useState(work);
   return <ReaderActionsProvider signedIn signInHref="/auth/start" actions={actions}>
     <div className="mx-auto grid max-w-2xl gap-4 px-4 py-8">
       <button type="button" className="justify-self-start text-sm underline" onClick={() => setOpening(value => value + 1)}>
         Reopen choice
       </button>
+      {navigation ? <button type="button" className="justify-self-start text-sm underline"
+        onClick={() => setSelectedWork(navigation.otherWork)}>Switch to Work B</button> : null}
       {surface === 'work' ? <section key={opening} aria-label="Your edition">
         <h2 className="mb-3 font-semibold text-lg">Your edition</h2>
-        <YourEdition work={work} signInHref="/auth/start" locale="en" messages={workMessages.en} />
-      </section> : <SeriesProgressPanel key={opening} work={work} locale="en" />}
+        <YourEdition work={selectedWork} signInHref="/auth/start" locale="en" messages={workMessages.en} />
+      </section> : <SeriesProgressPanel key={opening} work={selectedWork} locale="en" />}
     </div>
   </ReaderActionsProvider>;
 }
@@ -120,7 +197,7 @@ async function choose(canvas: Scope, name: string, option: string) {
 const continuation = (source: Args['source']): EditionPageQuery => source.kind === 'release'
   ? { releases: '20' } : { realizations: '20' };
 const laterName = (source: Args['source']) => source.kind === 'release'
-  ? 'Release 21 · paperback · Polish · Yen Press · 2014' : 'Polish translation';
+  ? `Release ${source.selected} · paperback · Polish · Yen Press · 2014` : 'Polish translation';
 
 async function saveUnchanged(canvas: Scope, source: Args['source'], count: number) {
   await userEvent.click(canvas.getByRole('button', { name: t.savePreference }));
@@ -151,7 +228,9 @@ async function unchangedChoice(canvasElement: HTMLElement, source: Args['source'
   await userEvent.click(canvas.getByRole('button', { name: 'Reopen choice' }));
   await canvas.findByRole('combobox', { name: t.edition });
   await expect(source.preferenceReads).toEqual([work, work]);
-  await expect(source.editionReads).toEqual([{ work, choice: source.edition }, { work, choice: source.edition }]);
+  await expect(source.editionReads.length).toBeGreaterThanOrEqual(2);
+  await expect(source.editionReads.every(read => read.work === work && read.choice.resource === source.edition.resource
+    && read.choice.revision === source.edition.revision)).toBe(true);
   await saveUnchanged(canvas, source, 3);
 
   await choose(canvas, t.edition, t.anyEdition);
@@ -286,4 +365,130 @@ export const SeriesLanguageUnavailable: Story = {
     await expect(canvas.getByRole('alert')).toHaveTextContent(t.seriesUnavailable);
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   },
+};
+
+async function lateSave(canvasElement: HTMLElement, navigation: ReturnType<typeof navigationFixture>, surface: Args['surface']) {
+  const canvas = within(canvasElement);
+  await canvas.findByRole('combobox', { name: t.edition });
+  await userEvent.click(canvas.getByRole('button', { name: t.savePreference }));
+  await waitFor(() => expect(navigation.started).toEqual([work]));
+  await userEvent.click(canvas.getByRole('button', { name: 'Switch to Work B' }));
+  await waitFor(() => expect(canvas.getByRole('combobox', { name: t.language })).toHaveTextContent('German'));
+  const name = navigation.otherChoice.kind === 'release'
+    ? 'Release B · paperback · German · Yen Press · 2014' : 'German translation';
+  await waitFor(() => expect(canvas.getByRole('combobox', { name: t.edition })).toHaveTextContent(name));
+  await navigation.complete();
+  await expect(canvas.getByRole('combobox', { name: t.edition })).toHaveTextContent(name);
+  await expect(canvas.getByRole('combobox', { name: t.language })).toHaveTextContent('German');
+  if (surface === 'series') await expect(canvas.getByRole('region', { name: t.seriesProgress })).toBeVisible();
+  await userEvent.click(canvas.getByRole('button', { name: t.savePreference }));
+  await waitFor(() => expect(navigation.source.main.preferences.get(navigation.otherWork)).toEqual({
+    work: navigation.otherWork, language: 'de', edition: navigation.otherChoice, version: 8,
+  }));
+  await expect(canvas.getByRole('status')).toHaveTextContent(t.preferenceSaved);
+}
+
+async function invalidatedContinuation(canvasElement: HTMLElement, source: Args['source']) {
+  const canvas = within(canvasElement);
+  await canvas.findByRole('combobox', { name: t.edition });
+  await userEvent.click(canvas.getByRole('button', { name: t.moreEditions }));
+  await expect(await canvas.findByRole('alert')).toHaveTextContent(t.moreEditionsFailed);
+  await expect(canvas.getByRole('combobox', { name: t.edition })).toHaveTextContent(laterName(source));
+  await userEvent.click(canvas.getByRole('button', { name: t.retry }));
+  await waitFor(() => expect(source.reads).toHaveLength(3));
+  await expect(source.reads[2]).toBeUndefined();
+  await userEvent.click(await canvas.findByRole('button', { name: t.moreEditions }));
+  await waitFor(() => expect(canvas.queryByRole('button', { name: t.moreEditions })).toBeNull());
+  await expect(source.reads).toEqual([undefined, continuation(source), undefined,
+    source.kind === 'release' ? { releases: 'renewed:20' } : { realizations: 'renewed:20' }]);
+  await saveUnchanged(canvas, source, 1);
+  await expect(canvas.getByRole('combobox', { name: t.edition })).toHaveTextContent(laterName(source));
+}
+
+async function thirdPageLanguage(canvasElement: HTMLElement, source: Args['source']) {
+  const canvas = within(canvasElement);
+  await canvas.findByRole('combobox', { name: t.edition });
+  await userEvent.click(canvas.getByRole('button', { name: t.moreEditions }));
+  await waitFor(() => expect(source.reads).toHaveLength(2));
+  await userEvent.click(canvas.getByRole('button', { name: t.moreEditions }));
+  await waitFor(() => expect(canvas.queryByRole('button', { name: t.moreEditions })).toBeNull());
+  await expect(source.reads).toEqual([undefined, continuation(source),
+    source.kind === 'release' ? { releases: '40' } : { realizations: '40' }]);
+  await choose(canvas, t.language, 'Polish');
+  await choose(canvas, t.edition, laterName(source));
+  await userEvent.click(canvas.getByRole('button', { name: t.savePreference }));
+  await waitFor(() => expect(source.main.preferences.get(work)).toEqual({ work, language: 'pl',
+    edition: { ...source.edition, revision: currentRevision }, version: 2 }));
+  await expect(canvas.getByRole('status')).toHaveTextContent(t.preferenceSaved);
+}
+
+async function oldVersionContinuation(canvasElement: HTMLElement, pending: ReturnType<typeof pendingContinuationFixture>) {
+  const canvas = within(canvasElement);
+  await canvas.findByRole('combobox', { name: t.edition });
+  await userEvent.click(canvas.getByRole('button', { name: t.moreEditions }));
+  await waitFor(() => expect(pending.source.reads).toHaveLength(2));
+  await saveUnchanged(canvas, pending.source, 1);
+  pending.complete();
+  await waitFor(() => expect(canvas.getByRole('button', { name: t.moreEditions })).toBeEnabled());
+  await expect(canvas.queryByRole('alert')).toBeNull();
+  await userEvent.click(canvas.getByRole('button', { name: t.moreEditions }));
+  await waitFor(() => expect(canvas.queryByRole('button', { name: t.moreEditions })).toBeNull());
+  await expect(pending.source.reads).toEqual([undefined, continuation(pending.source), continuation(pending.source)]);
+  await saveUnchanged(canvas, pending.source, 2);
+}
+
+const workNavigation = navigationFixture('release');
+export const WorkLateSaveStaysWithItsWork: Story = {
+  args: { surface: 'work', source: workNavigation.source, navigation: workNavigation },
+  async play({ canvasElement, args }) { await lateSave(canvasElement, args.navigation!, 'work'); },
+};
+
+const seriesNavigation = navigationFixture('realization');
+export const SeriesLateSaveStaysWithItsWork: Story = {
+  args: { surface: 'series', source: seriesNavigation.source, navigation: seriesNavigation },
+  async play({ canvasElement, args }) { await lateSave(canvasElement, args.navigation!, 'series'); },
+};
+
+export const WorkMovedCursorRestarts: Story = {
+  args: { surface: 'work', source: preferenceFixture('release', true, false, false, { invalidated: 'moved' }) },
+  async play({ canvasElement, args }) { await invalidatedContinuation(canvasElement, args.source); },
+};
+
+export const SeriesUnknownCursorRestarts: Story = {
+  args: { surface: 'series', source: preferenceFixture('realization', true, false, false, { invalidated: 'invalid' }) },
+  async play({ canvasElement, args }) { await invalidatedContinuation(canvasElement, args.source); },
+};
+
+export const SeriesMovedCursorRestarts: Story = {
+  args: { surface: 'series', source: preferenceFixture('realization', true, false, false, { invalidated: 'moved' }) },
+  async play({ canvasElement, args }) { await invalidatedContinuation(canvasElement, args.source); },
+};
+
+export const WorkUnknownCursorRestarts: Story = {
+  args: { surface: 'work', source: preferenceFixture('release', true, false, false, { invalidated: 'invalid' }) },
+  async play({ canvasElement, args }) { await invalidatedContinuation(canvasElement, args.source); },
+};
+
+export const WorkThirdPageLanguage: Story = {
+  args: { surface: 'work', source: preferenceFixture('release', false, false, false, { count: 45, selected: 41 }) },
+  globals: { viewport: { value: 'phone' } },
+  async play({ canvasElement, args }) { await thirdPageLanguage(canvasElement, args.source); },
+};
+
+export const SeriesThirdPageLanguage: Story = {
+  args: { surface: 'series', source: preferenceFixture('realization', false, false, false, { count: 45, selected: 41 }) },
+  globals: { viewport: { value: 'phone' } },
+  async play({ canvasElement, args }) { await thirdPageLanguage(canvasElement, args.source); },
+};
+
+const workPending = pendingContinuationFixture('release');
+export const WorkOldVersionContinuationIsDropped: Story = {
+  args: { surface: 'work', source: workPending.source, pendingContinuation: workPending },
+  async play({ canvasElement, args }) { await oldVersionContinuation(canvasElement, args.pendingContinuation!); },
+};
+
+const seriesPending = pendingContinuationFixture('realization');
+export const SeriesOldVersionContinuationIsDropped: Story = {
+  args: { surface: 'series', source: seriesPending.source, pendingContinuation: seriesPending },
+  async play({ canvasElement, args }) { await oldVersionContinuation(canvasElement, args.pendingContinuation!); },
 };

@@ -62,39 +62,68 @@ export function reasonText(reason: NonNullable<SeriesSummary['next']>['reason'],
     : reason === 'awaiting_chosen_language' ? t.reasonAwaiting : t.reasonOptional;
 }
 
+/** Async results belong to the mounted Work and the preference version that started them. */
+export function usePreferenceSubject(work: string, api: TrackingApi | null, version: number) {
+  const latest = useRef({ work, api, version });
+  if (latest.current.work !== work || latest.current.api !== api || latest.current.version !== version) {
+    latest.current = { work, api, version };
+  }
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+  const owner = latest.current;
+  return {
+    capture: () => owner,
+    applies: (subject: typeof latest.current) => mounted.current && subject === latest.current,
+  };
+}
+
 /** The series' language and edition, saved against the version read; another device's change is shown, not overwritten. */
 export function PreferenceForm({ work, preference, language, editions, api, locale, t, onSaved, onLanguage }: {
   work: string; preference: EditionPreference | null; language: string; editions: Editions | null; api: TrackingApi;
   locale: UiLocale; t: Copy; onSaved: (preference: EditionPreference | null) => void; onLanguage: (language: string) => void;
 }) {
+  const subject = usePreferenceSubject(work, api, preference?.version ?? 0);
   // The saved resource and revision are a choice, not a lookup into the current catalogue page.
   const [edition, setEdition] = useState<EditionChoice['edition']>(preference?.edition ?? null);
   const [listed, setListed] = useState(editions);
   const [selectedDetail, setSelectedDetail] = useState<Realization | Release | null>(null);
   const [moreFailed, setMoreFailed] = useState(!editions);
   const [moreBusy, setMoreBusy] = useState(false);
+  const [restartEditions, setRestartEditions] = useState(false);
   const generation = useRef(0);
   const readingMore = useRef(false);
   const [busy, setBusy] = useState(false);
+  const writing = useRef(false);
   const [note, setNote] = useState<'saved' | 'failed' | null>(null);
   const [stale, setStale] = useState<{ current: EditionPreference | null; mine: EditionChoice } | null>(null);
-  useEffect(() => { setEdition(preference?.edition ?? null); }, [preference]);
+  useEffect(() => {
+    setEdition(preference?.edition ?? null);
+    writing.current = false;
+    readingMore.current = false;
+    setBusy(false);
+    setMoreBusy(false);
+  }, [preference?.version, work, api]);
   useEffect(() => {
     const ticket = ++generation.current;
     setListed(editions);
     setMoreFailed(!editions);
+    setRestartEditions(false);
     setMoreBusy(false);
     readingMore.current = false;
     return () => { if (generation.current === ticket) generation.current++; };
   }, [editions, work, api]);
   useEffect(() => {
     let current = true;
+    const ticket = subject.capture();
     setSelectedDetail(null);
     if (preference?.edition) void api.edition(work, preference.edition).then(read => {
-      if (current && read.ok) setSelectedDetail(read.data);
+      if (current && subject.applies(ticket) && read.ok) setSelectedDetail(read.data);
     });
     return () => { current = false; };
-  }, [api, work, preference?.edition]);
+  }, [api, work, preference?.edition, preference?.version]);
   const realizations = [...(listed?.realizations ?? [])];
   const releases = [...(listed?.releases ?? [])];
   if (selectedDetail && 'contentLanguages' in selectedDetail) {
@@ -117,25 +146,28 @@ export function PreferenceForm({ work, preference, language, editions, api, loca
 
   async function moreEditions() {
     if (readingMore.current) return;
-    const next = listed ? editionRequest(listed) : null;
-    if (listed && !next) return;
+    const next = listed && !restartEditions ? editionRequest(listed) : null;
+    if (listed && !restartEditions && !next) return;
     const ticket = generation.current;
+    const owner = subject.capture();
     readingMore.current = true;
     setMoreBusy(true);
     setMoreFailed(false);
     try {
       const read = await api.editions(work, next?.query);
-      if (ticket !== generation.current) return;
+      if (ticket !== generation.current || !subject.applies(owner)) return;
       if (listed && next) {
         const applied = applyEditionPage(listed, read, next.requested);
         setListed(applied.editions);
         setMoreFailed(applied.retry);
+        setRestartEditions(applied.restart);
       } else {
         if (read.ok) setListed(read.data);
         setMoreFailed(!read.ok);
+        setRestartEditions(!read.ok);
       }
     } finally {
-      if (ticket === generation.current) {
+      if (ticket === generation.current && subject.applies(owner)) {
         readingMore.current = false;
         setMoreBusy(false);
       }
@@ -143,9 +175,14 @@ export function PreferenceForm({ work, preference, language, editions, api, loca
   }
 
   async function save(choice: EditionChoice, version: number) {
+    if (writing.current) return;
+    const owner = subject.capture();
+    writing.current = true;
     setBusy(true);
     setNote(null);
     const written = await api.setPreference(work, version, choice);
+    if (!subject.applies(owner)) return;
+    writing.current = false;
     setBusy(false);
     if (written.ok) { setStale(null); setNote('saved'); onSaved(written.data); }
     else if (written.failure === 'stale') setStale({ current: written.current, mine: written.submitted });
@@ -224,7 +261,7 @@ function Correspondences({ offers, marked, counterparts, failed, onMark, t }: {
 export const EDITION_SAVED = 'rezics:edition-preference-saved';
 
 /** What the panel reads once, before it asks for progress: the choice that names the language, editions, correspondences. */
-interface Setup { work: string; preference: EditionPreference | null; editions: Editions | null; counterparts: Counterpart[] }
+interface Setup { work: string; api: TrackingApi; preference: EditionPreference | null; editions: Editions | null; counterparts: Counterpart[] }
 type Progress = { work: string; language: string; value: ProgressSummary }
   | { work: string; language: string; failure: ReadFailure; previous: ProgressSummary | null };
 
@@ -261,17 +298,20 @@ function SeriesPartsPanel({ work, locale, className, preferenceForm = true }: {
   const [setup, setSetup] = useState<Setup | null>(null);
   // The preference names the language; without one the interface language stands until the reader chooses.
   const [language, setLanguage] = useState<string>(locale);
+  const subject = usePreferenceSubject(work, api,
+    setup?.work === work && setup.api === api ? setup.preference?.version ?? 0 : 0);
   const [progress, setProgress] = useState<Progress | null>(null);
 
   useEffect(() => {
     if (!api) return;
     let current = true;
+    const owner = subject.capture();
     void Promise.all([api.preference(work), api.editions(work), api.relations(work), api.definition('correspondence-equivalent')])
       .then(([saved, offered, relations, equivalent]) => {
-        if (!current) return;
+        if (!current || !subject.applies(owner)) return;
         const preference = saved.ok ? saved.data : null;
         setLanguage(preference?.language ?? locale);
-        setSetup({ work, preference, editions: offered.ok ? offered.data : null,
+        setSetup({ work, api, preference, editions: offered.ok ? offered.data : null,
           counterparts: relations.ok && equivalent.ok ? equivalentCounterparts(relations.data, equivalent.data.definition) : [] });
       });
     return () => { current = false; };
@@ -281,12 +321,17 @@ function SeriesPartsPanel({ work, locale, className, preferenceForm = true }: {
     const saved = (event: Event) => {
       const detail = (event as CustomEvent<{ work: string; preference: EditionPreference | null }>).detail;
       if (detail.work !== work) return;
-      setSetup(current => current ? { ...current, preference: detail.preference } : current);
+      const owner = subject.capture();
+      if (!api || owner.work !== work || !subject.applies(owner) || detail.preference
+        && (detail.preference.work !== work || detail.preference.version < owner.version)) return;
+      setSetup(current => current?.work === work && current.api === api
+        ? { ...current, preference: detail.preference }
+        : { work, api, preference: detail.preference, editions: null, counterparts: [] });
       if (detail.preference) setLanguage(detail.preference.language);
     };
     window.addEventListener(EDITION_SAVED, saved);
     return () => window.removeEventListener(EDITION_SAVED, saved);
-  }, [work]);
+  }, [work, api, setup?.preference?.version]);
 
   const preference = setup?.preference ?? null;
   const headingId = useId();
@@ -296,18 +341,22 @@ function SeriesPartsPanel({ work, locale, className, preferenceForm = true }: {
   const [markFailed, setMarkFailed] = useState<string | null>(null);
   // Kept on screen while the write is out: the shelf it changes would otherwise withdraw the offer first.
   const [marking, setMarking] = useState(false);
+  useEffect(() => { setMarked(new Set()); }, [work, api]);
+  useEffect(() => { setMarking(false); setMarkFailed(null); }, [work, api, preference?.version]);
   useEffect(() => {
-    if (!api || !setup || setup.work !== work) return;
+    if (!api || !setup || setup.work !== work || setup.api !== api) return;
     let current = true;
+    const owner = subject.capture();
     void api.series(work, language).then(result => {
-      if (current) setProgress(held => result.ok ? { work, language, value: result.data }
+      if (current && subject.applies(owner)) setProgress(held => result.ok ? { work, language, value: result.data }
         : { work, language, failure: result.failure,
           previous: held?.work === work ? ('value' in held ? held.value : held.previous) : null });
     });
     return () => { current = false; };
   }, [api, work, language, setup, ownStatus]);
 
-  if (!api || !setup || setup.work !== work || !progress || progress.work !== work) return null;
+  if (!api || !setup || setup.work !== work || setup.api !== api || !progress || progress.work !== work) return null;
+  const owner = subject.capture();
   const ready = actions.kind === 'ready' ? actions : null;
   const pending = progress.language !== language;
   // Keep the chooser mounted while its new language's progress is read, including pages already loaded.
@@ -325,9 +374,11 @@ function SeriesPartsPanel({ work, locale, className, preferenceForm = true }: {
   const silent = failure === 'missing' || failure === 'sign-in';
   if (!hasParts && !offers.length && !marked.size && !marking && (!failure || silent)) return null;
   async function mark(counterpart: Counterpart) {
+    const owner = subject.capture();
     setMarkFailed(null);
     setMarking(true);
     const written = await api!.start(counterpart.work, { state: 'finished' });
+    if (!subject.applies(owner)) return;
     setMarking(false);
     if (written.ok) setMarked(current => new Set([...current, counterpart.work]));
     else setMarkFailed(counterpart.work);
@@ -366,7 +417,11 @@ function SeriesPartsPanel({ work, locale, className, preferenceForm = true }: {
       <p className="text-muted-foreground text-xs">{t.preferenceNote}</p>
       <PreferenceForm key={work} work={work} preference={preference} language={language}
         editions={setup.editions} api={api} locale={locale} t={t}
-        onSaved={saved => setSetup({ ...setup, preference: saved })} onLanguage={setLanguage} />
+        onSaved={saved => {
+          if (!subject.applies(owner) || saved && saved.work !== work) return;
+          setSetup(current => current?.work === work && current.api === api && (current.preference?.version ?? 0) === owner.version
+            ? { ...current, preference: saved } : current);
+        }} onLanguage={setLanguage} />
     </div> : null}
     <Correspondences offers={offers} marked={marked} counterparts={counterparts} failed={markFailed} onMark={item => void mark(item)} t={t} />
   </section>;

@@ -29,9 +29,10 @@ export function editionContinuation(editions: Editions | null, failed: boolean):
  * A page that arrives is appended in its own order, without repeating an edition already shown.
  */
 export function applyEditionPage(current: Editions, read: Awaited<ReturnType<TrackingApi['editions']>>, requested: EditionPageRequest):
-  { editions: Editions; retry: boolean } {
-  if (!read.ok) return { editions: current, retry: true };
-  return { editions: appendEditionPage(current, read.data, requested), retry: false };
+  { editions: Editions; retry: boolean; restart: boolean } {
+  if (!read.ok) return { editions: current, retry: true,
+    restart: read.failure === 'moved' || read.failure === 'invalid' };
+  return { editions: appendEditionPage(current, read.data, requested), retry: false, restart: false };
 }
 
 /** The next page to ask for: only lists that still have a cursor. */
@@ -51,43 +52,65 @@ function useAttempts(work: string, api: TrackingApi, open: boolean) {
   const [editionsFailed, setEditionsFailed] = useState(false);
   const [moreFailed, setMoreFailed] = useState(false);
   const [moreBusy, setMoreBusy] = useState(false);
+  const [restartEditions, setRestartEditions] = useState(false);
   const generation = useRef(0);
   const readingMore = useRef(false);
+  const subject = useRef({ work, api });
+  if (subject.current.work !== work || subject.current.api !== api) subject.current = { work, api };
   const load = useCallback(async () => {
     const ticket = ++generation.current;
+    const owner = subject.current;
     setAttempts({ status: 'loading' });
     setMoreFailed(false);
     setMoreBusy(false);
+    setRestartEditions(false);
+    readingMore.current = false;
     const [read, offered] = await Promise.all([api.sessions(work), api.editions(work)]);
-    if (ticket !== generation.current) return;
+    if (ticket !== generation.current || owner !== subject.current) return;
     setAttempts(read.ok ? { status: 'ready', items: read.data.items, next: read.data.next } : { status: 'failed' });
     setEditions(offered.ok ? offered.data : null);
     setEditionsFailed(!offered.ok);
   }, [api, work]);
-  useEffect(() => { if (open) void load(); }, [open, load]);
+  useEffect(() => {
+    if (open) void load();
+    return () => { generation.current++; };
+  }, [open, load]);
   const more = async () => {
     if (attempts.status !== 'ready' || !attempts.next) return;
+    const ticket = generation.current;
+    const owner = subject.current;
     const read = await api.sessions(work, attempts.next);
+    if (ticket !== generation.current || owner !== subject.current) return;
     if (read.ok) setAttempts({ status: 'ready', items: [...attempts.items, ...read.data.items], next: read.data.next });
   };
   const moreEditions = async () => {
     if (!editions || readingMore.current) return;
-    const next = editionRequest(editions);
-    if (!next) return;
+    const next = restartEditions ? null : editionRequest(editions);
+    if (!restartEditions && !next) return;
     const ticket = generation.current;
+    const owner = subject.current;
     const held = editions;
     readingMore.current = true;
     setMoreBusy(true);
     setMoreFailed(false);
     try {
-      const read = await api.editions(work, next.query);
-      if (ticket !== generation.current) return;
-      const applied = applyEditionPage(held, read, next.requested);
-      setEditions(applied.editions);
-      setMoreFailed(applied.retry);
+      const read = await api.editions(work, next?.query);
+      if (ticket !== generation.current || owner !== subject.current) return;
+      if (next) {
+        const applied = applyEditionPage(held, read, next.requested);
+        setEditions(applied.editions);
+        setMoreFailed(applied.retry);
+        setRestartEditions(applied.restart);
+      } else {
+        if (read.ok) setEditions(read.data);
+        setMoreFailed(!read.ok);
+        setRestartEditions(!read.ok);
+      }
     } finally {
-      readingMore.current = false;
-      setMoreBusy(false);
+      if (ticket === generation.current && owner === subject.current) {
+        readingMore.current = false;
+        setMoreBusy(false);
+      }
     }
   };
   /** An attempt as Main now holds it: replaced in place, or put first when it is new. */

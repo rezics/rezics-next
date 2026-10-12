@@ -6,12 +6,13 @@ import { useEffect, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { useReaderActions } from '../catalogue/reader-actions.tsx';
 import Link from '../shell/localized-link.tsx';
-import { EDITION_SAVED, PreferenceForm } from '../tracking/series-progress-panel.tsx';
+import { EDITION_SAVED, PreferenceForm, usePreferenceSubject } from '../tracking/series-progress-panel.tsx';
 import { copyOf } from '../tracking/messages.ts';
+import type { TrackingApi } from '../tracking/api.ts';
 import type { EditionPreference, Editions } from '../tracking/types.ts';
 import type { WorkPageMessages } from './messages.ts';
 
-interface Setup { work: string; preference: EditionPreference | null; editions: Editions | null }
+interface Setup { work: string; api: TrackingApi; preference: EditionPreference | null; editions: Editions | null }
 
 /**
  * The reader's private edition choice for this Work, where it is made: the language and the realization or
@@ -29,14 +30,17 @@ export function YourEdition({ work, signInHref, locale, messages }: {
   const router = useRouter();
   const [setup, setSetup] = useState<Setup | null>(null);
   const [language, setLanguage] = useState<string>(locale);
+  const subject = usePreferenceSubject(work, api,
+    setup?.work === work && setup.api === api ? setup.preference?.version ?? 0 : 0);
   useEffect(() => {
     if (!api) return;
     let current = true;
+    const owner = subject.capture();
     void Promise.all([api.preference(work), api.editions(work)]).then(([saved, offered]) => {
-      if (!current) return;
+      if (!current || !subject.applies(owner)) return;
       const preference = saved.ok ? saved.data : null;
       setLanguage(preference?.language ?? locale);
-      setSetup({ work, preference, editions: offered.ok ? offered.data : null });
+      setSetup({ work, api, preference, editions: offered.ok ? offered.data : null });
     });
     return () => { current = false; };
   }, [api, work, locale]);
@@ -44,12 +48,15 @@ export function YourEdition({ work, signInHref, locale, messages }: {
     return <p className="text-muted-foreground text-sm">
       <Link href={signInHref} className="text-primary underline underline-offset-4 hover:no-underline">{t.signInForEdition}</Link></p>;
   }
-  if (!api || !setup || setup.work !== work) return null;
+  if (!api || !setup || setup.work !== work || setup.api !== api) return null;
+  const owner = subject.capture();
   return <div data-your-edition>
     <PreferenceForm key={work} work={work} preference={setup.preference} language={language} editions={setup.editions} api={api}
       locale={locale} t={copyOf(locale)} onLanguage={setLanguage}
       onSaved={preference => {
-        setSetup(current => current ? { ...current, preference } : current);
+        if (!subject.applies(owner) || preference && preference.work !== work) return;
+        setSetup(current => current?.work === work && current.api === api && (current.preference?.version ?? 0) === owner.version
+          ? { ...current, preference } : current);
         window.dispatchEvent(new CustomEvent(EDITION_SAVED, { detail: { work, preference } }));
         // The primary action and the status lines are read on the server; they follow the choice.
         router.refresh();

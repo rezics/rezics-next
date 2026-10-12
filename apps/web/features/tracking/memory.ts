@@ -102,15 +102,17 @@ export function memoryTracking(main: MemoryMain): TrackingApi {
       return { ok: true, data: next };
     },
     async editions() { return { ok: true, data: main.editions }; },
-    async edition(_work, choice) {
+    async edition(work, choice) {
       const found = choice.kind === 'realization'
         ? main.editions.realizations.find(item => item.id === choice.resource)
         : main.editions.releases.find(item => item.id === choice.resource);
-      return found ? { ok: true, data: found } : { ok: false, failure: 'missing' };
+      const belongs = found && ('work' in found ? found.work === work : found.coverage.some(item => item.work === work));
+      return belongs ? { ok: true, data: found } : { ok: false, failure: 'missing' };
     },
-    async series(_resource, language) {
+    async series(resource, language) {
       const found = (language && main.summaries[language]) || Object.values(main.summaries)[0];
-      return found ? { ok: true, data: typeof found === 'function' ? found() : found } : { ok: false, failure: 'missing' };
+      const summary = found ? typeof found === 'function' ? found() : found : null;
+      return summary?.resource === resource ? { ok: true, data: summary } : { ok: false, failure: 'missing' };
     },
     async relations() { return main.relations ? { ok: true, data: main.relations } : { ok: false, failure: 'missing' }; },
     async definition() { return { ok: true, data: { definition: equivalentDefinition } }; },
