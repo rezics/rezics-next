@@ -27,9 +27,12 @@ export class AccountHasOwnedAgents extends Error {
  * take Work, topology, principal, then the Agent locks in this same order. */
 export async function lockAccountDeletionTopology(client: PoolClient): Promise<void> {
   await client.query(`WITH work AS MATERIALIZED (
-    SELECT id FROM access.scope_gate WHERE id = 'work:create:root' FOR SHARE)
-    SELECT id FROM access.scope_gate WHERE id = 'access:representation-topology'
-      AND EXISTS (SELECT 1 FROM work) FOR UPDATE`);
+    SELECT id FROM access.scope_gate WHERE id = 'work:create:root' FOR SHARE),
+    topology AS MATERIALIZED (
+      SELECT id FROM access.scope_gate WHERE id = 'access:representation-topology'
+        AND EXISTS (SELECT 1 FROM work) FOR UPDATE)
+    SELECT id FROM topology OFFSET 1`);
+  // Consume the singleton lock row without returning inventory to the caller.
 }
 
 // Visit only this principal's mandates and the bounded outgoing control edges
