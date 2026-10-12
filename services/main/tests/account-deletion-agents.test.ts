@@ -8,10 +8,9 @@ import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import type { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import {
-  AccessAdmissionRegistry, AdmissionUnavailable, engageAccessRecoveryFence,
+  AccessAdmissionRegistry, AccountHasOwnedAgents, AdmissionUnavailable, engageAccessRecoveryFence,
   releaseAccessRecoveryFence, type VerifiedPrincipal,
 } from '../src/modules/access/admission.ts';
-import { AccountHasOwnedAgents } from '../src/modules/access/admission.ts';
 import { AccessAgentControl } from '../src/modules/access/agent-control.ts';
 import { grantFixtureAuthority, grantFixtureControllerEdge, deactivateFixtureController } from '../src/modules/access/fixture-authority.ts';
 import { AccessProtectedChanges, APPROVE } from '../src/modules/access/protected-set.ts';

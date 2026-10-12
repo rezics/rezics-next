@@ -1,6 +1,5 @@
 import { expect, test } from 'bun:test';
-import { AdmissionUnavailable } from '../../main/src/modules/access/admission.ts';
-import { AccountHasOwnedAgents } from '../../main/src/modules/access/admission.ts';
+import { AdmissionUnavailable, AccountHasOwnedAgents } from '../../main/src/modules/access/admission.ts';
 import { accountFixture } from './account-fixture.ts';
 
 test('Account deletion retains owned-Agent denial and validated explicit consent through the Access hook', async () => {

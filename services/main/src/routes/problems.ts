@@ -1,5 +1,4 @@
 import { logWorkerFault } from '@rezics/observability/log';
-import { AccountHasOwnedAgents, type AccountOwnedAgent } from '../modules/access/admission.ts';
 import { InvalidRatingCalendar } from '../modules/rating/calendar.ts';
 import { PlatformClosed } from '../modules/access/exposure.ts';
 import { platformExposureProblem } from '../modules/access/exposure-routes.ts';
@@ -11,7 +10,7 @@ import { ContentCommentCursorStale, ContentCommentInvalid, ContentCommentMissing
 import { CommandRejected, FusekiQueryResponseTooLarge, FusekiReadBudgetExceeded }
   from '../infrastructure/fuseki.ts';
 import { profileViolation } from '../infrastructure/profile-violation.ts';
-import { AdmissionConflict, AdmissionControllerContinuity, AdmissionDenied, AdmissionLockBusy, AdmissionUnavailable }
+import { AccountHasOwnedAgents, type AccountOwnedAgent, AdmissionConflict, AdmissionControllerContinuity, AdmissionDenied, AdmissionLockBusy, AdmissionUnavailable }
   from '../modules/access/admission.ts';
 import {
   ActingContextDenied, ActingContextInvalid, ActingContextStale, ActingContextUnavailable,
