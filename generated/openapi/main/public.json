@@ -581169,6 +581169,16 @@
                             ],
                             "type": "string"
                           },
+                          "subtreeLevels": {
+                            "items": {
+                              "maximum": 1048576,
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "maxItems": 16,
+                            "minItems": 16,
+                            "type": "array"
+                          },
                           "target": {
                             "maxLength": 2048,
                             "minLength": 1,
