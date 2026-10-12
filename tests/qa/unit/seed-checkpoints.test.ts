@@ -18,18 +18,39 @@ import {
 }
   from '../support/seed-checkpoints.ts';
 import { integrationResourceClass, qaResourceClasses } from '../../../scripts/qa/resource-classes.ts';
+import { seedVerificationPlan, SEED_RESTORE_RUN_CEILING_MS } from '../../../scripts/qa/seed-verification.ts';
 
-test('one-cut verification selects exactly the requested frozen cut and default all preserves isolation coverage', () => {
+test('every cut selection preserves the two-copy isolation proof and allocates its exact restore count', () => {
   const cuts = (['small', 'medium', 'large'] as const).map(scale => ({ manifest: { scale } }) as RetainedSeedCut);
   expect(seedVerificationCuts({ cuts })).toEqual([cuts[0]!, ...cuts]);
   expect(seedVerificationCuts({ cuts }, 'all')).toEqual([cuts[0]!, ...cuts]);
-  for (const [index, scale] of ['small', 'medium', 'large'].entries())
-    expect(seedVerificationCuts({ cuts }, scale)).toEqual([cuts[index]!]);
+  const previous = process.env.REZICS_SEED_VERIFY_CUT;
+  try {
+    for (const [index, scale] of ['small', 'medium', 'large'].entries()) {
+      const selected = seedVerificationCuts({ cuts }, scale);
+      expect(selected).toEqual([cuts[index]!, cuts[index]!]);
+      process.env.REZICS_SEED_VERIFY_CUT = scale;
+      const plan = seedVerificationPlan(scale);
+      expect(plan.restoreCount).toBe(selected.length);
+      expect(plan.restoreCount).toBe(2);
+      expect(qaResourceClasses['seed-cut-restore'].budgetMs).toBe(selected.length * SEED_RESTORE_RUN_CEILING_MS);
+    }
+    for (const selection of [undefined, 'all']) {
+      if (selection === undefined) delete process.env.REZICS_SEED_VERIFY_CUT;
+      else process.env.REZICS_SEED_VERIFY_CUT = selection;
+      const plan = seedVerificationPlan(selection);
+      expect(plan.restoreCount).toBe(seedVerificationCuts({ cuts }, selection).length);
+      expect(plan.restoreCount).toBe(4);
+      expect(qaResourceClasses['seed-cut-restore'].budgetMs).toBe(4 * SEED_RESTORE_RUN_CEILING_MS);
+    }
+  } finally {
+    if (previous === undefined) delete process.env.REZICS_SEED_VERIFY_CUT;
+    else process.env.REZICS_SEED_VERIFY_CUT = previous;
+  }
   expect(() => seedVerificationCuts({ cuts }, 'typo')).toThrow('REZICS_SEED_VERIFY_CUT');
   expect(() => seedVerificationCuts({ cuts: [] }, 'small')).toThrow('cut small is absent');
   const allocation = qaResourceClasses[integrationResourceClass(['tests/qa/integration/work-profile-seed-checkpoints.test.ts'])];
   expect(allocation.storage).toBe('scale');
-  expect(allocation.budgetMs).toBeGreaterThanOrEqual(600_000 + 120_000);
 });
 
 function commandMeasurement(

@@ -11,6 +11,7 @@ import { startMediaStack, type MediaStack } from './media-support.ts';
 import { readRetainedSeed, seedAuthorName, seedApi, seedCensus, seedSelection,
   seedDirectory, type RetainedSeedCut } from '../support/seed-checkpoints.ts';
 import { seedVerificationCuts } from '../support/seed-checkpoints.ts';
+import { seedVerificationPlan, SEED_RESTORE_PREPARATION_MS } from '../../../scripts/qa/seed-verification.ts';
 
 async function openCopy(input: CorpusRestoreSmokeInput) {
   const env = { ...input.apps, REZICS_QA_RUN_ID: input.runId,
@@ -31,7 +32,7 @@ async function openCopy(input: CorpusRestoreSmokeInput) {
 test('retained checkpoints restore exact populations and identities into isolated stores within 600 seconds', async () => {
   const retained = readRetainedSeed();
   const cuts = seedVerificationCuts(retained, Bun.env.REZICS_SEED_VERIFY_CUT);
-  const isolation = cuts.length > 1;
+  expect(cuts[0]).toBe(cuts[1]);
   console.log('seed cut verification host load start', Bun.env.REZICS_SEED_VERIFY_CUT ?? 'all', loadavg());
   const fixed = { unrelatedWorks: 0, unrelatedPosts: 0, follows: 0, memberships: 0,
     historyDepth: 0, realmSize: 0, conceptVocabulary: 0 };
@@ -66,7 +67,7 @@ test('retained checkpoints restore exact populations and identities into isolate
         for (const created of retained.cuts[2]!.works.slice(verifying.works.length))
           await expect(client.read(seedSelection(created.mainVersion))).rejects.toThrow('HTTP 404');
         if (isolatedWrite)
-          expect(await client.read(`/v1/works/${retained.cuts[0]!.works[0]!.work.slice(-36)}/reader-state?actingSubject=${encodeURIComponent(retained.actor)}`))
+          expect(await client.read(`/v1/works/${verifying.works[0]!.work.slice(-36)}/reader-state?actingSubject=${encodeURIComponent(retained.actor)}`))
             .toMatchObject({ status: { status: 'reading', version: 1 } });
         copy = { stack, api: client, input };
         stores.push(input);
@@ -75,7 +76,7 @@ test('retained checkpoints restore exact populations and identities into isolate
     },
   });
   try {
-    // Restore the smallest retained cut twice: the write must not mutate its
+    // Restore the first selected cut twice: the write must not mutate its
     // backup or appear in a second writable copy of that same cut.
     for (const [index, cut] of cuts.entries()) {
       verifying = cut;
@@ -83,8 +84,8 @@ test('retained checkpoints restore exact populations and identities into isolate
       targets.push(target);
       const elapsedMs = await restoreWorkProfileCorpus(cut.manifest, target, driver);
       const timing = driver.preparation(target)!;
-      expect(elapsedMs).toBeLessThan(600_000);
-      expect(timing.totalMs).toBeLessThan(600_000);
+      expect(elapsedMs).toBeLessThan(SEED_RESTORE_PREPARATION_MS);
+      expect(timing.totalMs).toBeLessThan(SEED_RESTORE_PREPARATION_MS);
       for (const value of [timing.restoreMs, timing.startupMs, timing.readinessMs]) expect(value).toBeGreaterThan(0);
       expect(timing.restoreMs + timing.startupMs + timing.readinessMs).toBeCloseTo(timing.totalMs, 3);
       expect(timing.volumeCopyMs).toBeDefined();
@@ -93,7 +94,7 @@ test('retained checkpoints restore exact populations and identities into isolate
         fusekiCopyMs: timing.volumeCopyMs!.fuseki_data, rustfsCopyMs: timing.volumeCopyMs!.rustfs_data,
         objectCopyMs: timing.objectCopyMs, startupMs: timing.startupMs,
         readinessMs: timing.readinessMs, totalMs: timing.totalMs });
-      if (isolation && index === 0) {
+      if (index === 0) {
         const state = await copy!.api.command(`checkpoint-isolated-${qaRunId}`, {
           method: 'PUT', path: `/v1/works/${cut.works[0]!.work.slice(-36)}/reader-status`,
           body: { actingSubject: retained.actor, expectedVersion: 1, status: 'want-to-read', startedOn: null, finishedOn: null } });
@@ -104,15 +105,13 @@ test('retained checkpoints restore exact populations and identities into isolate
       }
       await driver.stop(target);
     }
-    if (isolation) {
-      const [first, second] = stores;
-      expect(first!.runId).not.toBe(second!.runId);
-      for (const kind of VOLUME_KINDS)
-        expect(`rezics-qa-${first!.runId}_${kind}`).not.toBe(`rezics-qa-${second!.runId}_${kind}`);
-      for (const key of ['ACCESS_DATABASE_URL', 'CONTENT_DATABASE_URL', 'ACCOUNT_RELAY_DATABASE_URL',
-        'FUSEKI_URL', 'MAIN_S3_ENDPOINT', 'MAIN_OBJECT_DIRECTORY'])
-        expect(first!.apps[key]).not.toBe(second!.apps[key]);
-    }
+    const [first, second] = stores;
+    expect(first!.runId).not.toBe(second!.runId);
+    for (const kind of VOLUME_KINDS)
+      expect(`rezics-qa-${first!.runId}_${kind}`).not.toBe(`rezics-qa-${second!.runId}_${kind}`);
+    for (const key of ['ACCESS_DATABASE_URL', 'CONTENT_DATABASE_URL', 'ACCOUNT_RELAY_DATABASE_URL',
+      'FUSEKI_URL', 'MAIN_S3_ENDPOINT', 'MAIN_OBJECT_DIRECTORY'])
+      expect(first!.apps[key]).not.toBe(second!.apps[key]);
   } finally {
     writeFileSync(join(root, '.temp', `work-profile-seed-restores-${qaRunId}.json`), JSON.stringify(evidence, null, 2) + '\n');
     console.log('seed checkpoint restore seconds', JSON.stringify(evidence.map(item =>
@@ -123,4 +122,4 @@ test('retained checkpoints restore exact populations and identities into isolate
     if (errors.length) throw new AggregateError(errors, 'Seed restore cleanup failed');
     console.log('seed cut verification host load end', Bun.env.REZICS_SEED_VERIFY_CUT ?? 'all', loadavg());
   }
-}, 4 * 600_000);
+}, seedVerificationPlan(Bun.env.REZICS_SEED_VERIFY_CUT).budgetMs);

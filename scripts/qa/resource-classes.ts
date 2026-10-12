@@ -1,3 +1,5 @@
+import { seedVerificationPlan } from './seed-verification.ts';
+
 /** Stack allocation and command deadline are declared before any fixture starts.
  * A large tmpfs corpus needs RAM for TDB2's retained files as well as the JVM. */
 export const qaResourceClasses = {
@@ -27,13 +29,13 @@ export const qaResourceClasses = {
     jvmArgs: '-Xms128m -Xmx1536m -XX:MaxDirectMemorySize=512m',
     budgetMs: 480_000,
   },
-  // One retained cut owns a 600-second restore/readiness ceiling; the case
-  // also closes the unused harness store and drains its restored reader.
+  // Each selected restore owns its preparation ceiling plus harness/reader cleanup.
+  // Named selections restore twice for isolation; the default restores four times.
   'seed-cut-restore': {
     storage: 'scale',
     memory: '7g',
     jvmArgs: '-Xms128m -Xmx1536m -XX:MaxDirectMemorySize=512m',
-    budgetMs: 600_000 + 120_000,
+    get budgetMs() { return seedVerificationPlan(process.env.REZICS_SEED_VERIFY_CUT).budgetMs; },
   },
 } as const;
 export type QaResourceClass = keyof typeof qaResourceClasses;

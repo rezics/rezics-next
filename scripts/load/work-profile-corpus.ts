@@ -77,15 +77,43 @@ export interface CorpusCommand {
   headers?: HeadersInit;
   stage?: WorkProfileScale;
 }
+export const CORPUS_REFUSAL_BYTES = 300;
+function refusalExcerpt(bytes: Uint8Array): string {
+  // Do not turn a truncated UTF-8 character into a larger replacement sequence.
+  return new TextDecoder().decode(bytes.subarray(0, CORPUS_REFUSAL_BYTES), { stream: true });
+}
+async function readRefusalBody(response: Response): Promise<string> {
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  try {
+    reader = response.body?.getReader();
+    if (!reader) return '';
+    const bytes = new Uint8Array(CORPUS_REFUSAL_BYTES);
+    let length = 0;
+    while (length < bytes.length) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      const part = chunk.value.subarray(0, bytes.length - length);
+      bytes.set(part, length);
+      length += part.length;
+    }
+    return refusalExcerpt(bytes.subarray(0, length));
+  } catch {
+    return 'body unreadable';
+  } finally {
+    // Stop an oversized or broken upstream body; cancellation cannot hide its HTTP status.
+    try { await reader?.cancel(); } catch { /* Preserve the typed refusal. */ }
+    try { reader?.releaseLock(); } catch { /* Preserve the typed refusal. */ }
+  }
+}
 export class CorpusCommandError extends Error {
   readonly body: string;
   readonly code?: string;
   readonly responseStatus?: string | number;
   constructor(readonly key: string, readonly operation: string, readonly stage: WorkProfileScale | undefined,
     readonly status: number, detail: string) {
-    const body = Buffer.from(detail).subarray(0, 300).toString('utf8');
+    const body = refusalExcerpt(Buffer.from(detail));
     let parsed: unknown;
-    try { parsed = JSON.parse(detail); } catch { /* Non-JSON errors still carry their body. */ }
+    try { parsed = JSON.parse(body); } catch { /* Non-JSON or truncated errors still carry their body. */ }
     const typed = parsed !== null && typeof parsed === 'object' ? parsed as { code?: unknown; status?: unknown } : {};
     const code = typeof typed.code === 'string' ? typed.code : undefined;
     const responseStatus = typeof typed.status === 'string' || typeof typed.status === 'number' ? typed.status : undefined;
@@ -137,15 +165,13 @@ export function workProfileCorpusApi(
         signal: requestSignal,
         redirect: 'error',
       });
-      // An in-process API can return an empty cancelled response instead of
-      // rejecting fetch. Preserve the preparation deadline, not a JSON error.
-      requestSignal?.throwIfAborted();
       // Pending and partial commands are not a completed corpus.
       if (![200, 201, 204].includes(response.status)) {
-        const detail = await response.text();
-        requestSignal?.throwIfAborted();
+        const detail = await readRefusalBody(response);
         throw new CorpusCommandError(key, `${command.method} ${command.path}`, command.stage, response.status, detail);
       }
+      // An in-process API can return an empty cancelled success instead of rejecting fetch.
+      requestSignal?.throwIfAborted();
       return response.status === 204 ? (undefined as T) : ((await response.json()) as T);
     },
     async read<T>(path: `/v1/${string}`, signal?: AbortSignal): Promise<T> {

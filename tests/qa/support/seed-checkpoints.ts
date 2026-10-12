@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, linkSync, mkdirSync, readFileSync, renameSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fixtureRoot } from '../../../scripts/fixture/stack.ts';
+import { seedVerificationPlan } from '../../../scripts/qa/seed-verification.ts';
 import { workProfileCorpusApi, type CorpusApi, type WorkProfileCorpusManifest }
   from '../../../scripts/load/work-profile-corpus.ts';
 import type { seedPublicProfileWork } from '../../../scripts/load/work-profile-work.ts';
@@ -31,12 +32,11 @@ export interface RetainedSeed {
   cuts: RetainedSeedCut[];
 }
 export function seedVerificationCuts(seed: Pick<RetainedSeed, 'cuts'>, selection = 'all'): RetainedSeedCut[] {
-  if (selection === 'all') return [seed.cuts[0]!, ...seed.cuts];
-  if (!['small', 'medium', 'large'].includes(selection))
-    throw new Error('REZICS_SEED_VERIFY_CUT must be small, medium, large or all');
-  const cut = seed.cuts.find(cut => cut.manifest.scale === selection);
-  if (!cut) throw new Error(`Retained seed cut ${selection} is absent`);
-  return [cut];
+  return seedVerificationPlan(selection).scales.map(scale => {
+    const cut = seed.cuts.find(cut => cut.manifest.scale === scale);
+    if (!cut) throw new Error(`Retained seed cut ${scale} is absent`);
+    return cut;
+  });
 }
 export type SeedCommandCostStage = '4' | '16' | '64';
 export interface SeedCommandMeasurement {
