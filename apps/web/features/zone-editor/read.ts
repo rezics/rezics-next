@@ -1,4 +1,5 @@
 import { cache } from 'react';
+import type { ZoneText } from '@rezics/zone-sdk';
 import { addressKey, spaceHref } from '../address/path.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import { settle } from '../manage/read.ts';
@@ -16,6 +17,7 @@ export type ZoneAuthoringLoad =
   | { kind: 'missing' }
   | { kind: 'failure'; failure: ReadFailure }
   | { kind: 'ready'; model: ZoneAuthoringModel; preview: ZoneAuthoringPreview; realm: string | null;
+    frameMetadata: { ref: string; name: ZoneText };
     editorPath: string; previewPath: string; sitePath: string };
 
 export type ZoneLifecycleLoad =
@@ -55,6 +57,8 @@ export const loadZoneAuthoring = cache(async (
   return {
     kind: 'ready', model, preview: editor.data.preview,
     realm: typeof editor.data.configuration.defaultRealm === 'string' ? editor.data.configuration.defaultRealm : null,
+    frameMetadata: { ref: addressKey(site.address.canonical),
+      name: { value: model.name, lang: editor.data.language, dir: editor.data.direction } },
     editorPath: zoneEditorPath(space),
     previewPath: zonePreviewPath(space),
     sitePath: spaceHref(site.address.canonical, 'site'),
