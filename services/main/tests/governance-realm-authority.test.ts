@@ -266,6 +266,14 @@ async function productionFixture(kind: 'content_report' | 'rights_complaint' = '
     resource = (await productionJson<{ concept: string }>(await member.send('POST',
       '/v1/classification-propositions', { profile: 'classification-proposition-v1',
         label: 'Authority Concept', actingSubject: member.actor }))).concept;
+    // Imported Concept records have their own retained head; the proposition
+    // producer gives only its ClassificationSense a head.
+    const conceptHead = native();
+    await stack.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(resource)} rv:head ${iri(conceptHead)} }
+      GRAPH ${iri(GRAPHS.revisions)} { ${iri(conceptHead)} a rv:RevisionAnchor ;
+        rv:component ${iri(resource)} }
+    }`);
   }
   const head = (await stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head WHERE {
     GRAPH ${iri(GRAPHS.current)} { ${iri(resource)} rv:head ?head }
