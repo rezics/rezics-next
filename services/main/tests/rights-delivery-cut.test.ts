@@ -28,14 +28,21 @@ async function fixture() {
     extent: {}, evidence: {}, obligations: [], expectedAssessment: null, idempotencyKey: randomUUID() };
   let head = await rights.assess(authority.principal, input);
   const text = `Exact Content bytes ${randomUUID()}`;
-  const saved = await stack.content.saveDraft({ operationId: randomUUID(),
-    variant: { id: `urn:rezics:variant:${randomUUID()}`, resourceId: work.work,
-      language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr' },
-    expectedHead: null, model: 'content-shape-v1', sourceRevision: null,
-    provenance: { kind: 'admitted-public-domain-v1', rightsAssessmentId: head.assessmentId },
-    serializedJson: JSON.stringify({ body: text }) });
-  if (!saved.revisionId) throw new Error('Delivery fixture draft was not saved');
-  const revisionId = saved.revisionId;
+  await member.grant(`content:draft:${work.work}`, 'content.draft');
+  const draft = await member.send('POST', '/v1/content-drafts', {
+    profile: 'content-public-domain-text-v1', resourceId: work.work,
+    variantId: `urn:rezics:variant:${randomUUID()}`,
+    language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr',
+    expectedHead: null, body: text, actingSubject: member.actor,
+    assessmentId: head.assessmentId, source: { provider: 'gutenberg', identifier: '1',
+      url: 'https://www.gutenberg.org/ebooks/1', byteDigest: 'a'.repeat(64),
+      retrievedAt: '2026-10-12T00:00:00.000Z' },
+  });
+  if (draft.status !== 201) throw new Error(`Delivery fixture draft failed: ${await draft.text()}`);
+  const { revisionId } = await draft.json() as { revisionId: string };
+  const exact = (await stack.content.readExactBatch([revisionId], async ids => new Set(ids)))[0];
+  if (exact?.status !== 'available') throw new Error('Delivery fixture draft bytes are unavailable');
+  const serializedJson = exact.serializedJson;
   const target = { resourceId: work.work, rights };
   const moveRights = async (outcome: 'supported' | 'not_supported' = 'supported') => {
     head = await rights.assess(authority.principal, { ...input, outcome,
@@ -79,7 +86,7 @@ async function fixture() {
         : problem(503, 'delivery_cut_unavailable', 'Delivery is unavailable; retry', { 'retry-after': '1' });
     } finally { interceptor.mockRestore(); }
   };
-  return { target, text, revisionId, hold, moveRights, deliver, attempts: () => attempts };
+  return { target, text, serializedJson, revisionId, hold, moveRights, deliver, attempts: () => attempts };
 }
 
 async function withheld(response: Response, text: string) {
@@ -93,7 +100,7 @@ test('stable owner tokens deliver exact Content through production composition',
   const f = await fixture();
   const response = await f.deliver();
   expect(response.status).toBe(200);
-  expect(await response.json()).toMatchObject({ serializedJson: JSON.stringify({ body: f.text }) });
+  expect(await response.json()).toMatchObject({ serializedJson: f.serializedJson });
   expect(f.attempts()).toBe(1);
 });
 
@@ -129,7 +136,7 @@ test('an unrelated hold committed during the query neither replays nor refuses d
   const before = await f.target.rights.deliveryCutSnapshot(f.target.resourceId);
   const response = await f.deliver(async () => { await f.hold(other.work); });
   expect(response.status).toBe(200);
-  expect(await response.json()).toMatchObject({ serializedJson: JSON.stringify({ body: f.text }) });
+  expect(await response.json()).toMatchObject({ serializedJson: f.serializedJson });
   expect(await f.target.rights.deliveryCutSnapshot(f.target.resourceId)).toEqual(before);
   expect(f.attempts()).toBe(1);
 });
