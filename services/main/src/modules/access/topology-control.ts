@@ -50,6 +50,18 @@ export class ControlStale extends Error {}
 export class ControlUnavailable extends Error {}
 export class ControlInvalid extends Error {}
 
+/** Publish a raw owner's open transaction only after pinning recovery open.
+ * The owner retains BEGIN/COMMIT/ROLLBACK/release and its timeout bounds; the
+ * share lock survives this callback until that owner's transaction ends. */
+export async function publishAccessHoldingBehindRecoveryFence<T>(pool: Pool, client: PoolClient,
+  work: (client: PoolClient) => Promise<T>,
+  unavailable: () => Error = () => new ControlUnavailable('Access recovery is held')): Promise<T> {
+  const fence = await client.query<{ open: boolean }>(
+    'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
+  if (fence.rows[0]?.open !== true) throw unavailable();
+  return withAccessClient(pool, work, client);
+}
+
 export const WORK_SCOPE = 'work:create:root';
 export const idPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 export const agentPattern = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;

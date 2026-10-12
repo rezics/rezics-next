@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import type { VerifiedPrincipal } from './admission.ts';
 import { normalizePolicyError, PolicyDenied, PolicyUnavailable } from './policy-errors.ts';
 import { REVOCATION_AFFECTED_WORK_LIMIT } from './revocation-schema.ts';
-import { accessClient, inExplicitTransaction, withAccessClient } from './topology-control.ts';
+import { accessClient, inExplicitTransaction, publishAccessHoldingBehindRecoveryFence, withAccessClient } from './topology-control.ts';
 
 export type Isolation = 'read committed' | 'repeatable read';
 
@@ -24,13 +24,15 @@ export async function inAccessTransaction<T>(pool: Pool, isolation: Isolation,
             throw new PolicyUnavailable('Access read requires a repeatable-read owner transaction');
           }
         }
-        return await work(client);
+        return await publishAccessHoldingBehindRecoveryFence(pool, client, work,
+          () => new PolicyUnavailable('Access recovery is held'));
       }
       await client.query(isolation === 'repeatable read'
         ? 'BEGIN ISOLATION LEVEL REPEATABLE READ' : 'BEGIN');
       await client.query("SET LOCAL lock_timeout = '2s'");
       await client.query("SET LOCAL statement_timeout = '5s'");
-      const result = await work(client);
+      const result = await publishAccessHoldingBehindRecoveryFence(pool, client, work,
+        () => new PolicyUnavailable('Access recovery is held'));
       await client.query('COMMIT');
       return result;
     } catch (error) {

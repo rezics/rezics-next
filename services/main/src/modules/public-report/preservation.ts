@@ -1,5 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
-import { accessClient, inExplicitTransaction, withAccessClient } from '../access/topology-control.ts';
+import { accessClient, inExplicitTransaction, publishAccessHoldingBehindRecoveryFence, withAccessClient } from '../access/topology-control.ts';
 
 declare const fenceBrand: unique symbol;
 /** A live target lock, minted only while its transaction is open. */
@@ -29,7 +29,8 @@ export async function withPreservationFence<T>(access: PreservationAccess, resou
         await client.query("SET LOCAL lock_timeout = '2s'");
         await client.query("SET LOCAL statement_timeout = '5s'");
       }
-      const result = await writeWithPreservationFence(client, resource, operationId, write);
+      const result = await publishAccessHoldingBehindRecoveryFence(access, client,
+        connected => writeWithPreservationFence(connected, resource, operationId, write));
       if (ownsTransaction) await client.query('COMMIT');
       return result;
     } catch (error) {

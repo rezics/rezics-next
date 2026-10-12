@@ -41,7 +41,7 @@ import { checkEditorialAdmission, registerEditorialAdmission, withCommandOwnerAu
 import { platformAdministratorAction, platformAdministratorTargetAllowed, platformAdministratorProof,
   savedPlatformAdministratorProof, savePlatformAdministratorProof,
   platformAdministratorProofCurrent } from './platform-administrator.ts';
-import { accessClient,withAccessClient,inExplicitTransaction,controlTransaction,requirePrincipal,requireMandate,ControlConflict,ControlDenied,ControlUnavailable } from './topology-control.ts';
+import { accessClient,withAccessClient,inExplicitTransaction,publishAccessHoldingBehindRecoveryFence,controlTransaction,requirePrincipal,requireMandate,ControlConflict,ControlDenied,ControlUnavailable } from './topology-control.ts';
 import { realmTransaction,realmManager } from './realm-management-authority.ts';
 import { RealmAdminDenied,RealmAdminUnavailable } from '../realm-admin/contract.ts';
 import { realmRatingProof, savedRealmRatingProof, saveRealmRatingProof, ratingConfigurationAction } from './realm-roles-rating.ts';
@@ -1053,13 +1053,18 @@ export class AccessAdmissionRegistry {
     const borrowed = accessClient(this.pool);
     return withAccessClient(this.pool, async client => {
       try {
-        if (!borrowed) await client.query('BEGIN');
+        if (!borrowed) {
+          await client.query('BEGIN');
+          await client.query("SET LOCAL lock_timeout = '2s'");
+          await client.query("SET LOCAL statement_timeout = '5s'");
+        }
         const probe = { ...request, idempotencyKey: `authority:${Bun.randomUUIDv7()}`, requestDigest: '0'.repeat(64) };
-        const result = await withCommandOwnerAuthority(client, probe, this.baselineGraph, async () => {
-          try { await this.registerRequest(probe, client, true); }
-          catch (error) { if (!(error instanceof AuthorityChecked)) throw error; }
-          return operation(client);
-        });
+        const result = await publishAccessHoldingBehindRecoveryFence(this.pool, client,
+          () => withCommandOwnerAuthority(client, probe, this.baselineGraph, async () => {
+            try { await this.registerRequest(probe, client, true); }
+            catch (error) { if (!(error instanceof AuthorityChecked)) throw error; }
+            return operation(client);
+          }), () => new AdmissionUnavailable('Access is held for recovery'));
         if (!borrowed) await client.query('COMMIT');
         return result;
       } catch (error) { if (!borrowed) await rollback(client); throw error; }
@@ -2022,8 +2027,10 @@ export class AccessAdmissionRegistry {
             set_config('lock_timeout', CASE WHEN $2 = '0' OR $2::interval > interval '2 seconds' THEN '2s' ELSE $2 END, true)`,
           [parentTimeouts.statement, parentTimeouts.lock]);
         }
-        const result = await client.query<{ acting_subject: unknown }>(
-          'SELECT acting_subject FROM access.admission WHERE id = $1::uuid LIMIT 1', [admissionId]);
+        const result = await publishAccessHoldingBehindRecoveryFence(this.pool, client,
+          held => held.query<{ acting_subject: unknown }>(
+            'SELECT acting_subject FROM access.admission WHERE id = $1::uuid LIMIT 1', [admissionId]),
+          () => new AdmissionUnavailable('Access is held for recovery'));
         if (ownsTransaction) await client.query('COMMIT');
         const subject = result.rows[0]?.acting_subject;
         if (result.rows.length !== 1 || typeof subject !== 'string') {
