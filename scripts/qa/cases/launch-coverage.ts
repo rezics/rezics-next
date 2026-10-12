@@ -342,9 +342,7 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/zone-realm-discussion.test.ts',
       'a published Zone page opens one canonical discussion and preserves independent concurrent contributions',
       'Posts independent concurrent contributions through Main, resumes a pending child and checks replay, stale bindings and retained-root recovery.'),
-    browser: browser('apps/web/tests/zone-realm-attachment.e2e.ts',
-      'two Persons recover concurrent Zone-page discussion posts, reopen the thread, and keep it after Realm withdrawal',
-      'Posts by keyboard as two Persons, restores retained intents after lost and pending responses, reopens the canonical thread and withdraws the attachment without losing its discussion.'),
+    browser: missing('L10'),
   },
   {
     kind: 'books',
