@@ -37,12 +37,14 @@ test('imported quantity prefixes keep ingredient names through naming, display a
     expect(qualifier.amountLexical).toBe(item.lexical);
     expect(ingredientName(qualifier.originalText.value, qualifier.amountLexical, qualifier.unitText)).toBe(item.name);
     expect(displayed[index]?.line.endsWith(item.name)).toBe(true);
+    expect(exported[index]).toMatchObject({ text: item.line });
+    expect(roundTrip[index]?.qualifier).toEqual(qualifier);
 
     if (item.lexical) {
-      expect(exported[index]).toMatchObject({ value: item.lexical });
+      expect(exported[index]).toMatchObject({ amountLexical: item.lexical });
       expect(roundTrip[index]?.qualifier.amountLexical).toBe(item.lexical);
     } else {
-      expect(exported[index]).toBe(item.line);
+      expect(exported[index]).not.toHaveProperty('value');
       expect(roundTrip[index]?.qualifier.amountLexical).toBeUndefined();
     }
   });
@@ -55,5 +57,9 @@ test('a legacy whole-line amount lexical is parsed before deriving its ingredien
 
   expect(ingredientName(qualifier.originalText.value, qualifier.amountLexical, qualifier.unitText)).toBe('flour');
   expect(scaleIngredients([legacy], factor)[0]?.line.endsWith(' flour')).toBe(true);
-  expect(exportRecipe([legacy], structure).recipe.recipeIngredient).toEqual(['1½ cups flour']);
+  const exported = exportRecipe([legacy], structure).recipe.recipeIngredient;
+  expect(exported).toMatchObject([{ text: '1½ cups flour', value: '3/2',
+    amountLexical: '1½ cups flour' }]);
+  expect(importRecipe({ recipeIngredient: exported }, 'round-trip').ingredients[0]?.qualifier)
+    .toEqual(qualifier);
 });
