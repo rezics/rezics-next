@@ -375,6 +375,8 @@ test('sign-out refuses native retirement failure and succeeds after storage reco
   const f = await issuerFixture('https://issuer.test');
   try {
     const member = await f.signup('retirement-storage-failure@example.test');
+    expect((await f.request('/api/auth/sign-out', {}, member.cookie, { origin: 'https://other.test' })).status).toBe(403);
+    expect(await f.auth.api.getSession({ headers: new Headers({ cookie: member.cookie }) })).not.toBeNull();
     await f.pool.query(`CREATE FUNCTION refuse_session_retirement() RETURNS trigger LANGUAGE plpgsql AS
       $$ BEGIN RAISE EXCEPTION 'retirement unavailable'; END $$;
       CREATE TRIGGER refuse_session_retirement BEFORE UPDATE OF rezics_generation ON "session"

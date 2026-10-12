@@ -349,7 +349,10 @@ export function accountAuthOptions(config: AccountConfig) {
           const adapter = await getCurrentAdapter(ctx.context.adapter);
           const owner = sessionOwners.get(adapter);
           if (!owner) throw new APIError('SERVICE_UNAVAILABLE', { message: 'Account session owner is unavailable' });
-          await retireProviderSession(owner, token);
+          try { await retireProviderSession(owner, token); }
+          catch {
+            throw new APIError('SERVICE_UNAVAILABLE', { message: 'Account session retirement is unavailable' });
+          }
           return deleteSession(token);
         };
         sessionDeletionFences.add(internal);
@@ -357,6 +360,7 @@ export function accountAuthOptions(config: AccountConfig) {
       if (ctx.path === '/sign-out') {
         // The provider also catches deletion errors inside sign-out. Persist
         // retirement at admission so that failure cannot become success.
+        await originCheckMiddleware(ctx);
         const session = await getAuthoritativeSessionFromCtx(ctx);
         if (session) await internal.deleteSession(session.session.token);
       }
