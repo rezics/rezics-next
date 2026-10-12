@@ -58,7 +58,8 @@ test('G205 activity: private paginated events, coarse devices, failure summary a
     const member = await f.signup('activity@example.test');
     const peer = await f.signup('other@example.test');
     const signed = await f.request('/api/auth/sign-in/email', { email: member.email, password: member.password }, undefined,
-      { 'user-agent': 'Mozilla/5.0 (Macintosh) Chrome/140.0', 'x-rezics-client-ip': '192.0.2.27' });
+      { 'user-agent': 'Mozilla/5.0 (Macintosh) Chrome/140.0', 'x-rezics-client-ip': '192.0.2.27',
+        'x-forwarded-for': '192.0.2.27' });
     const currentCookie = signed.headers.get('set-cookie')!;
     await f.request('/api/auth/sign-in/email', { email: member.email, password: 'a wrong password' });
     expect((await f.request('/api/account/security-activity')).status).toBe(401);
@@ -68,7 +69,9 @@ test('G205 activity: private paginated events, coarse devices, failure summary a
     expect(first.failedAttemptsLast24Hours.count).toBe(1);
     const next = await (await f.request(`/api/account/security-activity?limit=1&cursor=${encodeURIComponent(first.nextCursor)}`,
       undefined, currentCookie)).json() as { items: { action: string; detail: object }[] };
-    expect(next.items[0]).toMatchObject({ action: 'sign_in', detail: { network: '192.0.2.0/24',
+    // The direct fixture has no trusted ingress: spoofed client addresses
+    // must leave the socket peer's coarse network in the security history.
+    expect(next.items[0]).toMatchObject({ action: 'sign_in', detail: { network: '127.0.0.0/24',
       device: { browser: 'Chrome', platform: 'macOS' } } });
     expect((await f.request(`/api/account/security-activity?cursor=${encodeURIComponent(first.nextCursor)}`, undefined, peer.cookie)).status).toBe(400);
     const sessions = await (await f.request('/api/account/sessions', undefined, currentCookie)).json() as {
