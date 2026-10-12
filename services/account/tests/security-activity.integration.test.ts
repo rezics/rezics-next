@@ -5,6 +5,25 @@ import { createOTP } from '@better-auth/utils/otp';
 
 const cookies = (response: Response) => response.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
 
+for (const provider of ['email', 'passkey'] as const) {
+  test(`${provider} failure for B with A's session records only B`, async () => {
+    const f = await accountFixture();
+    try {
+      const a = await f.signup('activity-cookie-owner@example.test');
+      const b = await f.signup('activity-provider-owner@example.test');
+      if (provider === 'passkey') await f.pool.query(`INSERT INTO passkey (id, name, "publicKey", "userId", "credentialID", counter, "deviceType", "backedUp", "createdAt")
+        VALUES ('provider-credential', 'Provider owner', 'invalid-proof-fixture', $1, 'credential-B', 0, 'singleDevice', false, now())`, [b.id]);
+      const response = provider === 'email'
+        ? await f.request('/api/auth/sign-in/email', { email: b.email, password: 'incorrect password', userId: a.id }, a.cookie)
+        : await f.request('/api/auth/passkey/verify-authentication', { response: { id: 'credential-B', rawId: 'credential-B', type: 'public-key',
+          response: { clientDataJSON: 'invalid', authenticatorData: 'invalid', signature: 'invalid' }, clientExtensionResults: {} }, email: a.email }, a.cookie);
+      expect(response.ok).toBe(false);
+      expect((await f.pool.query('SELECT user_id FROM rezics_account_security_event WHERE action = \'sign_in_failed\' AND user_id IN ($1, $2)',
+        [a.id, b.id])).rows).toEqual([{ user_id: b.id }]);
+    } finally { await f.close(); }
+  }, 60_000);
+}
+
 test('authentication failure activity follows the session or signed challenge, never ignored identity fields', async () => {
   const f = await accountFixture();
   try {
