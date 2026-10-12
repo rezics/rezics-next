@@ -61,22 +61,22 @@ async function fixture() {
     });
     try {
       const cut = await withDeliveryCut(target, async () => {
-      attempts++;
-      const response = await member.send('GET',
-        `/v1/content-revisions/${revisionId}?actingSubject=${encodeURIComponent(member.actor)}`);
-      if (response.status !== 200) return response;
-      const published = await stack.fuseki.query(`# final-publication-delivery
-        ASK { GRAPH ${iri(GRAPHS.current)} {
-        ${iri(work.work)} a <https://schema.org/CreativeWork> } }`);
-      if (published.boolean !== true) return problem(404, 'revision_unavailable', 'Revision is unavailable');
-      await stack.access.assertRecoveryOpen();
-      const erased = await graphErasedContentRevisions(stack.fuseki, [revisionId]);
-      await stack.access.assertRecoveryOpen();
-      return erased.has(saved.revisionId)
-        ? problem(404, 'revision_unavailable', 'Revision is unavailable') : response;
-    });
-    return cut.status === 'stable' ? cut.value
-      : problem(503, 'delivery_cut_unavailable', 'Delivery is unavailable; retry', { 'retry-after': '1' });
+        attempts++;
+        const response = await member.send('GET',
+          `/v1/content-revisions/${revisionId}?actingSubject=${encodeURIComponent(member.actor)}`);
+        if (response.status !== 200) return response;
+        const published = await stack.fuseki.query(`# final-publication-delivery
+          ASK { GRAPH ${iri(GRAPHS.current)} {
+          ${iri(work.work)} a <https://schema.org/CreativeWork> } }`);
+        if (published.boolean !== true) return problem(404, 'revision_unavailable', 'Revision is unavailable');
+        await stack.access.assertRecoveryOpen();
+        const erased = await graphErasedContentRevisions(stack.fuseki, [revisionId]);
+        await stack.access.assertRecoveryOpen();
+        return erased.has(revisionId)
+          ? problem(404, 'revision_unavailable', 'Revision is unavailable') : response;
+      });
+      return cut.status === 'stable' ? cut.value
+        : problem(503, 'delivery_cut_unavailable', 'Delivery is unavailable; retry', { 'retry-after': '1' });
     } finally { interceptor.mockRestore(); }
   };
   return { target, text, revisionId, hold, moveRights, deliver, attempts: () => attempts };
@@ -189,6 +189,7 @@ test('token reads cost one indexed statement per store per snapshot, with and wi
       expect(contentReads).toHaveLength(moving ? 4 : 2);
       expect(accessReads).toHaveLength(moving ? 4 : 2);
       for (const [query, actualParameters] of [...contentReads, ...accessReads]) {
+        if (typeof query !== 'string') throw new Error('Expected a delivery-cut SQL statement');
         expect(query).not.toMatch(/\b(COUNT|SUM|ORDER BY)\b/i);
         const parameters = [f.target.resourceId];
         expect(actualParameters).toEqual(parameters);
