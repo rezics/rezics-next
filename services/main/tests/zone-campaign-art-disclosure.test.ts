@@ -17,7 +17,6 @@ import { readZoneCampaignArt } from '../src/modules/zone/campaign-art.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import { ensureFixtureAuthoritySubject, ensureFixturePrincipal } from './support/access-fixture-identity.ts';
 import { configureFixtureDisclosureAncestry } from './support/disclosure-ancestry.ts';
-import { configureCampaignFixtureAncestry } from './support/campaign-disclosure.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const iri = (value: string) => `https://rezics.com/id/${value}`;
@@ -98,11 +97,12 @@ async function isolated(run: (f: { store: MediaStore; environment: MainWorkDepen
       lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } };
     configureDisclosure(environment, new DisclosureStore(pool));
     configureFixtureDisclosureAncestry(environment, target => {
-      const resource = target.work ?? target.resource;
+      // This owner fixture attaches campaign Uses to a Work. Its graph rows
+      // establish Work ownership rather than a Realm placement.
+      const resource = target.work ?? (target.owner === 'media' ? ownTarget : target.resource);
       return { resource, head: resource, ...(target.workRevision !== undefined
         ? { protectedRevision: target.workRevision } : {}) };
     });
-    configureCampaignFixtureAncestry(environment, { resource: ownTarget, head: ownTarget });
     configureMediaVisibility({ environment, media: { store }, access: {
       canReadWork: async () => false,
     } } as unknown as MainWorkDependencies);
