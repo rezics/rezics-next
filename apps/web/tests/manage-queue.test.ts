@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { materializeData } from 'native-i18n';
 import { commandFailure, decideReport, reportDecision } from '../features/manage/commands.ts';
+import { decisionReceipt, isolatedAttemptStorage } from '../features/manage/recovery-fixtures.ts';
 import { basisFor } from '../features/manage/fixtures.ts';
 import { auditDetail, auditRuns, shortcutActions } from '../features/manage/labels.ts';
 import { messages } from '../features/manage/messages.ts';
@@ -307,12 +308,12 @@ describe('G330 keep or remove reported content', () => {
       ({ data: basisFor(complaint), error: null }) }) }), rights: { restrictions: { post: async (
       body: unknown, options: unknown) => {
       calls.push({ body, options });
-      return { data: { saved: true }, error: null };
+      return { data: decisionReceipt(complaint), error: null };
     } } } } } as unknown as MainClient;
     const reasons = { facts: 'The claim was upheld.', scope: 'The reported revision.', duration: 'Until restored.',
       automation: false, contentLanguage: 'en', appealRoute: '/v1/public-reports/{caseId}/correspondence' as const };
     expect(await decideReport(main, uuid(1), complaint, { action: 'final-restrict', reason: 'Claim upheld', note: null, reasons },
-      iri(11), 'rights-key')).toEqual({ ok: true, data: { saved: true } });
+      iri(11), 'rights-key', isolatedAttemptStorage())).toEqual({ ok: true, data: decisionReceipt(complaint) });
     expect(calls).toEqual([{ body: expect.objectContaining({ profile: 'rights-restriction-v1',
       outcome: 'final_restrict', caseId: item.id, reasons }), options: { headers: { 'idempotency-key': 'rights-key' } } }]);
   });

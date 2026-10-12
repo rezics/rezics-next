@@ -1,6 +1,7 @@
 'use client';
 
 import { Badge } from '@rezics/ui/badge';
+import { Alert, AlertDescription } from '@rezics/ui/alert';
 import { Button } from '@rezics/ui/button';
 import { Field, FieldError, FieldHelper, FieldLabel } from '@rezics/ui/field';
 import { Input } from '@rezics/ui/input';
@@ -14,7 +15,7 @@ import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
-import { type AdminApi, bffAdminApi, useRoleChange } from './admin-api.ts';
+import { type AdminApi, bffAdminApi, useRoleChange, useRoleRecovery } from './admin-api.ts';
 import { CommandDialog } from './command-dialog.tsx';
 import type { CommandFailure } from './commands.ts';
 import { newKey } from './commands.ts';
@@ -80,6 +81,7 @@ export function MembersView({ realm, address = realm, actingSubject, first, agen
   const [searching, setSearching] = useState(false);
   const memberReads = useRef(new MemberReads());
   const [open, setOpen] = useState<Open | null>(null);
+  const recovery = useRoleRecovery(api, realm, actingSubject, open !== null);
   const [status, setStatus] = useState<string | null>(null);
 
   const nameOf = (iri: string) => agentLabel(agents[iri], iri, id => t.agentFallback({ id }));
@@ -136,6 +138,14 @@ export function MembersView({ realm, address = realm, actingSubject, first, agen
   const target = (member: Member): Target => ({ iri: member.member, membershipGeneration: member.membershipGeneration,
     member });
   return <div className="grid gap-5">
+    {recovery.attempts.filter(entry => entry.attempt.input.command.change.kind === 'assignment').map(entry => {
+      const change = entry.attempt.input.command.change;
+      return <Alert key={entry.operation} variant="warning"><AlertDescription className="flex items-center justify-between gap-3">
+        <span>{change.kind === 'assignment' ? nameOf(change.member) : ''}: {t.decisionStillPending}</span>
+        <Button size="sm" variant="outline" isLoading={recovery.pending} onClick={() => void recovery.resume(entry.operation)
+          .then(result => { if (result.ok) void done(t.roleSaved); else setStatus(t.failedNotice); })}>{t.decisionResume}</Button>
+      </AlertDescription></Alert>;
+    })}
     <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div className="space-y-1">
         <h2 className="font-semibold text-xl tracking-tight">{t.membersTitle}</h2>
@@ -245,7 +255,7 @@ export function MembersView({ realm, address = realm, actingSubject, first, agen
         onClick={() => void loadInvitations(invitations.data.nextCursor!)}>{t.loadMore}</Button> : null}
     </section>
     {open?.kind === 'give' || open?.kind === 'take'
-      ? <RoleDialog open={open} generation={page.generation} roles={roles ?? []} api={api} actingSubject={actingSubject}
+      ? <RoleDialog realm={realm} open={open} generation={page.generation} roles={roles ?? []} api={api} actingSubject={actingSubject}
         agents={agents} name={nameOf(open.target.iri)} now={now} locale={locale} messages={messages}
         onClose={() => setOpen(null)} onDone={message => void done(message)} />
       : <MemberDialog open={open} generation={page.generation} api={api} actingSubject={actingSubject} nameOf={nameOf}
@@ -367,7 +377,8 @@ function MemberDialog({ open, generation, api, actingSubject, nameOf, locale, me
   </CommandDialog>;
 }
 
-function RoleDialog({ open, generation, roles, api, actingSubject, agents, name, now, locale, messages, onClose, onDone }: {
+function RoleDialog({ realm, open, generation, roles, api, actingSubject, agents, name, now, locale, messages, onClose, onDone }: {
+  realm: string;
   open: Extract<Open, { kind: 'give' | 'take' }>; generation: string; roles: readonly Role[]; api: AdminApi;
   actingSubject: string; agents: Record<string, AgentSummary>; name: string; now: number; locale: UiLocale;
   messages: ManageMessages; onClose: () => void; onDone: (message: string) => void;
@@ -385,11 +396,11 @@ function RoleDialog({ open, generation, roles, api, actingSubject, agents, name,
     assigned: open.kind === 'give',
     validUntil: new Date(openedAt + (open.kind === 'give' ? days * 86_400_000 : 0)).toISOString() } : null,
   [roleId, open, days, openedAt]);
-  const { state, save, names } = useRoleChange(api, { actingSubject, generation, change });
+  const { state, save, names, recovering } = useRoleChange(api, { realm, actingSubject, generation, change });
   const roleName = open.kind === 'take' ? open.role.name : roles.find(role => role.id === roleId)?.name ?? '';
 
   async function submit() {
-    if (!reason.trim()) { setError(t.reasonRequired); return; }
+    if (!recovering && !reason.trim()) { setError(t.reasonRequired); return; }
     setPending(true); setError(null);
     const result = await save(reason);
     setPending(false);
@@ -401,9 +412,10 @@ function RoleDialog({ open, generation, roles, api, actingSubject, agents, name,
   }
 
   return <CommandDialog open title={open.kind === 'give' ? t.giveRoleTitle({ name }) : t.takeRoleTitle({ role: roleName, name })}
-    confirm={open.kind === 'give' ? t.giveRole : t.takeRole} destructive={open.kind === 'take'} pending={pending}
+    confirm={recovering ? t.decisionResume : open.kind === 'give' ? t.giveRole : t.takeRole} destructive={open.kind === 'take'} pending={pending}
     error={error} cancel={t.cancel} onClose={onClose} onConfirm={() => void submit()}
-    disabled={state.kind !== 'ready' || !roleId}>
+    disabled={!recovering && (state.kind !== 'ready' || !roleId)}>
+    <fieldset disabled={recovering || pending} className="contents">
     {open.kind === 'give' ? <div className="grid gap-4 sm:grid-cols-2">
       <Field>
         <FieldLabel>{t.roleLabel}</FieldLabel>
@@ -423,5 +435,6 @@ function RoleDialog({ open, generation, roles, api, actingSubject, agents, name,
       <Textarea value={reason} rows={2} maxLength={REASON_LIMIT} onChange={event => setReason(event.currentTarget.value)} />
       <FieldHelper>{t.changeReasonHelp}</FieldHelper>
     </Field>
+    </fieldset>
   </CommandDialog>;
 }

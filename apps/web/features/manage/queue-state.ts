@@ -98,6 +98,8 @@ export interface PendingDecision {
 
 export type Settled =
   | { kind: 'done' }
+  /** A retained request with an unknown response, or with effects still outstanding. */
+  | { kind: 'recorded' | 'pending' }
   /** Main refused because the item changed: another moderator got there first, or it moved on. */
   | { kind: 'stale' }
   /** The item left the open queue while a stale decision was being checked. */
@@ -116,6 +118,7 @@ export interface TriageState {
 }
 
 export type TriageEvent =
+  | { type: 'recover'; items: readonly { item: ModerationItem; status: 'recorded' | 'pending' }[] }
   | { type: 'load'; items: readonly ModerationItem[]; append?: boolean }
   | { type: 'focus'; id: string }
   | { type: 'move'; delta: 1 | -1 }
@@ -142,7 +145,8 @@ export function visibleIds(state: TriageState): string[] {
 
 /** The items the next decision applies to: the selection, or else the current item. */
 export function targetIds(state: TriageState): string[] {
-  const visible = new Set(visibleIds(state));
+  const visible = new Set(visibleIds(state).filter(id => state.settled[id]?.kind !== 'recorded'
+    && state.settled[id]?.kind !== 'pending'));
   const selected = state.selected.filter(id => visible.has(id));
   if (selected.length) return selected;
   return state.current && visible.has(state.current) ? [state.current] : [];
@@ -151,6 +155,7 @@ export function targetIds(state: TriageState): string[] {
 /** Actions every target allows, so a bulk decision is never half-applicable. */
 export function commonActions(state: TriageState, ids: readonly string[], authority: QueueAuthority = fullAuthority):
   Set<QueueAction> {
+  if (ids.some(id => state.settled[id]?.kind === 'recorded' || state.settled[id]?.kind === 'pending')) return new Set();
   const sets = ids.map(id => state.items[id]).filter(item => item !== undefined).map(item => actionsFor(item, authority));
   if (!sets.length) return new Set();
   return new Set([...sets[0]!].filter(action => sets.every(set => set.has(action))));
@@ -169,6 +174,17 @@ function nextCurrent(state: TriageState, removed: ReadonlySet<string>, from: str
 
 export function triage(state: TriageState, event: TriageEvent): TriageState {
   switch (event.type) {
+    case 'recover': {
+      const items = { ...state.items };
+      const settled = { ...state.settled };
+      const order = [...state.order];
+      for (const attempt of event.items) {
+        items[attempt.item.id] = attempt.item;
+        settled[attempt.item.id] = { kind: attempt.status };
+        if (!order.includes(attempt.item.id)) order.push(attempt.item.id);
+      }
+      return { ...state, items, settled, order, current: state.current ?? order[0] ?? null };
+    }
     case 'load': {
       const incoming = new Map(event.items.map(item => [item.id, item]));
       const order = event.append
@@ -176,13 +192,15 @@ export function triage(state: TriageState, event: TriageEvent): TriageState {
         : event.items.map(item => item.id);
       const items = event.append ? { ...state.items, ...Object.fromEntries(incoming) } : Object.fromEntries(incoming);
       const settled: Record<string, Settled> = {};
-      const pendingIds = new Set([...state.pending.flatMap(entry => entry.ids), ...state.committing]);
+      const pendingIds = new Set([...state.pending.flatMap(entry => entry.ids), ...state.committing,
+        ...Object.entries(state.settled).filter(([, outcome]) => outcome.kind === 'recorded' || outcome.kind === 'pending')
+          .map(([id]) => id)]);
       // Keep items that are still ours to resolve even if a fresh page no longer lists them.
       for (const id of pendingIds) if (!items[id] && state.items[id]) items[id] = state.items[id]!;
       for (const [id, outcome] of Object.entries(state.settled)) {
         const present = incoming.has(id) || event.append && state.items[id] !== undefined;
         if (outcome.kind === 'stale') settled[id] = present ? outcome : { kind: 'gone' };
-        else if (outcome.kind === 'failed' && present) settled[id] = outcome;
+        else if (outcome.kind === 'recorded' || outcome.kind === 'pending' || outcome.kind === 'failed' && present) settled[id] = outcome;
         else if (outcome.kind === 'gone') settled[id] = outcome;
       }
       const keep = [...order];
@@ -246,6 +264,7 @@ export function triage(state: TriageState, event: TriageEvent): TriageState {
       return event.outcome.kind === 'done' ? next : { ...next, current: next.current ?? event.id };
     }
     case 'dismiss': {
+      if (state.settled[event.id]?.kind === 'recorded' || state.settled[event.id]?.kind === 'pending') return state;
       const settled = { ...state.settled };
       delete settled[event.id];
       return { ...state, settled };

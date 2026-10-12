@@ -1,5 +1,6 @@
 import type { Decision } from './queue-state.ts';
 import { automationOf } from './reason-presets.ts';
+import { authoritativeRefusal, type AttemptStorage, forgetCommand, readReportAttempt, retainCommand } from './safety-pending.ts';
 import { readDecisionBasis, readMembers, readRoles, readSettings, readSubmission } from './read.ts';
 import { type DecisionBasis, type InvitationCommand, type MainClient, type MemberCommand, type ModerationDecisionCommand,
   type ModerationItem, problemCode, type ReadFailure, type RoleCommand, type SettingsView, uuidOf } from './types.ts';
@@ -48,6 +49,17 @@ export async function send<T>(call: () => Promise<Answer<T>>): Promise<Outcome<T
 
 export const newKey = () => crypto.randomUUID();
 const keyed = (key: string) => ({ headers: { 'idempotency-key': key } });
+export type DecisionReceipt = NonNullable<Awaited<ReturnType<MainClient['v1']['moderation']['decisions']['post']>>['data']>;
+
+/** Only an operation receipt can confirm that a report's effects have finished. */
+export function decisionStatus(data: unknown): DecisionReceipt['operation']['status'] | null {
+  if (typeof data !== 'object' || data === null || !('operation' in data)) return null;
+  const operation = data.operation;
+  if (typeof operation !== 'object' || operation === null || !('status' in operation)) return null;
+  return operation.status === 'completed' || operation.status === 'accepted' || operation.status === 'partial'
+    || operation.status === 'cancelled'
+    ? operation.status : null;
+}
 
 /**
  * Accepting adopts the submitted version, compare-and-set on the Realm's
@@ -169,12 +181,13 @@ async function caseAutomation(main: MainClient, realm: string, caseId: string, a
 }
 
 /**
- * Keeps or removes one report's content. The basis is read again when the
- * decision is sent, so it cites what is true then; Main compares the case
- * generation, rule revision and target heads and answers stale if any moved.
+ * Reads a basis only for the first dispatch. Replays keep the exact request,
+ * even if its targets, rules or case generation have since changed.
  */
 export async function decideReport(main: MainClient, realm: string, item: ModerationItem, decision: Decision,
-  actingSubject: string, key: string): Promise<Outcome<unknown>> {
+  actingSubject: string, key: string, store?: AttemptStorage): Promise<Outcome<DecisionReceipt>> {
+  const retained = readReportAttempt(realm, actingSubject, item.id, store);
+  if (retained?.input) return sendReport(main, retained, store);
   if (!['keep', 'remove', 'interim-restrict', 'final-restrict'].includes(decision.action))
     return { ok: false, failure: 'invalid' };
   if (item.kind === 'rights_complaint' && decision.action === 'remove'
@@ -195,11 +208,29 @@ export async function decideReport(main: MainClient, realm: string, item: Modera
     decision.details ?? null, actingSubject, key);
   // Everything reported is already hidden: another decision got there first.
   if (!command) return { ok: false, failure: 'stale' };
-  return item.kind === 'rights_complaint'
-    ? send(() => main.v1.rights.restrictions.post({ ...command, reasons, profile: 'rights-restriction-v1',
+  const attempt = { realm, actingSubject, item, decision, key: retained?.key ?? key,
+    input: { ...command, reasons, idempotencyKey: retained?.key ?? key }, status: 'recorded' as const };
+  if (!retainCommand(`report:${item.id}`, attempt, store)) return { ok: false, failure: 'unavailable' };
+  return sendReport(main, attempt, store);
+}
+
+async function sendReport(main: MainClient, attempt: NonNullable<ReturnType<typeof readReportAttempt>>,
+  store?: AttemptStorage): Promise<Outcome<DecisionReceipt>> {
+  const command = attempt.input!;
+  const result = attempt.item.kind === 'rights_complaint'
+    ? await send(() => main.v1.rights.restrictions.post({ ...command, profile: 'rights-restriction-v1',
       // Main's `literals()` helper currently reads as `never` through Eden.
-      outcome: command.outcome as never }, keyed(key)))
-    : send(() => main.v1.moderation.decisions.post({ ...command, reasons }, keyed(key)));
+      outcome: command.outcome as never }, keyed(attempt.key)))
+    : await send(() => main.v1.moderation.decisions.post(command, keyed(attempt.key)));
+  if (result.ok && decisionStatus(result.data) === 'completed') {
+    forgetCommand(attempt.realm, attempt.actingSubject, `report:${attempt.item.id}`, store);
+  } else if (result.ok) {
+    retainCommand(`report:${attempt.item.id}`, { ...attempt, status: 'pending' }, store);
+  } else if (attempt.status !== 'pending' && authoritativeRefusal(result.failure)) {
+    // These are authoritative refusals. A key conflict does not establish that nothing committed.
+    forgetCommand(attempt.realm, attempt.actingSubject, `report:${attempt.item.id}`, store);
+  }
+  return result;
 }
 
 /**

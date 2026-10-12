@@ -13,7 +13,8 @@ import { Fragment, useCallback, useEffect, useMemo, useReducer, useRef, useState
 import type { UiLocale } from '../../i18n/define.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { EmptyState } from '../shell/empty-state.tsx';
-import type { Outcome } from './commands.ts';
+import { decisionStatus, type Outcome } from './commands.ts';
+import { forgetCommand, readReportAttempt, reportAttempts, retainCommand, type ReportAttempt } from './safety-pending.ts';
 import { agentLabel, isoTime, relativeTime } from './format.ts';
 import { actionLabel, componentLabel, decidedText, kindLabel, reasonLabel, shortcutActions, shortcutKeys, stateLabel } from './labels.ts';
 import type { ManageMessages } from './messages.ts';
@@ -68,8 +69,12 @@ export function reasonsOf(items: readonly ModerationItem[], current: string | nu
   return [...new Set([...current ? [current] : [], ...codes])].sort();
 }
 
-function outcomeOf(result: Outcome<unknown>): Settled {
-  if (result.ok || result.failure === 'pending') return { kind: 'done' };
+export function outcomeOf(result: Outcome<unknown>, report = false): Settled {
+  if (result.ok) return !report || decisionStatus(result.data) === 'completed' ? { kind: 'done' }
+    : { kind: 'pending' };
+  if (result.failure === 'pending') return { kind: 'pending' };
+  if (report && (result.failure === 'unavailable' || result.failure === 'sign-in' || result.failure === 'conflict'))
+    return { kind: 'recorded' };
   if (result.code === 'rules_unpublished') return { kind: 'failed', failure: 'no-rules' };
   if (result.failure === 'stale') return { kind: 'stale' };
   if (result.failure === 'denied' || result.failure === 'sign-in' || result.failure === 'budget') {
@@ -123,6 +128,9 @@ export function QueueView({ realm, address = realm, actingSubject, authority = f
   const committed = useRef(new Set<string>());
   const latest = useRef(state);
   latest.current = state;
+  useEffect(() => {
+    dispatch({ type: 'recover', items: reportAttempts(realm, actingSubject) });
+  }, [realm, actingSubject]);
 
   const visible = visibleIds(state);
   const current = state.current ? state.items[state.current] ?? null : null;
@@ -145,21 +153,47 @@ export function QueueView({ realm, address = realm, actingSubject, authority = f
     await learn(read.data.items);
   }, [api, view, learn]);
 
+  const sendItem = useCallback(async (item: ModerationItem, decision: Decision, key: string) => {
+    const report = isReportAction(decision.action);
+    const saved = report ? readReportAttempt(realm, actingSubject, item.id) : null;
+    const attempt: ReportAttempt = saved ?? { realm, actingSubject, key, item, decision, input: null, status: 'recorded' };
+    if (report && !retainCommand(`report:${item.id}`, attempt)) {
+      const outcome: Settled = { kind: 'failed', failure: 'unavailable' };
+      dispatch({ type: 'settle', id: item.id, outcome });
+      return outcome;
+    }
+    const result = await api.commit(attempt.item, attempt.decision, attempt.key);
+    const outcome: Settled = report && saved?.status === 'pending' && !result.ok ? { kind: 'pending' } : outcomeOf(result, report);
+    if (report) {
+      if (outcome.kind === 'recorded' || outcome.kind === 'pending') {
+        // The command adapter has retained the prepared body; preserve it with the UI status.
+        retainCommand(`report:${item.id}`, { ...readReportAttempt(realm, actingSubject, item.id) ?? attempt,
+          status: outcome.kind });
+      } else forgetCommand(realm, actingSubject, `report:${item.id}`);
+    }
+    dispatch({ type: 'settle', id: item.id, outcome });
+    return outcome;
+  }, [api, realm, actingSubject]);
+
   const commit = useCallback(async (entry: PendingDecision) => {
     if (committed.current.has(entry.key)) return;
     committed.current.add(entry.key);
     dispatch({ type: 'commit', key: entry.key });
     const results = await Promise.all(entry.ids.map(async id => {
       const item = latest.current.items[id]!;
-      const result = await api.commit(item, entry.decision, `${entry.key}:${id}`);
-      const outcome = outcomeOf(result);
-      dispatch({ type: 'settle', id, outcome });
-      if (!result.ok && result.failure === 'pending') setFlash(t.pendingNotice);
-      return outcome;
+      return sendItem(item, entry.decision, `${entry.key}:${id}`);
     }));
     // An escalated item stays open for the owners, so it comes back with its escalation shown.
     if (entry.decision.action === 'escalate' || results.some(outcome => outcome.kind === 'stale')) await reload();
-  }, [api, reload, t.pendingNotice]);
+  }, [sendItem, reload]);
+
+  async function resume(id: string) {
+    const attempt = readReportAttempt(realm, actingSubject, id);
+    if (!attempt || latest.current.committing.includes(id)) return;
+    dispatch({ type: 'decide', key: attempt.key, ids: [id], decision: attempt.decision, now: 0, window: 0 });
+    dispatch({ type: 'commit', key: attempt.key });
+    await sendItem(attempt.item, attempt.decision, attempt.key);
+  }
 
   // The undo window: a clock while decisions wait, and each is sent when its window closes.
   const pendingCount = state.pending.length;
@@ -330,14 +364,16 @@ export function QueueView({ realm, address = realm, actingSubject, authority = f
         <WorkThumbCredit iri={subject.cover.iri} work={subject.cover.work}
           label={subject.book?.value ?? title} locale={locale} />
       </div>
-      {outcome && outcome.kind !== 'done' ? <span className="sr-only">{outcome.kind === 'stale' ? t.staleNotice : t.failedNotice}</span>
+      {outcome && outcome.kind !== 'done' ? <span className="sr-only">{outcome.kind === 'pending' || outcome.kind === 'recorded'
+        ? t.decisionStillPending : outcome.kind === 'stale' ? t.staleNotice : t.failedNotice}</span>
         : null}
     </li>;
   }
 
   const detail = (className?: string) => <QueueDetail item={current} names={names}
     draft={current ? drafts[current.id] : undefined} basis={current ? bases[current.id] : undefined}
-    allowed={current && visible.includes(current.id) ? actionsFor(current, effective) : new Set()}
+    allowed={current && visible.includes(current.id) && state.settled[current.id]?.kind !== 'recorded'
+      && state.settled[current.id]?.kind !== 'pending' ? actionsFor(current, effective) : new Set()}
     authority={authority} rules={rules} realmRules={realmRules} rulesHref={rulesHref} onAct={act} now={now}
     locale={locale} messages={messages} className={className} />;
   const reasons = view.type?.endsWith('_submission') ? [] : reasonsOf(Object.values(state.items), view.reason);
@@ -371,12 +407,17 @@ export function QueueView({ realm, address = realm, actingSubject, authority = f
     {notices.length ? <div className="grid gap-2">
       {notices.map(([id, outcome]) => <Alert key={id} variant={outcome.kind === 'gone' ? 'info' : 'warning'}>
         <AlertDescription className="flex items-start justify-between gap-3">
-          <span>{outcome.kind === 'gone' ? t.goneNotice({ title: titleOf(id) })
+          <span>{outcome.kind === 'pending' ? `${titleOf(id)}: ${t.decisionPendingHelp}`
+            : outcome.kind === 'recorded' ? `${titleOf(id)}: ${t.decisionStillPending}`
+            : outcome.kind === 'gone' ? t.goneNotice({ title: titleOf(id) })
             : outcome.kind === 'stale' ? `${titleOf(id)}: ${t.staleNotice}`
               : `${titleOf(id)}: ${outcome.kind === 'failed' && outcome.failure === 'denied' ? t.deniedNotice
                 : outcome.kind === 'failed' && outcome.failure === 'no-rules' ? t.noRulesNotice : t.failedNotice}`}</span>
-          <Button size="icon-xs" variant="ghost" aria-label={t.dismiss} onClick={() => dispatch({ type: 'dismiss', id })}>
+          {outcome.kind === 'pending' || outcome.kind === 'recorded'
+            ? <Button size="sm" variant="outline" onClick={() => void resume(id)}>{t.decisionResume}</Button>
+            : <Button size="icon-xs" variant="ghost" aria-label={t.dismiss} onClick={() => dispatch({ type: 'dismiss', id })}>
             <XIcon aria-hidden="true" /></Button>
+          }
         </AlertDescription>
       </Alert>)}
     </div> : null}

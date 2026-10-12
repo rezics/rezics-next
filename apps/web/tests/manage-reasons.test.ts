@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { materializeData } from 'native-i18n';
-import { decideReport } from '../features/manage/commands.ts';
+import { decideReport as sendReport } from '../features/manage/commands.ts';
+import { decisionReceipt, isolatedAttemptStorage } from '../features/manage/recovery-fixtures.ts';
 import { basisFor } from '../features/manage/fixtures.ts';
 import { messages, type ManageMessages } from '../features/manage/messages.ts';
 import { actionsFor, needsReason } from '../features/manage/queue-state.ts';
@@ -8,6 +9,9 @@ import { automationOf, combineAutomation, isReportAction, needsDetails, NOTE_LIM
   reportReasons, type ReportAction, sharedRule, sharedRules, STATEMENT_LIMIT, statementFor } from '../features/manage/reason-presets.ts';
 import type { MainClient, ModerationItem, PublishedRule } from '../features/manage/types.ts';
 import { type UiLocale, uiLocales } from '../i18n/define.ts';
+
+const decideReport: typeof sendReport = (main, realm, item, decision, actor, key) =>
+  sendReport(main, realm, item, decision, actor, key, isolatedAttemptStorage());
 
 const iri = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const uuid = (n: number) => iri(n).slice(-36);
@@ -254,14 +258,14 @@ describe('sending a report decision', () => {
   const mainFor = (calls: unknown[]) => ({ v1: { realms: () => ({ moderation: () => ({ get: async () =>
     ({ data: basisFor(item), error: null }) }) }), moderation: { decisions: { post: async (body: unknown, options: unknown) => {
     calls.push({ body, options });
-    return { data: { saved: true }, error: null };
+    return { data: decisionReceipt(item), error: null };
   } } } } }) as unknown as MainClient;
 
   test('the statement goes as `reasons`; a private note is not the rationale the parties read', async () => {
     const calls: unknown[] = [];
     const note = 'Reporter gave no edition.';
     expect(await decideReport(mainFor(calls), uuid(7), item, { action: 'keep', reason: reasons.facts,
-      note: `  ${note}  `, reasons }, iri(11), 'keep-key')).toEqual({ ok: true, data: { saved: true } });
+      note: `  ${note}  `, reasons }, iri(11), 'keep-key')).toEqual({ ok: true, data: decisionReceipt(item) });
     expect(calls).toEqual([{ body: expect.objectContaining({ outcome: 'dismiss', reasons,
       rationale: null, disclosure: 'parties' }), options: { headers: { 'idempotency-key': 'keep-key' } } }]);
     expect(JSON.stringify((calls[0] as { body: unknown }).body)).not.toContain(note);
@@ -273,7 +277,7 @@ describe('sending a report decision', () => {
     const note = 'Check the scan quality later.';
     const facts = `${reasons.facts} ${details}`;
     expect(await decideReport(mainFor(calls), uuid(7), item, { action: 'keep', reason: facts, note, details,
-      reasons: { ...reasons, facts } }, iri(11), 'keep-key')).toEqual({ ok: true, data: { saved: true } });
+      reasons: { ...reasons, facts } }, iri(11), 'keep-key')).toEqual({ ok: true, data: decisionReceipt(item) });
     const body = (calls[0] as { body: Record<string, unknown> }).body;
     expect(body).toMatchObject({ rationale: details, disclosure: 'parties', reasons: { ...reasons, facts } });
     expect(JSON.stringify(body)).not.toContain(note);
@@ -305,13 +309,13 @@ describe('sending a report decision', () => {
       return { data: { ...pages[index]!, nextCursor: index + 1 < pages.length ? String(index + 1) : null }, error: null };
     } }) }), moderation: { decisions: { post: async (body: Record<string, unknown>) => {
       posted.push(body);
-      return { data: {}, error: null };
+      return { data: decisionReceipt(item), error: null };
     } } } } }) as unknown as MainClient;
 
   test('the statement says automation was involved when this case\'s evidence records it, whatever the screen showed', async () => {
     const calls: Array<{ body: Record<string, unknown> }> = [];
     const main = { v1: { realms: () => ({ moderation: () => ({ get: async () => ({ data: automatedBasis(), error: null }) }) }),
-      moderation: { decisions: { post: async (body: Record<string, unknown>) => { calls.push({ body }); return { data: {}, error: null }; } } } } } as unknown as MainClient;
+      moderation: { decisions: { post: async (body: Record<string, unknown>) => { calls.push({ body }); return { data: decisionReceipt(item), error: null }; } } } } } as unknown as MainClient;
     await decideReport(main, uuid(7), item, keepDecision(false), iri(11), 'k');
     expect(calls[0]!.body.reasons).toEqual({ ...reasons, automation: true });
   });
@@ -328,7 +332,7 @@ describe('sending a report decision', () => {
     const cursors: Array<string | undefined> = [];
     const later = { ...basisFor(item), reports: automatedBasis().reports };
     const main = paged([basisFor(item), basisFor(item), later], posted, cursors);
-    expect(await decideReport(main, uuid(7), item, keepDecision(false), iri(11), 'k')).toEqual({ ok: true, data: {} });
+    expect(await decideReport(main, uuid(7), item, keepDecision(false), iri(11), 'k')).toEqual({ ok: true, data: decisionReceipt(item) });
     expect(cursors).toEqual([undefined, '1', '2']);
     expect(posted[0]!.reasons).toEqual({ ...reasons, automation: true });
   });
@@ -336,7 +340,7 @@ describe('sending a report decision', () => {
   test('every page without automation still sends a manual statement, and a case that moved between pages is stale', async () => {
     const posted: Array<Record<string, unknown>> = [];
     expect(await decideReport(paged([basisFor(item), basisFor(item)], posted, []), uuid(7), item, keepDecision(true), iri(11), 'k'))
-      .toEqual({ ok: true, data: {} });
+      .toEqual({ ok: true, data: decisionReceipt(item) });
     expect(posted[0]!.reasons).toEqual({ ...reasons, automation: false });
     const moved: Array<Record<string, unknown>> = [];
     expect(await decideReport(paged([basisFor(item), { ...basisFor(item), generation: '9' }], moved, []), uuid(7), item,
@@ -350,14 +354,14 @@ describe('sending a report decision', () => {
     const posted: Array<Record<string, unknown>> = [];
     const cursors: Array<string | undefined> = [];
     expect(await decideReport(paged(manual, posted, cursors), uuid(7), item, keepDecision(true), iri(11), 'k'))
-      .toEqual({ ok: true, data: {} });
+      .toEqual({ ok: true, data: decisionReceipt(item) });
     expect(cursors).toHaveLength(51);
     expect(posted[0]!.reasons).toEqual({ ...reasons, automation: false });
     const later = manual.map((page, index) => index === 50
       ? { ...page, reports: automatedBasis().reports } : page);
     const found: Array<Record<string, unknown>> = [];
     expect(await decideReport(paged(later, found, []), uuid(7), item, keepDecision(false), iri(11), 'k'))
-      .toEqual({ ok: true, data: {} });
+      .toEqual({ ok: true, data: decisionReceipt(item) });
     expect(found[0]!.reasons).toEqual({ ...reasons, automation: true });
   });
 
@@ -367,7 +371,7 @@ describe('sending a report decision', () => {
     const stuck = { v1: { realms: () => ({ moderation: () => ({ get: async ({ query }: { query: { cursor?: string } }) => {
       cursors.push(query.cursor);
       return { data: { ...basisFor(item), nextCursor: 'more' }, error: null };
-    } }) }), moderation: { decisions: { post: async (body: Record<string, unknown>) => { posted.push(body); return { data: {}, error: null }; } } } } } as unknown as MainClient;
+    } }) }), moderation: { decisions: { post: async (body: Record<string, unknown>) => { posted.push(body); return { data: decisionReceipt(item), error: null }; } } } } } as unknown as MainClient;
     expect(await decideReport(stuck, uuid(7), item, keepDecision(false), iri(11), 'k')).toEqual({ ok: false, failure: 'unavailable' });
     expect(cursors.length).toBeLessThan(50);
     expect(posted).toEqual([]);

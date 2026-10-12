@@ -1,5 +1,7 @@
 import type { CommandFailure, Outcome } from './commands.ts';
 import type { SafetyDecisionInput, SafetyDecisionResult, SafetyReasons } from './safety-types.ts';
+import type { Decision } from './queue-state.ts';
+import type { ModerationDecisionCommand, ModerationItem } from './types.ts';
 
 // A platform decision with targets is answered 202 and its effects run only when the same key and body are sent
 // again. The request is therefore kept until the API reports every effect confirmed: written down before it is sent,
@@ -55,3 +57,89 @@ export async function settleDecision(decide: (input: SafetyDecisionInput) => Pro
 /** A refusal that proves nothing was recorded under this key, so the kept request can go. */
 export const refusedForGood = (failure: CommandFailure) => failure !== 'unavailable' && failure !== 'pending'
   && failure !== 'sign-in';
+
+export interface CommandAttempt<Input> {
+  realm: string; actingSubject: string; key: string; input: Input;
+  status: 'recorded' | 'pending';
+}
+export interface ReportAttempt extends CommandAttempt<ModerationDecisionCommand | null> {
+  item: ModerationItem; decision: Decision;
+}
+export type AttemptStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem' | 'key' | 'length'>;
+const commandPrefix = (realm: string, actor: string) => `rezics:manage:command:${encodeURIComponent(realm)}:${encodeURIComponent(actor)}:`;
+const commandKey = (realm: string, actor: string, operation: string) => `${commandPrefix(realm, actor)}${operation}`;
+
+export function readCommand<Input>(realm: string, actor: string, operation: string,
+  store: AttemptStorage | null = storage()): CommandAttempt<Input> | null {
+  try {
+    const found = JSON.parse(store?.getItem(commandKey(realm, actor, operation)) ?? 'null') as CommandAttempt<Input> | null;
+    return found?.realm === realm && found.actingSubject === actor && typeof found.key === 'string'
+      && (found.status === 'recorded' || found.status === 'pending') ? found : null;
+  } catch { return null; }
+}
+
+/** Refuse dispatch if this device cannot retain the request for recovery. */
+export function retainCommand<Input>(operation: string, attempt: CommandAttempt<Input>,
+  store: AttemptStorage | null = storage()): boolean {
+  try {
+    if (!store) return false;
+    store.setItem(commandKey(attempt.realm, attempt.actingSubject, operation), JSON.stringify(attempt));
+    return true;
+  } catch { return false; }
+}
+
+export function forgetCommand(realm: string, actor: string, operation: string, store: AttemptStorage | null = storage()) {
+  try { store?.removeItem(commandKey(realm, actor, operation)); } catch { /* retain for recovery */ }
+}
+
+export const authoritativeRefusal = (failure: CommandFailure) => failure === 'stale' || failure === 'invalid'
+  || failure === 'denied' || failure === 'missing' || failure === 'budget';
+
+/** Retains a management write before dispatch; a lost response never creates a new intent. */
+export async function performCommand<Input, Receipt>(operation: string, proposed: CommandAttempt<Input>,
+  send: (attempt: CommandAttempt<Input>) => Promise<Outcome<Receipt>>,
+  store: AttemptStorage | null = storage()): Promise<Outcome<Receipt>> {
+  const attempt = readCommand<Input>(proposed.realm, proposed.actingSubject, operation, store) ?? proposed;
+  if (!retainCommand(operation, attempt, store)) return { ok: false, failure: 'unavailable' };
+  let result: Outcome<Receipt>;
+  try { result = await send(attempt); } catch { result = { ok: false, failure: 'unavailable' }; }
+  if (result.ok || attempt.status !== 'pending' && authoritativeRefusal(result.failure))
+    forgetCommand(attempt.realm, attempt.actingSubject, operation, store);
+  else if (result.failure === 'pending') retainCommand(operation, { ...attempt, status: 'pending' }, store);
+  return result;
+}
+
+export function readReportAttempt(realm: string, actor: string, id: string, store: AttemptStorage | null = storage()): ReportAttempt | null {
+  const found = readCommand<ModerationDecisionCommand | null>(realm, actor, `report:${id}`, store) as ReportAttempt | null;
+  return found?.item?.id === id && found.decision ? found : null;
+}
+
+export function reportAttempts(realm: string, actor: string, store: AttemptStorage | null = storage()): ReportAttempt[] {
+  const found: ReportAttempt[] = [];
+  try {
+    const prefix = `${commandPrefix(realm, actor)}report:`;
+    for (let index = 0; index < (store?.length ?? 0); index++) {
+      const key = store?.key(index);
+      if (!key?.startsWith(prefix)) continue;
+      const attempt = readReportAttempt(realm, actor, key.slice(prefix.length), store);
+      if (attempt) found.push(attempt);
+    }
+  } catch { /* inaccessible storage */ }
+  return found;
+}
+
+export function retainedCommands<Input>(realm: string, actor: string, family: string,
+  store: AttemptStorage | null = storage()): { operation: string; attempt: CommandAttempt<Input> }[] {
+  const found: { operation: string; attempt: CommandAttempt<Input> }[] = [];
+  try {
+    const prefix = commandPrefix(realm, actor);
+    for (let index = 0; index < (store?.length ?? 0); index++) {
+      const key = store?.key(index);
+      if (!key?.startsWith(`${prefix}${family}:`)) continue;
+      const operation = key.slice(prefix.length);
+      const attempt = readCommand<Input>(realm, actor, operation, store);
+      if (attempt) found.push({ operation, attempt });
+    }
+  } catch { /* inaccessible storage */ }
+  return found;
+}

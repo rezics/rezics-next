@@ -223,7 +223,8 @@ export function queueApi(options: { stale?: readonly string[]; reload?: Moderati
     commit: async (item, decision, key): Promise<Outcome<unknown>> => {
       recorded.commits.push({ id: item.id, action: decision.action, reason: decision.reason, key, note: decision.note,
         details: decision.details ?? null, reasons: decision.reasons ?? null });
-      return options.stale?.includes(item.id) ? { ok: false, failure: 'stale' } : { ok: true, data: {} };
+      return options.stale?.includes(item.id) ? { ok: false, failure: 'stale' }
+        : { ok: true, data: { operation: { status: 'completed' } } };
     },
   };
 }

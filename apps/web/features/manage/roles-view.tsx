@@ -1,6 +1,7 @@
 'use client';
 
 import { Badge } from '@rezics/ui/badge';
+import { Alert, AlertDescription } from '@rezics/ui/alert';
 import { Button } from '@rezics/ui/button';
 import { Checkbox } from '@rezics/ui/checkbox';
 import { Field, FieldContent, FieldDescription, FieldError, FieldHelper, FieldLabel, FieldLegend, FieldSet } from '@rezics/ui/field';
@@ -13,7 +14,7 @@ import { useMemo, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
-import { type AdminApi, bffAdminApi, useRoleChange } from './admin-api.ts';
+import { type AdminApi, bffAdminApi, useRoleChange, useRoleRecovery } from './admin-api.ts';
 import { CommandDialog } from './command-dialog.tsx';
 import { agentLabel } from './format.ts';
 import { ImpactPreview } from './impact-preview.tsx';
@@ -37,6 +38,7 @@ export function RolesView({ realm, address = realm, actingSubject, list: serverL
   const api = useMemo(() => givenApi ?? bffAdminApi(realm, actingSubject), [givenApi, realm, actingSubject]);
   const router = useRouter();
   const [editing, setEditing] = useState<Role | 'new' | null>(null);
+  const recovery = useRoleRecovery(api, realm, actingSubject, editing !== null);
   const [status, setStatus] = useState<string | null>(null);
   const [savedList, setSavedList] = useState<{ realm: string; actingSubject: string; list: RoleList } | null>(null);
   const list = newestRoleList(serverList,
@@ -53,6 +55,13 @@ export function RolesView({ realm, address = realm, actingSubject, list: serverL
       <Button size="sm" disabled={atCap} onClick={() => setEditing('new')}><PlusIcon aria-hidden="true" />{t.newRole}</Button>
     </div>
     <div role="status" aria-live="polite" className="empty:hidden">{status ? <p className="text-sm">{status}</p> : null}</div>
+    {recovery.attempts.filter(entry => entry.attempt.input.command.change.kind === 'role').map(entry =>
+      <Alert key={entry.operation} variant="warning"><AlertDescription className="flex items-center justify-between gap-3">
+        <span>{entry.attempt.input.command.change.kind === 'role' ? entry.attempt.input.command.change.name : ''}: {t.decisionStillPending}</span>
+        <Button size="sm" variant="outline" isLoading={recovery.pending} onClick={() => void recovery.resume(entry.operation)
+          .then(result => { if (result.ok) { setStatus(t.roleSaved); router.refresh(); } else setStatus(t.failedNotice); })}>
+          {t.decisionResume}</Button>
+      </AlertDescription></Alert>)}
     {!list.roles.length ? <EmptyState icon={ShieldIcon} title={t.noRolesTitle} description={t.noRolesHelp} />
       : <ul className="grid gap-4 md:grid-cols-2">
         {list.roles.map(role => <li key={role.id} className="grid content-start gap-4 rounded-2xl border border-border/60 bg-card p-5">
@@ -89,7 +98,7 @@ export function RolesView({ realm, address = realm, actingSubject, list: serverL
           </div>
         </li>)}
       </ul>}
-    {editing ? <RoleEditor role={editing === 'new' ? null : editing} generation={list.generation} api={api}
+    {editing ? <RoleEditor realm={realm} role={editing === 'new' ? null : editing} generation={list.generation} api={api}
       actingSubject={actingSubject} agents={agents} locale={locale} messages={messages} onClose={() => setEditing(null)}
       onSaved={async () => {
         const refreshed = await api.roles();
@@ -100,7 +109,8 @@ export function RolesView({ realm, address = realm, actingSubject, list: serverL
   </div>;
 }
 
-function RoleEditor({ role, generation, api, actingSubject, agents, locale, messages, onClose, onSaved }: {
+function RoleEditor({ realm, role, generation, api, actingSubject, agents, locale, messages, onClose, onSaved }: {
+  realm: string;
   role: Role | null; generation: string; api: AdminApi; actingSubject: string; agents: Record<string, AgentSummary>;
   locale: UiLocale; messages: ManageMessages; onClose: () => void; onSaved: () => Promise<void>;
 }) {
@@ -116,20 +126,21 @@ function RoleEditor({ role, generation, api, actingSubject, agents, locale, mess
   [roleId, name, permissions]);
   const unchanged = role !== null && role.name === name.trim()
     && sortPermissions(role.permissions).join() === sortPermissions(permissions).join();
-  const { state, save, names } = useRoleChange(api, { actingSubject, generation, change: unchanged ? null : change });
+  const { state, save, names, recovering } = useRoleChange(api, { realm, actingSubject, generation, change });
 
   async function submit() {
-    if (!name.trim()) { setError(t.roleNameRequired); return; }
-    if (!reason.trim()) { setError(t.reasonRequired); return; }
+    if (!recovering && !name.trim()) { setError(t.roleNameRequired); return; }
+    if (!recovering && !reason.trim()) { setError(t.reasonRequired); return; }
     setPending(true); setError(null);
     const result = await save(reason);
     if (!result.ok) { setPending(false); setError(failureText(result.failure, t, 'role')); return; }
     await onSaved();
   }
 
-  return <CommandDialog open title={role ? t.editRole : t.newRole} confirm={role ? t.saveRole : t.createRole}
+  return <CommandDialog open title={role ? t.editRole : t.newRole} confirm={recovering ? t.decisionResume : role ? t.saveRole : t.createRole}
     pending={pending} error={error} cancel={t.cancel} onClose={onClose} onConfirm={() => void submit()}
-    disabled={unchanged || state.kind !== 'ready'}>
+    disabled={!recovering && (unchanged || state.kind !== 'ready')}>
+    <fieldset disabled={recovering || pending} className="contents">
     <Field invalid={error === t.roleNameRequired}>
       <FieldLabel>{t.roleNameLabel}</FieldLabel>
       <Input value={name} maxLength={80} onChange={event => setName(event.currentTarget.value)} />
@@ -155,5 +166,6 @@ function RoleEditor({ role, generation, api, actingSubject, agents, locale, mess
       <Textarea value={reason} rows={2} maxLength={REASON_LIMIT} onChange={event => setReason(event.currentTarget.value)} />
       <FieldHelper>{t.changeReasonHelp}</FieldHelper>
     </Field>
+    </fieldset>
   </CommandDialog>;
 }
