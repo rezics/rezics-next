@@ -18,7 +18,10 @@ const requestCounters = [
   'postgresStatements', 'accountCalls', 'otherFetches', 'unclassifiedFetches',
 ] as const satisfies readonly WorkCostField[];
 const counters = [...requestCounters, ...commandCounters];
-type MeasuredProfile = WorkProfile & Record<(typeof commandCounters)[number], number>;
+type CandidateRead = { rows: number; candidates: number; sentBytes: number };
+type MeasuredProfile = WorkProfile & Record<(typeof commandCounters)[number], number> & {
+  candidateRows: number; candidateCount: number; candidateReceivedBytes: number; responseBytes: number;
+};
 type Page = { httpStatus: number; complete?: boolean; relationComplete?: boolean; population: number; total: number;
   results: { work: string; mainVersion: string }[]; next: SearchContinuation | null };
 type Evidence = { matchingWorks: number; restoreMs: number;
@@ -28,7 +31,7 @@ type Evidence = { matchingWorks: number; restoreMs: number;
  * CommandWork initializes mutation counters, but emits visit keys sparsely.
  * A covered dictionary's absent visit key means zero; an absent dictionary fails.
  * Health GETs do not execute native commands or queries. */
-function nativeCounters(profile: WorkProfile): MeasuredProfile {
+function measuredProfile(profile: WorkProfile, read: CandidateRead, responseBytes: number): MeasuredProfile {
   const spans = profile.fusekiCalls.map(call => profile.spans.find(span => span.spanId === call.spanId)!);
   const native = spans.filter(span => span.attributes['http.request.method'] === 'POST');
   expect(native.length).toBeGreaterThan(0);
@@ -42,7 +45,13 @@ function nativeCounters(profile: WorkProfile): MeasuredProfile {
       return sum + (value as number);
     }, 0),
   ])) as Record<(typeof commandCounters)[number], number>;
-  return { ...profile, ...totals };
+  // Match the observed query to its HTTP span by its exact SPARQL body size.
+  // This excludes fixed health responses and the later hydration/facet reads.
+  const calls = profile.fusekiCalls.filter(call => call.sentBytes === read.sentBytes);
+  expect(calls).toHaveLength(1);
+  expect(calls[0]!.receivedBytes).toBeGreaterThan(0);
+  return { ...profile, ...totals, candidateRows: read.rows, candidateCount: read.candidates,
+    candidateReceivedBytes: calls[0]!.receivedBytes!, responseBytes };
 }
 
 async function profileRankedSearch() {
@@ -69,17 +78,29 @@ async function profileRankedSearch() {
   const targets: string[] = [];
   const evidence: Evidence[] = [];
   const attempts: { matchingWorks: number; page: string; profile: WorkProfile }[] = [];
-  let blind: { matchingWorks: number; first: WorkProfile; continuation: WorkProfile } | undefined;
+  let blind: { matchingWorks: number; page: string; profile: WorkProfile } | undefined;
+  let candidateReads: CandidateRead[] = [];
+  const assertMeter = (matchingWorks: number, page: string, profile: WorkProfile) => {
+    if (profile.postgresStatements === null || profile.postgresStatements <= 0
+      || profile.fusekiRequests === null || profile.fusekiRequests <= 0) {
+      blind = { matchingWorks, page, profile };
+      throw new Error(`meter blind at ${matchingWorks} matching Works (${page})`);
+    }
+  };
   const request = async (stack: MediaStack, path: string, body: object, headers = new Headers(), captureFailure = false) => {
+    candidateReads = [];
     headers.set('content-type', 'application/json');
     const response = await stack.main.handle(new Request(`http://main.local${path}`, {
       method: 'POST', headers, body: JSON.stringify(body),
     }));
-    const value = await response.json() as Page;
+    const text = await response.text();
+    const value = JSON.parse(text) as Page;
     if (captureFailure) expect([200, 503]).toContain(response.status);
     else expect(response.status, JSON.stringify(value)).toBe(200);
     if (response.status === 503) expect(value).toMatchObject({ status: 503, code: 'search_index_unavailable' });
-    return { ...value, httpStatus: response.status };
+    if (response.status === 200) expect(candidateReads).toHaveLength(1);
+    return { ...value, httpStatus: response.status, responseBytes: Buffer.byteLength(text),
+      candidateRead: candidateReads[0] };
   };
   const backups = createCorpusBackupDriver({
     sourceRunId: retained.sourceRunId,
@@ -124,6 +145,16 @@ async function profileRankedSearch() {
           expect(await response.json()).toMatchObject({ work: work.work,
             selectedDraft: work.draftRevision, body: `${phrase} ${index}` });
         }
+        const query = stack.env.fuseki.query.bind(stack.env.fuseki);
+        stack.env.fuseki.query = async (...args) => {
+          const result = await query(...args);
+          if (args[0].includes('SELECT ?candidateCount ?epoch ?sequence ?indexGeneration ?unit ?score ?work ?main ?contribution')) {
+            const rows = result.results?.bindings ?? [];
+            candidateReads.push({ rows: rows.length, candidates: Number(rows[0]?.candidateCount?.value),
+              sentBytes: Buffer.byteLength(args[0]) });
+          }
+          return result;
+        };
         copy = stack;
         return async () => { copy = undefined; await stack.stop(); };
       } catch (error) { await stack.stop(); throw error; }
@@ -147,17 +178,14 @@ async function profileRankedSearch() {
         const first = await profileRequest(sink, headers => request(copy!, '/v1/queries/page', body, headers, true),
           { flush: flushTelemetryTraces });
         attempts.push({ matchingWorks: count, page: 'first', profile: first.profile });
+        assertMeter(count, 'first', first.profile);
         if (first.result.httpStatus !== 200) continue;
         expect(first.result.next).not.toBeNull();
         const continuation = await profileRequest(sink, headers => request(copy!, '/v1/queries/page', {
           ...body, continuation: first.result.next,
         }, headers, true), { flush: flushTelemetryTraces });
         attempts.push({ matchingWorks: count, page: 'continuation', profile: continuation.profile });
-        if ([first.profile, continuation.profile].some(profile => profile.postgresStatements === 0
-          || profile.fusekiRequests === 0)) {
-          blind = { matchingWorks: count, first: first.profile, continuation: continuation.profile };
-          throw new Error(`meter blind at ${count} matching Works`);
-        }
+        assertMeter(count, 'continuation', continuation.profile);
         if (continuation.result.httpStatus !== 200) continue;
         for (const result of [first.result, continuation.result]) {
           expect(result.relationComplete).toBe(true);
@@ -168,7 +196,8 @@ async function profileRankedSearch() {
         }
         expect(new Set([...first.result.results, ...continuation.result.results].map(row => row.work)).size).toBe(4);
         evidence.push({ matchingWorks: count, restoreMs,
-          first: nativeCounters(first.profile), continuation: nativeCounters(continuation.profile) });
+          first: measuredProfile(first.profile, first.result.candidateRead!, first.result.responseBytes),
+          continuation: measuredProfile(continuation.profile, continuation.result.candidateRead!, continuation.result.responseBytes) });
       } finally { await backups.stop(target); }
     }
   } finally {
@@ -201,7 +230,8 @@ if (process.env.REZICS_RANKED_SEARCH_PROFILE_CHILD === '1') {
       status: row.profile.request.status, fuseki: row.profile.fusekiRequests, sql: row.profile.postgresStatements })), null, 2));
     console.log(JSON.stringify(evidence.map(row => ({ matchingWorks: row.matchingWorks, restoreMs: row.restoreMs,
       ...Object.fromEntries(['first', 'continuation'].map(page => [page,
-        Object.fromEntries(counters.map(counter => [counter, row[page as 'first' | 'continuation'][counter]]))])),
+        Object.fromEntries([...counters, 'candidateRows', 'candidateCount', 'candidateReceivedBytes', 'responseBytes']
+          .map(counter => [counter, row[page as 'first' | 'continuation'][counter as keyof MeasuredProfile]]))])),
     })), null, 2));
   }, 460_000);
 
@@ -216,17 +246,59 @@ if (process.env.REZICS_RANKED_SEARCH_PROFILE_CHILD === '1') {
       for (const counter of counters) expect(profile[counter]).not.toBeNull();
       expect(profile.postgresStatements).toBeGreaterThan(0);
       expect(profile.fusekiRequests).toBeGreaterThan(0);
+      expect(profile.candidateRows).toBe(row.matchingWorks);
+      expect(profile.candidateCount).toBe(row.matchingWorks);
+      expect(profile.candidateRows).toBeLessThanOrEqual(PUBLIC_SEARCH_PAGE_COST.probeRows);
+      expect(profile.candidateCount).toBeLessThanOrEqual(PUBLIC_SEARCH_PAGE_COST.candidates);
     }
   });
   for (const page of ['first', 'continuation'] as const) {
-    const profiles = () => evidence.map(row => ({ ...row[page], matchingWorks: row.matchingWorks }));
-    const contractFor = (counter: string) =>
-      // The verdict accepts numeric evidence at runtime; preserve real counters
-      // while extending its current counter-only type with the seeded dimension.
-      ({ growth: { [counter]: PUBLIC_SEARCH_PAGE_COST } }) as unknown as WorkCostContract;
-    for (const counter of counters)
-      test(`SEARCH18: ranked ${page} page ${counter} stays constant by matching Works`, () => {
-        assertWorkCostAtScales(profiles(), contractFor(counter), `ranked-${page}-${counter}`);
-      });
+    test(`SEARCH18/SEARCH16: ranked ${page} page obeys the bounded candidate-pool formulas`, () => {
+      const profiles = evidence.map(row => row[page]);
+      const smallest = profiles[0]!;
+      const batches = (candidates: number) => Math.ceil(candidates / PUBLIC_SEARCH_PAGE_COST.hydrationBatchSize);
+      const fixedFuseki = smallest.fusekiRequests! - batches(smallest.candidateCount);
+      const fixedSql = smallest.postgresStatements! - batches(smallest.candidateCount);
+      const measuredRowBytes = smallest.candidateReceivedBytes / smallest.candidateRows;
+      const rowBytes = Math.ceil(measuredRowBytes * PUBLIC_SEARCH_PAGE_COST.rowByteSlack);
+      const poolBytes = PUBLIC_SEARCH_PAGE_COST.candidates * rowBytes;
+      expect(fixedFuseki).toBeGreaterThanOrEqual(0);
+      expect(fixedSql).toBeGreaterThanOrEqual(0);
+      expect(measuredRowBytes).toBeGreaterThan(0);
+
+      // Computed overflow check, not a new seed: filling all 512 admitted slots
+      // must still fit the candidate query's 1 MiB response cap, including slack.
+      expect(PUBLIC_SEARCH_PAGE_COST.candidates * measuredRowBytes).toBeLessThan(PUBLIC_SEARCH_PAGE_COST.responseBytes);
+      expect(poolBytes).toBeLessThan(PUBLIC_SEARCH_PAGE_COST.responseBytes);
+      console.log(JSON.stringify({ page, measuredRowBytes, slack: PUBLIC_SEARCH_PAGE_COST.rowByteSlack,
+        rowBytes, poolBytes, fixedFuseki, fixedSql, disclosureBatchSize: PUBLIC_SEARCH_PAGE_COST.disclosureBatchSize,
+        candidatesPerBatch: PUBLIC_SEARCH_PAGE_COST.hydrationBatchSize }));
+
+      // Numeric utilization fields let the existing verdict enforce per-cut
+      // formula maxima without replacing the raw request counters or its engine.
+      const bounded = profiles.map(profile => ({ ...profile,
+        candidateRowBudgetUse: profile.candidateRows / PUBLIC_SEARCH_PAGE_COST.probeRows,
+        candidateByteBudgetUse: profile.candidateReceivedBytes / poolBytes,
+        candidateFillByteBudgetUse: profile.candidateReceivedBytes / (profile.candidateRows * rowBytes),
+        fusekiCallBudgetUse: profile.fusekiRequests! / (fixedFuseki + batches(profile.candidateCount)),
+        sqlCallBudgetUse: profile.postgresStatements! / (fixedSql + batches(profile.candidateCount)),
+      }));
+      const perRowMaximum = (value: number) => Math.ceil(value / smallest.candidateRows
+        * PUBLIC_SEARCH_PAGE_COST.candidates * PUBLIC_SEARCH_PAGE_COST.rowByteSlack);
+      const contract = {
+        candidateRowBudgetUse: 1, candidateByteBudgetUse: 1, candidateFillByteBudgetUse: 1,
+        fusekiCallBudgetUse: 1, sqlCallBudgetUse: 1,
+        mainCalls: smallest.mainCalls!, accountCalls: smallest.accountCalls!, otherFetches: smallest.otherFetches!,
+        unclassifiedFetches: 0,
+        fusekiSentBytes: perRowMaximum(smallest.fusekiSentBytes!),
+        // Total traffic also includes health and hydration. The per-row formula
+        // above applies specifically to the candidate-query response.
+        fusekiReceivedBytes: PUBLIC_SEARCH_PAGE_COST.responseBytes,
+        candidateReceivedBytes: Math.min(poolBytes, PUBLIC_SEARCH_PAGE_COST.responseBytes),
+        responseBytes: PUBLIC_SEARCH_PAGE_COST.responseBytes,
+        ...Object.fromEntries(commandCounters.map(counter => [counter, perRowMaximum(smallest[counter])])),
+      } as unknown as WorkCostContract;
+      assertWorkCostAtScales(bounded, contract, `ranked-${page}-candidate-pool`);
+    });
   }
 }

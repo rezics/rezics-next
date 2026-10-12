@@ -1,15 +1,23 @@
 import { createHash } from 'node:crypto';
-import { MAX_PHRASE_CANDIDATES } from './search-readiness.ts';
+import { DISCLOSURE_COST } from '../disclosure/read.ts';
+import { MAX_PHRASE_CANDIDATES, PHRASE_HIT_PROBE, MAX_SEARCH_RESPONSE_BYTES } from './search-limits.ts';
 
 export const MAX_SEARCH_PAGE_SIZE = 64;
 export const SEARCH_PAGE_TTL_MS = 5 * 60_000;
 
-/** A fixed ranked page should depend on its page/context, not matching Works.
- * Both the first page and its continuation have this contract. The current
- * complete-relation reader below still needs qualification against it. */
+/** First and continuation pages rank a bounded complete candidate pool.
+ * For one body match per Work, disclosure hydrates name, content and contribution:
+ * calls = fixedCalls + ceil(candidates / hydrationBatchSize). Fixed calls and
+ * candidate row bytes are calibrated at the smallest restored cut. */
 export const PUBLIC_SEARCH_PAGE_COST = {
-  class: 'constant',
+  class: 'bounded-candidate-pool',
   dimension: 'matchingWorks',
+  candidates: MAX_PHRASE_CANDIDATES,
+  probeRows: PHRASE_HIT_PROBE,
+  responseBytes: MAX_SEARCH_RESPONSE_BYTES,
+  disclosureBatchSize: DISCLOSURE_COST.batch,
+  hydrationBatchSize: DISCLOSURE_COST.batch / 3,
+  rowByteSlack: 1.25,
 } as const;
 
 export class InvalidSearchContinuation extends Error {}
