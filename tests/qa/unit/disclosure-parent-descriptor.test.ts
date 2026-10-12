@@ -69,7 +69,7 @@ function parent(
     kind,
     resource: kind === 'work' ? work : realm,
     head: kind === 'work' ? workHead : realmHead,
-    relationshipBasis: basis(input),
+    relationshipBasis: { ...basis(input), kind: kind === 'work' ? 'work-ownership' : 'realm-placement' },
   };
 }
 function evidence(
@@ -355,8 +355,9 @@ test('disclosure ancestry: relationship kinds refuse unresolved required parents
   const f = fixture([]);
   f.setEvidence([{ ...evidence(target), relationshipBasis: { ...basis(), kind: 'work-ownership' } }]);
   await expect(captured(f)).rejects.toBeInstanceOf(DisclosureUnavailable);
-  const unresolvedParent = fixture([parent('work')]);
-  unresolvedParent.setEvidence([{ ...evidence(target, [parent('work')]),
+  const unresolvedWork = { ...parent('work'), relationshipBasis: basis() };
+  const unresolvedParent = fixture([unresolvedWork]);
+  unresolvedParent.setEvidence([{ ...evidence(target, [unresolvedWork]),
     relationshipBasis: { ...basis(), kind: 'publication' } }]);
   // A main publication proof cannot erase the Realm relationship declared by
   // an individual parent basis. Every declared relationship must be complete.

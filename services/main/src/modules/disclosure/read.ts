@@ -502,19 +502,23 @@ function copyBasis(basis: DisclosureRelationshipBasis): DisclosureRelationshipBa
     revision: basis.revision, targetResource: basis.targetResource, targetRevision: basis.targetRevision,
     token: basis.token, dataEpoch: basis.dataEpoch });
 }
+function hasRequiredParents(basis: DisclosureRelationshipBasis, parents: OwnerEstablishedGraphParents): boolean {
+  return (relationshipParents[basis.kind] as readonly GraphParentKind[])
+    .every(kind => parents.some(parent => parent?.kind === kind));
+}
 function validateEvidence(env: WorkActivationEnvironment, target: DisclosureTarget,
   evidence: DisclosureAncestryEvidence): Omit<OwnerEstablishedDisclosureAncestry, typeof establishedAncestry> {
   if (!evidence || evidence.status !== 'complete' || evidence.resource !== target.resource
     || !['realm', 'work', 'other'].includes(evidence.resourceKind)
     || !validBasis(evidence.relationshipBasis, env, target) || !Array.isArray(evidence.parents)
     || evidence.parents.length > DISCLOSURE_COST.graphParents
-    || !(relationshipParents[evidence.relationshipBasis.kind] as readonly GraphParentKind[])
-      .every(kind => evidence.parents.some(parent => parent.kind === kind))
+    || !hasRequiredParents(evidence.relationshipBasis, evidence.parents)
     || new Set(evidence.parents.map(parent => parent.resource)).size !== evidence.parents.length
     || new Set(evidence.parents.map(parent => parent.kind)).size !== evidence.parents.length
     || evidence.parents.some(parent => !parent || parent.owner !== 'graph'
       || !['work', 'realm'].includes(parent.kind) || !native.test(parent.resource) || !validRevision(parent.head)
       || !validBasis(parent.relationshipBasis, env, target)
+      || !hasRequiredParents(parent.relationshipBasis, evidence.parents)
       || parent.protectedRevision !== undefined && (parent.kind !== 'work'
         || parent.protectedRevision !== null && !validRevision(parent.protectedRevision)))
     || evidence.resourceKind !== 'other' && !native.test(target.resource)
