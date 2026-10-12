@@ -135,7 +135,8 @@ final class TextEntityDocuments {
                                               String language, String context, String group) {
         if (identity == null || !identity.matches("[0-9a-f]{64}"))
             throw new TextIndexException("original body identity unavailable");
-        try (DirectoryReader reader = DirectoryReader.open(index.getDirectory())) {
+        try (var lease = SearchDeltaJournal.committedReader(index)) {
+            DirectoryReader reader = lease.reader();
             var searcher = new IndexSearcher(reader);
             var hits = searcher.search(query(index, scope), 2);
             if (hits.totalHits.value() != 1) throw new TextIndexException("committed body identity membership differs");
@@ -176,7 +177,8 @@ final class TextEntityDocuments {
     private static long verifyPrepared(TextIndexLucene index, Scope scope, List<Prepared> prepared, boolean ranked) {
         Map<String, Document> remaining = new HashMap<>();
         for (Prepared row : prepared) remaining.put(row.key(), row.document());
-        try (DirectoryReader reader = DirectoryReader.open(index.getDirectory())) {
+        try (var lease = SearchDeltaJournal.committedReader(index)) {
+            DirectoryReader reader = lease.reader();
             IndexSearcher searcher = new IndexSearcher(reader);
             var hits = searcher.search(query(index, scope), MAX_ROWS + 1);
             if (hits.totalHits.value() != remaining.size() || hits.scoreDocs.length != remaining.size())

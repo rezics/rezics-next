@@ -60,6 +60,91 @@ final class SearchDeltaJournal {
     private record Qualification(String epoch, String generation, long ordinal,
                                  long luceneGeneration, long population, String sequence) {}
     private static final Map<DatasetGraph, Qualification> qualified = new WeakHashMap<>();
+    /** Publication and capture reuse the qualification owner's monitor. Never
+     * acquire the whole-command dataset monitor from a read. */
+    static Object publicationMonitor() { return qualified; }
+    private static final ThreadLocal<ReadCapture> captured = new ThreadLocal<>();
+
+    static final class ReadCapture implements AutoCloseable {
+        private final DatasetGraph data;
+        private final TextIndexLucene index;
+        private final DirectoryReader reader;
+        private final boolean ownsTransaction;
+        private final Map<String, Object> cut;
+        private final Map<String, Object> qualification;
+        private boolean closed;
+
+        private ReadCapture(DatasetGraph data, Runnable begin, boolean ownsTransaction) throws IOException {
+            this.data = data;
+            this.ownsTransaction = ownsTransaction;
+            index = lucene(data);
+            if (index == null || captured.get() != null || data.isInTransaction())
+                throw new IllegalStateException("consistent capture requires a fresh text read");
+            synchronized (qualified) {
+                begin.run();
+                DirectoryReader opened = null;
+                try {
+                    try (var phase = PublicSearchPhaseEvidence.phase(PublicSearchPhaseEvidence.Phase.READER_OPEN)) {
+                        opened = DirectoryReader.open(index.getDirectory());
+                    }
+                    var position = CommandInvariant.readControl(data);
+                    long generation = opened.getIndexCommit().getGeneration();
+                    cut = position == null || position.held() || position.textGeneration() == null
+                        || CommandModule.hasRestoreHold(data) ? Map.of("available", false)
+                        : Map.of("available", true, "dataEpoch", position.epoch().getLiteralLexicalForm(),
+                            "sequence", position.sequence().toString(), "generation", position.textGeneration().getURI(),
+                            "luceneGeneration", Long.toString(generation));
+                    Qualification baseline = qualified.get(data);
+                    qualification = Boolean.TRUE.equals(cut.get("available")) && baseline != null
+                        && baseline.epoch().equals(cut.get("dataEpoch"))
+                        && baseline.generation().equals(cut.get("generation"))
+                        && baseline.luceneGeneration() == generation && baseline.ordinal() == ordinal(data)
+                        ? Map.of("available", true, "dataEpoch", baseline.epoch(), "generation", baseline.generation(),
+                            "sequence", cut.get("sequence"), "luceneGeneration", Long.toString(generation),
+                            "ordinal", Long.toString(baseline.ordinal()), "qualifiedPopulation", Long.toString(baseline.population()))
+                        : Map.of("available", false);
+                    reader = opened;
+                    captured.set(this);
+                } catch (IOException | RuntimeException failure) {
+                    try { if (opened != null) opened.close(); }
+                    finally { if (ownsTransaction) data.end(); }
+                    throw failure;
+                }
+            }
+        }
+        DirectoryReader reader() { return reader; }
+        Map<String, Object> cut() { return cut; }
+        Map<String, Object> qualification() { return qualification; }
+        @Override public void close() throws IOException {
+            if (closed) return;
+            closed = true;
+            captured.remove();
+            try { reader.close(); }
+            finally { if (ownsTransaction) data.end(); }
+        }
+    }
+    static ReadCapture captureRead(DatasetGraph data) throws IOException {
+        return new ReadCapture(data, () -> data.begin(org.apache.jena.query.ReadWrite.READ), true);
+    }
+    static ReadCapture captureRead(DatasetGraph data, Runnable begin) throws IOException {
+        return new ReadCapture(data, begin, false);
+    }
+    /** Borrowing never closes the captured reader or opens another commit. */
+    static final class ReaderLease implements AutoCloseable {
+        private final DirectoryReader reader;
+        private final boolean owned;
+        ReaderLease(DirectoryReader reader, boolean owned) { this.reader = reader; this.owned = owned; }
+        DirectoryReader reader() { return reader; }
+        @Override public void close() throws IOException { if (owned) reader.close(); }
+    }
+    static ReaderLease committedReader(TextIndexLucene index) throws IOException {
+        ReadCapture capture = captured.get();
+        if (capture != null) {
+            if (capture.index != index) throw new IllegalStateException("text helper crossed captured index");
+            return new ReaderLease(capture.reader(), false);
+        }
+        return new ReaderLease(DirectoryReader.open(index.getDirectory()), true);
+    }
     /** Set only when this process's startup saw a delta-exclusive service.
      * Later admission reads the proof; it does not inspect the operation list again. */
     private static final Map<org.apache.jena.tdb2.store.DatasetGraphTDB, Boolean> exclusiveStartup = new WeakHashMap<>();
@@ -293,7 +378,8 @@ final class SearchDeltaJournal {
         Qualification baseline;
         synchronized (qualified) { baseline = qualified.get(data); }
         if (baseline == null) return;
-        try (DirectoryReader reader = openReader(lucene(data))) {
+        try (var lease = openReader(lucene(data))) {
+            DirectoryReader reader = lease.reader();
             if (reader.getIndexCommit().getGeneration() != baseline.luceneGeneration())
                 invalidate(data, "lucene generation drifted", "fenceBeforeWrite");
         } catch (IOException | RuntimeException unavailable) {
@@ -348,7 +434,8 @@ final class SearchDeltaJournal {
                 return refuse("public anchor absent", null);
             CanonicalPolicy.RealmOwnerRefusal realm = CanonicalPolicy.auditRealmOwnerRefusal(data);
             if (realm != null) return refuse(realm.reason(), realm.subject());
-            try (DirectoryReader reader = openReader(lucene)) {
+            try (var lease = openReader(lucene)) {
+                DirectoryReader reader = lease.reader();
                 IndexSearcher searcher = new IndexSearcher(reader);
                 boolean rankMetadata = org.apache.lucene.index.FieldInfos.getMergedFieldInfos(reader).fieldInfo(FilteredGraphTextIndex.RANK_SCHEMA) != null;
                 Set<String> seen = new LinkedHashSet<>();
@@ -422,7 +509,7 @@ final class SearchDeltaJournal {
         return audited.population();
     }
 
-    private static TextIndexLucene lucene(DatasetGraph data) {
+    static TextIndexLucene lucene(DatasetGraph data) {
         if (!(data instanceof DatasetGraphText text)) return null;
         return text.getTextIndex() instanceof FilteredGraphTextIndex filtered
             ? filtered.lucene() : text.getTextIndex() instanceof TextIndexLucene direct ? direct : null;
@@ -588,6 +675,14 @@ final class SearchDeltaJournal {
         }
     }
     private static Map<String, Object> qualifiedProofBody(DatasetGraph data, long since, long writeEpoch) {
+        ReadCapture capture = captured.get();
+        if (capture != null && capture.data == data) {
+            if (!Boolean.TRUE.equals(capture.qualification().get("available"))) return Map.of("available", false);
+            Map<String, Object> response = new LinkedHashMap<>(proof(data, since, writeEpoch));
+            if (Boolean.TRUE.equals(response.get("available")))
+                response.put("qualifiedPopulation", capture.qualification().get("qualifiedPopulation"));
+            return response;
+        }
         Qualification baseline;
         synchronized (qualified) { baseline = qualified.get(data); }
         if (baseline == null) return Map.of("available", false);
@@ -995,7 +1090,7 @@ final class SearchDeltaJournal {
                 catch (IllegalStateException malformed) { return Map.of("available", false); }
                 if (!delta.dataEpoch().equals(position.epoch().getLiteralLexicalForm())
                     || !delta.generation().equals(position.textGeneration().getURI()) || delta.reset()
-                    || delta.writeEpoch() > writeEpoch || (delta.writeEpoch() & 1L) != 0L)
+                    || (captured.get() == null && delta.writeEpoch() > writeEpoch) || (delta.writeEpoch() & 1L) != 0L)
                     return Map.of("available", false);
                 deltas.add(delta);
                 contentSources.putAll(delta.contentSources());
@@ -1010,9 +1105,10 @@ final class SearchDeltaJournal {
             TextIndexLucene lucene = text.getTextIndex() instanceof FilteredGraphTextIndex filtered
                 ? filtered.lucene() : text.getTextIndex() instanceof TextIndexLucene direct ? direct : null;
             if (lucene == null) return Map.of("available", false);
-            // A committed Lucene reader and the TDB snapshot must agree for every
-            // changed subject. The process write epoch fences intervening native writes.
-            try (DirectoryReader reader = openReader(lucene)) {
+            // Captured reads and every nested proof borrow one committed reader;
+            // writer-side qualification still checks the latest commit before publication.
+            try (var lease = openReader(lucene)) {
+                DirectoryReader reader = lease.reader();
                 IndexSearcher searcher = new IndexSearcher(reader);
                 for (var source : contentSources.entrySet()) {
                     TextEntityDocuments.Source current = FilteredGraphTextIndex.contentBodyMetadataSource(data, source.getKey());
@@ -1020,7 +1116,8 @@ final class SearchDeltaJournal {
                         throw new IllegalStateException("Content source delta differs from current authority");
                 }
                 for (String subject : subjects) verifySubject(data, lucene, searcher, subject);
-                try (DirectoryReader latest = openReader(lucene)) {
+                try (var latestLease = openReader(lucene)) {
+                    DirectoryReader latest = latestLease.reader();
                     if (latest.getIndexCommit().getGeneration() != reader.getIndexCommit().getGeneration())
                         return Map.of("available", false);
                 }
@@ -1106,7 +1203,8 @@ final class SearchDeltaJournal {
     }
     /** Historical body rows store uri, graph, body, language and uid only. */
     private static boolean plainStoredContentDocument(TextIndexLucene lucene, String subject) {
-        try (DirectoryReader reader = openReader(lucene)) {
+        try (var lease = openReader(lucene)) {
+            DirectoryReader reader = lease.reader();
             IndexSearcher searcher = new IndexSearcher(reader);
             BooleanQuery exact = new BooleanQuery.Builder()
                 .add(new TermQuery(new Term("uri", subject)), BooleanClause.Occur.MUST)
@@ -1157,7 +1255,8 @@ final class SearchDeltaJournal {
         if (!data.contains(PUBLIC, unit, RDF.type.asNode(), MATCH_UNIT)
             || body == null || !body.isLiteral())
             throw new IllegalStateException("public index differs from RDF");
-        try (DirectoryReader reader = openReader(lucene)) {
+        try (var lease = openReader(lucene)) {
+            DirectoryReader reader = lease.reader();
             IndexSearcher searcher = new IndexSearcher(reader);
             BooleanQuery exact = new BooleanQuery.Builder()
                 .add(new TermQuery(new Term("uri", subject)), BooleanClause.Occur.MUST)
@@ -1188,9 +1287,9 @@ final class SearchDeltaJournal {
         }
     }
 
-    private static DirectoryReader openReader(TextIndexLucene lucene) throws IOException {
+    private static ReaderLease openReader(TextIndexLucene lucene) throws IOException {
         try (var phase = PublicSearchPhaseEvidence.phase(PublicSearchPhaseEvidence.Phase.READER_OPEN)) {
-            return DirectoryReader.open(lucene.getDirectory());
+            return committedReader(lucene);
         }
     }
 

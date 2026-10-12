@@ -28,6 +28,24 @@ import { searchRoutes } from '../../../services/main/src/routes/search.ts';
 const generation = 'urn:rezics:text-index-generation:11111111-1111-4111-8111-111111111111';
 const instanceId = '11111111-1111-4111-8111-111111111111';
 
+test('native consistent capture and exact unit probe capabilities are typed and default to unavailable', async () => {
+  let flags: Record<string, unknown> = {};
+  const server = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch() {
+    return Response.json({ moduleVersion: COMMAND_MODULE_VERSION, instanceId,
+      publicSearchWriteEpoch: '1', publicSearchWriteActive: true, profiles: {}, ...flags });
+  } });
+  try {
+    const fuseki = new FusekiClient(`http://127.0.0.1:${server.port}/rezics`);
+    expect(await fuseki.commandHealth()).toMatchObject({ consistentCaptureAvailable: false, exactUnitProbeAvailable: false });
+    flags = { consistentCaptureAvailable: true, exactUnitProbeAvailable: true };
+    expect(await fuseki.commandHealth()).toMatchObject({ consistentCaptureAvailable: true, exactUnitProbeAvailable: true });
+    for (const flag of ['consistentCaptureAvailable', 'exactUnitProbeAvailable']) {
+      flags = { [flag]: 'true' };
+      await expect(fuseki.commandHealth()).rejects.toThrow('malformed Fuseki command health');
+    }
+  } finally { await server.stop(true); }
+});
+
 test('occurrence maintenance names its native discovery phase without sending query text as evidence', async () => {
   const phases: (string | null)[] = [];
   const budgets: (string | null)[] = [];
@@ -55,7 +73,7 @@ test('SEARCH18: typeahead timeout logs bounded Fuseki evidence without its prefi
   let activeSignal: AbortSignal | undefined;
   globalThis.fetch = ((input, init) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
-    if (url.pathname.endsWith('/query')) {
+    if (url.pathname.endsWith('/query') || url.pathname.endsWith('/command') && init?.method === 'POST') {
       queryCalls++;
       if (queryCalls === 2) {
         activeSignal = init?.signal ?? undefined;
@@ -74,11 +92,11 @@ test('SEARCH18: typeahead timeout logs bounded Fuseki evidence without its prefi
     }
     return Promise.resolve(Response.json({ moduleVersion: COMMAND_MODULE_VERSION, instanceId,
       publicSearchWriteEpoch: '0', publicSearchWriteActive: false,
-      publicSearchDeltaAvailable: true, profiles: {} }));
+      publicSearchDeltaAvailable: true, prefixWalkAvailable: true, profiles: {} }));
   }) as typeof fetch;
   console.error = (...values: unknown[]) => { errors.push(values.map(String).join(' ')); };
   try {
-    const fuseki = new FusekiClient('http://127.0.0.1:3030/rezics');
+    const fuseki = new FusekiClient('http://127.0.0.1:3030/rezics', undefined, 'a'.repeat(64));
     const work = { environment: { fuseki, lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } },
       access: { assertRecoveryOpen: async () => undefined } };
     const app = searchRoutes(fuseki, work as unknown as Parameters<typeof searchRoutes>[1]);

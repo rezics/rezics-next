@@ -91,29 +91,32 @@ final class CommandService extends ActionService {
         boolean deltaExclusive = deltaExclusive(action.getDataService());
         String since = action.getRequest().getParameter("deltaSince");
         if (since != null) {
-            if (!deltaExclusive || !since.matches("-1|(0|[1-9][0-9]*)") || (epoch & 1L) != 0L) {
+            if (!deltaExclusive || textIndexUncertain || !since.matches("-1|(0|[1-9][0-9]*)")) {
                 respond(action, 200, Map.of("available", false)); return;
             }
-            try {
+            try (var capture = SearchDeltaJournal.captureRead(action.getDataService().getDataset())) {
                 Map<String, Object> proof = SearchDeltaJournal.qualifiedProof(action.getDataService().getDataset(),
                     Long.parseLong(since), epoch);
-                if (publicSearchWriteEpoch.get() != epoch) proof = Map.of("available", false);
                 respond(action, 200, proof);
-            } catch (IllegalArgumentException | IllegalStateException ex) {
+            } catch (IOException | IllegalArgumentException | IllegalStateException ex) {
                 respond(action, 200, Map.of("available", false));
             }
             return;
         }
         long privateEpoch = privateSearchWriteEpoch.get();
-        respond(action, 200, Map.of("moduleVersion", CommandModule.VERSION,
-            "instanceId", instanceId, "publicSearchWriteEpoch", Long.toString(epoch),
-            "publicSearchWriteActive", (epoch & 1L) != 0L,
-            "privateSearchWriteEpoch", Long.toString(privateEpoch),
-            "privateSearchWriteActive", (privateEpoch & 1L) != 0L,
-            "publicSearchDeltaAvailable", deltaExclusive, "textIndexUncertain", textIndexUncertain,
-            "prefixWalkAvailable", deltaExclusive && !textIndexUncertain
-                && prefixWalkAvailable(action.getDataService().getDataset()),
-            "profiles", profiles.digests()));
+        respond(action, 200, Map.ofEntries(Map.entry("moduleVersion", CommandModule.VERSION),
+            Map.entry("instanceId", instanceId), Map.entry("publicSearchWriteEpoch", Long.toString(epoch)),
+            Map.entry("publicSearchWriteActive", (epoch & 1L) != 0L),
+            Map.entry("privateSearchWriteEpoch", Long.toString(privateEpoch)),
+            Map.entry("privateSearchWriteActive", (privateEpoch & 1L) != 0L),
+            Map.entry("publicSearchDeltaAvailable", deltaExclusive), Map.entry("textIndexUncertain", textIndexUncertain),
+            Map.entry("consistentCaptureAvailable", deltaExclusive && !textIndexUncertain
+                && prefixIndex(action.getDataService().getDataset()) != null),
+            Map.entry("exactUnitProbeAvailable", deltaExclusive && !textIndexUncertain
+                && prefixIndex(action.getDataService().getDataset()) != null),
+            Map.entry("prefixWalkAvailable", deltaExclusive && !textIndexUncertain
+                && prefixWalkAvailable(action.getDataService().getDataset())),
+            Map.entry("profiles", profiles.digests())));
     }
     private static boolean prefixWalkAvailable(DatasetGraph data) {
         data.begin(ReadWrite.READ);
@@ -130,6 +133,19 @@ final class CommandService extends ActionService {
             String requestJSON = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
             TitleControlPolicy.commandJSONDepth(requestJSON);
             JsonObject body = JSON.parse(requestJSON);
+            if (body.get("exactUnitProbe") != null) {
+                if (!authorized(action, admittedCapability)) {
+                    respond(action, 403, Map.of("status", "forbidden")); return;
+                }
+                if (bytes.length > 2 * 1024 * 1024 || !body.keys().equals(Set.of("exactUnitProbe"))
+                    || !body.get("exactUnitProbe").isObject())
+                    throw new IllegalArgumentException("invalid exact unit probe envelope");
+                JsonObject result = !deltaExclusive(action.getDataService()) || textIndexUncertain
+                    ? jsonObject(Map.of("status", "unavailable"))
+                    : runExactUnitProbe(action.getDataService().getDataset(), body.get("exactUnitProbe").getAsObject());
+                action.getResponse().setHeader("X-Rezics-Command-Work", CommandWork.currentCounters());
+                respond(action, 200, result); return;
+            }
             if (body.get("sourceAuthorNames") != null) {
                 JsonObject result;
                 int status = 200;
@@ -170,8 +186,7 @@ final class CommandService extends ActionService {
                     respond(action, 503, Map.of("status", "unavailable")); return;
                 }
                 DatasetGraph data = action.getDataService().getDataset();
-                data.begin(ReadWrite.READ);
-                try {
+                try (var capture = SearchDeltaJournal.captureRead(data)) {
                     if (!PublicNameProjection.prefixWalkAvailable(data)) {
                         respond(action, 503, Map.of("status", "unavailable")); return;
                     }
@@ -185,7 +200,7 @@ final class CommandService extends ActionService {
                 } catch (org.apache.jena.query.text.TextIndexException unavailable) {
                     action.getResponse().setHeader("X-Rezics-Command-Work", work.counters());
                     respond(action, 503, Map.of("status", "unavailable"));
-                } finally { data.end(); }
+                }
                 return;
             }
             if (body.get("titleCandidate") != null) {
@@ -390,12 +405,58 @@ final class CommandService extends ActionService {
                 CommandWork.enter("commit");
                 SemanticSourceBasis.check(deadline);
                 TemplateIndexService.workScopeBudget(deadline);
-                CommitHalt.commit(dataset); commit = true;
+                commitPublished(dataset, tracksIndex, true, false, false); commit = true;
                 CommandWork.count("durable_commits", 1);
                 return result;
             } finally {
                 finishNativeWrite(dataset, commit, tracksIndex, false, true, false, false);
             }
+        }
+    }
+
+    record ExactUnitProbe(String graph, String unit, String body, String language, String phrase) {
+        static ExactUnitProbe parse(JsonObject request) {
+            if (!request.keys().equals(Set.of("graph", "unit", "body", "language", "phrase")))
+                throw new IllegalArgumentException("invalid exact unit probe request");
+            for (String field : request.keys()) if (!request.get(field).isString())
+                throw new IllegalArgumentException("exact unit probe fields must be strings");
+            var value = new ExactUnitProbe(ProfileRegistry.required(request, "graph"),
+                ProfileRegistry.required(request, "unit"), request.get("body").getAsString().value(),
+                request.get("language").getAsString().value(), ProfileRegistry.required(request, "phrase"));
+            if (!Set.of(CommandPolicy.PUBLIC_SEARCH, CommandPolicy.PRIVATE_SEARCH).contains(value.graph())
+                || value.unit().getBytes(StandardCharsets.UTF_8).length > 128
+                || value.body().getBytes(StandardCharsets.UTF_8).length > 1024 * 1024
+                || value.language().getBytes(StandardCharsets.UTF_8).length > 64
+                || !value.language().isEmpty() && !value.language().matches("[a-zA-Z]{2,3}(-[a-zA-Z0-9]{1,8})*")
+                || value.phrase().isBlank() || value.phrase().getBytes(StandardCharsets.UTF_8).length > 512
+                || value.phrase().codePoints().anyMatch(c -> c < 32 || c == 127))
+                throw new IllegalArgumentException("exact unit probe exceeds its scope or byte bound");
+            iri(value.unit());
+            return value;
+        }
+    }
+    enum ProbeStatus { present, absent, damaged, unavailable }
+    record ExactUnitProbeResult(ProbeStatus status, Map<String, Object> cut) {
+        JsonObject json() {
+            return jsonObject(cut == null ? Map.of("status", status.name())
+                : Map.of("status", status.name(), "cut", cut));
+        }
+    }
+    static JsonObject runExactUnitProbe(DatasetGraph data, JsonObject request) {
+        ExactUnitProbe probe = ExactUnitProbe.parse(request);
+        FilteredGraphTextIndex index = prefixIndex(data);
+        if (index == null) return new ExactUnitProbeResult(ProbeStatus.unavailable, null).json();
+        try (var capture = SearchDeltaJournal.captureRead(data)) {
+            if (!Boolean.TRUE.equals(capture.cut().get("available")))
+                return new ExactUnitProbeResult(ProbeStatus.unavailable, null).json();
+            ProbeStatus status = index.exactUnitProbe(data, capture.reader(), probe);
+            if (status != ProbeStatus.damaged && CommandPolicy.PUBLIC_SEARCH.equals(probe.graph())
+                && !Boolean.TRUE.equals(capture.qualification().get("available")))
+                return new ExactUnitProbeResult(ProbeStatus.unavailable, null).json();
+            return new ExactUnitProbeResult(status, capture.cut()).json();
+        } catch (IOException | IllegalStateException | org.apache.lucene.queryparser.classic.ParseException
+                 | org.apache.jena.query.text.TextIndexException unavailable) {
+            return new ExactUnitProbeResult(ProbeStatus.unavailable, null).json();
         }
     }
 
@@ -516,16 +577,22 @@ final class CommandService extends ActionService {
                       String sequence, String streamSequence, String signature) {}
 
     /** One bounded directory page. The caller retains the cursor and repeats until phase complete. */
-    private static Map<String, Object> runWorkScopeDirectory(DatasetGraph dataset, long deadline) {
+    private Map<String, Object> runWorkScopeDirectory(DatasetGraph dataset, long deadline) {
         synchronized (dataset) {
             dataset.begin(org.apache.jena.query.ReadWrite.WRITE);
-            boolean commit = false;
+            boolean commit = false, tracksIndex = SearchDeltaJournal.canTrackCommit(dataset);
+            if (tracksIndex) {
+                publicSearchWriteEpoch.incrementAndGet();
+                SearchDeltaJournal.fenceBeforeWrite(dataset);
+            }
             try {
                 TemplateIndexService.workScopeBudget(deadline);
-                PublicNameProjection.prepareWorkScopeDirectory(dataset, deadline);
+                var delta = new SearchDeltaJournal.Capture(dataset, false, deadline);
+                PublicNameProjection.prepareWorkScopeDirectory(delta.observed(), deadline);
                 String phase = PublicNameProjection.workScopeDirectoryPhase(dataset);
+                if (tracksIndex) SearchDeltaJournal.append(dataset, delta, publicSearchWriteEpoch.get() + 1, deadline);
                 TemplateIndexService.workScopeBudget(deadline);
-                CommitHalt.commit(dataset);
+                commitPublished(dataset, tracksIndex, false, false, false);
                 commit = true;
                 return Map.of("status", "prepared", "phase", phase, "more", !"complete".equals(phase));
             } catch (java.util.concurrent.CancellationException cancelled) {
@@ -535,8 +602,7 @@ final class CommandService extends ActionService {
                 if (!"Work name scope requires exclusive native writer admission".equals(refused.getMessage())) throw refused;
                 return Map.of("status", "unavailable", "reason", "writer-not-exclusive");
             } finally {
-                try { if (!commit) dataset.abort(); }
-                finally { dataset.end(); }
+                finishNativeWrite(dataset, commit, tracksIndex, false, false, false, false);
             }
         }
     }
@@ -576,7 +642,7 @@ final class CommandService extends ActionService {
                     throw new IllegalStateException("title acceptance changed without an accepted outcome");
                 CommandWork.enter("commit");
                 TemplateIndexService.workScopeBudget(deadline);
-                CommitHalt.commit(dataset); commit = true;
+                commitPublished(dataset, tracksIndex, false, false, false); commit = true;
                 CommandWork.count("durable_commits", 1);
                 return result;
             } catch (java.util.concurrent.CancellationException cancelled) {
@@ -648,7 +714,7 @@ final class CommandService extends ActionService {
                 CommandWork.enter("commit");
                 SemanticSourceBasis.check(Long.MAX_VALUE);
                 TemplateIndexService.workScopeBudget(Long.MAX_VALUE);
-                CommitHalt.commit(dataset); commit = true;
+                commitPublished(dataset, tracksIndex, false, false, false); commit = true;
                 CommandWork.count("durable_commits", 1);
                 return Map.of("status", "retired");
             } catch (java.util.concurrent.CancellationException | SemanticSourceBasis.Cancelled cancelled) {
@@ -894,7 +960,7 @@ final class CommandService extends ActionService {
                     CommandWork.enter("commit");
                     SemanticSourceBasis.check(deadline);
                     TemplateIndexService.workScopeBudget(deadline);
-                    CommitHalt.commit(dataset); commit = true;
+                    commitPublished(dataset, tracksIndex, true, false, false); commit = true;
                     CommandWork.count("durable_commits", 1);
                 }
                 return Map.of("items", results);
@@ -906,9 +972,7 @@ final class CommandService extends ActionService {
                 try { if (!commit) dataset.abort(); }
                 finally {
                     try {
-                        dataset.end();
-                        if (commit && tracksIndex && !Boolean.TRUE.equals(SearchDeltaJournal.qualifiedProof(dataset,
-                            -1, publicSearchWriteEpoch.get() + 1).get("available"))) SearchDeltaJournal.invalidate(dataset);
+                        if (!commit || dataset.isInTransaction()) dataset.end();
                     } finally {
                         if (tracksIndex) publicSearchWriteEpoch.incrementAndGet();
                         if (interrupted) Thread.currentThread().interrupt();
@@ -1065,7 +1129,8 @@ final class CommandService extends ActionService {
             CommandWork.enter("commit");
             SemanticSourceBasis.check(deadline);
             TemplateIndexService.workScopeBudget(deadline);
-            CommitHalt.commit(dataset); commit = true;
+            commitPublished(dataset, tracksIndex, touchesPublicIndex, plan.rebuild(),
+                plan.bootstrap() || receipt.startsWith("urn:rezics:receipt:content-rebuild:activate:")); commit = true;
             CommandWork.count("durable_commits", 1);
             return result;
         } catch (java.util.concurrent.CancellationException | SemanticSourceBasis.Cancelled cancelled) {
@@ -1073,6 +1138,22 @@ final class CommandService extends ActionService {
         } finally {
             finishNativeWrite(dataset, commit, tracksIndex, touchesPrivateIndex, touchesPublicIndex,
                 plan.rebuild(), plan.bootstrap() || receipt.startsWith("urn:rezics:receipt:content-rebuild:activate:"));
+        }
+    }
+    /** Commit and bounded qualification form the publication boundary. The
+     * long command monitor remains outside; a captured query executes outside both. */
+    void commitPublished(DatasetGraph dataset, boolean tracksIndex, boolean touchesPublicIndex,
+                         boolean rebuild, boolean qualifyGeneration) {
+        synchronized (SearchDeltaJournal.publicationMonitor()) {
+            CommitHalt.commit(dataset);
+            dataset.end();
+            CommandWork.enter("qualification");
+            try {
+                if (qualifyGeneration || touchesPublicIndex && rebuild || !tracksIndex)
+                    SearchDeltaJournal.invalidate(dataset);
+                else if (!Boolean.TRUE.equals(SearchDeltaJournal.qualifiedProof(dataset, -1,
+                    publicSearchWriteEpoch.get() + 1).get("available"))) SearchDeltaJournal.invalidate(dataset);
+            } catch (RuntimeException unavailable) { SearchDeltaJournal.invalidate(dataset); }
         }
     }
     private void finishNativeWrite(DatasetGraph dataset, boolean commit, boolean tracksIndex,
@@ -1083,16 +1164,13 @@ final class CommandService extends ActionService {
         try { if (!commit) dataset.abort(); }
         finally {
             try {
-                dataset.end();
+                if (!commit || dataset.isInTransaction()) dataset.end();
                 CommandWork.enter("qualification");
                 if (commit && tracksIndex) {
-                    // Keep the odd process epoch and native writer monitor until
-                    // qualification completes, including receipt-only commits.
+                    // Full generation audits remain outside the short publication
+                    // section. The generation is unavailable until that audit publishes.
                     try {
                         if (qualifyGeneration) SearchDeltaJournal.qualify(dataset);
-                        else if (touchesPublicIndex && rebuild) SearchDeltaJournal.invalidate(dataset);
-                        else if (!Boolean.TRUE.equals(SearchDeltaJournal.qualifiedProof(dataset, -1,
-                            publicSearchWriteEpoch.get() + 1).get("available"))) SearchDeltaJournal.invalidate(dataset);
                     } catch (RuntimeException unavailable) { SearchDeltaJournal.invalidate(dataset); }
                 }
             } finally {

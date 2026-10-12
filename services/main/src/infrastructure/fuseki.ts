@@ -259,6 +259,9 @@ export interface CommandHealth { moduleVersion: string; instanceId: string;
   publicSearchDeltaAvailable?: boolean;
   /** Absent on older native modules; commandHealth exposes that as false. */
   prefixWalkAvailable?: boolean;
+  /** Native build capabilities; generation admission and delivery authority remain separate. */
+  consistentCaptureAvailable?: boolean;
+  exactUnitProbeAvailable?: boolean;
   profiles: Record<string, string> }
 
 export interface SearchDeltaProof {
@@ -750,10 +753,14 @@ export class FusekiClient {
         || (value.publicSearchDeltaAvailable !== undefined
           && typeof value.publicSearchDeltaAvailable !== 'boolean')
         || (value.prefixWalkAvailable !== undefined && typeof value.prefixWalkAvailable !== 'boolean')
+        || (value.consistentCaptureAvailable !== undefined && typeof value.consistentCaptureAvailable !== 'boolean')
+        || (value.exactUnitProbeAvailable !== undefined && typeof value.exactUnitProbeAvailable !== 'boolean')
         || !value.profiles
         || typeof value.profiles !== 'object') throw new Error('malformed Fuseki command health');
       status = 'complete';
-      return { ...value, prefixWalkAvailable: value.prefixWalkAvailable ?? false };
+      return { ...value, prefixWalkAvailable: value.prefixWalkAvailable ?? false,
+        consistentCaptureAvailable: value.consistentCaptureAvailable ?? false,
+        exactUnitProbeAvailable: value.exactUnitProbeAvailable ?? false };
     } catch (error) {
       if (signal.aborted) status = 'aborted';
       throw error;

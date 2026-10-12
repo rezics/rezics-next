@@ -250,7 +250,8 @@ public final class FilteredGraphTextIndex implements TextIndex {
             rank == null ? null : rank.context(), rank == null ? null : rank.group());
         // Include legacy untagged body documents in membership: a tagged copy
         // alongside a legacy row is not a successful replacement.
-        try (var reader = openReader(lucene)) {
+        try (var lease = openReader(lucene)) {
+            DirectoryReader reader = lease.reader();
             var identity = new BooleanQuery.Builder()
                 .add(new TermQuery(new Term(lucene.getDocDef().getEntityField(), id)), BooleanClause.Occur.FILTER)
                 .add(new TermQuery(new Term(lucene.getDocDef().getGraphField(), CommandPolicy.PUBLIC_SEARCH)), BooleanClause.Occur.FILTER)
@@ -298,12 +299,12 @@ public final class FilteredGraphTextIndex implements TextIndex {
         } catch (RuntimeException unavailable) { return 0; }
     }
 
-    private DirectoryReader openReader() throws IOException {
+    private SearchDeltaJournal.ReaderLease openReader() throws IOException {
         return openReader(lucene);
     }
-    private static DirectoryReader openReader(TextIndexLucene lucene) throws IOException {
+    private static SearchDeltaJournal.ReaderLease openReader(TextIndexLucene lucene) throws IOException {
         try (var phase = PublicSearchPhaseEvidence.phase(PublicSearchPhaseEvidence.Phase.READER_OPEN)) {
-            return DirectoryReader.open(lucene.getDirectory());
+            return SearchDeltaJournal.committedReader(lucene);
         }
     }
     private DirectoryReader openWriterReader() throws IOException {
@@ -311,6 +312,92 @@ public final class FilteredGraphTextIndex implements TextIndex {
             return DirectoryReader.open(lucene.getIndexWriter());
         }
     }
+    /** Every integrity and phrase check uses the request's one committed cut. */
+    CommandService.ProbeStatus exactUnitProbe(org.apache.jena.sparql.core.DatasetGraph data, DirectoryReader reader,
+                         CommandService.ExactUnitProbe request) throws IOException, ParseException {
+        EntityDefinition definition = lucene.getDocDef();
+        Node predicate = uri(RV + (CommandPolicy.PRIVATE_SEARCH.equals(request.graph())
+            ? "privateSearchBody" : "searchBody"));
+        String field = definition.getField(predicate);
+        if (field == null || definition.getGraphField() == null || definition.getLangField() == null)
+            return CommandService.ProbeStatus.damaged;
+        if (!data.contains(uri(request.graph()), uri(request.unit()),
+            org.apache.jena.vocabulary.RDF.type.asNode(), uri(RV + "MatchUnit")))
+            return CommandService.ProbeStatus.damaged;
+        CommandWork.count("exact_unit_rdf_rows_visited", 1);
+        var bodies = data.find(uri(request.graph()), uri(request.unit()), predicate, Node.ANY);
+        Node body = null;
+        int rows = 0;
+        try {
+            while (bodies.hasNext() && rows < 2) {
+                body = bodies.next().getObject(); rows++;
+                CommandWork.count("exact_unit_rdf_rows_visited", 1);
+            }
+        } finally { org.apache.jena.atlas.iterator.Iter.close(bodies); }
+        if (rows != 1 || !body.isLiteral() || !request.body().equals(body.getLiteralLexicalForm())
+            || !request.language().equalsIgnoreCase(body.getLiteralLanguage())) return CommandService.ProbeStatus.damaged;
+        Node language = exactProbeValue(data, request, uri(RV + "language"));
+        if (language == null || !language.isLiteral()
+            || !request.language().equalsIgnoreCase(language.getLiteralLexicalForm())) return CommandService.ProbeStatus.damaged;
+        Query exact = new BooleanQuery.Builder()
+            .add(new TermQuery(new Term(definition.getEntityField(), request.unit())), BooleanClause.Occur.FILTER)
+            .add(new TermQuery(new Term(definition.getGraphField(), request.graph())), BooleanClause.Occur.FILTER)
+            .add(new org.apache.lucene.search.FieldExistsQuery(field), BooleanClause.Occur.FILTER).build();
+        IndexSearcher searcher = new IndexSearcher(reader);
+        List<Integer> documents = new ArrayList<>(2);
+        try {
+            searcher.search(exact, new org.apache.lucene.search.SimpleCollector() {
+                private int base;
+                @Override protected void doSetNextReader(org.apache.lucene.index.LeafReaderContext context) { base = context.docBase; }
+                @Override public org.apache.lucene.search.ScoreMode scoreMode() { return org.apache.lucene.search.ScoreMode.COMPLETE_NO_SCORES; }
+                @Override public void collect(int doc) {
+                    CommandWork.count("exact_unit_postings_visited", 1);
+                    documents.add(base + doc);
+                    if (documents.size() == 2) throw new ProbeDamaged();
+                }
+            });
+        } catch (ProbeDamaged duplicate) { return CommandService.ProbeStatus.damaged; }
+        if (documents.size() != 1) return CommandService.ProbeStatus.damaged;
+        Document stored = searcher.storedFields().document(documents.getFirst());
+        String[] values = stored.getValues(field), languages = stored.getValues(definition.getLangField());
+        String auxiliary = languages.length == 1 ? languages[0] : "";
+        boolean languageMatches = request.language().isEmpty()
+            ? auxiliary.equals("^^" + body.getLiteralDatatypeURI()) || auxiliary.isEmpty()
+                && org.apache.jena.datatypes.xsd.XSDDatatype.XSDstring.getURI().equals(body.getLiteralDatatypeURI())
+            : request.language().equalsIgnoreCase(auxiliary);
+        if (values.length != 1 || !request.body().equals(values[0]) || languages.length > 1
+            || !languageMatches
+            || stored.getValues(definition.getEntityField()).length != 1
+            || !request.unit().equals(stored.get(definition.getEntityField()))
+            || stored.getValues(definition.getGraphField()).length != 1
+            || !request.graph().equals(stored.get(definition.getGraphField()))) return CommandService.ProbeStatus.damaged;
+        QueryParser parser = new QueryParser(field, lucene.getQueryAnalyzer());
+        Query phrase = parseQuery(parser, "\"" + request.phrase().replace("\\", "\\\\").replace("\"", "\\\"") + "\"");
+        Query matched = new BooleanQuery.Builder().add(exact, BooleanClause.Occur.FILTER)
+            .add(phrase, BooleanClause.Occur.MUST).build();
+        final int[] matches = {0};
+        searcher.search(matched, new org.apache.lucene.search.SimpleCollector() {
+            @Override public org.apache.lucene.search.ScoreMode scoreMode() { return org.apache.lucene.search.ScoreMode.COMPLETE_NO_SCORES; }
+            @Override public void collect(int doc) {
+                CommandWork.count("exact_unit_phrase_matches_visited", 1); matches[0]++;
+            }
+        });
+        return matches[0] == 1 ? CommandService.ProbeStatus.present : CommandService.ProbeStatus.absent;
+    }
+    private static Node exactProbeValue(org.apache.jena.sparql.core.DatasetGraph data,
+                                        CommandService.ExactUnitProbe request, Node predicate) {
+        var rows = data.find(uri(request.graph()), uri(request.unit()), predicate, Node.ANY);
+        Node value = null;
+        int count = 0;
+        try {
+            while (rows.hasNext() && count < 2) {
+                value = rows.next().getObject(); count++;
+                CommandWork.count("exact_unit_rdf_rows_visited", 1);
+            }
+        } finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
+        return count == 1 ? value : null;
+    }
+    private static final class ProbeDamaged extends RuntimeException {}
     private static Query parseQuery(QueryParser parser, String text) throws ParseException {
         try (var phase = PublicSearchPhaseEvidence.phase(PublicSearchPhaseEvidence.Phase.PARSE)) {
             return parser.parse(text);
@@ -354,7 +441,8 @@ public final class FilteredGraphTextIndex implements TextIndex {
         if (!"body".equals(field) && !"publicTitle".equals(field))
             throw new TextIndexException("ranked field is not public");
         try (var rankPhase = PublicSearchPhaseEvidence.phase(PublicSearchPhaseEvidence.Phase.RANK);
-             DirectoryReader reader = openReader()) {
+             var lease = openReader()) {
+            DirectoryReader reader = lease.reader();
             long commit = reader.getIndexCommit().getGeneration();
             if (after != null && (after.commit() != commit || !Float.isFinite(after.score())
                 || after.id() == null || after.id().length() > 2048))
@@ -514,7 +602,8 @@ public final class FilteredGraphTextIndex implements TextIndex {
         if (!"occurrenceLabel".equals(lucene.getDocDef().getField(OccurrenceLabelIndex.p("occurrenceSearchLabels"))))
             throw new TextIndexException("occurrence label field is not installed");
         try (var rankPhase = PublicSearchPhaseEvidence.phase(PublicSearchPhaseEvidence.Phase.RANK);
-             DirectoryReader reader = openReader()) {
+             var lease = openReader()) {
+            DirectoryReader reader = lease.reader();
             String field = lucene.getDocDef().getEntityField(), scope = OccurrenceLabelIndex.scope(generation, revision, parent);
             String lower = scope + after.replace('\u0001', '!').replace("https://rezics.com/id/", "");
             Query scopeQuery = new BooleanQuery.Builder()
@@ -680,7 +769,8 @@ public final class FilteredGraphTextIndex implements TextIndex {
         String prefix = identity ? PublicNameProjection.PREFIX + kind + ":"
             : PublicNameProjection.DIRECTORY + kind + ":" + order + ":";
         try (var rankPhase = PublicSearchPhaseEvidence.phase(PublicSearchPhaseEvidence.Phase.RANK);
-             DirectoryReader reader = openReader()) {
+             var lease = openReader()) {
+            DirectoryReader reader = lease.reader();
             long commit = reader.getIndexCommit().getGeneration();
             if (after != null && (after.commit() != commit || !after.id().startsWith(prefix))) throw new RankRestart();
             var terms = org.apache.lucene.index.MultiTerms.getTerms(reader, lucene.getDocDef().getEntityField());
@@ -722,7 +812,8 @@ public final class FilteredGraphTextIndex implements TextIndex {
         String scope = PublicNameProjection.prefixScope(prefix, language);
         PrefixAfter after = cursor == null ? null : prefixAfter(cursor, prefix, language);
         try (var rankPhase = PublicSearchPhaseEvidence.phase(PublicSearchPhaseEvidence.Phase.RANK);
-             DirectoryReader reader = openReader()) {
+             var lease = openReader()) {
+            DirectoryReader reader = lease.reader();
             prefixDeadline(deadline);
             String generation = Long.toString(reader.getIndexCommit().getGeneration());
             if (after != null && !after.generation().equals(generation)) throw new RankRestart();
@@ -1318,8 +1409,6 @@ public final class FilteredGraphTextIndex implements TextIndex {
     }
     @Override public List<TextHit> query(String subject, List<Resource> properties, String qs,
                                          String graph, String lang, int limit, String highlight) {
-        if (graph == null) return PublicSearchPhaseEvidence.timed(PublicSearchPhaseEvidence.Phase.RANK,
-            () -> lucene.query(subject, properties, qs, null, lang, limit, highlight));
         // Legacy complete readers and the offline rebuild audit retain their
         // explicit limits. Ranked pages and generation qualification use the
         // bounded collector and streaming audit above.
@@ -1332,13 +1421,14 @@ public final class FilteredGraphTextIndex implements TextIndex {
             throw new TextIndexException("named-graph text field is unavailable");
         }
         try (var rankPhase = PublicSearchPhaseEvidence.phase(PublicSearchPhaseEvidence.Phase.RANK);
-             DirectoryReader reader = openReader()) {
+             var lease = openReader()) {
+            DirectoryReader reader = lease.reader();
             QueryParser parser = new QueryParser(field, lucene.getQueryAnalyzer());
             parser.setAllowLeadingWildcard(true);
             Query body = parseQuery(parser, qs);
             BooleanQuery.Builder filtered = new BooleanQuery.Builder()
-                .add(body, BooleanClause.Occur.MUST)
-                .add(new TermQuery(new Term(definition.getGraphField(), graph)), BooleanClause.Occur.FILTER);
+                .add(body, BooleanClause.Occur.MUST);
+            if (graph != null) filtered.add(new TermQuery(new Term(definition.getGraphField(), graph)), BooleanClause.Occur.FILTER);
             if (CommandPolicy.PUBLIC_SEARCH.equals(graph)) {
                 filtered.add(new org.apache.lucene.search.PrefixQuery(new Term(definition.getEntityField(), PublicNameProjection.PREFIX)),
                     BooleanClause.Occur.MUST_NOT);
@@ -1356,7 +1446,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
                 String entity = document.get(definition.getEntityField());
                 String value = document.get(field);
                 String sourceGraph = document.get(definition.getGraphField());
-                if (entity == null || value == null || !graph.equals(sourceGraph)) {
+                if (entity == null || value == null || sourceGraph == null || graph != null && !graph.equals(sourceGraph)) {
                     throw new TextIndexException("named-graph text document is incomplete");
                 }
                 String language = definition.getLangField() == null ? null
