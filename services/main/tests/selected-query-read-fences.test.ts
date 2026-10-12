@@ -66,7 +66,10 @@ function realmFixture() {
   f.rows.forEach((row, index) => ['work', 'head', 'main', 'selection', 'contribution']
     .forEach((key, owner) => { row[key] = term(nativeId((owner + 1) * 1000 + index)); }));
   f.session.deps.environment.fuseki.query = async body => ({ results: { bindings:
-    body.includes('SELECT DISTINCT ?work ?head ?main') ? f.rows.map(row => ({ ...row })) : [] } });
+    body.includes('SELECT DISTINCT ?work ?head ?main') ? f.rows.map(row => ({ ...row }))
+      : body.includes('SELECT ?work ?head ?nameOwner') || body.includes('SELECT ?work ?head ?owningWork')
+        ? f.rows.filter(row => body.includes(`<${row.work!.value}>`))
+          .map(row => ({ work: row.work!, head: row.head! })) : [] } });
   const pool = { query: async (sql: string, args?: unknown[]) => ({ rows: sql.includes('jsonb_to_recordset')
     ? (JSON.parse(String(args![0])) as Array<{ ordinal: number }>).map(target => ({
       open: true, ordinal: target.ordinal, restricted: false, assessments: [],
