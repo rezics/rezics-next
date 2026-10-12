@@ -6,6 +6,7 @@ import {
   releaseAccessRecoveryFence,
 } from '../../../services/main/src/modules/access/admission.ts';
 import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
+import { GovernanceStore } from '../../../services/main/src/modules/governance/store.ts';
 import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { fixtureReasons } from './g-565-decision-support.ts';
 
@@ -163,12 +164,30 @@ const signalCount = async () =>
   ).rows[0]!.count;
 
 test('confirmation and restoration advance the disclosure cut after their already recorded decisions', async () => {
+  const preceding = await basis(), precedingCount = await signalCount();
   const decision = await stage([native()]);
   const pending = await basis();
   const count = await signalCount();
+  expect(pending).not.toBe(preceding);
+  expect(count).toBe(precedingCount + 1);
   const fence = await transaction((client) => confirm(client, decision));
   expect(await basis()).not.toBe(pending);
   expect(await signalCount()).toBe(count + 1);
+  const principal = (await access.query<{ issuer: string; subject: string }>(
+    'SELECT account_issuer AS issuer,account_subject AS subject FROM access.principal WHERE id = $1', [principalId],
+  )).rows[0]!;
+  const store = new GovernanceStore(access,
+    { capture: async () => { throw new Error('Replay must retain its accepted evidence'); } },
+    { current: async () => null }, { current: async () => null });
+  const acknowledged = await basis(), acknowledgedCount = await signalCount();
+  const firstReplay = await store.resumeDecision(principal, actor, decision.id);
+  expect(firstReplay.operation.status).toBe('completed');
+  const completedReplay = await store.resumeDecision(principal, actor, decision.id);
+  expect(completedReplay.operation.status).toBe('completed');
+  expect(await basis()).toBe(acknowledged);
+  expect(await signalCount()).toBe(acknowledgedCount);
+  expect((await access.query('SELECT state,fence_epoch::text FROM access.governance_enforcement WHERE id = $1', [fence])).rows)
+    .toEqual([{ state: 'restricted', fence_epoch: '1' }]);
   const restore = await stage(decision.resources, 'restore', decision.caseId);
   const pendingRestore = await basis();
   await transaction((client) => confirm(client, restore, 1, fence));

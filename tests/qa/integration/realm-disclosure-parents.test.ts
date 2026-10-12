@@ -55,6 +55,12 @@ async function restriction(
   component: 'record' | 'title' | 'name' | 'publication',
   revision: string | null = null,
   effect: 'disclosure' | 'search' = 'disclosure',
+  narrower: {
+    authority?: 'platform' | 'realm' | 'resource_owner';
+    scope?: string;
+    context?: string;
+    locator?: string | null;
+  } = {},
 ) {
   const caseId = randomUUID(), decisionId = randomUUID();
   let fenceId = randomUUID();
@@ -64,16 +70,16 @@ async function restriction(
     await client.query(
       `INSERT INTO access.governance_case
       (id,kind,authority_kind,authority_scope_id,context,target_owner,target_resource,target_component,disclosure)
-      VALUES ($1,'content_report','platform','governance:platform','urn:rezics:context:global','graph',$2,$3,'private')`,
-      [caseId, resource, component],
+      VALUES ($1,'content_report',$4,$5,$6,'graph',$2,$3,'private')`,
+      [caseId, resource, component, narrower.authority ?? 'platform', narrower.scope ?? 'governance:platform', narrower.context ?? 'urn:rezics:context:global'],
     );
     await client.query(
       `INSERT INTO access.moderation_decision
       (id,kind,outcome,context,case_id,case_sequence,principal_id,acting_subject,authority_kind,authority_scope_id,
       authority_epoch,authority_proof_digest,idempotency_key,request_digest,rule_ref,rule_revision,rule_digest,
       evidence_digest,disclosure,statement_of_reasons)
-      VALUES ($1::uuid,'content_moderation','restrict','urn:rezics:context:global',$2,1,$3,$4,'platform',
-      'governance:platform',0,$5,$1::text,$5,'urn:rezics:rule:disclosure-parent','1',$5,$5,'private',$6::jsonb)`,
+      VALUES ($1::uuid,'content_moderation','restrict',$9,$2,1,$3,$4,$7,
+      $8,0,$5,$1::text,$5,'urn:rezics:rule:disclosure-parent','1',$5,$5,'private',$6::jsonb)`,
       [
         decisionId,
         caseId,
@@ -88,12 +94,13 @@ async function restriction(
             digest: digest(decisionId),
           },
         },
+        narrower.authority ?? 'platform', narrower.scope ?? 'governance:platform', narrower.context ?? 'urn:rezics:context:global',
       ],
     );
     await client.query(
       `INSERT INTO access.moderation_decision_target
-      (decision_id,ordinal,owner,resource,component,scope_kind,revision,expected_head,effect)
-      VALUES ($1,1,'graph',$2,$3,$4,$5,$5,$6)`,
+      (decision_id,ordinal,owner,resource,component,scope_kind,revision,expected_head,effect,locator)
+      VALUES ($1,1,'graph',$2,$3,$4,$5,$5,$6,$7)`,
       [
         decisionId,
         resource,
@@ -101,16 +108,17 @@ async function restriction(
         revision === null ? 'component' : 'exact_revision',
         revision,
         effect,
+        narrower.locator ?? null,
       ],
     );
     const recorded = await client.query<{ id: string }>(
       `INSERT INTO access.governance_enforcement AS current
       (id,authority_scope_id,context,owner,resource,component,revision,effect,decision_id,decision_ordinal,state,fence_epoch)
-      VALUES ($1,'governance:platform','urn:rezics:context:global','graph',$2,$3,$4,$5,$6,1,'restricted',1)
+      VALUES ($1,$7,$8,'graph',$2,$3,$4,$5,$6,1,'restricted',1)
       ON CONFLICT (owner,resource,component,revision,effect,context,authority_scope_id)
       DO UPDATE SET state='restricted',decision_id=EXCLUDED.decision_id,
         decision_ordinal=EXCLUDED.decision_ordinal,fence_epoch=current.fence_epoch+1 RETURNING id`,
-      [fenceId, resource, component, revision, effect, decisionId],
+      [fenceId, resource, component, revision, effect, decisionId, narrower.scope ?? 'governance:platform', narrower.context ?? 'urn:rezics:context:global'],
     );
     fenceId = recorded.rows[0]!.id;
     await client.query(
@@ -326,6 +334,43 @@ test('Realm disclosure: real Access preserves Work and Realm fences, independent
       ${iri(space)} a rv:Space ; rv:realmCapability ${iri(realm)} .
     } }`);
     expect(await decisions()).toEqual(['visible', 'visible', 'visible', 'visible']);
+
+    const staleSnapshot = await f.accessPool.connect();
+    let releaseSnapshotRestriction: (() => Promise<void>) | undefined;
+    try {
+      await staleSnapshot.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+      const selection = await resolveDisclosureSelections(f.env, [body]);
+      const oldCut = await captureDisclosure(f.env, selection, ANONYMOUS_VIEWER, 'read', staleSnapshot);
+      expect(oldCut[0]!.decision).toBe('visible');
+      releaseSnapshotRestriction = await restrict(realm, 'record');
+      // A final fence on the capture snapshot must refuse: that snapshot cannot
+      // observe the independently committed closure.
+      await expect(fenceDisclosure(f.env, oldCut, ANONYMOUS_VIEWER, 'read', staleSnapshot))
+        .rejects.toBeInstanceOf(DisclosureUnavailable);
+    } finally {
+      await staleSnapshot.query('ROLLBACK');
+      staleSnapshot.release();
+      await releaseSnapshotRestriction?.();
+    }
+
+    const narrowerTuples = [
+      { label: 'non-platform authority', authority: 'resource_owner' as const },
+      { label: 'non-platform scope', scope: `governance:realm:${realm}` },
+      { label: 'non-global context', context: realm },
+      { label: 'located record', locator: 'urn:rezics:record:fragment' },
+    ];
+    for (const { label, ...tuple } of narrowerTuples) {
+      if (tuple.scope)
+        await grantFixtureAuthority(f.accessPool, {
+          scope: tuple.scope, requireDispatch: true,
+          representations: [{ principalId: f.principalId, actor: f.actor, action: 'governance.moderate', lifetime: '8 hours' }],
+          grant: { actor: f.actor, action: 'governance.moderate', lifetime: '8 hours' },
+        });
+      const release = await restriction(f.accessPool, f.principalId, f.actor, realm, 'record', null, 'disclosure', tuple);
+      try {
+        expect(await decisions([body, media, independent]), label).toEqual(['visible', 'visible', 'visible']);
+      } finally { await release(); }
+    }
 
     // Narrower Realm controls do not create whole-Realm closure or propagate
     // into a thread body/media use. They remain after whole-Realm restoration.
