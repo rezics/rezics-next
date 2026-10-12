@@ -5,7 +5,8 @@ import { startMediaStack, type MediaStack } from '../../../tests/qa/integration/
 import { provisionFixtureAuthor } from '../../../tests/qa/fixtures/authored-work.ts';
 import { fixtureAuthorityScenario } from '../src/modules/access/fixture-authority-scenario.ts';
 import { releaseFixturePreservationHold } from '../src/modules/access/fixture-preservation.ts';
-import { restrictFixtureDisclosure } from '../src/modules/access/fixture-disclosure.ts';
+import { withFixtureDisclosure } from '../src/modules/access/fixture-disclosure.ts';
+import { recordFixtureDisclosure } from '../src/modules/governance/fixture-disclosure.ts';
 import { discloseContent } from '../src/modules/disclosure/assembly.ts';
 import type { DisclosureChannel } from '../src/modules/disclosure/read.ts';
 import { disclosureViewer } from '../src/modules/disclosure/viewer.ts';
@@ -320,10 +321,10 @@ test('graph erasure during the final query is caught by the existing erasure che
 test.each(['disclosure', 'search'] as const)('a fresh final fence catches %s committed during publication with stable cut tokens', async effect => {
   const f = await fixture();
   const before = await f.target.rights.deliveryCutSnapshot(f.target.resourceId, f.target.assessmentId);
-  const restrict = () => restrictFixtureDisclosure(stack.accessPool, {
+  const restrict = () => withFixtureDisclosure(stack.accessPool, client => recordFixtureDisclosure(client, {
     resourceId: f.target.resourceId, revisionId: f.revisionId, effect,
     principalId: f.member.principalId, actingSubject: f.member.actor,
-  });
+  }));
   await withheld(await f.deliver(restrict, effect === 'search' ? 'search' : 'read'), f.text);
   expect(f.attempts()).toBe(1);
   expect(await f.target.rights.deliveryCutSnapshot(f.target.resourceId, f.target.assessmentId)).toEqual(before);
