@@ -2038,6 +2038,7 @@ export class AccessAdmissionRegistry {
       let enforcementEpoch = principal.enforcement_epoch;
       let deletionOperationId = Bun.randomUUIDv7();
       let deletionPending = false;
+      let deletionNeedsContinuity = false;
       if (principal.active) {
         const controlled = accountDeletion ? [] : await principalControllerSubjects(client, principalId);
         if (!accountDeletion) await lockControllerContinuity(client, controlled);
@@ -2046,7 +2047,9 @@ export class AccessAdmissionRegistry {
           const progress = await collectAccountDeletionAgents(client, principalId, deletionOperationId, options);
           if (progress) {
             deletionOperationId = progress.operation_id;
-            deletionPending = await applyAccountDeletionAgents(client, principalId, progress);
+            const step = await applyAccountDeletionAgents(client, principalId, progress);
+            deletionPending = step.pending;
+            deletionNeedsContinuity = step.checkBoundary;
           }
           if (deletionPending) {
             await client.query('COMMIT');
@@ -2059,8 +2062,8 @@ export class AccessAdmissionRegistry {
           `UPDATE access.principal SET active = false,
              enforcement_epoch = enforcement_epoch + 1 WHERE id = $1
            RETURNING enforcement_epoch`, [principalId]);
-        if (accountDeletion) await assertAccountDeletionContinuity(client, principalId, deletionOperationId);
-        else await assertControllerContinuity(client, controlled);
+        if (accountDeletion && deletionNeedsContinuity) await assertAccountDeletionContinuity(client, principalId, deletionOperationId);
+        else if (!accountDeletion) await assertControllerContinuity(client, controlled);
         enforcementEpoch = changed.rows[0]!.enforcement_epoch;
         await client.query(
           `INSERT INTO access.outbox (id, kind, principal_id, authority_epoch)

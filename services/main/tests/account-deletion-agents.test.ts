@@ -18,6 +18,7 @@ import { ControlConflict } from '../src/modules/access/topology-control.ts';
 import { CONTROLLER_CONTINUITY_COST } from '../src/modules/access/controller-continuity.ts';
 import { MAX_EDGE_DEGREE, MAX_PATH_EDGES } from '../src/modules/access/topology-schema.ts';
 import { AgentProvisioning, agentProvisionDigest } from '../src/modules/agent/provision.ts';
+import { accountFixture } from '../../account/tests/account-fixture.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -49,10 +50,10 @@ afterAll(async () => {
   cluster?.remove();
 });
 
-async function principal() {
+async function principal(subject?: string) {
   const id = randomUUID();
   const verified: VerifiedPrincipal = {
-    issuer: 'https://account.rezics.test', subject: randomUUID(), emailVerified: true,
+    issuer: 'https://account.rezics.test', subject: subject ?? randomUUID(), emailVerified: true,
   };
   verified.currentAssertion = async () => verified;
   await pool.query(`INSERT INTO access.principal (id,account_issuer,account_subject)
@@ -351,88 +352,139 @@ test('recovery hold refuses both deletion variants without partially ending or o
 });
 
 test('interruption beyond 256 retains active Access until atomic Person termination', async () => {
-  const owner = await principal();
-  const person = await provision(owner, 'person');
-  const persons = [person];
-  for (let index = 0; index < 256; index++) persons.push(await provision(owner, 'person'));
-  const organizations: string[] = [];
-  for (let index = 0; index < 257; index++) {
-    organizations.push(await provision(owner, 'organization', `Organization ${index}`));
-  }
-  const original = await principal();
-  const intermediate = await provision(original, 'person');
-  // The shortcut makes shortest-path depth unsuitable for effect ordering.
-  for (const [representative, represented] of [
-    [person, intermediate], [person, organizations[0]!], [intermediate, organizations[0]!],
-  ] as const) await grantFixtureControllerEdge(pool, {
-    principalId: original.id, representative, represented,
-  });
-  await removeController(original, intermediate);
-  let refusal: unknown;
-  try { await deletion(owner); } catch (error) { refusal = error; }
-  expect(refusal).toBeInstanceOf(AccountHasOwnedAgents);
-  if (!(refusal instanceof AccountHasOwnedAgents)) throw refusal;
-  expect(refusal.agents).toHaveLength(16);
-  expect(refusal.hasMore).toBe(true);
-  expect(refusal.moreCount).toBe(241);
-  for (const agent of refusal.agents) expect(organizations).toContain(agent.id);
-  expect(await principalState(owner)).toEqual({ active: true, enforcement_epoch: '0' });
-  if (!cluster) throw new Error('Postgres fixture unavailable');
-  const interrupted = new Pool({ ...cluster.connection, max: 1 });
-  const batchSizes: number[] = [];
-  let batchCommitted = false;
-  const interruption = new Error('lost connection after committed deletion step');
-  interrupted.on('connect', client => {
-    const query = client.query.bind(client);
-    client.query = ((...args: unknown[]) => Reflect.apply(query, client, args)
-      .then((result: { rowCount: number | null }) => {
-        const sql = args[0];
-        if (typeof sql === 'string' && sql.includes('CREATE TEMP TABLE account_deletion_batch')) {
-          batchSizes.push(result.rowCount ?? 0);
-        }
-        if (sql === 'COMMIT' && batchSizes.length > 0 && !batchCommitted) {
-          batchCommitted = true;
-          throw interruption;
-        }
-        return result;
-      })) as typeof client.query;
-  });
+  let deletingAccess = access;
+  const account = await accountFixture({ accessDeletionFence: async (subject, options) => {
+    await deletingAccess.strongDeactivateAccountSubject('https://account.rezics.test', subject, options);
+  } });
   try {
-    await expect(new AccessAdmissionRegistry(interrupted).strongDeactivateAccountSubject(
-      owner.verified.issuer, owner.verified.subject, { leaveOwnedAgentsStanding: true }))
-      .rejects.toBe(interruption);
-  } finally { await interrupted.end(); }
-  expect(batchSizes).toEqual([CONTROLLER_CONTINUITY_COST.maxSubjects]);
-  expect(await principalState(owner)).toEqual({ active: true, enforcement_epoch: '0' });
-  expect(await fenceRows(owner)).toEqual([]);
-  for (const subject of persons) expect(await subjectState(subject)).toEqual({ active: true, controllers: 1 });
-  expect(await subjectState(intermediate)).toEqual({ active: true, controllers: 1 });
-  const progress = (await pool.query<{ operation_id: string; completed: boolean }>(`SELECT operation_id,completed
-    FROM access.account_deletion_progress WHERE principal_id = $1`, [owner.id])).rows[0]!;
-  expect(progress.completed).toBe(false);
-  expect((await orphanRows(owner)).length).toBeGreaterThan(0);
-  // A held recovery fence stops further steps; consent and operation survive.
-  const generation = await engageAccessRecoveryFence(pool);
-  try { await expect(deletion(owner)).rejects.toBeInstanceOf(AdmissionUnavailable); }
-  finally { await releaseAccessRecoveryFence(pool, generation); }
-  // An ordinary controller change cannot invalidate the persisted inventory.
-  const replacement = await principal();
-  await expect(addFixtureController(replacement, organizations[0]!)).rejects.toMatchObject({ code: '54000' });
-  expect(await deletion(owner)).toMatchObject({ enforcementEpoch: '1' });
-  expect((await fenceRows(owner))[0]?.id).toBe(progress.operation_id);
-  expect((await orphanRows(owner)).every(row => row.operation_id === progress.operation_id)).toBe(true);
-  for (const subject of [...persons, intermediate]) {
-    expect(await subjectState(subject)).toEqual({ active: false, controllers: 0 });
-    expect((await pool.query('SELECT generation::text FROM access.authority_subject WHERE id = $1', [subject])).rows[0]?.generation).toBe('1');
-  }
-  const standing = await pool.query<{ count: string }>(`SELECT count(*) AS count
-    FROM access.authority_subject WHERE id = ANY($1::text[]) AND active
-      AND access.agent_controller_count(id) = 0`, [organizations]);
-  expect(standing.rows[0]?.count).toBe('257');
-  const orphans = await orphanRows(owner);
-  expect(orphans.map(row => row.agent_id).sort()).toEqual(organizations.sort());
-  expect(new Set(orphans.map(row => row.operation_id))).toEqual(new Set([(await fenceRows(owner))[0]!.id]));
-}, 60_000);
+    const member = await account.signup('bounded-deletion@example.test');
+    const owner = await principal(member.id);
+    const credentials = (await account.pool.query('SELECT id,password FROM account WHERE "userId" = $1 ORDER BY id', [member.id])).rows;
+    expect(credentials).toHaveLength(1);
+    const person = await provision(owner, 'person');
+    const persons = [person];
+    for (let index = 0; index < 256; index++) persons.push(await provision(owner, 'person'));
+    const organizations: string[] = [];
+    for (let index = 0; index < 257; index++) {
+      organizations.push(await provision(owner, 'organization', `Organization ${index}`));
+    }
+    const original = await principal();
+    const intermediate = await provision(original, 'person');
+    // The shortcut makes shortest-path depth unsuitable for effect ordering.
+    for (const [representative, represented] of [
+      [person, intermediate], [person, organizations[0]!], [intermediate, organizations[0]!],
+    ] as const) await grantFixtureControllerEdge(pool, {
+      principalId: original.id, representative, represented,
+    });
+    await removeController(original, intermediate);
+    let refusal: unknown;
+    try { await deletion(owner); } catch (error) { refusal = error; }
+    expect(refusal).toBeInstanceOf(AccountHasOwnedAgents);
+    if (!(refusal instanceof AccountHasOwnedAgents)) throw refusal;
+    expect(refusal.agents).toHaveLength(16);
+    expect(refusal.hasMore).toBe(true);
+    expect(refusal.moreCount).toBe(241);
+    for (const agent of refusal.agents) expect(organizations).toContain(agent.id);
+    expect(await principalState(owner)).toEqual({ active: true, enforcement_epoch: '0' });
+    if (!cluster) throw new Error('Postgres fixture unavailable');
+    const interrupted = new Pool({ ...cluster.connection, max: 1 });
+    const batchSizes: number[] = [];
+    let batchCommitted = false;
+    const observations: { active: boolean; stranded: string }[] = [];
+    const interruption = new Error('lost connection after committed deletion step');
+    interrupted.on('connect', client => {
+      const query = client.query.bind(client);
+      client.query = ((...args: unknown[]) => Reflect.apply(query, client, args)
+        .then(async (result: { rowCount: number | null }) => {
+          const sql = args[0];
+          if (typeof sql === 'string' && sql.includes('CREATE TEMP TABLE account_deletion_batch')) {
+            batchSizes.push(result.rowCount ?? 0);
+          }
+          if (sql === 'COMMIT') {
+            const observed = (await pool.query<{ active: boolean; stranded: string }>(`SELECT p.active,
+              (SELECT count(*)::text FROM access.authority_subject s WHERE s.id = ANY($2::text[])
+                AND s.active AND access.agent_controller_count(s.id) = 0) AS stranded
+              FROM access.principal p WHERE p.id = $1`, [owner.id, [...persons, intermediate]])).rows[0]!;
+            observations.push(observed);
+            expect(observed).toEqual({ active: true, stranded: '0' });
+          }
+          if (sql === 'COMMIT' && batchSizes.length > 0 && !batchCommitted) {
+            batchCommitted = true;
+            throw interruption;
+          }
+          return result;
+        })) as typeof client.query;
+    });
+    try {
+      deletingAccess = new AccessAdmissionRegistry(interrupted);
+      expect((await account.request('/api/account/reauthenticate', { password: member.password }, member.cookie)).status).toBe(200);
+      expect((await account.request('/api/auth/delete-user', {
+        password: member.password, leaveOwnedAgentsStanding: true,
+      }, member.cookie)).status).toBe(503);
+    } finally { deletingAccess = access; await interrupted.end(); }
+    expect(batchCommitted).toBe(true);
+    expect(observations.length).toBeGreaterThan(2);
+    expect(batchSizes).toEqual([CONTROLLER_CONTINUITY_COST.maxSubjects]);
+    expect((await account.pool.query('SELECT id FROM "user" WHERE id = $1', [member.id])).rowCount).toBe(1);
+    expect((await account.pool.query('SELECT id,password FROM account WHERE "userId" = $1 ORDER BY id', [member.id])).rows).toEqual(credentials);
+    expect((await account.pool.query('SELECT deletion_started_at FROM rezics_account_security WHERE user_id = $1', [member.id])).rows[0]?.deletion_started_at).toBeNull();
+    expect((await account.request('/api/auth/sign-in/email', { email: member.email, password: member.password })).status).toBe(200);
+    expect(await principalState(owner)).toEqual({ active: true, enforcement_epoch: '0' });
+    expect(await fenceRows(owner)).toEqual([]);
+    for (const subject of persons) expect(await subjectState(subject)).toEqual({ active: true, controllers: 1 });
+    expect(await subjectState(intermediate)).toEqual({ active: true, controllers: 1 });
+    const progress = (await pool.query<{ operation_id: string; completed: boolean }>(`SELECT operation_id,completed
+      FROM access.account_deletion_progress WHERE principal_id = $1`, [owner.id])).rows[0]!;
+    expect(progress.completed).toBe(false);
+    expect((await orphanRows(owner)).length).toBeGreaterThan(0);
+    // A held recovery fence stops further steps; consent and operation survive.
+    const generation = await engageAccessRecoveryFence(pool);
+    try { await expect(deletion(owner)).rejects.toBeInstanceOf(AdmissionUnavailable); }
+    finally { await releaseAccessRecoveryFence(pool, generation); }
+    // An ordinary controller change cannot invalidate the persisted inventory.
+    const replacement = await principal();
+    await expect(addFixtureController(replacement, organizations[0]!)).rejects.toMatchObject({ code: '54000' });
+    const finalInterrupted = new Pool({ ...cluster.connection, max: 1 });
+    let personPages = 0;
+    const personInterruption = new Error('final Person page interrupted');
+    finalInterrupted.on('connect', client => {
+      const query = client.query.bind(client);
+      client.query = ((...args: unknown[]) => {
+        const sql = args[0];
+        if (typeof sql === 'string' && sql.includes('UPDATE access.authority_subject s SET active = false')
+          && ++personPages === 2) throw personInterruption;
+        return Reflect.apply(query, client, args);
+      }) as typeof client.query;
+    });
+    try {
+      await expect(new AccessAdmissionRegistry(finalInterrupted).strongDeactivateAccountSubject(
+        owner.verified.issuer, owner.verified.subject)).rejects.toBe(personInterruption);
+    } finally { await finalInterrupted.end(); }
+    expect(personPages).toBe(2);
+    expect(await principalState(owner)).toEqual({ active: true, enforcement_epoch: '0' });
+    for (const subject of [...persons, intermediate]) {
+      expect(await subjectState(subject)).toEqual({ active: true, controllers: 1 });
+      expect((await pool.query('SELECT generation::text FROM access.authority_subject WHERE id = $1', [subject])).rows[0]?.generation).toBe('0');
+    }
+    expect((await account.pool.query('SELECT id,password FROM account WHERE "userId" = $1 ORDER BY id', [member.id])).rows).toEqual(credentials);
+    expect(await deletion(owner)).toMatchObject({ enforcementEpoch: '1' });
+    expect((await fenceRows(owner))[0]?.id).toBe(progress.operation_id);
+    expect((await orphanRows(owner)).every(row => row.operation_id === progress.operation_id)).toBe(true);
+    for (const subject of [...persons, intermediate]) {
+      expect(await subjectState(subject)).toEqual({ active: false, controllers: 0 });
+      expect((await pool.query('SELECT generation::text FROM access.authority_subject WHERE id = $1', [subject])).rows[0]?.generation).toBe('1');
+    }
+    const standing = await pool.query<{ count: string }>(`SELECT count(*) AS count
+      FROM access.authority_subject WHERE id = ANY($1::text[]) AND active
+        AND access.agent_controller_count(id) = 0`, [organizations]);
+    expect(standing.rows[0]?.count).toBe('257');
+    const orphans = await orphanRows(owner);
+    expect(orphans.map(row => row.agent_id).sort()).toEqual(organizations.sort());
+    expect(new Set(orphans.map(row => row.operation_id))).toEqual(new Set([(await fenceRows(owner))[0]!.id]));
+    expect((await account.request('/api/auth/delete-user', { password: member.password }, member.cookie)).status).toBe(200);
+    expect((await account.pool.query('SELECT id FROM "user" WHERE id = $1', [member.id])).rowCount).toBe(0);
+  } finally { await account.close(); }
+}, 240_000);
 
 test('lost-response retry keeps one deletion fence and the original orphan operation', async () => {
   const owner = await principal();

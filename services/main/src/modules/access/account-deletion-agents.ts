@@ -49,6 +49,8 @@ interface DeletionProgress {
   classification_done: boolean;
   consent: boolean;
   orphan_count: number;
+  steps: number;
+  needs_boundary_check: boolean;
 }
 
 /** Start only when this principal has controller mandates. A retry retains
@@ -61,7 +63,7 @@ export async function collectAccountDeletionAgents(client: PoolClient, principal
       WHERE principal_id = $1 AND action = 'agent.control' AND active)
       OR EXISTS (SELECT 1 FROM access.account_deletion_progress WHERE principal_id = $1 AND NOT completed)
     ON CONFLICT (principal_id) DO UPDATE SET consent = access.account_deletion_progress.consent OR excluded.consent
-    RETURNING operation_id, classification_done, consent, orphan_count`,
+    RETURNING operation_id, classification_done, consent, orphan_count, steps, needs_boundary_check`,
   [principal, operationId, options.leaveOwnedAgentsStanding === true])).rows[0];
 }
 
@@ -78,7 +80,7 @@ async function classifyAccountDeletionStep(client: PoolClient, principal: string
     ), roots AS MATERIALIZED (
       SELECT r.id, r.subject_id FROM access.representation r, state p
       WHERE NOT p.roots_done AND r.principal_id = $1 AND r.action = 'agent.control' AND r.active
-        AND (p.root_cursor IS NULL OR r.id > p.root_cursor)
+        AND r.id > coalesce(p.root_cursor, '00000000-0000-0000-0000-000000000000'::uuid)
       ORDER BY r.id LIMIT ${ACCOUNT_DELETION_CLASSIFICATION_COST.subjectsPerStep}
     ), awakened AS MATERIALIZED (
       SELECT f.agent_id FROM access.account_deletion_classification_frontier f, state p
@@ -133,9 +135,11 @@ async function classifyAccountDeletionStep(client: PoolClient, principal: string
       UPDATE access.account_deletion_progress p
       SET root_cursor = coalesce((SELECT id FROM roots ORDER BY id DESC LIMIT 1), p.root_cursor),
         roots_done = n.roots_done, classification_done = n.roots_done AND n.frontier_done,
-        orphan_count = p.orphan_count + (SELECT count(*) FROM inserted WHERE effect = 'orphan')
+        orphan_count = p.orphan_count + (SELECT count(*) FROM inserted WHERE effect = 'orphan'),
+        steps = p.steps + 1,
+        needs_boundary_check = p.needs_boundary_check OR EXISTS (SELECT 1 FROM effects WHERE remaining > 0)
       FROM next n WHERE p.operation_id = $2
-      RETURNING p.operation_id, p.classification_done, p.consent, p.orphan_count
+      RETURNING p.operation_id, p.classification_done, p.consent, p.orphan_count, p.steps, p.needs_boundary_check
     ) SELECT a.*, (SELECT count(*)::integer FROM effects) AS examined,
       (SELECT coalesce(sum(controller_rows), 0)::integer FROM effects) AS controller_rows,
       NOT EXISTS (SELECT 1 FROM effects e WHERE e.remaining > 0
@@ -155,10 +159,11 @@ async function classifyAccountDeletionStep(client: PoolClient, principal: string
 /** Orphan batches may commit separately. All Person pages run in the caller's
  * final transaction, which also deactivates the principal and publishes its fence. */
 export async function applyAccountDeletionAgents(client: PoolClient, principal: string,
-  initial: DeletionProgress): Promise<boolean> {
+  initial: DeletionProgress): Promise<{ pending: boolean; checkBoundary: boolean }> {
   const progress = initial.classification_done ? initial : await classifyAccountDeletionStep(client, principal, initial);
-  if (!progress.classification_done) return true;
+  if (!progress.classification_done) return { pending: true, checkBoundary: true };
   const operationId = progress.operation_id;
+  const checkBoundary = progress.needs_boundary_check || initial.classification_done || initial.steps > 0;
   if (progress.orphan_count > 0 && !progress.consent) {
     const agents = (await client.query<AccountOwnedAgent>(`SELECT a.agent_id AS id,
       coalesce(p.agent_kind, 'agent') AS kind, p.display_name AS "displayName"
@@ -187,7 +192,7 @@ export async function applyAccountDeletionAgents(client: PoolClient, principal: 
       ON CONFLICT (agent_id) DO NOTHING
     ) UPDATE access.account_deletion_progress_agent p SET completed = true
       FROM account_deletion_batch b WHERE p.operation_id = $2 AND p.agent_id = b.agent_id`, [principal, operationId]);
-    if ((batch.rowCount ?? 0) === CONTROLLER_CONTINUITY_COST.maxSubjects) return true;
+    if ((batch.rowCount ?? 0) === CONTROLLER_CONTINUITY_COST.maxSubjects) return { pending: true, checkBoundary };
   }
   // This loop deliberately does not commit. Its per-statement inventory stays
   // bounded, while every Person effect and principal deactivation remain atomic.
@@ -208,7 +213,7 @@ export async function applyAccountDeletionAgents(client: PoolClient, principal: 
     ) SELECT count(*)::text FROM batch`, [operationId, CONTROLLER_CONTINUITY_COST.maxSubjects])).rows[0]!.count);
   } while (ended === CONTROLLER_CONTINUITY_COST.maxSubjects);
   await client.query('UPDATE access.account_deletion_progress SET completed = true WHERE operation_id = $1', [operationId]);
-  return false;
+  return { pending: false, checkBoundary };
 }
 
 /** Check surviving boundary subjects after the final effects, without walking
@@ -220,7 +225,7 @@ export async function assertAccountDeletionContinuity(client: PoolClient, princi
   do {
     const result = (await client.query<{ cursor: string; count: number; allowed: boolean }>(`WITH roots AS MATERIALIZED (
       SELECT id, subject_id FROM access.representation WHERE principal_id = $1 AND active
-        AND action = 'agent.control' AND ($2 = '' OR id > nullif($2, '')::uuid)
+        AND action = 'agent.control' AND id > coalesce(nullif($2, '')::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
       ORDER BY id LIMIT $3
     ) SELECT (SELECT id::text FROM roots ORDER BY id DESC LIMIT 1) AS cursor,
       (SELECT count(*)::integer FROM roots) AS count,
@@ -253,8 +258,8 @@ export async function assertAccountDeletionContinuity(client: PoolClient, princi
 /** Compatibility for operations whose principal was fenced by an older release. */
 export async function continueAccountDeletionAgents(client: PoolClient, principal: string):
   Promise<{ operationId: string; pending: boolean } | null> {
-  const progress = (await client.query<DeletionProgress>(`SELECT operation_id, classification_done, consent, orphan_count
+  const progress = (await client.query<DeletionProgress>(`SELECT operation_id, classification_done, consent, orphan_count, steps, needs_boundary_check
     FROM access.account_deletion_progress WHERE principal_id = $1 AND NOT completed FOR UPDATE`, [principal])).rows[0];
   if (!progress) return null;
-  return { operationId: progress.operation_id, pending: await applyAccountDeletionAgents(client, principal, progress) };
+  return { operationId: progress.operation_id, pending: (await applyAccountDeletionAgents(client, principal, progress)).pending };
 }

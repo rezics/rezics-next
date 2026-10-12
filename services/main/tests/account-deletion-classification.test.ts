@@ -116,9 +116,13 @@ function measuredPool(observer: (sql: string, result: { rowCount: number | null;
   if (!cluster) throw new Error('Postgres fixture unavailable');
   const measured = new Pool({ ...cluster.connection, max: 1 });
   measured.on('connect', client => {
+    let timeoutArmed = false;
     const query = client.query.bind(client);
     client.query = ((...args: unknown[]) => {
       const sql = typeof args[0] === 'string' ? args[0] : '';
+      if (sql === 'BEGIN') timeoutArmed = false;
+      if (sql.includes("SET LOCAL statement_timeout = '5s'")) timeoutArmed = true;
+      if (sql.includes('account_deletion_classification_step')) expect(timeoutArmed).toBe(true);
       before?.(sql);
       return Reflect.apply(query, client, args).then((result: { rowCount: number | null; rows: Record<string, unknown>[] }) => {
         observer(sql, result);

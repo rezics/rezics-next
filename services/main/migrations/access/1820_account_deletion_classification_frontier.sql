@@ -5,7 +5,9 @@ ALTER TABLE access.account_deletion_progress
     ADD COLUMN roots_done boolean NOT NULL DEFAULT false,
     ADD COLUMN classification_done boolean NOT NULL DEFAULT false,
     ADD COLUMN consent boolean NOT NULL DEFAULT false,
-    ADD COLUMN orphan_count integer NOT NULL DEFAULT 0;
+    ADD COLUMN orphan_count integer NOT NULL DEFAULT 0,
+    ADD COLUMN steps integer NOT NULL DEFAULT 0,
+    ADD COLUMN needs_boundary_check boolean NOT NULL DEFAULT false;
 ALTER TABLE access.account_deletion_progress_agent
     ADD COLUMN expanded boolean NOT NULL DEFAULT false;
 CREATE INDEX account_deletion_root_frontier ON access.representation (principal_id, id)
