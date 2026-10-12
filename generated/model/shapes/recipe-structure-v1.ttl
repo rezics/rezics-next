@@ -10,7 +10,9 @@
 <https://rezics.com/definition/recipe-structure-v1/ingredient-line-shape>
     a sh:NodeShape ;
     sh:property [ sh:path rdf:type ; sh:maxCount 1 ; sh:hasValue rv:IngredientLine ] ;
-    sh:property [ sh:path rv:originalText ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype rdf:langString ; sh:minLength 1 ; sh:maxLength 1000 ] ;
+    sh:property [ sh:path rv:originalText ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype rdf:langString ; sh:minLength 0 ; sh:maxLength 1000 ] ;
+    sh:property [ sh:path rv:ingredientName ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:maxLength 1000 ] ;
+    sh:property [ sh:path rv:ingredientTextParts ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
     sh:property [ sh:path rv:amountLexical ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:minLength 1 ; sh:maxLength 100 ] ;
     sh:property [ sh:path rv:amountNumerator ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 0 ] ;
     sh:property [ sh:path rv:amountDenominator ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ] ;

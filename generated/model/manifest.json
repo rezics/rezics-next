@@ -923,7 +923,7 @@
     },
     {
       "id": "recipe-structure-v1",
-      "sha256": "b950e8eb396bc5261a976cf9c8378e42655b0aa2bdf9531701c7aaa51958dd72",
+      "sha256": "994a085c6ee2f10824cb29225d59076402db2cf4479d97e16a223d07323e2f16",
       "file": "shapes/recipe-structure-v1.ttl"
     },
     {
@@ -3998,7 +3998,7 @@
     "contexts/realm-target-rating-observation-v2.jsonld": "076015b8f072c1d38c12cb48affa89c3166ac01a6a7e2ff635fc91a880a27ff7",
     "contexts/realm-target-rating-observation-v3.jsonld": "96a7a85f52ae996071e73464c5e93dd376228217583c96ffd37a5d27213ac60b",
     "contexts/realm-target-rating-observation-v4.jsonld": "743af4b61f7a22a1450a6d68428641d30838ed7a1e4598f306ded60031f2970d",
-    "contexts/recipe-structure-v1.jsonld": "4aa7e0f01e0f726de05b5f1ee536434e43f73ecf43e787649c22bbc41e81b3f8",
+    "contexts/recipe-structure-v1.jsonld": "008e021120755538e16f0301ba2bd145dd167854435f66b0d1adc278c58c2d64",
     "contexts/relation-occurrence-v1.jsonld": "11765223ec6529f75fde356cb678562299f257127321825a0a6d06bc91b0b84f",
     "contexts/release-v1.jsonld": "4e08a0411d5e3180f70f1f90939d7df0c9d797daceeda586ebf4f823f7120461",
     "contexts/release-v2.jsonld": "6f72516d1ca454a37af8e11df6339fee343e716bf0215bfe38ea6312eb4143f4",
@@ -4133,7 +4133,7 @@
     "shapes/realm-target-rating-observation-v2.ttl": "dbfdb6259c310991d57b339854f8ac138f3b42c8acfba780d9d932bab411a341",
     "shapes/realm-target-rating-observation-v3.ttl": "4dc4a035b1dae7714d354e730617f1f649561e99a8a76eeb0afaed4a7b742c0e",
     "shapes/realm-target-rating-observation-v4.ttl": "670763404c8cd86a0629e4e55f35fb5b560e95ca00c1f7aaac52749dd4ee7386",
-    "shapes/recipe-structure-v1.ttl": "b950e8eb396bc5261a976cf9c8378e42655b0aa2bdf9531701c7aaa51958dd72",
+    "shapes/recipe-structure-v1.ttl": "994a085c6ee2f10824cb29225d59076402db2cf4479d97e16a223d07323e2f16",
     "shapes/relation-occurrence-v1.ttl": "27269b50a2a7c632a6fa4a96bcc94d4e623f3b00e19b36926727c229bca099c6",
     "shapes/release-v1.ttl": "e0018a2144113c2c3cc6bfcdc3951f1ce282c919859950c0811aa018c4a1c92c",
     "shapes/release-v2.ttl": "2f582286d19af2061cc01e2c80cc53813a9437a6b2a855ef578435e5261162f5",
@@ -4191,8 +4191,8 @@
     "shapes/zone-capability-v1.ttl": "a7296e09f052999c0578caa2894ebdbd272cedd04357e4f291e2506e73eed611",
     "shapes/zone-presentation-v1.ttl": "6aecbd83013a8a9f9e2dc712d26b6450df29554f2f2c7d6174c2897b418bece7",
     "shapes/zone-presentation-v2.ttl": "e331efea63e2bfb3ce883fb4d005ab63d7dd976973e43fd1599f655eef3ea730",
-    "packages/model/src/generated/profiles.ts": "d5f73364e2f84be7287c469191d644cb15b62def875607fc097fbbd9ff483050",
-    "packages/model/src/generated/schemas.ts": "63c42f5d097e175a7f9937a294f66d267615a76526e1c8fb06b94e55a64a5a52",
-    "packages/model/src/generated/vocabulary.ts": "9e54084c7b210ad6f44af453a9a4a643c3d99d14097b85e37db36e735a3a9ccd"
+    "packages/model/src/generated/profiles.ts": "1e26e4753b40ecc1562240ff75199f3924c92f500eec8879770a003cb18f62aa",
+    "packages/model/src/generated/schemas.ts": "6f77e604a1f3b36e0cf4caf2d3e782b0b5ffae16a862bc012dec3456143205b2",
+    "packages/model/src/generated/vocabulary.ts": "c11c6992cc8663af43f3fac3c2334dbc86bfdc8411f264e2c873e77af86925c1"
   }
 }

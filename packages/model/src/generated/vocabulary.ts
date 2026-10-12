@@ -582,6 +582,8 @@ export const iri = {
   "rv:independentOriginCount": "https://rezics.com/vocab/independentOriginCount",
   "rv:InferredValue": "https://rezics.com/vocab/InferredValue",
   "rv:IngredientLine": "https://rezics.com/vocab/IngredientLine",
+  "rv:ingredientName": "https://rezics.com/vocab/ingredientName",
+  "rv:ingredientTextParts": "https://rezics.com/vocab/ingredientTextParts",
   "rv:inheritanceDepth": "https://rezics.com/vocab/inheritanceDepth",
   "rv:inheritancePolicy": "https://rezics.com/vocab/inheritancePolicy",
   "rv:inputCount": "https://rezics.com/vocab/inputCount",

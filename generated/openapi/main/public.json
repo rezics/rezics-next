@@ -101163,6 +101163,10 @@
                                     ],
                                     "type": "object"
                                   },
+                                  "name": {
+                                    "maxLength": 1000,
+                                    "type": "string"
+                                  },
                                   "optional": {
                                     "type": "boolean"
                                   },
@@ -101175,7 +101179,7 @@
                                       },
                                       "value": {
                                         "maxLength": 1000,
-                                        "minLength": 1,
+                                        "minLength": 0,
                                         "type": "string"
                                       }
                                     },
@@ -101231,6 +101235,76 @@
                                     },
                                     "maxItems": 16,
                                     "type": "array"
+                                  },
+                                  "textParts": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "amount": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "end": {
+                                            "maximum": 1000,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          },
+                                          "start": {
+                                            "maximum": 1000,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": [
+                                          "start",
+                                          "end"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "name": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "end": {
+                                            "maximum": 1000,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          },
+                                          "start": {
+                                            "maximum": 1000,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": [
+                                          "start",
+                                          "end"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "unit": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "end": {
+                                            "maximum": 1000,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          },
+                                          "start": {
+                                            "maximum": 1000,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": [
+                                          "start",
+                                          "end"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    },
+                                    "required": [
+                                      "amount",
+                                      "name"
+                                    ],
+                                    "type": "object"
                                   },
                                   "type": {
                                     "const": "ingredient-line",
@@ -102323,6 +102397,10 @@
                                       ],
                                       "type": "object"
                                     },
+                                    "name": {
+                                      "maxLength": 1000,
+                                      "type": "string"
+                                    },
                                     "optional": {
                                       "type": "boolean"
                                     },
@@ -102335,7 +102413,7 @@
                                         },
                                         "value": {
                                           "maxLength": 1000,
-                                          "minLength": 1,
+                                          "minLength": 0,
                                           "type": "string"
                                         }
                                       },
@@ -102391,6 +102469,76 @@
                                       },
                                       "maxItems": 16,
                                       "type": "array"
+                                    },
+                                    "textParts": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "amount": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "end": {
+                                              "maximum": 1000,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            },
+                                            "start": {
+                                              "maximum": 1000,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "start",
+                                            "end"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "name": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "end": {
+                                              "maximum": 1000,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            },
+                                            "start": {
+                                              "maximum": 1000,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "start",
+                                            "end"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "unit": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "end": {
+                                              "maximum": 1000,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            },
+                                            "start": {
+                                              "maximum": 1000,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "start",
+                                            "end"
+                                          ],
+                                          "type": "object"
+                                        }
+                                      },
+                                      "required": [
+                                        "amount",
+                                        "name"
+                                      ],
+                                      "type": "object"
                                     },
                                     "type": {
                                       "const": "ingredient-line",
@@ -102751,6 +102899,10 @@
                                       ],
                                       "type": "object"
                                     },
+                                    "name": {
+                                      "maxLength": 1000,
+                                      "type": "string"
+                                    },
                                     "optional": {
                                       "type": "boolean"
                                     },
@@ -102763,7 +102915,7 @@
                                         },
                                         "value": {
                                           "maxLength": 1000,
-                                          "minLength": 1,
+                                          "minLength": 0,
                                           "type": "string"
                                         }
                                       },
@@ -102819,6 +102971,76 @@
                                       },
                                       "maxItems": 16,
                                       "type": "array"
+                                    },
+                                    "textParts": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "amount": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "end": {
+                                              "maximum": 1000,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            },
+                                            "start": {
+                                              "maximum": 1000,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "start",
+                                            "end"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "name": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "end": {
+                                              "maximum": 1000,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            },
+                                            "start": {
+                                              "maximum": 1000,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "start",
+                                            "end"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "unit": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "end": {
+                                              "maximum": 1000,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            },
+                                            "start": {
+                                              "maximum": 1000,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "start",
+                                            "end"
+                                          ],
+                                          "type": "object"
+                                        }
+                                      },
+                                      "required": [
+                                        "amount",
+                                        "name"
+                                      ],
+                                      "type": "object"
                                     },
                                     "type": {
                                       "const": "ingredient-line",
@@ -103169,6 +103391,10 @@
                                       ],
                                       "type": "object"
                                     },
+                                    "name": {
+                                      "maxLength": 1000,
+                                      "type": "string"
+                                    },
                                     "optional": {
                                       "type": "boolean"
                                     },
@@ -103181,7 +103407,7 @@
                                         },
                                         "value": {
                                           "maxLength": 1000,
-                                          "minLength": 1,
+                                          "minLength": 0,
                                           "type": "string"
                                         }
                                       },
@@ -103237,6 +103463,76 @@
                                       },
                                       "maxItems": 16,
                                       "type": "array"
+                                    },
+                                    "textParts": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "amount": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "end": {
+                                              "maximum": 1000,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            },
+                                            "start": {
+                                              "maximum": 1000,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "start",
+                                            "end"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "name": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "end": {
+                                              "maximum": 1000,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            },
+                                            "start": {
+                                              "maximum": 1000,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "start",
+                                            "end"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "unit": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "end": {
+                                              "maximum": 1000,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            },
+                                            "start": {
+                                              "maximum": 1000,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "start",
+                                            "end"
+                                          ],
+                                          "type": "object"
+                                        }
+                                      },
+                                      "required": [
+                                        "amount",
+                                        "name"
+                                      ],
+                                      "type": "object"
                                     },
                                     "type": {
                                       "const": "ingredient-line",
@@ -103597,6 +103893,10 @@
                                       ],
                                       "type": "object"
                                     },
+                                    "name": {
+                                      "maxLength": 1000,
+                                      "type": "string"
+                                    },
                                     "optional": {
                                       "type": "boolean"
                                     },
@@ -103609,7 +103909,7 @@
                                         },
                                         "value": {
                                           "maxLength": 1000,
-                                          "minLength": 1,
+                                          "minLength": 0,
                                           "type": "string"
                                         }
                                       },
@@ -103665,6 +103965,76 @@
                                       },
                                       "maxItems": 16,
                                       "type": "array"
+                                    },
+                                    "textParts": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "amount": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "end": {
+                                              "maximum": 1000,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            },
+                                            "start": {
+                                              "maximum": 1000,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "start",
+                                            "end"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "name": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "end": {
+                                              "maximum": 1000,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            },
+                                            "start": {
+                                              "maximum": 1000,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "start",
+                                            "end"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "unit": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "end": {
+                                              "maximum": 1000,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            },
+                                            "start": {
+                                              "maximum": 1000,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "start",
+                                            "end"
+                                          ],
+                                          "type": "object"
+                                        }
+                                      },
+                                      "required": [
+                                        "amount",
+                                        "name"
+                                      ],
+                                      "type": "object"
                                     },
                                     "type": {
                                       "const": "ingredient-line",
@@ -104015,6 +104385,10 @@
                                       ],
                                       "type": "object"
                                     },
+                                    "name": {
+                                      "maxLength": 1000,
+                                      "type": "string"
+                                    },
                                     "optional": {
                                       "type": "boolean"
                                     },
@@ -104027,7 +104401,7 @@
                                         },
                                         "value": {
                                           "maxLength": 1000,
-                                          "minLength": 1,
+                                          "minLength": 0,
                                           "type": "string"
                                         }
                                       },
@@ -104083,6 +104457,76 @@
                                       },
                                       "maxItems": 16,
                                       "type": "array"
+                                    },
+                                    "textParts": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "amount": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "end": {
+                                              "maximum": 1000,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            },
+                                            "start": {
+                                              "maximum": 1000,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "start",
+                                            "end"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "name": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "end": {
+                                              "maximum": 1000,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            },
+                                            "start": {
+                                              "maximum": 1000,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "start",
+                                            "end"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "unit": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "end": {
+                                              "maximum": 1000,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            },
+                                            "start": {
+                                              "maximum": 1000,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "start",
+                                            "end"
+                                          ],
+                                          "type": "object"
+                                        }
+                                      },
+                                      "required": [
+                                        "amount",
+                                        "name"
+                                      ],
+                                      "type": "object"
                                     },
                                     "type": {
                                       "const": "ingredient-line",
@@ -104443,6 +104887,10 @@
                                       ],
                                       "type": "object"
                                     },
+                                    "name": {
+                                      "maxLength": 1000,
+                                      "type": "string"
+                                    },
                                     "optional": {
                                       "type": "boolean"
                                     },
@@ -104455,7 +104903,7 @@
                                         },
                                         "value": {
                                           "maxLength": 1000,
-                                          "minLength": 1,
+                                          "minLength": 0,
                                           "type": "string"
                                         }
                                       },
@@ -104511,6 +104959,76 @@
                                       },
                                       "maxItems": 16,
                                       "type": "array"
+                                    },
+                                    "textParts": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "amount": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "end": {
+                                              "maximum": 1000,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            },
+                                            "start": {
+                                              "maximum": 1000,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "start",
+                                            "end"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "name": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "end": {
+                                              "maximum": 1000,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            },
+                                            "start": {
+                                              "maximum": 1000,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "start",
+                                            "end"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "unit": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "end": {
+                                              "maximum": 1000,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            },
+                                            "start": {
+                                              "maximum": 1000,
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "start",
+                                            "end"
+                                          ],
+                                          "type": "object"
+                                        }
+                                      },
+                                      "required": [
+                                        "amount",
+                                        "name"
+                                      ],
+                                      "type": "object"
                                     },
                                     "type": {
                                       "const": "ingredient-line",
@@ -105715,6 +106233,10 @@
                                     ],
                                     "type": "object"
                                   },
+                                  "name": {
+                                    "maxLength": 1000,
+                                    "type": "string"
+                                  },
                                   "optional": {
                                     "type": "boolean"
                                   },
@@ -105727,7 +106249,7 @@
                                       },
                                       "value": {
                                         "maxLength": 1000,
-                                        "minLength": 1,
+                                        "minLength": 0,
                                         "type": "string"
                                       }
                                     },
@@ -105783,6 +106305,76 @@
                                     },
                                     "maxItems": 16,
                                     "type": "array"
+                                  },
+                                  "textParts": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "amount": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "end": {
+                                            "maximum": 1000,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          },
+                                          "start": {
+                                            "maximum": 1000,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": [
+                                          "start",
+                                          "end"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "name": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "end": {
+                                            "maximum": 1000,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          },
+                                          "start": {
+                                            "maximum": 1000,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": [
+                                          "start",
+                                          "end"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "unit": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "end": {
+                                            "maximum": 1000,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          },
+                                          "start": {
+                                            "maximum": 1000,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": [
+                                          "start",
+                                          "end"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    },
+                                    "required": [
+                                      "amount",
+                                      "name"
+                                    ],
+                                    "type": "object"
                                   },
                                   "type": {
                                     "const": "ingredient-line",
@@ -111163,6 +111755,10 @@
                                     ],
                                     "type": "object"
                                   },
+                                  "name": {
+                                    "maxLength": 1000,
+                                    "type": "string"
+                                  },
                                   "optional": {
                                     "type": "boolean"
                                   },
@@ -111175,7 +111771,7 @@
                                       },
                                       "value": {
                                         "maxLength": 1000,
-                                        "minLength": 1,
+                                        "minLength": 0,
                                         "type": "string"
                                       }
                                     },
@@ -111231,6 +111827,76 @@
                                     },
                                     "maxItems": 16,
                                     "type": "array"
+                                  },
+                                  "textParts": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "amount": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "end": {
+                                            "maximum": 1000,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          },
+                                          "start": {
+                                            "maximum": 1000,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": [
+                                          "start",
+                                          "end"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "name": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "end": {
+                                            "maximum": 1000,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          },
+                                          "start": {
+                                            "maximum": 1000,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": [
+                                          "start",
+                                          "end"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "unit": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "end": {
+                                            "maximum": 1000,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          },
+                                          "start": {
+                                            "maximum": 1000,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": [
+                                          "start",
+                                          "end"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    },
+                                    "required": [
+                                      "amount",
+                                      "name"
+                                    ],
+                                    "type": "object"
                                   },
                                   "type": {
                                     "const": "ingredient-line",
@@ -582890,6 +583556,10 @@
                                     ],
                                     "type": "object"
                                   },
+                                  "name": {
+                                    "maxLength": 1000,
+                                    "type": "string"
+                                  },
                                   "optional": {
                                     "type": "boolean"
                                   },
@@ -582902,7 +583572,7 @@
                                       },
                                       "value": {
                                         "maxLength": 1000,
-                                        "minLength": 1,
+                                        "minLength": 0,
                                         "type": "string"
                                       }
                                     },
@@ -582958,6 +583628,76 @@
                                     },
                                     "maxItems": 16,
                                     "type": "array"
+                                  },
+                                  "textParts": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "amount": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "end": {
+                                            "maximum": 1000,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          },
+                                          "start": {
+                                            "maximum": 1000,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": [
+                                          "start",
+                                          "end"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "name": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "end": {
+                                            "maximum": 1000,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          },
+                                          "start": {
+                                            "maximum": 1000,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": [
+                                          "start",
+                                          "end"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "unit": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "end": {
+                                            "maximum": 1000,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          },
+                                          "start": {
+                                            "maximum": 1000,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": [
+                                          "start",
+                                          "end"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    },
+                                    "required": [
+                                      "amount",
+                                      "name"
+                                    ],
+                                    "type": "object"
                                   },
                                   "type": {
                                     "const": "ingredient-line",

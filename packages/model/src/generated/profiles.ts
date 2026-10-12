@@ -1011,7 +1011,7 @@ export const profileRegistry = {
     ]
   },
   "recipe-structure-v1": {
-    "sha256": "b950e8eb396bc5261a976cf9c8378e42655b0aa2bdf9531701c7aaa51958dd72",
+    "sha256": "994a085c6ee2f10824cb29225d59076402db2cf4479d97e16a223d07323e2f16",
     "file": "shapes/recipe-structure-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/recipe-structure-v1/ingredient-line-shape",

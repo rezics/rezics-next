@@ -59,6 +59,12 @@
       "@id": "https://rezics.com/vocab/generation",
       "@type": "@id"
     },
+    "rv:ingredientName": {
+      "@id": "https://rezics.com/vocab/ingredientName"
+    },
+    "rv:ingredientTextParts": {
+      "@id": "https://rezics.com/vocab/ingredientTextParts"
+    },
     "rv:instructionText": {
       "@id": "https://rezics.com/vocab/instructionText"
     },
