@@ -5,6 +5,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { ReaderActionsProvider } from '../catalogue/reader-actions.tsx';
 import { PageContainer } from '../shell/page.tsx';
 import { createMemoryEpisodes, type MemoryEpisodes } from './episode-memory.ts';
+import { MAX_COMPLETION_READS } from './episodes.ts';
 import { episodeSeries, saoOne } from './fixtures.ts';
 import { createMemoryMain, type MemoryMain, memoryReader } from './memory.ts';
 import { SeriesProgressPanel } from './series-progress-panel.tsx';
@@ -138,6 +139,57 @@ export const SparseLastWatched: Story = {
     await view.findByText('Last watched: Episode 1001');
     await expect(view.getByText('Continue from episode 1002')).toBeVisible();
     await expect(view.queryByRole('progressbar')).toBeNull();
+  },
+};
+
+/** Completing the final episode resumes at the end but does not complete the missing episodes. */
+export const SparseFinalEpisode: Story = {
+  args: { main: withEpisodes((() => {
+    const episodes = finishedThrough(createMemoryEpisodes({ ...episodeSeries({ mains: 12 }), page: 3 }), 1);
+    const last = episodes.mains[11]!;
+    episodes.progress.set(last.occurrence, { completed: true, position: 'episode:12', version: 1 });
+    return episodes;
+  })()) },
+  async play({ canvasElement }) {
+    const view = panel(canvasElement);
+    await view.findByText('Watched through episode 1 of 12');
+    await expect(view.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '8');
+    await expect(canvasElement.querySelector('[data-caught-up]')).toBeNull();
+    await expect(canvasElement.querySelector('[data-next]')).toBeNull();
+  },
+};
+
+export const UnmarkEarlierEpisode: Story = {
+  args: { main: withEpisodes(finishedThrough(createMemoryEpisodes(episodeSeries({ mains: 12 })), 12)) },
+  async play({ canvasElement }) {
+    const view = panel(canvasElement);
+    await view.findByText('Watched through episode 12 of 12');
+    await userEvent.type(view.getByLabelText('Go to episode number'), '2');
+    await userEvent.click(view.getByRole('button', { name: 'Go' }));
+    await userEvent.click(await view.findByRole('button', { name: 'Mark not watched' }));
+    await view.findByText('Watched through episode 1 of 12');
+    await expect(view.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '8');
+    await expect(canvasElement.querySelector('[data-caught-up]')).toBeNull();
+  },
+};
+
+export const AlmostComplete: Story = {
+  args: { main: withEpisodes(finishedThrough(createMemoryEpisodes({ ...episodeSeries({ mains: 200 }), page: 200 }), 199)) },
+  async play({ canvasElement }) {
+    const view = panel(canvasElement);
+    await view.findByText('Watched through episode 199 of 200');
+    await expect(view.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '99');
+    await expect(canvasElement.querySelector('[data-caught-up]')).toBeNull();
+  },
+};
+
+export const BoundedCompletionProof: Story = {
+  args: { main: withEpisodes(finishedThrough(createMemoryEpisodes(episodeSeries({ mains: MAX_COMPLETION_READS + 1 })), MAX_COMPLETION_READS + 1)) },
+  async play({ canvasElement }) {
+    const view = panel(canvasElement);
+    await view.findByText(`Last watched: Episode ${MAX_COMPLETION_READS + 1}`);
+    await expect(view.queryByRole('progressbar')).toBeNull();
+    await expect(canvasElement.querySelector('[data-caught-up]')).toBeNull();
   },
 };
 
