@@ -5,7 +5,7 @@ import { Kysely, PostgresDialect, sql } from 'kysely';
 import { defineRequestState, getCurrentAdapter, getCurrentDBAdapterAsyncLocalStorage, queueAfterTransactionHook, runWithTransaction } from '@better-auth/core/context';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { APIError, createAuthEndpoint, createAuthMiddleware, getAuthoritativeSessionFromCtx, getSessionFromCtx, originCheckMiddleware, verifyEmail } from 'better-auth/api';
+import { APIError, createAuthEndpoint, createAuthMiddleware, getAuthoritativeSessionFromCtx, getSessionFromCtx, isAPIError, originCheckMiddleware, verifyEmail } from 'better-auth/api';
 import { jwtVerify } from 'jose';
 import { captcha, jwt, openAPI, twoFactor } from 'better-auth/plugins';
 import { getAuthenticatorName, passkey } from '@better-auth/passkey';
@@ -120,11 +120,11 @@ function accountVerification(config: AccountConfig, owners: SessionOwners) {
         } catch (error) {
           // Better Auth signals successful callback navigation with an APIError.
           // Commit verification/session effects before forwarding that redirect.
-          if (error instanceof APIError && error.statusCode === 302) return error;
+          if (isAPIError(error) && error.statusCode === 302) return error;
           throw error;
         }
       });
-      if (result instanceof APIError) throw result;
+      if (isAPIError(result)) throw result;
       result.headers.forEach((value, key) => ctx.responseHeaders.append(key, value));
       return result.response;
     }),
