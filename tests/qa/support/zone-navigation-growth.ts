@@ -1,24 +1,58 @@
 import { expect } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { cpSync, mkdirSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { trace } from '@opentelemetry/api';
-import { flushTelemetryTraces } from '../../../packages/observability/src/runtime.ts';
+import { completePublicNavigation } from '../../../apps/web/features/realm/public-navigation.ts';
+import type { ZonePresentationRead } from '../../../apps/web/features/realm/types.ts';
+import { flushTelemetryTraces, shutdownTelemetry, startTelemetry } from '../../../packages/observability/src/runtime.ts';
+import { withoutVerifiedImmutableObjectCache } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { dockerEnvironment, root, stream } from '../../../scripts/fixture/stack.ts';
 import type { CorpusRestoreSmokeInput } from '../../../scripts/load/corpus-backup-driver.ts';
-import type { CorpusApi, CorpusCommand, CorpusDimensions } from '../../../scripts/load/work-profile-corpus.ts';
+import type { CorpusApi, CorpusDimensions } from '../../../scripts/load/work-profile-corpus.ts';
 import type { MediaStack } from '../integration/media-support.ts';
 import type { RetainedSeed, RetainedSeedCut } from './seed-checkpoints.ts';
 import {
   profileRequest,
+  assertWorkCostAtScales,
   type WorkCostContract,
   type WorkCostField,
   type WorkProfile,
   startWorkProfileSink,
 } from './work-profile.ts';
 
-export type ZoneGrowthSink = ReturnType<typeof startWorkProfileSink>;
+export type ZoneGrowthSink = Pick<ReturnType<typeof startWorkProfileSink>, 'collect' | 'clear' | 'release'>;
 export type ScaledProfile = WorkProfile & { unrelatedWorks: number };
+
+export async function withZoneGrowthTelemetry<T>(measure: (sink: ZoneGrowthSink) => Promise<T>, runtime: {
+  createSink: () => ZoneGrowthSink & { env: Record<string, string>; stop(): unknown };
+  start: (service: string, env: Record<string, string | undefined>) => unknown;
+  shutdown: () => Promise<void>;
+} = {
+  createSink: startWorkProfileSink,
+  start: startTelemetry,
+  shutdown: shutdownTelemetry,
+}): Promise<T> {
+  const sink = runtime.createSink();
+  try {
+    // pg must load after the SDK installs its instrumentation hooks.
+    runtime.start('main', { ...process.env, ...sink.env, OTEL_SERVICE_NAME: 'main', OTEL_TRACES_SAMPLER_ARG: '1' });
+    return await measure(sink);
+  } finally {
+    try { await runtime.shutdown(); }
+    finally { await sink.stop(); }
+  }
+}
+
+/** The wrapper can reject after registering a live restored copy. */
+export async function withRestoredZoneCut<T>(target: string, restore: () => Promise<unknown>,
+  measure: () => Promise<T>, stop: (target: string) => Promise<void>): Promise<T> {
+  try {
+    await restore();
+    return await measure();
+  } finally {
+    await stop(target);
+  }
+}
 
 export type RestoredMeasurement = {
   stack: MediaStack;
@@ -39,11 +73,28 @@ export function presentationPathFor(zoneId: string): string {
   return '/v1/zones/' + short(zoneId) + '/presentation';
 }
 
+export const ZONE_GROWTH_COVERAGE = {
+  census: { unrelatedWorks: 'constant at 4/16/64; admission per distinct mounted target' },
+  route: { unrelatedWorks: 'NOT COVERED: retained cuts co-grow own entries; absolute caps only' },
+  presentation: { unrelatedWorks: 'NOT COVERED: retained cuts co-grow own entries; absolute caps only' },
+  unrelatedPosts: 'NOT COVERED: retained cuts contain zero Posts; summaries include the rv:Post UNION',
+  requiredSeedAxes: {
+    unrelatedWorks: { sizes: [4, 16, 64], unit: 'public Work outside the measured Zone and mounted Collection',
+      fixed: '4 Zone navigation entries and 4 mounted Collection resources', expected: 'constant', owner: 'kernel class B' },
+    unrelatedPosts: { sizes: [4, 16, 64], unit: 'public Post outside the measured Zone',
+      fixed: '4 Zone navigation entries, 4 mounted Collection resources and unrelated Works', expected: 'constant', owner: 'kernel class B' },
+    zoneNavigationEntries: { sizes: [4, 16, 64], unit: 'public mount with a route segment and Work or Collection target',
+      expected: 'keyed lookup logarithmic; complete presentation linear because every mount is returned' },
+    mountedCollectionResources: { sizes: [4, 16, 64], unit: 'public Work in the mounted Collection',
+      expected: 'linear up to the 24-item route page cap, then bounded' },
+  },
+} as const;
+
 export function zoneSiteReadCost(owner: {
   maxGraphReads: number;
   maxGraphBytes: number;
   deadlineMs: number;
-}): WorkCostContract {
+}, operation: 'census' | 'route' | 'presentation'): WorkCostContract {
   return {
     fusekiRequests: owner.maxGraphReads,
     fusekiSentBytes: owner.maxGraphBytes,
@@ -55,7 +106,10 @@ export function zoneSiteReadCost(owner: {
     unclassifiedFetches: 0,
     serverLatencyMs: owner.deadlineMs,
     totalLatencyMs: owner.deadlineMs,
-    growth: {
+    minimumObserved: { postgresStatements: 1, fusekiRequests: 1 },
+    // The census admits distinct targets once. Other reads enumerate their own
+    // growing entries on these cuts, which cannot isolate unrelated population.
+    growth: operation === 'census' ? {
       fusekiRequests: { class: 'constant', dimension: corpusAxis },
       fusekiSentBytes: { class: 'constant', dimension: corpusAxis },
       fusekiReceivedBytes: { class: 'constant', dimension: corpusAxis },
@@ -64,8 +118,40 @@ export function zoneSiteReadCost(owner: {
       mainCalls: { class: 'constant', dimension: corpusAxis },
       otherFetches: { class: 'constant', dimension: corpusAxis },
       unclassifiedFetches: { class: 'constant', dimension: corpusAxis },
+    } : {},
+  };
+}
+
+export function assertZoneGrowthProfiles(profiles: Record<'census' | 'route' | 'presentation', ScaledProfile[]>,
+  owner: Parameters<typeof zoneSiteReadCost>[0]): void {
+  for (const operation of ['census', 'route', 'presentation'] as const)
+    assertWorkCostAtScales(profiles[operation], zoneSiteReadCost(owner, operation), 'zone-' + operation + '-growth');
+}
+
+/** The census does not pass a signal itself, so bind the restore deadline here. */
+export function bindRestoreSignal(api: CorpusApi, signal: AbortSignal): CorpusApi {
+  const bound = (other?: AbortSignal) => other ? AbortSignal.any([signal, other]) : signal;
+  return {
+    async command<T>(key, command, other) {
+      signal.throwIfAborted();
+      const result = await api.command<T>(key, command, bound(other));
+      signal.throwIfAborted();
+      return result;
+    },
+    async read<T>(path, other) {
+      signal.throwIfAborted();
+      const result = await api.read<T>(path, bound(other));
+      signal.throwIfAborted();
+      return result;
     },
   };
+}
+
+/** Use the site's traversal, so a failed or inconsistent tail refuses the read. */
+export async function readCompletePresentation(read: (after?: string) => Promise<ZonePresentationRead>) {
+  const result = await completePublicNavigation(async after => ({ ok: true, data: await read(after) }));
+  if (!result.ok) throw new Error('Zone presentation continuation failed: ' + result.failure);
+  return result.data;
 }
 
 export function measuredCounters(profile: ScaledProfile) {
@@ -81,6 +167,8 @@ export function measuredCounters(profile: ScaledProfile) {
     accountCalls: profile.accountCalls,
     otherFetches: profile.otherFetches,
     unclassifiedFetches: profile.unclassifiedFetches,
+    nativeVisitTotal: profile.nativeVisitTotal,
+    nativeVisits: profile.nativeVisits,
     serverLatencyMs: profile.serverLatencyMs,
     totalLatencyMs: profile.totalLatencyMs,
   };
@@ -157,18 +245,21 @@ async function openRestoredStack(input: CorpusRestoreSmokeInput, label: string):
 }
 
 export async function profileRead(sink: ZoneGrowthSink, restored: RestoredMeasurement, path: string,
-  unrelatedWorks: number) {
+  unrelatedWorks: number, completePresentation = false) {
   sink.clear();
   const { result, profile } = await profileRequest(
     sink,
-    async (headers) => {
-      const response = await restored.stack.main.handle(
-        new Request('http://main.local' + path, { headers }),
-      );
-      const body = await response.text();
-      expect(response.status, body).toBe(200);
-      return JSON.parse(body) as Record<string, unknown>;
-    },
+    headers => withoutVerifiedImmutableObjectCache(async () => {
+      const read = async (after?: string) => {
+        const url = new URL(path, 'http://main.local');
+        if (after) url.searchParams.set('after', after);
+        const response = await restored.stack.main.handle(new Request(url, { headers }));
+        const body = await response.text();
+        expect(response.status, body).toBe(200);
+        return JSON.parse(body);
+      };
+      return completePresentation ? readCompletePresentation(read) : read();
+    }),
     {
       service: 'main',
       peers: { fuseki: restored.fusekiUrl },
@@ -206,7 +297,7 @@ export async function measureZoneSite(sink: ZoneGrowthSink, restored: RestoredMe
   const routePath = routePathFor(zoneId, segment);
   const presentationPath = presentationPathFor(zoneId);
   const route = await profileRead(sink, restored, routePath, scale);
-  const presentation = await profileRead(sink, restored, presentationPath, scale);
+  const presentation = await profileRead(sink, restored, presentationPath, scale, true);
   return { routePath, presentationPath, route, presentation };
 }
 
@@ -254,23 +345,6 @@ export function writeProfileDump(label: string, dump: ReturnType<typeof profileD
   writeFileSync(join(directory, label + '.json'), JSON.stringify(dump, null, 2) + '\n');
 }
 
-export function logWorkCostRatios(label: string, profiles: readonly ScaledProfile[], cost: WorkCostContract) {
-  console.log('Zone navigation checkpoint ratios', JSON.stringify({
-    operation: label,
-    pairs: profiles.flatMap((smaller, index) => profiles.slice(index + 1).map(larger => ({
-      from: smaller.unrelatedWorks,
-      to: larger.unrelatedWorks,
-      counters: Object.fromEntries(Object.keys(cost.growth!).map(counter => {
-        const field = counter as WorkCostField;
-        const before = smaller[field];
-        const after = larger[field];
-        return [counter, before === null || after === null ? null
-          : before === 0 ? (after === 0 ? 'both zero' : 'Infinity') : after / before];
-      })),
-    }))),
-  }));
-}
-
 /** Restores the given retained cuts one at a time, runs the census read of each, then hands the restored stack to `measure`. */
 export async function restoreZoneCuts(options: {
   sink: ZoneGrowthSink;
@@ -279,13 +353,13 @@ export async function restoreZoneCuts(options: {
   label: string;
   cuts: readonly RetainedSeedCut[];
   measure: (cut: RetainedSeedCut, restored: RestoredMeasurement) => Promise<void>;
+  censusProfiles: ScaledProfile[];
 }): Promise<void> {
-  const { sink, qaRunId, retained, label, cuts, measure } = options;
+  const { sink, qaRunId, retained, label, cuts, measure, censusProfiles } = options;
   const { createCorpusBackupDriver } = await import('../../../scripts/load/corpus-backup-driver.ts');
   const { restoreWorkProfileCorpus } = await import('../../../scripts/load/work-profile-corpus.ts');
   const { seedApi, seedAuthorName, seedCensus, seedDirectory } = await import('./seed-checkpoints.ts');
   const smokeCopies = new Map<string, RestoredMeasurement>();
-  const targets: string[] = [];
   let verifying: RetainedSeedCut | undefined;
 
   const driver = createCorpusBackupDriver({
@@ -297,15 +371,20 @@ export async function restoreZoneCuts(options: {
       throw new Error('Routine Zone growth TEST only restores retained checkpoints');
     },
     smokeRead: async (input) => {
+      input.signal.throwIfAborted();
       const cut = verifying;
       if (!cut) throw new Error('A retained checkpoint restore started without its expected cut');
       const stack = await openRestoredStack(input, label);
       try {
+        input.signal.throwIfAborted();
         const member = await stack.member(seedAuthorName, { stable: true, verified: true });
-        const api = seedApi(stack, member.token);
+        input.signal.throwIfAborted();
+        const api = bindRestoreSignal(seedApi(stack, member.token), input.signal);
         const censusApi: typeof api = {
           ...api,
           async read<T>(path: `/v1/${string}`, signal?: AbortSignal): Promise<T> {
+            input.signal.throwIfAborted();
+            const requestSignal = signal ? AbortSignal.any([input.signal, signal]) : input.signal;
             if (new URL(path, 'http://main.local').pathname !== '/v1/zones/' + short(cut.population.zone.id))
               return api.read<T>(path, signal);
             // Stage spans annotate the existing read and meter, without altering
@@ -334,11 +413,13 @@ export async function restoreZoneCuts(options: {
             };
             try {
               sink.clear();
-              const { result, profile } = await profileRequest(sink, async headers => {
+              const { result, profile } = await profileRequest(sink, headers => withoutVerifiedImmutableObjectCache(async () => {
                 headers.set('authorization', 'Bearer ' + member.token);
-                const response = await stack.main.handle(new Request('http://main.local' + path, { headers, signal }));
+                const response = await stack.main.handle(new Request('http://main.local' + path, { headers, signal: requestSignal }));
                 return { status: response.status, body: await response.text() };
-              }, { service: 'main', peers: { fuseki: input.apps.FUSEKI_URL! }, flush: flushTelemetryTraces });
+              }), { service: 'main', peers: { fuseki: input.apps.FUSEKI_URL! }, flush: flushTelemetryTraces });
+              input.signal.throwIfAborted();
+              censusProfiles.push({ ...profile, unrelatedWorks: cut.manifest.dimensions.unrelatedWorks });
               const visibleMounts = result.status === 200
                 ? (JSON.parse(result.body) as { mounts: unknown[] }).mounts.length : null;
               const evidence = { scale: cut.manifest.scale, dimensions: cut.manifest.dimensions,
@@ -361,6 +442,7 @@ export async function restoreZoneCuts(options: {
           },
         };
         expect(await seedCensus(censusApi, cut)).toEqual(cut.manifest.dimensions as Required<CorpusDimensions>);
+        input.signal.throwIfAborted();
         smokeCopies.set(input.target, { stack, fusekiUrl: input.apps.FUSEKI_URL!, apps: input.apps, api, member });
         return async () => {
           smokeCopies.delete(input.target);
@@ -373,94 +455,28 @@ export async function restoreZoneCuts(options: {
     },
   });
 
-  try {
-    await stream(
-      'task',
-      ['stack:down', '--', '--profile', 'qa', '--run-id', qaRunId, '--persistent'],
-      dockerEnvironment(),
-    );
+  await stream(
+    'task',
+    ['stack:down', '--', '--profile', 'qa', '--run-id', qaRunId, '--persistent'],
+    dockerEnvironment(),
+  );
 
-    for (const cut of cuts) {
-      verifying = cut;
-      const target = label + '-' + qaRunId + '-' + cut.manifest.scale;
+  for (const cut of cuts) {
+    verifying = cut;
+    const target = label + '-' + qaRunId + '-' + cut.manifest.scale;
 
-      // Published backups are read-only. Restore metadata and object bytes from
-      // a local copy; the driver copies the retained owner volumes independently.
-      const localBackup = join(root, '.temp', label + '-backups', qaRunId, cut.manifest.id);
-      mkdirSync(dirname(localBackup), { recursive: true });
-      cpSync(dirname(cut.manifest.backup), localBackup, { recursive: true });
-      await restoreWorkProfileCorpus({
-        ...cut.manifest,
-        backup: join(localBackup, basename(cut.manifest.backup)),
-      }, target, driver);
-      targets.push(target);
+    // Published backups are read-only. Restore metadata and object bytes from
+    // a local copy; the driver copies the retained owner volumes independently.
+    const localBackup = join(root, '.temp', label + '-backups', qaRunId, cut.manifest.id);
+    mkdirSync(dirname(localBackup), { recursive: true });
+    cpSync(dirname(cut.manifest.backup), localBackup, { recursive: true });
+    await withRestoredZoneCut(target, () => restoreWorkProfileCorpus({
+      ...cut.manifest,
+      backup: join(localBackup, basename(cut.manifest.backup)),
+    }, target, driver), async () => {
       const restored = smokeCopies.get(target);
       if (!restored) throw new Error('The retained checkpoint smoke read did not keep its restored stack open');
       await measure(cut, restored);
-      await driver.stop(target);
-      targets.splice(targets.indexOf(target), 1);
-    }
-  } finally {
-    for (const target of targets.reverse()) await driver.stop(target);
+    }, target => driver.stop(target));
   }
-}
-
-/**
- * Within-cut control: a second Zone with the small cut's shape, built through the API in a restored stack.
- * It has its own Agent, so its reader shelf reads back the same four entries the small cut's does.
- * Its preceding reads match the small cut's: the census verification (which ends with the mounted route
- * read), then one wiring probe of the same route, then the measured route and presentation reads.
- */
-export async function measureControlZone(sink: ZoneGrowthSink, restored: RestoredMeasurement, input: {
-  small: RetainedSeedCut;
-  large: RetainedSeedCut;
-  scale: number;
-}) {
-  const { grantFixtureAuthority } = await import('../../../services/main/src/modules/access/fixture-authority.ts');
-  const { initializeSeedCheckpointPopulation, growSeedCheckpointPopulation } =
-    await import('./seed-checkpoint-population.ts');
-  const { seedCensus } = await import('./seed-checkpoints.ts');
-  // Command keys are idempotency keys the restored backup already holds, so the control gets its own namespace.
-  const keyspace = 'control:' + randomUUID() + ':';
-  const api: CorpusApi = {
-    command: <T>(key: string, command: CorpusCommand, signal?: AbortSignal) =>
-      restored.api.command<T>(keyspace + key, command, signal),
-    read: <T>(path: `/v1/${string}`, signal?: AbortSignal) => restored.api.read<T>(path, signal),
-  };
-  const agent = await api.command<{ agent: string }>('author', { method: 'POST', path: '/v1/agents', body: {
-    profile: 'agent-provision-v1', kind: 'person', displayName: 'Zone growth control author' } });
-  const actor = agent.agent;
-  const population = await initializeSeedCheckpointPopulation(api, { actor,
-    grant: (scope, action) => grantFixtureAuthority(restored.stack.accessPool, { scope, requireDispatch: true,
-      representations: [{ principalId: restored.member.principalId, actor, action, lifetime: '7 days' }],
-      grant: { actor, action, lifetime: '7 days' } }) });
-  // The small cut's manifest records every population dimension, so the control gets the same shape.
-  const shape = input.small.manifest.dimensions;
-  await growSeedCheckpointPopulation(api, population, input.large.works, {
-    recipeOccurrences: shape.recipeOccurrences!,
-    readerShelfEntries: shape.readerShelfEntries!,
-    mountedCollectionResources: shape.mountedCollectionResources!,
-    zoneNavigationEntries: shape.zoneNavigationEntries!,
-  });
-  // The census read the small cut performs before its route read, with the same works and the control's population.
-  await seedCensus(api, { works: input.small.works, population });
-  const segment = population.zone.mounts[0]!.segment;
-  const routePath = routePathFor(population.zone.id, segment);
-  await wiringProbe(sink, restored, routePath, input.scale, 'control');
-  const reads = await measureZoneSite(sink, restored, population.zone.id, segment, input.scale);
-  console.log('Zone navigation control counters', JSON.stringify({
-    built: {
-      recipeOccurrences: population.recipe.occurrences.length,
-      readerShelfEntries: population.shelfWorks.length,
-      mountedCollectionResources: population.collection.members.length,
-      zoneNavigationEntries: population.zone.mounts.length,
-    },
-    routes: measuredCounters(reads.route.profile),
-    presentation: measuredCounters(reads.presentation.profile),
-  }));
-  writeProfileDump('zone-control-check-route-control',
-    profileDump('route', 'control', reads.routePath, reads.route.profile, restored.apps));
-  writeProfileDump('zone-control-check-presentation-control',
-    profileDump('presentation', 'control', reads.presentationPath, reads.presentation.profile, restored.apps));
-  return reads;
 }
