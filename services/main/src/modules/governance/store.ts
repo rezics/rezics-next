@@ -229,7 +229,13 @@ export class GovernanceStore {
 
   private async realmBasis(target: EvidenceTarget): Promise<RealmTargetBasis | null> {
     if (target.owner !== 'graph') return null;
-    if (!this.heads.realmBasis) throw new GovernanceUnavailable('Realm target classification is unavailable');
+    if (!this.heads.realmBasis) {
+      // Older owner adapters supply only non-record heads. Their dispatched
+      // graph effects still pass the shared owner guard; closure needs an
+      // explicit record classifier before its platform jurisdiction is saved.
+      if (target.component !== 'record') return null;
+      throw new GovernanceUnavailable('Realm target classification is unavailable');
+    }
     return this.heads.realmBasis(target);
   }
 
