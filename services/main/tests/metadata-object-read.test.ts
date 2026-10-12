@@ -11,6 +11,7 @@ import { readWorkEdition, readWorkEditions } from '../src/modules/work/metadata-
 import { editionV2Digest, metadataDigest, METADATA_DETAILS_V2, METADATA_PROFILE, type MetadataEditionState,
   type MetadataEditionStateV2 } from '../src/modules/work/metadata-schema.ts';
 import { WorkReadSession, WorkReadUnavailable } from '../src/modules/work/read-session.ts';
+import { structuredWorkPublicationAnswer } from './structured-work-publication-fixture.ts';
 
 const id = (value: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(value).padStart(12, '0')}`;
 const work = id(1), edition = id(2), revision = id(3);
@@ -39,6 +40,8 @@ async function fixture(state: MetadataEditionState | MetadataEditionStateV2, pro
   let graphModel = profile, graphRevision = revision;
   const graph = new FusekiClient('http://metadata.invalid/rezics');
   graph.query = async query => {
+    const publication = structuredWorkPublicationAnswer(query);
+    if (publication) return publication;
     if (query.includes('SELECT ?head ?main ?mainHead')) return rows([{ head: term(id(4)), main: term(id(5)),
       mainHead: term(id(6)), public: term('true', 'literal') }]);
     if (query.includes('SELECT ?selection ?language')) return rows([]);

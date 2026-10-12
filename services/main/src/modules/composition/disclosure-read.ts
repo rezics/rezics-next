@@ -4,7 +4,8 @@ import { targetSummaryReader, resolveTargets } from '../target/resolve.ts';
 import { readResourceSummaries } from '../media/summary.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
 import { canReadStructureTarget, isCatalogTarget, type StructureProfileRegistration } from '../structure/profiles.ts';
-import { admittedPublicWorks } from '../work/public-patterns.ts';
+import { admittedPublicWorks, publishedStructuredWorkSourceFromRows, structuredPublicationRead }
+  from '../work/public-patterns.ts';
 import { collectionTargetBatchReader } from './visible-targets.ts';
 
 /** One exact Work probe per distinct candidate, under the caller's read budget.
@@ -12,17 +13,24 @@ import { collectionTargetBatchReader } from './visible-targets.ts';
  * and protection withhold the Work even from a reader with an explicit grant. */
 export async function canReadCompositionWork(session: WorkReadSession, work: string): Promise<boolean> {
   if (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(work)) return false;
-  const rows = await session.query(`SELECT ?main ?public WHERE {
+  const rows = await session.query(`SELECT ?main ?public ?structuredDecision ?structuredSource
+    ?structuredStructure ?structuredProfile ?structuredRevision ?structuredGeneration ?structuredRoot ?structuredExact WHERE {
     GRAPH ${iri(GRAPHS.current)} { ${iri(work)} a schema:CreativeWork ; rv:mainVersion ?main .
       ?main a rv:MainVersion ; rv:work ${iri(work)} . }
     ${unerased(iri(work))}
     BIND(EXISTS { ${publicWork(iri(work), '?main')} } AS ?public)
+    OPTIONAL { ${structuredPublicationRead(iri(work), '?main')} }
   } LIMIT 2`, 2);
   if (!rows.length) return false;
   if (rows.length !== 1 || !rows[0]?.public) throw new WorkReadUnavailable('Work disclosure is ambiguous');
   const readable = rows[0].public.value === 'true' || !!session.principal && !!session.options.actingSubject
     && await session.deps.access.canReadWork(session.principal, session.options.actingSubject, work);
-  return readable && (await admittedPublicWorks(session.deps.environment, [work], session.viewer)).has(work);
+  if (!readable) return false;
+  // Reuse the exact source at this Work probe's cut; a separate source query
+  // would add a scalar round trip to every parts/wholes admission.
+  const source = publishedStructuredWorkSourceFromRows(rows, work, rows[0]!.main?.value ?? '');
+  const sources = new Map(source ? [[work, source]] : []);
+  return (await admittedPublicWorks(session.deps.environment, [work], session.viewer, sources)).has(work);
 }
 
 /** Public semantic disclosure remains owned by Access, including closed gates.

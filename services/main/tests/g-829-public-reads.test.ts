@@ -55,15 +55,15 @@ test('G-829: wholes scan beyond a hidden batch and never expose trailing private
       // Only the contained Work uses the scalar header proof. Candidate Works
       // must pass the actual summary and exact-head resolver below.
       expect(query).toContain(`<${resource}>`);
-      bindings = [{ main: uri(id()), public: value('true') }];
-    } else if (query.includes('SELECT ?work ?main ?structuredDecision')) {
-      // The contained Work now also admits its exact structured publication
-      // source. This fixture uses the existing catalogue/text public branch.
-      const resources = [...query.matchAll(/VALUES \?work \{([^}]+)\}/g)].flatMap(match =>
-        [...match[1]!.matchAll(/<([^>]+)>/g)].map(match => match[1]!));
+      // Exact-source columns share the contained Work's scalar header cut.
+      // This fixture uses the existing catalogue/text public branch.
+      expect(query).toContain('SELECT ?main ?public ?structuredDecision ?structuredSource');
+      expect(query).toContain('?structuredGeneration ?structuredRoot ?structuredExact WHERE');
+      const resources = [...new Set([...query.matchAll(/<(https:\/\/rezics\.com\/id\/[^>]+)> a schema:CreativeWork/g)]
+        .map(match => match[1]!))];
       expect(resources).toEqual([resource]);
       publicationSourceBatches.push(resources);
-      bindings = [];
+      bindings = [{ main: uri(id()), public: value('true') }];
     } else if (query.includes('SELECT ?whole ?main ?structure')) {
       expect(query).toContain('LIMIT 101');
       if (scans === 1) expect(query).toContain(`FILTER(?key > "${rows[100]!.whole.value}|${rows[100]!.occurrence.value}")`);

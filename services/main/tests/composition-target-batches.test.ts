@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { FusekiClient, fusekiReadBudget, type SparqlResult } from '../src/infrastructure/fuseki.ts';
 import type { ImmutableObjects } from '../src/infrastructure/immutable-objects.ts';
-import { compositionTargetBatchReader } from '../src/modules/composition/disclosure-read.ts';
+import { canReadCompositionWork, compositionTargetBatchReader } from '../src/modules/composition/disclosure-read.ts';
 import { readWorkParts, readWorkWholes } from '../src/modules/composition/read.ts';
 import { compositionWorkBatchReader } from '../src/modules/composition/visible-targets.ts';
 import { configureDisclosure } from '../src/modules/disclosure/read.ts';
@@ -16,7 +16,10 @@ import { structureProfileFor } from '../src/modules/structure/profiles.ts';
 import { newCost } from '../src/modules/structure/tree.ts';
 import { WorkReadMoved, WorkReadSession, WorkReadUnavailable } from '../src/modules/work/read-session.ts';
 import { prepareWorkComponent } from '../src/modules/work/activate.ts';
+import { PublishedStructureSourceUnavailable, type PublishedStructuredWorkSource }
+  from '../src/modules/work/public-patterns.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
+import { structuredWorkPublicationAnswer, structuredWorkSourceRow } from './structured-work-publication-fixture.ts';
 
 const literal = (value: string) => ({ type: 'literal' as const, value });
 const uri = (value: string) => ({ type: 'uri' as const, value });
@@ -46,6 +49,11 @@ function fixture(input: Target[], signedIn = false) {
   let graphBytes = 0;
   graph.query = async query => {
     queries.push(query);
+    const publication = structuredWorkPublicationAnswer(query);
+    if (publication) {
+      graphBytes += Buffer.byteLength(JSON.stringify(publication));
+      return publication;
+    }
     if (query.includes('SELECT ?work ?head ?owningWork ?owningHead')) {
       const resources = [...new Set([...query.matchAll(/VALUES \?work \{([^}]+)\}/g)].flatMap(match =>
         [...match[1]!.matchAll(/<([^>]+)>/g)].map(iri => iri[1]!)))];
@@ -232,6 +240,43 @@ test('Composition batches fail closed on graph movement, ambiguous revisions and
     else if (state === 'ambiguous') await expect(result).rejects.toBeInstanceOf(WorkReadUnavailable);
     else await expect(result).rejects.toThrow('Media owner unavailable');
   }
+});
+
+test('Composition Work admission checks exact sources in its existing probe and retains Structure disclosure', async () => {
+  const f = fixture(targets(1)), work = f.input[0]!.resource;
+  const source: PublishedStructuredWorkSource = { work, mainVersion: derivedId('composition-source-main'),
+    decision: derivedId('composition-source-decision'), source: 'urn:rezics:work-source:composition',
+    structure: derivedId('composition-source-structure'), structureProfile: 'https://rezics.com/vocab/WorkComposition',
+    structureRevision: f.revision, selectedGeneration: derivedId('composition-source-generation'),
+    sourceRoot: `urn:rezics:sha256:${'a'.repeat(64)}` };
+  let visible = true, exact = true, duplicate = false;
+  configureDisclosure(f.deps.environment, { read: async targets => targets.map(target =>
+    target.component === 'structure' && !visible ? 'hidden' : 'visible') });
+  const queryTargets = f.graph.query.bind(f.graph);
+  f.graph.query = async query => {
+    if (query.includes('SELECT ?main ?public')) {
+      f.queries.push(query);
+      expect(query).toContain('rv:component ?structuredSourceMain');
+      expect(query).toContain('FILTER(?structuredSourceMain = ?main)');
+      const row = { main: uri(source.mainVersion), public: literal('true'), ...structuredWorkSourceRow(source),
+        structuredExact: literal(String(exact)) };
+      return { results: { bindings: duplicate ? [row, row] : [row] } };
+    }
+    if (query.includes('SELECT ?work ?parent')) {
+      f.queries.push(query);
+      return { results: { bindings: [{ work: uri(work) }] } };
+    }
+    return queryTargets(query);
+  };
+  expect(await canReadCompositionWork(f.session(), work)).toBe(true);
+  visible = false;
+  expect(await canReadCompositionWork(f.session(), work)).toBe(false);
+  exact = false;
+  await expect(canReadCompositionWork(f.session(), work)).rejects.toBeInstanceOf(PublishedStructureSourceUnavailable);
+  duplicate = true;
+  await expect(canReadCompositionWork(f.session(), work)).rejects.toBeInstanceOf(WorkReadUnavailable);
+  expect(f.queries.filter(query => query.includes('SELECT ?main ?public'))).toHaveLength(4);
+  expect(f.queries.filter(query => query.includes('SELECT ?work ?main ?structuredDecision'))).toHaveLength(0);
 });
 
 test('Composition batch cancellation stops before graph or owner hydration', async () => {

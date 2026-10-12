@@ -2,9 +2,11 @@ import { expect, test } from 'bun:test';
 import { configureDisclosure, DISCLOSURE_COST, type DisclosureReader, type DisclosureTarget }
   from '../src/modules/disclosure/read.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
-import { admittedPublicWorks, readPublishedStructuredWorkSource, readWorkPublicationParents,
+import { admittedPublicWorks, PublishedStructureSourceUnavailable, readPublishedStructuredWorkSource,
+  readPublishedStructuredWorkSources, readWorkPublicationParents,
   type PublishedStructuredWorkSource } from '../src/modules/work/public-patterns.ts';
 import { structureRevisionDisclosureVisible } from '../src/modules/work/read-header.ts';
+import { structuredWorkPublicationAnswer, structuredWorkSourceRow } from './structured-work-publication-fixture.ts';
 
 const work = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
 const main = 'https://rezics.com/id/00000000-0000-4000-8000-000000000002';
@@ -19,12 +21,7 @@ const source: PublishedStructuredWorkSource = { work, mainVersion: main, structu
   structureProfile: 'https://rezics.com/vocab/RecipeComposition', structureRevision: revision,
   decision, source: 'urn:rezics:work-source:publication', selectedGeneration: generation, sourceRoot: root };
 const term = (value: string) => ({ value });
-const sourceRow = (includeCandidate = false) => ({
-  ...(includeCandidate ? { work: term(work), main: term(main) } : {}),
-  structuredDecision: term(decision), structuredSource: term(source.source),
-  structuredStructure: term(structure), structuredProfile: term(source.structureProfile),
-  structuredRevision: term(revision), structuredGeneration: term(generation), structuredRoot: term(root),
-});
+const sourceRow = (includeCandidate = false) => structuredWorkSourceRow(source, includeCandidate);
 
 function env(query: (text: string, maxBytes?: number) => Promise<unknown>) {
   return { fuseki: { query }, lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' },
@@ -48,6 +45,72 @@ test('WORK10/VIEW03: unpublished and withdrawn selections resolve as absent; dup
   expect(await readPublishedStructuredWorkSource(unpublished, work, main)).toBeNull();
   const ambiguous = env(async () => ({ results: { bindings: [sourceRow(), sourceRow()] } }));
   await expect(readPublishedStructuredWorkSource(ambiguous, work, main)).rejects.toThrow('ambiguous');
+});
+
+test('WORK10/VIEW03: source reads distinguish absent publication from malformed and duplicate exact roots', async () => {
+  for (const bindings of [[], [{ work: term(work) }], [{ work: term(work), main: term(main) }]]) {
+    const environment = env(async () => ({ results: { bindings } }));
+    expect(await readPublishedStructuredWorkSources(environment, [work])).toEqual(new Map());
+    expect(await readPublishedStructuredWorkSource(environment, work, main)).toBeNull();
+  }
+  for (const malformed of [
+    { structuredDecision: term(decision) },
+    { ...sourceRow(true), structuredRoot: term('urn:rezics:sha256:malformed') },
+    { ...sourceRow(true), structuredExact: term('false') },
+    { ...sourceRow(true), main: term('urn:rezics:missing-main') },
+  ]) {
+    const environment = env(async query => {
+      expect(query).toContain('OPTIONAL { ?structuredDecision rv:publicSource ?structuredSource');
+      expect(query).toContain('BIND(EXISTS {');
+      expect(query).toContain('AS ?structuredExact');
+      return { results: { bindings: [{ work: term(work), ...malformed }] } };
+    });
+    await expect(readPublishedStructuredWorkSources(environment, [work]))
+      .rejects.toBeInstanceOf(PublishedStructureSourceUnavailable);
+    await expect(readPublishedStructuredWorkSources(environment, [work])).rejects.toMatchObject({ reason: 'incomplete' });
+    // The scalar mainVersion is supplied by the caller; an invalid current
+    // graph relation is represented by the owner's exact predicate.
+    const scalar = env(async () => ({ results: { bindings: [{ ...malformed, structuredExact: term('false') }] } }));
+    await expect(readPublishedStructuredWorkSource(scalar, work, main)).rejects.toMatchObject({ reason: 'incomplete' });
+  }
+  for (const secondRoot of [root, `urn:rezics:sha256:${'b'.repeat(64)}`, 'urn:rezics:sha256:malformed']) {
+    const duplicate = [sourceRow(true), { ...sourceRow(true), structuredRoot: term(secondRoot) }];
+    for (const bindings of [duplicate, [...duplicate].reverse()]) {
+      const environment = env(async () => ({ results: { bindings } }));
+      await expect(readPublishedStructuredWorkSource(environment, work, main)).rejects.toMatchObject({ reason: 'ambiguous' });
+      // Two requested Works keep this below the row limit; duplicate detection
+      // must also operate on Work keys, rather than only total row count.
+      await expect(readPublishedStructuredWorkSources(environment, [work, parent])).rejects.toMatchObject({ reason: 'ambiguous' });
+    }
+  }
+});
+
+test('WORK10/VIEW03: exact-source batches keep published and ordinary Works in one bounded query', async () => {
+  const candidates = Array.from({ length: 64 }, (_, index) =>
+    `https://rezics.com/id/00000000-0000-4000-8000-${String(index + 100).padStart(12, '0')}`);
+  const published = { ...source, work: candidates[0]! };
+  let calls = 0;
+  const environment = env(async (query, maxBytes) => {
+    calls++;
+    expect(maxBytes).toBe(128 * 1024);
+    expect(query).toContain('LIMIT 65');
+    return structuredWorkPublicationAnswer(query, [published]);
+  });
+  expect(await readPublishedStructuredWorkSources(environment, [...candidates, ...candidates]))
+    .toEqual(new Map([[published.work, published]]));
+  expect(calls).toBe(1);
+  const ordinary = env(async query => {
+    const publication = structuredWorkPublicationAnswer(query);
+    if (publication) return publication;
+    if (query.includes('SELECT ?work ?head ?owningWork ?owningHead')) {
+      const batch = [...(query.match(/VALUES \?work \{([^}]+)\}/)?.[1] ?? '').matchAll(/<([^>]+)>/g)]
+        .map(match => match[1]!);
+      return { results: { bindings: batch.map(work => ({ work: term(work) })) } };
+    }
+    throw new Error(`Unexpected disclosure query: ${query}`);
+  });
+  configureDisclosure(ordinary, { read: async targets => targets.map(() => 'visible') });
+  expect(await admittedPublicWorks(ordinary, candidates)).toEqual(new Set(candidates));
 });
 
 test('WORK10/VIEW03: public candidate admission requires the selected Structure disclosure at the same cut', async () => {

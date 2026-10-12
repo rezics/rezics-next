@@ -6,14 +6,17 @@ import { ANONYMOUS_VIEWER, type Viewer } from '../suitability/policy.ts';
  * returning identities/counts without summaries disclose both the Work name
  * and its selected Structure revision before pagination or aggregation. */
 export async function admittedPublicWorks(environment: WorkActivationEnvironment | undefined,
-  works: readonly string[], viewer: Viewer = ANONYMOUS_VIEWER): Promise<ReadonlySet<string>> {
+  works: readonly string[], viewer: Viewer = ANONYMOUS_VIEWER,
+  sourcesAtCut?: ReadonlyMap<string, PublishedStructuredWorkSource>): Promise<ReadonlySet<string>> {
   const unique = [...new Set(works)];
   if (!environment) return new Set(unique); // Graph-only legacy owner fixtures.
   const visible = new Set<string>();
   const worksPerBatch = Math.floor(DISCLOSURE_COST.batch / 3);
   for (let offset = 0; offset < unique.length; offset += worksPerBatch) {
     const batch = unique.slice(offset, offset + worksPerBatch);
-    const sources = await readPublishedStructuredWorkSources(environment, batch);
+    const sources = sourcesAtCut
+      ? new Map([...sourcesAtCut].filter(([work]) => batch.includes(work)))
+      : await readPublishedStructuredWorkSources(environment, batch);
     const sourceWorks = [...sources.keys()];
     const parents = await readWorkPublicationParents(environment, sourceWorks);
     const parentWorks = sourceWorks.filter(work => parents.has(work));
@@ -94,6 +97,27 @@ export interface PublishedStructuredWorkSource {
 const nativeWorkId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const structuredRoot = /^urn:rezics:sha256:[0-9a-f]{64}$/;
 
+export class PublishedStructureSourceUnavailable extends Error {
+  constructor(readonly reason: 'invalid' | 'incomplete' | 'ambiguous', batch = false) {
+    super(`Published Structure source${batch ? ' batch' : ''} is ${reason}`);
+    this.name = 'PublishedStructureSourceUnavailable';
+  }
+}
+
+/** Read every declared root before checking the exact admission predicate: a
+ * malformed root must neither disappear nor hide beside a valid root. */
+export const structuredPublicationRead = (work: string, main: string) => `
+  GRAPH ${iri(GRAPHS.current)} { ${work} rv:workStructurePublicationHead ?structuredDecision }
+  GRAPH ${iri(GRAPHS.revisions)} { ?structuredDecision a rv:WorkStructurePublicationDecision ;
+    rv:component ${work} ; rv:publicationOutcome rv:Published .
+    OPTIONAL { ?structuredDecision rv:publicSource ?structuredSource .
+      OPTIONAL { ?structuredSource rv:work ${work} ; rv:component ?structuredSourceMain ;
+        rv:structure ?structuredStructure ; rv:structureProfile ?structuredProfile ;
+        rv:structureRevision ?structuredRevision ; rv:selectedGeneration ?structuredGeneration ;
+        rv:sourceRoot ?structuredRoot . } } }
+  BIND(EXISTS { ${publishedStructuredWork(work, main)}
+    FILTER(?structuredSourceMain = ${main}) } AS ?structuredExact)`;
+
 /** Resolve the one immediate parent used by publication governance. Ambiguous
  * ancestry fails closed instead of checking only one arbitrary container. */
 export async function readWorkPublicationParents(environment: WorkActivationEnvironment,
@@ -138,14 +162,23 @@ function sourceFromRow(row: NonNullable<import('../../infrastructure/fuseki.ts')
     selectedGeneration: value('structuredGeneration') ?? '',
     sourceRoot: value('structuredRoot') ?? '',
   };
-  if (![source.decision, source.structure, source.structureRevision, source.selectedGeneration]
+  if (![source.work, source.mainVersion, source.decision, source.structure, source.structureRevision, source.selectedGeneration]
       .every(value => nativeWorkId.test(value))
     || !source.source.startsWith('urn:rezics:work-source:')
     || !/^https:\/\/rezics\.com\/vocab\/[A-Za-z][A-Za-z0-9]*$/.test(source.structureProfile)
-    || !structuredRoot.test(source.sourceRoot)) {
-    throw new Error('Published Structure source is incomplete');
+    || !structuredRoot.test(source.sourceRoot) || value('structuredExact') !== 'true') {
+    throw new PublishedStructureSourceUnavailable('incomplete');
   }
   return source;
+}
+
+/** Decode the publication columns at the same cut as the owner's Work probe. */
+export function publishedStructuredWorkSourceFromRows(
+  rows: NonNullable<import('../../infrastructure/fuseki.ts').SparqlResult['results']>['bindings'],
+  work: string, mainVersion: string): PublishedStructuredWorkSource | null {
+  if (!rows.length || rows.length === 1 && !rows[0]!.structuredDecision) return null;
+  if (rows.length !== 1) throw new PublishedStructureSourceUnavailable('ambiguous');
+  return sourceFromRow(rows[0]!, work, mainVersion);
 }
 
 /** Resolve exact admitted roots in one bounded owner query. No current
@@ -155,25 +188,26 @@ export async function readPublishedStructuredWorkSources(environment: WorkActiva
   const unique = [...new Set(works)];
   if (!unique.length) return new Map();
   if (unique.length > 64 || unique.some(work => !nativeWorkId.test(work))) {
-    throw new Error('Published Structure source batch is invalid');
+    throw new PublishedStructureSourceUnavailable('invalid', true);
   }
   const rows = (await environment.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
     PREFIX schema: <https://schema.org/>
     SELECT ?work ?main ?structuredDecision ?structuredSource ?structuredStructure ?structuredProfile
-      ?structuredRevision ?structuredGeneration ?structuredRoot WHERE {
+      ?structuredRevision ?structuredGeneration ?structuredRoot ?structuredExact WHERE {
       VALUES ?work { ${unique.map(iri).join(' ')} }
-      GRAPH ${iri(GRAPHS.current)} { ?work a schema:CreativeWork ; rv:mainVersion ?main . }
-      ${publishedStructuredWork('?work', '?main')}
+      OPTIONAL { ${structuredPublicationRead('?work', '?structuredSourceMain')} }
+      BIND(?structuredSourceMain AS ?main)
     } LIMIT ${unique.length + 1}`, 128 * 1024)).results?.bindings ?? [];
-  if (rows.length > unique.length) throw new Error('Published Structure source batch is ambiguous');
-  const result = new Map<string, PublishedStructuredWorkSource>();
+  if (rows.length > unique.length) throw new PublishedStructureSourceUnavailable('ambiguous', true);
+  const published = new Map<string, (typeof rows)[number]>();
   for (const row of rows) {
-    const work = row.work?.value, mainVersion = row.main?.value;
-    if (!work || !mainVersion || !unique.includes(work) || result.has(work)
-      || !nativeWorkId.test(mainVersion)) throw new Error('Published Structure source batch is incomplete');
-    result.set(work, sourceFromRow(row, work, mainVersion));
+    const work = row.work?.value;
+    if (!work || !unique.includes(work)) throw new PublishedStructureSourceUnavailable('incomplete', true);
+    if (!row.structuredDecision) continue;
+    if (published.has(work)) throw new PublishedStructureSourceUnavailable('ambiguous', true);
+    published.set(work, row);
   }
-  return result;
+  return new Map([...published].map(([work, row]) => [work, sourceFromRow(row, work, row.main?.value ?? '')]));
 }
 
 /** Resolve the exact admitted root used by the common public-candidate branch.
@@ -184,12 +218,10 @@ export async function readPublishedStructuredWorkSource(environment: WorkActivat
   const rows = (await environment.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
     PREFIX schema: <https://schema.org/>
     SELECT ?structuredDecision ?structuredSource ?structuredStructure ?structuredProfile
-      ?structuredRevision ?structuredGeneration ?structuredRoot WHERE {
-      ${publishedStructuredWork(iri(work), iri(mainVersion))}
+      ?structuredRevision ?structuredGeneration ?structuredRoot ?structuredExact WHERE {
+      ${structuredPublicationRead(iri(work), iri(mainVersion))}
     } LIMIT 2`, 16 * 1024)).results?.bindings ?? [];
-  if (!rows.length) return null;
-  if (rows.length !== 1) throw new Error('Published Structure source is ambiguous');
-  return sourceFromRow(rows[0]!, work, mainVersion);
+  return publishedStructuredWorkSourceFromRows(rows, work, mainVersion);
 }
 
 /** A visibility predicate: being both published and catalogue-visible must

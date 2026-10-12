@@ -5,6 +5,7 @@ import { readPostIdentifications } from '../src/modules/post/identification-read
 import { projectionRoutes } from '../src/routes/projections.ts';
 import { resourceRelationRoutes } from '../src/routes/resource-relations.ts';
 import { WorkReadSession } from '../src/modules/work/read-session.ts';
+import { structuredWorkPublicationAnswer } from './structured-work-publication-fixture.ts';
 
 const id = (number: number) => `https://rezics.com/id/00000000-0000-4000-8000-${number.toString().padStart(12, '0')}`;
 const literal = (value: string) => ({ type: 'literal' as const, value });
@@ -21,6 +22,8 @@ function catalogue(works: Work[], projections: Projection[] = [], memberships: r
   const requested = (query: string) => [...(/VALUES \?[rp] \{([^}]*)\}/.exec(query)?.[1] ?? '').matchAll(/<([^>]+)>/g)]
     .map(match => match[1]!);
   graph.query = async (query: string) => {
+    const publication = structuredWorkPublicationAnswer(query);
+    if (publication) return publication;
     if (query.includes('ASK {')) return { boolean: true };
     if (query.includes('in-continuity')) {
       return { results: { bindings: memberships.map(row => ({ work: uri(works[0]!.resource),
@@ -75,6 +78,8 @@ test('post identifications are complete only when the page bound does not cut th
   const graph = new FusekiClient('http://graph.invalid');
   const works = [first, second];
   graph.query = async (query: string) => {
+    const publication = structuredWorkPublicationAnswer(query);
+    if (publication) return publication;
     if (query.includes('composition-part')) {
       return { results: { bindings: works.map(work => ({ work: uri(work), main: uri(id(901)),
         structure: uri(id(903)), occurrence: uri(id(904)) })) } };
