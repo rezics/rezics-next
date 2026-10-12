@@ -4,7 +4,7 @@ import {
   configureDisclosure, configureDisclosureAncestrySource, DisclosureUnavailable,
   type DisclosureAncestryEvidence, type DisclosureTarget,
 } from '../src/modules/disclosure/read.ts';
-import { readClosedRealmMedia } from '../src/modules/media/closed-realm-media.ts';
+import { readClosedRealmMedia, readClosedRealmMediaSelection } from '../src/modules/media/closed-realm-media.ts';
 import { ANONYMOUS_VIEWER } from '../src/modules/suitability/policy.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { fixtureDisclosureCut } from './support/disclosure-ancestry.ts';
@@ -107,3 +107,41 @@ test('a removed attachment or failed owner reread discards already hydrated meta
     })).rejects.toBeInstanceOf(DisclosureUnavailable);
   }
 });
+
+test('the initial missing and closed owner selections share null without hydration', async () => {
+  for (const kind of ['missing', 'closed'] as const) {
+    const f = fixture(); f.state.closed = true;
+    let reads = 0, hydrations = 0;
+    const result = await readClosedRealmMediaSelection(f.env, async () => {
+      reads++;
+      return kind === 'missing' ? null : { asset, representation, use };
+    }, row => row, async row => { hydrations++; return row; });
+    expect(result).toBeNull();
+    expect(reads).toBe(1);
+    expect(hydrations).toBe(0);
+  }
+});
+
+test('a stable owner selection hydrates only after its exact basis is reread', async () => {
+  const f = fixture();
+  const events: string[] = [];
+  expect(await readClosedRealmMediaSelection(f.env, async () => {
+    events.push('owner'); return { asset, representation, use };
+  }, row => row, async row => { events.push('hydrate'); return row.representation; })).toBe(representation);
+  expect(events).toEqual(['owner', 'owner', 'hydrate']);
+});
+
+for (const change of ['asset', 'representation', 'use', 'digest', 'removed', 'mutated'] as const) {
+  test(`a moved ${change} selection cannot borrow fresh ancestry to hydrate the old selection`, async () => {
+    const f = fixture();
+    const selected = { asset, representation, use, digest: 'a'.repeat(64) };
+    let reads = 0, hydrations = 0;
+    await expect(readClosedRealmMediaSelection(f.env, async () => {
+      if (++reads === 1) return selected;
+      if (change === 'removed') return null;
+      if (change === 'mutated') { selected.digest = 'b'.repeat(64); return selected; }
+      return { ...selected, [change]: change === 'digest' ? 'b'.repeat(64) : ref(99) };
+    }, row => row, async row => { hydrations++; return row; })).rejects.toBeInstanceOf(DisclosureUnavailable);
+    expect(hydrations).toBe(0);
+  });
+}

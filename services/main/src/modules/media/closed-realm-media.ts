@@ -1,5 +1,6 @@
+import { isDeepStrictEqual } from 'node:util';
 import {
-  captureDisclosure, fenceDisclosure, resolveDisclosureSelections,
+  captureDisclosure, fenceDisclosure, resolveDisclosureSelections, DisclosureUnavailable,
   type DisclosureTarget,
 } from '../disclosure/read.ts';
 import { ANONYMOUS_VIEWER, type Viewer } from '../suitability/policy.ts';
@@ -67,4 +68,27 @@ export async function readClosedRealmMedia<T>(
   if (!read) return null;
   const value = await hydrate();
   return await read.fence() ? value : null;
+}
+
+/** A route may need a first owner lookup to locate the Asset behind a mutable
+ * selection. Capture its ancestry, then reread that exact owner basis before
+ * hydration: a successor must not authorize bytes selected by its predecessor.
+ * A missing owner row has the same null result as a hidden row. */
+export async function readClosedRealmMediaSelection<Selection, Result>(
+  env: WorkActivationEnvironment,
+  readOwner: () => Promise<Selection | null>,
+  referenceFor: (selection: Selection) => ClosedRealmMediaReference,
+  hydrate: (selection: Selection) => Promise<Result>,
+  viewer: Viewer = ANONYMOUS_VIEWER,
+): Promise<Result | null> {
+  const selected = await readOwner();
+  if (selected === null) return null;
+  const basis = structuredClone(selected);
+  return readClosedRealmMedia(env, referenceFor(basis), async () => {
+    const fresh = await readOwner();
+    if (fresh === null || !isDeepStrictEqual(basis, fresh)) {
+      throw new DisclosureUnavailable('Media delivery selection moved');
+    }
+    return hydrate(fresh);
+  }, viewer);
 }
