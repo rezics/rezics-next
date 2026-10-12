@@ -143,7 +143,18 @@ test('unaffected co-controlled Person chains have identical deletion work at 8, 
     const survivor = await principal();
     const persons = [await provision(owner, 'person')];
     await addFixtureController(survivor, persons[0]!);
-    for (let index = 1; index < size; index++) persons.push(await appendPerson(survivor, persons.at(-1)!));
+    // Join two independently admitted halves: each edge admission sees at
+    // most 256 ancestors or descendants, while the retained chain has 512.
+    for (let index = 1; index < size; index++) persons.push(await provision(survivor, 'person'));
+    const midpoint = Math.ceil(size / 2);
+    const links = [...Array.from({ length: size - 1 }, (_, index) => index + 1)
+      .filter(index => index !== midpoint), midpoint];
+    for (const index of links) {
+      await grantFixtureControllerEdge(pool, {
+        principalId: survivor.id, representative: persons[index - 1]!, represented: persons[index]!,
+      });
+      await removeController(survivor, persons[index]!);
+    }
     const cost = { statements: 0, rows: 0, classified: 0, controllers: 0 };
     const measured = measuredPool((sql, result) => {
       cost.statements++;
