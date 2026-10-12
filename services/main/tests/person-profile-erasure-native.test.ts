@@ -123,7 +123,7 @@ async function productionProfileCommands(objectDirectory: string) {
     const env = { fuseki: graph, lineage, objectDirectory };
     await createAgentGraph(env, { id: proof.provisionId, agent: person, kind: 'person',
       displayName: 'Original identifying name', digest: 'a'.repeat(64) });
-    const edited = await new AgentPublicProfiles(pool, env, { avatarSelection: async () => undefined })
+    const edited = await new AgentPublicProfiles(pool, env, { avatarSelection: async () => null })
       .change(principal, { agent: person, expectedHead: provision, displayName: 'Edited identifying name',
         avatarSelection: null, bio: { text: 'Edited identifying biography', language: 'en' }, idempotencyKey: 'erase-edited-profile' });
     expect(commands).toHaveLength(2);
@@ -142,6 +142,7 @@ async function productionProfileCommands(objectDirectory: string) {
 // ARQ executes the exact TypeScript command and completion query. Native
 // typed-footprint admission is a separate step; this test proves their RDF effect.
 test('Person command and completion query execute against retained TDB2 data', async () => {
+  console.log('Preparing native Person fixtures from production graph and profile commands');
   mkdirSync(join(root, '.temp'), { recursive: true });
   const build = mkdtempSync(join(root, '.temp/person-profile-native-'));
   const cache = join(root, '.temp/erasure-campaign-maven-cache');
