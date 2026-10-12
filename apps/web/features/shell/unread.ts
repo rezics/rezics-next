@@ -16,7 +16,8 @@ const UNREAD_INTERVAL_MS = 60_000;
 let current: Unread | null = null;
 let displayedGeneration: string | null = null;
 let revision = 0;
-let requestOrder = 0;
+type NotificationProducer = 'count' | 'page' | 'mark-all' | `read:${string}`;
+const requestOrders = new Map<NotificationProducer, number>();
 const listeners = new Set<() => void>();
 let users = 0;
 let timer: ReturnType<typeof setInterval> | undefined;
@@ -61,17 +62,22 @@ function stop() {
   document.removeEventListener('visibilitychange', onVisible);
   // A response started by an unmounted or signed-out badge cannot outlive it.
   revision += 1;
+  requestOrders.clear();
   publish(null);
 }
 
-/** One issuance order for badge polls and view page, command and count responses. */
-export interface NotificationRequest { readonly revision: number; readonly order: number }
-export function beginNotificationRequest(): NotificationRequest {
-  return { revision, order: ++requestOrder };
+/** Badge polls and view counts share an order; independent producers keep their own. */
+export interface NotificationRequest {
+  readonly revision: number; readonly order: number; readonly producer: NotificationProducer;
+}
+export function beginNotificationRequest(producer: NotificationProducer = 'count'): NotificationRequest {
+  const order = (requestOrders.get(producer) ?? 0) + 1;
+  requestOrders.set(producer, order);
+  return { revision, order, producer };
 }
 
 export function isNotificationRequestCurrent(request: NotificationRequest, generation?: string): boolean {
-  return request.revision === revision && request.order === requestOrder
+  return request.revision === revision && request.order === requestOrders.get(request.producer)
     && (generation === undefined || displayedGeneration === null || generation === displayedGeneration);
 }
 
@@ -83,7 +89,7 @@ export function setUnread(next: Unread | null, request?: NotificationRequest) {
     if (displayedGeneration !== null && next.generation !== displayedGeneration) return;
     if (next.generation && current?.generation && BigInt(next.generation) < BigInt(current.generation)) return;
   }
-  if (!request) revision += 1;
+  if (!request) { revision += 1; requestOrders.clear(); }
   publish(next);
 }
 
@@ -92,6 +98,7 @@ export function setUnreadGeneration(generation: string | null) {
   if (displayedGeneration === generation) return;
   displayedGeneration = generation;
   revision += 1;
+  requestOrders.clear();
   if (generation !== null && current?.generation !== generation) publish(null);
 }
 

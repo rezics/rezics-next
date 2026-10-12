@@ -96,13 +96,26 @@ test('a delayed view count cannot replace a newer badge poll through the shared 
   expect(snapshot()).toMatchObject({ generation: '2', count: 1 });
 });
 
-test('page and mark completions share count request order and generation fences', () => {
+test('producer order is independent while count producers share their generation fence', () => {
   setUnreadGeneration('1');
-  const page = beginNotificationRequest();
-  const mark = beginNotificationRequest();
-  expect(isNotificationRequestCurrent(page, '1')).toBe(false);
+  const count = beginNotificationRequest();
+  const page = beginNotificationRequest('page');
+  const mark = beginNotificationRequest('mark-all');
+  expect(isNotificationRequestCurrent(count, '1')).toBe(true);
+  expect(isNotificationRequestCurrent(page, '1')).toBe(true);
   expect(isNotificationRequestCurrent(mark, '2')).toBe(false);
   expect(isNotificationRequestCurrent(mark, '1')).toBe(true);
+  beginNotificationRequest();
+  expect(isNotificationRequestCurrent(count, '1')).toBe(false);
+  expect(isNotificationRequestCurrent(page, '1')).toBe(true);
   setUnreadGeneration('2');
   expect(isNotificationRequestCurrent(mark, '1')).toBe(false);
+});
+
+test('a delayed reset count lands after a page producer starts', async () => {
+  setUnreadGeneration('2');
+  const release = pendingPoll();
+  beginNotificationRequest('page');
+  await release('2', 5);
+  expect(snapshot()).toMatchObject({ generation: '2', count: 5 });
 });

@@ -1,8 +1,18 @@
 import { describe, expect, test } from 'bun:test';
 import type { MainClient } from '../../feed/types.ts';
-import { readLatest, readWindow, type NotificationSelection, type StreamItem } from './window.ts';
+import { mergeNotificationTriage, readLatest, readWindow, type NotificationSelection, type StreamItem } from './window.ts';
 
 type Query = { before?: string; limit: number; view?: 'saved' | 'done'; reason?: string };
+
+test('triage merges monotonically by owner revision, preserving the row fields', () => {
+  const current = { id: 'notice', saved: true, done: false, triageRevision: '4', sequence: '100' } as StreamItem;
+  expect(mergeNotificationTriage(current, { saved: false, done: true, triageRevision: '3' })).toBe(current);
+  expect(mergeNotificationTriage(current, { saved: false, done: false, triageRevision: null })).toBe(current);
+  expect(mergeNotificationTriage(current, { saved: false, done: true, triageRevision: '5' }))
+    .toMatchObject({ id: 'notice', sequence: '100', saved: false, done: true, triageRevision: '5' });
+  const stalePage = { ...current, saved: false, triageRevision: null };
+  expect(mergeNotificationTriage(stalePage, current)).toMatchObject({ saved: true, triageRevision: '4' });
+});
 
 function sparseStream(selection: NotificationSelection, count = 123) {
   const matches = Array.from({ length: count }, (_, index) => ({

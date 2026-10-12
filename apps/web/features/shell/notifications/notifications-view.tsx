@@ -26,7 +26,7 @@ import LocalizedLink from '../localized-link.tsx';
 import { PageContainer, PageHeader } from '../page.tsx';
 import { useShell } from '../shell-provider.tsx';
 import { beginNotificationRequest, isNotificationRequestCurrent, setUnread, setUnreadGeneration } from '../unread.ts';
-import { inboxReasons, inboxViews, type NotificationSelection, type NotificationWindow, notificationsHref,
+import { inboxReasons, inboxViews, mergeNotificationTriage, type NotificationSelection, type NotificationWindow, notificationsHref,
   readWindow, type StreamItem } from './window.ts';
 
 type T = ReturnType<typeof useShell>['t'];
@@ -252,6 +252,15 @@ function collapse(window: Pick<NotificationWindow, 'items' | 'groups'>): { item:
   return window.items.filter(item => !hidden.has(item.id)).map(item => ({ item, grouped: counts.get(item.id) ?? 0 }));
 }
 
+function mergePageTriage(items: StreamItem[], windows: NotificationWindow[]): StreamItem[] {
+  const known = new Map<string, StreamItem>();
+  for (const window of windows) for (const item of window.items) {
+    const previous = known.get(item.id);
+    known.set(item.id, previous ? mergeNotificationTriage(previous, item) : item);
+  }
+  return items.map(item => known.has(item.id) ? mergeNotificationTriage(item, known.get(item.id)!) : item);
+}
+
 /**
  * The notifications page: loaded matches newest first, unread marked, one press to mark all
  * read; opening one marks it read. Saved and Done are a separate triage, kept
@@ -307,7 +316,7 @@ export function NotificationsView({ initial, now, avatarQuery, invitations, main
   async function markAll() {
     const request = displayed;
     if (!isCurrent(request) || restartRequired.current) return;
-    const fence = beginNotificationRequest();
+    const fence = beginNotificationRequest('mark-all');
     const result = await settle(() => client().v1.me['notification-read-watermarks'].inbox.put({
       profile: 'notification-read-watermark-v1', generation: request.generation, readThrough: request.head }));
     if (!isCurrent(request) || !isNotificationRequestCurrent(fence)) return;
@@ -321,7 +330,7 @@ export function NotificationsView({ initial, now, avatarQuery, invitations, main
   function markOne(item: StreamItem) {
     const request = displayed;
     if (!isCurrent(request) || restartRequired.current || isRead(item)) return;
-    const fence = beginNotificationRequest();
+    const fence = beginNotificationRequest(`read:${item.id}`);
     setReadHere(current => new Set(current).add(item.id));
     void settle(() => client().v1.me.notifications({ item: item.id }).read.put()).then(async result => {
       if (!isCurrent(request) || !isNotificationRequestCurrent(fence) || !result.ok) return;
@@ -330,11 +339,12 @@ export function NotificationsView({ initial, now, avatarQuery, invitations, main
   }
 
   function replaceTraversal(window: NotificationWindow) {
+    const sameGeneration = traversal.current.generation === window.generation;
     traversal.current = { generation: window.generation, head: window.head, revision: traversal.current.revision + 1 };
     setUnreadGeneration(window.generation);
     triageBusy.current = null;
     setBusy(null); setTriageError(null); setTriageNote(null);
-    setWindows([window]);
+    setWindows(current => [{ ...window, items: mergePageTriage(window.items, sameGeneration ? current : []) }]);
     setReadThrough(window.readThrough);
     setReadHere(new Set());
     void refreshCount(traversal.current);
@@ -346,7 +356,7 @@ export function NotificationsView({ initial, now, avatarQuery, invitations, main
     loadingMore.current = request;
     setState('loading');
     let restarting = restartRequired.current;
-    let fence = beginNotificationRequest();
+    let fence = beginNotificationRequest('page');
     let next = await readWindow(client(), restarting ? null : lastWindow.next, selection);
     if (!isCurrent(request)) return;
     if (!isNotificationRequestCurrent(fence)) {
@@ -366,7 +376,7 @@ export function NotificationsView({ initial, now, avatarQuery, invitations, main
       triageBusy.current = null;
       setBusy(null); setTriageError(null); setTriageNote(null);
       setUnreadGeneration(request.generation);
-      fence = beginNotificationRequest();
+      fence = beginNotificationRequest('page');
       next = await readWindow(client(), null, selection);
       if (!isCurrent(request)) return;
     }
@@ -381,7 +391,7 @@ export function NotificationsView({ initial, now, avatarQuery, invitations, main
       restartRequired.current = false;
       replaceTraversal(next.data);
     } else {
-      setWindows(current => [...current, next.data]);
+      setWindows(current => [...current, { ...next.data, items: mergePageTriage(next.data.items, current) }]);
       setReadThrough(current => BigInt(current) > BigInt(next.data.readThrough) ? current : next.data.readThrough);
     }
     setState('idle');
@@ -391,7 +401,6 @@ export function NotificationsView({ initial, now, avatarQuery, invitations, main
   async function triage(item: StreamItem, patch: { saved?: boolean; done?: boolean }) {
     const request = displayed;
     if (!isCurrent(request) || restartRequired.current || triageBusy.current) return;
-    const fence = beginNotificationRequest();
     triageBusy.current = item.id;
     setBusy(item.id); setTriageError(null); setTriageNote(null);
     const result = await settle(() => client().v1.me.notifications({ item: item.id }).triage.put({
@@ -399,14 +408,15 @@ export function NotificationsView({ initial, now, avatarQuery, invitations, main
     if (!isCurrent(request)) return;
     triageBusy.current = null;
     setBusy(null);
-    if (!isNotificationRequestCurrent(fence)) return;
     if (!result.ok) { setTriageError(result.failure === 'moved' ? t.triageStale : t.triageFailed); return; }
     const next = result.data;
-    const leaves = (selection.view === 'inbox' && next.done) || (selection.view === 'saved' && !next.saved)
-      || (selection.view === 'done' && !next.done);
-    setWindows(current => current.map(window => ({ ...window, items: window.items.flatMap(entry =>
-      entry.id !== item.id ? [entry] : leaves ? [] : [{ ...entry, saved: next.saved, done: next.done,
-        triageRevision: next.revision }]) })));
+    setWindows(current => current.map(window => ({ ...window, items: window.items.flatMap(entry => {
+      if (entry.id !== item.id) return [entry];
+      const merged = mergeNotificationTriage(entry, { saved: next.saved, done: next.done, triageRevision: next.revision });
+      const leaves = (selection.view === 'inbox' && merged.done) || (selection.view === 'saved' && !merged.saved)
+        || (selection.view === 'done' && !merged.done);
+      return leaves ? [] : [merged];
+    }) })));
     setTriageNote(patch.done === true ? t.triageDone : patch.done === false ? t.triageUndone
       : patch.saved ? t.triageSaved : t.triageUnsaved);
   }

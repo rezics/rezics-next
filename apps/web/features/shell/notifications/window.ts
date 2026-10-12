@@ -51,6 +51,13 @@ export interface NotificationWindow {
   next: string | null;
 }
 
+/** The triage owner revision wins independently of page and count completion order. */
+export function mergeNotificationTriage(item: StreamItem,
+  triage: Pick<StreamItem, 'saved' | 'done' | 'triageRevision'>): StreamItem {
+  if (BigInt(triage.triageRevision ?? '0') <= BigInt(item.triageRevision ?? '0')) return item;
+  return { ...item, saved: triage.saved, done: triage.done, triageRevision: triage.triageRevision };
+}
+
 /** Read at most 50 matches using Main's continuation unchanged. */
 export async function readWindow(main: MainClient, before: string | null,
   selection: NotificationSelection = { view: 'inbox', reason: null }):

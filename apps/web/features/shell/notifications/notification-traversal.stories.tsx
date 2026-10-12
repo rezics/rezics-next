@@ -36,13 +36,16 @@ function scripted(options: {
   page: (query: Query) => Answer | Promise<Answer>;
   mark?: (body: { generation: string; readThrough: string }) => Answer | Promise<Answer>;
   count?: () => Answer | Promise<Answer>; read?: () => Answer | Promise<Answer>;
-  triage?: () => Answer | Promise<Answer>; invitation?: () => Answer | Promise<Answer>;
+  triage?: (body: { saved?: boolean; done?: boolean; expectedRevision: string | null }) => Answer | Promise<Answer>;
+  invitation?: () => Answer | Promise<Answer>;
 }) {
   const calls: string[] = [];
   let generation = '1';
   const notifications = Object.assign(({ item }: { item: string }) => ({
     read: { put: async () => { calls.push(`read:${item}`); return options.read?.() ?? answer({ readAt: NOW }); } },
-    triage: { put: async () => { calls.push('triage'); return options.triage?.() ?? answer({ saved: true, done: false, revision: '1' }); } },
+    triage: { put: async (body: { saved?: boolean; done?: boolean; expectedRevision: string | null }) => {
+      calls.push('triage'); return options.triage?.(body) ?? answer({ saved: true, done: false, revision: '1' });
+    } },
   }), {
     get: async ({ query }: { query: Query }) => {
       calls.push(`page:${query.before}:${query.view ?? 'inbox'}:${query.reason ?? 'all'}`);
@@ -190,8 +193,9 @@ export const LatePageAfterNewerPoll: Story = {
       window.dispatchEvent(new Event('focus'));
       await waitFor(() => expect(canvas.getByLabelText('Unread badge')).toHaveTextContent('1'));
       await args.release!();
-      await expect(canvas.getAllByRole('listitem')).toHaveLength(1);
-      await expect(canvas.getByRole('button', { name: 'Show more' })).toBeEnabled();
+      await expect(canvas.getAllByRole('listitem')).toHaveLength(2);
+      await expect(canvas.queryByRole('button', { name: 'Show more' })).toBeNull();
+      await expect(canvas.getByLabelText('Unread badge')).toHaveTextContent('1');
     } finally { poll.mockRestore(); }
   },
 };
@@ -212,9 +216,98 @@ export const LateMarkAfterNewerPoll: Story = {
       window.dispatchEvent(new Event('focus'));
       await waitFor(() => expect(canvas.getByLabelText('Unread badge')).toHaveTextContent('1'));
       await args.release!();
-      await expect(canvas.getByText('Unread')).toBeVisible();
-      await expect(args.calls).not.toContain('count');
+      await expect(canvas.queryByText('Unread')).toBeNull();
+      await expect(args.calls).toContain('count');
     } finally { poll.mockRestore(); }
+  },
+};
+
+export const SaveSucceedsAfterPollStarts: Story = {
+  args: (() => {
+    const pending = deferred();
+    let revision: string | null = null;
+    return { ...base, initial: windowOf([notice(100)]),
+      ...scripted({ page: () => page(windowOf([])), triage: body => {
+        if (body.expectedRevision !== revision) return { data: null, error: { status: 409, value: null } };
+        if (revision === null) { revision = '1'; return pending.promise; }
+        revision = '2'; return answer({ saved: false, done: false, revision });
+      } }), release: () => pending.release(answer({ saved: true, done: false, revision: '1' })) };
+  })(),
+  async play({ canvasElement, args }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Save' }));
+    const poll = spyOn(window, 'fetch').mockResolvedValueOnce(Response.json({
+      profile: 'notification-unread-count-v1', generation: '1', count: 1, overflow: false }));
+    try {
+      window.dispatchEvent(new Event('focus'));
+      await waitFor(() => expect(canvas.getByLabelText('Unread badge')).toHaveTextContent('1'));
+      await args.release!();
+      await userEvent.click(await canvas.findByRole('button', { name: 'Unsave' }));
+      await expect(await canvas.findByRole('button', { name: 'Save' })).toBeEnabled();
+      await expect(canvas.queryByRole('alert')).toBeNull();
+      await expect(args.calls.filter(call => call === 'triage')).toHaveLength(2);
+    } finally { poll.mockRestore(); }
+  },
+};
+
+function delayedResetCount() {
+  const pending = deferred();
+  return { ...base, initial: windowOf([notice(100)], '1', '100', 'reset'),
+    ...scripted({ page: query => query.before === 'reset'
+      ? page(windowOf([notice(2)], '2', '2', 'older'), true) : page(windowOf([notice(1)], '2', '2')),
+      count: () => pending.promise }), release: () => pending.release(count('2', 5)) };
+}
+
+export const ResetCountSurvivesSave: Story = {
+  args: delayedResetCount(),
+  async play({ canvasElement, args }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
+    await waitFor(() => expect(args.calls).toContain('count'));
+    await userEvent.click(canvas.getByRole('button', { name: 'Save' }));
+    await expect(await canvas.findByRole('button', { name: 'Unsave' })).toBeVisible();
+    await args.release!();
+    await expect(canvas.getByLabelText('Unread badge')).toHaveTextContent('5');
+  },
+};
+
+export const ResetCountSurvivesOlderPage: Story = {
+  args: delayedResetCount(),
+  async play({ canvasElement, args }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
+    await waitFor(() => expect(args.calls).toContain('count'));
+    await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
+    await waitFor(() => expect(canvas.getAllByRole('listitem')).toHaveLength(2));
+    await args.release!();
+    await expect(canvas.getByLabelText('Unread badge')).toHaveTextContent('5');
+    await expect(canvas.queryByRole('button', { name: 'Show more' })).toBeNull();
+  },
+};
+
+export const StaleRestartKeepsTriageRevision: Story = {
+  args: (() => {
+    let revision: string | null = null;
+    return { ...base, initial: windowOf([notice(100)], '1', '100', 'expired'),
+      ...scripted({ page: query => query.before === 'expired'
+        ? { data: null, error: { status: 400, value: null } } : page(windowOf([notice(100)])),
+        triage: body => {
+          if (body.expectedRevision !== revision) return { data: null, error: { status: 409, value: null } };
+          revision = String(BigInt(revision ?? '0') + 1n);
+          return answer({ saved: body.saved, done: false, revision });
+        } }) };
+  })(),
+  async play({ canvasElement, args }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Save' }));
+    await expect(await canvas.findByRole('button', { name: 'Unsave' })).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
+    await waitFor(() => expect(canvas.queryByRole('button', { name: 'Show more' })).toBeNull());
+    await expect(canvas.getByRole('button', { name: 'Unsave' })).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: 'Unsave' }));
+    await expect(await canvas.findByRole('button', { name: 'Save' })).toBeEnabled();
+    await expect(canvas.queryByRole('alert')).toBeNull();
+    await expect(args.calls.filter(call => call === 'triage')).toHaveLength(2);
   },
 };
 
