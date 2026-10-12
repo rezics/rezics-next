@@ -16,6 +16,7 @@ import { replyReceiptIri } from '../src/modules/realm-reply/graph.ts';
 import { RealmReplyThreadStore } from '../src/modules/realm-reply/thread-store.ts';
 import { RV, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { WorkReadMoved, WorkReadUnavailable, type WorkReadSession } from '../src/modules/work/read-session.ts';
+import { appendContentEvent, sequenceContentEvents } from '../../content/src/event-sequencer.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const epoch = randomUUID();
@@ -23,6 +24,7 @@ const contentEpoch = randomUUID();
 const native = () => `https://rezics.com/id/${randomUUID()}`;
 let cluster: PostgresCluster | undefined;
 let access: Pool;
+let nativeContent: Pool;
 
 beforeAll(async () => {
   cluster = await startPostgresCluster({ serverSettings: `logging_collector=on
@@ -34,14 +36,22 @@ log_rotation_age=0` });
   for (const file of schemaFiles(root, 'access')) {
     await access.query(readFileSync(join(root, 'services/main/migrations/access', file), 'utf8'));
   }
+  await access.query('CREATE DATABASE realm_ranking_content');
+  nativeContent = new Pool({ ...cluster.connection, database: 'realm_ranking_content', max: 2 });
+  for (const file of schemaFiles(root, 'content')) {
+    await nativeContent.query(readFileSync(join(root, 'services/content/migrations', file), 'utf8'));
+  }
 }, 120_000);
 
 afterAll(async () => {
+  await nativeContent?.end();
   await access?.end();
   cluster?.remove();
 });
 
 beforeEach(async () => {
+  await nativeContent.query('TRUNCATE content.variant,content.receipt CASCADE');
+  await nativeContent.query('UPDATE content.owner_control SET data_epoch=$1,sequence=7 WHERE singleton', [contentEpoch]);
   await access.query(`TRUNCATE access.realm_thread_reference, access.realm_thread_state,
     access.realm_thread_population, access.realm_thread_dirty, access.feed_item CASCADE`);
   await access.query(`INSERT INTO access.realm_thread_checkpoint
@@ -184,6 +194,59 @@ test('a reply added to an admitted thread while a page is established still retu
   await expect(session.deps.realmReplyThreads.assertThreadProjection(session, realm, item.reply))
     .resolves.toBeUndefined();
   expect(await session.deps.realmReplyThreads.siblingPage(epoch, realm, item.reply, 'new', 20)).toEqual([]);
+});
+
+test.each([
+  ['content.realm-reply.prepared', 'publication.prepare', 'succeeded', 'addition'],
+  ['content.publication.prepared', 'publication.prepare', 'succeeded', 'addition'],
+  ['content.revision.saved', 'draft.save', 'succeeded', 'addition'],
+  ['content.comment.created', 'comment.create', 'succeeded', 'addition'],
+  ['content.publication.active', 'publication.settle', 'succeeded', 'addition'],
+  ['content.publication.rejected', 'publication.settle', 'succeeded', 'removal'],
+  ['content.realm-reply.prepared', 'publication.prepare', 'rejected', 'removal'],
+  ['content.unknown', 'publication.prepare', 'succeeded', 'removal'],
+] as const)('native Content replay classifies %s (%s, %s) as %s', async (eventType, action, outcome, effect) => {
+  const realm = native(), item = await reference(realm);
+  const otherRealm = native(), other = await reference(otherRealm);
+  const variant = `reply:${randomUUID()}`, creation = randomUUID();
+  await nativeContent.query(`INSERT INTO content.variant (id,resource_id,language_kind,direction)
+    VALUES($1,$2,'missing','none')`, [variant, item.reply]);
+  const record = async (operationId: string, eventType: string, action: string,
+    outcome: 'succeeded' | 'rejected') => {
+    const client = await nativeContent.connect();
+    try {
+      await appendContentEvent(client, { operationId, requestDigest: 'a'.repeat(64), action, outcome,
+        variantId: variant, eventType, recipe: 'realm-reply-v1', payload: { realm, reply: item.reply } });
+    } finally { client.release(); }
+    await sequenceContentEvents(nativeContent);
+  };
+  await record(creation, 'content.reply.created', 'reply.create', 'succeeded');
+  await nativeContent.query(`INSERT INTO content.reply
+    (id,variant_id,author,root_target,root_revision,operation_id) VALUES($1,$2,$3,$4,$5,$6)`,
+  [item.reply, variant, native(), item.work, native(), creation]);
+  await access.query('UPDATE access.realm_thread_checkpoint SET content_sequence=8 WHERE data_epoch=$1', [epoch]);
+  const { session } = reader('8', '3');
+  session.deps.realmReplyThreads = new RealmReplyThreadStore(nativeContent, access);
+  session.deps.content = {} as NonNullable<WorkReadSession['deps']['content']>;
+  const previous = new Map<'best' | 'top', Awaited<ReturnType<typeof realmRankPage>>>();
+  for (const sort of ['best', 'top'] as const) {
+    previous.set(sort, await realmRankPage(access, session, realm, sort, 'all', 20));
+  }
+  // Exercise the production join and CASE against the owner's migrated receipt
+  // and outbox tables. A stubbed effect cannot hide a missing receipt family.
+  await record(randomUUID(), eventType, action, outcome);
+  await expect(new RealmThreadRankingProjection(access, {} as Pool)
+    .tick(session, { data_epoch: epoch } as FeedCheckpoint, '3')).resolves.toBe(true);
+  expect((await access.query('SELECT effect FROM access.realm_thread_dirty WHERE data_epoch=$1 AND resource=$2',
+    [epoch, item.reply])).rows).toEqual([{ effect }]);
+  for (const sort of ['best', 'top'] as const) {
+    if (effect === 'addition') {
+      expect(await realmRankPage(access, session, realm, sort, 'all', 20)).toEqual(previous.get(sort)!);
+    } else {
+      await expect(realmRankPage(access, session, realm, sort, 'all', 20)).rejects.toBeInstanceOf(RealmRankingsIncomplete);
+    }
+    expect((await realmRankPage(access, session, otherRealm, sort, 'all', 20)).rows.map(row => row.reply)).toEqual([other.reply]);
+  }
 });
 
 test('uninitialized and reset placements never masquerade as a complete empty population', async () => {

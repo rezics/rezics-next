@@ -369,6 +369,11 @@ export class RealmThreadRankingProjection {
           CASE WHEN o.event_type='content.realm-review.decided' THEN o.payload->>'realm' ELSE NULL END AS realm,
           CASE WHEN r.outcome='succeeded' AND (
             o.event_type='content.reply.created' AND r.action='reply.create'
+            OR o.event_type IN ('content.realm-reply.prepared','content.publication.prepared')
+              AND r.action='publication.prepare'
+            OR o.event_type='content.revision.saved' AND r.action='draft.save'
+            OR o.event_type='content.comment.created' AND r.action='comment.create'
+            OR o.event_type='content.publication.active' AND r.action='publication.settle'
             OR o.event_type='content.realm-review.decided' AND r.action='review.decide'
               AND d.outcome='approved' AND d.supersedes IS NULL
           ) THEN 'addition' ELSE 'removal' END AS effect
