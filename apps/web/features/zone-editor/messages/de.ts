@@ -2,6 +2,10 @@
 import type { ZoneEditorMessages } from '../messages.ts';
 
 const messages: ZoneEditorMessages = {
+  collectionLink: 'Ressourcenlink der Collection',
+  collectionFind: 'Collection suchen',
+  collectionInvalidLink: 'Geben Sie einen Ressourcenlink zur Collection ein, etwa https://rezics.com/id/…',
+  collectionUnavailable: 'Diese Collection ist nicht verfügbar.',
   themeCreate: 'Layout aus den Standardwerten erstellen',
   themeDefaultsBody: 'Beginnen Sie mit dem aktuellen Standardlayout dieser Zone. Die übrige Konfiguration bleibt gespeichert.',
   sectionsLabel: 'Bereiche der Website',

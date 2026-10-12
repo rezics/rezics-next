@@ -2,6 +2,10 @@
 import type { ZoneEditorMessages } from '../messages.ts';
 
 const messages: ZoneEditorMessages = {
+  collectionLink: 'Collection 리소스 링크',
+  collectionFind: 'Collection 찾기',
+  collectionInvalidLink: 'https://rezics.com/id/… 형식의 Collection 리소스 링크를 입력하세요.',
+  collectionUnavailable: '이 Collection을 사용할 수 없습니다.',
   themeCreate: '기본값으로 레이아웃 만들기',
   themeDefaultsBody: '이 Zone의 현재 기본 레이아웃으로 시작합니다. 다른 설정은 저장된 상태로 유지됩니다.',
   sectionsLabel: '사이트 구역',

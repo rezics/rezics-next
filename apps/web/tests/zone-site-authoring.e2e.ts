@@ -292,21 +292,12 @@ async function saveNavigationDraft(page: Page, actor: AuthorFixture, site: SiteF
   await grant('semantic:read:' + tides, 'semantic.read', actor.principalId, actor.actingSubject);
   await createCollection(page, charts, 'Harbor charts', actor.actingSubject);
   await createCollection(page, tides, 'Harbor tides', actor.actingSubject);
-  const typeahead = (url: URL) => url.pathname.includes('/v1/search/typeahead');
-  const suggestions = async (route: import('@playwright/test').Route) => route.fulfill({
-    status: 200, contentType: 'application/json',
-    body: JSON.stringify({ profile: 'public-work-typeahead-v1',
-      items: [pageSuggestion(charts, 'Harbor charts'), pageSuggestion(tides, 'Harbor tides')],
-      hasMore: false, sourcePosition: { dataEpoch: '00000000-0000-4000-8000-000000000901', sequence: '1' } }),
-  });
-  await page.route(typeahead, suggestions);
   await page.goto(site.editorPath + '/navigation');
-  await addNavigationLink(page, 'Harbor charts');
-  await addNavigationLink(page, 'Harbor tides');
+  await addNavigationLink(page, charts, 'Harbor charts');
+  await addNavigationLink(page, tides, 'Harbor tides');
   await page.getByRole('button', { name: 'Move up Harbor tides' }).click();
   await page.getByRole('button', { name: 'Save draft' }).click();
   await expect(page.getByText('Draft saved.')).toBeVisible({ timeout: 30_000 });
-  await page.unroute(typeahead, suggestions);
   return { charts, tides };
 }
 
@@ -380,20 +371,9 @@ async function revokeZoneEdit(zone: string, actingSubject: string) {
   }
 }
 
-function pageSuggestion(work: string, title: string) {
-  return {
-    work, mainVersion: work,
-    title: { value: title, language: 'en', direction: 'ltr', basis: 'requested' },
-    cover: { kind: 'fallback', policy: 'avatar-fallback-v1', key: 'collection', resourceType: 'collection' },
-    types: [], authors: [], matchedField: 'title', matchedText: title, matchedLanguage: 'en',
-  };
-}
-
-async function addNavigationLink(page: Page, name: string) {
-  const finder = page.getByRole('textbox', { name: 'Page' });
-  await finder.click();
-  await page.keyboard.press('ControlOrMeta+a');
-  await page.keyboard.type('Harbor');
+async function addNavigationLink(page: Page, collection: string, name: string) {
+  await page.getByRole('textbox', { name: 'Collection resource link' }).fill(collection);
+  await page.getByRole('button', { name: 'Find Collection' }).click();
   await page.getByRole('option', { name }).click();
   await page.getByRole('button', { name: 'Add link' }).click();
   await expect(page.getByRole('list', { name: 'Links' }).getByText(name)).toBeVisible();
@@ -663,24 +643,13 @@ test('Navigation and theme: a Realm-less Zone publishes the saved home, navigati
   await grant(`semantic:read:${tides}`, 'semantic.read', principalId, actingSubject);
   await createCollection(page, charts, 'Harbor charts', actingSubject);
   await createCollection(page, tides, 'Harbor tides', actingSubject);
-  const typeahead = (url: URL) => url.pathname.includes('/v1/search/typeahead');
-  const suggestions = async (route: import('@playwright/test').Route) => route.fulfill({
-    status: 200, contentType: 'application/json',
-    body: JSON.stringify({
-      profile: 'public-work-typeahead-v1',
-      items: [pageSuggestion(charts, 'Harbor charts'), pageSuggestion(tides, 'Harbor tides')],
-      hasMore: false, sourcePosition: { dataEpoch: '00000000-0000-4000-8000-000000000901', sequence: '1' },
-    }),
-  });
-  await page.route(typeahead, suggestions);
   await page.getByRole('link', { name: 'Navigation', exact: true }).click();
   await expect(page.getByRole('heading', { level: 2, name: 'Navigation' })).toBeVisible();
-  await addNavigationLink(page, 'Harbor charts');
-  await addNavigationLink(page, 'Harbor tides');
+  await addNavigationLink(page, charts, 'Harbor charts');
+  await addNavigationLink(page, tides, 'Harbor tides');
   await page.getByRole('button', { name: 'Move up Harbor tides' }).click();
   await page.getByRole('button', { name: 'Save draft' }).click();
   await expect(page.getByText('Draft saved.')).toBeVisible({ timeout: 30_000 });
-  await page.unroute(typeahead, suggestions);
 
   await page.getByRole('link', { name: 'Theme', exact: true }).click();
   await page.getByRole('button', { name: 'Create layout from defaults' }).click();

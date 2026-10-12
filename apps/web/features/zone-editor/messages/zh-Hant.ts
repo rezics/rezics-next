@@ -2,6 +2,10 @@
 import type { ZoneEditorMessages } from '../messages.ts';
 
 const messages: ZoneEditorMessages = {
+  collectionLink: 'Collection 資源連結',
+  collectionFind: '尋找 Collection',
+  collectionInvalidLink: '請輸入 Collection 資源連結，例如 https://rezics.com/id/…',
+  collectionUnavailable: '此 Collection 無法使用。',
   themeCreate: '從預設設定建立版面配置',
   themeDefaultsBody: '使用此 Zone 目前的預設版面配置開始編輯。其他設定仍保持儲存狀態。',
   sectionsLabel: '網站欄目',

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import {
-  browserZoneNavigation, loadCompleteZoneNavigation, loadZoneNavigation, readCompleteZoneNavigation,
+  browserZoneCollectionLookup, browserZoneNavigation, loadCompleteZoneNavigation, loadZoneNavigation, readCompleteZoneNavigation,
   type NavigationResume, type NavigationSnapshot, type WriteResult, type ZoneNavigationClient,
 } from './api.ts';
 import { NAV_LOAD_BATCH, NAV_PAGE_SIZE, type SiteLink } from './navigation.ts';
@@ -56,6 +56,57 @@ function fakeMain(read: (request: PageRequest) => Answer) {
 }
 
 const pageIndex = ({ query }: PageRequest) => query.after ? Number(query.after.slice('cursor-'.length)) : 0;
+
+describe('Collection resource-link lookup', () => {
+  const collection = iri(900);
+  function lookup(identity: Answer, named: Answer = { data: { collection, name: 'Harbor charts' }, error: null }) {
+    const identityCalls: unknown[] = [];
+    const nameCalls: string[] = [];
+    const main = { v1: { collections: ({ id }: { id: string }) => ({
+      get: async (options: unknown) => { identityCalls.push({ id, options }); return identity; },
+      name: { get: async () => { nameCalls.push(id); return named; } },
+    }) } };
+    return { api: browserZoneCollectionLookup(main as never), identityCalls, nameCalls };
+  }
+
+  test('uses an authorized Collection identity and its actual public name without Work typeahead', async () => {
+    const fake = lookup({ data: { collection, structure: iri(901), revision: iri(902) }, error: null },
+      { data: { collection, name: { original: 'en', labels: { en: 'Harbor charts' } } }, error: null });
+    expect(await fake.api.findCollection(` ${collection} `, actor)).toEqual({ ok: true,
+      data: { target: collection, name: 'Harbor charts' } });
+    expect(fake.identityCalls).toEqual([{ id: collection.slice(-36), options: { query: { actingSubject: actor, limit: 1 } } }]);
+    expect(fake.nameCalls).toEqual([collection.slice(-36)]);
+  });
+
+  test.each([
+    { status: 401, failure: 'sign-in' },
+    { status: 403, failure: 'denied' },
+    { status: 404, failure: 'denied' },
+    { status: 503, failure: 'unavailable' },
+  ])('preserves Collection identity failure ($failure) without reading names', async ({ status, failure }) => {
+    const fake = lookup({ data: null, error: { status, value: {} } });
+    expect(await fake.api.findCollection(collection, actor)).toEqual({ ok: false, failure });
+    expect(fake.nameCalls).toEqual([]);
+  });
+
+  test.each(['Harbor charts', 'https://example.com/id/00000000-0000-4000-8000-000000000900'])
+    ('rejects an invalid resource link before any read (%s)', async link => {
+      const fake = lookup({ data: { collection }, error: null });
+      expect(await fake.api.findCollection(link, actor)).toEqual({ ok: false, failure: 'invalid' });
+      expect(fake.identityCalls).toEqual([]);
+    });
+
+  test('refuses a name returned for another identity', async () => {
+    const fake = lookup({ data: { collection }, error: null },
+      { data: { collection: iri(999), name: 'Another shelf' }, error: null });
+    expect(await fake.api.findCollection(collection, actor)).toEqual({ ok: false, failure: 'unavailable' });
+  });
+
+  test('retains failure when the Collection is readable but its public name is unavailable', async () => {
+    const fake = lookup({ data: { collection }, error: null }, { data: null, error: { status: 503, value: {} } });
+    expect(await fake.api.findCollection(collection, actor)).toEqual({ ok: false, failure: 'unavailable' });
+  });
+});
 
 describe('complete authorized preview navigation', () => {
   test('an empty saved navigation is a complete inventory', async () => {

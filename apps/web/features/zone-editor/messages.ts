@@ -10,6 +10,10 @@ import zhHant from './messages/zh-Hant.ts';
 
 // Interface copy for writing a Zone's home page. The page the author writes is theirs, never this catalog.
 const en = {
+  collectionLink: 'Collection resource link',
+  collectionFind: 'Find Collection',
+  collectionInvalidLink: 'Enter a Collection resource link such as https://rezics.com/id/…',
+  collectionUnavailable: 'That Collection is not available.',
   themeCreate: 'Create layout from defaults',
   themeDefaultsBody: 'Start with this Zone’s current default layout. Other configuration stays saved.',
   sectionsLabel: 'Site sections',

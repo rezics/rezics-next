@@ -259,6 +259,29 @@ function record(value: unknown): Record<string, unknown> | null {
 
 export interface PageChoice { target: string; name: string }
 
+export interface ZoneCollectionLookupClient {
+  findCollection(resourceLink: string, actingSubject: string): Promise<WriteResult<PageChoice>>;
+}
+
+/** Resolve a Collection's resource link through its authorized typed identity and public name reads. */
+export function browserZoneCollectionLookup(main: ReturnType<typeof browserMainApi> = browserMainApi()): ZoneCollectionLookupClient {
+  return {
+    async findCollection(resourceLink, actingSubject) {
+      const target = resourceLink.trim();
+      const id = /^https:\/\/rezics\.com\/id\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/.exec(target)?.[1];
+      if (!id) return { ok: false, failure: 'invalid' };
+      const identity = await post(() => main.v1.collections({ id }).get({ query: { actingSubject, limit: 1 } }));
+      if (!identity.ok) return identity;
+      if (record(identity.data)?.collection !== target) return { ok: false, failure: 'unavailable' };
+      const named = await post(() => main.v1.collections({ id }).name.get());
+      if (!named.ok) return named;
+      const name = pageNameOf(named.data);
+      if (record(named.data)?.collection !== target || !name) return { ok: false, failure: 'unavailable' };
+      return { ok: true, data: { target, name } };
+    },
+  };
+}
+
 export interface NavigationSnapshot {
   head: string;
   navigation: string;

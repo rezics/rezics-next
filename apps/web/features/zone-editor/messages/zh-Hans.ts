@@ -2,6 +2,10 @@
 import type { ZoneEditorMessages } from '../messages.ts';
 
 const messages: ZoneEditorMessages = {
+  collectionLink: 'Collection 资源链接',
+  collectionFind: '查找 Collection',
+  collectionInvalidLink: '请输入 Collection 资源链接，例如 https://rezics.com/id/…',
+  collectionUnavailable: '此 Collection 不可用。',
   themeCreate: '从默认设置创建布局',
   themeDefaultsBody: '使用此 Zone 当前的默认布局开始编辑。其他配置仍保持保存状态。',
   sectionsLabel: '站点栏目',

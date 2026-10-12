@@ -20,6 +20,7 @@ import {
   type ZoneThemeClient,
 } from './api.ts';
 import { EditorActions } from './editor-actions.tsx';
+import { CollectionPageLookup } from './collection-page-lookup.tsx';
 import { useZoneEditorDraft } from './draft-provider.tsx';
 import { confirmPublicationReview, readSavedPublicationSelection, reviewedPublicationChoice, stagePublicationReview,
   type PublicationReview } from './publication-review.ts';
@@ -636,6 +637,8 @@ export function ZoneNavigationEditor({
       ) : (
         <p className="text-pretty text-muted-foreground text-sm">{copy.emptyLinks}</p>
       )}
+      <CollectionPageLookup actingSubject={actingSubject} copy={copy} disabled={editingDisabled} signInHref={signInHref}
+        onChoose={choice => { setPicked(choice); setQuery(choice.name); setChoices([]); setAddNotice(null); }} />
       <div className="grid max-w-md gap-2">
         <label className="grid gap-1 text-sm">
           <span className="font-medium">{copy.addPage}</span>
