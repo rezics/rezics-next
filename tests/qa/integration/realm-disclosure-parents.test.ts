@@ -35,6 +35,8 @@ interface PlanNode {
   'Node Type': string;
   'Actual Rows': number;
   'Actual Loops': number;
+  'Relation Name'?: string;
+  'Rows Removed by Filter'?: number;
   'Subplan Name'?: string;
   'CTE Name'?: string;
   Plans?: PlanNode[];
@@ -109,7 +111,8 @@ async function restriction(
       [fenceId, resource, component, revision, effect, decisionId],
     );
     await client.query(
-      'UPDATE access.governance_case SET decision_head=$2,generation=1 WHERE id=$1',
+      `UPDATE access.governance_case SET decision_head=$2,generation=1,
+        state='closed',closed_at=clock_timestamp() WHERE id=$1`,
       [caseId, decisionId],
     );
     await client.query('COMMIT');
@@ -403,7 +406,8 @@ test('Realm disclosure: real Access preserves Work and Realm fences, independent
 
     // Unrelated fences must not turn the exact parent lookup into ancestry
     // enumeration. Read the native plan rather than infer cost from call count.
-    for (let index = 0; index < 32; index++) await restrict(nativeId(), 'record');
+    for (let index = 0; index < 512; index++) await restrict(nativeId(), 'record');
+    await f.accessPool.query('ANALYZE access.governance_enforcement');
     const batch = Array.from({ length: 64 }, (): DisclosureTarget => ({
       ...body,
       resource: nativeId(),
@@ -442,6 +446,13 @@ test('Realm disclosure: real Access preserves Work and Realm fences, independent
       );
       expect(parentNodes.length).toBeGreaterThan(0);
       for (const node of parentNodes) expect(node['Actual Rows']).toBeLessThanOrEqual(128);
+      const enforcementNodes = planNodes(plan).filter(node => node['Relation Name'] === 'governance_enforcement');
+      expect(enforcementNodes.length).toBeGreaterThan(0);
+      for (const node of enforcementNodes) {
+        // A scan of unrelated retained fences would grow with the owner table,
+        // even when its final result and parent-edge cardinality stay bounded.
+        expect(node['Actual Rows'] + (node['Rows Removed by Filter'] ?? 0)).toBeLessThanOrEqual(128);
+      }
     } finally {
       measured.release();
       targets.splice(targets.length - batch.length, batch.length);

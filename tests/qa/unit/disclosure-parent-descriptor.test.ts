@@ -181,7 +181,7 @@ test('disclosure policy batches accept plain owner targets but reject forged des
   const plain = [target, { ...target, work, workRevision: workHead }];
   expect(await reader.read(plain, ANONYMOUS_VIEWER, 'read')).toEqual(['visible', 'visible']);
   expect(await reader.readWithAnonymousNames(plain, ANONYMOUS_VIEWER, 'summary')).toEqual({
-    decisions: ['visible', 'visible'], anonymousNames: ['visible', 'visible'],
+    decisions: ['visible', 'visible'], anonymousNames: ['hidden', 'hidden'],
   });
   expect(await reader.read([], ANONYMOUS_VIEWER, 'read')).toEqual([]);
   await expect(reader.read([{ ...target, work: 'unproven' }], ANONYMOUS_VIEWER, 'read'))

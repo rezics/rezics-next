@@ -7,6 +7,7 @@ import {
 } from '../../../services/main/src/modules/access/admission.ts';
 import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import { cloneQaOwnerDatabases } from '../support/databases.ts';
+import { fixtureReasons } from './g-565-decision-support.ts';
 
 const globalContext = 'urn:rezics:context:global';
 const native = () => `https://rezics.com/id/${randomUUID()}`;
@@ -92,10 +93,10 @@ async function stage(
       `INSERT INTO access.moderation_decision
       (id,kind,outcome,context,case_id,case_sequence,principal_id,acting_subject,authority_kind,
        authority_scope_id,authority_epoch,authority_proof_digest,idempotency_key,request_digest,
-       rule_ref,rule_revision,rule_digest,evidence_digest,rationale,disclosure)
+       rule_ref,rule_revision,rule_digest,evidence_digest,rationale,disclosure,statement_of_reasons)
       VALUES ($1::uuid,'content_moderation',$2,$3,$4,$5,$6,$7,'platform',$8,0,$9,$1::text,$9,
-       'urn:governance-disclosure-cut:rule','1',$9,$9,'Reviewed fixture evidence','private')`,
-      [id, outcome, globalContext, caseId, head!.sequence, principalId, actor, scope, digest],
+       'urn:governance-disclosure-cut:rule','1',$9,$9,'Reviewed fixture evidence','private',$10::jsonb)`,
+      [id, outcome, globalContext, caseId, head!.sequence, principalId, actor, scope, digest, fixtureReasons],
     );
     await client.query('INSERT INTO access.safety_decision_operation(decision_id) VALUES ($1)', [
       id,

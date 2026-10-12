@@ -196,10 +196,11 @@ export class DisclosureStore implements DisclosureReader {
     return (await this.readDecisions(targets, viewer, channel, false, client)).decisions;
   }
 
-  readWithAnonymousNames(targets: readonly DisclosureTarget[], viewer: Viewer, channel: DisclosureChannel,
+  async readWithAnonymousNames(targets: readonly DisclosureTarget[], viewer: Viewer, channel: DisclosureChannel,
     client?: PoolClient): Promise<DisclosureWithAnonymousNames> {
-    if (!targets.length) return Promise.resolve({ decisions: [], anonymousNames: [] });
-    return this.readDecisions(targets, viewer, channel, true, client);
+    if (!targets.length) return { decisions: [], anonymousNames: [] };
+    const { decisions, anonymousNames } = await this.readDecisions(targets, viewer, channel, true, client);
+    return { decisions, anonymousNames };
   }
 
   readAtCut(targets: readonly DisclosureTarget[], viewer: Viewer, channel: DisclosureChannel,
