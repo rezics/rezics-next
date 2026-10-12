@@ -217,6 +217,11 @@ export const governancePreservationHold = access.table('governance_preservation_
   authorSubject: text('author_subject'), accountIssuer: text('account_issuer'), accountSubject: text('account_subject'),
   reason: text('reason').notNull(), createdAt: at('created_at').notNull(), releasedAt: at('released_at'),
 });
+export const governancePreservationDeliveryHead = access.table('governance_preservation_delivery_head', {
+  targetResource: text('target_resource').primaryKey(),
+  version: bigint('version', { mode: 'bigint' }).notNull(),
+  activeHolds: bigint('active_holds', { mode: 'bigint' }).notNull(),
+});
 export const governanceErasurePostponement = access.table('governance_erasure_postponement', {
   holdId: uuid('hold_id').notNull(), operationId: text('operation_id').notNull(), materialRef: text('material_ref').notNull(),
   reason: text('reason').notNull(), recordedAt: at('recorded_at').notNull(),
@@ -310,7 +315,7 @@ export const governanceTables = [governanceRuleHead, governanceRuleRevision,
   governanceCase, realmSanctionAppeal, realmSanctionLift, governanceReport, governanceEvidence, rightsComplaint,
   moderationDecision, moderationDecisionTarget, governanceProcessStep, governanceEnforcement,
   governanceRole, governanceCaseCredential, governanceCorrespondenceReceipt, governancePreservationHold,
-  governanceErasurePostponement,
+  governanceErasurePostponement, governancePreservationDeliveryHead,
   safetyCaseClaim,
   siteModerationPosition,
   safetyDecisionOperation,

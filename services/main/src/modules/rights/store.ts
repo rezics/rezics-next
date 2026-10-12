@@ -3,6 +3,7 @@ import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { representedGrantProof } from '../access/composition.ts';
 import type { ExportBasis, LicenseScopeHook, VerifiedExportMember } from '../export/planner.ts';
+import type { DeliveryCutSnapshot } from './delivery-cut.ts';
 import { assessmentFamilies, assessmentOutcomes, expressionKinds, materialScopes, obligationKinds, rightsBases,
   useKinds } from './schema.ts';
 
@@ -168,6 +169,30 @@ function validMaterial(material: MaterialScope): boolean {
  */
 export class RightsStore {
   constructor(private readonly content: Pool, private readonly access: Pool) {}
+
+  /** Fresh autocommit snapshots: one indexed statement per owner, no hold scan. */
+  async deliveryCutSnapshot(resourceId: string): Promise<DeliveryCutSnapshot> {
+    if (!agentPattern.test(resourceId)) throw new RightsInvalid('invalid delivery target');
+    try {
+      const [assessment, preservation] = await Promise.all([
+        this.content.query<{ assessment_head: string | null }>(`SELECT h.assessment_id::text AS assessment_head
+          FROM rights.material m
+          LEFT JOIN rights.use_assessment_head h ON h.material_id = m.id
+            AND h.family = 'data_rights' AND h.use_kind = 'redistribution'
+            AND h.use_scope = 'rezics:public-text'
+          WHERE m.scope_kind = 'work' AND m.work_id = $1 AND m.component = 'body'
+            AND m.provider IS NULL AND m.namespace IS NULL AND m.source_record_id IS NULL
+            AND m.content_variant_id IS NULL AND m.media_asset IS NULL AND m.wiki_evidence_id IS NULL`,
+        [resourceId]),
+        this.access.query<{ version: string; held: boolean }>(`SELECT version::text,
+          active_holds > 0 AS held FROM access.governance_preservation_delivery_head
+          WHERE target_resource = $1`, [resourceId]),
+      ]);
+      return { assessmentHead: assessment.rows[0]?.assessment_head ?? null,
+        preservationVersion: preservation.rows[0]?.version ?? '0',
+        held: preservation.rows[0]?.held ?? false };
+    } catch { throw new RightsUnavailable('delivery cut is unavailable'); }
+  }
 
   /** One indexed current-head lookup. Historical or withdrawn assessments are never a public basis. */
   async currentPublicDomainAssessment(work: string, assessmentId: string): Promise<boolean> {
