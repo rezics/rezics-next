@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
-import { readFileSync, statSync, writeFileSync } from 'node:fs';
+import { readFileSync, statSync, writeFileSync, openSync, readSync, closeSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
@@ -376,7 +376,11 @@ function planPool(plans: RecordedPlan[], observe?: (sql: string, plans: Recorded
         const result = await Reflect.apply(query, client, args);
         // ReadyForQuery can arrive before ExecutorEnd flushes the plan log.
         await query('SELECT 1 /* plan_log_flush */');
-        const log = readFileSync(path).subarray(offset).toString();
+        const length = statSync(path).size - offset;
+        const appended = Buffer.alloc(length);
+        const logFile = openSync(path, 'r');
+        try { readSync(logFile, appended, 0, length, offset); } finally { closeSync(logFile); }
+        const log = appended.toString();
         for (const match of log.matchAll(/plan:\n\t(\{[\s\S]*?\n\t\})/g)) {
           const plan = JSON.parse(match[1]!) as RecordedPlan;
           if (!plan['Query Text'].includes('plan_log_flush')) executed.push({ ...plan,
@@ -498,8 +502,13 @@ test('owned refusal cleans a persisted long closure in bounded statements and re
   const deletes = Map.groupBy(cost.plans.filter(plan => /DELETE FROM access\.account_deletion_progress_agent/.test(plan.Statement)),
     plan => plan.StatementInstance);
   expect(deletes.size).toBeGreaterThanOrEqual(3);
-  for (const plans of deletes.values()) expect(plans.reduce((sum, plan) => sum + planRows(plan.Plan), 0))
-    .toBeLessThanOrEqual(32);
+  for (const plans of deletes.values()) {
+    const reads = plans.reduce((sum, plan) => sum + planRows(plan.Plan), 0);
+    if (reads > 32) console.info('Refusal cleanup scans', plans.map(plan => ({
+      query: plan['Query Text'].slice(0, 200), scans: readScans(plan.Plan),
+    })));
+    expect(reads).toBeLessThanOrEqual(32);
+  }
   expect((await pool.query('SELECT operation_id FROM access.account_deletion_progress WHERE principal_id = $1',
     [owner.id])).rows).toEqual([]);
   expect(await principalState(owner)).toEqual({ active: true, enforcement_epoch: '0' });
