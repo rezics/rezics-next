@@ -203,6 +203,9 @@ export const isolatedIntegrationFileList = [
   'tests/qa/integration/g-829-public-reads.test.ts',
   // Person avatar delivery toggles the global Access recovery hold and ends its Account authority.
   'services/main/tests/account-deletion-person-avatar.test.ts',
+  // Account-ending probes retain native names and refresh the catalogue index.
+  'services/main/tests/person-ended-typeahead.test.ts',
+  'services/main/tests/person-ended-name-search.test.ts',
 ] as const;
 
 /** Delta proofs require the product assembler, whose raw update endpoint is closed. */
