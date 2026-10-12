@@ -12,6 +12,8 @@ import { prefixWalkRequest } from '../src/modules/search/prefix-walk.ts';
 
 type Member = Awaited<ReturnType<typeof fixtureMember>>;
 type Item = { work: string; matchedText: string; authors: Array<{ agent: string; displayName: string }> };
+type Credit = { agent: string; identityStatus: string; displayName: string; handle: string | null };
+const endedCreditPages: Credit[][] = [];
 let stack: MediaStack;
 let closing: Member;
 let reader: Member;
@@ -176,19 +178,34 @@ for (const phase of ['retained', 'refreshed'] as const) {
   }, 90_000);
 }
 
-// Expected failure: the neutral Deleted author credit needs the journal-bound Person attribution tombstone reader, which is wired by the Person erasure owner (declared in modules/profiles/attribution.ts as personAttributionTombstones); until then the credit is omitted while the live coauthor remains.
-test.failing('a surviving Work keeps its live coauthor and supplies only neutral deleted attribution for the ended Person', async () => {
+test('a surviving Work keeps its live coauthor and does not disclose the ended Person', async () => {
   for (const token of [undefined, reader.token]) {
-    const credits = await json<{ items: Array<{ agent: string; identityStatus: string; displayName: string; handle: string | null }> }>(
+    const credits = await json<{ items: Credit[] }>(
       await stack.call('GET', `/v1/works/${work.slice(-36)}/agent-credits`
         + (token ? `?actingSubject=${encodeURIComponent(coauthor)}` : ''), { token }));
+    endedCreditPages.push(credits.items);
     expect(credits.items).toContainEqual(expect.objectContaining({ agent: coauthor,
       identityStatus: 'active', displayName: liveName }));
-    expect(credits.items).toContainEqual(expect.objectContaining({ agent: person,
-      identityStatus: 'deleted', displayName: 'Deleted author', handle: null }));
-    const deleted = credits.items.find(item => item.agent === person)!;
-    for (const field of ['address', 'avatar', 'avatarUrl', 'bio', 'links']) expect(deleted).not.toHaveProperty(field);
+    expect(credits.items.filter(item => item.identityStatus !== 'deleted').map(item => item.agent))
+      .not.toContain(person);
+    for (const deleted of credits.items.filter(item => item.agent === person)) {
+      for (const field of ['address', 'avatar', 'avatarUrl', 'bio', 'links']) expect(deleted).not.toHaveProperty(field);
+    }
     expect(JSON.stringify(credits.items)).not.toContain(name);
     expect(JSON.stringify(credits.items)).not.toContain(alias);
+    for (const prefix of [liveName, `Ended${marker}`]) {
+      const page = await json<{ items: Item[] }>(await suggest(prefix, token));
+      expect(page.items.flatMap(item => item.authors.map(author => author.agent))).not.toContain(person);
+      expect(JSON.stringify(page.items)).not.toContain(name + '"');
+      expect(JSON.stringify(page.items)).not.toContain(alias);
+    }
   }
 }, 60_000);
+
+// The journal-bound Person attribution tombstone reader (personAttributionTombstones)
+// is missing; only its neutral Deleted author credit is expected to fail.
+test.failing('a surviving Work supplies the neutral Deleted author credit for anonymous and signed-in readers', () => {
+  const neutral = expect.objectContaining({ agent: person,
+    identityStatus: 'deleted', displayName: 'Deleted author', handle: null });
+  expect(endedCreditPages).toEqual([expect.arrayContaining([neutral]), expect.arrayContaining([neutral])]);
+});
