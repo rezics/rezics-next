@@ -1,5 +1,5 @@
 import { assertControllerContinuity, lockControllerContinuity, principalControllerSubjects } from './controller-continuity.ts';
-import { applyAccountDeletionAgents, lockAccountDeletionAgents, lockAccountDeletionTopology,
+import { applyAccountDeletionAgents, continueAccountDeletionAgents, lockAccountDeletionAgents, lockAccountDeletionTopology,
   type AccountDeletionOptions } from './account-deletion-agents.ts';
 import { captureAuthorityWitness, authorityWitnessCurrent, authorityWitnessDeadline,
   type AuthoritySource, type AuthorityWitness } from './authority-witness.ts';
@@ -1918,14 +1918,17 @@ export class AccessAdmissionRegistry {
       await client.query("SET LOCAL lock_timeout = '2s'");
       await client.query("SET LOCAL statement_timeout = '5s'");
       await requireRecoveryOpen(client);
-      if (accountDeletion) await lockAccountDeletionTopology(client);
+      // Principal fences also remove controller authority. Serialize them with
+      // topology changes and resumable deletion before taking the principal lock.
+      await lockAccountDeletionTopology(client);
       const result = await client.query<{ active: boolean; enforcement_epoch: string }>(
         'SELECT active, enforcement_epoch FROM access.principal WHERE id = $1 FOR UPDATE',
         [principalId]);
       const principal = result.rows[0];
       if (!principal) throw new AdmissionUnavailable('principal is unavailable');
       let enforcementEpoch = principal.enforcement_epoch;
-      const deletionOperationId = Bun.randomUUIDv7();
+      let deletionOperationId = Bun.randomUUIDv7();
+      let deletionPending = false;
       if (principal.active) {
         const controlled = accountDeletion ? [] : await principalControllerSubjects(client, principalId);
         const hasDeletionAgents = accountDeletion && await lockAccountDeletionAgents(client, principalId);
@@ -1935,13 +1938,28 @@ export class AccessAdmissionRegistry {
           `UPDATE access.principal SET active = false,
              enforcement_epoch = enforcement_epoch + 1 WHERE id = $1
            RETURNING enforcement_epoch`, [principalId]);
-        if (hasDeletionAgents) await applyAccountDeletionAgents(client, principalId, deletionOperationId, options);
+        if (hasDeletionAgents) deletionPending = await applyAccountDeletionAgents(
+          client, principalId, deletionOperationId, options);
         if (!accountDeletion) await assertControllerContinuity(client, controlled);
         enforcementEpoch = changed.rows[0]!.enforcement_epoch;
         await client.query(
           `INSERT INTO access.outbox (id, kind, principal_id, authority_epoch)
            VALUES ($1, 'principal.deactivated', $2, $3)`,
           [Bun.randomUUIDv7(), principalId, enforcementEpoch]);
+      }
+      if (accountDeletion && !principal.active) {
+        const progress = await continueAccountDeletionAgents(client, principalId);
+        if (progress) {
+          deletionOperationId = progress.operationId;
+          deletionPending = progress.pending;
+        }
+      }
+      if (deletionPending) {
+        await client.query('COMMIT');
+        // Release every transaction lock between bounded steps. A crash or a
+        // held recovery fence leaves the operation resumable, with no erasure
+        // completion marker and with the principal still fenced.
+        return this.deactivatePrincipal(principalId, enforcementEpoch, true, options);
       }
       if (accountDeletion) {
         await client.query(

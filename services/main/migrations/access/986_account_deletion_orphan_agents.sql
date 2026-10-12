@@ -75,3 +75,66 @@ CREATE TRIGGER representation_reattach_account_deletion_orphan AFTER INSERT ON a
     FOR EACH ROW EXECUTE FUNCTION access.reattach_account_deletion_orphan_agent();
 CREATE TRIGGER representation_edge_reattach_account_deletion_orphan AFTER INSERT ON access.representation_edge
     FOR EACH ROW EXECUTE FUNCTION access.reattach_account_deletion_orphan_agent();
+
+-- A large erasure fences its principal before applying bounded Agent effects.
+-- Retain the original operation and inventory so a retry resumes after a crash.
+CREATE TABLE access.account_deletion_progress (
+    operation_id text PRIMARY KEY,
+    principal_id uuid NOT NULL UNIQUE REFERENCES access.principal(id),
+    completed boolean NOT NULL DEFAULT false
+);
+CREATE TABLE access.account_deletion_progress_agent (
+    operation_id text NOT NULL REFERENCES access.account_deletion_progress(operation_id),
+    agent_id text NOT NULL REFERENCES access.authority_subject(id),
+    depth integer NOT NULL CHECK (depth >= 0),
+    effect text NOT NULL CHECK (effect IN ('keep', 'end', 'orphan')),
+    completed boolean NOT NULL DEFAULT false,
+    PRIMARY KEY (operation_id, agent_id)
+);
+CREATE INDEX account_deletion_progress_agent_pending
+    ON access.account_deletion_progress_agent (operation_id, depth DESC, agent_id) WHERE NOT completed;
+CREATE INDEX account_deletion_progress_agent_subject
+    ON access.account_deletion_progress_agent (agent_id, operation_id);
+
+-- Stabilize only an in-progress operation's controller inventory between steps.
+-- This is a temporary fence, never an exception to ordinary continuity. New
+-- controllers and recovery can attach once the deletion's final step commits.
+CREATE FUNCTION access.fence_account_deletion_control() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE subjects text[];
+BEGIN
+    IF TG_TABLE_NAME = 'principal' THEN
+        IF NEW.active OR NOT OLD.active THEN RETURN NEW; END IF;
+        IF EXISTS (SELECT 1 FROM access.account_deletion_progress_agent a
+            JOIN access.account_deletion_progress p USING (operation_id)
+            JOIN access.representation r ON r.subject_id = a.agent_id
+            WHERE NOT p.completed AND p.principal_id <> NEW.id
+                AND r.principal_id = NEW.id AND r.action = 'agent.control' AND r.active) THEN
+            RAISE EXCEPTION 'Account deletion control inventory is fenced' USING ERRCODE = '54000';
+        END IF;
+        RETURN NEW;
+    ELSIF TG_TABLE_NAME = 'agent_control' THEN subjects := ARRAY[NEW.subject_id];
+    ELSIF TG_TABLE_NAME = 'representation' THEN
+        IF NEW.action <> 'agent.control' THEN RETURN NEW; END IF;
+        subjects := ARRAY[NEW.subject_id];
+    ELSE
+        IF NEW.action <> 'agent.control' THEN RETURN NEW; END IF;
+        subjects := ARRAY[NEW.representative_subject, NEW.represented_subject];
+    END IF;
+    -- Same ordering as the control owner and deletion: topology before Agent.
+    PERFORM 1 FROM access.scope_gate WHERE id = 'access:representation-topology' FOR UPDATE;
+    IF EXISTS (SELECT 1 FROM access.account_deletion_progress_agent a
+        JOIN access.account_deletion_progress p USING (operation_id)
+        WHERE a.agent_id = ANY(subjects) AND NOT p.completed) THEN
+        RAISE EXCEPTION 'Account deletion control inventory is fenced' USING ERRCODE = '54000';
+    END IF;
+    RETURN NEW;
+END $$;
+CREATE TRIGGER principal_account_deletion_control_fence BEFORE UPDATE OF active ON access.principal
+    FOR EACH ROW EXECUTE FUNCTION access.fence_account_deletion_control();
+CREATE TRIGGER representation_account_deletion_control_fence BEFORE INSERT OR UPDATE ON access.representation
+    FOR EACH ROW EXECUTE FUNCTION access.fence_account_deletion_control();
+CREATE TRIGGER representation_edge_account_deletion_control_fence BEFORE INSERT OR UPDATE ON access.representation_edge
+    FOR EACH ROW EXECUTE FUNCTION access.fence_account_deletion_control();
+CREATE TRIGGER agent_control_account_deletion_control_fence BEFORE INSERT OR UPDATE ON access.agent_control
+    FOR EACH ROW EXECUTE FUNCTION access.fence_account_deletion_control();

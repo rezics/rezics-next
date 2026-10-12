@@ -1,5 +1,7 @@
 import type { PoolClient } from 'pg';
 import { ControlConflict, ControlUnavailable } from './topology-control.ts';
+import { CONTROLLER_CONTINUITY_COST } from './controller-continuity.ts';
+import { MAX_EDGE_DEGREE, MAX_PATH_EDGES } from './topology-schema.ts';
 
 export interface AccountDeletionOptions {
   leaveOwnedAgentsStanding?: boolean;
@@ -49,11 +51,10 @@ const deletionInventory = `WITH RECURSIVE controlled AS MATERIALIZED (
   JOIN access.agent_provision p ON p.agent_id = a.subject_id AND p.agent_kind = 'person'
   CROSS JOIN LATERAL (SELECT represented_subject FROM access.representation_edge
     WHERE representative_subject = a.subject_id AND action = 'agent.control'
-      AND active AND valid_until > clock_timestamp() ORDER BY id LIMIT 17) e
-  WHERE a.depth < 2
-), candidates AS MATERIALIZED (
-  SELECT DISTINCT subject_id FROM affected
-)`;
+      AND active AND valid_until > clock_timestamp() ORDER BY id LIMIT ${MAX_EDGE_DEGREE}) e
+  WHERE a.depth < ${MAX_PATH_EDGES}
+)
+SELECT subject_id, min(depth)::integer AS depth FROM affected GROUP BY subject_id`;
 
 // The principal is already fenced. Subtract only live edges from the proposed
 // ending set from the owner's count; active foreign Person authorities count.
@@ -62,28 +63,34 @@ const endingControllers = `(SELECT count(*) FROM (
   JOIN access.authority_subject s ON s.id = e.representative_subject AND s.active
   WHERE e.represented_subject = c.subject_id AND e.action = 'agent.control'
     AND e.active AND e.valid_until > clock_timestamp()
-    AND e.representative_subject = ANY(previous.subjects) LIMIT 17) ending_edges)`;
+    AND e.representative_subject = ANY(previous.subjects) LIMIT ${CONTROLLER_CONTINUITY_COST.controllerRowsPerSide}) ending_edges)`;
 
 /** Same sorted object locks as every control change, without interpreting an
  * ordinary command's subject budget as a limit on account erasure. Only the
  * deleting principal's indexed mandates and bounded Person control paths are
  * visited; no resource inventory is walked or returned to the application. */
 export async function lockAccountDeletionAgents(client: PoolClient, principal: string): Promise<boolean> {
-  const result = await client.query<{ count: string }>(`${deletionInventory}
-    SELECT count(*)::text FROM (
-    SELECT pg_advisory_xact_lock(hashtextextended('controller-continuity:' || subject_id, 0))
-    FROM (SELECT subject_id FROM candidates ORDER BY subject_id) controlled) locked`, [principal]);
-  return Number(result.rows[0]?.count ?? '0') > 0;
+  // Keep the closure in PostgreSQL: one indexed recursive inventory, reused by
+  // classification and effects, with no population-sized application response.
+  const result = await client.query(`CREATE TEMP TABLE account_deletion_candidates ON COMMIT DROP AS
+    ${deletionInventory}`, [principal]);
+  return (result.rowCount ?? 0) > 0;
 }
 
-/** The principal has just been fenced in this transaction. End provisioned
- * Persons; explicitly consented non-Persons stay under platform care. The
- * bounded response and the set-based effects have independent cardinalities.
- * A refusal rolls back these effects together with the principal fence. */
+const candidateLocks = `SELECT pg_advisory_xact_lock(
+  hashtextextended('controller-continuity:' || subject_id, 0))
+  FROM (SELECT subject_id FROM account_deletion_candidates ORDER BY subject_id
+    LIMIT ${CONTROLLER_CONTINUITY_COST.maxSubjects}) locked`;
+
+/** Classify against the fenced principal before committing any effects. A large
+ * closure becomes a durable operation; retries use its inventory and consent.
+ * Its controller inventory is fenced until the bounded effects finish. */
 export async function applyAccountDeletionAgents(client: PoolClient, principal: string,
-  operationId: string, options: AccountDeletionOptions): Promise<void> {
-  const result = (await client.query<{ agents: AccountOwnedAgent[]; total: string; overflow: boolean }>(`
-    ${deletionInventory}, ending_persons(subjects, settled) AS (
+  operationId: string, options: AccountDeletionOptions): Promise<boolean> {
+  await client.query(`CREATE TEMP TABLE account_deletion_effects ON COMMIT DROP AS
+    WITH RECURSIVE locks AS MATERIALIZED (${candidateLocks}),
+    candidates AS (SELECT * FROM account_deletion_candidates),
+    ending_persons(subjects, settled) AS (
       SELECT ARRAY[]::text[], false
       UNION ALL
       SELECT next.subjects, next.subjects = previous.subjects FROM ending_persons previous
@@ -93,46 +100,89 @@ export async function applyAccountDeletionAgents(client: PoolClient, principal: 
         JOIN access.agent_provision p ON p.agent_id = c.subject_id AND p.agent_kind = 'person'
         WHERE access.agent_controller_count(c.subject_id) = ${endingControllers}) next
       WHERE NOT previous.settled
-    ), beyond_budget AS MATERIALIZED (
-      SELECT EXISTS (SELECT 1 FROM ending_persons previous
-        CROSS JOIN LATERAL unnest(previous.subjects) ended(subject_id)
-        CROSS JOIN LATERAL (SELECT represented_subject FROM access.representation_edge
-          WHERE representative_subject = ended.subject_id AND action = 'agent.control'
-            AND active AND valid_until > clock_timestamp() LIMIT 17) e
-        JOIN access.authority_subject s ON s.id = e.represented_subject AND s.active
-        WHERE previous.settled AND NOT EXISTS (
-          SELECT 1 FROM candidates c WHERE c.subject_id = e.represented_subject)) AS overflow
-    ), ownerless AS MATERIALIZED (
-      SELECT c.subject_id, coalesce(p.agent_kind, 'agent') AS kind, p.display_name
-      FROM candidates c JOIN access.authority_subject s ON s.id = c.subject_id AND s.active
-      LEFT JOIN access.agent_provision p ON p.agent_id = c.subject_id
-      CROSS JOIN (SELECT subjects FROM ending_persons WHERE settled) previous
-      WHERE access.agent_controller_count(c.subject_id) = ${endingControllers}
-    ), ended AS (
-      UPDATE access.authority_subject s SET active = false, generation = generation + 1
-      FROM ownerless o WHERE s.id = o.subject_id AND o.kind = 'person' RETURNING s.id
-    ), orphaned AS (
-      INSERT INTO access.account_deletion_orphan_agent
-        (agent_id, deleted_principal_id, deleted_at, operation_id)
-      SELECT subject_id, $1, clock_timestamp(), $2 FROM ownerless WHERE kind <> 'person' AND $3
-      ON CONFLICT (agent_id) DO NOTHING RETURNING agent_id
     )
-    SELECT (SELECT overflow FROM beyond_budget) AS overflow,
-      (SELECT count(*)::text FROM ownerless WHERE kind <> 'person') AS total,
+    SELECT c.subject_id, coalesce(p.agent_kind, 'agent') AS kind, p.display_name,
+      c.depth, access.agent_controller_count(c.subject_id) - ${endingControllers} AS remaining
+    FROM candidates c JOIN access.authority_subject s ON s.id = c.subject_id AND s.active
+    LEFT JOIN access.agent_provision p ON p.agent_id = c.subject_id
+    CROSS JOIN (SELECT subjects FROM ending_persons WHERE settled) previous
+    CROSS JOIN (SELECT count(*) FROM locks) locked`);
+  const result = (await client.query<{ agents: AccountOwnedAgent[]; total: string; count: string; allowed: boolean; fenced: boolean }>(`
+    SELECT EXISTS (SELECT 1 FROM access.account_deletion_progress_agent a
+      JOIN access.account_deletion_progress p USING (operation_id)
+      JOIN account_deletion_candidates c ON c.subject_id = a.agent_id
+      WHERE NOT p.completed) AS fenced, count(*)::text AS count,
+      count(*) FILTER (WHERE remaining = 0 AND kind <> 'person')::text AS total,
+      coalesce(bool_and(remaining = 0 OR access.agent_control_continuity_allowed(subject_id)
+        AND remaining >= coalesce((SELECT min_controllers FROM access.agent_control
+          WHERE subject_id = e.subject_id), 1)
+        OR EXISTS (SELECT 1 FROM access.account_deletion_orphan_agent WHERE agent_id = e.subject_id)), true) AS allowed,
       coalesce((SELECT jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
         'id', subject_id, 'kind', kind, 'displayName', display_name)) ORDER BY subject_id)
-        FROM (SELECT * FROM ownerless WHERE kind <> 'person' ORDER BY subject_id LIMIT 16) preview),
-        '[]'::jsonb) AS agents`, [principal, operationId, options.leaveOwnedAgentsStanding === true])).rows[0]!;
-  // A bound must never let authority end outside the checked/locked inventory.
-  if (result.overflow) throw new ControlUnavailable('account deletion exceeds its control-edge depth budget');
+        FROM (SELECT * FROM account_deletion_effects WHERE remaining = 0 AND kind <> 'person'
+          ORDER BY subject_id LIMIT 16) preview), '[]'::jsonb) AS agents
+    FROM account_deletion_effects e`)).rows[0]!;
+  if (result.fenced) throw new ControlUnavailable('Account deletion control inventory is fenced');
   if (!options.leaveOwnedAgentsStanding && Number(result.total) > 0) {
     throw new AccountHasOwnedAgents(result.agents, Number(result.total));
   }
-  // A fresh statement sees both authority endings and orphan rows. The shared
-  // owner predicate also retains configured floors for Agents still controlled.
-  const allowed = (await client.query<{ allowed: boolean }>(`${deletionInventory}
-    SELECT NOT EXISTS (
-    SELECT 1 FROM candidates
-    WHERE NOT access.agent_control_continuity_allowed(subject_id)) AS allowed`, [principal])).rows[0];
+  if (!result.allowed) throw new ControlConflict('change would break Agent control continuity');
+  if (Number(result.count) > CONTROLLER_CONTINUITY_COST.maxSubjects) {
+    await client.query(`INSERT INTO access.account_deletion_progress (operation_id, principal_id)
+      VALUES ($1, $2)`, [operationId, principal]);
+    await client.query(`INSERT INTO access.account_deletion_progress_agent
+      (operation_id, agent_id, depth, effect)
+      SELECT $1, subject_id, depth, CASE WHEN remaining <> 0 THEN 'keep'
+        WHEN kind = 'person' THEN 'end' ELSE 'orphan' END FROM account_deletion_effects`, [operationId]);
+    return true;
+  }
+  await client.query(`WITH ended AS (
+    UPDATE access.authority_subject s SET active = false, generation = generation + 1
+    FROM account_deletion_effects e WHERE s.id = e.subject_id AND e.remaining = 0 AND e.kind = 'person'
+    RETURNING s.id
+  ) INSERT INTO access.account_deletion_orphan_agent
+    (agent_id, deleted_principal_id, deleted_at, operation_id)
+    SELECT subject_id, $1, clock_timestamp(), $2 FROM account_deletion_effects
+    WHERE remaining = 0 AND kind <> 'person' ON CONFLICT (agent_id) DO NOTHING`, [principal, operationId]);
+  const allowed = (await client.query<{ allowed: boolean }>(`SELECT NOT EXISTS (
+    SELECT 1 FROM account_deletion_candidates
+    WHERE NOT access.agent_control_continuity_allowed(subject_id)) AS allowed`)).rows[0];
   if (!allowed?.allowed) throw new ControlConflict('change would break Agent control continuity');
+  return false;
+}
+
+/** Caller holds recovery, topology and principal locks. Complete deepest
+ * subjects first so ending a Person cannot strand an unprocessed descendant.
+ * The progress row and each effect commit together, including no-op subjects. */
+export async function continueAccountDeletionAgents(client: PoolClient, principal: string):
+  Promise<{ operationId: string; pending: boolean } | null> {
+  const progress = (await client.query<{ operation_id: string }>(`SELECT operation_id
+    FROM access.account_deletion_progress WHERE principal_id = $1 AND NOT completed FOR UPDATE`, [principal])).rows[0];
+  if (!progress) return null;
+  const operationId = progress.operation_id;
+  await client.query(`CREATE TEMP TABLE account_deletion_batch ON COMMIT DROP AS
+    SELECT agent_id, effect FROM access.account_deletion_progress_agent
+    WHERE operation_id = $1 AND NOT completed ORDER BY depth DESC, agent_id
+    LIMIT $2`, [operationId, CONTROLLER_CONTINUITY_COST.maxSubjects]);
+  await client.query(`SELECT pg_advisory_xact_lock(hashtextextended('controller-continuity:' || agent_id, 0))
+    FROM (SELECT agent_id FROM account_deletion_batch ORDER BY agent_id) locked`);
+  await client.query(`WITH ended AS (
+    UPDATE access.authority_subject s SET active = false, generation = generation + 1
+    FROM account_deletion_batch b WHERE s.id = b.agent_id AND b.effect = 'end' AND s.active RETURNING s.id
+  ), orphaned AS (
+    INSERT INTO access.account_deletion_orphan_agent
+      (agent_id, deleted_principal_id, deleted_at, operation_id)
+    SELECT agent_id, $1, clock_timestamp(), $2 FROM account_deletion_batch WHERE effect = 'orphan'
+    ON CONFLICT (agent_id) DO NOTHING RETURNING agent_id
+  ) UPDATE access.account_deletion_progress_agent p SET completed = true
+    FROM account_deletion_batch b WHERE p.operation_id = $2 AND p.agent_id = b.agent_id`, [principal, operationId]);
+  const allowed = (await client.query<{ allowed: boolean }>(`SELECT NOT EXISTS (
+    SELECT 1 FROM account_deletion_batch WHERE NOT access.agent_control_continuity_allowed(agent_id)) AS allowed`)).rows[0];
+  if (!allowed?.allowed) throw new ControlConflict('change would break Agent control continuity');
+  const pending = (await client.query<{ pending: boolean }>(`SELECT EXISTS (
+    SELECT 1 FROM access.account_deletion_progress_agent WHERE operation_id = $1 AND NOT completed) AS pending`,
+  [operationId])).rows[0]!.pending;
+  if (!pending) await client.query(`UPDATE access.account_deletion_progress SET completed = true
+    WHERE operation_id = $1`, [operationId]);
+  return { operationId, pending };
 }

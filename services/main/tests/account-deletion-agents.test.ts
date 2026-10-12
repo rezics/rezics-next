@@ -16,6 +16,8 @@ import { AccessAgentControl } from '../src/modules/access/agent-control.ts';
 import { grantFixtureAuthority, grantFixtureControllerEdge } from '../src/modules/access/fixture-authority.ts';
 import { AccessProtectedChanges, APPROVE } from '../src/modules/access/protected-set.ts';
 import { ControlConflict } from '../src/modules/access/topology-control.ts';
+import { CONTROLLER_CONTINUITY_COST } from '../src/modules/access/controller-continuity.ts';
+import { MAX_EDGE_DEGREE, MAX_PATH_EDGES } from '../src/modules/access/topology-schema.ts';
 import { AgentProvisioning, agentProvisionDigest } from '../src/modules/agent/provision.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -239,31 +241,73 @@ test('two control-edge levels propagate Person endings before classifying an ind
   expect((await orphanRows(owner)).map(row => row.agent_id)).toEqual([organization]);
 });
 
-test('a control path beyond the depth budget refuses atomically instead of stranding another Agent', async () => {
-  const owner = await principal();
-  const original = await principal();
-  const another = await principal();
-  const person = await provision(owner, 'person');
-  const intermediate = await provision(original, 'person');
-  const lastPerson = await provision(another, 'person');
-  const organization = await provision(original, 'organization');
-  for (const [representative, represented] of [
-    [person, intermediate], [intermediate, lastPerson], [lastPerson, organization],
-  ] as const) await grantFixtureControllerEdge(pool, {
-    principalId: original.id, representative, represented,
-  });
-  await removeController(original, intermediate);
-  await removeController(another, lastPerson);
-  await removeController(original, organization);
-  for (const consent of [false, true]) {
-    await expect(deletion(owner, consent)).rejects.toBeInstanceOf(AdmissionUnavailable);
-    expect(await principalState(owner)).toEqual({ active: true, enforcement_epoch: '0' });
-    for (const subject of [person, intermediate, lastPerson, organization]) {
-      expect(await subjectState(subject)).toEqual({ active: true, controllers: 1 });
-    }
-    expect(await orphanRows(owner)).toEqual([]);
-    expect(await fenceRows(owner)).toEqual([]);
+async function personChain(owner: Principal, edges: number) {
+  const persons = [await provision(owner, 'person')];
+  for (let index = 1; index < edges; index++) {
+    const original = await principal();
+    const person = await provision(original, 'person');
+    await grantFixtureControllerEdge(pool, {
+      principalId: original.id, representative: persons.at(-1)!, represented: person,
+    });
+    await removeController(original, person);
+    persons.push(person);
   }
+  return persons;
+}
+
+for (const edges of [3, MAX_PATH_EDGES]) {
+  test(`a ${edges}-edge control path names its Organization and completes with consent`, async () => {
+    const owner = await principal();
+    const original = await principal();
+    const persons = await personChain(owner, edges);
+    const organization = await provision(original, 'organization', 'Indirect Organization');
+    await grantFixtureControllerEdge(pool, {
+      principalId: original.id, representative: persons.at(-1)!, represented: organization,
+    });
+    await removeController(original, organization);
+    await expect(deletion(owner)).rejects.toMatchObject({ code: 'account_has_owned_agents',
+      agents: [{ id: organization, kind: 'organization', displayName: 'Indirect Organization' }],
+      hasMore: false, moreCount: 0 });
+    expect(await principalState(owner)).toEqual({ active: true, enforcement_epoch: '0' });
+    expect(await fenceRows(owner)).toEqual([]);
+    for (const person of persons) expect(await subjectState(person)).toEqual({ active: true, controllers: 1 });
+    await deletion(owner, true);
+    for (const person of persons) expect(await subjectState(person)).toEqual({ active: false, controllers: 0 });
+    expect(await subjectState(organization)).toEqual({ active: true, controllers: 0 });
+    expect((await orphanRows(owner)).map(row => row.agent_id)).toEqual([organization]);
+  });
+}
+
+test('40 owned Organizations at depth three retain the bounded preview and all consented effects', async () => {
+  const owner = await principal();
+  const persons = await personChain(owner, 2);
+  const original = await principal();
+  const organizations: string[] = [];
+  const endedPersons = [...persons];
+  for (let branch = 0; branch < Math.ceil(40 / MAX_EDGE_DEGREE); branch++) {
+    const branchOwner = await principal();
+    const person = await provision(branchOwner, 'person');
+    await grantFixtureControllerEdge(pool, {
+      principalId: original.id, representative: persons.at(-1)!, represented: person,
+    });
+    await removeController(branchOwner, person);
+    endedPersons.push(person);
+    for (let index = 0; index < MAX_EDGE_DEGREE && organizations.length < 40; index++) {
+      const organization = await provision(original, 'organization');
+      await grantFixtureControllerEdge(pool, {
+        principalId: original.id, representative: person, represented: organization,
+      });
+      await removeController(original, organization);
+      organizations.push(organization);
+    }
+  }
+  await expect(deletion(owner)).rejects.toMatchObject({ code: 'account_has_owned_agents',
+    agents: expect.arrayContaining(organizations.slice().sort().slice(0, 16).map(id =>
+      ({ id, kind: 'organization', displayName: 'Deletion fixture' }))), hasMore: true, moreCount: 24 });
+  await deletion(owner, true);
+  for (const person of endedPersons) expect(await subjectState(person)).toEqual({ active: false, controllers: 0 });
+  for (const organization of organizations) expect(await subjectState(organization)).toEqual({ active: true, controllers: 0 });
+  expect((await orphanRows(owner)).map(row => row.agent_id)).toEqual(organizations.sort());
 });
 
 test('owned-Agent refusal rolls back Person termination, principal fence and all orphan markers', async () => {
@@ -323,7 +367,48 @@ test('a controller inventory beyond 256 is a bounded refusal followed by complet
   expect(refusal.moreCount).toBe(241);
   for (const agent of refusal.agents) expect(organizations).toContain(agent.id);
   expect(await principalState(owner)).toEqual({ active: true, enforcement_epoch: '0' });
-  expect(await deletion(owner, true)).toMatchObject({ enforcementEpoch: '1' });
+  if (!cluster) throw new Error('Postgres fixture unavailable');
+  const interrupted = new Pool({ ...cluster.connection, max: 1 });
+  const batchSizes: number[] = [];
+  let batchCommitted = false;
+  const interruption = new Error('lost connection after committed deletion step');
+  interrupted.on('connect', client => {
+    const query = client.query.bind(client);
+    client.query = ((...args: unknown[]) => Reflect.apply(query, client, args)
+      .then((result: { rowCount: number | null }) => {
+        const sql = args[0];
+        if (typeof sql === 'string' && sql.includes('CREATE TEMP TABLE account_deletion_batch')) {
+          batchSizes.push(result.rowCount ?? 0);
+        }
+        if (sql === 'COMMIT' && batchSizes.length > 0 && !batchCommitted) {
+          batchCommitted = true;
+          throw interruption;
+        }
+        return result;
+      })) as typeof client.query;
+  });
+  try {
+    await expect(new AccessAdmissionRegistry(interrupted).strongDeactivateAccountSubject(
+      owner.verified.issuer, owner.verified.subject, { leaveOwnedAgentsStanding: true }))
+      .rejects.toBe(interruption);
+  } finally { await interrupted.end(); }
+  expect(batchSizes).toEqual([CONTROLLER_CONTINUITY_COST.maxSubjects]);
+  expect(await principalState(owner)).toEqual({ active: false, enforcement_epoch: '1' });
+  expect(await fenceRows(owner)).toEqual([]);
+  const progress = (await pool.query<{ operation_id: string; completed: boolean }>(`SELECT operation_id,completed
+    FROM access.account_deletion_progress WHERE principal_id = $1`, [owner.id])).rows[0]!;
+  expect(progress.completed).toBe(false);
+  expect((await orphanRows(owner)).length).toBeGreaterThan(0);
+  // A held recovery fence stops further steps; consent and operation survive.
+  const generation = await engageAccessRecoveryFence(pool);
+  try { await expect(deletion(owner)).rejects.toBeInstanceOf(AdmissionUnavailable); }
+  finally { await releaseAccessRecoveryFence(pool, generation); }
+  // An ordinary controller change cannot invalidate the persisted inventory.
+  const replacement = await principal();
+  await expect(addFixtureController(replacement, organizations[0]!)).rejects.toMatchObject({ code: '54000' });
+  expect(await deletion(owner)).toMatchObject({ enforcementEpoch: '1' });
+  expect((await fenceRows(owner))[0]?.id).toBe(progress.operation_id);
+  expect((await orphanRows(owner)).every(row => row.operation_id === progress.operation_id)).toBe(true);
   expect(await subjectState(person)).toEqual({ active: false, controllers: 0 });
   const standing = await pool.query<{ count: string }>(`SELECT count(*) AS count
     FROM access.authority_subject WHERE id = ANY($1::text[]) AND active

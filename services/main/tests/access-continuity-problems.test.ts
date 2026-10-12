@@ -29,6 +29,7 @@ function deactivationPool(options: { allowed: boolean; epoch?: string }) {
   const query = async (sql: string) => {
     if (sql.startsWith('BEGIN') || sql.startsWith('SET LOCAL') || sql === 'COMMIT' || sql === 'ROLLBACK') return rows([]);
     if (sql.includes('access.recovery_fence')) return rows([{ open: true, generation: '1' }]);
+    if (sql.includes('FROM access.scope_gate')) return rows([]);
     if (sql.includes('FROM access.principal')) return rows([{ active: true, enforcement_epoch: options.epoch ?? '0' }]);
     if (sql.includes('FROM access.representation')) return rows([{ subject_id: actor }]);
     if (sql.includes('pg_advisory_xact_lock')) return rows([]);
