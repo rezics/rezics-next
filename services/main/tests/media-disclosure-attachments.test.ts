@@ -11,14 +11,15 @@ import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { boundedPool } from '../src/infrastructure/pg-pool.ts';
 import { grantFixtureAuthority } from '../src/modules/access/fixture-authority.ts';
 import { configureDisclosure, discloseInventory, DisclosureStore } from '../src/modules/disclosure/read.ts';
+import { disclosureMedia } from '../src/modules/disclosure/assembly.ts';
 import { disclosureViewer } from '../src/modules/disclosure/viewer.ts';
-import { DEFAULT_MEDIA_CONTEXT, MediaStore, type MediaAdmission } from '../src/modules/media/store.ts';
+import { DEFAULT_MEDIA_CONTEXT, MediaMissing, MediaStore, type MediaAdmission } from '../src/modules/media/store.ts';
 import { configureMediaVisibility } from '../src/modules/media/visibility.ts';
 import { REQUIRED_MATCH_PROFILE } from '../src/modules/media-screen/required-match-store.ts';
 import { ANONYMOUS_VIEWER } from '../src/modules/suitability/policy.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import { ensureFixtureAuthoritySubject, ensureFixturePrincipal } from './support/access-fixture-identity.ts';
-import { configureFixtureDisclosureAncestry } from './support/disclosure-ancestry.ts';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const iri = (value: string) => `https://rezics.com/id/${value}`;
@@ -158,7 +159,7 @@ function fixture(pool: Pool) {
     await new MediaStore(explaining, new ContentCore(pool)).visibilityFacts([reference]);
     return plan!;
   };
-  return { pool, entries, authority, store, attach, read, reset, cost, probes, visibilityPlan };
+  return { pool, environment, entries, authority, store, attach, read, reset, cost, probes, visibilityPlan };
 }
 
 async function isolated(run: (f: ReturnType<typeof fixture>) => Promise<void>) {
@@ -167,6 +168,80 @@ async function isolated(run: (f: ReturnType<typeof fixture>) => Promise<void>) {
   const pool = boundedPool({ ...cluster!.connection, database: name, max: 8 });
   try { await run(fixture(pool)); }
   finally { await pool.end(); await admin.query(`DROP DATABASE ${name}`); }
+}
+
+async function screeningAsset(store: MediaStore, pool: Pool) {
+  // Launch currently bypasses screening. Exercise the owner's retained-image
+  // contract with the screening clearance function in this isolated database.
+  await pool.query(`CREATE OR REPLACE FUNCTION media.delivery_clearance(p media.representation)
+    RETURNS text LANGUAGE sql STABLE AS $$
+      SELECT o.clearance FROM media.representation o
+      WHERE o.id=CASE WHEN p.kind='original' THEN p.id ELSE p.source_id END
+    $$`);
+  const bytes = Buffer.from([71, 73, 70, 56, 57, 97, 2, 0, 1, 0]);
+  const reserved = await store.reserveUpload(admission(), { asset: null, mediaType: 'image/gif',
+    byteLength: bytes.length, sha256: sha(bytes), disclosure: 'public' });
+  const settled = await store.settleUpload(reserved.upload, { status: 'activated', sha256: sha(bytes),
+    byteLength: bytes.length, mediaType: 'image/gif', width: 2, height: 1 }, async () => sha(bytes));
+  await store.recordAssetRevision(reserved.upload);
+  await pool.query("UPDATE media.representation SET clearance='screening' WHERE id=$1", [settled.representation]);
+  return { asset: reserved.asset, representation: settled.representation };
+}
+
+test('avatar delivery keeps the previous cleared exact Use while its replacement is screening', async () => {
+  await isolated(async f => {
+    const target = iri(randomUUID()), context = DEFAULT_MEDIA_CONTEXT;
+    f.entries.set(target, { public: true });
+    await f.store.moderateOriginal(`clear:${randomUUID()}`, basis.representation,
+      (await f.store.readAsset(basis.asset))!.state, false);
+    const selected = await f.store.selectAvatar(admission(), { target, context,
+      expectedSelection: null, asset: basis.asset, crop: null });
+    const delivered = (await f.store.avatarDelivery(selected.id!))!;
+    expect(delivered.asset).toBe(basis.asset);
+    const replacement = await screeningAsset(f.store, f.pool);
+    const pending = await f.store.selectAvatar(admission(), { target, context,
+      expectedSelection: selected.id, asset: replacement.asset, crop: null });
+    expect(await f.store.avatarDelivery(selected.id!)).toEqual(delivered);
+    expect(await f.store.avatarDelivery(pending.id!)).toBeNull();
+    expect((await f.store.visibilityFacts([iri(delivered.use!)])).get(iri(delivered.use!))!.attachments)
+      .toEqual([{ target, context }]);
+    const composed = disclosureMedia(f.store, f.environment);
+    expect(await composed.avatarDelivery(selected.id!)).toEqual(delivered);
+    configureDisclosure(f.environment, fixtureDisclosureReader(async targets => targets.map(target =>
+      target.resource === iri(delivered.use!) ? 'hidden' : 'visible')));
+    expect(await composed.avatarDelivery(selected.id!)).toBeNull();
+    await f.store.selectAvatar(admission(), { target, context, expectedSelection: pending.id,
+      asset: null, crop: null });
+    expect((await f.store.visibilityFacts([iri(delivered.use!)])).get(iri(delivered.use!))!.attachments).toEqual([]);
+  });
+}, 60_000);
+
+for (const role of ['showcase', 'campaign'] as const) {
+test(`${role} keeps its exact cleared Use when a screening replacement is refused`, async () => {
+  await isolated(async f => {
+    const target = iri(randomUUID()), context = DEFAULT_MEDIA_CONTEXT;
+    f.entries.set(target, { public: true });
+    await f.store.moderateOriginal(`clear:${randomUUID()}`, basis.representation,
+      (await f.store.readAsset(basis.asset))!.state, false);
+    const input = { target, context, crop: null, focalArea: null, role: 'background-landscape' as const };
+    const inspect = async () => ({ width: 1280, height: 720, hasAlpha: false });
+    const zone = iri(randomUUID());
+    const select = (asset: string, expectedSelection: string | null = null) => role === 'showcase'
+      ? f.store.showcase.select(admission(), { ...input, asset, expectedSelection }, inspect)
+      : f.store.showcase.createCampaign(admission(), { ...input, asset, zone }, inspect);
+    const selected = await select(basis.asset);
+    const use = role === 'campaign' ? selected.id! :
+      (await f.pool.query('SELECT use_id FROM media.selection_revision WHERE id=$1', [selected.id])).rows[0].use_id as string;
+    const replacement = await screeningAsset(f.store, f.pool);
+    await expect(select(replacement.asset, selected.id)).rejects.toBeInstanceOf(MediaMissing);
+    expect((await f.store.visibilityFacts([iri(use)])).get(iri(use))!.attachments).toEqual([{ target, context }]);
+    const composed = disclosureMedia(f.store, f.environment);
+    expect(await composed.itemDelivery(use)).not.toBeNull();
+    configureDisclosure(f.environment, fixtureDisclosureReader(async targets => targets.map(target =>
+      target.resource === iri(use) ? 'hidden' : 'visible')));
+    expect(await composed.itemDelivery(use)).toBeNull();
+  });
+}, 60_000);
 }
 
 test('exact Use disclosure has identical summary probes and bytes at 1, 16, 64 and 256 asset attachments', async () => {

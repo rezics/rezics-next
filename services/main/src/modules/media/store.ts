@@ -545,7 +545,8 @@ export class MediaStore {
             AND j.status='failed') AS blocked,
         CASE WHEN requested_use.id IS NOT NULL THEN
           CASE WHEN requested_use.role <> 'avatar' AND requested_use.role NOT LIKE 'showcase-%' OR EXISTS (
-            SELECT 1 FROM media.selection_slot slot JOIN media.selection_revision r ON r.id=slot.head
+            SELECT 1 FROM media.selection_slot slot JOIN media.selection_revision r
+              ON r.id=media.delivered_selection(slot)
             WHERE (slot.target,slot.context,slot.role)=(requested_use.target,requested_use.context,requested_use.role)
               AND r.use_id=requested_use.id)
           THEN jsonb_build_array(jsonb_build_object('target',requested_use.target,'context',requested_use.context))
