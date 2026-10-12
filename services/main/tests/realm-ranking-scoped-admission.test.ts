@@ -208,15 +208,16 @@ test.each([
   ['content.publication.active', 'publication.settle', 'succeeded', 'addition'],
   ['content.publication.rejected', 'publication.settle', 'succeeded', 'removal'],
   ['content.realm-reply.prepared', 'publication.prepare', 'rejected', 'none'],
+  ['content.draft.stale', 'draft.save', 'stale_head', 'none'],
   ['content.unknown', 'publication.prepare', 'succeeded', 'removal'],
 ] as const)('native Content replay classifies %s (%s, %s) as %s', async (eventType, action, outcome, effect) => {
   const realm = native(), item = await reference(realm);
   const otherRealm = native(), other = await reference(otherRealm);
-  const variant = `reply:${randomUUID()}`, creation = randomUUID();
+  const variant = `reply:${randomUUID()}`, creation = randomUUID(), draft = randomUUID();
   await nativeContent.query(`INSERT INTO content.variant (id,resource_id,language_kind,direction)
     VALUES($1,$2,'missing','none')`, [variant, item.reply]);
   const record = async (operationId: string, eventType: string, action: string,
-    outcome: 'succeeded' | 'rejected') => {
+    outcome: 'succeeded' | 'rejected' | 'stale_head') => {
     const client = await nativeContent.connect();
     try {
       await appendContentEvent(client, { operationId, requestDigest: 'a'.repeat(64), action, outcome,
@@ -224,16 +225,17 @@ test.each([
     } finally { client.release(); }
     await sequenceContentEvents(nativeContent);
   };
-  await record(creation, 'content.reply.created', 'reply.create', 'succeeded');
   const actor = native(), rootRevision = native();
+  await record(draft, 'content.revision.saved', 'draft.save', 'succeeded');
   await nativeContent.query(`INSERT INTO content.reply_author
     (reply,variant_id,author,root_target,root_revision,operation_id) VALUES($1,$2,$3,$4,$5,$6)`,
-  [item.reply, variant, actor, item.work, rootRevision, creation]);
+  [item.reply, variant, actor, item.work, rootRevision, draft]);
+  await record(creation, 'content.reply.created', 'reply.create', 'succeeded');
   await nativeContent.query(`INSERT INTO content.reply
     (id,variant_id,author,root_target,root_revision,operation_id) VALUES($1,$2,$3,$4,$5,$6)`,
   [item.reply, variant, actor, item.work, rootRevision, creation]);
-  await access.query('UPDATE access.realm_thread_checkpoint SET content_sequence=8 WHERE data_epoch=$1', [epoch]);
-  const { session } = reader('8', '3');
+  await access.query('UPDATE access.realm_thread_checkpoint SET content_sequence=9 WHERE data_epoch=$1', [epoch]);
+  const { session } = reader('9', '3');
   session.deps.realmReplyThreads = new RealmReplyThreadStore(nativeContent, access);
   session.deps.content = {} as NonNullable<WorkReadSession['deps']['content']>;
   const previous = new Map<'best' | 'top', Awaited<ReturnType<typeof realmRankPage>>>();
