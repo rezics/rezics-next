@@ -11,7 +11,7 @@ import {
 import { runWorkProfileChild } from '../support/work-profile-child.ts';
 
 import {
-  assertRecipePageComplete, assertRecipeSeriesCosts, budgetRecipeProfile, coldRecipeRequest,
+  assertRecipeObjectBudget, assertRecipePageComplete, assertRecipeSeriesCosts, budgetRecipeProfile, coldRecipeRequest,
   finishRecipeGrowth, RECIPE_GROWTH_COVERAGE, recipeCostSample, recipeReaderRequest,
   recipeRemoteCost, recipeSectionDepthTodo,
   type RecipePage, type RecipeTreeCensus, type RecipeCostSeries, type RecipeReader,
@@ -65,7 +65,7 @@ if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
     };
     // Remote counters retain the owner's absolute caps and constant class with
     // the shared 1.20 margin. Only exact keys from the independent census receive
-    // the owner's min(nodeCount, K * (depth + 1)) immutable-object allowance.
+    // the owner's min(nodeCount, K * (depth + 1)) distinct immutable-key allowance.
     const recipePageCost = recipeRemoteCost(RECIPE_WORK_PAGE_READ_BOUND);
     const { growth } = recipePageCost;
     const retained = readRetainedSeed();
@@ -407,12 +407,12 @@ if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
       assertRecipeSeriesCosts(series, recipePageCost));
     for (const objectRead of objectReads)
       check(`GET /v1/recipes/works/:id ${objectRead.scale} ${objectRead.reader} ${objectRead.read} Structure object budget`, () =>
-        expect(objectRead.gets).toBeLessThanOrEqual(objectRead.maximumGets));
+        assertRecipeObjectBudget(objectRead));
     const largeReads = objectReads.filter(item => item.scale === 'large');
     for (const objectRead of largeReads)
       if (objectRead.fullWalkDetectable)
         check(`GET /v1/recipes/works/:id large ${objectRead.reader} ${objectRead.read} excludes a full tree walk`, () =>
-          expect(objectRead.gets).toBeLessThan(objectRead.nodeCount));
+          expect(objectRead.distinctKeys).toBeLessThan(objectRead.nodeCount));
     const large = largeReads[0]!;
     const registryNote = large.fullWalkDetectable
       ? 'Large tree exceeds the keyed-path budget; a full node walk must fail the check'

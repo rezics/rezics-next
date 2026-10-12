@@ -58,18 +58,30 @@ export function assertRecipeSeriesCosts(series: RecipeCostSeries, contract: Work
 export function recipeObjectBudget(census: RecipeTreeCensus, pageSize: number) {
   const keyedPathBudget = pageSize * (census.depth + 1);
   return { ...census, pageSize, keyedPathBudget,
-    maximumGets: Math.min(census.nodeCount, keyedPathBudget), fullWalkDetectable: census.nodeCount > keyedPathBudget };
+    maximumDistinctKeys: Math.min(census.nodeCount, keyedPathBudget), fullWalkDetectable: census.nodeCount > keyedPathBudget };
 }
 
 export function budgetRecipeProfile(profile: WorkProfile, inventory: readonly RecipeFetch[],
   census: RecipeTreeCensus, objectOrigin: string, pageSize: number) {
   if (profile.otherFetches === null) throw new Error('Recipe other fetches are unobserved');
   const ownKeys = new Set(census.objectPaths);
-  const gets = inventory.filter(item => item.peer === 'other' && item.method === 'GET'
-    && item.origin === objectOrigin && ownKeys.has(item.path)).reduce((sum, item) => sum + item.count, 0);
+  const ownFetches = inventory.filter(item => item.peer === 'other' && item.method === 'GET'
+    && item.origin === objectOrigin && ownKeys.has(item.path));
+  const gets = ownFetches.reduce((sum, item) => sum + item.count, 0);
+  const distinctKeys = new Set(ownFetches.map(item => item.path)).size;
   if (gets > profile.otherFetches) throw new Error('Recipe object inventory exceeds measured other fetches');
-  const budget = { ...recipeObjectBudget(census, pageSize), gets, unknownOtherFetches: profile.otherFetches - gets };
+  const budget = { ...recipeObjectBudget(census, pageSize), gets, distinctKeys,
+    unknownOtherFetches: profile.otherFetches - gets };
   return { budget, profile: { ...profile, otherFetches: budget.unknownOtherFetches } };
+}
+
+export function assertRecipeObjectBudget(budget: ReturnType<typeof budgetRecipeProfile>['budget']): void {
+  if (budget.distinctKeys > budget.maximumDistinctKeys)
+    throw new Error(`Recipe distinct Structure keys: ${budget.distinctKeys} > ${budget.maximumDistinctKeys}`);
+  // The measures read and child-page read each fetch the same immutable
+  // manifest. Kernel permits this constant duplicate manifest GET per request.
+  if (budget.gets > budget.distinctKeys + 1)
+    throw new Error(`Recipe Structure GETs: ${budget.gets} > ${budget.distinctKeys} distinct keys + 1 duplicate manifest`);
 }
 
 export function assertRecipePageComplete(page: RecipePage, census: RecipeTreeCensus, offset: number, pageSize: number): void {

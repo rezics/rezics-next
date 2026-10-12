@@ -9,7 +9,7 @@ import { STRUCTURE_LIMITS } from '../../services/main/src/modules/structure/form
 import { RECIPE_WORK_PAGE_OCCURRENCES, RECIPE_WORK_PAGE_READ_BOUND }
   from '../../services/main/src/modules/recipe/work-page.ts';
 import {
-  assertRecipePageComplete, assertRecipeSeriesCosts, budgetRecipeProfile, coldRecipeRequest,
+  assertRecipeObjectBudget, assertRecipePageComplete, assertRecipeSeriesCosts, budgetRecipeProfile, coldRecipeRequest,
   finishRecipeGrowth, RECIPE_GROWTH_COVERAGE, recipeCostSample, recipeObjectBudget,
   recipeReaderRequest, recipeRemoteCost, recipeSectionDepthTodo,
   type RecipeCostSeries, type RecipeFetch, type RecipePage, type RecipeTreeCensus,
@@ -163,11 +163,27 @@ test('a primed verified cache cannot hide either first or continuation object re
 });
 
 test('object allowance is the owner minimum, and full-walk discrimination depends on independent size', () => {
-  expect(recipeObjectBudget(census, K).maximumGets).toBe(16);
+  expect(recipeObjectBudget(census, K).maximumDistinctKeys).toBe(16);
   expect(recipeObjectBudget(census, K).fullWalkDetectable).toBe(false);
   const larger = recipeObjectBudget({ ...census, nodeCount: K * 3 }, K);
-  expect(larger.maximumGets).toBe(K * 2);
+  expect(larger.maximumDistinctKeys).toBe(K * 2);
   expect(larger.fullWalkDetectable).toBe(true);
+});
+
+test('distinct keys stay bounded while only one duplicated manifest GET is allowed', () => {
+  const keys = ['a', 'b', 'c'].map(letter => prefix + letter.repeat(64));
+  const small = { ...census, depth: 0, nodeCount: 3, objectPaths: keys };
+  const inventory = keys.map((path, index) => ({ peer: 'other', origin, path, method: 'GET', count: index === 0 ? 2 : 1 }));
+  const { budget } = budgetRecipeProfile(profile({ otherFetches: 4 }), inventory, small, origin, K);
+  expect(budget.distinctKeys).toBe(3);
+  expect(budget.gets).toBe(4);
+  expect(() => assertRecipeObjectBudget(budget)).not.toThrow();
+  expect(() => assertRecipeObjectBudget({ ...budget, gets: 5 })).toThrow('duplicate manifest');
+  const larger = budgetRecipeProfile(profile({ otherFetches: 4 }),
+    [...inventory.map(item => ({ ...item, count: 1 })),
+      { peer: 'other', origin, path: prefix + 'd'.repeat(64), method: 'GET', count: 1 }],
+    { ...small, objectPaths: [...keys, prefix + 'd'.repeat(64)] }, origin, K);
+  expect(() => assertRecipeObjectBudget(larger.budget)).toThrow('distinct Structure keys');
 });
 
 test('the executable growth check names missing depth and the real continuation coverage', () => {
