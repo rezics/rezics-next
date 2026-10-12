@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { join } from 'node:path';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { profileRequest, startWorkProfileSink, type WorkProfile } from '../support/work-profile.ts';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { profileRequest, startWorkProfileSink } from '../support/work-profile.ts';
 import { startTelemetry, flushTelemetryTraces, shutdownTelemetry }
   from '../../../packages/observability/src/runtime.ts';
 
@@ -21,7 +21,7 @@ test('explicit preparation retains one API-built store at three population cuts'
   const { prepareWorkProfileCorpus, workProfileDimensions, WORK_PROFILE_SCALES }
     = await import('../../../scripts/load/work-profile-corpus.ts');
   const { seedDirectory, retainedSeedPath, seedAuthorName, seedApi, seedCensus, acquireSeedBuildLock,
-    saveRetainedSeed, readRetainedSeed } = await import('../support/seed-checkpoints.ts');
+    buildSeedCommandCostReport, buildSeedCommandCostComparison, saveRetainedSeed, readRetainedSeed } = await import('../support/seed-checkpoints.ts');
   const { initializeSeedCheckpointPopulation, growSeedCheckpointPopulation }
     = await import('../support/seed-checkpoint-population.ts');
   type CorpusApi = import('../../../scripts/load/work-profile-corpus.ts').CorpusApi;
@@ -29,10 +29,16 @@ test('explicit preparation retains one API-built store at three population cuts'
   type Recipe = import('../../../scripts/load/work-profile-corpus.ts').WorkProfileCorpusRecipe;
   type SeedWork = import('../support/seed-checkpoints.ts').SeedWork;
   type RetainedSeed = import('../support/seed-checkpoints.ts').RetainedSeed;
+  type SeedCommandMeasurement = import('../support/seed-checkpoints.ts').SeedCommandMeasurement;
+  type SeedCommandCostStage = import('../support/seed-checkpoints.ts').SeedCommandCostStage;
+  type SeedCommandCostRow = import('../support/seed-checkpoints.ts').SeedCommandCostRow;
   type Population = import('../support/seed-checkpoint-population.ts').SeedCheckpointPopulation;
   type Targets = import('../support/seed-checkpoint-population.ts').SeedCheckpointPopulationTargets;
   const sourceRunId = Bun.env.REZICS_QA_RUN_ID;
   if (!sourceRunId) throw new Error('Run the explicit seed BUILD through goalctl');
+  const costJsonFiles = ['command-cost-4.json', 'command-cost-16.json', 'command-cost-64.json'];
+  const costMarkdownFiles = ['command-cost-4.md', 'command-cost-16.md', 'command-cost-64.md', 'command-cost-compare.md'];
+  const commandCostReportPaths = costMarkdownFiles.map(name => join(seedDirectory, name));
   let source: Awaited<ReturnType<typeof startMediaStack>> | undefined;
   let sourceStopped = false;
   let releaseSeedBuildLock: (() => void) | undefined;
@@ -42,8 +48,14 @@ test('explicit preparation retains one API-built store at three population cuts'
       try {
         const saved = readRetainedSeed();
         const { compatibleLoadStorage, loadCompatibility } = await import('../../../scripts/load/compatibility.ts');
-        if (saved.cuts.every(cut => compatibleLoadStorage(cut.manifest.compatibility, loadCompatibility(root)))) {
+        const costEvidenceComplete = [...costJsonFiles, ...costMarkdownFiles]
+          .every(name => existsSync(join(seedDirectory, name)))
+          && costMarkdownFiles.every(name => readFileSync(join(seedDirectory, name), 'utf8')
+            .includes(`Build run ID: ${saved.sourceRunId}`));
+        if (saved.cuts.every(cut => compatibleLoadStorage(cut.manifest.compatibility, loadCompatibility(root)))
+          && costEvidenceComplete) {
           console.log('Reusing completed retained seed checkpoints', retainedSeedPath);
+          console.log('seed command-cost report paths', JSON.stringify(commandCostReportPaths));
           return;
         }
       } catch { /* An incomplete earlier preparation is not a completed backup. */ }
@@ -64,16 +76,13 @@ test('explicit preparation retains one API-built store at three population cuts'
     let currentApi = seedApi(source, member.token);
     let actor = '', population: Population | undefined;
     const works: SeedWork[] = [];
-    const measured: Array<{ operation: string; profile: WorkProfile }> = [];
+    let measured: SeedCommandMeasurement[] = [];
     let scale: (typeof WORK_PROFILE_SCALES)[number] = 'small';
     const api: CorpusApi = {
       async command<T>(key: string, command: CorpusCommand, signal?: AbortSignal) {
-        if (scale === 'large') return await currentApi.command<T>(key, command, signal);
         const result = await profileRequest(sink, headers => currentApi.command<T>(key,
           { ...command, headers: new Headers([...new Headers(command.headers), ...headers]) }, signal),
         { service: 'main', flush: flushTelemetryTraces });
-        // Keep the first sixteen Works' command population, including the
-        // fixed scenario setup and all co-grown populations in that cut.
         measured.push({ operation: `${command.method} ${command.path.replace(/[0-9a-f]{8}-[0-9a-f-]{27}/gi, ':id')}`,
           profile: result.profile });
         return result.result;
@@ -83,6 +92,7 @@ test('explicit preparation retains one API-built store at three population cuts'
     const fixed = { unrelatedWorks: 0, unrelatedPosts: 0, follows: 0, memberships: 0,
       historyDepth: 0, realmSize: 0, conceptVocabulary: 0 };
     const populations = ['recipeOccurrences', 'readerShelfEntries', 'mountedCollectionResources', 'zoneNavigationEntries'] as const;
+    const stageCostRows: Record<SeedCommandCostStage, SeedCommandCostRow[]> = { '4': [], '16': [], '64': [] };
     let stageBuildMs = 0;
     const recipe: Recipe = {
       version: 'public-population-checkpoints-v2', fixed, populations,
@@ -115,6 +125,7 @@ test('explicit preparation retains one API-built store at three population cuts'
     };
     const retained: RetainedSeed = { format: 'seed-checkpoints-v2', sourceRunId, actor, cuts: [] };
     for (scale of WORK_PROFILE_SCALES) {
+      measured = [];
       if (scale !== 'small') { stageStartedAt = performance.now(); stageStartupMs = 0; }
       const driver = createCorpusBackupDriver({ sourceRunId, directory: join(seedDirectory, sourceRunId, 'backups'),
         resumeSource: scale !== 'large', onSourceStartup: ms => { stageStartupMs += ms; },
@@ -150,40 +161,26 @@ test('explicit preparation retains one API-built store at three population cuts'
       retained.cuts.push({ manifest, works: structuredClone(works), population: structuredClone(population!), timing });
       console.log('retained seed stage seconds', scale, JSON.stringify(Object.fromEntries(
         Object.entries(timing).map(([key, value]) => [key.replace(/Ms$/, 'Seconds'), value / 1000]))));
-      if (scale === 'medium') {
-        writeFileSync(join(seedDirectory, 'command-cost-16.json'), JSON.stringify(measured, null, 2) + '\n');
-        const groups = new Map<string, typeof measured>();
-        for (const item of measured) {
-          const group = groups.get(item.operation) ?? [];
-          group.push(item); groups.set(item.operation, group);
-        }
-        const median = (values: number[]) => {
-          const sorted = [...values].sort((a, b) => a - b), middle = Math.floor(sorted.length / 2);
-          return sorted.length % 2 ? sorted[middle]! : (sorted[middle - 1]! + sorted[middle]!) / 2;
-        };
-        const rows = [...groups].map(([operation, values]) => {
-          if (values.some(item => item.profile.postgresStatements === null || item.profile.fusekiRequests === null
-            || item.profile.unclassifiedFetches || item.profile.unobserved.some(gap => gap.endsWith('SQL descendants'))))
-            throw new Error(`Incomplete existing request meters for ${operation}`);
-          return { operation, count: values.length, ms: median(values.map(item => item.profile.totalLatencyMs)),
-            sql: median(values.map(item => item.profile.postgresStatements!)),
-            fuseki: median(values.map(item => item.profile.fusekiRequests!)) };
-        }).sort((a, b) => b.ms - a.ms);
-        const slowest = rows[0]!;
-        mkdirSync(seedDirectory, { recursive: true });
-        // Keep generated measurement evidence outside the source fingerprint;
-        // the worker publishes this exact table after the command completes.
-        writeFileSync(join(seedDirectory, 'seed-build-command-cost.md'),
-          '| API operation class | Count | Median time (ms) | SQL statements / command (median) | Fuseki calls / command (median) |\n'
-          + '| --- | ---: | ---: | ---: | ---: |\n'
-          + rows.map(row => `| ${row.operation} | ${row.count} | ${row.ms.toFixed(1)} | ${row.sql} | ${row.fuseki} |`).join('\n')
-          + `\n\nThe slowest class is ${slowest.operation}: median ${slowest.ms.toFixed(1)} ms, ${slowest.sql} SQL statements and ${slowest.fuseki} Fuseki calls per command. Measured while building the retained 16-Work cut (${sourceRunId}), using the existing request/work-profile instrumentation; counts include the fixed scenario setup and the 400-occurrence Recipe, 16-entry shelf, 16 mounts and 16 Collection resources.\n`);
+      const stageKey = ({ small: '4', medium: '16', large: '64' } as const)[scale];
+      const jsonPath = join(seedDirectory, `command-cost-${stageKey}.json`);
+      const markdownPath = join(seedDirectory, `command-cost-${stageKey}.md`);
+      writeFileSync(jsonPath, JSON.stringify(measured, null, 2) + '\n');
+      const report = buildSeedCommandCostReport(measured);
+      stageCostRows[stageKey] = report.rows;
+      const interval = scale === 'small' ? 'Commands issued for the initial 4-Work cut, including scenario setup.'
+        : `Commands issued while growing from the ${scale === 'medium' ? '4' : '16'}-Work cut to the ${stageKey}-Work cut.`;
+      writeFileSync(markdownPath, `# ${stageKey}-Work cut command costs\n\n${report.markdown}\n${interval}\nBuild run ID: ${sourceRunId}\n`);
+      if (scale === 'large') {
+        const comparison = buildSeedCommandCostComparison(stageCostRows);
+        const comparisonPath = join(seedDirectory, 'command-cost-compare.md');
+        writeFileSync(comparisonPath, `# Retained Work-profile command cost comparison\n\n${comparison.markdown}\nBuild run ID: ${sourceRunId}\n`);
       }
     }
     expect(works).toHaveLength(64);
     saveRetainedSeed(retained);
     console.log('largest retained seed build seconds', retained.cuts[2]!.timing.totalMs / 1000,
       'total build workflow seconds', (performance.now() - startedAt) / 1000);
+    console.log('seed command-cost report paths', JSON.stringify(commandCostReportPaths));
   } finally {
     try {
       if (source && !sourceStopped) await source.stop();

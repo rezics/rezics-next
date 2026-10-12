@@ -8,6 +8,7 @@ import { workProfileCorpusApi, type CorpusApi, type WorkProfileCorpusManifest }
 import type { seedPublicProfileWork } from '../../../scripts/load/work-profile-work.ts';
 import { verifySeedCheckpointPopulation, type SeedCheckpointPopulation } from './seed-checkpoint-population.ts';
 import type { MediaStack } from '../integration/media-support.ts';
+import type { WorkProfile } from './work-profile.ts';
 
 export const SEED_BUILD_COMMAND = 'bun scripts/goal/goalctl.ts test tests/qa/fault-recovery/work-profile-seed-build.test.ts';
 export function seedDirectoryForFixtureRoot(fixtureDirectory: string): string {
@@ -28,6 +29,85 @@ export interface RetainedSeed {
   sourceRunId: string;
   actor: string;
   cuts: RetainedSeedCut[];
+}
+export type SeedCommandCostStage = '4' | '16' | '64';
+export interface SeedCommandMeasurement {
+  operation: string;
+  profile: Pick<WorkProfile, 'totalLatencyMs' | 'postgresStatements' | 'fusekiRequests' | 'unclassifiedFetches' | 'unobserved'>;
+}
+export interface SeedCommandCostRow {
+  operation: string;
+  count: number;
+  ms: number;
+  sql: number;
+  fuseki: number;
+}
+export interface SeedCommandCostComparisonRow {
+  operation: string;
+  at4?: SeedCommandCostRow;
+  at16?: SeedCommandCostRow;
+  at64?: SeedCommandCostRow;
+  ratio64To4: number | null;
+  grows: boolean;
+}
+function median(values: number[]): number {
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle]! : (sorted[middle - 1]! + sorted[middle]!) / 2;
+}
+export function buildSeedCommandCostReport(measured: readonly SeedCommandMeasurement[]): {
+  rows: SeedCommandCostRow[];
+  markdown: string;
+} {
+  const groups = new Map<string, SeedCommandMeasurement[]>();
+  for (const item of measured) {
+    const group = groups.get(item.operation) ?? [];
+    group.push(item);
+    groups.set(item.operation, group);
+  }
+  const rows = [...groups].map(([operation, values]) => {
+    if (values.some(item => item.profile.postgresStatements === null || item.profile.fusekiRequests === null
+      || item.profile.unclassifiedFetches || item.profile.unobserved.some(gap => gap.endsWith('SQL descendants'))))
+      throw new Error(`Incomplete existing request meters for ${operation}`);
+    return { operation, count: values.length, ms: median(values.map(item => item.profile.totalLatencyMs)),
+      sql: median(values.map(item => item.profile.postgresStatements!)),
+      fuseki: median(values.map(item => item.profile.fusekiRequests!)) };
+  }).sort((left, right) => right.ms - left.ms || left.operation.localeCompare(right.operation));
+  const markdown = [
+    '| API operation class | Count | Median time (ms) | SQL statements / command (median) | Fuseki calls / command (median) |',
+    '| --- | ---: | ---: | ---: | ---: |',
+    ...rows.map(row => `| ${row.operation} | ${row.count} | ${row.ms.toFixed(1)} | ${row.sql} | ${row.fuseki} |`),
+  ].join('\n') + '\n';
+  return { rows, markdown };
+}
+export function buildSeedCommandCostComparison(stages: Record<SeedCommandCostStage, readonly SeedCommandCostRow[]>): {
+  rows: SeedCommandCostComparisonRow[];
+  markdown: string;
+} {
+  const byStage = Object.fromEntries((['4', '16', '64'] as const).map(stage => [stage,
+    new Map(stages[stage].map(row => [row.operation, row]))])) as Record<SeedCommandCostStage, Map<string, SeedCommandCostRow>>;
+  const operations = new Set([...byStage['4'].keys(), ...byStage['16'].keys(), ...byStage['64'].keys()]);
+  const rows = [...operations].map(operation => {
+    const at4 = byStage['4'].get(operation), at16 = byStage['16'].get(operation), at64 = byStage['64'].get(operation);
+    const ratio64To4 = at4 && at64
+      ? at4.ms === 0 ? (at64.ms === 0 ? null : Number.POSITIVE_INFINITY) : at64.ms / at4.ms
+      : null;
+    const grows = Boolean(at4 && at64
+      && (at64.ms > at4.ms * 1.5 || at64.sql > at4.sql * 1.5));
+    return { operation, at4, at16, at64, ratio64To4, grows };
+  }).sort((left, right) => (right.at64?.ms ?? right.at16?.ms ?? right.at4?.ms ?? -1)
+    - (left.at64?.ms ?? left.at16?.ms ?? left.at4?.ms ?? -1) || left.operation.localeCompare(right.operation));
+  const cell = (row: SeedCommandCostRow | undefined, key: 'ms' | 'sql' | 'fuseki') => {
+    const value = row?.[key];
+    return value === undefined ? '—' : key === 'ms' ? value.toFixed(1) : String(value);
+  };
+  const ratio = (value: number | null) => value === null ? '—' : Number.isFinite(value) ? `${value.toFixed(2)}x` : '∞';
+  const markdown = [
+    '| API operation class | 4 median ms | 4 SQL median | 4 Fuseki median | 16 median ms | 16 SQL median | 16 Fuseki median | 64 median ms | 64 SQL median | 64 Fuseki median | 64/4 median time | Trend |',
+    '| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :---: |',
+    ...rows.map(row => `| ${row.operation} | ${cell(row.at4, 'ms')} | ${cell(row.at4, 'sql')} | ${cell(row.at4, 'fuseki')} | ${cell(row.at16, 'ms')} | ${cell(row.at16, 'sql')} | ${cell(row.at16, 'fuseki')} | ${cell(row.at64, 'ms')} | ${cell(row.at64, 'sql')} | ${cell(row.at64, 'fuseki')} | ${ratio(row.ratio64To4)} | ${row.grows ? 'GROWS' : '—'} |`),
+  ].join('\n') + '\n';
+  return { rows, markdown };
 }
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
