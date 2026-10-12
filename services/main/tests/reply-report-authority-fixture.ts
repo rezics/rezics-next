@@ -383,17 +383,11 @@ async function createReplyReportFixture(
       });
     }
     await transaction(async (client) => {
-      await client.query(
-        "INSERT INTO access.scope_gate (id) VALUES ('work:create:root') ON CONFLICT DO NOTHING",
-      );
       for (const realm of realmSpaces.keys()) {
         await client.query(
           "INSERT INTO access.authority_subject (id,kind) VALUES ($1,'institution')",
           [realm],
         );
-        await client.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [
-          `governance:realm:${realm}`,
-        ]);
         await client.query('INSERT INTO access.realm_admin_revision (realm) VALUES ($1)', [realm]);
         await client.query(
           `INSERT INTO access.realm_admin_settings (realm,visibility,who_may_submit)
