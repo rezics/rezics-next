@@ -13,7 +13,8 @@ import { useRouter } from 'next/navigation';
 import { materializeData } from 'native-i18n';
 import { type ReactNode, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
-import { localizedPath } from '../../i18n/locale.ts';
+import { isPublicPagePath, localizedPath } from '../../i18n/locale.ts';
+import { useOptionalShell } from '../shell/shell-provider.tsx';
 import type { FeedMessages } from './messages.ts';
 import { activeFilterCount, contentLanguages, type FeedDefaults, feedSearch, type FeedSort, type FeedState,
   topWindows, withChange } from './state.ts';
@@ -45,10 +46,15 @@ export function LinkMenu<V extends string>({ label, value, options, icon, classN
   options: readonly { value: V; label: string; help?: string; href: string }[];
 }) {
   const router = useRouter();
+  const locale = useOptionalShell()?.locale ?? 'en';
   const current = options.find(option => option.value === value);
   return <Menu onSelect={({ value: next }) => {
     const option = options.find(candidate => candidate.value === next);
-    if (option && option.value !== value) router.push(option.href);
+    if (option && option.value !== value) {
+      const page = option.href.startsWith('/') && !option.href.startsWith('//')
+        && isPublicPagePath(option.href.split(/[?#]/, 1)[0]!);
+      router.push(page ? localizedPath(option.href, locale) : option.href);
+    }
   }}>
     <MenuTrigger aria-label={`${label}: ${current?.label ?? ''}`} className={cn(lineTrigger, className)}>
       {icon}{current?.label}<ChevronDownIcon aria-hidden="true" className="size-4 text-muted-foreground" />

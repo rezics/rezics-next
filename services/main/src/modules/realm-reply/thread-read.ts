@@ -19,6 +19,7 @@ import { retainedDocumentBody } from '../../../../content/src/document-body.ts';
 import { realmHistoryOriginFilter } from '../realm-admin/history.ts';
 import { RealmRankingsIncomplete, type RealmRankKey, type RealmRankPage } from '../rankings/realm-threads.ts';
 import { retainedMembershipBasis } from '../read-basis/membership.ts';
+import type { ExactReadResult } from '../../../../content/src/core.ts';
 
 type Sort = Static<typeof threadSort>;
 type Window = Static<typeof threadWindow>;
@@ -29,6 +30,42 @@ const revisionPrefix = 'urn:rezics:content:revision:';
 const reviewPrefix = 'urn:rezics:realm-review:';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const closed: ThreadVote = { score: 0, value: 0, revision: null, open: false };
+
+/** Owner maps and sets must keep their selected entries in the session token;
+ * JSON's default empty-object encoding would silently lose their fences. */
+function selectedOwnerValue(value: unknown): unknown {
+  if (value instanceof Date) return value.toISOString();
+  if (value instanceof Map) return [...value].sort(([a], [b]) => String(a).localeCompare(String(b)))
+    .map(([key, item]) => [key, selectedOwnerValue(item)]);
+  if (value instanceof Set) return [...value].map(selectedOwnerValue)
+    .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+  if (Array.isArray(value)) return value.map(selectedOwnerValue);
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value)
+    .sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => [key, selectedOwnerValue(item)]));
+  return value;
+}
+
+async function selectedOwnerRead<T>(session: WorkReadSession, key: readonly unknown[], read: () => Promise<T>,
+  selected: (value: T) => unknown = selectedOwnerValue): Promise<T> {
+  const value = await read();
+  // Lightweight unit adapters lack the session owner; production sessions
+  // register each bounded selected value and close its reread before delivery.
+  session.observeDependency?.(`realm-thread:${hash(JSON.stringify(key))}`, selected(value),
+    async () => selected(await read()));
+  return value;
+}
+
+function selectedContent(results: readonly ExactReadResult[]) {
+  return results.map(result => {
+    if (result.status !== 'available') return { revisionId: result.revisionId, status: result.status };
+    const ref = result.reference;
+    return { revisionId: result.revisionId, status: result.status,
+      reference: { owner: ref.owner, resourceId: ref.resourceId, variantId: ref.variantId,
+        revisionId: ref.revisionId, model: ref.model, byteDigest: ref.byteDigest, byteLength: ref.byteLength,
+        language: ref.language, direction: ref.direction, sourceRevision: ref.sourceRevision,
+        predecessor: ref.predecessor, provenance: ref.provenance }, body: result.body };
+  });
+}
 
 /** Find the owner's one discussion without enumerating threads or reading bodies.
  * The nullable placement and approval probes run even for an absent/reserved
@@ -41,7 +78,8 @@ export async function readRealmAboutThread(session: WorkReadSession, realm: stri
     try { return await read(); }
     catch (error) { throw new WorkReadUnavailable('About thread owner is unavailable', { cause: error }); }
   };
-  const canonical = await ownerRead(() => threads.aboutThread(realm, about));
+  const canonical = await selectedOwnerRead(session, ['about-thread', realm, about],
+    () => ownerRead(() => threads.aboutThread(realm, about)));
   const history = async () => basis.visibility === 'private' && basis.history === 'from-admission'
     ? realmHistoryOriginFilter(session, realm, 'placement', '?slot') : '';
   const openingHistory = await history();
@@ -168,17 +206,20 @@ function declaredSpoiler(body: Record<string, unknown>): boolean | undefined {
 }
 
 /** Exact placed bodies, in Content's 64-revision batches. Unreadable bodies keep a neutral reply position.
- * The spoiler declaration is a field of that same body: no second read per reply. */
+ * The spoiler declaration comes from that body; the closing availability probe stays batched. */
 async function bodies(session: WorkReadSession, heads: readonly Head[], realm: string) {
-  const decisions = await discloseInventory(session.deps.environment, heads.map((item) => ({ owner: 'content',
-    resource: item.reply, component: 'body', revision: item.revisionId,
-    work: item.work, context: realm })), disclosureViewer(session.principal), 'thread');
+  const targets = heads.map((item) => ({ owner: 'content' as const,
+    resource: item.reply, component: 'body' as const, revision: item.revisionId,
+    work: item.work, context: realm }));
+  const decisions = await selectedOwnerRead(session, ['body-disclosure', realm, targets],
+    () => discloseInventory(session.deps.environment, targets, disclosureViewer(session.principal), 'thread'));
   heads = heads.filter((_item, index) => decisions[index] === 'visible');
   const revisions = [...new Set(heads.map((item) => item.revisionId))];
   const read = new Map<string, { body: string; document?: DocumentSnapshot; language: string | null; spoiler?: boolean }>();
   for (let start = 0; start < revisions.length; start += REALM_THREAD_COST.contentBatch) {
     const batch = revisions.slice(start, start + REALM_THREAD_COST.contentBatch);
-    const results = await session.deps.content!.readExactBatch(batch, async (ids) => new Set(ids));
+    const results = await selectedOwnerRead(session, ['content', batch],
+      () => session.deps.content!.readExactBatch(batch, async (ids) => new Set(ids)), selectedContent);
     for (const result of results) {
       if (result.status !== 'available' || typeof result.body.body !== 'string') continue;
       const { language } = result.reference;
@@ -321,7 +362,8 @@ export async function readRealmThreads(session: WorkReadSession, realm: string,
   }
   let rankedPage: RealmRankPage | null = null;
   if (sort !== 'new') {
-    try { rankedPage = await threads.rankedPage(session, realm, sort, window, limit, after, population); }
+    try { rankedPage = await selectedOwnerRead(session, ['ranked-page', realm, sort, window, limit, after, population],
+      () => threads.rankedPage(session, realm, sort, window, limit, after, population)); }
     catch (error) {
       // A Realm with no placed reply is empty under every order, so a ranking
       // that has not caught up with a just-created Realm has nothing to hold back.
@@ -349,20 +391,22 @@ export async function readRealmThreads(session: WorkReadSession, realm: string,
         .map((item) => rows.find((row) => row.placement === item.placement))
         .filter((row): row is Head => !!row)
     : rows.slice(0, limit);
-  const admitted = await threads.admitted(realm, candidates);
+  const admitted = await selectedOwnerRead(session, ['admitted', realm, candidates],
+    () => threads.admitted(realm, candidates));
   const visible = candidates.filter((row) => admitted.has(row.reply));
   let page: Head[], next: string | null = null, votes: Map<string, ThreadVote>;
   if (sort === 'new') {
     page = visible;
-    votes = await threads.votes(session.position.dataEpoch, page.map((row) => row.placement), reader(session));
+    votes = await selectedOwnerRead(session, ['votes', page.map(row => row.placement)],
+      () => threads.votes(session.position.dataEpoch, page.map((row) => row.placement), reader(session)));
     const last = candidates.at(-1);
     if (rows.length > limit && last) {
       next = retained.encode(last.placement, `${last.epochOrder}:${last.sequence}:${newRevision}:${hash(history)}`);
     }
   } else {
     page = visible;
-    votes = await threads.votes(session.position.dataEpoch,
-      page.map((row) => row.placement), reader(session));
+    votes = await selectedOwnerRead(session, ['votes', page.map(row => row.placement)],
+      () => threads.votes(session.position.dataEpoch, page.map((row) => row.placement), reader(session)));
     const last = selected!.at(- 1);
     if (rankedPage!.rows.length > limit && last) {
       next = retained.encode(last.placement,
@@ -373,20 +417,21 @@ export async function readRealmThreads(session: WorkReadSession, realm: string,
         }));
     }
   }
-  const [texts, titles, named, counted] = await Promise.all([bodies(session, page, realm),
-    works(session, page), authors(session, page.map((row) => row.author)),
-    threads.counts(realm, page.map((row) => row.reply),
-      population
-        ? (replies) =>
-            threads.rankedHistoryAdmission(session.position.dataEpoch, realm, population!, replies)
-        : history ? async (replies) => {
+  const historyAdmission = population
+    ? (replies: readonly string[]) =>
+      threads.rankedHistoryAdmission(session.position.dataEpoch, realm, population!, replies)
+    : history ? async (replies: readonly string[]) => {
       if (!replies.length) return new Set<string>();
       const rows = await session.query(`SELECT DISTINCT ?reply WHERE {
         VALUES (?slot ?reply) { ${replies.map((reply) => `(${iri(replySlotIri(realm,reply))} ${iri(reply)})`).join(' ')} }
         ${headPattern(realm)} ${history}
       } LIMIT ${replies.length + 1}`, replies.length);
       return new Set(rows.map((row) => row.reply!.value));
-    } : undefined)]);
+    } : undefined;
+  const [texts, titles, named, counted] = await Promise.all([bodies(session, page, realm),
+    works(session, page), authors(session, page.map((row) => row.author)),
+    selectedOwnerRead(session, ['counts', realm, page.map(row => row.reply), population, history],
+      () => threads.counts(realm, page.map((row) => row.reply), historyAdmission))]);
   const items: Summary[] = page.flatMap((row) => {
     const text = texts.get(row.reply), about = titles.get(row.work);
     if (!about || !text) return [];
@@ -456,7 +501,8 @@ export async function readRealmThread(session: WorkReadSession, realm: string, f
     } catch { throw new WorkReadInvalid('Thread sibling cursor is invalid'); }
   }
   await threads.assertThreadProjection(session, realm, focus, population);
-  const focusBasis = await threads.focusBasis(session.position.dataEpoch, realm, focus);
+  const focusBasis = await selectedOwnerRead(session, ['focus', realm, focus],
+    () => threads.focusBasis(session.position.dataEpoch, realm, focus));
   if (!focusBasis) throw new WorkReadMissing('Reply is unavailable');
   // A bookmark beneath a withdrawn ancestor still reads its own placed branch.
   // Whole-thread eligibility cannot hide descendants of that new focus; raw
@@ -482,8 +528,10 @@ export async function readRealmThread(session: WorkReadSession, realm: string, f
       throw new WorkReadExpired('Sibling order changed; restart this branch');
     }
     orderRevisions.set(parent.reply, revision);
-    const page = await threads.siblingPage(session.position.dataEpoch, realm, parent.reply, sort, remaining,
-      parent.after, includeInactive);
+    const page = await selectedOwnerRead(session,
+      ['siblings', realm, parent.reply, sort, remaining, parent.after, includeInactive],
+      () => threads.siblingPage(session.position.dataEpoch, realm, parent.reply, sort, remaining,
+        parent.after, includeInactive));
     const children = page.slice(0, remaining);
     selected.push(...children.map(child => child.reply));
     for (const child of children) {
@@ -495,7 +543,9 @@ export async function readRealmThread(session: WorkReadSession, realm: string, f
       continuations.push(siblingContinuation(parent.reply, last));
     }
   }
-  const [identities, parents] = await Promise.all([threads.identities(selected), threads.ancestors(focus)]);
+  const [identities, parents] = await Promise.all([
+    selectedOwnerRead(session, ['identities', selected], () => threads.identities(selected)),
+    selectedOwnerRead(session, ['ancestors', focus], () => threads.ancestors(focus))]);
   const thread = focusBasis.thread;
   const identityMap = new Map(identities.map(node => [node.reply, node]));
   const subtree = selected.flatMap(reply => identityMap.has(reply) ? [identityMap.get(reply)!] : []);
@@ -512,7 +562,7 @@ export async function readRealmThread(session: WorkReadSession, realm: string, f
   if (new Set(rows.map((row) => row.reply)).size !== rows.length) {
     throw new WorkReadUnavailable('Reply slot has multiple heads');
   }
-  const admitted = await threads.admitted(realm, rows);
+  const admitted = await selectedOwnerRead(session, ['admitted', realm, rows], () => threads.admitted(realm, rows));
   const focused = rows.find((row) => row.reply === focus);
   const work = focused?.work;
   // Graph and Content must agree on the reply's place; the whole thread is about one Work.
@@ -540,7 +590,8 @@ export async function readRealmThread(session: WorkReadSession, realm: string, f
   const all = [...above, ...below];
   const [texts, titles, named, votes, blocked] = await Promise.all([bodies(session, all, realm), works(session, [focused]),
     authors(session, all.map((row) => row.author)),
-    threads.votes(session.position.dataEpoch, all.map((row) => row.placement), reader(session)),
+    selectedOwnerRead(session, ['votes', all.map(row => row.placement)],
+      () => threads.votes(session.position.dataEpoch, all.map((row) => row.placement), reader(session))),
     blockedAuthors(session, all.map((row) => row.author))]);
   const about = titles.get(focused.work);
   if (!about || !texts.has(focus)) throw new WorkReadMissing('Reply is unavailable');
@@ -684,16 +735,18 @@ export async function readProfileContributions(session: WorkReadSession, author:
   const binding = ['agent-realm-contributions-v1', author, kind];
   const cursor = decodeReadCursor(encoded, binding, session.position);
   if (cursor && Number.isNaN(Date.parse(cursor.order))) throw new WorkReadInvalid('Contribution cursor is invalid');
-  const nodes = await threads.authorPage(author, kind, PROFILE_CONTRIBUTION_COST.candidates,
-    cursor ? { time: cursor.order, reply: cursor.after } : undefined);
+  const nodes = await selectedOwnerRead(session, ['author-page', author, kind, cursor?.order, cursor?.after],
+    () => threads.authorPage(author, kind, PROFILE_CONTRIBUTION_COST.candidates,
+      cursor ? { time: cursor.order, reply: cursor.after } : undefined));
   const page = nodes.slice(0, PROFILE_CONTRIBUTION_COST.pageSize);
   const items = [];
   const replies = session.deps.realmReplies;
-  const disclosed = typeof replies.readPublicBatch === 'function'
-    ? await replies.readPublicBatch(page.map(node => node.reply),
+  const disclosed = await selectedOwnerRead(session, ['public-replies', page.map(node => node.reply)],
+    () => typeof replies.readPublicBatch === 'function'
+    ? replies.readPublicBatch(page.map(node => node.reply),
       session.principal ?? undefined, session.options.actingSubject)
-    : await Promise.all(page.map(node => replies.readPublic(node.reply,
-      session.principal ?? undefined, session.options.actingSubject)));
+    : Promise.all(page.map(node => replies.readPublic(node.reply,
+      session.principal ?? undefined, session.options.actingSubject))));
   if (!(await session.deps.personPreferences?.profileVisible(author, session.principal))) {
     throw new WorkReadMissing('Agent unavailable');
   }
@@ -701,10 +754,11 @@ export async function readProfileContributions(session: WorkReadSession, author:
   // this after the intermediate profile check so a revoked parent cannot
   // survive that await; close profile privacy after parent hydration too.
   const parentIds = [...new Set(page.flatMap(node => node.parent ? [node.parent] : []))];
-  const parents = parentIds.length ? typeof replies.readPublicBatch === 'function'
+  const parents = await selectedOwnerRead(session, ['public-parents', parentIds],
+    async () => parentIds.length ? typeof replies.readPublicBatch === 'function'
     ? await replies.readPublicBatch(parentIds, session.principal ?? undefined, session.options.actingSubject)
     : await Promise.all(parentIds.map(parent => replies.readPublic(parent,
-      session.principal ?? undefined, session.options.actingSubject))) : [];
+      session.principal ?? undefined, session.options.actingSubject))) : []);
   const publicParents = new Set(parentIds.filter((_id, index) => parents[index]));
   for (const [index, node] of page.entries()) {
     if (!node.origin) continue;

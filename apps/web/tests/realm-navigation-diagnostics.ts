@@ -18,13 +18,21 @@ export async function realmNavigationDiagnostics(page: Page, info: TestInfo, nam
       && !url.pathname.includes('/typeahead')) return;
     reads.push((async () => {
       const headers = await response.allHeaders();
-      const body = await response.text().catch(() => '');
-      events.push({ event: 'response', at: new Date().toISOString(), url: response.url(),
+      const record = { event: 'response', at: new Date().toISOString(), url: response.url(),
         method: request.method(), status: response.status(), requestHeaders: {
           rsc: request.headers().rsc, nextUrl: request.headers()['next-url'],
         }, headers: { location: headers.location, cacheControl: headers['cache-control'],
           contentType: headers['content-type'], traceparent: headers.traceparent },
-        body: body.slice(0, 262_144) });
+        bodyState: 'pending', body: '' };
+      events.push(record);
+      // A redirected or abandoned Flight stream can outlive the assertion.
+      // Diagnostics must preserve that assertion and flush its trace promptly.
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const body = await Promise.race([response.text().catch(() => null),
+        new Promise<null>(resolve => { timer = setTimeout(() => resolve(null), 1000); })]);
+      clearTimeout(timer);
+      record.bodyState = body === null ? 'unavailable' : 'complete';
+      record.body = body?.slice(0, 262_144) ?? '';
     })());
   });
   return async () => {

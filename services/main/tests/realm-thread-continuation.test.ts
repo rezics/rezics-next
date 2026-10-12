@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { fromMarkdown } from '@rezics/document';
 import { authoredDocumentBody } from '../../content/src/document-body.ts';
-import { readRealmThread } from '../src/modules/realm-reply/thread-read.ts';
+import { readRealmThread, readRealmThreads } from '../src/modules/realm-reply/thread-read.ts';
 import { REALM_THREAD_COST } from '../src/modules/realm-reply/thread-contract.ts';
 import type { ThreadVote } from '../src/modules/realm-reply/thread-store.ts';
 import { WorkReadExpired, WorkReadInvalid, WorkReadMissing, WorkReadMoved, WorkReadSession, WorkReadUnavailable }
@@ -210,6 +210,69 @@ test('local thread target summaries fence their selected root rather than unrela
     }
     return result;
   };
+  await expect(owner.fenceDependencies()).rejects.toBeInstanceOf(WorkReadMoved);
+});
+
+/** Exercise the production session's dependency ledger while the bounded
+ * graph and owner adapters retain the same deterministic thread fixture. */
+function selectedThreadSession(fixture: ReturnType<typeof world>) {
+  const { session } = fixture;
+  const owner = new WorkReadSession(session.deps, session.request, { ...session.options, localBasis: true },
+    { ...session.position });
+  Object.assign(session, { options: owner.options, observeDependency: owner.observeDependency.bind(owner) });
+  return { session, owner };
+}
+
+test('selected thread owner closure stays usable under unrelated graph movement', async () => {
+  const { session, owner } = selectedThreadSession(world(siblings(2)));
+  const page = await readRealmThread(session, realm, reply(1), 'new');
+  session.position.sequence = '1000';
+  await expect(owner.fenceDependencies()).resolves.toBeUndefined();
+  expect(page.items.map(item => item.reply)).toEqual([reply(1), reply(3), reply(2)]);
+  expect(owner.position.sequence).toBe('9');
+});
+
+test('selected pinned body erasure refuses delivery at the owner closure', async () => {
+  const placed = siblings(2).map(item => ({ ...item, bodyUnavailable: false }));
+  const { session, owner } = selectedThreadSession(world(placed));
+  const page = await readRealmThread(session, realm, reply(1), 'new');
+  expect(page.items.find(item => item.reply === reply(2))?.body).toBeTruthy();
+  placed[1]!.bodyUnavailable = true;
+  await expect(owner.fenceDependencies()).rejects.toBeInstanceOf(WorkReadMoved);
+});
+
+test('selected Content approval removal refuses delivery at the owner closure', async () => {
+  const placed = siblings(2).map(item => ({ ...item, approved: true }));
+  const { session, owner } = selectedThreadSession(world(placed));
+  await readRealmThread(session, realm, reply(1), 'new');
+  placed[1]!.approved = false;
+  await expect(owner.fenceDependencies()).rejects.toBeInstanceOf(WorkReadMoved);
+});
+
+test('New display votes close independently of the sibling ordering revision', async () => {
+  const votes: Record<number, Partial<ThreadVote>> = {};
+  const { session, owner } = selectedThreadSession(world(siblings(2), { votes }));
+  await readRealmThread(session, realm, reply(1), 'new');
+  votes[2] = { value: 1, revision: 'changed-reader-vote' };
+  await expect(owner.fenceDependencies()).rejects.toBeInstanceOf(WorkReadMoved);
+});
+
+test('a displayed thread count closes its selected child admission result', async () => {
+  const placed = siblings(2).map(item => ({ ...item, approved: true }));
+  const { session, owner } = selectedThreadSession(world(placed));
+  const page = await readRealmThreads(session, realm, { sort: 'new' });
+  expect(page.items[0]!.replies).toEqual({ value: 2, kind: 'exact' });
+  placed[1]!.approved = false;
+  await expect(owner.fenceDependencies()).rejects.toBeInstanceOf(WorkReadMoved);
+});
+
+test('an empty selected sibling relation is fenced before it can become a false empty branch', async () => {
+  const placed = siblings(0);
+  const { session, owner } = selectedThreadSession(world(placed));
+  const page = await readRealmThread(session, realm, reply(1), 'new');
+  expect(page.items.map(item => item.reply)).toEqual([reply(1)]);
+  expect(page.complete).toBe(true);
+  placed.push({ id: 2, parent: 1, author: 1 });
   await expect(owner.fenceDependencies()).rejects.toBeInstanceOf(WorkReadMoved);
 });
 
