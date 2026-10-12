@@ -40,6 +40,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
     private static final java.util.concurrent.atomic.AtomicReference<java.lang.ref.WeakReference<FilteredGraphTextIndex>> mergeIndex =
         new java.util.concurrent.atomic.AtomicReference<>(new java.lang.ref.WeakReference<>(null));
     private final TextIndexLucene lucene;
+    private final org.apache.lucene.store.Directory directory;
     static final String RANK_CONTEXT = "rankContext", RANK_GROUP = "rankGroup", RANK_SCHEMA = "rankMetadataVersion";
     private java.lang.ref.WeakReference<org.apache.jena.sparql.core.DatasetGraph> rankData = new java.lang.ref.WeakReference<>(null);
     void bindRankData(org.apache.jena.sparql.core.DatasetGraph data) {
@@ -124,7 +125,12 @@ public final class FilteredGraphTextIndex implements TextIndex {
         // its empty delta must not certify unseeded metadata. Stream owners
         // under the existing rebuild budget, never from a ranked read.
         long deadline = System.nanoTime() + OccurrenceTextSchema.REBUILD_DEADLINE_MS * 1_000_000L;
-        var rows = data.find(PUBLIC_GRAPH, Node.ANY, uri(RV + "searchBody"), Node.ANY);
+        refreshRankRebuild(data, deadline);
+    }
+    void refreshRankRebuild(org.apache.jena.sparql.core.DatasetGraph data, long deadline) {
+        // Partial Content subjects stay in cleanup inventory; only typed units
+        // have source pins for this bulk reconstruction to validate.
+        var rows = data.find(PUBLIC_GRAPH, Node.ANY, org.apache.jena.vocabulary.RDF.type.asNode(), uri(RV + "MatchUnit"));
         try { while (rows.hasNext()) {
             if (System.nanoTime() >= deadline) throw new TextIndexException("rank metadata rebuild exceeded its maintenance budget");
             Node owner = rows.next().getSubject();
@@ -287,8 +293,11 @@ public final class FilteredGraphTextIndex implements TextIndex {
 
     public FilteredGraphTextIndex(TextIndexLucene lucene) {
         this.lucene = lucene;
+        // The index's location survives transient reader failures and writer rollback/reopen.
+        this.directory = lucene.getIndexWriter().getDirectory();
         mergeIndex.set(new java.lang.ref.WeakReference<>(this));
     }
+    org.apache.lucene.store.Directory physicalDirectory() { return directory; }
 
     /** A maintenance sampler reads the current writer; deadline evidence only
      * reads that sampler's published observation. Rollback can replace it. */

@@ -196,6 +196,7 @@ public class g556QualificationTest {
     @Test public void transientFenceFailureRecoversInBackgroundWithoutARebuild() throws Exception {
         try (Fixture fixture = new Fixture(3)) {
             assertTrue(SearchDeltaJournal.qualify(fixture.data));
+            var before = SearchDeltaJournal.qualifiedProof(fixture.data, -1, 0);
             synchronized (fixture.data) {
                 fixture.failDirectoryOnce.set(true);
                 SearchDeltaJournal.fenceBeforeWrite(fixture.data);
@@ -204,11 +205,16 @@ public class g556QualificationTest {
                 // must retain one flight and recover on its next retry.
                 fixture.failDirectoryOnce.set(true);
                 for (int n = 0; n < 10; n++) SearchDeltaJournal.invalidate(fixture.data);
+                assertEquals(false, SearchDeltaJournal.qualifiedProof(fixture.data, -1, 0).get("available"));
+                assertTrue("unavailable diagnostics do not consume the pending reader failure", fixture.failDirectoryOnce.get());
+                assertEquals(0, SearchDeltaJournal.qualifiedProof(fixture.data, -1, 0).get("rebuildAttempts"));
             }
             long deadline = System.nanoTime() + 5_000_000_000L;
             while (!Boolean.TRUE.equals(SearchDeltaJournal.qualifiedProof(fixture.data, -1, 0).get("available"))
                 && System.nanoTime() < deadline) Thread.sleep(20);
             assertEquals("3", SearchDeltaJournal.qualifiedProof(fixture.data, -1, 0).get("qualifiedPopulation"));
+            assertEquals(before.get("generation"), SearchDeltaJournal.qualifiedProof(fixture.data, -1, 0).get("generation"));
+            assertEquals(before.get("luceneGeneration"), SearchDeltaJournal.qualifiedProof(fixture.data, -1, 0).get("luceneGeneration"));
         }
     }
 

@@ -85,12 +85,14 @@ public final class CommandModule implements FusekiAutoModule {
         // Empty/uninitialized datasets stay closed until a qualified startup.
         if (CommandService.deltaExclusive(point.getDataService())) {
             SearchDeltaJournal.proveExclusiveStartup(data);
+            // Source qualification writes share the text dataset's commit.
+            // The public baseline must describe the last startup commit.
+            qualifySemanticSources(data);
             // An empty store has no text generation yet, so this audit returns
             // false. The maintenance reset deletes that generation too. The
             // command that stores the fresh graph completes the same admission.
             if (SearchDeltaJournal.qualifyAtStartup(data)) SearchDeltaJournal.clearDeferredAdmission(data);
             else SearchDeltaJournal.deferExclusiveAdmission(data);
-            qualifySemanticSources(data);
         } else {
             SearchDeltaJournal.revokeExclusiveStartup(data);
             data.begin(org.apache.jena.query.ReadWrite.WRITE);

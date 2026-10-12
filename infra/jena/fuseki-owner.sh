@@ -8,9 +8,8 @@
 #
 # OPS15: jena-text does not promise crash-atomic TDB2/Lucene commits. Only an
 # orderly JVM exit after SIGTERM leaves `clean-stop`. Any other previous stop of
-# a nonempty state leaves `lucene.uncertain`; the command module reports it and
-# Main keeps public text unavailable until `yarn search:rebuild` indexes an empty
-# replacement directory and removes the marker.
+# a nonempty state leaves `lucene.uncertain`. The command module audits the
+# committed graph/index cut and repairs derived state before clearing the fence.
 set -eu
 state="${FUSEKI_BASE:-/fuseki}/databases/rezics"
 if [ -e "${FUSEKI_BASE:-/fuseki}/databases/purge.incomplete" ]; then

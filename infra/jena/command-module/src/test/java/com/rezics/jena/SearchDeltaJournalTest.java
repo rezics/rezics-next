@@ -293,7 +293,7 @@ public class SearchDeltaJournalTest {
     }
 
     /** Persistent native writer, configured analyzer and real admission profiles. */
-    private static final class ContentFixture implements AutoCloseable {
+    static final class ContentFixture implements AutoCloseable {
         static final String UNIT_ID = "urn:rezics:content:match-unit:" + "a".repeat(64);
         static final String WORK = "urn:test:content:work", VARIANT = "urn:test:content:variant";
         static final String PUBLICATION = "urn:test:content:publication", ELIGIBILITY = "urn:test:content:eligibility";
@@ -316,6 +316,7 @@ public class SearchDeltaJournalTest {
         int journalSourceWrites;
         int journalEntriesWritten;
         int quadAddDepth;
+        final java.util.concurrent.atomic.AtomicInteger failReaderAt = new java.util.concurrent.atomic.AtomicInteger();
         ContentFixture(Path existing) throws Exception { root = existing; open(); }
         ContentFixture() throws Exception {
             Files.createDirectories(Path.of(".temp"));
@@ -370,7 +371,15 @@ public class SearchDeltaJournalTest {
             definition.setUidField("uid"); definition.setLangField("lang");
             config = new TextIndexConfig(definition); config.setValueStored(true);
             config.setAnalyzer(new FilteredGraphTextAssembler.CjkBigramV2());
-            index = new TextIndexLucene(FSDirectory.open(root.resolve("lucene")), config);
+            var directory = new org.apache.lucene.store.FilterDirectory(FSDirectory.open(root.resolve("lucene"))) {
+                @Override public org.apache.lucene.store.IndexInput openInput(String name, org.apache.lucene.store.IOContext context)
+                    throws java.io.IOException {
+                    if (name.startsWith("segments_") && failReaderAt.getAndUpdate(value -> Math.max(0, value - 1)) == 1)
+                        throw new java.io.IOException("injected nested Content reader failure");
+                    return super.openInput(name, context);
+                }
+            };
+            index = new TextIndexLucene(directory, config);
             filtered = new FilteredGraphTextIndex(index);
             storage = TDB2Factory.connectDataset(root.resolve("tdb2").toString()).asDatasetGraph();
             data = new DatasetGraphText(storage, filtered, new TextDocProducerTriples(filtered), true) {

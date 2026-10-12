@@ -21,7 +21,7 @@ final class QueryWorkService extends SPARQL_QueryDataset {
         if (Boolean.TRUE.equals(evidence.get("qualified"))
             && !evidence.keySet().containsAll(java.util.List.of("dataEpoch", "sequence", "generation",
                 "luceneGeneration", "ordinal", "writeEpoch")))
-            return unavailableHeader("cut-evidence-unavailable");
+            return unavailableHeader("cut-evidence-unavailable", Boolean.TRUE.equals(evidence.get("textIndexUncertain")));
         var header = new org.apache.jena.atlas.json.JsonObject();
         for (var entry : evidence.entrySet()) {
             Object value = entry.getValue();
@@ -30,15 +30,19 @@ final class QueryWorkService extends SPARQL_QueryDataset {
             else if (value instanceof String string && string.length() <= 256
                 && string.chars().allMatch(character -> character >= 32 && character <= 126))
                 header.put(entry.getKey(), string);
-            else return unavailableHeader("cut-evidence-unavailable");
+            else return unavailableHeader("cut-evidence-unavailable", Boolean.TRUE.equals(evidence.get("textIndexUncertain")));
         }
-        return org.apache.jena.atlas.json.JSON.toStringFlat(header).length() <= MAX_READ_CUT_BYTES ? header : unavailableHeader("cut-evidence-unavailable");
+        return org.apache.jena.atlas.json.JSON.toStringFlat(header).length() <= MAX_READ_CUT_BYTES ? header
+            : unavailableHeader("cut-evidence-unavailable", Boolean.TRUE.equals(evidence.get("textIndexUncertain")));
     }
 
     private static org.apache.jena.atlas.json.JsonObject unavailableHeader(String reason) {
+        return unavailableHeader(reason, false);
+    }
+    private static org.apache.jena.atlas.json.JsonObject unavailableHeader(String reason, boolean uncertain) {
         var header = new org.apache.jena.atlas.json.JsonObject();
         header.put("version", 1); header.put("qualified", false);
-        header.put("textIndexUncertain", SearchDeltaJournal.textIndexUncertain);
+        header.put("textIndexUncertain", uncertain);
         header.put("reason", reason);
         return header;
     }
@@ -94,8 +98,10 @@ final class QueryWorkService extends SPARQL_QueryDataset {
                     sendResults(action, result, query.getPrologue());
                 }
             } catch (java.io.IOException unavailable) {
+                SearchDeltaJournal.invalidate(data, "committed reader unavailable", "query");
                 if (requireQualified && !action.getResponse().isCommitted()) {
-                    action.getResponse().setHeader(READ_CUT_HEADER, org.apache.jena.atlas.json.JSON.toStringFlat(unavailableHeader("committed-reader-unavailable")));
+                    action.getResponse().setHeader(READ_CUT_HEADER, org.apache.jena.atlas.json.JSON.toStringFlat(
+                        unavailableHeader("committed-reader-unavailable", SearchDeltaJournal.textIndexUncertain(data))));
                     try { unavailable(action); }
                     catch (java.io.IOException failure) { throw new java.io.UncheckedIOException(failure); }
                     return;

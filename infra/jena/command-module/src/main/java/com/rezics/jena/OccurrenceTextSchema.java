@@ -34,8 +34,8 @@ final class OccurrenceTextSchema {
      * authoritative RDF. Lucene 10 requires a fresh field registry (deleteAll),
      * so replay every mapped field, not just occurrence documents. Streaming
      * O(indexed quads), constant retained memory, one writer transaction. Jena's
-     * abort restores both owners on failure; the entrypoint's unclean-stop
-     * marker still fences crash uncertainty and is never cleared here.
+     * abort restores both owners on failure; the journal's committed audit
+     * owns clearing the entrypoint's unclean-stop fence.
      * https://github.com/apache/lucene/blob/releases/lucene/10.3.1/lucene/core/src/java/org/apache/lucene/index/IndexWriter.java
      */
     static boolean rebuildIfIncompatible(DatasetGraph source) {
@@ -46,9 +46,19 @@ final class OccurrenceTextSchema {
             || !(data.getTextIndex() instanceof FilteredGraphTextIndex index)) return false;
         index.bindRankData(data);
         if (!incompatible(index)) return false;
+        rebuild(source, deadline);
+        return true;
+    }
+    /** Recovery and schema migration use one streaming derived-index rebuild. */
+    static long rebuild(DatasetGraph source, long deadline) {
+        if (!(source instanceof org.apache.jena.query.text.DatasetGraphText data)
+            || !(data.getTextIndex() instanceof FilteredGraphTextIndex index))
+            throw new IllegalStateException("text rebuild requires the native index");
+        index.bindRankData(data);
         data.begin(ReadWrite.WRITE);
         var producer = new TextDocProducerTriples(index);
         producer.start();
+        long quads = 0;
         try {
             index.lucene().getIndexWriter().deleteAll();
             for (String field : java.util.Set.copyOf(index.getDocDef().fields())) for (var predicate : index.getDocDef().getPredicates(field)) {
@@ -56,11 +66,13 @@ final class OccurrenceTextSchema {
                     predicate, org.apache.jena.graph.Node.ANY);
                 try { while (rows.hasNext()) {
                     if (System.nanoTime() >= deadline) throw new IllegalStateException(
-                        "occurrence schema rebuild exceeded 600 seconds; run task search:rebuild with writers stopped");
+                        "text rebuild exceeded its maintenance budget");
                     var quad = rows.next();
                     producer.change(TextQuadAction.ADD, quad.getGraph(), quad.getSubject(), quad.getPredicate(), quad.getObject());
+                    quads++;
                 } } finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
             }
+            index.refreshRankRebuild(data, deadline);
             var generation = OccurrenceLabelIndex.textGeneration(data);
             if (generation != null) {
                 var control = OccurrenceLabelIndex.uri(CommandPolicy.CONTROL);
@@ -69,8 +81,11 @@ final class OccurrenceTextSchema {
                 data.deleteAny(control, product, predicate, org.apache.jena.graph.Node.ANY);
                 data.add(control, product, predicate, NodeFactory.createURI("urn:rezics:text-index-generation:" + UUID.randomUUID()));
             }
+            // Empty inventories also have to respect the maintenance deadline.
+            if (System.nanoTime() >= deadline)
+                throw new IllegalStateException("text rebuild exceeded its maintenance budget");
             CommitHalt.commit(data);
-            return true;
+            return quads;
         } catch (IOException error) { throw new TextIndexException("occurrence schema rebuild failed", error); }
         finally { producer.finish(); data.end(); }
     }

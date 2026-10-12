@@ -59,10 +59,41 @@ final class SearchDeltaJournal {
 
     private record Qualification(String epoch, String generation, long ordinal,
                                  long luceneGeneration, long population, String sequence) {}
+    /** Only an observed mismatch authorizes repair; an unreadable cut needs a retry. */
+    private record AuditResult(Qualification baseline, boolean inconsistent) {}
     private static final Map<DatasetGraph, Qualification> qualified = new WeakHashMap<>();
-    // The entrypoint's uncertainty marker, like command health, is fixed for this JVM.
-    static final boolean textIndexUncertain = java.nio.file.Files.exists(java.nio.file.Path.of(
-        System.getenv().getOrDefault("FUSEKI_BASE", "."), "databases/rezics/lucene.uncertain"));
+    /** The journal owns the crash fence for the physical index, not the JVM. */
+    private static java.nio.file.Path uncertaintyMarker(DatasetGraph data) {
+        TextIndexLucene index = lucene(data);
+        // Directory location is an immutable writer property. A diagnostic must
+        // not open/probe the committed reader or consume a transient read failure.
+        org.apache.lucene.store.Directory physical = data instanceof DatasetGraphText text
+            && text.getTextIndex() instanceof FilteredGraphTextIndex filtered ? filtered.physicalDirectory()
+            : index == null ? null : index.getDirectory();
+        while (physical instanceof org.apache.lucene.store.FilterDirectory wrapper) physical = wrapper.getDelegate();
+        return physical instanceof org.apache.lucene.store.FSDirectory directory
+            ? directory.getDirectory().getParent().resolve("lucene.uncertain") : null;
+    }
+    static boolean textIndexUncertain(DatasetGraph data) {
+        var marker = uncertaintyMarker(data);
+        return marker != null && java.nio.file.Files.exists(marker);
+    }
+    enum UnavailableReason {
+        TEXT_INDEX_UNCERTAIN("text-index-uncertain"), CUT_UNAVAILABLE("cut-unavailable"),
+        GENERATION_UNQUALIFIED("generation-unqualified"), REPLAY_UNAVAILABLE("replay-unavailable"),
+        COMMITTED_READER_UNAVAILABLE("committed-reader-unavailable");
+        final String code;
+        UnavailableReason(String code) { this.code = code; }
+    }
+    static Map<String, Object> unavailable(DatasetGraph data, UnavailableReason reason) {
+        synchronized (recovering) {
+            Recovery recovery = recovering.get(data);
+            return Map.of("available", false, "reason", reason.code,
+                "recovery", recovery == null ? "waiting-for-lineage" : recovery.running ? "running" : "scheduled",
+                "recoveryAttempts", recovery == null ? 0 : recovery.attempts,
+                "rebuildAttempts", recovery == null ? 0 : recovery.rebuilds);
+        }
+    }
     /** Publication and capture reuse the qualification owner's monitor. Never
      * acquire the whole-command dataset monitor from a read. */
     static Object publicationMonitor() { return qualified; }
@@ -99,15 +130,21 @@ final class SearchDeltaJournal {
                             "sequence", position.sequence().toString(), "generation", position.textGeneration().getURI(),
                             "luceneGeneration", Long.toString(generation));
                     Qualification baseline = qualified.get(data);
-                    boolean uncertain = textIndexUncertain;
-                    qualification = !uncertain && Boolean.TRUE.equals(cut.get("available")) && baseline != null
+                    boolean uncertain = textIndexUncertain(data);
+                    boolean ready = !uncertain && Boolean.TRUE.equals(cut.get("available")) && baseline != null
                         && baseline.epoch().equals(cut.get("dataEpoch"))
                         && baseline.generation().equals(cut.get("generation"))
-                        && baseline.luceneGeneration() == generation && baseline.ordinal() == ordinal(data)
-                        ? Map.of("available", true, "dataEpoch", baseline.epoch(), "generation", baseline.generation(),
+                        && baseline.luceneGeneration() == generation && baseline.ordinal() == ordinal(data);
+                    // A captured read never audits its inventory. The existing
+                    // maintenance owner repairs drift without a writer request.
+                    if (!ready && Boolean.TRUE.equals(cut.get("available")) && exclusiveStartupProved(data))
+                        invalidate(data, "captured generation unqualified", "captureRead");
+                    qualification = ready ? Map.of("available", true, "dataEpoch", baseline.epoch(), "generation", baseline.generation(),
                             "sequence", cut.get("sequence"), "luceneGeneration", Long.toString(generation),
                             "ordinal", Long.toString(baseline.ordinal()), "qualifiedPopulation", Long.toString(baseline.population()))
-                        : Map.of("available", false);
+                        : unavailable(data, uncertain ? UnavailableReason.TEXT_INDEX_UNCERTAIN
+                            : !Boolean.TRUE.equals(cut.get("available")) ? UnavailableReason.CUT_UNAVAILABLE
+                            : UnavailableReason.GENERATION_UNQUALIFIED);
                     Map<String, Object> capturedEvidence = new LinkedHashMap<>(cut);
                     capturedEvidence.remove("available");
                     capturedEvidence.put("version", 1);
@@ -167,7 +204,8 @@ final class SearchDeltaJournal {
             if (capture.index != index) throw new IllegalStateException("text helper crossed captured index");
             return new ReaderLease(capture.reader(), false);
         }
-        return new ReaderLease(DirectoryReader.open(index.getDirectory()), true);
+        try { return new ReaderLease(DirectoryReader.open(index.getDirectory()), true); }
+        catch (RuntimeException failure) { throw new IndexReadUnavailable(failure); }
     }
     /** Set only when this process's startup saw a delta-exclusive service.
      * Later admission reads the proof; it does not inspect the operation list again. */
@@ -188,6 +226,8 @@ final class SearchDeltaJournal {
         final java.lang.ref.WeakReference<DatasetGraph> dataset;
         java.util.concurrent.ScheduledFuture<?> pending;
         long delayMs = 100;
+        int attempts, rebuilds;
+        boolean running;
         Recovery(DatasetGraph data) { dataset = new java.lang.ref.WeakReference<>(data); }
     }
 
@@ -211,9 +251,12 @@ final class SearchDeltaJournal {
         String flat = message.replace('\r', ' ').replace('\n', ' ').trim();
         return flat.length() > 160 ? failure.getClass().getSimpleName() : flat;
     }
-    private static Qualification refuse(String reason, String subject) {
+    private static AuditResult refuse(String reason, String subject) {
+        return refuse(reason, subject, false);
+    }
+    private static AuditResult refuse(String reason, String subject, boolean inconsistent) {
         auditFailed(reason, subject);
-        return null;
+        return new AuditResult(null, inconsistent);
     }
     static void invalidate(DatasetGraph data) {
         invalidate(data, "qualification withdrawn", callerLabel());
@@ -265,18 +308,47 @@ final class SearchDeltaJournal {
         // maintenance. Requalification is never a request-time inventory and
         // never installs a baseline for an intervening write.
         synchronized (data) {
-            synchronized (recovering) { if (recovering.get(data) != recovery) return; }
-            try { ready = qualify(data); }
-            catch (RuntimeException transientFailure) { /* retain the closed read gate and retry */ }
+            synchronized (recovering) {
+                if (recovering.get(data) != recovery) return;
+                recovery.running = true;
+                recovery.attempts++;
+            }
+            try {
+                AuditResult audit = qualifyResult(data);
+                ready = audit.baseline() != null;
+                if (audit.inconsistent() && repairable(data)) {
+                    synchronized (recovering) { recovery.rebuilds++; }
+                    long started = System.nanoTime();
+                    record("public text rebuild started: attempt=" + recovery.rebuilds, false);
+                    long quads = OccurrenceTextSchema.rebuild(data,
+                        started + OccurrenceTextSchema.REBUILD_DEADLINE_MS * 1_000_000L);
+                    record("public text rebuild completed: quads=" + quads
+                        + " elapsedMs=" + (System.nanoTime() - started) / 1_000_000L, false);
+                    ready = qualify(data);
+                }
+            } catch (RuntimeException transientFailure) {
+                record("public text recovery failed: " + auditReason(transientFailure), true);
+            }
         }
         synchronized (recovering) {
             if (recovering.get(data) != recovery) return;
+            recovery.running = false;
             if (ready) recovering.remove(data);
             else {
                 recovery.delayMs = Math.min(30_000, recovery.delayMs * 2);
                 schedule(recovery);
             }
         }
+    }
+    private static boolean repairable(DatasetGraph data) {
+        if (!exclusiveStartupProved(data)) return false;
+        data.begin(org.apache.jena.query.ReadWrite.READ);
+        try {
+            var position = CommandInvariant.readControl(data);
+            return position != null && !position.held() && position.textGeneration() != null
+                && !CommandModule.hasRestoreHold(data)
+                && data.contains(PUBLIC, ANCHOR, RDF.type.asNode(), uri(RV + "SearchGraphAnchor"));
+        } finally { data.end(); }
     }
     static void stopRecovery(DatasetGraph data) {
         synchronized (recovering) {
@@ -323,6 +395,7 @@ final class SearchDeltaJournal {
     }
     /** A non-exclusive reconfiguration must not keep a proof from an earlier exclusive start. */
     static void revokeExclusiveStartup(DatasetGraph data) {
+        dropQualification(data);
         var store = physicalStore(data);
         if (store == null) return;
         synchronized (exclusiveStartup) { exclusiveStartup.remove(store); }
@@ -366,18 +439,19 @@ final class SearchDeltaJournal {
      * the state a maintenance reset commits. The fresh graph is stored by the
      * next command. This repeats that same admission then, and only when the
      * process proved exclusivity at startup. */
-    private static void admitDeferred(DatasetGraph data) {
-        if (startupAudit.get()) return;
+    private static boolean admitDeferred(DatasetGraph data) {
+        if (startupAudit.get()) return false;
         var store = physicalStore(data);
-        if (store == null || data.isInTransaction() || !exclusiveStartupProved(data)) return;
+        if (store == null || data.isInTransaction() || !exclusiveStartupProved(data)) return false;
         boolean deferred;
         synchronized (deferredAdmission) { deferred = Boolean.TRUE.equals(deferredAdmission.get(store)); }
-        if (!deferred || !TemplateIndexService.workScopeNativeStorage(data)) return;
+        if (!deferred || !TemplateIndexService.workScopeNativeStorage(data)) return false;
         long started = System.nanoTime();
         try {
             CommandModule.qualifySemanticSources(data);
             TemplateIndexService.admitWorkScopeWriter(data);
             clearDeferredAdmission(store);
+            return true;
         } catch (RuntimeException failure) {
             TemplateIndexService.withdrawWorkScopeWriter(data);
             throw failure;
@@ -415,37 +489,66 @@ final class SearchDeltaJournal {
      * collector streams documents; no top-N inventory can silently truncate it.
      * Native deltas maintain this baseline between generation qualifications. */
     static boolean qualify(DatasetGraph data) {
+        return qualifyResult(data).baseline() != null;
+    }
+    private static AuditResult qualifyResult(DatasetGraph data) {
         try (var phase = PublicSearchPhaseEvidence.phase(PublicSearchPhaseEvidence.Phase.QUALIFICATION)) {
-            return qualifyBody(data);
+            try { return qualifyBody(data); }
+            catch (RuntimeException failure) {
+                invalidate(data, "qualification failed", "qualify");
+                throw failure;
+            }
         }
     }
-    private static boolean qualifyBody(DatasetGraph data) {
+    private static AuditResult qualifyBody(DatasetGraph data) {
         synchronized (qualified) { qualified.remove(data); }
         TextIndexLucene index = lucene(data);
-        Qualification baseline = auditGeneration(data, index);
+        AuditResult audit = auditGeneration(data, index);
+        Qualification baseline = audit.baseline();
         if (baseline == null) {
             invalidate(data, "startup audit returned no baseline", "qualify");
-            return false;
+            return audit;
         }
-        synchronized (qualified) { qualified.put(data, baseline); }
+        // Deferred source admission commits through the same text dataset.
+        // Publish only the final RDF/Lucene cut, after every startup write.
+        if (admitDeferred(data)) {
+            audit = auditGeneration(data, index);
+            baseline = audit.baseline();
+            if (baseline == null) {
+                invalidate(data, "deferred admission audit returned no baseline", "qualify");
+                return audit;
+            }
+        }
+        synchronized (qualified) {
+            if (textIndexUncertain(data)) {
+                if (!exclusiveStartupProved(data)) {
+                    invalidate(data, "crash fence requires exclusive startup", "qualify");
+                    return new AuditResult(null, false);
+                }
+                try { java.nio.file.Files.deleteIfExists(uncertaintyMarker(data)); }
+                catch (IOException failure) { throw new TextIndexException("crash fence removal failed", failure); }
+                record("public text crash fence cleared after committed generation audit", false);
+            }
+            qualified.put(data, baseline);
+        }
         record("search journal baseline installed: epoch=" + baseline.epoch()
             + " generation=" + baseline.generation()
             + " population=" + baseline.population()
             + " luceneGeneration=" + baseline.luceneGeneration(), false);
-        admitDeferred(data);
-        return true;
+        return new AuditResult(baseline, false);
     }
 
-    private static Qualification auditGeneration(DatasetGraph data, TextIndexLucene lucene) {
+    private static AuditResult auditGeneration(DatasetGraph data, TextIndexLucene lucene) {
         return auditGeneration(data, lucene, true);
     }
 
-    private static Qualification auditGeneration(DatasetGraph data, TextIndexLucene lucene, boolean requireAnchor) {
+    private static AuditResult auditGeneration(DatasetGraph data, TextIndexLucene lucene, boolean requireAnchor) {
         try (var phase = PublicSearchPhaseEvidence.phase(PublicSearchPhaseEvidence.Phase.AUDIT)) {
             return auditGenerationBody(data, lucene, requireAnchor);
         }
     }
-    private static Qualification auditGenerationBody(DatasetGraph data, TextIndexLucene lucene, boolean requireAnchor) {
+    private static AuditResult auditGenerationBody(DatasetGraph data, TextIndexLucene lucene, boolean requireAnchor) {
+        long deadline = System.nanoTime() + OccurrenceTextSchema.REBUILD_DEADLINE_MS * 1_000_000L;
         boolean ownsTransaction = !data.isInTransaction();
         if (ownsTransaction) data.begin(org.apache.jena.query.ReadWrite.READ);
         try {
@@ -454,6 +557,7 @@ final class SearchDeltaJournal {
             if (position.textGeneration() == null) return refuse("control has no text generation", null);
             if (lucene == null) return refuse("lucene index unavailable", null);
             if (position.held()) return refuse("control position held", null);
+            if (CommandModule.hasRestoreHold(data)) return refuse("restore hold present", null);
             if (requireAnchor && !data.contains(PUBLIC, ANCHOR, RDF.type.asNode(), uri(RV + "SearchGraphAnchor")))
                 return refuse("public anchor absent", null);
             CanonicalPolicy.RealmOwnerRefusal realm = CanonicalPolicy.auditRealmOwnerRefusal(data);
@@ -470,6 +574,8 @@ final class SearchDeltaJournal {
                     @Override protected void doSetNextReader(LeafReaderContext context) { leaf = context; }
                     @Override public ScoreMode scoreMode() { return ScoreMode.COMPLETE_NO_SCORES; }
                     @Override public void collect(int doc) throws IOException {
+                        if (System.nanoTime() >= deadline)
+                            throw new AuditRefusal("public text audit exceeded maintenance budget", null, false);
                         Document stored = leaf.reader().storedFields().document(doc);
                         String subject = stored.get("uri");
                         if (rankMetadata && stored.getValues("publicTitle").length != 0 && subject != null
@@ -484,10 +590,11 @@ final class SearchDeltaJournal {
                         if (contentUnit(subject)) {
                             try {
                                 if (verifyContentSubject(data, lucene, subject) != reader.getIndexCommit().getGeneration())
-                                    throw new AuditRefusal("public Content reader changed during audit", subject);
+                                    throw new AuditRefusal("public Content reader changed during audit", subject, false);
                             } catch (AuditRefusal refusal) {
                                 throw refusal;
                             } catch (RuntimeException mismatch) {
+                                if (indexReadUnavailable(mismatch)) throw mismatch;
                                 throw new AuditRefusal(auditReason(mismatch), subject);
                             }
                         } else {
@@ -506,21 +613,25 @@ final class SearchDeltaJournal {
                 var units = data.find(PUBLIC, Node.ANY, RDF.type.asNode(), MATCH_UNIT);
                 try {
                     while (units.hasNext()) {
+                        if (System.nanoTime() >= deadline) return refuse("public text audit exceeded maintenance budget", null);
                         Node unit = units.next().getSubject();
                         if (!unit.isURI()) return refuse("public MatchUnit is not an IRI", null);
-                        if (!seen.contains(unit.getURI())) return refuse("public MatchUnit absent from index", unit.getURI());
+                        if (!seen.contains(unit.getURI())) return refuse("public MatchUnit absent from index", unit.getURI(), true);
                         population++;
                     }
                 } finally { org.apache.jena.atlas.iterator.Iter.close(units); }
                 if (population != seen.size())
-                    return refuse("index population differs from public MatchUnit count", null);
-                return new Qualification(position.epoch().getLiteralLexicalForm(),
+                    return refuse("index population differs from public MatchUnit count", null, true);
+                return new AuditResult(new Qualification(position.epoch().getLiteralLexicalForm(),
                     position.textGeneration().getURI(), ordinal(data),
-                    reader.getIndexCommit().getGeneration(), population, position.sequence().toString());
+                    reader.getIndexCommit().getGeneration(), population, position.sequence().toString()), false);
             } catch (IOException | IllegalStateException | TextIndexException ex) {
-                if (ex instanceof AuditRefusal refusal) auditFailed(refusal.getMessage(), refusal.subject);
+                if (ex instanceof AuditRefusal refusal) {
+                    auditFailed(refusal.getMessage(), refusal.subject);
+                    return new AuditResult(null, refusal.inconsistent);
+                }
                 else auditFailed(auditReason(ex), null);
-                return null;
+                return new AuditResult(null, false);
             }
         } finally { if (ownsTransaction) data.end(); }
     }
@@ -528,7 +639,7 @@ final class SearchDeltaJournal {
     static long auditPopulation(DatasetGraph data, TextIndexLucene lucene) {
         // A bypass-writer service audits its own snapshot. It must not install
         // or invalidate the command-only service's generation qualification.
-        Qualification audited = auditGeneration(data, lucene, false);
+        Qualification audited = auditGeneration(data, lucene, false).baseline();
         if (audited == null) throw new IllegalStateException("public text generation is unqualified");
         return audited.population();
     }
@@ -701,21 +812,23 @@ final class SearchDeltaJournal {
     private static Map<String, Object> qualifiedProofBody(DatasetGraph data, long since, long writeEpoch) {
         ReadCapture capture = captured.get();
         if (capture != null && capture.data == data) {
-            if (!Boolean.TRUE.equals(capture.qualification().get("available"))) return Map.of("available", false);
+            if (!Boolean.TRUE.equals(capture.qualification().get("available"))) return capture.qualification();
             Map<String, Object> response = new LinkedHashMap<>(proof(data, since, writeEpoch));
             if (Boolean.TRUE.equals(response.get("available")))
                 response.put("qualifiedPopulation", capture.qualification().get("qualifiedPopulation"));
-            return response;
+            return Boolean.TRUE.equals(response.get("available")) ? response
+                : unavailable(data, UnavailableReason.REPLAY_UNAVAILABLE);
         }
         Qualification baseline;
         synchronized (qualified) { baseline = qualified.get(data); }
-        if (baseline == null) return Map.of("available", false);
+        if (baseline == null) return unavailable(data, textIndexUncertain(data)
+            ? UnavailableReason.TEXT_INDEX_UNCERTAIN : UnavailableReason.GENERATION_UNQUALIFIED);
         Map<String, Object> replay = proof(data, baseline.ordinal(), writeEpoch);
         if (!Boolean.TRUE.equals(replay.get("available"))
             || !baseline.epoch().equals(replay.get("dataEpoch"))
             || !baseline.generation().equals(replay.get("generation"))) {
             invalidate(data, "qualified epoch or generation differs", "qualifiedProof");
-            return Map.of("available", false);
+            return unavailable(data, UnavailableReason.GENERATION_UNQUALIFIED);
         }
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> deltas = (List<Map<String, Object>>) replay.get("deltas");
@@ -731,7 +844,7 @@ final class SearchDeltaJournal {
         long luceneGeneration = Long.parseLong((String) replay.get("luceneGeneration"));
         if (population < 0 || deltas.isEmpty() && luceneGeneration != baseline.luceneGeneration()) {
             invalidate(data, "qualified population or lucene generation differs", "qualifiedProof");
-            return Map.of("available", false);
+            return unavailable(data, UnavailableReason.GENERATION_UNQUALIFIED);
         }
         Qualification next = new Qualification(baseline.epoch(), baseline.generation(),
             Long.parseLong((String) replay.get("ordinal")), luceneGeneration, population,
@@ -746,7 +859,7 @@ final class SearchDeltaJournal {
         if (!Boolean.TRUE.equals(requested.get("available"))
             || !requested.get("ordinal").equals(replay.get("ordinal"))
             || !requested.get("luceneGeneration").equals(replay.get("luceneGeneration")))
-            return Map.of("available", false);
+            return unavailable(data, UnavailableReason.REPLAY_UNAVAILABLE);
         Map<String, Object> response = new LinkedHashMap<>(requested);
         response.put("qualifiedPopulation", Long.toString(population));
         return response;
@@ -1251,7 +1364,7 @@ final class SearchDeltaJournal {
             return stored.get(FilteredGraphTextIndex.RANK_CONTEXT) == null
                 && stored.get(FilteredGraphTextIndex.RANK_GROUP) == null
                 && stored.get("externalTextKey") == null;
-        } catch (IOException unavailable) { return false; }
+        } catch (IOException unavailable) { throw new IndexReadUnavailable(unavailable); }
     }
     /** True only for one successful receipt whose metadata matches and which never received either native pin. */
     private static boolean legacyUnpinnedContentReceipt(DatasetGraph data, String unit) {
@@ -1315,10 +1428,23 @@ final class SearchDeltaJournal {
     /** Carries a fixed audit reason and, when the check names one, the subject IRI. The message is never a body. */
     private static final class AuditRefusal extends IllegalStateException {
         final String subject;
+        final boolean inconsistent;
         AuditRefusal(String reason, String subject) {
+            this(reason, subject, true);
+        }
+        AuditRefusal(String reason, String subject, boolean inconsistent) {
             super(reason);
             this.subject = subject;
+            this.inconsistent = inconsistent;
         }
+    }
+    private static final class IndexReadUnavailable extends TextIndexException {
+        IndexReadUnavailable(Throwable cause) { super("committed text reader unavailable", cause); }
+    }
+    private static boolean indexReadUnavailable(Throwable failure) {
+        for (Throwable cause = failure; cause != null; cause = cause.getCause())
+            if (cause instanceof IndexReadUnavailable || cause instanceof IOException) return true;
+        return false;
     }
 
     private static ReaderLease openReader(TextIndexLucene lucene) throws IOException {

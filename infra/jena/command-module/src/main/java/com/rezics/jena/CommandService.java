@@ -55,10 +55,6 @@ final class CommandService extends ActionService {
     // for a rolled-back attempt, which conservatively invalidates cached proof.
     private final AtomicLong publicSearchWriteEpoch = new AtomicLong();
     private final AtomicLong privateSearchWriteEpoch = new AtomicLong();
-    // The image entrypoint leaves this marker after an unclean stop; only the
-    // offline empty-index rebuild removes it. Its state is fixed for this JVM.
-    private final boolean textIndexUncertain = java.nio.file.Files.exists(java.nio.file.Path.of(
-        System.getenv().getOrDefault("FUSEKI_BASE", "."), "databases/rezics/lucene.uncertain"));
 
     CommandService(ProfileRegistry profiles) {
         this(profiles, capability("FUSEKI_MAINTENANCE_TOKEN"), capability("FUSEKI_COMMAND_TOKEN"), capability("FUSEKI_TITLE_ADMISSION_KEY"));
@@ -91,16 +87,22 @@ final class CommandService extends ActionService {
     @Override public void execGet(HttpAction action) {
         long epoch = publicSearchWriteEpoch.get();
         boolean deltaExclusive = deltaExclusive(action.getDataService());
+        boolean textIndexUncertain = SearchDeltaJournal.textIndexUncertain(action.getDataService().getDataset());
         String since = action.getRequest().getParameter("deltaSince");
         if (since != null) {
-            if (!deltaExclusive || textIndexUncertain || !since.matches("-1|(0|[1-9][0-9]*)")) {
+            if (!deltaExclusive || !since.matches("-1|(0|[1-9][0-9]*)")) {
                 respond(action, 200, Map.of("available", false)); return;
             }
             try (var capture = SearchDeltaJournal.captureRead(action.getDataService().getDataset())) {
                 Map<String, Object> proof = SearchDeltaJournal.qualifiedProof(action.getDataService().getDataset(),
                     Long.parseLong(since), epoch);
                 respond(action, 200, proof);
-            } catch (IOException | IllegalArgumentException | IllegalStateException ex) {
+            } catch (IOException | IllegalStateException ex) {
+                var data = action.getDataService().getDataset();
+                SearchDeltaJournal.invalidate(data, "committed reader unavailable", "deltaProof");
+                respond(action, 200, SearchDeltaJournal.unavailable(data,
+                    SearchDeltaJournal.UnavailableReason.COMMITTED_READER_UNAVAILABLE));
+            } catch (IllegalArgumentException ex) {
                 respond(action, 200, Map.of("available", false));
             }
             return;
@@ -142,7 +144,8 @@ final class CommandService extends ActionService {
                 if (bytes.length > 2 * 1024 * 1024 || !body.keys().equals(Set.of("exactUnitProbe"))
                     || !body.get("exactUnitProbe").isObject())
                     throw new IllegalArgumentException("invalid exact unit probe envelope");
-                JsonObject result = !deltaExclusive(action.getDataService()) || textIndexUncertain
+                JsonObject result = !deltaExclusive(action.getDataService())
+                    || SearchDeltaJournal.textIndexUncertain(action.getDataService().getDataset())
                     ? jsonObject(Map.of("status", "unavailable"))
                     : runExactUnitProbe(action.getDataService().getDataset(), body.get("exactUnitProbe").getAsObject());
                 action.getResponse().setHeader("X-Rezics-Command-Work", CommandWork.currentCounters());
@@ -158,7 +161,8 @@ final class CommandService extends ActionService {
                         if (bytes.length > 128 * 1024 || !body.keys().equals(Set.of("sourceAuthorNames"))
                             || !body.get("sourceAuthorNames").isObject())
                             throw new IllegalArgumentException("invalid source author names envelope");
-                        if (!deltaExclusive(action.getDataService()) || textIndexUncertain) {
+                        if (!deltaExclusive(action.getDataService())
+                            || SearchDeltaJournal.textIndexUncertain(action.getDataService().getDataset())) {
                             status = 503; result = jsonObject(Map.of("status", "unavailable"));
                         } else {
                             result = runSourceAuthorNames(action.getDataService().getDataset(),
@@ -184,7 +188,8 @@ final class CommandService extends ActionService {
                 if (bytes.length > 8192 || !body.keys().equals(Set.of("prefixWalk"))
                     || !body.get("prefixWalk").isObject())
                     throw new IllegalArgumentException("invalid prefix walk envelope");
-                if (!deltaExclusive(action.getDataService()) || textIndexUncertain) {
+                if (!deltaExclusive(action.getDataService())
+                    || SearchDeltaJournal.textIndexUncertain(action.getDataService().getDataset())) {
                     respond(action, 503, Map.of("status", "unavailable")); return;
                 }
                 DatasetGraph data = action.getDataService().getDataset();
@@ -386,7 +391,8 @@ final class CommandService extends ActionService {
                 CommandWork.enter("preflight");
                 TemplateIndexService.workScopeBudget(deadline);
                 CommandInvariant.Control control = CommandInvariant.readControl(dataset);
-                if (textIndexUncertain || control == null || control.held() || CommandModule.hasRestoreHold(dataset)
+                if (SearchDeltaJournal.textIndexUncertain(dataset)
+                    || control == null || control.held() || CommandModule.hasRestoreHold(dataset)
                     || prefixIndex(dataset) == null || !SearchDeltaJournal.canTrackCommit(dataset))
                     throw new IllegalStateException("source author name writer is unavailable");
                 tracksIndex = true;
