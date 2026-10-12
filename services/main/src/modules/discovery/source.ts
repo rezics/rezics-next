@@ -76,12 +76,18 @@ export class DiscoveryRefreshInputs {
       return null;
     }
     const afterGraphSequence = BigInt(afterGraph.sequence);
+    // A boundary older than the delta budget already disables reuse. Bound the
+    // backward header probe too, even for long runs of empty or newer cuts.
+    // MATERIALIZED keeps the position and its one boundary-envelope check out
+    // of the page join's per-row index condition.
     const rows = (
       await this.pool.query<{
         after_sequence: string;
         coverage_stream_scope: string;
         coverage_data_epoch: string;
         coverage_sequence: string;
+        coverage_unresolved: boolean;
+        boundary_valid: boolean;
         stream_scope: string | null;
         data_epoch: string | null;
         sequence: string | null;
@@ -91,30 +97,41 @@ export class DiscoveryRefreshInputs {
         event_id: string | null;
         envelope: DeliveredMainEvent | null;
       }>(
-        `WITH coverage AS (
+        `WITH coverage AS MATERIALIZED (
         SELECT c.stream_scope,c.data_epoch,c.sequence::text AS sequence,
-          COALESCE((SELECT max(b.sequence) FROM relay.delivered_batch b
-            WHERE b.stream_scope=c.stream_scope AND b.data_epoch=c.data_epoch
-              AND b.sequence <= c.sequence AND EXISTS (
+          COALESCE(boundary.sequence,0)::text AS after_sequence,
+          EXISTS (SELECT 1 FROM relay.delivered_batch unresolved
+            WHERE unresolved.stream_scope=c.stream_scope AND unresolved.data_epoch=c.data_epoch
+              AND unresolved.sequence <= c.sequence AND unresolved.graph_sequence IS NULL) AS coverage_unresolved,
+          boundary.sequence IS NULL OR EXISTS (
                 SELECT 1 FROM relay.delivered_event e
-                WHERE e.stream_scope=b.stream_scope AND e.data_epoch=b.data_epoch AND e.sequence=b.sequence
+                WHERE e.stream_scope=c.stream_scope AND e.data_epoch=c.data_epoch AND e.sequence=boundary.sequence
                   AND e.source='https://rezics.com/services/main'
                   AND e.envelope #>> '{data,sourcePosition,datasetId}'='product'
                   AND e.envelope #>> '{data,sourcePosition,dataEpoch}'=c.data_epoch
-                  AND e.envelope #>> '{data,sourcePosition,sequence}' ~ '^(0|[1-9][0-9]{0,99})$'
-                  AND (e.envelope #>> '{data,sourcePosition,sequence}')::numeric <= $5::numeric
-              )),0)::text AS after_sequence
+                  AND e.envelope #>> '{data,sourcePosition,sequence}'=boundary.graph_sequence::text
+              ) AS boundary_valid
         FROM relay.checkpoint c
+        LEFT JOIN LATERAL (
+          SELECT b.sequence,b.graph_sequence FROM relay.delivered_batch b
+          WHERE b.stream_scope=c.stream_scope AND b.data_epoch=c.data_epoch
+            AND b.sequence <= c.sequence
+            AND b.sequence >= GREATEST(1,c.sequence-${DISCOVERY_REFRESH_INPUT_COST.batches})
+            AND b.event_count > 0 AND b.graph_sequence <= $5::numeric
+          ORDER BY b.sequence DESC LIMIT 1
+        ) boundary ON true
         WHERE c.consumer=$1 AND c.stream_scope=$2 AND c.data_epoch=$3 AND c.sequence >= $4::numeric
       )
       SELECT coverage.after_sequence,coverage.stream_scope AS coverage_stream_scope,
         coverage.data_epoch AS coverage_data_epoch,coverage.sequence AS coverage_sequence,
+        coverage.coverage_unresolved,coverage.boundary_valid,
         b.stream_scope,b.data_epoch,b.sequence::text,b.batch_id,b.routing_epoch,b.event_count,
         e.event_id,e.envelope
       FROM coverage
       LEFT JOIN relay.delivered_batch b ON b.stream_scope=coverage.stream_scope
         AND b.data_epoch=coverage.data_epoch AND b.sequence > coverage.after_sequence::numeric
         AND b.sequence <= coverage.sequence::numeric
+        AND coverage.sequence::numeric-coverage.after_sequence::numeric <= ${DISCOVERY_REFRESH_INPUT_COST.batches}
       LEFT JOIN relay.delivered_event e ON e.stream_scope=b.stream_scope
         AND e.data_epoch=b.data_epoch AND e.sequence=b.sequence
       ORDER BY b.sequence,e.event_id LIMIT $6`,
@@ -129,6 +146,10 @@ export class DiscoveryRefreshInputs {
       )
     ).rows;
     if (!rows.length) return null;
+    if (rows[0]!.coverage_unresolved) {
+      throw new WorkReadUnavailable('Main discovery graph cut is unavailable; repair with task main:relay -- --repair-graph-cuts --data-epoch <epoch>');
+    }
+    if (rows[0]!.boundary_valid === false) return null;
     const afterSequence = rows[0]!.after_sequence;
     const count = BigInt(coverage.sequence) - BigInt(afterSequence);
     if (count < 0n || count > BigInt(DISCOVERY_REFRESH_INPUT_COST.batches)) return null;
