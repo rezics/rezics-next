@@ -827,7 +827,7 @@ export async function restoreBrowserRecipes(input: { runId: string; webOrigin: s
     replacePrivate(composePath, compose);
     replacePrivate(join(stackDir, 'apps.env'), appEnvironment(compose, stackDir));
     const { bootstrapWebAuth } = await import('../dev/web-auth-bootstrap.ts');
-    await bootstrapWebAuth({ runId: copy.runId, redirectUris: [`${input.webOrigin}/auth/callback`] });
+    await bootstrapWebAuth({ profile: 'qa', runId: copy.runId, redirectUris: [`${input.webOrigin}/auth/callback`] });
     const preparation = { ...driver.preparation(target), totalMs: performance.now() - started };
     if (preparation.totalMs > budgetMs) throw new Error('Browser recipe restore and readiness exceeded 600 seconds');
     const prepared = { corpus, restored: true as const, restoreRunId: copy.runId, preparation };

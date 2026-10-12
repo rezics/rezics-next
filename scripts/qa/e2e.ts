@@ -23,6 +23,13 @@ export interface BrowserStepOptions {
   record?: (result: BrowserStepResult) => void;
 }
 
+/** A restored stack owns its credentials and administrator; absent values cannot come from the empty stack. */
+export function replaceBrowserStackEnvironment(env: NodeJS.ProcessEnv,
+  previous: Record<string, string>, restored: Record<string, string>): void {
+  for (const key of Object.keys(previous)) delete env[key];
+  Object.assign(env, restored);
+}
+
 /** Admission has the run deadline; the step keeps its full execution budget once admitted. */
 export async function measuredBrowserStep(step: string, budgetMs: number, run: (budgetMs: number) => Promise<void>,
   options: BrowserStepOptions): Promise<BrowserStepResult> {
@@ -275,7 +282,7 @@ async function runE2e(): Promise<void> {
     throw new Error('e2e requires an apps file, artifact directory and isolated run ID');
   }
   const web = requiredWebOrigin();
-  const apps = JSON.parse(readFileSync(appsPath, 'utf8')) as Record<string, string>;
+  let apps = JSON.parse(readFileSync(appsPath, 'utf8')) as Record<string, string>;
   const plan = e2eBrowserPlan(playwrightArgs, storybookRequested);
   const counts = browserFileCounts(root, playwrightArgs);
   const budgets = browserBudgets(counts.playwright, counts.storybook, browserProjectCount(), {
@@ -402,12 +409,13 @@ async function runE2e(): Promise<void> {
           accountsPort: apps.ACCOUNTS_PORT });
         stopRestoredStack = restored.stop;
         appRunId = restored.runId;
-        Object.assign(apps, restored.apps);
+        const previousStackEnvironment = { ...apps, ...runtime };
+        apps = restored.apps;
         const stackDir = join(root, '.temp/stack', `rezics-qa-${appRunId}`);
         const authDir = join(stackDir, 'web-auth');
         const client = JSON.parse(readFileSync(join(authDir, 'public.json'), 'utf8')) as { clientId: string };
         const compose = readEnv(join(stackDir, 'compose.env'));
-        Object.assign(env, apps, readEnv(join(authDir, 'runtime.env')), {
+        replaceBrowserStackEnvironment(env, previousStackEnvironment, { ...apps, ...readEnv(join(authDir, 'runtime.env')),
           WEB_OAUTH_CLIENT_ID: client.clientId,
           MAILPIT_URL: `http://127.0.0.1:${compose.MAILPIT_HTTP_PORT}`,
           REZICS_WEB_AUTH_PUBLIC_PATH: join(authDir, 'public.json'),

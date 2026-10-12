@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { join, resolve } from 'node:path';
 import { describe, expect, test } from 'bun:test';
 import { e2eArgs, failedSelection, parseJUnit, selectedTestExecuted } from './acceptance.ts';
-import { measuredBrowserStep, runPreparedJourneys, type BrowserStepResult } from './e2e.ts';
+import { measuredBrowserStep, replaceBrowserStackEnvironment, runPreparedJourneys, type BrowserStepResult } from './e2e.ts';
 import { discoverJourneyPreparations, type JourneyPreparation } from './e2e-preparation.ts';
 
 const preparation = (name: string): JourneyPreparation => ({
@@ -21,7 +21,69 @@ function fixture() {
     cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
 
+describe('restored browser stack credentials', () => {
+  const previous = {
+    ACCOUNT_BASE_URL: 'http://127.0.0.1:4101', MAIN_PORT: '4102',
+    PLATFORM_FIRST_ADMIN_ACCOUNT: 'empty-stack-admin', ACCOUNT_OPERATOR_USER_IDS: 'empty-stack-operator',
+    ACCOUNT_MAIN_CLIENT_ID: 'empty-stack-main-client', ACCOUNT_MAIN_CLIENT_SECRET: 'empty-stack-secret',
+    WEB_OAUTH_CLIENT_ID: 'empty-stack-web-client',
+  };
+  const settings = { REZICS_QA_RUN_ID: 'browser-run', REZICS_STACK_PROFILE: 'qa',
+    REZICS_WEB_E2E_BASE_URL: 'http://127.0.0.1:4200', CI: '1' };
+
+  test('the restored issuer, administrator and clients replace the empty stack identities', () => {
+    const env: NodeJS.ProcessEnv = { ...settings, ...previous };
+    replaceBrowserStackEnvironment(env, previous, {
+      ACCOUNT_BASE_URL: 'http://127.0.0.1:4301', MAIN_PORT: '4302',
+      PLATFORM_FIRST_ADMIN_ACCOUNT: 'retained-admin', ACCOUNT_OPERATOR_USER_IDS: 'restored-operator',
+      ACCOUNT_MAIN_CLIENT_ID: 'restored-main-client', ACCOUNT_MAIN_CLIENT_SECRET: 'restored-secret',
+      WEB_OAUTH_CLIENT_ID: 'restored-web-client',
+    });
+    expect(env).toEqual({
+      ...settings, ACCOUNT_BASE_URL: 'http://127.0.0.1:4301', MAIN_PORT: '4302',
+      PLATFORM_FIRST_ADMIN_ACCOUNT: 'retained-admin', ACCOUNT_OPERATOR_USER_IDS: 'restored-operator',
+      ACCOUNT_MAIN_CLIENT_ID: 'restored-main-client', ACCOUNT_MAIN_CLIENT_SECRET: 'restored-secret',
+      WEB_OAUTH_CLIENT_ID: 'restored-web-client',
+    });
+  });
+
+  test('absent restored administrator and client credentials are removed while QA settings remain', () => {
+    const env: NodeJS.ProcessEnv = { ...settings, ...previous };
+    replaceBrowserStackEnvironment(env, previous, { ACCOUNT_BASE_URL: 'http://127.0.0.1:4301', MAIN_PORT: '4302' });
+    expect(env).toEqual({ ...settings, ACCOUNT_BASE_URL: 'http://127.0.0.1:4301', MAIN_PORT: '4302' });
+    expect(Object.hasOwn(env, 'PLATFORM_FIRST_ADMIN_ACCOUNT')).toBe(false);
+    expect(Object.hasOwn(env, 'ACCOUNT_OPERATOR_USER_IDS')).toBe(false);
+    expect(Object.hasOwn(env, 'ACCOUNT_MAIN_CLIENT_ID')).toBe(false);
+    expect(Object.hasOwn(env, 'ACCOUNT_MAIN_CLIENT_SECRET')).toBe(false);
+    expect(Object.hasOwn(env, 'WEB_OAUTH_CLIENT_ID')).toBe(false);
+  });
+});
+
 describe('journey preparation isolation', () => {
+  test('simulated admission keeps preparation timing independent of host memory and its full execution budget', async () => {
+    const f = fixture();
+    let clock = 0;
+    const events: string[] = [];
+    const steps: BrowserStepResult[] = [];
+    try {
+      const result = await measuredBrowserStep('Prepare retained', 1_000, async budget => {
+        events.push('prepare');
+        expect(budget).toBe(1_000);
+        clock += 7;
+      }, { root: f.root, env: { REZICS_STACK_PROFILE: 'qa' }, deadline: 20_000, now: () => clock,
+        admission: async (_need, options) => {
+          events.push('admission');
+          expect(options.deadline).toBe(20_000);
+          clock += 16_000;
+          options.onAdmissionWait?.(16_000);
+        }, record: result => steps.push(result) });
+      expect(events).toEqual(['admission', 'prepare']);
+      expect(result).toEqual({ step: 'Prepare retained', budgetMs: 1_000, elapsedMs: 7,
+        admissionWaitMs: 16_000, passed: true });
+      expect(steps).toEqual([result]);
+    } finally { f.cleanup(); }
+  });
+
   test('discovery retains a stack restore hook instead of falling back to fresh data preparation', async () => {
     const f = fixture();
     try {
@@ -62,20 +124,22 @@ describe('journey preparation isolation', () => {
       const f = fixture();
       try {
         const first = preparation('first'), second = preparation('second');
-        const prepared: string[] = [], launched: (readonly string[])[] = [], steps: BrowserStepResult[] = [];
+        const admitted: string[] = [], prepared: string[] = [], launched: (readonly string[])[] = [], steps: BrowserStepResult[] = [];
         const failures = await runPreparedJourneys([first, second], [first.journey, second.journey, '--project', 'chromium'], {
           root: f.root, artifactDir: f.artifactDir,
           prepare: async item => {
             await measuredBrowserStep(item.step, item.budgetMs, async () => {
               prepared.push(item.journey);
               if (item === first) throw new Error(error);
-            }, { root: f.root, env: { CI: '1' }, deadline: Date.now() + 10_000, record: result => steps.push(result) });
+            }, { root: f.root, env: { REZICS_STACK_PROFILE: 'qa' }, deadline: Date.now() + 10_000,
+              admission: async () => { admitted.push(item.journey); }, record: result => steps.push(result) });
           },
           playwright: async args => {
             launched.push(args);
             writeFileSync(join(f.artifactDir, 'e2e.xml'), `<testsuites><testsuite tests="1"><testcase name="second journey" classname="second.e2e.ts" time="1" /></testsuite></testsuites>`);
           },
         });
+        expect(admitted).toEqual([first.journey, second.journey]);
         expect(prepared).toEqual([first.journey, second.journey]);
         expect(launched).toEqual([['--project', 'chromium', second.journey]]);
         expect(failures).toEqual([{ preparation: first, error }]);
