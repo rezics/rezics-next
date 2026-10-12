@@ -21,6 +21,7 @@ import { VOLUME_KINDS, composeArgs, copyVolume, currentEngines, dockerEnvironmen
 import { redactCommandOutput } from './command-output.ts';
 import { fixtureModel } from './model.ts';
 import { alignFixtureModel, type FixtureModelAlignment } from './align-model.ts';
+import { ModelAlignmentTimeout } from './model-deadline.ts';
 
 export const RESTORE_DEADLINE_MS = 600_000;
 
@@ -64,7 +65,46 @@ export interface FixtureRestoreEvidence {
   /** Active restore work; admission queueing is reported separately. */
   elapsedMs?: number; admissionWaitMs?: number;
   completedAt?: string; failure?: string; artifacts: string;
+  failurePhase?: string; failureKind?: 'timeout' | 'error';
 }
+
+export class FixtureRestoreFailure extends Error {
+  constructor(readonly evidence: FixtureRestoreEvidence, cause: unknown) {
+    super(evidence.failure, { cause }); this.name = 'FixtureRestoreFailure';
+  }
+}
+
+/** Phase injection replaces external owners while exercising the restore lifecycle. */
+export interface FixtureRestoreRuntime {
+  readManifest: typeof readManifest;
+  inputs: typeof fixtureRestoreInputs;
+  docker: typeof dockerEnvironment;
+  projectRunning: typeof projectRunning;
+  volumeExists: typeof volumeExists;
+  readApps: typeof readEnv;
+  alignModel: typeof alignFixtureModel;
+  runPhase: <T>(name: string, work: () => T | Promise<T>) => Promise<T>;
+  cleanup: (target: string, targetDir: string, volumes: string[], docker: NodeJS.ProcessEnv, artifacts: string) => void;
+  deadlineMs: number;
+  artifactsRoot: string;
+}
+
+function cleanupRestoredFixture(target: string, targetDir: string, volumes: string[], docker: NodeJS.ProcessEnv, artifacts: string) {
+  const logs = spawnSync('bun', ['scripts/dev/cli.ts', 'stack:logs', '--profile', 'qa', '--run-id', target, '--persistent'],
+    { cwd: root, env: docker, encoding: 'utf8', timeout: 30_000 });
+  writeFileSync(join(artifacts, 'stack.log'), [logs.stdout, logs.stderr].filter(Boolean).map(part => redactCommandOutput(part)).join('\n'));
+  spawnSync('bun', ['scripts/dev/cli.ts', 'stack:reset', '--profile', 'qa', '--run-id', target, '--persistent'],
+    { cwd: root, env: docker, encoding: 'utf8', timeout: 120_000 });
+  for (const volume of volumes) spawnSync('docker', ['volume', 'rm', volume], { cwd: root, env: docker, timeout: 30_000 });
+  rmSync(targetDir, { recursive: true, force: true });
+}
+
+const fixtureRestoreRuntime: FixtureRestoreRuntime = {
+  readManifest, inputs: fixtureRestoreInputs, docker: dockerEnvironment, projectRunning, volumeExists,
+  readApps: readEnv, alignModel: alignFixtureModel, runPhase: async (_name, work) => work(),
+  cleanup: cleanupRestoredFixture, deadlineMs: RESTORE_DEADLINE_MS,
+  artifactsRoot: join(root, '.artifacts', 'fixture-restore'),
+};
 
 /**
  * Restore an isolated writable QA stack from one stopped fixture backup under one
@@ -72,25 +112,30 @@ export interface FixtureRestoreEvidence {
  * check owner readiness and read the manifest's samples. No corpus rescan.
  */
 export async function restoreFixture(id: string, target: string,
-  owners: readonly FixtureOwner[] = fixtureOwners): Promise<FixtureRestoreEvidence> {
+  owners: readonly FixtureOwner[] = fixtureOwners,
+  dependencies: Partial<FixtureRestoreRuntime> = {}): Promise<FixtureRestoreEvidence> {
+  const runtime = { ...fixtureRestoreRuntime, ...dependencies };
   const started = Date.now();
-  const budget = new FixtureWorkBudget(RESTORE_DEADLINE_MS);
+  const budget = new FixtureWorkBudget(runtime.deadlineMs);
   const remaining = () => budget.remaining();
-  const artifacts = join(root, '.artifacts', 'fixture-restore', target);
+  const artifacts = join(runtime.artifactsRoot, target);
   if (existsSync(artifacts)) throw new Error(`Fixture restore evidence already exists: ${target}`);
   mkdirSync(artifacts, { recursive: true });
-  const manifest = readManifest(id);
+  const manifest = runtime.readManifest(id);
   if (!manifest) throw new Error(`Fixture ${id} has no retained manifest; run task fixture:build first`);
   const evidence: FixtureRestoreEvidence = { fixture: id, target, profile: manifest.profile,
     works: manifest.entities.works, startedAt: new Date(started).toISOString(),
-    deadlineMs: RESTORE_DEADLINE_MS, phases: {}, artifacts };
+    deadlineMs: runtime.deadlineMs, phases: {}, artifacts };
+  let activePhase: string | undefined;
+  let failureCause: unknown;
   const phase = async <T>(name: string, work: () => Promise<T> | T): Promise<T> => {
     const at = performance.now(), waiting = budget.admissionWaitMs();
-    try { return await work(); } finally {
+    activePhase = name;
+    try { return await runtime.runPhase(name, work); } finally {
       evidence.phases[name] = Math.round(performance.now() - at - (budget.admissionWaitMs() - waiting));
     }
   };
-  const docker = dockerEnvironment();
+  const docker = runtime.docker();
   const options: StackOptions = { profile: 'qa', runId: target, persistent: true };
   const targetDir = stackDirectory(root, options);
   const targetVolumes = VOLUME_KINDS.map(kind => `rezics-qa-${target}_${kind}`);
@@ -98,17 +143,17 @@ export async function restoreFixture(id: string, target: string,
   let pools: { access: Pool; content: Pool } | undefined;
   try {
     const compatibility = await phase('compatibility', () => restoreCompatibility(manifest,
-      fixtureRestoreInputs(docker, owners)));
+      runtime.inputs(docker, owners)));
     evidence.compatibility = compatibility;
     if (!compatibility.compatible) {
       throw new Error(`Fixture ${id} is stale; rebuild it: ${compatibility.reasons.join('; ')}`);
     }
     const project = fixtureProject(id);
-    if (projectRunning(project, docker)) throw new Error('Fixture backup project must be stopped');
+    if (runtime.projectRunning(project, docker)) throw new Error('Fixture backup project must be stopped');
     for (const kind of VOLUME_KINDS) {
-      if (!volumeExists(`${project}_${kind}`, docker)) throw new Error(`Fixture backup volume is missing: ${kind}`);
+      if (!runtime.volumeExists(`${project}_${kind}`, docker)) throw new Error(`Fixture backup volume is missing: ${kind}`);
     }
-    if (existsSync(targetDir) || targetVolumes.some(volume => volumeExists(volume, docker))) {
+    if (existsSync(targetDir) || targetVolumes.some(volume => runtime.volumeExists(volume, docker))) {
       throw new Error(`Restore target ${target} already exists`);
     }
     created = true;
@@ -155,10 +200,11 @@ export async function restoreFixture(id: string, target: string,
         await configurePorts();
       }
     });
-    const apps = readEnv(join(targetDir, 'apps.env'));
+    const apps = runtime.readApps(join(targetDir, 'apps.env'));
     evidence.appliedMigrations = await phase('migrate', () => migrateFixtureOwners(apps));
     remaining();
-    evidence.modelAlignment = await phase('align-model', () => alignFixtureModel(root, targetDir, apps, manifest));
+    evidence.modelAlignment = await phase('align-model', () => runtime.alignModel(root, targetDir, apps, manifest,
+      { remaining, signal: AbortSignal.timeout(Math.max(1, Math.ceil(remaining()))) }));
     remaining();
     await phase('ready', async () => {
       for (const [key, database] of [
@@ -173,7 +219,10 @@ export async function restoreFixture(id: string, target: string,
     evidence.samples = await phase('smoke', () => checkSamples(apps, manifest, pools!));
     remaining();
   } catch (error) {
+    failureCause = error;
     evidence.failure = redactCommandOutput(error instanceof Error ? error.message : String(error));
+    evidence.failurePhase = activePhase;
+    evidence.failureKind = error instanceof ModelAlignmentTimeout ? 'timeout' : 'error';
   } finally {
     if (pools) await Promise.all([pools.access.end(), pools.content.end()]);
   }
@@ -181,18 +230,10 @@ export async function restoreFixture(id: string, target: string,
   evidence.completedAt = new Date().toISOString();
   if (evidence.failure && created) {
     // A failed restore leaves no half-built writable copy behind; its logs stay as evidence.
-    const logs = spawnSync('bun', ['scripts/dev/cli.ts', 'stack:logs', '--profile', 'qa', '--run-id', target, '--persistent'],
-      { cwd: root, env: docker, encoding: 'utf8', timeout: 30_000 });
-    writeFileSync(join(artifacts, 'stack.log'), [logs.stdout, logs.stderr].filter(Boolean).map(part => redactCommandOutput(part)).join('\n'));
-    spawnSync('bun', ['scripts/dev/cli.ts', 'stack:reset', '--profile', 'qa', '--run-id', target, '--persistent'],
-      { cwd: root, env: docker, encoding: 'utf8', timeout: 120_000 });
-    for (const volume of targetVolumes) {
-      spawnSync('docker', ['volume', 'rm', volume], { cwd: root, env: docker, timeout: 30_000 });
-    }
-    rmSync(targetDir, { recursive: true, force: true });
+    runtime.cleanup(target, targetDir, targetVolumes, docker, artifacts);
   }
   writeFileSync(join(artifacts, 'run.json'), `${JSON.stringify(evidence, null, 2)}\n`);
   console.log(`Fixture restore artifacts: ${artifacts}`);
-  if (evidence.failure) throw new Error(evidence.failure);
+  if (evidence.failure) throw new FixtureRestoreFailure(evidence, failureCause);
   return evidence;
 }

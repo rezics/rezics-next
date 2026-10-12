@@ -8,9 +8,11 @@ import { fixtureModel, fixtureModelInputs, type FixtureModelManifest } from '../
 import { graphOwner } from '../../../scripts/fixture/owners/graph.ts';
 import { fixtureOwners } from '../../../scripts/fixture/owners/index.ts';
 import { fixtureDirectory, PINNED_FIXTURE_IDS } from '../../../scripts/fixture/stack.ts';
-import { fixtureModelAuditActor, localDatasetModelHead } from '../../../scripts/datasets/model-bootstrap.ts';
+import { fixtureModelAuditActor, localDatasetModelHead, type ModelArtifactEvidence,
+  type LocalModelBootstrapResult } from '../../../scripts/datasets/model-bootstrap.ts';
 import { ModelGenerationUnavailable, type ActiveModelGeneration } from '../../../services/main/src/modules/semantic/generation-guard.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
+import { Pool } from 'pg';
 
 const root = resolve(import.meta.dir, '../../..');
 const engines = {
@@ -45,7 +47,7 @@ test('fixture: model compatibility derives only the loader-declared shapes and v
     const inputs = fixtureModelInputs(directory, profiles);
     expect(Object.keys(inputs).sort()).toEqual(profiles.flatMap(profile => {
       const id = profile.split('/').at(-1)!;
-      return [`profile:${id}`, `vocabulary:${id}`];
+      return [`profile:${id}`];
     }).sort());
     const before = fixtureModel(directory).generation;
     model.profiles.push({ id: 'unrelated-additive-v1', sha256: 'new-shape', file: 'shapes/unrelated-additive-v1.ttl' });
@@ -86,6 +88,28 @@ test('fixture: real manifests before an additive definition restore, with newer 
   });
 });
 
+test('finding 2: a changed used canonical route, binding or binding demand is stale with the profile reason', async () => {
+  await modelRoot((directory, model) => {
+    const backup = core();
+    const id = 'work-metadata-v1';
+    for (const metadata of ['canonical', 'binding', 'demand']) {
+      const changed = structuredClone(model);
+      if (metadata === 'canonical') {
+        const route = changed.canonical.flatMap(entry => entry.routes).find(route => route.profile === id)!;
+        route.when = [{ path: 'https://rezics.com/vocab/hostingPolicy', value: 'https://rezics.com/vocab/MetadataOnly' }];
+      } else if (metadata === 'binding') {
+        changed.profiles.find(profile => profile.id === id)!.binding = { required: ['work'], optional: [], roles: ['work'] };
+      } else changed.bindingDemands.push({ type: 'https://schema.org/CreativeWork', profile: id });
+      saveModel(directory, changed);
+      const now = current(backup);
+      now.owners.graph!.inputs = graphOwner.compatibilityInputs(directory);
+      now.modelGeneration = fixtureModel(directory).generation;
+      expect(restoreCompatibility(backup, now)).toMatchObject({ compatible: false,
+        reasons: [`owner graph model input changed: profile:${id}`] });
+    }
+  });
+});
+
 test('fixture: every used profile and vocabulary change is refused with its named input', async () => {
   await modelRoot((directory, model) => {
     const backup = core();
@@ -100,13 +124,30 @@ test('fixture: every used profile and vocabulary change is refused with its name
         now.owners.graph!.inputs = graphOwner.compatibilityInputs(directory);
         now.modelGeneration = fixtureModel(directory).generation;
         expect(restoreCompatibility(backup, now)).toMatchObject({ compatible: false,
-          reasons: [`owner graph model input changed: ${kind}:${id}`] });
+          reasons: [`owner graph model input changed: profile:${id}`] });
       }
     }
     const now = current(backup);
     now.owners.graph!.inputs.jena = 'next-version';
     expect(restoreCompatibility(backup, now).reasons).toEqual(['owner graph model input changed: jena']);
   });
+});
+
+test('finding 6: every profile declared by the emitted loader records has a compatibility fingerprint', async () => {
+  const observed = new Set<string>();
+  let bytes = '';
+  const access = new Pool(), content = new Pool();
+  try {
+    await graphOwner.load(fixtureCorpus('small', 'profile-coverage', 6), {
+      root, apps: {}, pools: { access, content }, recordModelProfile: profile => observed.add(profile),
+      async fusekiOffline(_script, input) { if (input) for await (const chunk of input) bytes += chunk; return ''; },
+    });
+    expect(bytes).toContain('https://rezics.com/vocab/TextContribution');
+    expect(bytes).toContain('https://rezics.com/vocab/PublicationDecision');
+    expect([...observed].sort()).toEqual([...graphOwner.modelProfiles!].sort());
+    const inputs = graphOwner.compatibilityInputs(root);
+    for (const profile of observed) expect(inputs[`profile:${profile.split('/').at(-1)}`]).toMatch(/^[a-f0-9]{64}$/);
+  } finally { await Promise.all([access.end(), content.end()]); }
 });
 
 const retainedMedium = join(fixtureDirectory(PINNED_FIXTURE_IDS[0]), 'manifest.json');
@@ -127,21 +168,24 @@ test('fixture: restore reuses model bootstrap and records both generations and t
   const apps = { FUSEKI_URL: 'http://127.0.0.1:3030/rezics' };
   const model = fixtureModel(root);
   const stack = join(root, '.temp/stack/rezics-qa-alignment');
-  const evidence = await alignFixtureModel(root, stack, apps, backup, async (directory, fixture) => {
+  const artifacts: ModelArtifactEvidence[] = [{ name: 'manifest.json', sha256: '1'.repeat(64) }];
+  const evidence = await alignFixtureModel(root, stack, apps, backup, {}, async (directory, fixture) => {
     expect(directory).toBe(stack);
     expect(fixture).toEqual({ apps, importOperation: backup.importOperation });
-    return { state: 'completed', generation: model.generation, sequence: '1' };
+    return { state: 'completed', generation: model.generation, sequence: '1', artifacts, artifactCount: artifacts.length };
   });
   expect(evidence).toEqual({ backupGeneration: backup.modelGeneration, currentGeneration: model.generation,
-    artifacts: model.manifest.artifacts, installation: { state: 'completed', generation: model.generation, sequence: '1' } });
+    artifacts, artifactCount: artifacts.length, installation: { state: 'completed', generation: model.generation,
+      sequence: '1', artifacts, artifactCount: artifacts.length } });
   expect(backup).toEqual(original);
-  for (const installation of [{ state: 'completed', generation: 'wrong' },
-    { state: 'pending', generation: model.generation }]) {
-    await expect(alignFixtureModel(root, stack, apps, backup, async () => installation))
+  const invalid: LocalModelBootstrapResult[] = [{ state: 'completed', generation: 'wrong', artifacts, artifactCount: artifacts.length },
+    { state: 'current', generation: model.generation, artifacts, artifactCount: 999 }];
+  for (const installation of invalid) {
+    await expect(alignFixtureModel(root, stack, apps, backup, {}, async () => installation))
       .rejects.toThrow('did not install the current generation');
   }
   const failure = new Error('alignment failed');
-  await expect(alignFixtureModel(root, stack, apps, backup, async () => { throw failure; })).rejects.toBe(failure);
+  await expect(alignFixtureModel(root, stack, apps, backup, {}, async () => { throw failure; })).rejects.toBe(failure);
 });
 
 test('fixture: fixture audit identities cannot authorize shared-stack model maintenance', () => {

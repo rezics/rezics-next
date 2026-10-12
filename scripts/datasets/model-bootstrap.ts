@@ -11,7 +11,7 @@ import {
 import { profileRegistry } from '../../packages/model/src/generated/profiles.ts';
 import { writeAudit } from '../../services/account/src/operators.ts';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
-import { S3ImmutableObjects } from '../../services/main/src/infrastructure/immutable-objects.ts';
+import { S3ImmutableObjects, type ImmutableObjects } from '../../services/main/src/infrastructure/immutable-objects.ts';
 import {
   assertCommandProfiles,
   COMMAND_MODULE_VERSION,
@@ -41,6 +41,7 @@ import { checkedLocalDatabase, datasetAdminPath } from './bootstrap.ts';
 import { readEnv } from '../dev/config.ts';
 import { atomicJson, repository, sha256 } from './store.ts';
 import { tryAcquireDirectoryLease, type AcquiredDirectoryLease } from '../qa/process/lease.ts';
+import { ModelWorkBudget, modelWork } from '../fixture/model-deadline.ts';
 
 function holdDirectory(lock: string, busy: string): AcquiredDirectoryLease {
   const lease = tryAcquireDirectoryLease(lock);
@@ -193,6 +194,106 @@ function docker(args: string[], timeout = 30_000): string {
   return execFileSync('docker', args, { encoding: 'utf8', timeout, maxBuffer: 1_048_576 }).trim();
 }
 
+interface LocalModelContainer {
+  Id: string; Image: string;
+  Config: { Env: string[]; Labels: Record<string, string> };
+  Mounts: { Type: string; Name: string; Destination: string; RW: boolean }[];
+  NetworkSettings: { Ports: Record<string, { HostIp: string; HostPort: string }[]> };
+}
+
+export interface ModelBootstrapRuntime {
+  docker: typeof docker;
+  readEnv: typeof readEnv;
+  assertProfiles: typeof assertCommandProfiles;
+  readHead: typeof readActiveModelGeneration;
+  initialize: typeof ensureModelGeneration;
+  custody: typeof custodyModelGenerationArtifacts;
+  objects: (env: Record<string, string>, signal: AbortSignal) => ImmutableObjects;
+}
+
+const modelBootstrapRuntime: ModelBootstrapRuntime = {
+  docker, readEnv, assertProfiles: assertCommandProfiles, readHead: readActiveModelGeneration,
+  initialize: ensureModelGeneration, custody: custodyModelGenerationArtifacts,
+  objects: (env, signal) => new S3ImmutableObjects({
+    endpoint: checkedLocalModelEndpoint(env.MAIN_S3_ENDPOINT!), bucket: env.MAIN_S3_BUCKET!,
+    region: env.MAIN_S3_REGION, accessKeyId: env.MAIN_S3_ACCESS_KEY!,
+    secretAccessKey: env.MAIN_S3_SECRET_KEY!, prefix: 'semantic/work/', readSignal: () => signal,
+  }),
+};
+
+export interface ModelBootstrapOptions {
+  signal?: AbortSignal;
+  remaining?: () => number;
+  runtime?: Partial<ModelBootstrapRuntime>;
+}
+export interface ModelArtifactEvidence { name: string; sha256: string }
+export interface LocalModelBootstrapResult extends Record<string, unknown> {
+  state: 'current' | 'completed'; generation: string;
+  artifacts: ModelArtifactEvidence[]; artifactCount: number;
+}
+
+/** Match saved configuration, Compose labels, named volumes and owner endpoints
+ * before every bootstrap, custody and audit write, including current-head paths. */
+export function assertLocalModelOwner(stack: string, env: Record<string, string>,
+  inspect: typeof docker = docker, savedEnvironment: typeof readEnv = readEnv): LocalModelContainer {
+  const project = basename(stack);
+  if (!/^rezics-(dev|qa-[a-z0-9-]+)$/.test(project)
+    || basename(dirname(stack)) !== 'stack' || basename(dirname(dirname(stack))) !== '.temp'
+    || !existsSync(join(stack, 'compose.env')))
+    throw new Error('Model maintenance requires a harness-owned stack configuration');
+  const saved = savedEnvironment(join(stack, project === 'rezics-dev' ? 'dev.env' : 'apps.env'));
+  if (Object.entries(env).some(([key, value]) => saved[key] !== value))
+    throw new Error('Model environment differs from the harness-owned stack');
+  const contexts = JSON.parse(inspect(['context', 'inspect'])) as { Endpoints: { docker: { Host: string } } }[];
+  if (!contexts[0]?.Endpoints.docker.Host.startsWith('unix://')
+    || (process.env.DOCKER_HOST && !process.env.DOCKER_HOST.startsWith('unix://')))
+    throw new Error('Model fixture maintenance requires a local Unix Docker owner');
+  let graph: LocalModelContainer | undefined;
+  const services = [
+    { service: 'fuseki', volume: 'fuseki_data', destination: '/fuseki/databases', port: '3030/tcp',
+      endpoint: env.FUSEKI_URL!, credentials: [`FUSEKI_COMMAND_TOKEN=${env.FUSEKI_COMMAND_TOKEN}`] },
+    { service: 'postgres', volume: 'postgres_data', destination: '/var/lib/postgresql', port: '5432/tcp',
+      endpoint: env.ACCOUNT_DATABASE_URL!, credentials: [] },
+    ...(env.MAIN_S3_ENDPOINT ? [{ service: 'rustfs', volume: 'rustfs_data', destination: '/data', port: '9000/tcp',
+      endpoint: env.MAIN_S3_ENDPOINT, credentials: [`RUSTFS_ACCESS_KEY=${env.MAIN_S3_ACCESS_KEY}`,
+        `RUSTFS_SECRET_KEY=${env.MAIN_S3_SECRET_KEY}`] }] : []),
+  ];
+  for (const owner of services) {
+    const id = inspect(['ps', '-q', '--filter', `label=com.docker.compose.project=${project}`,
+      '--filter', `label=com.docker.compose.service=${owner.service}`]);
+    if (!/^[a-f0-9]{12,64}$/.test(id)) throw new Error(`Exactly one running local ${owner.service} owner is required`);
+    const container = (JSON.parse(inspect(['inspect', id])) as LocalModelContainer[])[0];
+    const endpoint = new URL(owner.endpoint);
+    if (!container || !['127.0.0.1', 'localhost', '[::1]'].includes(endpoint.hostname) || !endpoint.port
+      || container.Config.Labels['com.docker.compose.project'] !== project
+      || container.Config.Labels['com.docker.compose.service'] !== owner.service
+      || !container.Mounts.some(mount => mount.Type === 'volume' && mount.Name === `${project}_${owner.volume}`
+        && mount.Destination === owner.destination && mount.RW)
+      || owner.credentials.some(credential => !container.Config.Env.includes(credential))
+      || !container.NetworkSettings.Ports[owner.port]?.some(port => ['127.0.0.1', '::1'].includes(port.HostIp)
+        && port.HostPort === endpoint.port))
+      throw new Error(`${owner.service} container differs from the configured harness owner`);
+    if (owner.service === 'fuseki') graph = container;
+  }
+  if (!graph) throw new Error('Local graph owner is absent');
+  return graph;
+}
+
+/** Report only shapes read/verified by successful custody and its manifest. */
+export async function custodyLocalModelArtifacts(environment: WorkActivationEnvironment, generation: string,
+  bytes: Uint8Array, readShape: (file: string) => Uint8Array,
+  custody: typeof custodyModelGenerationArtifacts = custodyModelGenerationArtifacts, signal?: AbortSignal,
+): Promise<ModelArtifactEvidence[]> {
+  const artifacts: ModelArtifactEvidence[] = [];
+  await modelWork(signal, () => custody(environment, generation, bytes, file => {
+    signal?.throwIfAborted();
+    const shape = readShape(file);
+    artifacts.push({ name: file, sha256: sha256(shape) });
+    return shape;
+  }));
+  return [...artifacts, { name: 'manifest.json', sha256: sha256(bytes) }];
+}
+
 async function finalizeModelBootstrap(
   env: Record<string, string>,
   fuseki: FusekiClient,
@@ -200,6 +301,7 @@ async function finalizeModelBootstrap(
   active: ActiveModelGeneration,
   directory: string,
   auditActor?: string,
+  budget?: ModelWorkBudget,
 ): Promise<Record<string, unknown>> {
   if (
     active.generation !== intent.generation ||
@@ -210,14 +312,14 @@ async function finalizeModelBootstrap(
     intent.lineage.routingEpoch !== env.MAIN_ROUTING_EPOCH
   )
     throw new Error('Committed model bootstrap differs from its exact maintenance intent');
-  const receipt = await fuseki.query(`PREFIX rv: <${RV}> SELECT ?sequence WHERE {
+  const receipt = await modelWork(budget?.signal, () => fuseki.query(`PREFIX rv: <${RV}> SELECT ?sequence WHERE {
     GRAPH ${iri(GRAPHS.receipts)} { ${iri(intent.receipt)} rv:requestDigest ${lit(intent.digest)} ; rv:outcome rv:Succeeded ;
       rv:operation ${iri(intent.operation)} ; rv:dataEpoch ${lit(intent.lineage.dataEpoch)} ; rv:sequence ?sequence . }
     GRAPH ${iri(GRAPHS.outbox)} { ${iri(`urn:rezics:outbox:${sha256(intent.receipt)}`)} a rv:OutboxBatch ;
       rv:dataEpoch ${lit(intent.lineage.dataEpoch)} ; rv:sequence ?sequence ; rv:eventCount 0 . }
     GRAPH ${iri(GRAPHS.revisions)} { ${iri(intent.predecessor.generation)} a rv:ModelGeneration ;
       rv:manifest ${iri(intent.predecessor.manifest)} ; rv:generationNumber ${intent.predecessor.generationNumber} . }
-  } LIMIT 2`);
+  } LIMIT 2`));
   const rows = receipt.results?.bindings ?? [],
     sequence = rows[0]?.sequence?.value;
   if (rows.length !== 1 || !sequence)
@@ -230,9 +332,10 @@ async function finalizeModelBootstrap(
     throw new Error(
       'Model bootstrap needs the existing dedicated dataset administrator audit identity',
     );
-  const account = new Pool({ connectionString: checkedLocalDatabase(env.ACCOUNT_DATABASE_URL!) });
+  const account = new Pool({ connectionString: checkedLocalDatabase(env.ACCOUNT_DATABASE_URL!),
+    ...(budget ? { statement_timeout: budget.remaining(), connectionTimeoutMillis: budget.remaining() } : {}) });
   try {
-    await writeAudit(account, {
+    await modelWork(budget?.signal, () => writeAudit(account, {
       actorId: actor,
       action: 'local_dataset_model_generation_bootstrapped',
       targetId: intent.generation,
@@ -240,9 +343,10 @@ async function finalizeModelBootstrap(
       before: intent.predecessor,
       after: { ...active, sequence, outbox: 'local-fixture-zero-event-batch' },
       requestId: randomUUID(),
-    });
+    }));
   } finally {
-    await account.end();
+    const closing = account.end();
+    await modelWork(budget?.signal, () => closing);
   }
   const completed = {
     state: 'completed',
@@ -253,6 +357,7 @@ async function finalizeModelBootstrap(
     outbox: 'local-fixture-zero-event-batch',
     completedAt: new Date().toISOString(),
   };
+  budget?.remaining();
   atomicJson(join(directory, 'completed.json'), completed);
   return completed;
 }
@@ -278,66 +383,82 @@ export function fixtureModelAuditActor(stack: string, fixture: FixtureModelBoots
 export async function localDatasetModelHead(environment: WorkActivationEnvironment, fixture: boolean,
   read: typeof readActiveModelGeneration = readActiveModelGeneration,
   initialize: typeof ensureModelGeneration = ensureModelGeneration,
+  signal?: AbortSignal,
 ): Promise<{ active: ActiveModelGeneration; bootstrapped: boolean }> {
-  try { return { active: await read(environment.fuseki), bootstrapped: false }; }
+  try { return { active: await modelWork(signal, () => read(environment.fuseki)), bootstrapped: false }; }
   catch (error) {
     if (!fixture || !(error instanceof ModelGenerationUnavailable)) throw error;
-    await initialize(environment);
-    return { active: await read(environment.fuseki), bootstrapped: true };
+    await modelWork(signal, () => initialize(environment));
+    return { active: await modelWork(signal, () => read(environment.fuseki)), bootstrapped: true };
   }
 }
 
 export async function ensureLocalDatasetModelGeneration(
   stack = process.env.REZICS_DATASET_STACK ?? join(repository, '.temp/stack/rezics-dev'),
   fixture?: FixtureModelBootstrap,
-): Promise<Record<string, unknown>> {
+  options: ModelBootstrapOptions = {},
+): Promise<LocalModelBootstrapResult> {
+  const deadline = Date.now() + 180_000;
+  const budget = new ModelWorkBudget(options.remaining ?? (() => deadline - Date.now()), options.signal);
+  try {
+    return await budget.run(() => alignLocalDatasetModelGeneration(stack, fixture,
+      { ...modelBootstrapRuntime, ...options.runtime }, budget));
+  } finally { budget.close(); }
+}
+
+async function alignLocalDatasetModelGeneration(stack: string, fixture: FixtureModelBootstrap | undefined,
+  runtime: ModelBootstrapRuntime, budget: ModelWorkBudget): Promise<LocalModelBootstrapResult> {
+  const docker = (args: string[], timeout = 30_000) => {
+    const result = runtime.docker(args, Math.min(timeout, budget.remaining()));
+    budget.remaining();
+    return result;
+  };
   const auditActor = fixture ? fixtureModelAuditActor(stack, fixture) : undefined;
-  const env = fixture?.apps ?? readEnv(join(stack, 'dev.env'));
+  const env = fixture?.apps ?? runtime.readEnv(join(stack, 'dev.env'));
+  const container = assertLocalModelOwner(stack, env, docker, runtime.readEnv);
   checkedLocalModelEndpoint(env.FUSEKI_URL!);
   const fuseki = new FusekiClient(
     env.FUSEKI_URL!,
     env.FUSEKI_MAINTENANCE_TOKEN,
     env.FUSEKI_COMMAND_TOKEN,
+    budget.signal,
   );
-  await assertCommandProfiles(fuseki);
+  await budget.run(() => runtime.assertProfiles(fuseki));
   const bytes = readFileSync(modelFile),
     modelManifestSha256 = sha256(bytes);
   const generation = `urn:rezics:model-generation:${modelManifestSha256}`;
   const context = sha256(JSON.stringify([env.FUSEKI_URL, env.MAIN_DATA_EPOCH, generation]));
   const directory = join(repository, '.temp/datasets/model-bootstrap', context);
   const intentPath = join(directory, 'intent.json');
-  const workObjects = env.MAIN_S3_ENDPOINT
-    ? new S3ImmutableObjects({
-        endpoint: checkedLocalModelEndpoint(env.MAIN_S3_ENDPOINT),
-        bucket: env.MAIN_S3_BUCKET!,
-        region: env.MAIN_S3_REGION,
-        accessKeyId: env.MAIN_S3_ACCESS_KEY!,
-        secretAccessKey: env.MAIN_S3_SECRET_KEY!,
-        prefix: 'semantic/work/',
-      })
-    : undefined;
+  const objects = env.MAIN_S3_ENDPOINT ? runtime.objects(env, budget.signal) : undefined;
+  const workObjects: ImmutableObjects | undefined = objects ? {
+    put: bytes => budget.run(() => objects.put(bytes, budget.signal)),
+    get: (digest, maxBytes) => budget.run(() => objects.get(digest, maxBytes, budget.signal)),
+  } : undefined;
   const environment = {
     fuseki,
     lineage: { dataEpoch: env.MAIN_DATA_EPOCH!, routingEpoch: env.MAIN_ROUTING_EPOCH! },
     objectDirectory: env.MAIN_OBJECT_DIRECTORY!,
     ...(workObjects ? { workObjects } : {}),
   };
-  const { active: predecessor, bootstrapped } = await localDatasetModelHead(environment, Boolean(fixture));
+  const { active: predecessor, bootstrapped } = await budget.run(() => localDatasetModelHead(environment,
+    Boolean(fixture), runtime.readHead, runtime.initialize, budget.signal));
   if (predecessor.generation === generation) {
     // An existing head, including a lost maintenance response, needs the same
     // exact artifact custody as a newly activated generation.
-    await custodyModelGenerationArtifacts(environment, generation, bytes,
-      file => readFileSync(join(repository, 'generated/model', file)));
+    const artifacts = await budget.run(() => custodyLocalModelArtifacts(environment, generation, bytes,
+      file => readFileSync(join(repository, 'generated/model', file)), runtime.custody, budget.signal));
     if (existsSync(intentPath) && !existsSync(join(directory, 'completed.json')))
-      return finalizeModelBootstrap(
+      return { ...await budget.run(() => finalizeModelBootstrap(
         env,
         fuseki,
         JSON.parse(readFileSync(intentPath, 'utf8')) as ModelBootstrapIntent,
         predecessor,
         directory,
         auditActor,
-      );
-    return { state: 'current', generation, generationNumber: predecessor.generationNumber,
+        budget,
+      )), state: 'completed', generation, artifacts, artifactCount: artifacts.length };
+    return { state: 'current', generation, generationNumber: predecessor.generationNumber, artifacts, artifactCount: artifacts.length,
       ...(bootstrapped ? { bootstrapped: true, receipt: predecessor.receipt } : {}) };
   }
   const auditActorPath = datasetAdminPath(env.ACCOUNT_ORIGIN ?? env.ACCOUNT_BASE_URL!);
@@ -350,10 +471,10 @@ export async function ensureLocalDatasetModelGeneration(
     );
   checkedLocalDatabase(env.ACCOUNT_DATABASE_URL!);
   const location =
-    await fuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?routing ?sequence ?hold WHERE {
+    await budget.run(() => fuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?routing ?sequence ?hold WHERE {
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:routingEpoch ?routing ; rv:sequence ?sequence .
       OPTIONAL { ${iri(DATASET)} rv:restoreHold ?hold } }
-  } LIMIT 2`);
+  } LIMIT 2`));
   const rows = location.results?.bindings ?? [],
     row = rows[0];
   if (
@@ -364,65 +485,25 @@ export async function ensureLocalDatasetModelGeneration(
     row.hold?.value === 'true'
   )
     throw new Error('Model maintenance requires matching open local graph lineage');
-  const existing = await fuseki.query(
+  const existing = await budget.run(() => fuseki.query(
     `ASK { GRAPH ${iri(GRAPHS.revisions)} { ${iri(generation)} ?p ?o } }`,
-  );
+  ));
   if (existing.boolean)
     throw new Error(
       'Target model generation already has immutable history; refuse to overwrite or reactivate it implicitly',
     );
-  const project = basename(stack);
-  if (!/^rezics-(dev|qa-[a-z0-9-]+)$/.test(project))
-    throw new Error('Model maintenance needs a repository-managed local fixture stack');
-  const contexts = JSON.parse(docker(['context', 'inspect'])) as {
-    Endpoints: { docker: { Host: string } };
-  }[];
-  if (
-    !contexts[0]?.Endpoints.docker.Host.startsWith('unix://') ||
-    (process.env.DOCKER_HOST && !process.env.DOCKER_HOST.startsWith('unix://'))
-  )
-    throw new Error('Model fixture maintenance requires a local Unix Docker owner');
-  const containerId = docker([
-    'ps',
-    '-q',
-    '--filter',
-    `label=com.docker.compose.project=${project}`,
-    '--filter',
-    'label=com.docker.compose.service=fuseki',
-  ]);
-  if (!/^[a-f0-9]{12,64}$/.test(containerId))
-    throw new Error('Exactly one running local Fuseki owner is required');
-  const container = JSON.parse(docker(['inspect', containerId]))[0] as {
-    Id: string;
-    Image: string;
-    Config: { Env: string[] };
-    Mounts: { Type: string; Destination: string; RW: boolean }[];
-    NetworkSettings: { Ports: Record<string, { HostIp: string; HostPort: string }[]> };
-  };
-  if (
-    !container.Mounts.some(
-      (mount) => mount.Type === 'volume' && mount.Destination === '/fuseki/databases' && mount.RW,
-    ) ||
-    !container.Config.Env.includes(`FUSEKI_COMMAND_TOKEN=${env.FUSEKI_COMMAND_TOKEN}`) ||
-    !container.NetworkSettings.Ports['3030/tcp']?.some(
-      (port) =>
-        ['127.0.0.1', '::1'].includes(port.HostIp) &&
-        port.HostPort === new URL(env.FUSEKI_URL!).port,
-    )
-  )
-    throw new Error('Fuseki container differs from the configured local graph owner');
-  await readWorkComponentState(
+  await budget.run(() => readWorkComponentState(
     environment,
     predecessor.manifest,
     predecessor.generation,
     PROFILES.generation,
-  );
+  ));
   mkdirSync(directory, { recursive: true });
   const lock = join(directory, 'lock');
   const maintenance = holdDirectory(lock, `Model fixture maintenance already active; inspect ${lock} before retrying`);
   try {
-    await custodyModelGenerationArtifacts(environment, generation, bytes,
-      file => readFileSync(join(repository, 'generated/model', file)));
+    const artifacts = await budget.run(() => custodyLocalModelArtifacts(environment, generation, bytes,
+      file => readFileSync(join(repository, 'generated/model', file)), runtime.custody, budget.signal));
     let intent: ModelBootstrapIntent;
     if (existsSync(intentPath))
       intent = JSON.parse(readFileSync(intentPath, 'utf8')) as ModelBootstrapIntent;
@@ -438,7 +519,7 @@ export async function ensureLocalDatasetModelGeneration(
         },
       };
       const digest = workObjects
-        ? await prepareWorkComponent(workObjects, generation, state, PROFILES.generation)
+        ? await budget.run(() => prepareWorkComponent(workObjects, generation, state, PROFILES.generation))
         : prepareComponent(env.MAIN_OBJECT_DIRECTORY!, generation, state, PROFILES.generation);
       intent = {
         format: 'rezics-local-dataset-model-bootstrap-v1',
@@ -534,18 +615,19 @@ sync`,
       );
       writeFileSync(join(directory, 'owner-maintenance.log'), result);
     } finally {
-      if (stopped) docker(['start', container.Id], 30_000);
+      // Recovery still restarts an owner if its maintenance deadline expired.
+      if (stopped) runtime.docker(['start', container.Id], 30_000);
     }
     for (let attempt = 0; ; attempt++) {
       try {
-        await fuseki.commandHealth();
+        await budget.run(() => fuseki.commandHealth());
         break;
       } catch (error) {
         if (attempt === 30) throw error;
-        await Bun.sleep(500);
+        await budget.run(() => Bun.sleep(500));
       }
     }
-    const active = await readActiveModelGeneration(fuseki);
+    const active = await budget.run(() => runtime.readHead(fuseki));
     if (
       active.generation !== generation ||
       active.predecessor !== predecessor.generation ||
@@ -553,13 +635,14 @@ sync`,
       active.manifest !== intent.manifest
     )
       throw new Error('Local owner maintenance did not commit the exact model head CAS');
-    await readWorkComponentState(
+    await budget.run(() => readWorkComponentState(
       environment,
       active.manifest,
       active.generation,
       PROFILES.generation,
-    );
-    return finalizeModelBootstrap(env, fuseki, intent, active, directory, auditActor);
+    ));
+    return { ...await budget.run(() => finalizeModelBootstrap(env, fuseki, intent, active, directory, auditActor, budget)),
+      state: 'completed', generation, artifacts, artifactCount: artifacts.length };
   } finally {
     maintenance.release();
   }
@@ -594,6 +677,7 @@ export function modelCustodyArguments(args: string[]): ModelCustodyArguments {
 export async function backfillLocalDatasetModelCustody(options: ModelCustodyArguments,
   stack = process.env.REZICS_DATASET_STACK ?? join(repository, '.temp/stack/rezics-dev')) {
   const env = readEnv(join(stack, 'dev.env'));
+  assertLocalModelOwner(stack, env);
   checkedLocalModelEndpoint(env.FUSEKI_URL!);
   const sourceKey = sha256(JSON.stringify([env.FUSEKI_URL, env.MAIN_S3_ENDPOINT ?? null,
     env.MAIN_S3_BUCKET ?? null, env.MAIN_OBJECT_DIRECTORY]));

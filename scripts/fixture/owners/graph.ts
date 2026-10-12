@@ -41,22 +41,28 @@ const LUCENE = '/fuseki/databases/rezics/lucene';
 const node = (value: string) => `<${value}>`;
 const text = (value: string) => JSON.stringify(value);
 type GraphKind = keyof typeof GRAPHS | 'public';
+type GraphRecord = [GraphKind, string, string];
+const MATCH_UNIT_PROFILE = 'https://rezics.com/definition/content-match-unit-v1';
 
 // These imported records retain their original authored basis, as Work metadata
 // retains v1 even when the live commands admit newer revisions.
 const modelProfiles = [PROFILE, SPACE_REALM_PROFILE_V1, CONTRIBUTION_PROFILE,
   PUBLICATION_PROFILE, MAIN_SELECTION_PROFILE, REALM_SELECTION_PROFILE,
-  'https://rezics.com/definition/content-match-unit-v1'] as const;
+  MATCH_UNIT_PROFILE] as const;
 
 /** The current and revision quads activateMetadataWork commits, minus its receipt and outbox. */
-function* workQuads(corpus: Corpus, work: FixtureWork): Generator<[GraphKind, string]> {
-  const current = (s: string, p: string, o: string) =>
-    ['current', `${node(s)} ${node(p)} ${o} ${node(GRAPHS.current)} .`] as [GraphKind, string];
-  const revision = (s: string, p: string, o: string) =>
-    ['revisions', `${node(s)} ${node(p)} ${o} ${node(GRAPHS.revisions)} .`] as [GraphKind, string];
+function* workQuads(corpus: Corpus, work: FixtureWork): Generator<GraphRecord> {
+  const writer = (graph: keyof typeof GRAPHS, profile: string) => (s: string, p: string, o: string): GraphRecord =>
+    [graph, `${node(s)} ${node(p)} ${o} ${node(GRAPHS[graph])} .`, profile];
+  const current = writer('current', PROFILE);
+  const contribution = writer('current', CONTRIBUTION_PROFILE);
+  const selection = writer('revisions', MAIN_SELECTION_PROFILE);
+  const decision = writer('revisions', PUBLICATION_PROFILE);
   const publicQuad = (s: string, p: string, o: string) =>
-    ['public', `${node(s)} ${node(p)} ${o} ${node(PUBLIC_SEARCH_GRAPH)} .`] as [GraphKind, string];
+    ['public', `${node(s)} ${node(p)} ${o} ${node(PUBLIC_SEARCH_GRAPH)} .`, MATCH_UNIT_PROFILE] as GraphRecord;
   if (work.index === 0) {
+    const current = writer('current', SPACE_REALM_PROFILE_V1);
+    const slot = writer('current', REALM_SELECTION_PROFILE);
     const realm = fixtureRealm(corpus);
     yield current(realm.space, RDF_TYPE, node(`${RV}Space`));
     yield current(realm.space, `${RV}realmCapability`, node(realm.realm));
@@ -66,11 +72,11 @@ function* workQuads(corpus: Corpus, work: FixtureWork): Generator<[GraphKind, st
     yield current(realm.realm, `${RV}realmState`, node(`${RV}Active`));
     yield current(realm.realm, `${RV}selectionPolicy`, node(SELECTION_POLICY));
     const rejected = publicUnitAt(corpus, Math.min(129, corpus.publicUnits - 1));
-    yield current(realm.rejectionSlot, RDF_TYPE, node(`${RV}RealmPublicationSlot`));
-    yield current(realm.rejectionSlot, `${RV}realm`, node(realm.realm));
-    yield current(realm.rejectionSlot, `${RV}mainVersion`, node(rejected.work.mainVersion));
-    yield current(realm.rejectionSlot, `${RV}work`, node(rejected.work.work));
-    yield current(realm.rejectionSlot, `${RV}selectionHead`, node(realm.rejectionSelection));
+    yield slot(realm.rejectionSlot, RDF_TYPE, node(`${RV}RealmPublicationSlot`));
+    yield slot(realm.rejectionSlot, `${RV}realm`, node(realm.realm));
+    yield slot(realm.rejectionSlot, `${RV}mainVersion`, node(rejected.work.mainVersion));
+    yield slot(realm.rejectionSlot, `${RV}work`, node(rejected.work.work));
+    yield slot(realm.rejectionSlot, `${RV}selectionHead`, node(realm.rejectionSelection));
   }
   yield current(work.work, RDF_TYPE, node('https://schema.org/CreativeWork'));
   for (const type of work.semanticTypes) yield current(work.work, RDF_TYPE, node(type));
@@ -87,11 +93,7 @@ function* workQuads(corpus: Corpus, work: FixtureWork): Generator<[GraphKind, st
     [work.workRevision, work.work, objects.workManifest],
     [work.mainRevision, work.mainVersion, objects.mainManifest],
   ] as const) {
-    const anchor = (p: string, o: string) =>
-      ['revisions', `${node(revision)} ${node(p)} ${o} ${node(GRAPHS.revisions)} .`] as [
-        GraphKind,
-        string,
-      ];
+    const anchor = (p: string, o: string) => writer('revisions', PROFILE)(revision, p, o);
     yield anchor(RDF_TYPE, node(`${RV}RevisionAnchor`));
     yield anchor(`${RV}component`, node(component));
     yield anchor(`${RV}operation`, node(corpus.importOperation));
@@ -104,20 +106,20 @@ function* workQuads(corpus: Corpus, work: FixtureWork): Generator<[GraphKind, st
   }
   if (work.index === 0 || work.index > corpus.publicUnits) return;
   const selected = publicUnitAt(corpus, work.index - 1);
-  yield current(work.mainVersion, `${RV}selectionHead`, node(selected.selection));
-  yield current(selected.contribution, RDF_TYPE, node(`${RV}TextContribution`));
-  yield current(selected.contribution, `${RV}work`, node(work.work));
-  yield current(selected.contribution, `${RV}author`, node(work.agent));
-  yield current(selected.contribution, `${RV}language`, text(work.language));
-  yield current(selected.contribution, `${RV}draftHead`, node(selected.draft));
-  yield current(selected.contribution, `${RV}publicationHead`, node(selected.decision));
-  yield revision(selected.selection, RDF_TYPE, node(`${RV}PublicationSelection`));
-  yield revision(selected.selection, `${RV}matchUnit`, node(selected.unit));
-  yield revision(selected.selection, `${RV}mainVersion`, node(work.mainVersion));
-  yield revision(selected.selection, `${RV}contribution`, node(selected.contribution));
-  yield revision(selected.decision, RDF_TYPE, node(`${RV}PublicationDecision`));
-  yield revision(selected.decision, `${RV}contribution`, node(selected.contribution));
-  yield revision(selected.decision, `${RV}selectedDraft`, node(selected.draft));
+  yield writer('current', MAIN_SELECTION_PROFILE)(work.mainVersion, `${RV}selectionHead`, node(selected.selection));
+  yield contribution(selected.contribution, RDF_TYPE, node(`${RV}TextContribution`));
+  yield contribution(selected.contribution, `${RV}work`, node(work.work));
+  yield contribution(selected.contribution, `${RV}author`, node(work.agent));
+  yield contribution(selected.contribution, `${RV}language`, text(work.language));
+  yield contribution(selected.contribution, `${RV}draftHead`, node(selected.draft));
+  yield contribution(selected.contribution, `${RV}publicationHead`, node(selected.decision));
+  yield selection(selected.selection, RDF_TYPE, node(`${RV}PublicationSelection`));
+  yield selection(selected.selection, `${RV}matchUnit`, node(selected.unit));
+  yield selection(selected.selection, `${RV}mainVersion`, node(work.mainVersion));
+  yield selection(selected.selection, `${RV}contribution`, node(selected.contribution));
+  yield decision(selected.decision, RDF_TYPE, node(`${RV}PublicationDecision`));
+  yield decision(selected.decision, `${RV}contribution`, node(selected.contribution));
+  yield decision(selected.decision, `${RV}selectedDraft`, node(selected.draft));
   for (const [predicate, object] of [
     [RDF_TYPE, node(`${RV}MatchUnit`)],
     [`${RV}work`, node(work.work)],
@@ -134,10 +136,13 @@ function* workQuads(corpus: Corpus, work: FixtureWork): Generator<[GraphKind, st
     yield publicQuad(selected.unit, predicate!, object!);
 }
 
-async function* nquads(corpus: Corpus): AsyncGenerator<string> {
+async function* nquads(corpus: Corpus, recordModelProfile?: (profile: string) => void): AsyncGenerator<string> {
   let chunk = '';
   for (const work of corpusWorks(corpus)) {
-    for (const [, quad] of workQuads(corpus, work)) chunk += `${quad}\n`;
+    for (const [, quad, profile] of workQuads(corpus, work)) {
+      recordModelProfile?.(profile);
+      chunk += `${quad}\n`;
+    }
     if (chunk.length > 1_048_576) {
       yield chunk;
       chunk = '';
@@ -188,7 +193,7 @@ export const graphOwner: FixtureOwner = {
     // No server holds the stopped TDB2; it already has the bootstrap control graph.
     const loader = await target.fusekiOffline(
       `java -Xmx${heap} -cp ${JAR} tdb2.tdbloader --loc ${TDB2} --loader=phased --syntax=nquads`,
-      nquads(corpus),
+      nquads(corpus, target.recordModelProfile),
     );
     const loaded = performance.now();
     // Same offline index construction as search:rebuild, for this new generation only.

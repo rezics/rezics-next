@@ -42,4 +42,6 @@ export interface LoadTarget {
   pools: { access: Pool; content: Pool };
   /** Streams bytes into a one-shot container that shares the stopped Fuseki volume. */
   fusekiOffline(script: string, input?: AsyncIterable<string>): Promise<string>;
+  /** Observe the declared model basis of each emitted graph record. */
+  recordModelProfile?(profile: string): void;
 }
