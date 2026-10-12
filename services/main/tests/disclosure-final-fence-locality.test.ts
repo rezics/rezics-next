@@ -7,6 +7,9 @@ import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { grantFixtureAuthority, registerFixtureIdentity } from '../src/modules/access/fixture-authority.ts';
 import { engageAccessRecoveryFence, releaseAccessRecoveryFence } from '../src/modules/access/admission.ts';
+import { discloseContent } from '../src/modules/disclosure/assembly.ts';
+import { DISCLOSURE_SUBMISSION_LIMIT } from '../src/modules/disclosure/contract-batching.ts';
+import { discloseSearchMatches } from '../src/modules/disclosure/search.ts';
 import { scopedEnforcementBasis, SCOPED_ENFORCEMENT_BASIS_SQL } from '../src/modules/disclosure/fence-scope.ts';
 import { captureDisclosure, configureDisclosure, configureDisclosureAncestrySource, discloseInventoryWithCost,
   fenceDisclosure, DisclosureStore, DisclosureUnavailable, resolveDisclosureSelections,
@@ -380,4 +383,18 @@ test('missing, reordered, malformed or unavailable owner results fail closed', a
   const unavailable = { query: async () => { throw new Error('Access unavailable'); } } as unknown as PoolClient;
   await expect(scopedEnforcementBasis(unavailable, selections)).rejects.toBeInstanceOf(DisclosureUnavailable);
   await expect(scopedEnforcementBasis(pool, selections, 'invalid' as DisclosureChannel)).rejects.toBeInstanceOf(DisclosureUnavailable);
+});
+
+
+test('assembly submits the whole over-cap content inventory before any policy or hydration work', async () => {
+  const input = target('content', 'body');
+  await select(input, [], 'other');
+  const { client, statements } = measured(pool);
+  configureDisclosure(environment, new DisclosureStore(client as unknown as Pool));
+  try {
+    await expect(discloseContent(environment, Array(DISCLOSURE_SUBMISSION_LIMIT + 1).fill({
+      status: 'available', reference: { resourceId: input.resource }, revisionId: input.revision,
+    }))).rejects.toThrow('Disclosure submission exceeds');
+    expect(statements).toHaveLength(0);
+  } finally { configureDisclosure(environment, reader); }
 });

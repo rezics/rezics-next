@@ -5,7 +5,7 @@ import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { DEFAULT_MEDIA_CONTEXT, type MediaStore } from '../media/store.ts';
 import { ANONYMOUS_VIEWER, type Viewer } from '../suitability/policy.ts';
 import { captureDisclosure, configureDisclosure, fenceDisclosure, resolveDisclosureSelections,
-  DISCLOSURE_COST, DisclosureUnavailable, type DisclosureChannel, type DisclosureDecision, type DisclosureReadCut,
+  DisclosureUnavailable, type DisclosureChannel,
   type DisclosureTarget } from './read.ts';
 import { currentDisclosureViewer } from './viewer.ts';
 import { configureMediaVisibility } from '../media/visibility.ts';
@@ -13,17 +13,13 @@ import { graphErasedContentRevisions } from '../erasure/graph.ts';
 
 /** Keep the owner-selected occurrence fixed across hydration and the final
  * policy check. Sources establish ancestry; request context is only a hint.
- * Owner inventory bounds remain native; expanded descriptor batches stay at 64. */
+ * Disclosure receives the complete inventory and owns its bound and batching. */
 async function finalDisclosure<T>(env: WorkActivationEnvironment, targets: readonly DisclosureTarget[],
   viewer: Viewer, channel: DisclosureChannel, hydrate: () => Promise<T>) {
-  const batches: (readonly DisclosureReadCut[])[] = [];
-  for (let offset = 0; offset < Math.max(targets.length, 1); offset += DISCLOSURE_COST.batch) {
-    const selections = await resolveDisclosureSelections(env, targets.slice(offset, offset + DISCLOSURE_COST.batch));
-    batches.push(await captureDisclosure(env, selections, viewer, channel));
-  }
+  const selections = await resolveDisclosureSelections(env, targets);
+  const cuts = await captureDisclosure(env, selections, viewer, channel);
   const value = await hydrate();
-  const decisions: DisclosureDecision[] = [];
-  for (const cuts of batches) decisions.push(...await fenceDisclosure(env, cuts, viewer, channel));
+  const decisions = await fenceDisclosure(env, cuts, viewer, channel);
   return { value, decisions };
 }
 
