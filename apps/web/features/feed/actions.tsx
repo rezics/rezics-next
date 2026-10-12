@@ -50,16 +50,19 @@ export function VoteControl({ target, plain = false }: { target: VoteTarget; pla
     </div>;
   }
   async function cast(direction: Exclude<Vote, 0>) {
+    if (busy) return;
     const value: Vote = state.vote === direction ? 0 : direction;
     const before = state;
     setState({ ...state, vote: value, score: state.score - state.vote + value });
     setBusy(true);
     setFailed(false);
-    const receipt = await api().vote(target.id, { value, expectedRevision: before.revision,
-      actingSubject: actingSubject! }, commandKey());
-    if (receipt.ok) setState({ vote: receipt.data.value, score: receipt.data.score, revision: receipt.data.revision });
-    else { setState(before); setFailed(true); }
-    setBusy(false);
+    try {
+      const receipt = await api().vote(target.id, { value, expectedRevision: before.revision,
+        actingSubject: actingSubject! }, commandKey());
+      if (receipt.ok) setState({ vote: receipt.data.value, score: receipt.data.score, revision: receipt.data.revision });
+      else { setState(before); setFailed(true); }
+    } catch { setState(before); setFailed(true); }
+    finally { setBusy(false); }
   }
   return <div className="inline-flex items-center gap-1">
     <div aria-busy={busy || undefined} className={cn(frame, !plain && state.vote === 1 && 'bg-brand/10',

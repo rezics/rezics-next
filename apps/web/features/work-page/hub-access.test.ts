@@ -1,14 +1,22 @@
 import { afterAll, expect, mock, test } from 'bun:test';
-import { createElement } from 'react';
+import { cloneElement, createElement, isValidElement, type ReactElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { PlatformAccess } from '../api/platform-access.ts';
 import { work } from './fixtures.ts';
 import { messages } from './messages.ts';
 import type { HubWorkPage } from './types.ts';
+import { localizedPath } from '../../i18n/locale.ts';
+import { workHref } from './route.ts';
+import { seedServedTypes, servedTypes } from '../catalogue/type-fixtures.ts';
+import { projectionFor } from '../entity-page/fixtures.ts';
+import { ShellProvider } from '../shell/shell-provider.tsx';
+import { messages as shellMessages } from '../shell/messages.ts';
 
 const originalMain = { ...(await import('../api/main.ts')) };
 const originalHeaders = { ...(await import('next/headers')) };
+const originalNavigation = { ...(await import('next/navigation')) };
 const originalSession = { ...(await import('../auth/session.ts')) };
+const originalProjection = { ...(await import('../entity-page/read.ts')) };
 const id = '00000000-0000-4000-8000-000000000001';
 const href = `/v1/hub/works/${id}`;
 const publication: HubWorkPage = { profile: 'hub-work-page-v1', kind: 'prompt', revision: id,
@@ -18,6 +26,9 @@ const publication: HubWorkPage = { profile: 'hub-work-page-v1', kind: 'prompt', 
 let signedIn = false;
 let access: PlatformAccess = { groups: [], operations: [], generation: 'anonymous' };
 let reads = 0;
+let kind: 'prompt' | 'skill' = 'prompt';
+seedServedTypes();
+const typesFor = (kind: 'prompt' | 'skill') => [servedTypes.types.find(type => type.presentation === kind)!.type];
 let answer: { data: HubWorkPage | null; error: { status: number; value?: unknown } | null };
 
 await mock.module('../api/main.ts', () => ({ ...originalMain,
@@ -27,14 +38,55 @@ await mock.module('../api/main.ts', () => ({ ...originalMain,
 await mock.module('next/headers', () => ({ ...originalHeaders,
   cookies: async () => ({ get: () => signedIn ? { value: 'session-token' } : undefined }),
 }));
+await mock.module('next/navigation', () => ({ ...originalNavigation,
+  usePathname: () => localizedPath(workHref(id), 'en'),
+  useSearchParams: () => new URLSearchParams(),
+}));
 await mock.module('../auth/session.ts', () => ({ ...originalSession, sessionAgentState: async () => null }));
+await mock.module('../entity-page/read.ts', () => ({ ...originalProjection,
+  readEntityProjection: async () => ({ ok: true, data: projectionFor({ id, base: 'work', types: typesFor(kind),
+    name: work.title.value }) }),
+}));
+const originalRead = { ...(await import('./read.ts')) };
+await mock.module('./read.ts', () => ({ ...originalRead,
+  readingAgent: async () => ({ signedIn, actingSubject: null }),
+  readReaderState: async () => null,
+  readRatings: async () => ({ ok: false, failure: 'unavailable' }),
+}));
 afterAll(async () => {
   await mock.module('../api/main.ts', () => originalMain);
   await mock.module('next/headers', () => originalHeaders);
+  await mock.module('next/navigation', () => originalNavigation);
   await mock.module('../auth/session.ts', () => originalSession);
+  await mock.module('../entity-page/read.ts', () => originalProjection);
+  await mock.module('./read.ts', () => originalRead);
 });
 const { readHubWorkPage } = await import('./read.ts');
-const { TypeExperience } = await import('./work-views.tsx');
+const { TypeExperience, WorkOverview, WorkFrameView } = await import('./work-views.tsx');
+
+// Resolve the production Hub slots. Other independently streamed regions do not participate in
+// this acceptance; leave them empty instead of replacing the page/header with a test-made shell.
+async function hubShell(node: ReactNode): Promise<ReactNode> {
+  if (Array.isArray(node)) return Promise.all(node.map(hubShell));
+  if (!isValidElement<Record<string, unknown>>(node)) return node;
+  if (typeof node.type === 'function' && node.type.constructor.name === 'AsyncFunction') {
+    if (!['TypeExperience', 'ReadSlot'].includes(node.type.name)) return null;
+    return hubShell(await (node.type as (props: Record<string, unknown>) => Promise<ReactNode>)(node.props));
+  }
+  const props = Object.fromEntries(await Promise.all(Object.entries(node.props).map(async ([name, value]) =>
+    [name, await hubShell(value as ReactNode)])));
+  return cloneElement(node as ReactElement<Record<string, unknown>>, props);
+}
+
+async function productionPage() {
+  const shown = { ...work, types: typesFor(kind) };
+  const overview = await WorkOverview({ workRef: id, id, work: shown, scope: null, context: undefined,
+    locale: 'en', messages: messages.en });
+  const frame = await WorkFrameView({ workRef: id, id, work: shown, locale: 'en', messages: messages.en,
+    children: overview });
+  return renderToStaticMarkup(createElement(ShellProvider, { locale: 'en', messages: shellMessages,
+    signedIn, platformAccess: access, initialTheme: 'light', initialCollapsed: false, children: await hubShell(frame) }));
+}
 
 async function typeSection(kind: 'prompt' | 'skill') {
   return TypeExperience({ id, work, locale: 'en', messages: messages.en,
@@ -58,16 +110,18 @@ for (const state of [
     expect(await readHubWorkPage(href)).toEqual(state.permitted
       ? { ok: true, data: answer.data } : null);
     expect(reads).toBe(state.permitted ? 1 : 0);
-    for (const kind of ['prompt', 'skill'] as const) {
-      const section = await typeSection(kind);
+    for (const shownKind of ['prompt', 'skill'] as const) {
+      kind = shownKind;
+      const section = await typeSection(shownKind);
       expect(section === null).toBe(!state.permitted);
-      if (!state.permitted) {
-        const html = renderToStaticMarkup(createElement('main', null,
-          createElement('h1', null, work.title.value), section));
-        expect(html).toContain(work.title.value);
-        expect(html).not.toContain('Retry');
-        expect(html).not.toContain('Published text could not be loaded');
-      }
+      const html = await productionPage();
+      expect(/<h1\b[^>]*>(.*?)<\/h1>/s.exec(html)?.[1]).toBe(work.title.value);
+      const about = /<section\b[^>]*aria-labelledby="work-about"[^>]*>(.*?)<\/section>/s.exec(html)?.[1];
+      expect(about).toContain('A surveyor maps a delta that redraws itself with every tide.');
+      expect(html).toContain(messages.en.overview);
+      expect(html.includes(publication.content)).toBe(state.permitted);
+      expect(html).not.toContain('Retry');
+      expect(html).not.toContain('Published text could not be loaded');
     }
   });
 }

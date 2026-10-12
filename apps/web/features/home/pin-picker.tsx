@@ -87,30 +87,45 @@ export function PinPicker({ state, defaults, locale, messages, actingSubject, fi
     router.push(localizedPath(`/${feedSearch(pinnedTab(state, id), defaults)}`, locale));
   };
   const fail = (reason: CommandFailure) => {
-    setBusy(null);
     // A grant that went away: refresh the optional Saved Filter controls while public topics stay available.
     if (reason === 'closed') { setOpen(false); router.refresh(); return; }
     setFailure(reason);
   };
 
   async function pinConcept(topic: Topic) {
+    if (busy !== null) return;
     setBusy(topic.id); setFailure(null);
-    const followed = await followHomeTopic(client(), topic.id);
-    return followed.ok ? go(followed.data.tab) : fail(followed.failure);
+    try {
+      const followed = await followHomeTopic(client(), topic.id);
+      return followed.ok ? go(followed.data.tab) : fail(followed.failure);
+    } catch { fail('unavailable'); }
+    finally { setBusy(null); }
   }
 
   async function pinFilter(filter: SavedFilter) {
+    if (busy !== null) return;
     setBusy(filter.id); setFailure(null);
-    const pinned = await pinHomeFilter(client(), filter, operation => gateRef.current(operation));
-    return pinned.ok ? go(filter.id) : fail(pinned.failure);
+    try {
+      const pinned = await pinHomeFilter(client(), filter, operation => gateRef.current(operation));
+      if (!pinned.ok) return fail(pinned.failure);
+      // The awaited write may outlive the destination's read grant.
+      if (!gateRef.current('getV1MeSaved-filters')) return fail('closed');
+      go(filter.id);
+    } catch { fail('unavailable'); }
+    finally { setBusy(null); }
   }
 
   async function saveCurrent(name: string) {
-    if (!current) return;
+    if (!current || busy !== null) return;
     setBusy('current'); setFailure(null);
-    const created = await saveHomeFilter(client(), { name, filter: current.document, pinned: true },
-      operation => gateRef.current(operation));
-    return created.ok && created.data.id ? go(created.data.id) : fail(created.ok ? 'unavailable' : created.failure);
+    try {
+      const created = await saveHomeFilter(client(), { name, filter: current.document, pinned: true },
+        operation => gateRef.current(operation));
+      if (!created.ok || !created.data.id) return fail(created.ok ? 'unavailable' : created.failure);
+      if (!gateRef.current('getV1MeSaved-filters')) return fail('closed');
+      go(created.data.id);
+    } catch { fail('unavailable'); }
+    finally { setBusy(null); }
   }
 
   return <Dialog open={open} onOpenChange={details => { setOpen(details.open); if (!details.open) setFailure(null); }}>
@@ -131,7 +146,7 @@ export function PinPicker({ state, defaults, locale, messages, actingSubject, fi
           pinned={concepts.map(concept => concept.id)}
           known={concepts.map(concept => concept.id)}
           unpinned={canPin ? visibleFilters?.unpinned ?? [] : []} onPin={topic => void pinConcept(topic)} onPinFilter={filter => void pinFilter(filter)} />
-        {current && canCreate ? <SaveCurrent t={t} labels={current.labels} disabled={full} busy={busy === 'current'}
+        {current && canCreate ? <SaveCurrent t={t} labels={current.labels} disabled={full || busy !== null && busy !== 'current'} busy={busy === 'current'}
           onSave={name => void saveCurrent(name)} /> : null}
       </DialogBody>
     </DialogContent>
@@ -184,7 +199,7 @@ function TopicSearch({ t, locale, api, disabled, busy, pinned, known, unpinned, 
         {neighbours(t.broader, detail.data.broader)}
         {neighbours(t.narrower, detail.data.narrower)}
       </> : null}
-      {pinned.includes(selected.id) ? <Button className="justify-self-start" variant="soft" isLoading={busy === selected.id}
+      {pinned.includes(selected.id) ? <Button className="justify-self-start" variant="soft" disabled={busy !== null} isLoading={busy === selected.id}
         onClick={() => onPin({ id: selected.id, name })}>{t.openTab}</Button>
         : <Button className="justify-self-start" disabled={busy !== null} isLoading={busy === selected.id}
           onClick={() => onPin({ id: selected.id, name })}><PinIcon aria-hidden="true" />
@@ -225,7 +240,7 @@ function TopicSearch({ t, locale, api, disabled, busy, pinned, known, unpinned, 
       <ul className="-mx-3 grid">{unpinned.map(filter => {
         const title = filterTitle(filter);
         return <li key={filter.id}><button type="button" className={row}
-          disabled={disabled || filter.home !== 'available'} onClick={() => onPinFilter(filter)}>
+          disabled={disabled || busy !== null || filter.home !== 'available'} onClick={() => onPinFilter(filter)}>
           <SlidersHorizontalIcon aria-hidden="true" className="size-4 text-muted-foreground" />
           <span lang={title?.language} className="min-w-0 flex-1 truncate">{title?.value ?? t.untitledTab}</span>
           {busy === filter.id ? <Spinner aria-hidden="true" /> : null}</button></li>;

@@ -350,16 +350,17 @@ export async function WorkOverview({ workRef, id, work, scope, context, locale, 
   const t = messages;
   const loading = t.loadingRegion;
   const common = { id, locale, messages };
+  const specialist = <Suspense fallback={<RegionSkeleton
+    id="work-type-loading" title={work.title.value} label={loading} lines={5} />}>
+    <TypeExperience id={id} work={work} experience={experience} locale={locale} messages={messages} /></Suspense>;
   return <OverviewLayout messages={messages} plan={plan} lead={lead}
     // Specialist reading or cooking leads; the description and tags follow.
     // A recipe's description reads straight under its title, before the method.
-    type={experience.kind === 'book' || experience.kind === 'plain'
-      || ((experience.kind === 'prompt' || experience.kind === 'skill')
-        && !operationOpen('getV1HubWorksById', access)) ? null : <>
+    type={experience.kind === 'prompt' || experience.kind === 'skill'
+      ? operationOpen('getV1HubWorksById', access) ? specialist : null
+      : experience.kind === 'book' || experience.kind === 'plain' ? null : <>
       {experience.kind === 'recipe' ? <WorkAbout work={work} locale={locale} messages={messages} /> : null}
-      <Suspense fallback={<RegionSkeleton
-        id="work-type-loading" title={work.title.value} label={loading} lines={5} />}>
-        <TypeExperience id={id} work={work} experience={experience} locale={locale} messages={messages} /></Suspense></>}
+      {specialist}</>}
     about={experience.kind === 'recipe' ? null : <WorkAbout work={work} locale={locale} messages={messages} />}
     facts={<Suspense fallback={null}><AboutFacts {...common} /></Suspense>}
     availability={<>

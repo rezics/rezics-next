@@ -175,9 +175,10 @@ export function HomeTabs({ state, defaults, locale, messages, actingSubject, fil
     topicsBusy.current = true;
     setTopicsLoading(true);
     const requested = continuationRequest(fromStart, followsCursor);
-    const read = await (loadTopics ?? (next => readConceptFollows(browserMainApi(), actingSubject, next)))(requested);
-    topicsBusy.current = false;
-    setTopicsLoading(false);
+    let read: Loaded<ConceptTabList>;
+    try { read = await (loadTopics ?? (next => readConceptFollows(browserMainApi(), actingSubject, next)))(requested); }
+    catch { read = { ok: false, failure: 'offline' }; }
+    finally { topicsBusy.current = false; setTopicsLoading(false); }
     // A failed restart stays one: Show more must not ask for the rejected cursor.
     if (!read.ok) { setTopicsNotice(nextContinuation(fromStart, read.failure)); return; }
     if (fromStart) {
@@ -192,7 +193,7 @@ export function HomeTabs({ state, defaults, locale, messages, actingSubject, fil
   }
 
   async function settle<R>(result: Promise<CommandResult<R>>, after?: () => void) {
-    const done = await result;
+    const done = await result.catch(() => ({ ok: false, failure: 'unavailable' } as const));
     if (done.ok) { setStatus(null); after?.(); router.refresh(); return true; }
     setOrder(null);
     // A grant that went away: the refreshed page no longer offers what was just refused, and says nothing.
@@ -287,7 +288,7 @@ export function HomeTabs({ state, defaults, locale, messages, actingSubject, fil
             <span className="truncate">{name}</span></Link>
           <TabMenu t={t} name={name} filter={filter} first={index === 0} last={index === shown.length - 1}
             can={can} visible={current} onSelect={action => {
-              if (action === 'rename') setRenaming(filter);
+              if (action === 'rename') { setStatus(null); setRenaming(filter); }
               else if (action === 'left' || action === 'right') {
                 reorder(moved(order ?? server, filter.id, action === 'left' ? -1 : 1));
               } else remove(filter, action);
@@ -297,9 +298,9 @@ export function HomeTabs({ state, defaults, locale, messages, actingSubject, fil
     </ul>
     {picker}
   </nav>
-  {status ? <p role="status" className="border-border/60 border-b bg-warning/10 px-4 py-2 text-sm
+  {status && !renaming ? <p role="status" className="border-border/60 border-b bg-warning/10 px-4 py-2 text-sm
     text-warning-foreground">{status}</p> : null}
-  {renaming && can.edit ? <RenameDialog t={t} filter={renaming} onClose={() => setRenaming(null)}
+  {renaming && can.edit ? <RenameDialog t={t} filter={renaming} failure={status} onClose={() => setRenaming(null)}
     onSave={name => settle(client().update(renaming, { name }), () => setRenaming(null))} /> : null}
   {moreOpen ? <MoreTopics t={t} topics={followed} cursor={followsCursor} notice={topicsNotice} loading={topicsLoading}
     hrefFor={tab => href(pinnedTab(state, tab))} onClose={() => setMoreOpen(false)}
@@ -373,7 +374,7 @@ function MoreTopics({ t, topics, cursor, notice, loading, hrefFor, onClose, onMo
 }
 
 /** A new name for a tab; a followed Concept's tab can go back to the Concept's own label. */
-function RenameDialog({ t, filter, onClose, onSave }: { t: T; filter: SavedFilter; onClose: () => void;
+function RenameDialog({ t, filter, failure, onClose, onSave }: { t: T; filter: SavedFilter; failure: string | null; onClose: () => void;
   onSave: (name: string | null) => Promise<boolean> }) {
   const [name, setName] = useState(filter.name ?? filter.concept?.name?.value ?? '');
   const [busy, setBusy] = useState(false);
@@ -381,12 +382,13 @@ function RenameDialog({ t, filter, onClose, onSave }: { t: T; filter: SavedFilte
   const topic = filter.concept?.name?.value;
   async function save(value: string | null) {
     setBusy(true);
-    if (!await onSave(value)) setBusy(false);
+    try { await onSave(value); }
+    finally { setBusy(false); }
   }
   return <Dialog open pending={busy} onOpenChange={details => { if (!details.open) onClose(); }}>
     <DialogContent size="sm">
       <DialogHeader title={t.renameTitle} />
-      <form onSubmit={event => { event.preventDefault(); if (trimmed) void save(trimmed); }}>
+      <form className="flex min-h-0 flex-1 flex-col" onSubmit={event => { event.preventDefault(); if (trimmed) void save(trimmed); }}>
         <DialogBody>
           <Field>
             <FieldLabel>{t.tabName}</FieldLabel>
@@ -395,6 +397,7 @@ function RenameDialog({ t, filter, onClose, onSave }: { t: T; filter: SavedFilte
           {filter.concept && filter.name && topic ? <Button type="button" variant="link" size="sm"
             className="justify-self-start px-0" onClick={() => void save(null)}>{t.useTopicName({ topic })}</Button>
             : null}
+          {failure ? <p role="status" className="text-sm text-warning-foreground">{failure}</p> : null}
         </DialogBody>
         <DialogFooter>
           <DialogClose asChild><Button type="button" variant="outline">{t.cancel}</Button></DialogClose>
@@ -456,9 +459,10 @@ export function ConceptTopicFeed({ topic, initial, locale, messages, load }: {
     setLoading(true);
     const requested = continuationRequest(fromStart, shown.cursor);
     // publicWorkRead applies disclosure from the bearer, the same session as the first page.
-    const read = await (load ?? (next => readConceptFeed(browserMainApi(), topic.id, locale, next)))(requested);
-    busy.current = false;
-    setLoading(false);
+    let read: Loaded<ConceptFeedPage>;
+    try { read = await (load ?? (next => readConceptFeed(browserMainApi(), topic.id, locale, next)))(requested); }
+    catch { read = { ok: false, failure: 'offline' }; }
+    finally { busy.current = false; setLoading(false); }
     if (!read.ok) { setNotice(nextContinuation(fromStart, read.failure)); return; }
     setClient(rememberTopicPage(initial, active, read.data, fromStart));
     setNotice(null);

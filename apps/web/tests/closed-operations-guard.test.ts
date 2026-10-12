@@ -6,7 +6,7 @@ import {
   operationExposures,
   type PlatformOperationId,
 } from '../../../generated/openapi/main/exposure.ts';
-import { edenCalls, escape, operationPattern, readWebSources, sources } from './support/eden-calls.ts';
+import { escape, operationPattern, readWebSources, sources } from './support/eden-calls.ts';
 
 // A refused request cannot protect the control that offered it. Inventory closed calls and their UI
 // predicates separately; Main's generated exposure remains the only source of platform policy.
@@ -28,16 +28,125 @@ export interface Call {
   operations: PlatformOperationId[];
 }
 
-/** Operations the Eden client calls: `x.v1.me['saved-filters'].get(...)`, or the same chain kept in a variable. */
-function closedCalls(text: string): Call[] {
-  return edenCalls(text).flatMap((call) => {
-    // A type/existence check of a client property is not an alias that calls every operation below it.
-    if (call.method === null && !/\b(?:const|let)\s+[^;\n]*=\s*[^;\n]*$/.test(text.slice(0, call.start))) return [];
-    const operations = closedIds.filter((id) =>
-      operationPattern(call.method, call.segments, call.method === null).test(id),
-    );
-    return operations.length ? [{ source: call.chain, operations }] : [];
-  });
+interface LocatedCall extends Call { node: ts.Node }
+
+function parse(text: string): ts.SourceFile {
+  return ts.createSourceFile('source.tsx', text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+}
+
+/** Resolve only the named binding/property; a gate in a neighbouring object member is unrelated. */
+const scopeBindings = new WeakMap<ts.Node, Map<string, { value?: ts.Expression; position: number; assigned: boolean }[]>>();
+function binding(node: ts.Identifier): ts.Expression | undefined {
+  let scope: ts.Node | undefined = node.parent;
+  while (scope) {
+    if (ts.isBlock(scope) || ts.isSourceFile(scope) || ts.isFunctionLike(scope)) {
+      let bindings = scopeBindings.get(scope);
+      if (!bindings) {
+        bindings = new Map();
+        const add = (name: string, value: ts.Expression | undefined, position: number, assigned = false) =>
+          bindings!.set(name, [...bindings!.get(name) ?? [], { value, position, assigned }]);
+        function visit(child: ts.Node) {
+          if (child !== scope && ts.isBlock(child)) return;
+          if (child !== scope && ts.isFunctionLike(child)) {
+            if (ts.isFunctionDeclaration(child) && child.name) add(child.name.text, child as unknown as ts.Expression, child.pos);
+            return;
+          }
+          if (ts.isVariableDeclaration(child) && ts.isIdentifier(child.name)) add(child.name.text, child.initializer, child.pos);
+          if (ts.isParameter(child) && ts.isIdentifier(child.name)) add(child.name.text, undefined, child.pos);
+          if (ts.isBinaryExpression(child) && child.operatorToken.kind === ts.SyntaxKind.EqualsToken && ts.isIdentifier(child.left))
+            add(child.left.text, child.right, child.getStart(), true);
+          ts.forEachChild(child, visit);
+        }
+        visit(scope);
+        scopeBindings.set(scope, bindings);
+      }
+      const candidates = bindings.get(node.text)?.filter(item => !item.assigned || item.position < node.getStart());
+      if (candidates?.length) return candidates.at(-1)!.value;
+    }
+    scope = scope.parent;
+  }
+  return undefined;
+}
+
+function resolved(node: ts.Expression, seen = new Set<ts.Node>(), props = new Map<string, ts.Expression>()): ts.Expression {
+  if (seen.has(node)) return node;
+  seen.add(node);
+  if (ts.isParenthesizedExpression(node) || ts.isAsExpression(node) || ts.isNonNullExpression(node) || ts.isSatisfiesExpression(node))
+    return resolved(node.expression, seen, props);
+  if (ts.isIdentifier(node)) {
+    const value = props.get(node.text) ?? binding(node);
+    if (value) return resolved(value, seen, props);
+  }
+  if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
+    const value = resolved(node.expression, seen, props);
+    const name = ts.isPropertyAccessExpression(node) ? node.name.text :
+      node.argumentExpression && ts.isStringLiteralLike(node.argumentExpression) ? node.argumentExpression.text : null;
+    if (name && ts.isObjectLiteralExpression(value)) {
+      const property = value.properties.find(item => item.name?.getText().replace(/^['"]|['"]$/g, '') === name);
+      if (property && ts.isPropertyAssignment(property)) return resolved(property.initializer, seen, props);
+    }
+  }
+  return node;
+}
+
+/** Eden routes are followed through bindings, assignments, returned clients and parameter calls. */
+function route(node: ts.Expression, seen = new Set<ts.Node>()): (string | null)[] | null {
+  if (seen.has(node)) return null;
+  seen.add(node);
+  const value = resolved(node);
+  if (value !== node) return route(value, seen);
+  if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
+    const name = ts.isPropertyAccessExpression(node) ? node.name.text :
+      node.argumentExpression && ts.isStringLiteralLike(node.argumentExpression) ? node.argumentExpression.text : null;
+    if (name === 'v1') return [];
+    const parent = route(node.expression, seen);
+    return parent && name ? [...parent, name] : null;
+  }
+  if (ts.isCallExpression(node)) {
+    const target = resolved(node.expression);
+    if (ts.isArrowFunction(target) || ts.isFunctionExpression(target) || ts.isFunctionDeclaration(target)) {
+      const body = target.body;
+      if (body && !ts.isBlock(body)) return route(body, seen);
+      const returned: ts.Expression[] = [];
+      function visit(child: ts.Node) {
+        if (child !== body && ts.isFunctionLike(child)) return;
+        if (ts.isReturnStatement(child) && child.expression) returned.push(child.expression);
+        ts.forEachChild(child, visit);
+      }
+      if (body) visit(body);
+      const routes = returned.map(item => route(item, new Set(seen)));
+      if (routes.length && routes.every(item => JSON.stringify(item) === JSON.stringify(routes[0]))) return routes[0]!;
+      return null;
+    }
+    const parent = route(node.expression, seen);
+    return parent ? [...parent, null] : null;
+  }
+  return null;
+}
+
+function closedCalls(source: ts.SourceFile): LocatedCall[] {
+  const calls: LocatedCall[] = [];
+  function visit(node: ts.Node) {
+    if (ts.isCallExpression(node)) {
+      const endpoint = resolved(node.expression);
+      if (!ts.isPropertyAccessExpression(endpoint) && !ts.isElementAccessExpression(endpoint)) { ts.forEachChild(node, visit); return; }
+      const method = ts.isPropertyAccessExpression(endpoint) ? endpoint.name.text :
+        endpoint.argumentExpression && ts.isStringLiteralLike(endpoint.argumentExpression) ? endpoint.argumentExpression.text : null;
+      const segments = route(endpoint.expression);
+      if (method && ['get', 'post', 'put', 'patch', 'delete'].includes(method) && segments) {
+        const operations = closedRoutes.filter(item => item.method === method && item.segments.length === segments.length &&
+          item.segments.every((segment, index) => /^\{[^}]+\}$/.test(segment) ? segments[index] === null : segment === segments[index]))
+          .map(item => item.operation);
+        if (operations.length) {
+          const text = node.getText().replace(/\s+/g, '');
+          calls.push({ source: text.includes('.v1') ? text.slice(text.indexOf('.v1')) : text, operations, node });
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(source);
+  return calls;
 }
 
 const literal =
@@ -105,35 +214,115 @@ function uncommented(text: string): string {
   return text;
 }
 
-export function callsIn(source: string, projected = new Map<string, PlatformOperationId[]>()): Call[] {
-  const text = uncommented(source);
-  return [
-  ...closedCalls(text), ...pathCalls(text),
-  ...[...text.matchAll(/\bfollowHref<([^>]+)>\s*\(/g)].flatMap(match => {
-    const operations = [...projected].filter(([name]) => new RegExp(`\\b${escape(name)}\\b`).test(match[1]!))
-      .flatMap(([, ids]) => ids);
-    return operations.length ? [{ source: `followHref<${match[1]}>`, operations }] : [];
-  }),
-  ];
+function locatedCalls(text: string, projected = new Map<string, PlatformOperationId[]>()): LocatedCall[] {
+  const source = parse(uncommented(text));
+  const calls = closedCalls(source);
+  function visit(node: ts.Node) {
+    if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
+      const name = node.expression.getText();
+      if (/^(?:fetch|fetchImpl|serverRead|URL)$/.test(name) && node.arguments?.[0]) {
+        const path = resolved(node.arguments[0]);
+        const scanned = pathCalls(path.getText() + ', ' + (node.arguments[1]?.getText() ?? ''));
+        calls.push(...scanned.map(call => ({ ...call, node })));
+      }
+      if (ts.isCallExpression(node) && name === 'followHref') {
+        const types = node.typeArguments?.map(item => item.getText()).join(' ') ?? '';
+        const operations = [...projected].filter(([type]) => new RegExp(`\\b${escape(type)}\\b`).test(types)).flatMap(([, ids]) => ids);
+        if (operations.length) calls.push({ source: `followHref<${types}>`, operations, node });
+      }
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(source);
+  return calls;
 }
 
-/** A typed refusal alone never establishes that a request or its UI entry was gated. */
-function guarded(text: string, operation: string): boolean {
-  return new RegExp(`operationOpen\\(\\s*['"]${escape(operation)}['"]`).test(text);
+export function callsIn(text: string, projected = new Map<string, PlatformOperationId[]>()): Call[] {
+  return locatedCalls(text, projected).map(({ source, operations }) => ({ source, operations }));
+}
+
+/** Possible boolean results with this operation denied. Unknown predicates may be either value. */
+function deniedValues(node: ts.Expression, operation: string, seen = new Set<ts.Node>(), props = new Map<string, ts.Expression>()): Set<boolean> {
+  if (seen.has(node)) return new Set([true, false]);
+  seen.add(node);
+  const value = resolved(node, new Set(), props);
+  if (value !== node) return deniedValues(value, operation, seen, props);
+  if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && ['operationOpen', 'gate'].includes(node.expression.text) &&
+    node.arguments[0] && ts.isStringLiteralLike(node.arguments[0]) && node.arguments[0].text === operation) return new Set([false]);
+  if (node.kind === ts.SyntaxKind.TrueKeyword) return new Set([true]);
+  if (node.kind === ts.SyntaxKind.FalseKeyword || node.kind === ts.SyntaxKind.NullKeyword) return new Set([false]);
+  if (ts.isPrefixUnaryExpression(node) && node.operator === ts.SyntaxKind.ExclamationToken)
+    return new Set([...deniedValues(node.operand, operation, new Set(seen), props)].map(item => !item));
+  if (ts.isBinaryExpression(node)) {
+    const left = deniedValues(node.left, operation, new Set(seen), props);
+    const right = deniedValues(node.right, operation, new Set(seen), props);
+    if (node.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken)
+      return new Set([...left].flatMap(a => [...right].map(b => a && b)));
+    if (node.operatorToken.kind === ts.SyntaxKind.BarBarToken)
+      return new Set([...left].flatMap(a => [...right].map(b => a || b)));
+    if ([ts.SyntaxKind.EqualsEqualsEqualsToken, ts.SyntaxKind.EqualsEqualsToken].includes(node.operatorToken.kind) &&
+      (node.right.kind === ts.SyntaxKind.TrueKeyword || node.right.kind === ts.SyntaxKind.FalseKeyword))
+      return new Set([...left].map(item => item === (node.right.kind === ts.SyntaxKind.TrueKeyword)));
+  }
+  return new Set([true, false]);
+}
+
+function entailsOpen(condition: ts.Expression, operation: string, branch: boolean, props = new Map<string, ts.Expression>()): boolean {
+  return !deniedValues(condition, operation, new Set(), props).has(branch);
+}
+
+function terminates(node: ts.Node): boolean {
+  if (ts.isReturnStatement(node) || ts.isThrowStatement(node)) return true;
+  if (ts.isBlock(node)) return node.statements.some(terminates);
+  if (ts.isIfStatement(node)) return Boolean(node.elseStatement && terminates(node.thenStatement) && terminates(node.elseStatement));
+  return false;
+}
+
+/** Only ancestor branches and preceding exits can dominate this exact request expression. */
+function requestGuarded(node: ts.Node, operation: string, props = new Map<string, ts.Expression>()): boolean {
+  let child = node;
+  for (let parent = node.parent; parent; child = parent, parent = parent.parent) {
+    if (ts.isJsxElement(parent) && child !== parent.openingElement) {
+      const opening = parent.openingElement;
+      if (opening.tagName.getText() === 'OperationGate') {
+        const attribute = opening.attributes.properties.find(item => ts.isJsxAttribute(item) && item.name.getText() === 'operation');
+        if (attribute && ts.isJsxAttribute(attribute) && attribute.initializer && ts.isStringLiteral(attribute.initializer) &&
+          attribute.initializer.text === operation) return true;
+      }
+    }
+    if (ts.isConditionalExpression(parent)) {
+      if (child === parent.whenTrue && entailsOpen(parent.condition, operation, true, props)) return true;
+      if (child === parent.whenFalse && entailsOpen(parent.condition, operation, false, props)) return true;
+    }
+    if (ts.isIfStatement(parent)) {
+      if (child === parent.thenStatement && entailsOpen(parent.expression, operation, true, props)) return true;
+      if (child === parent.elseStatement && entailsOpen(parent.expression, operation, false, props)) return true;
+    }
+    if (ts.isBinaryExpression(parent) && child === parent.right) {
+      const branch = parent.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken ? true :
+        parent.operatorToken.kind === ts.SyntaxKind.BarBarToken ? false : null;
+      if (branch !== null && entailsOpen(parent.left, operation, branch, props)) return true;
+    }
+    if (ts.isBlock(parent) || ts.isSourceFile(parent)) {
+      for (const statement of parent.statements) {
+        if (statement === child || statement.end > child.pos) break;
+        if (ts.isIfStatement(statement)) {
+          if (terminates(statement.thenStatement) && entailsOpen(statement.expression, operation, false, props)) return true;
+          if (statement.elseStatement && terminates(statement.elseStatement) && entailsOpen(statement.expression, operation, true, props)) return true;
+        }
+      }
+    }
+    // A separately declared function can be called from anywhere; its caller's lexical body is no proof.
+    if (ts.isFunctionDeclaration(parent) || (ts.isArrowFunction(parent) && ts.isVariableDeclaration(parent.parent))) break;
+  }
+  return false;
 }
 
 export function violations(files: Readonly<Record<string, string>>): string[] {
   const projected = projectedTypes(files);
-  return Object.entries(files).flatMap(([file, text]) =>
-    callsIn(text, projected).flatMap((call) =>
-      call.operations
-        .filter((operation) => !guarded(text, operation))
-        .map(
-          (operation) =>
-            `${file}: ${call.source} reaches ${operation} (${operationExposures[operation]})`,
-        ),
-    ),
-  );
+  return Object.entries(files).flatMap(([file, text]) => locatedCalls(text, projected).flatMap(call =>
+    call.operations.filter(operation => !requestGuarded(call.node, operation)).map(operation =>
+      `${file}: ${call.source} reaches ${operation} (${operationExposures[operation]})`)));
 }
 
 const webRoot = join(import.meta.dir, '..');
@@ -144,75 +333,198 @@ const webSources = {
 
 // Regression entry inventory, not an exposure matrix: these are the concrete controls from the sweep.
 // Component/stories prove their rendered states; this guard also fails when an entry loses its predicate.
-const entries: readonly { file: string; function: string; operations: readonly PlatformOperationId[]; request?: boolean }[] = [
-  { file: 'features/work-page/work-views.tsx', function: 'WorkOverview', operations: ['getV1HubWorksById'] },
-  { file: 'features/feed/actions.tsx', function: 'PrimaryAction', operations: ['getV1HubWorksById'] },
-  { file: 'features/showcase/work-action.tsx', function: 'PrimaryAction', operations: ['getV1HubWorksById'] },
-  { file: 'zones/official/ai-workshop/slots.tsx', function: 'Actions', operations: ['getV1HubWorksById'] },
+type Target =
+  | { jsx: string; prop?: string; value?: string; text?: string }
+  | { attribute: readonly [string, string] }
+  | { call: readonly [string, string] }
+  | { binding: string }
+  | { branch: readonly [string, string] };
+interface Entry {
+  file: string;
+  function: string;
+  operations: readonly PlatformOperationId[];
+  request?: boolean;
+  targets?: Partial<Record<PlatformOperationId, readonly Target[]>>;
+}
+const entries: readonly Entry[] = [
+  { file: 'features/work-page/work-views.tsx', function: 'WorkOverview', operations: ['getV1HubWorksById'],
+    targets: { getV1HubWorksById: [{ branch: ["experience.kind === 'prompt'", 'specialist'] }] } },
+  { file: 'features/feed/actions.tsx', function: 'PrimaryAction', operations: ['getV1HubWorksById'],
+    targets: { getV1HubWorksById: [{ call: ['link', 'install'] }, { call: ['link', 'usePrompt'] }] } },
+  { file: 'features/showcase/work-action.tsx', function: 'PrimaryAction', operations: ['getV1HubWorksById'],
+    targets: { getV1HubWorksById: [{ branch: ["work.hub?.kind === 'skill'", 'action'] }] } },
+  { file: 'zones/official/ai-workshop/slots.tsx', function: 'Actions', operations: ['getV1HubWorksById'],
+    targets: { getV1HubWorksById: [{ branch: ['hub', 'tryIt'] }] } },
   { file: 'features/realm-appeal/panel.tsx', function: 'RealmBanPanel', operations: [
     'postV1RealmsByRealmMember-receiptsByReceiptIdAppeal', 'getV1RealmsByRealmMember-receiptsByReceiptIdAppeal',
-  ] },
+  ], targets: {
+    'postV1RealmsByRealmMember-receiptsByReceiptIdAppeal': [{ jsx: 'form' }],
+    'getV1RealmsByRealmMember-receiptsByReceiptIdAppeal': [{ jsx: 'form' }],
+  } },
   { file: 'features/home/pin-picker.tsx', function: 'PinPicker', operations: [
     'getV1MeSaved-filters', 'postV1MeSaved-filters', 'patchV1MeSaved-filtersById',
-  ] },
+  ], targets: {
+    'getV1MeSaved-filters': [{ binding: 'visibleFilters' }, { jsx: 'SaveCurrent' }, { attribute: ['TopicSearch', 'unpinned'] }],
+    'postV1MeSaved-filters': [{ jsx: 'SaveCurrent' }],
+    'patchV1MeSaved-filtersById': [{ attribute: ['TopicSearch', 'unpinned'] }],
+  } },
   { file: 'features/home/tabs.tsx', function: 'HomeTabs', operations: [
     'getV1MeSaved-filters', 'patchV1MeSaved-filtersById', 'putV1MeSaved-filtersOrder', 'deleteV1MeSaved-filtersById',
-  ] },
+  ], targets: {
+    'getV1MeSaved-filters': [{ binding: 'visibleFilters' }],
+    'patchV1MeSaved-filtersById': [{ jsx: 'RenameDialog' }, { jsx: 'MenuItem', prop: 'value', value: 'rename' }, { jsx: 'MenuItem', prop: 'value', value: 'unpin' }],
+    'putV1MeSaved-filtersOrder': [{ attribute: ['li', 'draggable'] }, { jsx: 'MenuItem', prop: 'value', value: 'left' }, { jsx: 'MenuItem', prop: 'value', value: 'right' }],
+    'deleteV1MeSaved-filtersById': [{ jsx: 'MenuItem', prop: 'value', value: 'delete' }],
+  } },
   { file: 'features/post-composer/api.ts', function: 'banned', operations: ['getV1RealmsByRealmMember-ban'], request: true },
-  { file: 'features/zones/about-discussion.tsx', function: 'AboutDiscussionEntry', operations: ['postV1RealmsByRealmAbout-posts'] },
+  { file: 'features/zones/about-discussion.tsx', function: 'AboutDiscussionEntry', operations: ['postV1RealmsByRealmAbout-posts'],
+    targets: { 'postV1RealmsByRealmAbout-posts': [{ jsx: 'form' }, { jsx: 'Button', prop: 'onClick', text: 'setOpened' }] } },
 ];
 
-function hasPredicate(body: ts.Node, operation: string, request = false): boolean {
-  const bindings = new Map<string, ts.Expression>();
-  const nestedFunction = (node: ts.Node) => ts.isFunctionDeclaration(node) || ts.isArrowFunction(node) ||
-    ts.isFunctionExpression(node) || ts.isMethodDeclaration(node);
-  function collect(node: ts.Node) {
-    if (nestedFunction(node)) return;
-    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
-      bindings.set(node.name.text, node.initializer);
-    }
-    ts.forEachChild(node, collect);
+function hasPredicate(body: ts.Node, operation: string, request = false, props = new Map<string, ts.Expression>(), visited = new Set<string>()): boolean {
+  const nestedFunction = (node: ts.Node) => ts.isFunctionLike(node);
+  function absent(node: ts.Expression): boolean {
+    const value = resolved(node, new Set(), props);
+    return value.kind === ts.SyntaxKind.NullKeyword || value.kind === ts.SyntaxKind.FalseKeyword ||
+      (ts.isIdentifier(value) && value.text === 'undefined') || (ts.isArrayLiteralExpression(value) && !value.elements.length);
   }
-  collect(body);
-  function mentions(node: ts.Node, seen = new Set<string>()): boolean {
-    if (ts.isIdentifier(node) && bindings.has(node.text) && !seen.has(node.text)) {
-      return mentions(bindings.get(node.text)!, new Set([...seen, node.text]));
-    }
-    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && ['operationOpen', 'gate'].includes(node.expression.text) &&
-      node.arguments[0] && ts.isStringLiteralLike(node.arguments[0]) && node.arguments[0].text === operation) return true;
-    return ts.forEachChild(node, child => mentions(child, seen) || undefined) ?? false;
-  }
-  function renders(node: ts.Node, seen = new Set<string>()): boolean {
-    if (ts.isIdentifier(node) && bindings.has(node.text) && !seen.has(node.text)) {
-      return renders(bindings.get(node.text)!, new Set([...seen, node.text]));
+  function payload(node: ts.Node, seen = new Set<ts.Node>()): boolean {
+    if (seen.has(node)) return false;
+    seen.add(node);
+    if (ts.isIdentifier(node)) {
+      const value = resolved(node, new Set(), props);
+      if (value !== node) return payload(value, seen);
     }
     if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node) || ts.isJsxFragment(node)) return true;
     if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'link') return true;
     if (nestedFunction(node)) return false;
-    return ts.forEachChild(node, child => renders(child, seen) || undefined) ?? false;
+    return ts.forEachChild(node, child => payload(child, new Set(seen)) || undefined) ?? false;
+  }
+  function rendered(node: ts.Node): boolean {
+    for (let parent = node.parent; parent; parent = parent.parent) {
+      if (ts.isReturnStatement(parent) || ts.isJsxExpression(parent) || ts.isJsxAttribute(parent)) return true;
+      if (ts.isVariableDeclaration(parent) || ts.isFunctionLike(parent)) return false;
+    }
+    return false;
   }
   function walk(node: ts.Node): boolean {
-    // A handler can refuse a click while its button remains visible. Inspect the rendering expression,
-    // not a gate in a nested callback or an unrelated boolean declaration.
-    if (nestedFunction(node)) return false;
-    if (ts.isIfStatement(node) && mentions(node.expression) && (request || renders(node.thenStatement))) return true;
-    if (ts.isConditionalExpression(node) && mentions(node.condition) &&
-      (request || renders(node.whenTrue) || renders(node.whenFalse) ||
-        (ts.isJsxExpression(node.parent) && ts.isJsxAttribute(node.parent.parent)))) return true;
-    if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken &&
-      mentions(node.left) && (request || renders(node.right))) return true;
+    const mapped = ts.isArrowFunction(node) && ts.isCallExpression(node.parent) &&
+      ts.isPropertyAccessExpression(node.parent.expression) && node.parent.expression.name.text === 'map' && rendered(node.parent);
+    if (nestedFunction(node) && !mapped) return false;
+    if (request && (ts.isCallExpression(node) || ts.isNewExpression(node)) && requestGuarded(node, operation)) return true;
+    if (ts.isConditionalExpression(node) && rendered(node)) {
+      const attribute = ts.isJsxExpression(node.parent) && ts.isJsxAttribute(node.parent.parent);
+      if (entailsOpen(node.condition, operation, true, props) && absent(node.whenFalse) && (payload(node.whenTrue) || attribute)) return true;
+      if (entailsOpen(node.condition, operation, false, props) && absent(node.whenTrue) && (payload(node.whenFalse) || attribute)) return true;
+    }
+    if (ts.isBinaryExpression(node) && rendered(node) && node.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken &&
+      entailsOpen(node.left, operation, true, props) && payload(node.right)) return true;
+    // Boolean attributes control enablement; a denied gate must make the exact attribute false.
+    if (ts.isJsxAttribute(node) && ['disabled', 'draggable'].includes(node.name.getText()) && node.initializer &&
+      ts.isJsxExpression(node.initializer) && node.initializer.expression &&
+      entailsOpen(node.initializer.expression, operation, node.name.getText() === 'draggable', props)) return true;
+    if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
+      const name = node.tagName.getText();
+      if (!visited.has(name)) {
+        let component: ts.FunctionDeclaration | undefined;
+        function find(child: ts.Node) {
+          if (ts.isFunctionDeclaration(child) && child.name?.text === name) component = child;
+          ts.forEachChild(child, find);
+        }
+        find(body.getSourceFile());
+        if (component?.body && component.parameters[0] && ts.isObjectBindingPattern(component.parameters[0].name)) {
+          const supplied = new Map<string, ts.Expression>();
+          for (const item of component.parameters[0].name.elements) {
+            if (!ts.isIdentifier(item.name)) continue;
+            const propName = item.propertyName?.getText() ?? item.name.text;
+            const attribute = node.attributes.properties.find(item => ts.isJsxAttribute(item) && item.name.getText() === propName);
+            if (attribute && ts.isJsxAttribute(attribute) && attribute.initializer && ts.isJsxExpression(attribute.initializer) && attribute.initializer.expression)
+              supplied.set(item.name.text, resolved(attribute.initializer.expression, new Set(), props));
+          }
+          if (hasPredicate(component.body, operation, false, supplied, new Set([...visited, name]))) return true;
+        }
+      }
+    }
     if (ts.isJsxOpeningElement(node) && node.tagName.getText() === 'OperationGate') {
       const prop = node.attributes.properties.find(item => ts.isJsxAttribute(item) && item.name.getText() === 'operation');
-      if (prop && ts.isJsxAttribute(prop) && prop.initializer && ts.isStringLiteral(prop.initializer) &&
-        prop.initializer.text === operation) return true;
+      if (prop && ts.isJsxAttribute(prop) && prop.initializer && ts.isStringLiteral(prop.initializer) && prop.initializer.text === operation) return true;
     }
     return ts.forEachChild(node, child => walk(child) || undefined) ?? false;
   }
   return walk(body);
 }
 
-function entryViolations(files: Readonly<Record<string, string>>): string[] {
-  return entries.flatMap(entry => {
+/** Every inventoried closed payload proves its own suppression; public siblings are not targets. */
+function targetProof(body: ts.Node, operation: string, target: Target, props = new Map<string, ts.Expression>(), visited = new Set<string>(), proofs: boolean[] = []): boolean {
+  function expressionProof(node: ts.Node): boolean {
+    return requestGuarded(node, operation, props);
+  }
+  function absent(node: ts.Expression): boolean {
+    const value = resolved(node, new Set(), props);
+    return value.kind === ts.SyntaxKind.NullKeyword || value.kind === ts.SyntaxKind.FalseKeyword ||
+      ts.isArrayLiteralExpression(value) && value.elements.length === 0;
+  }
+  function refs(node: ts.Node, name: string) {
+    if (ts.isIdentifier(node) && node.text === name) proofs.push(expressionProof(node));
+    if (!ts.isFunctionLike(node)) ts.forEachChild(node, child => refs(child, name));
+  }
+  function walk(node: ts.Node) {
+    const mapped = ts.isArrowFunction(node) && ts.isCallExpression(node.parent) &&
+      ts.isPropertyAccessExpression(node.parent.expression) && node.parent.expression.name.text === 'map';
+    if (ts.isFunctionLike(node) && !mapped) return;
+    if ('binding' in target && ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === target.binding && node.initializer) {
+      const value = resolved(node.initializer, new Set(), props);
+      proofs.push(ts.isConditionalExpression(value) && absent(value.whenFalse) && expressionProof(value.whenTrue));
+    }
+    if ('branch' in target && ts.isConditionalExpression(node) && node.condition.getText().includes(target.branch[0])) refs(node.whenTrue, target.branch[1]);
+    if ('call' in target && ts.isCallExpression(node) && node.expression.getText() === target.call[0] &&
+      node.arguments.some(item => ts.isPropertyAccessExpression(item) && item.name.text === target.call[1])) proofs.push(expressionProof(node));
+    if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
+      const opening = ts.isJsxElement(node) ? node.openingElement : node;
+      if ('jsx' in target && opening.tagName.getText() === target.jsx) {
+        const attr = target.prop ? opening.attributes.properties.find(item => ts.isJsxAttribute(item) && item.name.getText() === target.prop) : null;
+        const value = attr && ts.isJsxAttribute(attr) ? attr.initializer : null;
+        if ((!target.prop || value) && (!target.value || value && ts.isStringLiteral(value) && value.text === target.value) &&
+          (!target.text || value?.getText().includes(target.text) || !target.prop && node.getText().includes(target.text))) proofs.push(expressionProof(node));
+      }
+      if ('attribute' in target && opening.tagName.getText() === target.attribute[0]) {
+        const attr = opening.attributes.properties.find(item => ts.isJsxAttribute(item) && item.name.getText() === target.attribute[1]);
+        if (attr && ts.isJsxAttribute(attr) && attr.initializer && ts.isJsxExpression(attr.initializer) && attr.initializer.expression) {
+          const value = attr.initializer.expression;
+          if (target.attribute[1] === 'draggable') proofs.push(entailsOpen(value, operation, true, props));
+          else proofs.push(ts.isConditionalExpression(value) && absent(value.whenFalse) && expressionProof(value.whenTrue));
+        }
+      }
+      const name = opening.tagName.getText();
+      if (!visited.has(name)) {
+        let component: ts.FunctionDeclaration | undefined;
+        function find(child: ts.Node) {
+          if (ts.isFunctionDeclaration(child) && child.name?.text === name) component = child;
+          ts.forEachChild(child, find);
+        }
+        find(body.getSourceFile());
+        if (component?.body && component.parameters[0] && ts.isObjectBindingPattern(component.parameters[0].name)) {
+          const supplied = new Map<string, ts.Expression>();
+          for (const item of component.parameters[0].name.elements) {
+            if (!ts.isIdentifier(item.name)) continue;
+            const propName = item.propertyName?.getText() ?? item.name.text;
+            const attr = opening.attributes.properties.find(item => ts.isJsxAttribute(item) && item.name.getText() === propName);
+            if (attr && ts.isJsxAttribute(attr) && attr.initializer && ts.isJsxExpression(attr.initializer) && attr.initializer.expression)
+              supplied.set(item.name.text, resolved(attr.initializer.expression, new Set(), props));
+          }
+          // The inventory's target can be owned by a child, such as a tab's delete menu item.
+          targetProof(component.body, operation, target, supplied, new Set([...visited, name]), proofs);
+        }
+      }
+    }
+    ts.forEachChild(node, walk);
+  }
+  walk(body);
+  return proofs.length > 0 && proofs.every(Boolean);
+}
+
+function entryViolations(files: Readonly<Record<string, string>>, inventory: readonly Entry[] = entries): string[] {
+  return inventory.flatMap(entry => {
     const source = ts.createSourceFile(entry.file, files[entry.file] ?? '', ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
     let body: ts.Node | undefined;
     function find(node: ts.Node) {
@@ -222,7 +534,9 @@ function entryViolations(files: Readonly<Record<string, string>>): string[] {
       ts.forEachChild(node, find);
     }
     find(source);
-    return entry.operations.filter(operation => !body || !hasPredicate(body, operation, entry.request))
+    return entry.operations.filter(operation => !body || (entry.targets?.[operation]
+      ? !entry.targets[operation]!.every(target => targetProof(body!, operation, target))
+      : !hasPredicate(body, operation, entry.request)))
       .map(operation => `${entry.file}: ${entry.function} must gate its entry on ${operation}`);
   });
 }
@@ -263,11 +577,7 @@ test('the scan rejects an ungated call to a closed operation, by Eden chain and 
     }),
   ).toEqual([
     "eden: .v1.me['saved-filters'].get({query:{}}) reaches getV1MeSaved-filters (platform:saved-views)",
-    "alias: .v1.me['saved-filters'] reaches deleteV1MeSaved-filtersById (platform:saved-views)",
-    "alias: .v1.me['saved-filters'] reaches getV1MeSaved-filters (platform:saved-views)",
-    "alias: .v1.me['saved-filters'] reaches patchV1MeSaved-filtersById (platform:saved-views)",
-    "alias: .v1.me['saved-filters'] reaches postV1MeSaved-filters (platform:saved-views)",
-    "alias: .v1.me['saved-filters'] reaches putV1MeSaved-filtersOrder (platform:saved-views)",
+    "alias: filters.order.put({}) reaches putV1MeSaved-filtersOrder (platform:saved-views)",
     "mods: .v1['mod-releases']({work}).get({query:{}}) reaches getV1Mod-releasesByWork (platform:developer-extras)",
     'path: /v1/types reaches postV1Types (platform:platform-admin)',
   ]);
@@ -312,7 +622,7 @@ test('property existence checks and public parameterised paths do not invent clo
 
 test('each UI entry loses its proof when any required operation predicate is removed', () => {
   for (const entry of entries) for (const operation of entry.operations) {
-    expect(entryViolations({ ...webSources, [entry.file]: webSources[entry.file]!.replaceAll(operation, 'getV1Types') }))
+    expect(entryViolations({ [entry.file]: webSources[entry.file]!.replaceAll(operation, 'getV1Types') }, [entry]))
       .toContain(`${entry.file}: ${entry.function} must gate its entry on ${operation}`);
   }
 });
@@ -324,4 +634,84 @@ test('an unused gate or a closed error string is not a UI predicate', () => {
   expect(hasPredicate(parse("const submit = () => { if (!operationOpen('getV1HubWorksById')) return; }; return <button onClick={submit}>Retry</button>;"), 'getV1HubWorksById')).toBe(false);
   expect(hasPredicate(parse("const allowed = operationOpen('getV1HubWorksById') && ready; return <button>Retry</button>;"), 'getV1HubWorksById')).toBe(false);
   expect(hasPredicate(parse("return operationOpen('getV1HubWorksById') ? <button>Retry</button> : null;"), 'getV1HubWorksById')).toBe(true);
+});
+
+test('request gates dominate each invocation, not the file or a neighbouring expression', () => {
+  const call = "main.v1.me['saved-filters'].get({})";
+  const gate = "operationOpen('getV1MeSaved-filters', access)";
+  for (const source of [
+    `${gate}; ${call};`,
+    `const unused = ${gate}; ${call};`,
+    `${gate} ? ${call} : ${call};`,
+    `!${gate} ? ${call} : null;`,
+    `if (!${gate}) { ${call}; }`,
+    `if (${gate}) {} ${call};`,
+    `${gate} && ${call}; ${call};`,
+    `function allowed() { if (!${gate}) return; return ${call}; } function denied() { return ${call}; }`,
+    `if (!${gate}) { if (ready) return; } ${call};`,
+  ]) expect(violations({ fixture: source }).some(item => item.includes('getV1MeSaved-filters'))).toBe(true);
+  for (const source of [
+    `if (!${gate}) return null; ${call};`,
+    `${gate} ? ${call} : null;`,
+    `!${gate} ? null : ${call};`,
+    `const can = { read: ${gate}, edit: operationOpen('postV1MeSaved-filters') }; can.read && ${call};`,
+  ]) expect(violations({ fixture: source })).toEqual([]);
+});
+
+test('Eden aliases retain the exact operation across assignments, returns and multiline declarations', () => {
+  for (const source of [
+    "let filters; filters = main.v1.me['saved-filters']; filters.get({});",
+    "const client = () => main.v1.me['saved-filters']; client().get({});",
+    "function client() { return main.v1.me['saved-filters']; } client().get({});",
+    "const filters =\n main.v1.me['saved-filters'];\n filters.get({});",
+    "const filters = main.v1.me['saved-filters']; const alias = filters; alias.get({});",
+    "const filters = main.v1.me['saved-filters']; const read = filters.get; read({});",
+  ]) {
+    expect(violations({ fixture: source })).toHaveLength(1);
+    expect(violations({ fixture: source })[0]).toContain('getV1MeSaved-filters');
+  }
+  expect(callsIn("let filters; filters = main.v1.me['saved-filters']; if (typeof filters.get === 'function') ready();")).toEqual([]);
+});
+
+test('UI fixtures reject inverted, identical and unused predicates and unrelated object members', () => {
+  const operation = 'getV1HubWorksById';
+  const gate = `operationOpen('${operation}')`;
+  for (const source of [
+    `return ${gate} ? <button>Install</button> : <button>Install</button>;`,
+    `return !${gate} ? <button>Install</button> : null;`,
+    `const unused = ${gate}; return <button>Install</button>;`,
+    `const unused = ${gate} ? <button>Install</button> : null; return <button>Install</button>;`,
+    `const can = { install: ready, unrelated: ${gate} }; return can.install ? <button>Install</button> : null;`,
+    `if (!${gate}) return <button>Install</button>; return null;`,
+  ]) expect(hasPredicate(parse(source), operation)).toBe(false);
+  expect(hasPredicate(parse(`const can = { install: ${gate}, unrelated: ready }; return can.install ? <button>Install</button> : null;`), operation)).toBe(true);
+});
+
+test('HTTP paths and projected reads require a gate dominating their own expression', () => {
+  const http = "fetch('/v1/types', { method: 'POST' })";
+  const adminGate = "operationOpen('postV1Types', access)";
+  expect(violations({ request: `${adminGate}; ${http};` })).toHaveLength(1);
+  expect(violations({ request: `${adminGate} ? ${http} : ${http};` })).toHaveLength(1);
+  expect(violations({ request: `${adminGate} && ${http}; ${http};` })).toHaveLength(1);
+  expect(violations({ request: `${adminGate} ? ${http} : null;` })).toEqual([]);
+  const types = "export type HubWorkPage = NonNullable<Ok<ReturnType<Main['v1']['hub']['works']>['get']>>;";
+  const projected = 'followHref<HubWorkPage>(main, href)';
+  const hubGate = "operationOpen('getV1HubWorksById', access)";
+  expect(violations({ types, read: `${hubGate}; ${projected};` })).toHaveLength(1);
+  expect(violations({ types, read: `${hubGate} && ${projected}; ${projected};` })).toHaveLength(1);
+  expect(violations({ types, read: `!${hubGate} ? ${projected} : null;` })).toHaveLength(1);
+  expect(violations({ types, read: `${hubGate} ? ${projected} : null;` })).toEqual([]);
+});
+
+test('a gated unrelated sibling cannot protect the inventoried closed action', () => {
+  const fixture: Entry = { file: 'entry.tsx', function: 'Entry', operations: ['getV1HubWorksById'],
+    targets: { getV1HubWorksById: [{ jsx: 'button', text: 'Install' }] } };
+  const gate = "operationOpen('getV1HubWorksById')";
+  for (const source of [
+    `function Entry() { return <>{${gate} ? <span>Unrelated</span> : null}<button>Install</button></>; }`,
+    `function Entry() { return <>{${gate} ? <button>Install</button> : null}<button>Install</button></>; }`,
+    `function Entry() { return ${gate} ? <button>Install</button> : <button>Install</button>; }`,
+    `function Entry() { return !${gate} ? <button>Install</button> : null; }`,
+  ]) expect(entryViolations({ 'entry.tsx': source }, [fixture])).toHaveLength(1);
+  expect(entryViolations({ 'entry.tsx': `function Entry() { return <><button>Copy</button>{${gate} ? <button>Install</button> : null}</>; }` }, [fixture])).toEqual([]);
 });

@@ -2,7 +2,7 @@ import { localizedPath } from '../../i18n/locale.ts';
 import { resourceHref } from '../address/path.ts';
 import { communityHref } from '../feed/discussion.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
+import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
 import { fixtureFollow, memoryRelationships } from '../relationships/fixtures.ts';
 import { relationshipStoryFetch } from '../relationships/story-fetch.ts';
@@ -26,6 +26,7 @@ import { chooseOption } from '../stories/choose-option.ts';
 import { gateFor, NO_PLATFORM_ACCESS } from '../api/platform-access.ts';
 import { Button } from '@rezics/ui/button';
 import { useState } from 'react';
+import { StoryRouteContext } from '../../.storybook/next-navigation.ts';
 
 // Home as each kind of visitor meets it, over an in-memory Main. The feed's
 // own rules are in Feed/Posts; these stories carry the frame: signed out,
@@ -372,6 +373,219 @@ export const PinATopic: Story = {
     await waitFor(() => expect(api.calls).toContain(`follow:${topics.cozy.id.slice(-12)}:true`));
     await expect(api.calls.some(call => call === 'list' || call.startsWith('update:'))).toBe(false);
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Pin to Home' })).toBeNull());
+
+    // The page may stay mounted after navigation; a successful pin must leave the next one usable.
+    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Pin a topic or filter' }));
+    const second = within(await screen.findByRole('dialog', { name: 'Pin to Home' }));
+    const secondSearch = second.getByRole('combobox', { name: 'Search topics' });
+    await waitFor(() => expect(secondSearch).toHaveFocus());
+    await openTopics(secondSearch, 'Mystery');
+    await chooseOption(screen, 'Mystery');
+    const pinAgain = await second.findByRole('button', { name: 'Pin “Mystery”' });
+    await expect(pinAgain).toBeEnabled();
+    await userEvent.click(pinAgain);
+    await waitFor(() => expect(api.calls).toContain(`follow:${topics.mystery.id.slice(-12)}:true`));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Pin to Home' })).toBeNull());
+  },
+};
+
+/** A rejected transport leaves the topic action retryable rather than permanently pending. */
+export const TopicPinTransportFailure: Story = {
+  args: props({ operationGate: gateFor(NO_PLATFORM_ACCESS) }),
+  beforeEach: ignoreResizeObserverLoop,
+  async play({ canvasElement, args }) {
+    const api = args.filtersApi as ReturnType<typeof memorySavedFilters>;
+    const follow = api.followConcept;
+    api.followConcept = async () => { throw new Error('Lost response'); };
+    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Pin a topic' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Pin to Home' }));
+    const search = dialog.getByRole('combobox', { name: 'Search topics' });
+    await waitFor(() => expect(search).toHaveFocus());
+    await openTopics(search, 'Cozy games');
+    await chooseOption(screen, 'Cozy games');
+    const pin = await dialog.findByRole('button', { name: 'Pin “Cozy games”' });
+    await userEvent.click(pin);
+    await expect(await dialog.findByRole('alert')).toHaveTextContent('Couldn’t pin it. Try again.');
+    await expect(pin).toBeEnabled();
+    api.followConcept = follow;
+    await userEvent.click(pin);
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Pin to Home' })).toBeNull());
+    await expect(api.calls).toContain(`follow:${topics.cozy.id.slice(-12)}:true`);
+  },
+};
+
+let voteAttempts = 0;
+const voteRetrySource = memoryFeed();
+const voteRetryApi = { ...voteRetrySource, vote: async (...input: Parameters<typeof voteRetrySource.vote>) => {
+  if (voteAttempts++ === 0) throw new Error('Disconnected');
+  return voteRetrySource.vote(...input);
+} };
+
+/** A rejected public vote rolls its optimistic value back and clears pending for a retry. */
+export const VoteTransportFailure: Story = {
+  args: props({ api: voteRetryApi, posts: <HomePosts locale="en" messages={{ home, feed }} signedIn actingSubject={reader}
+    signInHref={signInHref} state={state()} defaults={following} query={feedQuery(state(), { language: 'en', actingSubject: reader })}
+    page={{ ok: true, data: page([everyKind[0]!]) }} /> }),
+  beforeEach() { voteAttempts = 0; },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const upvote = canvas.getByRole('button', { name: 'Upvote' });
+    await userEvent.click(upvote);
+    await expect(await canvas.findByText(/Couldn’t save your vote/)).toHaveAttribute('role', 'status');
+    await expect(upvote).toBeEnabled();
+    await expect(upvote).toHaveAttribute('aria-pressed', 'false');
+    await userEvent.click(upvote);
+    await waitFor(() => expect(upvote).toHaveAttribute('aria-pressed', 'true'));
+    await expect(upvote).toBeEnabled();
+    await expect(canvas.queryByText(/Couldn’t save your vote/)).toBeNull();
+  },
+};
+
+const pendingSavedAction = { revoke: () => {}, release: () => {}, navigate: fn() };
+
+function PendingSavedActionHome(args: Args) {
+  const [readOpen, setReadOpen] = useState(true);
+  const [api] = useState(() => {
+    const source = args.filtersApi!;
+    const hold = async <R,>(result: R) => {
+      await new Promise<void>(resolve => { pendingSavedAction.release = resolve; });
+      return result;
+    };
+    return { ...source,
+      update: async (...input: Parameters<typeof source.update>) => hold(await source.update(...input)),
+      create: async (...input: Parameters<typeof source.create>) => hold(await source.create(...input)),
+    };
+  });
+  pendingSavedAction.revoke = () => setReadOpen(false);
+  const operationGate = gateFor({ groups: [], operations: [
+    'postV1MeSaved-filters', 'patchV1MeSaved-filtersById', ...(readOpen ? ['getV1MeSaved-filters' as const] : []),
+  ], generation: readOpen ? 'granted' : 'revoked' });
+  return <StoryRouteContext value={{ pathname: localizedPath('/', args.locale), onPush: pendingSavedAction.navigate }}>
+    <HomePage {...args} filtersApi={api} operationGate={operationGate} />
+  </StoryRouteContext>;
+}
+
+/** A successful saved pin cannot navigate to its tab after the read grant vanishes mid-write. */
+export const SavedPinReadRevokedWhilePending: Story = {
+  args: props(),
+  render: args => <PendingSavedActionHome {...args} />,
+  beforeEach() { pendingSavedAction.navigate.mockClear(); return ignoreResizeObserverLoop(); },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Pin a topic or filter' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Pin to Home' }));
+    const pin = within(dialog.getByRole('region', { name: 'Your topics' })).getByRole('button', { name: 'Mystery' });
+    await userEvent.click(pin);
+    await expect(pin).toBeDisabled();
+    pendingSavedAction.revoke();
+    await waitFor(() => expect(dialog.queryByRole('region', { name: 'Your topics' })).toBeNull());
+    pendingSavedAction.release();
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Pin to Home' })).toBeNull());
+    await expect(pendingSavedAction.navigate).not.toHaveBeenCalled();
+    // A completed saved write also clears pending for the still-public topic action.
+    await userEvent.click(canvas.getByRole('button', { name: 'Pin a topic' }));
+    const reopened = within(await screen.findByRole('dialog', { name: 'Pin to Home' }));
+    const search = reopened.getByRole('combobox', { name: 'Search topics' });
+    await waitFor(() => expect(search).toHaveFocus());
+    await openTopics(search, 'Cozy games');
+    await chooseOption(screen, 'Cozy games');
+    await expect(await reopened.findByRole('button', { name: 'Pin “Cozy games”' })).toBeEnabled();
+  },
+};
+
+/** Creating a saved view has the same post-await destination gate as pinning an existing one. */
+export const SavedCreateReadRevokedWhilePending: Story = {
+  ...SavedPinReadRevokedWhilePending,
+  args: props({ state: state({ tab: 'all', languages: ['ja'] }) }),
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Pin a topic or filter' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Pin to Home' }));
+    const save = within(dialog.getByRole('form', { name: 'Save these filters as a tab' }))
+      .getByRole('button', { name: 'Save as tab' });
+    await userEvent.click(save);
+    await expect(save).toHaveAttribute('aria-disabled', 'true');
+    pendingSavedAction.revoke();
+    await waitFor(() => expect(dialog.queryByRole('form', { name: 'Save these filters as a tab' })).toBeNull());
+    pendingSavedAction.release();
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Pin to Home' })).toBeNull());
+    await expect(pendingSavedAction.navigate).not.toHaveBeenCalled();
+    await userEvent.click(canvas.getByRole('button', { name: 'Pin a topic' }));
+    const reopened = within(await screen.findByRole('dialog', { name: 'Pin to Home' }));
+    await expect(reopened.queryByRole('form', { name: 'Save these filters as a tab' })).toBeNull();
+    await waitFor(() => expect(reopened.getByRole('combobox', { name: 'Search topics' })).toBeEnabled());
+  },
+};
+
+/** Saved pin and create transport failures both clear pending and keep the same action retryable. */
+export const SavedActionsTransportFailure: Story = {
+  args: props({ state: state({ tab: 'all', languages: ['ja'] }),
+    operationGate: gateFor({ groups: ['saved-views'], operations: [], generation: '1' }) }),
+  beforeEach: ignoreResizeObserverLoop,
+  async play({ canvasElement, args }) {
+    const api = args.filtersApi as ReturnType<typeof memorySavedFilters>;
+    const create = api.create;
+    api.update = async () => { throw new Error('Lost response'); };
+    api.create = async () => { throw new Error('Lost response'); };
+    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Pin a topic or filter' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Pin to Home' }));
+    const pin = within(dialog.getByRole('region', { name: 'Your topics' })).getByRole('button', { name: 'Mystery' });
+    await userEvent.click(pin);
+    await expect(await dialog.findByRole('alert')).toHaveTextContent('Couldn’t pin it. Try again.');
+    await expect(pin).toBeEnabled();
+    const save = within(dialog.getByRole('form', { name: 'Save these filters as a tab' }))
+      .getByRole('button', { name: 'Save as tab' });
+    await userEvent.click(save);
+    await waitFor(() => expect(save).toBeEnabled());
+    await expect(dialog.getByRole('alert')).toHaveTextContent('Couldn’t pin it. Try again.');
+    api.create = create;
+    await userEvent.click(save);
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Pin to Home' })).toBeNull());
+  },
+};
+
+/** A lost rename response leaves Save enabled and the typed name available for retry. */
+export const RenameTransportFailure: Story = {
+  args: props({ state: pinnedState(),
+    operationGate: gateFor({ groups: ['saved-views'], operations: [], generation: '1' }) }),
+  async play({ canvasElement, args }) {
+    const api = args.filtersApi as ReturnType<typeof memorySavedFilters>;
+    api.update = async () => { throw new Error('Lost response'); };
+    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Options for Fantasy' }));
+    await waitFor(() => expect(screen.getByRole('menuitem', { name: 'Rename' })).toBeVisible());
+    for (let step = 0; step < 6 && !screen.getByRole('menuitem', { name: 'Rename' }).hasAttribute('data-highlighted'); step++) {
+      await userEvent.keyboard('{ArrowDown}');
+    }
+    await userEvent.keyboard('{Enter}');
+    const dialog = within(await screen.findByRole('dialog', { name: 'Rename tab' }));
+    const field = dialog.getByRole('textbox', { name: 'Name' });
+    await userEvent.clear(field);
+    await userEvent.type(field, 'Magic');
+    const save = dialog.getByRole('button', { name: 'Save' });
+    await userEvent.click(save);
+    await waitFor(() => expect(dialog.getByRole('status')).toHaveTextContent('Couldn’t change your tabs. Try again.'));
+    await expect(save).toBeEnabled();
+    await expect(save).not.toHaveAttribute('aria-disabled', 'true');
+    await expect(field).toHaveValue('Magic');
+    const title = dialog.getByRole('heading', { name: 'Rename tab' });
+    await waitFor(() => expect(title.getBoundingClientRect().top)
+      .toBeGreaterThanOrEqual(screen.getByRole('dialog', { name: 'Rename tab' }).getBoundingClientRect().top));
+  },
+};
+
+/** Retrying the same rename after a lost response succeeds without retyping the name. */
+export const RenameTransportRecovery: Story = {
+  ...RenameTransportFailure,
+  args: props({ state: pinnedState(),
+    operationGate: gateFor({ groups: ['saved-views'], operations: [], generation: '1' }) }),
+  async play(context) {
+    const api = context.args.filtersApi as ReturnType<typeof memorySavedFilters>;
+    const update = api.update;
+    await RenameTransportFailure.play?.(context);
+    api.update = update;
+    const dialog = within(screen.getByRole('dialog', { name: 'Rename tab' }));
+    await userEvent.click(dialog.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Rename tab' })).toBeNull());
   },
 };
 
@@ -505,6 +719,27 @@ export const MoreTopics: Story = {
   },
 };
 
+let topicPageAttempts = 0;
+
+/** Rejected public topic pagination clears pending, so Show more can retry. */
+export const MoreTopicsTransportFailure: Story = {
+  args: props({ savedFilters: null, state: state({ tab: 'all' }), concepts: [followedTopic, cozyTopic],
+    conceptCursor: 'page-2', loadTopics: async () => {
+      if (topicPageAttempts++ === 0) throw new Error('Disconnected');
+      return { ok: true, data: { tabs: [mysteryTopic], nextCursor: null, complete: true } };
+    } }),
+  beforeEach() { topicPageAttempts = 0; },
+  async play({ canvasElement }) {
+    await userEvent.click(within(canvasElement).getByRole('button', { name: 'More topics' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'More topics' }));
+    await userEvent.click(dialog.getByRole('button', { name: 'Show more' }));
+    await waitFor(() => expect(dialog.getByRole('button', { name: 'Show more' })).toBeEnabled());
+    await expect(dialog.getByRole('status')).toHaveTextContent('Couldn’t load more');
+    await userEvent.click(dialog.getByRole('button', { name: 'Show more' }));
+    await expect(await dialog.findByRole('link', { name: 'Mystery' })).toBeVisible();
+  },
+};
+
 /** A phone shows the topics that fit; the rest are still in More topics, and the page does not scroll sideways. */
 export const MoreTopicsPhone: Story = {
   args: props({
@@ -569,6 +804,28 @@ export const FollowedTopicMoved: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Start from the newest' }));
     await expect(canvas.getByRole('link', { name: 'Newest Tale' })).toBeVisible();
     await expect(canvas.queryByRole('link', { name: 'Lantern Market' })).toBeNull();
+  },
+};
+
+let workPageAttempts = 0;
+
+/** A rejected public topic feed read leaves the continuation retryable. */
+export const FollowedTopicTransportFailure: Story = {
+  args: props({ savedFilters: null, state: state({ tab: 'pinned', filter: fantasyTab }), concepts: [followedTopic],
+    posts: <ConceptTopicFeed topic={followedTopic} locale="en" messages={{ home }}
+      initial={{ ok: true, data: { items: [conceptWork(1, 'Lantern Market')], nextCursor: 'older', complete: false } }}
+      load={async () => {
+        if (workPageAttempts++ === 0) throw new Error('Disconnected');
+        return { ok: true, data: { items: [conceptWork(2, 'Older Tale')], nextCursor: null, complete: true } };
+      }} /> }),
+  beforeEach() { workPageAttempts = 0; },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
+    await waitFor(() => expect(canvas.getByRole('button', { name: 'Show more' })).toBeEnabled());
+    await expect(canvas.getByRole('status')).toHaveTextContent('Couldn’t load more');
+    await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
+    await expect(await canvas.findByRole('link', { name: 'Older Tale' })).toBeVisible();
   },
 };
 
