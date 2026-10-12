@@ -18,6 +18,18 @@ export const PUBLIC_SEARCH_PAGE_COST = {
   disclosureBatchSize: DISCLOSURE_COST.batch,
   hydrationBatchSize: DISCLOSURE_COST.batch / 3,
   rowByteSlack: 1.25,
+  growth: {
+    mainCalls: { class: 'constant', dimension: 'candidateCount' },
+    accountCalls: { class: 'constant', dimension: 'candidateCount' },
+    otherFetches: { class: 'constant', dimension: 'candidateCount' },
+    unclassifiedFetches: { class: 'constant', dimension: 'candidateCount' },
+    fusekiRequests: { class: 'linear', dimension: 'candidateCount',
+      reason: `fixedCalls + ceil(3 * candidates / ${DISCLOSURE_COST.batch}), candidates <= ${MAX_PHRASE_CANDIDATES}` },
+    postgresStatements: { class: 'linear', dimension: 'candidateCount',
+      reason: `fixedStatements + ceil(3 * candidates / ${DISCLOSURE_COST.batch}), candidates <= ${MAX_PHRASE_CANDIDATES}` },
+    fusekiSentBytes: { class: 'linear', dimension: 'candidateCount', reason: 'Bounded candidate hydration input' },
+    fusekiReceivedBytes: { class: 'linear', dimension: 'candidateCount', reason: 'Bounded candidate rows and hydrated cards' },
+  },
 } as const;
 
 export class InvalidSearchContinuation extends Error {}

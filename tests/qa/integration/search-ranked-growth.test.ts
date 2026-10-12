@@ -1,9 +1,8 @@
 import { beforeAll, expect, test } from 'bun:test';
 import { cpSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { commandCounters } from '../../../packages/observability/src/http-measurement.ts';
 import {
-  assertWorkCostAtScales, profileRequest, startWorkProfileSink,
+  assertWorkCost, assertWorkCostAtScales, assertWorkMeterObserved, profileRequest, startWorkProfileSink,
   type WorkCostContract, type WorkCostField, type WorkProfile,
 } from '../support/work-profile.ts';
 import { runWorkProfileChild } from '../support/work-profile-child.ts';
@@ -13,52 +12,32 @@ import type { SearchContinuation } from '../../../services/main/src/modules/work
 
 const phrase = 'Checkpoint selected text';
 const pageSize = 2;
-// One isolated diagnostic cut uses the same restore and requests as the growth
-// qualification, without pretending it is a three-scale verdict.
-const isolatedLarge = process.env.REZICS_RANKED_SEARCH_CUT === 'large';
-if (process.env.REZICS_RANKED_SEARCH_CUT && !isolatedLarge)
-  throw new Error('REZICS_RANKED_SEARCH_CUT only accepts large');
+const meterContract = { minimumObserved: { postgresStatements: 1, fusekiRequests: 1 } } as const;
 const requestCounters = [
   'mainCalls', 'fusekiRequests', 'fusekiSentBytes', 'fusekiReceivedBytes',
   'postgresStatements', 'accountCalls', 'otherFetches', 'unclassifiedFetches',
 ] as const satisfies readonly WorkCostField[];
-const counters = [...requestCounters, ...commandCounters];
 type CandidateRead = { rows: number; candidates: number; sentBytes: number };
-type MeasuredProfile = WorkProfile & Record<(typeof commandCounters)[number], number> & {
+type CandidateProfile = WorkProfile & {
   candidateRows: number; candidateCount: number; candidateReceivedBytes: number; responseBytes: number;
 };
 type Page = { httpStatus: number; complete?: boolean; relationComplete?: boolean; population: number; total: number;
-  results: { work: string; mainVersion: string }[]; next: SearchContinuation | null };
+  results: { work: string; mainVersion: string; title?: unknown }[]; next: SearchContinuation | null;
+  cardWindow?: { hydrated: number; limit: number; next: object | null } };
 type Evidence = { matchingWorks: number; restoreMs: number;
-  first: MeasuredProfile; continuation: MeasuredProfile };
+  query: CandidateProfile; first: CandidateProfile; continuation: CandidateProfile;
+  queryContinuation?: CandidateProfile };
 type Refusal = { status: number; code?: string; responseStatus?: string | number; body: string };
 type Attempt = { matchingWorks: number; page: string; profile: WorkProfile;
   hostLoad: string; refusal?: Refusal; candidateRead?: CandidateRead };
 
-/** Project the request's existing native span counters into numeric verdict fields.
- * CommandWork initializes mutation counters, but emits visit keys sparsely.
- * A covered dictionary's absent visit key means zero; an absent dictionary fails.
- * Health GETs do not execute native commands or queries. */
-function measuredProfile(profile: WorkProfile, read: CandidateRead, responseBytes: number): MeasuredProfile {
-  const spans = profile.fusekiCalls.map(call => profile.spans.find(span => span.spanId === call.spanId)!);
-  const native = spans.filter(span => span.attributes['http.request.method'] === 'POST');
-  expect(native.length).toBeGreaterThan(0);
-  for (const span of native) for (const sentinel of ['current_adds', 'durable_commits'])
-    expect(Number.isSafeInteger(span.attributes[`rezics.fuseki.${sentinel}`])).toBe(true);
-  const totals = Object.fromEntries(commandCounters.map(counter => [counter,
-    native.reduce((sum, span) => {
-      const value = span.attributes[`rezics.fuseki.${counter}`] ?? 0;
-      expect(Number.isSafeInteger(value)).toBe(true);
-      expect(value as number).toBeGreaterThanOrEqual(0);
-      return sum + (value as number);
-    }, 0),
-  ])) as Record<(typeof commandCounters)[number], number>;
-  // Match the observed query to its HTTP span by its exact SPARQL body size.
-  // This excludes fixed health responses and the later hydration/facet reads.
+/** Attach candidate-query evidence; native work remains the shared owner's
+ * nativeVisits/nativeVisitTotal, without aliases or a second aggregation. */
+function withCandidateRead(profile: WorkProfile, read: CandidateRead, responseBytes: number): CandidateProfile {
   const calls = profile.fusekiCalls.filter(call => call.sentBytes === read.sentBytes);
   expect(calls).toHaveLength(1);
   expect(calls[0]!.receivedBytes).toBeGreaterThan(0);
-  return { ...profile, ...totals, candidateRows: read.rows, candidateCount: read.candidates,
+  return { ...profile, candidateRows: read.rows, candidateCount: read.candidates,
     candidateReceivedBytes: calls[0]!.receivedBytes!, responseBytes };
 }
 
@@ -74,12 +53,12 @@ async function profileRankedSearch() {
   const { root, stream, dockerEnvironment } = await import('../../../scripts/fixture/stack.ts');
   const { readRetainedSeed } = await import('../support/seed-checkpoints.ts');
   const { assertPublicContentSearchReady } = await import('../../../services/main/src/modules/content-publication/search.ts');
+  const { SEARCH_CARD_WINDOW } = await import('../../../services/main/src/modules/search/card-window.ts');
   const retained = readRetainedSeed();
   expect(retained.cuts.map(cut => cut.works.length)).toEqual([4, 16, 64]);
-  const cuts = isolatedLarge ? retained.cuts.filter(cut => cut.works.length === 64) : retained.cuts;
   const hostLoadAtStart = readFileSync('/proc/loadavg', 'utf8').trim();
   console.log(JSON.stringify({ event: 'ranked-profile-start', hostLoadAtStart,
-    cuts: cuts.map(cut => cut.works.length) }));
+    cuts: retained.cuts.map(cut => cut.works.length) }));
   const qaRunId = process.env.REZICS_QA_RUN_ID;
   if (!qaRunId) throw new Error('Run through goalctl integration QA');
   // Release the unused harness stack before admitting the first restored copy.
@@ -90,15 +69,7 @@ async function profileRankedSearch() {
   const targets: string[] = [];
   const evidence: Evidence[] = [];
   const attempts: Attempt[] = [];
-  let blind: { matchingWorks: number; page: string; profile: WorkProfile } | undefined;
   let candidateReads: CandidateRead[] = [];
-  const assertMeter = (matchingWorks: number, page: string, profile: WorkProfile) => {
-    if (profile.postgresStatements === null || profile.postgresStatements <= 0
-      || profile.fusekiRequests === null || profile.fusekiRequests <= 0) {
-      blind = { matchingWorks, page, profile };
-      throw new Error(`meter blind at ${matchingWorks} matching Works (${page})`);
-    }
-  };
   const request = async (stack: MediaStack, path: string, body: object, headers = new Headers(), captureFailure = false) => {
     candidateReads = [];
     const hostLoad = readFileSync('/proc/loadavg', 'utf8').trim();
@@ -179,7 +150,7 @@ async function profileRankedSearch() {
     },
   });
   try {
-    for (const cut of cuts) {
+    for (const cut of retained.cuts) {
       verifying = cut;
       const target = `ranked-growth-${qaRunId.replaceAll('-', '').slice(0, 24)}-${cut.manifest.scale}`;
       targets.push(target);
@@ -192,21 +163,43 @@ async function profileRankedSearch() {
         target, backups);
       try {
         const count = cut.works.length;
+        const measure = async (page: string, path: string, body: object) => {
+          const measured = await profileRequest(sink, headers => request(copy!, path, body, headers, true),
+            { flush: flushTelemetryTraces });
+          attempts.push({ matchingWorks: count, page, profile: measured.profile,
+            hostLoad: measured.result.hostLoad, refusal: measured.result.refusal,
+            candidateRead: measured.result.candidateRead });
+          assertWorkMeterObserved(measured.profile, meterContract);
+          return measured;
+        };
+        const query = await measure('query', '/v1/queries', {
+          profile: 'public-main-phrase-v1', phrase, language: 'en',
+        });
         const body = { profile: 'public-main-phrase-page-v1', phrase, language: 'en', pageSize };
-        const first = await profileRequest(sink, headers => request(copy!, '/v1/queries/page', body, headers, true),
-          { flush: flushTelemetryTraces });
-        attempts.push({ matchingWorks: count, page: 'first', profile: first.profile,
-          hostLoad: first.result.hostLoad, refusal: first.result.refusal, candidateRead: first.result.candidateRead });
-        assertMeter(count, 'first', first.profile);
+        const first = await measure('first', '/v1/queries/page', body);
         if (first.result.httpStatus !== 200) continue;
         expect(first.result.next).not.toBeNull();
-        const continuation = await profileRequest(sink, headers => request(copy!, '/v1/queries/page', {
+        const continuation = await measure('continuation', '/v1/queries/page', {
           ...body, continuation: first.result.next,
-        }, headers, true), { flush: flushTelemetryTraces });
-        attempts.push({ matchingWorks: count, page: 'continuation', profile: continuation.profile,
-          hostLoad: continuation.result.hostLoad, refusal: continuation.result.refusal, candidateRead: continuation.result.candidateRead });
-        assertMeter(count, 'continuation', continuation.profile);
-        if (continuation.result.httpStatus !== 200) continue;
+        });
+        if (continuation.result.httpStatus !== 200 || query.result.httpStatus !== 200) continue;
+        expect(query.result.complete).toBe(true);
+        expect(query.result.total).toBe(count);
+        expect(query.result.results).toHaveLength(count);
+        expect(new Set(query.result.results.map(row => row.work))).toEqual(new Set(cut.works.map(row => row.work)));
+        expect(query.result.cardWindow).toMatchObject({ limit: SEARCH_CARD_WINDOW,
+          hydrated: Math.min(count, SEARCH_CARD_WINDOW) });
+        let queryContinuation: CandidateProfile | undefined;
+        if (count > SEARCH_CARD_WINDOW) {
+          expect(query.result.cardWindow!.next).not.toBeNull();
+          const next = await measure('queryContinuation', '/v1/queries/page', query.result.cardWindow!.next!);
+          if (next.result.httpStatus !== 200) continue;
+          expect(next.result.results).toHaveLength(SEARCH_CARD_WINDOW);
+          expect(next.result.total).toBe(count);
+          expect(new Set([...query.result.results.slice(0, SEARCH_CARD_WINDOW), ...next.result.results]
+            .map(row => row.work)).size).toBe(2 * SEARCH_CARD_WINDOW);
+          queryContinuation = withCandidateRead(next.profile, next.result.candidateRead!, next.result.responseBytes);
+        } else expect(query.result.cardWindow!.next).toBeNull();
         for (const result of [first.result, continuation.result]) {
           expect(result.relationComplete).toBe(true);
           expect(result.results).toHaveLength(pageSize);
@@ -216,13 +209,15 @@ async function profileRankedSearch() {
         }
         expect(new Set([...first.result.results, ...continuation.result.results].map(row => row.work)).size).toBe(4);
         evidence.push({ matchingWorks: count, restoreMs,
-          first: measuredProfile(first.profile, first.result.candidateRead!, first.result.responseBytes),
-          continuation: measuredProfile(continuation.profile, continuation.result.candidateRead!, continuation.result.responseBytes) });
+          query: withCandidateRead(query.profile, query.result.candidateRead!, query.result.responseBytes),
+          first: withCandidateRead(first.profile, first.result.candidateRead!, first.result.responseBytes),
+          continuation: withCandidateRead(continuation.profile, continuation.result.candidateRead!, continuation.result.responseBytes),
+          queryContinuation });
       } finally { await backups.stop(target); }
     }
   } finally {
     mkdirSync(dirname(process.env.REZICS_WORK_PROFILE_RESULT!), { recursive: true });
-    writeFileSync(process.env.REZICS_WORK_PROFILE_RESULT!, JSON.stringify({ evidence, attempts, blind, hostLoadAtStart }, null, 2));
+    writeFileSync(process.env.REZICS_WORK_PROFILE_RESULT!, JSON.stringify({ evidence, attempts, hostLoadAtStart }, null, 2));
     const errors: unknown[] = [];
     for (const target of targets) {
       try { await backups.stop(target); } catch (error) { errors.push(error); }
@@ -244,38 +239,60 @@ if (process.env.REZICS_RANKED_SEARCH_PROFILE_CHILD === '1') {
       env: { REZICS_RANKED_SEARCH_PROFILE_CHILD: '1' }, timeoutMs: 450_000,
     });
     ({ evidence, attempts } = JSON.parse(readFileSync(measured.resultPath, 'utf8')) as {
-      evidence: Evidence[]; attempts: typeof attempts });
+      evidence: Evidence[]; attempts: Attempt[] });
     console.log(`Ranked search work profiles: ${measured.resultPath}`);
     console.log(JSON.stringify(attempts.map(row => ({ works: row.matchingWorks, page: row.page,
-      status: row.profile.request.status, fuseki: row.profile.fusekiRequests, sql: row.profile.postgresStatements,
+      route: row.profile.request.route, status: row.profile.request.status,
+      fuseki: row.profile.fusekiRequests, sql: row.profile.postgresStatements,
+      nativeVisits: row.profile.nativeVisits, nativeVisitTotal: row.profile.nativeVisitTotal,
       hostLoad: row.hostLoad, refusal: row.refusal, candidateRead: row.candidateRead })), null, 2));
-    console.log(JSON.stringify(evidence.map(row => ({ matchingWorks: row.matchingWorks, restoreMs: row.restoreMs,
-      ...Object.fromEntries(['first', 'continuation'].map(page => [page,
-        Object.fromEntries([...counters, 'candidateRows', 'candidateCount', 'candidateReceivedBytes', 'responseBytes']
-          .map(counter => [counter, row[page as 'first' | 'continuation'][counter as keyof MeasuredProfile]]))])),
+    console.log(JSON.stringify(evidence.map(row => ({ works: row.matchingWorks, restoreMs: row.restoreMs,
+      ...Object.fromEntries(['query', 'first', 'continuation', 'queryContinuation'].flatMap(operation => {
+        const profile = row[operation as 'query' | 'first' | 'continuation' | 'queryContinuation'];
+        return profile ? [[operation, { sentBytes: profile.fusekiSentBytes,
+          receivedBytes: profile.fusekiReceivedBytes, candidateRows: profile.candidateRows,
+          candidateReceivedBytes: profile.candidateReceivedBytes, responseBytes: profile.responseBytes }]] : [];
+      })),
     })), null, 2));
   }, 460_000);
 
-  test(`SEARCH18/SEARCH16: ranked first and continuation pages cover restored ${isolatedLarge ? '64' : '4/16/64'} matching Works`, () => {
-    for (const attempt of attempts) expect(attempt.profile.request.status).toBe(200);
-    expect(evidence.map(row => row.matchingWorks)).toEqual(isolatedLarge ? [64] : [4, 16, 64]);
-    for (const row of evidence) for (const profile of [row.first, row.continuation]) {
-      expect(profile.request.route).toBe('/v1/queries/page');
-      expect(profile.request.status).toBe(200);
+  test('SEARCH18/SEARCH16: both entry points and ranked continuations cover restored 4/16/64 matching Works', () => {
+    for (const attempt of attempts) {
+      assertWorkMeterObserved(attempt.profile, meterContract);
+      expect(attempt.profile.request.status).toBe(200);
+    }
+    expect(evidence.map(row => row.matchingWorks)).toEqual([4, 16, 64]);
+    expect(attempts.filter(row => row.page === 'query').map(row => row.matchingWorks)).toEqual([4, 16, 64]);
+    expect(attempts.filter(row => row.page === 'first').map(row => row.matchingWorks)).toEqual([4, 16, 64]);
+    expect(attempts.filter(row => row.page === 'continuation').map(row => row.matchingWorks)).toEqual([4, 16, 64]);
+    for (const row of evidence) for (const operation of ['query', 'first', 'continuation'] as const) {
+      const profile = row[operation];
+      expect(profile.request.route).toBe(operation === 'query' ? '/v1/queries' : '/v1/queries/page');
       expect(profile.unclassifiedFetches).toBe(0);
       expect(profile.unobserved.filter(gap => gap.endsWith('SQL descendants'))).toEqual([]);
-      for (const counter of counters) expect(profile[counter]).not.toBeNull();
-      expect(profile.postgresStatements).toBeGreaterThan(0);
-      expect(profile.fusekiRequests).toBeGreaterThan(0);
+      for (const counter of requestCounters) expect(profile[counter]).not.toBeNull();
+      expect(profile.nativeVisitTotal).toBeGreaterThanOrEqual(0);
       expect(profile.candidateRows).toBe(row.matchingWorks);
       expect(profile.candidateCount).toBe(row.matchingWorks);
       expect(profile.candidateRows).toBeLessThanOrEqual(PUBLIC_SEARCH_PAGE_COST.probeRows);
       expect(profile.candidateCount).toBeLessThanOrEqual(PUBLIC_SEARCH_PAGE_COST.candidates);
     }
+    expect(evidence.filter(row => row.queryContinuation).map(row => row.matchingWorks)).toEqual([64]);
   });
-  if (!isolatedLarge) for (const page of ['first', 'continuation'] as const) {
-    test(`SEARCH18/SEARCH16: ranked ${page} page obeys the bounded candidate-pool formulas`, () => {
-      const profiles = evidence.map(row => row[page]);
+
+  // The shared engine can read additional numeric profile evidence. Its current
+  // type enumerates built-in fields; these keys retain the actual candidate
+  // measurements rather than repurposing a request counter or normalizing it.
+  const candidateDimension = 'candidateCount' as WorkCostField;
+  const candidateRowsField = 'candidateRows' as WorkCostField;
+  const candidateBytesField = 'candidateReceivedBytes' as WorkCostField;
+  const responseBytesField = 'responseBytes' as WorkCostField;
+  const growth = Object.fromEntries(Object.entries(PUBLIC_SEARCH_PAGE_COST.growth)
+    .map(([counter, declaration]) => [counter, { ...declaration, dimension: candidateDimension }])) as NonNullable<WorkCostContract['growth']>;
+
+  for (const operation of ['query', 'first', 'continuation'] as const) {
+    test(`SEARCH18/SEARCH16: ranked ${operation} obeys declared candidate growth and pool formulas`, () => {
+      const profiles = evidence.map(row => row[operation]);
       const smallest = profiles[0]!;
       const batches = (candidates: number) => Math.ceil(candidates / PUBLIC_SEARCH_PAGE_COST.hydrationBatchSize);
       const fixedFuseki = smallest.fusekiRequests! - batches(smallest.candidateCount);
@@ -286,40 +303,43 @@ if (process.env.REZICS_RANKED_SEARCH_PROFILE_CHILD === '1') {
       expect(fixedFuseki).toBeGreaterThanOrEqual(0);
       expect(fixedSql).toBeGreaterThanOrEqual(0);
       expect(measuredRowBytes).toBeGreaterThan(0);
-
-      // Computed overflow check, not a new seed: filling all 512 admitted slots
-      // must still fit the candidate query's 1 MiB response cap, including slack.
+      // The full pool, including the declared 25% row-byte slack, fits 1 MiB.
       expect(PUBLIC_SEARCH_PAGE_COST.candidates * measuredRowBytes).toBeLessThan(PUBLIC_SEARCH_PAGE_COST.responseBytes);
       expect(poolBytes).toBeLessThan(PUBLIC_SEARCH_PAGE_COST.responseBytes);
-      console.log(JSON.stringify({ page, measuredRowBytes, slack: PUBLIC_SEARCH_PAGE_COST.rowByteSlack,
-        rowBytes, poolBytes, fixedFuseki, fixedSql, disclosureBatchSize: PUBLIC_SEARCH_PAGE_COST.disclosureBatchSize,
-        candidatesPerBatch: PUBLIC_SEARCH_PAGE_COST.hydrationBatchSize }));
-
-      // Numeric utilization fields let the existing verdict enforce per-cut
-      // formula maxima without replacing the raw request counters or its engine.
-      const bounded = profiles.map(profile => ({ ...profile,
-        candidateRowBudgetUse: profile.candidateRows / PUBLIC_SEARCH_PAGE_COST.probeRows,
-        candidateByteBudgetUse: profile.candidateReceivedBytes / poolBytes,
-        candidateFillByteBudgetUse: profile.candidateReceivedBytes / (profile.candidateRows * rowBytes),
-        fusekiCallBudgetUse: profile.fusekiRequests! / (fixedFuseki + batches(profile.candidateCount)),
-        sqlCallBudgetUse: profile.postgresStatements! / (fixedSql + batches(profile.candidateCount)),
-      }));
+      console.log(JSON.stringify({ operation, measuredRowBytes, slack: PUBLIC_SEARCH_PAGE_COST.rowByteSlack,
+        rowBytes, poolBytes, fixedFuseki, fixedSql, disclosureBatchSize: PUBLIC_SEARCH_PAGE_COST.disclosureBatchSize }));
       const perRowMaximum = (value: number) => Math.ceil(value / smallest.candidateRows
         * PUBLIC_SEARCH_PAGE_COST.candidates * PUBLIC_SEARCH_PAGE_COST.rowByteSlack);
-      const contract = {
-        candidateRowBudgetUse: 1, candidateByteBudgetUse: 1, candidateFillByteBudgetUse: 1,
-        fusekiCallBudgetUse: 1, sqlCallBudgetUse: 1,
+      const contract: WorkCostContract = {
+        ...meterContract, growth,
         mainCalls: smallest.mainCalls!, accountCalls: smallest.accountCalls!, otherFetches: smallest.otherFetches!,
         unclassifiedFetches: 0,
+        fusekiRequests: fixedFuseki + batches(PUBLIC_SEARCH_PAGE_COST.candidates),
+        postgresStatements: fixedSql + batches(PUBLIC_SEARCH_PAGE_COST.candidates),
         fusekiSentBytes: perRowMaximum(smallest.fusekiSentBytes!),
-        // Total traffic also includes health and hydration. The per-row formula
-        // above applies specifically to the candidate-query response.
         fusekiReceivedBytes: PUBLIC_SEARCH_PAGE_COST.responseBytes,
-        candidateReceivedBytes: Math.min(poolBytes, PUBLIC_SEARCH_PAGE_COST.responseBytes),
-        responseBytes: PUBLIC_SEARCH_PAGE_COST.responseBytes,
-        ...Object.fromEntries(commandCounters.map(counter => [counter, perRowMaximum(smallest[counter])])),
-      } as unknown as WorkCostContract;
-      assertWorkCostAtScales(bounded, contract, `ranked-${page}-candidate-pool`);
+        [candidateRowsField]: PUBLIC_SEARCH_PAGE_COST.probeRows,
+        [candidateBytesField]: Math.min(poolBytes, PUBLIC_SEARCH_PAGE_COST.responseBytes),
+        [responseBytesField]: PUBLIC_SEARCH_PAGE_COST.responseBytes,
+      };
+      // Per-cut formula ceilings and the cross-cut class both use the shared
+      // verdict owner; raw SQL/Fuseki counters remain raw numeric evidence.
+      for (const profile of profiles) assertWorkCost(profile, {
+        fusekiRequests: fixedFuseki + batches(profile.candidateCount),
+        postgresStatements: fixedSql + batches(profile.candidateCount),
+        [candidateBytesField]: profile.candidateRows * rowBytes,
+      });
+      assertWorkCostAtScales(profiles, contract, `ranked-${operation}-candidate-pool`);
+      if (operation === 'query') for (const row of evidence) {
+        if (row.queryContinuation) assertWorkCost(row.queryContinuation, {
+          fusekiRequests: fixedFuseki + batches(row.queryContinuation.candidateCount),
+          postgresStatements: fixedSql + batches(row.queryContinuation.candidateCount),
+          [candidateRowsField]: PUBLIC_SEARCH_PAGE_COST.probeRows,
+          [candidateBytesField]: poolBytes,
+          [responseBytesField]: PUBLIC_SEARCH_PAGE_COST.responseBytes,
+          unclassifiedFetches: 0,
+        });
+      }
     });
   }
 }
