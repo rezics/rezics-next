@@ -99,3 +99,36 @@ export const Unavailable: Story = {
     await expect(within(canvasElement).queryByText(/A Certain Magical Index/)).toBeNull();
   },
 };
+
+/** A leaf Work has no own composition, but Main can disclose the Work containing it. */
+export const NoCompositionWithWhole: Story = {
+  args: { parts: { ok: false, failure: 'missing' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText('Part of')).toBeVisible();
+    await expect(
+      within(canvas.getByRole('list', { name: copyOf('en').partOfList })).getByRole('link', {
+        name: 'A Certain Magical Index',
+      }),
+    ).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'All connections' })).toBeVisible();
+    await expect(canvas.queryByRole('alert')).toBeNull();
+  },
+};
+
+export const PartsTimeoutWithWhole: Story = {
+  args: { parts: { ok: false, failure: 'budget' } },
+  globals: { viewport: { value: 'phone' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('alert')).toHaveTextContent('Parts could not be loaded.');
+    await expect(canvas.getByText('Part of')).toBeVisible();
+    await expect(
+      within(canvas.getByRole('list', { name: copyOf('en').partOfList })).getByRole('link', {
+        name: 'A Certain Magical Index',
+      }),
+    ).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'All connections' })).toBeVisible();
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
+};

@@ -108,7 +108,18 @@ export const NoParts: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { name: 'No parts' })).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'A Certain Magical Index' })).toBeVisible();
     await expect(canvas.queryByRole('alert')).toBeNull();
+  },
+};
+
+export const PartsTimeoutWithWhole: Story = {
+  args: { parts: { ok: false, failure: 'budget' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('alert')).toHaveTextContent('Parts could not be loaded.');
+    await expect(canvas.getByText('Part of')).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'A Certain Magical Index' })).toBeVisible();
   },
 };
 

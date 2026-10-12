@@ -23,52 +23,134 @@ function PartLabel({ part }: { part: Part }) {
 }
 
 /** The `Part of` lines: one per whole that places this Work, each a link to it. */
-export function WholesLines({ wholes, names, t, pages }: {
-  wholes: Loaded<WholesPage> | null; names: Names; t: Copy;
+export function WholesLines({
+  wholes,
+  names,
+  t,
+  pages,
+}: {
+  wholes: Loaded<WholesPage> | null;
+  names: Names;
+  t: Copy;
   /** Where Main's cursor continues and where the list starts again; absent in a preview. */
   pages?: { first: string | null; next: (cursor: string) => string };
 }) {
   if (!wholes?.ok || !wholes.data.wholes.length) return null;
   const next = wholes.data.next;
-  return <div className="grid gap-1">
-    <ul id={anchors.wholes} aria-label={t.partOfList} className="grid scroll-mt-20 gap-1">
-      {wholes.data.wholes.map(whole => <li key={whole.occurrence} className="text-sm">
-        <span className="text-muted-foreground">{t.partOf}</span>{' '}
-        <NameLink reference={whole.work} names={names} unavailable={t.unavailable} unnamed={t.unnamed} />
-      </li>)}
-    </ul>
-    {pages && (pages.first || next) ? <nav aria-label={t.partOfList} className="flex flex-wrap gap-2">
-      {pages.first ? <Link href={pages.first} className={outline}>{t.firstPage}</Link> : null}
-      {next ? <Link href={pages.next(next)} className={outline}>{t.showMore}</Link> : null}
-    </nav> : null}
-  </div>;
+  return (
+    <div className="grid gap-1">
+      <ul id={anchors.wholes} aria-label={t.partOfList} className="grid scroll-mt-20 gap-1">
+        {wholes.data.wholes.map((whole) => (
+          <li key={whole.occurrence} className="text-sm">
+            <span className="text-muted-foreground">{t.partOf}</span>{' '}
+            <NameLink
+              reference={whole.work}
+              names={names}
+              unavailable={t.unavailable}
+              unnamed={t.unnamed}
+            />
+          </li>
+        ))}
+      </ul>
+      {pages && (pages.first || next) ? (
+        <nav aria-label={t.partOfList} className="flex flex-wrap gap-2">
+          {pages.first ? (
+            <Link href={pages.first} className={outline}>
+              {t.firstPage}
+            </Link>
+          ) : null}
+          {next ? (
+            <Link href={pages.next(next)} className={outline}>
+              {t.showMore}
+            </Link>
+          ) : null}
+        </nav>
+      ) : null}
+    </div>
+  );
 }
 
 /** What the Work's own Structure says about its run, as Main evidences it. */
 function Completion({ completion, t }: { completion: PartsPage['completion']; t: Copy }) {
-  const label = completion.status === 'concluded' ? t.completionConcluded
-    : completion.status === 'ongoing' ? t.completionOngoing : t.completionUnknown;
-  const evidence = completion.evidence.filter(item => /^https?:\/\//.test(item));
-  return <p className="text-muted-foreground text-sm">{label}
-    {evidence.map((href, index) => <span key={href}>{index ? ', ' : ' · '}<a href={href} rel="noreferrer"
-      className="break-all text-primary underline-offset-4 hover:underline">{t.evidence}{evidence.length > 1 ? ` ${index + 1}` : ''}</a></span>)}
-  </p>;
+  const label =
+    completion.status === 'concluded'
+      ? t.completionConcluded
+      : completion.status === 'ongoing'
+        ? t.completionOngoing
+        : t.completionUnknown;
+  const evidence = completion.evidence.filter((item) => /^https?:\/\//.test(item));
+  return (
+    <p className="text-muted-foreground text-sm">
+      {label}
+      {evidence.map((href, index) => (
+        <span key={href}>
+          {index ? ', ' : ' · '}
+          <a
+            href={href}
+            rel="noreferrer"
+            className="break-all text-primary underline-offset-4 hover:underline"
+          >
+            {t.evidence}
+            {evidence.length > 1 ? ` ${index + 1}` : ''}
+          </a>
+        </span>
+      ))}
+    </p>
+  );
 }
 
-function PartRow({ part, names, workRef, query, t }: {
-  part: Part; names: Names; workRef: string; query: ConnectionsQuery; t: Copy;
+function PartRow({
+  part,
+  names,
+  workRef,
+  query,
+  t,
+}: {
+  part: Part;
+  names: Names;
+  workRef: string;
+  query: ConnectionsQuery;
+  t: Copy;
 }) {
-  const inclusion = part.inclusion === 'optional' ? t.inclusionOptional : part.inclusion === 'extra' ? t.inclusionExtra : null;
-  return <li id={`part-${part.occurrence.slice(-12)}`}
-    className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1 py-3">
-    <span className="w-28 shrink-0 break-words font-semibold tabular-nums"><PartLabel part={part} /></span>
-    <span className="min-w-0 flex-1">
-      {part.work ? <NameLink reference={part.work} names={names} unavailable={t.unavailable} unnamed={t.unnamed} />
-        : <Link href={connectionsHref(workRef, { ...query, parent: part.occurrence.slice(-36), partsAfter: undefined },
-          anchors.parts)} className={outline}><FolderOpenIcon aria-hidden="true" />{t.openGroup}</Link>}
-    </span>
-    {inclusion ? <Badge variant="outline">{inclusion}</Badge> : null}
-  </li>;
+  const inclusion =
+    part.inclusion === 'optional'
+      ? t.inclusionOptional
+      : part.inclusion === 'extra'
+        ? t.inclusionExtra
+        : null;
+  return (
+    <li
+      id={`part-${part.occurrence.slice(-12)}`}
+      className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1 py-3"
+    >
+      <span className="w-28 shrink-0 break-words font-semibold tabular-nums">
+        <PartLabel part={part} />
+      </span>
+      <span className="min-w-0 flex-1">
+        {part.work ? (
+          <NameLink
+            reference={part.work}
+            names={names}
+            unavailable={t.unavailable}
+            unnamed={t.unnamed}
+          />
+        ) : (
+          <Link
+            href={connectionsHref(
+              workRef,
+              { ...query, parent: part.occurrence.slice(-36), partsAfter: undefined },
+              anchors.parts,
+            )}
+            className={outline}
+          >
+            <FolderOpenIcon aria-hidden="true" />
+            {t.openGroup}
+          </Link>
+        )}
+      </span>
+      {inclusion ? <Badge variant="outline">{inclusion}</Badge> : null}
+    </li>
+  );
 }
 
 /**
@@ -76,34 +158,111 @@ function PartRow({ part, names, workRef, query, t }: {
  * its local label and inclusion, and the wholes that contain the Work. A group opens
  * in place by URL; "Show more" continues Main's cursor and never re-derives order.
  */
-export function PartsSection({ parts, wholes, names, workRef, query, locale: _locale, t, pageMessages }: {
-  parts: Loaded<PartsPage>; wholes: Loaded<WholesPage> | null; names: Names; workRef: string;
-  query: ConnectionsQuery; locale: UiLocale; t: Copy; pageMessages: WorkPageMessages;
+export function PartsSection({
+  parts,
+  wholes,
+  names,
+  workRef,
+  query,
+  locale: _locale,
+  t,
+  pageMessages,
+}: {
+  parts: Loaded<PartsPage>;
+  wholes: Loaded<WholesPage> | null;
+  names: Names;
+  workRef: string;
+  query: ConnectionsQuery;
+  locale: UiLocale;
+  t: Copy;
+  pageMessages: WorkPageMessages;
 }) {
   const first = connectionsHref(workRef, { ...query, partsAfter: undefined }, anchors.parts);
   // Main answers 404 for a Work that has no composition: the page already showed the Work, so it has no parts.
   const page = parts.ok ? parts.data : null;
-  const body = !parts.ok && parts.failure !== 'missing'
-    ? <RegionFailure title={t.partsUnavailable} failure={parts.failure} messages={pageMessages} restartHref={first} />
-    : <>
-      <WholesLines wholes={wholes} names={names} t={t} pages={{
-        first: query.wholesAfter ? connectionsHref(workRef, { ...query, wholesAfter: undefined }, anchors.wholes) : null,
-        next: cursor => connectionsHref(workRef, { ...query, wholesAfter: cursor }, anchors.wholes) }} />
-      {page ? <Completion completion={page.completion} t={t} /> : null}
-      {query.parent ? <Link href={connectionsHref(workRef, { ...query, parent: undefined, partsAfter: undefined },
-        anchors.parts)} className={`${outline} w-fit`}>{t.allParts}</Link> : null}
-      {page?.parts.length
-        ? <ol aria-label={t.partsList} className="grid divide-y divide-border/60 border-border/60 border-y">
-          {page.parts.map(part => <PartRow key={part.occurrence} part={part} names={names} workRef={workRef}
-            query={query} t={t} />)}
-        </ol>
-        : <EmptyState icon={LayersIcon} headingLevel={3} title={t.noParts} description={t.noPartsBody} />}
-      {query.partsAfter || page?.next
-        ? <nav aria-label={t.partsPages} className="flex flex-wrap justify-between gap-2">
-          {query.partsAfter ? <Link href={first} className={outline}>{t.firstPage}</Link> : <span />}
-          {page?.next ? <Link href={connectionsHref(workRef, { ...query, partsAfter: page.next },
-            anchors.parts)} className={outline}>{t.showMore}</Link> : null}
-        </nav> : null}
-    </>;
-  return <Region id={anchors.parts} title={t.parts} className="scroll-mt-20">{body}</Region>;
+  const body =
+    !parts.ok && parts.failure !== 'missing' ? (
+      <RegionFailure
+        title={t.partsUnavailable}
+        failure={parts.failure}
+        messages={pageMessages}
+        restartHref={first}
+      />
+    ) : (
+      <>
+        {page ? <Completion completion={page.completion} t={t} /> : null}
+        {query.parent ? (
+          <Link
+            href={connectionsHref(
+              workRef,
+              { ...query, parent: undefined, partsAfter: undefined },
+              anchors.parts,
+            )}
+            className={`${outline} w-fit`}
+          >
+            {t.allParts}
+          </Link>
+        ) : null}
+        {page?.parts.length ? (
+          <ol
+            aria-label={t.partsList}
+            className="grid divide-y divide-border/60 border-border/60 border-y"
+          >
+            {page.parts.map((part) => (
+              <PartRow
+                key={part.occurrence}
+                part={part}
+                names={names}
+                workRef={workRef}
+                query={query}
+                t={t}
+              />
+            ))}
+          </ol>
+        ) : (
+          <EmptyState
+            icon={LayersIcon}
+            headingLevel={3}
+            title={t.noParts}
+            description={t.noPartsBody}
+          />
+        )}
+        {query.partsAfter || page?.next ? (
+          <nav aria-label={t.partsPages} className="flex flex-wrap justify-between gap-2">
+            {query.partsAfter ? (
+              <Link href={first} className={outline}>
+                {t.firstPage}
+              </Link>
+            ) : (
+              <span />
+            )}
+            {page?.next ? (
+              <Link
+                href={connectionsHref(workRef, { ...query, partsAfter: page.next }, anchors.parts)}
+                className={outline}
+              >
+                {t.showMore}
+              </Link>
+            ) : null}
+          </nav>
+        ) : null}
+      </>
+    );
+  return (
+    <Region id={anchors.parts} title={t.parts} className="scroll-mt-20">
+      <WholesLines
+        wholes={wholes}
+        names={names}
+        t={t}
+        pages={{
+          first: query.wholesAfter
+            ? connectionsHref(workRef, { ...query, wholesAfter: undefined }, anchors.wholes)
+            : null,
+          next: (cursor) =>
+            connectionsHref(workRef, { ...query, wholesAfter: cursor }, anchors.wholes),
+        }}
+      />
+      {body}
+    </Region>
+  );
 }

@@ -85,16 +85,11 @@ test('parts, connections and editions read from Main for the franchise records',
   const at = (work: { work: string }, tab: string) =>
     localizedPath(`${resourceHref('/w/', uuid(work.work))}/${tab}`, 'en');
   await page.setViewportSize(desktop);
-  // Main answers parts, relations and Collections only to a signed-in Agent; signed out, the page says so in place.
+  // Signed-out visitors read the parts, wholes and relations Main discloses.
   await page.goto(at(index.newTestament, 'connections'));
   await expect(
     page.getByRole('heading', { level: 1, name: 'A Certain Magical Index: New Testament' }),
   ).toBeVisible();
-  await expect(page.getByRole('alert')).toHaveCount(2);
-  await expect(page.getByRole('alert').first()).toContainText('Parts could not be loaded.');
-  await expect(page.getByRole('alert').first()).toContainText('Sign in with access to this Work');
-  await signInAtAccounts(page, at(index.newTestament, 'connections'), member);
-
   // Index: New Testament lists "22" and "22 Reverse" as separate parts, in Main's order, and is concluded.
   const parts = page.getByRole('list', { name: 'Parts in publication order' });
   await expect(parts.getByRole('listitem')).toHaveCount(4);
@@ -116,6 +111,7 @@ test('parts, connections and editions read from Main for the franchise records',
   await expect(page.locator('[data-relation-row]').filter({ hasText: 'Sequel' })).toContainText(
     'Genesis Testament',
   );
+  await signInAtAccounts(page, at(index.newTestament, 'connections'), member);
 
   // Genesis Testament restarts at 1.
   await page.goto(at(index.genesisTestament, 'connections'));

@@ -2,9 +2,15 @@ import { resourceHref } from '../features/address/path.ts';
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { createElement } from 'react';
+import { createElement, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import {
+  AppRouterContext,
+  type AppRouterInstance,
+} from 'next/dist/shared/lib/app-router-context.shared-runtime.js';
 import { RelationRows } from '../features/work-levels/connections.tsx';
+import { PartsSection } from '../features/work-levels/parts.tsx';
+import { EditionsPreviewView, PartsPreviewView } from '../features/work-levels/previews.tsx';
 import * as fixture from '../features/work-levels/fixtures.ts';
 import { copyOf, englishMessages, messages } from '../features/work-levels/messages.ts';
 import { labelFor, relationRows } from '../features/work-levels/relation-rows.ts';
@@ -17,10 +23,110 @@ import {
   parseReleaseId,
   releaseHref,
 } from '../features/work-levels/route.ts';
-import type { RelationEntry } from '../features/work-levels/types.ts';
+import type { ReadFailure, RelationEntry } from '../features/work-levels/types.ts';
+import { messages as pageMessages } from '../features/work-page/messages.ts';
 import { uiLocales } from '../i18n/define.ts';
 
 const uuid = '01944100-0000-7000-8000-000000000123';
+
+describe('independent Work reads preserve disclosed results', () => {
+  const common = { workRef: fixture.workRef, t: copyOf('en'), pageMessages: pageMessages.en };
+  const partsProps = { ...common, wholes: fixture.wholes, names: fixture.names };
+  const failedReads: ReadFailure[] = ['missing', 'budget', 'unavailable'];
+  const router: AppRouterInstance = {
+    bfcacheId: '',
+    refresh() {},
+    push() {},
+    replace() {},
+    back() {},
+    forward() {},
+    prefetch() {},
+  };
+  const render = (element: ReactElement) =>
+    renderToStaticMarkup(createElement(AppRouterContext.Provider, { value: router }, element));
+
+  for (const failure of failedReads) {
+    test(`the parts preview keeps the whole when parts are ${failure}`, () => {
+      const markup = render(
+        createElement(PartsPreviewView, {
+          ...partsProps,
+          parts: { ok: false, failure },
+        }),
+      );
+      expect(markup).toContain('Part of');
+      expect(markup).toContain('A Certain Magical Index');
+      expect(markup).toContain(resourceHref('/w/', fixture.iri('200')));
+      expect(markup.includes('role="alert"')).toBe(failure !== 'missing');
+    });
+
+    test(`the full parts section keeps the whole when parts are ${failure}`, () => {
+      const markup = render(
+        createElement(PartsSection, {
+          ...partsProps,
+          parts: { ok: false, failure },
+          query: { grain: 'series' },
+          locale: 'en',
+        }),
+      );
+      expect(markup).toContain('Part of');
+      expect(markup).toContain('A Certain Magical Index');
+      expect(markup).toContain(resourceHref('/w/', fixture.iri('200')));
+      expect(markup.includes('role="alert"')).toBe(failure !== 'missing');
+    });
+
+    test(`the editions preview keeps releases when realizations are ${failure}`, () => {
+      const markup = render(
+        createElement(EditionsPreviewView, {
+          ...common,
+          locale: 'en',
+          realizations: { ok: false, failure },
+          releases: fixture.releases,
+        }),
+      );
+      expect(markup).toContain('A Certain Magical Index, Vol. 1');
+      expect(markup).toContain(releaseHref(fixture.iri('c1')));
+      expect(markup.includes('role="alert"')).toBe(failure !== 'missing');
+    });
+
+    test(`the editions preview keeps languages when releases are ${failure}`, () => {
+      const markup = render(
+        createElement(EditionsPreviewView, {
+          ...common,
+          locale: 'en',
+          realizations: fixture.realizations,
+          releases: { ok: false, failure },
+        }),
+      );
+      expect(markup).toContain('Japanese');
+      expect(markup).toContain(copyOf('en').realizations);
+      expect(markup.includes('role="alert"')).toBe(failure !== 'missing');
+    });
+  }
+
+  test('a missing realizations read does not suppress an unavailable releases read', () => {
+    const markup = render(
+      createElement(EditionsPreviewView, {
+        ...common,
+        locale: 'en',
+        realizations: { ok: false, failure: 'missing' },
+        releases: { ok: false, failure: 'unavailable' },
+      }),
+    );
+    expect(markup).toContain('role="alert"');
+    expect(markup).toContain(copyOf('en').releasesUnavailable);
+  });
+
+  test('an unavailable wholes read does not suppress disclosed parts', () => {
+    const markup = render(
+      createElement(PartsPreviewView, {
+        ...partsProps,
+        parts: fixture.parts,
+        wholes: { ok: false, failure: 'unavailable' },
+      }),
+    );
+    expect(markup).toContain('A Certain Magical Index NT 1');
+  });
+});
 
 describe('G-837 page addresses', () => {
   test('the Connections query keeps grain, group and cursors, and refuses what is malformed', () => {

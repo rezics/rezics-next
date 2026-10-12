@@ -9,6 +9,7 @@ import * as fixture from './fixtures.ts';
 import { copyOf } from './messages.ts';
 import { EditionsPreviewView } from './previews.tsx';
 import { ReleaseView } from './release-page.tsx';
+import type { Loaded, RealizationPage, ReleasePage as ReleasePageData } from './types.ts';
 
 const names = new Map([
   ...fixture.names,
@@ -22,9 +23,13 @@ const names = new Map([
 function Page({
   locale,
   view = 'section',
+  realizations = fixture.realizations,
+  releases = fixture.releases,
 }: {
   locale: UiLocale;
   view?: 'section' | 'preview' | 'release';
+  realizations?: Loaded<RealizationPage>;
+  releases?: Loaded<ReleasePageData>;
 }) {
   const t = copyOf(locale);
   const release = fixture.releases.ok ? fixture.releases.data.items[1]! : undefined;
@@ -32,8 +37,8 @@ function Page({
     <div className="mx-auto grid max-w-[46rem] gap-8 px-4 py-8 sm:px-8">
       {view === 'preview' ? (
         <EditionsPreviewView
-          realizations={fixture.realizations}
-          releases={fixture.releases}
+          realizations={realizations}
+          releases={releases}
           workRef={fixture.workRef}
           locale={locale}
           pageMessages={pageMessages[locale]}
@@ -143,6 +148,32 @@ export const Preview: Story = {
       'href',
       localizedPath(`${resourceHref('/w/', fixture.workRef)}/editions#realizations`, 'en'),
     );
+  },
+};
+
+export const PreviewLanguagesUnavailableWithReleases: Story = {
+  args: { view: 'preview', realizations: { ok: false, failure: 'unavailable' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('alert')).toHaveTextContent(copyOf('en').realizationsUnavailable);
+    await expect(
+      canvas.getByRole('link', { name: 'A Certain Magical Index, Vol. 1' }),
+    ).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'All editions and releases' })).toBeVisible();
+  },
+};
+
+export const PreviewReleasesTimeoutWithLanguages: Story = {
+  args: { view: 'preview', releases: { ok: false, failure: 'budget' } },
+  globals: { viewport: { value: 'phone' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('alert')).toHaveTextContent(copyOf('en').releasesUnavailable);
+    await expect(
+      within(canvas.getByRole('list', { name: copyOf('en').realizations })).getByText('Japanese'),
+    ).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'All editions and releases' })).toBeVisible();
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   },
 };
 
