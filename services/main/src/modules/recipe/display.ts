@@ -88,11 +88,18 @@ export const RECIPE_UNIT_DEFINITIONS: ReadonlyMap<string, string> = new Map([
   ['https://qudt.org/vocab/unit/OZ', 'oz'],
 ]);
 
+export type RecipeUnitImportability = {
+  status: 'not-importable'; code: 'recipe_unit_not_registered'; unit: string;
+};
+
 export class RecipeUnitNotRegistered extends Error {
   readonly code = 'recipe_unit_not_registered';
   constructor(readonly unit: string) {
     super(`Recipe unit has no registered inert definition: ${unit}`);
     this.name = 'RecipeUnitNotRegistered';
+  }
+  get importability(): RecipeUnitImportability {
+    return { status: 'not-importable', code: this.code, unit: this.unit };
   }
 }
 

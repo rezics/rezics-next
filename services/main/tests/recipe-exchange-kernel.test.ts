@@ -144,6 +144,10 @@ test('structured unit composition uses a registered symbol and survives export t
   expect(unknown.importability).toEqual({ status: 'not-importable', code: 'recipe_unit_not_registered', unit });
   expect(() => parseRecipeFile(Buffer.from(JSON.stringify(unknown.recipe)), 'application/ld+json'))
     .toThrow(RecipeUnitNotRegistered);
+  try { parseRecipeFile(Buffer.from(JSON.stringify(unknown.recipe)), 'application/ld+json'); }
+  catch (error) {
+    expect((error as RecipeUnitNotRegistered).importability).toEqual(unknown.importability);
+  }
 });
 
 test('singleton instruction objects retain sections, children and exact support pointers at every level', () => {

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { OccurrenceRecord } from '../structure/format.ts';
 import { isStructureUnitReference } from '../structure/format.ts';
-import { recognizeUnit, RECIPE_UNIT_DEFINITIONS } from './display.ts';
+import { recognizeUnit, RECIPE_UNIT_DEFINITIONS, type RecipeUnitImportability } from './display.ts';
 
 export interface ImportedIngredient {
   sourceKey: string;
@@ -61,10 +61,11 @@ export function measureRecipeJSON(value: unknown): { depth: number; values: numb
   return { depth, values };
 }
 
-export type RecipeImportability = { status: 'importable' } | {
+export type RecipeCapacityRefusal = {
   status: 'not-importable'; code: 'recipe_not_importable';
   limit: 'occurrences' | 'bytes' | 'depth'; measured: number; allowed: number;
 };
+export type RecipeImportability = { status: 'importable' } | RecipeCapacityRefusal | RecipeUnitImportability;
 
 export function recipeImportability(occurrences: number, bytes: number, depth = 0): RecipeImportability {
   if (bytes > MAX_RECIPE_IMPORT_BYTES) return { status: 'not-importable',
@@ -86,7 +87,7 @@ export class RecipeInstructionNotSupported extends Error {
 }
 
 export class RecipeNotImportable extends Error {
-  constructor(readonly importability: Extract<RecipeImportability, { status: 'not-importable' }>) {
+  constructor(readonly importability: RecipeCapacityRefusal) {
     super(`Recipe import exceeds its ${importability.limit} limit (${importability.measured} > ${importability.allowed})`);
     this.name = 'RecipeNotImportable';
   }

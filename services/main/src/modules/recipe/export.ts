@@ -1,7 +1,7 @@
 import type { OccurrenceRecord } from '../structure/format.ts';
 import { checkOccurrenceQualifier } from '../structure/format.ts';
 import { MAX_RECIPE_SECTION_DEPTH, measureRecipeJSON, RecipeNotImportable, recipeImportability } from './importer.ts';
-import { RECIPE_UNIT_DEFINITIONS } from './display.ts';
+import { RECIPE_UNIT_DEFINITIONS, RecipeUnitNotRegistered } from './display.ts';
 
 export const RECIPE_EXPORT_OCCURRENCE_LIMIT = 4096;
 export class RecipeExportLimit extends Error {}
@@ -65,7 +65,7 @@ export function exportRecipe(records: readonly OccurrenceRecord[], structure: st
   const capacity = recipeImportability(occurrences, Buffer.byteLength(JSON.stringify(recipe), 'utf8'),
     measureRecipeJSON(recipe).depth);
   const importability = capacity.status === 'importable' && unsupportedUnit
-    ? { status: 'not-importable' as const, code: 'recipe_unit_not_registered' as const, unit: unsupportedUnit }
+    ? new RecipeUnitNotRegistered(unsupportedUnit).importability
     : capacity;
   const result = { recipe, residuals, sourceObservations: [...sourceObservations], importability };
   if (Buffer.byteLength(JSON.stringify(result)) > 1_048_576) {
