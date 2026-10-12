@@ -48,6 +48,8 @@ import { realmTransaction,realmManager } from './realm-management-authority.ts';
 import { RealmAdminDenied,RealmAdminUnavailable } from '../realm-admin/contract.ts';
 import { realmRatingProof, savedRealmRatingProof, saveRealmRatingProof, ratingConfigurationAction } from './realm-roles-rating.ts';
 
+export { AccountHasOwnedAgents, type AccountOwnedAgent, type AccountDeletionOptions } from './account-deletion-agents.ts';
+
 /** Populated only by Account assertion verification, never from a request body. */
 export interface VerifiedPrincipal {
   issuer: string;

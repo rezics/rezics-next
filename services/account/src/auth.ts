@@ -29,7 +29,7 @@ import { consumeAccountLimit } from './rate-limit.ts';
 import { signupPolicyInput, policyAcceptanceRequired } from './policy-acceptance.ts';
 import { SignupPolicyProblem } from './market-policy.ts';
 import type { PolicyVersion } from './policy-versions.ts';
-import { AccountHasOwnedAgents } from '../../main/src/modules/access/account-deletion-agents.ts';
+import { AccountHasOwnedAgents } from '../../main/src/modules/access/admission.ts';
 
 export const AGENT_REGISTRATION_BUDGET = Object.freeze({ maximum: 10, seconds: 300 });
 const enrollmentEndpoints = ['/sign-up/email', '/request-password-reset', '/send-verification-email'];

@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { grantFixtureAuthority } from '../src/modules/access/fixture-authority.ts';
-import { AccountHasOwnedAgents } from '../src/modules/access/account-deletion-agents.ts';
+import { AccountHasOwnedAgents } from '../src/modules/access/admission.ts';
 import { commandError } from '../src/routes/problems.ts';
 import { startMediaStack, type MediaStack } from '../../../tests/qa/integration/media-support.ts';
 

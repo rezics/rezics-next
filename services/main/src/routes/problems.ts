@@ -1,5 +1,5 @@
 import { logWorkerFault } from '@rezics/observability/log';
-import { AccountHasOwnedAgents, type AccountOwnedAgent } from '../modules/access/account-deletion-agents.ts';
+import { AccountHasOwnedAgents, type AccountOwnedAgent } from '../modules/access/admission.ts';
 import { InvalidRatingCalendar } from '../modules/rating/calendar.ts';
 import { PlatformClosed } from '../modules/access/exposure.ts';
 import { platformExposureProblem } from '../modules/access/exposure-routes.ts';

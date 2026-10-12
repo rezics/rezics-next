@@ -21,7 +21,7 @@ import { baselineMemberProof } from '../src/modules/access/baseline.ts';
 import { WorkMaintainers } from '../src/modules/work/maintainers.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { principalControllerSubjects } from '../src/modules/access/controller-continuity.ts';
-import { AccountHasOwnedAgents } from '../src/modules/access/account-deletion-agents.ts';
+import { AccountHasOwnedAgents } from '../src/modules/access/admission.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');

@@ -11,9 +11,9 @@ import {
   AccessAdmissionRegistry, AdmissionUnavailable, engageAccessRecoveryFence,
   releaseAccessRecoveryFence, type VerifiedPrincipal,
 } from '../src/modules/access/admission.ts';
-import { AccountHasOwnedAgents } from '../src/modules/access/account-deletion-agents.ts';
+import { AccountHasOwnedAgents } from '../src/modules/access/admission.ts';
 import { AccessAgentControl } from '../src/modules/access/agent-control.ts';
-import { grantFixtureAuthority, grantFixtureControllerEdge } from '../src/modules/access/fixture-authority.ts';
+import { grantFixtureAuthority, grantFixtureControllerEdge, deactivateFixtureController } from '../src/modules/access/fixture-authority.ts';
 import { AccessProtectedChanges, APPROVE } from '../src/modules/access/protected-set.ts';
 import { ControlConflict } from '../src/modules/access/topology-control.ts';
 import { CONTROLLER_CONTINUITY_COST } from '../src/modules/access/controller-continuity.ts';
@@ -498,8 +498,7 @@ test('approved independent recovery reattaches an orphan and restores ordinary c
   await expect(control.removeController(claimant.verified, receipt(), {
     subjectId: organization, representationId: mandate.id, expectedGeneration: mandate.generation,
   })).rejects.toBeInstanceOf(ControlConflict);
-  await expect(pool.query('UPDATE access.representation SET active = false WHERE id = $1',
-    [mandate.id])).rejects.toMatchObject({ code: '23514' });
+  await expect(deactivateFixtureController(pool, mandate.id)).rejects.toMatchObject({ code: '23514' });
   expect(await subjectState(organization)).toEqual({ active: true, controllers: 1 });
 });
 

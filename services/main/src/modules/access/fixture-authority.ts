@@ -165,6 +165,14 @@ export async function grantFixtureControllerEdge(client: Sql, input: {
   return id;
 }
 
+/** Exercise controller removal through the fixture boundary while retaining
+ * the database continuity check, including after recovery reattachment. */
+export async function deactivateFixtureController(client: Sql, representationId: string): Promise<void> {
+  await recoveryOpen(client);
+  await client.query(`UPDATE access.representation SET active = false
+    WHERE id = $1 AND action = 'agent.control'`, [representationId]);
+}
+
 /** End this actor's live fixture mandates and self-grants. A load baseline
  * expires the seed window so a later read meets closed authority. */
 export async function expireFixtureAuthority(client: Sql, actor: string): Promise<void> {
