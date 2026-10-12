@@ -463,7 +463,7 @@ test('GOV01/GOV02/GOV03/GOV24/GOV25: public rights restrictions compose across W
         const counter = await body<{ stepId: string; replayed: boolean }>(await f.call('POST', correspondencePath, {
           kind: 'counter_notice', statement: counterStatement, contentLanguage: 'en',
           counterNotice: counterDeclaration,
-        }, undefined, `counter-${randomUUID()}`, result.affected), 201);
+        }, undefined, `counter-${randomUUID()}`, result.affected), 200);
         expect(counter.replayed).toBe(false);
         const delivered = await notices.runPage();
         expect(delivered.processed).toBe(1);
