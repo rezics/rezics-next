@@ -431,6 +431,12 @@ export async function erasePersonProfileGraph(access: Pool, relay: Pool, fuseki:
   identity(proof, inventory);
   await withPersonProfileErasureAuthority(access, relay, proof, async () => {
     const expected = personProfileGraphTargets(inventory);
+    const graphSeals = (await relay.query<{ seal: string }>(`SELECT target_ref AS seal FROM relay.erasure_target
+      WHERE erasure_id = $1 AND owner = 'graph' AND target_kind = 'person_profile_inventory'
+        AND target_ref LIKE $2 ORDER BY target_ref LIMIT 2`, [proof.erasureId, `${proof.person}|%`])).rows;
+    if (graphSeals.length !== 1 || graphSeals[0]?.seal !== expected[1]?.ref) {
+      throw new PersonGraphErasureConflict('Person graph inventory differs from its original journal seal');
+    }
     const sealed = await relay.query(`SELECT 1 FROM jsonb_to_recordset($2::jsonb)
       AS expected(owner text, kind text, ref text) WHERE NOT EXISTS (
         SELECT 1 FROM relay.erasure_target t WHERE t.erasure_id = $1
