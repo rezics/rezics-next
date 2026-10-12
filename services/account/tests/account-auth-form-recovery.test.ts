@@ -49,6 +49,9 @@ test('every JSON authentication admission rejects ambiguous keys before lock or 
   const handler = f.auth.handler;
   let providerCalls = 0;
   try {
+    // Every request below is rejected before the provider runs. Finish its
+    // background initialization before teardown closes the fixture database.
+    await f.auth.$context;
     f.auth.handler = async request => { providerCalls++; return handler(request); };
     const ambiguous = [
       '{"email":"first@example.test","email":"last@example.test"}',
