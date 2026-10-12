@@ -14,6 +14,8 @@ import {
   type PersonProfileErasureProof,
 } from '../src/modules/access/person-profile-erasure.ts';
 import { erasePersonProfileAliases, listPersonProfileAliases, personProfileAliasesErased } from '../src/modules/address/person-profile-erasure.ts';
+import { erasePersonProfileGraph, PersonGraphErasureConflict, type PersonProfileGraphInventory } from '../src/modules/agent/erasure.ts';
+import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { AliasRegistry } from '../src/modules/address/registry.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -423,4 +425,34 @@ test('alias inventory budget refuses overflow without changing any owner copy', 
   const before = await aliasRows(profile.person);
   await expect(listPersonProfileAliases(access, relay, proof, 5)).rejects.toBeInstanceOf(PersonProfileErasureDenied);
   expect(await aliasRows(profile.person)).toEqual(before);
+});
+
+function graphInventory(proof: PersonProfileErasureProof): PersonProfileGraphInventory {
+  const head = native();
+  return { person: proof.person, provisionId: proof.provisionId, head, profileHead: null,
+    revisions: [{ revision: head, manifest: null }, { revision: native(), manifest: null }],
+    objects: [], units: [], authorUnits: [], creditedWorks: [] };
+}
+async function sealGraphInventory(proof: PersonProfileErasureProof, inventory: PersonProfileGraphInventory) {
+  const targets = [
+    ['graph', 'person_profile_inventory', `${proof.person}|${digest(JSON.stringify(inventory))}`],
+    ...inventory.revisions.map(value => ['graph', 'person_profile_revision', value.revision]),
+  ];
+  for (const [owner, kind, ref] of targets) await relay.query(`INSERT INTO relay.erasure_target
+    (erasure_id,owner,target_kind,target_ref) VALUES ($1,$2,$3,$4)`, [proof.erasureId, owner, kind, ref]);
+}
+test('Agent owner refuses an omitted historical revision before dispatching the graph command', async () => {
+  const { proof } = await endedFixture();
+  const complete = graphInventory(proof);
+  await sealGraphInventory(proof, complete);
+  let commands = 0;
+  class Graph extends FusekiClient {
+    constructor() { super('http://person-erasure.invalid'); }
+    override async query() { return { boolean: true }; }
+    override async commandWithReceipt() { commands++; throw new Error('must never dispatch'); }
+  }
+  await expect(erasePersonProfileGraph(access, relay, new Graph(),
+    { dataEpoch: 'fixture', routingEpoch: '1' }, proof,
+    { ...complete, revisions: [complete.revisions[0]!] })).rejects.toBeInstanceOf(PersonGraphErasureConflict);
+  expect(commands).toBe(0);
 });
