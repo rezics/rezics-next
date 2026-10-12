@@ -29,7 +29,7 @@ let control: AccessAgentControl;
 
 beforeAll(async () => {
   cluster = await startPostgresCluster();
-  pool = new Pool({ ...cluster.connection, max: 4, connectionTimeoutMillis: 1000 });
+  pool = new Pool({ ...cluster.connection, max: 4, connectionTimeoutMillis: 5000 });
   const client = await pool.connect();
   try {
     await client.query('BEGIN');

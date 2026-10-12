@@ -69,7 +69,7 @@ $$;
 
 -- A cut is not fenced. If an ordinary controller change makes it affected
 -- between steps, wake precisely that subject rather than replaying old levels.
-CREATE FUNCTION access.queue_account_deletion_candidate(controlled text) RETURNS void
+CREATE FUNCTION access.queue_account_deletion_candidate(controlled text) RETURNS boolean
 LANGUAGE sql AS $$
     WITH relevant AS MATERIALIZED (
         SELECT DISTINCT p.operation_id, p.principal_id FROM (
@@ -82,7 +82,8 @@ LANGUAGE sql AS $$
             WHERE e.represented_subject = controlled AND e.action = 'agent.control'
                 AND e.active AND e.valid_until > clock_timestamp()
         ) connected JOIN access.account_deletion_progress p USING (operation_id)
-        WHERE NOT p.completed AND NOT EXISTS (SELECT 1 FROM access.account_deletion_progress_agent a
+        WHERE NOT p.completed AND EXISTS (SELECT 1 FROM access.authority_subject s WHERE s.id = controlled AND s.active)
+            AND NOT EXISTS (SELECT 1 FROM access.account_deletion_progress_agent a
                 WHERE a.operation_id = p.operation_id AND a.agent_id = controlled)
     ), queued AS (
         INSERT INTO access.account_deletion_classification_frontier (operation_id, agent_id)
@@ -91,8 +92,10 @@ LANGUAGE sql AS $$
             controlled, r.principal_id, r.operation_id) c
         WHERE c.remaining = 0
         ON CONFLICT DO NOTHING RETURNING operation_id
-    ) UPDATE access.account_deletion_progress p SET classification_done = false
-        WHERE p.operation_id IN (SELECT operation_id FROM queued)
+    ), advanced AS (
+        UPDATE access.account_deletion_progress p SET classification_done = false
+        WHERE p.operation_id IN (SELECT operation_id FROM queued) RETURNING p.operation_id
+    ) SELECT EXISTS (SELECT 1 FROM advanced)
 $$;
 
 CREATE FUNCTION access.wake_account_deletion_frontier() RETURNS trigger
