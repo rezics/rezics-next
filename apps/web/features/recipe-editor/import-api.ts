@@ -73,7 +73,7 @@ function imported(value: unknown, expectedStructure: string): value is RecipeFil
 export function mainRecipeImportApi(options: {
   fetch?: ImportFetch; origin?: string; pageUrl?: string;
 } = {}): RecipeImportApi {
-  const send: ImportFetch = options.fetch ?? ((input, init) => fetch(input, init));
+  const send: ImportFetch = options.fetch ?? fetch;
   return {
     async importFile(input) {
       // File.size is available without reading the file, so an oversized file never leaves the browser.

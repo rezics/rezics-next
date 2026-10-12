@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useSyncExternalStore } from 'react';
-import { BFF_PREFIX } from '../api/browser.ts';
 
 // The reader's unread notifications (Main's `GET /v1/me/notifications/unread-count`),
 // shared by the header bell and the phone bar. Main counts exactly through 99
@@ -31,7 +30,7 @@ async function refresh() {
   if (document.visibilityState !== 'visible') return;
   const request = beginNotificationRequest();
   try {
-    const response = await fetch(`${BFF_PREFIX}/v1/me/notifications/unread-count`,
+    const response = await fetch('/api/main/v1/me/notifications/unread-count',
       { credentials: 'same-origin', headers: { accept: 'application/json' } });
     if (!response.ok) { await response.body?.cancel(); return; }
     const body = await response.json() as { profile?: string; generation?: unknown; count?: unknown; overflow?: unknown };
