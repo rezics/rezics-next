@@ -29,7 +29,8 @@ test('G1063: every owner relay action has an explicit discovery/rating effect', 
     for (const action of [handler.action, ...(handler.actions ?? [])]) {
       expect(DISCOVERY_EFFECTS[action], `${handler.type}: ${action}`).toBeDefined();
     }
-  expect(discoveryEventEffect({ action: 'future.unclassified' }, base)).toBeUndefined();
+  for (const action of ['future.unclassified', 'constructor', 'toString', '__proto__'])
+    expect(discoveryEventEffect({ action }, base)).toBeUndefined();
 });
 
 test('G1063: ratings affect their Context and Mine slot; unrelated owner commands advance only coverage', () => {
@@ -109,6 +110,8 @@ test('G1063: complete relay coverage accepts Work-free events and fails closed o
   expect(await inputs.read(position, afterGraph, base)).toBeNull();
   rows = [row('11', 'relation.change'), row('12', 'work.edit', 1, work)];
   expect(await inputs.read(position, afterGraph, base)).toBeNull();
-  rows = [row('11', 'relation.change'), row('12', 'future.command')];
-  expect(await inputs.read(position, afterGraph, base)).toBeNull();
+  for (const action of ['future.command', 'constructor', 'toString', '__proto__']) {
+    rows = [row('11', 'relation.change'), row('12', action)];
+    expect(await inputs.read(position, afterGraph, base)).toBeNull();
+  }
 });

@@ -137,7 +137,9 @@ export function discoveryEventEffect(
   event: DiscoveryEventInput,
   basis?: OwnedDiscoveryBasis,
 ): DiscoveryEffect | undefined {
-  const effect = DISCOVERY_EFFECTS[event.action];
+  const effect = Object.hasOwn(DISCOVERY_EFFECTS, event.action)
+    ? DISCOVERY_EFFECTS[event.action]
+    : undefined;
   if (!effect) return undefined;
   if (event.outcome === 'cancelled' || event.outcome === 'stale' || event.outcome === 'denied')
     return 'irrelevant';
