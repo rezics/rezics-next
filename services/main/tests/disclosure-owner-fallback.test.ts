@@ -203,6 +203,65 @@ test('registering an owner source during a legacy policy statement invalidates t
     .rejects.toBeInstanceOf(DisclosureUnavailable);
 });
 
+for (const timing of ['last', 'earlier'] as const) {
+  for (const entry of ['capture', 'fence', 'inventory', 'paired inventory'] as const) {
+    const size = timing === 'last' ? 65 : 129;
+    const name = timing === 'last'
+      ? 'legacy submission of 65 selections rejects when an owner registers during the last chunk'
+      : 'legacy submission of 129 selections rejects when an owner registers during an earlier chunk';
+    test(`${name}: ${entry}`, async () => {
+      const f = fixture(), targets = Array.from({ length: size }, (_, index) => ({
+        ...target(index < 64 ? 'content' : 'source'), resource: id(100 + index),
+      }));
+      const selections = await resolveDisclosureSelections(f.env, targets);
+      const cuts = entry === 'fence' ? await captureDisclosure(f.env, selections, ANONYMOUS_VIEWER, 'read') : [];
+      f.requested.length = 0;
+      f.onStatement(() => {
+        if (f.requested.length === 2) configureDisclosureAncestrySource(f.env, 'content', {
+          read: async () => [], reread: async () => [],
+        });
+      });
+      const submission = entry === 'capture' ? captureDisclosure(f.env, selections, ANONYMOUS_VIEWER, 'read')
+        : entry === 'fence' ? fenceDisclosure(f.env, cuts, ANONYMOUS_VIEWER, 'read')
+        : entry === 'inventory' ? discloseInventory(f.env, targets, ANONYMOUS_VIEWER, 'read')
+        : discloseInventoryWithAnonymousNames(f.env, targets, ANONYMOUS_VIEWER, 'read');
+      await expect(submission).rejects.toBeInstanceOf(DisclosureUnavailable);
+      expect(f.requested.map(batch => batch.length)).toEqual(timing === 'last' ? [64, 1] : [64, 64, 1]);
+    });
+  }
+}
+
+for (const entry of ['read', 'readWithAnonymousNames', 'readAtCut'] as const) {
+  for (const issued of [false, true]) {
+    test(`legacy store ${entry} rejects registration in the last chunk for ${issued ? 'issued' : 'bare'} targets`, async () => {
+      const f = fixture(), targets = Array.from({ length: 65 }, (_, index) => ({
+        ...target(index < 64 ? 'content' : 'source'), resource: id(100 + index),
+      }));
+      const inputs = issued ? (await resolveDisclosureSelections(f.env, targets))
+        .map(selection => ({ ...selection.target, ancestry: selection.ancestry })) : targets;
+      f.onStatement(() => {
+        if (f.requested.length === 2) configureDisclosureAncestrySource(f.env, 'content', {
+          read: async () => [], reread: async () => [],
+        });
+      });
+      await expect(f.reader[entry](inputs, ANONYMOUS_VIEWER, 'read')).rejects.toBeInstanceOf(DisclosureUnavailable);
+      expect(f.requested.map(batch => batch.length)).toEqual([64, 1]);
+    });
+  }
+}
+
+test('legacy selection resolution rejects registration between chunks for an earlier owner', async () => {
+  const f = fixture(), targets = Array.from({ length: 65 }, (_, index) => ({
+    ...target(index < 64 ? 'content' : 'source'), resource: id(100 + index),
+  }));
+  const submission = resolveDisclosureSelections(f.env, targets);
+  // The first legacy chunk resolves synchronously; registration runs at its await.
+  queueMicrotask(() => configureDisclosureAncestrySource(f.env, 'content', {
+    read: async () => [], reread: async () => [],
+  }));
+  await expect(submission).rejects.toBeInstanceOf(DisclosureUnavailable);
+});
+
 test('P1-2 legacy visible hydration cannot cross an Access recovery-generation change', async () => {
   const f = fixture(), selections = await resolveDisclosureSelections(f.env, [target('content')]);
   const cuts = await captureDisclosure(f.env, selections, ANONYMOUS_VIEWER, 'read');

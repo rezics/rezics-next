@@ -203,7 +203,8 @@ export function requireEstablishedAncestry(selection: Pick<DisclosureTarget, 'an
   return ancestry;
 }
 async function ownerSubmission<T, R>(legacy: boolean, inputs: readonly T[],
-  run: (chunk: readonly T[], offset: number) => Promise<{ results: readonly R[]; cost: Readonly<Record<string, number>> }>) {
+  run: (chunk: readonly T[], offset: number) => Promise<{ results: readonly R[]; cost: Readonly<Record<string, number>> }>,
+  requireLegacySubmission: (inputs: readonly T[], results: readonly R[]) => void) {
   if (!legacy) return chunkDisclosureSubmission(inputs, run);
   const accepted = [...inputs], results: R[] = [], cost: Record<string, number> = {};
   for (let offset = 0; offset < accepted.length; offset += DISCLOSURE_COST.batch) {
@@ -213,6 +214,8 @@ async function ownerSubmission<T, R>(legacy: boolean, inputs: readonly T[],
     results.push(...submission.results);
     for (const [counter, count] of Object.entries(submission.cost)) cost[counter] = (cost[counter] ?? 0) + count;
   }
+  // A later chunk can register an owner whose legacy results were already read.
+  requireLegacySubmission(accepted, results);
   return { results, cost };
 }
 function legacyPolicyTarget(target: DisclosureTarget): boolean {
@@ -293,7 +296,11 @@ export class DisclosureStore implements DisclosureReader {
       const evaluated = await this.readDecisions(chunk, viewer, channel, anonymousNames, client);
       return { results: evaluated.decisions.map((decision, index) => ({ decision,
         name: evaluated.anonymousNames[index], fenceBasis: evaluated.fenceBases[index]! })), cost: evaluated.cost };
-    }, client));
+    }, client), accepted => {
+      if (accepted.some(target => !validPolicyTarget(target, this.environment))) {
+        throw new DisclosureUnavailable('Disclosure selection was not established by its owner');
+      }
+    });
     return { decisions: submission.results.map(result => result.decision),
       anonymousNames: anonymousNames ? submission.results.map(result => result.name!) : [],
       fenceBases: submission.results.map(result => result.fenceBasis), cost: submission.cost };
@@ -733,7 +740,7 @@ export async function resolveDisclosureSelections(env: WorkActivationEnvironment
   const submission = await ownerSubmission(targets.every(target => !ownerHasAncestrySource(env, target.owner)), targets, async chunk => measuredSubmission(async () => ({
     results: await resolveDisclosureSelectionChunk(env, chunk),
     cost: { ancestryReads: new Set(chunk.map(target => target.owner)).size },
-  })));
+  })), (_accepted, results) => requireSelections(env, results));
   return costedResults(submission.results, submission.cost);
 }
 async function resolveDisclosureSelectionChunk(env: WorkActivationEnvironment,
@@ -958,7 +965,7 @@ export async function captureDisclosure(env: WorkActivationEnvironment, selectio
   const submission = await ownerSubmission(selections.every(selection => isLegacy(selection.ancestry)), selections, chunk => measuredSubmission(async () => {
     const results = await captureDisclosureChunk(env, chunk, viewer, channel, client);
     return { results, cost: results.cost! };
-  }, client));
+  }, client), accepted => requireSelections(env, accepted));
   return costedResults(submission.results, submission.cost);
 }
 async function captureDisclosureChunk(env: WorkActivationEnvironment, selections: readonly DisclosureSelection[],
@@ -1012,7 +1019,7 @@ export async function fenceDisclosure(env: WorkActivationEnvironment, cuts: read
   const submission = await ownerSubmission(cuts.every(cut => isLegacy(cut.selection.ancestry)), cuts, chunk => measuredSubmission(async () => {
     const results = await fenceDisclosureChunk(env, chunk, viewer, channel, client);
     return { results, cost: results.cost! };
-  }, client));
+  }, client), accepted => requireSelections(env, accepted.map(cut => cut.selection)));
   return costedResults(submission.results, submission.cost);
 }
 async function fenceDisclosureChunk(env: WorkActivationEnvironment, cuts: readonly DisclosureReadCut[],
