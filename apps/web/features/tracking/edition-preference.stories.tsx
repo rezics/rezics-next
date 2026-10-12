@@ -133,6 +133,29 @@ function navigationFixture(kind: Kind) {
   };
 }
 
+function returningFixture() {
+  const source = preferenceFixture('release');
+  const otherWork = fixture.iri('workb');
+  const pending = deferred<Awaited<ReturnType<TrackingApi['preference']>>>();
+  const preference = source.api.preference;
+  const editions = source.api.editions;
+  source.api = { ...source.api,
+    async preference(resource) {
+      if (resource !== otherWork) return preference(resource);
+      source.preferenceReads.push(resource);
+      return pending.promise;
+    },
+    async editions(resource, page) {
+      return resource === otherWork ? { ok: true, data: { realizations: [], releases: [], more: false } }
+        : editions(resource, page);
+    },
+  };
+  return { source, otherWork,
+    update() { source.main.preferences.set(work, { work, language: 'de', edition: null, version: 2 }); },
+    complete: () => pending.resolve({ ok: true, data: null }),
+  };
+}
+
 function pendingContinuationFixture(kind: Kind) {
   const source = preferenceFixture(kind);
   const read = source.api.editions;
@@ -185,12 +208,13 @@ function languageProgressFixture(state: 'loading' | 'unavailable') {
 interface Args {
   surface: 'work' | 'series'; source: ReturnType<typeof preferenceFixture>;
   navigation?: ReturnType<typeof navigationFixture>;
+  returning?: ReturnType<typeof returningFixture>;
   pendingContinuation?: ReturnType<typeof pendingContinuationFixture>;
   pendingSetup?: ReturnType<typeof pendingSetupFixture>;
 }
 
 /** Reopening discards the catalogue page while keeping only what Main persisted. */
-function EditionPreference({ surface, source, navigation, pendingSetup }: Args) {
+function EditionPreference({ surface, source, navigation, returning, pendingSetup }: Args) {
   const [actions] = useState(() => ({ ...memoryReader(source.main, pendingSetup ? { [work]: 'read' } : {}), tracking: source.api }));
   const [opening, setOpening] = useState(0);
   const [selectedWork, setSelectedWork] = useState(work);
@@ -199,8 +223,10 @@ function EditionPreference({ surface, source, navigation, pendingSetup }: Args) 
       <button type="button" className="justify-self-start text-sm underline" onClick={() => setOpening(value => value + 1)}>
         Reopen choice
       </button>
-      {navigation ? <button type="button" className="justify-self-start text-sm underline"
-        onClick={() => setSelectedWork(navigation.otherWork)}>Switch to Work B</button> : null}
+      {navigation || returning ? <button type="button" className="justify-self-start text-sm underline"
+        onClick={() => setSelectedWork((navigation ?? returning)!.otherWork)}>Switch to Work B</button> : null}
+      {returning ? <button type="button" className="justify-self-start text-sm underline"
+        onClick={() => setSelectedWork(work)}>Return to Work A</button> : null}
       {surface === 'work' ? <section key={opening} aria-label="Your edition">
         <h2 className="mb-3 font-semibold text-lg">Your edition</h2>
         <YourEdition work={selectedWork} signInHref="/auth/start" locale="en" messages={workMessages.en} />
@@ -536,5 +562,28 @@ export const WorkSaveBeforeRelationsKeepsCounterparts: Story = {
     await expect(pending.progressReads.at(-1)).toBe('en');
     await expect(canvas.getByRole('combobox', { name: t.language })).toHaveTextContent('English');
     await expect(args.source.main.calls.started).toEqual([]);
+  },
+};
+
+const returning = returningFixture();
+export const SeriesReturnReadsCurrentPreference: Story = {
+  args: { surface: 'series', source: returning.source, returning },
+  async play({ canvasElement, args }) {
+    const canvas = within(canvasElement);
+    const returning = args.returning!;
+    await canvas.findByRole('combobox', { name: t.edition });
+    await expect(canvas.getByRole('combobox', { name: t.language })).toHaveTextContent('Polish');
+    await userEvent.click(canvas.getByRole('button', { name: 'Switch to Work B' }));
+    await waitFor(() => expect(args.source.preferenceReads).toEqual([work, returning.otherWork]));
+    returning.update();
+    await userEvent.click(canvas.getByRole('button', { name: 'Return to Work A' }));
+    await waitFor(() => expect(args.source.preferenceReads).toEqual([work, returning.otherWork, work]));
+    await waitFor(() => expect(canvas.getByRole('combobox', { name: t.language })).toHaveTextContent('German'));
+    await expect(canvas.getByRole('region', { name: t.seriesProgress })).toBeVisible();
+    await expect(canvas.getByRole('combobox', { name: t.edition })).toHaveTextContent(t.anyEdition);
+    returning.complete();
+    await userEvent.click(canvas.getByRole('button', { name: t.savePreference }));
+    await expect(await canvas.findByRole('status')).toHaveTextContent(t.preferenceSaved);
+    await expect(args.source.main.preferences.get(work)).toEqual({ work, language: 'de', edition: null, version: 3 });
   },
 };

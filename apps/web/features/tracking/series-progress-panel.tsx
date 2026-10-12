@@ -261,11 +261,11 @@ function Correspondences({ offers, marked, counterparts, failed, onMark, t }: {
 export const EDITION_SAVED = 'rezics:edition-preference-saved';
 
 /** What the panel reads once, before it asks for progress: the choice that names the language, editions, correspondences. */
-interface Setup { work: string; api: TrackingApi; preference: EditionPreference | null; editions: Editions | null; counterparts: Counterpart[] }
+interface Setup { work: string; api: TrackingApi; generation: number; preference: EditionPreference | null; editions: Editions | null; counterparts: Counterpart[] }
 
-/** Relations and editions are Work-scoped reads; a save during that read still owns the preference. */
+/** Only a save within this load owns the preference; setup from an earlier visit yields to the fresh read. */
 export function mergeSeriesSetup(current: Setup | null, loaded: Setup): Setup {
-  return current?.work === loaded.work && current.api === loaded.api
+  return current?.work === loaded.work && current.api === loaded.api && current.generation === loaded.generation
     ? { ...loaded, preference: current.preference } : loaded;
 }
 type Progress = { work: string; language: string; value: ProgressSummary }
@@ -302,11 +302,16 @@ function SeriesPartsPanel({ work, locale, className, preferenceForm = true }: {
   const api = actions.kind === 'ready' ? actions.tracking ?? null : null;
   const t = copyOf(locale);
   const [setup, setSetup] = useState<Setup | null>(null);
+  const load = useRef({ work, api, locale, generation: 0 });
+  if (load.current.work !== work || load.current.api !== api || load.current.locale !== locale) {
+    load.current = { work, api, locale, generation: load.current.generation + 1 };
+  }
+  const generation = load.current.generation;
+  const currentSetup = setup?.work === work && setup.api === api && setup.generation === generation ? setup : null;
   // The preference names the language; without one the interface language stands until the reader chooses.
   const [language, setLanguage] = useState<string>(locale);
-  const subject = usePreferenceSubject(work, api,
-    setup?.work === work && setup.api === api ? setup.preference?.version ?? 0 : 0);
-  const initialSubject = usePreferenceSubject(work, api, 0);
+  const subject = usePreferenceSubject(work, api, currentSetup?.preference?.version ?? 0);
+  const initialSubject = usePreferenceSubject(work, api, generation);
   const [progress, setProgress] = useState<Progress | null>(null);
 
   useEffect(() => {
@@ -317,11 +322,11 @@ function SeriesPartsPanel({ work, locale, className, preferenceForm = true }: {
       .then(([saved, offered, relations, equivalent]) => {
         if (!current || !initialSubject.applies(owner)) return;
         const preference = saved.ok ? saved.data : null;
-        setSetup(held => mergeSeriesSetup(held, { work, api, preference, editions: offered.ok ? offered.data : null,
+        setSetup(held => mergeSeriesSetup(held, { work, api, generation, preference, editions: offered.ok ? offered.data : null,
           counterparts: relations.ok && equivalent.ok ? equivalentCounterparts(relations.data, equivalent.data.definition) : [] }));
       });
     return () => { current = false; };
-  }, [api, work, locale]);
+  }, [api, work, locale, generation]);
 
   useEffect(() => {
     const saved = (event: Event) => {
@@ -331,8 +336,8 @@ function SeriesPartsPanel({ work, locale, className, preferenceForm = true }: {
       if (!api || owner.work !== work || !subject.applies(owner) || detail.preference
         && (detail.preference.work !== work || detail.preference.version < owner.version)) return;
       setSetup(current => {
-        if (current?.work !== work || current.api !== api) {
-          return { work, api, preference: detail.preference, editions: null, counterparts: [] };
+        if (current?.work !== work || current.api !== api || current.generation !== generation) {
+          return { work, api, generation, preference: detail.preference, editions: null, counterparts: [] };
         }
         return detail.preference && detail.preference.version < (current.preference?.version ?? 0)
           ? current : { ...current, preference: detail.preference };
@@ -340,9 +345,9 @@ function SeriesPartsPanel({ work, locale, className, preferenceForm = true }: {
     };
     window.addEventListener(EDITION_SAVED, saved);
     return () => window.removeEventListener(EDITION_SAVED, saved);
-  }, [work, api, setup?.preference?.version]);
+  }, [work, api, generation, currentSetup?.preference?.version]);
 
-  const preference = setup?.work === work && setup.api === api ? setup.preference : null;
+  const preference = currentSetup?.preference ?? null;
   // Read the committed choice after merges, so a batched late load cannot reset an event's language.
   useEffect(() => { setLanguage(preference?.language ?? locale); }, [work, api, locale, preference?.version, preference?.language]);
   const headingId = useId();
@@ -355,7 +360,7 @@ function SeriesPartsPanel({ work, locale, className, preferenceForm = true }: {
   useEffect(() => { setMarked(new Set()); }, [work, api]);
   useEffect(() => { setMarking(false); setMarkFailed(null); }, [work, api, preference?.version]);
   useEffect(() => {
-    if (!api || !setup || setup.work !== work || setup.api !== api) return;
+    if (!api || !currentSetup) return;
     let current = true;
     const owner = subject.capture();
     void api.series(work, language).then(result => {
@@ -364,16 +369,16 @@ function SeriesPartsPanel({ work, locale, className, preferenceForm = true }: {
           previous: held?.work === work ? ('value' in held ? held.value : held.previous) : null });
     });
     return () => { current = false; };
-  }, [api, work, language, setup, ownStatus]);
+  }, [api, work, language, currentSetup, ownStatus]);
 
-  if (!api || !setup || setup.work !== work || setup.api !== api || !progress || progress.work !== work) return null;
+  if (!api || !currentSetup || !progress || progress.work !== work) return null;
   const owner = subject.capture();
   const ready = actions.kind === 'ready' ? actions : null;
   const pending = progress.language !== language;
   // Keep the chooser mounted while its new language's progress is read, including pages already loaded.
   const value = 'value' in progress ? progress.value : progress.previous;
   const failure = 'failure' in progress && !pending ? progress.failure : null;
-  const counterparts = setup.counterparts;
+  const counterparts = currentSetup.counterparts;
   // A Work with no composition answers for itself; only a composition has parts, a next part and a series to report.
   const series = value?.scope === 'disclosed-composition' ? value : null;
   const standalone = value?.scope === 'work' ? value : null;
@@ -427,10 +432,10 @@ function SeriesPartsPanel({ work, locale, className, preferenceForm = true }: {
       <h3 className="font-medium text-sm">{t.preference}</h3>
       <p className="text-muted-foreground text-xs">{t.preferenceNote}</p>
       <PreferenceForm key={work} work={work} preference={preference} language={language}
-        editions={setup.editions} api={api} locale={locale} t={t}
+        editions={currentSetup.editions} api={api} locale={locale} t={t}
         onSaved={saved => {
           if (!subject.applies(owner) || saved && saved.work !== work) return;
-          setSetup(current => current?.work === work && current.api === api && (current.preference?.version ?? 0) === owner.version
+          setSetup(current => current?.work === work && current.api === api && current.generation === generation && (current.preference?.version ?? 0) === owner.version
             ? { ...current, preference: saved } : current);
         }} onLanguage={setLanguage} />
     </div> : null}
