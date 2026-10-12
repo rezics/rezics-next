@@ -61,7 +61,7 @@ function graph(version = 3, declared = true) {
             target: uri(realm), head: uri(receipt.head) }] : [] } };
         }
         if (sql.includes('SELECT DISTINCT ?author')) {
-          const supportsRealmOwner = sql.includes('a rv:Realm;') || sql.includes('a rv:Realm ;');
+          const supportsRealmOwner = sql.includes('a rv:Realm .');
           const after = sql.match(/FILTER\(STR\(\?author\) > "([^"]+)"\)/)?.[1];
           return { results: { bindings: supportsRealmOwner && state.reciprocal
             && (!after || owner > after) ? [{ author: uri(owner) }] : [] } };

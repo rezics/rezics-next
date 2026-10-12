@@ -171,13 +171,16 @@ test('affected graph Agents use a keyset across all authors and owners without A
   const resolver = graphNoticeParticipants({
     fuseki: {
       query: async (sql: string) => {
+        if (sql.includes('SELECT DISTINCT ?kind ?head')) return { results: { bindings: [{
+          kind: { type: 'uri', value: 'https://schema.org/CreativeWork' },
+        }] } };
         query = sql;
         return { results: { bindings: [{ author: { value: 'urn:second-author' } }] } };
       },
     },
   } as never);
   const rows = await resolver.participants!(
-    { owner: 'graph', resource: 'urn:rezics:work' } as never,
+    { owner: 'graph', resource: 'https://rezics.com/id/00000000-0000-4000-8000-000000000991' } as never,
     'urn:first-author',
     1,
   );
