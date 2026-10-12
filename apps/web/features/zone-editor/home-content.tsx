@@ -2,13 +2,13 @@ import { ResolvedMediaImages } from '@rezics/ui/media-image';
 import type { ZoneContext, ZonePackage } from '@rezics/zone-sdk';
 import type { AdaptContext } from '../realm/adapt.ts';
 import { readShowcaseWorks } from '../api/showcase.ts';
-import { enrichShowcaseModules, loadHomeModules, loadModules, moduleMoreHref, readHeroImages, showcaseContext,
+import { enrichShowcaseModules, loadModules, moduleMoreHref, readHeroImages, showcaseContext,
   summaryWork } from '../realm/modules.ts';
 import type { ZonePresentationRead } from '../realm/types.ts';
 import type { ZoneMessages } from '../zones/messages.ts';
 import { ZoneDocumentHome } from '../zones/site-pages.tsx';
 import type { ZoneHomePage } from './home-document.tsx';
-import { loadPreviewHomeModules, localizedHomePresentation } from './home-modules.ts';
+import { loadDocumentHomeModules, localizedHomePresentation } from './home-modules.ts';
 import type { ZoneAuthoringPreview } from './read.ts';
 import type { ZoneEditorMessages } from './messages.ts';
 import { ZonePreviewHome } from './preview.tsx';
@@ -31,10 +31,13 @@ export async function ZoneHomeContent({ page, presentation, moduleData, slideMed
   empty?: ReactNode;
 }) {
   const localized = localizedHomePresentation(presentation, context.locale);
-  const { modules, images } = await loadHomeModules(localized, { ...context, publishedHome: { moduleData, slideMedia } }, slideMedia);
+  const { modules, images, representedShowcases } = await loadDocumentHomeModules(page, { moduleData, slideMedia }, localized, context, {
+    publicModules: loadModules, summaries: readShowcaseWorks, work: summaryWork, context: showcaseContext,
+    more: moduleMoreHref, enrich: enrichShowcaseModules, images: readHeroImages,
+  }, messages.moduleHeroCarousel);
   return <ResolvedMediaImages images={images}>
     {page ? <ZoneDocumentHome page={page} modules={modules} zone={zone} pkg={pkg} locale={context.locale}
-      messages={messages} avatarQuery={context.avatarQuery} />
+      messages={messages} avatarQuery={context.avatarQuery} representedShowcases={representedShowcases} />
       : <ZoneHome modules={modules} zone={zone} pkg={pkg} locale={context.locale}
         messages={messages} avatarQuery={context.avatarQuery} empty={empty} />}
   </ResolvedMediaImages>;
@@ -46,12 +49,12 @@ export async function ZoneSavedHomeContent({ preview, context, zone, pkg, messag
   copy: ZoneEditorMessages;
 }) {
   const presentation = localizedHomePresentation(preview.presentation, context.locale);
-  const { modules, images } = await loadPreviewHomeModules(preview, presentation, context, {
+  const { modules, images, representedShowcases } = await loadDocumentHomeModules(preview.page, preview, presentation, context, {
     publicModules: loadModules, summaries: readShowcaseWorks, work: summaryWork, context: showcaseContext,
     more: moduleMoreHref, enrich: enrichShowcaseModules, images: readHeroImages,
-  });
+  }, messages.moduleHeroCarousel);
   return <ResolvedMediaImages images={images}>
     <ZonePreviewHome page={preview.page} modules={modules} zone={zone} pkg={pkg} locale={context.locale}
-      messages={messages} copy={copy} avatarQuery={context.avatarQuery} />
+      messages={messages} copy={copy} avatarQuery={context.avatarQuery} representedShowcases={representedShowcases} />
   </ResolvedMediaImages>;
 }

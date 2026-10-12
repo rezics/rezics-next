@@ -16,12 +16,13 @@ import type { ZoneEditorMessages } from './messages.ts';
 const linkClass = 'h-auto min-h-9 w-full whitespace-normal sm:w-auto';
 
 /** A presentation-only draft still has modules to preview before its first home document. */
-export function ZonePreviewHome({ page, modules, zone, pkg, locale, messages, copy, avatarQuery }: {
+export function ZonePreviewHome({ page, modules, zone, pkg, locale, messages, copy, avatarQuery, representedShowcases }: {
   page: ZoneHomePage | null; modules: readonly PlacedModule[]; zone: ZoneContext; pkg: ZonePackage | null;
   locale: UiLocale; messages: ZoneMessages; copy: ZoneEditorMessages; avatarQuery?: string;
+  representedShowcases?: readonly string[];
 }) {
   if (page) return <ZoneDocumentHome page={page} modules={modules} zone={zone} pkg={pkg} locale={locale}
-    messages={messages} avatarQuery={avatarQuery} preview />;
+    messages={messages} avatarQuery={avatarQuery} representedShowcases={representedShowcases} preview />;
   return <ZoneHome modules={modules} zone={zone} pkg={pkg} locale={locale} messages={messages} avatarQuery={avatarQuery}
     empty={<EmptyState icon={FileTextIcon} title={copy.previewEmptyTitle} description={copy.previewEmptyBody} headingLevel={3} />} />;
 }

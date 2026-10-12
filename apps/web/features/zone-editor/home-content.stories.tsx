@@ -6,6 +6,11 @@ import { ZoneHome } from '../zones/zone-home.tsx';
 import { zoneTheme } from '../zones/theme.ts';
 import { collectionPreview, previewCollection, previewReaders } from './home-modules.fixtures.ts';
 import { loadPublishedHomeModules, localizedHomePresentation } from './home-modules.ts';
+import { loadDocumentHomeModules } from './home-modules.ts';
+import { defaultShowcase } from './default-showcase.fixtures.ts';
+import { ZoneDocumentHome } from '../zones/site-pages.tsx';
+import { ZonePreviewHome } from './preview.tsx';
+import { messages } from './messages.ts';
 
 function PublishedModules({ unavailable = false }: { unavailable?: boolean }) {
   const [loaded, setLoaded] = useState<Awaited<ReturnType<typeof loadPublishedHomeModules>> | null>(null);
@@ -54,3 +59,35 @@ export const IncompletePublishedSources: Story = {
     await expect(canvas.queryByText('The saved Collection member')).not.toBeInTheDocument();
   },
 };
+
+function DefaultShowcase({ preview = false }: { preview?: boolean }) {
+  const [{ selected, page }] = useState(defaultShowcase);
+  const [loaded, setLoaded] = useState<Awaited<ReturnType<typeof loadDocumentHomeModules>> | null>(null);
+  useEffect(() => {
+    void loadDocumentHomeModules(page, selected, localizedHomePresentation(selected.presentation, 'en'),
+      { locale: 'en', ref: 'harbor', realm: previewCollection }, previewReaders(), 'Featured').then(setLoaded);
+  }, [page, selected]);
+  const zone = fictionZone('en');
+  const theme = zoneTheme(zone.tokens, { reader: 'light', enabled: true });
+  if (!loaded) return null;
+  const props = { page, modules: loaded.modules, zone, pkg: null, locale: 'en' as const,
+    messages: zoneMessagesFor('en'), representedShowcases: loaded.representedShowcases };
+  return <div className={`${theme.className} min-h-dvh bg-(--zone-page)`} style={theme.style}>
+    {preview ? <ZonePreviewHome {...props} copy={messages.en} /> : <ZoneDocumentHome {...props} />}
+  </div>;
+}
+
+async function checkDefaultShowcase(canvasElement: HTMLElement) {
+  const canvas = within(canvasElement);
+  await expect(await canvas.findByText('The default Showcase', { exact: true })).toBeVisible();
+  await expect(canvasElement.querySelectorAll('.showcase-slide')).toHaveLength(1);
+  await expect(canvas.getByText('Prose beside the default Showcase')).toBeVisible();
+  await expect(canvas.queryByText('Default Showcase fallback')).not.toBeInTheDocument();
+  await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+}
+
+export const PublicDefaultShowcase: Story = { render: () => <DefaultShowcase />,
+  play: async ({ canvasElement }) => { await checkDefaultShowcase(canvasElement); } };
+export const SavedDefaultShowcase: Story = { render: () => <DefaultShowcase preview />,
+  play: async ({ canvasElement }) => { await checkDefaultShowcase(canvasElement); } };
+export const DefaultShowcasePhone: Story = { ...PublicDefaultShowcase, globals: { viewport: { value: 'phone' } } };

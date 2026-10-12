@@ -21,7 +21,7 @@ describe('Zone home document rendering', () => {
     const body = zoneHomeProse(document, [resolved, {
       id: 'future', definition: 'https://example.org/future', version: '2', fallback: 'Future component',
       status: 'placeholder', reason: 'unknown_definition',
-    }]);
+    }], ['showcase']);
 
     expect(body.doc.content).toEqual([document.doc.content![0], opaque, document.doc.content![3]]);
     expect(document).toEqual(original);
@@ -32,7 +32,7 @@ describe('Zone home document rendering', () => {
     const document = structuredClone(fromPlainText('Kept paragraph', 'blocks'));
     document.doc.content!.push({ type: 'blockquote', attrs: { id: 'quote' }, content: [showcase,
       ...fromPlainText('Kept quotation', 'blocks').doc.content!] });
-    const body = zoneHomeProse(document, [resolved]);
+    const body = zoneHomeProse(document, [resolved], ['showcase']);
     expect(body.doc.content![1]).toEqual({ ...document.doc.content![1],
       content: document.doc.content![1]!.content!.slice(1) });
   });
@@ -42,5 +42,12 @@ describe('Zone home document rendering', () => {
     document.doc.content!.push(showcase);
     expect(zoneHomeProse(document, [{ ...resolved, status: 'placeholder', reason: 'invalid_payload' }])).toBe(document);
     expect(zoneHomeProse(document, [])).toBe(document);
+  });
+
+  test('resolved metadata cannot suppress a Showcase that the layout did not represent', () => {
+    const document = structuredClone(fromPlainText('Kept prose', 'blocks'));
+    document.doc.content!.push(showcase);
+    expect(zoneHomeProse(document, [resolved])).toBe(document);
+    expect(zoneHomeProse(document, [resolved], ['different-showcase'])).toBe(document);
   });
 });

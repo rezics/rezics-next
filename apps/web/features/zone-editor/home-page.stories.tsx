@@ -50,7 +50,7 @@ const sitePath = spaceHref('harbor', 'site');
 
 function Home({ preview = false }: { preview?: boolean }) {
   const body = <ZoneDocumentHome page={page} modules={modules} zone={zone} pkg={null} locale="en"
-    messages={zoneMessagesFor('en')} preview={preview} />;
+    messages={zoneMessagesFor('en')} representedShowcases={['showcase']} preview={preview} />;
   return <ZoneFrame zone={zone} dataZone="harbor" theme={zoneTheme(zone.tokens, { reader: 'light', enabled: true })}
     pkg={null} members={null} actions={null} tabs={null}
     masthead={<ZoneMasthead zone={zone} members={null} actions={null} />}
@@ -100,7 +100,8 @@ function SavedCollection({ incomplete = false, document = true }: { incomplete?:
     site={{ label: zone.name.value, links: cuts.navigation }}>
     <PageContainer><ZoneDraftPreview copy={messages.en} document={document ? homeDocument : null}
       editorPath="/manage/z/harbor" sitePath={sitePath} status="private">
-      <ZonePreviewHome page={document ? page : null} modules={savedModules} zone={zone} pkg={null} locale="en"
+      <ZonePreviewHome page={document ? { document: fromPlainText('Morning edition of the harbor', 'blocks'), blocks: [] } : null}
+        modules={savedModules} zone={zone} pkg={null} locale="en"
         messages={zoneMessagesFor('en')} copy={messages.en} />
     </ZoneDraftPreview></PageContainer>
   </ZoneFrame>;

@@ -12,6 +12,7 @@ import type { ZoneAuthoringPreview } from './read.ts';
 import type { ZonePresentationRead } from '../realm/types.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import { moduleTitle } from '../zones/presentation.ts';
+import type { ZoneHomePage } from './home-document.tsx';
 
 type SavedSource = NonNullable<ZoneAuthoringPreview['page']>['showcases'][number]['sources'][number];
 type SavedModule = { id: string; sources: SavedSource[] };
@@ -39,6 +40,32 @@ export interface PublishedHomeContext extends AdaptContext {
 export function loadPublishedHomeModules(selection: HomeSourceSelection, presentation: ZonePresentation,
   context: AdaptContext, read: PreviewModuleReaders) {
   return loadPreviewHomeModules(selection, presentation, context, read);
+}
+
+/** A default Showcase has slides even when no presentation module was authored. */
+export async function loadDocumentHomeModules(page: ZoneHomePage | null, selection: HomeSourceSelection,
+  presentation: ZonePresentation, context: AdaptContext, read: PreviewModuleReaders, defaultTitle: string) {
+  const loaded = await loadPreviewHomeModules(selection, presentation, context, read);
+  const representedShowcases = (page?.showcases ?? []).flatMap(showcase => showcase.module
+    && loaded.modules.some(item => item.module.id === showcase.module!.id && item.state.state === 'ready') ? [showcase.id] : []);
+  const defaultShowcase = page?.showcases?.find(showcase => showcase.id === '$default' && showcase.module === null);
+  if (!defaultShowcase || !page?.showcaseData) return { ...loaded, representedShowcases };
+  const source = { kind: 'query-block' as const, block: 'document-default' };
+  const module: PresentationModule = { id: '$default', type: 'hero-carousel', title: defaultTitle, source };
+  const resolved = await loadPreviewHomeModules({
+    moduleData: [{ id: module.id, sources: [{ source, state: 'complete', members: [] }] }],
+    slideMedia: defaultShowcase.slideMedia ?? page.showcaseData.slideMedia,
+  }, { ...presentation, modules: [module], slides: defaultShowcase.slides ?? page.showcaseData.slides }, context, read);
+  const hero = resolved.modules[0];
+  if (!hero || hero.state.state !== 'ready') return {
+    ...loaded, modules: hero?.state.state === 'failed' ? [hero, ...loaded.modules] : loaded.modules,
+    images: { ...loaded.images, ...resolved.images }, representedShowcases,
+  };
+  const heroData = hero.state.state === 'ready' ? JSON.stringify(hero.state.data) : null;
+  const duplicate = heroData !== null && loaded.modules.some(item => item.module.type === 'hero-carousel'
+    && item.state.state === 'ready' && JSON.stringify(item.state.data) === heroData);
+  return { modules: duplicate ? loaded.modules : [hero, ...loaded.modules],
+    images: { ...loaded.images, ...resolved.images }, representedShowcases: [...representedShowcases, defaultShowcase.id] };
 }
 
 /** Saved membership comes only from Main's authorized producer. Public reads

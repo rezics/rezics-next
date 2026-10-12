@@ -28,9 +28,11 @@ import { ZoneHomeDocument, type ZoneHomePage } from '../zone-editor/home-documen
 type Route<Kind extends ZoneRouteRead['kind']> = Extract<ZoneRouteRead, { kind: Kind }>;
 
 /** The selected document and the selected presentation are one home page, including its Showcase. */
-export function ZoneDocumentHome({ page, modules, zone, pkg, locale, messages, avatarQuery, preview = false }: {
+export function ZoneDocumentHome({ page, modules, zone, pkg, locale, messages, avatarQuery, preview = false,
+  representedShowcases = [] }: {
   page: ZoneHomePage; modules: readonly PlacedModule[]; zone: ZoneContext; pkg: ZonePackage | null;
   locale: UiLocale; messages: ZoneMessages; avatarQuery?: string; preview?: boolean;
+  representedShowcases?: readonly string[];
 }) {
   return <>
     {modules.length ? <ZoneHome modules={modules} zone={zone} pkg={pkg} locale={locale} messages={messages}
@@ -39,7 +41,8 @@ export function ZoneDocumentHome({ page, modules, zone, pkg, locale, messages, a
       <article data-zone-site-home-surface={preview ? undefined : zone.tokens.pageSurface}
         data-zone-preview-page-surface={preview ? zone.tokens.pageSurface : undefined}
         className="max-w-3xl rounded-(--zone-radius-card) bg-(--zone-panel) p-(--zone-panel-pad)">
-        <ZoneHomeDocument document={page.document} blocks={page.blocks} className="text-pretty leading-7" />
+        <ZoneHomeDocument document={page.document} blocks={page.blocks} representedShowcases={representedShowcases}
+          className="text-pretty leading-7" />
       </article>
     </PageContainer>
   </>;
