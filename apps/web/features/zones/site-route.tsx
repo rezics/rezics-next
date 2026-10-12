@@ -10,6 +10,7 @@ import type { RealmMessages } from '../realm/messages.ts';
 import { loadRealmView, privateJoinPage, RealmFrame } from '../realm/realm-page.tsx';
 import {
   readPresentation,
+  readCompletePresentation,
   readZoneRoute,
   resolveRealm,
   resolveSite,
@@ -185,31 +186,31 @@ export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps): Pr
   if (resolved.kind === 'join')
     return privateJoinPage(resolved.page, locale, siteHref(locale, space, path));
   if (!resolved.realm) return standaloneSite(resolved, locale, path, search);
-  // Read the Zone table before the starter Browse renderer, so a mount named
-  // browse is never shadowed. Main currently has no starter-browse route kind.
-  const routed = await readZoneRoute(resolved.zone, routePath(path), routeCursor(path, search));
   const communityProps = {
     params: Promise.resolve({ locale, realm: space }),
     searchParams: Promise.resolve(search),
   };
-  if (routed.ok && routed.data.kind === 'home') {
-    const document = zoneHomeDocument(routed.data.page);
+  if (!path.length) {
+    const homeView = await loadRealmView(space, locale, search, 'site');
+    if (homeView.kind === 'unavailable')
+      return <RealmUnavailable messages={await getMessages('realm', locale)} failure={homeView.failure}
+        reference={homeView.reference} />;
+    if (homeView.kind === 'join') return privateJoinPage(homeView.page, locale, siteHref(locale, space, path));
+    if (homeView.kind !== 'view' || !homeView.publication) notFound();
+    const page = homeView.publication.home;
+    const document = zoneHomeDocument(page);
     if (document) {
-      const homeView = await loadRealmView(space, locale, search, 'site');
-      if (homeView.kind === 'unavailable')
-        return <RealmUnavailable messages={await getMessages('realm', locale)} failure={homeView.failure}
-          reference={homeView.reference} />;
-      if (homeView.kind === 'join') return privateJoinPage(homeView.page, locale, siteHref(locale, space, path));
-      if (homeView.kind !== 'view') notFound();
       return <RealmFrame view={homeView} tab={null} locale={locale} search={search}
         address={siteHref(locale, homeView.context.ref, path)}>
-        <ZoneHomeContent page={routed.data.page!} presentation={homeView.presentation}
+        <ZoneHomeContent page={page!} presentation={homeView.presentation}
           slideMedia={homeView.slideMedia} context={homeView.context} zone={homeView.zone}
           pkg={homeView.pkg} messages={homeView.zoneMessages} />
       </RealmFrame>;
     }
-    return SiteHomeRoute(communityProps);
+    return SiteHomeRoute(communityProps, async () => homeView);
   }
+  // Resolve mounts before the starter Browse renderer, so a mount named browse is never shadowed.
+  const routed = await readZoneRoute(resolved.zone, routePath(path), routeCursor(path, search));
   if (!routed.ok && routed.failure === 'missing' && path.length === 1 && path[0] === 'browse') {
     return RealmBrowseRoute(communityProps);
   }
@@ -421,15 +422,15 @@ async function standaloneSite(
   search: Search,
 ): Promise<ReactNode> {
   const [route, presentation, messages, workMessages, zoneMessages] = await Promise.all([
-    readZoneRoute(resolved.zone, routePath(path), routeCursor(path, search)),
-    readPresentation(resolved.zone),
+    path.length ? readZoneRoute(resolved.zone, routePath(path), routeCursor(path, search)) : null,
+    readCompletePresentation(resolved.zone),
     getMessages('realm', locale),
     getMessages('workPage', locale),
     getMessages('zones', locale),
   ]);
-  if (!route.ok && route.failure === 'missing') notFound();
-  if (!route.ok || !presentation.ok) {
-    const shown = shownZoneFailure(route, presentation);
+  if (route && !route.ok && route.failure === 'missing') notFound();
+  if (route && !route.ok || !presentation.ok) {
+    const shown = shownZoneFailure(route ?? { ok: true }, presentation);
     return shown
       ? failure(shown.failure, siteHref(locale, addressKey(resolved.address.canonical), path), messages, shown.reference)
       : null;
@@ -439,8 +440,8 @@ async function standaloneSite(
     slug: presentation.data.official,
     realm: null,
     name: zoneContentText(
-      route.data.name ?? resolved.address.canonical.suffixSource,
-      route.data.language,
+      presentation.data.name ?? resolved.address.canonical.suffixSource,
+      presentation.data.language,
     ),
     description: null,
     icon: null,
@@ -459,13 +460,13 @@ async function standaloneSite(
   const mounts = presentation.data.navigation;
   const frame = (children: ReactNode) => <StandaloneZoneSiteFrame zone={zone} zoneId={resolved.zone} address={ref}
     locale={locale} messages={messages} presentation={presentation.data}>{children}</StandaloneZoneSiteFrame>;
-  const read = route.data;
-  if (read.kind === 'home') {
+  if (!path.length) {
     // The published home page is its Content document. Mounts stay in the site navigation.
     // Until a document is published, the page keeps the list of those mounts.
-    const document = zoneHomeDocument(read.page);
+    const page = presentation.data.home;
+    const document = zoneHomeDocument(page);
     if (document) return frame(
-      <ZoneHomeContent page={read.page!} presentation={presentation.data.presentation}
+      <ZoneHomeContent page={page!} presentation={presentation.data.presentation}
         slideMedia={presentation.data.slideMedia} zone={zone} pkg={null} messages={zoneMessages}
         context={{ locale, ref, realm: resolved.zone, zone: resolved.zone,
           mounts: new Map(mounts.map(mount => [mount.target, mount.segment])) }} />,
@@ -483,6 +484,9 @@ async function standaloneSite(
       </PageContainer>,
     );
   }
+  if (!route?.ok) notFound();
+  const read = route.data;
+  if (read.kind === 'home') notFound();
   if (read.kind === 'index')
     return frame(
       <PageContainer className="grid gap-6">

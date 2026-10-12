@@ -188,7 +188,7 @@ export function RealmHomeRoute(props: RealmRouteProps) {
   return RealmDiscussionsRoute(props);
 }
 
-export function SiteHomeRoute(props: RealmRouteProps) {
+export function SiteHomeRoute(props: RealmRouteProps, loadView?: typeof loadRealmView) {
   return realmRoute(
     props,
     'home',
@@ -251,6 +251,7 @@ export function SiteHomeRoute(props: RealmRouteProps) {
       );
     },
     true,
+    loadView,
   );
 }
 

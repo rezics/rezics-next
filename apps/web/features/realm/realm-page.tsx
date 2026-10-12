@@ -40,7 +40,7 @@ import type { BanReading } from '../realm-appeal/reading.ts';
 import { RealmMembership } from './membership.tsx';
 import { type Membership, readMembership } from './membership-state.ts';
 import type { RealmMessages } from './messages.ts';
-import { readPresentation, type RealmResolution, resolveRealm } from './read.ts';
+import { readCompletePresentation, type RealmResolution, resolveRealm } from './read.ts';
 import type { ZoneMount, ZonePresentationRead } from './types.ts';
 import { RealmTabs } from './realm-tabs.tsx';
 import { type RealmTab, realmHref } from './route.ts';
@@ -71,6 +71,8 @@ export interface RealmView {
   kind: 'view';
   realm: Resolved;
   presentation: ZonePresentation;
+  /** The home, layout and resolved sources selected by one public publication read. */
+  publication: ZonePresentationRead | null;
   slideMedia: ZonePresentationRead['slideMedia'];
   execution: Execution;
   pkg: ZonePackage | null;
@@ -147,7 +149,7 @@ export async function loadRealmView(
   ]);
   if (realm.kind !== 'realm') return realm;
   const [read, membership, ban] = await Promise.all([
-    surface === 'site' && realm.zone ? readPresentation(realm.zone.id) : null,
+    surface === 'site' && realm.zone ? readCompletePresentation(realm.zone.id) : null,
     reader.actingSubject
       ? readMembership(reader.personal, realm.header.id, reader.actingSubject)
       : null,
@@ -216,6 +218,7 @@ export async function loadRealmView(
     kind: 'view',
     realm,
     presentation,
+    publication: read?.ok ? read.data : null,
     slideMedia,
     execution,
     pkg,
