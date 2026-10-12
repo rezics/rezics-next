@@ -687,7 +687,7 @@ function validPolicyTarget(target: DisclosureTarget, env?: WorkActivationEnviron
 }
 function stripAncestry(target: DisclosureTarget): DisclosureSelection['target'] {
   const { ancestry: _ancestry, ...selected } = target;
-  if (!target.ancestry || isLegacy(target.ancestry)) return selected;
+  if (target.ancestry && isLegacy(target.ancestry)) return selected;
   const { work: _work, workRevision: _workRevision, ...strict } = selected;
   return strict;
 }
@@ -912,7 +912,6 @@ async function evaluateSelections(env: WorkActivationEnvironment, selections: re
     const exactUse = selection.target.owner === 'media' && basis.owner === 'media' && basis.kind === 'media-use';
     return { reference: exactUse ? basis.resource : selection.target.resource, exactUse };
   }));
-  try {
   const legacyTargetsToRead = selections.filter(selection => isLegacy(selection.ancestry)).map(selection => selection.target);
   const legacy = reader ? await legacyTargets(env, legacyTargetsToRead)
     : { targets: legacyTargetsToRead, graphQueries: 0 };
@@ -925,6 +924,7 @@ async function evaluateSelections(env: WorkActivationEnvironment, selections: re
     return { ...current.target, ancestry: current.ancestry };
   });
   requireSelections(env, selections);
+  try {
     const evaluated = reader?.readAtCut
       ? await reader.readAtCut(targets, viewer, channel, client, anonymousNames)
       : { ...(reader
@@ -934,7 +934,7 @@ async function evaluateSelections(env: WorkActivationEnvironment, selections: re
             anonymousNames: anonymousNames ? await reader.read(targets, ANONYMOUS_VIEWER, channel, client) : [] }
         : { decisions: targets.map(() => 'visible' as const),
           anonymousNames: anonymousNames ? targets.map(() => 'visible' as const) : [] }),
-        fenceBases: targets.map(() => unconfiguredLegacyFence) };
+        fenceBases: targets.map(() => unconfiguredLegacyFence), cost: {} as Readonly<Record<string, number>> };
     requireSelections(env, selections);
 
     if (mediaAllowed.length !== targets.length || mediaAllowed.some(allowed => typeof allowed !== 'boolean')
@@ -1139,19 +1139,5 @@ async function readLegacyInventory(env: WorkActivationEnvironment, targets: read
     return { decisions: evaluated.decisions.map((decision, index) => allowed[index] ? decision : 'hidden'),
       anonymousNames: evaluated.anonymousNames, anonymousNameProbes, parentHeadQueries: current.graphQueries };
   }
-  requireReader(env);
-  const decisions: DisclosureDecision[] = [], names: DisclosureDecision[] = [];
-  const processed: DisclosureSelection[] = [];
-  let parentHeadQueries = 0;
-  for (let offset = 0; offset < targets.length; offset += DISCLOSURE_COST.batch) {
-    const selections = await resolveDisclosureSelections(env, targets.slice(offset, offset + DISCLOSURE_COST.batch));
-    processed.push(...selections);
-    parentHeadQueries += (await currentHeads(env, selections)).graphQueries;
-    const evaluated = await evaluateSelections(env, selections, viewer, channel, client, anonymousNames);
-    parentHeadQueries += evaluated.parentHeadQueries;
-    decisions.push(...evaluated.decisions);
-    names.push(...evaluated.anonymousNames);
-  }
-  requireSelections(env, processed);
-  return { decisions, anonymousNames: names, anonymousNameProbes: 0, parentHeadQueries };
+  throw new DisclosureUnavailable('Disclosure ancestry source registered during legacy delivery');
 }

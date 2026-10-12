@@ -1,7 +1,7 @@
 import type { PoolClient } from 'pg';
 import { GLOBAL_CONTEXT } from '../governance/schema.ts';
 import { chunkDisclosureSubmission } from './contract-batching.ts';
-import { DISCLOSURE_CHANNELS, DisclosureUnavailable,
+import { DISCLOSURE_CHANNELS, DisclosureUnavailable, requireEstablishedAncestry,
   type DisclosureChannel, type DisclosureSelection } from './read.ts';
 
 /** Correlated to `wanted` from the policy reader's requested relation; $2 is the
@@ -139,7 +139,8 @@ export async function scopedEnforcementBasis(client: Pick<PoolClient, 'query'>,
         "resourceKind" text, parents jsonb))
       SELECT wanted.ordinal, ${SCOPED_ENFORCEMENT_BASIS_SQL} AS basis
       FROM requested wanted ORDER BY wanted.ordinal`, [JSON.stringify(chunk.map((selection, ordinal) => {
-      const { target, ancestry } = selection;
+      const { target } = selection;
+      const ancestry = requireEstablishedAncestry(selection);
       const identity = target.owner === 'graph' && ancestry.relationshipBasis.owner === 'graph'
         && ancestry.relationshipBasis.kind === 'identity' && ancestry.relationshipBasis.resource === target.resource;
       const nameHead = identity ? ancestry.relationshipBasis.revision
