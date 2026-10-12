@@ -57,6 +57,8 @@ export interface GraphLineage {
 }
 
 export interface WorkActivationEnvironment {
+  /** Shared Content database for linking payloads concurrently with erasure. */
+  referenceFencePool?: import('pg').Pool;
   /** Exact original-manifest supplemental coverage owned by Content. */
   structureQualifierRoots?: import('../structure/qualifier-index.ts').StructureQualifierRootStore;
   /** The owner stages exact slim commands before dispatch and reconciles their commit proofs. */

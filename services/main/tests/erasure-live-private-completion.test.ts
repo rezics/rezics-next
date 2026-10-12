@@ -14,11 +14,13 @@ import { ObjectNotFound, ObjectUnavailable, type ImmutableObjects } from '../src
 import { boundedPool } from '../src/infrastructure/pg-pool.ts';
 import { AdmissionDenied, type RegisteredAdmission } from '../src/modules/access/admission.ts';
 import { CONTRIBUTION_PROFILE } from '../src/modules/contribution/draft.ts';
+import { editTextContributionDraft, textContributionEditDigest } from '../src/modules/contribution/edit.ts';
 import { applyContentErasure, ContentErasureStale, probeContentErasure } from '../src/modules/erasure/content.ts';
 import { ERASURE_PREFLIGHT_LIMITS, journalErasure, readErasure,
   sha256, ErasurePreflightUnsupported, type ErasureTargetInput } from '../src/modules/erasure/journal.ts';
 import { completePendingContentErasures, contentErasureDigest, ErasureDenied, ErasureService,
   requestContentErasure, type ContentErasureInput } from '../src/modules/erasure/request.ts';
+import { withReferenceFence } from '../src/modules/erasure/reference-fence.ts';
 import { assetIri, assetNamespace, assetVariant, MediaStore } from '../src/modules/media/store.ts';
 import { MediaErasureUnsupported } from '../src/modules/media/erasure.ts';
 import { PostgresReceiptCustodyStore, ReceiptCustody, type SlimEnvelope } from '../src/modules/outbox/receipt-custody.ts';
@@ -174,7 +176,7 @@ async function fixture(run: (f: Awaited<ReturnType<typeof environment>>) => Prom
 async function environment(pool: Pool, objectDirectory: string, relay: Pool, accessPool: Pool) {
   const graph = new Graph(), objects = new Objects(), core = new ContentCore(pool);
   const env: WorkActivationEnvironment = { fuseki: graph, lineage: graph.lineage,
-    objectDirectory, workObjects: objects.namespace() };
+    referenceFencePool: pool, objectDirectory, workObjects: objects.namespace() };
   const service = new ErasureService(relay, pool, accessPool, objects.namespace);
   const admissions = new Map<string, RegisteredAdmission>();
   const outcomes: string[] = [];
@@ -294,6 +296,57 @@ test('retained erasure retry preserves a payload newly referenced by a live Cont
     expect(retained.targets.find(target => target.kind === 'object')?.completionState).toBe('failed');
     expect(retained.stage).toBe('deleting');
     expect(f.graph.suppressed.has(resourceIri(liveRevision))).toBe(false);
+  });
+});
+
+test('P1 the Contribution editor holds the deletion fence while linking existing bytes', async () => {
+  await fixture(async f => {
+    const contribution = resource(), work = resource(), author = resource(), head = resource();
+    const input = { contribution, expectedHead: head, actingSubject: author, body: 'existing body' };
+    const admitted = await f.access.register({ actingSubject: author, scope: `contribution:edit:${contribution}`,
+      action: 'contribution.edit', idempotencyKey: randomUUID(), requestDigest: textContributionEditDigest(input) });
+    const digest = hash(Buffer.from(JSON.stringify({ format: 'rezics-component-v1', component: contribution,
+      state: { work, author, language: 'en', body: input.body, publication: 'draft' } })));
+    f.graph.commandHealth = async () => ({ moduleVersion: 'fixture', instanceId: 'fixture',
+      publicSearchWriteEpoch: 'fixture', publicSearchWriteActive: true,
+      profiles: { 'text-contribution-v1': profileRegistry['text-contribution-v1'].sha256 } });
+    f.graph.query = async query => query.includes('SELECT ?work ?author ?language ?head')
+      ? { results: { bindings: [{ work: uri(work), author: uri(author), language: lit('en'), head: uri(head) }] } }
+      : { boolean: false, results: { bindings: [] } };
+    let held = false;
+    f.graph.commandWithReceipt = async envelope => {
+      if (envelope.validations.length) held = !(await f.pool.query<{ locked: boolean }>(
+        "SELECT pg_try_advisory_xact_lock(hashtextextended('rezics-payload-reference:' || $1, 0)) AS locked", [digest])).rows[0]!.locked;
+      throw new Error('uncommitted dispatch');
+    };
+    await expect(editTextContributionDraft(f.env, admitted, input)).rejects.toThrow();
+    expect(held).toBe(true);
+  });
+});
+
+test('P1 a payload reference fence holds through the owner commit and releases on failure', async () => {
+  await fixture(async f => {
+    const digest = hash(Buffer.from('existing payload'));
+    let release!: () => void;
+    let entered!: () => void;
+    const ready = new Promise<void>(resolve => { entered = resolve; });
+    const pause = new Promise<void>(resolve => { release = resolve; });
+    const first = withReferenceFence(f.pool, digest, async () => { entered(); await pause; });
+    await ready;
+    const client = await f.pool.connect();
+    try {
+      await client.query('BEGIN');
+      expect((await client.query<{ locked: boolean }>(
+        "SELECT pg_try_advisory_xact_lock(hashtextextended('rezics-payload-reference:' || $1, 0)) AS locked", [digest])).rows[0]?.locked).toBe(false);
+      await client.query('ROLLBACK');
+      release();
+      await first;
+      await expect(withReferenceFence(f.pool, digest, async () => { throw new Error('writer refused'); })).rejects.toThrow('writer refused');
+      await client.query('BEGIN');
+      expect((await client.query<{ locked: boolean }>(
+        "SELECT pg_try_advisory_xact_lock(hashtextextended('rezics-payload-reference:' || $1, 0)) AS locked", [digest])).rows[0]?.locked).toBe(true);
+      await client.query('ROLLBACK');
+    } finally { release(); await first; client.release(); }
   });
 });
 

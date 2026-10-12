@@ -386,6 +386,7 @@ pg_verifybackup --no-parse-wal ${remote}`], 100_000);
     expect(await account.verify(request, ['work:create'])).toEqual(expectedAccountAssertion);
     const oldLineage = { dataEpoch: Bun.randomUUIDv7(), routingEpoch: '1' };
     const liveEnv: WorkActivationEnvironment = { fuseki, lineage: oldLineage,
+      referenceFencePool: contentPool,
       objectDirectory: liveObjects, candidateDirectory: join(state, 'live', 'candidates'),
       repositoryRoot: root };
     await initializeFreshGraph(fuseki, oldLineage);

@@ -270,6 +270,7 @@ export async function composeMain(input: ComposeMainInput) {
   }) : undefined;
   if (workObjects) await workObjects.initialize();
   const environment = {
+    referenceFencePool: contentPool,
     eventTemporalAccess: pool,
     addresses: new AliasRegistry(pool),
     fuseki,

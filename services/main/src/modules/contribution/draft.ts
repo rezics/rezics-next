@@ -3,6 +3,7 @@ import { CommandRejected, fusekiReadBudget, FusekiReadBudgetExceeded,
 import { profileValidations } from '../../infrastructure/profile.ts';
 import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
+import { withReferenceFence } from '../erasure/reference-fence.ts';
 import { PRIVATE_SEARCH_GRAPH, privateDraftTriples } from './private-projection.ts';
 import { serializeDocument } from '@rezics/document';
 import { authoredDocumentBody, type AuthoredBodyInput } from '../../../../content/src/document-body.ts';
@@ -210,79 +211,86 @@ export async function activateTextContribution(
   const operation = ID + Bun.randomUUIDv7();
   const receipt = textContributionReceiptIri(admission.id);
   const validations = await validateTextContributionCandidate(env, contribution, draftRevision, input);
-  const manifest = prepareComponent(env.objectDirectory, contribution,
-    { work: input.work, author: input.actingSubject, language: input.language,
-      ...content, publication: 'draft' }, CONTRIBUTION_PROFILE);
-  if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingActivation('Contribution admission expired');
-  const batch = `urn:rezics:outbox:${hash(receipt)}`;
-  const event = `urn:rezics:event:${hash(operation)}`;
-  let updateError: unknown;
-  try {
-    const result = await validatedCommand(env, { receipt, digest, validations, deadlineMs: 10_000,
-      update: `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
-      DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
-      INSERT {
-        GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
-        GRAPH ${iri(GRAPHS.current)} {
-          ${iri(contribution)} a rv:TextContribution ; rv:work ${iri(input.work)} ;
-            rv:author ${iri(input.actingSubject)} ; rv:language ${lit(input.language)} ;
-            rv:draftHead ${iri(draftRevision)} .
+  if (!env.referenceFencePool) throw new InvalidContributionInput('reference fence is unavailable');
+  return withReferenceFence(env.referenceFencePool, hash(Buffer.from(JSON.stringify({
+    format: 'rezics-component-v1', component: contribution,
+    state: { work: input.work, author: input.actingSubject, language: input.language,
+      ...content, publication: 'draft' },
+  }))), async () => {
+    const manifest = prepareComponent(env.objectDirectory, contribution,
+      { work: input.work, author: input.actingSubject, language: input.language,
+        ...content, publication: 'draft' }, CONTRIBUTION_PROFILE);
+    if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingActivation('Contribution admission expired');
+    const batch = `urn:rezics:outbox:${hash(receipt)}`;
+    const event = `urn:rezics:event:${hash(operation)}`;
+    let updateError: unknown;
+    try {
+      const result = await validatedCommand(env, { receipt, digest, validations, deadlineMs: 10_000,
+        update: `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+        DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
+        INSERT {
+          GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
+          GRAPH ${iri(GRAPHS.current)} {
+            ${iri(contribution)} a rv:TextContribution ; rv:work ${iri(input.work)} ;
+              rv:author ${iri(input.actingSubject)} ; rv:language ${lit(input.language)} ;
+              rv:draftHead ${iri(draftRevision)} .
+          }
+          GRAPH ${iri(GRAPHS.revisions)} {
+            ${iri(draftRevision)} a rv:RevisionAnchor ; rv:component ${iri(contribution)} ;
+              rv:operation ${iri(operation)} ; rv:manifest ${iri(`urn:rezics:sha256:${manifest}`)} ;
+              rv:modelRevision ${iri(CONTRIBUTION_PROFILE)} ;
+              rv:shapeRevision ${iri(CONTRIBUTION_PROFILE)} ; rv:datasetId ${iri(DATASET)} ;
+              rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .
+          }
+          GRAPH ${iri(PRIVATE_SEARCH_GRAPH)} {
+            ${privateDraftTriples(contribution, draftRevision, input.work, input.language, content.body)}
+          }
+          GRAPH ${iri(GRAPHS.receipts)} {
+            ${iri(receipt)} a rv:OperationReceipt ; rv:operation ${iri(operation)} ;
+              rv:requestDigest ${lit(digest)} ; rv:admissionId ${lit(admission.id)} ;
+              rv:authorityEpoch ${lit(admission.authorityEpoch)} ;
+              rv:admittedScope ${lit(admission.scope)} ; rv:outcome rv:Succeeded ;
+              rv:work ${iri(input.work)} ; rv:contribution ${iri(contribution)} ;
+              rv:draftRevision ${iri(draftRevision)} ; rv:language ${lit(input.language)} ;
+              rv:author ${iri(input.actingSubject)} ; rv:datasetId ${iri(DATASET)} ;
+              rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .
+          }
+          GRAPH ${iri(GRAPHS.outbox)} {
+            ${iri(batch)} a rv:OutboxBatch ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+              rv:sequence ?next ; rv:eventCount 1 ; rv:event ${iri(event)} .
+            ${iri(event)} a rv:ContributionDraftCreatedEvent ; rv:ordinal 0 ;
+              rv:action "contribution.create" ; rv:receipt ${iri(receipt)} ;
+              rv:operation ${iri(operation)} ; rv:work ${iri(input.work)} ;
+              rv:contribution ${iri(contribution)} .
+          }
         }
-        GRAPH ${iri(GRAPHS.revisions)} {
-          ${iri(draftRevision)} a rv:RevisionAnchor ; rv:component ${iri(contribution)} ;
-            rv:operation ${iri(operation)} ; rv:manifest ${iri(`urn:rezics:sha256:${manifest}`)} ;
-            rv:modelRevision ${iri(CONTRIBUTION_PROFILE)} ;
-            rv:shapeRevision ${iri(CONTRIBUTION_PROFILE)} ; rv:datasetId ${iri(DATASET)} ;
-            rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .
-        }
-        GRAPH ${iri(PRIVATE_SEARCH_GRAPH)} {
-          ${privateDraftTriples(contribution, draftRevision, input.work, input.language, content.body)}
-        }
-        GRAPH ${iri(GRAPHS.receipts)} {
-          ${iri(receipt)} a rv:OperationReceipt ; rv:operation ${iri(operation)} ;
-            rv:requestDigest ${lit(digest)} ; rv:admissionId ${lit(admission.id)} ;
-            rv:authorityEpoch ${lit(admission.authorityEpoch)} ;
-            rv:admittedScope ${lit(admission.scope)} ; rv:outcome rv:Succeeded ;
-            rv:work ${iri(input.work)} ; rv:contribution ${iri(contribution)} ;
-            rv:draftRevision ${iri(draftRevision)} ; rv:language ${lit(input.language)} ;
-            rv:author ${iri(input.actingSubject)} ; rv:datasetId ${iri(DATASET)} ;
-            rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .
-        }
-        GRAPH ${iri(GRAPHS.outbox)} {
-          ${iri(batch)} a rv:OutboxBatch ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
-            rv:sequence ?next ; rv:eventCount 1 ; rv:event ${iri(event)} .
-          ${iri(event)} a rv:ContributionDraftCreatedEvent ; rv:ordinal 0 ;
-            rv:action "contribution.create" ; rv:receipt ${iri(receipt)} ;
-            rv:operation ${iri(operation)} ; rv:work ${iri(input.work)} ;
-            rv:contribution ${iri(contribution)} .
-        }
+        WHERE {
+          GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+            rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
+          GRAPH ${iri(GRAPHS.current)} { ${iri(input.work)} a schema:CreativeWork . }
+          FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
+          FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
+          FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(contribution)} ?p ?o } }
+          BIND(?n + 1 AS ?next)
+        }` }, admission);
+      if (result.status === 'unknown-profile') throw new CommandRejected(result);
+      if (result.status === 'invalid') {
+        throw new InvalidContributionInput(`Contribution validation ${result.status}`);
       }
-      WHERE {
-        GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
-          rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
-        GRAPH ${iri(GRAPHS.current)} { ${iri(input.work)} a schema:CreativeWork . }
-        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
-        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
-        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(contribution)} ?p ?o } }
-        BIND(?n + 1 AS ?next)
-      }` }, admission);
-    if (result.status === 'unknown-profile') throw new CommandRejected(result);
-    if (result.status === 'invalid') {
-      throw new InvalidContributionInput(`Contribution validation ${result.status}`);
+    } catch (error) {
+      if (error instanceof InvalidContributionInput || error instanceof CommandRejected) throw error;
+      updateError = error;
     }
-  } catch (error) {
-    if (error instanceof InvalidContributionInput || error instanceof CommandRejected) throw error;
-    updateError = error;
-  }
-  const committed = await readTextContributionReceipt(env, admission.id);
-  if (!committed) throw new PendingActivation(updateError
-    ? 'Contribution update outcome is unknown' : 'Contribution guard did not match');
-  if (!matches(committed, admission, digest)) throw new IdempotencyConflict('Contribution receipt differs');
-  if (committed.outcome !== 'succeeded' || committed.work !== input.work
-    || committed.author !== input.actingSubject || committed.language !== input.language) {
-    throw new IdempotencyConflict('Contribution receipt targets another intent');
-  }
-  return committed;
+    const committed = await readTextContributionReceipt(env, admission.id);
+    if (!committed) throw new PendingActivation(updateError
+      ? 'Contribution update outcome is unknown' : 'Contribution guard did not match');
+    if (!matches(committed, admission, digest)) throw new IdempotencyConflict('Contribution receipt differs');
+    if (committed.outcome !== 'succeeded' || committed.work !== input.work
+      || committed.author !== input.actingSubject || committed.language !== input.language) {
+      throw new IdempotencyConflict('Contribution receipt targets another intent');
+    }
+    return committed;
+  });
 }
 
 /** Strong closure seals a pending draft admission without publishing it. */

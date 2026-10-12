@@ -1,4 +1,5 @@
 import type { RegisteredAdmission } from '../access/admission.ts';
+import { withReferenceFence } from '../erasure/reference-fence.ts';
 import { CommandRejected } from '../../infrastructure/fuseki.ts';
 import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
@@ -251,76 +252,82 @@ export async function editTextContributionDraft(
   const validations = await validateTextContributionCandidate(env, input.contribution, draftRevision,
     { work, actingSubject: author, language,
       ...(content.document ? { document: content.document } : { body: content.body }) });
-  const manifest = prepareComponent(env.objectDirectory, input.contribution,
-    { work, author, language, ...content, publication: 'draft' }, CONTRIBUTION_PROFILE);
-  if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingActivation('Contribution edit admission expired');
-  const receipt = textContributionEditReceiptIri(admission.id);
-  const batch = `urn:rezics:outbox:${hash(receipt)}`;
-  const event = `urn:rezics:event:${hash(operation)}`;
-  try {
-    const result = await validatedCommand(env, { receipt, digest, validations, deadlineMs: 10_000,
-    update: `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
-    DELETE {
-      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
-      GRAPH ${iri(GRAPHS.current)} { ${iri(input.contribution)} rv:draftHead ${iri(input.expectedHead)} }
-      GRAPH ${iri(PRIVATE_SEARCH_GRAPH)} { ${iri(privateDraftUnit(input.expectedHead))} ?oldProperty ?oldValue }
+  if (!env.referenceFencePool) throw new ContributionEditUnavailable('reference fence is unavailable');
+  return withReferenceFence(env.referenceFencePool, hash(Buffer.from(JSON.stringify({
+    format: 'rezics-component-v1', component: input.contribution,
+    state: { work, author, language, ...content, publication: 'draft' },
+  }))), async () => {
+    const manifest = prepareComponent(env.objectDirectory, input.contribution,
+      { work, author, language, ...content, publication: 'draft' }, CONTRIBUTION_PROFILE);
+    if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingActivation('Contribution edit admission expired');
+    const receipt = textContributionEditReceiptIri(admission.id);
+    const batch = `urn:rezics:outbox:${hash(receipt)}`;
+    const event = `urn:rezics:event:${hash(operation)}`;
+    try {
+      const result = await validatedCommand(env, { receipt, digest, validations, deadlineMs: 10_000,
+      update: `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+      DELETE {
+        GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
+        GRAPH ${iri(GRAPHS.current)} { ${iri(input.contribution)} rv:draftHead ${iri(input.expectedHead)} }
+        GRAPH ${iri(PRIVATE_SEARCH_GRAPH)} { ${iri(privateDraftUnit(input.expectedHead))} ?oldProperty ?oldValue }
+      }
+      INSERT {
+        GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
+        GRAPH ${iri(GRAPHS.current)} { ${iri(input.contribution)} rv:draftHead ${iri(draftRevision)} }
+        GRAPH ${iri(GRAPHS.revisions)} {
+          ${iri(draftRevision)} a rv:RevisionAnchor ; rv:component ${iri(input.contribution)} ;
+            rv:predecessor ${iri(input.expectedHead)} ; rv:operation ${iri(operation)} ;
+            rv:manifest ${iri(`urn:rezics:sha256:${manifest}`)} ;
+            rv:modelRevision ${iri(CONTRIBUTION_PROFILE)} ;
+            rv:shapeRevision ${iri(CONTRIBUTION_PROFILE)} ; rv:datasetId ${iri(DATASET)} ;
+            rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .
+        }
+        GRAPH ${iri(PRIVATE_SEARCH_GRAPH)} {
+          ${privateDraftTriples(input.contribution, draftRevision, work, language, content.body)}
+        }
+        GRAPH ${iri(GRAPHS.receipts)} {
+          ${iri(receipt)} a rv:OperationReceipt ; rv:operation ${iri(operation)} ;
+            rv:requestDigest ${lit(digest)} ; rv:admissionId ${lit(admission.id)} ;
+            rv:authorityEpoch ${lit(admission.authorityEpoch)} ;
+            rv:admittedScope ${lit(admission.scope)} ; rv:outcome rv:Succeeded ;
+            rv:work ${iri(work)} ; rv:contribution ${iri(input.contribution)} ;
+            rv:draftRevision ${iri(draftRevision)} ; rv:expectedHead ${iri(input.expectedHead)} ;
+            rv:author ${iri(author)} ; rv:language ${lit(language)} ; rv:datasetId ${iri(DATASET)} ;
+            rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .
+        }
+        GRAPH ${iri(GRAPHS.outbox)} {
+          ${iri(batch)} a rv:OutboxBatch ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+            rv:sequence ?next ; rv:eventCount 1 ; rv:event ${iri(event)} .
+          ${iri(event)} a rv:ContributionDraftEditedEvent ; rv:ordinal 0 ;
+            rv:action "contribution.edit" ; rv:receipt ${iri(receipt)} ;
+            rv:operation ${iri(operation)} ; rv:work ${iri(work)} ;
+            rv:contribution ${iri(input.contribution)} .
+        }
+      }
+      WHERE {
+        GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+          rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
+        GRAPH ${iri(GRAPHS.current)} {
+          ${iri(input.contribution)} a rv:TextContribution ; rv:work ${iri(work)} ;
+            rv:author ${iri(author)} ; rv:language ${lit(language)} ;
+            rv:draftHead ${iri(input.expectedHead)} .
+          ${iri(work)} a schema:CreativeWork .
+        }
+        OPTIONAL { GRAPH ${iri(PRIVATE_SEARCH_GRAPH)} {
+          ${iri(privateDraftUnit(input.expectedHead))} ?oldProperty ?oldValue } }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
+        BIND(?n + 1 AS ?next)
+      }` }, admission);
+      if (result.status === 'invalid' || result.status === 'unknown-profile') throw new CommandRejected(result);
+    } catch (error) {
+      if (error instanceof CommandRejected) throw error;
+      /* resolve by the terminal receipt */
     }
-    INSERT {
-      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
-      GRAPH ${iri(GRAPHS.current)} { ${iri(input.contribution)} rv:draftHead ${iri(draftRevision)} }
-      GRAPH ${iri(GRAPHS.revisions)} {
-        ${iri(draftRevision)} a rv:RevisionAnchor ; rv:component ${iri(input.contribution)} ;
-          rv:predecessor ${iri(input.expectedHead)} ; rv:operation ${iri(operation)} ;
-          rv:manifest ${iri(`urn:rezics:sha256:${manifest}`)} ;
-          rv:modelRevision ${iri(CONTRIBUTION_PROFILE)} ;
-          rv:shapeRevision ${iri(CONTRIBUTION_PROFILE)} ; rv:datasetId ${iri(DATASET)} ;
-          rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .
-      }
-      GRAPH ${iri(PRIVATE_SEARCH_GRAPH)} {
-        ${privateDraftTriples(input.contribution, draftRevision, work, language, content.body)}
-      }
-      GRAPH ${iri(GRAPHS.receipts)} {
-        ${iri(receipt)} a rv:OperationReceipt ; rv:operation ${iri(operation)} ;
-          rv:requestDigest ${lit(digest)} ; rv:admissionId ${lit(admission.id)} ;
-          rv:authorityEpoch ${lit(admission.authorityEpoch)} ;
-          rv:admittedScope ${lit(admission.scope)} ; rv:outcome rv:Succeeded ;
-          rv:work ${iri(work)} ; rv:contribution ${iri(input.contribution)} ;
-          rv:draftRevision ${iri(draftRevision)} ; rv:expectedHead ${iri(input.expectedHead)} ;
-          rv:author ${iri(author)} ; rv:language ${lit(language)} ; rv:datasetId ${iri(DATASET)} ;
-          rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .
-      }
-      GRAPH ${iri(GRAPHS.outbox)} {
-        ${iri(batch)} a rv:OutboxBatch ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
-          rv:sequence ?next ; rv:eventCount 1 ; rv:event ${iri(event)} .
-        ${iri(event)} a rv:ContributionDraftEditedEvent ; rv:ordinal 0 ;
-          rv:action "contribution.edit" ; rv:receipt ${iri(receipt)} ;
-          rv:operation ${iri(operation)} ; rv:work ${iri(work)} ;
-          rv:contribution ${iri(input.contribution)} .
-      }
-    }
-    WHERE {
-      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
-        rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
-      GRAPH ${iri(GRAPHS.current)} {
-        ${iri(input.contribution)} a rv:TextContribution ; rv:work ${iri(work)} ;
-          rv:author ${iri(author)} ; rv:language ${lit(language)} ;
-          rv:draftHead ${iri(input.expectedHead)} .
-        ${iri(work)} a schema:CreativeWork .
-      }
-      OPTIONAL { GRAPH ${iri(PRIVATE_SEARCH_GRAPH)} {
-        ${iri(privateDraftUnit(input.expectedHead))} ?oldProperty ?oldValue } }
-      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
-      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
-      BIND(?n + 1 AS ?next)
-    }` }, admission);
-    if (result.status === 'invalid' || result.status === 'unknown-profile') throw new CommandRejected(result);
-  } catch (error) {
-    if (error instanceof CommandRejected) throw error;
-    /* resolve by the terminal receipt */
-  }
-  const committed = await readTextContributionEditReceipt(env, admission.id);
-  if (committed) return checkedTextContributionEditReceipt(committed, admission, input, digest);
-  const stale = await sealStaleHead(env, admission, input, digest);
-  if (stale) return checkedTextContributionEditReceipt(stale, admission, input, digest);
-  throw new PendingActivation('Contribution edit guard did not match');
+    const committed = await readTextContributionEditReceipt(env, admission.id);
+    if (committed) return checkedTextContributionEditReceipt(committed, admission, input, digest);
+    const stale = await sealStaleHead(env, admission, input, digest);
+    if (stale) return checkedTextContributionEditReceipt(stale, admission, input, digest);
+    throw new PendingActivation('Contribution edit guard did not match');
+  });
 }

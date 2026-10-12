@@ -1,4 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
+import { readFile, stat } from 'node:fs/promises';
+import { join } from 'node:path';
+import { withReferenceFence } from './reference-fence.ts';
 import { lockPreservationTarget, withPreservationFence, type PreservationFence } from '../public-report/preservation.ts';
 import { ERASURE_DEFERRED_REASON, ERASURE_TARGET_OWNERS } from './schema.ts';
 import type { ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
@@ -17,7 +20,7 @@ import { graphRevisionIds, isGraphErasureKind, resolveErasureRevisions } from '.
 import { assertErasureJournalTargetBound, GraphErasureConflict, GraphErasureUnavailable,
   inventoryContributionPayloads, preflightGraphErasure, readGraphErasureProof, suppressGraphContentRevisions } from './graph.ts';
 import { ERASURE_JOURNAL_EPOCH, ErasureInvalid, ErasureNotFound, ErasureStale, ErasureUnavailable,
-  createErasurePreflightBudget, consumeErasurePreflight, type ErasurePreflightBudget, erasurePreflightRemaining, ErasurePreflightUnsupported, findErasureByOperation,
+  ERASURE_PREFLIGHT_LIMITS, createErasurePreflightBudget, consumeErasurePreflight, type ErasurePreflightBudget, erasurePreflightRemaining, ErasurePreflightUnsupported, findErasureByOperation,
   completeErasureTarget, failErasureTarget, isValidErasureTargetList, journalErasure,
   markErasureBlocked, markErasureSuppressed, readErasure, extendErasureTargets, type ErasureTargetInput,
   recordErasureInventory, type ErasureReport, ensureRetentionDomain, relayTransaction,
@@ -155,7 +158,7 @@ async function completeFencedContentErasure(service: ErasureService, graph: Work
       await applyRevisionOwners(service, graph, admission, journaled, fence, accessClient, plan);
       await markErasureSuppressed(service.relay, erasureId);
       // Disclosure is suppressed even while physical objects await retry.
-      return completeLiveTargets(service, graph, journaled, accessClient);
+      return completeLiveTargets(service, graph, journaled, accessClient, resourceId);
     }, publicationClient);
   if (guarded.held) {
     if (journaled.stage !== 'requested') throw new ContentErasureStale('Content erasure is deferred');
@@ -277,6 +280,52 @@ async function applyRevisionOwners(service: ErasureService, graph: WorkActivatio
     objectRefs: new Set(report.targets.filter(target => target.kind === 'object').map(target => target.ref)) }, plan.budget);
 }
 
+/** Reverse indexes are read under the same digest fence as every reference writer.
+ * Tombstones retain identities, so absence of payload bytes never removes protection. */
+async function freshObjectProtection(client: PoolClient, service: ErasureService,
+  graph: WorkActivationEnvironment, report: ErasureReport, ref: string, resourceId: string): Promise<Set<string>> {
+  const digest = ref.slice(-64);
+  const references = new Set<string>([`checked:${digest}`]);
+  const owners = await client.query<{ protected: boolean }>(`SELECT
+    EXISTS (SELECT 1 FROM content.revision WHERE byte_digest=$1 AND availability <> 'erased')
+    OR EXISTS (SELECT 1 FROM media.representation r JOIN media.asset a ON a.id=r.asset_id
+      JOIN media.asset_state s ON s.id=a.state_head
+      WHERE r.byte_digest=$1 AND r.availability <> 'erased' AND s.lifecycle <> 'erased') AS protected`, [digest]);
+  if (owners.rows[0]?.protected !== false) references.add(ref);
+  const drafts = report.targets.filter(target => target.kind === 'text_contribution_draft');
+  const resolved = drafts.length ? await resolveErasureRevisions(service.content, graph.fuseki,
+    resourceId, drafts.map(target => target.ref)) : [];
+  const manifests = new Map<string, string | undefined>([[`urn:rezics:sha256:${digest}`, undefined]]);
+  for (const revision of resolved) {
+    const manifest = revision.manifest!;
+    const path = join(graph.objectDirectory, manifest.slice('urn:rezics:sha256:'.length));
+    if ((await stat(path)).size > ERASURE_PREFLIGHT_LIMITS.metadataBytes) throw new ErasurePreflightUnsupported('manifest exceeds metadata bound');
+    const bytes = await readFile(path);
+    if (sha256(bytes) !== manifest.slice('urn:rezics:sha256:'.length)) throw new ContentErasureStale('manifest digest differs');
+    const value = JSON.parse(bytes.toString('utf8')) as { payload: string };
+    if (value.payload !== `sha256:${digest}` && manifest !== `urn:rezics:sha256:${digest}`) continue;
+    manifests.set(manifest, revision.resourceId);
+  }
+  for (const [manifest, component] of manifests) {
+    const result = await graph.fuseki.query(`PREFIX rv: <${RV}>
+      SELECT ?revision ?component ?manifest ?erased ?duplicate WHERE {
+      VALUES ?manifest { ${iri(manifest)} }
+      GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:RevisionAnchor ; rv:component ?component ; rv:manifest ?manifest }
+      BIND(EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:ErasedRevision } } AS ?erased)
+      BIND(EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?revision rv:manifest ?otherManifest
+        FILTER(!sameTerm(?otherManifest, ?manifest)) } } AS ?duplicate)
+    } ORDER BY ?revision LIMIT 65`, 65_536);
+    const rows = result.results?.bindings;
+    if (!rows || rows.length > 64 || rows.some(row => row.manifest?.value !== manifest
+      || component !== undefined && row.component?.value !== component || row.duplicate?.value !== 'false'
+      || !['true', 'false'].includes(row.erased?.value ?? ''))) {
+      throw new ContentErasureStale('Contribution reverse references are unavailable');
+    }
+    if (rows.some(row => row.erased?.value !== 'true')) references.add(ref);
+  }
+  return references;
+}
+
 /** Inject a shared deadline into the existing object owners, including uncached probes. */
 function deadlineObjects(objects: ImmutableObjects | undefined, signal: AbortSignal): ImmutableObjects | undefined {
   if (!objects) return undefined;
@@ -288,7 +337,7 @@ function deadlineObjects(objects: ImmutableObjects | undefined, signal: AbortSig
 }
 
 async function completeLiveTargets(service: ErasureService, graph: WorkActivationEnvironment,
-  report: ErasureReport, accessClient: PoolClient): Promise<boolean> {
+  report: ErasureReport, accessClient: PoolClient, resourceId: string): Promise<boolean> {
   const signal = AbortSignal.timeout(10_000);
   const objects: ObjectRecoveryStore = { directory: graph.objectDirectory,
     workObjects: deadlineObjects(graph.workObjects, signal),
@@ -305,8 +354,11 @@ async function completeLiveTargets(service: ErasureService, graph: WorkActivatio
     || completedPresent.has(target.ordinal)).slice(0, 16);
   for (const target of attempted) {
     signal.throwIfAborted();
-    const outcome = await applyLiveObjectErasure(objects, target.ref,
-      { kind: 'live-bounded', references: new Set() }, true);
+    const digest = target.ref.slice(-64);
+    const outcome = await withReferenceFence(service.content, digest, async client => {
+      const references = await freshObjectProtection(client, service, graph, report, target.ref, resourceId);
+      return applyLiveObjectErasure(objects, target.ref, { kind: 'live-bounded', references }, true);
+    });
     if (outcome === 'conflict') {
       if (target.completionState !== 'completed') {
         await failErasureTarget(service.relay, report.erasureId, target.ordinal, 'live_copy_unavailable');
