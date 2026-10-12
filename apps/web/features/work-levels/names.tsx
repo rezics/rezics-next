@@ -12,8 +12,7 @@ const link = 'rounded-sm font-medium outline-none decoration-1 underline-offset-
   + 'focus-visible:ring-2 focus-visible:ring-ring';
 
 /**
- * Use Main's canonical address to avoid redirecting an RSC navigation through
- * a bare identity. That redirect can leave the router on the originating Work.
+ * Use Main's canonical address so following a relation needs no address redirect.
  */
 export const summaryWorkHref = (summary: AvailableSummary): string | null =>
   summary.type === 'work' ? resourceHref('/w/', summary.address as CanonicalAddress) : null;
@@ -43,7 +42,10 @@ export function SummaryLink({ summary, unavailable, unnamed, hrefFor }: {
   if (summary.status !== 'available') return <span className="text-muted-foreground">{unavailable}</span>;
   const href = hrefFor ? hrefFor(summary) : summaryWorkHref(summary);
   const text = <LocalizedText text={summary.name} />;
-  return href ? <Link href={href} className={link}>{text}</Link> : <span className="font-medium">{text}</span>;
+  // A Work hub streams independent reads. Its RSC response can stay open while
+  // the client router keeps the old Work; the browser can commit the document as it streams.
+  return href ? <Link href={href} documentNavigation={summary.type === 'work'} className={link}>{text}</Link>
+    : <span className="font-medium">{text}</span>;
 }
 
 /** `SummaryLink` for a resource named by a batch read. */

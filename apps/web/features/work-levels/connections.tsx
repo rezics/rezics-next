@@ -66,7 +66,7 @@ function CreditedAs({ credit, item, t, hrefFor, people }: {
 }) {
   if ('status' in credit) {
     return <span data-credited-name data-credited-unavailable className="text-muted-foreground">{t.creditedAs}{' '}
-      <Link href={creditPage(credit.reference, item, hrefFor, people)} className={creditLink}>{t.nameNotShown}</Link></span>;
+      <Link href={creditPage(credit.reference, item, hrefFor, people)} documentNavigation className={creditLink}>{t.nameNotShown}</Link></span>;
   }
   return <span data-credited-name className="text-muted-foreground">{t.creditedAs}{' '}
     <bdi lang={credit.language} dir="auto">{credit.lexical}</bdi></span>;
@@ -201,7 +201,7 @@ function Members({ franchise, current, names, workRef, query, t }: {
                   <NameLink reference={part.work!} names={names} unavailable={t.unavailable} unnamed={t.unnamed} />
                   {part.displayLabel ? <> <bdi className="tabular-nums">({part.displayLabel})</bdi></> : null}
                 </li>)}
-                {parts.data.next && workPage ? <li><Link href={`${workPage}/connections#parts`}
+                {parts.data.next && workPage ? <li><Link href={`${workPage}/connections#parts`} documentNavigation
                   className="text-primary underline-offset-4 hover:underline">{t.morePartsExist}</Link></li> : null}
               </ol>
               : parts.failure === 'missing' ? null

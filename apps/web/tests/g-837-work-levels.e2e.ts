@@ -374,10 +374,14 @@ for (const kind of ['anime', 'manga', 'vn'] as const) {
     const href = await link.getAttribute('href');
     expect(href).not.toBeNull();
     if ('work' in target) await expect(link).toHaveAttribute('href', canonicalWorkPath(target));
-    // Wait for React effects so this covers the enhanced router, rather than the hydration fallback.
+    // The streamed hub must start a destination document, even after hydration.
     await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
-    await link.click();
-    await expect(page).toHaveURL(new URL(href!, page.url()).href);
+    const destination = new URL(href!, page.url()).href;
+    await Promise.all([
+      page.waitForRequest(request => request.isNavigationRequest() && request.url() === destination),
+      link.click(),
+    ]);
+    await expect(page).toHaveURL(destination);
     await expect(
       page.getByRole('heading', { level: 1, name: target.title, exact: true }),
     ).toBeVisible();
