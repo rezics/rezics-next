@@ -61,7 +61,7 @@ export interface FixtureManifestCore {
   migrations: Record<string, string>;
   account: Record<string, string>;
   engines: FixtureEngines;
-  /** The backup's model head; restore advances it without rewriting this manifest. */
+  /** Model generation compiled into the backup's build; retained as provenance at restore. */
   modelGeneration: string;
   samples: FixtureSample[];
 }
@@ -149,7 +149,7 @@ export function manifestCore(
 }
 
 /** The same retained records, schema inputs and engines give the same ID.
- * The installed model head is provenance; unrelated additions do not change it. */
+ * The build model generation is provenance, outside retained-record identity. */
 export function manifestIdentity(core: FixtureManifestCore): { digest: string; id: string } {
   const { modelGeneration: _modelGeneration, ...identity } = core;
   const digest = sha256(stable(identity));

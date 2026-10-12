@@ -17,9 +17,11 @@ import {
   COMMAND_MODULE_VERSION,
 } from '../../services/main/src/infrastructure/profile.ts';
 import {
+  ModelGenerationUnavailable,
   readActiveModelGeneration,
   type ActiveModelGeneration,
 } from '../../services/main/src/modules/semantic/generation-guard.ts';
+import { ensureModelGeneration } from '../../services/main/src/modules/semantic/command.ts';
 import { MODEL_COMPONENT, PROFILES } from '../../services/main/src/modules/semantic/schema.ts';
 import { backfillRetainedModelCustody, custodyModelGenerationArtifacts,
   type ModelCustodyBackfillCheckpoint } from '../../services/main/src/modules/semantic/model-custody.ts';
@@ -32,6 +34,7 @@ import {
   prepareComponent,
   prepareWorkComponent,
   type GraphLineage,
+  type WorkActivationEnvironment,
 } from '../../services/main/src/modules/work/activate.ts';
 import { readWorkComponentState } from '../../services/main/src/modules/work/history.ts';
 import { checkedLocalDatabase, datasetAdminPath } from './bootstrap.ts';
@@ -269,6 +272,21 @@ export function fixtureModelAuditActor(stack: string, fixture: FixtureModelBoots
   return fixture.importOperation;
 }
 
+/** Bulk imports have no semantic command to record their initial model head.
+ * The owning bootstrap decides whether the model is empty; partial or retained
+ * state still fails its existing guard rather than being repaired here. */
+export async function localDatasetModelHead(environment: WorkActivationEnvironment, fixture: boolean,
+  read: typeof readActiveModelGeneration = readActiveModelGeneration,
+  initialize: typeof ensureModelGeneration = ensureModelGeneration,
+): Promise<{ active: ActiveModelGeneration; bootstrapped: boolean }> {
+  try { return { active: await read(environment.fuseki), bootstrapped: false }; }
+  catch (error) {
+    if (!fixture || !(error instanceof ModelGenerationUnavailable)) throw error;
+    await initialize(environment);
+    return { active: await read(environment.fuseki), bootstrapped: true };
+  }
+}
+
 export async function ensureLocalDatasetModelGeneration(
   stack = process.env.REZICS_DATASET_STACK ?? join(repository, '.temp/stack/rezics-dev'),
   fixture?: FixtureModelBootstrap,
@@ -285,7 +303,6 @@ export async function ensureLocalDatasetModelGeneration(
   const bytes = readFileSync(modelFile),
     modelManifestSha256 = sha256(bytes);
   const generation = `urn:rezics:model-generation:${modelManifestSha256}`;
-  const predecessor = await readActiveModelGeneration(fuseki);
   const context = sha256(JSON.stringify([env.FUSEKI_URL, env.MAIN_DATA_EPOCH, generation]));
   const directory = join(repository, '.temp/datasets/model-bootstrap', context);
   const intentPath = join(directory, 'intent.json');
@@ -305,6 +322,7 @@ export async function ensureLocalDatasetModelGeneration(
     objectDirectory: env.MAIN_OBJECT_DIRECTORY!,
     ...(workObjects ? { workObjects } : {}),
   };
+  const { active: predecessor, bootstrapped } = await localDatasetModelHead(environment, Boolean(fixture));
   if (predecessor.generation === generation) {
     // An existing head, including a lost maintenance response, needs the same
     // exact artifact custody as a newly activated generation.
@@ -319,7 +337,8 @@ export async function ensureLocalDatasetModelGeneration(
         directory,
         auditActor,
       );
-    return { state: 'current', generation, generationNumber: predecessor.generationNumber };
+    return { state: 'current', generation, generationNumber: predecessor.generationNumber,
+      ...(bootstrapped ? { bootstrapped: true, receipt: predecessor.receipt } : {}) };
   }
   const auditActorPath = datasetAdminPath(env.ACCOUNT_ORIGIN ?? env.ACCOUNT_BASE_URL!);
   if (

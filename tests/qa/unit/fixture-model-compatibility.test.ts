@@ -8,7 +8,9 @@ import { fixtureModel, fixtureModelInputs, type FixtureModelManifest } from '../
 import { graphOwner } from '../../../scripts/fixture/owners/graph.ts';
 import { fixtureOwners } from '../../../scripts/fixture/owners/index.ts';
 import { fixtureDirectory, PINNED_FIXTURE_IDS } from '../../../scripts/fixture/stack.ts';
-import { fixtureModelAuditActor } from '../../../scripts/datasets/model-bootstrap.ts';
+import { fixtureModelAuditActor, localDatasetModelHead } from '../../../scripts/datasets/model-bootstrap.ts';
+import { ModelGenerationUnavailable, type ActiveModelGeneration } from '../../../services/main/src/modules/semantic/generation-guard.ts';
+import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const engines = {
@@ -149,4 +151,31 @@ test('fixture: fixture audit identities cannot authorize shared-stack model main
     expect(() => fixtureModelAuditActor(stack, fixture)).toThrow('isolated QA stack');
   expect(() => fixtureModelAuditActor('rezics-qa-alignment', { ...fixture, importOperation: 'arbitrary-user' }))
     .toThrow('fixture import identity');
+});
+
+test('fixture: an unrecorded model uses the owner bootstrap, while partial state and shared maintenance stay refused', async () => {
+  const environment = { fuseki: new FusekiClient('http://127.0.0.1:3030/rezics'),
+    lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' }, objectDirectory: '.temp/model-head' };
+  const active: ActiveModelGeneration = { generation: fixtureModel(root).generation,
+    manifest: `urn:rezics:sha256:${'1'.repeat(64)}`, generationNumber: '1', predecessor: null,
+    entailmentProfile: 'NoEntailment', receipt: 'receipt' };
+  let initialized = false;
+  const missing = new ModelGenerationUnavailable('model head is absent');
+  const read = async () => {
+    if (!initialized) throw missing;
+    return active;
+  };
+  const initialize = async () => { initialized = true; return active.generation; };
+  await expect(localDatasetModelHead(environment, false, read, initialize)).rejects.toBe(missing);
+  expect(initialized).toBe(false);
+  await expect(localDatasetModelHead(environment, true, read, initialize))
+    .resolves.toEqual({ active, bootstrapped: true });
+  await expect(localDatasetModelHead(environment, true, read, async () => { throw new Error('must not initialize twice'); }))
+    .resolves.toEqual({ active, bootstrapped: false });
+  initialized = false;
+  const partial = new Error('owner refuses bootstrap over partial model state');
+  await expect(localDatasetModelHead(environment, true, read, async () => { throw partial; })).rejects.toBe(partial);
+  const unavailable = new Error('graph unavailable');
+  await expect(localDatasetModelHead(environment, true, async () => { throw unavailable; }, initialize)).rejects.toBe(unavailable);
+  expect(initialized).toBe(false);
 });
