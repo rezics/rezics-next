@@ -492,11 +492,21 @@ test('exact HTTP 404 replay retains resource_unavailable through the real reply 
     value: async () => { throw new TargetUnavailable(); } });
   try {
     const work = { ...f.work, account: { verify: async () => f.principal } } as MainWorkDependencies;
-    const app = realmReplyRoutes(work).compile();
-    const call = () => app.handle(new Request(`http://localhost/v1/realms/${f.realm.split('/').at(-1)}/about-posts`, {
-      method: 'POST', headers: { 'content-type': 'application/json', 'idempotency-key': f.key },
-      body: JSON.stringify(f.input),
-    }));
+    // The authored Request/Response adapter owns problem status/code/body.
+    // Exercise it with the real durable owner; routing/schema admission has
+    // separate native HTTP coverage in the integration suite.
+    const route = realmReplyRoutes(work).routes.find(route =>
+      route.method === 'POST' && route.path === '/v1/realms/:realm/about-posts');
+    if (!route || typeof route.handler !== 'function') throw new Error('expected native reply adapter');
+    const handle = route.handler as unknown as (context: {
+      request: Request; params: { realm: string }; body: RealmAboutPostInput;
+    }) => Promise<Response>;
+    const realm = f.realm.split('/').at(-1)!;
+    const call = () => handle({ params: { realm }, body: f.input,
+      request: new Request(`http://localhost/v1/realms/${realm}/about-posts`, {
+        method: 'POST', headers: { 'content-type': 'application/json', 'idempotency-key': f.key },
+        body: JSON.stringify(f.input),
+      }) });
     const initial = await call();
     expect(initial.status).toBe(404);
     const body = await initial.json();
