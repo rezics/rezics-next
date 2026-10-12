@@ -63,7 +63,9 @@ test('G1034: complete Realm Best/Top and fixed header work at 100/400/1600 real 
           {
             fusekiRequests: 16,
             fusekiReceivedBytes: 16_000,
-            postgresStatements: viewer === 'anonymous' ? 44 : 49,
+            // RelayHandoffPositions.read's relay.checkpoint statement, added in
+            // 4634362af, compares Main stream coverage with the projection cut.
+            postgresStatements: viewer === 'anonymous' ? 45 : 50,
             accountCalls: 0,
             mainCalls: 0,
             otherFetches: 0,
