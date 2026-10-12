@@ -3,10 +3,11 @@ import { canonicalLanguage } from '../display-language/tag.ts';
 import { pixelCrop, RENDITION_LIMITS, type RenditionCandidate } from '../media-rendition/policy.ts';
 import { zoneCampaignUses, type ZoneCampaignArt, type ZoneSlide } from './presentation-format.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
-import { disclose, discloseInventory } from '../disclosure/read.ts';
+import { DISCLOSURE_COST, disclose, type DisclosureDecision } from '../disclosure/read.ts';
 import { currentDisclosureViewer } from '../disclosure/viewer.ts';
 import type { MediaDependencies } from '../media/commands.ts';
 import { requestUseRenditions } from '../media-rendition/request.ts';
+import { mediaVisibility } from '../media/visibility.ts';
 
 export const ZONE_CAMPAIGN_ART_COST = { maxSlides: 6, maxCampaignUses: RENDITION_LIMITS.batch,
   maxCampaignMediaReads: 2 } as const;
@@ -66,18 +67,27 @@ export async function readZoneCampaignArt(store: CampaignMediaStore | undefined,
   if (disclosure && items.size) {
     const uses = [...items.keys()];
     const viewer = currentDisclosureViewer();
-    // The Use proves its Asset state and exact attachment. Asset governance
-    // still applies, without asking visibility about every other attachment.
-    const assetDecisions = await disclose(disclosure.environment, uses.map(use => ({
-      owner: 'media' as const, resource: `https://rezics.com/id/${items.get(use)!.asset}`,
-      component: 'cover' as const, context: items.get(use)!.context ?? DEFAULT_MEDIA_CONTEXT, work: realm,
-    })), viewer, 'media');
-    const useDecisions = await discloseInventory(disclosure.environment, uses.map(use => ({
+    // The Use proves its Asset state and exact attachment, without asking
+    // visibility about every other attachment of the Asset.
+    const useTargets = uses.map(use => ({
       owner: 'media' as const, resource: `https://rezics.com/id/${use}`,
       component: 'media_use' as const, context: items.get(use)!.context ?? DEFAULT_MEDIA_CONTEXT, work: realm,
-    })), viewer, 'media');
+    }));
+    const attachments = await mediaVisibility(disclosure.environment, useTargets, viewer);
+    const targets = useTargets.flatMap((target, index) => [
+      { ...target, resource: `https://rezics.com/id/${items.get(uses[index]!)!.asset}`, component: 'cover' as const },
+      target,
+    ]);
+    const decisions: DisclosureDecision[] = [];
+    // Both fences for an image must share one policy cut. The even batch
+    // bound keeps each Asset/Use pair together, including a full Use batch.
+    for (let offset = 0; offset < targets.length; offset += DISCLOSURE_COST.batch) {
+      decisions.push(...await disclose(disclosure.environment,
+        targets.slice(offset, offset + DISCLOSURE_COST.batch), viewer, 'media'));
+    }
     uses.forEach((use, index) => {
-      if (assetDecisions[index] !== 'visible' || useDecisions[index] !== 'visible') items.delete(use);
+      if (!attachments[index] || decisions[index * 2] !== 'visible'
+        || decisions[index * 2 + 1] !== 'visible') items.delete(use);
     });
   }
   const candidates: Map<string, RenditionCandidate[]> = store && items.size

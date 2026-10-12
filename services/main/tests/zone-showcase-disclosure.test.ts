@@ -39,7 +39,7 @@ test('campaign disclosure hides a held Asset or Use before advertising source UR
   for (const held of [asset, use]) {
     const checked: string[] = [];
     configureDisclosure(environment, { read: async targets => {
-      expect(targets).toHaveLength(1);
+      expect(targets).toHaveLength(2);
       expect(targets.every(target => target.context === 'urn:rezics:media:context:default')).toBe(true);
       checked.push(...targets.map(target => target.resource));
       return targets.map(target => target.resource.endsWith(held) ? 'hidden' : 'visible');
@@ -51,6 +51,59 @@ test('campaign disclosure hides a held Asset or Use before advertising source UR
   }
   expect(candidateReads).toBe(0);
   expect(slides[0]!.title).toBe('Launch');
+});
+
+test('campaign art checks Asset and Use fences at the same policy cut', async () => {
+  const realm = ref(), zone = ref(), asset = randomUUID(), use = randomUUID();
+  const environment = { fuseki: { query: async () => ({ results: { bindings: [] } }) } } as unknown as WorkActivationEnvironment;
+  let policyReads = 0, candidateReads = 0;
+  configureDisclosure(environment, { read: async targets => {
+    // Each snapshot denies the image, even while the restriction moves.
+    const held = policyReads++ % 2 === 0 ? use : asset;
+    return targets.map(target => target.resource.endsWith(held) ? 'hidden' : 'visible');
+  } });
+  const store = { itemDeliveryBatch: async () => new Map([[use, { asset, target: realm,
+    availability: 'available', disclosure: 'public', moderation: 'none', lifecycle: 'active',
+    width: 1280, height: 720, mediaType: 'image/png' }]]),
+  renditions: { candidatesBatch: async () => { candidateReads++; return new Map(); } } } as unknown as MediaStore;
+  expect(await readZoneCampaignArt(store, realm,
+    [{ id: 'campaign', href: '/launch', art: { landscape: { use: `https://rezics.com/id/${use}` } } }],
+    { environment, zone })).toEqual([
+    { id: 'campaign', art: { landscape: null, portrait: null, cutout: null, logos: [] } },
+  ]);
+  expect(policyReads).toBe(1);
+  expect(candidateReads).toBe(0);
+});
+
+test('a full campaign Use batch keeps each image policy together and filters the last held Use', async () => {
+  const realm = ref(), zone = ref();
+  const uses = Array.from({ length: 64 }, () => randomUUID());
+  const assets = uses.map(() => randomUUID());
+  const environment = { fuseki: { query: async () => ({ results: { bindings: [] } }) } } as unknown as WorkActivationEnvironment;
+  let policyReads = 0;
+  configureDisclosure(environment, { read: async targets => {
+    policyReads++;
+    expect(targets).toHaveLength(64);
+    for (let offset = 0; offset < targets.length; offset += 2) {
+      expect(targets[offset]!.component).toBe('cover');
+      expect(targets[offset + 1]!.component).toBe('media_use');
+    }
+    return targets.map(target => target.resource.endsWith(uses[63]!) ? 'hidden' : 'visible');
+  } });
+  const store = { itemDeliveryBatch: async () => new Map(uses.map((use, index) => [use,
+    { asset: assets[index], target: realm, availability: 'available', disclosure: 'public', moderation: 'none',
+      lifecycle: 'active', width: 1280, height: 720, mediaType: 'image/png' }])),
+  renditions: { candidatesBatch: async (selected: string[]) => {
+    expect(selected).toEqual(uses.slice(0, -1)); return new Map();
+  } } } as unknown as MediaStore;
+  const languages = ['en', 'ja', 'zh', 'ko', 'de', 'fr', 'es', 'pt'];
+  const slides = Array.from({ length: 6 }, (_, index) => ({ id: `campaign-${index}`, href: '/launch',
+    art: { logos: uses.slice(index * 12, (index + 1) * 12).map((use, logo) => ({ use: `https://rezics.com/id/${use}`,
+      language: languages[logo % 8]!, tone: logo < 8 ? 'light' as const : 'dark' as const,
+      anchor: 'center-middle' as const })) } }));
+  const result = await readZoneCampaignArt(store, realm, slides, { environment, zone });
+  expect(result.flatMap(slide => slide.art.logos)).toHaveLength(63);
+  expect(policyReads).toBe(2);
 });
 
 test('selected campaign art binds every original and rendition URL without mutating owner candidates', async () => {
