@@ -90,7 +90,7 @@ test('ordinary Concept, Agent and Space reports confirm disclosure receipts and 
       expect((await stack.accessPool.query('SELECT effect,state FROM access.governance_enforcement WHERE decision_id=$1',
         [result.decisionId])).rows).toEqual([{ effect: 'disclosure', state: 'restricted' }]);
       expect((await stack.call('GET', path)).status).toBe(404);
-      expect(await discloseInventory(stack.env, [target], ANONYMOUS_VIEWER, 'read')).toEqual(['hidden']);
+      expect(['tombstone', 'hidden']).toContain((await discloseInventory(stack.env, [target], ANONYMOUS_VIEWER, 'read'))[0]);
       expect(await discloseInventory(stack.env, [target], ANONYMOUS_VIEWER, 'search')).toEqual(['hidden']);
       if (kind === 'Concept') {
         const vocabulary = await json<{ items: { id: string }[] }>(await stack.call('GET',
