@@ -29,7 +29,8 @@ import { safetyCorrespondenceApi } from './email-safety.ts';
 import { mailSuppressionApi } from './mail-suppression.ts';
 import { policyAcceptanceApi } from './policy-acceptance.ts';
 import { accountSchemaReady } from './schema-ready.ts';
-import { authenticationBody, authenticationMediaTypeFailure, withRecoveryAuthentication } from './recovery-auth.ts';
+import { authenticationMediaTypeFailure, withRecoveryAuthentication } from './recovery-auth.ts';
+import { authenticationSubject } from './authentication-subject.ts';
 import { changeGuardianInvitation, readGuardianInvitations, readRecoveryPolicy } from './recovery-guardian.ts';
 import { bootstrapOperators, requireOperator } from './operators.ts';
 import { AccountRecoveryConflict, AccountRecoveryDenied, AccountRecoveryStale, AccountRecoveryRateLimited,
@@ -143,22 +144,14 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
   credentialPaths.add('/api/auth/two-factor/verify-totp');
   const guardedAuthHandler = async (request: Request, held?: PoolClient): Promise<Response> => {
     const path = new URL(request.url).pathname;
-    let totpUserId: string | undefined;
-    if (request.method === 'POST' && path === '/api/auth/two-factor/verify-totp') {
-      const session = await auth.api.getSession({ headers: request.headers });
-      if (session) {
-        totpUserId = session.user.id;
-      }
-    }
+    const subject = await authenticationSubject(pool, request,
+      () => auth.api.getSession({ headers: request.headers }), String(auth.options.secret));
+    const totpUserId = subject.signedInBudget ? subject.userId : undefined;
     const authenticationLimit = async (database: Pool | PoolClient): Promise<Response | null> => {
       if (request.method !== 'POST' || !(path === '/api/auth/sign-in/email' || path === '/api/auth/reset-password'
         || path === '/api/auth/passkey/verify-authentication' || path.startsWith('/api/auth/two-factor/verify-'))) return null;
       try {
-        const body = await authenticationBody(request) as { email?: unknown; token?: unknown; response?: { id?: unknown } };
-        const target = totpUserId ?? (typeof body.email === 'string' ? body.email.toLowerCase()
-          : typeof body.token === 'string' ? body.token
-          : typeof body.response?.id === 'string' ? body.response.id
-          : request.headers.get('cookie')?.split(';').find(value => value.includes('two_factor='))?.trim() ?? 'anonymous');
+        const target = subject.target;
         if (!await consumeAccountLimit(database, String(auth.options.secret), `authenticate:${path}:${target}`, 20, 300)) {
           return Response.json({ error: 'rate_limited' }, { status: 429, headers: { 'retry-after': '300' } });
         }
@@ -506,7 +499,7 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
     .cleanup(async () => { await guardPool?.end(); })
     .mount(async (request: Request) => await authenticationMediaTypeFailure(request) ?? observeAuthentication(auth, pool, request,
       () => withRecoveryAuthentication(guard(), request, db => guardedAuthHandler(request, db),
-        () => auth.api.getSession({ headers: request.headers }))));
+        () => auth.api.getSession({ headers: request.headers }), String(auth.options.secret))));
   return app.get('/api/account/openapi.json', () => ({ openapi: '3.1.2',
     info: { title: 'REZICS Account API', version: '1' },
     ...toOpenAPISchema(app, { paths: [/^\/api\/auth\//, /^\/health\//, '/api/account/openapi.json'] }),
