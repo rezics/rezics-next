@@ -22,7 +22,7 @@ import { readResourceSummaries, MAX_SUMMARY_BATCH } from '../media/summary.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
 import { targetSummaryReader } from '../target/resolve.ts';
 import type { DisclosureChannel, DisclosureTarget } from '../disclosure/read.ts';
-import type { ReadingBoundary } from '../reading-position/boundary.ts';
+import { ReadingBoundary } from '../reading-position/boundary.ts';
 
 export interface WikiHistoryScope {
   entity?: string;
@@ -79,9 +79,10 @@ async function readableIdentities(
         language: null,
         resolveMerges: false,
         channel,
+        localBasis: session.fencesSelectedUnits,
       },
     );
-    if (batch.generation.graph !== `${session.position.dataEpoch}:${session.position.sequence}`)
+    if (!session.fencesSelectedUnits && batch.generation.graph !== `${session.position.dataEpoch}:${session.position.sequence}`)
       throw new WorkReadMoved('Wiki dependencies changed during the read');
     for (const summary of batch.summaries)
       if (summary.status === 'available') readable.add(summary.reference);
@@ -184,7 +185,9 @@ async function readWikiHistoryUnchecked(
   };
   if (!work.editorialReview || !work.wikiEvidence)
     throw new EditorialBlocked({ code: 'owner_unavailable' });
-  return readingPositionRead(work, request, principal, actor, async (boundary) => {
+  return readingPositionRead(work, request, principal, actor, outer => outer.session.selection(
+    `wiki-history:${JSON.stringify([resource, selection, scope, page, channel])}`, async session => {
+    const boundary = new ReadingBoundary(session);
     await requireWikiWork(boundary, resource, channel);
     const selected = await wikiReceipts(work.editorialReview!, resource, selection);
     const pinnedHistory = wikiHistory(resource, selected);
@@ -310,7 +313,7 @@ async function readWikiHistoryUnchecked(
     const resolutions: Record<string, MergedIdentity> = {};
     for (const entity of identities) {
       if (!(await canRead(entity))) throw new WorkReadMissing('Resource is unavailable');
-      const resolution = await readMergedIdentity(work.environment, entity, canRead);
+      const resolution = await readMergedIdentity(work.environment, entity, canRead, { session: boundary.session });
       if (resolution) resolutions[entity] = resolution;
     }
     // Resolutions describe today's links; they never replace a pinned IRI/name.
@@ -324,6 +327,7 @@ async function readWikiHistoryUnchecked(
     for (const resolution of Object.values(resolutions))
       if (!(await canRead(resolution.survivor)))
         throw new WorkReadMoved('Wiki identity disclosure changed during the read');
+    await boundary.fence();
     return {
       ...disclosed,
       nextCursor: paged.nextCursor,
@@ -332,7 +336,7 @@ async function readWikiHistoryUnchecked(
       revisionSetDigest: revisionSetDigest(history.revisions),
       resolutions,
     };
-  });
+  }));
 }
 export function readWikiHistory(...args: Parameters<typeof readWikiHistoryUnchecked>) {
   return fusekiReadBudget.run(

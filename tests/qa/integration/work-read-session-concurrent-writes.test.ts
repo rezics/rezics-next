@@ -65,7 +65,7 @@ async function concurrentReadProfiles() {
   const evidence: unknown[] = [];
   const directory = join(process.env.REZICS_QA_ARTIFACT_DIR ?? '.temp/work-profiles', 'concurrent-work-reads');
   const sampleContext = new AsyncLocalStorage<{
-    path: string; attempts: number[]; opening?: { dataEpoch: string; sequence: string };
+    path: string; attempts: number[]; observedAttempts: number[]; opening?: { dataEpoch: string; sequence: string };
     reached: () => void; held: Promise<void>; paused: boolean;
     failures: Array<{ phase: string; attempt: number; query?: string; error: unknown }>;
     prefixWalks: unknown[];
@@ -77,6 +77,7 @@ async function concurrentReadProfiles() {
     let close!: () => void;
     const done = new Promise<void>(resolve => { close = resolve; });
     sample.sessions.set(session, { done, close });
+    sample.observedAttempts.push(session.attemptCount);
   };
   const failureDetail = (error: unknown): unknown => error instanceof Error
     ? { name: error.name, message: error.message, stack: error.stack,
@@ -231,19 +232,24 @@ async function concurrentReadProfiles() {
       return { instanceId: health.instanceId, publicSearchWriteEpoch: health.publicSearchWriteEpoch,
         publicSearchWriteActive: health.publicSearchWriteActive, prefixWalkAvailable: health.prefixWalkAvailable };
     };
-    const measure = async (path: string, mutate: () => Promise<unknown> = async () => {}) => {
+    const measure = async (path: string, mutate: () => Promise<unknown> = async () => {}, token?: string,
+      concurrentWrites?: () => { requested: number; durable: number; finished: number }) => {
       const searchBefore = path.startsWith('/v1/search/typeahead') ? await nativeSearchState() : undefined;
       let reached!: () => void, release!: () => void;
       const entered = new Promise<void>(resolve => { reached = resolve; });
       const held = new Promise<void>(resolve => { release = resolve; });
-      const sample = { path, attempts: [] as number[], reached, held, paused: false,
+      const sample = { path, attempts: [] as number[], observedAttempts: [] as number[], reached, held, paused: false,
         failures: [] as Array<{ phase: string; attempt: number; query?: string; error: unknown }>,
         prefixWalks: [] as unknown[],
         sessions: new Map<InstanceType<typeof WorkReadSession>, { done: Promise<void>; close: () => void }>(),
         opening: undefined as { dataEpoch: string; sequence: string } | undefined };
+      let writesAtHydration: ReturnType<NonNullable<typeof concurrentWrites>> | undefined;
+      let writesBeforeFence: typeof writesAtHydration, writesAtDelivery: typeof writesAtHydration;
       const measured = profileRequest(sink, headers => sampleContext.run(sample, async () => {
+        if (token) headers.set('authorization', `Bearer ${token}`);
         const response = await home.app.handle(new Request(`http://main.local${path}`, { headers }));
         const text = await response.text();
+        writesAtDelivery = concurrentWrites?.();
         // A search deadline can return HTTP while the canceled attempt closes
         // its mandatory authority checks. Export only after those attempts end.
         for (;;) {
@@ -260,8 +266,9 @@ async function concurrentReadProfiles() {
           throw new Error(`Read completed before hydration hook: ${JSON.stringify(result.result)}`);
         })]);
         // This sibling operation starts outside the request's trace and budget.
+        writesAtHydration = concurrentWrites?.();
         const heldAt = performance.now();
-        try { await mutate(); }
+        try { await mutate(); writesBeforeFence = concurrentWrites?.(); }
         finally { heldMs = Math.round(performance.now() - heldAt); }
       } finally { release(); }
       const result = await measured;
@@ -269,15 +276,17 @@ async function concurrentReadProfiles() {
       const attempts = result.profile.spans.filter(span => span.name === 'main.work_read.attempt').length;
       const attemptSpans = wireAttempts.get(result.profile.traceId) ?? [];
       const diagnostic = { path, result: result.result, attempts, fenceAttempts: sample.attempts,
+        observedAttempts: sample.observedAttempts,
         failures: sample.failures, attemptSpans, prefixWalks: sample.prefixWalks,
-        searchBefore, searchAfter, opening: sample.opening, heldMs };
+        searchBefore, searchAfter, opening: sample.opening, heldMs,
+        writesAtHydration, writesBeforeFence, writesAtDelivery };
       evidence.push({ ...diagnostic, profile: result.profile });
       mkdirSync(directory, { recursive: true });
       writeFileSync(join(directory, 'profiles.json'), JSON.stringify(evidence, null, 2) + '\n');
       wireAttempts.delete(result.profile.traceId);
       console.info(JSON.stringify({ path, attempts, heldMs,
         status: result.result.status, fusekiRequests: result.profile.fusekiRequests }));
-      assert.equal(attempts, Math.max(...sample.attempts),
+      assert.equal(attempts, Math.max(...sample.observedAttempts),
         `Attempt profile must describe the real sessions: ${JSON.stringify(diagnostic)}`);
       assert(result.profile.fusekiRequests !== null && result.profile.fusekiRequests > 0,
         'Request profile must include measured Fuseki calls');
@@ -292,19 +301,24 @@ async function concurrentReadProfiles() {
       target.revision = changed.revision;
     };
     const stageEdits = async (count: number) => {
+      let durableCount = 0, finishedCount = 0;
       const gates = unrelated.slice(0, count).map(target => {
         let ready!: () => void, release!: () => void, committed!: () => void, failed!: (error: unknown) => void;
         const prepared = new Promise<void>(resolve => { ready = resolve; });
         const held = new Promise<void>(resolve => { release = resolve; });
-        const durable = new Promise<void>((resolve, reject) => { committed = resolve; failed = reject; });
+        const durable = new Promise<void>((resolve, reject) => {
+          committed = () => { durableCount++; resolve(); }; failed = reject;
+        });
         const settled = commandStage.run({ ready, held, committed, failed }, async () => {
           await scalarEdit(target, target.next);
           target.next = target.next === 'unknown' ? 'no-value' : 'unknown';
+          finishedCount++;
         });
         return { prepared, durable, settled, release };
       });
       const finished = Promise.all(gates.map(gate => gate.settled));
       const committed = Promise.all(gates.map(gate => gate.durable));
+      const firstCommitted = Promise.race(gates.map(gate => gate.durable));
       // Admission, manifests and validation preparation precede the measured read;
       // every actual native dispatch remains blocked until hydration has finished.
       try {
@@ -312,7 +326,8 @@ async function concurrentReadProfiles() {
           throw new Error('API edit completed before its graph-dispatch barrier');
         })]);
       } catch (error) { gates.forEach(gate => gate.release()); throw error; }
-      return { release: () => gates.forEach(gate => gate.release()), committed, finished };
+      return { release: () => gates.forEach(gate => gate.release()), committed, firstCommitted, finished,
+        progress: () => ({ requested: count, durable: durableCount, finished: finishedCount }) };
     };
     for (const surface of surfaces) {
       // Warm retained manifests before measuring the request's physical calls.
@@ -330,8 +345,19 @@ async function concurrentReadProfiles() {
         const staged = await stageEdits(count);
         let moved: Awaited<ReturnType<typeof measure>>;
         try {
-          moved = await measure(surface.path, async () => { staged.release(); await staged.committed; });
-        } finally { staged.release(); await staged.finished; }
+          moved = await measure(surface.path, async () => {
+            assert.equal(staged.progress().durable, 0, 'Native edits must remain gated until hydration');
+            staged.release();
+            await staged.firstCommitted;
+            assert(staged.progress().durable >= 1, 'An unrelated API write must commit before the final read fence');
+          }, undefined, staged.progress);
+        } finally {
+          staged.release();
+          await Promise.all([staged.committed, staged.finished]);
+          evidence.push({ path: surface.path, concurrentWritesFinished: staged.progress() });
+        }
+        assert.deepEqual(staged.progress(), { requested: count, durable: count, finished: count },
+          'Every concurrent product API edit must durably commit and return a new Work head');
         assert.equal(moved.result.status, 200, JSON.stringify(moved.result.body));
         assert.equal(moved.attempts, 1, `${surface.name}, ${count} unrelated writes must never replay`);
         assert.equal(moved.profile.fusekiRequests, baseline.profile.fusekiRequests,
@@ -347,6 +373,53 @@ async function concurrentReadProfiles() {
       assert.equal(rated.profile.fusekiRequests, baseline.profile.fusekiRequests);
       assert.deepEqual(displayed(rated.result.body), displayed(baseline.result.body));
     }
+
+    const interestPath = '/v1/feed?sort=new&kinds=work&interests=recipes&limit=2';
+    const interestExcluded = await measure(interestPath);
+    assert.equal(interestExcluded.result.status, 200);
+    assert.deepEqual(interestExcluded.result.body.items, []);
+    const interestHead = await home.json<{ revision: string }>(await home.call('GET',
+      `/v1/works/${short(unrelatedPublic.work)}`));
+    const interestEdit = await measure(interestPath, () => scalarEdit({ work: unrelatedPublic.work,
+      revision: interestHead.revision }, 'unknown'));
+    assert.equal(interestEdit.result.status, 200, JSON.stringify(interestEdit.result.body));
+    assert.equal(interestEdit.attempts, 1, 'Editing an interest-excluded candidate must never replay');
+    assert.equal(interestEdit.profile.fusekiRequests, interestExcluded.profile.fusekiRequests);
+    assert.deepEqual(displayed(interestEdit.result.body), displayed(interestExcluded.result.body));
+
+    // Filtered sources remain retained feed candidates, but their Work heads
+    // and summaries contribute no displayed values to this reader's page.
+    await command('POST', '/v1/me/feed-feedback', {
+      actingSubject: actor, kind: 'work', target: unrelatedPublic.work, strength: 'hide',
+    });
+    const excludedPath = `/v1/feed?sort=new&kinds=work&limit=2&actingSubject=${encodeURIComponent(actor)}`;
+    const excluded = await measure(excludedPath, undefined, home.author.token);
+    assert.equal(excluded.result.status, 200);
+    assert(JSON.stringify(excluded.result.body).includes(shown.work));
+    assert(!JSON.stringify(excluded.result.body).includes(unrelatedPublic.work));
+    const excludedHead = await home.json<{ revision: string }>(await home.call('GET',
+      `/v1/works/${short(unrelatedPublic.work)}`));
+    const hiddenEdit = await measure(excludedPath, () => scalarEdit({ work: unrelatedPublic.work,
+      revision: excludedHead.revision }, 'unknown'), home.author.token);
+    assert.equal(hiddenEdit.result.status, 200, JSON.stringify(hiddenEdit.result.body));
+    assert.equal(hiddenEdit.attempts, 1, 'Editing an excluded feed candidate must never replay');
+    assert.equal(hiddenEdit.profile.fusekiRequests, excluded.profile.fusekiRequests);
+    assert.deepEqual(displayed(hiddenEdit.result.body), displayed(excluded.result.body));
+    const blockedReader = await home.provision('Blocked-source reader', home.reader.token);
+    await home.json(await home.call('PUT', '/v1/me/blocked-people', {
+      actingSubject: blockedReader, target: actor, blocked: true,
+    }, home.reader.token));
+    const blockedPath = `/v1/feed?sort=new&kinds=work&limit=2&actingSubject=${encodeURIComponent(blockedReader)}`;
+    const blocked = await measure(blockedPath, undefined, home.reader.token);
+    assert.equal(blocked.result.status, 200);
+    assert.deepEqual(blocked.result.body.items, []);
+    const blockedHead = await home.json<{ revision: string }>(await home.call('GET', `/v1/works/${short(shown.work)}`));
+    const blockedEdit = await measure(blockedPath, () => scalarEdit({ work: shown.work,
+      revision: blockedHead.revision }, 'no-value'), home.reader.token);
+    assert.equal(blockedEdit.result.status, 200, JSON.stringify(blockedEdit.result.body));
+    assert.equal(blockedEdit.attempts, 1, 'Editing a blocked actor\'s feed candidate must never replay');
+    assert.equal(blockedEdit.profile.fusekiRequests, blocked.profile.fusekiRequests);
+    assert.deepEqual(displayed(blockedEdit.result.body), displayed(blocked.result.body));
 
     const assertAffected = (sample: Awaited<ReturnType<typeof measure>>, fresh: string) => {
       if (sample.result.status === 200) {
@@ -452,6 +525,59 @@ async function concurrentReadProfiles() {
       assert(!JSON.stringify(changedList.result.body).includes(unrelatedPublic.work),
         'Home must omit the member removed during hydration');
     }
+
+    // A public Work selects one exact Structure revision. Editing its private
+    // draft keeps that selection; publishing the revision changes the page's basis.
+    const structured = await command<{ work: string; mainVersion: string }>('POST', '/v1/works', {
+      profile: 'metadata-only-v1', authoring: 'own-work', title: 'Selected structured Work race',
+      semanticTypes: ['https://schema.org/Recipe'], language: 'en', actingSubject: actor,
+    }, 201);
+    for (const [scope, action] of [[`work:edit:${structured.work}`, 'work.edit'],
+      [`work:edit:${structured.work}`, 'recipe.edit'], [`work:read:${structured.work}`, 'work.read'],
+      [`work:publish:${structured.work}`, 'work.publish'],
+      [`work:publish:${structured.work}`, 'work.withdraw-publication']] as const) await grant(scope, action);
+    const composition = await command<{ structure: string; revision: string }>('POST', '/v1/compositions', {
+      profile: 'recipe-composition', work: structured.work, mainVersion: structured.mainVersion, actingSubject: actor,
+    }, 201);
+    const structuredHead = await home.json<{ revision: string }>(await home.call('GET',
+      `/v1/works/${short(structured.work)}?actingSubject=${encodeURIComponent(actor)}`, undefined, home.author.token));
+    const publicationBody = (revision: string, expectedPublicationHead: string | null) => ({
+      profile: 'work-structure-publication-v1', operation: 'publish', work: structured.work,
+      actingSubject: actor, expectedWorkHead: structuredHead.revision,
+      expectedMainVersion: structured.mainVersion, structure: composition.structure,
+      expectedStructureHead: revision, expectedPublicationHead,
+      disclosure: 'public', rightsBasis: 'original-contribution',
+    });
+    const firstPublication = await command<{ publicationDecision: string }>('POST', '/v1/work-publications',
+      publicationBody(composition.revision, null), 201);
+    const structuredPath = `/v1/resources/${short(structured.work)}/page`;
+    const structuredBaseline = await measure(structuredPath);
+    assert.equal(structuredBaseline.result.status, 200);
+    let draftRevision = '';
+    const draftOnly = await measure(structuredPath, async () => {
+      const changed = await command<{ revision: string }>('POST', `/v1/compositions/${short(composition.structure)}/changes`, {
+        profile: 'recipe-composition', expectedHead: composition.revision, actingSubject: actor,
+        operations: [{ op: 'insert', parent: composition.structure, position: 'last', role: 'step',
+          qualifier: { type: 'recipe-step', instructionText: { value: 'Cook the refreshed recipe.', language: 'en' },
+            usesIngredient: [], media: [], scaling: 'not-scalable' } }],
+      });
+      draftRevision = changed.revision;
+    });
+    assert.equal(draftOnly.result.status, 200, JSON.stringify(draftOnly.result.body));
+    assert.equal(draftOnly.attempts, 1, 'An unselected Structure draft must not move the public Work page');
+    assert.equal(draftOnly.profile.fusekiRequests, structuredBaseline.profile.fusekiRequests);
+    assert.deepEqual(displayed(draftOnly.result.body), displayed(structuredBaseline.result.body));
+    const republished = await measure(structuredPath, () => command('POST', '/v1/work-publications',
+      publicationBody(draftRevision, firstPublication.publicationDecision), 201));
+    assertAffected(republished, structured.work);
+    if (republished.result.status === 200) {
+      const position = republished.result.body.sourcePosition as { sequence: string };
+      assert(BigInt(position.sequence) > BigInt(republished.opening!.sequence),
+        'Successful Work/Structure publication replay must open a fresh source position');
+    }
+    const selectedRecipe = await home.json<{ revision: string }>(await home.call('GET',
+      `/v1/recipes/works/${short(structured.work)}`));
+    assert.equal(selectedRecipe.revision, draftRevision, 'The published Work must select the edited Structure exactly');
   } finally {
     mkdirSync(directory, { recursive: true });
     writeFileSync(join(directory, 'profiles.json'), JSON.stringify(evidence, null, 2) + '\n');

@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import type { Pool } from 'pg';
 import { SerialStatisticsProjection } from '../src/modules/work/serial-projection.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
+import { selectedSerialFixture } from './serial-selected-fixture.ts';
 import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts';
 
 const work = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
@@ -37,6 +38,9 @@ function retainedProjection(options: { missingEvent?: boolean; missingBatch?: bo
       expect(args).toEqual([MAIN_RELAY_STREAM_SCOPE, 'epoch']);
       return { rows: [headers[1]] };
     }
+    if (sql.includes('SELECT graph_sequence::text')) {
+      return { rows: headers.filter(header => header.sequence === args?.[2]) };
+    }
     if (sql.includes('FROM relay.delivered_batch')) {
       expect(sql).toContain('ORDER BY batch.sequence LIMIT 1');
       expect(args).toEqual([MAIN_RELAY_STREAM_SCOPE, 'epoch', sequence]);
@@ -55,12 +59,14 @@ function retainedProjection(options: { missingEvent?: boolean; missingBatch?: bo
     if (sql === 'COMMIT') commits++;
     return { rows: [] };
   }, release: () => {} };
-  const access = { query: async (sql: string) => ({
-    rows: sql.includes('LEFT JOIN access.serial_summary') ? [{ ...checkpoint(), work: sequence === '0' ? null : work,
-      chapter_count: 2, word_count: '480', last_updated_at: new Date('2026-10-01T00:00:00Z') }]
-      : [checkpoint()],
-  }), connect: async () => client } as unknown as Pool;
-  return { projection: new SerialStatisticsProjection(access, relay, {} as Pool, env),
+  const f = selectedSerialFixture();
+  const access = { query: async (sql: string) => {
+    if (sql.includes('FROM access.serial_chapter')) return f.access.query(sql);
+    if (!sql.includes('LEFT JOIN access.serial_summary')) return { rows: [checkpoint()] };
+    f.state.projected = sequence !== '0'; f.state.checkpoint = sequence;
+    return f.access.query(sql);
+  }, connect: async () => client } as unknown as Pool;
+  return { projection: new SerialStatisticsProjection(access, relay, {} as Pool, f.env),
     sequence: () => sequence, commits: () => commits };
 }
 

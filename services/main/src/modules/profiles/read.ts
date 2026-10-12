@@ -385,12 +385,12 @@ export async function shelfWorks(session: WorkReadSession, works: string[]) {
 export async function readAgentWorks(session: WorkReadSession, agent: string, context?: string) {
   await readAgent(session, agent);
   const { limit, binding, after } = pageBasis(session, 'works', agent);
-  const selected = await admittedPage<ReadRow>({
+  const selected = await session.selection(`readAgentWorks:${agent}:${after}:${limit}`, probe => admittedPage<ReadRow>({
     limit,
     after: after ? { id: { type: 'uri', value: after } } : undefined,
     key: (row) => field(row, 'id'),
     fetch: (seek, size) =>
-      session.query(
+      probe.query(
         `SELECT DISTINCT ?id WHERE {
     GRAPH ${iri(GRAPHS.current)} { ?credit a rv:NativeAgentCredit ; rv:agent ${iri(agent)} ;
       rv:work ?id ; rv:creditRevision ?creditHead . }
@@ -403,7 +403,7 @@ export async function readAgentWorks(session: WorkReadSession, agent: string, co
         size,
       ),
     admit: async (rows) => {
-      const decisions = await session.disclosure(
+      const decisions = await probe.disclosure(
         rows.map((row) => ({
           owner: 'graph',
           resource: field(row, 'id'),
@@ -414,7 +414,7 @@ export async function readAgentWorks(session: WorkReadSession, agent: string, co
       );
       return rows.filter((_, index) => decisions[index] === 'visible');
     },
-  });
+  }), value => ({ page: value.page, hasMore: !!value.lookahead }));
   const page = selected.page.map((row) => field(row, 'id'));
   const cards = await shelfWorks(session, page);
   const visible = page.filter((id) => cards.has(id));
@@ -488,12 +488,12 @@ export async function readAgentCollections(session: WorkReadSession, agent: stri
   await readAgent(session, agent);
   const { limit, binding, after } = pageBasis(session, 'collections', agent);
   // Public partition precedes LIMIT: private shelves never affect cursor or count.
-  const selected = await admittedPage<ReadRow>({
+  const selected = await session.selection(`readAgentCollections:${agent}:${after}:${limit}`, probe => admittedPage<ReadRow>({
     limit,
     after: after ? { id: { type: 'uri', value: after } } : undefined,
     key: (row) => field(row, 'id'),
     fetch: (seek, size) =>
-      session.query(
+      probe.query(
         `SELECT ?id ?revision ?name ?kind ?structure WHERE {
     GRAPH ${iri(GRAPHS.current)} { ?id a rv:Collection ; rv:curator ${iri(agent)} ;
       rv:collectionState rv:Active ; rv:disclosure rv:Public ; rv:collectionHead ?revision ;
@@ -506,7 +506,7 @@ export async function readAgentCollections(session: WorkReadSession, agent: stri
         size,
       ),
     admit: async (rows) => {
-      const decisions = await session.disclosure(
+      const decisions = await probe.disclosure(
         rows.map((row) => ({
           owner: 'graph',
           resource: field(row, 'id'),
@@ -517,7 +517,7 @@ export async function readAgentCollections(session: WorkReadSession, agent: stri
       );
       return rows.filter((_, index) => decisions[index] === 'visible');
     },
-  });
+  }), value => ({ page: value.page, hasMore: !!value.lookahead }));
   // Hydration uses the same graph-position-bound rows that disclosure admitted.
   const rows = selected.page;
   if (new Set(rows.map((row) => field(row, 'id'))).size !== rows.length)

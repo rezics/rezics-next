@@ -443,6 +443,7 @@ export interface PublicStatementBatchRow {
 export async function readPublicStatementsAt(env: WorkActivationEnvironment,
   statements: readonly string[], position: { dataEpoch: string; sequence: string },
   canReadQualificationReferences?: (references: readonly string[]) => Promise<ReadonlySet<string>>,
+  session?: WorkReadSession,
 ):
   Promise<Map<string, PublicStatementBatchRow>> {
   const unique = [...new Set(statements)];
@@ -456,7 +457,7 @@ export async function readPublicStatementsAt(env: WorkActivationEnvironment,
   }
   if (unique.length === 0) return new Map();
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
-  const result = await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX rdf: <${RDF}>
+  const body = `PREFIX rv: <${RV}> PREFIX rdf: <${RDF}>
     SELECT ?epoch ?sequence ?statement ?subject ?predicate ?object ?relation ?speaker ?key ?head
       ?pin ?context ?disclosure ?manifest ?qualificationDefinition ?qualificationContext ?precision ?validFrom ?validUntil ?edition
       (GROUP_CONCAT(DISTINCT STR(?definition); separator="|") AS ?definitions)
@@ -464,7 +465,7 @@ export async function readPublicStatementsAt(env: WorkActivationEnvironment,
       (GROUP_CONCAT(DISTINCT STR(?app); separator="|") AS ?applicability) WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence .
         FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
-      FILTER(?epoch = ${lit(position.dataEpoch)} && ?sequence = ${position.sequence})
+      FILTER(?epoch = ${lit(position.dataEpoch)}${session?.fencesSelectedUnits ? '' : ` && ?sequence = ${position.sequence}`})
       VALUES ?statement { ${unique.map(iri).join(' ')} }
       GRAPH ${iri(GRAPHS.current)} {
         ?statement a rdf:Statement ; rv:statementState rv:Active ; rdf:subject ?subject ;
@@ -488,9 +489,11 @@ export async function readPublicStatementsAt(env: WorkActivationEnvironment,
         GRAPH ${iri(GRAPHS.current)} { ?context rv:disclosure ?disclosure . } }
     } GROUP BY ?epoch ?sequence ?statement ?subject ?predicate ?object ?relation ?speaker ?key ?head
       ?pin ?context ?disclosure ?manifest ?qualificationDefinition ?qualificationContext ?precision ?validFrom ?validUntil ?edition
-    LIMIT ${MAX_PUBLIC_STATEMENT_BATCH + 1}`, MAX_SEARCH_RESPONSE_BYTES,
-  );
-  const rows = result.results?.bindings ?? [];
+    LIMIT ${MAX_PUBLIC_STATEMENT_BATCH + 1}`;
+  const rows = session?.fencesSelectedUnits
+    ? await session.query(body, MAX_PUBLIC_STATEMENT_BATCH + 1,
+      rows => rows.map(({ sequence: _sequence, ...row }) => row))
+    : (await env.fuseki.query(body, MAX_SEARCH_RESPONSE_BYTES)).results?.bindings ?? [];
   if (rows.length > MAX_PUBLIC_STATEMENT_BATCH) {
     throw new StatementBatchBudgetExceeded('public Statement batch result exceeds 512 supports');
   }
@@ -529,7 +532,7 @@ export async function readPublicStatementsAt(env: WorkActivationEnvironment,
   for (const row of rows) {
     const id = row.statement?.value;
     if (!id || !unique.includes(id) || parsed.has(id)
-      || row.epoch?.value !== position.dataEpoch || row.sequence?.value !== position.sequence
+      || row.epoch?.value !== position.dataEpoch || !session?.fencesSelectedUnits && row.sequence?.value !== position.sequence
       || !row.subject || !row.predicate || !row.object || !row.relation || !row.speaker
       || !row.key || !row.head) {
       throw new StatementBatchUnavailable('public Statement batch is incomplete or ambiguous');

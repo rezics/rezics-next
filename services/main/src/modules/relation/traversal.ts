@@ -293,7 +293,21 @@ async function resolveCandidate(
 /** Fixed work budget, O(page participants + selected labels); no full catalogue scan.
  * A cursor exists only after finding a later visible row. Summary references fit one owner batch.
  * Position is rechecked after resolution so concurrent updates yield a stale page, never mixed state. */
-export async function readResourceRelations(
+export async function readResourceRelations(env: WorkActivationEnvironment,
+  input: Parameters<typeof readResourceRelationsAtPosition>[1], session?: WorkReadSession) {
+  const read = () => readResourceRelationsAtPosition(env, input, session);
+  const page = await read();
+  // The selected page includes its visible incidence/order and every delivered
+  // definition, rendering and counterpart. Re-read that bounded owner result;
+  // dataset movement alone is outside its dependency set.
+  const token = (value: Awaited<ReturnType<typeof read>>) => [value.items, value.next !== null];
+  session?.observeDependency(`relation-page:${JSON.stringify([input.resource, input.languages,
+    input.limit, input.after, input.readingPosition, input.frames])}`, token(page),
+  async () => token(await read()));
+  return page;
+}
+
+async function readResourceRelationsAtPosition(
   env: WorkActivationEnvironment,
   input: {
     resource: string;
@@ -311,6 +325,7 @@ export async function readResourceRelations(
     readingPosition?: string;
     frames?: readonly Coordinate[];
   },
+  session?: WorkReadSession,
 ) {
   checkedNativeIri(input.resource);
   if (
@@ -336,7 +351,8 @@ export async function readResourceRelations(
   if (input.visibleRecords && !(await input.visibleRecords([input.resource])).has(input.resource)) {
     throw new SemanticTargetUnavailable('resource is unavailable');
   }
-  const snapshot = await position(env);
+  const snapshot = session?.fencesSelectedUnits
+    ? { epoch: session.position.dataEpoch, sequence: session.position.sequence } : await position(env);
   let cursor: Cursor | undefined;
   if (input.after) {
     try {
@@ -528,7 +544,7 @@ export async function readResourceRelations(
       && !await input.canReadOccurrence(occurrence)) throw new StaleSemanticHead('relation availability changed');
   }
   const end = await position(env);
-  if (end.epoch !== snapshot.epoch || end.sequence !== snapshot.sequence)
+  if (end.epoch !== snapshot.epoch || !session?.fencesSelectedUnits && end.sequence !== snapshot.sequence)
     throw new StaleSemanticHead('relation page changed');
   return {
     profile: 'resource-relations-v1' as const,

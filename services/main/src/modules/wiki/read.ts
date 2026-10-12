@@ -3,14 +3,15 @@ import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { readVisibleCompositionPage } from '../collection/visible-page.ts';
 import { readCompositionHeader, type CompositionHeader } from '../structure/graph.ts';
-import { resolveTargets, targetRead, type TargetReadSession } from '../target/resolve.ts';
+import { resolveTargets, targetRead } from '../target/resolve.ts';
+import { WorkReadSession, withWorkReadSession } from '../work/read-session.ts';
 import { GRAPHS, RV, iri } from '../work/activate.ts';
 import { readZonePublication } from '../zone/publication.ts';
 import { WikiRejected } from './errors.ts';
 
 export const WIKI_READ_COST = { graphReads: 2048, graphBytes: 8_388_608, deadlineMs: 10_000,
   inventory: 512, pages: 64, targetBatch: 50 } as const;
-export interface WikiRead { work: MainWorkDependencies; session: TargetReadSession;
+export interface WikiRead { work: MainWorkDependencies; session: WorkReadSession;
   principal: VerifiedPrincipal; actingSubject: string }
 export function wikiRead<T>(work: MainWorkDependencies, principal: VerifiedPrincipal, actingSubject: string,
   operation: (read: WikiRead) => Promise<T>) {
@@ -18,24 +19,49 @@ export function wikiRead<T>(work: MainWorkDependencies, principal: VerifiedPrinc
     structureObjects: NonNullable<typeof work.structureObjects> }).structureObjects = work.structureObjects;
   return fusekiReadBudget.run({ signal: AbortSignal.timeout(WIKI_READ_COST.deadlineMs),
     callsLeft: WIKI_READ_COST.graphReads, bytesLeft: WIKI_READ_COST.graphBytes }, () =>
-    targetRead(work.environment, { access: work.access, principal, actingSubject }, session =>
-      operation({ work, session, principal, actingSubject })));
+    targetRead(work.environment, { access: work.access, principal, actingSubject }, async targetSession => {
+      const session = new WorkReadSession(work, targetSession.request, { actingSubject }, targetSession.position);
+      session.principal = principal;
+      session.query = async (body, limit, fenceRows) => {
+        const rows = await targetSession.query(body, limit);
+        const selected = (value: typeof rows) => fenceRows ? fenceRows(value) : value;
+        session.observeDependency(`wiki-target-query:${body}`, selected(rows),
+          async () => selected(await targetSession.query(body, limit)));
+        return rows;
+      };
+      session.checkDeadline = targetSession.checkDeadline;
+      return withWorkReadSession(session, async () => {
+        try {
+          const result = await operation({ work, session, principal, actingSubject });
+          await session.fenceDependencies();
+          return result;
+        } finally { await session.fenceAuthority(); }
+      });
+    }));
 }
 async function readableOwner(read: WikiRead, resource: string, type: string, state: string) {
   const rows = await read.session.query(`SELECT ?disclosure WHERE { GRAPH ${iri(GRAPHS.current)} {
     ${iri(resource)} a rv:${type} ; rv:${state} rv:Active ; rv:disclosure ?disclosure .
   } } LIMIT 2`, 2);
-  if (rows.length !== 1 || !rows[0]?.disclosure || (rows[0].disclosure.value !== `${RV}Public`
-    && !await read.work.access.canReadSemanticResource?.(read.principal, read.actingSubject, resource))) {
+  const authority = () => read.work.access.canReadSemanticResource?.(read.principal, read.actingSubject, resource)
+    ?? Promise.resolve(false);
+  const privateOwner = rows[0]?.disclosure?.value !== `${RV}Public`;
+  const admitted = !privateOwner || await authority();
+  if (rows.length !== 1 || !rows[0]?.disclosure || !admitted) {
     throw new WikiRejected('wiki_unavailable', 404);
   }
+  if (privateOwner) read.session.observeDependency(`wiki-owner-authority:${resource}`, admitted, authority);
 }
 export async function wikiScope(read: WikiRead, target: string, zone: string) {
   const [workTarget] = await resolveTargets(read.session, [target], 'collection-member');
   if (workTarget?.base !== 'work') throw new WikiRejected('wiki_target_mismatch');
   await readableOwner(read, zone, 'Zone', 'zoneState');
-  const publication = await readZonePublication(read.work.environment, zone);
-  const navigation = await readCompositionHeader(read.work.environment, publication.configuration.navigation);
+  const readNavigation = async () => (await readZonePublication(read.work.environment, zone)).configuration.navigation;
+  const navigationId = await readNavigation();
+  read.session.observeDependency(`wiki-navigation-mapping:${zone}`, navigationId, readNavigation);
+  const readNavigationHeader = () => readCompositionHeader(read.work.environment, navigationId);
+  const navigation = await readNavigationHeader();
+  read.session.observeDependency(`wiki-navigation-header:${navigationId}`, navigation, readNavigationHeader);
   if (!navigation || navigation.owner !== zone || navigation.profile !== 'zone-navigation') {
     throw new WikiRejected('wiki_unavailable', 404);
   }
@@ -54,8 +80,10 @@ export async function wikiScope(read: WikiRead, target: string, zone: string) {
     await readableOwner(read, collection, 'Collection', 'collectionState');
     const rows = await read.session.query(`SELECT ?structure WHERE { GRAPH ${iri(GRAPHS.current)} {
       ${iri(collection)} rv:structure ?structure . } } LIMIT 2`, 2);
-    const header = rows.length === 1 && rows[0]?.structure
-      ? await readCompositionHeader(read.work.environment, rows[0].structure.value) : null;
+    const structure = rows.length === 1 ? rows[0]?.structure?.value : null;
+    const readHeader = () => structure ? readCompositionHeader(read.work.environment, structure) : Promise.resolve(null);
+    const header = await readHeader();
+    read.session.observeDependency(`wiki-collection-header:${collection}`, header, readHeader);
     if (!header || header.profile !== 'collection-membership' || header.owner !== collection) {
       throw new WikiRejected('wiki_unavailable', 404);
     }
@@ -63,13 +91,13 @@ export async function wikiScope(read: WikiRead, target: string, zone: string) {
   }
   const franchise = collections.get('franchise');
   if (!franchise) throw new WikiRejected('wiki_target_mismatch');
-  const member = await read.work.environment.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.current)} {
+  const member = await read.session.query(`SELECT (EXISTS { GRAPH ${iri(GRAPHS.current)} {
     ${iri(franchise.structure)} rv:structureHead ${iri(franchise.head)} ; rv:selectedGeneration ${iri(franchise.generation)} .
     ?placement a rv:OccurrencePlacement ; rv:generation ${iri(franchise.generation)} ;
       rv:occurrenceRole rv:MemberRole ; <https://schema.org/item> ${iri(target)} .
     FILTER NOT EXISTS { ?placement rv:removedBy ?removed }
-  } }`, 1024);
-  if (member.boolean !== true) throw new WikiRejected('wiki_target_mismatch');
+  } } AS ?member) WHERE {} LIMIT 1`, 1);
+  if (member[0]?.member?.value !== 'true') throw new WikiRejected('wiki_target_mismatch');
   return { target: workTarget, collections };
 }
 

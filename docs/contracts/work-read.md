@@ -14,6 +14,14 @@ dependency must agree within an attempt. Empty selected relations are recorded
 too, so a newly created selected row cannot escape the fence. Dependencies from
 nested sessions belong to the enclosing attempt and must close before delivery.
 
+Admission scans can inspect more candidates than the page returns. The session's
+selection reader repeats that bounded admission operation and registers only the
+returned rows and whether a continuation exists. Candidate-only descriptive
+heads, payloads and summaries are excluded; an edit to them that leaves the
+selected page and continuation unchanged does not replay. Every selection probe
+still closes its authority and recovery checks. The returned rows retain their
+head tokens, and subsequent displayed hydration registers its own dependencies.
+
 ## Position and continuation
 
 `sourcePosition` is the position at which the successful attempt **started**.
@@ -21,6 +29,8 @@ It is not the final dataset position and does not promise a dataset snapshot.
 A replay opens a new position; the returned value belongs to that successful
 attempt. An unrelated write may advance the dataset while the page keeps its
 opening `sourcePosition`.
+Selected-unit search sessions read that opening position afresh on each attempt;
+they do not reuse the enclosing matching snapshot's cached position after replay.
 
 Continuation cursors bind to that opening position, the owner's selection and
 ordering, and any supplied dependency token. Removing the session-wide end
@@ -56,6 +66,16 @@ immutable pages for that header. A metadata/edition page binds the Work metadata
 head, selected edition collection revision and exact edition payload revision.
 These fences reject combinations assembled across a selected-unit mutation.
 
+Serial materialization records the selected MainVersion and Structure revision,
+plus each chapter's body revision, publication and eligibility. Delivery qualifies
+that basis against the current selected Structure and chapter tuples, and proves
+native body coverage at the retained batch's graph position. An older checkpoint
+can qualify an unchanged Work; it cannot qualify a newer Structure or chapter
+publication. The retained checkpoint is looked up after reading Access, so a
+concurrently advanced projection is not compared with an earlier global relay
+head. Existing aggregates without this basis are replayed into a qualified
+generation by the bounded serial worker.
+
 A dependency read performed directly through an owner client bypasses
 `session.query`. Its consumer must register the observed selected value and a
 reread closure, or retain the owner's explicit end check. A flag saying the
@@ -75,6 +95,10 @@ with `epoch:sequence` when `session.fencesSelectedUnits` is true. The registered
 summary dependency owns that check; independent adapters keep their position
 comparison. Resource-list and progress disclosure adapters likewise register
 their directly consumed local summaries instead of comparing dataset sequence.
+Reading-boundary admission consumes availability, type and disclosure rather
+than names or avatars. It registers that admission outcome only; the traversal
+separately registers its selected Work, Structure and occurrence rows. Editing an
+unused label or avatar does not change this admission result.
 
 The Work rating adapter rereads only its selected Context/MainVersion aggregate,
 including the reader's selected slot for mine scope. Its dependency token keeps
@@ -175,6 +199,8 @@ calls and remaining bytes cover the previous attempt's measured cost. Otherwise
 the read immediately returns typed unavailable with movement as its cause.
 Exhausting the retry count also returns typed unavailable. This preserves the
 reason for failure instead of concealing movement behind a later budget error.
+An enclosing search retry envelope preserves that terminal unavailable outcome;
+it cannot convert it back into movement and restart the exhausted Work envelope.
 The request profile records one `main.work_read.attempt` span per started
 attempt; `session.attemptCount` and Fuseki call diagnostics carry its one-based
 ordinal. One ordinary successful

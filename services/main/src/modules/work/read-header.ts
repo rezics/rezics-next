@@ -10,6 +10,7 @@ import { WorkReadMissing, WorkReadMoved, WorkReadUnavailable, publicWork, uneras
 import { readPublishedStructuredWorkSource, readWorkPublicationParents,
   type PublishedStructuredWorkSource } from './public-patterns.ts';
 import { readMetadataHeader, recordedDisplayText, selectedMetadata } from './metadata-read.ts';
+import { readSerialStatistics } from './summary-serial.ts';
 
 export type WorkCard = Static<typeof workCard>;
 export interface WorkBasis { card: WorkCard; mainRevision: string; selectedLanguage: string | null;
@@ -130,10 +131,11 @@ export async function readWorkBasis(session: WorkReadSession, work: string): Pro
     ? session.observeDependency(`language-heads:${row.main.value}`, heads, readHeads)
     : readDependencyToken(heads);
   const selected = isPublic ? chooseMainLanguage(heads, session.options.language) : null;
-  const profiles = session.fencesSelectedUnits ? await session.dependency('work-profiles', async () => {
+  const selectedProfiles = [...new Set(['work-metadata-v1', ...(row.metadataHead ? ['work-metadata-details-v1'] : []),
+    ...(session.options.localProfiles ?? [])])].sort();
+  const profiles = session.fencesSelectedUnits ? await session.dependency(`work-profiles:${JSON.stringify(selectedProfiles)}`, async () => {
     const health = await session.deps.environment.fuseki.commandHealth();
-    return [...new Set(['work-metadata-v1', ...(row.metadataHead ? ['work-metadata-details-v1'] : []),
-      ...(session.options.localProfiles ?? [])])]
+    return selectedProfiles
       .map(profile => { const digest = health.profiles[profile];
         if (!digest) throw new WorkReadUnavailable('Selected Work profile is unavailable');
         return [profile, digest]; });
@@ -142,9 +144,7 @@ export async function readWorkBasis(session: WorkReadSession, work: string): Pro
   if (summary?.status !== 'available' || summary.type !== 'work') throw new WorkReadMissing('Work is unavailable');
   const metadata = await readMetadataHeader(session, work, row.metadataHead?.value ?? null);
   const selectedMetadataValue = selectedMetadata(metadata, session.options.language);
-  const readStats = async () => (await session.deps.serialStats?.batch([work]))?.get(work) ?? null;
-  const stats = await readStats();
-  session.observeDependency(`serial-statistics:${work}`, stats, readStats);
+  const stats = (await readSerialStatistics(session, [work]))?.get(work) ?? null;
   return { card: { id: work, revision: row.head.value, mainVersion: row.main.value,
     ...(row.provisional ? { verification: row.provisional.value === 'true' ? 'unverified' as const : 'verified' as const } : {}),
     title: summary.name, cover: summary.avatar, types: [...new Set(rows.flatMap(item => item.type ? [item.type.value] : []))].sort(),

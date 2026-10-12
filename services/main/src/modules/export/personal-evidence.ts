@@ -27,6 +27,13 @@ export async function readPersonalRatingEvidence<Head extends PersonalRatingHead
   principalId: string,
   heads: readonly Head[],
 ) {
+  return session.selection(`personal-rating-evidence:${JSON.stringify([principalId, heads])}`,
+    probe => readPersonalRatingEvidenceBatch(probe, principalId, heads));
+}
+
+async function readPersonalRatingEvidenceBatch<Head extends PersonalRatingHead>(
+  session: WorkReadSession, principalId: string, heads: readonly Head[],
+) {
   if (heads.length > PERSONAL_EVIDENCE_COST.heads)
     throw new WorkReadUnavailable('Personal rating evidence exceeds its page bound');
   type Pending = {
@@ -52,18 +59,17 @@ export async function readPersonalRatingEvidence<Head extends PersonalRatingHead
       // A full page of accepted Contexts can exceed one ordinary probe's byte
       // ceiling. This exchange is still charged to the enclosing session's
       // shared call, byte and deadline budget; it receives no fresh allowance.
-      const rows =
-        (
-          await session.deps.environment.fuseki.query(
-            `${READ_PREFIX}\nSELECT * WHERE {
+      const body = `${READ_PREFIX}\nSELECT * WHERE {
         ${current.map((probe, index) => `{ { ${probe.select} } BIND(${index} AS ?ownerExportProbe) }`).join(' UNION ')}
-      } LIMIT ${bound + 1}`,
-            PERSONAL_EVIDENCE_COST.graphBatchBytes,
-          )
-        ).results?.bindings ?? [];
-      session.checkDeadline();
-      if (rows.length > bound)
-        throw new WorkReadUnavailable('Personal rating evidence exceeds its row bound');
+      } LIMIT ${bound + 1}`;
+      const readBatch = async () => {
+        const rows = (await session.deps.environment.fuseki.query(
+          body, PERSONAL_EVIDENCE_COST.graphBatchBytes)).results?.bindings ?? [];
+        session.checkDeadline();
+        if (rows.length > bound) throw new WorkReadUnavailable('Personal rating evidence exceeds its row bound');
+        return rows;
+      };
+      const rows = await readBatch();
       const grouped = current.map(() => [] as NonNullable<SparqlResult['results']>['bindings']);
       for (const row of rows) {
         const { ownerExportProbe, ...binding } = row;

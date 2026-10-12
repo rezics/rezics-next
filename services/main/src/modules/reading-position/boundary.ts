@@ -38,8 +38,9 @@ async function disclosureSummaries(session: WorkReadSession, resources: string[]
       localBasis: session.fencesSelectedUnits, settleNonAgentNameOwners: 'includingAbsent' });
   const result = await read();
   if (session.fencesSelectedUnits) {
-    const token = (batch: SummaryBatch) => [batch.generation.graph,
-      batch.generation.media?.split(':')[0] ?? null, batch.summaries];
+    const token = (batch: SummaryBatch) => batch.summaries.map(summary => [summary.reference, summary.status,
+      summary.status === 'available' ? summary.type : null,
+      summary.status === 'available' ? summary.disclosure : null]);
     session.observeDependency(`reading-disclosure:${JSON.stringify(resources)}`, token(result),
       async () => token(await read()));
   }

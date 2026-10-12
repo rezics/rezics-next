@@ -7,8 +7,8 @@ import { GRAPHS, iri } from '../work/activate.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadLimit, WorkReadMissing, WorkReadMoved,
   publicWork, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
-import { readResourceSummaries, type ResourceSummary } from '../media/summary.ts';
-import { targetSummaryReader } from '../target/resolve.ts';
+import { readResourceSummaries, type ResourceSummary, type SummaryBatch } from '../media/summary.ts';
+import { targetSummaries } from '../target/resolve.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
 import { AUTHOR_FOLLOW_KINDS, externalAuthorKey, FOLLOWS_COST, type followedAuthorsPage, type followsPage,
   type followTarget, type FollowKind } from './contract.ts';
@@ -80,9 +80,7 @@ export async function readFollowTarget(session: WorkReadSession, target: string,
   }
   const generic = !['work','realm','zone','concept'].includes(kind);
   const summary = summaries?.get(summaryId) ?? (generic
-    ? (await readResourceSummaries(session.deps.environment,session.deps.media?.store,targetSummaryReader(session),
-      { resources: [summaryId], context: DEFAULT_MEDIA_CONTEXT, language: session.options.language ?? null,
-        includeCollections: true })).summaries[0]
+    ? (await targetSummaries(session, [summaryId], { includeCollections: true })).summaries[0]
     : (await session.summaries([summaryId]))[0]);
   if (summary?.status !== 'available' || summary.disclosure !== 'public'
     || !generic && summary.type !== (kind === 'zone' ? 'realm' : kind)) throw new WorkReadMissing('Follow target is unavailable');
@@ -143,16 +141,27 @@ async function spaceFollowTargets(session: WorkReadSession, spaces: readonly str
       FILTER(BOUND(?realm) || BOUND(?zone))
     } } LIMIT ${spaces.length+1}`,spaces.length);
   if (new Set(rows.map(row => row.space?.value)).size !== rows.length) throw new WorkReadUnavailable('Space identities are ambiguous');
-  const summaries = await readResourceSummaries(session.deps.environment,session.deps.media?.store,
-    { realmReadProof: async realm => reader
-      ? await session.deps.access.realmReadProof?.(reader.principal,reader.agent,realm) ?? null : null,
+  const readSummaries = () => readResourceSummaries(session.deps.environment,session.deps.media?.store,
+    { realmReadProof: async realm => {
+      const read = async () => reader
+        ? await session.deps.access.realmReadProof?.(reader.principal,reader.agent,realm) ?? null : null;
+      const proof = await read();
+      session.observeDependency(`follow-realm-proof:${realm}:${reader?.agent ?? ''}`, proof, read);
+      return proof;
+    },
       canReadSemantic: async resource => {
         // Only Zone-only Spaces use Zone authority. A semantic grant must never
         // substitute for membership on a Space with an active Realm.
         const row = rows.find(row => !row.realm && (row.space?.value === resource || row.zone?.value === resource));
         return !!(row?.zone && reader && await session.deps.access.canReadSemanticResource?.(reader.principal, reader.agent, row.zone.value));
       } },
-    { resources: rows.map(row => (row.realm ?? row.zone)!.value),context: DEFAULT_MEDIA_CONTEXT,language: session.options.language ?? null });
+    { resources: rows.map(row => (row.realm ?? row.zone)!.value),context: DEFAULT_MEDIA_CONTEXT,
+      localBasis: session.fencesSelectedUnits, language: session.options.language ?? null });
+  const summaries = await readSummaries();
+  const summaryToken = (batch: SummaryBatch) => [batch.generation.graph,
+    batch.generation.media?.split(':')[0] ?? null, batch.summaries];
+  session.observeDependency(`follow-space-summaries:${JSON.stringify(spaces)}`, summaryToken(summaries),
+    async () => summaryToken(await readSummaries()));
   const names = new Map(summaries.summaries.map(summary => [summary.reference,summary]));
   for (const row of rows) {
     const summary = names.get((row.realm ?? row.zone)!.value);

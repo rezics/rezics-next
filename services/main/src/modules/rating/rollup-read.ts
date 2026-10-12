@@ -14,19 +14,26 @@ import { readTargetRatingContext, type TargetGrain } from './target.ts';
 import type { TargetRatingInventoryStore } from './target-inventory.ts';
 import { ROLLUP_PROFILE } from './rollup-api.ts';
 
-/** This owner's own work is fixed: one Access snapshot of every member's row and
- * the Context seal (plus a fence recheck) and two graph probes, whatever the
- * members' ratings. Acceptance is that Context read. A non-projection member is
+/** This owner's own work is fixed: an Access snapshot of the selected members
+ * and Context seal, re-read at delivery, and two graph probes, whatever the
+ * members' ratings. The selected Context is also revalidated in assembly. A non-projection member is
  * classified from the types the resolver already returned. A projection's subject
  * and frames are one probe per visibility batch, and only when the Context declares
  * acceptance. Whether a caller may read a member is the shared target resolver's
  * work and grows with the members, so it runs in sessions of at most 64 members,
  * each with its own call budget and deadline. */
-export const ROLLUP_COST = { members: MAX_ROLLUP_MEMBERS, accessSnapshots: 1, graphProbes: 2,
+export const ROLLUP_COST = { members: MAX_ROLLUP_MEMBERS, accessSnapshots: 2, graphProbes: 2,
   visibilityBatch: MAX_SUMMARY_BATCH, perMember: { graphCalls: 3, accessCheckouts: 3 } } as const;
 
 /** Runs an operation in its own read session; each call has a fresh budget and graph-position fence. */
 export type RollupReader = <T>(operation: (session: WorkReadSession) => Promise<T>) => Promise<T>;
+
+async function selectedContext(session: WorkReadSession, context: string) {
+  const read = () => readTargetRatingContext(session.deps.environment, context);
+  const value = await read();
+  session.observeDependency(`rating-rollup-context:${context}`, value, read);
+  return value;
+}
 
 type Unavailable = 'unavailable' | 'grain-mismatch' | 'needs-reconstruction' | 'unverified';
 type MemberMark = Unavailable | 'not-accepted';
@@ -148,16 +155,20 @@ async function classifyMembers(read: RollupReader, targets: readonly string[], g
 
 export async function queryRatingRollup(read: RollupReader, store: TargetRatingInventoryStore,
   input: { context: string; targets: readonly string[]; formula: RollupFormula; rank: boolean }) {
-  const context = await read(session => readTargetRatingContext(session.deps.environment, input.context));
+  const context = await read(session => selectedContext(session, input.context));
   if (!context) throw new WorkReadMissing('Target Context unavailable');
-  // One acceptance read per request: `readTargetRatingContext` already loaded the declaration.
+  // The Context owner supplies the acceptance declaration; no member population walk.
   const policy: ContextAcceptance = {
     ...(context.acceptedSubjectTypes ? { acceptedSubjectTypes: context.acceptedSubjectTypes } : {}),
     ...(context.acceptedFrameDimensions ? { acceptedFrameDimensions: context.acceptedFrameDimensions } : {}),
   };
   const verdict = await classifyMembers(read, input.targets, context.targetGrain, policy);
   const readable = input.targets.filter(target => verdict.get(target) === null);
-  return read(session => assemble(session, store, input, context, verdict, readable));
+  return read(session => {
+    session.observeDependency(`rating-rollup-admission:${JSON.stringify([input.context, input.targets])}`, verdict,
+      () => classifyMembers(read, input.targets, context.targetGrain, policy));
+    return assemble(session, store, input, context, verdict, readable);
+  });
 }
 
 /** One Access snapshot and two graph probes over the readable members. */
@@ -166,7 +177,21 @@ async function assemble(session: WorkReadSession, store: TargetRatingInventorySt
   context: NonNullable<Awaited<ReturnType<typeof readTargetRatingContext>>>,
   verdict: ReadonlyMap<string, MemberMark | null>, readable: readonly string[]) {
   const signal = AbortSignal.timeout(10_000);
-  const snapshot = await store.readMembers(input.context, readable.length ? readable : [input.targets[0]!], signal);
+  const currentContext = await selectedContext(session, input.context);
+  if (!currentContext || currentContext.contextRevision !== context.contextRevision)
+    throw new WorkReadMoved('Target Context selection changed');
+  const readSnapshot = () => store.readMembers(input.context, readable.length ? readable : [input.targets[0]!], signal);
+  const snapshot = await readSnapshot();
+  const snapshotToken = (value: typeof snapshot) => [value.contextRevision, value.realm, value.contextReceipt,
+    value.contextDataEpoch, value.contextSequence, value.recoveryGeneration,
+    readable.map(target => [target, value.members.get(target) ?? null])];
+  session.observeDependency(`rating-rollup-members:${JSON.stringify([input.context, readable])}`, snapshotToken(snapshot),
+    async () => {
+      const current = await readSnapshot();
+      if (!await store.checkFence(current.recoveryGeneration, signal))
+        throw new RatingAggregateUnavailable('Recovery fence changed');
+      return snapshotToken(current);
+    });
   if (context.contextRevision !== snapshot.contextRevision || context.realm !== snapshot.realm) {
     throw new RatingAggregateUnavailable('Target Context seal differs');
   }
@@ -177,8 +202,9 @@ async function assemble(session: WorkReadSession, store: TargetRatingInventorySt
       rv:dataEpoch ?contextEpoch ; rv:sequence ?contextSequence }
     GRAPH ${iri(GRAPHS.receipts)} { ?contextReceipt rv:ratingContext ${iri(input.context)} ;
       rv:ratingContextRevision ${iri(snapshot.contextRevision)} ; rv:outcome rv:Succeeded }
-  } LIMIT 2`, 1);
-  if (!witness || witness.epoch?.value !== session.position.dataEpoch || witness.sequence?.value !== session.position.sequence
+  } LIMIT 2`, 1, rows => rows.map(({ sequence: _sequence, ...row }) => row));
+  if (!witness || witness.epoch?.value !== session.position.dataEpoch
+    || !session.fencesSelectedUnits && witness.sequence?.value !== session.position.sequence
     || witness.contextReceipt?.value !== snapshot.contextReceipt || witness.contextEpoch?.value !== snapshot.contextDataEpoch
     || witness.contextSequence?.value !== snapshot.contextSequence) throw new WorkReadMoved('Target Context witness changed');
   // A member's last sealed write must still be its observation's live head.

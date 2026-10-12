@@ -11,7 +11,7 @@ import { GRAPHS, WORK_SEMANTIC_TYPES, iri } from '../work/activate.ts';
 import { serialStatuses, type SerialStatus } from '../work/metadata-schema.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, publicWork, WorkReadInvalid, WorkReadUnavailable,
   type WorkReadSession, type ReadRow } from '../work/read-session.ts';
-import { readSerialSummaries } from '../work/summary-serial.ts';
+import { readSerialSummaries, readSerialStatistics } from '../work/summary-serial.ts';
 import { ZONE_BROWSE_COST, type zoneBrowseQuery, type ZoneBrowseSort, zoneLengthBands } from './contract.ts';
 import { displayZoneCredits, zoneCreditNames } from './read.ts';
 
@@ -210,8 +210,8 @@ async function readBrowseBatch(session: WorkReadSession, realm: string, ids: str
     types.set(row.work.value, [...types.get(row.work.value) ?? [], row.type.value].sort());
   }
   const [summaries, stats, tags] = await Promise.all([session.summaries(visibleIds),
-    session.deps.serialStats?.batch(visibleIds, session.position.sequence)
-      ?? new Map<string, { wordCount: number | null; lastUpdatedAt: string | null }>(),
+    readSerialStatistics(session, visibleIds).then(stats =>
+      stats ?? new Map<string, { wordCount: number | null; lastUpdatedAt: string | null }>()),
     readTags(session, realm, visibleIds)]);
   if ((filter.concept?.length || filter.conceptExclude?.length) && tags.state === 'unavailable') {
     throw new WorkReadUnavailable('Zone Tags are unavailable');

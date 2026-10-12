@@ -53,6 +53,18 @@ export async function readWorkClassificationBatch(
   selectedSenses?: readonly string[],
   after?: string,
 ) {
+  // Resolution and Judgment protection may inspect hidden and lookahead rows.
+  // Their selected result owns the fence, including its scan continuation.
+  return session.selection(`work-classifications:${JSON.stringify([targets, selectedSenses, after])}`,
+    probe => readSelectedWorkClassificationBatch(probe, targets, selectedSenses, after));
+}
+
+async function readSelectedWorkClassificationBatch(
+  session: WorkReadSession,
+  targets: readonly ClassificationTarget[],
+  selectedSenses?: readonly string[],
+  after?: string,
+) {
   checkSelection(selectedSenses);
   const limit = session.options.limit ?? 20;
   if (
@@ -133,6 +145,7 @@ export async function readWorkClassificationBatch(
         : { kind: 'global' as const },
     })),
     session.position,
+    session,
   );
   const accepted = candidates.flatMap(({ target, row }, index) => {
     const result = resolved[index]!;
@@ -171,6 +184,7 @@ export async function readWorkClassificationBatch(
           ]
         : [],
     ),
+    session,
   );
   const concepts = [...new Set(accepted.map((item) => item.concept))];
   const names = new Map<string, Awaited<ReturnType<WorkReadSession['summaries']>>[number]>();

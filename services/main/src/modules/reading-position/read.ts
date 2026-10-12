@@ -1,14 +1,15 @@
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
-import { DATASET, GRAPHS, RV, iri } from '../work/activate.ts';
-import { WorkReadSession, WorkReadMoved, WorkReadUnavailable } from '../work/read-session.ts';
+import { DATASET, GRAPHS, RV, iri, lit } from '../work/activate.ts';
+import { WorkReadSession, WorkReadMoved, WorkReadUnavailable, withWorkReadSession } from '../work/read-session.ts';
 import { ReadingBoundary } from './boundary.ts';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fusekiReadBudget, FusekiReadBudgetExceeded, FusekiQueryResponseTooLarge } from '../../infrastructure/fuseki.ts';
 import { WORK_READ_COST } from '../work/read-contract.ts';
+import { withTelemetrySpan } from '@rezics/observability/runtime';
 
 /** Only read operations may use this retry envelope. Every attempt shares one
- * deadline and graph budget; a moving dataset eventually reports unavailable. */
+ * deadline and graph budget; changed selected inputs eventually report unavailable. */
 export async function boundedReadingPositionRead<T>(
   deps: MainWorkDependencies,
   request: Request,
@@ -26,6 +27,9 @@ export async function boundedReadingPositionRead<T>(
     bytes: number = WORK_READ_COST.graphBytes;
   const budget = {
     signal,
+    attempt: 1,
+    diagnostics: outer?.diagnostics,
+    deadline: outer?.deadline,
     get callsLeft() {
       return Math.min(calls, outer?.callsLeft ?? calls);
     },
@@ -46,6 +50,8 @@ export async function boundedReadingPositionRead<T>(
   try {
     return await fusekiReadBudget.run(budget, async () => {
       for (let attempt = 0; ; attempt++) {
+        const callsBefore = budget.callsLeft, bytesBefore = budget.bytesLeft;
+        budget.attempt = attempt + 1;
         try {
           signal.throwIfAborted();
           const result = await readingPositionRead(
@@ -59,7 +65,9 @@ export async function boundedReadingPositionRead<T>(
           return result;
         } catch (error) {
           if (!(error instanceof WorkReadMoved)) throw error;
-          if (attempt + 1 === WORK_READ_COST.attempts)
+          const callsUsed = callsBefore - budget.callsLeft, bytesUsed = bytesBefore - budget.bytesLeft;
+          if (attempt + 1 === WORK_READ_COST.attempts
+            || budget.callsLeft < callsUsed || budget.bytesLeft < bytesUsed)
             throw new WorkReadUnavailable(
               'A consistent reading-position read could not be obtained within its budget',
               { cause: error },
@@ -86,24 +94,35 @@ export async function boundedReadingPositionRead<T>(
 
 /** Add position filtering after the transport's existing authentication and
  * disclosure gates. This helper neither admits a reader nor changes scopes.
- * Two constant-size graph checks bracket the owner's bounded read. */
+ * The owner's selected dependencies and current authority close each attempt. */
 export async function readingPositionRead<T>(deps: MainWorkDependencies, request: Request,
   principal: VerifiedPrincipal | null, actingSubject: string | undefined,
   operation: (boundary: ReadingBoundary) => Promise<T>): Promise<T> {
   const position = async () => {
     const rows = (await deps.environment.fuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?sequence WHERE {
-      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence }
+      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence ;
+        rv:routingEpoch ${lit(deps.environment.lineage.routingEpoch)} .
+        FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
     } LIMIT 2`, 4096)).results?.bindings ?? [];
-    if (rows.length !== 1 || !rows[0]?.epoch || !rows[0].sequence) throw new WorkReadUnavailable('Reading position is unavailable');
+    if (rows.length !== 1 || rows[0]?.epoch?.value !== deps.environment.lineage.dataEpoch
+      || !/^\d+$/.test(rows[0].sequence?.value ?? '')) throw new WorkReadUnavailable('Reading position is unavailable');
     return { dataEpoch: rows[0].epoch.value, sequence: rows[0].sequence.value };
   };
-  const start = await position();
-  const session = new WorkReadSession(deps, request, { actingSubject }, start);
-  session.principal = principal;
-  const boundary = new ReadingBoundary(session);
-  const result = await operation(boundary);
-  await boundary.fence();
-  const end = await position();
-  if (start.dataEpoch !== end.dataEpoch || start.sequence !== end.sequence) throw new WorkReadMoved('Reading position changed during the read');
-  return result;
+  return withTelemetrySpan('main.work_read.attempt', async () => {
+    const start = await position();
+    const session = new WorkReadSession(deps, request, { actingSubject }, start, false,
+      fusekiReadBudget.getStore()?.attempt ?? 1);
+    session.principal = principal;
+    return withWorkReadSession(session, async () => {
+      const boundary = new ReadingBoundary(session);
+      try {
+        const result = await operation(boundary);
+        await boundary.fence();
+        const end = await position();
+        if (start.dataEpoch !== end.dataEpoch) throw new WorkReadMoved('Reading position changed during the read');
+        await session.fenceDependencies();
+        return result;
+      } finally { await session.fenceAuthority(); }
+    });
+  });
 }

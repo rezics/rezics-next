@@ -3,6 +3,8 @@ import type { Pool } from 'pg';
 import { SerialStatisticsProjection } from '../src/modules/work/serial-projection.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts';
+import { FusekiClient } from '../src/infrastructure/fuseki.ts';
+import { serialId, serialWork } from './serial-selected-fixture.ts';
 
 test('serial projection reads numeric batch 9 before 10 and advances its checkpoint', async () => {
   let advanced = '';
@@ -74,4 +76,61 @@ test('serial projection restarts at batch 1 after a data epoch change', async ()
   expect(await new SerialStatisticsProjection(access, relay, {} as Pool, env).tick()).toBe(1);
   expect(reset).toBe(true);
   expect(advanced).toBe('1');
+});
+
+test('terminal Structure commands materialize their selected head and chapters before advancing the checkpoint', async () => {
+  const structure = serialId(3), head = serialId(5), main = serialId(2);
+  const state = { currentHead: head, writes: [] as Array<{ sql: string; args?: unknown[] }> };
+  const checkpoint = { generation: 'generation', graph_epoch: 'epoch', sequence: '3' };
+  const relay = { query: async (sql: string) => ({ rows: sql.includes('max(sequence)')
+    ? [{ stream_scope: MAIN_RELAY_STREAM_SCOPE, data_epoch: 'epoch', sequence: '4' }]
+    : sql.includes('FROM relay.delivered_batch') ? [{ stream_scope: MAIN_RELAY_STREAM_SCOPE,
+      data_epoch: 'epoch', sequence: '4', event_count: 1 }]
+    : [{ envelope: { type: 'com.rezics.structure.command.v1', data: { receipt: {
+      action: 'structure.command', outcome: 'succeeded', structure, revision: head,
+      admissionId: '00000000-0000-4000-8000-000000000001' } } } }] }) } as unknown as Pool;
+  const client = { query: async (sql: string, args?: unknown[]) => {
+    state.writes.push({ sql, args });
+    return { rows: sql.includes('FROM access.serial_stats_checkpoint') ? [checkpoint] : [] };
+  }, release: () => {} };
+  const at = new Date('2026-10-01T00:00:00Z');
+  const access = { query: async (sql: string) => ({ rows: sql.includes('SELECT sealed_at') ? [{ sealed_at: at }] : [checkpoint] }),
+    connect: async () => client } as unknown as Pool;
+  const term = (value: string) => ({ type: 'uri', value });
+  const graph = new FusekiClient('http://graph.invalid/structure-command');
+  graph.query = async () => ({ results: { bindings: Array.from({ length: 3 }, (_, n) => ({
+    work: term(serialWork), main: term(main), head: term(state.currentHead), generation: term('urn:rezics:generation:selected'),
+    occurrence: term(serialId(20 + n)), chapter: term(serialId(30 + n)) })) } });
+  const env = { fuseki: graph, lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } } as WorkActivationEnvironment;
+  const projection = new SerialStatisticsProjection(access, relay, {} as Pool, env);
+  expect(await projection.tick()).toBe(1);
+  const summary = state.writes.find(write => write.sql.includes('INSERT INTO access.serial_summary'));
+  expect(summary?.args).toEqual(['generation', serialWork, structure, 3, at, main, head]);
+  expect(state.writes.filter(write => write.sql.includes('INSERT INTO access.serial_chapter'))).toHaveLength(3);
+  const advance = state.writes.findIndex(write => write.sql.includes('SET sequence ='));
+  expect(advance).toBeGreaterThan(state.writes.findIndex(write => write === summary));
+  state.writes.length = 0; state.currentHead = serialId(99);
+  expect(await projection.tick()).toBe(1);
+  expect(state.writes.some(write => write.sql.includes('INSERT INTO access.serial_summary'))).toBe(false);
+});
+
+test('a retained checkpoint that advances after the sampled relay head does not reset the projection generation', async () => {
+  const checkpoint = { generation: 'generation', graph_epoch: 'epoch', sequence: '4' };
+  const queries: string[] = [];
+  const relay = { query: async (sql: string, args?: unknown[]) => {
+    if (sql.includes('max(sequence)')) return { rows: [{ stream_scope: MAIN_RELAY_STREAM_SCOPE, data_epoch: 'epoch', sequence: '3' }] };
+    if (sql.includes('SELECT sequence::text')) {
+      expect(args).toEqual([MAIN_RELAY_STREAM_SCOPE, 'epoch', '4']);
+      return { rows: [{ sequence: '4' }] };
+    }
+    expect(args).toEqual([MAIN_RELAY_STREAM_SCOPE, 'epoch', '4']);
+    return { rows: [] };
+  } } as unknown as Pool;
+  const client = { query: async (sql: string) => {
+    queries.push(sql); return { rows: sql.includes('FROM access.serial_stats_checkpoint') ? [checkpoint] : [] };
+  }, release: () => {} };
+  const access = { query: async () => ({ rows: [checkpoint] }), connect: async () => client } as unknown as Pool;
+  const env = { lineage: { dataEpoch: 'epoch' } } as WorkActivationEnvironment;
+  expect(await new SerialStatisticsProjection(access, relay, {} as Pool, env).tick()).toBe(0);
+  expect(queries.some(sql => sql.includes('INSERT INTO access.serial_stats_checkpoint'))).toBe(false);
 });

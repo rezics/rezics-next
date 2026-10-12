@@ -18,10 +18,9 @@ import { WorkReadSession, WorkReadMoved, WorkReadMissing, WorkReadUnavailable, r
   workRead, type ReadRow } from '../src/modules/work/read-session.ts';
 import { AccountAssertionDenied } from '../src/modules/account/verify-assertion.ts';
 import { SerialStatisticsProjection } from '../src/modules/work/serial-projection.ts';
-import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts';
+import { selectedSerialFixture } from './serial-selected-fixture.ts';
 import { withSearchGraphSnapshot } from '../src/modules/search/snapshot.ts';
 import { SearchIndexUnavailable, SearchSnapshotMoved } from '../src/modules/work/search-readiness.ts';
-import type { Pool } from 'pg';
 import { DEFAULT_MEDIA_CONTEXT, type AvatarRow } from '../src/modules/media/store.ts';
 import { readWorkHeader } from '../src/modules/work/read-header.ts';
 import { readRealmThreads } from '../src/modules/realm-reply/thread-read.ts';
@@ -346,14 +345,10 @@ test('the next attempt requires the previous measured HTTP call and byte cost, p
 
 test('selected statistics survive unrelated stream lag; genuinely absent statistics remain incomplete', async () => {
   for (const present of [true, false]) {
-    const relay = { query: async () => ({ rows: [{ stream_scope: MAIN_RELAY_STREAM_SCOPE,
-      data_epoch: 'epoch', sequence: '32' }] }) } as unknown as Pool;
-    const access = { query: async () => ({ rows: [{ graph_epoch: 'epoch', generation: 'one', sequence: '1',
-      work: present ? work : null, chapter_count: 3, word_count: '400', last_updated_at: null }] }) } as unknown as Pool;
-    const f = fixture();
-    const projection = new SerialStatisticsProjection(access, relay, {} as Pool, f.deps.environment);
-    expect((await projection.batch([work])).get(work)).toEqual(present
-      ? { chapterCount: 3, wordCount: 400, lastUpdatedAt: null } : undefined);
+    const f = selectedSerialFixture();
+    f.state.relayHead = '32'; f.state.projected = present;
+    expect((await f.projection.batch([work])).get(work)).toEqual(present
+      ? { chapterCount: 2, wordCount: 480, lastUpdatedAt: '2026-10-01T00:00:00.000Z' } : undefined);
   }
 });
 

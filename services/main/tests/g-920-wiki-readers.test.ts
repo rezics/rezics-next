@@ -78,15 +78,18 @@ test('G-920: wiki entity types follow live registry admission and retirement, pr
   }
 });
 
-test('G-920: moving reading-position reads exhaust one shared retry budget and report unavailable', async () => {
+test('selected reading-position head movement exhausts one shared retry budget and reports unavailable', async () => {
   let sequence = 1,
     attempts = 0;
   const deps = {
     environment: {
+      lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' },
       fuseki: {
-        query: async () => ({
+        query: async (query: string) => ({
           results: {
-            bindings: [
+            bindings: query.includes('# selected-reading-head')
+              ? [{ head: { type: 'literal', value: String(sequence) } }]
+              : [
               {
                 epoch: { type: 'literal', value: 'epoch' },
                 sequence: { type: 'literal', value: String(sequence) },
@@ -96,6 +99,7 @@ test('G-920: moving reading-position reads exhaust one shared retry budget and r
         }),
       },
     },
+    access: { assertRecoveryOpen: async () => {} },
   } as unknown as MainWorkDependencies;
   const budgets: number[] = [];
   await expect(
@@ -104,8 +108,9 @@ test('G-920: moving reading-position reads exhaust one shared retry budget and r
       new Request('http://main.local/v1/resources/summaries'),
       null,
       undefined,
-      async () => {
+      async boundary => {
         attempts++;
+        await boundary.session.query('SELECT ?head WHERE { # selected-reading-head\n }', 1);
         const budget = fusekiReadBudget.getStore()!;
         budgets.push(budget.callsLeft);
         budget.callsLeft--;
@@ -242,12 +247,6 @@ test('G-920: claim disclosure batches source Works, preserves private grants and
     access: { canReadWork: async () => granted },
     account: {},
   } as unknown as MainWorkDependencies;
-  const session = new WorkReadSession(
-    deps,
-    new Request('http://main.local/v1/test'),
-    { actingSubject: id(9) },
-    { dataEpoch: 'epoch', sequence: '1' },
-  );
   const boundary = {
     visible: async (records: readonly string[]) =>
       new Set(records.filter((record) => record !== id(5))),
@@ -258,6 +257,8 @@ test('G-920: claim disclosure batches source Works, preserves private grants and
     [true, true],
   ]) {
     granted = hasGrant!;
+    const session = new WorkReadSession(deps, new Request('http://main.local/v1/test'),
+      { actingSubject: id(9) }, { dataEpoch: 'epoch', sequence: '1' });
     session.principal = signed ? { issuer: 'https://account.test', subject: 'reader' } : null;
     expect([
       ...(
@@ -776,14 +777,13 @@ test('published Wiki provenance never grants a private meaning Context', async (
   expect(run.grantReads).toBe(2);
 });
 
-for (const race of ['evidence-withdrawal', 'claim-permission', 'private-context-grant', 'graph-position'] as const) {
+for (const race of ['evidence-withdrawal', 'claim-permission', 'private-context-grant'] as const) {
   test(`${race} during eligible hydration refuses the final Wiki page`, async () => {
     const candidate = statementCandidate(100);
     const run = subjectReader([candidate], [wikiCitation(candidate.statementId, 300)]);
     run.absentGlobal();
     if (race === 'evidence-withdrawal') run.withdrawWiki(2);
     if (race === 'claim-permission') run.afterHydration(() => run.hideClaim());
-    if (race === 'graph-position') run.afterHydration(() => run.moveGraph());
     if (race === 'private-context-grant') {
       run.privateMeanings.add(candidate.statementId);
       run.grant(true);
@@ -797,10 +797,21 @@ for (const race of ['evidence-withdrawal', 'claim-permission', 'private-context-
       await expect(readSubjectStatements(session, run.resource)).rejects.toBeInstanceOf(WorkReadMissing);
     } else {
       await expect(readSubjectStatements(run.session(), run.resource))
-        .rejects.toBeInstanceOf(race === 'graph-position' ? WorkReadMoved : WorkReadMissing);
+        .rejects.toBeInstanceOf(race === 'claim-permission' ? WorkReadMoved : WorkReadMissing);
     }
   });
 }
+
+test('unrelated dataset movement during eligible hydration preserves the selected Wiki page and its final fence', async () => {
+  const candidate = statementCandidate(100);
+  const run = subjectReader([candidate], [wikiCitation(candidate.statementId, 300)]);
+  run.absentGlobal();
+  run.afterHydration(() => run.moveGraph());
+  const session = run.session();
+  const page = await readSubjectStatements(session, run.resource);
+  expect(page.groups[0]?.items).toMatchObject([{ statement: candidate.statementId, acceptance: null }]);
+  await session.fenceDependencies();
+});
 
 test('an eligible Statement whose current meaning changed still refuses hydration', async () => {
   const candidate = statementCandidate(100);

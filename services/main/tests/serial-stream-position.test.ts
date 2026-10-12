@@ -1,7 +1,5 @@
 import { expect, test } from 'bun:test';
-import type { Pool } from 'pg';
-import { SerialStatisticsProjection } from '../src/modules/work/serial-projection.ts';
-import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
+import { selectedSerialFixture } from './serial-selected-fixture.ts';
 import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts';
 
 const work = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
@@ -11,33 +9,15 @@ function projection(
   options: { streamScope?: string; dataEpoch?: string; checkpointEpoch?: string; checkpointSequence?: string;
     projected?: boolean } = {},
 ) {
-  const relay = {
-    query: async (sql: string, args?: unknown[]) => {
-      expect(sql).toContain('stream_scope = $1');
-      expect(sql).toContain('data_epoch = $2');
-      expect(args).toEqual([MAIN_RELAY_STREAM_SCOPE, 'epoch']);
-      return {
-        rows: [{
-          stream_scope: options.streamScope ?? MAIN_RELAY_STREAM_SCOPE,
-          data_epoch: options.dataEpoch ?? 'epoch',
-          sequence: relayHead,
-        }],
-      };
-    },
-  } as unknown as Pool;
-  const access = {
-    query: async () => ({ rows: [{
-      generation: 'generation',
-      graph_epoch: options.checkpointEpoch ?? 'epoch',
-      sequence: options.checkpointSequence ?? '3',
-      work: options.projected === false ? null : work,
-      chapter_count: 2,
-      word_count: '480',
-      last_updated_at: new Date('2026-10-01T00:00:00Z'),
-    }] }),
-  } as unknown as Pool;
-  const env = { lineage: { dataEpoch: 'epoch' } } as WorkActivationEnvironment;
-  return new SerialStatisticsProjection(access, relay, {} as Pool, env);
+  const f = selectedSerialFixture();
+  f.state.relayHead = relayHead;
+  f.state.scope = options.streamScope ?? MAIN_RELAY_STREAM_SCOPE;
+  f.state.relayEpoch = options.dataEpoch ?? 'epoch';
+  f.state.checkpointEpoch = options.checkpointEpoch ?? 'epoch';
+  f.state.checkpoint = options.checkpointSequence ?? '3';
+  f.state.projected = options.projected !== false;
+  f.state.retained = BigInt(f.state.checkpoint) <= BigInt(relayHead);
+  return f.projection;
 }
 
 test('A6: completed Main stream projection still returns statistics after graph-only position 100', async () => {

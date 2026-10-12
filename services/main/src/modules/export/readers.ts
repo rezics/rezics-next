@@ -28,7 +28,7 @@ import { referenceDisclosure, semanticReaderOnly } from '../target/disclosed-ref
 import { queryTargetRatingAggregate } from '../rating/target-aggregate.ts';
 import { queryRatingRollup } from '../rating/rollup-read.ts';
 import { resolveRatingTarget } from '../rating/target.ts';
-import { WorkReadSession, WorkReadMissing, WorkReadMoved, WorkReadUnavailable } from '../work/read-session.ts';
+import { WorkReadSession, withWorkReadSession, WorkReadMissing, WorkReadMoved, WorkReadUnavailable } from '../work/read-session.ts';
 import { ExportDenied } from './store.ts';
 import { AccountAssertionInsufficientScope } from '../account/verify-assertion.ts';
 import { RatingObservationUnavailable } from '../rating/observation.ts';
@@ -197,12 +197,24 @@ async function readExportPlanUnchecked(deps: ExportReaderDependencies, principal
         const read = <T>(
           operation: (session: WorkReadSession) => Promise<T>,
         ) => targetRead(deps.env, { principal: reader, actingSubject, access: work.access, readers: work },
-          targetSession => {
+          async targetSession => {
             const session = new WorkReadSession(work, request, { actingSubject }, targetSession.position);
             session.principal = reader;
-            session.query = targetSession.query;
+            session.query = async (body, limit, fenceRows) => {
+              const rows = await targetSession.query(body, limit);
+              const selected = (value: typeof rows) => fenceRows ? fenceRows(value) : value;
+              session.observeDependency(`export-target-query:${body}`, selected(rows),
+                async () => selected(await targetSession.query(body, limit)));
+              return rows;
+            };
             session.checkDeadline = targetSession.checkDeadline;
-            return operation(session);
+            return withWorkReadSession(session, async () => {
+              try {
+                const result = await operation(session);
+                await session.fenceDependencies();
+                return result;
+              } finally { await session.fenceAuthority(); }
+            });
           });
         if (selection.kind === 'rating-aggregate') {
           const aggregate = await read(async (session) => {

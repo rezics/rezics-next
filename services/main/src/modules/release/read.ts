@@ -139,73 +139,77 @@ async function releasePage(
     limit: number;
     after: string | undefined;
     work?: string;
-    fetch: (after: string | undefined, size: number) => Promise<ReadRow[]>;
+    binding: unknown;
+    fetch: (probe: WorkReadSession, after: string | undefined, size: number) => Promise<ReadRow[]>;
     parse: (raw: string, release: string) => AnyReleaseRecord;
   },
 ) {
-  const views = new Map<string, ReleaseView>();
-  const records = new Map<string, AnyReleaseRecord>();
-  const selected = await admittedPage<ReadRow>({
-    limit: input.limit,
-    after: input.after ? { release: { type: 'uri', value: input.after } } : undefined,
-    key: (row) => row.release!.value,
-    fetch: async (after, size) => {
-      const rows = await input.fetch(after?.release!.value, size);
-      if (rows.some((row) => !row.release || !row.revision))
-        throw new WorkReadUnavailable('Release identities are ambiguous');
-      return rows;
-    },
-    admit: async (rows) => {
-      const decisions = await session.disclosure(
-        rows.map((row) => ({
-          owner: 'graph',
-          resource: row.release!.value,
-          component: 'name',
-          revision: row.revision!.value,
-          work: input.work,
-        })),
-        'read',
-      );
-      const admitted = rows.filter((_, index) => decisions[index] === 'visible');
-      const hydrated = admitted.length
-        ? await session.query(
-            `SELECT ?release ?revision ?state WHERE {
-        VALUES (?release ?revision) { ${admitted.map((row) => `(${iri(row.release!.value)} ${iri(row.revision!.value)})`).join(' ')} }
-        GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:ReleaseRevision ; rv:component ?release ;
-          rv:modelRevision ?profile ; rv:releaseState ?state .
-          VALUES ?profile { ${iri(RELEASE_PROFILE)} ${iri(RELEASE_V2_PROFILE)} ${iri(RELEASE_V3_PROFILE)} }
-          FILTER NOT EXISTS { ?revision a rv:ErasedRevision } }
-      } LIMIT ${admitted.length + 1}`,
-            admitted.length + 1,
-          )
-        : [];
-      if (
-        hydrated.length !== admitted.length ||
-        new Set(hydrated.map((row) => row.release?.value)).size !== admitted.length
-      ) {
-        throw new WorkReadUnavailable('Release revisions are incomplete');
-      }
-      const entries = hydrated.map((row) => {
+  return session.selection(`releases:${JSON.stringify({ binding: input.binding, after: input.after, limit: input.limit })}`, async probe => {
+    const views = new Map<string, ReleaseView>();
+    const records = new Map<string, AnyReleaseRecord>();
+    const selected = await admittedPage<ReadRow>({
+      limit: input.limit,
+      after: input.after ? { release: { type: 'uri', value: input.after } } : undefined,
+      key: (row) => row.release!.value,
+      fetch: async (after, size) => {
+        const rows = await input.fetch(probe, after?.release!.value, size);
+        if (rows.some((row) => !row.release || !row.revision))
+          throw new WorkReadUnavailable('Release identities are ambiguous');
+        return rows;
+      },
+      admit: async (rows) => {
+        const decisions = await probe.disclosure(
+          rows.map((row) => ({
+            owner: 'graph',
+            resource: row.release!.value,
+            component: 'name',
+            revision: row.revision!.value,
+            work: input.work,
+          })),
+          'read',
+        );
+        const admitted = rows.filter((_, index) => decisions[index] === 'visible');
+        const hydrated = admitted.length
+          ? await probe.query(
+              `SELECT ?release ?revision ?state WHERE {
+          VALUES (?release ?revision) { ${admitted.map((row) => `(${iri(row.release!.value)} ${iri(row.revision!.value)})`).join(' ')} }
+          GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:ReleaseRevision ; rv:component ?release ;
+            rv:modelRevision ?profile ; rv:releaseState ?state .
+            VALUES ?profile { ${iri(RELEASE_PROFILE)} ${iri(RELEASE_V2_PROFILE)} ${iri(RELEASE_V3_PROFILE)} }
+            FILTER NOT EXISTS { ?revision a rv:ErasedRevision } }
+        } LIMIT ${admitted.length + 1}`,
+              admitted.length + 1,
+            )
+          : [];
         if (
-          !row.release ||
-          !row.revision ||
-          !row.state ||
-          !admitted.some(
-            (candidate) =>
-              candidate.release!.value === row.release!.value &&
-              candidate.revision!.value === row.revision!.value,
+          hydrated.length !== admitted.length ||
+          new Set(hydrated.map((row) => row.release?.value)).size !== admitted.length
+        ) {
+          throw new WorkReadUnavailable('Release revisions are incomplete');
+        }
+        const entries = hydrated.map((row) => {
+          if (
+            !row.release ||
+            !row.revision ||
+            !row.state ||
+            !admitted.some(
+              (candidate) =>
+                candidate.release!.value === row.release!.value &&
+                candidate.revision!.value === row.revision!.value,
+            )
           )
-        )
-          throw new WorkReadUnavailable('Release payload is missing');
-        const record = input.parse(row.state.value, row.release.value);
-        records.set(record.id, record);
-        return { record, revision: row.revision.value, snapshots: [] };
-      });
-      for (const view of await completeViews(session, entries)) views.set(view.id, view);
-      return admitted.filter((row) => views.has(row.release!.value));
-    },
-  });
-  return { ...selected, views, records };
+            throw new WorkReadUnavailable('Release payload is missing');
+          const record = input.parse(row.state.value, row.release.value);
+          records.set(record.id, record);
+          return { record, revision: row.revision.value, snapshots: [] };
+        });
+        for (const view of await completeViews(probe, entries)) views.set(view.id, view);
+        return admitted.filter((row) => views.has(row.release!.value));
+      },
+    });
+    return { ...selected, views, records };
+  }, value => ({ page: value.page.map(row => ({ row, view: value.views.get(row.release!.value) })),
+    hasMore: !!value.lookahead }));
 }
 
 /** At most 64 x 64 coverage entries per candidate batch, in summary groups of 64.
@@ -288,12 +292,13 @@ export async function readWorkReleases(
   const binding = ['releases', work, listed];
   const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
   const selected = await releasePage(session, {
+    binding,
     limit,
     after: cursor?.after,
     work,
     parse: (raw, release) => parseRecord(raw, work, release),
-    fetch: (after, size) =>
-      session.query(
+    fetch: (probe, after, size) =>
+      probe.query(
         `SELECT DISTINCT ?release ?revision WHERE {
     GRAPH ${iri(GRAPHS.current)} { ?release a rv:Release ; rv:work|rv:coverageWork ${iri(work)} ; rv:releaseHead ?revision .
     }
@@ -458,10 +463,11 @@ export async function readReleasesByIdentifier(session: WorkReadSession, lookup:
   const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
   const limit = session.options.limit ?? RELEASE_V2_COST.page;
   const selected = await releasePage(session, {
+    binding,
     limit,
     after: cursor?.after,
-    fetch: (after, size) =>
-      session.query(
+    fetch: (probe, after, size) =>
+      probe.query(
         `SELECT ?release ?revision WHERE {
     GRAPH ${iri(GRAPHS.current)} { ?release a rv:Release ; ${predicate} ${lit(value)} ; rv:releaseHead ?revision }
     ${after ? `FILTER(STR(?release) > ${lit(after)})` : ''}

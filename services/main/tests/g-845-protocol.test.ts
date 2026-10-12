@@ -15,7 +15,7 @@ import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { AccountAssertionDenied } from '../src/modules/account/verify-assertion.ts';
 import { PlatformClosed } from '../src/modules/access/exposure.ts';
 import { wikiRead, type WikiRead } from '../src/modules/wiki/read.ts';
-import { WorkReadMoved, WorkReadUnavailable } from '../src/modules/work/read-session.ts';
+import { WorkReadSession, WorkReadMoved, WorkReadUnavailable } from '../src/modules/work/read-session.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const protocol = resolve(root, 'packages/wiki-toolkit/protocol');
@@ -199,7 +199,9 @@ test('G-845: intake position fences reject concurrent graph changes and recovery
         sequence: { type: 'literal', value: moved && calls > 1 ? '2' : '1' } }] } };
     };
     const deps = { environment: { fuseki: graph, objectDirectory: '.temp/g-845-fence',
-      lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } } } as MainWorkDependencies;
+      lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } }, access: {
+      activePrincipalId: async () => 'holder', assertRecoveryOpen: async () => {},
+    } } as unknown as MainWorkDependencies;
     const operation = wikiRead(deps, { issuer: 'account', subject: 'holder' }, id(9),
       async read => ({ sourcePosition: read.session.position }));
     if (moved) await expect(operation).rejects.toBeInstanceOf(WorkReadMoved);
@@ -207,6 +209,33 @@ test('G-845: intake position fences reject concurrent graph changes and recovery
     graph.query = async () => ({ results: { bindings: [] } });
     await expect(wikiRead(deps, { issuer: 'account', subject: 'holder' }, id(9), async () => 'preview'))
       .rejects.toBeInstanceOf(WorkReadUnavailable);
+  }
+});
+
+test('Wiki owner adapter closes selected and nested payload dependencies plus live authority before delivery', async () => {
+  for (const movement of ['selected', 'nested', 'principal', 'recovery'] as const) {
+    let selected = id(20), nested = id(21), active = true, recoveryOpen = true;
+    const graph = new FusekiClient('http://graph.invalid/wiki-delivery');
+    const term = (value: string) => ({ type: 'literal', value });
+    graph.query = async query => ({ results: { bindings: query.includes('SELECT ?epoch ?sequence')
+      ? [{ epoch: term('epoch'), sequence: term('1') }]
+      : [{ head: term(query.includes('selected-owner') ? selected : nested) }] } });
+    const deps = { environment: { fuseki: graph, lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } },
+      access: { activePrincipalId: async () => active ? 'holder' : null,
+        assertRecoveryOpen: async () => { if (!recoveryOpen) throw new WorkReadUnavailable('Recovery hold'); } },
+    } as unknown as MainWorkDependencies;
+    const delivery = wikiRead(deps, { issuer: 'account', subject: 'holder' }, id(9), async read => {
+      await read.session.query('SELECT ?head WHERE { BIND("selected-owner" AS ?kind) }', 1);
+      const child = new WorkReadSession(deps, read.session.request, {}, read.session.position);
+      await child.query('SELECT ?head WHERE { BIND("nested-owner" AS ?kind) }', 1);
+      if (movement === 'selected') selected = id(22);
+      if (movement === 'nested') nested = id(23);
+      if (movement === 'principal') active = false;
+      if (movement === 'recovery') recoveryOpen = false;
+      return 'preview';
+    });
+    await expect(delivery).rejects.toBeInstanceOf(movement === 'principal' ? AccountAssertionDenied
+      : movement === 'recovery' ? WorkReadUnavailable : WorkReadMoved);
   }
 });
 

@@ -306,7 +306,10 @@ test('Work reads: native public/private/erased disclosure, fallback, scoped rati
     let tailCursor = next.nextCursor;
     for (let page = 0; tailCursor && page < 20; page++) {
       const tail = await json<Page<{ id: string }>>(await get(`/v1/works?limit=1&cursor=${tailCursor}`));
-      for (const item of tail.items) { expect(seen.has(item.id)).toBe(false); seen.add(item.id); }
+      for (const item of tail.items) {
+        expect([restricted.work, unreviewed.work]).not.toContain(item.id);
+        expect(seen.has(item.id)).toBe(false); seen.add(item.id);
+      }
       tailCursor = tail.nextCursor;
     }
     expect(tailCursor).toBeNull();

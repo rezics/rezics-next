@@ -5,6 +5,7 @@ import { workRead, WorkReadLimit, WorkReadMissing, WorkReadMoved, WorkReadUnavai
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { READING_STATS_COST } from './status.ts';
+import { readSerialStatistics } from '../work/summary-serial.ts';
 
 /** A private bounded aggregate. Labels describe the recorded title language,
  * not a guessed original language; page counts have no native projection yet. */
@@ -79,7 +80,7 @@ export async function readRichReadingYear(work: MainWorkDependencies, request: R
         for (const values of classified.values()) {
           for (const concept of values) if (!eligible.has(concept)) values.delete(concept);
         }
-        const chapters = await work.serialStats?.batch(ids, session.position.sequence);
+        const chapters = await readSerialStatistics(session, ids);
         return { summaries, ratings, classified, chapters };
       });
       for (const item of part.summaries) {

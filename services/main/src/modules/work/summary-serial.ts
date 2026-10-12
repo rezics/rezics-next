@@ -1,11 +1,24 @@
 import { GRAPHS, iri } from './activate.ts';
 import type { SerialStatus } from './metadata-schema.ts';
 import { readMetadataHeader, selectedMetadata } from './metadata-read.ts';
-import { WorkReadUnavailable, type WorkReadSession } from './read-session.ts';
+import { WorkReadUnavailable, readDependencyToken, type WorkReadSession } from './read-session.ts';
+import { SearchSnapshotMoved } from './search-readiness.ts';
 import { optionalPreview } from '../query/optional-preview.ts';
 
 export const EMPTY_SERIAL_SUMMARY = { tagline: null, completionStatus: null,
   chapterCount: null, wordCount: null, lastUpdatedAt: null } as const;
+
+/** Every consumer closes the selected statistics owner's materialization and
+ * live child/body disclosure, including absent and optional preview results. */
+export async function readSerialStatistics(session: WorkReadSession, works: readonly string[], preview = false) {
+  if (!session.deps.serialStats) return undefined;
+  const read = () => session.deps.serialStats?.batch(works, session.position.sequence);
+  const current = async () => preview ? await optionalPreview(session, async () => read()) : await read();
+  const stats = await current();
+  const selected = (values: typeof stats) => values == null ? null : works.map(work => [work, values.get(work) ?? null]);
+  session.observeDependency(`serial-statistics:${JSON.stringify(works)}`, selected(stats), async () => selected(await current()));
+  return stats;
+}
 
 /** Metadata is editor-owned; numeric facts are from the durable relay projection. */
 export async function readSerialSummaries(session: WorkReadSession, works: readonly string[], preview = false) {
@@ -25,8 +38,7 @@ export async function readSerialSummaries(session: WorkReadSession, works: reado
     || rows.some(row => !row.work || !works.includes(row.work.value))) {
     throw new WorkReadUnavailable('Serial summary heads are ambiguous');
   }
-  const stats = preview ? await optionalPreview(session, async () => session.deps.serialStats?.batch(works, session.position.sequence))
-    : await session.deps.serialStats?.batch(works, session.position.sequence);
+  const stats = await readSerialStatistics(session, works, preview);
   for (const row of rows) {
     const header = preview
       ? await optionalPreview(session, () => readMetadataHeader(session, row.work!.value, row.head?.value ?? null))
@@ -58,6 +70,13 @@ export async function enrichSerialSearch<T>(relation: T,
   const graphSequence = (value.sourcePosition as { sequence?: unknown }).sequence;
   const projected = stats && typeof graphSequence === 'string'
     ? await stats.batch(ids, graphSequence) : null;
+  if (stats && projected && typeof graphSequence === 'string') {
+    const current = await stats.batch(ids, graphSequence);
+    const selected = (values: typeof projected) => ids.map(work => [work, values.get(work) ?? null]);
+    if (readDependencyToken(selected(projected)) !== readDependencyToken(selected(current))) {
+      throw new SearchSnapshotMoved('Selected serial search statistics changed during hydration');
+    }
+  }
   return { ...value, results: matches.map(match => ({ ...match,
     chapterCount: projected?.get(match.work)?.chapterCount ?? null,
     wordCount: projected?.get(match.work)?.wordCount ?? null,

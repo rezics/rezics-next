@@ -87,7 +87,9 @@ function fixture(signed = false) {
   };
   configureDisclosure(environment, new DisclosureStore(pool));
   const session = new WorkReadSession(
-    { environment } as MainWorkDependencies,
+    { environment, access: {
+      activePrincipalId: async () => 'reader', assertRecoveryOpen: async () => {},
+    } } as unknown as MainWorkDependencies,
     new Request('http://main.local/v1/read'),
     { limit: 2 },
     position,
@@ -350,6 +352,9 @@ for (const signed of [false, true]) {
         return ids.slice(1).map((work) => row({ work, credit: work, role: 'author' }));
       return [];
     };
+    const graphQuery = f.graph.query.bind(f.graph);
+    f.graph.query = async query => query.includes('SELECT DISTINCT ?id') || query.includes('SELECT ?id ?revision ?name')
+      ? { results: { bindings: await f.session.query(query, 64) } } : graphQuery(query);
     const works = await readAgentWorks(f.session, agent);
     expect(works.items.map((item) => item.id)).toEqual(ids.slice(1));
     expect(works.nextCursor).toBeNull();
@@ -410,11 +415,23 @@ for (const signed of [false, true]) {
         return [2, 3].map((n) => row({ work: id(n), main: id(n + 30) }));
       return [];
     };
+    const graphQuery = f.graph.query.bind(f.graph);
+    f.graph.query = async query => {
+      if (query.includes('SELECT ?release ?revision') || query.includes('SELECT ?work ?main'))
+        return { results: { bindings: await f.session.query(query, 64) } };
+      if (query.includes('SELECT ?epoch ?sequence ?hold ?r')) {
+        const control = { epoch: term('epoch'), sequence: term('1') };
+        return { results: { bindings: [control, ...[id(2), id(3)].filter(work => query.includes(`<${work}>`))
+          .map(work => ({ ...control, r: term(work), type: term('work'), work: term(work), head: term(id(900)),
+            public: term('true'), label: { ...term('Public title'), 'xml:lang': 'en' } }))] } };
+      }
+      return graphQuery(query);
+    };
     const page = await readReleasesByIdentifier(f.session, { isbn13: '9780316371247' });
     expect(page.items.map((item) => item.id)).toEqual([id(12)]);
     expect(page.count.value).toBe(1);
     expect(page.nextCursor).toBeNull();
-    expect(f.batches).toHaveLength(1);
+    expect(f.batches).toHaveLength(2); // Release identity and its live parent-summary admission.
   });
 }
 
@@ -484,16 +501,26 @@ test('G-904: serial counts fence current child restrictions without a relay even
   const f = fixture(),
     work = id(1),
     child = id(2);
+  const variant = `urn:rezics:variant:00000000-0000-4000-8000-000000000010`;
+  const revision = `urn:rezics:content:revision:00000000-0000-4000-8000-000000000011`;
+  const publication = id(12), eligibility = id(13);
+  const queryGraph = f.environment.fuseki.query.bind(f.environment.fuseki);
+  f.environment.fuseki.query = async query => query.includes('VALUES (?work ?main ?structure)')
+    ? { results: { bindings: [row({ work, head: id(900) })] } }
+    : query.includes('SELECT ?occurrence ?variant') ? { results: { bindings: [row({ occurrence: id(3),
+      variant, revision, publication, eligibility, epoch: 'epoch', sequence: '1', public: 'true' })] } }
+    : queryGraph(query);
   const access = {
     query: async (sql: string) => ({
       rows: sql.includes('FROM access.serial_chapter')
-        ? [{ work, occurrence: id(3), resource: child, revision: null }]
+        ? [{ work, occurrence: id(3), resource: child, variant, revision, publication, eligibility }]
         : [
             {
               generation: 'g',
               graph_epoch: 'epoch',
               sequence: '1',
               work,
+              main_version: id(4), structure: id(5), structure_head: id(900),
               chapter_count: 1,
               word_count: '8',
               last_updated_at: new Date('2026-09-30T00:00:00Z'),
@@ -502,10 +529,12 @@ test('G-904: serial counts fence current child restrictions without a relay even
     }),
   } as unknown as Pool;
   let relaySequence = '1';
+  let retained = true;
   const projection = new SerialStatisticsProjection(
     access,
-    { query: async () => ({ rows: [{ stream_scope: MAIN_RELAY_STREAM_SCOPE,
-      data_epoch: 'epoch', sequence: relaySequence }] }) } as unknown as Pool,
+    { query: async (sql: string) => ({ rows: sql.includes('max(sequence)')
+      ? [{ stream_scope: MAIN_RELAY_STREAM_SCOPE, data_epoch: 'epoch', sequence: relaySequence }]
+      : retained ? [{ graph_sequence: '1' }] : [] }) } as unknown as Pool,
     {} as Pool,
     f.environment,
   );
@@ -522,8 +551,11 @@ test('G-904: serial counts fence current child restrictions without a relay even
   f.restricted.clear();
   expect((await projection.batch([work], '1')).get(work)?.chapterCount).toBe(1);
   relaySequence = '2';
+  expect((await projection.batch([work], '1')).get(work)?.chapterCount).toBe(1);
+  retained = false;
   expect(await projection.batch([work], '1')).toEqual(new Map());
   relaySequence = '1';
+  retained = true;
   f.fail();
   await expect(projection.batch([work], '1')).rejects.toThrow('Disclosure owner is unavailable');
 });

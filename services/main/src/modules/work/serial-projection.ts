@@ -34,10 +34,15 @@ interface Chapter {
   resource: string;
   variant: string | null;
   revision: string | null;
+  publication: string | null;
+  eligibility: string | null;
 }
 interface StructureSnapshot {
   structure: string;
   work: string;
+  main: string;
+  head: string;
+  generation: string;
   chapters: Chapter[] | null;
 }
 interface RelayEvent {
@@ -138,6 +143,18 @@ export class SerialStatisticsProjection {
     return row.created_at;
   }
 
+  private async structureCommandTime(receipt: Record<string, unknown>): Promise<Date> {
+    if (typeof receipt.admissionId !== 'string' || !/^[0-9a-f-]{36}$/.test(receipt.admissionId)) {
+      throw new SerialProjectionUnavailable('Structure command has no stable owner time');
+    }
+    const row = (await this.access.query<{ sealed_at: Date | null }>(
+      'SELECT sealed_at FROM access.admission WHERE id = $1::uuid AND state = $2',
+      [receipt.admissionId, 'sealed'],
+    )).rows[0];
+    if (!row?.sealed_at) throw new SerialProjectionUnavailable('Structure command owner time is unavailable');
+    return row.sealed_at;
+  }
+
   start(): void {
     if (this.timer) return;
     this.timer = setInterval(() => {
@@ -165,13 +182,13 @@ export class SerialStatisticsProjection {
       (
         await this.env.fuseki.query(
           `PREFIX rv: <${RV}>
-      PREFIX schema: <https://schema.org/> SELECT ?work ?occurrence ?chapter ?variant ?revision WHERE {
+      PREFIX schema: <https://schema.org/> SELECT ?work ?main ?head ?generation ?occurrence ?chapter ?variant ?revision ?publication ?eligibility WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(this.env.lineage.dataEpoch)} ;
         rv:routingEpoch ${lit(this.env.lineage.routingEpoch)} .
         FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
       GRAPH ${iri(GRAPHS.current)} {
-        ${iri(structure)} a rv:Structure ; rv:structureOf ?main ; rv:selectedGeneration ?generation .
-        ?main rv:work ?work .
+        ${iri(structure)} a rv:Structure ; rv:structureOf ?main ; rv:structureHead ?head ; rv:selectedGeneration ?generation .
+        ?main rv:work ?work . ?work rv:mainVersion ?main .
         OPTIONAL { ?placement a rv:OccurrencePlacement ; rv:generation ?generation ;
           rv:occurrence ?occurrence ; rv:occurrenceRole rv:ChapterRole ; schema:item ?chapter .
           FILTER NOT EXISTS { ?placement rv:removedBy ?removal }
@@ -190,10 +207,13 @@ export class SerialStatisticsProjection {
       ).results?.bindings ?? [];
     if (!rows.length) return null;
     const work = rows[0]?.work?.value;
-    if (!work || !ID.test(work) || rows.some((row) => row.work?.value !== work)) {
+    const main = rows[0]?.main?.value, head = rows[0]?.head?.value, generation = rows[0]?.generation?.value;
+    if (!work || !ID.test(work) || !main || !ID.test(main) || !head || !ID.test(head) || !generation
+      || rows.some((row) => row.work?.value !== work || row.main?.value !== main
+        || row.head?.value !== head || row.generation?.value !== generation)) {
       throw new SerialProjectionUnavailable('Structure Work relation is ambiguous');
     }
-    if (rows.length > SERIAL_COST.maxVariants) return { structure, work, chapters: null };
+    if (rows.length > SERIAL_COST.maxVariants) return { structure, work, main, head, generation, chapters: null };
     const chapters = new Map<string, Chapter>();
     for (const row of rows) {
       if (!row.occurrence) continue;
@@ -201,12 +221,14 @@ export class SerialStatisticsProjection {
         resource = row.chapter?.value;
       const variant = row.variant?.value ?? null,
         revision = row.revision?.value ?? null;
+      const publication = row.publication?.value ?? null, eligibility = row.eligibility?.value ?? null;
       if (
         !ID.test(occurrence) ||
         !resource ||
         !ID.test(resource) ||
         (variant !== null && !variant.startsWith('urn:rezics:variant:')) ||
-        (revision !== null && !CONTENT_REVISION.test(revision))
+        (revision !== null && !CONTENT_REVISION.test(revision)) || !!variant !== !!revision
+        || !!variant !== !!publication || !!variant !== !!eligibility
       ) {
         throw new SerialProjectionUnavailable('Chapter relation is incomplete');
       }
@@ -214,19 +236,20 @@ export class SerialStatisticsProjection {
       if (prior && prior.resource !== resource)
         throw new SerialProjectionUnavailable('Occurrence has two targets');
       if (!prior || (variant !== null && (prior.variant === null || variant < prior.variant))) {
-        chapters.set(occurrence, { occurrence, resource, variant, revision });
+        chapters.set(occurrence, { occurrence, resource, variant, revision, publication, eligibility });
       }
     }
     return {
       structure,
       work,
+      main, head, generation,
       chapters: chapters.size > SERIAL_COST.maxChapters ? null : [...chapters.values()],
     };
   }
 
   private async contentWord(
     receipt: Record<string, unknown>,
-  ): Promise<{ resource: string; variant: string; revision: string; words: number } | null> {
+  ): Promise<{ resource: string; variant: string; revision: string; publication: string; eligibility: string; words: number } | null> {
     const { resource, variant, contentRevision, matchUnit } = receipt;
     if (
       typeof resource !== 'string' ||
@@ -243,21 +266,22 @@ export class SerialStatisticsProjection {
     const rows =
       (
         await this.env.fuseki.query(
-          `PREFIX rv: <${RV}> SELECT ?body WHERE {
+          `PREFIX rv: <${RV}> SELECT ?body ?publication ?eligibility WHERE {
       GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ${iri(matchUnit)} a rv:MatchUnit ;
         rv:resource ${iri(resource)} ; rv:variant ${iri(variant)} ;
-        rv:revision ${iri(contentRevision)} ; rv:searchBody ?body . }
+        rv:revision ${iri(contentRevision)} ; rv:publicationDecision ?publication ; rv:eligibility ?eligibility ; rv:searchBody ?body . }
     } LIMIT 2`,
           SERIAL_COST.maxBodyCharacters * 4,
         )
       ).results?.bindings ?? [];
     if (!rows.length) return null; // The publication was superseded before this relay pass.
-    if (rows.length !== 1 || !rows[0]?.body)
+    if (rows.length !== 1 || !rows[0]?.body || !rows[0].publication || !rows[0].eligibility)
       throw new SerialProjectionUnavailable('Content match unit is ambiguous');
     return {
       resource,
       variant,
       revision: contentRevision,
+      publication: rows[0].publication.value, eligibility: rows[0].eligibility.value,
       words: countSerialWords(rows[0].body.value),
     };
   }
@@ -290,13 +314,16 @@ export class SerialStatisticsProjection {
         `SELECT generation, graph_epoch, sequence::text FROM access.serial_stats_checkpoint WHERE singleton`,
       )
     ).rows[0];
-    const reset =
-      !prior ||
-      prior.graph_epoch !== head.dataEpoch ||
-      compareRelayPositions(
+    const ahead = prior?.graph_epoch === head.dataEpoch && compareRelayPositions(
         { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: prior.graph_epoch, sequence: prior.sequence },
         head,
       ) > 0;
+    const retained = ahead ? (await this.relay.query<{ sequence: string }>(
+      `SELECT sequence::text FROM relay.delivered_batch
+        WHERE stream_scope = $1 AND data_epoch = $2 AND sequence = $3::numeric`,
+      [MAIN_RELAY_STREAM_SCOPE, prior!.graph_epoch, prior!.sequence],
+    )).rows[0]?.sequence === prior!.sequence : true;
+    const reset = !prior || prior.graph_epoch !== head.dataEpoch || !retained;
     const after = reset ? '0' : prior.sequence;
     const batch = (
       await this.relay.query<{
@@ -346,7 +373,7 @@ export class SerialStatisticsProjection {
           at: Date;
         }
     > = [];
-    const refresh = new Set<string>();
+    const refresh = new Map<string, string>();
     for (const event of events) {
       const receipt = event.envelope.data?.receipt ?? {};
       if (
@@ -354,11 +381,18 @@ export class SerialStatisticsProjection {
         receipt.action === 'structure.project' &&
         receipt.outcome === 'succeeded'
       ) {
+        const value = await this.structure(String(receipt.structure));
         prepared.push({
           kind: 'structure',
-          value: await this.structure(String(receipt.structure)),
+          value: value?.generation === receipt.generation ? value : null,
           at: await this.sourceTime(receipt, 'structure'),
         });
+      } else if (event.envelope.type === 'com.rezics.structure.command.v1'
+        && receipt.action === 'structure.command' && receipt.outcome === 'succeeded'
+        && typeof receipt.structure === 'string' && typeof receipt.revision === 'string') {
+        const value = await this.structure(receipt.structure);
+        if (value?.head === receipt.revision) prepared.push({ kind: 'structure', value,
+          at: await this.structureCommandTime(receipt) });
       } else if (
         event.envelope.type === 'com.rezics.content.projected.v1' &&
         receipt.action === 'content.project' &&
@@ -380,11 +414,11 @@ export class SerialStatisticsProjection {
         !reset
       ) {
         const rows = (
-          await this.access.query<{ structure: string }>(
-            `SELECT DISTINCT s.structure
+          await this.access.query<{ structure: string; structure_head: string }>(
+            `SELECT DISTINCT s.structure, s.structure_head
           FROM access.serial_chapter c JOIN access.serial_summary s
             ON s.generation = c.generation AND s.work = c.work
-          WHERE c.generation = $1 AND c.resource = $2 AND s.structure IS NOT NULL
+          WHERE c.generation = $1 AND c.resource = $2 AND s.structure IS NOT NULL AND s.structure_head IS NOT NULL
           LIMIT $3`,
             [prior.generation, receipt.resource, SERIAL_COST.maxAffectedWorks + 1],
           )
@@ -392,11 +426,14 @@ export class SerialStatisticsProjection {
         if (rows.length > SERIAL_COST.maxAffectedWorks) {
           throw new SerialProjectionUnavailable('Content resource belongs to too many serials');
         }
-        for (const row of rows) refresh.add(row.structure);
+        for (const row of rows) refresh.set(row.structure, row.structure_head);
       }
     }
-    for (const structure of refresh)
-      prepared.push({ kind: 'structure', value: await this.structure(structure), at: null });
+    for (const [structure, head] of refresh) {
+      const value = await this.structure(structure);
+      // A child publication refresh cannot certify an unconsumed parent edit.
+      if (value?.head === head) prepared.push({ kind: 'structure', value, at: null });
+    }
     const client = await this.access.connect();
     try {
       await client.query('BEGIN');
@@ -435,7 +472,7 @@ export class SerialStatisticsProjection {
             for (const chapter of chapters) {
               await client.query(
                 `INSERT INTO access.serial_chapter
-              (generation, work, occurrence, resource, variant, revision) VALUES ($1,$2,$3,$4,$5,$6)`,
+                (generation, work, occurrence, resource, variant, revision, publication, eligibility) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
                 [
                   generation,
                   work,
@@ -443,24 +480,26 @@ export class SerialStatisticsProjection {
                   chapter.resource,
                   chapter.variant,
                   chapter.revision,
+                  chapter.publication, chapter.eligibility,
                 ],
               );
             }
           await client.query(
             `INSERT INTO access.serial_summary
-            (generation, work, structure, chapter_count, word_count, structure_updated_at, last_updated_at)
-            VALUES ($1,$2,$3,$4,NULL,$5,$5) ON CONFLICT (generation, work)
+            (generation, work, structure, chapter_count, word_count, structure_updated_at, last_updated_at, main_version, structure_head)
+            VALUES ($1,$2,$3,$4,NULL,$5,$5,$6,$7) ON CONFLICT (generation, work)
             DO UPDATE SET chapter_count = EXCLUDED.chapter_count, word_count = NULL,
               structure = EXCLUDED.structure,
+              main_version = EXCLUDED.main_version, structure_head = EXCLUDED.structure_head,
               structure_updated_at = coalesce(EXCLUDED.structure_updated_at,
                 access.serial_summary.structure_updated_at),
               last_updated_at = coalesce(EXCLUDED.last_updated_at,
                 access.serial_summary.last_updated_at)`,
-            [generation, work, item.value.structure, chapters?.length ?? null, item.at],
+            [generation, work, item.value.structure, chapters?.length ?? null, item.at, item.value.main, item.value.head],
           );
           if (chapters) affected.add(work);
         } else if (item.kind === 'content' && item.value) {
-          const { resource, variant, revision, words } = item.value;
+          const { resource, variant, revision, words, publication, eligibility } = item.value;
           await client.query(
             `INSERT INTO access.serial_content_words
             (generation, variant, revision, word_count, updated_at) VALUES ($1,$2,$3,$4,$5)
@@ -470,9 +509,9 @@ export class SerialStatisticsProjection {
             [generation, variant, revision, words, item.at],
           );
           await client.query(
-            `UPDATE access.serial_chapter SET variant = $3, revision = $4
+            `UPDATE access.serial_chapter SET variant = $3, revision = $4, publication = $5, eligibility = $6
             WHERE generation = $1 AND resource = $2 AND (variant IS NULL OR variant >= $3)`,
-            [generation, resource, variant, revision],
+            [generation, resource, variant, revision, publication, eligibility],
           );
           const rows = (
             await client.query<{ work: string }>(
@@ -531,12 +570,16 @@ export class SerialStatisticsProjection {
       graph_epoch: string;
       sequence: string;
       work: string | null;
+      main_version: string | null;
+      structure: string | null;
+      structure_head: string | null;
       chapter_count: number | null;
       word_count: string | null;
       last_updated_at: Date | null;
     }>(
       `SELECT c.generation, c.graph_epoch,
-      c.sequence::text, s.work, s.chapter_count, s.word_count::text, s.last_updated_at
+      c.sequence::text, s.work, s.main_version, s.structure, s.structure_head,
+      s.chapter_count, s.word_count::text, s.last_updated_at
       FROM access.serial_stats_checkpoint c LEFT JOIN access.serial_summary s
         ON s.generation = c.generation AND s.work = ANY($1::text[]) WHERE c.singleton`,
       [works],
@@ -544,21 +587,35 @@ export class SerialStatisticsProjection {
     const first = result.rows[0];
     if (
       !first ||
-      first.graph_epoch !== head.dataEpoch ||
-      compareRelayPositions(
-        { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: first.graph_epoch, sequence: first.sequence },
-        head,
-      ) > 0
+      first.graph_epoch !== head.dataEpoch
     ) {
-      return new Map(); // A foreign or future checkpoint cannot certify this generation.
+      return new Map();
     }
-    // Each row is the selected Work's materialization at the checkpoint's own
-    // batch position. Later unrelated relay batches cannot make it unknown.
-    // A Work with no materialized row remains absent (the caller's incomplete
-    // result); disclosure below still qualifies every published aggregate.
+    // Look up this exact retained checkpoint AFTER the Access read. A global
+    // relay head captured earlier cannot reject a concurrently advanced row.
+    const cut = (await this.relay.query<{ graph_sequence: string | null }>(
+      `SELECT graph_sequence::text FROM relay.delivered_batch
+        WHERE stream_scope = $1 AND data_epoch = $2 AND sequence = $3::numeric`,
+      [MAIN_RELAY_STREAM_SCOPE, first.graph_epoch, first.sequence],
+    )).rows[0]?.graph_sequence;
+    if (!cut || !/^[1-9][0-9]*$/.test(cut)) return new Map();
+    const projected = result.rows.filter(row => row.work && row.main_version && row.structure && row.structure_head);
+    if (!projected.length) return new Map();
+    const heads = (await this.env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?work ?head WHERE {
+      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(this.env.lineage.dataEpoch)} ;
+        rv:routingEpoch ${lit(this.env.lineage.routingEpoch)} . FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
+      VALUES (?work ?main ?structure) { ${projected.map(row =>
+        `(${iri(row.work!)} ${iri(row.main_version!)} ${iri(row.structure!)})`).join(' ')} }
+      GRAPH ${iri(GRAPHS.current)} { ?work rv:mainVersion ?main . ?main rv:work ?work .
+        ?structure a rv:Structure ; rv:structureOf ?main ; rv:structureHead ?head }
+    } LIMIT ${projected.length + 1}`, 131_072)).results?.bindings ?? [];
+    if (heads.length > projected.length || new Set(heads.map(row => row.work?.value)).size !== heads.length) {
+      throw new SerialProjectionUnavailable('Serial selected Structure basis is ambiguous');
+    }
+    const currentHeads = new Map(heads.map(row => [row.work?.value, row.head?.value]));
     const summaries = new Map(
-      result.rows.flatMap((row) =>
-        row.work
+      projected.flatMap((row) =>
+        row.work && currentHeads.get(row.work) === row.structure_head
           ? [
               [
                 row.work,
@@ -572,7 +629,7 @@ export class SerialStatisticsProjection {
           : [],
       ),
     );
-    if (!hasDisclosure(this.env)) return summaries;
+    if (!summaries.size) return summaries;
     // Suitability heads can change without a relay event. A checkpoint alone
     // cannot certify aggregates today. Fence the materialized facts against
     // current child/occurrence/body admission; unknown means no derived count
@@ -582,14 +639,54 @@ export class SerialStatisticsProjection {
         work: string;
         occurrence: string;
         resource: string;
+        variant: string | null;
         revision: string | null;
+        publication: string | null;
+        eligibility: string | null;
       }>(
-        `SELECT work, occurrence, resource, revision
+        `SELECT work, occurrence, resource, variant, revision, publication, eligibility
       FROM access.serial_chapter WHERE generation = $1 AND work = ANY($2::text[])
       ORDER BY work, occurrence LIMIT $3`,
         [first.generation, works, SERIAL_COST.disclosureChildren + 1],
       )
     ).rows;
+    if (children.length > SERIAL_COST.disclosureChildren) return new Map();
+    const bodies = children.filter(child => summaries.has(child.work));
+    if (bodies.length) {
+      const current = (await this.env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+        SELECT ?occurrence ?variant ?revision ?publication ?eligibility ?epoch ?sequence ?public WHERE {
+        GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(this.env.lineage.dataEpoch)} ;
+          rv:routingEpoch ${lit(this.env.lineage.routingEpoch)} . FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
+        VALUES (?occurrence ?resource) { ${bodies.map(child => `(${iri(child.occurrence)} ${iri(child.resource)})`).join(' ')} }
+        OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?variant a rv:ContentVariant ; rv:resource ?resource ;
+          rv:contentPublicationHead ?publication ; rv:publicSearchEligibilityHead ?eligibility . }
+          GRAPH ${iri(GRAPHS.revisions)} { ?eligibility a rv:ContentSearchEligibilityDecision ;
+            rv:publicationDecision ?publication ; rv:disclosure rv:Public .
+            ?publication rv:contentRevision ?revision . FILTER NOT EXISTS { ?revision a rv:ErasedRevision } }
+          OPTIONAL { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?unit a rv:MatchUnit ; rv:variant ?variant ; rv:revision ?revision ;
+            rv:publicationDecision ?publication ; rv:eligibility ?eligibility ; rv:projection ?projection . }
+            GRAPH ${iri(GRAPHS.revisions)} { ?projection rv:dataEpoch ?epoch ; rv:sequence ?sequence } } }
+        BIND(EXISTS { ${publicWork('?resource', '?childMain')} } AS ?public)
+      } ORDER BY STR(?occurrence) STR(?variant) LIMIT ${SERIAL_COST.maxVariants + 1}`, 512 * 1024)).results?.bindings ?? [];
+      if (current.length > SERIAL_COST.maxVariants) return new Map();
+      for (const child of bodies) {
+        const own = current.filter(row => row.occurrence?.value === child.occurrence);
+        const row = own[0];
+        const covered = row && own.filter(value => value.variant?.value === row.variant?.value).length === 1
+          && (row.variant?.value ?? null) === child.variant
+          && (row.revision?.value ?? null) === child.revision
+          && (row.publication?.value ?? null) === child.publication && (row.eligibility?.value ?? null) === child.eligibility
+          && (child.variant ? row.epoch?.value === first.graph_epoch && /^[1-9][0-9]*$/.test(row.sequence?.value ?? '')
+            && BigInt(row.sequence!.value) <= BigInt(cut) : row.public?.value === 'true');
+        if (!covered) summaries.delete(child.work);
+      }
+    }
+    for (const row of projected) {
+      if (row.work && row.chapter_count !== null && children.filter(child => child.work === row.work).length !== row.chapter_count) {
+        summaries.delete(row.work);
+      }
+    }
+    if (!hasDisclosure(this.env)) return summaries;
     const hidden = new Set<string>();
     if (children.length > SERIAL_COST.disclosureChildren) works.forEach((work) => hidden.add(work));
     else {

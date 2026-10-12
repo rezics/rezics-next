@@ -520,13 +520,36 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
   const cutoff = window === 'all' ? 0 : asOf - (window === 'week' ? 7 : 30) * 86_400_000;
   const withinWindow = page.filter(row => row.sort_time.getTime() >= cutoff && row.sort_time.getTime() <= asOf);
   const memberRows = await store.members(session.position.dataEpoch, withinWindow.flatMap(row => row.group_members), frame);
-  const sources = await visibleFeedSources(session, memberRows);
+  // These owner filters decide whether a source can supply any card. Apply
+  // them before reading its Work, Structure, body or presentation dependencies.
+  const sources = await session.selection('feed-card-candidates', async probe => {
+    const admitted = (await visibleFeedSources(probe, memberRows)).filter(source =>
+      !personSettings?.blockedPeople.includes(source.actor)
+      && !(personal && excludedFeedSource(source, personal.exclusions))
+      && !(query.kinds && !query.kinds.includes(source.kind))
+      && !(query.realms && (!source.realm || !query.realms.includes(source.realm))));
+    await frame.cardAccess(admitted.map(source => source.actor), []);
+    const visible = admitted.filter(source => personFeedSourceVisible(source, reader?.agent ?? null,
+      personSettings?.blockedPeople ?? [], frame.hiddenReadingActors));
+    const workKinds = interests.length ? await readWorkKindMatches(probe, [...new Set(visible
+      .filter(source => matchingActivityKinds(source.kind).length === 0)
+      .flatMap(source => source.work ? [source.work] : []))]) : new Map<string, HomeInterestKind[]>();
+    const interested = visible.filter(source => matchesFeedInterest(source, interests, workKinds));
+    const tagRules = personal?.exclusions.filter(rule => rule.kind === 'tag') ?? [];
+    const senses = [...new Set([...tagRules.map(rule => rule.target), ...conceptFilter])];
+    const tagMatches = senses.length ? await readTagSets(probe, query.language, interested, senses)
+      : new Map<string, Settled<string[]>>();
+    return interested.filter(source => {
+      if (!source.work) return !conceptFilter.length;
+      const tags = senses.length ? unwrap(tagMatches.get(tagKey(source))!) : [];
+      return !tagRules.some(rule => tags.includes(rule.target) && reduced(source, rule))
+        && (!conceptFilter.length || carriesPinnedConcepts(query, tags));
+    });
+  });
   const compositionsRead = feedCompositions(session, sources.flatMap(source => source.work ? [source.work]
     : source.kind === 'collection' ? [source.target] : []));
   const repliesRead = replyExcerpts(session, sources);
   const presentationRead = feedWorkPresentations(session, sources.flatMap(source => source.work ? [source.work] : []), { frame, sources });
-  const hiddenReading = (await presentationRead, frame.hiddenReadingActors);
-  const summaryIds = [...new Set(sources.flatMap(source => [source.work, source.realm].filter((id): id is string => !!id)))];
   const more = rows.length > page.length;
   /** Groups, collapses and selects the disclosed cards. Pure over its input:
    * it assigns only to the group cards it creates. */
@@ -591,21 +614,12 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
   const kindsRead = interests.length ? readWorkKindMatches(session, [...new Set(sources
     .filter(source => matchingActivityKinds(source.kind).length === 0)
     .flatMap(source => source.work ? [source.work] : []))]) : Promise.resolve(new Map<string, HomeInterestKind[]>());
-  const summariesRead = session.summaries(summaryIds).then(list => new Map(list.map(summary => [summary.reference, summary])));
-  const tagRules = personal?.exclusions.filter(rule => rule.kind === 'tag') ?? [];
-  // Selection waits only for interest kinds and tag rules, so without them
-  // the card parts start alongside the page's presentation batches.
-  const candidatesRead = kindsRead.then(async workKinds => {
-    const filtered = sources.filter(source => personFeedSourceVisible(source, reader?.agent ?? null,
-      personSettings?.blockedPeople ?? [], hiddenReading)
-      && !(personal && excludedFeedSource(source, personal.exclusions))
-      && !(query.kinds && !query.kinds.includes(source.kind)) && matchesFeedInterest(source, interests, workKinds)
-      && !(query.realms && (!source.realm || !query.realms.includes(source.realm))));
-    const tagMatches = tagRules.length ? await readTagSets(session, query.language, filtered, tagRules.map(rule => rule.target))
-      : new Map<string, Settled<string[]>>();
-    return filtered.filter(source => !source.work || !tagRules.length
-      || !tagRules.some(rule => unwrap(tagMatches.get(tagKey(source))!).includes(rule.target) && reduced(source, rule)));
-  });
+  // Only admitted cards enter mutable payload owners. Exploratory interest and
+  // classification reads above fence their returned selection, not rejected heads.
+  const candidatesRead = Promise.resolve(sources);
+  const summariesRead = candidatesRead.then(candidates => session.summaries([...new Set(candidates
+    .flatMap(source => [source.work, source.realm].filter((id): id is string => !!id)))]))
+    .then(list => new Map(list.map(summary => [summary.reference, summary])));
   const partsRead = Promise.all([candidatesRead, compositionsRead]).then(async ([candidates, compositions]) => {
     const batch = await presentationRead;
     const types = new Map([...batch.items].map(([work,item]) => [work,item.types]));

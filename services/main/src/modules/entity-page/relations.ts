@@ -1,5 +1,5 @@
 import { readResourceRelations } from '../relation/traversal.ts';
-import { readResourceSummaries } from '../media/summary.ts';
+import { readResourceSummaries, type SummaryBatch, type SummaryReader } from '../media/summary.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
 import { referenceDisclosure } from '../target/disclosed-references.ts';
 import { targetSummaryReader } from '../target/resolve.ts';
@@ -20,6 +20,24 @@ export function includeDraftRelationPresentations(
   return 'granted' in disclosure && disclosure.granted.has(definition);
 }
 
+/** Only selected counterparts register descriptive/media values; admission
+ * probes are covered by the relation owner's selected page reread. */
+export async function readPageRelationSummaries(session: WorkReadSession, resources: string[],
+  reader: SummaryReader, selected = true) {
+  const read = () => readResourceSummaries(session.deps.environment, session.deps.media?.store, reader,
+    { resources, context: DEFAULT_MEDIA_CONTEXT, localBasis: session.fencesSelectedUnits,
+      language: null, languages: session.displayLanguages, includeCollections: true,
+      settleNonAgentNameOwners: 'includingAbsent' });
+  const batch = await read();
+  if (selected) {
+    const token = (value: SummaryBatch) => [value.generation.graph,
+      value.generation.media?.split(':')[0] ?? null, value.summaries];
+    session.observeDependency(`relation-counterpart-summaries:${JSON.stringify(resources)}`, token(batch),
+      async () => token(await read()));
+  }
+  return batch.summaries;
+}
+
 /** The same incidence inventory for a subject page and a projection page. All
  * Access, publication, disclosure and reading-position gates stay in owner reads. */
 export async function readPageRelations(session: WorkReadSession, resource: string,
@@ -31,11 +49,9 @@ export async function readPageRelations(session: WorkReadSession, resource: stri
   const canReadSemantic = (ref: string) => deps.access.canReadSemanticResource?.(
     principal, actor, ref, undefined, deps.environment.fuseki) ?? Promise.resolve(false);
   const reader = { ...targetSummaryReader(session), visibleRecords: visible };
-  const summarize = async (resources: string[]) => (await readResourceSummaries(deps.environment,
-    deps.media?.store, reader, { resources, context: DEFAULT_MEDIA_CONTEXT,
-      language: null, languages: session.displayLanguages, includeCollections: true,
-      settleNonAgentNameOwners: 'includingAbsent' })).summaries;
-  const canRead = async (ref: string) => (await canReadSemantic(ref) || (await summarize([ref]))[0]?.status === 'available')
+  const summarize = (resources: string[]) => readPageRelationSummaries(session, resources, reader);
+  const canRead = async (ref: string) => (await canReadSemantic(ref)
+    || (await readPageRelationSummaries(session, [ref], reader, false))[0]?.status === 'available')
     && (await discloseInventory(deps.environment, [{ owner: 'graph', resource: ref, component: 'record' }],
       session.viewer, 'read'))[0] === 'visible' && (await visible([ref])).has(ref);
   const result = await readResourceRelations(deps.environment, {
@@ -51,7 +67,7 @@ export async function readPageRelations(session: WorkReadSession, resource: stri
       return includeDraftRelationPresentations(disclosure, definition);
     }, summarize, visibleRecords: visible,
     readingPosition: JSON.stringify([principal, actor, await boundary.binding()]),
-  });
+  }, session);
   const evidence = await readWikiClaimEvidence(session, result.items.filter(item => item.kind === 'occurrence')
     .map(item => item.relation), 'relation', boundary);
   const projected = await projectWikiEvidence(session, [...evidence.values()].flat());

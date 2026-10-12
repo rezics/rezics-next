@@ -17,7 +17,7 @@ test('G291: public Work search matches carry projected serial facts', async () =
     return new Map([[work, { chapterCount: 3, wordCount: 14,
       lastUpdatedAt: '2026-09-27T00:00:00.000Z' }]]);
   } } as never);
-  expect(calls).toEqual([[work, '7']]);
+  expect(calls).toEqual([[work, '7'], [work, '7']]);
   expect(projected.results[0]).toMatchObject({ chapterCount: 3, wordCount: 14,
     lastUpdatedAt: '2026-09-27T00:00:00.000Z' });
 });

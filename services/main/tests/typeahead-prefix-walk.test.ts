@@ -10,7 +10,9 @@ import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts'
 import type { SourceAuthorNameStore } from '../src/modules/source/author-name.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import { PublicQueryUnavailable } from '../src/modules/work/search-budget.ts';
-import { SearchSnapshotMoved } from '../src/modules/work/search-readiness.ts';
+import { SearchSnapshotMoved, withStableSearchSnapshot } from '../src/modules/work/search-readiness.ts';
+import { WorkReadUnavailable } from '../src/modules/work/read-session.ts';
+import { WORK_READ_COST } from '../src/modules/work/read-contract.ts';
 import { searchRoutes } from '../src/routes/search.ts';
 
 const id = (number: number) => `https://rezics.com/id/00000000-0000-4000-8000-${number.toString(16).padStart(12, '0')}`;
@@ -215,7 +217,7 @@ test('native generation changes and changing hydrated disclosure refuse a partia
   const moved = fixture([nativeEntry(1)]);
   moved.state.failure = new FusekiPrefixWalkRestart('generation changed');
   await expect(readPublicTypeahead(moved.work, request(), { prefix: 'bounded' }, present))
-    .rejects.toBeInstanceOf(SearchSnapshotMoved);
+    .rejects.toBeInstanceOf(WorkReadUnavailable);
   const changed = fixture([nativeEntry(1)]);
   changed.state.changeNameOnSecondRead = true;
   await expect(readPublicTypeahead(changed.work, new Request('http://main.test/typeahead'), { prefix: 'bounded' }, present))
@@ -270,4 +272,79 @@ test('a new selected native prefix entry during hydration replays the bounded tr
   };
   const page = await readPublicTypeahead(f.work, request(), { prefix: 'bounded' }, present);
   expect(page.items).toHaveLength(2); expect(f.walks).toHaveLength(4);
+  expect(page.sourcePosition.sequence).toBe('8');
+});
+
+test('terminal Work movement remains terminal inside the enclosing search retry envelope', async () => {
+  const f = fixture([nativeEntry(1)]);
+  f.state.failure = new FusekiPrefixWalkRestart('selected traversal changed');
+  let enclosingAttempts = 0;
+  await expect(withStableSearchSnapshot(undefined, async () => {
+    enclosingAttempts++;
+    return readPublicTypeahead(f.work, request(), { prefix: 'bounded' }, present);
+  })).rejects.toBeInstanceOf(WorkReadUnavailable);
+  expect(enclosingAttempts).toBe(1);
+  expect(f.walks).toHaveLength(WORK_READ_COST.attempts);
+});
+
+test('an unshown muted candidate title edit does not replay the selected typeahead page', async () => {
+  const entries = [nativeEntry(1), nativeEntry(2)], rows = entries.map(entry => candidate(entry));
+  const f = fixture(entries, rows), original = f.fuseki.query;
+  let changed = false;
+  f.fuseki.query = async query => {
+    const result = await original(query);
+    if (f.state.summaryReads === 2 && !changed) {
+      changed = true;
+      rows[1]!.text = { ...value('Bounded edited muted title'), 'xml:lang': 'en' };
+      f.state.sequence = '8';
+    }
+    return result;
+  };
+  const page = await readPublicTypeahead(f.work, request(), { prefix: 'bounded' }, async relation => ({
+    ...relation, results: relation.results.filter(row => row.work !== rows[1]!.work!.value),
+  }));
+  expect(page.items.map(item => item.work)).toEqual([rows[0]!.work!.value]);
+  expect(page.sourcePosition.sequence).toBe('7');
+  expect(f.walks).toHaveLength(2);
+});
+
+test('a duplicate MainVersion witness outside the shown typeahead cards does not fence its text', async () => {
+  const title = nativeEntry(1), credit = nativeEntry(1, 'credit');
+  credit.matchUnit = id(9_000); credit.key = prefixWalkDirectoryKey(credit);
+  const entries = [title, ...Array.from({ length: 9 }, (_, index) => nativeEntry(index + 2, 'title', true)), credit];
+  const rows = [candidate(title), candidate(credit, 'Bounded duplicate credit')];
+  const f = fixture(entries, rows), original = f.fuseki.query;
+  let changed = false;
+  f.fuseki.query = async query => {
+    const result = await original(query);
+    if (f.walks.length === 2 && query.includes("SELECT ?epoch ?sequence WHERE") && !changed) {
+      changed = true;
+      rows[1]!.text = { ...value('Bounded edited duplicate credit'), 'xml:lang': 'en' };
+      f.state.sequence = '8';
+    }
+    return result;
+  };
+  const page = await readPublicTypeahead(f.work, request(), { prefix: 'bounded' }, present);
+  expect(page.items).toHaveLength(1);
+  expect(page.items[0]?.matchedField).toBe('title');
+  expect(page.sourcePosition.sequence).toBe('7');
+  expect(f.walks).toHaveLength(4);
+});
+
+test('selection probes do not fence source names belonging only to muted typeahead candidates', async () => {
+  const entries = [nativeEntry(1), nativeEntry(2, 'credit')], rows = entries.map(entry => candidate(entry));
+  rows[1]!.kind = value('source'); rows[1]!.key = value('/authors/OL9000A');
+  const f = fixture(entries, rows);
+  let name = 'Bounded muted author', changed = false;
+  f.work.sourceAuthorNames = { batch: async () => new Map([['/authors/OL9000A', {
+    key: '/authors/OL9000A', displayName: name, language: 'en',
+  }]]) } as unknown as SourceAuthorNameStore;
+  const page = await readPublicTypeahead(f.work, request(), { prefix: 'bounded' }, async relation => {
+    const selected = relation.results.filter(row => row.work !== rows[1]!.work!.value);
+    if (!changed) { changed = true; name = 'Bounded changed muted author'; f.state.sequence = '8'; }
+    return { ...relation, results: selected };
+  });
+  expect(page.items.map(item => item.work)).toEqual([rows[0]!.work!.value]);
+  expect(page.sourcePosition.sequence).toBe('7');
+  expect(f.walks).toHaveLength(2);
 });

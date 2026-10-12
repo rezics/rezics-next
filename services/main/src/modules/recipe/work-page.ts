@@ -282,6 +282,26 @@ export async function readRecipeHierarchyPage(input: {
   return result;
 }
 
+/** A private preview follows the live mapping and head, unlike a pinned public publication. */
+export async function readRecipePreviewGrant(session: WorkReadSession, work: string) {
+  if (!session.principal || !session.options.actingSubject) return false;
+  const read = async () => !!await session.deps.access.canReadWork(session.principal!, session.options.actingSubject!, work);
+  const allowed = await read();
+  session.observeDependency(`recipe-preview-grant:${work}:${session.options.actingSubject}`, allowed, read);
+  return allowed;
+}
+
+export async function readRecipePreviewStructure(session: WorkReadSession, mainVersion: string) {
+  const readStructure = () => compositionForMainVersion(session.deps.environment, mainVersion);
+  const structure = await readStructure();
+  session.observeDependency(`recipe-structure-mapping:${mainVersion}`, structure, readStructure);
+  if (!structure) return null;
+  const readHeader = () => readCompositionHeader(session.deps.environment, structure);
+  const header = await readHeader();
+  session.observeDependency(`recipe-structure-header:${structure}`, header, readHeader);
+  return { structure, header };
+}
+
 /** One selected Recipe revision, at most {@link RECIPE_WORK_PAGE_OCCURRENCES} occurrences. */
 export async function readRecipeWorkPage(session: WorkReadSession, work: string, servings?: number, cursor?: string) {
   if (servings !== undefined && (!Number.isInteger(servings) || servings < 1 || servings > 100)) {
@@ -289,21 +309,21 @@ export async function readRecipeWorkPage(session: WorkReadSession, work: string,
   }
   const basis = await readWorkBasis(session, work);
   // Work basis already fences visibility. A non-Recipe cannot acquire a Recipe view.
-  const type = await session.deps.environment.fuseki.query(`PREFIX rv: <${RV}> ASK {
-    GRAPH ${iri(GRAPHS.current)} { ${iri(work)} a <https://schema.org/Recipe> . } }`);
-  if (!type.boolean) { await fenceWorkBasis(session, basis); return null; }
-  const hasPrivatePreview = !!session.principal && !!session.options.actingSubject
-    && await session.deps.access.canReadWork(session.principal, session.options.actingSubject, work);
+  const readType = async () => !!(await session.deps.environment.fuseki.query(`PREFIX rv: <${RV}> ASK {
+    GRAPH ${iri(GRAPHS.current)} { ${iri(work)} a <https://schema.org/Recipe> . } }`)).boolean;
+  const isRecipe = await readType();
+  session.observeDependency(`recipe-type:${work}`, isRecipe, readType);
+  if (!isRecipe) { await fenceWorkBasis(session, basis); return null; }
+  const hasPrivatePreview = await readRecipePreviewGrant(session, work);
   if (!hasPrivatePreview && !basis.structuredPublication) {
     await fenceWorkBasis(session, basis);
     return null;
   }
   const selected = basis.structuredPublication;
-  const structure = hasPrivatePreview
-    ? await compositionForMainVersion(session.deps.environment, basis.card.mainVersion)
-    : selected!.structure;
+  const preview = hasPrivatePreview ? await readRecipePreviewStructure(session, basis.card.mainVersion) : null;
+  const structure = hasPrivatePreview ? preview?.structure : selected!.structure;
   if (!structure) { await fenceWorkBasis(session, basis); return null; }
-  const header = await readCompositionHeader(session.deps.environment, structure);
+  const header = hasPrivatePreview ? preview?.header : await readCompositionHeader(session.deps.environment, structure);
   if (!header || header.profile !== 'recipe-composition' || header.owner !== work
     || header.component !== basis.card.mainVersion
     || selected && selected.structureProfile !== `${RV}RecipeComposition`) {

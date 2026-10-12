@@ -17,6 +17,7 @@ import {
   statementMeaningKey,
 } from '../statement/schema.ts';
 import { MAX_SEARCH_RESPONSE_BYTES } from '../work/search-readiness.ts';
+import type { WorkReadSession } from '../work/read-session.ts';
 
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 export class InvalidClassificationResolution extends Error {}
@@ -44,6 +45,7 @@ export async function resolveClassifications(
   env: WorkActivationEnvironment,
   inputs: readonly ClassificationResolutionInput[],
   position?: { dataEpoch: string; sequence: string },
+  session?: WorkReadSession,
 ) {
   if (inputs.length > CLASSIFICATION_RESOLUTION_COST.candidates) {
     throw new InvalidClassificationResolution('classification batch exceeds its candidate bound');
@@ -61,6 +63,11 @@ export async function resolveClassifications(
     }
   }
   const input = inputs[0]!;
+  const selected = !!session?.fencesSelectedUnits;
+  const query = async (body: string, maxBytes: number) => selected
+    ? { results: { bindings: await session!.query(body, CLASSIFICATION_RESOLUTION_COST.candidates + 1,
+      rows => rows.map(({ sequence: _sequence, ...row }) => row)) } }
+    : env.fuseki.query(body, maxBytes);
   if (
     inputs.some((row) => JSON.stringify(row.context) !== JSON.stringify(input.context)) ||
     new Set(inputs.map((row) => `${row.work}\0${row.mainVersion}\0${row.sense}`)).size !==
@@ -91,7 +98,7 @@ export async function resolveClassifications(
   }`,
     )
     .join(' UNION ');
-  const base = await env.fuseki.query(
+  const base = await query(
     `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     SELECT ?work ?main ?sense ?epoch ?sequence ?context ?contextRevision ?senseRevision ?concept WHERE {
       GRAPH ${iri(GRAPHS.control)} {
@@ -155,7 +162,7 @@ export async function resolveClassifications(
     context = target.context!.value;
   if (
     position &&
-    (target.epoch!.value !== position.dataEpoch || target.sequence!.value !== position.sequence)
+    (target.epoch!.value !== position.dataEpoch || !selected && target.sequence!.value !== position.sequence)
   ) {
     throw new ClassificationResolutionUnavailable('classification batch position moved');
   }
@@ -212,7 +219,7 @@ export async function resolveClassifications(
   }`,
     )
     .join(' UNION ');
-  const read = await env.fuseki.query(
+  const read = await query(
     `PREFIX rv: <${RV}>
     SELECT ?index ?epoch ?sequence ?localApplication ?localDecision ?localOutcome
       ?globalApplication ?globalDecision ?globalOutcome WHERE {
@@ -240,7 +247,7 @@ export async function resolveClassifications(
     const value = (key: string) => row[key]?.value;
     if (
       value('epoch') !== target.epoch!.value ||
-      value('sequence') !== target.sequence!.value ||
+      !selected && value('sequence') !== target.sequence!.value ||
       (value('globalApplication') && (!value('globalDecision') || !value('globalOutcome'))) ||
       (value('localApplication') && (!value('localDecision') || !value('localOutcome'))) ||
       [value('localOutcome'), value('globalOutcome')].some(
@@ -285,7 +292,7 @@ export async function resolveClassifications(
       sourcePosition: {
         datasetId: 'product' as const,
         dataEpoch: target.epoch!.value,
-        sequence: target.sequence!.value,
+        sequence: selected && position ? position.sequence : target.sequence!.value,
       },
     };
   });

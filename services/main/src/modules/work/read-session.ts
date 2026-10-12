@@ -19,7 +19,7 @@ import { WORK_READ_COST } from './read-contract.ts';
 import { SearchSnapshotMoved } from './search-readiness.ts';
 import { fenceAuthorNames } from '../source/author-name-read.ts';
 import { optionalPreview } from '../query/optional-preview.ts';
-import { knownSearchPosition } from '../search/snapshot-state.ts';
+import { knownSearchPosition, searchGraphSnapshot } from '../search/snapshot-state.ts';
 import { disclosureViewer, withDisclosureViewer } from '../disclosure/viewer.ts';
 import type { Viewer } from '../suitability/policy.ts';
 import { publicLanguageRequest } from '../display-language/public-request.ts';
@@ -115,6 +115,7 @@ export function decodeReadCursor(token: string | undefined, binding: unknown, po
 
 export class WorkReadSession {
   private readonly children = new Set<WorkReadSession>();
+  private captureDependencies = true;
   /** Moving inventories own their live-row fences; every other read captures selected inputs. */
   get fencesSelectedUnits() { return !this.options.movingGraph || !!this.options.localBasis; }
   private readonly queryDependencies = new Map<string, { limit: number; token: string;
@@ -125,12 +126,31 @@ export class WorkReadSession {
   }
   observeDependency(name: string, value: unknown, read: () => Promise<unknown>): string {
     const token = readDependencyToken(value);
-    if (this.fencesSelectedUnits) {
+    if (this.fencesSelectedUnits && this.captureDependencies) {
       const previous = this.ownerDependencies.get(name);
       if (previous && previous.token !== token) throw new WorkReadMoved('Selected dependency changed');
       this.ownerDependencies.set(name, { token, read });
     }
     return token;
+  }
+  /** Admission scans may inspect many unshown candidates. Fence their selected
+   * result, rather than retaining every candidate's descriptive revision. */
+  async selection<T>(name: string, read: (probe: WorkReadSession) => Promise<T>,
+    selectedValue: (value: T) => unknown = value => value): Promise<T> {
+    const reread = async () => {
+      const probe = new WorkReadSession(this.deps, this.request, this.options, { ...this.position });
+      probe.captureDependencies = false;
+      probe.principal = this.principal;
+      probe.readingLanguages = this.readingLanguages;
+      probe.restorePriors = this.restorePriors;
+      return withWorkReadSession(probe, async () => {
+        try { return await read(probe); }
+        finally { await probe.fenceAuthority(); }
+      });
+    };
+    const value = await reread();
+    this.observeDependency(`selection:${name}`, selectedValue(value), async () => selectedValue(await reread()));
+    return value;
   }
   /** Recheck only the bounded inputs consumed by this page. Retries share its HTTP budget. */
   async fenceDependencies() {
@@ -149,7 +169,9 @@ export class WorkReadSession {
   async fenceAuthority(): Promise<void> {
     try {
       await this.fenceRealms();
-      await fenceAuthorNames(this);
+      // A selection probe's mutable attribution is part of its registered
+      // selected result, rather than a fence on every candidate it inspected.
+      if (this.captureDependencies) await fenceAuthorNames(this);
       for (const child of this.children) await child.fenceAuthority();
     } finally {
       try {
@@ -218,7 +240,10 @@ export class WorkReadSession {
   constructor(readonly deps: MainWorkDependencies, readonly request: Request, readonly options: ReadOptions,
     readonly position: ReadPosition, readonly graphSnapshotFenced = false, readonly attemptCount = 1) {
     const parent = activeReadSession.getStore();
-    if (parent?.position === position) parent.children.add(this);
+    if (parent?.position === position) {
+      parent.children.add(this);
+      this.captureDependencies = parent.captureDependencies;
+    }
   }
 
   async query(body: string, limit: number, fenceRows?: (rows: readonly ReadRow[]) => ReadRow[]): Promise<ReadRow[]> {
@@ -226,7 +251,7 @@ export class WorkReadSession {
     const rows = (await this.deps.environment.fuseki.query(`${READ_PREFIX}\n${body}`,
       WORK_READ_COST.queryBytes)).results?.bindings ?? [];
     if (rows.length > limit) throw new WorkReadLimit('Read exceeds its bounded relation');
-    if (this.fencesSelectedUnits) {
+    if (this.fencesSelectedUnits && this.captureDependencies) {
       const token = readRowsToken(fenceRows ? fenceRows(rows) : rows), prior = this.queryDependencies.get(body);
       if (prior && prior.token !== token) throw new WorkReadMoved('Selected head changed');
       this.queryDependencies.set(body, { limit, token, fenceRows });
@@ -245,7 +270,7 @@ export class WorkReadSession {
     const summaryMedia = media ? {
       avatarRows: async (...args: Parameters<typeof media.avatarRows>) => {
         const row = optionalMedia ? await optionalPreview(this, () => media.avatarRows(...args)) : await media.avatarRows(...args);
-        if (row) {
+        if (row && this.captureDependencies) {
           const prior = this.avatarSnapshots.get(args[1]);
           const captured = prior ?? { epoch: row.generation.dataEpoch, rows: new Map<string,string>(), targets: new Set<string>() };
           if (captured.epoch !== row.generation.dataEpoch) throw new WorkReadMoved('Media owner changed');
@@ -268,7 +293,7 @@ export class WorkReadSession {
       for (const [work, revision] of revisions) this.workRevisions.set(work, revision);
     };
     rememberWorkRevisions(result.workRevisions);
-    if (this.fencesSelectedUnits) {
+    if (this.fencesSelectedUnits && this.captureDependencies) {
       const key = `summaries:${JSON.stringify(resources)}`;
       const token = readDependencyToken([result.generation.graph, result.generation.media?.split(':')[0] ?? null, result.summaries]);
       const previous = this.ownerDependencies.get(key);
@@ -278,7 +303,7 @@ export class WorkReadSession {
         rememberWorkRevisions(fresh.workRevisions);
         return [fresh.generation.graph, fresh.generation.media?.split(':')[0] ?? null, fresh.summaries];
       } });
-    } else if (result.generation.graph !== `${this.position.dataEpoch}:${this.position.sequence}`) {
+    } else if (!this.fencesSelectedUnits && result.generation.graph !== `${this.position.dataEpoch}:${this.position.sequence}`) {
       if (this.options.movingGraph && result.generation.graph.startsWith(`${this.position.dataEpoch}:`)) {
         this.stale = true;
         return result.summaries;
@@ -365,6 +390,10 @@ async function position(deps: MainWorkDependencies, fresh = false, restoreLineag
   return { dataEpoch: epoch, sequence, priors };
 }
 
+export function withWorkReadSession<T>(session: WorkReadSession, operation: () => Promise<T>): Promise<T> {
+  return activeReadSession.run(session, () => withDisclosureViewer(session.viewer, operation));
+}
+
 /** Public inventories retain live Account age/preferences without adopting bearer authority. */
 export async function publicWorkRead<T>(deps: MainWorkDependencies, request: Request,
   options: Omit<ReadOptions, 'actingSubject' | 'publicViewer'>,
@@ -410,7 +439,8 @@ export async function workRead<T>(deps: MainWorkDependencies, request: Request, 
         budget.attempt = attempt + 1;
         try {
           return await withTelemetrySpan('main.work_read.attempt', async () => {
-            const located = await position(deps, options.localBasis, url.searchParams.get('sort') === 'new');
+            const located = await position(deps, options.localBasis
+              || searchGraphSnapshot.getStore()?.graphBasis === 'selected-units', url.searchParams.get('sort') === 'new');
             const session = new WorkReadSession(deps, request, options,
               { dataEpoch: located.dataEpoch, sequence: located.sequence }, false, attempt + 1);
             session.restorePriors = located.priors;

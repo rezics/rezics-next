@@ -12,7 +12,7 @@ import { parsedMetadataState } from '../work/metadata-read.ts';
 import { PublicQueryBudgetExceeded, PublicQueryUnavailable } from '../work/search-budget.ts';
 import { SearchSnapshotMoved } from '../work/search-readiness.ts';
 import { phraseWorkTypes } from '../work/search-facets.ts';
-import { WorkReadMoved, WorkReadUnavailable, workRead, type WorkReadSession } from '../work/read-session.ts';
+import { WorkReadMoved, workRead, type WorkReadSession } from '../work/read-session.ts';
 import { currentDisclosureViewer } from '../disclosure/viewer.ts';
 import { discloseSearchMatches } from '../disclosure/search.ts';
 import { publicLanguageRequest } from '../display-language/public-request.ts';
@@ -22,7 +22,6 @@ import { matchesSearchText, SEARCH_FIELD_COST, type FieldMatch } from './fields.
 import { fillPrefixWalkPage, validatePrefixWalkResponse, type PrefixWalkEntry,
   type PrefixWalkRequest, type PrefixWalkResponse } from './prefix-walk.ts';
 import { withSearchGraphSnapshot } from './snapshot.ts';
-import { knownSearchPosition } from './snapshot-state.ts';
 
 /** Resolve only the native page's exact identities. Bind Work subjects before
  * opening names so field hydration cannot become another population scan. */
@@ -148,9 +147,9 @@ export async function readPublicTypeahead(work: MainWorkDependencies, request: R
   }
   return withSearchGraphSnapshot(env, () => workRead(work, publicLanguageRequest(request),
     { language: input.language, publicViewer: currentDisclosureViewer() }, async session => {
-    const position = knownSearchPosition(env.fuseki, env.lineage);
-    if (!position) throw new PublicQueryUnavailable('Typeahead graph snapshot is unavailable');
+    const position = session.position;
     let accepted = new Map<string, TypeaheadItem>();
+    const deliveredMainVersions = new Set<string>();
     let generation: string | undefined;
     const walks: Array<{ request: PrefixWalkRequest; response: PrefixWalkResponse }> = [];
     // Language selects card presentation, as before; matching spans all selected languages.
@@ -172,11 +171,21 @@ export async function readPublicTypeahead(work: MainWorkDependencies, request: R
       generation = response.generation;
       // Candidate identities, their matched fields, facets and all cards share
       // one selected dependency set, including across native walk batches.
-      const candidates = await queryTypeaheadCandidates(env, input.prefix, response.entries, work.sourceAuthorNames, session);
-      const readPresentation = () => present({ context: 'main-version-default' as const, sourcePosition: position,
-        total: candidates.length, results: candidates });
-      const visible = await readPresentation();
-      session.observeDependency(`typeahead-presentation:${JSON.stringify(response.entries)}`, visible, readPresentation);
+      const previouslyDelivered = new Set(deliveredMainVersions);
+      const visible = await session.selection(`typeahead-presentation:${JSON.stringify(response.entries)}`, async probe => {
+        const candidates = await queryTypeaheadCandidates(env, input.prefix, response.entries, work.sourceAuthorNames, probe);
+        const relation = await present({ context: 'main-version-default' as const, sourcePosition: position,
+          total: candidates.length, results: candidates });
+        const seen = new Set(previouslyDelivered);
+        return { ...relation, results: response.entries.flatMap(entry => {
+          if (seen.has(entry.mainVersion)) return [];
+          const row = relation.results.find(match => match.mainVersion === entry.mainVersion
+            && match.matchUnit === entry.matchUnit && match.matchedField === entry.matchedField);
+          if (!row) return [];
+          seen.add(entry.mainVersion);
+          return [row];
+        }) };
+      }, relation => relation.results);
       if (!visible.results.length) {
         accepted.clear();
         return response;
@@ -203,7 +212,11 @@ export async function readPublicTypeahead(work: MainWorkDependencies, request: R
             matchedLanguage: row.matchedLanguage }]] : [];
       }));
       return response;
-    }, async entry => accepted.get(`${entry.mainVersion}\n${entry.matchUnit}\n${entry.matchedField}`) ?? null);
+    }, async entry => {
+      const item = accepted.get(`${entry.mainVersion}\n${entry.matchUnit}\n${entry.matchedField}`) ?? null;
+      if (item) deliveredMainVersions.add(entry.mainVersion);
+      return item;
+    });
     // Reopen this exact bounded prefix traversal, including its empty/tail
     // relation. Native commit generations and cursors can advance after an
     // unrelated writer; the selected entries and continuation presence cannot.
@@ -230,8 +243,7 @@ export async function readPublicTypeahead(work: MainWorkDependencies, request: R
     return { profile: 'public-work-typeahead-v1' as const, items: page.items, hasMore: page.hasMore,
       sourcePosition: { dataEpoch: position.dataEpoch, sequence: position.sequence } };
   }), 'selected-units').catch((error: unknown) => {
-    if (error instanceof WorkReadMoved || error instanceof WorkReadUnavailable
-      && (error.cause instanceof WorkReadMoved || error.cause instanceof SearchSnapshotMoved)) {
+    if (error instanceof WorkReadMoved) {
       throw new SearchSnapshotMoved(error.message, { cause: error });
     }
     throw error;
