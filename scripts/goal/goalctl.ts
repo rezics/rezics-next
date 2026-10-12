@@ -1609,7 +1609,7 @@ async function setAutoLand(id: string, on: boolean): Promise<void> {
   });
 }
 
-async function landTask(id: string): Promise<void> {
+async function landTask(id: string, step = false): Promise<void> {
   const initial = taskOf(readLedger(), id);
   assertOwner(initial);
   const runDir = join(stateDir, 'runs', initial.id);
@@ -1638,7 +1638,7 @@ async function landTask(id: string): Promise<void> {
       return { task, attempt: attempt.n, handoff: result.text, brief: readFileSync(brief, 'utf8'),
         head, base: git(root, ['merge-base', 'main', task.branch]) };
     });
-    await land({ id: snapshot.task.id, worktree: snapshot.task.worktree, runDir,
+    await land({ id: snapshot.task.id, worktree: snapshot.task.worktree, runDir, step,
       brief: snapshot.brief, handoff: snapshot.handoff, base: snapshot.base, head: snapshot.head,
       scope: () => landScope(id),
       merge: permittedFiles => mergeTask(id, new Set(), snapshot.head, current => {
@@ -6147,7 +6147,7 @@ async function main(argv: string[]): Promise<number> {
     case 'scope': console.log(describe(taskOf(readLedger(), positional[0] ?? ''))); return 0;
     case 'merge': await mergeTask(positional[0] ?? '', flags); return 0;
     case 'gate': await mergeTask(positional[0] ?? '', flags, undefined, undefined, undefined, true); return 0;
-    case 'land': await landTask(positional[0] ?? ''); return 0;
+    case 'land': await landTask(positional[0] ?? '', flags.has('--step')); return 0;
     case 'auto-land': await setAutoLand(positional[0] ?? '', positional[1] !== 'off'); return 0;
     case 'close': await closeTasks(positional.slice(0, -1), positional.at(-1) ?? ''); return 0;
     case 'reclaim': await reclaimTask(positional[0] ?? '', positional[1] ?? '', flags); return 0;

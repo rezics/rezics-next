@@ -3,7 +3,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test } from 'bun:test';
-import { blocksLanding, findingsFromText, handoffResult, land, REVIEW_LENSES, reviewBranch, reviewEngine } from './land.ts';
+import { blocksLanding, findingsFromText, handoffResult, land, REVIEW_LENSES, reviewBranch, reviewEngine, reviewPrompt } from './land.ts';
 import { parseBrief, validateBrief, type Ledger, type Task } from './goalctl.ts';
 
 // A refused review pass is run again after a wait; the tests do not wait.
@@ -316,6 +316,24 @@ echo '{"findings":[]}' > "$out"
       expect(readFileSync(join(directory, REVIEW_LENSES[0].name, 'stderr.log'), 'utf8').match(/at capacity/g)).toHaveLength(2);
     } finally { process.env.PATH = path; rmSync(bin, { recursive: true, force: true }); r.cleanup(); }
   }, 30_000);
+
+  test('a step landing accepts a partial handoff, is reviewed as a step and leaves the task open', async () => {
+    const runDir = mkdtempSync(join(tmpdir(), 'goal-land-step-'));
+    try {
+      const calls: string[] = [];
+      const options = { id: 'G-001', worktree: '/w', runDir, brief: 'brief', handoff: 'RESULT: partial\nNEXT: step 2\n', base: 'a', head: 'b',
+        review: async (request: { step?: boolean }) => { calls.push(`review step=${request.step}`); return []; },
+        merge: async () => { calls.push('merge'); }, close: async () => { calls.push('close'); } };
+      await land({ ...options, step: true });
+      expect(calls).toEqual(['review step=true', 'merge']);
+      await expect(land(options)).rejects.toThrow('expected done');
+      await expect(land({ ...options, step: true, handoff: 'RESULT: blocked\n' })).rejects.toThrow('expected done or partial');
+      const prompt = reviewPrompt({ worktree: '/w', base: 'a', head: 'b', brief: 'brief', handoff: 'RESULT: partial', directory: '/d', step: true });
+      expect(prompt).toContain('do not report what the brief still lacks');
+      expect(reviewPrompt({ worktree: '/w', base: 'a', head: 'b', brief: 'brief', handoff: 'RESULT: done', directory: '/d' }))
+        .not.toContain('one step of the brief');
+    } finally { rmSync(runDir, { recursive: true, force: true }); }
+  });
 
   test('what blocks a landing is decided from severity and origin', () => {
     expect(blocksLanding({ text: 'x', severity: 'P2', origin: 'first' })).toBe(true);
