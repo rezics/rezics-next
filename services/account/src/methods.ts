@@ -5,16 +5,10 @@ import { APIError } from 'better-auth/api';
 import { accountFailure, accountJson, AccountProblem, accountSession, type AccountAuth } from './http.ts';
 import { consumeAccountLimit } from './rate-limit.ts';
 import { accountResponses, methodsView, statusView } from './views.ts';
-import { authenticationSubjectRule } from './authentication-subject.ts';
+import { resolveAuthenticationSubject } from './authentication-subject.ts';
+import { prepareSessionAuthentication } from './authentication-input.ts';
 
-export const sensitiveAuthPaths = new Set([
-  '/api/auth/change-password', '/api/auth/set-password', '/api/auth/change-email', '/api/auth/delete-user',
-  '/api/auth/link-social', '/api/auth/unlink-account', '/api/auth/passkey/generate-register-options',
-  '/api/auth/passkey/verify-registration', '/api/auth/passkey/delete-passkey', '/api/auth/passkey/update-passkey',
-  '/api/auth/two-factor/enable', '/api/auth/two-factor/disable',
-  '/api/auth/two-factor/generate-backup-codes', '/api/auth/two-factor/get-totp-uri',
-  '/api/auth/revoke-session', '/api/auth/revoke-sessions', '/api/auth/revoke-other-sessions',
-]);
+export { sensitiveAuthPaths } from './authentication-subject.ts';
 
 export async function requireStepUp(pool: Pool | PoolClient, session: { session: { id: string; createdAt: Date } }) {
   const current = await pool.query(`SELECT 1 FROM "session" s WHERE s.id = $1 AND s."expiresAt" > now()
@@ -71,7 +65,7 @@ async function mutateMethod<T>(pool: Pool, session: { session: { id: string }; u
  * refused proof commits its charge without converting infrastructure to 403. */
 export async function reauthenticate(guardPool: Pool, session: { session: { id: string }; user: { id: string } },
   secret: string, path: string, verify: () => Promise<boolean>) {
-  if (authenticationSubjectRule(path) !== 'session') throw new Error('reauthentication must be session-bound');
+  if (!['/api/account/reauthenticate', '/api/account/reauthenticate/passkey'].includes(path)) throw new Error('reauthentication must be session-bound');
   const verified = await mutateMethod(guardPool, session, async db => {
     await consumeStepUpAttempt(db, secret, session.user.id);
     let accepted: boolean;
@@ -133,6 +127,8 @@ export function methodsApi(auth: AccountAuth, pool: Pool, guard: () => Pool) {
     }) }, async ({ request, body }) => {
       try {
         const session = await accountSession(auth, request);
+        const subject = await resolveAuthenticationSubject(auth, pool, prepareSessionAuthentication(request, session, body));
+        if (subject.candidateUserId !== session.user.id) throw new AccountProblem('forbidden', 403);
         await reauthenticate(guard(), session, String(auth.options.secret), new URL(request.url).pathname, async () => {
           await auth.api.verifyPassword({ headers: request.headers, body: { password: body.password } });
           const twoFactor = await pool.query('SELECT 1 FROM "user" WHERE id = $1 AND "twoFactorEnabled" = true', [session.user.id]);

@@ -1,6 +1,7 @@
-import { authenticationSubject } from './authentication-subject.ts';
+import { resolveAuthenticationSubject, type AuthenticationSubject } from './authentication-subject.ts';
 import type { Pool, PoolClient } from 'pg';
-import { authenticationCookies, type AuthenticationCookieOptions } from './authentication-cookies.ts';
+import { authenticationCookies } from './authentication-cookies.ts';
+import type { AuthenticationProvider, PreparedAuthentication } from './authentication-input.ts';
 
 /** Order factor verification and session creation against recovery. A password
  * or passkey read before the claim must not create a session after its cleanup.
@@ -8,13 +9,17 @@ import { authenticationCookies, type AuthenticationCookieOptions } from './authe
  * Cost: indexed owner/session/verification lookups and one indexed policy lock;
  * no verification inventory is scanned or parsed. */
 export async function withRecoveryAuthentication(
+  auth: AuthenticationProvider,
   pool: Pool,
   request: Request,
+  input: PreparedAuthentication,
+  subject: AuthenticationSubject,
   handle: (db?: PoolClient) => Promise<Response>,
-  readSession: () => Promise<{ session: { id: string }; user: { id: string } } | null>,
-  options: AuthenticationCookieOptions,
 ): Promise<Response> {
-  const { userId, sessionId, verificationCreatedAt, trustCreatedAt } = await authenticationSubject(pool, request, readSession, options);
+  const userId = subject.candidateUserId;
+  const sessionId = subject.session?.session.id;
+  const verificationCreatedAt = subject.verification?.createdAt;
+  const trustCreatedAt = subject.trust?.createdAt;
   if (!userId) return handle();
   const db = await pool.connect();
   try {
@@ -46,8 +51,19 @@ export async function withRecoveryAuthentication(
         { status: 403, headers: { 'cache-control': 'no-store' } },
       );
     }
+    // SQL policy checks protect the retained epoch; the provider-backed recheck
+    // protects identity changes after admission. Reuse the held connection.
+    const current = await resolveAuthenticationSubject(auth, db, input);
+    if (current.candidateUserId !== userId || current.session?.session.id !== sessionId) {
+      await db.query('ROLLBACK');
+      return Response.json({ error: 'stale_request' }, { status: 403,
+        headers: { 'cache-control': 'no-store' } });
+    }
     if (policy.rows[0]?.stale_trust) {
-      (await authenticationCookies(request.headers, options)).remove('trust_device');
+      (await authenticationCookies(request.headers, await auth.$context)).remove('trust_device');
+      // The admitted snapshot is no longer an authority for trust. Future
+      // rechecks read the explicitly updated header snapshot.
+      (await authenticationCookies(input.headers, await auth.$context)).remove('trust_device');
     }
     const response = await handle(db);
     await db.query(response.status >= 500 ? 'ROLLBACK' : 'COMMIT');

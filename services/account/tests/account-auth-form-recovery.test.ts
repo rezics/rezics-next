@@ -4,6 +4,9 @@ import { cookies, recoveryProof } from './recovery-fixture.ts';
 import type { Pool } from 'pg';
 import { withRecoveryAuthentication } from '../src/recovery-auth.ts';
 import { authenticationBody } from '../src/authentication-input.ts';
+import { prepareAuthentication } from '../src/authentication-input.ts';
+import { resolveAuthenticationSubject } from '../src/authentication-subject.ts';
+import { betterAuth } from 'better-auth';
 import { symmetricDecrypt } from 'better-auth/crypto';
 import { createOTP } from '@better-auth/utils/otp';
 import { createCookieGetter } from 'better-auth/cookies';
@@ -412,6 +415,7 @@ test('strict authentication parsing preserves provider values and binds the same
   const db = {
     query: async (sql: string, values: unknown[] = []) => {
       if (sql.includes('AS stale_verification')) owners.push(values);
+      if (sql.includes('WHERE email = $1')) return { rows: [{ id: 'member-owner' }] };
       return { rows: [{ stale_verification: false, stale_session: false, stale_trust: false }] };
     },
     release: () => {},
@@ -423,9 +427,17 @@ test('strict authentication parsing preserves provider values and binds the same
     },
     connect: async () => db,
   } as unknown as Pool;
+  const auth = betterAuth({ baseURL: 'http://account.test', secret: 'strict-json-test-at-least-thirty-two-characters',
+    emailAndPassword: { enabled: true } });
+  const prepared = await prepareAuthentication(auth, request);
+  if (prepared.kind === 'reject') throw new Error('valid body refused');
+  const subject = await resolveAuthenticationSubject(auth, pool, prepared.input);
   const response = await withRecoveryAuthentication(
+    auth,
     pool,
     request,
+    prepared.input,
+    subject,
     async (held) => {
       expect(held as unknown).toBe(db);
       const providerBody = await request.json();
@@ -433,8 +445,6 @@ test('strict authentication parsing preserves provider values and binds the same
       expect(owners).toEqual([['member-owner', null, null, null]]);
       return Response.json({ status: true });
     },
-    async () => null,
-    { baseURL: 'http://account.test' },
   );
   expect(response.status).toBe(200);
 });

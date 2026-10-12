@@ -30,8 +30,8 @@ import { mailSuppressionApi } from './mail-suppression.ts';
 import { policyAcceptanceApi } from './policy-acceptance.ts';
 import { accountSchemaReady } from './schema-ready.ts';
 import { withRecoveryAuthentication } from './recovery-auth.ts';
-import { authenticationMediaTypeFailure } from './authentication-input.ts';
-import { authenticationSubject } from './authentication-subject.ts';
+import { prepareAuthentication } from './authentication-input.ts';
+import { resolveAuthenticationSubject, type AuthenticationSubject } from './authentication-subject.ts';
 import { changeGuardianInvitation, readGuardianInvitations, readRecoveryPolicy } from './recovery-guardian.ts';
 import { bootstrapOperators, requireOperator } from './operators.ts';
 import { AccountRecoveryConflict, AccountRecoveryDenied, AccountRecoveryStale, AccountRecoveryRateLimited,
@@ -144,11 +144,9 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
   credentialPaths.add('/api/auth/update-user');
   credentialPaths.add('/api/auth/two-factor/verify-totp');
   credentialPaths.add('/api/auth/two-factor/verify-backup-code');
-  const guardedAuthHandler = async (request: Request, held?: PoolClient): Promise<Response> => {
+  const guardedAuthHandler = async (request: Request, subject: AuthenticationSubject, held?: PoolClient): Promise<Response> => {
     const path = new URL(request.url).pathname;
-    const subject = await authenticationSubject(pool, request,
-      () => auth.api.getSession({ headers: request.headers }), auth.options);
-    const totpUserId = subject.signedInBudget ? subject.userId : undefined;
+    const totpUserId = subject.signedInBudget ? subject.candidateUserId : undefined;
     const authenticationLimit = async (database: Pool | PoolClient): Promise<Response | null> => {
       if (request.method !== 'POST' || !(path === '/api/auth/sign-in/email' || path === '/api/auth/reset-password'
         || path === '/api/auth/passkey/verify-authentication' || path.startsWith('/api/auth/two-factor/verify-'))) return null;
@@ -168,8 +166,9 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
       try {
         // Browsers send no Origin on a same-origin GET (passkey registration
         // options); SameSite cookies already keep cross-site GETs signed out.
-        const session = await accountSession(auth, request);
-        await requireStepUp(pool, session);
+        if (request.method !== 'GET' && request.headers.get('origin') !== origin) return Response.json({ error: 'invalid_origin' }, { status: 403 });
+        if (!subject.session) return Response.json({ error: 'unauthenticated' }, { status: 401 });
+        await requireStepUp(held ?? pool, subject.session);
       } catch (error) { return accountFailure(error); }
     }
     const emailPaths = new Set(['/api/auth/sign-up/email', '/api/auth/request-password-reset',
@@ -185,9 +184,7 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
     if (request.method !== 'POST' || !credentialPaths.has(new URL(request.url).pathname)) {
       return auth.handler(request);
     }
-    let session;
-    try { session = await auth.api.getSession({ headers: request.headers }); }
-    catch { return Response.json({ error: 'temporarily_unavailable' }, { status: 503 }); }
+    const session = subject.session;
     if (!session) return auth.handler(request);
     // Recovery authentication already owns a guard connection for these
     // routes. Reuse it; nesting a checkout can exhaust the bounded pool.
@@ -499,9 +496,16 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
       catch (error) { return recoveryError(error); }
     })
     .cleanup(async () => { await guardPool?.end(); })
-    .mount(async (request: Request) => await authenticationMediaTypeFailure(request) ?? observeAuthentication(auth, pool, request,
-      () => withRecoveryAuthentication(guard(), request, db => guardedAuthHandler(request, db),
-        () => auth.api.getSession({ headers: request.headers }), auth.options)));
+    .mount(async (request: Request) => {
+      try {
+        const prepared = await prepareAuthentication(auth, request);
+        if (prepared.kind === 'reject') return prepared.response;
+        const subject = await resolveAuthenticationSubject(auth, pool, prepared.input);
+        return await observeAuthentication(auth, pool, request, subject,
+          () => withRecoveryAuthentication(auth, guard(), request, prepared.input, subject,
+            db => guardedAuthHandler(request, subject, db)));
+      } catch (error) { return accountFailure(error); }
+    });
   return app.get('/api/account/openapi.json', () => ({ openapi: '3.1.2',
     info: { title: 'REZICS Account API', version: '1' },
     ...toOpenAPISchema(app, { paths: [/^\/api\/auth\//, /^\/health\//, '/api/account/openapi.json'] }),

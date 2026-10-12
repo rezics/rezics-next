@@ -3,7 +3,9 @@ import { Elysia, t } from 'elysia';
 import { APIError } from 'better-auth/api';
 import type { Pool } from 'pg';
 import { accountLocale, type AccountLocale } from './email.ts';
-import { accountFailure, accountJson, accountSession, type AccountAuth } from './http.ts';
+import { accountFailure, accountJson, AccountProblem, accountSession, type AccountAuth } from './http.ts';
+import { resolveAuthenticationSubject } from './authentication-subject.ts';
+import { prepareSessionAuthentication } from './authentication-input.ts';
 import { reauthenticate } from './methods.ts';
 import { accountResponses } from './views.ts';
 
@@ -148,6 +150,8 @@ export function accountSettingsApi(auth: AccountAuth, guard: () => Pool) {
     }, async ({ request, body }) => {
       try {
         const session = await accountSession(auth, request);
+        const subject = await resolveAuthenticationSubject(auth, guard(), prepareSessionAuthentication(request, session, body));
+        if (subject.candidateUserId !== session.user.id) throw new AccountProblem('forbidden', 403);
         await reauthenticate(guard(), session, secret, new URL(request.url).pathname, async () => {
           const proof = { userId: session.user.id, verified: false };
           try {

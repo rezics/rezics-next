@@ -31,6 +31,9 @@ import { signupPolicyInput, policyAcceptanceRequired } from './policy-acceptance
 import { SignupPolicyProblem } from './market-policy.ts';
 import type { PolicyVersion } from './policy-versions.ts';
 import { AccountHasOwnedAgents } from '../../main/src/modules/access/admission.ts';
+import { prepareAuthentication } from './authentication-input.ts';
+import { resolveAuthenticationSubject } from './authentication-subject.ts';
+import { AccountProblem } from './http.ts';
 
 export const AGENT_REGISTRATION_BUDGET = Object.freeze({ maximum: 10, seconds: 300 });
 const enrollmentEndpoints = ['/sign-up/email', '/request-password-reset', '/send-verification-email'];
@@ -324,9 +327,17 @@ export function accountAuthOptions(config: AccountConfig) {
       // Charging here keeps failed challenges out of a caller-selected target's
       // budget, including embedded clients that bypass the HTTP app adapter.
       if (enrollmentEndpoints.includes(ctx.path)) {
-        const body = ctx.body as { email?: unknown } | undefined;
-        const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
-        if (email && email.length <= 320) {
+        const provider = { options: ctx.context.options, $context: Promise.resolve(ctx.context) };
+        const prepared = await prepareAuthentication(provider, { kind: 'provider-context', context: ctx });
+        if (prepared.kind === 'reject') throw new APIError('BAD_REQUEST', { error: 'invalid_request' });
+        let target;
+        try { target = await resolveAuthenticationSubject(provider, config.pool, prepared.input); }
+        catch (error) {
+          if (error instanceof AccountProblem) throw new APIError(error.status >= 500 ? 'SERVICE_UNAVAILABLE' : 'BAD_REQUEST', { error: error.code });
+          throw error;
+        }
+        const email = target.target;
+        if (email !== 'anonymous') {
           let admitted: boolean;
           try { admitted = await consumeAccountLimit(config.pool, config.secret,
             `/api/auth${ctx.path}:${email}`, 3, 300); }

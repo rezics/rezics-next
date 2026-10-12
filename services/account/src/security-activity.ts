@@ -8,7 +8,7 @@ import { requireStepUp } from './methods.ts';
 import { accountResponses, activityView, pageView, sessionView } from './views.ts';
 import { revokeSessionSelection } from './first-party-session.ts';
 import { APIError } from 'better-auth/api';
-import { authenticationSubject } from './authentication-subject.ts';
+import type { AuthenticationSubject } from './authentication-subject.ts';
 
 export function deviceLabel(userAgent?: string | null) {
   const ua = userAgent ?? '';
@@ -128,6 +128,7 @@ export function securityActivityApi(auth: AccountAuth, pool: Pool) {
 /** The two-factor plugin issues a provisional session after a password; only
  * a response containing a usable session is a successful sign-in event. */
 export async function observeAuthentication(auth: AccountAuth, pool: Pool, request: Request,
+  subject: AuthenticationSubject,
   handle: () => Promise<Response>): Promise<Response> {
   const path = new URL(request.url).pathname;
   const signingIn = ['/api/auth/sign-in/email', '/api/auth/passkey/verify-authentication',
@@ -135,8 +136,7 @@ export async function observeAuthentication(auth: AccountAuth, pool: Pool, reque
   const signingOut = path === '/api/auth/sign-out';
   const verifying = path === '/api/auth/verify-email' && request.method === 'GET';
   if (!signingIn && !signingOut && !verifying) return handle();
-  const before = await auth.api.getSession({ headers: request.headers });
-  const subject = signingIn ? await authenticationSubject(pool, request, async () => before, auth.options) : undefined;
+  const before = subject.session;
   const response = await handle();
   if (verifying && response.status === 302) {
     const cookie = response.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
@@ -164,7 +164,7 @@ export async function observeAuthentication(auth: AccountAuth, pool: Pool, reque
       network: coarseNetwork(request.headers.get('x-rezics-client-ip')) });
   } else if (signingIn && !response.ok) {
     try {
-      const userId = subject?.userId;
+      const userId = subject.activityUserId;
       if (userId) await securityEvent(pool, userId, 'sign_in_failed', { method: path.split('/').at(-1) });
     } catch {
       // Failure logging must not turn a storage fault into an address oracle.
