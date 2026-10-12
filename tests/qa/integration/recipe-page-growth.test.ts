@@ -51,10 +51,27 @@ if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
     await import('../support/seed-checkpoints.ts');
   const { RECIPE_WORK_PAGE_OCCURRENCES, RECIPE_WORK_PAGE_READ_BOUND } =
     await import('../../../services/main/src/modules/recipe/work-page.ts');
+  const { STRUCTURE_LIMITS } = await import('../../../services/main/src/modules/structure/format.ts');
+  // Recipe work-page.ts supplies K; tree.ts chunks both leaves and interior
+  // nodes using format.ts's pageEntries. Neither bound is duplicated here.
+  const recipePageSize = RECIPE_WORK_PAGE_OCCURRENCES;
+  const structureNodeFanout = STRUCTURE_LIMITS.pageEntries;
+  const structureObjectPrefix = '/rezics-semantic/semantic/structure/sha256/';
+  const objectReadBudget = (occurrences: number) => {
+    const logDepth = Math.log(occurrences) / Math.log(structureNodeFanout);
+    const treeDepth = Math.ceil(logDepth);
+    return { occurrences, pageSize: recipePageSize, fanout: structureNodeFanout,
+      logDepth, treeDepth, maximumGets: recipePageSize * (treeDepth + 1) };
+  };
+  type ObjectRead = ReturnType<typeof objectReadBudget> & {
+    scale: string; read: string; gets: number; unknownOtherFetches: number;
+  };
 
   // Owner contract: readRecipeWorkPage follows only the Work basis and its Structure.
   // Content posts are never read. The published cuts co-grow unrelatedWorks (4/16/64)
-  // and recipeOccurrences (100/400/1600); a fixed 100-occurrence page stays constant.
+  // and recipeOccurrences (100/400/1600). Remote Fuseki/SQL work stays constant;
+  // exact-origin immutable Structure GETs use the owner's keyed-tree budget.
+  // Every remaining other fetch retains the zero cap below.
   // Carry unrelatedWorks in mainCalls for the existing verdict's numeric dimension,
   // retaining the measured mainCalls separately in the evidence.
   const recipePageCost: WorkCostContract = {
@@ -92,6 +109,7 @@ if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
   const targets: string[] = [];
   const firstProfiles: WorkProfile[] = [];
   const continuationProfiles: Array<{ scale: string; unrelatedWorks: number; profile: WorkProfile }> = [];
+  const objectReads: ObjectRead[] = [];
   const evidence: Array<Record<string, unknown>> = [];
   let verifying = cuts[0]!;
   let copy: {
@@ -138,6 +156,16 @@ if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
     expect(inventory.filter(item => item.peer === 'unclassified').reduce((sum, item) => sum + item.count, 0))
       .toBe(profile.unclassifiedFetches);
     return inventory;
+  };
+  const budgetedRead = (profile: WorkProfile, inventory: ReturnType<typeof fetchInventory>,
+    scale: string, read: string, occurrences: number) => {
+    const gets = inventory.filter(item => item.peer === 'other' && item.method === 'GET'
+      && item.origin === copy!.ownerOrigins.MAIN_S3_ENDPOINT && item.path.startsWith(structureObjectPrefix))
+      .reduce((sum, item) => sum + item.count, 0);
+    const budget = { scale, read, ...objectReadBudget(occurrences), gets,
+      unknownOtherFetches: profile.otherFetches! - gets };
+    objectReads.push(budget);
+    return { budget, profile: { ...profile, otherFetches: budget.unknownOtherFetches } };
   };
   const measuredRead = async <T>(path: string) => {
     if (!copy) throw new Error('Restored Recipe fixture is unavailable');
@@ -241,8 +269,11 @@ if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
       // Retain every cut before assertions that can stop the run. A failed
       // cost contract must not discard the page that demonstrated the failure.
       evidence.push(row);
-      (row.firstPage as Record<string, unknown>).fetches = fetchInventory(first.profile);
-      firstProfiles.push({ ...first.profile, mainCalls: cut.manifest.dimensions.unrelatedWorks });
+      const firstFetches = fetchInventory(first.profile);
+      (row.firstPage as Record<string, unknown>).fetches = firstFetches;
+      const budgetedFirst = budgetedRead(first.profile, firstFetches, cut.manifest.scale, 'first page', expectedOccurrences);
+      (row.firstPage as Record<string, unknown>).objectReadBudget = budgetedFirst.budget;
+      firstProfiles.push({ ...budgetedFirst.profile, mainCalls: cut.manifest.dimensions.unrelatedWorks });
       if (first.result.next) {
         phase = `${cut.manifest.scale} continuation`;
         const next = await measuredRead<RecipePage>(`${path}&${new URLSearchParams({ cursor: first.result.next })}`);
@@ -255,9 +286,13 @@ if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
         // Keep absolute caps; two available continuations cannot provide the
         // existing verdict's required three scales. Do not invent a third cursor.
         row.continuation = { counters: counters(next.profile), cost: next.result.cost };
-        (row.continuation as Record<string, unknown>).fetches = fetchInventory(next.profile);
+        const continuationFetches = fetchInventory(next.profile);
+        (row.continuation as Record<string, unknown>).fetches = continuationFetches;
+        const budgetedContinuation = budgetedRead(next.profile, continuationFetches,
+          cut.manifest.scale, 'continuation', expectedOccurrences);
+        (row.continuation as Record<string, unknown>).objectReadBudget = budgetedContinuation.budget;
         continuationProfiles.push({ scale: cut.manifest.scale,
-          unrelatedWorks: cut.manifest.dimensions.unrelatedWorks, profile: next.profile });
+          unrelatedWorks: cut.manifest.dimensions.unrelatedWorks, profile: budgetedContinuation.profile });
       } else {
         expect(expectedOccurrences).toBe(RECIPE_WORK_PAGE_OCCURRENCES);
         row.continuationMissingReason = 'Small cut ends on its first 100-occurrence page';
@@ -279,7 +314,8 @@ if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
       continuation: ratiosFor(continuationProfiles.map(item => ({ ...item.profile, mainCalls: item.unrelatedWorks }))) };
     evidence.push({ ratios });
     console.log('recipe-page-growth-ratios', JSON.stringify(ratios));
-    // This is the only growth verdict: the shared checker owns ratios and margin.
+    // The shared verdict retains all remote caps/classes. The owner's immutable
+    // object allowance is asserted separately, without opening other fetches.
     phase = 'growth verdict';
     const failures: Error[] = [];
     const check = (read: string, assertion: () => void) => {
@@ -295,6 +331,24 @@ if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
     for (const continuation of continuationProfiles)
       check(`GET /v1/recipes/works/:id ${continuation.scale} continuation`, () =>
         assertWorkCost(continuation.profile, absoluteCaps));
+    for (const objectRead of objectReads)
+      check(`GET /v1/recipes/works/:id ${objectRead.scale} ${objectRead.read} Structure object budget`, () =>
+        expect(objectRead.gets).toBeLessThanOrEqual(objectRead.maximumGets));
+    const firstObjectReads = objectReads.filter(item => item.read === 'first page');
+    const objectIncrements = firstObjectReads.slice(1).map((larger, index) => {
+      const smaller = firstObjectReads[index]!;
+      return { scales: [smaller.scale, larger.scale],
+        occurrences: [smaller.occurrences, larger.occurrences],
+        gets: [smaller.gets, larger.gets], treeDepths: [smaller.treeDepth, larger.treeDepth],
+        observedIncrement: larger.gets - smaller.gets,
+        maximumIncrement: recipePageSize * (larger.treeDepth - smaller.treeDepth),
+        rule: 'pageSize * (larger ceil(log_fanout(N)) - smaller ceil(log_fanout(N)))' };
+    });
+    evidence.push({ structureObjectIncrements: objectIncrements });
+    console.log('recipe-page-growth-object-increments', JSON.stringify(objectIncrements));
+    for (const increment of objectIncrements)
+      check(`GET /v1/recipes/works/:id ${increment.scales.join(' to ')} Structure object increment`, () =>
+        expect(increment.observedIncrement).toBeLessThanOrEqual(increment.maximumIncrement));
     if (failures.length) throw new AggregateError(failures, 'Recipe page cost contracts failed');
     evidence.push({ verdict: 'pass', coverage: 'first page at three cuts; continuation at medium/large; no nested sections' });
   } catch (error) {
@@ -316,7 +370,7 @@ if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
   }
 } else {
   const { test } = await import('bun:test');
-  test('Recipe Work page stays constant on published growth cuts with qualified meters', async () => {
+  test('Recipe Work page meets remote and immutable-object budgets on published growth cuts', async () => {
     const { stdout } = await runWorkProfileChild('tests/qa/integration/recipe-page-growth.test.ts', {
       env: { REZICS_RECIPE_GROWTH_CHILD: '1' }, timeoutMs: 1_800_000,
     });
