@@ -164,8 +164,8 @@ for (const issuer of ['http://issuer.test', 'https://issuer.test', 'HTTPS://issu
         `${a.cookie}; ${bChallenge.cookie}`);
       const admitted = await Promise.race([admission.entered, pending.then(() => 'finished')]);
       if (admitted === 'finished') {
-        expect(provider.mock.calls.filter(([request]) =>
-          new URL((request as Request).url).pathname === '/api/auth/two-factor/verify-totp')).toHaveLength(0);
+        expect(provider.mock.calls.filter((call: readonly unknown[]) =>
+          new URL((call[0] as Request).url).pathname === '/api/auth/two-factor/verify-totp')).toHaveLength(0);
         await deniedWithoutSession(f, await pending);
         return;
       }
@@ -258,7 +258,7 @@ test('post-provider subject replacement denies issuance, charges both users and 
     for (const userId of [a.id, b.id]) {
       expect((await f.pool.query('SELECT count FROM rezics_account_rate_limit WHERE key = $1', [key(userId)])).rows[0]?.count).toBe(1);
       expect((await f.pool.query(`SELECT user_id FROM rezics_account_security_event
-        WHERE user_id = $1 AND action = 'authentication_subject_changed'`, [userId])).rows).toEqual([{ user_id: userId }]);
+        WHERE user_id = $1 AND action = 'sign_in_failed' AND detail->>'reason' = 'provider_subject_changed'`, [userId])).rows).toEqual([{ user_id: userId }]);
     }
     expect((await f.pool.query(`SELECT id FROM rezics_account_security_event
       WHERE user_id IN ($1, $2) AND action = 'sign_in' ORDER BY id`, [a.id, b.id])).rows).toEqual(signInsBefore);
@@ -270,7 +270,8 @@ test('post-provider subject replacement denies issuance, charges both users and 
   }
 }, 60_000);
 
-test('post-provider creation evidence survives a later provider error and retires its actual session', async () => {
+for (const completion of ['provider-error', 'handler-error'] as const)
+test(`post-provider creation evidence survives ${completion} and retires its actual session`, async () => {
   const f = await issuerFixture('HTTPS://issuer.test');
   const admission = pause();
   const context = await f.auth.$context;
@@ -293,7 +294,12 @@ test('post-provider creation evidence survives a later provider error and retire
         admission.enter();
         await admission.released;
       }
-      return handler(request);
+      const response = await handler(request);
+      if (completion === 'handler-error' && created
+        && new URL(request.url).pathname === '/api/auth/two-factor/verify-totp') {
+        throw new APIError('SERVICE_UNAVAILABLE', { message: 'late handler completion unavailable' });
+      }
+      return response;
     });
     context.internalAdapter.createSession = async (...args) => {
       const session = await createSession(...args);
@@ -301,7 +307,7 @@ test('post-provider creation evidence survives a later provider error and retire
         created = session;
         // The provider really inserted B's session. No success body/newSession
         // has been produced yet; its database hook must retain this evidence.
-        throw new APIError('SERVICE_UNAVAILABLE', { message: 'late provider completion unavailable' });
+        if (completion === 'provider-error') throw new APIError('SERVICE_UNAVAILABLE', { message: 'late provider completion unavailable' });
       }
       return session;
     };
@@ -320,7 +326,7 @@ test('post-provider creation evidence survives a later provider error and retire
     for (const userId of [a.id, b.id]) {
       expect((await f.pool.query('SELECT count FROM rezics_account_rate_limit WHERE key=$1', [key(userId)])).rows[0]?.count).toBe(1);
       expect((await f.pool.query(`SELECT user_id FROM rezics_account_security_event
-        WHERE user_id=$1 AND action='authentication_subject_changed'`, [userId])).rows).toEqual([{ user_id: userId }]);
+        WHERE user_id=$1 AND action='sign_in_failed' AND detail->>'reason'='provider_subject_changed'`, [userId])).rows).toEqual([{ user_id: userId }]);
     }
   } finally {
     admission.resume();

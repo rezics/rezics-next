@@ -234,8 +234,12 @@ export function recordVerifiedPasskey(credentialId: string): boolean {
 }
 export async function runAuthenticationExchange<T>(work: () => Promise<T>) {
   const evidence: AuthenticationEvidence = { authenticatedUserIds: new Set(), issuedTokens: new Set(), providerPasskeys: new Map() };
-  const result = await exchanges.run(evidence, work);
-  return { result, ...evidence };
+  try { return { kind: 'returned' as const, result: await exchanges.run(evidence, work), ...evidence }; }
+  catch (error) {
+    // Verification/session insertion may have succeeded before a later hook
+    // threw. Preserve the provider's evidence for the same fail-closed fence.
+    return { kind: 'threw' as const, error, ...evidence };
+  }
 }
 export async function authenticationProviderResponse(auth: Pick<AccountAuth, 'handler'>, request: Request) {
   const response = await auth.handler(request);

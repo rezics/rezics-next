@@ -36,7 +36,8 @@ export async function lockTotpFactor(db: PoolClient, userId: string): Promise<vo
 // and recheck the session inside local credential writes, so a request admitted
 // before recovery cannot remove the newly recovered user's sign-in methods.
 async function mutateMethod<T>(pool: Pool, session: { session: { id: string }; user: { id: string } },
-  write: (db: PoolClient) => Promise<T>, options: { totpVerification?: true } = {}): Promise<T> {
+  write: (db: PoolClient) => Promise<T>, options: { totpVerification?: true;
+    afterCommit?: (result: T, db: PoolClient) => Promise<void> } = {}): Promise<T> {
   const db = await pool.connect();
   try {
     await db.query('BEGIN');
@@ -54,6 +55,7 @@ async function mutateMethod<T>(pool: Pool, session: { session: { id: string }; u
     if (!current.rowCount) throw new AccountProblem('stale_request', 403);
     const result = await write(db);
     await db.query('COMMIT');
+    await options.afterCommit?.(result, db);
     return result;
   } catch (error) { await db.query('ROLLBACK'); throw error; }
   finally { db.release(); }
@@ -75,13 +77,18 @@ export async function reauthenticate(guardPool: Pool, session: { session: { id: 
       }
     });
     if (authenticationSubjectChanged(authentication.subject, exchange)) return { changed: exchange };
+    if (exchange.kind === 'threw') throw exchange.error;
     const accepted = exchange.result;
     if (accepted) await db.query(`INSERT INTO rezics_account_step_up (session_id) VALUES ($1)
       ON CONFLICT (session_id) DO UPDATE SET verified_at = now()`, [session.session.id]);
     return { accepted };
-  }, path === '/api/account/reauthenticate' ? { totpVerification: true } : {});
+  }, { ...(path === '/api/account/reauthenticate' ? { totpVerification: true as const } : {}),
+    afterCommit: async (result, db) => {
+      if ('changed' in result && result.changed) {
+        await settleChangedAuthentication(authentication.auth, guardPool, authentication.subject, result.changed, db);
+      }
+    } });
   if ('changed' in verified && verified.changed) {
-    await settleChangedAuthentication(authentication.auth, guardPool, authentication.subject, verified.changed);
     throw new AccountProblem('stale_request', 403);
   }
   if (!verified.accepted) throw new AccountProblem('forbidden', 403);

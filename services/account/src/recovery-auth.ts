@@ -15,7 +15,7 @@ export function authenticationSubjectChanged(subject: AuthenticationSubject, evi
   return [...evidence.authenticatedUserIds].some(id => id !== subject.candidateUserId);
 }
 export async function settleChangedAuthentication(auth: AuthenticationProvider, pool: Pool,
-  subject: AuthenticationSubject, evidence: Evidence): Promise<void> {
+  subject: AuthenticationSubject, evidence: Evidence, held?: PoolClient): Promise<void> {
   const provider = await auth.$context as AuthContext;
   for (const token of evidence.issuedTokens) await provider.internalAdapter.deleteSession(token);
   const users = [...new Set([...(subject.candidateUserId ? [subject.candidateUserId] : []),
@@ -23,8 +23,9 @@ export async function settleChangedAuthentication(auth: AuthenticationProvider, 
   // The original proof transaction has committed and released its own rate
   // row/security locks. Opposite owner changes cannot hold A then wait for B
   // while another exchange holds B then waits for A. This operation owns one
-  // fresh connection, and commits both subjects' charges/events atomically.
-  const db = await pool.connect();
+  // transaction on the existing connection, and commits both subjects' effects
+  // atomically. The caller's COMMIT released locks, not its bounded pool slot.
+  const db = held ?? await pool.connect();
   try {
     await db.query('BEGIN');
     await db.query("SET LOCAL lock_timeout = '2s'");
@@ -35,11 +36,11 @@ export async function settleChangedAuthentication(auth: AuthenticationProvider, 
         catch (error) { if (!(error instanceof AccountProblem) || error.code !== 'rate_limited') throw error; }
       }
       await db.query(`INSERT INTO rezics_account_security_event (user_id, action, detail)
-        VALUES ($1, 'authentication_subject_changed', $2)`, [userId, JSON.stringify({ reason: 'provider_subject_changed' })]);
+        VALUES ($1, 'sign_in_failed', $2)`, [userId, JSON.stringify({ reason: 'provider_subject_changed' })]);
     }
     await db.query('COMMIT');
   } catch (error) { await db.query('ROLLBACK'); throw error; }
-  finally { db.release(); }
+  finally { if (!held) db.release(); }
 }
 
 /** Order factor verification and session creation against recovery. A password
@@ -62,16 +63,18 @@ export async function withRecoveryAuthentication(
   let changed: Evidence | undefined;
   const exchange = async (held?: PoolClient) => {
     const evidence = await runAuthenticationExchange(() => handle(held));
-    const response = evidence.result;
-    if (!['credential', 'reset-token', 'session-proof'].includes(subject.purpose)
-      && input.path !== '/api/auth/sign-in/email') return response;
-    const output = await response.clone().json().catch(() => null) as { user?: { id?: unknown } } | null;
-    if (response.ok && typeof output?.user?.id === 'string') evidence.authenticatedUserIds.add(output.user.id);
-    if (authenticationSubjectChanged(subject, evidence)) {
+    const proof = ['credential', 'reset-token', 'session-proof'].includes(subject.purpose)
+      || input.path === '/api/auth/sign-in/email';
+    if (proof && evidence.kind === 'returned') {
+      const output = await evidence.result.clone().json().catch(() => null) as { user?: { id?: unknown } } | null;
+      if (evidence.result.ok && typeof output?.user?.id === 'string') evidence.authenticatedUserIds.add(output.user.id);
+    }
+    if (proof && authenticationSubjectChanged(subject, evidence)) {
       changed = evidence;
       return Response.json({ error: 'stale_request' }, { status: 403, headers: { 'cache-control': 'no-store' } });
     }
-    return response;
+    if (evidence.kind === 'threw') throw evidence.error;
+    return evidence.result;
   };
   if (!userId) {
     const response = await exchange();
@@ -125,12 +128,12 @@ export async function withRecoveryAuthentication(
     }
     response = await exchange(db);
     await db.query(response.status >= 500 ? 'ROLLBACK' : 'COMMIT');
+    if (changed) await settleChangedAuthentication(auth, pool, subject, changed, db);
   } catch (error) {
     await db.query('ROLLBACK');
     throw error;
   } finally {
     db.release();
   }
-  if (changed) await settleChangedAuthentication(auth, pool, subject, changed);
   return response;
 }
