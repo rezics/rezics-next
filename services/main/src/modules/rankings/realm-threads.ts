@@ -362,14 +362,21 @@ export class RealmThreadRankingProjection {
           reply: string | null;
           resource: string | null;
           realm: string | null;
+          effect?: 'addition' | 'removal';
         }>(
           `
         SELECT o.sequence::text,p.id AS reply,v.resource_id AS resource,
-          CASE WHEN o.event_type='content.realm-review.decided' THEN o.payload->>'realm' ELSE NULL END AS realm
+          CASE WHEN o.event_type='content.realm-review.decided' THEN o.payload->>'realm' ELSE NULL END AS realm,
+          CASE WHEN r.outcome='succeeded' AND (
+            o.event_type='content.reply.created' AND r.action='reply.create'
+            OR o.event_type='content.realm-review.decided' AND r.action='review.decide'
+              AND d.outcome='approved' AND d.supersedes IS NULL
+          ) THEN 'addition' ELSE 'removal' END AS effect
           FROM content.outbox o
         JOIN content.receipt r ON r.operation_id=o.operation_id
         LEFT JOIN content.variant v ON v.id=r.variant_id
         LEFT JOIN content.reply p ON p.variant_id=v.id
+        LEFT JOIN content.realm_review_decision d ON d.operation_id=o.operation_id
         WHERE o.data_epoch=$1 AND o.sequence>$2::bigint ORDER BY o.sequence LIMIT $3`,
           [owner.dataEpoch, position.content_sequence, BATCH],
         )
@@ -383,10 +390,9 @@ export class RealmThreadRankingProjection {
       await controlTransaction(this.access, async (client) => {
         await this.lock(client, epoch, position);
         for (const event of events) {
-          if (event.reply && event.realm) await client.query(`INSERT INTO access.realm_thread_dirty(data_epoch,kind,resource,after_key)
-            VALUES($1,'placement',$2,'ready:replay') ON CONFLICT DO NOTHING`, [epoch, `${event.realm}|${event.reply}`]);
-          else if (event.reply) await this.dirty(client, epoch, 'reply', event.reply);
-          else if (event.resource) await this.dirty(client, epoch, 'work', event.resource);
+          if (event.reply && event.realm) await this.placementDirty(client, epoch, event.realm, event.reply, event.effect);
+          else if (event.reply) await this.dirty(client, epoch, 'reply', event.reply, event.effect);
+          else if (event.resource) await this.dirty(client, epoch, 'work', event.resource, event.effect);
         }
         await client.query(
           `UPDATE access.realm_thread_checkpoint SET content_sequence=$2 WHERE data_epoch=$1`,
@@ -403,12 +409,20 @@ export class RealmThreadRankingProjection {
           reply: string | null;
           work: string | null;
           realm: string | null;
+          effect?: 'addition' | 'removal';
         }>(
           `SELECT sequence::text,event_id,
           envelope#>>'{data,receipt,reply}' AS reply,
           COALESCE(envelope#>>'{data,receipt,work}',envelope#>>'{data,receipt,rootTarget}',
             envelope#>>'{data,payload,work}',envelope#>>'{data,work}') AS work,
-          envelope#>>'{data,receipt,realm}' AS realm
+          envelope#>>'{data,receipt,realm}' AS realm,
+          CASE WHEN envelope#>>'{data,receipt,outcome}'='succeeded' AND (
+            envelope->>'type'='com.rezics.realm.reply-placed.v1' AND envelope#>>'{data,receipt,action}'='reply.place'
+            OR envelope->>'type'='com.rezics.work.created.v1' AND envelope#>>'{data,receipt,action}'='work.create'
+            OR envelope->>'type'='com.rezics.contribution.draft-created.v1'
+              AND envelope#>>'{data,receipt,action}'='contribution.create'
+            OR envelope->>'type'='com.rezics.space.created.v1' AND envelope#>>'{data,receipt,action}'='space.create'
+          ) THEN 'addition' ELSE 'removal' END AS effect
         FROM relay.delivered_event WHERE stream_scope=$1 AND data_epoch=$2 AND sequence<=$3::numeric
           AND (sequence>$4::numeric OR sequence=$4::numeric AND event_id>$5)
         ORDER BY sequence,event_id LIMIT $6`,
@@ -419,11 +433,10 @@ export class RealmThreadRankingProjection {
       await controlTransaction(this.access, async (client) => {
         await this.lock(client, epoch, position);
         for (const event of events) {
-          if (event.reply && event.realm) await client.query(`INSERT INTO access.realm_thread_dirty(data_epoch,kind,resource,after_key)
-            VALUES($1,'placement',$2,'ready:replay') ON CONFLICT DO NOTHING`, [epoch, `${event.realm}|${event.reply}`]);
-          else if (event.reply) await this.dirty(client, epoch, 'reply', event.reply);
-          else if (event.work) await this.dirty(client, epoch, 'work', event.work);
-          else if (event.realm) await this.dirty(client, epoch, 'realm', event.realm);
+          if (event.reply && event.realm) await this.placementDirty(client, epoch, event.realm, event.reply, event.effect);
+          else if (event.reply) await this.dirty(client, epoch, 'reply', event.reply, event.effect);
+          else if (event.work) await this.dirty(client, epoch, 'work', event.work, event.effect);
+          else if (event.realm) await this.dirty(client, epoch, 'realm', event.realm, event.effect);
         }
         const last = events.at(-1);
         await client.query(
@@ -572,12 +585,27 @@ export class RealmThreadRankingProjection {
     epoch: string,
     kind: 'reply' | 'work' | 'realm',
     resource: string,
+    effect: 'addition' | 'removal' = 'removal',
   ) {
     await client.query(
-      `INSERT INTO access.realm_thread_dirty(data_epoch,kind,resource) VALUES($1,$2,$3)
-      ON CONFLICT(data_epoch,kind,resource) DO UPDATE SET after_key=''`,
-      [epoch, kind, resource],
+      `INSERT INTO access.realm_thread_dirty(data_epoch,kind,resource,effect) VALUES($1,$2,$3,$4)
+      ON CONFLICT(data_epoch,kind,resource) DO UPDATE SET after_key='',
+        effect=CASE WHEN access.realm_thread_dirty.effect='removal' OR EXCLUDED.effect='removal'
+          THEN 'removal' ELSE 'addition' END`,
+      [epoch, kind, resource, effect],
     );
+  }
+
+  private async placementDirty(client: PoolClient, epoch: string, realm: string, reply: string,
+    effect: 'addition' | 'removal' = 'removal') {
+    // Successful placements retain Content's immutable parent/root and have
+    // settled their own index. Replaying one cannot remove membership. An
+    // already registered review removal keeps its marker and wins the effect.
+    await client.query(`INSERT INTO access.realm_thread_dirty(data_epoch,kind,resource,after_key,effect)
+      VALUES($1,'placement',$2,'ready:replay',$3)
+      ON CONFLICT(data_epoch,kind,resource) DO UPDATE SET
+        effect=CASE WHEN access.realm_thread_dirty.effect='removal' OR EXCLUDED.effect='removal'
+          THEN 'removal' ELSE 'addition' END`, [epoch, `${realm}|${reply}`, effect]);
   }
 
   private async project(

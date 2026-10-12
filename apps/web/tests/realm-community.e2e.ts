@@ -10,6 +10,7 @@ import { realmHref as manageHref } from '../features/manage/routes.ts';
 import { postDocument, type PostIntent, type PostProgress } from '../features/post-composer/api.ts';
 import { PublicCommands, selectedSessionAgent } from './direction-9-fixture.ts';
 import { signInAtAccounts } from './account-sign-in.ts';
+import { realmNavigationDiagnostics } from './realm-navigation-diagnostics.ts';
 
 const idOf = (iri: string) => iri.slice(-36);
 const nativeId = () => `https://rezics.com/id/${randomUUID()}`;
@@ -304,9 +305,11 @@ async function waitForWorkTypeahead(api: PublicCommands, work: { work: string; t
   const path = `/search/typeahead?prefix=${encodeURIComponent(work.title)}`;
   const deadline = Date.now() + 120_000;
   let lastStatus = 0;
+  let lastBody: unknown;
   do {
     const result = await api.inspect(path);
     lastStatus = result.status;
+    lastBody = result.body;
     if (result.status === 200) {
       const items = (result.body as { items?: { work: string }[] } | null)?.items ?? [];
       if (items.some(item => item.work === work.work)) return;
@@ -319,6 +322,8 @@ async function waitForWorkTypeahead(api: PublicCommands, work: { work: string; t
     }
     await new Promise(resolve => setTimeout(resolve, 250));
   } while (Date.now() < deadline);
+  console.log(JSON.stringify({ event: 'realm-fixture-typeahead-incomplete', at: new Date().toISOString(),
+    request: { method: 'GET', path: `/api/main/v1${path}` }, status: lastStatus, body: lastBody }));
   throw new Error(`Fixture projection ${path} was not ready within 120 seconds (last HTTP ${lastStatus})`);
 }
 
@@ -423,50 +428,53 @@ test('a member opens a thread and nested replies that another person sees after 
   test.setTimeout(600_000);
   page.setDefaultTimeout(30_000);
   const manager = await managerSession(page);
-  const realm = await createRealm(manager.api, manager.actor, manager.principalId, `Thread Circle ${randomUUID().slice(0, 8)}`);
-  const work = await createPublicWork(manager.api, manager.actor, manager.principalId, `Conversation Work ${randomUUID().slice(0, 8)}`);
-  await waitForWorkTypeahead(manager.api, work);
-  const writer = await participantFor(browser, info);
-  await grant(`work:read:${work.work}`, 'work.read', writer.principalId, writer.actor);
-  await grant(`reply:create:${work.work}`, 'reply.create', writer.principalId, writer.actor);
-  await grant(`reply:place:${realm.realm}`, 'reply.place', writer.principalId, writer.actor);
-  await letMemberDraft(writer.page, writer.actor, writer.principalId);
-  await joinRealm(writer.page, realm.realm);
-  await writer.page.goto(communityHref('en', realm.realm, 'discussions'));
-  await writer.page.getByRole('link', { name: 'Create post', exact: true }).click();
-  const workSearch = writer.page.getByRole('searchbox', { name: 'Search for a Work' });
-  await waitForReactHandler(workSearch);
-  await workSearch.fill(work.title);
-  await expect(workSearch).toHaveValue(work.title);
-  const workChoice = writer.page.getByRole('button', { name: work.title, exact: true });
-  await expect(workChoice).toBeVisible();
-  await workChoice.click();
-  const title = `First conversation ${randomUUID().slice(0, 6)}`;
-  const body = 'A member starts this discussion from the Realm.';
-  await writer.page.getByRole('textbox', { name: 'Title', exact: true }).fill(title);
-  await writer.page.getByRole('textbox', { name: 'Your post', exact: true }).fill(body);
-  await writer.page.getByRole('button', { name: 'Post', exact: true }).click();
-  await expect(writer.page.getByRole('heading', { level: 1, name: title, exact: true })).toBeVisible({ timeout: 60_000 });
-  const threadUrl = writer.page.url();
+  const finishDiagnostics = await realmNavigationDiagnostics(page, info, 'thread-fixture');
+  try {
+    const realm = await createRealm(manager.api, manager.actor, manager.principalId, `Thread Circle ${randomUUID().slice(0, 8)}`);
+    const work = await createPublicWork(manager.api, manager.actor, manager.principalId, `Conversation Work ${randomUUID().slice(0, 8)}`);
+    await waitForWorkTypeahead(manager.api, work);
+    const writer = await participantFor(browser, info);
+    await grant(`work:read:${work.work}`, 'work.read', writer.principalId, writer.actor);
+    await grant(`reply:create:${work.work}`, 'reply.create', writer.principalId, writer.actor);
+    await grant(`reply:place:${realm.realm}`, 'reply.place', writer.principalId, writer.actor);
+    await letMemberDraft(writer.page, writer.actor, writer.principalId);
+    await joinRealm(writer.page, realm.realm);
+    await writer.page.goto(communityHref('en', realm.realm, 'discussions'));
+    await writer.page.getByRole('link', { name: 'Create post', exact: true }).click();
+    const workSearch = writer.page.getByRole('searchbox', { name: 'Search for a Work' });
+    await waitForReactHandler(workSearch);
+    await workSearch.fill(work.title);
+    await expect(workSearch).toHaveValue(work.title);
+    const workChoice = writer.page.getByRole('button', { name: work.title, exact: true });
+    await expect(workChoice).toBeVisible();
+    await workChoice.click();
+    const title = `First conversation ${randomUUID().slice(0, 6)}`;
+    const body = 'A member starts this discussion from the Realm.';
+    await writer.page.getByRole('textbox', { name: 'Title', exact: true }).fill(title);
+    await writer.page.getByRole('textbox', { name: 'Your post', exact: true }).fill(body);
+    await writer.page.getByRole('button', { name: 'Post', exact: true }).click();
+    await expect(writer.page.getByRole('heading', { level: 1, name: title, exact: true })).toBeVisible({ timeout: 60_000 });
+    const threadUrl = writer.page.url();
 
-  const firstReply = `A reader replies ${randomUUID().slice(0, 6)}.`;
-  await writer.page.getByRole('textbox', { name: 'Add a comment' }).fill(firstReply);
-  await writer.page.getByRole('button', { name: 'Comment', exact: true }).click();
-  await expect(writer.page.getByText(firstReply, { exact: true })).toBeVisible();
-  const firstArticle = writer.page.getByRole('article').filter({ hasText: firstReply });
-  await firstArticle.getByRole('button', { name: 'Reply', exact: true }).click();
-  const nested = `A nested reply ${randomUUID().slice(0, 6)}.`;
-  const nestedBox = firstArticle.getByRole('textbox', { name: `Reply to ${writer.publicName}`, exact: true });
-  await nestedBox.fill(nested);
-  await firstArticle.getByRole('button', { name: 'Reply', exact: true }).last().click();
-  await expect(writer.page.getByText(nested, { exact: true })).toBeVisible();
+    const firstReply = `A reader replies ${randomUUID().slice(0, 6)}.`;
+    await writer.page.getByRole('textbox', { name: 'Add a comment' }).fill(firstReply);
+    await writer.page.getByRole('button', { name: 'Comment', exact: true }).click();
+    await expect(writer.page.getByText(firstReply, { exact: true })).toBeVisible();
+    const firstArticle = writer.page.getByRole('article').filter({ hasText: firstReply });
+    await firstArticle.getByRole('button', { name: 'Reply', exact: true }).click();
+    const nested = `A nested reply ${randomUUID().slice(0, 6)}.`;
+    const nestedBox = firstArticle.getByRole('textbox', { name: `Reply to ${writer.publicName}`, exact: true });
+    await nestedBox.fill(nested);
+    await firstArticle.getByRole('button', { name: 'Reply', exact: true }).last().click();
+    await expect(writer.page.getByText(nested, { exact: true })).toBeVisible();
 
-  await page.goto(threadUrl);
-  await page.reload();
-  await expect(page.getByRole('heading', { level: 1, name: title, exact: true })).toBeVisible();
-  await expect(page.getByText(body, { exact: true })).toBeVisible();
-  await expect(page.getByText(firstReply, { exact: true })).toBeVisible();
-  await expect(page.getByText(nested, { exact: true })).toBeVisible();
+    await page.goto(threadUrl);
+    await page.reload();
+    await expect(page.getByRole('heading', { level: 1, name: title, exact: true })).toBeVisible();
+    await expect(page.getByText(body, { exact: true })).toBeVisible();
+    await expect(page.getByText(firstReply, { exact: true })).toBeVisible();
+    await expect(page.getByText(nested, { exact: true })).toBeVisible();
+  } finally { await finishDiagnostics(); }
 });
 
 test('Best, Top and New reorder every Realm discussion after a reader votes', async ({ page, browser }, info) => {
@@ -488,28 +496,31 @@ test('Best, Top and New reorder every Realm discussion after a reader votes', as
   await waitForThreads(manager.api, realm.realm, manager.actor, Object.values(titles));
 
   const voter = await participantFor(browser, info);
-  await grant(`work:read:${work.work}`, 'work.read', voter.principalId, voter.actor);
-  await voter.page.goto(communityHref('en', realm.realm, 'discussions'));
-  const feed = voter.page.getByRole('feed', { name: 'Discussions' });
-  await expect(feed).toBeVisible();
-  const votedCard = feed.getByRole('article').filter({ has: voter.page.getByRole('heading', { name: titles.voted, exact: true }) });
-  const upvote = votedCard.getByRole('button', { name: 'Upvote', exact: true });
-  await expect(upvote).toBeVisible();
-  await waitForReactHandler(upvote);
-  const savedVote = voter.page.waitForResponse(response =>
-    new URL(response.url()).pathname.endsWith(`/feed/${idOf(realm.realm)}/vote`)
-    || new URL(response.url()).pathname.match(/\/api\/main\/v1\/feed\/[0-9a-f-]{36}\/vote$/) !== null);
-  await upvote.click();
-  await expect(upvote).toHaveAttribute('aria-pressed', 'true');
-  expect((await savedVote).status()).toBe(200);
-  await voter.page.reload();
+  const finishDiagnostics = await realmNavigationDiagnostics(voter.page, info, 'realm-sort');
+  try {
+    await grant(`work:read:${work.work}`, 'work.read', voter.principalId, voter.actor);
+    await voter.page.goto(communityHref('en', realm.realm, 'discussions'));
+    const feed = voter.page.getByRole('feed', { name: 'Discussions' });
+    await expect(feed).toBeVisible();
+    const votedCard = feed.getByRole('article').filter({ has: voter.page.getByRole('heading', { name: titles.voted, exact: true }) });
+    const upvote = votedCard.getByRole('button', { name: 'Upvote', exact: true });
+    await expect(upvote).toBeVisible();
+    await waitForReactHandler(upvote);
+    const savedVote = voter.page.waitForResponse(response =>
+      new URL(response.url()).pathname.endsWith(`/feed/${idOf(realm.realm)}/vote`)
+      || new URL(response.url()).pathname.match(/\/api\/main\/v1\/feed\/[0-9a-f-]{36}\/vote$/) !== null);
+    await upvote.click();
+    await expect(upvote).toHaveAttribute('aria-pressed', 'true');
+    expect((await savedVote).status()).toBe(200);
+    await voter.page.reload();
 
-  const best = [titles.voted, titles.newest, titles.oldest];
-  const newerFirst = [titles.newest, titles.voted, titles.oldest];
-  await expect.poll(() => visibleThreadTitles(voter.page)).toEqual(best);
-  await chooseSort(voter.page, 'Best', 'New');
-  await expect.poll(() => visibleThreadTitles(voter.page)).toEqual(newerFirst);
-  await chooseSort(voter.page, 'New', 'Top');
-  await expect.poll(() => visibleThreadTitles(voter.page)).toEqual(best);
-  expect(await visibleThreadTitles(voter.page)).toEqual(best);
+    const best = [titles.voted, titles.newest, titles.oldest];
+    const newerFirst = [titles.newest, titles.voted, titles.oldest];
+    await expect.poll(() => visibleThreadTitles(voter.page)).toEqual(best);
+    await chooseSort(voter.page, 'Best', 'New');
+    await expect.poll(() => visibleThreadTitles(voter.page)).toEqual(newerFirst);
+    await chooseSort(voter.page, 'New', 'Top');
+    await expect.poll(() => visibleThreadTitles(voter.page)).toEqual(best);
+    expect(await visibleThreadTitles(voter.page)).toEqual(best);
+  } finally { await finishDiagnostics(); }
 });

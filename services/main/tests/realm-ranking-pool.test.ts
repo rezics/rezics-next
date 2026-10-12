@@ -130,7 +130,7 @@ test('Content changes dirty only the exact reply and advance the Realm checkpoin
     call.sql.includes('INSERT INTO access.realm_thread_dirty'),
   );
   expect(invalidation).toHaveLength(1);
-  expect(invalidation[0]).toMatchObject({ values: [epoch, 'reply', reply], held: true });
+  expect(invalidation[0]).toMatchObject({ values: [epoch, 'reply', reply, 'removal'], held: true });
   expect(f.calls.find((call) => call.sql.includes('SET content_sequence=$2'))).toMatchObject({
     values: [epoch, '2'],
     held: true,

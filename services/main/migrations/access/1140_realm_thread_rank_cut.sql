@@ -1,13 +1,19 @@
--- Admission and ordering share one statement snapshot. The local planner
--- settings extend the existing seek's bounded-index contract to dependency
--- probes: a small unrelated dirty table must not invite a sequential scan.
+-- Admission and ordering share one statement snapshot. Function-local
+-- enable_seqscan=off and enable_bitmapscan=off are a bounded-index contract,
+-- extending the seek to dependency probes: unrelated dirty inventory must not
+-- invite a scan. The caller's planner settings are restored after the function.
 CREATE INDEX realm_thread_scoped_backfill ON access.feed_item(data_epoch,realm,id)
   WHERE kind IN ('reply','discussion') AND NOT realm_thread_indexed;
 
 ALTER TABLE access.realm_thread_dirty DROP CONSTRAINT realm_thread_dirty_kind_check;
 ALTER TABLE access.realm_thread_dirty ADD CHECK(kind IN ('reply','work','realm','parent','population','placement'));
+-- Projection work and read invalidation are distinct: replaying an additive
+-- receipt must not close an already published population. Closure uses the
+-- existing realm kind, with a removal effect, before acknowledging the decision.
+ALTER TABLE access.realm_thread_dirty ADD COLUMN effect text NOT NULL DEFAULT 'removal'
+  CHECK(effect IN ('addition','removal'));
 CREATE INDEX realm_thread_placement_effect ON access.realm_thread_dirty(data_epoch,resource COLLATE "C")
-  WHERE kind='placement';
+  WHERE kind='placement' AND effect='removal';
 
 CREATE FUNCTION access.read_realm_thread_rank_cut(
   _epoch text,_realm text,_sort text,_period text,
@@ -38,19 +44,19 @@ BEGIN
           WHERE data_epoch=$1 AND realm=$2 AND kind IN ('reply','discussion')
             AND NOT realm_thread_indexed LIMIT 1))
         AND NOT EXISTS(SELECT 1 FROM access.realm_thread_dirty
-          WHERE data_epoch=$1 AND kind='realm' AND resource=$2)
+          WHERE data_epoch=$1 AND kind='realm' AND resource=$2 AND effect='removal')
         AND NOT EXISTS(SELECT 1 FROM access.realm_thread_reference r
-          JOIN access.realm_thread_dirty d ON d.data_epoch=r.data_epoch AND d.kind='reply' AND d.resource=r.reply
+          JOIN access.realm_thread_dirty d ON d.data_epoch=r.data_epoch AND d.kind='reply' AND d.resource=r.reply AND d.effect='removal'
           WHERE r.data_epoch=$1 AND r.realm=$2 %3$s)
         AND NOT EXISTS(SELECT 1 FROM access.realm_thread_reference r
-          JOIN access.realm_thread_dirty d ON d.data_epoch=r.data_epoch AND d.kind='placement'
+          JOIN access.realm_thread_dirty d ON d.data_epoch=r.data_epoch AND d.kind='placement' AND d.effect='removal'
             AND d.resource COLLATE "C">=r.realm||'|'||r.reply AND d.resource COLLATE "C"<=r.realm||'|'||r.reply||'|￿'
           WHERE r.data_epoch=$1 AND r.realm=$2 %3$s)
         AND NOT EXISTS(SELECT 1 FROM access.realm_thread_reference r
-          JOIN access.realm_thread_dirty d ON d.data_epoch=r.data_epoch AND d.kind='work' AND d.resource=r.work
+          JOIN access.realm_thread_dirty d ON d.data_epoch=r.data_epoch AND d.kind='work' AND d.resource=r.work AND d.effect='removal'
           WHERE r.data_epoch=$1 AND r.realm=$2 %3$s)
         AND NOT EXISTS(SELECT 1 FROM access.realm_thread_reference r
-          JOIN access.realm_thread_dirty d ON d.data_epoch=r.data_epoch AND d.kind='parent' AND d.resource=r.parent
+          JOIN access.realm_thread_dirty d ON d.data_epoch=r.data_epoch AND d.kind='parent' AND d.resource=r.parent AND d.effect='removal'
           WHERE r.data_epoch=$1 AND r.realm=$2 %3$s)
         AND NOT EXISTS(SELECT 1 FROM access.realm_thread_reference r
           JOIN access.feed_item f ON f.data_epoch=r.data_epoch AND f.id=r.placement
@@ -84,17 +90,27 @@ CREATE TRIGGER realm_thread_feed_arrived BEFORE INSERT ON access.feed_item
 -- Parent propagation belongs to this Realm's placement, whereas a Content
 -- availability change still uses the existing cross-Realm reply/parent jobs.
 CREATE OR REPLACE FUNCTION access.realm_thread_parent_changed() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE _epoch text; _realm text; _reply text; _effect text;
 BEGIN
   IF TG_OP='UPDATE' THEN
     IF (OLD.thread,OLD.active) IS NOT DISTINCT FROM (NEW.thread,NEW.active) THEN RETURN NULL; END IF;
   END IF;
-  INSERT INTO access.realm_thread_dirty(data_epoch,kind,resource,after_key)
-    SELECT NEW.data_epoch,'placement',NEW.realm||'|'||NEW.reply,'children:'
+  IF TG_OP='DELETE' THEN
+    _epoch:=OLD.data_epoch; _realm:=OLD.realm; _reply:=OLD.reply; _effect:='removal';
+  ELSE
+    _epoch:=NEW.data_epoch; _realm:=NEW.realm; _reply:=NEW.reply;
+    IF TG_OP='INSERT' THEN _effect:='addition';
+    ELSIF OLD.thread=NEW.thread AND NOT OLD.active AND NEW.active THEN _effect:='addition';
+    ELSE _effect:='removal'; END IF;
+  END IF;
+  INSERT INTO access.realm_thread_dirty(data_epoch,kind,resource,after_key,effect)
+    SELECT _epoch,'placement',_realm||'|'||_reply,'children:',_effect
     WHERE EXISTS(SELECT 1 FROM access.realm_thread_reference child
-      WHERE child.data_epoch=NEW.data_epoch AND child.realm=NEW.realm AND child.parent=NEW.reply LIMIT 1)
+      WHERE child.data_epoch=_epoch AND child.realm=_realm AND child.parent=_reply LIMIT 1)
     ON CONFLICT(data_epoch,kind,resource) DO UPDATE SET after_key=CASE
       WHEN access.realm_thread_dirty.after_key LIKE 'pending:%' THEN access.realm_thread_dirty.after_key
-      ELSE 'children:' END;
+      ELSE 'children:' END,effect=CASE WHEN access.realm_thread_dirty.effect='removal'
+      THEN 'removal' ELSE EXCLUDED.effect END;
   RETURN NULL;
 END $$;
 
@@ -124,16 +140,17 @@ LANGUAGE sql VOLATILE SET enable_bitmapscan=off SET enable_seqscan=off AS $$
     AND (_population IS NULL OR EXISTS(SELECT 1 FROM access.realm_thread_population p
       WHERE p.data_epoch=_epoch AND p.realm=_realm AND p.population=_population AND p.ready))
     AND NOT EXISTS(SELECT 1 FROM access.realm_thread_dirty
-      WHERE data_epoch=_epoch AND kind='realm' AND resource=_realm)
+      WHERE data_epoch=_epoch AND kind='realm' AND resource=_realm AND effect='removal')
     AND NOT EXISTS(SELECT 1 FROM dependencies r JOIN access.realm_thread_dirty d
-      ON d.data_epoch=_epoch AND d.kind='reply' AND d.resource=r.reply)
+      ON d.data_epoch=_epoch AND d.kind='reply' AND d.resource=r.reply AND d.effect='removal')
     AND NOT EXISTS(SELECT 1 FROM dependencies r JOIN access.realm_thread_dirty d
-      ON d.data_epoch=_epoch AND d.kind='placement' AND d.resource COLLATE "C">=_realm||'|'||r.reply
-        AND d.resource COLLATE "C"<=_realm||'|'||r.reply||'|￿')
+      ON d.data_epoch=_epoch AND d.kind='placement' AND d.effect='removal' AND (
+        (d.resource COLLATE "C">=_realm||'|'||r.reply AND d.resource COLLATE "C"<=_realm||'|'||r.reply||'|￿')
+        OR (d.resource COLLATE "C">=_realm||'|'||r.parent AND d.resource COLLATE "C"<=_realm||'|'||r.parent||'|￿')))
     AND NOT EXISTS(SELECT 1 FROM dependencies r JOIN access.realm_thread_dirty d
-      ON d.data_epoch=_epoch AND d.kind='work' AND d.resource=r.work)
+      ON d.data_epoch=_epoch AND d.kind='work' AND d.resource=r.work AND d.effect='removal')
     AND NOT EXISTS(SELECT 1 FROM dependencies r JOIN access.realm_thread_dirty d
-      ON d.data_epoch=_epoch AND d.kind='parent' AND d.resource=r.parent)
+      ON d.data_epoch=_epoch AND d.kind='parent' AND d.resource=r.parent AND d.effect='removal')
     AND NOT EXISTS(SELECT 1 FROM dependencies r JOIN access.feed_item f
       ON f.data_epoch=_epoch AND f.id=r.placement WHERE NOT f.realm_thread_indexed) AS ready
   FROM fence LEFT JOIN access.realm_thread_checkpoint c ON c.data_epoch=_epoch

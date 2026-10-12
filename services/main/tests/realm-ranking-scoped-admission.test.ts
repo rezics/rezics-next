@@ -7,7 +7,8 @@ import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts';
 import { AccessAdmissionRegistry, type RegisteredAdmission } from '../src/modules/access/admission.ts';
-import { RealmRankingsIncomplete, realmRankPage } from '../src/modules/rankings/realm-threads.ts';
+import { RealmRankingsIncomplete, RealmThreadRankingProjection, realmRankPage } from '../src/modules/rankings/realm-threads.ts';
+import type { FeedCheckpoint } from '../src/modules/feed/store.ts';
 import { RealmReplyStore } from '../src/modules/realm-reply/store.ts';
 import { RealmReplyStale, RealmReplyUnavailable, type PlacementPreparation,
   type RealmReplyContentStore } from '../src/modules/realm-reply/content-store.ts';
@@ -143,6 +144,48 @@ for (const sort of ['best', 'top'] as const) {
   });
 }
 
+test('a reply added to an admitted thread while a page is established still returns 200 with the previous revision', async () => {
+  const realm = native(), item = await reference(realm);
+  const established = new Map<'best' | 'top', Awaited<ReturnType<typeof realmRankPage>>>();
+  for (const sort of ['best', 'top'] as const) {
+    established.set(sort, await realmRankPage(access, reader().session, realm, sort, 'all', 20));
+  }
+  const reply = native(), placement = native();
+  // Replay the Content addition through the real projection owner. Its new
+  // identity belongs under this admitted root but has no published reference.
+  const content = {
+    query: async (sql: string) => {
+      if (sql.includes('content.owner_control')) return { rows: [{ data_epoch: contentEpoch, sequence: '8' }] };
+      if (sql.includes('FROM content.outbox')) return { rows: [{ sequence: '8', reply, resource: item.work,
+        realm: null, effect: 'addition', event_type: 'content.reply.created' }] };
+      throw new Error('A pending reply addition read an unrelated Content population');
+    },
+  } as unknown as Pool;
+  const { session } = reader('8', '4');
+  session.deps.realmReplyThreads = new RealmReplyThreadStore(content, access);
+  session.deps.content = {} as NonNullable<WorkReadSession['deps']['content']>;
+  const projection = new RealmThreadRankingProjection(access, {} as Pool);
+  await expect(projection.tick(session, { data_epoch: epoch } as FeedCheckpoint, '3')).resolves.toBe(true);
+  expect((await access.query(`SELECT 1 FROM access.realm_thread_dirty
+    WHERE data_epoch=$1 AND kind='reply' AND resource=$2`, [epoch, reply])).rowCount).toBe(1);
+  await pending(realm, placement);
+  // The immutable placement addition still awaits the exact child delta;
+  // it must neither change nor close the already published root population.
+  await access.query(`INSERT INTO access.realm_thread_dirty(data_epoch,kind,resource,after_key)
+    VALUES($1,'placement',$2,'ready:replay') ON CONFLICT DO NOTHING`, [epoch, `${realm}|${reply}`]);
+  for (const sort of ['best', 'top'] as const) {
+    const previous = established.get(sort)!;
+    expect(await realmRankPage(access, session, realm, sort, 'all', 20)).toEqual(previous);
+    const anchor = previous.rows[0]!;
+    expect(await realmRankPage(access, session, realm, sort, 'all', 20, {
+      rank: anchor.rank_key, time: anchor.time_key, placement: anchor.placement, revision: previous.revision,
+    })).toEqual({ revision: previous.revision, rows: [] });
+  }
+  await expect(session.deps.realmReplyThreads.assertThreadProjection(session, realm, item.reply))
+    .resolves.toBeUndefined();
+  expect(await session.deps.realmReplyThreads.siblingPage(epoch, realm, item.reply, 'new', 20)).toEqual([]);
+});
+
 test('uninitialized and reset placements never masquerade as a complete empty population', async () => {
   const realm = native();
   await pending(realm);
@@ -256,6 +299,28 @@ test('thread admission fences only the affected root inside one Realm', async ()
   await expect(ready(a, first.reply)).rejects.toBeInstanceOf(WorkReadUnavailable);
   await expect(ready(a, second.reply)).resolves.toBeUndefined();
   await expect(ready(b, other.reply)).resolves.toBeUndefined();
+});
+
+test('deleting a placed parent queues child propagation only in that Realm', async () => {
+  const a = native(), b = native(), parent = await reference(a);
+  const child = await reference(a, parent.reply, parent.work);
+  await access.query(`INSERT INTO access.realm_thread_reference
+    (data_epoch,realm,reply,placement,parent,thread,work,occurred_at,activity_at,active)
+    VALUES($1,$2,$3,$4,NULL,$3,$5,clock_timestamp(),clock_timestamp(),true)`,
+  [epoch, b, parent.reply, native(), parent.work]);
+  const otherChild = await reference(b, parent.reply, parent.work);
+  await access.query(`DELETE FROM access.realm_thread_reference
+    WHERE data_epoch=$1 AND realm=$2 AND reply=$3`, [epoch, a, parent.reply]);
+  expect((await access.query<{ kind: string; resource: string; after_key: string }>(`SELECT kind,resource,after_key
+    FROM access.realm_thread_dirty WHERE data_epoch=$1`, [epoch])).rows)
+    .toEqual([{ kind: 'placement', resource: `${a}|${parent.reply}`, after_key: 'children:' }]);
+  expect((await realmRankPage(access, reader().session, b, 'top', 'all', 20)).rows.map(row => row.reply))
+    .toEqual([parent.reply]);
+  const { session } = reader();
+  await expect(session.deps.realmReplyThreads!.assertThreadProjection(session, a, child.reply))
+    .rejects.toBeInstanceOf(WorkReadUnavailable);
+  await expect(session.deps.realmReplyThreads!.assertThreadProjection(session, b, otherChild.reply))
+    .resolves.toBeUndefined();
 });
 
 for (const aggregate of [false, true]) {
@@ -509,6 +574,93 @@ test('an acknowledged first root placement is immediately present in its Best an
     .resolves.toBeUndefined();
 });
 
+for (const [source, removal] of [
+  ['content', false], ['content', true], ['main', false], ['main', true],
+] as const) {
+  test(removal ? `an additive ${source} replay preserves an outstanding removal of the same indexed child`
+    : `an indexed child addition keeps its published cut readable while ${source} replay is pending`, async () => {
+    const realm = native(), parent = await reference(realm);
+    const unaffectedRealm = native(), unaffected = await reference(unaffectedRealm);
+    const command = placementReplay(realm, parent.reply, parent.work);
+    await expect(command.place()).resolves.toMatchObject({ placement: command.placement });
+    const established = new Map<'best' | 'top', Awaited<ReturnType<typeof realmRankPage>>>();
+    for (const sort of ['best', 'top'] as const) {
+      established.set(sort, await realmRankPage(access, reader('8', '4').session, realm, sort, 'all', 20));
+    }
+    if (source === 'main') await access.query(`UPDATE access.realm_thread_checkpoint
+      SET content_sequence=8 WHERE data_epoch=$1`, [epoch]);
+    const ownerSequence = source === 'content' ? '9' : '8';
+    const operation = randomUUID();
+    const removalKind = source === 'content' ? 'reply' : 'placement';
+    const removalResource = source === 'content' ? command.reply : `${realm}|${command.reply}`;
+    const removalAfter = source === 'content' ? '' : `pending:${operation}`;
+    const interleaveRemoval = async () => {
+      if (!removal) return;
+      // The authoritative removal arrives after the worker chose source
+      // replay, while its external owner read is in flight. Its durable row
+      // must win the later additive upsert, including a pending operation.
+      await access.query(`INSERT INTO access.realm_thread_dirty(data_epoch,kind,resource,after_key,effect)
+        VALUES($1,$2,$3,$4,'removal')`, [epoch, removalKind, removalResource, removalAfter]);
+    };
+    const content = {
+      query: async (sql: string) => {
+        if (sql.includes('content.owner_control')) return { rows: [{ data_epoch: contentEpoch, sequence: ownerSequence }] };
+        if (source === 'content' && sql.includes('FROM content.outbox')) {
+          expect(sql).toContain('content.reply.created');
+          expect(sql).toContain('supersedes');
+          await interleaveRemoval();
+          return { rows: [
+            { sequence: '8', reply: command.reply, resource: parent.work, realm: null, effect: 'addition',
+              event_type: 'content.reply.created', operation_id: randomUUID(), payload: { reply: command.reply } },
+            { sequence: '9', reply: command.reply, resource: parent.work, realm, effect: 'addition',
+              event_type: 'content.realm-review.decided', operation_id: randomUUID(),
+              payload: { realm, reply: command.reply, outcome: 'approved', supersedes: null } },
+          ] };
+        }
+        throw new Error('A pure addition replay read an unrelated Content population');
+      },
+    } as unknown as Pool;
+    const relay = {
+      query: async (sql: string) => {
+        if (!sql.includes('FROM relay.delivered_event')) throw new Error('A pure addition replay read unrelated Main inventory');
+        expect(sql).toContain('reply.place');
+        expect(sql).toContain('com.rezics.realm.reply-placed.v1');
+        await interleaveRemoval();
+        return { rows: [{ sequence: '4', event_id: randomUUID(), reply: command.reply, work: parent.work, realm, effect: 'addition',
+          event_type: 'realm.reply.placed', action: 'reply.place', predecessor: null,
+          envelope: { data: { action: 'reply.place', receipt: { realm, reply: command.reply,
+            placement: command.placement, predecessor: null } } } }] };
+      },
+    } as unknown as Pool;
+    const { session } = reader(ownerSequence, '4');
+    session.deps.realmReplyThreads = new RealmReplyThreadStore(content, access);
+    session.deps.content = {} as NonNullable<WorkReadSession['deps']['content']>;
+    await expect(new RealmThreadRankingProjection(access, relay)
+      .tick(session, { data_epoch: epoch } as FeedCheckpoint, source === 'main' ? '4' : '3')).resolves.toBe(true);
+    const jobs = (await access.query<{ kind: string; resource: string; after_key: string; effect: string }>(
+      `SELECT kind,resource,after_key,effect FROM access.realm_thread_dirty
+      WHERE data_epoch=$1`, [epoch])).rows;
+    expect(jobs.length).toBeGreaterThan(0);
+    if (removal) expect(jobs.find(job => job.kind === removalKind && job.resource === removalResource))
+      .toEqual({ kind: removalKind, resource: removalResource, after_key: removalAfter, effect: 'removal' });
+    else expect(jobs.every(job => job.effect === 'addition')).toBe(true);
+    for (const sort of ['best', 'top'] as const) {
+      if (removal) await expect(realmRankPage(access, session, realm, sort, 'all', 20))
+        .rejects.toBeInstanceOf(RealmRankingsIncomplete);
+      else expect(await realmRankPage(access, session, realm, sort, 'all', 20)).toEqual(established.get(sort)!);
+      expect((await realmRankPage(access, session, unaffectedRealm, sort, 'all', 20)).rows.map(row => row.reply))
+        .toEqual([unaffected.reply]);
+    }
+    for (const focus of [parent.reply, command.reply]) {
+      const ready = session.deps.realmReplyThreads.assertThreadProjection(session, realm, focus);
+      if (removal) await expect(ready).rejects.toBeInstanceOf(WorkReadUnavailable);
+      else await expect(ready).resolves.toBeUndefined();
+    }
+    await expect(session.deps.realmReplyThreads.assertThreadProjection(session, unaffectedRealm, unaffected.reply))
+      .resolves.toBeUndefined();
+  });
+}
+
 test('acknowledged placement publishes its exact index, aggregate, order and revision with bounded work', async () => {
   const unrelated = native();
   const costs: { statements: number; graphRequests: number }[] = [];
@@ -611,7 +763,7 @@ async function loggedPlans(path: string, offset: number, pages: number): Promise
       .filter(entry => entry.message.includes('plan:\n'))
       .map(entry => JSON.parse(entry.message.slice(entry.message.indexOf('plan:\n') + 6)) as
         { 'Query Text': string; Plan: Plan });
-    if (plans.filter(plan => plan['Query Text'].includes('SELECT * FROM access.read_realm_thread_rank_cut')).length === pages)
+    if (plans.filter(plan => plan['Query Text'].includes('SELECT * FROM access.read_realm_thread_rank_cut(')).length === pages)
       return plans;
     await new Promise(resolveWait => setTimeout(resolveWait, 10));
   }
