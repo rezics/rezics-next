@@ -514,8 +514,8 @@ test('GOV24/GOV25: frozen imported covers keep exact credit and lifecycle fences
     }
   }, 360_000);
 
-// Waits for the owner effect that suppresses digest-identical cover copies for a copyright decision.
-test.failing('copyright erasure suppresses identical bytes on another imported cover', async () => {
+// Copyright suppression covers imported copies of the same bytes while preserving the user's own upload.
+test('copyright erasure suppresses identical bytes on another imported cover', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Use goalctl test with the integration tier');
   const owners = await cloneQaOwnerDatabases(requireQa(), ['access', 'content', 'relay'], 'owner');
   const root = mkdtempSync(join(repository, '.temp/imported-cover-identical-digest-'));
