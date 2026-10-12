@@ -70,6 +70,7 @@ export function ZoneNavigationEditor({
   signInHref,
   api,
   authoring,
+  themeApi,
 }: {
   zoneId: string;
   zoneIri: string;
@@ -83,6 +84,7 @@ export function ZoneNavigationEditor({
   signInHref: string;
   api?: ZoneNavigationClient;
   authoring?: ZoneAuthoringClient;
+  themeApi?: ZoneThemeClient;
 }) {
   const [state, dispatch, draftReady] = useZoneEditorDraft('navigation', initial, isNavigationDirty, isNavigationState);
   const [page, setPage, pageReady] = useZoneEditorDraft('home', home, isDirty, isEditorState);
@@ -121,7 +123,7 @@ export function ZoneNavigationEditor({
   const theme = useRef<ZoneThemeClient | null>(null);
   if (!client.current) client.current = api ?? browserZoneNavigation();
   if (!pages.current) pages.current = authoring ?? browserZoneAuthoring();
-  if (!theme.current) theme.current = browserZoneTheme();
+  if (!theme.current) theme.current = themeApi ?? browserZoneTheme();
   const saveLane = useZoneEditorRef<ReturnType<
     typeof commandLane<
       NavigationState,
@@ -233,7 +235,7 @@ export function ZoneNavigationEditor({
             replayed: result.data.replayed,
           });
         else if (result.failure === 'stale') { setReview(null); putPage({ type: 'publish-stale' }); }
-        else put({ type: 'failed', failure: result.failure });
+        else putPage({ type: 'failed', failure: result.failure });
         if (result.ok || result.failure !== 'unavailable') publishChoice.current = null;
         return result;
       },
@@ -639,20 +641,11 @@ export function ZoneNavigationEditor({
   );
 }
 
-function NavNotice({
-  copy,
-  state,
-  page,
-  busy,
-  signInHref,
-  ready,
-  review,
-  reviewPublishDisabled,
-  onReview,
-  onRefresh,
-  onPublishReviewed,
-  onRetry,
-}: {
+function NavNotice(props: NavNoticeProps) {
+  return <><NavigationWriteNotice {...props} /><NavigationPublicationNotice {...props} /></>;
+}
+
+type NavNoticeProps = {
   copy: ZoneEditorMessages;
   state: NavigationState;
   page: EditorState;
@@ -665,7 +658,16 @@ function NavNotice({
   onRefresh: () => void;
   onPublishReviewed: () => void;
   onRetry: () => void;
-}) {
+};
+
+function NavigationWriteNotice({
+  copy,
+  state,
+  busy,
+  signInHref,
+  onReview,
+  onRetry,
+}: NavNoticeProps) {
   if (state.notice.kind === 'stale') {
     return (
       <NoticeAlert variant="warning" title={copy.navStaleTitle} body={copy.navStaleBody}>
@@ -704,6 +706,13 @@ function NavNotice({
       </NoticeAlert>
     );
   }
+  const failure = failureCopy(copy, state.notice.kind);
+  if (!failure) return null;
+  return <FailureNotice copy={copy} kind={state.notice.kind} failure={failure} busy={busy} signInHref={signInHref} onRetry={onRetry} />;
+}
+
+function NavigationPublicationNotice({ copy, state, page, busy, signInHref, ready, review, reviewPublishDisabled,
+  onRefresh, onPublishReviewed, onRetry }: NavNoticeProps) {
   if (page.notice.kind === 'publish-stale') {
     return (
       <>
@@ -724,15 +733,26 @@ function NavNotice({
       </>
     );
   }
-  const failure = failureCopy(copy, state.notice.kind);
+  const failure = failureCopy(copy, page.notice.kind);
   if (!failure) return null;
+  return <FailureNotice copy={copy} kind={page.notice.kind} failure={failure} busy={busy} signInHref={signInHref} onRetry={onRetry} />;
+}
+
+function FailureNotice({ copy, kind, failure, busy, signInHref, onRetry }: {
+  copy: ZoneEditorMessages;
+  kind: string;
+  failure: { title: string; body: string; retry: boolean };
+  busy: string | null;
+  signInHref: string;
+  onRetry(): void;
+}) {
   return (
     <NoticeAlert
-      variant={state.notice.kind === 'sign-in' ? 'info' : 'destructive'}
+      variant={kind === 'sign-in' ? 'info' : 'destructive'}
       title={failure.title}
       body={failure.body}
     >
-      {state.notice.kind === 'sign-in' ? (
+      {kind === 'sign-in' ? (
         <LocalizedLink
           href={signInHref}
           className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), choiceClass)}

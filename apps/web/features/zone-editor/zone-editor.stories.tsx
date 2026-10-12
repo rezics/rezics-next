@@ -7,7 +7,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { spaceHref } from '../address/path.ts';
 import { messages as manageMessages } from '../manage/messages.ts';
 import manageZhHans from '../manage/messages/zh-Hans.ts';
-import type { ZoneAuthoringClient, ZoneNavigationClient } from './api.ts';
+import type { ZoneAuthoringClient, ZoneNavigationClient, ZoneThemeClient } from './api.ts';
 import { ZoneHomeEditor } from './editor.tsx';
 import { ZoneEditorFrame } from './frame.tsx';
 import { messages } from './messages.ts';
@@ -15,6 +15,7 @@ import { authoringModel, type EditorState } from './model.ts';
 import { ZoneNavigationEditor } from './navigation-editor.tsx';
 import type { NavigationState, NavPosition, SiteLink } from './navigation.ts';
 import { ZoneDraftPreview } from './preview.tsx';
+import { presetTokens } from '../zones/presentation.ts';
 
 const zoneId = '00000000-0000-4000-8000-000000000301';
 const zoneIri = `https://rezics.com/id/${zoneId}`;
@@ -412,7 +413,8 @@ const tides = 'https://rezics.com/id/00000000-0000-4000-8000-000000000322';
 let navCalls: { name: string; key: string; segment?: string }[] = [];
 let navServer: SiteLink[] = [];
 
-type NavigationMode = 'save' | 'stale' | 'stale-removal' | 'partial' | 'incomplete' | 'paths';
+type NavigationMode = 'save' | 'stale' | 'stale-removal' | 'partial' | 'incomplete' | 'paths'
+  | 'review-denied' | 'review-unavailable' | 'review-stale';
 const loadedMounts: SiteLink[] = [
   {
     id: '00000000-0000-4000-8000-000000000351',
@@ -593,6 +595,23 @@ function NavigationPage({ mode }: { mode: NavigationMode }) {
   });
   const [api] = useState(() => navigationClient(calls, mode));
   const [authoring] = useState(() => clientOf([], 'save'));
+  const [themeApi] = useState<ZoneThemeClient>(() => ({
+    async readConfiguration() {
+      return { ok: true, data: { revision: zoneHead, configuration: { presentation: {
+        profile: 'zone-presentation-v2', preset: 'clean', tokens: presetTokens.clean, navigation: [], modules: [], slides: [],
+      } } } };
+    },
+    async saveConfiguration() { return { ok: false, failure: 'unavailable' }; },
+  }));
+  if (mode.startsWith('review-')) {
+    authoring.readHeads = async () => mode === 'review-denied' ? { ok: false, failure: 'denied' }
+      : mode === 'review-unavailable' ? { ok: false, failure: 'unavailable' }
+      : { ok: true, data: { zoneHead, navigationRevision: navigation } };
+    authoring.publish = async () => ({ ok: false, failure: 'stale', currentHead: zoneHead });
+    api.readNavigation = async () => ({ ok: true, data: {
+      head: navigation, navigation, links: [], complete: true, after: null, zoneHead,
+    } });
+  }
   const [home] = useState(() =>
     opening(
       fromPlainText('Morning edition of the harbor', 'blocks'),
@@ -632,6 +651,7 @@ function NavigationPage({ mode }: { mode: NavigationMode }) {
       return { ...base, links: loadedMounts, saved: loadedMounts };
     return base;
   });
+  if (mode.startsWith('review-')) { home.notice = { kind: 'publish-stale' }; initial.notice = { kind: 'review', dropped: [] }; }
   return (
     <ZoneEditorFrame
       name="Harbor notes"
@@ -658,6 +678,7 @@ function NavigationPage({ mode }: { mode: NavigationMode }) {
         signInHref="/auth/start?next=%2Fmanage%2Fz%2Fharbor"
         api={api}
         authoring={authoring}
+        themeApi={themeApi}
       />
     </ZoneEditorFrame>
   );
@@ -672,6 +693,41 @@ async function addPage(canvas: ReturnType<typeof within>, name: string) {
   await userEvent.click(canvas.getByRole('button', { name: 'Add link' }));
   await expect(canvas.getByText(name)).toBeVisible();
 }
+
+export const DeniedPublicationReviewRemainsVisibleBesideNavigation: Story = {
+  render: () => <NavigationPage mode="review-denied" />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: messages.en.refreshAndPublish }));
+    await expect(await canvas.findByText(messages.en.deniedBody)).toBeVisible();
+    await expect(canvas.getByText(messages.en.navReviewClean)).toBeVisible();
+  },
+};
+
+export const UnavailablePublicationReviewOffersRetry: Story = {
+  render: () => <NavigationPage mode="review-unavailable" />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: messages.en.refreshAndPublish }));
+    await expect(await canvas.findByText(messages.en.unavailableBody)).toBeVisible();
+    await expect(canvas.getByRole('button', { name: messages.en.tryAgain })).toBeEnabled();
+    await userEvent.click(canvas.getByRole('button', { name: messages.en.tryAgain }));
+    await expect(canvas.getByText(messages.en.unavailableBody)).toBeVisible();
+  },
+};
+
+export const ReviewedPublicationCanBecomeStaleAgain: Story = {
+  render: () => <NavigationPage mode="review-stale" />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: messages.en.refreshAndPublish }));
+    await userEvent.click(await canvas.findByRole('button', { name: messages.en.publishReviewed }));
+    await expect(await canvas.findByRole('button', { name: messages.en.refreshAndPublish })).toBeEnabled();
+    await expect(canvas.getByText(messages.en.navReviewClean)).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: messages.en.refreshAndPublish }));
+    await expect(await canvas.findByRole('button', { name: messages.en.publishReviewed })).toBeEnabled();
+  },
+};
 
 /** Two links are added, reversed, saved and published. Removing one is a later save. */
 export const AddsAndReordersLinks: Story = {
