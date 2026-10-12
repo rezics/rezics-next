@@ -227,7 +227,27 @@ test('cancelled and expired first posts release their reservation while retainin
       FROM access.admission WHERE id=$1`, [expired.placement_admission_id])).rows[0]!;
     expect(expiry.remaining).toBeLessThanOrEqual(30_000);
     await Bun.sleep(Math.ceil(expiry.remaining) + 100);
-    const expiredRetry = await a.post(expiredPage, a.author, 'Expired prepared contribution', home.author.token, expiredKey);
+    const nativePlace = home.deps.realmReplies.place;
+    let nativeFailure: Error | undefined;
+    home.deps.realmReplies.place = async function (...args) {
+      try { return await nativePlace.apply(this, args); }
+      catch (error) { if (error instanceof Error) nativeFailure = error; throw error; }
+    };
+    let expiredRetry: Response | undefined;
+    try {
+      // Expiry is not a terminal proof while the native cancellation/cleanup
+      // outcome is unknown. Retry that same intent within a bounded recovery.
+      for (let attempt = 0; attempt < 3; attempt++) {
+        expiredRetry = await a.post(expiredPage, a.author, 'Expired prepared contribution', home.author.token, expiredKey);
+        if (expiredRetry.status !== 503) break;
+        const retained = (await home.stack.contentPool.query(`SELECT terminal_outcome,terminal_refusal
+          FROM content.realm_about_post_operation WHERE id=$1`, [expired.id])).rows[0];
+        expect(retained).toEqual({ terminal_outcome: null, terminal_refusal: false });
+        await Bun.sleep(100);
+      }
+    } finally { home.deps.realmReplies.place = nativePlace; }
+    if (!expiredRetry) throw new Error('Expected native expiry recovery');
+    expect(expiredRetry.status, nativeFailure ? `${nativeFailure.constructor.name}: ${nativeFailure.message}` : undefined).toBe(409);
     const expiredRefusal = await refusal(expiredRetry, 409);
     await noOrphanPublicReply(home, a.realm.realm, expired.reply);
     expect((await a.effects(expiredPage.about)).threads).toBe(0);
