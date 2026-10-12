@@ -37,8 +37,8 @@ function fixture(tombstone = true) {
   };
   session.summaries = async () => [{ reference: work, status: 'available', type: 'work', disclosure: 'public',
     name: { value: 'Surviving Work', language: 'en', direction: 'ltr', basis: 'original' },
-    avatar: { kind: 'fallback', policy: 'work-cover-v1', key: 'work', resourceType: 'work' } }]
-      as unknown as Awaited<ReturnType<WorkReadSession['summaries']>>;
+    avatar: { kind: 'fallback', policy: 'work-cover-v1', key: 'work', resourceType: 'work' } }] as unknown as
+    Awaited<ReturnType<WorkReadSession['summaries']>>;
   return session;
 }
 
