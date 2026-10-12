@@ -11,6 +11,7 @@ import * as subjectDeletion from '../../../services/main/src/modules/outbox/acco
 import * as relayCoverage from '../../../services/main/src/modules/outbox/relay.ts';
 import * as journalCoverage from '../../../services/main/src/modules/erasure/core-journal-coverage.ts';
 import * as erasureAuthority from '../../../services/main/src/modules/erasure/authority.ts';
+import * as custody from '../../../services/main/src/modules/erasure/custody.ts';
 import { RestoreLineageConflict } from '../../../services/main/src/modules/work/restore-lineage.ts';
 import { readGraphErasureProof } from '../../../services/main/src/modules/erasure/graph.ts';
 import { readErasure } from '../../../services/main/src/modules/erasure/journal.ts';
@@ -391,11 +392,21 @@ test(
           ['Account absent subjects', () => spyOn(subjectDeletion, 'assertAccountSubjectDeletionsAbsent')],
           ['captured relay scan', () => spyOn(relayCoverage, 'relayCoverageOnClient')],
           ['captured journal scan', () => spyOn(journalCoverage, 'captureErasureJournalCoreCoverage')],
+          ['retained two-cut journal scan', () => {
+            const actual = journalCoverage.captureErasureJournalCoreCoverage;
+            return spyOn(journalCoverage, 'captureErasureJournalCoreCoverage').mockImplementationOnce(actual);
+          }, 2],
+          ['retained relay prefix', () => spyOn(relayCoverage, 'relayPrefixCoverageOnClient')],
+          ['retained relay scan', () => {
+            const actual = relayCoverage.relayCoverageOnClient;
+            return spyOn(relayCoverage, 'relayCoverageOnClient').mockImplementationOnce(actual);
+          }, 2],
+          ['retained suppression originals', () => spyOn(custody, 'readRetainedNativeGraphSuppressionProof')],
           ['retained authority', () => spyOn(erasureAuthority, 'assertRetainedAuthorityCapture')],
           ['retained reconciliation / Content basis', () => spyOn(binding, 'captureReleaseBasis')],
           ['native graph release', () => spyOn(qualified.fuseki, 'commandWithReceipt')],
         ] as const;
-        for (const [site, install] of qualifiedSites) {
+        for (const [site, install, calls = 1] of qualifiedSites) {
           for (const code of ['ECONNRESET', '57P01', 'integrity']) {
             const failure = code === 'integrity'
               ? new RestoreLineageConflict('integrity mismatch: connection timeout ECONNRESET 57P01')
@@ -403,7 +414,7 @@ test(
             const injected = install().mockImplementationOnce(async () => { throw failure; });
             try {
               await expect(attempt(qualified, key)).rejects.toBeInstanceOf(RecoveryRefusal);
-              expect(injected).toHaveBeenCalledTimes(1);
+              expect(injected).toHaveBeenCalledTimes(calls);
               const failed = await outerOperation(qualified, key);
               expect(failed.state).toBe(code === 'integrity' ? 'held' : 'running');
               if (code !== 'integrity') expect(failed.hold_reason).toBeNull();

@@ -471,7 +471,7 @@ function expectBothHeld(run: ReturnType<typeof fixture>) {
  * existing release fixture supplies the independently held owner transactions.
  * Only the composed erasure callback is a seam; error handling and same-key
  * settlement run through OwnerOperations and the real release helper. */
-function outerRestore(run: ReturnType<typeof fixture>) {
+function outerRestore(run: ReturnType<typeof fixture>, borrowedOwners = false) {
   const row = { id: '', request_digest: '', kind: 'restore', scope: 'product',
     state: 'running', hold_reason: null as string | null };
   let disposition: string | null = null;
@@ -505,7 +505,20 @@ function outerRestore(run: ReturnType<typeof fixture>) {
   const releaseSpy = spyOn(restoreLineage, 'releaseRestoredGraphHold').mockImplementation(
     async (graph, access, relay, actualLineage, evidence, client) => {
       expect(evidence.sealedCoverage).toBe(run.evidence.sealedCoverage);
-      await actualRelease(graph, access, relay, actualLineage, run.evidence, client);
+      if (!borrowedOwners || !run.evidence.qualification?.resume) {
+        await actualRelease(graph, access, relay, actualLineage, run.evidence, client);
+        return;
+      }
+      const accessClient = await access.connect();
+      try {
+        await client!.query('BEGIN ISOLATION LEVEL READ COMMITTED');
+        await accessClient.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+        await actualRelease(graph, access, relay, actualLineage, run.evidence, client, accessClient);
+        await client!.query('COMMIT'); await accessClient.query('COMMIT');
+      } catch (error) {
+        await client!.query('ROLLBACK'); await accessClient.query('ROLLBACK');
+        throw error;
+      } finally { accessClient.release(); }
     });
   const operations = new OwnerOperations(run.relay.pool,
     { fuseki: run.fuseki, lineage, objectDirectory: '.temp/unused-restore-release-objects' } as WorkActivationEnvironment, {
@@ -544,6 +557,7 @@ const qualifiedSites = [
   'account-subject-deletions', 'account-deletion-journal', 'deleted-account-access-state',
   'captured-relay', 'captured-relay-connect', 'captured-journal', 'current-coverage-head',
   'retained-authority', 'retained-reconciliation-content', 'native-graph-release',
+  'borrowed-Access-transaction', 'borrowed-relay-transaction',
 ] as const;
 
 for (const site of qualifiedSites) {
@@ -576,7 +590,7 @@ for (const site of qualifiedSites) {
           if (armed) throw failure;
         }));
       }
-      const owner = outerRestore(run);
+      const owner = outerRestore(run, site.startsWith('borrowed-'));
       try {
         await owner.qualify();
         armed = true;
@@ -587,6 +601,10 @@ for (const site of qualifiedSites) {
           if (armed && sql === 'SELECT max(erasure_epoch)::text AS epoch FROM relay.erasure') throw failure;
         };
         else if (site === 'retained-reconciliation-content') run.evidence.releaseErasures = async () => { throw failure; };
+        else if (site === 'borrowed-Access-transaction' || site === 'borrowed-relay-transaction') {
+          const borrowed = site === 'borrowed-Access-transaction' ? run.access : run.relay;
+          borrowed.queryGate = async sql => { if (armed && sql === 'SHOW transaction_isolation') throw failure; };
+        }
         else if (site === 'native-graph-release') extraSpies.push(
           spyOn(run.fuseki, 'commandWithReceipt').mockImplementation(async () => { throw failure; }));
 
@@ -607,6 +625,7 @@ for (const site of qualifiedSites) {
         expectBothHeld(run);
         armed = false; run.state.failAt = undefined; run.state.failError = undefined;
         run.capturedRelay.connectFailure = undefined; run.capturedRelay.queryGate = undefined;
+        run.access.queryGate = undefined; run.relay.queryGate = undefined;
         if (site === 'native-graph-release') extraSpies.pop()!.mockRestore();
         run.evidence.releaseErasures = async (clients, releaseGraph) => {
           await releaseGraph(); await openAccess(clients);
