@@ -49,6 +49,21 @@ export interface CommandRegistry {
   bindingDemands: { type: string; profile: string }[];
   bindings: ReadonlyMap<string, RegistryBinding>;
 }
+/** The same ordered, single-value selector consumed by native CanonicalPolicy.select.
+ * Classification belongs to callers; profile and shape selection belongs here. */
+export function selectCommandProfile(registry: Pick<CommandRegistry, 'canonical'>,
+  types: Iterable<string>, values: (path: string) => readonly string[]) {
+  const present = new Set(types);
+  const canonical = registry.canonical.find(entry => present.has(entry.type));
+  if (!canonical) return null;
+  const selectors = [...new Set(canonical.routes.flatMap(route => route.when.map(condition => condition.path)))];
+  const route = canonical.routes.find(candidate => candidate.when.every(condition => {
+    const selected = [...new Set(values(condition.path))];
+    return selected.length === 1 && selected[0] === condition.value;
+  }));
+  return route ? { ...route, kind: canonical.type, selectors } : null;
+}
+
 export interface RegistryOptions {
   canonicalOrder?: readonly Term[];
   demandOrder?: readonly Term[];

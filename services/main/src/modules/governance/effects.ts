@@ -1,4 +1,5 @@
 import manifest from '../../../../../generated/model/manifest.json';
+import { selectCommandProfile } from '../../../../../model/compiler/registry.ts';
 import { profileValidations, type ProfileId } from '../../infrastructure/profile.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { ContentModeration, ContentModerationConflict, ContentModerationStale }
@@ -66,12 +67,6 @@ const effectIri = (operationId: string, ordinal: number) =>
   `urn:rezics:moderation:${hash(`${operationId}:${ordinal}`)}`;
 const typed = (value: number) => `${lit(String(value))}^^<http://www.w3.org/2001/XMLSchema#integer>`;
 
-interface GraphModerationProfile {
-  profile: string;
-  shape: string;
-  when: readonly { path: string; value: string }[];
-}
-
 type GraphTerm = NonNullable<SparqlResult['results']>['bindings'][number][string];
 /** Model predicates and classes are RDF terms, not native resource identities. */
 function graphIri(value: string): string {
@@ -86,18 +81,12 @@ function graphTerm(value: GraphTerm): string {
     : value.datatype ? `^^${graphIri(value.datatype)}` : ''}`;
 }
 
-/** The semantic owner determines primary kinds; the authored model determines
- * their ordered profile/shape routes. Reserved kinds without a shape stay Access-only. */
-export const graphModerationProfiles: ReadonlyMap<string, readonly GraphModerationProfile[]> = new Map(
-  [...semanticOwnerTypes].map(kind => [kind, manifest.canonical.find(entry => entry.type === kind)?.routes ?? []]),
-);
-
 async function graphModerationProfile(env: WorkActivationEnvironment, target: DecisionTargetInput) {
   // This structural probe must work while P or its current H is restricted.
   const home = target.component === 'record' && (await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
     GRAPH ${iri(GRAPHS.current)} { ${iri(target.resource)} a rv:ZoneHomeDocument }
   }`, 1024)).boolean === true;
-  const selectors = [...new Set([...graphModerationProfiles.values()].flatMap(routes => routes
+  const selectors = [...new Set(manifest.canonical.flatMap(entry => entry.routes
     .flatMap(route => route.when.map(condition => condition.path))))];
   const rows = home ? [] : (await env.fuseki.query(`PREFIX rv: <${RV}>
     SELECT DISTINCT ?kind ?head ?selector ?value WHERE { GRAPH ${iri(GRAPHS.current)} {
@@ -112,19 +101,18 @@ async function graphModerationProfile(env: WorkActivationEnvironment, target: De
   if (kinds.length > 1) throw new GovernanceUnavailable('Graph target profile is unavailable or ambiguous');
   const kind = kinds[0];
   if (kind === `${RV}Realm`) throw new GovernanceStale('Graph target became a Realm after classification');
-  const routes = kind ? graphModerationProfiles.get(kind) : undefined;
-  if (!routes?.length) return null;
   const values = (path: string) => [...new Map(rows.filter(row => row.selector?.value === path)
     .map(row => row.value).filter(value => value !== undefined)
     .map(value => [graphTerm(value), value])).values()];
-  const route = routes.find(candidate => candidate.when.every(condition => {
-    const selected = values(condition.path);
-    return selected.length === 1 && selected[0]!.value === condition.value;
-  }));
-  if (!route) throw new GovernanceUnavailable('Graph target has no matching reviewed profile');
+  const route = selectCommandProfile(manifest, kinds, path => values(path).map(value => value.value));
+  if (!route) {
+    if (manifest.canonical.some(entry => entry.type === kind))
+      throw new GovernanceUnavailable('Graph target has no matching reviewed profile');
+    return null;
+  }
   // Bind the complete selector cut, including absence and earlier unmatched
   // routes, so a concurrent profile change cannot weaken the selected validation.
-  const selectorGuard = [...new Set(routes.flatMap(candidate => candidate.when.map(condition => condition.path)))].map(path => {
+  const selectorGuard = route.selectors.map(path => {
     const selected = rows.filter(row => row.selector?.value === path).map(row => row.value)
       .filter(value => value !== undefined);
     const triples = [...new Set(selected.map(graphTerm))];
@@ -360,10 +348,16 @@ export function ownerModerationEffects(content: ContentModeration, env: WorkActi
       const concept = selected?.kind === 'http://www.w3.org/2004/02/skos/core#Concept'
         && (selected.profile === 'classification-proposition-v1' || selected.profile === 'classification-proposition-v2')
         ? await currentConceptValidations(env, target.resource, selected.profile) : null;
-      const validations = realm ? await profileValidations(env.fuseki, realm.profileId, [
-        { shape: `${realm.profile}/space-shape`, focus: [realm.space], graphs: [GRAPHS.current] },
-        { shape: `${realm.profile}/realm-shape`, focus: [realm.realm], graphs: [GRAPHS.current] },
-      ]) : concept?.validations ?? await profileValidations(env.fuseki, selected!.profile as ProfileId, [{
+      const realmValidations = realm ? [
+        { kind: `${RV}Space`, resource: realm.space }, { kind: `${RV}Realm`, resource: realm.realm },
+      ].map(({ kind, resource }) => {
+        const route = selectCommandProfile(manifest, [kind], path =>
+          path === `${RV}definitionProfile` && !realm.legacy ? [realm.profile] : []);
+        if (!route || route.profile !== realm.profileId)
+          throw new GovernanceUnavailable('Realm registry profile differs from its owner basis');
+        return { shape: route.shape, focus: [resource], graphs: [GRAPHS.current] };
+      }) : null;
+      const validations = realm ? await profileValidations(env.fuseki, realm.profileId, realmValidations!) : concept?.validations ?? await profileValidations(env.fuseki, selected!.profile as ProfileId, [{
         shape: selected!.shape, focus: [target.resource], graphs: [GRAPHS.current, GRAPHS.revisions],
       }]);
       const headPredicate = realm ? 'rv:head' : selected!.headPredicate;

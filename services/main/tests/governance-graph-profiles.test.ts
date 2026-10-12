@@ -2,9 +2,10 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
 import manifest from '../../../generated/model/manifest.json';
+import { selectCommandProfile } from '../../../model/compiler/registry.ts';
 import type { ContentModeration } from '../../content/src/moderation.ts';
 import type { CommandEnvelope } from '../src/infrastructure/fuseki.ts';
-import { graphModerationProfiles, ownerModerationEffects } from '../src/modules/governance/effects.ts';
+import { ownerModerationEffects } from '../src/modules/governance/effects.ts';
 import { CANONICAL_TYPES, semanticOwnerTypes } from '../src/modules/semantic/change.ts';
 import { GovernanceConflict, GovernanceStale, type DecisionTargetInput } from '../src/modules/governance/store.ts';
 import { RV, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
@@ -145,15 +146,16 @@ for (const kind of [`${RV}Character`, 'https://example.org/UnreviewedOwner',
 
 for (const kind of semanticOwnerTypes) {
   test(`PRIMARY ${kind} has its authored profile/shape row or an explicit Access-only row`, async () => {
-    const routes = graphModerationProfiles.get(kind);
+    const routes = manifest.canonical.find(entry => entry.type === kind)?.routes ?? [];
     expect(routes).toEqual(manifest.canonical.find(entry => entry.type === kind)?.routes ?? []);
-    expect(routes).toBeDefined();
+
     for (const route of routes!) {
       const pinned = profileRegistry[route.profile as keyof typeof profileRegistry];
       expect(pinned.shapes as readonly string[]).toContain(route.shape);
     }
     if (kind === `${RV}Realm`) return; // The reciprocal Realm fixture covers all authored revisions.
-    const first = routes?.[0];
+    const first = selectCommandProfile(manifest, [kind], path =>
+      routes[0]?.when.filter(condition => condition.path === path).map(condition => condition.value) ?? []);
     const f = graph(kind, Object.fromEntries(first?.when.map(condition => [condition.path, condition.value]) ?? []));
     const operation = randomUUID();
     const result = await f.effects.apply(operation, 1, f.target);
@@ -171,7 +173,7 @@ test('a new PRIMARY kind without a table row remains eligible for Access-only di
   (semanticOwnerTypes as Set<string>).add(kind);
   try {
     const f = graph(kind), operation = randomUUID();
-    expect(graphModerationProfiles.has(kind)).toBe(false);
+    expect(selectCommandProfile(manifest, [kind], () => [])).toBeNull();
     expect(await f.effects.apply(operation, 1, { ...f.target, expectedHead: null }))
       .toEqual({ receipt: `access:governance-enforcement:${operation}:1` });
     expect(f.commands).toHaveLength(0);
