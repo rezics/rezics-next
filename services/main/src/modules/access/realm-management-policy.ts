@@ -65,7 +65,10 @@ export async function realmPermit(client: PoolClient, principal: VerifiedPrincip
   return { visibility, reviewMode: settings?.review_mode ?? 'mandatory', member: !!approved, historyFloor,
     revision: !delivery ? null : delivery.admission_id
       ? spaceCreationReceiptIri(delivery.admission_id) : realmPolicyDeliveryHead(delivery),
-    stamp: JSON.stringify([identity, gate?.authority_epoch ?? null, approved, delivery?.receipt_id ?? null]) };
+    // Owner authority removes the history floor even when membership already
+    // admits the reader. Both branches must survive the final disclosure check.
+    stamp: JSON.stringify([identity, gate?.authority_epoch ?? null, member, owner,
+      settings ?? null, historyFloor, delivery ?? null]) };
 }
 
 export async function withRealmPermit<T>(pool: Pool, principal: VerifiedPrincipal, actor: string, realm: string,
