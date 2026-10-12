@@ -74,11 +74,13 @@ export async function readZoneCampaignArt(store: CampaignMediaStore | undefined,
       const selected = uses.slice(offset, offset + DISCLOSURE_COST.batch / 2);
       const targets = selected.flatMap(use => {
         const context = items.get(use)!.context ?? DEFAULT_MEDIA_CONTEXT;
+        const occurrence = { owner: 'media' as const, kind: 'media-use' as const,
+          resource: `https://rezics.com/id/${use}`, revision: `https://rezics.com/id/${use}` };
         return [
           { owner: 'media' as const, resource: `https://rezics.com/id/${items.get(use)!.asset}`,
-            component: 'cover' as const, context },
+            component: 'cover' as const, context, occurrence },
           { owner: 'media' as const, resource: `https://rezics.com/id/${use}`,
-            component: 'media_use' as const, context },
+            component: 'media_use' as const, context, occurrence },
         ];
       });
       const selections = await resolveDisclosureSelections(disclosure.environment, targets);

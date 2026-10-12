@@ -23,11 +23,15 @@ const ref = () => `https://rezics.com/id/${randomUUID()}`;
 function configureCampaignFixtureAncestry(env: WorkActivationEnvironment,
   realm?: { resource: string; head: string }) {
   const selected = new Map<string, DisclosureAncestryEvidence>();
-  const evidence = (target: DisclosureTarget, use: string): DisclosureAncestryEvidence => {
+  const evidence = (target: DisclosureTarget): DisclosureAncestryEvidence => {
+    const occurrence = target.occurrence;
+    if (!occurrence || occurrence.owner !== 'media' || occurrence.kind !== 'media-use') {
+      throw new Error('Campaign media targets must carry their exact Use occurrence');
+    }
     const relationshipBasis: DisclosureRelationshipBasis = {
-      owner: 'media', kind: 'media-use', resource: use, revision: use,
+      ...occurrence,
       targetResource: target.resource, targetRevision: target.revision ?? null,
-      token: createHash('sha256').update(JSON.stringify([use, realm])).digest('hex'),
+      token: createHash('sha256').update(JSON.stringify([occurrence, realm])).digest('hex'),
       dataEpoch: env.lineage.dataEpoch,
     };
     const result: DisclosureAncestryEvidence = { resource: target.resource, resourceKind: 'other',
@@ -37,8 +41,7 @@ function configureCampaignFixtureAncestry(env: WorkActivationEnvironment,
     return result;
   };
   configureDisclosureAncestrySource(env, 'media', {
-    read: async targets => targets.map((target, index) => evidence(target,
-      target.component === 'cover' ? targets[index + 1]!.resource : target.resource)),
+    read: async targets => targets.map(evidence),
     reread: async bases => bases.map(basis => selected.get(`${basis.token}\0${basis.targetResource}`)!),
   });
 }
@@ -84,10 +87,9 @@ for (const audience of ['private', 'restricted'] as const) {
         if (query.includes('SELECT ?epoch ?hold ?context')) return { results: { bindings: [] } };
         throw new Error(`Unexpected campaign query: ${query.slice(0, 100)}`);
       };
-      configureFixtureDisclosureAncestry(environment, target => ({ resource: target.work ?? target.resource,
+      configureFixtureDisclosureAncestry(environment, target => target.owner === 'media' ? undefined : ({ resource: target.work ?? target.resource,
         head: target.work ?? target.resource, ...(target.workRevision !== undefined
           ? { protectedRevision: target.workRevision } : {}) }));
-      configureCampaignFixtureAncestry(environment);
       configureCampaignFixtureReader(environment, async targets => targets.map(target =>
         target.owner === 'graph' && target.resource === privateTarget && audience === 'restricted' ? 'hidden' : 'visible'));
       const facts = (targets: string[]) => ({ owner: ref(), disclosure: 'public', pending: false,
@@ -228,6 +230,8 @@ for (const restrictedHead of ['historical', 'current'] as const) {
     expect(checked).toHaveLength(4);
     for (const target of checked) {
       expect(target.workRevision).toBeUndefined();
+      expect(target.occurrence).toEqual({ owner: 'media', kind: 'media-use',
+        resource: `https://rezics.com/id/${use}`, revision: `https://rezics.com/id/${use}` });
       expect(target.ancestry!.parents).toMatchObject([{ kind: 'realm', resource: realm, head: current }]);
       expect(target.ancestry!.relationshipBasis.resource).toBe(`https://rezics.com/id/${use}`);
     }
