@@ -25,7 +25,7 @@ async function projectionQueries(through: number) {
     if (query.includes('OutboxBatch')) {
       const sequences = query.match(/VALUES \?sequence \{\s*([^}]+)\}/)![1]!.trim().split(/\s+/);
       return { results: { bindings: sequences.map(value => ({ sequence: { value },
-        batch: { value: `urn:rezics:test:batch:${value}` } })) } };
+        batch: { value: `urn:rezics:test:batch:${value}` }, count: { value: '0' } })) } };
     }
     if (query.includes('SELECT ?sequence WHERE'))
       return { results: { bindings: [{ sequence: { value: '64' } }] } };

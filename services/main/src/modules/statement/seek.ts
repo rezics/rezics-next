@@ -365,6 +365,63 @@ export class StatementSeek {
     } catch (error) { await client.query('ROLLBACK').catch(() => {}); throw error; }
     finally { client.release(); }
   }
+  private async assertOutboxCoverage(client: PoolClient,sequences: readonly bigint[],epoch: string): Promise<void> {
+    const incomplete = (): never => { throw new WorkReadUnavailable('Statement index outbox coverage is incomplete'); };
+    const requested = new Set(sequences.map(String));
+    // Start each VALUES binding at the sequence index; type-first visits the
+    // entire write history, even when this projection turn requests one batch.
+    // Compact proofs can recover custody whose SQL reconciliation was interrupted.
+    const rows = (await this.env.fuseki.query(`PREFIX rv: <${RV}>
+      SELECT ?sequence ?batch ?count ?streamSequence ?receipt ?proofStream WHERE {
+        VALUES ?sequence { ${sequences.join(' ')} }
+        OPTIONAL { GRAPH ${iri(GRAPHS.outbox)} {
+          ?batch rv:sequence ?sequence . ?batch a rv:OutboxBatch ; rv:dataEpoch ${lit(epoch)} .
+          OPTIONAL { ?batch rv:eventCount ?count }
+          OPTIONAL { ?batch rv:streamSequence ?streamSequence } } }
+        OPTIONAL { GRAPH ${iri(GRAPHS.receipts)} {
+          ?receipt rv:sequence ?sequence . ?receipt a rv:CommitProof ; rv:dataEpoch ${lit(epoch)} ;
+            rv:streamSequence ?proofStream } }
+      } LIMIT ${sequences.length+1}`,STATEMENT_SEEK_COST.responseBytes)).results?.bindings ?? [];
+    if (rows.length !== sequences.length || new Set(rows.map(row => row.sequence?.value)).size !== sequences.length
+      || rows.some(row => !requested.has(row.sequence?.value ?? ''))) incomplete();
+    // Retirement removes the compact graph proof; the durable custody record
+    // still binds both position domains. Never assume their numbers coincide.
+    // Extra turn cost: one SQL mapping statement and at most projectionSequences
+    // owner reads, once per position, including physical/custody agreement checks.
+    // The current PostgreSQL owner uses four statements per ordinary read;
+    // interrupted reconciliation adds four SQL statements and two proof queries.
+    const records = (await client.query<{ graph_sequence: string; stream_sequence: string;
+      receipt: string; batch_id: string }>(`SELECT outbox->>'graphSequence' AS graph_sequence,
+        stream_sequence::text,receipt,outbox->>'batchId' AS batch_id
+      FROM access.command_custody WHERE data_epoch=$1 AND outbox->>'graphSequence'=ANY($2::text[])
+      LIMIT ${sequences.length+1}`,[epoch,[...requested]])).rows;
+    const byGraph = new Map<string,typeof records[number]>();
+    for (const record of records) {
+      if (!requested.has(record.graph_sequence) || byGraph.has(record.graph_sequence)
+        || !/^[1-9][0-9]{0,99}$/.test(record.stream_sequence) || !record.receipt || !record.batch_id) incomplete();
+      byGraph.set(record.graph_sequence,record);
+    }
+    for (const row of rows) {
+      const sequence = row.sequence!.value,record = byGraph.get(sequence);
+      const receipt = record?.receipt ?? row.receipt?.value;
+      const stream = record?.stream_sequence ?? row.proofStream?.value;
+      if (record && row.receipt && (row.receipt.value !== record.receipt || row.proofStream?.value !== stream)) incomplete();
+      if (!receipt) {
+        if (!row.batch) incomplete();
+        continue;
+      }
+      if (!stream || !/^[1-9][0-9]{0,99}$/.test(stream)) incomplete();
+      const retained = await this.env.receiptCustody?.read(epoch,stream).catch(incomplete);
+      if (!retained) return incomplete();
+      if (retained.batch.graphSequence !== sequence || retained.batch.dataEpoch !== epoch
+        || retained.batch.sequence !== stream || retained.batch.custodiedReceipt !== receipt
+        || retained.batch.routingEpoch !== this.env.lineage.routingEpoch
+        || record && retained.batch.batchId !== record.batch_id) incomplete();
+      if (row.batch && (row.batch.value !== retained.batch.batchId
+        || row.count?.value !== String(retained.batch.eventIds.length)
+        || row.streamSequence && row.streamSequence.value !== stream)) incomplete();
+    }
+  }
   /** Replay bounded contiguous graph batches, including unrelated commands.
    * Coverage and references advance together; missing batches never become absence. */
   async projectOnce(): Promise<boolean> {
@@ -391,13 +448,7 @@ export class StatementSeek {
       const through = BigInt(position) < BigInt(prior.through_sequence)+BigInt(STATEMENT_SEEK_COST.projectionSequences)
         ? BigInt(position) : BigInt(prior.through_sequence)+BigInt(STATEMENT_SEEK_COST.projectionSequences);
       const sequences = Array.from({length: Number(through-BigInt(prior.through_sequence))},(_,i) => BigInt(prior.through_sequence)+BigInt(i+1));
-      // Start each VALUES binding at the sequence index; type-first visits the
-      // entire write history, even when this projection turn requests one batch.
-      const batches = (await this.env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?sequence ?batch WHERE {
-        VALUES ?sequence { ${sequences.join(' ')} } GRAPH ${iri(GRAPHS.outbox)} {
-          ?batch rv:sequence ?sequence . ?batch a rv:OutboxBatch ; rv:dataEpoch ${lit(epoch)} } }`,STATEMENT_SEEK_COST.responseBytes)).results?.bindings ?? [];
-      if (batches.length !== sequences.length || new Set(batches.map(row => row.sequence?.value)).size !== sequences.length)
-        throw new WorkReadUnavailable('Statement index outbox coverage is incomplete');
+      await this.assertOutboxCoverage(client,sequences,epoch);
       const changed = (await this.env.fuseki.query(`PREFIX rv: <${RV}> SELECT DISTINCT ?statement WHERE {
         VALUES ?sequence { ${sequences.join(' ')} } GRAPH ${iri(GRAPHS.revisions)} {
           ?revision rv:sequence ?sequence . ?revision a rv:StatementRevision ; rv:dataEpoch ${lit(epoch)} ; rv:component ?statement }
