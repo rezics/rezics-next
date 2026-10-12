@@ -175,11 +175,11 @@ function isCollectedStatement(statement: ts.Statement, registered: RegisteredFun
  * A test declaration has a string, template or reference title and an inline function
  * body after that title (with optional Playwright options or a Bun timeout). Skipped
  * sibling declarations have their own scopes and never disqualify another proof.
- * A test.skip/fixme/fail call without such a body is a runtime skip; a first-argument
+ * A test.skip/fixme/fail/failing call without such a body is a runtime skip; a first-argument
  * predicate is not a test body. Any runtime skip rejects its enclosing proof, describe
  * or file scope, including hooks, unused helpers and untaken branches. Conditions are
  * never evaluated: test.skip(false) still rejects that scope.
- * Skip/fixme/failing/todo/if/skipIf modifiers (including test.describe.skip) reject all
+ * Skip/fixme/fail/failing/todo/if/skipIf modifiers (including test.describe.skip) reject all
  * contained tests and journey registrations regardless of their condition's value.
  * The same scope rule applies to direct tests, table registrations and journey wrappers.
  * False rejections are intentional: cited proofs must have scopes free of skip constructs.
@@ -694,10 +694,61 @@ test('launch outcomes retain landed proofs, the recipe reading name and all five
   const missingRows = launchCoverage.filter(row => proofMissing(row.api) || proofMissing(row.browser));
   const missingProofs = launchCoverage.flatMap(row => [row.api, row.browser]).filter(proofMissing);
   expect({ rows: launchCoverage.length, provedPairs: provedPairs.length, missingRows: missingRows.length, missingProofs: missingProofs.length })
-    .toEqual({ rows: 55, provedPairs: 39, missingRows: 16, missingProofs: 25 });
+    .toEqual({ rows: 65, provedPairs: 39, missingRows: 26, missingProofs: 44 });
   expect(Object.fromEntries([...missingItems].map(item => [item,
     missingRows.filter(row => missingForRow(row).includes(item)).length,
-  ]))).toEqual({ L10: 1, L11: 1, L12: 2, L13: 0, L17: 0, L19: 0, L20: 0, L21: 10, L26: 0, gap: 2 });
+  ]))).toEqual({ L10: 1, L11: 1, L12: 2, L13: 0, L17: 0, L19: 0, L20: 0, L21: 10, L26: 0, gap: 12 });
+});
+
+test('literal loops and registered journeys retain all nine browser citations', () => {
+  const restored = [
+    ['visual-novels', 'Catalogue browse and search in its Zone'],
+    ['anime', 'Catalogue browse and search in its Zone'],
+    ['manga', 'Catalogue browse and search in its Zone'],
+    ['realm', 'Membership and admission'],
+    ['zone', 'Home rendering'],
+    ['books', 'Choose among ambiguous editions of one Work'],
+    ['books', 'Choose among mixed formats'],
+    ['books', 'Navigate a thousand-chapter inventory'],
+    ['books', 'Continue progress across devices'],
+  ];
+  for (const [kind, capability] of restored) {
+    const row = launchCoverage.find(candidate => candidate.kind === kind && candidate.capability === capability);
+    expect(row, `${kind} / ${capability}`).toBeDefined();
+    expect(proofMissing(row!.browser), `${kind} / ${capability}`).toBe(false);
+  }
+});
+
+test('every Realm closure surface records passing directory evidence or its missing owner adapter', () => {
+  const missingAdapters = [
+    ['direct routes', 'realm-reads/read-realm.ts', '${state}-${surface}-${reader}'],
+    ['threads and replies', 'realm-reply/thread-read.ts', 'closure-during-${surface}-content-hydration'],
+    ['Zone discussion entry and modules', 'zone-modules/read.ts', 'closure-during-zone-module-hydration'],
+    ['feed', 'feed/read.ts', 'closure-during-feed-source-hydration'],
+    ['rankings', 'rankings/read.ts', 'closure-during-read-rankings-${order}-hydration'],
+    ['search', 'work/search-public.ts', 'closure-during-search-hydration'],
+    ['notifications', 'notification/subjects.ts', 'closed-notifications-${channel}'],
+    ['media', 'routes/media.ts', '${state}-reply-media-${surface}-${reader}'],
+    ['roster', 'access/roster.ts', '${state}-${surface}-${reader}'],
+  ];
+  const closureRows = launchCoverage.filter(row => row.kind === 'realm' && row.capability.startsWith('Closure: '));
+  expect(closureRows).toHaveLength(10);
+  for (const [surface, adapter, title] of missingAdapters) {
+    const rows = closureRows.filter(row => row.capability === `Closure: ${surface}`);
+    expect(rows, surface).toHaveLength(1);
+    expect(rows[0]!.api, surface).toMatchObject({ missing: 'gap' });
+    if (proofMissing(rows[0]!.api)) {
+      expect(rows[0]!.api.reason, surface).toContain(adapter!);
+      expect(rows[0]!.api.reason, surface).toContain(title!);
+      expect(rows[0]!.api.reason, surface).toContain('expected failure');
+    }
+  }
+  const directory = closureRows.find(row => row.capability === 'Closure: directory');
+  expect(directory!.api).toMatchObject({
+    file: 'services/main/tests/realm-platform-closure-reads.test.ts',
+    test: 'closed-directory-before-drain: hidden indexed rows are omitted and live rows remain traversable',
+  });
+  for (const row of closureRows) expect(row.browser, row.capability).toMatchObject({ missing: 'gap' });
 });
 
 test('every launch kind and hard case has a coverage row', () => {
