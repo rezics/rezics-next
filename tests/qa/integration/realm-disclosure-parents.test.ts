@@ -131,6 +131,10 @@ async function restriction(
     try {
       await release.query('BEGIN');
       await release.query(
+        "UPDATE access.governance_case SET state='open',closed_at=NULL WHERE id=$1",
+        [caseId],
+      );
+      await release.query(
         `INSERT INTO access.moderation_decision
         (id,kind,outcome,context,case_id,case_sequence,principal_id,acting_subject,authority_kind,authority_scope_id,
         authority_epoch,authority_proof_digest,idempotency_key,request_digest,rule_ref,rule_revision,rule_digest,
