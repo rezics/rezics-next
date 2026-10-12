@@ -2,6 +2,9 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { meterStatements } from './feed-read-support.ts';
 import { workRead } from '../../../services/main/src/modules/work/read-session.ts';
+import { FeedStore } from '../../../services/main/src/modules/feed/store.ts';
+import { FeedRefreshWorker } from '../../../services/main/src/modules/feed/refresh.ts';
+import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import {
   retireRealmPopulation,
   REALM_RETIREMENT_COST,
@@ -85,7 +88,7 @@ test('G1042: depth, row and ancestor caps report partial results; retired cuts a
       expect((await readThread(chain[1]!.reply)).complete).toBe(true);
       const page = await home.json<{
         items: { reply: string; replies: { kind: string; value: number } }[];
-      }>(await home.call('GET', `${root}/threads?sort=new&limit=20`));
+      }>(await home.call('GET', `${root}/threads?sort=new&window=all&limit=20`));
       expect(page.items.find((item) => item.reply === chainRoot.reply)?.replies.kind).toBe(
         'lower-bound',
       );
@@ -214,7 +217,9 @@ test('G1042: depth, row and ancestor caps report partial results; retired cuts a
     );
     expect(await count('realm_thread_population', 'AND ready')).toBe(0);
     // Retiring a private history cut does not stall the shared public order.
-    expect((await home.call('GET', `${root}/threads?sort=best&limit=2`)).status).toBe(200);
+    expect((await home.call('GET', `${root}/threads?sort=best&window=all&limit=2`)).status).toBe(
+      200,
+    );
     await stack.accessPool.query('UPDATE access.recovery_fence SET open=false WHERE id');
     await expect(
       retireRealmPopulation(stack.accessPool, session, epoch, realm, ''),
@@ -237,6 +242,149 @@ test('G1042: depth, row and ancestor caps report partial results; retired cuts a
     await catchUp();
     expect(await count('realm_thread_population_admission')).toBe(before);
     expect(await count('realm_thread_population', 'AND ready')).toBe(1);
+
+    // A newly placed reference queues its exact key for every live history cut.
+    // Stop the real worker after that insert, before it can consume the job.
+    const actor = restored.manifest.identity.author;
+    for (const [scope, action] of [
+      [`review:decide:${realm}`, 'review.decide'],
+      [`reply:place:${realm}`, 'reply.place'],
+    ] as const) {
+      await grantFixtureAuthority(stack.accessPool, {
+        scope,
+        requireDispatch: true,
+        representations: [
+          { principalId: home.author.principalId, actor, action, lifetime: '8 hours' },
+        ],
+        grant: { actor, action, lifetime: '8 hours' },
+      });
+    }
+    const pendingReply = `https://rezics.com/id/${randomUUID()}`;
+    const pendingVariant = `urn:rezics:variant:${randomUUID()}`;
+    const pendingDraftInput = {
+      profile: 'member-reply-draft-v1',
+      reply: pendingReply,
+      variantId: pendingVariant,
+      rootTarget: followups.work,
+      rootRevision: followups.draftRevision,
+      language: 'en',
+      direction: 'ltr',
+      expectedHead: null,
+      body: 'A reply whose pending history admission must drain after deletion',
+      actingSubject: actor,
+    };
+    const pendingDraft = await timeRealmRankingStage('followup-history-job-draft', async () =>
+      home.json<{ revisionId: string; revisionDigest: string }>(
+        await home.call('POST', '/v1/member-reply-drafts', pendingDraftInput, home.author.token),
+        201,
+      ),
+    );
+    await timeRealmRankingStage('followup-history-job-identity', async () =>
+      home.json(
+        await home.call(
+          'POST',
+          '/v1/realm-replies',
+          {
+            profile: 'realm-reply-identity-v1',
+            reply: pendingReply,
+            variantId: pendingVariant,
+            revisionId: pendingDraft.revisionId,
+            author: actor,
+            rootTarget: followups.work,
+            rootRevision: followups.draftRevision,
+            parentReply: null,
+            parentRevision: null,
+            contextRevision: null,
+          },
+          home.author.token,
+        ),
+        201,
+      ),
+    );
+    const pendingReview = await timeRealmRankingStage('followup-history-job-review', async () =>
+      home.json<{ decisionId: string }>(
+        await home.call(
+          'POST',
+          '/v1/realm-reply-reviews',
+          {
+            profile: 'realm-reply-review-v1',
+            realm,
+            reply: pendingReply,
+            revisionId: pendingDraft.revisionId,
+            revisionDigest: pendingDraft.revisionDigest,
+            expectedGeneration: '0',
+            supersedes: null,
+            outcome: 'approved',
+            method: 'human',
+            methodRevision: 'realm-ranking-v1',
+            dependencyDigest: 'a'.repeat(64),
+            reasonReference: null,
+            actingSubject: actor,
+          },
+          home.author.token,
+        ),
+        201,
+      ),
+    );
+    await timeRealmRankingStage('followup-history-job-placement', async () =>
+      home.json(
+        await home.call(
+          'POST',
+          '/v1/realm-reply-placements',
+          {
+            profile: 'realm-reply-placement-v1',
+            realm,
+            reply: pendingReply,
+            revisionId: pendingDraft.revisionId,
+            revisionDigest: pendingDraft.revisionDigest,
+            reviewDecisionId: pendingReview.decisionId,
+            expectedHead: null,
+            actingSubject: actor,
+          },
+          home.author.token,
+        ),
+        201,
+      ),
+    );
+    const pendingJobs = () => count('realm_thread_population_job', `AND reply='${pendingReply}'`);
+    expect(await pendingJobs()).toBe(0);
+    await timeRealmRankingStage('followup-history-job-enqueue', async () => {
+      await home.projectRelay();
+      const worker = new FeedRefreshWorker(home.deps, new FeedStore(stack.accessPool), home.relay);
+      for (let wave = 0; wave < 400; wave++) {
+        await worker.tick();
+        if ((await pendingJobs()) > 0) return;
+      }
+      throw new Error('Product reply did not queue an exact-key history admission job');
+    });
+    expect(await pendingJobs()).toBe(1);
+    expect(await count('realm_thread_reference', `AND reply='${pendingReply}' AND active`)).toBe(1);
+    const pendingTombstone = await timeRealmRankingStage(
+      'followup-history-job-deletion',
+      async () =>
+        home.json<{ deleted: boolean }>(
+          await home.call(
+            'POST',
+            '/v1/member-reply-drafts',
+            {
+              ...pendingDraftInput,
+              expectedHead: pendingDraft.revisionId,
+              body: null,
+            },
+            home.author.token,
+          ),
+          201,
+        ),
+    );
+    expect(pendingTombstone.deleted).toBe(true);
+    expect(await pendingJobs()).toBe(1);
+    await catchUp();
+    expect(await pendingJobs()).toBe(0);
+    expect(await count('realm_thread_reference', `AND reply='${pendingReply}' AND active`)).toBe(0);
+    expect(await count('realm_thread_order', `AND reply='${pendingReply}'`)).toBe(0);
+    expect(await count('realm_thread_private_order', `AND reply='${pendingReply}'`)).toBe(0);
+    expect(await count('realm_thread_population', 'AND ready')).toBe(1);
+
     await stack.accessPool.query(
       `UPDATE access.membership SET state='left',generation=generation+1 WHERE id=$1`,
       [membership],
@@ -254,7 +402,7 @@ test('G1042: depth, row and ancestor caps report partial results; retired cuts a
       timeRealmRankingStage(
         'followup-ranking',
         async () => {
-          const query = new URLSearchParams({ sort, limit: String(limit) });
+          const query = new URLSearchParams({ sort, window: 'all', limit: String(limit) });
           if (cursor) query.set('cursor', cursor);
           return home.json<RankedPage>(await home.call('GET', `${root}/threads?${query}`));
         },
@@ -326,7 +474,6 @@ test('G1042: depth, row and ancestor caps report partial results; retired cuts a
       0,
     );
     expect(await count('realm_thread_order', `AND reply='${chainRoot.reply}'`)).toBe(0);
-    expect(await count('realm_thread_population_job', `AND reply='${chainRoot.reply}'`)).toBe(0);
     expect(
       await count('realm_thread_reference', `AND parent='${chainRoot.reply}' AND active`),
     ).toBe(0);
@@ -345,7 +492,7 @@ test('G1042: depth, row and ancestor caps report partial results; retired cuts a
       const stale = await home.json<{ code: string }>(
         await home.call(
           'GET',
-          `${root}/threads?${new URLSearchParams({ sort, limit: '1', cursor })}`,
+          `${root}/threads?${new URLSearchParams({ sort, window: 'all', limit: '1', cursor })}`,
         ),
         409,
       );
@@ -371,8 +518,6 @@ test('G1042: depth, row and ancestor caps report partial results; retired cuts a
       );
       assertRemainingCounts(reached);
     }
-    // Population retirement above remains covered by its owner. Realm identity
-    // retirement has no product command, so it cannot be a graph fault fixture.
     expect(realmHistoryPopulation(floor)).toBe(population);
   } finally {
     try {
