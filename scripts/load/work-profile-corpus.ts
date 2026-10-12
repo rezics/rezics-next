@@ -75,6 +75,26 @@ export interface CorpusCommand {
   path: `/v1/${string}`;
   body: unknown;
   headers?: HeadersInit;
+  stage?: WorkProfileScale;
+}
+export class CorpusCommandError extends Error {
+  readonly body: string;
+  readonly code?: string;
+  readonly responseStatus?: string | number;
+  constructor(readonly key: string, readonly operation: string, readonly stage: WorkProfileScale | undefined,
+    readonly status: number, detail: string) {
+    const body = Buffer.from(detail).subarray(0, 300).toString('utf8');
+    let typed: { code?: unknown; status?: unknown } | null = null;
+    try { typed = JSON.parse(detail) as typeof typed; } catch { /* Non-JSON errors still carry their body. */ }
+    const code = typeof typed?.code === 'string' ? typed.code : undefined;
+    const responseStatus = typeof typed?.status === 'string' || typeof typed?.status === 'number' ? typed.status : undefined;
+    super(`Corpus command ${key} (${operation}, stage ${stage ?? 'unspecified'}) returned HTTP ${status}`
+      + ` code=${code ?? 'unspecified'} status=${responseStatus ?? 'unspecified'}: ${body}`);
+    this.name = 'CorpusCommandError';
+    this.body = body;
+    this.code = code;
+    this.responseStatus = responseStatus;
+  }
 }
 export interface CorpusApi {
   command<T>(key: string, command: CorpusCommand, signal?: AbortSignal): Promise<T>;
@@ -120,8 +140,11 @@ export function workProfileCorpusApi(
       // rejecting fetch. Preserve the preparation deadline, not a JSON error.
       requestSignal?.throwIfAborted();
       // Pending and partial commands are not a completed corpus.
-      if (![200, 201, 204].includes(response.status))
-        throw new Error(`Corpus command ${key} returned HTTP ${response.status}`);
+      if (![200, 201, 204].includes(response.status)) {
+        const detail = await response.text();
+        requestSignal?.throwIfAborted();
+        throw new CorpusCommandError(key, `${command.method} ${command.path}`, command.stage, response.status, detail);
+      }
       return response.status === 204 ? (undefined as T) : ((await response.json()) as T);
     },
     async read<T>(path: `/v1/${string}`, signal?: AbortSignal): Promise<T> {
@@ -282,7 +305,7 @@ export async function prepareWorkProfileCorpus(input: {
       if (remaining() <= 0) throw new Error('Corpus preparation exceeded 600 seconds');
     };
     const api: CorpusApi = {
-      command: (key, command) => input.api.command(key, command, signal),
+      command: (key, command) => input.api.command(key, { ...command, stage: scale }, signal),
       read: (path) => input.api.read(path, signal),
     };
     await recipe.initialize(api, `${buildId}:base`);
