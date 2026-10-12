@@ -327,6 +327,13 @@ tasks:
     cmds:
       - bun test {{.CLI_ARGS}}
 
+  guards:
+    desc: Run the repository-wide inventory guards the merge gate enforces (scripts/qa/repository-guards.ts). No stack; about three minutes.
+    dir: '{{.ROOT_DIR}}'
+    silent: true
+    cmds:
+      - bun scripts/qa/repository-guards.ts
+
   # Checks and tests
 
   observability:typecheck:

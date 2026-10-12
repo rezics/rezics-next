@@ -11,8 +11,9 @@ and other documents. Documents record practice; the code is the truth.
 Deliver the brief's outcome completely before you stop. Make reasonable
 assumptions, state them in the handoff, and keep going; do not stop to ask. If
 the brief is wrong for the code or the need, take the better course within your
-claim and explain it, or hand off `blocked` with the exact reason. If your CLI can
-delegate independent parts to sub-agents, do so.
+claim and explain it, or hand off `blocked` with the exact reason. A sub-agent
+starts with a copy of your whole context: delegate only a large part that is
+independent of the rest (its own files and tests), never reading or searching.
 
 When a brief prescribes a second mechanism for a decision an owner already
 makes, stop and report that instead of building it.
@@ -69,7 +70,12 @@ task <workspace>:typecheck                 # waits for host memory on a local Go
 node_modules/.bin/oxlint --type-aware <changed directories>
 task ast-grep -- scan <changed files>
 task goal -- test --affected --list | tail -n 40   # what else your change reaches; do not run it
+task guards                                # the repository-wide rules the merge gate enforces; no stack, about three minutes
 ```
+
+Run `task guards` once before you hand off `done`: on 2026-10-11 two thirds of
+the landings that a gate stopped failed one of these rules, after a review had
+already been spent on them.
 
 Tests are what this host runs short of, not workers. Name every file a step
 needs in one `task goal -- test` call: one call starts one stack, and a stack
@@ -97,6 +103,21 @@ prints (`rg -m`, `sed -n` ranges, `| tail -n 40`); never print a whole log or
 list. Do not read again what you already have. A command's output is cut at about
 16,000 characters, so ask for the part you need. `task --summary <task>`
 describes one task; `task --list` prints every one.
+
+A test run or a check takes minutes. Start it, then wait for it in one call: an
+empty `write_stdin` with `yield_time_ms: 300000` returns the moment the command
+ends. Asking every 30 seconds resends your whole context each time; a quarter
+of all worker input on 2026-10-11 was such polls.
+
+## After a review
+
+A finding names one site of a defect. When you are resumed with findings, name
+the class of each, search your whole change for every other site of that class,
+fix them all and hold the class with a test. Then read the diff of your own fix
+as a reviewer would, before you hand off. Of the findings that later review
+rounds returned on 2026-10-11, 44% were defects in the fix itself and 38% the
+same class at another site. Say in the handoff which classes you closed and
+where you looked.
 
 ## Handoff
 

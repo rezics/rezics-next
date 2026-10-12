@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs';
+
 /** Inventory guards read files beyond their import graph, so affected selection
  * cannot establish their coverage. Merge runs these in its existing unit gate.
  * Owner-specific assertions and migration setup for database fixtures stay in
@@ -129,3 +131,14 @@ export const repositoryGuards = [
       'Every id-accepting GET or POST must be registered, exempted, or kept on the frozen hidden-id debt list.',
   },
 ] as const;
+
+// `task guards`: a worker runs the same rules before it hands off. Prints the failures or one summary line.
+if (import.meta.main) {
+  const files = repositoryGuards.map(guard => guard.file).filter(file => existsSync(file));
+  const run = Bun.spawnSync(['bun', 'test', ...files], { stdout: 'pipe', stderr: 'pipe' });
+  const lines = `${run.stdout.toString()}${run.stderr.toString()}`.split('\n');
+  const summary = lines.filter(line => /^\s*\d+ (pass|fail)\b|^Ran \d+ tests/.test(line));
+  if (run.exitCode === 0) console.log(`Repository guards passed: ${summary.join(',').replace(/\s+/g, ' ').trim()}`);
+  else console.log([...lines.filter(line => /^\(fail\)|^error:|^\s+error:/.test(line)).slice(0, 60), ...lines.slice(-25)].join('\n'));
+  process.exit(run.exitCode ?? 1);
+}
