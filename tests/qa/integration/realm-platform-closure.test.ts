@@ -703,7 +703,7 @@ test.failing('restoration uses current placement, detachment, reassignment and i
       revisionId: removed.revisionId, revisionDigest: removed.revisionDigest,
       expectedGeneration: '1', supersedes: removed.reviewDecisionId, outcome: 'revoked',
       method: 'human', methodRevision: 'realm-manager-v1', dependencyDigest: sha(work.work),
-      reasonReference: null, actingSubject: manager.actor }), 201);
+      reasonReference: 'placement-removed-during-closure', actingSubject: manager.actor }), 201);
   const replacement = await json<{ revisionId: string; revisionDigest: string }>(await call('POST',
     '/v1/member-reply-drafts', member,
     { profile: 'member-reply-draft-v1', reply: changed.reply, variantId: changed.variantId,
