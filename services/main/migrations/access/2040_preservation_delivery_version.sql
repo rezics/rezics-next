@@ -1,5 +1,7 @@
 -- Retain a version after release so a hold's add/release cannot look unchanged.
 -- The trigger covers both public intake and staff holds in their owner transaction.
+-- Fence intake while backfilling and installing its transactional version trigger.
+LOCK TABLE access.governance_preservation_hold IN SHARE ROW EXCLUSIVE MODE;
 CREATE TABLE access.governance_preservation_delivery_head (
     target_resource text PRIMARY KEY,
     version bigint NOT NULL CHECK (version > 0),

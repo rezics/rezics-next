@@ -156,6 +156,20 @@ test('a hold added and released during the query still advances its own token an
   expect(BigInt(after.preservationVersion)).toBeGreaterThan(BigInt(before.preservationVersion));
 });
 
+test('concurrent intake for one case counts its hold once and release restores delivery', async () => {
+  const f = await fixture();
+  const [first, second] = await Promise.all([f.hold(), f.hold()]);
+  expect(second.caseId).toBe(first.caseId);
+  expect(await f.target.rights.deliveryCutSnapshot(f.target.resourceId)).toMatchObject({
+    preservationVersion: '1', held: true,
+  });
+  await releaseFixturePreservationHold(stack.accessPool, f.target.resourceId, first.caseId);
+  expect(await f.target.rights.deliveryCutSnapshot(f.target.resourceId)).toMatchObject({
+    preservationVersion: '2', held: false,
+  });
+  expect((await f.deliver()).status).toBe(200);
+});
+
 test('movement on both attempts returns a typed retry outcome without retaining either value', async () => {
   const f = await fixture();
   let attempts = 0;
