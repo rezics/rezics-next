@@ -8,8 +8,8 @@ import { createOTP } from '@better-auth/utils/otp';
 import { createCookieGetter } from 'better-auth/cookies';
 import { createInternalContext } from 'better-call';
 
-for (const scheme of ['https', 'http']) for (const reverse of [false, true]) {
-  test(`${scheme} challenge attribution and recovery lock follow B with both names in ${reverse ? 'reverse' : 'forward'} order`, async () => {
+for (const scheme of ['https', 'http']) for (const reverse of [false, true]) for (const scenario of ['attribution', 'lock']) {
+  test(`${scheme} challenge ${scenario} follows B with both names in ${reverse ? 'reverse' : 'forward'} order`, async () => {
     const issuer = `${scheme}://issuer.test`;
     const f = await accountFixture({ baseURL: issuer, requireEmailVerification: false });
     const request: typeof f.request = (path, body, cookie, extra = {}) =>
@@ -56,6 +56,7 @@ for (const scheme of ['https', 'http']) for (const reverse of [false, true]) {
       const pairs = [aChallenge, bChallenge];
       if (reverse) pairs.reverse();
       const both = pairs.join('; ');
+      if (scenario === 'attribution') {
       expect((await request('/api/auth/two-factor/verify-totp', { code: 'invalid' }, both)).status).toBe(401);
       const failures = async () => (await f.pool.query(`SELECT user_id FROM rezics_account_security_event
         WHERE action = 'sign_in_failed' AND user_id IN ($1, $2) ORDER BY occurred_at, id`, [a.id, b.id])).rows;
@@ -68,11 +69,14 @@ for (const scheme of ['https', 'http']) for (const reverse of [false, true]) {
       repeated.append('cookie', bChallenge);
       repeated.append('cookie', aChallenge.replace(other, exact));
       const native = await createInternalContext({ headers: repeated }, { options: { method: 'POST' } });
-      expect(await native.getSignedCookie(exact, f.secret)).toBeFalsy();
+      const selected = await createInternalContext({ headers: new Headers({ cookie: bChallenge }) }, { options: { method: 'GET' } });
+      expect(await native.getSignedCookie(exact, f.secret)).toBe(await selected.getSignedCookie(exact, f.secret));
       expect((await fetch(`${f.baseURL}/api/auth/two-factor/verify-totp`, {
         method: 'POST', headers: repeated, body: '{"code":"invalid"}',
       })).status).toBe(401);
-      expect(await failures()).toHaveLength(2);
+      expect(await failures()).toEqual([{ user_id: b.id }, { user_id: b.id }, { user_id: b.id }]);
+      return;
+      }
 
       const nativeChallenge = await createInternalContext({ headers: new Headers({ cookie: bChallenge }) }, { options: { method: 'GET' } });
       const identifier = await nativeChallenge.getSignedCookie(exact, f.secret);
