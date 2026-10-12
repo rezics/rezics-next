@@ -439,7 +439,14 @@ export function disclose(env: WorkActivationEnvironment, targets: readonly Discl
 /** Each caller bounds its inventory before owner or graph work begins. */
 export async function discloseInventory(env: WorkActivationEnvironment, targets: readonly DisclosureTarget[],
   viewer: Viewer, channel: DisclosureChannel, client?: PoolClient): Promise<DisclosureDecision[]> {
-  return (await readInventory(env, targets, viewer, channel, false, client)).decisions;
+  return (await discloseInventoryWithCost(env, targets, viewer, channel, client)).decisions;
+}
+
+/** Cost comes from the established dependencies actually queried, rather than
+ * request hints that can omit a Realm or repeat an already selected parent. */
+export function discloseInventoryWithCost(env: WorkActivationEnvironment, targets: readonly DisclosureTarget[],
+  viewer: Viewer, channel: DisclosureChannel, client?: PoolClient) {
+  return readInventory(env, targets, viewer, channel, false, client);
 }
 
 /** Summary publicness shares the final owner's exact-target policy statement.
@@ -610,9 +617,11 @@ function requireSelections(env: WorkActivationEnvironment, selections: readonly 
 async function currentHeads(env: WorkActivationEnvironment, selections: readonly DisclosureSelection[]) {
   const resources = [...new Set(selections.flatMap(headDependencies))];
   const heads = new Map<string, string>();
+  let graphQueries = 0;
   try {
     for (let offset = 0; offset < resources.length; offset += DISCLOSURE_COST.parentHeadBatch) {
       const batch = resources.slice(offset, offset + DISCLOSURE_COST.parentHeadBatch);
+      graphQueries++;
       const rows = (await env.fuseki.query(`PREFIX rv: <${RV}>
         SELECT ?resource ?head WHERE { VALUES ?resource { ${batch.map(iri).join(' ')} }
           GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
@@ -634,7 +643,7 @@ async function currentHeads(env: WorkActivationEnvironment, selections: readonly
         && heads.get(selection.target.resource) !== selection.ancestry.relationshipBasis.revision)) {
       throw new DisclosureUnavailable('Disclosure parent head moved');
     }
-    return heads;
+    return { heads, graphQueries };
   } catch (cause) {
     if (cause instanceof DisclosureUnavailable) throw cause;
     throw new DisclosureUnavailable('Disclosure parent heads are unavailable', { cause });
@@ -668,7 +677,7 @@ export async function captureDisclosure(env: WorkActivationEnvironment, selectio
   requireReader(env);
   if (!selections.length) return [];
   await rereadRelationships(env, selections);
-  const heads = await currentHeads(env, selections);
+  const { heads } = await currentHeads(env, selections);
   const evaluated = await evaluateSelections(env, selections, viewer, channel, client, false);
   const fenceBasis = Object.freeze({ ...evaluated.fenceBasis });
   const state = ancestryState(env);
@@ -724,7 +733,7 @@ export async function fenceDisclosure(env: WorkActivationEnvironment, cuts: read
     if (reader instanceof DisclosureStore) await reader.assertFinalSnapshot(client);
     else await requireFreshSnapshot(client);
     await rereadRelationships(env, selections);
-    const heads = await currentHeads(env, selections);
+    const { heads } = await currentHeads(env, selections);
     if (saved.some(basis => [...basis.heads].some(([resource, head]) => heads.get(resource) !== head))) {
       throw new DisclosureUnavailable('Disclosure parent head moved');
     }
@@ -750,16 +759,17 @@ async function requireFreshSnapshot(client?: PoolClient): Promise<void> {
 }
 async function readInventory(env: WorkActivationEnvironment, targets: readonly DisclosureTarget[],
   viewer: Viewer, channel: DisclosureChannel, anonymousNames: boolean, client?: PoolClient):
-  Promise<DisclosureWithAnonymousNames & { anonymousNameProbes: number }> {
+  Promise<DisclosureWithAnonymousNames & { anonymousNameProbes: number; parentHeadQueries: number }> {
   requireBatch(targets);
   requireReader(env);
   const decisions: DisclosureDecision[] = [], names: DisclosureDecision[] = [];
+  let parentHeadQueries = 0;
   for (let offset = 0; offset < targets.length; offset += DISCLOSURE_COST.batch) {
     const selections = await resolveDisclosureSelections(env, targets.slice(offset, offset + DISCLOSURE_COST.batch));
-    await currentHeads(env, selections);
+    parentHeadQueries += (await currentHeads(env, selections)).graphQueries;
     const evaluated = await evaluateSelections(env, selections, viewer, channel, client, anonymousNames);
     decisions.push(...evaluated.decisions);
     names.push(...evaluated.anonymousNames);
   }
-  return { decisions, anonymousNames: names, anonymousNameProbes: 0 };
+  return { decisions, anonymousNames: names, anonymousNameProbes: 0, parentHeadQueries };
 }

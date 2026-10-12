@@ -10,6 +10,7 @@ import {
   DisclosureStore,
   disclose,
   discloseInventory,
+  discloseInventoryWithCost,
   fenceDisclosure,
   resolveDisclosureSelections,
   type DisclosureAncestryEvidence,
@@ -377,7 +378,7 @@ test('disclosure final fence compares only a cut’s established dependencies in
 });
 
 test('disclosure public batch entries reject 65 targets before any owner or graph work', async () => {
-  for (const entry of [disclose, discloseInventory, discloseInventoryWithAnonymousNames]) {
+  for (const entry of [disclose, discloseInventory, discloseInventoryWithCost, discloseInventoryWithAnonymousNames]) {
     const f = fixture();
     let sourceReads = 0;
     configureDisclosureAncestrySource(f.env, 'content', {
@@ -756,6 +757,10 @@ test('disclosure ancestry: direct batch accepts 64 targets, rejects 65 and bound
   expect(DISCLOSURE_COST.parentEdges).toBe(128);
   expect(DISCLOSURE_COST.parentHeadBatch).toBe(64);
   expect(f.headQueries).toHaveLength(2);
+  const before = f.headQueries.length;
+  const inventory = await discloseInventoryWithCost(f.env, inputs, ANONYMOUS_VIEWER, 'read');
+  expect(inventory.parentHeadQueries).toBe(2);
+  expect(inventory.parentHeadQueries).toBe(f.headQueries.length - before);
   for (const query of f.headQueries) {
     const values = query.match(/VALUES\s+\?resource\s*\{([^}]+)\}/i)?.[1];
     expect(values).toBeDefined();
