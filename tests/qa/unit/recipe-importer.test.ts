@@ -13,7 +13,7 @@ test('RECIPE03: duplicate ingredient occurrences and grouped multilingual instru
   expect(result.ingredients[0]?.qualifier.amount).toEqual({ numerator: 1, denominator: 2 });
   expect(result.ingredients[0]?.qualifier.unitText).toBe('cup');
   expect(result.sections).toEqual([{ sourceKey: expect.stringContaining('#/recipeInstructions/0'),
-    label: 'Prepare', language: 'fr' }]);
+    label: 'Prepare', language: 'fr', parent: -1, order: 0 }]);
   expect(result.steps.map(step => [step.text, step.language, step.section])).toEqual([
     ['Warm the milk.', 'fr', 0], ['Fold gently.', 'en', 0],
   ]);
