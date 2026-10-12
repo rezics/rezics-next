@@ -1,6 +1,6 @@
 import { decodeJwt } from 'jose';
 import type { Pool } from 'pg';
-import { authenticationBody } from './recovery-auth.ts';
+import { authenticationBody } from './authentication-input.ts';
 import { authenticationCookies, type AuthenticationCookieOptions } from './authentication-cookies.ts';
 
 /** Only providers proving the current session's user may prefer its cookie.
