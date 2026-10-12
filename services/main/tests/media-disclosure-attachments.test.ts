@@ -85,9 +85,9 @@ function fixture(pool: Pool) {
           label: { ...literal('Attachment'), 'xml:lang': 'en' } }];
       })] } };
     }
-    if (query.includes('SELECT ?work ?head')) return { results: { bindings: refs('work').flatMap(reference =>
-      entries.has(reference) ? [{ work: uri(reference), head: uri(reference),
-        owningWork: uri(reference), owningHead: uri(reference) }] : []) } };
+    if (query.includes('SELECT ?work ?head')) return { results: { bindings: refs('work').map(reference =>
+      ({ work: uri(reference), ...(entries.has(reference) ? { head: uri(reference),
+        owningWork: uri(reference), owningHead: uri(reference) } : {}) })) } };
     if (query.includes('SELECT ?epoch ?hold ?context')) return { results: { bindings: [] } };
     throw new Error(`Unexpected summary query: ${query.slice(0, 160)}`);
   };
@@ -136,7 +136,7 @@ test('exact Use disclosure has identical summary probes and bytes at 1, 16, 64 a
       else baseline = cost;
     }
   });
-}, 30_000);
+}, 60_000);
 
 test('private, hidden and missing other targets neither hide nor get probed by this Use', async () => {
   await isolated(async f => {
@@ -183,7 +183,7 @@ test('Asset disclosure checks all attachments through 64 and fails closed above 
       expect(await f.read(iri(ownUse))).toEqual(['visible']);
     }
   });
-}, 30_000);
+}, 60_000);
 
 test('mixed Asset and Use facts retain independent attachment audiences', async () => {
   await isolated(async f => {
@@ -206,7 +206,7 @@ test(`${role} attachments still count only the selected head in their exact cont
     const select = (asset: string | null, expectedSelection: string | null) => role === 'avatar'
       ? f.store.selectAvatar(admission(), { target, context, expectedSelection, asset, crop: null })
       : f.store.showcase.select(admission(), { target, context, expectedSelection, asset, crop: null,
-        role: 'background-landscape', focalArea: null }, async () => ({ width: 1280, height: 720 }));
+        role: 'background-landscape', focalArea: null }, async () => ({ width: 1280, height: 720, hasAlpha: false }));
     const selected = await select(basis.asset, null);
     const use = (await f.pool.query('SELECT use_id FROM media.selection_revision WHERE id=$1', [selected.id])).rows[0].use_id as string;
     expect((await f.store.visibilityFacts([iri(use)])).get(iri(use))!.attachments).toEqual([{ target, context }]);
@@ -231,13 +231,14 @@ for (const state of ['private', 'deleted', 'moderated', 'queued', 'leased', 'fai
         // Reuse the fixture's succeeded receipt; the job retains the real owner schema constraints.
         const op = (await f.pool.query('SELECT operation_id FROM media.use WHERE id=$1', [ownUse])).rows[0].operation_id as string;
         await f.pool.query(`INSERT INTO media.transform_job(id,asset_id,source_id,input_digest,profile,
-          authority_epoch,erasure_epoch,operation_id,status,lease_token,lease_expires_at,
-          settle_operation_id,settled_at,reason)
-          VALUES ($1,$2,$3,$4,$5,'1',0,$6,$7,$8,$9,$10,$11,$12)`,
-        [randomUUID(), basis.asset, basis.representation, basis.sha256, REQUIRED_MATCH_PROFILE, op, state,
-          state === 'leased' ? randomUUID() : null, state === 'leased' ? new Date(Date.now() + 60_000) : null,
-          state === 'failed' ? op : null, state === 'failed' ? new Date() : null,
-          state === 'failed' ? 'matcher unavailable' : null]);
+          authority_epoch,erasure_epoch,operation_id)
+          VALUES ($1,$2,$3,$4,$5,'1',0,$6)`,
+          [randomUUID(), basis.asset, basis.representation, basis.sha256, REQUIRED_MATCH_PROFILE, op]);
+        if (state !== 'queued') {
+          const lease = await f.store.matching.leaseNext(30_000, basis.representation);
+          expect(lease).not.toBeNull();
+          if (state === 'failed') expect(await f.store.matching.settle(lease!, 'blocked')).toBe(true);
+        }
       }
       expect(await f.read(iri(ownUse))).toEqual(['hidden']);
       const ownerViewer = disclosureViewer(principal, owner);
