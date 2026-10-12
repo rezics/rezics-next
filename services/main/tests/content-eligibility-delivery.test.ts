@@ -19,8 +19,8 @@ publication: { id: 'urn:publication:1', variant: 'urn:variant:1', resource: 'urn
   preparationId: 'prepare-1', ownerDataEpoch: CONTENT_EPOCH, ownerSequence: '3', graphSequence: '40' },
 revisionId: '00000000-0000-4000-8000-000000000103' };
 
-const originalRelay = await import('../src/modules/outbox/relay.ts');
-const originalEligibilityState = await import('../src/modules/content-publication/eligibility-state.ts');
+const originalRelay = { ...await import('../src/modules/outbox/relay.ts') };
+const originalEligibilityState = { ...await import('../src/modules/content-publication/eligibility-state.ts') };
 let readRange: (consumer: string, after: string, limit: number) => Promise<{
   coverage: { streamScope: string; consumer: string; dataEpoch: string; sequence: string };
   batches: RetainedRelayBatch[];
