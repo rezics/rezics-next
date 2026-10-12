@@ -11,7 +11,7 @@ import type { QueueApi } from './queue-api.ts';
 import { RealmFrame } from './realm-frame.tsx';
 import { decisionReceipt, recoveryReasons } from './recovery-fixtures.ts';
 import { RolesView } from './roles-view.tsx';
-import { attemptStorage, recoveryIndexKey, readQueueAttempt, readCommand, retainedCommands, readReportAttempt as readStoredReport, retainCommand as retainStoredCommand, type ReportAttempt } from './safety-pending.ts';
+import { attemptStorage, forgetCommand, recoveryIndexKey, readQueueAttempt, readCommand, retainedCommands, readReportAttempt as readStoredReport, retainCommand as retainStoredCommand, type ReportAttempt } from './safety-pending.ts';
 import { rulesDraftKey, SettingsView } from './settings-view.tsx';
 import type { MainClient, ModerationItem, RoleCommand } from './types.ts';
 
@@ -29,14 +29,17 @@ const sent: { body: unknown; key: string }[] = [];
 let complete = false;
 let cancelled = false;
 let latestSettings = settings;
+let settingsRead: Promise<void> | null = null;
+let rolesRead: Promise<void> | null = null;
 let previews = 0;
 const admin = adminApi();
 const roleReceipts = new Map<string, Awaited<ReturnType<typeof admin.changeRole>>>();
 const roleWrites = new Map<string, RoleCommand>();
 const settingsReceipts = new Map<string, Awaited<ReturnType<typeof admin.saveSettings>>>();
 const lostAdmin = { ...admin,
-  settings: async () => ({ ok: true as const, data: latestSettings }),
+  settings: async () => { await settingsRead; return { ok: true as const, data: latestSettings }; },
   roles: async () => {
+    await rolesRead;
     const read = await admin.roles();
     if (!read.ok) return read;
     const current = new Map(read.data.roles.map(role => [role.id, role]));
@@ -78,9 +81,9 @@ const lostAdmin = { ...admin,
       : result.ok ? { ok: true as const, data: { ...result.data, replayed: true } } : result;
   },
 };
-async function seed(item: ModerationItem, action: 'remove' | 'interim-restrict' | 'final-restrict') {
-  const command = reportDecision(basisFor(item), action, 'The reported revision breaches the rule.', acting.iri, 'retained-key')!;
-  const attempt: ReportAttempt = { realm, actingSubject: acting.iri, key: 'retained-key', item,
+async function seed(item: ModerationItem, action: 'remove' | 'interim-restrict' | 'final-restrict', key = 'retained-key') {
+  const command = reportDecision(basisFor(item), action, 'The reported revision breaches the rule.', acting.iri, key)!;
+  const attempt: ReportAttempt = { realm, actingSubject: acting.iri, key, item,
     decision: { action, reason: recoveryReasons.facts, note: null, reasons: recoveryReasons },
     input: { ...command, reasons: recoveryReasons,
       profile: item.kind === 'rights_complaint' ? 'rights-restriction-v1' : 'moderation-decision-v1' }, status: 'pending' };
@@ -114,7 +117,7 @@ const meta = {
   title: 'Manage/Recoverable operations',
   parameters: { route: { pathname: `/en/manage/r/${realm}` } },
   beforeEach() {
-    sent.length = 0; complete = false; cancelled = false; previews = 0; latestSettings = settings;
+    sent.length = 0; complete = false; cancelled = false; previews = 0; latestSettings = settings; settingsRead = null; rolesRead = null;
     roleReceipts.clear(); roleWrites.clear(); settingsReceipts.clear();
     // Remove only this isolated fixture's recovery records and draft.
     localStorage.removeItem(recoveryIndexKey('storybook:account-one', realm));
@@ -395,9 +398,10 @@ function ReloadableSettings({ newer = false }: { newer?: boolean }) {
       initial={version ? latestSettings : settings} locale="en" messages={messages} api={lostAdmin} />
   </>;
 }
-async function publishWithLostResponse(canvas: ReturnType<typeof within>) {
+const ruleTitle = (canvas: ReturnType<typeof within>) => canvas.getAllByRole('textbox', { name: 'Title in English' })[0]!;
+async function reviewDraft(canvas: ReturnType<typeof within>) {
   await userEvent.click(canvas.getByRole('button', { name: 'Edit rules' }));
-  const title = () => canvas.getAllByRole('textbox', { name: 'Title in English' })[0]!;
+  const title = () => ruleTitle(canvas);
   await waitFor(async () => {
     if ((title() as HTMLInputElement).value !== 'Mark spoilers in titles') {
       await userEvent.clear(title()); await userEvent.type(title(), 'Mark spoilers in titles');
@@ -409,6 +413,10 @@ async function publishWithLostResponse(canvas: ReturnType<typeof within>) {
   await settleOverlay(element);
   const dialog = within(element);
   await userEvent.type(dialog.getByRole('textbox', { name: 'What changed and why' }), 'Clarify spoiler warnings.');
+  return dialog;
+}
+async function publishWithLostResponse(canvas: ReturnType<typeof within>) {
+  const dialog = await reviewDraft(canvas);
   await userEvent.click(dialog.getByRole('button', { name: 'Publish' }));
   await expect(await dialog.findByRole('button', { name: 'Resume' })).toBeVisible();
   await userEvent.click(dialog.getByRole('button', { name: 'Keep editing' }));
@@ -428,6 +436,33 @@ export const PublicationResumeAfterReload: Story = {
     await expect(await canvas.findByRole('heading', { name: /Mark spoilers in titles$/ })).toBeVisible();
     await expect(sent[1]).toEqual(sent[0]);
     await expect(readCommand(realm, acting.iri, 'settings', recoveryStore())).toBeNull();
+  },
+};
+export const EditsAfterPublishSurviveTheRead: Story = {
+  parameters: { route: { pathname: `/en/manage/r/${realm}/settings` } },
+  render: () => frame(<SettingsView principal="storybook:account-one" realm={realm} actingSubject={acting.iri} initial={settings}
+    locale="en" messages={messages} api={{ ...lostAdmin, saveSettings: async (...args) => {
+      const result = await admin.saveSettings(...args);
+      if (result.ok) latestSettings = result.data;
+      return result;
+    } }} />),
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    let release!: () => void;
+    settingsRead = new Promise<void>(resolve => { release = resolve; });
+    const dialog = await reviewDraft(canvas);
+    await userEvent.click(dialog.getByRole('button', { name: 'Publish' }));
+    // The publication is accepted; the settings read that follows it is still outstanding.
+    await waitFor(() => expect(latestSettings.ruleBasis.revision).toBe('4'));
+    await userEvent.click(await dialog.findByRole('button', { name: 'Keep editing' }));
+    await userEvent.type(ruleTitle(canvas), ' (after publishing)');
+    release();
+    await expect(await canvas.findByText('Revision 4 is published.')).toBeVisible();
+    await expect(ruleTitle(canvas)).toHaveValue('Mark spoilers in titles (after publishing)');
+    const stored = JSON.parse(localStorage.getItem(rulesDraftKey('storybook:account-one', realm, acting.iri)) ?? 'null');
+    await expect(stored.base).toBe('4');
+    await expect(JSON.stringify(stored.drafts)).toContain('(after publishing)');
+    await expect(canvas.getByRole('button', { name: 'Review changes' })).toBeEnabled();
   },
 };
 export const OlderReceiptKeepsNewerPublication: Story = {
@@ -494,6 +529,17 @@ export const RightsFilterHidesContentRecovery: Story = {
     await expect(canvas.queryByText('Edition details')).toBeNull();
   },
 };
+const secondReasonCase = { ...report, reasonCode: 'spam' };
+export const ReasonFilterShowsWhatTheApiReturns: Story = {
+  render: () => frame(<QueueView principal="storybook:account-one" realm={realm} actingSubject={acting.iri}
+    initial={{ ...queuePage, items: [secondReasonCase], nextCursor: null }} names={names} now={now}
+    view={{ state: 'open', type: null, reason: 'harassment' }} locale="en" messages={messages} api={recoveryApi(report)} />),
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('list', { name: 'Queue items' }).children).toHaveLength(1);
+    await expect(canvas.queryByText('Nothing here')).toBeNull();
+  },
+};
 export const ReasonFilterHidesUnrelatedRecovery: Story = {
   ...RightsFilterHidesContentRecovery,
   render: () => frame(<QueueView principal="storybook:account-one" realm={realm} actingSubject={acting.iri}
@@ -531,6 +577,39 @@ export const SubmissionResumeAfterReload: Story = {
     await expect(await canvas.findByText('All caught up')).toBeVisible();
     await expect(sent[1]).toEqual(sent[0]);
     await expect(readQueueAttempt(realm, acting.iri, pendingSubmission.id, recoveryStore())).toBeNull();
+  },
+};
+
+// Another tab completes this tab's decision and retains its own while the first response is in flight.
+function otherTabApi(item: ModerationItem): QueueApi {
+  let first = true;
+  const post = async (input: unknown, options: { headers: { 'idempotency-key': string } }) => {
+    sent.push({ body: input, key: options.headers['idempotency-key'] });
+    if (first) {
+      first = false;
+      await forgetCommand(`report:${item.id}`, readReportAttempt(realm, acting.iri, item.id)!, recoveryStore());
+      await seed(item, 'remove', 'other-tab-key');
+    }
+    return { data: decisionReceipt(item, complete ? 'completed' : 'accepted'), error: null };
+  };
+  const main = { v1: { moderation: { decisions: { post } }, rights: { restrictions: { post } } } } as unknown as MainClient;
+  return { ...queueApi(), commit: (target, decision, key) => decideReport(main, realm, target, decision, acting.iri, key, recoveryStore()) };
+}
+export const OtherTabReplacesDecisionInFlight: Story = {
+  beforeEach: async () => { await seed(report, 'remove'); },
+  render: () => frame(<ReloadableQueue item={report} api={otherTabApi(report)} />),
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: 'Resume' }));
+    await waitFor(() => expect(sent).toHaveLength(1));
+    // The item is visible again, with the other tab's decision, without a reload.
+    await waitFor(() => expect(canvas.getByRole('button', { name: 'Resume' })).toBeVisible());
+    await expect(readReportAttempt(realm, acting.iri, report.id)?.key).toBe('other-tab-key');
+    complete = true;
+    await userEvent.click(canvas.getByRole('button', { name: 'Resume' }));
+    await waitFor(() => expect(sent).toHaveLength(2));
+    await expect(sent[1]!.key).toBe('other-tab-key');
+    await expect(await canvas.findByText('All caught up')).toBeVisible();
   },
 };
 

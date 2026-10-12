@@ -110,9 +110,13 @@ export function QueueView({ principal, recoverReports, realm, address = realm, a
   const api = useMemo(() => givenApi ?? bffQueueApi(realm, actingSubject, locale, principal),
     [givenApi, realm, actingSubject, locale, principal]);
   const store = useMemo(() => attemptStorage(principal), [principal]);
-  const allowedHere = useCallback((item: ModerationItem) => (!isReportItem(item) || (recoverReports ?? authority.decideReports))
+  // The API's type and reason filters decide what the open view lists; a report is shown only to those who may decide it.
+  const allowedHere = useCallback((item: ModerationItem) => !isReportItem(item) || (recoverReports ?? authority.decideReports),
+    [recoverReports, authority.decideReports]);
+  // A retained decision has no API read behind it, so it joins the view only where its own type and reason match.
+  const recoverableHere = useCallback((item: ModerationItem) => allowedHere(item)
     && (!view.type || item.kind === view.type) && (!view.reason || item.reasonCode === view.reason),
-  [recoverReports, authority.decideReports, view.type, view.reason]);
+  [allowedHere, view.type, view.reason]);
   const [state, dispatch] = useReducer(triage, itemsFor(initial.items, view.state), initialTriage);
   const [names, setNames] = useState(initialNames);
   const namesRef = useRef(names);
@@ -150,10 +154,10 @@ export function QueueView({ principal, recoverReports, realm, address = realm, a
     setNames(known => mergeNames(known, found));
   }, [api]);
   useEffect(() => {
-    const attempts = view.state === 'open' ? queueAttempts(realm, actingSubject, store).filter(attempt => allowedHere(attempt.item)) : [];
+    const attempts = view.state === 'open' ? queueAttempts(realm, actingSubject, store).filter(attempt => recoverableHere(attempt.item)) : [];
     dispatch({ type: 'recover', items: attempts });
     if (attempts.length) void learn(attempts.map(attempt => attempt.item));
-  }, [realm, actingSubject, learn, store, allowedHere, view.state]);
+  }, [realm, actingSubject, learn, store, recoverableHere, view.state]);
 
   const reload = useCallback(async () => {
     const read = await api.page(view, null);
@@ -171,14 +175,15 @@ export function QueueView({ principal, recoverReports, realm, address = realm, a
     const result = await api.commit(intended.item, intended.decision, intended.key);
     const retained = readQueueAttempt(realm, actingSubject, item.id, store);
     if (retained && retained.key !== intended.key) {
-      dispatch({ type: 'recover', items: allowedHere(retained.item) ? [retained] : [] });
+      // Another tab replaced this decision: the item stops committing and shows the retained one, with its Resume.
+      dispatch({ type: 'settle', id: item.id, outcome: { kind: retained.status } });
       return { kind: retained.status } as Settled;
     }
     const outcome: Settled = !result.ok && retained?.status === 'pending' ? { kind: 'pending' }
       : !result.ok && retained?.uncertain ? { kind: 'recorded' } : outcomeOf(result, report);
     dispatch({ type: 'settle', id: item.id, outcome });
     return outcome;
-  }, [api, realm, actingSubject, store, allowedHere]);
+  }, [api, realm, actingSubject, store]);
 
   const commit = useCallback(async (entry: PendingDecision) => {
     if (committed.current.has(entry.key)) return;

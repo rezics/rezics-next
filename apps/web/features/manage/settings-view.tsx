@@ -55,6 +55,10 @@ export function SettingsView({ principal, realm, actingSubject, initial, locale,
   const [conflict, setConflict] = useState<Settings | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [recovering, setRecovering] = useState(false);
+  // Counts what this person changed in the draft, so a result that lands later can tell whether the draft moved on.
+  const draftEdits = useRef(0);
+  const editingNow = useRef(editing);
+  editingNow.current = editing;
 
   // A draft survives a reload until it is published or discarded.
   useEffect(() => {
@@ -111,11 +115,14 @@ export function SettingsView({ principal, realm, actingSubject, initial, locale,
     if (!found.length) setReviewing(true);
   }
 
-  async function published(result: Settings, revision: string | null) {
+  async function published(result: Settings, revision: string | null, editsAtPublish: number) {
     setRecovering(false);
     const fresh = await api.settings();
     const latest = newestSettings(latestSettings.current, fresh.ok ? fresh.data : result);
-    discard(newestSettings(latest, result));
+    const newest = newestSettings(latest, result);
+    // What was changed after Publish is a newer draft: it stays, compared with the revision just published.
+    if (draftEdits.current !== editsAtPublish && editingNow.current) { setCurrent(newest); setConflict(null); }
+    else discard(newest);
     setReviewing(false);
     setStatus(revision && BigInt(result.generation) >= BigInt(latest.generation) ? t.rulesPublished({ revision }) : t.settingsSaved);
     router.refresh();
@@ -129,6 +136,7 @@ export function SettingsView({ principal, realm, actingSubject, initial, locale,
       </div>
       <RadioGroup disabled={recovering} value={who} onValueChange={details => {
         if (!details.value) return;
+        draftEdits.current++;
         setWho(details.value as WhoMaySubmit);
         setEditing(true);
       }}>
@@ -155,7 +163,7 @@ export function SettingsView({ principal, realm, actingSubject, initial, locale,
         onDiscard={() => discard(conflict)}
         onKeep={() => { setCurrent(conflict); setConflict(null); review(); }} /> : null}
       {editing ? <fieldset disabled={recovering} className="contents"><RulesEditor drafts={drafts} published={current.settings.rules} problems={problems} locale={locale}
-        messages={messages} reading={reading} onChange={next => { setDrafts(next); if (problems) setProblems(ruleProblems(next.map(item => item.rule))); }} /></fieldset>
+        messages={messages} reading={reading} onChange={next => { draftEdits.current++; setDrafts(next); if (problems) setProblems(ruleProblems(next.map(item => item.rule))); }} /></fieldset>
         : current.settings.rules.length ? <RuleList rules={current.settings.rules} locale={locale} messages={messages} />
           : <EmptyState icon={ScaleIcon} title={t.noRulesTitle} description={t.noRulesHelp}>
             <Button size="sm" onClick={() => setEditing(true)}>{t.addRule}</Button></EmptyState>}
@@ -169,8 +177,8 @@ export function SettingsView({ principal, realm, actingSubject, initial, locale,
     </div> : null}
     <PublishDialog principal={principal} realm={realm} open={reviewing} current={current} changes={changes} whoMaySubmit={who} whoChanged={whoChanged}
       rules={rules} api={api} actingSubject={actingSubject} locale={locale} messages={messages}
-      onRecovery={setRecovering}
-      onClose={() => setReviewing(false)} onPublished={(result, revision) => void published(result, revision)}
+      onRecovery={setRecovering} draftEdits={() => draftEdits.current}
+      onClose={() => setReviewing(false)} onPublished={(result, revision, edits) => void published(result, revision, edits)}
       onConflict={theirs => { setReviewing(false); setConflict(theirs); }} />
   </div>;
 }
@@ -187,12 +195,13 @@ function changeText(change: RuleChange, t: ReturnType<typeof materializeData<Man
 }
 
 function PublishDialog({ principal, realm, open, current, changes, whoMaySubmit, whoChanged, rules, api, actingSubject, locale, messages, onRecovery,
-  onClose, onPublished, onConflict }: {
+  draftEdits, onClose, onPublished, onConflict }: {
   principal: string; realm: string; open: boolean; current: Settings; changes: RuleChange[]; whoMaySubmit: WhoMaySubmit; whoChanged: boolean;
   rules: RealmRule[]; api: AdminApi; actingSubject: string; locale: UiLocale; messages: ManageMessages;
-  onClose: () => void; onPublished: (result: Settings, revision: string | null) => void;
+  onClose: () => void; onPublished: (result: Settings, revision: string | null, edits: number) => void;
   onConflict: (theirs: Settings) => void;
   onRecovery: (recovering: boolean) => void;
+  draftEdits: () => number;
 }) {
   const t = materializeData(messages, { locale });
   const store = useMemo(() => attemptStorage(principal), [principal]);
@@ -212,6 +221,7 @@ function PublishDialog({ principal, realm, open, current, changes, whoMaySubmit,
   async function publish() {
     if (!recovering && (!reason.trim() || reason.trim().length > REASON_LIMIT)) { setError(t.reasonRequired); return; }
     setPending(true); setError(null);
+    const edits = draftEdits();
     let basis = current;
     for (let attempt = 0; attempt < 2; attempt++) {
       const attempt = readCommand<SettingsCommand>(realm, actingSubject, 'settings', store) ?? { realm, actingSubject, key: newKey(), status: 'recorded' as const,
@@ -224,7 +234,7 @@ function PublishDialog({ principal, realm, open, current, changes, whoMaySubmit,
       if (result.ok) {
         setPending(false); setReason('');
         onPublished({ generation: result.data.generation, settings: result.data.settings, ruleBasis: result.data.ruleBasis },
-          result.data.ruleBasis.revision);
+          result.data.ruleBasis.revision, edits);
         return;
       }
       if (retained || result.failure !== 'stale') {
