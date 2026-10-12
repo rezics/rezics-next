@@ -170,7 +170,11 @@ test('an ordinary Realm rating-context bundle binds structurally and native SHAC
             BIND(?n + 1 AS ?next) FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
           }` });
       expect(result.status, JSON.stringify(result)).toBe(retired ? 'invalid' : 'committed');
-      if (result.status === 'invalid') expect(JSON.stringify(result.report)).toContain('realm-shape');
+      if (result.status === 'invalid') {
+        expect(String(result.report)).toContain(`${RV}realmState`);
+        expect(String(result.report)).toContain('HasValueConstraintComponent');
+        expect(String(result.report)).toContain(space.realm);
+      }
       expect((await stack.fuseki.query(`ASK { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }`, 1024)).boolean)
         .toBe(!retired);
     }
