@@ -9,7 +9,7 @@ import { FusekiClient, type CommandEnvelope } from '../../../services/main/src/i
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import { PUBLIC_DOMAIN_TEXT_USE, publicDomainWorkMaterial, RightsStore }
   from '../../../services/main/src/modules/rights/store.ts';
-import { activateMetadataWork, GRAPHS, iri, metadataWorkRequestDigest, RV,
+import { activateMetadataWork, createWorkActivationEnvironment, GRAPHS, iri, metadataWorkRequestDigest, RV,
   type WorkActivationReceipt } from '../../../services/main/src/modules/work/activate.ts';
 import { activateTextContribution, textContributionDigest }
   from '../../../services/main/src/modules/contribution/draft.ts';
@@ -44,9 +44,9 @@ test('G-591: text contribution publication requires the source basis, including 
     const content = new ContentCore(contentPool);
     const rights = new RightsStore(contentPool, accessPool);
     const graph = new RacingGraph(Bun.env.FUSEKI_URL);
-    const env = { fuseki: graph,
+    const env = createWorkActivationEnvironment({ referenceFencePool: contentPool, fuseki: graph,
       lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
-      objectDirectory: directory };
+      objectDirectory: directory });
     const principal = { issuer: 'https://qa-g-591.test', subject: randomUUID() };
     const principalId = randomUUID();
     const author = id(), translator = id();

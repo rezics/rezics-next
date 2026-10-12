@@ -31,7 +31,7 @@ import { activateTextContribution, textContributionDigest }
   from '../../../services/main/src/modules/contribution/draft.ts';
 import { publishTextContribution, textPublicationDigest }
   from '../../../services/main/src/modules/contribution/publish.ts';
-import { activateMetadataWork, DATASET, GRAPHS, metadataWorkRequestDigest, RV }
+import { activateMetadataWork, createWorkActivationEnvironment, DATASET, GRAPHS, metadataWorkRequestDigest, RV }
   from '../../../services/main/src/modules/work/activate.ts';
 import { selectRealmLocal, realmSelectionDigest }
   from '../../../services/main/src/modules/work/select-realm.ts';
@@ -64,9 +64,9 @@ test('SEARCH19: same-language variants survive reversed owner settlement, replay
     await migrateContent(pool);
     const content = new ContentCore(pool);
     const fuseki = new FusekiClient(Bun.env.FUSEKI_URL);
-    const env = { fuseki,
+    const env = createWorkActivationEnvironment({ referenceFencePool: pool, fuseki,
       lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
-      objectDirectory: join(state, 'objects') };
+      objectDirectory: join(state, 'objects') });
     const actor = `https://rezics.com/id/${randomUUID()}`;
     const principal = { issuer: 'https://qa-content-variants.test', subject: randomUUID() };
     const principalId = randomUUID();

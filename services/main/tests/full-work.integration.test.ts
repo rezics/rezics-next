@@ -22,7 +22,7 @@ import { mirrorAccountDeletionIntent } from '../src/modules/outbox/account-delet
 import { retainAccountSubjectDeletion } from '../src/modules/outbox/account-subject-deletion.ts';
 import { initializeRelayCheckpoint, relayMainOutboxOnce } from '../src/modules/outbox/relay.ts';
 import { AccountAssertionVerifier } from '../src/modules/account/verify-assertion.ts';
-import { initializeFreshGraph, metadataWorkRequestDigest, TEXT_INDEX_PROFILE,
+import { createWorkActivationEnvironment, initializeFreshGraph, metadataWorkRequestDigest, TEXT_INDEX_PROFILE,
   TEXT_INDEX_PROBE, TEXT_INDEX_PROBE_BODY, TEXT_INDEX_PROBE_GRAPH,
   type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { metadataWorkEditDigest } from '../src/modules/work/edit.ts';
@@ -163,9 +163,10 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
       VALUES ($1, $2, $2, 'work:create:root', 'work.create', now() + interval '1 hour')`, [Bun.randomUUIDv7(), actor]);
     const lineage = { dataEpoch: Bun.randomUUIDv7(), routingEpoch: '1' };
     await initializeFreshGraph(fuseki, lineage);
-    const environment: WorkActivationEnvironment = { fuseki, lineage,
+    const environment: WorkActivationEnvironment = createWorkActivationEnvironment({ referenceFencePool: pool!,
+      fuseki, lineage,
       objectDirectory: join(state, 'objects'), candidateDirectory: join(state, 'candidates'),
-      repositoryRoot: root, jenaHome, javaHome, python: 'python3' };
+      repositoryRoot: root, jenaHome, javaHome, python: 'python3' });
     const verifier = new AccountAssertionVerifier({ issuer: metadata.issuer, audience: resource,
       jwksUrl: metadata.jwks_uri, introspectUrl: `${accountBase}/api/auth/oauth2/introspect`,
       clientId: confidential.client_id, clientSecret: confidential.client_secret! });

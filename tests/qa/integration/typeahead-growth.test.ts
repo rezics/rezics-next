@@ -15,8 +15,8 @@ import { publishTextContribution, textPublicationDigest }
   from '../../../services/main/src/modules/contribution/publish.ts';
 import { SEARCH_FIELD_COST } from '../../../services/main/src/modules/search/fields.ts';
 import { prefixWalkExaminedLimit } from '../../../services/main/src/modules/search/prefix-walk.ts';
-import { activateMetadataWork, ID, metadataWorkRequestDigest, type WorkActivationEnvironment }
-  from '../../../services/main/src/modules/work/activate.ts';
+import { activateMetadataWork, createWorkActivationEnvironment, ID, metadataWorkRequestDigest,
+  type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { commitMetadata } from '../../../services/main/src/modules/work/metadata-command.ts';
 import { metadataDigest, type MetadataIntent }
   from '../../../services/main/src/modules/work/metadata-schema.ts';
@@ -111,9 +111,10 @@ test('SEARCH18: public typeahead native work follows population before prefix cu
   const state = join(resolve(import.meta.dir, '../../..'), '.temp', `typeahead-growth-${randomUUID()}`);
   mkdirSync(state, { recursive: true, mode: 0o700 });
   const fuseki = new GrowthFuseki(Bun.env.FUSEKI_URL);
-  const env: WorkActivationEnvironment = { fuseki,
+  const contentPool = new Pool({ connectionString: Bun.env.CONTENT_DATABASE_URL, max: 2 });
+  const env: WorkActivationEnvironment = createWorkActivationEnvironment({ referenceFencePool: contentPool, fuseki,
     lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
-    objectDirectory: join(state, 'objects') };
+    objectDirectory: join(state, 'objects') });
   const accessPool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
   const app = createMainApp(fuseki, { environment: env,
     account: { verify: async () => { throw new Error('The growth read is anonymous'); } },
@@ -212,6 +213,7 @@ test('SEARCH18: public typeahead native work follows population before prefix cu
     fuseki.read = undefined;
     await app.stop();
     await accessPool.end();
+    await contentPool.end();
     rmSync(state, { recursive: true, force: true });
   }
 }, 600_000);

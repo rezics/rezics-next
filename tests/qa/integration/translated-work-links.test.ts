@@ -11,8 +11,9 @@ import { activateTextContribution, textContributionDigest }
   from '../../../services/main/src/modules/contribution/draft.ts';
 import { publishTextContribution, textPublicationDigest }
   from '../../../services/main/src/modules/contribution/publish.ts';
-import { activateMetadataWork, DATASET, GRAPHS, ID, RV, iri, lit, metadataWorkRequestDigest,
-  type WorkActivationEnvironment, type WorkActivationReceipt } from '../../../services/main/src/modules/work/activate.ts';
+import { activateMetadataWork, createWorkActivationEnvironment, DATASET, GRAPHS, ID, RV, iri, lit,
+  metadataWorkRequestDigest, type WorkActivationEnvironment, type WorkActivationReceipt }
+  from '../../../services/main/src/modules/work/activate.ts';
 import { listEligibleNativeVariants, readEligibleNativeVariant }
   from '../../../services/main/src/modules/work/native-variants.ts';
 
@@ -27,9 +28,11 @@ function translationFixture(label: string) {
   }
   const directory = join(root, '.temp', `${label}-${randomUUID()}`);
   mkdirSync(directory, { recursive: true, mode: 0o700 });
-  const env: WorkActivationEnvironment = { fuseki: new FusekiClient(Bun.env.FUSEKI_URL),
+  const contentPool = new Pool({ connectionString: Bun.env.CONTENT_DATABASE_URL, max: 2 });
+  const env: WorkActivationEnvironment = createWorkActivationEnvironment({ referenceFencePool: contentPool,
+    fuseki: new FusekiClient(Bun.env.FUSEKI_URL),
     lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
-    objectDirectory: join(directory, 'objects') };
+    objectDirectory: join(directory, 'objects') });
   const accessPool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
   const actor = ID + randomUUID();
   const principal = { issuer: `https://qa-${label}.test`, subject: randomUUID() };
@@ -109,6 +112,7 @@ function translationFixture(label: string) {
   };
   const close = async () => {
     await accessPool.end();
+    await contentPool.end();
     rmSync(directory, { recursive: true, force: true });
   };
   return { env, accessPool, actor, principal, grant, registerActor, createWork, publish,

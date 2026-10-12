@@ -21,7 +21,8 @@ import { queryReleaseRatingAggregate } from '../../../services/main/src/modules/
 import { RELEASE_RATING_WRITE_COST } from '../../../services/main/src/modules/rating/release.ts';
 import { initializeRelayCheckpoint, relayCoverage, relayMainOutboxOnce,
   readMainOutboxEnvelope } from '../../../services/main/src/modules/outbox/relay.ts';
-import { GRAPHS, DATASET, RV, iri, initializeFreshGraph } from '../../../services/main/src/modules/work/activate.ts';
+import { createWorkActivationEnvironment, GRAPHS, DATASET, RV, iri, initializeFreshGraph }
+  from '../../../services/main/src/modules/work/activate.ts';
 import { reconcileRetainedFixedRelease } from '../../../services/main/src/modules/work/reconcile-fixed-release.ts';
 import { reconcileRetainedAdmissionCancellation, reconcileRetainedContributionDraftCreate,
   reconcileRetainedContributionPublication, reconcileRetainedMainSelection,
@@ -91,8 +92,9 @@ test('WORK06: exact fixed releases and Main Version keep separate Access-backed 
     }
     const fuseki = new FusekiClient(Bun.env.FUSEKI_URL,
       Bun.env.FUSEKI_MAINTENANCE_TOKEN, Bun.env.FUSEKI_COMMAND_TOKEN);
-    const environment = { fuseki, objectDirectory: join(state, 'objects'),
-      lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH } };
+    const environment = createWorkActivationEnvironment({ referenceFencePool: contentPool, fuseki,
+      objectDirectory: join(state, 'objects'),
+      lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH } });
     const content = new ContentCore(contentPool);
     const access = new AccessAdmissionRegistry(accessPool);
     const inventory = new ReleaseRatingInventoryStore(accessPool);
@@ -366,7 +368,8 @@ test('WORK06: exact fixed releases and Main Version keep separate Access-backed 
       { prior: { ...restorePrior, sequence: '0' }, next: nextLineage });
     const restoredObjects = join(state, 'restored-objects');
     cpSync(environment.objectDirectory, restoredObjects, { recursive: true, errorOnExist: true });
-    const recovered = { fuseki: restoredFuseki, objectDirectory: restoredObjects, lineage: nextLineage };
+    const recovered = { referenceFencePool: contentPool, fuseki: restoredFuseki,
+      objectDirectory: restoredObjects, lineage: nextLineage };
     for (let n = 1; n <= Number(coverage.sequence); n++) {
       const sequence = String(n);
       const type = retained.get(sequence)?.type;

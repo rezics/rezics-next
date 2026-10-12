@@ -9,7 +9,7 @@ import { FusekiClient, fusekiReadBudget, type FusekiReadBudget }
 import { AccessAdmissionRegistry, type RegisteredAdmission } from '../../../services/main/src/modules/access/admission.ts';
 import { activateTextContribution, textContributionDigest } from '../../../services/main/src/modules/contribution/draft.ts';
 import { publishTextContribution, textPublicationDigest } from '../../../services/main/src/modules/contribution/publish.ts';
-import { activateMetadataWork, ID, metadataWorkRequestDigest,
+import { activateMetadataWork, createWorkActivationEnvironment, ID, metadataWorkRequestDigest,
   type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { selectMainDefault, mainSelectionDigest } from '../../../services/main/src/modules/work/select-main.ts';
 import { capabilities } from '../../../services/main/src/routes/search.ts';
@@ -30,16 +30,17 @@ interface Page { profile: string; retrieval: string; population: number;
 
 test('G-556: ranked catalogue HTTP pages keep identity, hydrate cards and restart after a native selection write', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL || !Bun.env.MAIN_DATA_EPOCH
-    || !Bun.env.MAIN_ROUTING_EPOCH || !Bun.env.ACCESS_DATABASE_URL) {
+    || !Bun.env.MAIN_ROUTING_EPOCH || !Bun.env.ACCESS_DATABASE_URL || !Bun.env.CONTENT_DATABASE_URL) {
     throw new Error('Run through the isolated QA integration tier');
   }
   const state = join(resolve(import.meta.dir, '../../..'), '.temp', `g556-ranked-${randomUUID()}`);
   mkdirSync(state, { recursive: true, mode: 0o700 });
   const actor = ID + randomUUID(), phrase = `catalogue${randomUUID().replaceAll('-', '')}`;
   const fuseki = new MeasuredFuseki(Bun.env.FUSEKI_URL);
-  const env: WorkActivationEnvironment = { fuseki,
+  const contentPool = new Pool({ connectionString: Bun.env.CONTENT_DATABASE_URL, max: 2 });
+  const env: WorkActivationEnvironment = createWorkActivationEnvironment({ referenceFencePool: contentPool, fuseki,
     lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
-    objectDirectory: join(state, 'objects') };
+    objectDirectory: join(state, 'objects') });
   const pool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
   const app = createMainApp(fuseki, { environment: env, access: new AccessAdmissionRegistry(pool),
     account: { verify: async () => { throw new Error('anonymous catalogue read'); } } });
@@ -124,6 +125,7 @@ test('G-556: ranked catalogue HTTP pages keep identity, hydrate cards and restar
     expect(await stale.json()).toMatchObject({ code: 'search_restart_required' });
   } finally {
     await pool.end();
+    await contentPool.end();
     rmSync(state, { recursive: true, force: true });
   }
 }, 120_000);

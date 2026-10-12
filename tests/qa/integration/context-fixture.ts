@@ -18,7 +18,7 @@ import { StatementSeek } from '../../../services/main/src/modules/statement/seek
 import { CLASSIFIED_AS } from '../../../services/main/src/modules/statement/schema.ts';
 import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { createRealmSpace, spaceCreationDigest } from '../../../services/main/src/modules/space/create.ts';
-import { activateMetadataWork, ID, metadataWorkRequestDigest,
+import { activateMetadataWork, createWorkActivationEnvironment, ID, metadataWorkRequestDigest,
   type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import type { ContextRouteDependencies } from '../../../services/main/src/routes/contexts.ts';
 import { ratingAccount } from '../support/rating-account.ts';
@@ -36,6 +36,7 @@ export async function contextFixture(apps: Record<string, string>) {
   const account = await ratingAccount(apps,
     'openid context:write context:select context:read statement:write statement:decide work:create work:edit work:read classification:decide rating:configure rating:submit');
   const accessPool = new Pool({ connectionString: apps.ACCESS_DATABASE_URL });
+  const contentPool = new Pool({ connectionString: apps.CONTENT_DATABASE_URL, max: 2 });
   const native = new FusekiClient(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN!, apps.FUSEKI_COMMAND_TOKEN!);
   let loseResponse: string | null = null;
   let localDecisionReadFault: 'missing-outcome' | 'failed-read' | null = null;
@@ -85,8 +86,9 @@ export async function contextFixture(apps: Record<string, string>) {
     const value = Reflect.get(target, property, target);
     return typeof value === 'function' ? value.bind(target) : value;
   } }) as FusekiClient;
-  const env: WorkActivationEnvironment = { fuseki, lineage: { dataEpoch: apps.MAIN_DATA_EPOCH!,
-    routingEpoch: apps.MAIN_ROUTING_EPOCH! }, objectDirectory: resolve('.temp', `context-${randomUUID()}`) };
+  const env: WorkActivationEnvironment = createWorkActivationEnvironment({ referenceFencePool: contentPool, fuseki,
+    lineage: { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: apps.MAIN_ROUTING_EPOCH! },
+    objectDirectory: resolve('.temp', `context-${randomUUID()}`) });
   const access = new AccessAdmissionRegistry(accessPool, apps.FUSEKI_TITLE_ADMISSION_KEY);
   access.configureBaseline(fuseki);
   const selections = new PrivateContextSelections(accessPool);
@@ -239,7 +241,7 @@ export async function contextFixture(apps: Record<string, string>) {
     faultNextLocalDecisionRead: (fault: 'missing-outcome' | 'failed-read') => { localDecisionReadFault = fault; },
     faultNextContextChainRead: (revision: string) => { missingContextRevision = revision; },
     faultNextStatementRead: (fault: 'missing-pin-context' | 'missing-head') => { statementReadFault = fault; },
-    close: async () => { await account.close(); await accessPool.end(); } };
+    close: async () => { await account.close(); await accessPool.end(); await contentPool.end(); } };
 }
 
 export type ContextFixture = Awaited<ReturnType<typeof contextFixture>>;

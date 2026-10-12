@@ -27,7 +27,7 @@ import { setStandingRating, standingRatingDigest }
   from '../../../services/main/src/modules/rating/observation.ts';
 import { createRealmSpace, spaceCreationDigest }
   from '../../../services/main/src/modules/space/create.ts';
-import { activateMetadataWork, ID, iri, lit, metadataWorkRequestDigest,
+import { activateMetadataWork, createWorkActivationEnvironment, ID, iri, lit, metadataWorkRequestDigest,
   type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { selectMainDefault, mainSelectionDigest }
   from '../../../services/main/src/modules/work/select-main.ts';
@@ -104,11 +104,13 @@ test('IAM18/SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rate
   const phrase = `scale${randomUUID().replaceAll('-', '')}`;
   attributeDirectoryRefreshQueries();
   const fuseki = new CountingFusekiClient(Bun.env.FUSEKI_URL);
-  const env: WorkActivationEnvironment = {
+  const contentPool = new Pool({ connectionString: Bun.env.CONTENT_DATABASE_URL, max: 2 });
+  const env: WorkActivationEnvironment = createWorkActivationEnvironment({
+    referenceFencePool: contentPool,
     fuseki,
     lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
     objectDirectory: join(state, 'objects'),
-  };
+  });
   const accessPool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
   const viewer = { issuer: 'https://rezics.com/qa/search-viewer', subject: randomUUID() };
   const viewerToken = 'search-viewer';
@@ -691,6 +693,7 @@ test('IAM18/SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rate
     expect(currentAfterNarrowing.results.map(row => row.work)).toEqual([chineseA]);
   } finally {
     await accessPool.end();
+    await contentPool.end();
     await classificationFixture.close();
     rmSync(state, { recursive: true, force: true });
     rmSync(classificationObjectDirectory, { recursive: true, force: true });

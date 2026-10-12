@@ -22,7 +22,7 @@ import { publishTextContribution, textPublicationDigest }
   from '../../../services/main/src/modules/contribution/publish.ts';
 import { createRealmSpace, spaceCreationDigest }
   from '../../../services/main/src/modules/space/create.ts';
-import { activateMetadataWork, GRAPHS, ID, metadataWorkRequestDigest, RV,
+import { activateMetadataWork, createWorkActivationEnvironment, GRAPHS, ID, metadataWorkRequestDigest, RV,
   type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { rejectRealmLocal, realmRejectionDigest }
   from '../../../services/main/src/modules/work/reject-realm.ts';
@@ -47,11 +47,13 @@ test('CTX02/CTX03/WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection
   const actor = ID + randomUUID();
   const otherAuthor = ID + randomUUID();
   const marker = `selectionbeacon${randomUUID().replaceAll('-', '')}`;
-  const env: WorkActivationEnvironment = {
+  const contentPool = new Pool({ connectionString: Bun.env.CONTENT_DATABASE_URL, max: 2 });
+  const env: WorkActivationEnvironment = createWorkActivationEnvironment({
+    referenceFencePool: contentPool,
     fuseki: new FusekiClient(Bun.env.FUSEKI_URL),
     lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
     objectDirectory: join(state, 'objects'),
-  };
+  });
   const accessPool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
   const judgments = new AccessJudgments(accessPool);
   const app = createMainApp(env.fuseki, { environment: env,
@@ -447,6 +449,7 @@ test('CTX02/CTX03/WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection
     expect(await contributorState(replacement.contribution)).toEqual(replacementOwner);
   } finally {
     await accessPool.end();
+    await contentPool.end();
     await classificationFixture.close();
     rmSync(state, { recursive: true, force: true });
     rmSync(classificationObjectDirectory, { recursive: true, force: true });

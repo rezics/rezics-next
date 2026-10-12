@@ -15,7 +15,7 @@ import { publishTextContribution, textPublicationDigest }
   from '../../../services/main/src/modules/contribution/publish.ts';
 import { FixedSiteStore } from '../../../services/main/src/modules/pro-site/store.ts';
 import { createRealmSpace, spaceCreationDigest } from '../../../services/main/src/modules/space/create.ts';
-import { activateMetadataWork, ID, metadataWorkRequestDigest,
+import { activateMetadataWork, createWorkActivationEnvironment, ID, metadataWorkRequestDigest,
   type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { selectMainDefault, mainSelectionDigest } from '../../../services/main/src/modules/work/select-main.ts';
 import { selectRealmLocal, realmSelectionDigest } from '../../../services/main/src/modules/work/select-realm.ts';
@@ -42,11 +42,14 @@ test('SUB07: a fixed site with sparse Realm candidates never falls back to gener
   const actor = ID + randomUUID();
   const otherAuthor = ID + randomUUID();
   const marker = `prositebeacon${randomUUID().replaceAll('-', '')}`;
-  const env: WorkActivationEnvironment = {
+  const contentPool = new Pool({ connectionString: Bun.env.CONTENT_DATABASE_URL, max: 2 });
+  cleanups.push(async () => { await contentPool.end(); });
+  const env: WorkActivationEnvironment = createWorkActivationEnvironment({
+    referenceFencePool: contentPool,
     fuseki: new FusekiClient(Bun.env.FUSEKI_URL),
     lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
     objectDirectory: join(state, 'objects'),
-  };
+  });
   const deps = {
     environment: env,
     account: { verify: async (request: Request, scopes: readonly string[]) => {

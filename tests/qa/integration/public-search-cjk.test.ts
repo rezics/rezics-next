@@ -13,7 +13,7 @@ import { publishTextContribution, textPublicationDigest }
   from '../../../services/main/src/modules/contribution/publish.ts';
 import { createRealmSpace, spaceCreationDigest }
   from '../../../services/main/src/modules/space/create.ts';
-import { activateMetadataWork, GRAPHS, ID, metadataWorkRequestDigest,
+import { activateMetadataWork, createWorkActivationEnvironment, GRAPHS, ID, metadataWorkRequestDigest,
   TEXT_INDEX_PROFILE, type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { selectMainDefault, mainSelectionDigest }
   from '../../../services/main/src/modules/work/select-main.ts';
@@ -44,11 +44,13 @@ test('SEARCH06: versioned CJK Main and Realm phrases bind exact selected bodies 
   mkdirSync(state, { recursive: true, mode: 0o700 });
   const actor = ID + randomUUID();
   const fuseki = new FusekiClient(Bun.env.FUSEKI_URL);
-  const env: WorkActivationEnvironment = {
+  const contentPool = new Pool({ connectionString: Bun.env.CONTENT_DATABASE_URL, max: 2 });
+  const env: WorkActivationEnvironment = createWorkActivationEnvironment({
+    referenceFencePool: contentPool,
     fuseki,
     lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
     objectDirectory: join(state, 'objects'),
-  };
+  });
   const accessPool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
   const app = createMainApp(fuseki, { environment: env,
     account: { verify: async () => { throw new Error('no authority request in public search test'); } },
@@ -309,6 +311,7 @@ test('SEARCH06: versioned CJK Main and Realm phrases bind exact selected bodies 
     }], generation, 'realm-adoption');
   } finally {
     await accessPool.end();
+    await contentPool.end();
     rmSync(state, { recursive: true, force: true });
   }
 }, 120_000);

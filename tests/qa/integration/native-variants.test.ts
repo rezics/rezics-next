@@ -11,7 +11,7 @@ import { activateTextContribution, textContributionDigest }
   from '../../../services/main/src/modules/contribution/draft.ts';
 import { publishTextContribution, textPublicationDigest }
   from '../../../services/main/src/modules/contribution/publish.ts';
-import { activateMetadataWork, ID, metadataWorkRequestDigest,
+import { activateMetadataWork, createWorkActivationEnvironment, ID, metadataWorkRequestDigest,
   type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { ReaderVariantPreferenceStore } from '../../../services/main/src/modules/work/native-variants.ts';
 import { RealmVariantRecommendationStore, readRealmAdoptedVariant, readRealmVariantDecision }
@@ -30,14 +30,16 @@ const root = resolve(import.meta.dir, '../../..');
 test('WORK02: two same-language native variants keep one Main spine and sparse reader choice', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL
     || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH
-    || !Bun.env.ACCESS_DATABASE_URL) {
+    || !Bun.env.ACCESS_DATABASE_URL || !Bun.env.CONTENT_DATABASE_URL) {
     throw new Error('Run through the isolated QA integration tier');
   }
   const directory = join(root, '.temp', `native-variants-${randomUUID()}`);
   mkdirSync(directory, { recursive: true, mode: 0o700 });
-  const env: WorkActivationEnvironment = { fuseki: new FusekiClient(Bun.env.FUSEKI_URL),
+  const contentPool = new Pool({ connectionString: Bun.env.CONTENT_DATABASE_URL, max: 2 });
+  const env: WorkActivationEnvironment = createWorkActivationEnvironment({ referenceFencePool: contentPool,
+    fuseki: new FusekiClient(Bun.env.FUSEKI_URL),
     lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
-    objectDirectory: join(directory, 'objects') };
+    objectDirectory: join(directory, 'objects') });
   const accessPool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
   const principal = { issuer: 'https://qa-native-reader.test', subject: randomUUID() };
   const principalId = randomUUID();
@@ -353,6 +355,7 @@ test('WORK02: two same-language native variants keep one Main spine and sparse r
     }, `revoked-${randomUUID()}`))).status).toBe(403);
   } finally {
     await accessPool.end();
+    await contentPool.end();
     rmSync(directory, { recursive: true, force: true });
   }
 }, 180_000);

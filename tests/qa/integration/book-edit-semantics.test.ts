@@ -19,7 +19,7 @@ import { AccessAdmissionRegistry } from '../../../services/main/src/modules/acce
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { strongRevokeWorkPrincipal, strongRevokeWorkScope }
   from '../../../services/main/src/modules/work/strong-revoke.ts';
-import { DATASET, GRAPHS, RV } from '../../../services/main/src/modules/work/activate.ts';
+import { createWorkActivationEnvironment, DATASET, GRAPHS, RV } from '../../../services/main/src/modules/work/activate.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const scope = 'openid work:create work:edit work:read comment:create';
@@ -89,8 +89,9 @@ async function startStack() {
   const content = new ContentCore(contentPool);
   const comments = new ContentComments(contentPool);
   const fuseki = new FusekiClient(Bun.env.FUSEKI_URL);
-  const environment = { fuseki, lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH,
-    routingEpoch: Bun.env.MAIN_ROUTING_EPOCH }, objectDirectory: join(state, 'objects') };
+  const environment = createWorkActivationEnvironment({ referenceFencePool: contentPool, fuseki,
+    lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
+    objectDirectory: join(state, 'objects') });
   const access = new AccessAdmissionRegistry(accessPool);
   const main = createMainApp(fuseki, { environment,
     account: new AccountAssertionVerifier({ issuer: `${base}/api/auth`,

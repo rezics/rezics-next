@@ -17,8 +17,8 @@ import { publishTextContribution, textPublicationDigest }
   from '../../../services/main/src/modules/contribution/publish.ts';
 import { createRealmSpace, spaceCreationDigest }
   from '../../../services/main/src/modules/space/create.ts';
-import { activateMetadataWork, ID, metadataWorkRequestDigest, type WorkActivationEnvironment }
-  from '../../../services/main/src/modules/work/activate.ts';
+import { activateMetadataWork, createWorkActivationEnvironment, ID, metadataWorkRequestDigest,
+  type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { selectMainDefault, mainSelectionDigest }
   from '../../../services/main/src/modules/work/select-main.ts';
 import { selectRealmLocal, realmSelectionDigest }
@@ -30,15 +30,16 @@ const book = 'https://schema.org/Book';
 
 test('QUERY01: Query type/language and Realm Context match admitted phrase reads; unsupported is typed', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL || !Bun.env.MAIN_DATA_EPOCH
-    || !Bun.env.MAIN_ROUTING_EPOCH || !Bun.env.ACCESS_DATABASE_URL) {
+    || !Bun.env.MAIN_ROUTING_EPOCH || !Bun.env.ACCESS_DATABASE_URL || !Bun.env.CONTENT_DATABASE_URL) {
     throw new Error('Run through the isolated QA integration tier');
   }
   const state = join(root, '.temp', `query-read-${randomUUID()}`);
   mkdirSync(state, { recursive: true, mode: 0o700 });
   const fuseki = new FusekiClient(Bun.env.FUSEKI_URL);
-  const env: WorkActivationEnvironment = { fuseki,
+  const contentPool = new Pool({ connectionString: Bun.env.CONTENT_DATABASE_URL, max: 2 });
+  const env: WorkActivationEnvironment = createWorkActivationEnvironment({ referenceFencePool: contentPool, fuseki,
     lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
-    objectDirectory: join(state, 'objects') };
+    objectDirectory: join(state, 'objects') });
   const accessPool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
   const relayPool = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL });
   const zoneBrowse = new ZoneBrowseProjection(accessPool, relayPool, env);
@@ -213,6 +214,7 @@ test('QUERY01: Query type/language and Realm Context match admitted phrase reads
   } finally {
     await relayPool.end();
     await accessPool.end();
+    await contentPool.end();
     rmSync(state, { recursive: true, force: true });
   }
 }, 120_000);

@@ -27,7 +27,7 @@ import { initializeRelayCheckpoint, relayMainOutboxOnce }
   from '../../../services/main/src/modules/outbox/relay.ts';
 import { relayContentProjectionOnce }
   from '../../../services/main/src/modules/content-publication/relay.ts';
-import { DATASET, GRAPHS, RV } from '../../../services/main/src/modules/work/activate.ts';
+import { createWorkActivationEnvironment, DATASET, GRAPHS, RV } from '../../../services/main/src/modules/work/activate.ts';
 import { assertCommandRace } from '../support/command-race.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -150,8 +150,9 @@ test('IAM01/IAM10/IAM21/MODEL01/MODEL08/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/
     const consumer = `s2-${randomUUID()}`;
     await cursor.initialize(consumer);
     const fuseki = new FusekiClient(Bun.env.FUSEKI_URL);
-    const environment = { fuseki, lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH,
-      routingEpoch: Bun.env.MAIN_ROUTING_EPOCH }, objectDirectory: join(state, 'objects') };
+    const environment = createWorkActivationEnvironment({ referenceFencePool: contentPool, fuseki,
+      lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
+      objectDirectory: join(state, 'objects') });
     const access = new AccessAdmissionRegistry(accessPool);
     const main = createMainApp(fuseki, { environment,
       account: new AccountAssertionVerifier({ issuer: `${base}/api/auth`,

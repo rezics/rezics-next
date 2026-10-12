@@ -96,6 +96,7 @@ test('G-556: restored >20k units and >2k bilingual phrase matches traverse 200 H
     pages: measurements,
   };
   let pool: Pool | undefined;
+  let contentPool: Pool | undefined;
   try {
     const restored = await restoreFixture(fixture.id, target, rankedFixtureOwners);
     evidence.restoreMs = restored.elapsedMs;
@@ -107,7 +108,8 @@ test('G-556: restored >20k units and >2k bilingual phrase matches traverse 200 H
       apps.FUSEKI_MAINTENANCE_TOKEN,
       apps.FUSEKI_COMMAND_TOKEN,
     );
-    const env = { ...workEnvironment(apps, fixture.lineage), fuseki };
+    contentPool = new Pool({ connectionString: apps.CONTENT_DATABASE_URL, max: 2 });
+    const env = { ...workEnvironment(apps, fixture.lineage, contentPool), fuseki };
     pool = new Pool({ connectionString: apps.ACCESS_DATABASE_URL });
     const app = createMainApp(fuseki, {
       environment: env,
@@ -305,6 +307,7 @@ test('G-556: restored >20k units and >2k bilingual phrase matches traverse 200 H
     throw error;
   } finally {
     if (pool) await pool.end();
+    if (contentPool) await contentPool.end();
     const stack = stackDirectory(resolve(import.meta.dir, '../../..'), {
       profile: 'qa',
       runId: target,
