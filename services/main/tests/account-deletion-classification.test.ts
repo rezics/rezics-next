@@ -292,6 +292,16 @@ test('bounded production pool releases classification and orphan handoffs in thr
       const owner = await principal();
       for (let index = 0; index < 18; index++) await provision(owner, 'person');
       const measured = boundedPool({ ...cluster!.connection, max: 1, connectionTimeoutMillis: 1000 });
+      const held = new WeakSet<object>();
+      measured.on('acquire', client => held.add(client));
+      measured.on('release', (_error, client) => held.delete(client));
+      measured.on('connect', client => {
+        const query = client.query.bind(client);
+        client.query = ((...args: unknown[]) => {
+          expect(held.has(client)).toBe(true);
+          return Reflect.apply(query, client, args);
+        }) as typeof client.query;
+      });
       try {
         expect(await new AccessAdmissionRegistry(measured).strongDeactivateAccountSubject(
           owner.verified.issuer, owner.verified.subject)).toMatchObject({ enforcementEpoch: '1' });

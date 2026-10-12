@@ -2055,7 +2055,7 @@ export class AccessAdmissionRegistry {
             await client.query('COMMIT');
             // Classification and orphan pages retain active Access. Release
             // transaction locks and resume the durable frontier on the next step.
-            return this.deactivatePrincipal(principalId, enforcementEpoch, true, options, client);
+            return await this.deactivatePrincipal(principalId, enforcementEpoch, true, options, client);
           }
         }
         const changed = await client.query<{ enforcement_epoch: string }>(
@@ -2080,7 +2080,7 @@ export class AccessAdmissionRegistry {
       if (deletionPending) {
         await client.query('COMMIT');
         // Resume a pre-frontier operation already fenced by an older release.
-        return this.deactivatePrincipal(principalId, enforcementEpoch, true, options, client);
+        return await this.deactivatePrincipal(principalId, enforcementEpoch, true, options, client);
       }
       if (accountDeletion) {
         await client.query(
