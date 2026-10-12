@@ -13,7 +13,7 @@ import {
 } from '../src/modules/access/admission.ts';
 import { AccountHasOwnedAgents } from '../src/modules/access/account-deletion-agents.ts';
 import { AccessAgentControl } from '../src/modules/access/agent-control.ts';
-import { grantFixtureAuthority } from '../src/modules/access/fixture-authority.ts';
+import { grantFixtureAuthority, grantFixtureControllerEdge } from '../src/modules/access/fixture-authority.ts';
 import { AccessProtectedChanges, APPROVE } from '../src/modules/access/protected-set.ts';
 import { ControlConflict } from '../src/modules/access/topology-control.ts';
 import { AgentProvisioning, agentProvisionDigest } from '../src/modules/agent/provision.ts';
@@ -125,6 +125,147 @@ async function addFixtureController(owner: Principal, subject: string) {
     [authority.representationIds[0]])).rows[0]!;
 }
 
+async function removeController(owner: Principal, subject: string) {
+  const mandate = (await pool.query<{ id: string; generation: string }>(`SELECT id,generation
+    FROM access.representation WHERE subject_id = $1 AND principal_id = $2
+      AND action = 'agent.control' AND active`, [subject, owner.id])).rows[0]!;
+  return control.removeController(owner.verified, receipt(), {
+    subjectId: subject, representationId: mandate.id, expectedGeneration: mandate.generation,
+  });
+}
+
+test('an ending Person control edge requires consent naming the Organization and records its orphan', async () => {
+  const owner = await principal();
+  const person = await provision(owner, 'person');
+  const organization = await provision(owner, 'organization', 'Edge-controlled Organization');
+  const edge = await grantFixtureControllerEdge(pool, {
+    principalId: owner.id, representative: person, represented: organization,
+  });
+  expect(await subjectState(organization)).toEqual({ active: true, controllers: 2 });
+  let refusal: unknown;
+  try { await deletion(owner); } catch (error) { refusal = error; }
+  expect(refusal).toBeInstanceOf(AccountHasOwnedAgents);
+  if (!(refusal instanceof AccountHasOwnedAgents)) throw refusal;
+  expect(refusal.agents).toEqual([{ id: organization, kind: 'organization',
+    displayName: 'Edge-controlled Organization' }]);
+  expect(await subjectState(person)).toEqual({ active: true, controllers: 1 });
+  expect(await principalState(owner)).toEqual({ active: true, enforcement_epoch: '0' });
+  expect(await orphanRows(owner)).toEqual([]);
+  expect(await deletion(owner, true)).toMatchObject({ enforcementEpoch: '1' });
+  expect(await subjectState(person)).toEqual({ active: false, controllers: 0 });
+  expect(await subjectState(organization)).toEqual({ active: true, controllers: 0 });
+  expect((await orphanRows(owner)).map(row => row.agent_id)).toEqual([organization]);
+  // Authority ending invalidates the controller even while the historical edge
+  // itself remains active. Replayed deletion cannot manufacture a controller.
+  expect((await pool.query('SELECT active FROM access.representation_edge WHERE id = $1',
+    [edge])).rows[0]?.active).toBe(true);
+  await deletion(owner);
+  expect(await subjectState(organization)).toEqual({ active: true, controllers: 0 });
+});
+
+test('a live second principal prevents orphaning and an ended Person cannot waive the next removal floor', async () => {
+  const owner = await principal();
+  const other = await principal();
+  const person = await provision(owner, 'person');
+  const organization = await provision(owner, 'organization');
+  await grantFixtureControllerEdge(pool, {
+    principalId: owner.id, representative: person, represented: organization,
+  });
+  await addFixtureController(other, organization);
+  await deletion(owner);
+  expect(await subjectState(person)).toEqual({ active: false, controllers: 0 });
+  expect(await subjectState(organization)).toEqual({ active: true, controllers: 1 });
+  expect(await orphanRows(owner)).toEqual([]);
+  await expect(removeController(other, organization)).rejects.toBeInstanceOf(ControlConflict);
+  expect(await subjectState(organization)).toEqual({ active: true, controllers: 1 });
+});
+
+test('an active different Person edge still counts after the deleting Person ends', async () => {
+  const owner = await principal();
+  const other = await principal();
+  const person = await provision(owner, 'person');
+  const otherPerson = await provision(other, 'person');
+  const organization = await provision(owner, 'organization');
+  for (const representative of [person, otherPerson]) await grantFixtureControllerEdge(pool, {
+    principalId: owner.id, representative, represented: organization,
+  });
+  await deletion(owner);
+  expect(await subjectState(person)).toEqual({ active: false, controllers: 0 });
+  expect(await subjectState(otherPerson)).toEqual({ active: true, controllers: 1 });
+  expect(await subjectState(organization)).toEqual({ active: true, controllers: 1 });
+  expect(await orphanRows(owner)).toEqual([]);
+  expect(await principalState(other)).toEqual({ active: true, enforcement_epoch: '0' });
+});
+
+test('an Organization reached only through an ending Person is included in deletion classification', async () => {
+  const owner = await principal();
+  const original = await principal();
+  const person = await provision(owner, 'person');
+  const organization = await provision(original, 'organization', 'Indirect Organization');
+  await grantFixtureControllerEdge(pool, {
+    principalId: original.id, representative: person, represented: organization,
+  });
+  await removeController(original, organization);
+  await expect(deletion(owner)).rejects.toMatchObject({ code: 'account_has_owned_agents',
+    agents: [{ id: organization, kind: 'organization', displayName: 'Indirect Organization' }] });
+  await deletion(owner, true);
+  expect(await subjectState(person)).toEqual({ active: false, controllers: 0 });
+  expect(await subjectState(organization)).toEqual({ active: true, controllers: 0 });
+  expect((await orphanRows(owner)).map(row => row.agent_id)).toEqual([organization]);
+});
+
+test('two control-edge levels propagate Person endings before classifying an indirect Organization', async () => {
+  const owner = await principal();
+  const original = await principal();
+  const person = await provision(owner, 'person');
+  const intermediate = await provision(original, 'person');
+  const organization = await provision(original, 'organization', 'Second-level Organization');
+  await grantFixtureControllerEdge(pool, {
+    principalId: original.id, representative: person, represented: intermediate,
+  });
+  await grantFixtureControllerEdge(pool, {
+    principalId: original.id, representative: intermediate, represented: organization,
+  });
+  await removeController(original, intermediate);
+  await removeController(original, organization);
+  await expect(deletion(owner)).rejects.toMatchObject({ code: 'account_has_owned_agents',
+    agents: [{ id: organization, kind: 'organization', displayName: 'Second-level Organization' }] });
+  expect(await subjectState(intermediate)).toEqual({ active: true, controllers: 1 });
+  await deletion(owner, true);
+  for (const ended of [person, intermediate]) {
+    expect(await subjectState(ended)).toEqual({ active: false, controllers: 0 });
+  }
+  expect(await subjectState(organization)).toEqual({ active: true, controllers: 0 });
+  expect((await orphanRows(owner)).map(row => row.agent_id)).toEqual([organization]);
+});
+
+test('a control path beyond the depth budget refuses atomically instead of stranding another Agent', async () => {
+  const owner = await principal();
+  const original = await principal();
+  const another = await principal();
+  const person = await provision(owner, 'person');
+  const intermediate = await provision(original, 'person');
+  const lastPerson = await provision(another, 'person');
+  const organization = await provision(original, 'organization');
+  for (const [representative, represented] of [
+    [person, intermediate], [intermediate, lastPerson], [lastPerson, organization],
+  ] as const) await grantFixtureControllerEdge(pool, {
+    principalId: original.id, representative, represented,
+  });
+  await removeController(original, intermediate);
+  await removeController(another, lastPerson);
+  await removeController(original, organization);
+  for (const consent of [false, true]) {
+    await expect(deletion(owner, consent)).rejects.toBeInstanceOf(AdmissionUnavailable);
+    expect(await principalState(owner)).toEqual({ active: true, enforcement_epoch: '0' });
+    for (const subject of [person, intermediate, lastPerson, organization]) {
+      expect(await subjectState(subject)).toEqual({ active: true, controllers: 1 });
+    }
+    expect(await orphanRows(owner)).toEqual([]);
+    expect(await fenceRows(owner)).toEqual([]);
+  }
+});
+
 test('owned-Agent refusal rolls back Person termination, principal fence and all orphan markers', async () => {
   const owner = await principal();
   const person = await provision(owner, 'person');
@@ -212,7 +353,11 @@ test('approved independent recovery reattaches an orphan and restores ordinary c
   const owner = await principal();
   const claimant = await principal();
   const guardian = await principal();
+  const person = await provision(owner, 'person');
   const organization = await provision(owner, 'organization');
+  await grantFixtureControllerEdge(pool, {
+    principalId: owner.id, representative: person, represented: organization,
+  });
   const recoverySubject = await provision(guardian, 'person');
   const configured = await control.configure(owner.verified, receipt(), {
     subjectId: organization, recoverySubject, recoveryApprovals: 1,
@@ -225,6 +370,7 @@ test('approved independent recovery reattaches an orphan and restores ordinary c
     grant: { actor: recoverySubject, action: APPROVE, lifetime: 'infinity' },
   });
   await deletion(owner, true);
+  expect(await subjectState(person)).toEqual({ active: false, controllers: 0 });
   expect(await subjectState(organization)).toEqual({ active: true, controllers: 0 });
   expect(await orphanRows(owner)).toHaveLength(1);
   const recoveryId = randomUUID();
@@ -283,6 +429,28 @@ test('concurrent account deletion and ordinary removal preserve the surviving co
       subjectId: organization, representationId: otherMandate.id,
       expectedGeneration: otherMandate.generation,
     })),
+  ]);
+  for (const context of contexts) context.emitDestroy();
+  expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1);
+  const failure = results.find(result => result.status === 'rejected');
+  expect(failure?.status === 'rejected'
+    && (failure.reason instanceof AccountHasOwnedAgents || failure.reason instanceof ControlConflict)).toBe(true);
+  expect(await subjectState(organization)).toEqual({ active: true, controllers: 1 });
+  expect(await orphanRows(owner)).toEqual([]);
+});
+
+test('indirect Organization controller removal serializes with account deletion', async () => {
+  const owner = await principal();
+  const other = await principal();
+  const person = await provision(owner, 'person');
+  const organization = await provision(other, 'organization');
+  await grantFixtureControllerEdge(pool, {
+    principalId: other.id, representative: person, represented: organization,
+  });
+  const contexts = [new AsyncResource('account-deletion'), new AsyncResource('controller-removal')];
+  const results = await Promise.allSettled([
+    contexts[0]!.runInAsyncScope(() => deletion(owner)),
+    contexts[1]!.runInAsyncScope(() => removeController(other, organization)),
   ]);
   for (const context of contexts) context.emitDestroy();
   expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1);

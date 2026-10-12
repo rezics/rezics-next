@@ -1,4 +1,18 @@
 -- An explicit deletion choice leaves non-Person Agents under platform care.
+-- An edge can act only while its representing Agent's authority is active.
+-- Keep the principal-mandate semantics and the 17-row bound per side.
+CREATE OR REPLACE FUNCTION access.agent_controller_count(controlled text) RETURNS integer
+LANGUAGE sql STABLE AS $$
+    SELECT (SELECT count(*) FROM (SELECT 1 FROM access.representation r
+            JOIN access.principal p ON p.id = r.principal_id
+            WHERE r.subject_id = controlled AND r.action = 'agent.control' AND r.active
+                AND p.active LIMIT 17) principals)::integer
+        + (SELECT count(*) FROM (SELECT 1 FROM access.representation_edge e
+            JOIN access.authority_subject s ON s.id = e.representative_subject AND s.active
+            WHERE e.represented_subject = controlled AND e.action = 'agent.control'
+                AND e.active AND e.valid_until > clock_timestamp() LIMIT 17) agents)::integer
+$$;
+
 CREATE TABLE access.account_deletion_orphan_agent (
     agent_id text PRIMARY KEY REFERENCES access.authority_subject(id),
     deleted_principal_id uuid NOT NULL REFERENCES access.principal(id),

@@ -134,6 +134,37 @@ export async function grantFixtureAuthority(client: Sql, input: FixtureAuthority
   return { grantId: await ensureGrant(client, input.scope, input.grant), representationIds };
 }
 
+/** Institutional controller edges use the same recovery/scope-checked fixture
+ * boundary as mandates. Install before a recovery policy requires approval. */
+export async function grantFixtureControllerEdge(client: Sql, input: {
+  principalId: string; representative: string; represented: string;
+}): Promise<string> {
+  const action = 'access.representation.assign.agent.control';
+  const authority = await grantFixtureAuthority(client, {
+    scope: 'work:create:root', requireDispatch: true,
+    representations: [{ principalId: input.principalId, actor: input.represented,
+      action: 'access.representation.manage', lifetime: 'infinity' }],
+    grant: { actor: input.represented, action, lifetime: 'infinity' },
+  });
+  await openFixtureScope(client, 'access:representation-topology', false);
+  const existing = await client.query<{ id: string }>(`SELECT id FROM access.representation_edge
+    WHERE representative_subject = $1 AND represented_subject = $2
+      AND action = 'agent.control' AND active AND valid_until > clock_timestamp()`,
+  [input.representative, input.represented]);
+  if (existing.rows[0]) return existing.rows[0].id;
+  const id = randomUUID();
+  await client.query(`INSERT INTO access.representation_edge (id, representative_subject,
+    represented_subject, action, max_path_edges, valid_until, assigned_by_principal,
+    issuer_representation_id, issuer_representation_generation, issuer_representation_action,
+    ceiling_grant_id, ceiling_grant_generation, ceiling_scope_id, ceiling_action)
+    SELECT $1,$2,$3,'agent.control',2,'infinity',$4,r.id,r.generation,r.action,
+      g.id,g.generation,g.scope_id,g.action FROM access.representation r
+    CROSS JOIN access.permission_grant g WHERE r.id = $5 AND g.id = $6`,
+  [id, input.representative, input.represented, input.principalId,
+    authority.representationIds[0], authority.grantId]);
+  return id;
+}
+
 /** End this actor's live fixture mandates and self-grants. A load baseline
  * expires the seed window so a later read meets closed authority. */
 export async function expireFixtureAuthority(client: Sql, actor: string): Promise<void> {

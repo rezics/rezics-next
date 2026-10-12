@@ -1,5 +1,5 @@
 import { assertControllerContinuity, lockControllerContinuity, principalControllerSubjects } from './controller-continuity.ts';
-import { applyAccountDeletionAgents, lockAccountDeletionAgents,
+import { applyAccountDeletionAgents, lockAccountDeletionAgents, lockAccountDeletionTopology,
   type AccountDeletionOptions } from './account-deletion-agents.ts';
 import { captureAuthorityWitness, authorityWitnessCurrent, authorityWitnessDeadline,
   type AuthoritySource, type AuthorityWitness } from './authority-witness.ts';
@@ -1918,6 +1918,7 @@ export class AccessAdmissionRegistry {
       await client.query("SET LOCAL lock_timeout = '2s'");
       await client.query("SET LOCAL statement_timeout = '5s'");
       await requireRecoveryOpen(client);
+      if (accountDeletion) await lockAccountDeletionTopology(client);
       const result = await client.query<{ active: boolean; enforcement_epoch: string }>(
         'SELECT active, enforcement_epoch FROM access.principal WHERE id = $1 FOR UPDATE',
         [principalId]);
