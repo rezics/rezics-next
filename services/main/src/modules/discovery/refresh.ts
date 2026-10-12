@@ -132,6 +132,13 @@ export class DiscoveryRefreshWorker {
         bases.push(basis);
       }
       return { bases, after: rows.length > page.length ? page.at(-1)!.resource!.value : '' };
+    }).catch(async (error: unknown) => {
+      if (error instanceof WorkReadMoved) {
+        // Restart the keyset scan after a restore; its old cursor can skip
+        // resources introduced before that key in the restored graph.
+        await this.store.catalogDone(after, '');
+      }
+      throw error;
     });
     if (!result) return;
     await this.store.enroll(result.bases);

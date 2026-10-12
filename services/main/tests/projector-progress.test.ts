@@ -4,7 +4,7 @@ import { AlsoEnjoyedStore } from '../src/modules/also-enjoyed/store.ts';
 import { automaticCoReaders } from '../src/modules/also-enjoyed/automation.ts';
 import { RecommendationRestart } from '../src/modules/recommendation/derived-generation.ts';
 import { DiscoveryRefreshWorker } from '../src/modules/discovery/refresh.ts';
-import { DISCOVERY_REFRESH_COST } from '../src/modules/discovery/refresh-store.ts';
+import { DISCOVERY_REFRESH_COST, DiscoveryRefreshStore } from '../src/modules/discovery/refresh-store.ts';
 import type { DiscoveryProjection } from '../src/modules/discovery/store.ts';
 import { RealmDirectoryIndex } from '../src/modules/realm-directory/index.ts';
 import { RealmDirectoryWorker } from '../src/modules/realm-directory/worker.ts';
@@ -36,22 +36,23 @@ function movingSource(sequence = 5n): MovingSource {
   return { head: sequence, frozen: false, epoch: 'epoch', hold: false, reads: 0 };
 }
 
-function positionAnswer(source: MovingSource, changeEpochOnSecondRead = false) {
+function positionAnswer(source: MovingSource, sparql: string) {
   source.reads += 1;
-  if (source.hold) return { results: { bindings: [] } };
+  if (source.hold || !sparql.includes(`FILTER(?epoch = ${JSON.stringify(source.epoch)})`)) {
+    return { results: { bindings: [] } };
+  }
   const sequence = source.head;
-  const epoch = changeEpochOnSecondRead && source.reads === 2 ? 'restored' : source.epoch;
   if (!source.frozen) source.head += 1n;
-  return { results: { bindings: [{ epoch: { value: epoch }, sequence: { value: sequence.toString() } }] } };
+  return { results: { bindings: [{ epoch: { value: source.epoch }, sequence: { value: sequence.toString() } }] } };
 }
 
 function workDeps(source: MovingSource, query: (sparql: string) => { results: { bindings: object[] } },
-  extra: Partial<MainWorkDependencies> = {}, changeEpochOnSecondRead = false): MainWorkDependencies {
+  extra: Partial<MainWorkDependencies> = {}): MainWorkDependencies {
   return {
     environment: {
       lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' },
       fuseki: { query: async (sparql: string) => sparql.includes('routingEpoch')
-        ? positionAnswer(source, changeEpochOnSecondRead) : query(sparql) },
+        ? positionAnswer(source, sparql) : query(sparql) },
     },
     access: { assertRecoveryOpen: async () => {} },
     ...extra,
@@ -65,7 +66,7 @@ interface DirectoryRow {
   phase: string;
 }
 
-function directoryHarness(options: { holdOnFence?: boolean; builderConflict?: boolean } = {}) {
+function directoryHarness(options: { holdOnFence?: boolean; builderConflict?: boolean; recoveryConflict?: boolean } = {}) {
   const source = movingSource(5n);
   const fences: string[] = [];
   const row: DirectoryRow = {
@@ -91,8 +92,11 @@ function directoryHarness(options: { holdOnFence?: boolean; builderConflict?: bo
       return { rows: matches ? [{}] : [], rowCount: matches ? 1 : 0 };
     }
     if (sql.includes('FROM access.realm_directory_position')) return { rows: [{ ...saved() }], rowCount: 1 };
-    if (sql.includes('FROM access.recovery_fence')) return { rows: [{}], rowCount: 1 };
-    if (sql.startsWith('DELETE') || sql.startsWith('INSERT') || sql.includes('DELETE FROM access.realm_directory')) {
+    if (sql.includes('FROM access.recovery_fence')) {
+      const matches = String(params[0]) === (options.recoveryConflict ? '5' : '4');
+      return { rows: matches ? [{}] : [], rowCount: matches ? 1 : 0 };
+    }
+    if (sql.startsWith('DELETE FROM access.realm_directory') || sql.startsWith('INSERT INTO access.realm_directory')) {
       return { rows: [], rowCount: 0 };
     }
     if (sql.includes('UPDATE access.realm_directory_position')) {
@@ -123,7 +127,11 @@ function directoryHarness(options: { holdOnFence?: boolean; builderConflict?: bo
       if (options.holdOnFence) return { results: { bindings: [] } };
       return { results: { bindings: [{ sequence: { value: source.head.toString() } }] } };
     }
-    return { results: { bindings: [] } };
+    if (sparql.includes('SELECT ?epoch ?prior') || sparql.includes('SELECT ?realm ?space ?created') ||
+      sparql.includes('SELECT DISTINCT ?realm') || sparql.includes('SELECT ?receipt')) {
+      return { results: { bindings: [] } };
+    }
+    throw new Error(`unexpected directory sparql: ${sparql.slice(-200)}`);
   }, { access: { assertRecoveryOpen: async () => {}, realmDirectory: index } as never });
   return { source, row, fences, worker: new RealmDirectoryWorker(deps) };
 }
@@ -169,6 +177,10 @@ test('realm directory still refuses a restore hold or a lost builder and does no
   const conflict = directoryHarness({ builderConflict: true });
   await expect(conflict.worker.tick()).rejects.toThrow('Realm directory builder changed');
   expect(conflict.row.sequence).toBe('1');
+  const recovery = directoryHarness({ recoveryConflict: true });
+  await expect(recovery.worker.tick()).rejects.toThrow('Realm directory recovery changed');
+  expect(recovery.row.sequence).toBe('1');
+  expect(recovery.row.phase).toBe('graph');
 });
 
 test('realm directory reads still refuse when the published cut changes', async () => {
@@ -187,45 +199,91 @@ test('realm directory reads still refuse when the published cut changes', async 
 
 interface CoReaderRow { phase: string; after_key: string; graph_sequence: string }
 
-function coReaderHarness() {
+function coReaderHarness(options: { leaseConflict?: boolean } = {}) {
   const source = movingSource(10n);
   const generation: CoReaderRow = { phase: 'ratings', after_key: '', graph_sequence: '4' };
   const observation = 'https://rezics.com/id/00000000-0000-4000-8000-0000000000aa';
   const rating = { context: 'ctx', main_version: 'main', slot: 'slot', observation,
     revision: realm(1), work: realm(2), agent: realm(3) };
-  const clientQuery = async (sql: string) => {
-    if (sql === 'BEGIN' || sql === 'COMMIT' || sql === 'ROLLBACK' || sql.startsWith('SET LOCAL')) {
+  let lease = 0;
+  let held = false;
+  let state = 'building';
+  let signals = 0;
+  let snapshot: { generation: CoReaderRow; lease: number; held: boolean; state: string; signals: number } | null = null;
+  const clientQuery = async (sql: string, params: unknown[] = []) => {
+    if (sql === 'BEGIN') {
+      snapshot = { generation: { ...generation }, lease, held, state, signals };
       return { rows: [], rowCount: 0 };
     }
+    if (sql === 'ROLLBACK' && snapshot) {
+      Object.assign(generation, snapshot.generation);
+      ({ lease, held, state, signals } = snapshot);
+      snapshot = null;
+      return { rows: [], rowCount: 0 };
+    }
+    if (sql === 'COMMIT') { snapshot = null; return { rows: [], rowCount: 0 }; }
+    if (sql.startsWith('SET LOCAL')) return { rows: [], rowCount: 0 };
     if (sql.includes('recovery_fence')) return { rows: [{ open: true }], rowCount: 1 };
-    if (sql.includes('lease_epoch = lease_epoch + 1')) return { rows: [{ lease_epoch: '1' }], rowCount: 1 };
-    if (sql.includes('lease_epoch = $2')) return { rows: [], rowCount: 1 };
+    if (sql.includes('lease_epoch = lease_epoch + 1')) {
+      if (params[0] !== 'gen' || state !== 'building' || held) return { rows: [], rowCount: 0 };
+      held = true;
+      return { rows: [{ lease_epoch: String(++lease) }], rowCount: 1 };
+    }
+    if (sql.includes('lease_epoch = $2')) {
+      const matches = !options.leaseConflict && params[0] === 'gen' &&
+        String(params[1]) === String(lease) && state === 'building' && held;
+      return { rows: [], rowCount: matches ? 1 : 0 };
+    }
     if (sql.includes('FROM access.also_enjoyed_generation a')) {
-      return { rows: [{ ...generation, graph_epoch: 'epoch', state: 'building', generation_id: 'gen',
-        access_revision: '1', content_revision: '1', signal_count: '0', pair_count: '0' }], rowCount: 1 };
+      return { rows: params[0] === 'gen' ? [{ ...generation, graph_epoch: 'epoch', state, generation_id: 'gen',
+        access_revision: '1', content_revision: '1', signal_count: String(signals), pair_count: '0' }] : [],
+        rowCount: params[0] === 'gen' ? 1 : 0 };
     }
     if (sql.includes('WITH page AS MATERIALIZED')) {
-      return { rows: generation.phase === 'ratings' ? [rating] : [], rowCount: generation.phase === 'ratings' ? 1 : 0 };
+      const after = JSON.stringify(params.slice(1, 4));
+      const rows = JSON.stringify([rating.context, rating.main_version, rating.slot]) > after ? [rating] : [];
+      const limit = /\bLIMIT \$(\d+)/.exec(sql);
+      const page = rows.slice(0, limit ? Number(params[Number(limit[1]) - 1]) : undefined);
+      return { rows: page, rowCount: page.length };
     }
     if (sql.includes('SELECT DISTINCT work FROM access.also_enjoyed_signal')) return { rows: [], rowCount: 0 };
     if (sql.includes('SELECT phase, signal_count')) {
-      return { rows: [{ phase: generation.phase, signal_count: '0', pair_count: '0' }], rowCount: 1 };
+      return { rows: params[0] === 'gen' ? [{ phase: generation.phase, signal_count: String(signals), pair_count: '0' }] : [],
+        rowCount: params[0] === 'gen' ? 1 : 0 };
     }
-    if (sql.includes('signal_count::text')) {
-      return { rows: [{ signal_count: '1', pair_count: '0' }], rowCount: 1 };
+    if (sql.includes('SELECT signal_count::text')) {
+      return { rows: params[0] === 'gen' ? [{ signal_count: String(signals), pair_count: '0' }] : [],
+        rowCount: params[0] === 'gen' ? 1 : 0 };
     }
-    if (sql.startsWith('INSERT') || sql.startsWith('UPDATE')) return { rows: [], rowCount: 1 };
-    throw new Error(`unexpected co-reader sql: ${sql.slice(0, 180)}`);
-  };
-  // The phase update passes the next phase as a bind parameter, not inline SQL.
-  const query = async (sql: string, params: unknown[] = []) => {
     if (sql.includes('UPDATE access.also_enjoyed_generation SET phase')) {
+      if (params[0] !== 'gen') return { rows: [], rowCount: 0 };
       generation.phase = String(params[1]);
       generation.after_key = String(params[2]);
       return { rows: [], rowCount: 1 };
     }
-    return clientQuery(sql);
+    if (sql.includes('INSERT INTO access.also_enjoyed_signal')) {
+      if (params[0] !== 'gen') return { rows: [], rowCount: 0 };
+      signals = 1;
+      return { rows: [], rowCount: 1 };
+    }
+    if (sql.includes('UPDATE access.derived_generation SET state')) {
+      if (params[0] !== 'gen') return { rows: [], rowCount: 0 };
+      state = 'ready';
+      held = false;
+      return { rows: [], rowCount: 1 };
+    }
+    if (sql.includes('UPDATE access.derived_generation SET lease_expires_at')) {
+      if (params[0] !== 'gen') return { rows: [], rowCount: 0 };
+      held = false;
+      return { rows: [], rowCount: 1 };
+    }
+    if (sql.includes('UPDATE access.also_enjoyed_generation SET') ||
+      sql.includes('UPDATE access.derived_generation_input')) {
+      return { rows: [], rowCount: params[0] === 'gen' ? 1 : 0 };
+    }
+    throw new Error(`unexpected co-reader sql: ${sql.slice(0, 180)}`);
   };
+  const query = clientQuery;
   const pool = { query, connect: async () => ({ query, release() {} }) } as unknown as Pool;
   const content = { query: async (sql: string) => {
     if (sql.includes('library_status')) return { rows: [], rowCount: 0 };
@@ -235,9 +293,11 @@ function coReaderHarness() {
   const store = new AlsoEnjoyedStore(pool, content, () => 1_700_000_000_000);
   const deps = workDeps(source, sparql => {
     if (sparql.includes('GlobalRatingObservationRevision')) {
-      return { results: { bindings: [{ observation: { value: observation } }] } };
+      const limit = sparql.match(/\bLIMIT\s+(\d+)\s*$/i);
+      const rows = sparql.includes(`<${rating.observation}> <${rating.revision}>`) ? [{ observation: { value: observation } }] : [];
+      return { results: { bindings: rows.slice(0, limit ? Number(limit[1]) : undefined) } };
     }
-    return { results: { bindings: [] } };
+    throw new Error(`unexpected co-reader sparql: ${sparql.slice(-200)}`);
   });
   return { source, generation, store, deps };
 }
@@ -281,6 +341,7 @@ test('co-reader refresh keeps its position pin when the sequence moves and still
   expect(source.head).toBe(10n);
   const closed = coReaderHarness();
   closed.source.epoch = 'restored';
+  closed.deps.environment.lineage.dataEpoch = closed.source.epoch;
   await expect(closed.store.advance('gen', automaticCoReaders, closed.deps, new Request('http://main.internal/co-reader-build')))
     .rejects.toBeInstanceOf(RecommendationRestart);
   expect(closed.generation.phase).toBe('ratings');
@@ -290,6 +351,13 @@ test('co-reader refresh keeps its position pin when the sequence moves and still
     { dataEpoch: 'epoch', sequence: '3' })).rejects.toThrow('Co-reader generation source changed');
 });
 
+test('co-reader build refuses a lost lease before committing its phase', async () => {
+  const run = coReaderHarness({ leaseConflict: true });
+  await expect(run.store.advance('gen', automaticCoReaders, run.deps,
+    new Request('http://main.internal/co-reader-build'))).rejects.toThrow('build lease is no longer held');
+  expect(run.generation).toEqual({ phase: 'ratings', after_key: '', graph_sequence: '4' });
+});
+
 function catalogHarness(options: { hold?: boolean; changeEpoch?: boolean } = {}) {
   const source = movingSource(1n);
   source.hold = options.hold === true;
@@ -297,27 +365,60 @@ function catalogHarness(options: { hold?: boolean; changeEpoch?: boolean } = {})
   const done: Array<[string, string]> = [];
   const pages: string[] = [];
   let checkpoint = '';
-  const store = {
-    purge: async () => {},
-    catalog: async () => checkpoint,
-    enroll: async () => {},
-    catalogDone: async (prior: string, after: string) => { done.push([prior, after]); checkpoint = after; },
-    claim: async () => null,
+  let stagedCheckpoint = checkpoint;
+  let stagedDone: Array<[string, string]> = [];
+  const query = async (sql: string, params: unknown[] = []) => {
+    if (sql === 'BEGIN') {
+      stagedCheckpoint = checkpoint;
+      stagedDone = [];
+      return { rows: [], rowCount: 0 };
+    }
+    if (sql === 'COMMIT') {
+      checkpoint = stagedCheckpoint;
+      done.push(...stagedDone);
+      return { rows: [], rowCount: 0 };
+    }
+    if (sql === 'ROLLBACK' || sql.startsWith('SET LOCAL')) return { rows: [], rowCount: 0 };
+    if (sql.includes('FROM access.recovery_fence')) return { rows: [{ open: true }], rowCount: 1 };
+    if (sql.includes('RETURNING checkpoint')) return { rows: [{ checkpoint: stagedCheckpoint }], rowCount: 1 };
+    if (sql.includes('SET checkpoint = $2')) {
+      const prior = String(params[0]), after = String(params[1]);
+      if (sql.includes('checkpoint = $1') && stagedCheckpoint !== prior) return { rows: [], rowCount: 0 };
+      stagedCheckpoint = after;
+      stagedDone.push([prior, after]);
+      return { rows: [], rowCount: 1 };
+    }
+    if (sql.includes('INSERT INTO access.discovery_refresh ')) return { rows: [], rowCount: 1 };
+    throw new Error(`unexpected catalog sql: ${sql.slice(0, 160)}`);
   };
+  const pool = { query, connect: async () => ({ query, release() {} }) } as unknown as Pool;
+  const catalog = new DiscoveryRefreshStore(pool);
+  const store = {
+    purge: async () => 0,
+    catalog: () => catalog.catalog(),
+    enroll: (bases: Parameters<DiscoveryRefreshStore['enroll']>[0]) => catalog.enroll(bases),
+    catalogDone: (prior: string, after: string) => catalog.catalogDone(prior, after),
+    claim: async () => null,
+  } satisfies Pick<DiscoveryRefreshStore, 'purge' | 'catalog' | 'enroll' | 'catalogDone' | 'claim'>;
   const deps = workDeps(source, sparql => {
     const match = sparql.match(/STR\(\?resource\) > ("(?:[^"\\]|\\.)*")/);
     const after = match ? JSON.parse(match[1]!) as string : '';
     pages.push(after);
-    const page = resources.filter(id => id > after).slice(0, DISCOVERY_REFRESH_COST.catalogSize + 1);
+    const limit = sparql.match(/\bLIMIT\s+(\d+)\s*$/i);
+    const page = resources.filter(id => id > after).slice(0, limit ? Number(limit[1]) : undefined);
+    if (options.changeEpoch && pages.length === 2) {
+      source.epoch = 'restored';
+      deps.environment.lineage.dataEpoch = source.epoch;
+    }
     return { results: { bindings: page.map(id => ({ resource: { value: id }, scope: { value: 'realm' },
       realm: { value: id } })) } };
   }, {
     relayPosition: { read: async () => ({ streamScope: MAIN_RELAY_STREAM_SCOPE,
       dataEpoch: source.epoch, sequence: (source.frozen
         ? source.head : source.head - 1n).toString() }) },
-  }, options.changeEpoch);
+  });
   const worker = new DiscoveryRefreshWorker(deps, store as never, {} as DiscoveryProjection);
-  return { source, done, pages, checkpoint: () => checkpoint, worker };
+  return { source, done, pages, catalog, checkpoint: () => checkpoint, worker };
 }
 
 test('discovery catalog commits each keyset page while the graph moves and finishes within its bound', async () => {
@@ -336,16 +437,38 @@ test('discovery catalog commits each keyset page while the graph moves and finis
   expect(run.checkpoint()).toBe('');
   expect(calls).toBe(CATALOG_BOUND);
   expect(run.done[1]![1]).toBe('');
+  expect(run.done).toEqual([['', page[DISCOVERY_REFRESH_COST.catalogSize - 1]!],
+    [page[DISCOVERY_REFRESH_COST.catalogSize - 1]!, '']]);
   expect(run.pages).toEqual(['', page[DISCOVERY_REFRESH_COST.catalogSize - 1]!]);
 });
 
-test('discovery catalog does not advance while the graph is held or its epoch changes', async () => {
+test('discovery catalog holds during recovery and restarts after a persistent epoch change', async () => {
   const held = catalogHarness({ hold: true });
   expect(await held.worker.tick()).toBe('idle');
   expect(held.done).toEqual([]);
   expect(held.pages).toEqual([]);
   const restored = catalogHarness({ changeEpoch: true });
+  await restored.worker.tick();
+  const prior = restored.checkpoint();
+  expect(prior).not.toBe('');
   await expect(restored.worker.tick()).rejects.toBeInstanceOf(WorkReadMoved);
-  expect(restored.done).toEqual([]);
-  expect(restored.pages).toEqual(['']);
+  expect(restored.source.epoch).toBe('restored');
+  expect(restored.done).toEqual([['', prior], [prior, '']]);
+  expect(restored.checkpoint()).toBe('');
+  await restored.worker.tick();
+  expect(restored.pages).toEqual(['', prior, '']);
+  expect(restored.done).toEqual([['', prior], [prior, ''], ['', prior]]);
+  await restored.worker.tick();
+  expect(restored.done).toEqual([['', prior], [prior, ''], ['', prior], [prior, '']]);
+  expect(restored.checkpoint()).toBe('');
+});
+
+test('discovery catalog refuses a stale page checkpoint', async () => {
+  const run = catalogHarness();
+  await run.worker.tick();
+  const prior = run.checkpoint();
+  expect(prior).not.toBe('');
+  await run.catalog.catalogDone('', '');
+  expect(run.checkpoint()).toBe(prior);
+  expect(run.done).toEqual([['', prior]]);
 });
