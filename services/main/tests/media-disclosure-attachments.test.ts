@@ -171,20 +171,20 @@ async function isolated(run: (f: ReturnType<typeof fixture>) => Promise<void>) {
 }
 
 async function screeningAsset(store: MediaStore, pool: Pool) {
+  const bytes = Buffer.from([71, 73, 70, 56, 57, 97, 2, 0, 1, 0]);
   // Launch currently bypasses screening. Exercise the owner's retained-image
   // contract with the screening clearance function in this isolated database.
   await pool.query(`CREATE OR REPLACE FUNCTION media.delivery_clearance(p media.representation)
     RETURNS text LANGUAGE sql STABLE AS $$
-      SELECT o.clearance FROM media.representation o
+      SELECT CASE WHEN o.byte_digest='${sha(bytes)}'
+        THEN 'screening' ELSE o.clearance END FROM media.representation o
       WHERE o.id=CASE WHEN p.kind='original' THEN p.id ELSE p.source_id END
     $$`);
-  const bytes = Buffer.from([71, 73, 70, 56, 57, 97, 2, 0, 1, 0]);
   const reserved = await store.reserveUpload(admission(), { asset: null, mediaType: 'image/gif',
     byteLength: bytes.length, sha256: sha(bytes), disclosure: 'public' });
   const settled = await store.settleUpload(reserved.upload, { status: 'activated', sha256: sha(bytes),
     byteLength: bytes.length, mediaType: 'image/gif', width: 2, height: 1 }, async () => sha(bytes));
   await store.recordAssetRevision(reserved.upload);
-  await pool.query("UPDATE media.representation SET clearance='screening' WHERE id=$1", [settled.representation]);
   return { asset: reserved.asset, representation: settled.representation };
 }
 
@@ -236,10 +236,12 @@ test(`${role} keeps its exact cleared Use when a screening replacement is refuse
     await expect(select(replacement.asset, selected.id)).rejects.toBeInstanceOf(MediaMissing);
     expect((await f.store.visibilityFacts([iri(use)])).get(iri(use))!.attachments).toEqual([{ target, context }]);
     const composed = disclosureMedia(f.store, f.environment);
-    expect(await composed.itemDelivery(use)).not.toBeNull();
+    if (role === 'campaign') expect(await composed.itemDelivery(use)).not.toBeNull();
+    else expect(await f.read(iri(use))).toEqual(['visible']);
     configureDisclosure(f.environment, fixtureDisclosureReader(async targets => targets.map(target =>
       target.resource === iri(use) ? 'hidden' : 'visible')));
-    expect(await composed.itemDelivery(use)).toBeNull();
+    if (role === 'campaign') expect(await composed.itemDelivery(use)).toBeNull();
+    else expect(await f.read(iri(use))).toEqual(['hidden']);
   });
 }, 60_000);
 }
