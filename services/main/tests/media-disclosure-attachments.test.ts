@@ -18,6 +18,7 @@ import { REQUIRED_MATCH_PROFILE } from '../src/modules/media-screen/required-mat
 import { ANONYMOUS_VIEWER } from '../src/modules/suitability/policy.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import { ensureFixtureAuthoritySubject, ensureFixturePrincipal } from './support/access-fixture-identity.ts';
+import { configureFixtureDisclosureAncestry } from './support/disclosure-ancestry.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const iri = (value: string) => `https://rezics.com/id/${value}`;
@@ -85,6 +86,7 @@ const examinedRows = (plan: Plan) => planNodes(plan)
 
 function fixture(pool: Pool) {
   const entries = new Map<string, Entry>([[ownTarget, { public: true }]]);
+  const useTargets = new Map<string, string>([[iri(ownUse), ownTarget]]);
   const authority = { manage: true, baseline: false };
   const probes: string[] = [];
   const graph = new FusekiClient('http://media-disclosure.invalid');
@@ -107,6 +109,8 @@ function fixture(pool: Pool) {
     if (query.includes('SELECT ?work ?head')) return { results: { bindings: refs('work').map(reference =>
       ({ work: uri(reference), ...(entries.has(reference) ? { head: uri(reference),
         owningWork: uri(reference), owningHead: uri(reference) } : {}) })) } };
+    if (query.includes('SELECT ?resource ?head')) return { results: { bindings: refs('resource').map(reference =>
+      ({ resource: uri(reference), head: uri(reference) })) } };
     if (query.includes('SELECT ?epoch ?hold ?context')) return { results: { bindings: [] } };
     throw new Error(`Unexpected summary query: ${query.slice(0, 160)}`);
   };
@@ -115,6 +119,14 @@ function fixture(pool: Pool) {
   const environment = { fuseki, objectDirectory: '.temp/media-disclosure',
     lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } };
   configureDisclosure(environment, new DisclosureStore(pool));
+  configureFixtureDisclosureAncestry(environment, target => {
+    // Each publication Use retains its own Work. Bare Assets rely on their
+    // bounded attachment inventory rather than an invented single owner.
+    const resource = target.work ?? (target.owner === 'media'
+      ? useTargets.get(target.occurrence?.resource ?? target.resource) : target.resource);
+    return resource ? { resource, head: resource, ...(target.workRevision !== undefined
+      ? { protectedRevision: target.workRevision } : {}) } : undefined;
+  });
   configureMediaVisibility({ environment, media: { store }, access: {
     canManageMedia: async () => authority.manage,
     canReadAsBaselineMember: async () => authority.baseline,
@@ -126,6 +138,7 @@ function fixture(pool: Pool) {
     const target = iri(randomUUID()), use = randomUUID();
     entries.set(target, entry);
     await store.createPublicationUses(randomUUID(), owner, target, [{ ...basis, use }]);
+    useTargets.set(iri(use), target);
     return { target, use };
   };
   const reset = () => { fuseki.reset(); contentPool.reset(); probes.length = 0; };
