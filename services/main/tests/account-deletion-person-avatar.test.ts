@@ -146,7 +146,10 @@ for (const boundary of ['graph', 'object'] as const) for (const change of ['priv
     const current = mediaStack(), person = await personAvatar(`Concurrent ${change}`);
     await available(person);
     const query = current.fuseki.query.bind(current.fuseki);
-    const objects = current.media.objects;
+    // Disclosure composition wraps a copy of the fixture's media dependency.
+    // Pause the object reader used by the mounted delivery route.
+    const media = current.composition.dependencies.media!;
+    const objects = media.objects;
     let resume: () => void = () => {}, hydrated: () => void = () => {};
     const paused = new Promise<void>(resolve => { hydrated = resolve; });
     const released = new Promise<void>(resolve => { resume = resolve; });
@@ -159,7 +162,7 @@ for (const boundary of ['graph', 'object'] as const) for (const change of ['priv
       }
       return query(...args);
     };
-    current.media.objects = namespace => {
+    media.objects = namespace => {
       const instance = objects(namespace), get = instance.get.bind(instance);
       instance.get = async digest => {
         if (boundary === 'object' && !intercepted && digest === person.digest) {
@@ -175,7 +178,9 @@ for (const boundary of ['graph', 'object'] as const) for (const change of ['priv
       headers: boundary === 'graph' && change === 'private-name' ? { 'if-none-match': `"${person.digest}"` } : {},
     }));
     try {
-      await paused;
+      await Promise.race([paused, request.then(response => {
+        throw new Error(`Avatar delivery returned ${response.status} before the ${boundary} boundary`);
+      })]);
       if (change === 'private-name') await privateName(person);
       else await current.access.strongDeactivateAccountSubject(person.member.principal.issuer, person.member.principal.subject);
       resume();
@@ -185,7 +190,7 @@ for (const boundary of ['graph', 'object'] as const) for (const change of ['priv
     } finally {
       resume();
       current.fuseki.query = query;
-      current.media.objects = objects;
+      media.objects = objects;
       await request;
     }
   }, 60_000);
