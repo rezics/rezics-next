@@ -261,7 +261,8 @@ export async function extendErasureTargets(relay: Pool, erasureId: string, erasu
     throw new ErasureInvalid('Home erasure targets are invalid');
   }
   await relayTransaction(relay, async client => {
-    await client.query("SELECT pg_advisory_xact_lock(hashtextextended('rezics-relay-erasure-epoch', 0))");
+    // Reuse the allocator's approved lock path; its read does not consume an epoch.
+    await client.query('SELECT relay.next_erasure_epoch()');
     const entry = (await client.query<{ admission_id: string; erasure_epoch: string; stage: string }>(
       `SELECT admission_id, erasure_epoch::text, stage FROM relay.erasure WHERE id=$1 FOR UPDATE`,
       [erasureId])).rows[0];
