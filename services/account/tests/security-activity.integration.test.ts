@@ -1,5 +1,56 @@
 import { expect, test } from 'bun:test';
 import { accountFixture } from './account-fixture.ts';
+import { symmetricDecrypt } from 'better-auth/crypto';
+import { createOTP } from '@better-auth/utils/otp';
+
+const cookies = (response: Response) => response.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
+
+test('authentication failure activity follows the session or signed challenge, never ignored identity fields', async () => {
+  const f = await accountFixture();
+  try {
+    const member = await f.signup('activity-principal@example.test');
+    const peer = await f.signup('activity-forged-target@example.test');
+    const failures = async () => (await f.pool.query<{ user_id: string; method: string }>(`SELECT user_id,
+      detail->>'method' AS method FROM rezics_account_security_event
+      WHERE user_id IN ($1, $2) AND action = 'sign_in_failed' ORDER BY occurred_at, id`, [member.id, peer.id])).rows;
+    const forged = { email: peer.email, userId: peer.id };
+    const factorPaths = ['/api/auth/two-factor/verify-totp', '/api/auth/two-factor/verify-backup-code'];
+    expect((await f.request('/api/auth/two-factor/enable', { password: member.password }, member.cookie)).status).toBe(200);
+    for (const path of factorPaths) {
+      const invalid = await f.request(path, { code: 'invalid', ...forged }, member.cookie);
+      expect(invalid.status).toBe(401);
+    }
+    expect(await failures()).toEqual(factorPaths.map(path => ({ user_id: member.id, method: path.split('/').at(-1)! })));
+    const secret = await symmetricDecrypt({ key: f.secret,
+      data: (await f.pool.query('SELECT secret FROM "twoFactor" WHERE "userId" = $1', [member.id])).rows[0].secret });
+    const verified = await f.request('/api/auth/two-factor/verify-totp', { code: await createOTP(secret).totp() }, member.cookie);
+    expect(verified.status).toBe(200);
+    const signedCookie = cookies(verified);
+    for (const path of factorPaths) {
+      expect((await f.request(path, { code: 'invalid', ...forged }, signedCookie)).status).toBe(401);
+    }
+    const signIn = await f.request('/api/auth/sign-in/email', { email: member.email, password: member.password });
+    expect(await signIn.json()).toMatchObject({ twoFactorRedirect: true });
+    const challengeCookie = cookies(signIn);
+    for (const path of factorPaths) {
+      expect((await f.request(path, { code: 'invalid', ...forged }, challengeCookie)).status).toBe(401);
+    }
+    expect(await failures()).toEqual(Array.from({ length: 3 }, () => factorPaths.map(path => ({
+      user_id: member.id, method: path.split('/').at(-1)!,
+    }))).flat());
+    for (const path of factorPaths) {
+      expect((await f.request(path, { code: 'invalid', ...forged })).ok).toBe(false);
+    }
+    expect(await failures()).toHaveLength(6);
+    const invalidPasskey = { response: { id: 'unknown-credential' }, ...forged };
+    expect((await f.request('/api/auth/passkey/verify-authentication', invalidPasskey, signedCookie)).ok).toBe(false);
+    expect((await failures()).at(-1)).toEqual({ user_id: member.id, method: 'verify-authentication' });
+    expect((await f.request('/api/auth/passkey/verify-authentication', invalidPasskey)).ok).toBe(false);
+    expect(await failures()).toHaveLength(7);
+    expect((await f.request('/api/auth/sign-in/email', { email: peer.email, password: 'incorrect password', userId: member.id })).status).toBe(401);
+    expect((await failures()).filter(row => row.user_id === peer.id)).toEqual([{ user_id: peer.id, method: 'email' }]);
+  } finally { await f.close(); }
+}, 60_000);
 
 test('G205 activity: private paginated events, coarse devices, failure summary and session revocation', async () => {
   const f = await accountFixture();
