@@ -27,6 +27,7 @@ export default {
   moreEditionsFailed: '판본을 더 불러오지 못했습니다.',
   filterEditions: '표시된 판본 걸러내기',
   noMatchingEditions: '일치하는 판본이 없습니다.',
+  noMatchingEditionsYet: '불러온 판본 중 일치하는 것이 없습니다. 판본을 더 보며 계속 찾아보세요.',
   workInGeneral: '작품 자체', chooseEdition: '판본 선택', edition: '판본', format: '형식', noFormat: '형식 없음',
   formatPrint: '종이책', formatEbook: '전자책', formatAudiobook: '오디오북', formatWeb: '웹',
   addEdition: '추가', unnamedEdition: '선택한 판본',

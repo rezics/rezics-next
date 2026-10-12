@@ -36,6 +36,7 @@ const en = {
   moreEditionsFailed: 'Couldn’t load more editions.',
   filterEditions: 'Filter listed editions',
   noMatchingEditions: 'No listed edition matches.',
+  noMatchingEditionsYet: 'No loaded edition matches. Show more editions to keep looking.',
   workInGeneral: 'The Work itself', chooseEdition: 'Choose an edition', edition: 'Edition', format: 'Format', noFormat: 'No format',
   formatPrint: 'Print', formatEbook: 'E-book', formatAudiobook: 'Audiobook', formatWeb: 'Web',
   addEdition: 'Add', unnamedEdition: 'Selected edition',

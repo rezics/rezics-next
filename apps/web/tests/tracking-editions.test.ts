@@ -7,7 +7,7 @@ import { editionName } from '../features/tracking/display.ts';
 import * as fixture from '../features/tracking/fixtures.ts';
 import { copyOf } from '../features/tracking/messages.ts';
 import { editionListed, editionOptions } from '../features/tracking/model.ts';
-import { applyEditionPage, EditionContinuation, editionContinuation } from '../features/tracking/tracking-sheet.tsx';
+import { applyEditionPage, EditionContinuation, EditionFilterNote, editionContinuation } from '../features/tracking/tracking-sheet.tsx';
 import type { Editions, Realization, Release } from '../features/tracking/types.ts';
 
 const t = copyOf('en');
@@ -87,6 +87,34 @@ describe('edition pages', () => {
     expect(names(joined, 'Release 21')).toEqual([fixture.iri('e21')]);
     expect(calls.filter(call => call.list === 'realizations')).toHaveLength(1);
     expect(calls.at(-1)).toEqual({ list: 'releases', limit: 20, cursor: '20' });
+  });
+
+  test('a filter with no loaded match says more may exist and offers the next page; the match is reachable from it', async () => {
+    const { api } = pagedApi({ realizations: [], releases: releases(21) });
+    const first = await api.editions(work);
+    if (!first.ok) throw new Error('first page failed');
+    const note = (editions: Editions, failed = false) => renderToStaticMarkup(createElement(EditionFilterNote,
+      { work, editions, failed, locale: 'en', t, query: 'Release 21' }));
+    expect(names(first.data, 'Release 21')).toEqual([]);
+    expect(note(first.data)).toContain(t.noMatchingEditionsYet);
+    expect(note(first.data, true)).toContain(t.noMatchingEditionsYet);
+    expect(control(first.data)).toContain(t.moreEditions);
+
+    const second = await api.editions(work, { releases: first.data.releasesCursor! });
+    if (!second.ok) throw new Error('second page failed');
+    const joined = appendEditionPage(first.data, second.data, { realizations: false, releases: true });
+    expect(names(joined, 'Release 21')).toEqual([fixture.iri('e21')]);
+    expect(note(joined)).toBe('');
+  });
+
+  test('a filter with no match on the last page says none exists', async () => {
+    const { api } = pagedApi({ realizations: [], releases: releases(3) });
+    const read = await api.editions(work);
+    if (!read.ok) throw new Error('page failed');
+    const markup = renderToStaticMarkup(createElement(EditionFilterNote,
+      { work, editions: read.data, failed: false, locale: 'en', t, query: 'nothing like this' }));
+    expect(markup).toContain(t.noMatchingEditions);
+    expect(markup).not.toContain(t.noMatchingEditionsYet);
   });
 
   test('a repeated edition stays where it was first listed', () => {

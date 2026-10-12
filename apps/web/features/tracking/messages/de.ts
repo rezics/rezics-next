@@ -27,6 +27,7 @@ export default {
   moreEditionsFailed: 'Weitere Ausgaben konnten nicht geladen werden.',
   filterEditions: 'Gelistete Ausgaben filtern',
   noMatchingEditions: 'Keine gelistete Ausgabe passt.',
+  noMatchingEditionsYet: 'Keine geladene Ausgabe passt. Zeige weitere Ausgaben an, um weiterzusuchen.',
   workInGeneral: 'Das Werk selbst', chooseEdition: 'Ausgabe wählen', edition: 'Ausgabe', format: 'Format', noFormat: 'Kein Format',
   formatPrint: 'Print', formatEbook: 'E-Book', formatAudiobook: 'Hörbuch', formatWeb: 'Web',
   addEdition: 'Hinzufügen', unnamedEdition: 'Gewählte Ausgabe',

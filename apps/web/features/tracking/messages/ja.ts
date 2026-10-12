@@ -27,6 +27,7 @@ export default {
   moreEditionsFailed: 'ほかの版を読み込めませんでした。',
   filterEditions: '表示中の版を絞り込む',
   noMatchingEditions: '一致する版がありません。',
+  noMatchingEditionsYet: '読み込み済みの版に一致するものがありません。ほかの版を表示して探してください。',
   workInGeneral: '作品そのもの', chooseEdition: '版を選ぶ', edition: '版', format: '形式', noFormat: '形式なし',
   formatPrint: '紙', formatEbook: '電子書籍', formatAudiobook: 'オーディオブック', formatWeb: 'ウェブ',
   addEdition: '追加', unnamedEdition: '選択した版',

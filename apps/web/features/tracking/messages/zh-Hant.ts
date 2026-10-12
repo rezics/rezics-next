@@ -27,6 +27,7 @@ export default {
   moreEditionsFailed: '無法載入更多版本。',
   filterEditions: '篩選已列出的版本',
   noMatchingEditions: '沒有列出的版本相符。',
+  noMatchingEditionsYet: '已載入的版本中沒有相符項目，請顯示更多版本繼續尋找。',
   workInGeneral: '作品本身', chooseEdition: '選擇版本', edition: '版本', format: '格式', noFormat: '不指定格式',
   formatPrint: '紙本', formatEbook: '電子書', formatAudiobook: '有聲書', formatWeb: '網頁',
   addEdition: '加入', unnamedEdition: '已選的版本',

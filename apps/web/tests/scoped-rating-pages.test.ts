@@ -14,7 +14,8 @@ import { keepReading } from '../features/wiki/links.ts';
 import { continuityParam, offContinuity, parseContinuity } from '../features/wiki/continuity.ts';
 import type { MainClient } from '../features/discover/types.ts';
 import { nameOccurrences } from '../features/scoped-rating/occurrence-names.ts';
-import { relatedEventSource, releaseSource } from '../features/scoped-rating/sources.ts';
+import { MAX_RELEASE_PAGES, relatedEventSource, releaseSource } from '../features/scoped-rating/sources.ts';
+import { EntityPickerSource } from '../../../packages/ui/src/components/entity-picker-state.ts';
 import * as fixture from '../features/scoped-rating/fixtures.ts';
 
 const actor = 'https://rezics.com/id/019a5c00-0000-7000-8000-0000000000aa';
@@ -156,6 +157,61 @@ describe('places a subject can be rated in', () => {
     expect((await source.load({ q: '', cursor: null })).items[0]).toMatchObject({ value: release.id, label: 'Summer balance',
       candidate: { dimension: 'release', iri: release.id } });
     expect(source.id).not.toBe(releaseSource({ work: fixture.subject.iri, main }).id);
+  });
+
+  describe('a title search over pages that do not match', () => {
+    const work = 'https://rezics.com/id/019a5c00-0000-7000-8000-0000000000c1';
+    const releaseId = (n: number) => `https://rezics.com/id/019a5c00-0000-7000-8000-${String(n).padStart(12, '0')}`;
+    /** `titles` is one page per entry; the token of a page is its index. */
+    function pagedReleases(pages: string[][], failAt?: number) {
+      const cursors: (string | undefined)[] = [];
+      const main = (() => ({ v1: { works: () => ({ releases: { get: async ({ query }: { query: { cursor?: string } }) => {
+        cursors.push(query.cursor);
+        const index = query.cursor ? Number(query.cursor) : 0;
+        if (index === failAt) return { data: null, error: { status: 503, value: null } };
+        return { data: { items: pages[index]!.map((title, at) => ({ id: releaseId(index * 100 + at), title: { value: title, language: 'en' } })),
+          nextCursor: index + 1 < pages.length ? String(index + 1) : null }, error: null };
+      } } }) } })) as unknown as () => MainClient;
+      return { cursors, source: releaseSource({ work, main }) };
+    }
+
+    test('a first page with no match is followed by the page that has one', async () => {
+      const { cursors, source } = pagedReleases([['Alpha', 'Beta'], ['Gamma', 'Summer balance']]);
+      const loaded = await source.load({ q: 'balance', cursor: null });
+      expect(loaded.items.map(item => item.label)).toEqual(['Summer balance']);
+      expect(loaded.complete).toBe(true);
+      expect(cursors).toEqual([undefined, '1']);
+    });
+
+    test('an empty filter reads one page and keeps the next token', async () => {
+      const { cursors, source } = pagedReleases([['Alpha'], ['Beta']]);
+      const loaded = await source.load({ q: '', cursor: null });
+      expect(loaded.items.map(item => item.label)).toEqual(['Alpha']);
+      expect([loaded.nextCursor, loaded.complete]).toEqual(['1', false]);
+      expect(cursors).toEqual([undefined]);
+    });
+
+    test('past the bound the picker is left with the next token, and offering it reaches the match', async () => {
+      const pages = Array.from({ length: MAX_RELEASE_PAGES + 2 }, (_, index) => [`Page ${index}`]);
+      pages[MAX_RELEASE_PAGES + 1] = ['Summer balance'];
+      const { cursors, source } = pagedReleases(pages);
+      const picker = new EntityPickerSource(source.load);
+      await picker.search('balance');
+      expect(picker.getSnapshot()).toMatchObject({ items: [], complete: false, nextCursor: String(MAX_RELEASE_PAGES), error: false });
+      expect(cursors).toHaveLength(MAX_RELEASE_PAGES);
+      await picker.more();
+      expect(picker.getSnapshot().items.map(item => item.label)).toEqual(['Summer balance']);
+      expect(picker.getSnapshot().complete).toBe(true);
+    });
+
+    test('a page that cannot be read is an error to retry, not an empty result', async () => {
+      await expect(pagedReleases([['Alpha']], 0).source.load({ q: 'x', cursor: null })).rejects.toThrow();
+      const midway = pagedReleases([['Alpha'], ['Beta'], ['Summer balance']], 1);
+      await expect(midway.source.load({ q: 'zzz', cursor: null })).rejects.toThrow();
+      const picker = new EntityPickerSource(midway.source.load);
+      await picker.search('zzz');
+      expect(picker.getSnapshot()).toMatchObject({ items: [], error: true });
+    });
   });
 });
 

@@ -27,6 +27,7 @@ export default {
   moreEditionsFailed: '无法加载更多版本。',
   filterEditions: '筛选已列出的版本',
   noMatchingEditions: '没有列出的版本相符。',
+  noMatchingEditionsYet: '已加载的版本中没有匹配项，请显示更多版本继续查找。',
   workInGeneral: '作品本身', chooseEdition: '选择版本', edition: '版本', format: '格式', noFormat: '不指定格式',
   formatPrint: '纸质书', formatEbook: '电子书', formatAudiobook: '有声书', formatWeb: '网页',
   addEdition: '添加', unnamedEdition: '已选的版本',

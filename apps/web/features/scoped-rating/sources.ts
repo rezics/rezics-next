@@ -53,19 +53,34 @@ export function readingPositionSource({ work, actingSubject, position, locale, l
   } };
 }
 
-/** The releases of a Work (its game versions and editions as published), newest page first, searched here by title. */
+/** A search that matches nothing on a page reads at most this many pages before it offers the next one to the person. */
+export const MAX_RELEASE_PAGES = 5;
+
+/**
+ * The releases of a Work (its game versions and editions as published), newest page first. Main's page has no title search,
+ * so the title is matched here per page; a page with no match is followed by the next one, up to a fixed bound, so a
+ * search never stops on an empty page while releases remain. Past the bound the next token is kept and the picker offers it.
+ */
 export function releaseSource({ work, actingSubject, label, main = () => browserMainApi(undefined, { anonymous: !actingSubject }) }: {
   work: string; actingSubject?: string; label?: string; main?: () => MainClient;
 }): FrameSource {
   const id = idOf(work);
   return { id: `release:${work}`, dimension: 'release', label, async load({ q, cursor }) {
     if (!id) return { items: [], nextCursor: null, complete: true };
-    const { data } = await main().v1.works({ id }).releases.get({ query: { limit: 20, ...cursor ? { cursor } : {}, ...actingSubject ? { actingSubject } : {} } });
     const needle = q.trim().toLocaleLowerCase();
-    const items = (data?.items ?? []).filter(release => !needle || release.title.value.toLocaleLowerCase().includes(needle)).map(release =>
-      option({ iri: release.id, dimension: 'release', work, name: { value: release.title.value, language: release.title.language,
-        direction: direction(release.title.language, release.title.value) } }));
-    return { items, nextCursor: data?.nextCursor ?? null, complete: !data?.nextCursor };
+    const items: FrameOption[] = [];
+    let next = cursor;
+    for (let pages = 0; pages < MAX_RELEASE_PAGES; pages++) {
+      const { data } = await main().v1.works({ id }).releases.get({ query: { limit: 20, ...next ? { cursor: next } : {}, ...actingSubject ? { actingSubject } : {} } });
+      // A failed page is an error the picker can retry, not an empty result.
+      if (!data) throw new Error('Releases could not be read');
+      items.push(...data.items.filter(release => !needle || release.title.value.toLocaleLowerCase().includes(needle)).map(release =>
+        option({ iri: release.id, dimension: 'release', work, name: { value: release.title.value, language: release.title.language,
+          direction: direction(release.title.language, release.title.value) } })));
+      next = data.nextCursor ?? null;
+      if (items.length || !next) break;
+    }
+    return { items, nextCursor: next, complete: !next };
   } };
 }
 

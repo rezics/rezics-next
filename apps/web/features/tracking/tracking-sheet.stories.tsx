@@ -129,6 +129,23 @@ export const FortyFiveEditions: Story = {
   },
 };
 
+/** A filter that matches nothing on the loaded page says more may exist and leaves the next page one tap away. */
+export const FilterBeforeLoaded: Story = {
+  globals: { viewport: { value: 'phone' } },
+  async play() {
+    const dialog = await openDialog();
+    const sheet = within(dialog);
+    await userEvent.type(sheet.getByRole('textbox', { name: t.filterEditions }), 'Release 45');
+    await expect(await sheet.findByText(t.noMatchingEditionsYet)).toBeVisible();
+    await expect(await editionLabels(dialog)).toEqual([]);
+    await fits(dialog);
+    await userEvent.click(sheet.getByRole('button', { name: t.moreEditions }));
+    await userEvent.click(sheet.getByRole('button', { name: t.moreEditions }));
+    await waitFor(() => expect(sheet.queryByText(t.noMatchingEditionsYet)).toBeNull());
+    await expect(await editionLabels(dialog)).toEqual([releaseName(45)]);
+  },
+};
+
 /** A full page that is also the last page has nothing further to open. */
 export const ExactlyTwenty: Story = {
   args: { count: 20 },

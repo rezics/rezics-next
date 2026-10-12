@@ -27,6 +27,7 @@ export default {
   moreEditionsFailed: 'Impossible de charger d’autres éditions.',
   filterEditions: 'Filtrer les éditions affichées',
   noMatchingEditions: 'Aucune édition affichée ne correspond.',
+  noMatchingEditionsYet: 'Aucune édition chargée ne correspond. Affichez plus d’éditions pour continuer à chercher.',
   workInGeneral: 'L’œuvre elle-même', chooseEdition: 'Choisir une édition', edition: 'Édition', format: 'Format', noFormat: 'Aucun format',
   formatPrint: 'Papier', formatEbook: 'Livre numérique', formatAudiobook: 'Livre audio', formatWeb: 'Web',
   addEdition: 'Ajouter', unnamedEdition: 'Édition choisie',

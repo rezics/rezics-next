@@ -166,6 +166,18 @@ function listedEditionMatches(work: string, editions: Editions | null, locale: U
     && editionListed(editionName(option.resource, option.kind, editions, locale, t), query));
 }
 
+/**
+ * Said when the filter leaves no loaded edition. Editions load a page at a time and the filter only reads the loaded ones,
+ * so while another page remains the note says the match may still be there rather than that none exists.
+ */
+export function EditionFilterNote({ work, editions, failed, locale, t, query }: {
+  work: string; editions: Editions | null; failed: boolean; locale: UiLocale; t: Copy; query: string;
+}) {
+  if (listedEditionMatches(work, editions, locale, t, query)) return null;
+  const more = editionContinuation(editions, failed) !== null;
+  return <p className="text-muted-foreground text-xs">{more ? t.noMatchingEditionsYet : t.noMatchingEditions}</p>;
+}
+
 function SheetAttempts({ work, api, locale, t, open }: {
   work: string; api: TrackingApi; locale: UiLocale; t: Copy; open: boolean;
 }) {
@@ -193,8 +205,7 @@ function SheetAttempts({ work, api, locale, t, open }: {
       <Input size="sm" value={query} className="w-full" aria-label={t.filterEditions}
         onChange={event => setQuery(event.target.value)} />
     </Field> : null}
-    {canFilter && !listedEditionMatches(work, editions, locale, t, query)
-      ? <p className="text-muted-foreground text-xs">{t.noMatchingEditions}</p> : null}
+    {canFilter ? <EditionFilterNote work={work} editions={editions} failed={moreFailed} locale={locale} t={t} query={query} /> : null}
     <EditionContinuation editions={editions} failed={moreFailed} busy={moreBusy} t={t} onMore={() => void moreEditions()} />
     {/* One attempt at a time: a second would be two open attempts. The form returns once the open one ends. */}
     {attempts.items.some(item => !hasEnded(item)) ? null
