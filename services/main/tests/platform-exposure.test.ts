@@ -215,6 +215,7 @@ test('every served Main route, including transports, has a reviewed exposure', (
   expect(publicOperations).toContain('getV1RealmsByRealmZone-attachments');
   expect(matrix.find(entry => entry.path === '/v1/realms/{realm}/zone-attachments' && entry.method === 'get'))
     .toMatchObject({ exposure: 'public', rateLimitFamily: 'read' });
+  expect(publicOperations).toContain('getV1RealmsByRealmAbout-thread');
   // Trust-ops approved public on 2026-10-10 under standing route consent, conditional on a hidden Work answering like an absent id: the signed-in reader's standing on one Work, bearer, read family.
   expect(publicOperations).toContain('getV1WorksByIdProgress');
   expect(matrix.find(entry => entry.path === '/v1/works/{id}/progress' && entry.method === 'get'))
@@ -230,7 +231,7 @@ test('every served Main route, including transports, has a reviewed exposure', (
   expect(publicOperations).toContain('postV1Work-publications');
   expect(matrix.find(entry => entry.path === '/v1/work-publications' && entry.method === 'post'))
     .toMatchObject({ exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true });
-  expect(publicOperations).toHaveLength(529);
+  expect(publicOperations).toHaveLength(530);
   expect(publicOperations.filter((id) => libraryCopiesAndLoans.includes(id)).sort()).toEqual(
     libraryCopiesAndLoans,
   );
@@ -238,7 +239,8 @@ test('every served Main route, including transports, has a reviewed exposure', (
   const closedOperations = matrix
     .filter((entry) => entry.exposure !== 'public')
     .map((entry) => exposureOperationId(entry.method, entry.path));
-  expect(closedOperations).toHaveLength(247);
+  expect(closedOperations).toHaveLength(248);
+  expect(closedOperations).toContain('postV1RealmsByRealmAbout-posts');
   expect(closedOperations).toContain('getV1RealmsByRealmMember-receiptsByReceiptIdAppeal');
   expect(closedOperations).toContain('postV1RealmsByRealmMember-receiptsByReceiptIdAppeal');
   // Closed own-ban read. The controller sees that ban; every other caller gets the same absence.
