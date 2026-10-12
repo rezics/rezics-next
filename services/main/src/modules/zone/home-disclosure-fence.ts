@@ -14,11 +14,12 @@ export interface HomeDisclosureEntry {
 }
 
 /** Capture before hydration; call the returned fence as the last awaited step.
- * Zone authority is read afresh, while disclosure revalidates the original
- * owner-issued cuts in a fresh Access statement snapshot. */
+ * Capture Zone/Realm authority alongside the owner cuts. Final authority is
+ * reread after ancestry and policy, so those awaits cannot outlive a grant. */
 export async function captureHomeDisclosureFence(env: WorkActivationEnvironment,
   entries: readonly HomeDisclosureEntry[], viewer: Viewer, channel: DisclosureChannel,
-  client?: PoolClient): Promise<(readZones: () => Promise<ReadonlySet<string>>) => Promise<ReadonlySet<string>>> {
+  readZones: () => Promise<ReadonlySet<string>>, client?: PoolClient,
+  cost?: { graphQueries: number; accessQueries: number }): Promise<() => Promise<ReadonlySet<string>>> {
   if (entries.length > 256 || entries.some(entry => !entry.targets.length || entry.targets.length > 33
     || !Number.isInteger(entry.optionalTargets ?? 0) || (entry.optionalTargets ?? 0) < 0
     || (entry.optionalTargets ?? 0) >= entry.targets.length)
@@ -26,22 +27,40 @@ export async function captureHomeDisclosureFence(env: WorkActivationEnvironment,
     || new Set(entries.map(entry => entry.resource)).size !== entries.length) {
     throw new DisclosureUnavailable('Home disclosure batch is invalid');
   }
+  const capturedZones = new Set(await readZones());
   const targets = entries.flatMap(entry => entry.targets);
   const batches: (readonly DisclosureReadCut[])[] = [];
+  const noteCut = (cuts: readonly DisclosureReadCut[]) => {
+    if (!cost || !cuts.length) return;
+    cost.accessQueries += DISCLOSURE_COST.ownerStatements;
+    const heads = new Set(cuts.flatMap(({ selection }) => [
+      ...selection.ancestry.parents.map(parent => parent.resource),
+      ...(selection.ancestry.resourceKind !== 'other' || selection.target.owner === 'graph'
+        && selection.ancestry.relationshipBasis.owner === 'graph'
+        && selection.ancestry.relationshipBasis.kind === 'identity'
+        && selection.ancestry.relationshipBasis.resource === selection.target.resource ? [selection.target.resource] : []),
+    ]));
+    cost.graphQueries += Math.ceil(heads.size / DISCLOSURE_COST.parentHeadBatch);
+  };
   for (let offset = 0; offset < targets.length; offset += DISCLOSURE_COST.batch) {
     const selections = await resolveDisclosureSelections(env, targets.slice(offset, offset + DISCLOSURE_COST.batch));
-    batches.push(await captureDisclosure(env, selections, viewer, channel, client));
+    const cuts = await captureDisclosure(env, selections, viewer, channel, client);
+    batches.push(cuts);
+    noteCut(cuts);
   }
-  return async readZones => {
-    const zones = await readZones();
+  return async () => {
     const decisions: DisclosureDecision[] = [];
-    for (const cuts of batches) decisions.push(...await fenceDisclosure(env, cuts, viewer, channel, client));
+    for (const cuts of batches) {
+      decisions.push(...await fenceDisclosure(env, cuts, viewer, channel, client));
+      noteCut(cuts);
+    }
+    const zones = await readZones();
     if (decisions.length !== targets.length) throw new DisclosureUnavailable('Disclosure final fence is incomplete');
     const readable = new Set<string>();
     let ordinal = 0;
     for (const entry of entries) {
       const required = entry.targets.length - (entry.optionalTargets ?? 0);
-      if (zones.has(entry.zone) && decisions.slice(ordinal, ordinal + required).every(value => value === 'visible')) {
+      if (capturedZones.has(entry.zone) && zones.has(entry.zone) && decisions.slice(ordinal, ordinal + required).every(value => value === 'visible')) {
         readable.add(entry.resource);
         for (let index = required; index < entry.targets.length; index++) {
           if (decisions[ordinal + index] === 'visible') readable.add(entry.targets[index]!.resource);

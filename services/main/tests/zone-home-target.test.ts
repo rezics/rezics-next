@@ -1,3 +1,4 @@
+import { configureFixtureDisclosureAncestry } from './support/disclosure-ancestry.ts';
 import { expect, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -114,7 +115,7 @@ test('a private Zone-only home needs Zone read authority and private Realm homes
   expect((await readZoneHomeTarget(h.env, h.resource, undefined, {
     zoneReadable: async zone => { zones.push(zone); return zone === h.zone; },
   }))?.disclosure).toBe('restricted');
-  expect(zones).toEqual([h.zone, h.zone]);
+  expect(zones).toEqual([h.zone, h.zone, h.zone]);
   const realm = id();
   h.visibilityRows[0]!.realm = cell(realm);
   expect(await readZoneHomeTarget(h.env, h.resource, undefined, { zoneReadable: async () => true })).toBeNull();
@@ -206,4 +207,26 @@ for (const lateTarget of ['graph', 'content'] as const) test(`a ${lateTarget} re
     expect(h.queries.filter(query => query.includes('SELECT ?space ?navigation ?head'))).toHaveLength(2);
     expect(h.queries.filter(query => query.includes('ASK') && query.includes('rv:sitePublicationRevision'))).toHaveLength(2);
   } finally { rmSync(objectDirectory, { recursive: true, force: true }); }
+});
+
+
+for (const authority of ['zone', 'realm'] as const) test(`owner-cut home target withholds H, selections and digests when ${authority} authority is revoked during final ancestry reread`, async () => {
+  const h = fixture();
+  h.visibilityRows[0]!.disclosure = cell(`${RV}Private`);
+  h.visibilityRows[0]!.zoneDisclosure = cell(`${RV}Private`);
+  if (authority === 'realm') h.visibilityRows[0]!.realm = cell(id());
+  let readable = true, rereads = 0, authorityReads = 0;
+  configureFixtureDisclosureAncestry(h.env, () => undefined, owner => {
+    if (owner === 'graph' && ++rereads === 2) {
+      expect(authorityReads).toBe(2);
+      readable = false;
+    }
+  });
+  const result = await readZoneHomeTarget(h.env, h.resource, h.revision, {
+    zoneReadable: async () => { authorityReads++; return readable; },
+    realmReadProof: async () => { authorityReads++; return readable ? 'membership' : null; },
+  });
+  expect(rereads).toBe(2);
+  expect(authorityReads).toBe(3);
+  expect(result).toBeNull();
 });

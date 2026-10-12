@@ -1,15 +1,17 @@
 import { expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
 import type { ContentModeration } from '../../content/src/moderation.ts';
 import { ownerModerationEffects } from '../src/modules/governance/effects.ts';
 import type { DecisionTargetInput } from '../src/modules/governance/store.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import type { FusekiClient } from '../src/infrastructure/fuseki.ts';
-import { configureDisclosure } from '../src/modules/disclosure/read.ts';
+import { configureDisclosure, configureDisclosureAncestrySource, type DisclosureAncestryEvidence, type DisclosureTarget } from '../src/modules/disclosure/read.ts';
 import { discloseContent } from '../src/modules/disclosure/assembly.ts';
 import type { ExactReadResult } from '../../content/src/core.ts';
 import { zoneHomeTargetFixture, zoneHomeTargetCell as cell } from './support/zone-home-target.ts';
+
+import { fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 
@@ -62,14 +64,37 @@ function homeBodyRestriction(heldCurrent: boolean) {
     }
     return graph(query, budget);
   };
-  if (heldCurrent) h.deny(true);
-  else configureDisclosure(h.env, { read: async targets => targets.map(target => {
-    // Match the enforcement owner's conservative parent rule: a missing head cannot exclude an exact restriction.
+  if (heldCurrent) {
+    const targetsByToken = new Map<string, DisclosureTarget>();
+    const read = async (targets: readonly DisclosureTarget[]): Promise<DisclosureAncestryEvidence[]> => {
+      const rows = (await h.env.fuseki.query(`SELECT ?work ?head ?owningWork ?owningHead WHERE {
+        <${h.resource}> rv:homeDocumentHead ?head .
+      }`)).results?.bindings ?? [];
+      return targets.map(target => {
+        const associated = rows.some(row => row.work?.value === h.resource && row.head?.value === h.revision)
+          && h.selections.some(page => page.revisionId === target.revision);
+        const token = createHash('sha256').update(JSON.stringify([target, associated])).digest('hex');
+        targetsByToken.set(token, target);
+        return { resource: target.resource, resourceKind: 'other', status: 'complete', parents: [], relationshipBasis: {
+          owner: 'graph', kind: 'publication', resource: h.resource,
+          revision: associated ? h.revision : target.revision!, targetResource: target.resource,
+          targetRevision: target.revision ?? null, token, dataEpoch: h.env.lineage.dataEpoch,
+        } };
+      });
+    };
+    configureDisclosureAncestrySource(h.env, 'content', {
+      read, reread: bases => read(bases.map(basis => targetsByToken.get(basis.token)!)),
+    });
+  }
+  configureDisclosure(h.env, fixtureDisclosureReader(async targets => targets.map(target => {
+    const publication = target.ancestry?.relationshipBasis;
+    // The exact native publication is authoritative; legacy parent hints cannot broaden it.
     const restricted = target.owner === 'graph' && target.resource === h.resource && target.revision === held
-      || target.owner === 'content' && target.work === h.resource
-        && (target.workRevision == null || target.workRevision === held);
+      || target.owner === 'content' && (publication?.kind === 'publication'
+        ? publication.resource === h.resource && publication.revision === held
+        : target.work === h.resource && (target.workRevision == null || target.workRevision === held));
     return restricted ? 'hidden' : 'visible';
-  }) });
+  })));
   const exact: ExactReadResult[] = h.selections.map(selection => ({ revisionId: selection.revisionId, status: 'available',
     reference: { owner: 'content', resourceId: h.resource, ...selection, byteLength: 2,
       model: 'zone-page-v1', format: 'rezics-content-json-v1', direction: 'ltr', sourceRevision: null,
@@ -87,4 +112,13 @@ test.failing('an exact restriction on an older H does not suppress bytes selecte
 test('the Content delivery adapter withholds every selected body of the currently restricted H', async () => {
   const { h, exact } = homeBodyRestriction(true);
   expect(await discloseContent(h.env, exact)).toEqual(exact.map(result => ({ revisionId: result.revisionId, status: 'denied' })));
+});
+
+
+test('selected-body restrictions depend on the owner home association, not an unconditional deny', async () => {
+  const { h, exact } = homeBodyRestriction(true);
+  const graph = h.env.fuseki.query.bind(h.env.fuseki);
+  h.env.fuseki.query = async (query, budget) => query.includes('SELECT ?work ?head ?owningWork ?owningHead')
+    ? { results: { bindings: [] } } : graph(query, budget);
+  expect(await discloseContent(h.env, exact)).toEqual(exact);
 });

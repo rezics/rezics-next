@@ -20,6 +20,8 @@ import { disclosureViewer } from '../disclosure/viewer.ts';
 import type { VisibilityReader } from '../space/visibility.ts';
 import { readResourceVisibility } from '../space/visibility.ts';
 import { GRAPHS, RV, iri } from '../work/activate.ts';
+import { canReadContentTarget, type ContentReadAuthority } from '../content-publication/draft.ts';
+import { isZonePublishedPageRevision } from '../zone/publication.ts';
 import { captureHomeDisclosureFence } from '../zone/home-disclosure-fence.ts';
 
 /** The publication owner supplies a published cut, never a variant draft head. */
@@ -101,9 +103,25 @@ async function legacyZoneContentOwner(env: WorkActivationEnvironment, resource: 
   return rows[0].legacySpace.value;
 }
 
+type HomeEvidenceAuthority = Partial<Pick<AccessAdmissionRegistry,
+  'realmReadProof' | 'canReadSemanticResource' | 'activePrincipalId' | 'withOwnerAuthority' | 'canReadWork'>>;
+
+/** Match exact Content delivery: public selected bytes or live Zone edit authority. */
+async function legacyRevisionReadable(env: WorkActivationEnvironment, registry: HomeEvidenceAuthority,
+  principal: VerifiedPrincipal | null, actingSubject: string | undefined, zone: string, revision: string): Promise<boolean> {
+  try {
+    if (await isZonePublishedPageRevision(env, zone, zone, revision)) return true;
+    if (!principal || !actingSubject) return false;
+    return await canReadContentTarget(env, registry as ContentReadAuthority, principal, actingSubject, zone,
+      { type: `${RV}Zone`, zone });
+  } catch (cause) {
+    throw new GovernanceUnavailable('Legacy home authority is unavailable', { cause });
+  }
+}
+
 export function governanceContentEvidenceReader(content: Pick<ContentCore, 'owningResourceForRevision'>,
   contentPool: Pick<Pool, 'query'>, registry: Pick<AccessAdmissionRegistry,
-    'realmReadProof' | 'canReadSemanticResource' | 'canReadWork'>, env: WorkActivationEnvironment) {
+    'realmReadProof' | 'canReadSemanticResource' | 'canReadWork'> & HomeEvidenceAuthority, env: WorkActivationEnvironment) {
   return async (principal: VerifiedPrincipal, actingSubject: string, ids: readonly string[]) => {
     const disclosed = new Set<string>();
     for (const id of ids) {
@@ -120,7 +138,7 @@ export function governanceContentEvidenceReader(content: Pick<ContentCore, 'owni
           homeDocumentVisibilityReader(registry, principal, actingSubject)).catch(error => {
           throw new GovernanceUnavailable('Legacy home visibility is unavailable', { cause: error });
         });
-        if (visibility?.readable) disclosed.add(id);
+        if (visibility?.readable && await legacyRevisionReadable(env, registry, principal, actingSubject, resource, id)) disclosed.add(id);
         continue;
       }
       if (await registry.canReadWork(principal, actingSubject, resource)
@@ -136,8 +154,7 @@ export function governanceContentEvidenceReader(content: Pick<ContentCore, 'owni
 
 /** Known home identities do not fall through to Work authority or draft reads. */
 export async function capturePublishedHomeEvidence(env: WorkActivationEnvironment,
-  core: Pick<ContentCore, 'readExactBatch'>, registry: Partial<Pick<AccessAdmissionRegistry,
-  'realmReadProof' | 'canReadSemanticResource'>>, principal: VerifiedPrincipal | null,
+  core: Pick<ContentCore, 'readExactBatch'>, registry: HomeEvidenceAuthority, principal: VerifiedPrincipal | null,
   actingSubject: string | undefined, target: EvidenceTarget, resolveCurrent = false,
   observedHomeRevision?: string): Promise<CapturedEvidence | null> {
   if (!await readZoneHomeOwner(env, target.resource)) {
@@ -147,10 +164,18 @@ export async function capturePublishedHomeEvidence(env: WorkActivationEnvironmen
     }
     const reader = homeDocumentVisibilityReader(registry, principal, actingSubject);
     const visibility = await readResourceVisibility(env, target.resource, reader);
-    if (!visibility?.readable) throw new GovernanceDenied('Target is unavailable');
+    if (!visibility?.readable || !await legacyRevisionReadable(env, registry, principal, actingSubject, target.resource, target.revision)) {
+      throw new GovernanceDenied('Target is unavailable');
+    }
     const fence = await captureHomeDisclosureFence(env, [{ resource: target.resource, zone: target.resource,
       targets: [{ owner: 'content', resource: target.resource, revision: target.revision, component: 'body' }] }],
-    disclosureViewer(principal), 'read');
+    disclosureViewer(principal), 'read', async () => {
+      const current = await readResourceVisibility(env, target.resource, reader);
+      const admitted = current?.readable && current.visibility === visibility.visibility
+        && current.space === visibility.space && current.realm === visibility.realm
+        && await legacyRevisionReadable(env, registry, principal, actingSubject, target.resource, target.revision!);
+      return new Set(admitted ? [target.resource] : []);
+    });
     const exact = await core.readExactBatch([target.revision], async ids => new Set(ids))
       .catch(cause => { throw new GovernanceUnavailable('Content owner is unavailable', { cause }); });
     const read = exact[0];
@@ -169,11 +194,7 @@ export async function capturePublishedHomeEvidence(env: WorkActivationEnvironmen
         zone: target.resource, disclosure: visibility.visibility,
         ...(visibility.realm ? { realm: visibility.realm } : {}),
         ...(typeof read.reference.provenance.author === 'string' ? { author: read.reference.provenance.author } : {}) } };
-    const visible = await fence(async () => {
-      const current = await readResourceVisibility(env, target.resource, reader);
-      return new Set(current?.readable && current.visibility === visibility.visibility
-        && current.space === visibility.space && current.realm === visibility.realm ? [target.resource] : []);
-    });
+    const visible = await fence();
     if (!visible.has(target.resource)) throw new GovernanceDenied('Target is unavailable');
     return evidence;
   }
@@ -191,18 +212,18 @@ export async function capturePublishedHomeEvidence(env: WorkActivationEnvironmen
         .map(page => ({ owner: 'content' as const, resource: home.resource, revision: page.revisionId,
           component: 'body' as const, occurrence: { owner: 'graph' as const, kind: 'publication' as const,
             resource: home.resource, revision: home.revision } }))] }],
-  disclosureViewer(principal), 'read');
-  const captured = await captureHomeDocumentEvidence(core, { ...home, disclosure: home.disclosure === 'restricted' ? 'private' : 'public',
-    pages: home.selections }, target.owner === 'content' ? target.revision! : undefined);
-  const current = await readZoneHomeTarget(env, target.resource, home.revision,
-    homeDocumentVisibilityReader(registry, principal, actingSubject), disclosureViewer(principal));
-  if (!current || !isDeepStrictEqual(current, home)) throw new GovernanceDenied('Target is unavailable');
-  const visible = await fence(async () => {
+  disclosureViewer(principal), 'read', async () => {
     const visibility = await readResourceVisibility(env, home.zone,
       homeDocumentVisibilityReader(registry, principal, actingSubject));
     return new Set(visibility?.readable && (visibility.visibility === 'private') === (home.disclosure === 'restricted')
       && visibility.space === home.space ? [home.zone] : []);
   });
+  const captured = await captureHomeDocumentEvidence(core, { ...home, disclosure: home.disclosure === 'restricted' ? 'private' : 'public',
+    pages: home.selections }, target.owner === 'content' ? target.revision! : undefined);
+  const current = await readZoneHomeTarget(env, target.resource, home.revision,
+    homeDocumentVisibilityReader(registry, principal, actingSubject), disclosureViewer(principal));
+  if (!current || !isDeepStrictEqual(current, home)) throw new GovernanceDenied('Target is unavailable');
+  const visible = await fence();
   if (!visible.has(home.resource)) throw new GovernanceDenied('Target is unavailable');
   return captured;
 }

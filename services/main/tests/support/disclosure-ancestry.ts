@@ -14,7 +14,7 @@ export const fixtureDisclosureCut = { recoveryGeneration: '0', enforcementCut: '
  * publication. Production sources must establish those facts in owner storage. */
 export function configureFixtureDisclosureAncestry(env: WorkActivationEnvironment,
   parentFor: (target: DisclosureTarget) => Omit<OwnerEstablishedGraphParent,
-    'owner' | 'kind' | 'relationshipBasis'> | undefined): void {
+    'owner' | 'kind' | 'relationshipBasis'> | undefined, beforeReread?: (owner: 'graph' | 'content' | 'media' | 'review') => void): void {
   const selected = new Map<string, DisclosureTarget>();
   const evidence = (target: DisclosureTarget): DisclosureAncestryEvidence => {
     const parent = parentFor(target);
@@ -37,7 +37,10 @@ export function configureFixtureDisclosureAncestry(env: WorkActivationEnvironmen
   for (const owner of ['graph', 'content', 'media', 'review'] as const)
     configureDisclosureAncestrySource(env, owner, {
       read: async targets => targets.map(evidence),
-      reread: async bases => bases.map(basis => evidence(selected.get(basis.token)!)),
+      reread: async bases => {
+        beforeReread?.(owner);
+        return bases.map(basis => evidence(selected.get(basis.token)!));
+      },
     });
 }
 

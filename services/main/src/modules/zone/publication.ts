@@ -206,11 +206,11 @@ async function capturePublicationHomeFence(env: WorkActivationEnvironment,
     targets: [{ owner: 'graph', resource, revision: state.bundle.homeRevision, component: 'record' },
       { owner: 'content', resource: page.page, revision: page.revisionId, component: 'body',
         occurrence: { owner: 'graph', kind: 'publication', resource, revision: state.bundle.homeRevision } }] }],
-  currentDisclosureViewer(), 'read');
-  return async () => (await fence(async () => {
+  currentDisclosureViewer(), 'read', async () => {
     const zones = await readZoneVisibilities(env, [state.zone]);
     return new Set(zones.get(state.zone)?.readable && zones.get(state.zone)?.visibility === 'public' ? [state.zone] : []);
-  })).has(resource);
+  });
+  return async () => (await fence()).has(resource);
 }
 
 async function homeCutVisible(env: WorkActivationEnvironment,

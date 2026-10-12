@@ -171,8 +171,10 @@ for (const withAvatars of [false, true]) test(`64 published homes ${withAvatars 
   };
   const batch = await targetSummaries(h.session, homes.map(home => home.resource));
   expect(batch.summaries.filter(summary => summary.status === 'available')).toHaveLength(64);
-  expect(visibilityCalls).toBe(3);
+  expect(visibilityCalls).toBe(4);
   expect(calls).toBeLessThan(160);
+  // The counter includes both the owner capture and its fresh final policy cut.
+  expect(batch.cost.accessQueries).toBe(h.policyTargets.length);
 });
 
 test('native home visibility follows its publication owner rather than a copied Zone disclosure flag', async () => {
@@ -199,7 +201,7 @@ test('private home resolves only with live owning Zone read authority and report
     resource: h.resource, base: 'resource', work: null, revision: h.revision,
     disclosure: 'restricted', contentSelections: h.selections,
   });
-  expect(h.authority).toEqual([h.zone, h.zone, h.zone, h.zone, h.zone, h.zone]);
+  expect(h.authority).toEqual(Array(9).fill(h.zone));
 });
 
 test('draft, erased and foreign home cuts never resolve as current published targets', async () => {

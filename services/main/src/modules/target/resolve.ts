@@ -490,13 +490,13 @@ async function resolveSummarizedTargets(session: TargetReadSession, summaries: S
     const reader = targetSummaryReader(session);
     const expectedVisibility = new Map(homeEntries.map(entry => [entry.zone,
       targets.get(entry.resource)!.disclosure === 'public' ? 'public' : 'private']));
-    const fence = await captureHomeDisclosureFence(session.deps.environment, homeEntries, reader.viewer!, 'read');
-    const visible = await fence(async () => {
+    const fence = await captureHomeDisclosureFence(session.deps.environment, homeEntries, reader.viewer!, 'read', async () => {
       const policies = await readZoneVisibilities(session.deps.environment, [...new Set(homeEntries.map(entry => entry.zone))],
         { realmReadProof: reader.realmReadProof, zoneReadable: reader.canReadSemantic });
       return new Set([...policies].filter(([zone, policy]) => policy.readable
         && policy.visibility === expectedVisibility.get(zone)).map(([zone]) => zone));
     });
+    const visible = await fence();
     for (const entry of homeEntries) if (!visible.has(entry.resource)) {
       if (!inventory) throw new TargetUnavailable();
       targets.delete(entry.resource);

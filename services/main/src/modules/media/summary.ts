@@ -815,7 +815,10 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
       ...(assetIndexes.has(reference) ? [targets[assetIndexes.get(reference)!]!] : [])],
   }));
   const homeFence = homeEntries.length ? await captureHomeDisclosureFence(env, homeEntries,
-    reader.viewer ?? ANONYMOUS_VIEWER, input.channel ?? 'summary', client) : undefined;
+    reader.viewer ?? ANONYMOUS_VIEWER, input.channel ?? 'summary', async () => {
+      const current = await readHomeVisibility();
+      return new Set([...current].filter(([zone, isPublic]) => homeVisibility.get(zone) === isPublic).map(([zone]) => zone));
+    }, client, cost) : undefined;
   const final = { decisions: [] as DisclosureDecision[], anonymousNames: [] as DisclosureDecision[],
     anonymousNameProbes: 0, parentHeadQueries: 0 };
   for (let offset = 0; offset < targets.length; offset += DISCLOSURE_COST.batch) {
@@ -884,10 +887,7 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
   if (available.some(summary => ['space','realm','zone'].includes(summary.type))) cost.graphQueries++;
   for (const summary of available) summary.address = addresses.get(summary.reference)!;
   if (homeFence) {
-    const visible = await homeFence(async () => {
-      const current = await readHomeVisibility();
-      return new Set([...current].filter(([zone, isPublic]) => homeVisibility.get(zone) === isPublic).map(([zone]) => zone));
-    });
+    const visible = await homeFence();
     for (const [index, summary] of summaries.entries()) {
       if (homes.has(summary.reference) && !visible.has(summary.reference)) {
         summaries[index] = { reference: summary.reference, status: 'unavailable' };

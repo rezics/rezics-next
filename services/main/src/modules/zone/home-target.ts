@@ -86,17 +86,17 @@ export async function readZoneHomeTarget(env: WorkActivationEnvironment, resourc
     targets: [{ owner: 'graph', resource, revision: cut, component: 'record' },
       ...receipt.pages.map(page => ({ owner: 'content' as const, resource, revision: page.revisionId,
         component: 'body' as const, occurrence: { owner: 'graph' as const, kind: 'publication' as const, resource, revision: cut } }))],
-  }], viewer, 'read');
+  }], viewer, 'read', async () => {
+    const current = await readResourceVisibility(env, owner.zone, reader);
+    return new Set(current?.readable && current.visibility === visibility.visibility
+      && current.space === visibility.space && current.realm === visibility.realm ? [owner.zone] : []);
+  });
   const target: ZoneHomeTarget = { resource, revision: cut, zone: owner.zone,
     disclosure: visibility.visibility === 'private' ? 'restricted' : 'public',
     space: visibility.space, ...(owner.author ? { author: owner.author } : {}),
     realm: owner.realm ?? visibility.realm,
     selections: receipt.pages.map(page => ({ revisionId: page.revisionId, variantId: page.variantId,
       byteDigest: page.byteDigest!, ...(page.language ? { language: page.language } : {}) })) };
-  const visible = await fence(async () => {
-    const current = await readResourceVisibility(env, owner.zone, reader);
-    return new Set(current?.readable && current.visibility === visibility.visibility
-      && current.space === visibility.space && current.realm === visibility.realm ? [owner.zone] : []);
-  });
+  const visible = await fence();
   return visible.has(resource) ? target : null;
 }
