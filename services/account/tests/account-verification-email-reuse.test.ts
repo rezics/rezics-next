@@ -11,15 +11,16 @@ import { cookies, recoveryProof } from './recovery-fixture.ts';
 const link = (text: string) => /https?:\/\/\S+/.exec(text)![0];
 type Fixture = Awaited<ReturnType<typeof accountFixture>>;
 
-async function waitForBlockedQuery(f: Fixture, statement: string) {
+async function waitForBlockedQuery(f: Fixture, statements: string[]) {
   for (let attempt = 0; attempt < 100; attempt++) {
     const blocked = await f.pool.query(`SELECT 1 FROM pg_stat_activity
       WHERE datname = current_database() AND wait_event_type = 'Lock'
-        AND query LIKE $1 AND cardinality(pg_blocking_pids(pid)) > 0`, [`%${statement}%`]);
+        AND query LIKE ANY($1::text[]) AND cardinality(pg_blocking_pids(pid)) > 0`,
+    [statements.map(statement => `%${statement}%`)]);
     if (blocked.rowCount) return;
     await Bun.sleep(5);
   }
-  throw new Error(`No blocked query observed for ${statement}`);
+  throw new Error(`No blocked query observed for ${statements.join(', ')}`);
 }
 
 for (const first of ['verification', 'operator-note'] as const) {
@@ -72,7 +73,7 @@ for (const first of ['verification', 'operator-note'] as const) {
       const secondRequest = first === 'verification' ? note() : verify();
       pending.push(secondRequest);
       await waitForBlockedQuery(f, first === 'verification'
-        ? 'rezics_account_security' : 'FOR UPDATE');
+        ? ['rezics_account_security', 'rezics_account_operator_note'] : ['FOR UPDATE', 'FOR SHARE']);
       resumed.resolve();
       const [firstResponse, secondResponse] = await Promise.all(pending);
       const verified = first === 'verification' ? firstResponse! : secondResponse!;
