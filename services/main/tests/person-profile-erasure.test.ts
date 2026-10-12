@@ -16,7 +16,7 @@ import {
 import { erasePersonProfileAliases, listPersonProfileAliases, personProfileAliasesErased } from '../src/modules/address/person-profile-erasure.ts';
 import { erasePersonProfileGraph, PersonGraphErasureConflict, type PersonProfileGraphInventory } from '../src/modules/agent/erasure.ts';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
-import { AliasRegistry } from '../src/modules/address/registry.ts';
+import { AliasRegistry, AliasConflict } from '../src/modules/address/registry.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const native = () => `https://rezics.com/id/${randomUUID()}`;
@@ -338,7 +338,7 @@ test('Person alias copies erase by exact holder across delegated receipts; perma
   const before = await aliasRows(profile.person);
   const unrelatedBefore = await aliasRows(unrelated.profile.person);
   const organizationBefore = await aliasRows(organization.person);
-  const inventory = await listPersonProfileAliases(access, relay, proof, 6);
+  const inventory = await sealedAliases(proof, 6);
   expect(inventory.entries).toHaveLength(6);
   expect(new Set(inventory.entries.map(entry => entry.owner))).toEqual(new Set(['registry', 'history', 'receipt', 'import']));
   expect(JSON.stringify(inventory)).not.toContain(copies.key);
@@ -369,24 +369,24 @@ test('Person alias copies erase by exact holder across delegated receipts; perma
   expect(await aliasRows(profile.person)).toEqual(after);
 });
 
-test('changed alias receipt inventory refuses partial sanitation and can be resealed for recovery', async () => {
+test('changed alias receipt inventory and recollection refuse under the original seal', async () => {
   const { owner, profile, proof } = await endedFixture();
   const copies = await aliasCopies(owner, profile.person);
-  const inventory = await listPersonProfileAliases(access, relay, proof, 6);
+  const inventory = await sealedAliases(proof, 6);
   await access.query(`UPDATE access.alias_receipt SET result = result || '{"changedAt":"changed"}'::jsonb
     WHERE principal_id = $1 AND idempotency_key = $2`, [copies.receiptPrincipal, copies.idempotencyKey]);
   const changed = await aliasRows(profile.person);
   await expect(erasePersonProfileAliases(access, relay, proof, inventory)).rejects.toBeInstanceOf(PersonProfileErasureStale);
   expect(await aliasRows(profile.person)).toEqual(changed);
   const recovered = await listPersonProfileAliases(access, relay, proof, 6);
-  await erasePersonProfileAliases(access, relay, proof, recovered);
-  expect(await personProfileAliasesErased(access, proof)).toBe(true);
+  await expect(erasePersonProfileAliases(access, relay, proof, recovered)).rejects.toBeInstanceOf(PersonProfileErasureStale);
+  expect(await aliasRows(profile.person)).toEqual(changed);
 });
 
 test('alias sanitation rejects forged fingerprints, bypass stamps and replanted names', async () => {
   const { owner, profile, proof } = await endedFixture();
   const copies = await aliasCopies(owner, profile.person);
-  const inventory = await listPersonProfileAliases(access, relay, proof, 6);
+  const inventory = await sealedAliases(proof, 6);
   const entries = inventory.entries.map(entry => ({ ...entry, fingerprint: digest('forged') }));
   await expect(erasePersonProfileAliases(access, relay, proof, { entries, digest: digest(JSON.stringify(entries)) }))
     .rejects.toBeInstanceOf(PersonProfileErasureStale);
@@ -455,4 +455,52 @@ test('Agent owner refuses an omitted historical revision before dispatching the 
     { dataEpoch: 'fixture', routingEpoch: '1' }, proof,
     { ...complete, revisions: [complete.revisions[0]!] })).rejects.toBeInstanceOf(PersonGraphErasureConflict);
   expect(commands).toBe(0);
+});
+
+async function sealedAliases(proof: PersonProfileErasureProof, limit: number) {
+  const inventory = await listPersonProfileAliases(access, relay, proof, limit);
+  await relay.query(`INSERT INTO relay.erasure_target (erasure_id,owner,target_kind,target_ref)
+    VALUES ($1,'access','person_alias_inventory',$2)`, [proof.erasureId, `${proof.person}|${inventory.digest}`]);
+  return inventory;
+}
+
+test('unlanded Person migrations keep the retired Agent handle bridge absent and use the principal index', async () => {
+  expect((await access.query("SELECT to_regclass('access.agent_handle') AS bridge")).rows[0]?.bridge).toBeNull();
+  const { proof } = await endedFixture();
+  const definition = (await access.query<{ body: string }>(`SELECT pg_get_functiondef(
+    'access.assert_person_profile_erasure(text)'::regprocedure) AS body`)).rows[0]!.body;
+  const condition = /JOIN access.principal p ON ([^\n]+)/.exec(definition)![1]!.replaceAll('context', '$1::jsonb');
+  const client = await access.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SET LOCAL enable_seqscan = off');
+    const plan = (await client.query(`EXPLAIN (FORMAT JSON) SELECT p.id FROM access.principal p WHERE ${condition}`,
+      [JSON.stringify(proof)])).rows[0]!['QUERY PLAN'];
+    expect(JSON.stringify(plan)).toContain('Index Cond');
+  } finally { await client.query('ROLLBACK'); client.release(); }
+});
+
+test('a live admitted Space claim cannot take an erased opaque Agent reservation', async () => {
+  const erased = await endedFixture();
+  const copies = await aliasCopies(erased.owner, erased.profile.person);
+  const sealed = await sealedAliases(erased.proof, 6);
+  await erasePersonProfileAliases(access, relay, erased.proof, sealed);
+  const live = await principal();
+  const actor = (await provision(live)).person;
+  const realm = native();
+  await access.query("INSERT INTO access.authority_subject(id,kind) VALUES ($1,'realm')", [realm]);
+  const scope = `governance:realm:${realm}`;
+  const action = 'realm.settings.manage';
+  await grantFixtureAuthority(access, { scope, requireDispatch: false,
+    representations: [{ principalId: live.id, actor, action, lifetime: 'infinity' }],
+    grant: { actor, action, lifetime: 'infinity' } });
+  const admission = new AccessAdmissionRegistry(access);
+  const aliases = new AliasRegistry(access);
+  const holder = native();
+  const claim = (alias: string) => admission.withOwnerAuthority({ principal: live, actingSubject: actor, scope, action },
+    client => aliases.write(client, live, { scope: 'space', holder, actingSubject: actor,
+      operation: 'claim', alias, expectedRevision: null, idempotencyKey: randomUUID() }, actor));
+  await expect(claim(copies.key)).rejects.toBeInstanceOf(AliasConflict);
+  expect((await access.query("SELECT 1 FROM access.alias_registry WHERE scope='space' AND holder=$1", [holder])).rowCount).toBe(0);
+  expect(await claim(`newspace${randomUUID().slice(0,8)}`)).toMatchObject({ holder, scope: 'space', state: 'current' });
 });
