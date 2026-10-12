@@ -8,8 +8,8 @@ import * as fixture from '../features/tracking/fixtures.ts';
 import { copyOf } from '../features/tracking/messages.ts';
 import { editionListed, editionOptions } from '../features/tracking/model.ts';
 import { AttemptCard } from '../features/tracking/attempt-card.tsx';
-import { applyEditionPage, EditionContinuation, EditionFilterNote, editionContinuation, editionPickers } from '../features/tracking/tracking-sheet.tsx';
-import type { Editions, Realization, Release } from '../features/tracking/types.ts';
+import { applyEditionPage, EditionContinuation, editionContinuation } from '../features/tracking/tracking-sheet.tsx';
+import type { Editions, Realization, Release, Session } from '../features/tracking/types.ts';
 
 const t = copyOf('en');
 const work = fixture.saoOne;
@@ -90,44 +90,54 @@ describe('edition pages', () => {
     expect(calls.at(-1)).toEqual({ list: 'releases', limit: 20, cursor: '20' });
   });
 
+  /** The card of one attempt, with the sheet's filter text and the editions loaded so far. */
+  const cardOf = (session: Session, editions: Editions, editionQuery: string) => renderToStaticMarkup(createElement(AttemptCard,
+    { session, title: 'Read', work, editions, editionQuery, api: pagedApi({ realizations: [], releases: [] }).api, locale: 'en', t,
+      onChange: () => {} }));
+  const holdingOf = (release: Release, overrides: Partial<Session> = {}) => fixture.session({ selections: [
+    ...fixture.session().selections,
+    { target: { ...fixture.session().target, resource: release.id, base: 'release' }, language: 'en', format: null, progress: 'locator' }],
+  ...overrides });
+
   test('a filter with no loaded match says more may exist and offers the next page; the match is reachable from it', async () => {
     const { api } = pagedApi({ realizations: [], releases: releases(21) });
     const first = await api.editions(work);
     if (!first.ok) throw new Error('first page failed');
-    const note = (editions: Editions, failed = false) => renderToStaticMarkup(createElement(EditionFilterNote,
-      { work, editions, failed, locale: 'en', t, query: 'Release 21', pickers: [null] }));
     expect(names(first.data, 'Release 21')).toEqual([]);
-    expect(note(first.data)).toContain(t.noMatchingEditionsYet);
-    expect(note(first.data, true)).toContain(t.noMatchingEditionsYet);
+    expect(cardOf(fixture.session(), first.data, 'Release 21')).toContain(t.noMatchingEditionsYet);
     expect(control(first.data)).toContain(t.moreEditions);
 
     const second = await api.editions(work, { releases: first.data.releasesCursor! });
     if (!second.ok) throw new Error('second page failed');
     const joined = appendEditionPage(first.data, second.data, { realizations: false, releases: true });
     expect(names(joined, 'Release 21')).toEqual([fixture.iri('e21')]);
-    expect(note(joined)).toBe('');
+    const card = cardOf(fixture.session(), joined, 'Release 21');
+    expect(card).not.toContain(t.noMatchingEditionsYet);
+    expect(card).toContain('Release 21 ');
   });
 
-  test('an edition an attempt already holds is no match for it, so the note and the next page still follow', async () => {
+  test("each attempt's note follows its own matches: one that holds the only loaded match says so while another still lists it", async () => {
     const all = releases(21);
     all[0] = { ...all[0]!, title: { ...all[0]!.title, value: 'Balance' } };
     all[20] = { ...all[20]!, title: { ...all[20]!.title, value: 'Balance patch' } };
     const { api } = pagedApi({ realizations: [], releases: all });
     const first = await api.editions(work);
     if (!first.ok) throw new Error('first page failed');
-    const holding = fixture.session({ selections: [
-      ...fixture.session().selections,
-      { target: { ...fixture.session().target, resource: all[0]!.id, base: 'release' }, language: 'en', format: null, progress: 'locator' }] });
-    const note = (pickers: Parameters<typeof editionPickers>[0]) => renderToStaticMarkup(createElement(EditionFilterNote,
-      { work, editions: first.data, failed: false, locale: 'en', t, query: 'Balance', pickers: editionPickers(pickers) }));
-    // Only the open attempt shows a picker, and it holds the one loaded match.
-    expect(editionPickers([holding])).toEqual([holding]);
-    expect(note([holding])).toContain(t.noMatchingEditionsYet);
+    const active = holdingOf(all[0]!);
+    const older = fixture.session({ id: fixture.iri('a02'), state: 'finished', finishedOn: '2026-08' });
+    // The active attempt holds "Balance", so nothing loaded is left for it; the older one still lists it.
+    expect(cardOf(active, first.data, 'Balance')).toContain(t.noMatchingEditionsYet);
+    const other = cardOf(older, first.data, 'Balance');
+    expect(other).not.toContain(t.noMatchingEditionsYet);
+    expect(other).toContain('Balance ');
     expect(control(first.data)).toContain(t.moreEditions);
-    // Once it ends, the form that starts an attempt offers the match again.
-    const ended = { ...holding, state: 'finished' as const, finishedOn: '2026-10' };
-    expect(editionPickers([ended])).toEqual([ended, null]);
-    expect(note([ended])).toBe('');
+
+    const second = await api.editions(work, { releases: first.data.releasesCursor! });
+    if (!second.ok) throw new Error('second page failed');
+    const joined = appendEditionPage(first.data, second.data, { realizations: false, releases: true });
+    const after = cardOf(active, joined, 'Balance');
+    expect(after).not.toContain(t.noMatchingEditionsYet);
+    expect(after).toContain('Balance patch');
   });
 
   test('an existing attempt lists only the filtered editions, and the one on the next page once it is loaded', async () => {
@@ -137,8 +147,7 @@ describe('edition pages', () => {
     const second = await api.editions(work, { releases: first.data.releasesCursor! });
     if (!second.ok) throw new Error('second page failed');
     const joined = appendEditionPage(first.data, second.data, { realizations: false, releases: true });
-    const card = (editions: Editions, editionQuery: string) => renderToStaticMarkup(createElement(AttemptCard,
-      { session: fixture.session(), title: 'First read', work, editions, editionQuery, api, locale: 'en', t, onChange: () => {} }));
+    const card = (editions: Editions, editionQuery: string) => cardOf(fixture.session(), editions, editionQuery);
     expect(card(first.data, '')).toContain('Release 1 ');
     expect(card(first.data, 'Release 21')).not.toContain('Release 1 ');
     expect(card(joined, 'Release 21')).toContain('Release 21 ');
@@ -149,8 +158,7 @@ describe('edition pages', () => {
     const { api } = pagedApi({ realizations: [], releases: releases(3) });
     const read = await api.editions(work);
     if (!read.ok) throw new Error('page failed');
-    const markup = renderToStaticMarkup(createElement(EditionFilterNote,
-      { work, editions: read.data, failed: false, locale: 'en', t, query: 'nothing like this', pickers: [null] }));
+    const markup = cardOf(fixture.session(), read.data, 'nothing like this');
     expect(markup).toContain(t.noMatchingEditions);
     expect(markup).not.toContain(t.noMatchingEditionsYet);
   });

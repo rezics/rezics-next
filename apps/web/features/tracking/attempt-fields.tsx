@@ -8,8 +8,8 @@ import { useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { formatLabel, locatorParts, unitLabel } from './display.ts';
 import type { Copy } from './messages.ts';
-import { dateText, type EditionOption, isoDatePlaceholder, knownFormats, locatorOf, parsePosition, today, validDate } from './model.ts';
-import type { LocatorUnit, Selection, Session } from './types.ts';
+import { dateText, type EditionOption, editionsRemain, isoDatePlaceholder, knownFormats, locatorOf, parsePosition, today, validDate } from './model.ts';
+import type { Editions, LocatorUnit, Selection, Session } from './types.ts';
 
 // The small forms of an attempt. Each sends one change and says nothing about the result: the card
 // that owns the attempt applies Main's answer, or shows the conflict.
@@ -73,6 +73,14 @@ export function EditionPicker({ options, nameOf, t, busy, submit, onSubmit, allo
     {secondary ? <Button size="sm" variant="ghost" disabled={busy || (!allowWork && !chosen)}
       onClick={() => void secondary.onSubmit(chosen, format || null)}>{secondary.label}</Button> : null}
   </div>;
+}
+
+/**
+ * Said by a picker whose own filter leaves it nothing to offer. Editions load a page at a time and the filter only reads
+ * the loaded ones, so while another page remains it says the match may still be there rather than that none exists.
+ */
+export function EditionFilterNote({ editions, t }: { editions: Editions | null; t: Copy }) {
+  return <p className="text-muted-foreground text-xs">{editionsRemain(editions) ? t.noMatchingEditionsYet : t.noMatchingEditions}</p>;
 }
 
 /** Where the reader is in one edition: current and furthest apart, and a form to move the current one. */

@@ -10,10 +10,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { appendEditionPage, type EditionPageRequest, type TrackingApi } from './api.ts';
 import { AttemptCard } from './attempt-card.tsx';
-import { EditionPicker } from './attempt-fields.tsx';
+import { EditionFilterNote, EditionPicker } from './attempt-fields.tsx';
 import { editionName } from './display.ts';
 import { copyOf, type Copy } from './messages.ts';
-import { editionListed, editionOptions, hasEnded, isOpen, numbered, selectionInput } from './model.ts';
+import { editionFilterMissed, editionListed, editionOptions, editionsRemain, hasEnded, isOpen, numbered, selectionInput } from './model.ts';
 import type { Editions, Session } from './types.ts';
 
 type Attempts = { status: 'loading' } | { status: 'failed' } | { status: 'ready'; items: Session[]; next: string | null };
@@ -21,7 +21,7 @@ type Attempts = { status: 'loading' } | { status: 'failed' } | { status: 'ready'
 /** What the sheet offers once a page of editions is in hand: another page, a retry, or nothing. */
 export function editionContinuation(editions: Editions | null, failed: boolean): 'more' | 'retry' | null {
   if (failed && editions) return 'retry';
-  return editions?.realizationsCursor || editions?.releasesCursor ? 'more' : null;
+  return editionsRemain(editions) ? 'more' : null;
 }
 
 /**
@@ -128,7 +128,8 @@ function StartAttempt({ work, editions, api, locale, t, reread, query, onStarted
   const [failed, setFailed] = useState(false);
   const nameOf = (option: { resource: string; kind: 'work' | 'realization' | 'release' }) =>
     editionName(option.resource, option.kind, editions, locale, t);
-  const options = editionOptions(work, editions, null).filter(option => editionListed(nameOf(option), query));
+  const offered = editionOptions(work, editions, null);
+  const options = offered.filter(option => editionListed(nameOf(option), query));
   async function start(state: 'planned' | 'active', option: Parameters<typeof selectionInput>[0] | null, format: string | null) {
     setBusy(true);
     setFailed(false);
@@ -144,6 +145,7 @@ function StartAttempt({ work, editions, api, locale, t, reread, query, onStarted
     <EditionPicker options={options} nameOf={nameOf} t={t} busy={busy} submit={t.startReading} allowWork
       onSubmit={(option, format) => start('active', option, format)}
       secondary={{ label: t.plan, onSubmit: (option, format) => start('planned', option, format) }} />
+    {editionFilterMissed(offered, nameOf, query) ? <EditionFilterNote editions={editions} t={t} /> : null}
     {failed ? <p role="status" className="text-destructive-foreground text-xs">{t.saveFailed}</p> : null}
   </section>;
 }
@@ -158,39 +160,6 @@ export function EditionContinuation({ editions, failed, busy, t, onMore }: {
     {mode === 'retry' ? <p role="alert" className="text-destructive-foreground text-xs">{t.moreEditionsFailed}</p> : null}
     <Button variant="outline" size="sm" disabled={busy} onClick={onMore}>{mode === 'retry' ? t.retry : t.moreEditions}</Button>
   </div>;
-}
-
-/**
- * The edition pickers the sheet shows: one on every attempt, and the form that starts an attempt (`null`) once none is open.
- * The filter note counts the editions each of these can still offer, not the editions listed.
- */
-export function editionPickers(attempts: readonly Session[]): (Session | null)[] {
-  return attempts.some(item => !hasEnded(item)) ? [...attempts] : [...attempts, null];
-}
-
-/**
- * Whether any picker the sheet shows still lists an edition the filter keeps. Each picker lists only what its own attempt
- * does not hold yet (`null` is the form that starts an attempt), so an edition one attempt already holds is no match for it.
- */
-function listedEditionMatches(work: string, editions: Editions | null, locale: UiLocale, t: Copy, query: string,
-  pickers: readonly (Session | null)[]): boolean {
-  if (!query.trim()) return true;
-  return pickers.some(session => editionOptions(work, editions, session).some(option => option.kind !== 'work'
-    && editionListed(editionName(option.resource, option.kind, editions, locale, t), query)));
-}
-
-/**
- * Said when the filter leaves no edition any picker can offer. Editions load a page at a time and the filter only reads
- * the loaded ones, so while another page remains the note says the match may still be there rather than that none exists.
- */
-export function EditionFilterNote({ work, editions, failed, locale, t, query, pickers }: {
-  work: string; editions: Editions | null; failed: boolean; locale: UiLocale; t: Copy; query: string;
-  /** The attempts that show an edition picker, and `null` where the form that starts an attempt does. */
-  pickers: readonly (Session | null)[];
-}) {
-  if (listedEditionMatches(work, editions, locale, t, query, pickers)) return null;
-  const more = editionContinuation(editions, failed) !== null;
-  return <p className="text-muted-foreground text-xs">{more ? t.noMatchingEditionsYet : t.noMatchingEditions}</p>;
 }
 
 function SheetAttempts({ work, api, locale, t, open }: {
@@ -208,8 +177,7 @@ function SheetAttempts({ work, api, locale, t, open }: {
   const rows = numbered(attempts.items);
   const openCount = attempts.items.filter(isOpen).length;
   const ended = attempts.items.some(hasEnded);
-  const pickers = editionPickers(attempts.items);
-  const starting = pickers.includes(null);
+  const starting = !attempts.items.some(item => !hasEnded(item));
   // A short list is chosen from the select. The filter appears once another page remains, or enough editions
   // are listed that the one the reader wants is no longer obvious.
   const listedCount = (editions?.realizations.length ?? 0) + (editions?.releases.length ?? 0);
@@ -222,8 +190,6 @@ function SheetAttempts({ work, api, locale, t, open }: {
       <Input size="sm" value={query} className="w-full" aria-label={t.filterEditions}
         onChange={event => setQuery(event.target.value)} />
     </Field> : null}
-    {canFilter ? <EditionFilterNote work={work} editions={editions} failed={moreFailed} locale={locale} t={t} query={query}
-      pickers={pickers} /> : null}
     <EditionContinuation editions={editions} failed={moreFailed} busy={moreBusy} t={t} onMore={() => void moreEditions()} />
     {/* One attempt at a time: a second would be two open attempts. The form returns once the open one ends. */}
     {starting

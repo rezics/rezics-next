@@ -244,6 +244,41 @@ describe('places a subject can be rated in', () => {
         expect(picker.getSnapshot().items.map(item => item.label)).toEqual(['Summer balance']);
       });
 
+    test('a restart replaces what the invalidated read listed: a choice from it is no longer there', async () => {
+      const pages = [['Alpha one'], ['Alpha two']];
+      let refusals = 0;
+      const { source } = pagedReleases(pages, (_call, cursor) => cursor?.startsWith('1.') && refusals++ === 0 ? moved : null);
+      const picker = new EntityPickerSource(source.load);
+      await picker.search('alpha');
+      expect(picker.getSnapshot().items.map(item => item.label)).toEqual(['Alpha one']);
+      // Main now holds another read: the first release is renamed, so only the fresh read's items are still true.
+      pages[0] = ['Zulu'];
+      await picker.more();
+      expect(picker.getSnapshot()).toMatchObject({ error: false, complete: true });
+      expect(picker.getSnapshot().items.map(item => item.label)).toEqual(['Alpha two']);
+    });
+
+    test('a restart that fails is still a restart: the retry sends no cursor', async () => {
+      const stale = `${MAX_RELEASE_PAGES}.0`;
+      let phase = 0;
+      const { cursors, source } = pagedReleases(manyPages(), (_call, cursor) => {
+        if (cursor === stale && phase === 0) { phase = 1; return moved; }
+        if (phase === 1) { phase = 2; return unavailable; }
+        return null;
+      });
+      const picker = new EntityPickerSource(source.load);
+      await picker.search('balance');
+      await picker.more();
+      expect(picker.getSnapshot()).toMatchObject({ error: true, nextCursor: stale });
+      const before = cursors.length;
+      await picker.retry();
+      expect(cursors[before]).toBeUndefined();
+      expect(cursors.filter(cursor => cursor === stale)).toHaveLength(1);
+      expect(picker.getSnapshot()).toMatchObject({ error: false, complete: false });
+      await picker.more();
+      expect(picker.getSnapshot().items.map(item => item.label)).toEqual(['Summer balance']);
+    });
+
     test('a read that is refused again after its restart is an error, and an invalid first page is not retried', async () => {
       const always = pagedReleases(manyPages(), () => moved);
       await expect(always.source.load({ q: 'balance', cursor: null })).rejects.toThrow();

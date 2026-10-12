@@ -5,11 +5,11 @@ import { Button } from '@rezics/ui/button';
 import { useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import type { StaleChange, TrackingApi } from './api.ts';
-import { DateField, EditionPicker, PositionEditor } from './attempt-fields.tsx';
+import { DateField, EditionFilterNote, EditionPicker, PositionEditor } from './attempt-fields.tsx';
 import { ConflictPanel } from './conflict-panel.tsx';
 import { editionName, formatLabel, moveLabel, stateLabel } from './display.ts';
 import type { Copy } from './messages.ts';
-import { conflictRows, editionListed, editionOptions, hasEnded, movesFrom, selectionInput, takesPosition, withoutVersion } from './model.ts';
+import { conflictRows, editionFilterMissed, editionListed, editionOptions, hasEnded, movesFrom, selectionInput, takesPosition, withoutVersion } from './model.ts';
 import type { Editions, LocatorUnit, Session, SessionChanges } from './types.ts';
 
 type Conflict = { current: Session; submitted: StaleChange };
@@ -52,6 +52,7 @@ export function AttemptCard({ session, title, work, editions, editionQuery = '',
     editionName(option.resource, option.kind, editions, locale, t);
   const options = editionOptions(work, editions, session);
   const visible = options.filter(option => editionListed(nameOf(option), editionQuery));
+  const filterMissed = editionFilterMissed(options, nameOf, editionQuery);
 
   return <article aria-label={title} data-session={session.id} data-state={session.state} className="grid gap-4 rounded-2xl border border-border/60 p-4">
     <header className="flex flex-wrap items-center justify-between gap-2">
@@ -98,7 +99,9 @@ export function AttemptCard({ session, title, work, editions, editionQuery = '',
         <EditionPicker options={visible} nameOf={nameOf} t={t} busy={busy} submit={t.addEdition} allowWork={false}
           onSubmit={(option, format) => option ? apply({ addSelections: [selectionInput(option, format)] }) : Promise.resolve(false)} />
         <p className="text-muted-foreground text-xs">{t.editionsNote}</p>
-      </> : options.length ? null : editions ? <p className="text-muted-foreground text-xs">{t.noEditionsLeft}</p> : null}
+      </> : null}
+      {filterMissed ? <EditionFilterNote editions={editions} t={t} />
+        : !visible.length && !options.length && editions ? <p className="text-muted-foreground text-xs">{t.noEditionsLeft}</p> : null}
       {failed ? <p role="status" className="text-destructive-foreground text-xs">{t.saveFailed}</p> : null}
     </div>
   </article>;

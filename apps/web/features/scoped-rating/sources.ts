@@ -71,19 +71,25 @@ export function releaseSource({ work, actingSubject, label, main = () => browser
   work: string; actingSubject?: string; label?: string; main?: () => MainClient;
 }): FrameSource {
   const id = idOf(work);
+  // A cursor Main refused belongs to a read that no longer holds: whatever happens after the refusal, a retry of it
+  // starts from the first page, and a later cursor is only ever one that a fresh read issued.
+  const refused = new Set<string>();
   return { id: `release:${work}`, dimension: 'release', label, async load({ q, cursor }) {
     if (!id) return { items: [], nextCursor: null, complete: true };
     const needle = q.trim().toLocaleLowerCase();
     const items: FrameOption[] = [];
-    let next = cursor;
-    let restarted = false;
+    let next = cursor && refused.has(cursor) ? null : cursor;
+    let restarted = next !== cursor;
+    let retried = false;
     let pages = 0;
     while (pages < MAX_RELEASE_PAGES) {
       const { data, error } = await main().v1.works({ id }).releases.get({ query: { limit: 20, ...next ? { cursor: next } : {}, ...actingSubject ? { actingSubject } : {} } });
       if (!data) {
-        // Main asks for a read it moved under, or whose cursor it no longer accepts, to start again from the first page:
-        // the stale cursor is never sent twice. Any other failure is an error the picker can retry, not an empty result.
-        if (!restarted && restartRequired(error, next)) {
+        // Main asks for a read it moved under, or whose cursor it no longer accepts, to start again from the first page.
+        // Any other failure is an error the picker can retry, not an empty result.
+        if (!retried && restartRequired(error, next)) {
+          if (next) refused.add(next);
+          retried = true;
           restarted = true;
           next = null;
           pages = 0;
@@ -98,7 +104,8 @@ export function releaseSource({ work, actingSubject, label, main = () => browser
       next = data.nextCursor ?? null;
       if (items.length || !next) break;
     }
-    return { items, nextCursor: next, complete: !next };
+    // A restarted read replaces what the picker listed from the read it left.
+    return { items, nextCursor: next, complete: !next, ...restarted ? { restarted } : {} };
   } };
 }
 

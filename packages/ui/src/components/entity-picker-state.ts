@@ -10,6 +10,8 @@ export interface EntityPickerPage<T> {
   complete: boolean;
   /** More matches may appear; refreshing restarts from the current search basis. */
   updating?: boolean;
+  /** The read began again from its first page: choices from the read it replaces are dropped, not kept beside these. */
+  restarted?: boolean;
   /** Shown with the choices. A refused query can explain itself without failing the list. */
   notice?: string;
 }
@@ -73,10 +75,11 @@ export class EntityPickerSource<T extends EntityPickerItem> {
       const page = await this.load({ q, cursor: append ? nextCursor : null });
       if (generation !== this.generation) return;
       // An unfinished traversal must provide a progressing cursor, never quietly claim an exact count.
-      if (!page.complete && !page.updating && (!page.nextCursor || (append && page.nextCursor === nextCursor)))
+      const continues = append && !page.restarted;
+      if (!page.complete && !page.updating && (!page.nextCursor || (continues && page.nextCursor === nextCursor)))
         throw new Error('Non-progressing picker page');
       if (page.updating && page.complete) throw new Error('Updating picker page cannot be complete');
-      const items = new Map((append ? this.snapshot.items : []).map((item) => [item.value, item]));
+      const items = new Map((continues ? this.snapshot.items : []).map((item) => [item.value, item]));
       page.items.forEach((item) => items.set(item.value, item));
       this.publish({
         items: [...items.values()],

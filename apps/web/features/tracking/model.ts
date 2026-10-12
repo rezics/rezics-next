@@ -104,6 +104,19 @@ export function editionListed(name: string, query: string): boolean {
   return needle === '' || name.toLowerCase().includes(needle);
 }
 
+/** Whether another page of editions remains, which a filter that matches none of the loaded ones cannot rule out. */
+export function editionsRemain(editions: Editions | null): boolean {
+  return Boolean(editions?.realizationsCursor || editions?.releasesCursor);
+}
+
+/**
+ * Whether a filter is set and none of the editions this picker could offer survives it. `options` are the picker's own
+ * (an attempt does not offer what it holds), not the editions listed for the Work; the Work itself is not an edition.
+ */
+export function editionFilterMissed(options: readonly EditionOption[], nameOf: (option: EditionOption) => string, query: string): boolean {
+  return query.trim() !== '' && !options.some(option => option.kind !== 'work' && editionListed(nameOf(option), query));
+}
+
 export function editionOptions(work: string, editions: Editions | null, session: Session | null): EditionOption[] {
   const taken = new Set(session?.selections.map(selection => selection.target.resource));
   const options: EditionOption[] = [{ resource: work, kind: 'work', language: null },
