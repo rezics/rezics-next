@@ -24,7 +24,7 @@ test('finding 5: the real Zone loop counts a healing retry as deferred even afte
       const { relayHandoffFixture } = await import(${JSON.stringify(support)});
       const { ZoneBrowseProjection } = await import(${JSON.stringify(store)});
       const f = relayHandoffFixture(2);
-      f.state.completeEvents.add(1); f.state.missing.add(2);
+      f.state.completeEvents.add(1); f.state.partial.add(2);
       const projection = new ZoneBrowseProjection(f.access, f.relay, f.env, 'relay');
       projection.usableCut = true;
       projection.start();
