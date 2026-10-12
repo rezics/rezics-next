@@ -258,9 +258,36 @@ export class ReadRankingProjection {
       if (value.structure !== row.target) throw new RankingProjectionUnavailable('Retained progress target differs');
       retrySignals.set(row.position, value);
     }
+    const reviewRetries = pending.filter(row => row.source === 'review');
+    if (reviewRetries.length) {
+      const proofs = (await this.access.query<{ position: string; work: string; occurred_at: Date; delta: number }>(
+        `SELECT position::text,work,occurred_at,delta FROM access.reader_review_rank_change
+          WHERE position=ANY($1::bigint[])`, [reviewRetries.map(row => row.position)])).rows;
+      for (const row of reviewRetries) {
+        const retained = row.source_event as { work: string; occurred_at: string; delta: number };
+        const proof = proofs.find(candidate => candidate.position === row.position);
+        if (!proof || proof.work !== row.target || retained.work !== proof.work
+          || retained.occurred_at !== proof.occurred_at.toISOString() || retained.delta !== proof.delta) {
+          throw new RankingProjectionUnavailable('Retained Review source differs');
+        }
+      }
+    }
+    // Resolve the bounded Work set before any publication row is locked.
+    // Otherwise a source can hold a later Work while waiting on this turn's
+    // population row, producing a cycle across two targets.
+    const rankedWorks = new Map<ProgressSignal, string | null>();
+    for (const value of [...retrySignals.values(), ...signals.map(signal => signal.value)]) {
+      try { rankedWorks.set(value, await this.rankedWork(value)); }
+      catch { rankedWorks.set(value, null); }
+    }
+    const works = [...new Set([
+      ...[...rankedWorks.values()].filter((work): work is string => work !== null),
+      ...reviewEvents.map(event => event.work), ...reviewRetries.map(row => row.target),
+    ])].sort();
     const client = await this.access.connect();
     try {
       await client.query('BEGIN');
+      await client.query('SELECT access.lock_read_ranking_works($1::text[])', [works]);
       const latest = await checkpoint(client);
       if (latest?.generation !== existing?.generation || latest?.contentSequence !== existing?.content_sequence
         || latest?.contentEpoch !== existing?.content_epoch || latest?.graphEpoch !== existing?.graph_epoch
@@ -282,6 +309,10 @@ export class ReadRankingProjection {
       // scan advancement still commit together in this Access transaction.
       const apply = async (source: Retained['source'], position: string, target: string,
         sourceEvent: Retained['source_event'], value?: ProgressSignal, retry = false) => {
+        // Another worker can settle a retained target without moving its scan
+        // position. A cached retry must not apply or recreate that event again.
+        if (retry && !(await client.query(`SELECT 1 FROM access.read_ranking_pending
+          WHERE generation=$1 AND source=$2 AND position=$3`, [generation,source,position])).rowCount) return;
         const retained = await client.query(`SELECT position::text FROM access.read_ranking_pending
           WHERE generation = $1 AND source = $2 AND target = $3 AND position <= $4
           ORDER BY position LIMIT 1`, [generation, source, target, position]);
@@ -292,7 +323,7 @@ export class ReadRankingProjection {
           if (blocked) throw new RankingProjectionUnavailable('Earlier target work remains pending');
           if (source === 'content' && !value) throw new RankingProjectionUnavailable('Retained progress proof is unavailable');
           const review = sourceEvent as { work: string; occurred_at: string; delta: number };
-          const work = value ? await this.rankedWork(value) : review.work;
+          const work = value ? rankedWorks.get(value) : review.work;
           if (!work) throw new RankingProjectionUnavailable('Progress Structure has no current Work');
           await refreshReadRankingAdmissions(this.env, this.access, [work], client);
           if (value) {

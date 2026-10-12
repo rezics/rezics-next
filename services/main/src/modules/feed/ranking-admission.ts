@@ -28,6 +28,9 @@ export async function refreshReadRankingAdmissions(env: WorkActivationEnvironmen
         GRAPH ${iri(GRAPHS.current)} { ?contribution rv:publicationHead ?decision } }
     }`, 512*1024)).results?.bindings ?? [];
   const update = async (client: PoolClient) => {
+    // Acquire the whole changed set before any shared population row. A source
+    // removal and a batch admission refresh must observe each other after waits.
+    await client.query('SELECT access.lock_read_ranking_works($1::text[])', [[...works].sort()]);
     await client.query('DELETE FROM access.read_ranking_admission WHERE work=ANY($1::text[])', [works]);
     const admitted = rows.flatMap(row => row.work && row.main && row.head ? [
       { work: row.work.value, head: row.head.value, main_version: row.main.value, context: 'urn:rezics:context:global' },

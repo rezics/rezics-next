@@ -39,6 +39,12 @@ Removal safety comes from the existing owners:
   A per-population removal watermark also refuses a captured page when negative
   replay finishes before its delivery probe, even if the Work still has a lower
   nonzero score. A fresh page then admits the updated materialization.
+  Source registration, admission reconciliation and context propagation share
+  one Work publication lock. Their volatile SQL statements observe membership
+  after any lock wait. A projection turn acquires its bounded, sorted Work set
+  before checkpoint and population rows; page capture takes no writer locks.
+  Retained Review retries must match the authoritative indexed source record;
+  a concurrently settled retry cannot reapply its score or recreate its removal.
 - A rebuilt generation initializes Review populations through the captured
   historical replay horizon, so an old removal cannot be rediscovered after a
   partial Review population was already served. Failed additions at that horizon
@@ -51,5 +57,7 @@ admission. Graph dependency checks are bounded to consumed facts rather than the
 whole graph position.
 
 These reads use PostgreSQL's [statement snapshot semantics](https://www.postgresql.org/docs/current/transaction-iso.html#XACT-READ-COMMITTED).
+Publication functions use [volatile-function snapshots](https://www.postgresql.org/docs/current/xfunc-volatility.html)
+after their Work lock is acquired.
 They do not require a native Java change. Realm Best/Top thread rankings and
 personal Home Trending have separate establishment and delivery contracts.

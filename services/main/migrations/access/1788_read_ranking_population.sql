@@ -4,6 +4,13 @@ CREATE SEQUENCE access.read_ranking_publication_revision;
 -- before the first Review population becomes usable. Live removals have the
 -- synchronous owner fence below; this horizon is only generation initialization.
 ALTER TABLE access.read_ranking_checkpoint ADD COLUMN review_rebuild_position bigint NOT NULL DEFAULT 0;
+CREATE FUNCTION access.lock_read_ranking_works(_works text[]) RETURNS void LANGUAGE plpgsql AS $$
+DECLARE _work text;
+BEGIN
+  FOR _work IN SELECT DISTINCT work FROM unnest(_works) targets(work) WHERE work IS NOT NULL ORDER BY work LOOP
+    PERFORM pg_advisory_xact_lock(hashtextextended('read-ranking-work:'||_work,0));
+  END LOOP;
+END $$;
 CREATE TABLE access.read_ranking_publication (
   generation uuid NOT NULL, context text NOT NULL, metric text NOT NULL,
   interval text NOT NULL, bucket date NOT NULL, revision bigint NOT NULL,
@@ -16,6 +23,9 @@ INSERT INTO access.read_ranking_publication
   FROM (SELECT DISTINCT generation,context,metric,interval,bucket FROM access.read_ranking_admitted) populations;
 CREATE FUNCTION access.publish_read_ranking_population() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
+  PERFORM access.lock_read_ranking_works(ARRAY[
+    CASE WHEN TG_OP<>'INSERT' AND OLD.metric='reviews' THEN OLD.work END,
+    CASE WHEN TG_OP<>'DELETE' AND NEW.metric='reviews' THEN NEW.work END]);
   IF TG_OP <> 'INSERT' THEN
     IF OLD.metric='reviews' THEN
       UPDATE access.read_ranking_removal SET generation=NULL
@@ -34,7 +44,9 @@ BEGIN
     IF NEW.metric='reviews' THEN
       UPDATE access.read_ranking_removal SET generation=NEW.generation
         WHERE context=NEW.context AND interval=NEW.interval AND bucket=NEW.bucket
-          AND work=NEW.work AND generation IS DISTINCT FROM NEW.generation;
+          AND work=NEW.work AND generation IS DISTINCT FROM NEW.generation
+          AND EXISTS (SELECT 1 FROM access.read_ranking_checkpoint c
+            WHERE c.singleton AND c.generation=NEW.generation);
     END IF;
     INSERT INTO access.read_ranking_publication(generation,context,metric,interval,bucket,revision) VALUES
       (NEW.generation,NEW.context,NEW.metric,NEW.interval,NEW.bucket,nextval('access.read_ranking_publication_revision'))
@@ -50,6 +62,7 @@ CREATE TRIGGER publish_read_ranking_population AFTER INSERT OR UPDATE OR DELETE 
 -- a new revision for an otherwise identical population of the same Work.
 CREATE OR REPLACE FUNCTION access.refresh_read_ranking_admission(_work text) RETURNS void LANGUAGE plpgsql AS $$
 BEGIN
+  PERFORM access.lock_read_ranking_works(ARRAY[_work]);
   WITH desired AS MATERIALIZED (
     SELECT s.generation,s.metric,s.interval,s.bucket,a.context,s.work,s.score,s.growth
     FROM access.read_ranking_score s JOIN access.read_ranking_admission a USING(work)
@@ -95,7 +108,10 @@ END $$;
 CREATE TRIGGER publish_read_ranking_removal AFTER INSERT OR UPDATE OF generation ON access.read_ranking_removal
   FOR EACH ROW EXECUTE FUNCTION access.publish_read_ranking_removal();
 CREATE FUNCTION access.register_read_ranking_removal(_id bigint,_work text,_at timestamptz)
-RETURNS void LANGUAGE sql AS $$
+RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
+  -- A distinct volatile statement takes its snapshot after any publisher wait.
+  PERFORM access.lock_read_ranking_works(ARRAY[_work]);
   INSERT INTO access.read_ranking_removal
     SELECT _id,_work,contexts.context,periods.interval,buckets.bucket,
       CASE WHEN EXISTS (SELECT 1 FROM access.read_ranking_admitted a
@@ -111,6 +127,7 @@ RETURNS void LANGUAGE sql AS $$
           ELSE INTERVAL '1 month' END)::date) buckets
     LEFT JOIN access.read_ranking_checkpoint c ON c.singleton
     ON CONFLICT DO NOTHING;
+END;
 $$;
 CREATE FUNCTION access.read_ranking_source_removal() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
@@ -123,6 +140,7 @@ CREATE TRIGGER read_ranking_source_removal AFTER INSERT ON access.reader_review_
   FOR EACH ROW EXECUTE FUNCTION access.read_ranking_source_removal();
 CREATE FUNCTION access.read_ranking_removal_context() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
+  PERFORM access.lock_read_ranking_works(ARRAY[NEW.work]);
   INSERT INTO access.read_ranking_removal(event_id,work,context,interval,bucket)
     SELECT event_id,work,NEW.context,interval,bucket FROM access.read_ranking_removal
       WHERE work=NEW.work AND context='urn:rezics:context:global'
