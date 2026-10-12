@@ -303,6 +303,7 @@ test('ranking SQL statements and actual executor rows stay constant across three
       profiles.push({ traceId: '', request: { service: 'main', route, status: response.status },
         postgresStatements: statements.length, mainCalls: null, fusekiRequests: null,
         fusekiSentBytes: null, fusekiReceivedBytes: null, fusekiEngineMs: null,
+        nativeVisits: {}, nativeVisitTotal: 0,
         accountCalls: null, otherFetches: null, unclassifiedFetches: 0,
         serverLatencyMs: 0, totalLatencyMs: 0, fusekiCalls: [], postgres: [], unobserved: [], spans: [] });
     }

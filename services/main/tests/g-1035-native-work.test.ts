@@ -1,6 +1,10 @@
 import { expect, test } from 'bun:test';
 import { fusekiCommandWork } from '../../../packages/observability/src/http-measurement.ts';
-import { summarizeWorkProfile, type WorkSpan } from '../../../tests/qa/support/work-profile.ts';
+import {
+  summarizeWorkProfile,
+  WorkProfileError,
+  type WorkSpan,
+} from '../../../tests/qa/support/work-profile.ts';
 
 test('G1035: native command trace retains fixed numeric work and refuses arbitrary upstream data', () => {
   const attributes = fusekiCommandWork(
@@ -53,7 +57,6 @@ test('G1035: compact work profiles retain native phase counters and keep unmeasu
       'rezics.fuseki.commit_ms': 20,
       'rezics.fuseki.text_adds': 0,
       'rezics.fuseki.validation_ms': 1,
-      'rezics.fuseki.arbitrary': 'PRIVATE',
     },
   };
   const query: WorkSpan = {
@@ -64,6 +67,19 @@ test('G1035: compact work profiles retain native phase counters and keep unmeasu
       'rezics.peer.service': 'fuseki',
     },
   };
+  const unknown = {
+    ...command,
+    attributes: { ...command.attributes, 'rezics.fuseki.arbitrary': 'PRIVATE' },
+  };
+  try {
+    summarizeWorkProfile([root, unknown, query], 'trace', 'parent', 25);
+    throw new Error('Expected unknown native counter rejection');
+  } catch (error) {
+    expect(error).toBeInstanceOf(WorkProfileError);
+    expect((error as WorkProfileError).code).toBe('NATIVE_COUNTER_NOT_ALLOWLISTED');
+    expect((error as WorkProfileError).counter).toBe('arbitrary');
+    expect((error as Error).message).not.toContain('PRIVATE');
+  }
   const profile = summarizeWorkProfile([root, command, query], 'trace', 'parent', 25, {
     service: 'main',
   });

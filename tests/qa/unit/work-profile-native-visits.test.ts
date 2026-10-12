@@ -8,6 +8,7 @@ import {
   assertWorkCostAtScales,
   profileRequest,
   summarizeWorkProfile,
+  WorkProfileError,
   type WorkCostContract,
   type WorkProfile,
   type WorkSpan,
@@ -87,6 +88,9 @@ test('query counters survive without commit timing and missing counters are an e
 
 test('unknown native attributes and malformed or overflowing counters refuse the profile', () => {
   expect(() => profile({ 'rezics.fuseki.unreviewed_visited': 1 })).toThrow('not allowlisted');
+  expect(() => profile({ 'rezics.fuseki.unreviewed_visited': 1 })).toThrow(WorkProfileError);
+  const unknown = { ...profile(), nativeVisits: { unreviewed_visited: 1 } };
+  expect(() => assertWorkCostAtScales([unknown, unknown, unknown], {})).toThrow(WorkProfileError);
   for (const value of [-1, 1.5, Infinity, NaN, '3', Number.MAX_SAFE_INTEGER + 1])
     expect(() => profile({ 'rezics.fuseki.public_name_heads_visited': value })).toThrow(
       'counter is invalid',

@@ -151,6 +151,7 @@ const successfulRoot = {
 function costProfiles(values: (number | null)[], scales = [4, 16, 64]): WorkProfile[] {
   return values.map((value, index) => ({
     ...summarizeWorkProfile([successfulRoot], traceId, parent, 60),
+    postgresStatements: 1,
     mainCalls: scales[index]!,
     fusekiRequests: value,
   }));

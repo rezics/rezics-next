@@ -3,11 +3,13 @@ import { join } from 'node:path';
 import { loadavg } from 'node:os';
 import { writeFileSync } from 'node:fs';
 import { root, VOLUME_KINDS, stream, dockerEnvironment } from '../../../scripts/fixture/stack.ts';
-import { createCorpusBackupDriver, type CorpusRestoreSmokeInput }
+import type { CorpusRestoreSmokeInput }
   from '../../../scripts/load/corpus-backup-driver.ts';
 import { restoreWorkProfileCorpus, workProfileDimensions, WORK_PROFILE_DIMENSIONS, WORK_PROFILE_SCALES,
   type CorpusApi, type CorpusDimensions } from '../../../scripts/load/work-profile-corpus.ts';
-import { startMediaStack, type MediaStack } from './media-support.ts';
+import type { MediaStack } from './media-support.ts';
+import { startTelemetry, flushTelemetryTraces, shutdownTelemetry } from '../../../packages/observability/src/runtime.ts';
+import { assertWorkMeterObserved, profileRequest, startWorkProfileSink } from '../support/work-profile.ts';
 import { readRetainedSeed, seedAuthorName, seedApi, seedCensus, seedSelection,
   seedDirectory, type RetainedSeedCut } from '../support/seed-checkpoints.ts';
 import { seedVerificationCuts } from '../support/seed-checkpoints.ts';
@@ -19,6 +21,7 @@ async function openCopy(input: CorpusRestoreSmokeInput) {
   const previous = new Map(Object.keys(env).map(key => [key, Bun.env[key]]));
   Object.assign(Bun.env, env);
   try {
+    const { startMediaStack } = await import('./media-support.ts');
     return await startMediaStack(`seed-checkpoint-${input.target}`, { library: true,
       ownerUrls: { access: input.apps.ACCESS_DATABASE_URL!, content: input.apps.CONTENT_DATABASE_URL!,
         relay: input.apps.ACCOUNT_RELAY_DATABASE_URL! } });
@@ -30,6 +33,11 @@ async function openCopy(input: CorpusRestoreSmokeInput) {
 }
 
 test('retained checkpoints restore exact populations and identities into isolated stores within 600 seconds', async () => {
+  const sink = startWorkProfileSink({ settleMs: 25 });
+  try {
+  // Register instrumentation before importing either the backup driver or application storage clients.
+  startTelemetry('main', { ...process.env, ...sink.env, OTEL_SERVICE_NAME: 'main' });
+  const { createCorpusBackupDriver } = await import('../../../scripts/load/corpus-backup-driver.ts');
   const retained = readRetainedSeed();
   const cuts = seedVerificationCuts(retained, Bun.env.REZICS_SEED_VERIFY_CUT);
   expect(cuts[0]).toBe(cuts[1]);
@@ -61,9 +69,23 @@ test('retained checkpoints restore exact populations and identities into isolate
       expect(postgresLog).not.toContain('database system shutdown was interrupted');
       const stack = await openCopy(input);
       try {
-        const client = seedApi(stack, (await stack.member(seedAuthorName, { stable: true, verified: true })).token);
+        const { token } = await stack.member(seedAuthorName, { stable: true, verified: true });
+        const client = seedApi(stack, token);
         const actual: CorpusDimensions = await seedCensus(client, verifying);
         expect(actual).toEqual(verifying.manifest.dimensions);
+        const { profile } = await profileRequest(sink, async headers => {
+          headers.set('authorization', `Bearer ${token}`);
+          const response = await stack.main.handle(new Request(`http://main.local/v1/works/${verifying.works[0]!.work.slice(-36)}/reader-state?actingSubject=${encodeURIComponent(retained.actor)}`, { headers }));
+          expect(response.status).toBe(200);
+          expect(await response.json()).toMatchObject({ status: { status: 'reading', version: 1 } });
+        }, { service: 'main', flush: flushTelemetryTraces });
+        assertWorkMeterObserved(profile);
+        expect((profile.postgresStatements ?? 0) + (profile.fusekiRequests ?? 0)).toBeGreaterThan(0);
+        expect(profile.otherFetches).toBe(0);
+        const attribution = { scale: verifying.manifest.scale, postgresStatements: profile.postgresStatements,
+          fusekiRequests: profile.fusekiRequests, otherFetches: profile.otherFetches, unclassifiedFetches: profile.unclassifiedFetches };
+        console.log('restored read attribution', JSON.stringify(attribution));
+        evidence.push({ restoredRead: attribution });
         for (const created of retained.cuts[2]!.works.slice(verifying.works.length))
           await expect(client.read(seedSelection(created.mainVersion))).rejects.toThrow('HTTP 404');
         if (isolatedWrite)
@@ -121,5 +143,8 @@ test('retained checkpoints restore exact populations and identities into isolate
     for (const target of targets) { try { await driver.stop(target); } catch (error) { errors.push(error); } }
     if (errors.length) throw new AggregateError(errors, 'Seed restore cleanup failed');
     console.log('seed cut verification host load end', Bun.env.REZICS_SEED_VERIFY_CUT ?? 'all', loadavg());
+  }
+  } finally {
+    try { await shutdownTelemetry(); } finally { await sink.stop(); }
   }
 }, seedVerificationPlan(Bun.env.REZICS_SEED_VERIFY_CUT).budgetMs);

@@ -209,6 +209,20 @@ export interface WorkProfileOptions {
   peers?: { fuseki?: string; account?: string; main?: string; other?: string };
 }
 
+export class WorkProfileError extends Error {
+  constructor(
+    readonly code:
+      | 'NATIVE_COUNTER_NOT_ALLOWLISTED'
+      | 'INVALID_NATIVE_COUNTER'
+      | 'NATIVE_COUNTER_OVERFLOW',
+    readonly counter: string,
+    detail: string,
+  ) {
+    super(`Work profile native counter ${detail}: ${counter}`);
+    this.name = 'WorkProfileError';
+  }
+}
+
 function peer(span: WorkSpan, options: WorkProfileOptions): string {
   const tag = span.attributes['rezics.peer.service'];
   if (typeof tag === 'string' && ['fuseki', 'account', 'main', 'other'].includes(tag)) return tag;
@@ -316,13 +330,17 @@ export function summarizeWorkProfile(
       const name = attribute.slice('rezics.fuseki.'.length);
       if (timers.has(name)) continue;
       if (!counters.has(name))
-        throw new Error(`Work profile native counter is not allowlisted: ${name}`);
+        throw new WorkProfileError('NATIVE_COUNTER_NOT_ALLOWLISTED', name, 'is not allowlisted');
       if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0)
-        throw new Error(`Work profile native counter is invalid: ${name}`);
+        throw new WorkProfileError('INVALID_NATIVE_COUNTER', name, 'is invalid');
       const sum = (nativeVisits[name] ?? 0) + value;
       nativeVisitTotal += value;
       if (!Number.isSafeInteger(sum) || !Number.isSafeInteger(nativeVisitTotal))
-        throw new Error(`Work profile native counter sum exceeds safe integer bounds: ${name}`);
+        throw new WorkProfileError(
+          'NATIVE_COUNTER_OVERFLOW',
+          name,
+          'sum exceeds safe integer bounds',
+        );
       nativeVisits[name] = sum;
     }
   }
@@ -433,14 +451,18 @@ export type WorkCostGrowthDeclaration = {
 type NativeWorkCostGrowthDeclaration = WorkCostGrowthDeclaration &
   ({ class: 'constant' } | { class: Exclude<WorkCostGrowthClass, 'constant'>; reason: string });
 export type WorkMinimumObserved = Partial<Record<'postgresStatements' | 'fusekiRequests', number>>;
-export type WorkCostContract = Partial<Record<WorkCostField, number>> & {
-  growth?: {
-    [K in WorkCostField]?: K extends NativeWorkCostField
-      ? NativeWorkCostGrowthDeclaration
-      : WorkCostGrowthDeclaration;
+export type WorkObservationContract = { minimumObserved?: WorkMinimumObserved } & (
+  | { noBackendCalls?: false; reason?: never }
+  | { noBackendCalls: true; reason: string }
+);
+export type WorkCostContract = Partial<Record<WorkCostField, number>> &
+  WorkObservationContract & {
+    growth?: {
+      [K in WorkCostField]?: K extends NativeWorkCostField
+        ? NativeWorkCostGrowthDeclaration
+        : WorkCostGrowthDeclaration;
+    };
   };
-  minimumObserved?: WorkMinimumObserved;
-};
 export const WORK_COST_GROWTH_MARGIN = 1.2;
 
 type WorkCostGrowthBreach = {
@@ -475,8 +497,13 @@ export class WorkMeterBlindError extends Error {
 /** The same attribution proof serves a single restored read and each growth scale. */
 export function assertWorkMeterObserved(
   profile: WorkProfile,
-  minimumObserved?: WorkMinimumObserved,
+  contract: WorkObservationContract = {},
 ): void {
+  const { minimumObserved, noBackendCalls } = contract;
+  if (noBackendCalls && !contract.reason?.trim())
+    throw new Error('No-backend-call allowance requires a reason');
+  if (noBackendCalls && Object.keys(minimumObserved ?? {}).length)
+    throw new Error('No-backend-call allowance contradicts minimum observed calls');
   for (const [field, minimum] of Object.entries(minimumObserved ?? {})) {
     if (!Number.isSafeInteger(minimum) || minimum < 1)
       throw new Error(`Invalid minimum observed cost: ${field}`);
@@ -490,14 +517,14 @@ export function assertWorkMeterObserved(
       profile.traceId,
       'fetches observed without SQL or Fuseki attribution',
     );
-  if (profile.request.status !== 200 || minimumObserved === undefined) return;
-  if (
-    profile.postgresStatements === 0 &&
-    profile.fusekiRequests === 0 &&
-    profile.otherFetches === 0
-  )
-    throw new WorkMeterBlindError(profile.traceId, 'successful read has no observed calls');
-  for (const [field, minimum] of Object.entries(minimumObserved)) {
+  const status = profile.request.status;
+  if (status === null || status < 200 || status >= 300) return;
+  if (profile.postgresStatements === 0 && profile.fusekiRequests === 0 && !noBackendCalls)
+    throw new WorkMeterBlindError(
+      profile.traceId,
+      'successful request has no attributed backend calls',
+    );
+  for (const [field, minimum] of Object.entries(minimumObserved ?? {})) {
     const observed = profile[field as keyof WorkMinimumObserved];
     if (observed === null || observed < minimum)
       throw new WorkMeterBlindError(
@@ -560,13 +587,16 @@ export function assertWorkCostAtScales(
   label = 'work-cost',
 ): void {
   if (profiles.length < 3) throw new Error('Cost growth checks require at least three scales');
-  const { growth = {}, minimumObserved, ...maxima } = contract;
-  for (const profile of profiles) assertWorkMeterObserved(profile, minimumObserved);
+  const { growth = {}, minimumObserved, noBackendCalls, reason, ...maxima } = contract;
+  const observation: WorkObservationContract = noBackendCalls
+    ? { minimumObserved, noBackendCalls, reason }
+    : { minimumObserved };
+  for (const profile of profiles) assertWorkMeterObserved(profile, observation);
   const nativeFields = new Set<NativeWorkCostField>(['nativeVisitTotal']);
   for (const profile of profiles) {
     for (const name of Object.keys(profile.nativeVisits)) {
       if (!(commandCounters as readonly string[]).includes(name))
-        throw new Error(`Work profile native counter is not allowlisted: ${name}`);
+        throw new WorkProfileError('NATIVE_COUNTER_NOT_ALLOWLISTED', name, 'is not allowlisted');
       nativeFields.add(`nativeVisits.${name}` as NativeWorkCostField);
     }
   }
