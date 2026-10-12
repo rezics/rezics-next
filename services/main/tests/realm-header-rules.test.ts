@@ -4,7 +4,7 @@ import { GovernanceRules } from '../src/modules/governance/rules.ts';
 import { fallbackAvatar } from '../src/modules/media/summary.ts';
 import { REALM_PROFILE, type PublicProfile } from '../src/modules/realm-profile/schema.ts';
 import { readRealmHeader } from '../src/modules/realm-reads/read-realm.ts';
-import type { WorkReadSession } from '../src/modules/work/read-session.ts';
+import { WorkReadUnavailable, type WorkReadSession } from '../src/modules/work/read-session.ts';
 
 const realm = 'https://rezics.com/id/00000000-0000-4000-8000-000000001504';
 const space = 'https://rezics.com/id/00000000-0000-4000-8000-000000001505';
@@ -39,6 +39,7 @@ function headerSession(document: unknown, legacyRules: unknown[]) {
       return { rows: [{ open: true, document, heads: [], member_value: null, member_revision: null }] };
     },
   } as unknown as Pool;
+  const governance = new GovernanceRules(pool);
   const session = {
     displayLanguages: ['en'],
     position: { dataEpoch: 'epoch', sequence: '1' },
@@ -65,11 +66,11 @@ function headerSession(document: unknown, legacyRules: unknown[]) {
           },
         },
       },
-      governance: { rules: new GovernanceRules(pool) },
+      governance: { rules: governance },
       access: {},
     },
   } as unknown as WorkReadSession;
-  return { session, calls };
+  return { session, calls, governance };
 }
 
 test('settings rules stay the header source when an old profile also has rules', async () => {
@@ -83,4 +84,23 @@ test('settings rules stay the header source when an old profile also has rules',
   expect(header.rules?.[0]?.title).toEqual({
     value: 'Stay', language: 'en', direction: 'ltr', basis: 'requested',
   });
+});
+
+test('invalid managed rules are unreadable while absent and empty documents mean no rules', async () => {
+  const staleProfileRules = [rule('stale', 'Stale profile rule')];
+  const invalid = headerSession(
+    { profile: 'realm-settings-rules-v2', public: true, rules: 'invalid' },
+    staleProfileRules,
+  );
+  expect((await invalid.governance.realmHeaderRules(realm)).rules).toBeNull();
+  await expect(readRealmHeader(invalid.session, realm)).rejects.toBeInstanceOf(WorkReadUnavailable);
+
+  const absent = headerSession(null, staleProfileRules);
+  expect((await readRealmHeader(absent.session, realm)).rules).toEqual([]);
+
+  const empty = headerSession(
+    { profile: 'realm-settings-rules-v2', public: true, rules: [] },
+    staleProfileRules,
+  );
+  expect((await readRealmHeader(empty.session, realm)).rules).toEqual([]);
 });

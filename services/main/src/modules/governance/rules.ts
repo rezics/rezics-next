@@ -139,14 +139,18 @@ export class GovernanceRules implements RuleBasis {
     ).rows[0];
     if (!row?.open) throw new GovernanceUnavailable('Access is held for recovery');
     let rules: ReturnType<typeof currentRealmRulesDocument>['rules'] | null = null;
-    try {
-      rules = currentRealmRulesDocument(
-        row.document && typeof row.document === 'object'
-          ? { ...row.document, public: true }
-          : row.document,
-      ).rules;
-    } catch (error) {
-      if (!(error instanceof GovernanceInvalid)) throw error;
+    if (row.document === null || row.document === undefined) {
+      rules = [];
+    } else {
+      try {
+        rules = currentRealmRulesDocument(
+          row.document && typeof row.document === 'object'
+            ? { ...row.document, public: true }
+            : row.document,
+        ).rules;
+      } catch (error) {
+        if (!(error instanceof GovernanceInvalid)) throw error;
+      }
     }
     return { rules, heads: new Map(row.heads.map((head) => [head.ref, head])),
       memberValue: row.member_value, memberRevision: row.member_revision };

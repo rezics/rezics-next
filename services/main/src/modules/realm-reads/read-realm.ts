@@ -57,6 +57,7 @@ export async function readRealmHeader(session: WorkReadSession, realm: string) {
     try { snapshot = await governance.realmHeaderRules(realm); }
     catch { throw new WorkReadUnavailable('Realm governance rule is unavailable'); }
   }
+  if (snapshot?.rules === null) throw new WorkReadUnavailable('Realm governance rule is unavailable');
   const rules = snapshot?.rules?.map(rule => {
     let governanceRule = rule.governanceRule;
     if (governanceRule && snapshot?.heads.get(governanceRule.ref)?.revision !== governanceRule.revision) {
