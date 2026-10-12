@@ -1,6 +1,6 @@
-import { DISCLOSURE_COST, DisclosureUnavailable } from './read.ts';
-
-export const DISCLOSURE_SUBMISSION_LIMIT = 2_048;
+import { DisclosureUnavailable } from './read.ts';
+import { DISCLOSURE_COST, DISCLOSURE_SUBMISSION_LIMIT } from './contract-cost.ts';
+export { DISCLOSURE_SUBMISSION_LIMIT } from './contract-cost.ts';
 
 export interface DisclosureSubmission<T> {
   results: readonly T[];

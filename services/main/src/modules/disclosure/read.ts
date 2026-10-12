@@ -58,7 +58,9 @@ import { nameOwnerPolicySql } from '../preferences/store.ts';
 import { BASELINE_MEMBER_POLICY } from '../access/baseline.ts';
 import { accessClient } from '../access/topology-control.ts';
 import { namePolicyViewerPrincipal } from './name-policy.ts';
-import { chunkDisclosureSubmission, DISCLOSURE_SUBMISSION_LIMIT } from './contract-batching.ts';
+import { chunkDisclosureSubmission } from './contract-batching.ts';
+import { DISCLOSURE_COST } from './contract-cost.ts';
+export { DISCLOSURE_COST } from './contract-cost.ts';
 import { SCOPED_ENFORCEMENT_BASIS_SQL } from './fence-scope.ts';
 
 export type DisclosureChannel = 'read' | 'summary' | 'thread' | 'feed' | 'search' | 'typeahead'
@@ -178,9 +180,6 @@ export interface DisclosureReader {
     }>;
 }
 export class DisclosureUnavailable extends MediaUnavailable {}
-export const DISCLOSURE_COST = { submissionLimit: DISCLOSURE_SUBMISSION_LIMIT, batch: 64, ownerStatements: 1, recoveryStatements: 1,
-  graphParents: 2, parentEdges: 128, parentHeadBatch: 64,
-  nameOwnerQueries: 1, namePreferenceStatements: 1 } as const;
 function requireBatch(items: readonly unknown[]): void {
   if (items.length > DISCLOSURE_COST.batch) throw new DisclosureUnavailable('Disclosure batch is invalid');
 }
