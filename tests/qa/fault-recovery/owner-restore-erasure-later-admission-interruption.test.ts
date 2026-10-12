@@ -1,6 +1,7 @@
 import { expect, spyOn, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import type { Pool, PoolClient } from 'pg';
 import * as admission from '../../../services/main/src/modules/access/admission.ts';
 import * as contentErasure from '../../../services/main/src/modules/erasure/content.ts';
 import * as accountCoverage from '../../../services/account/src/recovery-coverage.ts';
@@ -15,7 +16,10 @@ import * as custody from '../../../services/main/src/modules/erasure/custody.ts'
 import * as graphErasure from '../../../services/main/src/modules/erasure/graph.ts';
 import * as graphReplay from '../../../services/main/src/modules/erasure/replay-graph.ts';
 import * as modelCustody from '../../../services/main/src/modules/semantic/model-custody.ts';
-import { ObjectUnavailable } from '../../../services/main/src/infrastructure/immutable-objects.ts';
+import {
+  ObjectIntegrityError,
+  ObjectUnavailable,
+} from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { RestoreLineageConflict } from '../../../services/main/src/modules/work/restore-lineage.ts';
 import { readGraphErasureProof } from '../../../services/main/src/modules/erasure/graph.ts';
 import { readErasure } from '../../../services/main/src/modules/erasure/journal.ts';
@@ -468,6 +472,9 @@ test(
         // Inject inside the adapters, so replacing their original cause or
         // swallowing it as a proof mismatch is observable in the outer state.
         const innerSites = [
+          'qualification binding findings SQL',
+          'retained authority head SQL',
+          'retained relay checkpoint SQL',
           'custody command inventory SQL',
           'historical receipt custody SQL',
           'Structure group custody SQL',
@@ -491,7 +498,55 @@ test(
               hits++;
               throw failure;
             };
-            if (
+            const insideRelayQuery = async <T>(
+              client: Pool | PoolClient,
+              needle: string,
+              operation: () => Promise<T>,
+            ): Promise<T> => {
+              const query = client.query.bind(client);
+              const injected = spyOn(client, 'query').mockImplementation(((
+                sql: string,
+                values?: unknown[],
+              ) => {
+                if (sql.includes(needle)) fail();
+                return query(sql, values);
+              }) as typeof client.query);
+              try {
+                return await operation();
+              } finally {
+                injected.mockRestore();
+              }
+            };
+            if (site === 'qualification binding findings SQL') {
+              const actual = binding.requireQualification;
+              const injected = spyOn(binding, 'requireQualification').mockImplementationOnce(
+                async (...args) =>
+                  insideRelayQuery(args[0], 'FROM relay.owner_reconciliation_item', () =>
+                    actual(...args),
+                  ),
+              );
+              stop.push(() => injected.mockRestore());
+            } else if (site === 'retained authority head SQL') {
+              const actual = erasureAuthority.assertRetainedAuthorityCapture;
+              const injected = spyOn(
+                erasureAuthority,
+                'assertRetainedAuthorityCapture',
+              ).mockImplementationOnce(async (...args) =>
+                insideRelayQuery(args[0], 'FROM relay.recovery_coverage_head', () =>
+                  actual(...args),
+                ),
+              );
+              stop.push(() => injected.mockRestore());
+            } else if (site === 'retained relay checkpoint SQL') {
+              const actual = relayCoverage.relayPrefixCoverageOnClient;
+              const injected = spyOn(
+                relayCoverage,
+                'relayPrefixCoverageOnClient',
+              ).mockImplementationOnce(async (...args) =>
+                insideRelayQuery(args[0], 'FROM relay.checkpoint', () => actual(...args)),
+              );
+              stop.push(() => injected.mockRestore());
+            } else if (
               site === 'custody command inventory SQL' ||
               site === 'historical receipt custody SQL'
             ) {
@@ -581,9 +636,16 @@ test(
                     const manifest = args[0] === generation.slice(-64);
                     if (manifest === (site === 'model manifest object GET')) {
                       hits++;
-                      throw new ObjectUnavailable('model object owner is unavailable', {
-                        cause: failure,
-                      });
+                      const Failure =
+                        code === 'integrity' ? ObjectIntegrityError : ObjectUnavailable;
+                      throw new Failure(
+                        code === 'integrity'
+                          ? 'model object is corrupt'
+                          : 'model object owner is unavailable',
+                        {
+                          cause: failure,
+                        },
+                      );
                     }
                     return get(...args);
                   });
