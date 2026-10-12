@@ -42,10 +42,11 @@ function errorResponse(error: unknown): Response {
 }
 
 /** Preserve the profile command's typed refusal when strict schema validation finds legacy rules. */
-export function realmProfileSchemaError(error: unknown, request: Request): Response | undefined {
+export function realmProfileSchemaError(error: unknown, request: Request, route: string | undefined,
+  params: Record<string, string | undefined>): Response | undefined {
   if (!(error instanceof ValidationError) || error.type !== 'body'
     || request.method !== 'PUT'
-    || !/^\/v1\/realms\/[0-9a-f-]{36}\/profile$/i.test(new URL(request.url).pathname)) return;
+    || route !== '/v1/realms/:realm/profile' || !params.realm) return;
   const value = error.value;
   if (!value || typeof value !== 'object' || !('publication' in value)) return;
   const publication = value.publication;

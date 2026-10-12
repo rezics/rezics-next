@@ -3,12 +3,14 @@ import { Elysia } from 'elysia';
 import type { Pool, PoolClient } from 'pg';
 import { saveRealmSettings } from '../src/modules/access/realm-management-settings.ts';
 import { GovernanceRules } from '../src/modules/governance/rules.ts';
+import type { VerifiedPrincipal } from '../src/modules/access/admission.ts';
 import type { SettingsCommand } from '../src/modules/realm-admin/contract.ts';
 import { fallbackAvatar } from '../src/modules/media/summary.ts';
 import { REALM_PROFILE } from '../src/modules/realm-profile/schema.ts';
 import { realmProfileRoutes, realmProfileSchemaError } from '../src/routes/realm-profile.ts';
+import { reportRoutes } from '../src/routes/reports.ts';
 import { readRealmHeader, readRealmLanding } from '../src/modules/realm-reads/read-realm.ts';
-import type { WorkReadSession } from '../src/modules/work/read-session.ts';
+import { WorkReadUnavailable, type WorkReadSession } from '../src/modules/work/read-session.ts';
 import { RV } from '../src/modules/work/activate.ts';
 
 const realm = 'https://rezics.com/id/00000000-0000-4000-8000-000000001504';
@@ -32,9 +34,16 @@ function settingsStore() {
     document: unknown; request_digest: string }
   let head: Revision | undefined;
   let settings: Record<string, unknown> | undefined;
+  const authorityActions: unknown[] = [];
   const revisions = new Map<string, Revision>();
   const query = async (sql: string, values: unknown[] = []) => {
     const result = (items: unknown[] = []) => ({ rows: items, rowCount: items.length });
+    if (sql === 'BEGIN' || sql === 'COMMIT' || sql === 'ROLLBACK' || sql.startsWith('SET LOCAL')) return result();
+    if (sql.startsWith('SELECT open FROM access.recovery_fence')) return result([{ open: true }]);
+    if (sql.includes('SELECT p.id FROM access.principal p')) {
+      authorityActions.push(values[4]);
+      return result(values[4] === 'governance.rule.publish' ? [{ id: 'principal' }] : []);
+    }
     if (sql.includes('SELECT f.open,r.document')) {
       return result([{ open: true, document: head?.document ?? null }]);
     }
@@ -71,7 +80,12 @@ function settingsStore() {
     if (sql.includes('UPDATE access.membership_policy')) return result([{ updated: true }]);
     throw new Error(`Unexpected settings-store query: ${sql}`);
   };
-  return { client: { query } as unknown as PoolClient, pool: { query } as unknown as Pool };
+  const client = { query, release: () => {} } as unknown as PoolClient;
+  return { client, pool: { query, connect: async () => client } as unknown as Pool,
+    authorityActions, setDocument: (document: unknown) => {
+      if (!head) throw new Error('Save settings before replacing the document');
+      head.document = document;
+    } };
 }
 
 function readSession(governance: GovernanceRules, profileRules: unknown, summaryAvailable: boolean) {
@@ -115,11 +129,16 @@ function readSession(governance: GovernanceRules, profileRules: unknown, summary
   return session;
 }
 
-test('profile publication refuses rules and Realm reads use only saved settings rules', async () => {
-  const request = new Elysia().error(({ error, request }) => realmProfileSchemaError(error, request))
+test('profile publication refuses rules on every matched route form', async () => {
+  const request = new Elysia().error(({ error, request, route, params }) =>
+    realmProfileSchemaError(error, request, route, params))
     .use(realmProfileRoutes({} as never));
-  const rejected = await request.handle(new Request(
-    'http://main.local/v1/realms/00000000-0000-4000-8000-000000001504/profile', {
+  for (const path of [
+    '/v1/realms/00000000-0000-4000-8000-000000001504/profile',
+    '/v1/realms/00000000-0000-4000-8000-000000001504/profile/',
+    '/v1/realms/%300000000-0000-4000-8000-000000001504/profile',
+  ]) {
+    const rejected = await request.handle(new Request(`http://main.local${path}`, {
       method: 'PUT',
       headers: { 'content-type': 'application/json', 'idempotency-key': 'rules-rejected' },
       body: JSON.stringify({ profile: 'realm-public-profile-v2', expectedHead: null,
@@ -128,9 +147,12 @@ test('profile publication refuses rules and Realm reads use only saved settings 
           bannerSelection: null, count: { kind: 'unknown', value: null }, moderators: [],
           rules: [authoredRule] } }),
     }));
-  expect(rejected.status).toBe(400);
-  expect(await rejected.json()).toMatchObject({ status: 400, code: 'invalid_realm_profile' });
+    expect(rejected.status).toBe(400);
+    expect(await rejected.json()).toMatchObject({ status: 400, code: 'invalid_realm_profile' });
+  }
+});
 
+test('Realm reads use only saved settings rules and clearing means no rules', async () => {
   const db = settingsStore();
   const governance = new GovernanceRules(db.pool);
   const saved = await saveRealmSettings(db.client, realm, 'principal',
@@ -147,4 +169,47 @@ test('profile publication refuses rules and Realm reads use only saved settings 
     settingsCommand([], saved.ruleBasis.revision, '2'), 'rules-cleared');
   expect((await readRealmHeader(readSession(governance, profileRules, true), realm)).rules).toEqual([]);
   expect((await readRealmLanding(readSession(governance, profileRules, false), realm)).rules).toEqual([]);
+});
+
+test('generic rule publication authority cannot replace or clear managed Realm rules', async () => {
+  const db = settingsStore();
+  const governance = new GovernanceRules(db.pool);
+  const saved = await saveRealmSettings(db.client, realm, 'settings-principal',
+    settingsCommand([authoredRule], null, '1'), 'rules-present');
+  const principal = { issuer: 'https://account.test', subject: 'rule-publisher', emailVerified: true } as VerifiedPrincipal;
+  const input = { ref: saved.ruleBasis.ref, scopeId: `governance:realm:${realm}`,
+    actingSubject: actor, expectedRevision: saved.ruleBasis.revision, idempotencyKey: 'generic-rules' };
+  const api = new Elysia().use(reportRoutes({ governance: { rules: governance },
+    account: { verify: async () => principal } } as never));
+  // The reference remains reserved even when disguised as a generic document.
+  for (const document of [
+    { profile: 'realm-settings-rules-v2', public: true, rules: [{ ...authoredRule, id: 'replacement' }] },
+    { profile: 'realm-settings-rules-v2', public: true, rules: [] },
+    { message: 'clear' },
+  ]) {
+    const refused = await api.handle(new Request('http://main.local/v1/governance/rules', {
+      method: 'POST', headers: { 'content-type': 'application/json', 'idempotency-key': input.idempotencyKey },
+      body: JSON.stringify({ profile: 'governance-rule-v1', ...input, document }),
+    }));
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toMatchObject({ code: 'invalid_governance_request' });
+    expect(await governance.publishedRealmRules(realm, true)).toEqual([authoredRule]);
+  }
+  expect(db.authorityActions).toEqual(Array(3).fill('governance.rule.publish'));
+});
+
+test('unreadable rules make the join page unavailable; absent and empty documents have no rules', async () => {
+  const db = settingsStore();
+  const governance = new GovernanceRules(db.pool);
+  const staleProfileRules = [authoredRule];
+  expect(await governance.publishedRealmRules(realm, true)).toEqual([]);
+  expect((await readRealmLanding(readSession(governance, staleProfileRules, false), realm)).rules).toEqual([]);
+  await saveRealmSettings(db.client, realm, 'principal', settingsCommand([], null, '1'), 'rules-empty');
+  expect(await governance.publishedRealmRules(realm, true)).toEqual([]);
+  expect((await readRealmLanding(readSession(governance, staleProfileRules, false), realm)).rules).toEqual([]);
+
+  db.setDocument({ profile: 'realm-settings-rules-v2', public: true, rules: 'invalid' });
+  expect(await governance.publishedRealmRules(realm, true)).toBeNull();
+  await expect(readRealmLanding(readSession(governance, staleProfileRules, false), realm))
+    .rejects.toBeInstanceOf(WorkReadUnavailable);
 });

@@ -542,7 +542,7 @@ try {
     for (const count of [0, 1, 12]) {
       const currentSettings = await api.read<Awaited<ReturnType<typeof realmAdmin.settings>>>(
         `${root}/settings?actingSubject=${encodeURIComponent(actor)}`);
-      await api.command(`g1034:settings:${count}`, {
+      await api.command(`realm-ranking:settings:${count}`, {
         method: 'PUT',
         path: `${root}/settings`,
         body: {

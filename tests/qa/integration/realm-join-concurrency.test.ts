@@ -84,7 +84,7 @@ test('Realm joins and directory reads: delayed graph preparation holds no shared
       profile: 'realm-public-profile-v2', expectedHead: null, actingSubject: owner.actor,
       publication: { name: { original: 'en', labels: { en: 'Second concurrency Realm' } },
         description: { original: 'en', labels: { en: 'Exact concurrent membership counts' } },
-        iconSelection: null, bannerSelection: null, rules: [], moderators: [],
+        iconSelection: null, bannerSelection: null, moderators: [],
         count: { kind: 'exact', value: null } },
     });
     expect(profile.status, await profile.clone().text()).toBe(201);

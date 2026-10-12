@@ -120,7 +120,12 @@ export async function readRealmLanding(session: WorkReadSession, realm: string) 
     const language = names[0].name['xml:lang'] ?? 'und';
     const name = published ? selected(published.profile.name)
       : selected({ original: language, labels: { [language]: names[0].name.value } });
-    const rules = await session.deps.governance?.rules?.publishedRealmRules(realm, true) ?? [];
+    let rules;
+    try { rules = await session.deps.governance?.rules?.publishedRealmRules(realm, true); }
+    catch { throw new WorkReadUnavailable('Realm governance rule is unavailable'); }
+    if (rules === null || rules === undefined) {
+      throw new WorkReadUnavailable('Realm governance rule is unavailable');
+    }
     const current = await readRealmPolicy(session.deps.environment, realm);
     if (!current || current.revision !== policy.revision || current.visibility !== 'private'
       || current.admission !== 'request') throw new WorkReadMissing('Realm is unavailable');

@@ -350,8 +350,8 @@ export function createMainApp(fuseki: FusekiClient, work?: SearchRouteDependenci
       if (new URL(request.url).pathname.startsWith('/health/')) return;
       work?.types?.endRequest?.();
     })
-    .error(({ error, request }) => {
-      const profileProblem = realmProfileSchemaError(error, request);
+    .error(({ error, request, route, params }) => {
+      const profileProblem = realmProfileSchemaError(error, request, route, params);
       if (profileProblem) return profileProblem;
       const wikiProblem = wikiSchemaError(error, request);
       if (wikiProblem) return wikiProblem;

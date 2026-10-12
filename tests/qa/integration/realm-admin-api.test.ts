@@ -6,6 +6,7 @@ import { AccessRealmManagement, realmAdminScope } from '../../../services/main/s
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { ManagementReadStore } from '../../../services/main/src/modules/management-reads/read-store.ts';
 import { GovernanceRules } from '../../../services/main/src/modules/governance/rules.ts';
+import { GovernanceInvalid } from '../../../services/main/src/modules/governance/store.ts';
 import { AccessMembershipConsents } from '../../../services/main/src/modules/access/membership-consents.ts';
 import { realmMemberProof } from '../../../services/main/src/modules/realm-reply/member-policy.ts';
 import type { RoleCommand, RoleImpact } from '../../../services/main/src/modules/realm-admin/contract.ts';
@@ -180,25 +181,14 @@ test('Realm settings: atomic rule CAS, localization, submission restrictions and
     expect((await s.call('PUT', '/settings', { ...input, expectedGeneration: '1',
       settings: { ...input.settings, reviewRequired: false } })).status).toBe(409);
     const external = new GovernanceRules(s.stack.accessPool);
-    await external.publish(s.owner.principal, { ref: basis.ref, scopeId: s.scope, actingSubject: s.owner.actor,
-      expectedRevision: basis.revision, document: { rules: input.settings.rules }, idempotencyKey: randomUUID() });
-    expect(await external.publishedRealmRules(s.realm)).toBeNull();
+    await expect(external.publish(s.owner.principal, { ref: basis.ref, scopeId: s.scope, actingSubject: s.owner.actor,
+      expectedRevision: basis.revision, document: { rules: input.settings.rules }, idempotencyKey: randomUUID() }))
+      .rejects.toBeInstanceOf(GovernanceInvalid);
+    expect(await external.publishedRealmRules(s.realm)).toEqual(input.settings.rules);
     expect((await s.call('PUT', '/settings', { ...input, expectedGeneration: '1', expectedRulesRevision: basis.revision })).status).toBe(409);
-    // Immutable v1 storage is still readable; normalization never rewrites its digest.
-    for (const same of [true, false]) {
-      const document = { profile: 'realm-settings-rules-v1', public: true, rules: [{ id: 'legacy',
-        title: { en: 'Be kind', 'zh-CN': same ? 'Be kind' : '友善' },
-        body: { en: 'Respect readers', 'zh-CN': same ? 'Respect readers' : '尊重读者' }, governanceRule: null }] };
-      const stored = await external.publish(s.owner.principal, { ref: basis.ref, scopeId: s.scope,
-        actingSubject: s.owner.actor, expectedRevision: (await external.current(basis.ref, s.scope))!.revision,
-        document, idempotencyKey: randomUUID() });
-      const normalized = await s.call('GET', `/settings${s.actorQuery()}`);
-      expect(normalized.status).toBe(200);
-      expect(normalized.body).toMatchObject({ ruleBasis: { revision: stored.revision, digest: stored.digest },
-        settings: { rules: [{ title: same ? { original: 'und', labels: { und: 'Be kind' } }
-          : { original: 'en', labels: { en: 'Be kind', 'zh-Hans': '友善' } } }] } });
-      expect((await external.read(s.owner.principal, s.owner.actor, basis.ref, s.scope)).document).toEqual(document);
-    }
+    expect(await external.current(basis.ref, s.scope)).toEqual({ revision: basis.revision, digest: basis.digest });
+    // Immutable legacy normalization is covered by the localized-rules owner
+    // test; generic publication cannot manufacture managed legacy revisions.
     await s.outsider.grant(`submission:submit:${s.realm}`, 'submission.submit');
     const id = () => `https://rezics.com/id/${randomUUID()}`;
     const denied = await s.call('POST', '/submissions', { actingSubject: s.outsider.actor,

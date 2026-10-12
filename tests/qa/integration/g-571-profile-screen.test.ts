@@ -106,7 +106,7 @@ test('G571: community images remain deliverable through historical classifier ho
     const path = `/v1/realms/${short(realm)}`;
     const publication: PublicProfile = { name: { original: 'en', labels: { en: 'Pending images' } },
       description: { original: 'en', labels: { en: 'A reading community.' } },
-      iconSelection: icon.selection, bannerSelection: banner.selection, rules: [],
+      iconSelection: icon.selection, bannerSelection: banner.selection,
       count: { kind: 'unknown', value: null }, moderators: [] };
     const save = (expectedHead: string | null, images = publication) => manager.send('PUT', `${path}/profile`, {
       profile: 'realm-public-profile-v2', expectedHead, actingSubject: manager.actor, publication: images });

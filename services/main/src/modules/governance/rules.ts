@@ -168,6 +168,7 @@ export class GovernanceRules implements RuleBasis {
     if (!row?.open) throw new GovernanceUnavailable('Access is held for recovery');
     // The Realm owner has already fenced disclosure/membership. Keep the
     // public profile validation while allowing its private publication flag.
+    if (row.document === null || row.document === undefined) return [];
     const document = authorizedRealmRead && row.document && typeof row.document === 'object'
       ? { ...row.document, public: true } : row.document;
     try {
@@ -223,6 +224,9 @@ export class GovernanceRules implements RuleBasis {
   async publish(principal: VerifiedPrincipal, input: RulePublication): Promise<PublishedRule> {
     return this.transaction(async client => {
       const principalId = await this.authorized(client, principal, input.actingSubject, input.scopeId);
+      if (input.ref.startsWith('urn:rezics:realm-rules:')) {
+        throw new GovernanceInvalid('Managed Realm rules must be published through Realm settings');
+      }
       return publishRuleRevision(client, principalId, input);
     });
   }

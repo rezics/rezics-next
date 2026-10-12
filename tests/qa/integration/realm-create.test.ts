@@ -88,7 +88,7 @@ test('A new owner can configure community rules and publish the public profile',
     expect(settings.status, JSON.stringify(settings.body)).toBe(201);
     const publication = { name: { original: 'en', labels: { en: 'Reading Circle', 'zh-Hans': '读书会' } },
       description: { original: 'en', labels: { en: 'Discuss good books.', 'zh-Hans': '一起讨论好书。' } },
-      iconSelection: null, bannerSelection: null, replyPolicy: 'members-direct', rules,
+      iconSelection: null, bannerSelection: null, replyPolicy: 'members-direct',
       count: { kind: 'exact', value: null }, moderators: [] };
     const profile = await h.call('PUT', `${h.root}/profile`, { profile: 'realm-public-profile-v2',
       expectedHead: null, actingSubject: h.actor, publication });
@@ -96,6 +96,7 @@ test('A new owner can configure community rules and publish the public profile',
     const read = await h.call('GET', `${h.root}?language=zh-CN`, undefined, null);
     expect(read.status, JSON.stringify(read.body)).toBe(200);
     expect(read.body).toMatchObject({ id: h.realm, name: { value: '读书会' },
-      description: { value: '一起讨论好书。' }, reviewMode: 'open' });
+      description: { value: '一起讨论好书。' }, reviewMode: 'open',
+      rules: [{ id: 'rule-1', title: { value: '友善交流' }, body: { value: '尊重其他读者。' } }] });
   } finally { await h.close(); }
 }, 180_000);

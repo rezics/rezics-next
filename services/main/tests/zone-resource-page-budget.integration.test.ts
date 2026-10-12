@@ -221,7 +221,7 @@ if (process.env.REZICS_ZONE_BUDGET_PROFILE_CHILD === '1') {
                 : { profile: 'realm-public-profile-v2', expectedHead, actingSubject: actor,
                   publication: { name: { original: 'en', labels: { en: 'Writer community' } },
                     description: { original: 'en', labels: { en: `Profile write ${serial}` } },
-                    iconSelection: null, bannerSelection: null, rules: [], moderators: [],
+                    iconSelection: null, bannerSelection: null, moderators: [],
                     count: { kind: 'unknown', value: null } } };
               const changed = await json<{ revision: string; sourcePosition: { sequence: string } }>(
                 await home.app.handle(new Request(`http://main.local${endpoint}`, {

@@ -324,7 +324,7 @@ async function measure(dimension: string, scale: string, operation: string, path
     const settingsPath = `${root}/settings` as `/v1/${string}`;
     const settings = await authorApi.read<Awaited<ReturnType<typeof admin.settings>>>(
       `${settingsPath}?actingSubject=${encodeURIComponent(actor)}` as `/v1/${string}`);
-    await authorApi.command(`g1026:settings:${index}`, { method: 'PUT', path: settingsPath, body: {
+    await authorApi.command(`realm-read-cost:settings:${index}`, { method: 'PUT', path: settingsPath, body: {
       actingSubject: actor, expectedGeneration: settings.generation,
       expectedRulesRevision: settings.ruleBasis.revision, reason: 'Measure Realm rule reads',
       settings: { ...settings.settings, rules: publishedRules } } });

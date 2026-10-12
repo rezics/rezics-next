@@ -63,7 +63,7 @@ test('Realm directory: public profiles, activity/member/newest pages, CJK search
           profile: 'realm-public-profile-v2', expectedHead: null, actingSubject: editor.actor,
           publication: { name: { original: 'en', labels: { en, 'zh-Hans': zh } },
             description: { original: 'en', labels: { en: `Reading in ${en}`, 'zh-Hans': `一起阅读${zh}` } },
-            iconSelection: null, bannerSelection: null, rules: [],
+            iconSelection: null, bannerSelection: null,
             count: { kind: 'estimated', value: count }, moderators: [] },
         }), 201);
     };
@@ -183,7 +183,7 @@ test('Realm directory: public profiles, activity/member/newest pages, CJK search
     const exactBody = { profile: 'realm-public-profile-v2', expectedHead: secondProfile.revision,
       actingSubject: editor.actor, publication: { name: { original: 'en', labels: { en: 'Book Circle', 'zh-Hans': '图书圈' } },
         description: { original: 'en', labels: { en: 'Together', 'zh-Hans': '一起阅读' } }, iconSelection: null, bannerSelection: null,
-        rules: [], moderators: [], count: { kind: 'exact', value: null } } };
+        moderators: [], count: { kind: 'exact', value: null } } };
     expect((await editor.send('PUT', `/v1/realms/${second.realm.slice(-36)}/profile`, {
       ...exactBody, publication: { ...exactBody.publication, count: { kind: 'exact', value: 999 } } })).status).toBe(400);
     const exactProfile = await json<{ revision: string }>(await editor.send('PUT',
