@@ -3,7 +3,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test } from 'bun:test';
-import { findingsFromText, handoffResult, land, reviewBranch, reviewEngine } from './land.ts';
+import { blocksLanding, findingsFromText, handoffResult, land, REVIEW_LENSES, reviewBranch, reviewEngine } from './land.ts';
 import { parseBrief, validateBrief, type Ledger, type Task } from './goalctl.ts';
 
 function repo(options: { result?: string; auto?: boolean; files?: Record<string, string>; paths?: string[] } = {}) {
@@ -134,8 +134,11 @@ describe('Goal landing', () => {
       expect(r.ledger().tasks[r.task.id]!.state).toBe('verified');
       expect(r.git(r.dir, 'show', 'main:value.ts')).toContain('value = 1');
       expect(existsSync(r.worktree)).toBe(false);
-      const args = JSON.parse(readFileSync(r.log, 'utf8').trim()) as string[];
-      expect(args.slice(0, 7)).toEqual(['exec', '-m', 'gpt-6.1-sol', '-c', 'model_reasoning_effort=high', '-s', 'read-only']);
+      const passes = readFileSync(r.log, 'utf8').trim().split('\n').map(line => JSON.parse(line) as string[]);
+      expect(passes).toHaveLength(REVIEW_LENSES.length);
+      for (const args of passes) {
+        expect(args.slice(0, 7)).toEqual(['exec', '-m', 'gpt-6.1-sol', '-c', 'model_reasoning_effort=high', '-s', 'read-only']);
+      }
       expect(r.git(r.dir, 'ls-tree', '-r', '--name-only', 'archive/goals')).toContain('handoffs/G-001.md');
       expect(readdirSync(r.runDir).some(name => name.startsWith('review-'))).toBe(true);
     } finally { r.cleanup(); }
@@ -242,7 +245,7 @@ describe('Goal landing', () => {
     try {
       await expect(reviewBranch({ directory, worktree: join(directory, 'absent'),
         brief: 'brief', handoff: 'RESULT: done', base: 'base', head: 'head' }, 'codex')).rejects.toThrow();
-      expect(existsSync(join(directory, 'stderr.log'))).toBe(true);
+      expect(existsSync(join(directory, REVIEW_LENSES[0].name, 'stderr.log'))).toBe(true);
     } finally { rmSync(directory, { recursive: true, force: true }); }
   });
 
@@ -263,6 +266,121 @@ describe('Goal landing', () => {
     expect(findingsFromText('Review done.\n```json\n{"findings":["a P1"]}\n```')).toEqual({ findings: ['a P1'] });
     expect(() => findingsFromText('no object here')).toThrow();
   });
+
+  /** A `codex exec` stand-in: keeps its prompt beside the output file and answers with REVIEW_REPLY's content. */
+  function reviewerStub() {
+    const bin = mkdtempSync(join(tmpdir(), 'goal-review-bin-'));
+    const reply = join(bin, 'reply.json');
+    writeFileSync(join(bin, 'codex'), `#!/bin/sh
+out=""; prev=""
+for arg in "$@"; do [ "$prev" = "--output-last-message" ] && out="$arg"; prev="$arg"; done
+cat > "$(dirname "$out")/stdin.txt"
+cat "${reply}" > "$out"
+`);
+    chmodSync(join(bin, 'codex'), 0o755);
+    const path = process.env.PATH;
+    process.env.PATH = `${bin}:${path}`;
+    return { answer: (findings: unknown[]) => writeFileSync(reply, JSON.stringify({ findings })),
+      cleanup: () => { process.env.PATH = path; rmSync(bin, { recursive: true, force: true }); } };
+  }
+
+  test('what blocks a landing is decided from severity and origin', () => {
+    expect(blocksLanding({ text: 'x', severity: 'P2', origin: 'first' })).toBe(true);
+    expect(blocksLanding({ text: 'x', severity: 'P3', origin: 'first' })).toBe(false);
+    expect(blocksLanding({ text: 'x', severity: 'P2', origin: 'earlier' })).toBe(true);
+    expect(blocksLanding({ text: 'x', severity: 'P2', origin: 'fix' })).toBe(true);
+    expect(blocksLanding({ text: 'x', severity: 'P2', origin: 'old' })).toBe(false);
+    expect(blocksLanding({ text: 'x', severity: 'P1', origin: 'old' })).toBe(true);
+  });
+
+  test('the first review reads the whole change through every lens and records what does not block', async () => {
+    const r = repo();
+    const stub = reviewerStub();
+    try {
+      const head = r.git(r.worktree, 'rev-parse', 'HEAD');
+      const directory = join(r.runDir, 'review-1000-first');
+      stub.answer([{ text: 'value.ts:1 loses the draft', severity: 'P2', origin: 'first' },
+        { text: 'a clearer name exists', severity: 'P3', origin: 'first' }]);
+      const blocking = await reviewBranch({ directory, worktree: r.worktree, brief: 'brief', handoff: 'RESULT: done',
+        base: r.base, head }, 'codex');
+      // Every lens reported the same two findings; each is kept once.
+      expect(blocking).toEqual(['P2: value.ts:1 loses the draft']);
+      expect(JSON.parse(readFileSync(join(directory, 'recorded.json'), 'utf8')).findings).toEqual(
+        [{ text: 'a clearer name exists', severity: 'P3', origin: 'first' }]);
+      for (const lens of REVIEW_LENSES) {
+        const prompt = readFileSync(join(directory, lens.name, 'stdin.txt'), 'utf8');
+        expect(prompt).toContain(lens.question);
+        expect(prompt).toContain('the one exhaustive review');
+      }
+      // The candidates of every lens go through one confirming pass.
+      const merge = readFileSync(join(directory, 'merge', 'stdin.txt'), 'utf8');
+      expect(merge.match(/- \[P2, first\] value\.ts:1 loses the draft/g)).toHaveLength(REVIEW_LENSES.length);
+      expect(merge).toContain('Add no finding of your own');
+      expect(JSON.parse(readFileSync(join(directory, 'request.json'), 'utf8'))).toEqual({ base: r.base, head, mode: 'whole' });
+    } finally { stub.cleanup(); r.cleanup(); }
+  }, 30_000);
+
+  test.each([['recorded request', true], ['prompt of a review made before requests were recorded', false]])(
+    'a later review checks the earlier findings and the changes since it (%s)', async (_name, recorded) => {
+      const r = repo();
+      const stub = reviewerStub();
+      try {
+        const reviewed = r.git(r.worktree, 'rev-parse', 'HEAD');
+        const first = join(r.runDir, 'review-1000-first');
+        mkdirSync(first, { recursive: true });
+        writeFileSync(join(first, 'findings.json'), JSON.stringify({ findings: ['P2: value.ts:1 loses the draft'] }));
+        if (recorded) writeFileSync(join(first, 'request.json'), JSON.stringify({ base: r.base, head: reviewed, mode: 'whole' }));
+        else writeFileSync(join(first, 'prompt.md'), `Inspect git diff ${r.base}..${reviewed} and relevant source/tests in this worktree.\n`);
+        // A review that crashed before reporting is not a reviewed commit.
+        mkdirSync(join(r.runDir, 'review-1500-crashed'), { recursive: true });
+        writeFileSync(join(r.worktree, 'value.ts'), 'export const value = 1;\nexport const draft = "kept";\n');
+        r.git(r.worktree, 'commit', '-qam', 'Keep the draft');
+        const head = r.git(r.worktree, 'rev-parse', 'HEAD');
+        const directory = join(r.runDir, 'review-2000-second');
+        stub.answer([{ text: 'the draft is still lost on retry', severity: 'P2', origin: 'earlier' },
+          { text: 'the fix drops the title', severity: 'P2', origin: 'fix' },
+          { text: 'covered code names it oddly', severity: 'P2', origin: 'old' },
+          { text: 'covered code shows a private name', severity: 'P1', origin: 'old' }]);
+        const blocking = await reviewBranch({ directory, worktree: r.worktree, brief: 'brief', handoff: 'RESULT: done',
+          base: r.base, head }, 'codex');
+        expect(blocking).toEqual(['P2: the draft is still lost on retry', 'P2: the fix drops the title',
+          'P1: covered code shows a private name']);
+        expect(JSON.parse(readFileSync(join(directory, 'recorded.json'), 'utf8')).findings.map((finding: { text: string }) => finding.text))
+          .toEqual(['covered code names it oddly']);
+        // One pass, which gets the earlier finding and exactly what changed since the reviewed commit.
+        expect(existsSync(join(directory, REVIEW_LENSES[0].name))).toBe(false);
+        const prompt = readFileSync(join(directory, 'stdin.txt'), 'utf8');
+        expect(prompt).toContain('- P2: value.ts:1 loses the draft');
+        expect(prompt).toContain(`$ git diff ${reviewed}..${head}`);
+        expect(prompt).toContain('+export const draft = "kept";');
+        expect(prompt).not.toContain('+export const value = 1;');
+        expect(JSON.parse(readFileSync(join(directory, 'request.json'), 'utf8')).mode).toBe('verify');
+      } finally { stub.cleanup(); r.cleanup(); }
+    }, 30_000);
+
+  test('a change mostly rewritten since its last review is read from the start again', async () => {
+    const r = repo();
+    const stub = reviewerStub();
+    try {
+      const reviewed = r.git(r.worktree, 'rev-parse', 'HEAD');
+      const first = join(r.runDir, 'review-1000-first');
+      mkdirSync(first, { recursive: true });
+      writeFileSync(join(first, 'findings.json'), JSON.stringify({ findings: ['P2: value.ts:1 loses the draft'] }));
+      writeFileSync(join(first, 'request.json'), JSON.stringify({ base: r.base, head: reviewed, mode: 'whole' }));
+      writeFileSync(join(r.worktree, 'value.ts'),
+        Array.from({ length: 500 }, (_unused, index) => `export const value${index} = ${index};`).join('\n'));
+      r.git(r.worktree, 'commit', '-qam', 'A fresh implementation');
+      const head = r.git(r.worktree, 'rev-parse', 'HEAD');
+      const directory = join(r.runDir, 'review-2000-second');
+      stub.answer([]);
+      expect(await reviewBranch({ directory, worktree: r.worktree, brief: 'brief', handoff: 'RESULT: done',
+        base: r.base, head }, 'codex')).toEqual([]);
+      const prompt = readFileSync(join(directory, REVIEW_LENSES[0].name, 'stdin.txt'), 'utf8');
+      expect(prompt).toContain('the one exhaustive review');
+      expect(prompt).toContain('- P2: value.ts:1 loses the draft');
+      expect(JSON.parse(readFileSync(join(directory, 'request.json'), 'utf8')).mode).toBe('whole');
+    } finally { stub.cleanup(); r.cleanup(); }
+  }, 30_000);
 
   test('the sonnet reviewer gets the diff in its prompt and its findings fail closed', async () => {
     const r = repo();

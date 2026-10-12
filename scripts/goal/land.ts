@@ -1,7 +1,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 
 export interface LandReview {
   worktree: string; base: string; head: string; brief: string; handoff: string; directory: string;
@@ -84,14 +84,31 @@ function runReviewer(program: string, args: string[], request: LandReview, promp
   }).finally(() => { closeSync(stdout); closeSync(stderr); });
 }
 
-/** Questions the landing review asks in addition to brief compliance. */
-export function reviewPrompt(request: LandReview): string {
-  return `Review this exited Goal worker's committed branch against its assigned brief.
-Report blocking defects only: wrong behaviour, scope beyond the brief, weakened tests, or security defects.
-Which owner carries this change? Report a blocker when any new table, predicate, action or policy duplicates a mapped mechanism. When the brief merges copies, report a blocker if non-test lines grow without a correctness gain the brief names.
-Do not report style preferences or speculative improvements. Return {"findings":[]} if there are no blockers.
+export type FindingSeverity = 'P1' | 'P2' | 'P3';
+export type FindingOrigin = 'first' | 'earlier' | 'fix' | 'old';
+export interface ReviewFinding { text: string; severity: FindingSeverity; origin: FindingOrigin }
+
+/** What the reviews already made of this task say: every finding they reported and the last commit reviewed. */
+export interface EarlierReviews { findings: string[]; base: string; head: string }
+
+/** The first review reads the whole change three times, each pass with one question, because one pass finds a
+ * small share of a change's defects and every later round costs a worker session and another landing. */
+export const REVIEW_LENSES = [
+  { name: 'contract', question: 'Contract. Take each outcome, case, decision and check in the brief in turn and find where the code does something else, does less, or is not held by a test that would fail without it.' },
+  { name: 'failure', question: 'Failure and hostile use. Malformed, oversized, repeated and out-of-order input; two requests at once; a value read before an await and used after it; retries, timeouts and partial failure; an error mapped to the wrong outcome; who may do or see what.' },
+  { name: 'structure', question: 'Structure. Files changed beyond the brief; tests weakened, skipped or deleted; a read or write whose cost grows with unrelated data; repository rules broken, such as a task ID in code or comments or a test writing another owner\'s tables directly.' },
+] as const;
+
+const SEVERITIES = `Give each finding a severity. Report what you find; what blocks the landing is decided elsewhere.
+P1: someone gets wrong, lost or exposed data, or an authorization, disclosure or integrity rule is broken.
+P2: behaviour differs from the brief; a behaviour the brief claims has no test that would fail without it; a test is weakened; a change beyond the brief or in another owner's mechanism; a cost that grows with unrelated data.
+P3: anything else worth recording.
+Each finding names the file and line, what happens, and the input or sequence that shows it.`;
+
+function reviewRules(request: LandReview): string {
+  return `Which owner carries this change? Report a finding when any new table, predicate, action or policy duplicates a mapped mechanism. When the brief merges copies, report a finding if non-test lines grow without a correctness gain the brief names.
+Do not report style preferences or speculative improvements. Return {"findings":[]} if you find none.
 This is a read-only review: do not edit files or run commands that mutate repository or external state.
-Inspect git diff ${request.base}..${request.head} and relevant source/tests in this worktree.
 ${request.permittedFiles?.length
     ? `These out-of-claim files were confirmed unclaimed by live tasks for this landing and may proceed as owner changes:\n${request.permittedFiles.map(file => `- ${file}`).join('\n')}\n`
     : ''}
@@ -106,13 +123,131 @@ ${request.handoff}
 </handoff>`;
 }
 
-/** Keep the review independent of worker instructions and fail closed on malformed output. */
-export async function reviewBranch(request: LandReview, engine: ReviewEngine = reviewEngine()): Promise<string[]> {
+/** The whole-change review. `question` narrows one pass to a lens; `earlier` lists what former reviews
+ * reported when a rewritten change is read from the start again. */
+export function reviewPrompt(request: LandReview, question?: string, earlier: readonly string[] = []): string {
+  return `Review this exited Goal worker's committed branch against its assigned brief.
+This is the one exhaustive review of the change: later reviews only check the fixes, so report every defect you can confirm from the code now. Use origin "first" for each.
+${question ? `Your part of the review: ${question}\n` : ''}Report wrong behaviour, scope beyond the brief, weakened tests and security defects.
+${SEVERITIES}
+Inspect git diff ${request.base}..${request.head} and relevant source/tests in this worktree.
+${earlier.length ? `Earlier reviews of a former version reported these; report any that still holds:\n${earlier.map(text => `- ${text}`).join('\n')}\n` : ''}${reviewRules(request)}`;
+}
+
+/** A later review checks the fixes: the earlier findings and what changed since the last reviewed commit. */
+export function verifyPrompt(request: LandReview, earlier: EarlierReviews, changes: string): string {
+  return `Review what changed on this exited Goal worker's branch since its last review. The whole change was reviewed at commit ${earlier.head}; it is not reviewed from the start again.
+1. For each earlier finding below, read the code and decide whether it is fixed. Report it again with origin "earlier" only if it is not.
+2. Read the changes since the last review and report every defect they introduce, with origin "fix".
+3. A defect you come across in code the last review already covered gets origin "old". Do not go looking for these.
+${SEVERITIES}
+The whole change is git diff ${request.base}..${request.head}.
+${reviewRules(request)}
+<earlier-findings>
+${earlier.findings.length ? earlier.findings.map(text => `- ${text}`).join('\n') : 'none'}
+</earlier-findings>
+<changes-since-last-review>
+${changes}
+</changes-since-last-review>`;
+}
+
+/** The passes of a first review report the same defect in different words, and a single pass is sometimes
+ * wrong. One more pass confirms each candidate against the code and returns each distinct defect once. */
+export function mergePrompt(request: LandReview, candidates: readonly ReviewFinding[]): string {
+  return `Several reviewers read this exited Goal worker's branch independently and reported the candidate findings below. Some describe the same defect in different words, and some may be wrong.
+Read the code for each candidate and confirm or refute it. Return one finding for each distinct confirmed defect: merge candidates that describe the same defect, keep the most precise wording, the highest severity among them that the code supports, and the origin as given. Drop a candidate only when the code shows it is wrong. Add no finding of your own.
+Inspect git diff ${request.base}..${request.head} and relevant source/tests in this worktree.
+${reviewRules(request)}
+<candidates>
+${candidates.map(finding => `- [${finding.severity}, ${finding.origin}] ${finding.text}`).join('\n')}
+</candidates>`;
+}
+
+/** The landing rule lives here, not in the reviewer's prompt: a reviewer told what blocks shifts its findings
+ * to fit. A later round does not reopen code the first review covered unless data or a rule is at stake. */
+export function blocksLanding(finding: ReviewFinding): boolean {
+  if (finding.severity === 'P3') return false;
+  return finding.origin !== 'old' || finding.severity === 'P1';
+}
+
+/** A bare string is a finding from a reviewer that ignored the schema; it blocks. */
+export function reviewFinding(item: unknown): ReviewFinding | undefined {
+  if (typeof item === 'string') return item.trim() ? { text: item, severity: 'P2', origin: 'first' } : undefined;
+  if (!item || typeof item !== 'object') return undefined;
+  const { text, severity, origin } = item as Record<string, unknown>;
+  if (typeof text !== 'string' || !text.trim()) return undefined;
+  if (severity !== 'P1' && severity !== 'P2' && severity !== 'P3') return undefined;
+  if (origin !== 'first' && origin !== 'earlier' && origin !== 'fix' && origin !== 'old') return undefined;
+  return { text, severity, origin };
+}
+
+function describeFinding(finding: ReviewFinding): string {
+  return /^P[1-3]\b/.test(finding.text) ? finding.text : `${finding.severity}: ${finding.text}`;
+}
+
+const git = (worktree: string, args: string[]) =>
+  spawnSync('git', args, { cwd: worktree, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
+
+/** Former reviews of the same task are the sibling directories of this one. */
+export function earlierReviews(directory: string): EarlierReviews | undefined {
+  const parent = dirname(directory);
+  const stamp = (name: string) => Number(name.split('-')[1]);
+  const names = existsSync(parent)
+    ? readdirSync(parent).filter(name => /^review-\d+-/.test(name) && name !== basename(directory)).sort((a, b) => stamp(a) - stamp(b))
+    : [];
+  const findings = new Set<string>();
+  let last: { base: string; head: string } | undefined;
+  for (const name of names) {
+    const read = (file: string) => { try { return readFileSync(join(parent, name, file), 'utf8'); } catch { return undefined; } };
+    const reported = read('findings.json');
+    if (reported === undefined) continue;
+    try {
+      for (const item of (JSON.parse(reported) as { findings?: unknown[] }).findings ?? []) {
+        if (typeof item === 'string' && item.trim()) findings.add(item);
+      }
+    } catch { continue; }
+    // Reviews made before the request was recorded name their commits in the prompt.
+    const range = /Inspect git diff ([0-9a-f]{7,40})\.\.([0-9a-f]{7,40})/.exec(read('prompt.md') ?? '');
+    try { last = JSON.parse(read('request.json') ?? '') as { base: string; head: string }; }
+    catch { if (range) last = { base: range[1]!, head: range[2]! }; }
+  }
+  return last ? { findings: [...findings], base: last.base, head: last.head } : undefined;
+}
+
+const patchLines = (worktree: string, base: string, head: string) =>
+  git(worktree, ['diff', `${base}..${head}`]).stdout.split('\n').filter(line => /^[+-](?![+-]{2} )/.test(line));
+
+/** What a later review reads, or nothing when the change must be read from the start: the last reviewed
+ * commit is gone, or more than half of the change (and over 400 lines) is new since then, as after a
+ * fresh implementation. Comparing the two patches line by line survives a rebase onto a newer main. */
+export function changesSinceReview(request: LandReview, earlier: EarlierReviews): string | undefined {
+  if (git(request.worktree, ['cat-file', '-e', `${earlier.head}^{commit}`]).status !== 0) return undefined;
+  const before = new Set(patchLines(request.worktree, earlier.base, earlier.head));
+  const now = patchLines(request.worktree, request.base, request.head);
+  const fresh = now.filter(line => !before.has(line)).length;
+  if (fresh > Math.max(400, now.length / 2)) return undefined;
+  const ancestor = git(request.worktree, ['merge-base', '--is-ancestor', earlier.head, request.head]).status === 0;
+  const args = ancestor ? ['diff', `${earlier.head}..${request.head}`]
+    : ['range-diff', `${earlier.base}..${earlier.head}`, `${request.base}..${request.head}`];
+  const shown = git(request.worktree, args);
+  if (shown.status !== 0) return undefined;
+  const limit = EMBEDDED_DIFF_LIMIT / 2;
+  return `$ git ${args.join(' ')}\n${shown.stdout.length > limit
+    ? `${shown.stdout.slice(0, limit)}\n[truncated at ${limit} characters; run the command for the rest]`
+    : shown.stdout}`;
+}
+
+const FINDINGS_SCHEMA = { type: 'object', additionalProperties: false, required: ['findings'],
+  properties: { findings: { type: 'array', items: { type: 'object', additionalProperties: false,
+    required: ['text', 'severity', 'origin'], properties: { text: { type: 'string' },
+      severity: { type: 'string', enum: ['P1', 'P2', 'P3'] },
+      origin: { type: 'string', enum: ['first', 'earlier', 'fix', 'old'] } } } } } };
+
+async function reviewPass(request: LandReview, engine: ReviewEngine, prompt: string): Promise<ReviewFinding[]> {
+  mkdirSync(request.directory, { recursive: true });
   const schema = join(request.directory, 'schema.json');
   const output = join(request.directory, 'review.json');
-  writeFileSync(schema, JSON.stringify({ type: 'object', additionalProperties: false,
-    properties: { findings: { type: 'array', items: { type: 'string' } } }, required: ['findings'] }));
-  const prompt = reviewPrompt(request);
+  writeFileSync(schema, JSON.stringify(FINDINGS_SCHEMA));
   let result: unknown;
   if (engine === 'sonnet') {
     // Claude Code reviews with read-only tools and no shell, so the diff travels in the prompt.
@@ -140,11 +275,47 @@ export async function reviewBranch(request: LandReview, engine: ReviewEngine = r
       '-s', 'read-only', '--output-schema', schema, '--output-last-message', output, '-'], request, prompt);
     result = JSON.parse(readFileSync(output, 'utf8'));
   }
-  if (!result || typeof result !== 'object' || !('findings' in result)
-    || !Array.isArray(result.findings) || !result.findings.every(item => typeof item === 'string' && item.trim())) {
-    throw new Error(`reviewer returned an invalid findings report; see ${output}`);
+  const items = result && typeof result === 'object' && 'findings' in result && Array.isArray(result.findings)
+    ? result.findings.map(reviewFinding) : [undefined];
+  if (items.some(item => !item)) throw new Error(`reviewer returned an invalid findings report; see ${output}`);
+  return items as ReviewFinding[];
+}
+
+/** Keep the review independent of worker instructions and fail closed on malformed output. Returns the
+ * findings that block; the rest are written to recorded.json for the manager to class. */
+export async function reviewBranch(request: LandReview, engine: ReviewEngine = reviewEngine()): Promise<string[]> {
+  const earlier = earlierReviews(request.directory);
+  const changes = earlier && changesSinceReview(request, earlier);
+  let found: ReviewFinding[];
+  if (earlier && changes !== undefined) {
+    found = await reviewPass(request, engine, verifyPrompt(request, earlier, changes));
+  } else if (engine === 'sonnet') {
+    found = await reviewPass(request, engine, reviewPrompt(request,
+      REVIEW_LENSES.map(lens => lens.question).join('\n'), earlier?.findings));
+  } else {
+    const passes = await Promise.all(REVIEW_LENSES.map(lens => reviewPass(
+      { ...request, directory: join(request.directory, lens.name) }, engine,
+      reviewPrompt(request, lens.question, earlier?.findings))));
+    found = passes.flat();
+    if (found.length > 1) {
+      // Without the merge the union still stands: it only costs the worker reading a defect twice.
+      found = await reviewPass({ ...request, directory: join(request.directory, 'merge') }, engine, mergePrompt(request, found))
+        .catch(error => { console.log(`review merge pass failed, keeping every candidate: ${String(error)}`); return found; });
+    }
+    // The landing's own prompt.md names the reviewed range for the next round and for readers of the run.
+    writeFileSync(join(request.directory, 'prompt.md'), reviewPrompt(request, undefined, earlier?.findings));
+    writeFileSync(join(request.directory, 'review.json'), JSON.stringify({ findings: found }));
   }
-  return result.findings;
+  writeFileSync(join(request.directory, 'request.json'), JSON.stringify({ base: request.base, head: request.head,
+    mode: earlier && changes !== undefined ? 'verify' : 'whole' }));
+  const distinct = [...new Map(found.map(finding => [finding.text, finding])).values()];
+  const recorded = distinct.filter(finding => !blocksLanding(finding));
+  if (recorded.length) {
+    writeFileSync(join(request.directory, 'recorded.json'), `${JSON.stringify({ findings: recorded }, null, 2)}\n`);
+    console.log(`review recorded ${recorded.length} finding(s) that do not block; class each and brief what is owed:\n  ${
+      recorded.map(describeFinding).join('\n  ')}`);
+  }
+  return distinct.filter(blocksLanding).map(describeFinding);
 }
 
 /** Keep landing on the shared merge path; merge receives only the revalidated owner-change list. */

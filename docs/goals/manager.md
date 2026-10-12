@@ -222,7 +222,13 @@ time); the default Codex account was 1% used (reset about 2026-10-07 00:40) and
     review does count: each one costs a worker session, a review and a gate, so
     the third on one task ends the fix rounds and the task goes to Sol with
     every finding so far, as a read-only pass over the whole contract or a
-    fresh implementation.
+    fresh implementation. Rounds failed to converge on 2026-10-12 (two tasks
+    took 9 and 11 reviews, each returning one to three new findings) because
+    every round was an independent single pass in which every finding blocked;
+    one pass finds a small share of a change's defects. Since then the first
+    review is three parallel passes and later ones only verify fixes
+    ([`land`](README.md#worker-processes)); class what a review records without
+    blocking in the mail that reports the landing.
   - **Session length.** Context grows with every call, so cost grows with the
     square of a session's length (88 calls on average, half of them searching
     and reading). A brief names the files and lines to change and the tests that
