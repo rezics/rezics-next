@@ -187,8 +187,9 @@ async function sitePublicationProof(env: WorkActivationEnvironment, publication:
     if (marker.boolean !== true) return false;
     const site = await readZoneSitePublicationReceipt(env, graph.receipt);
     if (!site) throw new ContentProjectionUnavailable('site publication receipt is incomplete');
-    if (site.zone !== ref.resourceId || site.dataEpoch !== graph.dataEpoch || site.sequence !== graph.sequence
-      || !site.pages.some(page => page.page === ref.resourceId && page.variantId === ref.variantId && page.revisionId === ref.revisionId)) {
+    if (site.dataEpoch !== graph.dataEpoch || site.sequence !== graph.sequence
+      || !site.pages.some(page => page.page === ref.resourceId && page.variantId === ref.variantId
+        && page.revisionId === ref.revisionId && page.byteDigest === ref.byteDigest)) {
       throw new ContentProjectionUnavailable('site receipt differs from terminal Content publication');
     }
     const binding = zonePublishedPageBinding(site.revision, ref.resourceId, ref.revisionId);
@@ -197,6 +198,12 @@ async function sitePublicationProof(env: WorkActivationEnvironment, publication:
         rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?current .
         FILTER(?current >= ${graph.sequence})
         FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
+      GRAPH ${iri(GRAPHS.current)} {
+        ${iri(site.zone)} a rv:Zone .
+        ${site.zone === ref.resourceId ? '' : `${iri(site.zone)} rv:homeDocument ${iri(ref.resourceId)} .
+          FILTER NOT EXISTS { ?otherZone rv:homeDocument ${iri(ref.resourceId)} .
+            FILTER(?otherZone != ${iri(site.zone)}) }`}
+      }
       GRAPH ${iri(GRAPHS.revisions)} { ${iri(binding)} rv:sitePublicationRevision ${iri(site.revision)} ;
         rv:page ${iri(ref.resourceId)} ; rv:variant ${iri(ref.variantId)} ;
         rv:contentRevision ${iri(`${CONTENT_REVISION}${ref.revisionId}`)} ; rv:byteDigest ${lit(ref.byteDigest)} ;
@@ -209,8 +216,9 @@ async function sitePublicationProof(env: WorkActivationEnvironment, publication:
   const matched = /^content-site-pin:([0-9a-f-]{36}):([0-9a-f-]{36})$/.exec(preparationId);
   if (!matched || graph.receipt !== compositionReceiptIri(matched[1]!, 'zone.edit')) return false;
   const terminal = await readCompositionReceipt(env, matched[1]!, 'zone.edit');
+  const zone = /^zone:edit:(https:\/\/rezics\.com\/id\/[0-9a-f-]{36})$/.exec(terminal?.scope ?? '')?.[1];
   if (!terminal || terminal.outcome !== 'cancelled' || matched[2] !== ref.revisionId
-    || terminal.scope !== `zone:edit:${ref.resourceId}` || terminal.dataEpoch !== graph.dataEpoch
+    || !zone || terminal.dataEpoch !== graph.dataEpoch
     || terminal.sequence !== graph.sequence) {
     throw new ContentProjectionUnavailable('site cancellation differs from rejected Content custody');
   }
@@ -218,6 +226,12 @@ async function sitePublicationProof(env: WorkActivationEnvironment, publication:
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
       rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?current .
       FILTER(?current >= ${graph.sequence}) FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
+    GRAPH ${iri(GRAPHS.current)} {
+      ${iri(zone)} a rv:Zone .
+      ${zone === ref.resourceId ? '' : `${iri(zone)} rv:homeDocument ${iri(ref.resourceId)} .
+        FILTER NOT EXISTS { ?otherZone rv:homeDocument ${iri(ref.resourceId)} .
+          FILTER(?otherZone != ${iri(zone)}) }`}
+    }
   }`, 1024);
   if (open.boolean !== true) throw new ContentProjectionUnavailable('site cancellation graph position is unavailable');
   return true;

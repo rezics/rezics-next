@@ -6,6 +6,7 @@
 - [Immutable-object adapter](../../services/main/src/infrastructure/immutable-objects.ts): conditional writes, digest verification and owner namespaces.
 - [Workload policy](workload-budgets.md): cost contracts, reusable/bulk preparation, the current 500M-entity capacity baseline and owner workload rules.
 - [Schema evolution](schema-evolution.md): model, storage, API and index generations.
+- [Home erasure ordering](zone-home-erasure-ordering.md): publication fencing, exact H closure journaling and retry coverage.
 
 [Editorial protection](../contracts/editorial-protection.md) uses the existing
 Jena/PostgreSQL owner bindings for local head/decision enforcement; it does not
