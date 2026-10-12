@@ -203,6 +203,7 @@ export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps): Pr
       return <RealmFrame view={homeView} tab={null} locale={locale} search={search}
         address={siteHref(locale, homeView.context.ref, path)}>
         <ZoneHomeContent page={page!} presentation={homeView.presentation}
+          moduleData={homeView.publication.moduleData}
           slideMedia={homeView.slideMedia} context={homeView.context} zone={homeView.zone}
           pkg={homeView.pkg} messages={homeView.zoneMessages} />
       </RealmFrame>;
@@ -467,12 +468,17 @@ async function standaloneSite(
     const document = zoneHomeDocument(page);
     if (document) return frame(
       <ZoneHomeContent page={page!} presentation={presentation.data.presentation}
+        moduleData={presentation.data.moduleData}
         slideMedia={presentation.data.slideMedia} zone={zone} pkg={null} messages={zoneMessages}
         context={{ locale, ref, realm: resolved.zone, zone: resolved.zone,
           mounts: new Map(mounts.map(mount => [mount.target, mount.segment])) }} />,
     );
-    return frame(
-      <PageContainer>
+    return frame(<ZoneHomeContent page={null} presentation={presentation.data.presentation}
+      moduleData={presentation.data.moduleData} slideMedia={presentation.data.slideMedia}
+      zone={zone} pkg={null} messages={zoneMessages}
+      context={{ locale, ref, realm: resolved.zone, zone: resolved.zone,
+        mounts: new Map(mounts.map(mount => [mount.target, mount.segment])) }}
+      empty={<PageContainer>
         <MemberList
           members={mounts.map((mount) => ({
             id: mount.target,
@@ -481,8 +487,7 @@ async function standaloneSite(
             kind: null,
           }))}
         />
-      </PageContainer>,
-    );
+      </PageContainer>} />);
   }
   if (!route?.ok) notFound();
   const read = route.data;

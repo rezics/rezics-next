@@ -33,7 +33,7 @@ import { PositionBar } from '../wiki/position-bar.tsx';
 import { withContinuity } from '../wiki/continuity.ts';
 import { ExecutionNotice, ZoneFrame, ZoneMasthead } from '../zones/zone-frame.tsx';
 import { savedSiteCuts, type SiteMountCut, type SitePresentationCut } from '../zones/site-cuts.ts';
-import { type AdaptContext, mainExecution, zoneImage, zoneText } from './adapt.ts';
+import { mainExecution, zoneImage, zoneText } from './adapt.ts';
 import { RealmBanPanel } from '../realm-appeal/panel.tsx';
 import { readOwnRealmBan } from '../realm-appeal/read.ts';
 import type { BanReading } from '../realm-appeal/reading.ts';
@@ -51,6 +51,7 @@ import { spaceHref } from '../address/path.ts';
 import { PrivateSpaceJoinPage } from '../space-access/join-page.tsx';
 import { UnlistedSpaceNotice } from '../space-access/unlisted-notice.tsx';
 import { privateDiscovery, realmDiscovery } from '../address/space-read.ts';
+import type { PublishedHomeContext } from '../zone-editor/home-modules.ts';
 import type { JoinPage } from '../manage/settings-api.ts';
 
 type Search = Record<string, string | string[] | undefined>;
@@ -82,7 +83,7 @@ export interface RealmView {
    */
   data: ZoneData | null;
   zone: ZoneContext;
-  context: AdaptContext;
+  context: PublishedHomeContext;
   lookEnabled: boolean;
   /** Who reads: signed in or not, and the Agent their shelf controls act as. */
   reader: { signedIn: boolean; actingSubject: string | null; avatarQuery: string };
@@ -240,6 +241,7 @@ export async function loadRealmView(
       ref: realm.ref,
       realm: realm.realm,
       avatarQuery: reader.avatarQuery,
+      ...(read?.ok ? { publishedHome: { moduleData: read.data.moduleData, slideMedia: read.data.slideMedia } } : {}),
       ...(realm.zone && surface === 'site'
         ? {
             zone: realm.zone.id,

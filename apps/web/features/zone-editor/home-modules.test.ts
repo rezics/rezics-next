@@ -3,7 +3,7 @@ import type { AdaptContext } from '../realm/adapt.ts';
 import type { CanonicalAddress } from '@rezics/model/address';
 import { resourceHref, siteMemberTarget } from '../address/path.ts';
 import { realmWorkHref } from '../realm/route.ts';
-import { loadPreviewHomeModules, localizedHomePresentation } from './home-modules.ts';
+import { loadPreviewHomeModules, loadPublishedHomeModules, localizedHomePresentation } from './home-modules.ts';
 import { collectionPreview, previewCollection, previewReaders, previewSummary, previewWork } from './home-modules.fixtures.ts';
 
 const context: AdaptContext = { locale: 'en', ref: 'harbor', realm: previewCollection,
@@ -124,5 +124,38 @@ describe('authorized saved home modules', () => {
     const { modules } = await load(preview);
     expect(modules[0]?.state).toMatchObject({ state: 'ready', data: { slides: [{ id: 'saved-campaign',
       title: { value: 'Saved campaign' }, href: '/saved-campaign' }] } });
+  });
+});
+
+describe('published home resolved module sources', () => {
+  test('custom-query shelves and Collection heroes retain the same selections as saved preview', async () => {
+    for (const type of ['shelf', 'hero-carousel'] as const) {
+      const preview = collectionPreview();
+      preview.presentation.modules[0]!.type = type;
+      if (type === 'shelf') {
+        const source = { kind: 'query-block' as const, block: 'selected-query' };
+        preview.presentation.modules[0]!.source = source;
+        preview.moduleData[0].sources[0].source = source;
+      }
+      const read = previewReaders();
+      read.publicModules = vi.fn(read.publicModules);
+      const publicModules = await loadPublishedHomeModules(preview,
+        localizedHomePresentation(preview.presentation, 'en'), context, read);
+      expect(publicModules).toEqual(await load(preview));
+      expect(JSON.stringify(publicModules.modules)).toContain(previewWork);
+      expect(read.publicModules).not.toHaveBeenCalled();
+    }
+  });
+
+  test('partial, skipped and unavailable published sources remain failed regions', async () => {
+    for (const state of ['partial', 'skipped', 'unavailable']) {
+      const selected = collectionPreview(state);
+      const read = previewReaders();
+      read.publicModules = vi.fn(read.publicModules);
+      const result = await loadPublishedHomeModules(selected,
+        localizedHomePresentation(selected.presentation, 'en'), context, read);
+      expect(result.modules[0]?.state).toEqual({ state: 'failed' });
+      expect(read.publicModules).not.toHaveBeenCalled();
+    }
   });
 });

@@ -1,6 +1,7 @@
 import { readShowcaseHeaders, readShowcaseImages, readShowcaseWorks, readWorkShowcase } from '../api/showcase.ts';
 import { slideImageUrls } from '../showcase/stage.ts';
 import { resourceHref, spaceHref } from '../address/path.ts';
+import { loadPublishedHomeModules, type PublishedHomeContext } from '../zone-editor/home-modules.ts';
 import type { CanonicalAddress } from '@rezics/model/address';
 import type {
   RankingMetric as ChartMetric,
@@ -591,9 +592,13 @@ export function readHeroImages(modules: readonly PlacedModule[], locale: string,
 /** A Zone home's modules and their hero images' metadata, so its first slide is in the server's HTML. */
 export async function loadHomeModules(
   presentation: ZonePresentation,
-  context: AdaptContext,
+  context: PublishedHomeContext,
   slideMedia: ZonePresentationRead['slideMedia'] = [],
 ) {
+  if (context.publishedHome) return loadPublishedHomeModules(context.publishedHome, presentation, context, {
+    publicModules: loadModules, summaries: readShowcaseWorks, work: summaryWork, context: showcaseContext,
+    more: moduleMoreHref, enrich: enrichShowcaseModules, images: readHeroImages,
+  });
   const modules = await loadModules(presentation, context, slideMedia);
   return { modules, images: await readHeroImages(modules, context.locale) };
 }

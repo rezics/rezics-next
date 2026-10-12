@@ -29,9 +29,21 @@ export interface PreviewModuleReaders {
   images: typeof readHeroImages;
 }
 
+export type HomeSourceSelection = Pick<ZonePresentationRead, 'moduleData' | 'slideMedia'>;
+export interface PublishedHomeContext extends AdaptContext {
+  /** Resolved membership from the same public response as the home's layout. */
+  publishedHome?: HomeSourceSelection;
+}
+
+/** Public and saved reads retain their own resolved sources through the same adapter. */
+export function loadPublishedHomeModules(selection: HomeSourceSelection, presentation: ZonePresentation,
+  context: AdaptContext, read: PreviewModuleReaders) {
+  return loadPreviewHomeModules(selection, presentation, context, read);
+}
+
 /** Saved membership comes only from Main's authorized producer. Public reads
  * supply public Work cards and sources Main explicitly delegates to them. */
-export async function loadPreviewHomeModules(preview: ZoneAuthoringPreview, presentation: ZonePresentation,
+export async function loadPreviewHomeModules(preview: Pick<ZoneAuthoringPreview, 'moduleData' | 'slideMedia'>, presentation: ZonePresentation,
   context: AdaptContext, read: PreviewModuleReaders) {
   const data = preview.moduleData.filter(isSavedModule);
   const summaries = async (targets: string[]) => {
@@ -129,7 +141,7 @@ export async function loadPreviewHomeModules(preview: ZoneAuthoringPreview, pres
       return lists.length ? { state: 'ready', data: { lists } } : empty;
     }
     const source = sourceOf(module, module.source);
-    if (source?.state === 'public-read' || source?.state === 'reference') return publicModule(module);
+    if (source?.state === 'public-read' || source?.state === 'reference' && module.source.kind === 'context') return publicModule(module);
     if (module.type === 'rising') {
       const works = await worksOf(module, module.source);
       if (!works.ok) return failed;

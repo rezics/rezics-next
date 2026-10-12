@@ -12,6 +12,8 @@ import { loadPreviewHomeModules, localizedHomePresentation } from './home-module
 import type { ZoneAuthoringPreview } from './read.ts';
 import type { ZoneEditorMessages } from './messages.ts';
 import { ZonePreviewHome } from './preview.tsx';
+import { ZoneHome } from '../zones/zone-home.tsx';
+import type { ReactNode } from 'react';
 
 interface HomeContext {
   context: AdaptContext;
@@ -21,16 +23,20 @@ interface HomeContext {
 }
 
 /** The public publication uses Main's public source reads. */
-export async function ZoneHomeContent({ page, presentation, slideMedia, context, zone, pkg, messages }: HomeContext & {
-  page: ZoneHomePage;
+export async function ZoneHomeContent({ page, presentation, moduleData, slideMedia, context, zone, pkg, messages, empty }: HomeContext & {
+  page: ZoneHomePage | null;
   presentation: ZonePresentationRead['presentation'];
+  moduleData: ZonePresentationRead['moduleData'];
   slideMedia: ZonePresentationRead['slideMedia'];
+  empty?: ReactNode;
 }) {
   const localized = localizedHomePresentation(presentation, context.locale);
-  const { modules, images } = await loadHomeModules(localized, context, slideMedia);
+  const { modules, images } = await loadHomeModules(localized, { ...context, publishedHome: { moduleData, slideMedia } }, slideMedia);
   return <ResolvedMediaImages images={images}>
-    <ZoneDocumentHome page={page} modules={modules} zone={zone} pkg={pkg} locale={context.locale}
+    {page ? <ZoneDocumentHome page={page} modules={modules} zone={zone} pkg={pkg} locale={context.locale}
       messages={messages} avatarQuery={context.avatarQuery} />
+      : <ZoneHome modules={modules} zone={zone} pkg={pkg} locale={context.locale}
+        messages={messages} avatarQuery={context.avatarQuery} empty={empty} />}
   </ResolvedMediaImages>;
 }
 
