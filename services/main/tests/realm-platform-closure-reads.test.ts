@@ -649,7 +649,7 @@ function feedHydrationOwner() {
   const owner = replyHydrationOwner();
   const independent = native(13);
   let hydrate = () => {};
-  owner.rows(query => {
+  owner.rows((query): ReadRow[] => {
     if (!query.includes('SELECT DISTINCT ?id ?sequence ?kind ?target')) return owner.commonRows(query);
     hydrate();
     return [
