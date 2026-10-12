@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
 import type { ContentCore } from '../../content/src/core.ts';
 import type { VerifiedPrincipal } from '../src/modules/access/admission.ts';
 import { configureDisclosure } from '../src/modules/disclosure/read.ts';
@@ -51,6 +52,7 @@ function fixture(state: ParentState, options: { count?: number; sharedParent?: b
         rows = [{ epoch: bind('epoch'), sequence: bind('9'), r: bind(root), revision: bind(rootRevision),
           type: bind('https://schema.org/CreativeWork') }];
       } else if (sql.includes('SELECT ?root WHERE')) rows = [{ root: bind(rootRevision) }];
+      else if (sql.includes('SELECT ?resource ?head')) rows = [{ resource: bind(root), head: bind(rootRevision) }];
       else if (sql.includes('SELECT ?work ?head ?owningWork ?owningHead')) rows = [{ work: bind(root), head: bind(rootRevision) }];
       else if (sql.includes('rv:RestoreCutover')) rows = [];
       else if (sql.includes(`GRAPH <${GRAPHS.control}>`)) rows = [{ epoch: bind('epoch'), sequence: bind('9') }];
@@ -58,9 +60,11 @@ function fixture(state: ParentState, options: { count?: number; sharedParent?: b
       return { results: { bindings: rows } };
     } },
   } as unknown as WorkActivationEnvironment;
-  configureDisclosure(env, { read: async (targets) => targets.map(target =>
+  configureFixtureDisclosureAncestry(env, target => target.work ? { resource: root, head: rootRevision,
+    ...(target.workRevision !== undefined ? { protectedRevision: target.workRevision } : {}) } : undefined);
+  configureDisclosure(env, fixtureDisclosureReader(async (targets) => targets.map(target =>
     state === 'hidden' && target.owner === 'content' && !children.some(item => item.reply === target.resource)
-      ? 'hidden' : 'visible') });
+      ? 'hidden' : 'visible')));
   const access = { canReadWork: async () => true } as unknown as ConstructorParameters<typeof RealmReplyStore>[2];
   const store = new RealmReplyStore(content, { settlePublication: async () => {
     calls.writes++; throw new Error('Read attempted Content settlement');

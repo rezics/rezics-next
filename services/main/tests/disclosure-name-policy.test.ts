@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureCut } from './support/disclosure-ancestry.ts';
 import type { Pool } from 'pg';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { PersonPreferencesStore } from '../src/modules/preferences/store.ts';
@@ -48,6 +49,8 @@ function fixture() {
               ...row,
               open,
               restricted: false,
+              realmClosed: false,
+              ...fixtureDisclosureCut,
               assessments: [],
               nameVisible: !row.nameOwner || visible(row.nameOwner, args[4], args[5]),
             }),
@@ -192,13 +195,14 @@ test('Disclosure applies Agent name policy on every channel without changing Wor
     graph = new FusekiClient('http://graph.invalid');
   graph.query = async (query) => {
     expect(query).not.toMatch(/\*|\+/);
+    const headRead = query.includes('SELECT ?resource ?head');
     const refs = [
-      ...(/VALUES \?work \{([^}]+)\}/.exec(query)?.[1] ?? '').matchAll(/<([^>]+)>/g),
+      ...(/VALUES \?(?:work|resource) \{([^}]+)\}/.exec(query)?.[1] ?? '').matchAll(/<([^>]+)>/g),
     ].map((match) => match[1]!);
     return {
       results: {
         bindings: refs.map((work) => ({
-          work: { type: 'uri', value: work },
+          ...(headRead ? { resource: { type: 'uri', value: work } } : { work: { type: 'uri', value: work } }),
           head: { type: 'uri', value: id(70) },
           ...(work === id(1) ? { nameOwner: { type: 'uri', value: work } } : {}),
         })),
@@ -211,6 +215,8 @@ test('Disclosure applies Agent name policy on every channel without changing Wor
     lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' },
   };
   configureDisclosure(env, new DisclosureStore(f.pool));
+  configureFixtureDisclosureAncestry(env, target => target.work ? { resource: target.work, head: id(70),
+    ...(target.workRevision !== undefined ? { protectedRevision: target.workRevision } : {}) } : undefined);
   const targets: DisclosureTarget[] = [
     { owner: 'graph', resource: id(1), component: 'name' },
     { owner: 'graph', resource: id(10), work: id(10), component: 'name' },

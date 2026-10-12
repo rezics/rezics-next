@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import { readWikiHistory } from '../src/modules/wiki/history-read.ts';
 import { WorkReadMissing } from '../src/modules/work/read-session.ts';
@@ -22,7 +23,9 @@ function fixture() {
   const graph = new FusekiClient('http://graph.invalid');
   graph.query = async (query) => ({
     results: {
-      bindings: query.includes('SELECT ?epoch ?sequence')
+      bindings: query.includes('?structuredDecision') ? []
+        : query.includes('SELECT ?resource ?head') ? [{ resource: term(work), head: term(work) }]
+        : query.includes('SELECT ?epoch ?sequence')
         ? [{ epoch: term('epoch'), sequence: term('1') }]
         : query.includes('SELECT ?main ?public')
           ? [{ main: term(work), public: term('true') }]
@@ -34,15 +37,15 @@ function fixture() {
     objectDirectory: '.temp/g-929',
     lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' },
   };
-  configureDisclosure(environment, {
-    read: async (targets, viewer) => {
+  configureFixtureDisclosureAncestry(environment, target => target.work ? { resource: work, head: work,
+    ...(target.workRevision !== undefined ? { protectedRevision: target.workRevision } : {}) } : undefined);
+  configureDisclosure(environment, fixtureDisclosureReader(async (targets, viewer) => {
       expect(viewer.signedIn).toBe(true);
       expect(viewer.age).toBe('unknown');
       expect(viewer.optIns).toEqual({ general: true, r15: false, sexual: false, grotesque: false });
       if (outage) throw new DisclosureUnavailable('Assessment unavailable');
       return targets.map(() => decision);
-    },
-  });
+    }));
   const deps = {
     environment,
     access: { canReadWork: async () => true },

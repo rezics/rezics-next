@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureCut } from './support/disclosure-ancestry.ts';
 import { readFileSync } from 'node:fs';
 import type { Pool } from 'pg';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
@@ -38,7 +39,7 @@ function storage() {
     if (sql.includes('requested AS')) {
       ownerQueries++;
       const targets = JSON.parse(String(args![0])) as { ordinal: number }[];
-      return { rows: malformed ? [] : targets.map(target => ({ ordinal: target.ordinal, open, restricted, assessments: labels })) };
+      return { rows: malformed ? [] : targets.map(target => ({ ordinal: target.ordinal, open, restricted, assessments: labels, realmClosed: false, ...fixtureDisclosureCut })) };
     }
     if (sql.includes('FROM access.recovery_fence')) return { rows: [{ open }] };
     return { rows: [] };
@@ -79,7 +80,7 @@ test('G-542: governance applies to every channel; interactive reads leave rating
   }
 });
 
-test('G-542: configured recovery and incomplete results fail closed; absent governance preserves fixtures', async () => {
+test('G-542: configured recovery and incomplete results fail closed; absent governance is unavailable', async () => {
   const s = storage(), reader = new DisclosureStore(s.pool);
   s.set({ open: false });
   await expect(reader.read(fixtures, ANONYMOUS_VIEWER, 'read')).rejects.toBeInstanceOf(DisclosureUnavailable);
@@ -87,7 +88,7 @@ test('G-542: configured recovery and incomplete results fail closed; absent gove
   await expect(reader.read(fixtures, ANONYMOUS_VIEWER, 'read')).rejects.toThrow('Disclosure result is incomplete');
   const env = { fuseki: new FusekiClient('http://graph.invalid'), objectDirectory: '.temp/g-542',
     lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } };
-  expect(await disclose(env, fixtures)).toEqual(fixtures.map(() => 'visible'));
+  await expect(disclose(env, fixtures)).rejects.toBeInstanceOf(DisclosureUnavailable);
 });
 
 test('G-542: the search graph adapter retains the live required owner across graph-client identities', async () => {
@@ -98,6 +99,7 @@ test('G-542: the search graph adapter retains the live required owner across gra
   const env = { fuseki: graph, objectDirectory: '.temp/g-542', lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } };
   const position = { dataEpoch: 'epoch', sequence: '1', generation: 'generation' } as PublicTextPosition;
   configureDisclosure(env, new DisclosureStore(s.pool));
+  configureFixtureDisclosureAncestry(env, () => undefined);
   const adapt = () => searchGraphSnapshot.run({ clients: new Set([graph]), lineage: env.lineage, position },
     () => searchCardReadDependencies({ environment: env } as MainWorkDependencies));
   const deps = adapt();
@@ -106,7 +108,7 @@ test('G-542: the search graph adapter retains the live required owner across gra
   s.set({ restricted: true });
   expect((await disclose(deps.environment, fixtures)).every(decision => decision !== 'visible')).toBe(true);
   configureDisclosure(env, null);
-  expect(await disclose(adapt().environment, fixtures)).toEqual(fixtures.map(() => 'visible'));
+  await expect(disclose(adapt().environment, fixtures)).rejects.toBeInstanceOf(DisclosureUnavailable);
 });
 
 test('G-542: summary assembly keeps unavailable entries in position and never hydrates a restricted name', async () => {
@@ -119,6 +121,7 @@ test('G-542: summary assembly keeps unavailable entries in position and never hy
   })) } });
   const env = { fuseki: graph, objectDirectory: '.temp/g-542', lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } };
   configureDisclosure(env, new DisclosureStore(s.pool));
+  configureFixtureDisclosureAncestry(env, () => undefined);
   let wikiAllows = true;
   const read = () => readResourceSummaries(env, undefined, {
     visibleRecords: async refs => new Set(wikiAllows ? refs : []),
@@ -133,7 +136,7 @@ test('G-542: summary assembly keeps unavailable entries in position and never hy
   expect(result.summaries).toEqual([{ reference: id(1), status: 'unavailable' }, { reference: id(1), status: 'unavailable' }]);
   expect(JSON.stringify(result)).not.toContain('Secret Work');
   configureDisclosure(env, null);
-  expect((await read()).summaries.every(summary => summary.status === 'available')).toBe(true);
+  await expect(read()).rejects.toBeInstanceOf(DisclosureUnavailable);
 });
 
 test('G-542: two Governance stores on one pool retain current heads for notices and reply counts', async () => {
@@ -145,21 +148,23 @@ test('G-542: two Governance stores on one pool retain current heads for notices 
       return { rows: targets.map(target => ({ ordinal: target.ordinal, open: true,
         restricted: target.resource === id(1) && target.component === 'name'
           && (target.revision == null || target.revision === oldHead)
-          || target.work === id(1) && (target.workRevision == null || target.workRevision === oldHead),
-        assessments: [] })) };
+          || target.ancestry?.parents.some(parent => parent.resource === id(1) && parent.head === oldHead),
+        assessments: [], realmClosed: false, ...fixtureDisclosureCut })) };
     }
     if (sql.includes('FROM access.recovery_fence')) return { rows: [{ open: true }] };
     return { rows: [] };
   };
   const pool = { query, connect: async () => ({ release() {}, query }) } as unknown as Pool;
   const graph = new FusekiClient('http://graph.invalid');
-  graph.query = async () => ({ results: { bindings: [{ work: { type: 'uri', value: id(1) },
+  graph.query = async query => ({ results: { bindings: [{
+    ...(query.includes('SELECT ?resource ?head') ? { resource: { type: 'uri', value: id(1) } } : { work: { type: 'uri', value: id(1) } }),
     head: { type: 'uri', value: current } }] } });
   const env = { fuseki: graph, objectDirectory: '.temp/g-542', lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } };
   const createOwner = () => new GovernanceStore(pool, { capture: async () => { throw new Error('capture is unused'); } },
     { current: async () => null }, { current: async () => null });
   const first = createOwner();
   configureDisclosure(env, first.disclosure);
+  configureFixtureDisclosureAncestry(env, target => target.work ? { resource: target.work, head: current } : undefined);
   const second = createOwner();
   expect(second.disclosure).not.toBe(first.disclosure);
   expect(disclosurePoolReader(pool)).toBe(second.disclosure);
@@ -186,6 +191,7 @@ test('G-542: asset adapters and export manifests discard all denied payload and 
     head: { type: 'uri', value: id(11) } }] } });
   const env = { fuseki: graph, objectDirectory: '.temp/g-542', lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } };
   configureDisclosure(env, new DisclosureStore(s.pool));
+  configureFixtureDisclosureAncestry(env, () => undefined);
   const asset = { asset: id(5).slice(-36), target: id(1), context: DEFAULT_MEDIA_CONTEXT,
     selection: id(11).slice(-36), selectionPosition: null, use: id(12).slice(-36), crop: null,
     representation: id(13).slice(-36), sha256: 'b'.repeat(64), mediaType: 'image/png', byteLength: 100,

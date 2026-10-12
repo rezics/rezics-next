@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureCut } from './support/disclosure-ancestry.ts';
 import type { Pool } from 'pg';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import {
@@ -46,8 +47,9 @@ function fixture(count = 1, type: Entry['type'] = 'work') {
       const owner = target.nameOwner ? entries.get(target.nameOwner) : undefined;
       const publicNameVisible = !target.nameOwner || !!owner?.active && owner.publicName;
       return { ordinal: target.ordinal, open: recoveryOpen, restricted: restricted(target, effects),
+        realmClosed: false, ...fixtureDisclosureCut,
         assessments: sql.includes('access.suitability_assessment')
-          ? [...new Set([target.resource, target.work])].flatMap(reference => reference && assessments.has(reference)
+          ? [...new Set([target.resource, ...(target.ancestry?.parents.map(parent => parent.resource) ?? [])])].flatMap(reference => reference && assessments.has(reference)
             ? [assessments.get(reference)!] : []) : [],
         nameVisible: !target.nameOwner || !!owner?.active && (owner.publicName
           || args[4] === principal.issuer && args[5] === owner.controller),
@@ -69,6 +71,9 @@ function fixture(count = 1, type: Entry['type'] = 'work') {
           label: { ...term(`Name ${reference.slice(-12)}`), 'xml:lang': 'en' } }] : [];
       })] } };
     }
+    if (query.includes('SELECT ?resource ?head')) return { results: { bindings: refs('resource').map(reference => ({
+      resource: uri(reference), head: uri(entries.get(reference)!.head),
+    })) } };
     if (query.includes('SELECT ?work ?head')) return { results: { bindings: refs('work').map(reference => {
       const entry = entries.get(reference);
       return { work: uri(reference), ...(entry ? { head: uri(entry.head) } : {}),
@@ -82,6 +87,11 @@ function fixture(count = 1, type: Entry['type'] = 'work') {
     lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } };
   const disclosure = new DisclosureStore(pool);
   configureDisclosure(environment, disclosure);
+  configureFixtureDisclosureAncestry(environment, target => {
+    const work = target.work ?? entries.get(target.resource)?.work;
+    return work ? { resource: work, head: entries.get(work)!.head,
+      ...(target.workRevision !== undefined ? { protectedRevision: target.workRevision } : {}) } : undefined;
+  });
   const input = { resources: [...entries.keys()], context: DEFAULT_MEDIA_CONTEXT, language: null };
   return { entries, environment, disclosure, graphCalls, ownerCalls, assessments, input,
     restrict: (policy: typeof restricted) => { restricted = policy; },
@@ -169,17 +179,12 @@ test('A full summary batch spends the same graph calls signed in and anonymous, 
   }
 });
 
-test('Owner adapters without paired decisions retain the required anonymous probe and its measured cost', async () => {
-  const f = fixture(1, 'agent'), entry = f.entries.get(id(1))!;
-  entry.publicName = false; entry.controller = principal.subject;
-  // This adapter uses the real owner but deliberately supports only its original interface.
+test('Owner adapters without an Access cut fail closed before summary hydration', async () => {
+  const f = fixture(1, 'agent');
   configureDisclosure(f.environment, { read: f.disclosure.read.bind(f.disclosure) });
-  const result = await readResourceSummaries(f.environment, undefined,
-    { viewer: disclosureViewer(principal) }, f.input);
-  expect(result.summaries[0]).toMatchObject({ status: 'available', disclosure: 'restricted' });
-  expect(f.ownerCalls).toHaveLength(3);
-  expect(f.graphCalls).toHaveLength(6);
-  expect(result.cost).toMatchObject({ graphQueries: 4, accessQueries: 3 });
+  await expect(readResourceSummaries(f.environment, undefined,
+    { viewer: disclosureViewer(principal) }, f.input)).rejects.toThrow('Disclosure cut reader is unavailable');
+  expect(f.ownerCalls).toHaveLength(0);
 });
 
 test('A full summary batch with covers preserves name indexes across two bounded final owner statements', async () => {
@@ -202,15 +207,15 @@ test('Release summaries carry the current owning Work and exact parent head into
   const first = await readResourceSummaries(f.environment, undefined, { viewer: disclosureViewer(principal) }, input);
   expect(first.summaries.map(summary => summary.status)).toEqual(['available', 'available']);
   for (const call of f.ownerCalls) {
-    expect(call.targets[1]).toMatchObject({ resource: id(10), work: id(2), workRevision: id(1002) });
+    expect(call.targets[1]).toMatchObject({ resource: id(10), ancestry: { parents: [expect.objectContaining({ resource: id(2), head: id(1002) })] } });
   }
   f.entries.get(id(2))!.head = id(1202);
   f.entries.get(id(10))!.head = id(1202);
-  f.restrict(target => target.work === id(2) && target.workRevision === id(1202));
+  f.restrict(target => !!target.ancestry?.parents.some(parent => parent.resource === id(2) && parent.head === id(1202)));
   const second = await readResourceSummaries(f.environment, undefined, { viewer: disclosureViewer(principal) }, input);
   expect(second.summaries).toEqual([expect.objectContaining({ reference: id(1), status: 'available' }),
     { reference: id(10), status: 'unavailable' }]);
-  expect(f.ownerCalls[2]!.targets[1]).toMatchObject({ resource: id(10), work: id(2), workRevision: id(1202) });
+  expect(f.ownerCalls[2]!.targets[1]).toMatchObject({ resource: id(10), ancestry: { parents: [expect.objectContaining({ resource: id(2), head: id(1202) })] } });
 });
 
 test('Paired inventory retains every exact target, parent revision, context and channel independently', async () => {
@@ -224,7 +229,7 @@ test('Paired inventory retains every exact target, parent revision, context and 
     { owner: 'graph', resource: id(1), component: 'name', revision: id(1001), work: id(1), workRevision: id(1001), context: id(700) },
   ];
   f.restrict((target, effects) => effects.includes('search') && (target.resource === id(2)
-    || target.revision === id(1101) || target.workRevision === id(1102) || target.context === id(700)));
+    || target.revision === id(1101) || target.ancestry?.parents.some(parent => parent.protectedRevision === id(1102)) || target.context === id(700)));
   for (const channel of ['summary', 'search', 'summary'] as const) {
     const result = await discloseInventoryWithAnonymousNames(f.environment, targets, disclosureViewer(principal), channel);
     const expected: DisclosureDecision[] = channel === 'search'
@@ -233,7 +238,10 @@ test('Paired inventory retains every exact target, parent revision, context and 
     expect(result.decisions).toEqual(expected);
     expect(result.anonymousNames).toEqual(expected);
     const captured = f.ownerCalls.at(-1)!.targets;
-    targets.forEach((target, index) => expect(captured[index]).toMatchObject(target));
+    targets.forEach(({ work, workRevision, ...target }, index) => {
+      expect(captured[index]).toMatchObject(target);
+      expect(captured[index]!.ancestry?.parents[0]).toMatchObject({ resource: work, protectedRevision: workRevision });
+    });
   }
   expect(f.ownerCalls).toHaveLength(3);
   expect(f.graphCalls).toHaveLength(3);

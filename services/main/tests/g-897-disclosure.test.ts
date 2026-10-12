@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureCut } from './support/disclosure-ancestry.ts';
 import type { Pool } from 'pg';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { configureDisclosure, discloseInventory, DisclosureStore,
@@ -34,8 +35,8 @@ function fixture() {
       if (failed) throw new Error('Assessment store unavailable');
       const targets = JSON.parse(String(args![0])) as (DisclosureTarget & { ordinal: number })[];
       requested.push(targets);
-      return { rows: targets.map(target => ({ ordinal: target.ordinal, open: true, restricted: false,
-        assessments: [...new Set([target.resource, target.work])]
+      return { rows: targets.map(target => ({ ordinal: target.ordinal, open: true, restricted: false, realmClosed: false, ...fixtureDisclosureCut,
+        assessments: [...new Set([target.resource, ...(target.ancestry?.parents.map(parent => parent.resource) ?? [])])]
           .flatMap(ref => ref && labels.has(ref) ? [labels.get(ref)!] : []) })) };
     }
     return { rows: [] };
@@ -45,9 +46,12 @@ function fixture() {
     if (query.includes('SELECT ?target WHERE') && query.includes('rv:ErasedRevision')) {
       return { results: { bindings: [] } };
     }
+    if (query.includes('?structuredDecision')) return { results: { bindings: [] } };
     if (query.includes('SELECT ?epoch ?sequence WHERE')) return { results: { bindings: [{
       epoch: term('epoch'), sequence: term('1'),
     }] } };
+    if (query.includes('SELECT ?resource ?head')) return { results: { bindings: [...new Set([...query.matchAll(/<https:\/\/rezics\.com\/id\/[0-9a-f-]{36}>/g)]
+      .map(match => match[0].slice(1, -1)))].map(resource => ({ resource: term(resource), head: term(id(11)) })) } };
     if (query.includes('SELECT ?work ?head')) {
       const refs = [...new Set([...query.matchAll(/<https:\/\/rezics\.com\/id\/[0-9a-f-]{36}>/g)]
         .map(match => match[0].slice(1, -1)))];
@@ -63,6 +67,11 @@ function fixture() {
   const environment = { fuseki: graph, objectDirectory: '.temp/g-897',
     lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } };
   configureDisclosure(environment, new DisclosureStore(pool));
+  configureFixtureDisclosureAncestry(environment, target => {
+    const work = target.work ?? (target.resource === id(2) ? id(1) : undefined);
+    return work ? { resource: work, head: id(11),
+      ...(target.workRevision !== undefined ? { protectedRevision: target.workRevision } : {}) } : undefined;
+  });
   return { environment, labels, requested, ownerSql, queries: () => ownerQueries, fail: () => { failed = true; } };
 }
 
@@ -115,7 +124,7 @@ test('G-897: identity-only derivatives retain governance ownership without a rat
   f.labels.set(id(1), ['r18']);
   expect(await discloseInventory(f.environment, [{ owner: 'graph', resource: id(2), component: 'record' }],
     ANONYMOUS_VIEWER, 'read')).toEqual(['visible']);
-  expect(f.requested.at(-1)?.[0]).toMatchObject({ work: id(1), workRevision: id(11) });
+  expect(f.requested.at(-1)?.[0]).toMatchObject({ ancestry: { parents: [expect.objectContaining({ resource: id(1), head: id(11) })] } });
   expect(await admittedPublicWorks(f.environment, [id(1)], adult)).toEqual(new Set([id(1)]));
   f.fail();
   await expect(discloseInventory(f.environment, [{ owner: 'graph', resource: id(2), component: 'record' }],
@@ -137,7 +146,8 @@ test('G-897: graph-only public target resolution retains the configured assessme
 
 test('G-897: ratings leave Access-authorized composition and reader counts available', async () => {
   const f = fixture();
-  f.environment.fuseki.query = async () => ({ results: { bindings: [{ work: term(id(1)), head: term(id(11)) }] } });
+  f.environment.fuseki.query = async query => ({ results: { bindings: query.includes('?structuredDecision') ? []
+    : [{ ...(query.includes('SELECT ?resource ?head') ? { resource: term(id(1)) } : { work: term(id(1)) }), head: term(id(11)) }] } });
   const deps = { environment: f.environment, access: { canReadWork: async () => true } } as unknown as MainWorkDependencies;
   const session = new WorkReadSession(deps, new Request('http://main.local/v1/works'), { actingSubject: id(9) },
     { dataEpoch: 'epoch', sequence: '1' });
