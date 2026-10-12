@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
+import { startMediaStack } from '../../../tests/qa/integration/media-support.ts';
 import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import type { VerifiedPrincipal } from '../src/modules/access/admission.ts';
 import { grantFixtureAuthority } from '../src/modules/access/fixture-authority.ts';
@@ -13,6 +14,8 @@ import { DECIDE_ACTION, GLOBAL_CONTEXT, GovernanceDenied, GovernanceStale, Gover
 } from '../src/modules/governance/store.ts';
 import { recordCounterNotice } from '../src/modules/rights/counter-notice.ts';
 import { SPACE_REALM_PROFILE } from '../src/modules/space/create.ts';
+import { RULE_PUBLISH_ACTION } from '../src/modules/governance/rules.ts';
+import { GRAPHS, RV, hash, iri } from '../src/modules/work/activate.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const native = () => `https://rezics.com/id/${randomUUID()}`;
@@ -544,6 +547,142 @@ test('scheduled eligible Realm restoration uses the original source and current 
   expect(await closureFence(f)).toEqual([{ decision_id: restored.decisionId, state: 'released', fence_epoch: '2' }]);
   expect(f.seenPlans.at(-1)?.restorationRestrictionId).toBe(original.decisionId);
 });
+
+async function productionJson<T>(response: Response, status = 201): Promise<T> {
+  const body = await response.text();
+  expect(response.status, body).toBe(status);
+  return JSON.parse(body) as T;
+}
+
+test('production Realm release recovers its native receipt after Access acknowledgement rollback and owner profile change', async () => {
+  const stack = await startMediaStack('realm-release-receipt');
+  const store = stack.composition.dependencies.governance!.store;
+  try {
+    const staff = await stack.member('realm-release-staff');
+    const grant = (scope: string, action: string) => grantFixtureAuthority(stack.accessPool, {
+      scope, requireDispatch: true,
+      representations: [{ principalId: staff.principalId, actor: staff.actor, action, lifetime: 'infinity' }],
+      grant: { actor: staff.actor, action, lifetime: 'infinity' },
+    });
+    await grant('space:create:root', 'space.create');
+    const created = await productionJson<{ realm: string; space: string }>(await staff.send('POST',
+      '/v1/spaces', { profile: 'space-realm-v1', name: 'Receipt recovery Realm', capabilities: ['realm'],
+        actingSubject: staff.actor }));
+    await grant(`realm:profile:${created.realm}`, 'realm.profile.publish');
+    await productionJson(await staff.send('PUT', `/v1/realms/${created.realm.slice(-36)}/profile`, {
+      profile: 'realm-public-profile-v2', expectedHead: null, actingSubject: staff.actor,
+      publication: { name: { original: 'en', labels: { en: 'Receipt recovery public Realm' } },
+        description: null, iconSelection: null, bannerSelection: null, rules: [], moderators: [],
+        count: { kind: 'unknown', value: null } },
+    }));
+    const head = (await stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head WHERE {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(created.realm)} rv:head ?head }
+    }`)).results!.bindings[0]!.head!.value;
+    const report = await productionJson<{ caseId: string; reportId: string }>(await staff.send('POST',
+      '/v1/public-reports', { profile: 'public-report-v1', target: created.realm,
+        category: 'spam_or_manipulation', statement: 'Review the retained public Realm record.',
+        contentLanguage: 'en', actingSubject: staff.actor }));
+    const basis = (await stack.accessPool.query<{ generation: string; evidence_digest: string }>(
+      `SELECT c.generation::text,r.evidence_digest FROM access.governance_case c
+        JOIN access.governance_report r ON r.case_id=c.id WHERE r.id=$1`, [report.reportId])).rows[0]!;
+    await grant('governance:platform', DECIDE_ACTION.content_report);
+    await grant('governance:platform', RULE_PUBLISH_ACTION);
+    const publishedRule = await stack.composition.dependencies.governance!.rules!.publish(staff.principal, {
+      ref: `urn:rule:receipt:${randomUUID()}`, scopeId: 'governance:platform', actingSubject: staff.actor,
+      expectedRevision: null, document: { reason: 'Protect the public Realm record' }, idempotencyKey: randomUUID(),
+    });
+    await store.safety.claim(staff.principal, staff.actor, report.caseId);
+    const input: DecisionInput = {
+      caseId: report.caseId, expectedGeneration: basis.generation, actingSubject: staff.actor,
+      outcome: 'restrict', targets: [{ owner: 'graph', resource: created.realm, component: 'record',
+        locator: null, scopeKind: 'component', revision: null, expectedHead: head, effect: 'disclosure' }],
+      rule: { ref: publishedRule.ref, revision: publishedRule.revision, digest: publishedRule.digest },
+      evidenceDigest: basis.evidence_digest, reversesDecisionId: null, answersStepId: null,
+      rationale: null, disclosure: 'private', idempotencyKey: randomUUID(),
+      reasons: { facts: 'The public Realm record was reviewed.', scope: 'The whole Realm record.',
+        duration: 'Until reconsideration.', automation: false, contentLanguage: 'en',
+        appealRoute: '/v1/public-reports/{caseId}/correspondence' },
+    };
+    const restricted = await store.decide(staff.principal, input);
+    expect(restricted.operation.status).toBe('completed');
+    await store.safety.claim(staff.principal, staff.actor, report.caseId);
+    const release: DecisionInput = { ...input, outcome: 'restore', expectedGeneration: restricted.caseGeneration,
+      idempotencyKey: randomUUID() };
+    const accepted = await store.decide(staff.principal, release, true);
+    expect(accepted.operation.status).toBe('accepted');
+    let loseAck = true, ownerCommands = 0;
+    const command = stack.fuseki.commandWithReceipt.bind(stack.fuseki);
+    stack.fuseki.commandWithReceipt = async (...args) => { ownerCommands++; return command(...args); };
+    // Keep the real production evidence, plans, owner adapter and native command;
+    // only the composed store's Access acknowledgement transport loses one reply.
+    const faultPool = new Proxy(stack.accessPool, { get(target, property) {
+      if (property === 'connect') return async () => {
+        const client = await target.connect();
+        return new Proxy(client, { get(connection, member) {
+          if (member === 'query') return async (...args: unknown[]) => {
+            if (loseAck && typeof args[0] === 'string'
+              && args[0].includes("UPDATE access.safety_decision_effect SET state = 'confirmed'")) {
+              loseAck = false;
+              throw new Error('Lost Access acknowledgement after native graph commitment');
+            }
+            return Reflect.apply(connection.query, connection, args);
+          };
+          const value = Reflect.get(connection, member);
+          return typeof value === 'function' ? value.bind(connection) : value;
+        } });
+      };
+      const value = Reflect.get(target, property);
+      return typeof value === 'function' ? value.bind(target) : value;
+    } });
+    Object.assign(store, { pool: faultPool });
+    const uncertain = await store.resumeDecision(staff.principal, staff.actor, accepted.decisionId);
+    expect(loseAck).toBe(false);
+    expect(uncertain.operation.status).toBe('partial');
+    expect(uncertain.operation.items[0]).toMatchObject({ state: 'uncertain', receipt: null });
+    const fence = async () => (await stack.accessPool.query(`SELECT decision_id,state,fence_epoch::text
+      FROM access.governance_enforcement WHERE resource=$1 AND component='record' AND revision IS NULL
+        AND effect='disclosure'`, [created.realm])).rows;
+    expect(await fence()).toEqual([{ decision_id: restricted.decisionId, state: 'restricted', fence_epoch: '1' }]);
+    const receipt = `urn:rezics:receipt:moderation:${hash(`governance-moderation:${accepted.decisionId}:1`)}`;
+    const nativeReceipt = async () => (await stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?sequence ?target ?work WHERE {
+      GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} rv:sequence ?sequence ; rv:moderationTarget ?target ; rv:work ?work }
+    }`)).results!.bindings;
+    const committed = await nativeReceipt();
+    expect(committed).toHaveLength(1);
+    expect(committed[0]!.target!.value).toBe(created.realm);
+    expect(committed[0]!.work!.value).toBe(created.realm);
+    expect((await stack.accessPool.query('SELECT 1 FROM access.outbox WHERE moderation_decision_id=$1',
+      [accepted.decisionId])).rowCount).toBe(0);
+    const nextHead = native();
+    await stack.fuseki.update(`PREFIX rv: <${RV}> DELETE { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(created.realm)} rv:head ?head ; rv:definitionProfile ?profile }
+    } INSERT { GRAPH ${iri(GRAPHS.current)} { ${iri(created.realm)} rv:head ${iri(nextHead)} ;
+      rv:definitionProfile <urn:realm-receipt:changed-profile> }
+    } WHERE { GRAPH ${iri(GRAPHS.current)} { ${iri(created.realm)} rv:head ?head .
+      OPTIONAL { ${iri(created.realm)} rv:definitionProfile ?profile } } }`);
+    const replay = await store.decide(staff.principal, release);
+    expect(replay.replayed).toBe(true);
+    expect(replay.decisionId).toBe(accepted.decisionId);
+    expect(replay.operation.status).toBe('completed');
+    expect(replay.operation.items[0]).toMatchObject({ state: 'confirmed', receipt });
+    expect(ownerCommands).toBe(1);
+    expect(await nativeReceipt()).toEqual(committed);
+    expect(await fence()).toEqual([{ decision_id: accepted.decisionId, state: 'released', fence_epoch: '2' }]);
+    const repeat = await store.decide(staff.principal, release);
+    expect(repeat.decisionId).toBe(accepted.decisionId);
+    expect(repeat.operation.status).toBe('completed');
+    expect(ownerCommands).toBe(1);
+    expect(await fence()).toEqual([{ decision_id: accepted.decisionId, state: 'released', fence_epoch: '2' }]);
+    expect((await stack.accessPool.query('SELECT 1 FROM access.outbox WHERE moderation_decision_id=$1',
+      [accepted.decisionId])).rowCount).toBe(1);
+    expect((await stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?event WHERE {
+      GRAPH ${iri(GRAPHS.outbox)} { ?event rv:receipt ${iri(receipt)} }
+    }`)).results!.bindings).toHaveLength(1);
+  } finally {
+    Object.assign(store, { pool: stack.accessPool });
+    await stack.stop();
+  }
+}, 120_000);
 
 for (const corruption of ['local authority', 'wrong scope', 'nonglobal context'] as const) {
   test(`scheduled Realm restoration rejects retained ${corruption} despite valid current action authority`, async () => {
