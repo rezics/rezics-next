@@ -3,7 +3,8 @@ import type { SparqlResult } from '../src/infrastructure/fuseki.ts';
 import { contentSearchEligibilityDecisionIri, contentSearchEligibilityDigest,
   contentSearchEligibilityReceiptIri, ContentEligibilityDenied, type ContentSearchEligibilityInput }
   from '../src/modules/content-publication/eligibility.ts';
-import { readContentEligibilityStatesForVariants }
+import { readContentEligibilityStatesForVariants, readRetainedContentEligibilitySource,
+  ContentEligibilityStateUnavailable }
   from '../src/modules/content-publication/eligibility-state.ts';
 import { contentPublicationDecisionIri, contentPublicationReceiptIri }
   from '../src/modules/content-publication/publish.ts';
@@ -68,7 +69,7 @@ function proofRow(idField: string, id: string, receipt: string): Row {
     receiptCount: integer('1'), receipt: uri(receipt), receiptTypeCount: integer('1') };
 }
 
-async function readProof(input: ContentSearchEligibilityInput, requestDigest: string) {
+function proofFixture(input: ContentSearchEligibilityInput, requestDigest: string) {
   const rights = `${RV}${input.rightsBasis === 'public-domain' ? 'PublicDomain' : 'OriginalContribution'}`;
   const assessment = input.assessmentId ? `urn:rezics:rights:assessment:${input.assessmentId}` : undefined;
   const profile = `https://rezics.com/definition/content-search-eligibility-${input.rightsBasis === 'public-domain' ? 'v2' : 'v1'}`;
@@ -115,9 +116,7 @@ async function readProof(input: ContentSearchEligibilityInput, requestDigest: st
     ['rDecision', input.publicationDecision, 'uri'],
   ];
   for (const [name, value, type] of fields) setField(pin, name, value, type);
-  const env = { lineage: { dataEpoch: graphEpoch, routingEpoch: '1' }, objectDirectory: '.temp' } as WorkActivationEnvironment;
-  return (await readContentEligibilityStatesForVariants(env, [input.variantId],
-    { dataEpoch: ownerEpoch, sequence: '10' }, { read: async step => {
+  const read = async (step: string): Promise<SparqlResult> => {
       let rows: Row[];
       if (step.startsWith('snapshot')) rows = [{ epoch: literal(graphEpoch),
         routing: literal('1'), sequence: integer('20') }];
@@ -128,8 +127,76 @@ async function readProof(input: ContentSearchEligibilityInput, requestDigest: st
       else if (step === 'publication owner records') rows = [pin];
       else throw new Error(`unexpected proof read: ${step}`);
       return { results: { bindings: rows } };
-    } }))[0]!;
+  };
+  const queries: string[] = [];
+  const env = { lineage: { dataEpoch: graphEpoch, routingEpoch: '1' }, objectDirectory: '.temp',
+    fuseki: { query: async (sparql: string) => {
+      queries.push(sparql);
+      if (sparql.includes('SELECT ?epoch')) return read('snapshot before');
+      if (sparql.includes('SELECT ?eligibility')) return read('eligibility owner records');
+      if (sparql.includes('SELECT ?publication')) return read('publication owner records');
+      throw new Error('unexpected retained proof query');
+    } } } as unknown as WorkActivationEnvironment;
+  const owner = { dataEpoch: ownerEpoch, sequence: '10' };
+  const source = { eligibilityDecision: eligibility, publicationDecision: input.publicationDecision,
+    variant: input.variantId, resource: input.resourceId,
+    receiptId: contentSearchEligibilityReceiptIri(eligibilityAdmission), requestDigest,
+    graphDataEpoch: graphEpoch, graphSequence: '6' };
+  return { env, owner, source, approval, read, queries };
 }
+
+async function readProof(input: ContentSearchEligibilityInput, requestDigest: string) {
+  const { env, owner, read } = proofFixture(input, requestDigest);
+  return (await readContentEligibilityStatesForVariants(env, [input.variantId], owner, { read }))[0]!;
+}
+
+test('retained eligibility reports an unresolved Main proof and its failing predicate', async () => {
+  const digest = contentSearchEligibilityDigest(apiV1);
+  const fixture = proofFixture(apiV1, digest);
+  const read = () => readRetainedContentEligibilitySource(fixture.env, fixture.owner, fixture.source);
+  setField(fixture.approval, 'rRequestDigest', 'f'.repeat(64), 'literal');
+  const failure = await read().catch((error: unknown) => error);
+  expect(failure).toBeInstanceOf(ContentEligibilityStateUnavailable);
+  expect((failure as Error).message).toBe(
+    'retained eligibility proof did not resolve: not a verified Main owner proof (digest predicate)');
+  expect(fixture.queries).toHaveLength(2);
+  setField(fixture.approval, 'rRequestDigest', digest, 'literal');
+  fixture.approval.receiptTypeCount = integer('0');
+  await expect(read()).rejects.toThrow(
+    'retained eligibility proof did not resolve: not a verified Main owner proof (type or count predicate (receiptType))');
+  fixture.approval.receiptTypeCount = integer('1');
+  setField(fixture.approval, 'rOutcome', `${RV}Stale`);
+  setField(fixture.approval, 'rRequestDigest', 'f'.repeat(64), 'literal');
+  await expect(read()).rejects.toThrow(
+    'retained eligibility proof did not resolve: not a verified Main owner proof (field predicate (rOutcome))');
+  setField(fixture.approval, 'rOutcome', `${RV}Succeeded`);
+  setField(fixture.approval, 'rRequestDigest', digest, 'literal');
+  await expect(readRetainedContentEligibilitySource(fixture.env, fixture.owner,
+    { ...fixture.source, resource: `${apiV1.resourceId}-foreign` })).rejects.toThrow(
+      'retained eligibility proof did not resolve: not a verified Main owner proof (field predicate (dResource))');
+});
+
+test('retained eligibility reports which verified proof fields differ from the event', async () => {
+  const fixture = proofFixture(apiV2, contentSearchEligibilityDigest(apiV2));
+  const verified = await readRetainedContentEligibilitySource(fixture.env, fixture.owner, fixture.source);
+  expect(verified.eligibility.requestDigest).toBe(fixture.source.requestDigest);
+  const mismatches = [
+    { field: 'publicationDecision', source: { publicationDecision: `${publication}-changed` } },
+    { field: 'sourceReceiptId', source: { receiptId: `${fixture.source.receiptId}-changed` } },
+    { field: 'requestDigest', source: { requestDigest: 'e'.repeat(64) } },
+    { field: 'graphSequence', source: { graphSequence: '7' } },
+  ];
+  for (const mismatch of mismatches) {
+    const before = fixture.queries.length;
+    const read = () => readRetainedContentEligibilitySource(fixture.env, fixture.owner,
+      { ...fixture.source, ...mismatch.source });
+    const failure = await read().catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(ContentEligibilityStateUnavailable);
+    expect((failure as Error).message).toBe(
+      `retained eligibility proof resolved but differs from retained event (${mismatch.field})`);
+    expect(fixture.queries).toHaveLength(before + 2);
+  }
+});
 
 test('canonical v1 matches the retained API receipt from the projection diagnosis', () => {
   const input: ContentSearchEligibilityInput = {

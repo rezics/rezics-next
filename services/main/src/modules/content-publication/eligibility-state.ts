@@ -600,11 +600,62 @@ export async function readRetainedContentEligibilitySource(env: WorkActivationEn
     1_048_576)).results?.bindings ?? [];
   const eligibility = parseEligibilityProof(eligibilityRows.length === 1 ? eligibilityRows[0] : undefined,
     source.eligibilityDecision, snapshot, source.variant, source.resource);
-  if (!eligibility || !eligibility.sourceReceiptId || !eligibility.requestDigest
-    || eligibility.publicationDecision !== source.publicationDecision
-    || eligibility.sourceReceiptId !== source.receiptId || eligibility.requestDigest !== source.requestDigest
-    || eligibility.graphSequence !== source.graphSequence) {
-    throw new ContentEligibilityStateUnavailable('retained eligibility event differs from its exact Main owner proof');
+  if (!eligibility || !eligibility.sourceReceiptId || !eligibility.requestDigest) {
+    const row = eligibilityRows.length === 1 ? eligibilityRows[0] : undefined;
+    let predicate = 'field predicate (owner decision or receipt binding)';
+    const invalidCount = row && ['decisionType', 'anchorType', 'receipt', 'receiptType']
+      .find(field => count(row, field) !== 1);
+    if (!row) predicate = 'count predicate (eligibility owner rows)';
+    else if (exactRowId(row, 'eligibility') !== source.eligibilityDecision) {
+      predicate = 'type or identity predicate (eligibility)';
+    } else if (invalidCount) predicate = `type or count predicate (${invalidCount})`;
+    else {
+      const invalidField = [
+        ['dComponent', exact(row, 'dComponent', 'uri') === source.variant],
+        ['dVariant', exact(row, 'dVariant', 'uri') === source.variant],
+        ['dResource', exact(row, 'dResource', 'uri') === source.resource],
+        ['rOutcome', exact(row, 'rOutcome', 'uri') === `${RV}Succeeded`],
+        ['rReason', optionalExact(row, 'rReason', 'uri') === null],
+      ] as const;
+      const fieldMismatch = invalidField.find(([, matches]) => !matches)?.[0];
+      const publicationDecision = exact(row, 'dPublication', 'uri');
+      const expectedHead = exact(row, 'rExpectedHead', 'uri');
+      const actor = exact(row, 'dActor', 'uri');
+      const rights = exact(row, 'dRightsBasis', 'uri');
+      const rightsBasis = rights === `${RV}OriginalContribution` ? 'original-contribution'
+        : rights === `${RV}PublicDomain` ? 'public-domain' : undefined;
+      const assessment = optionalExact(row, 'dAssessment', 'uri');
+      const assessmentId = assessment && /^urn:rezics:rights:assessment:([0-9a-f-]{36})$/i.exec(assessment)?.[1];
+      const digest = exact(row, 'rRequestDigest', 'literal');
+      if (fieldMismatch) predicate = `field predicate (${fieldMismatch})`;
+      else if (publicationDecision && isIri(publicationDecision) && expectedHead && isIri(expectedHead)
+        && actor && isIri(actor) && rightsBasis && digest && SHA256.test(digest)
+        && source.resource !== source.variant && isIri(source.resource) && isIri(source.variant)
+        && (rightsBasis === 'original-contribution' ? assessment === null : assessmentId && UUID.test(assessmentId))) {
+        const diagnosticDigest = contentSearchEligibilityDigest({ resourceId: source.resource,
+          variantId: source.variant, publicationDecision,
+          expectedEligibilityHead: expectedHead === NONE ? null : expectedHead,
+          actingSubject: actor, rightsBasis, disclosure: 'public',
+          ...(rightsBasis === 'public-domain'
+            ? { profile: 'content-search-eligibility-v2' as const, assessmentId: assessmentId! } : {}) });
+        // Only attribute failure to the digest when the same parser accepts all
+        // other predicates. This diagnostic copy never becomes a verified source.
+        if (parseEligibilityProof({ ...row, rRequestDigest: { ...row.rRequestDigest!, value: diagnosticDigest } },
+          source.eligibilityDecision, snapshot, source.variant, source.resource)) predicate = 'digest predicate';
+      }
+    }
+    throw new ContentEligibilityStateUnavailable(
+      `retained eligibility proof did not resolve: not a verified Main owner proof (${predicate})`);
+  }
+  const differences = [
+    ['publicationDecision', eligibility.publicationDecision, source.publicationDecision],
+    ['sourceReceiptId', eligibility.sourceReceiptId, source.receiptId],
+    ['requestDigest', eligibility.requestDigest, source.requestDigest],
+    ['graphSequence', eligibility.graphSequence, source.graphSequence],
+  ].filter(([, proof, event]) => proof !== event).map(([field]) => field);
+  if (differences.length) {
+    throw new ContentEligibilityStateUnavailable(
+      `retained eligibility proof resolved but differs from retained event (${differences.join(', ')})`);
   }
   const publicationRows = (await env.fuseki.query(publicationProofQuery([source.publicationDecision]),
     1_048_576)).results?.bindings ?? [];
