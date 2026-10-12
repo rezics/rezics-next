@@ -1,5 +1,6 @@
 import { afterAll, beforeEach, expect, mock, test } from 'bun:test';
 import type { MainClient } from '../discover/types.ts';
+import { workHref } from '../work-page/route.ts';
 import { parseLibraryState } from './state.ts';
 
 const originalReader = { ...(await import('../shell/communities-read.ts')) };
@@ -16,7 +17,7 @@ let lowerBound: string | null = null;
 const answer = (data: unknown) => Promise.resolve({ data, error: null });
 const resume = (work: string) => ({ work, nextUnread: work === complete ? null : {
   title: `Chapter ${works.indexOf(work) + 2}`,
-  href: `/w/${work.slice(-36)}/read/chapter-${works.indexOf(work) + 2}?language=zh-Hans`,
+  href: `${workHref(work.slice(-36))}/read/chapter-${works.indexOf(work) + 2}?language=zh-Hans`,
 }, unreadCount: work === complete ? null : { value: 8 - works.indexOf(work),
   kind: work === lowerBound ? 'lower-bound' : 'exact' } });
 const shelf = (limit: number) => answer({ items: works.slice(0, limit).map(work => ({ work, status: 'reading',

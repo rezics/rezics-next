@@ -46,7 +46,7 @@ export const EightReadingWorks: Story = {
     const links = canvas.getAllByRole('link', { name: /^Continue/ });
     await expect(links).toHaveLength(8);
     for (const [index, link] of links.entries()) {
-      await expect(link).toHaveAttribute('href', localizedPath('en', eightReadingWorks[index]!.progress.next.href));
+      await expect(link).toHaveAttribute('href', localizedPath(eightReadingWorks[index]!.progress.next.href, 'en'));
     }
     await expect(canvas.queryByRole('link', { name: /^Open Work/ })).toBeNull();
   },
