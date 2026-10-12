@@ -8,7 +8,7 @@ import { signInAtAccounts } from './account-sign-in.ts';
 
 interface PreparedRecipes {
   corpus: LaunchRecipesCorpus;
-  restored: false;
+  restored: true;
 }
 
 interface Reader {
@@ -26,7 +26,9 @@ test.beforeAll(() => {
   const prepared = JSON.parse(readFileSync(retained, 'utf8')) as PreparedRecipes;
   expect(prepared.corpus.recipe).toBe('launch-real-recipes-v2');
   expect(prepared.corpus.records).toHaveLength(30);
-  expect(prepared.restored).toBe(false);
+  expect(prepared.restored).toBe(true);
+  expect(prepared.corpus.id).toBe('launch-recipes-139f15c221bb728ebfca');
+  expect(prepared.corpus.backup).not.toBe('');
   corpus = prepared.corpus;
   const privatePath = process.env.REZICS_WEB_AUTH_PRIVATE_PATH;
   if (!privatePath) throw new Error('REZICS_WEB_AUTH_PRIVATE_PATH must identify the isolated QA reader');

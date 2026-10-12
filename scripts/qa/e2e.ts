@@ -301,6 +301,8 @@ async function runE2e(): Promise<void> {
   const runDeadline = qaMemoryDeadline(env);
   const steps: BrowserStepResult[] = [];
   let ownedPort: number | undefined;
+  let appRunId = runId;
+  let stopRestoredStack: (() => Promise<void>) | undefined;
 
   async function measured(step: string, budgetMs: number, run: () => Promise<void>): Promise<void> {
     console.log(`${step}: ${budgetMs / 1000}s budget`);
@@ -390,6 +392,29 @@ async function runE2e(): Promise<void> {
     ownedPort = web.port;
     console.log(`Web origin: ${web.origin}`);
     const preparations = selectJourneyPreparations(await discoverJourneyPreparations(root), playwrightArgs);
+    const restores = preparations.filter(item => item.restoreStack);
+    if (restores.length > 1) throw new Error('A browser run can restore only one retained stack');
+    if (restores[0]) {
+      const preparation = restores[0];
+      await measured(`${preparation.step} restore`, preparation.budgetMs, async () => {
+        if (!apps.ACCOUNTS_PORT) throw new Error('Retained browser restore needs an Accounts port');
+        const restored = await preparation.restoreStack!({ runId, webOrigin: web.origin,
+          accountsPort: apps.ACCOUNTS_PORT });
+        stopRestoredStack = restored.stop;
+        appRunId = restored.runId;
+        Object.assign(apps, restored.apps);
+        const stackDir = join(root, '.temp/stack', `rezics-qa-${appRunId}`);
+        const authDir = join(stackDir, 'web-auth');
+        const client = JSON.parse(readFileSync(join(authDir, 'public.json'), 'utf8')) as { clientId: string };
+        const compose = readEnv(join(stackDir, 'compose.env'));
+        Object.assign(env, apps, readEnv(join(authDir, 'runtime.env')), {
+          WEB_OAUTH_CLIENT_ID: client.clientId,
+          MAILPIT_URL: `http://127.0.0.1:${compose.MAILPIT_HTTP_PORT}`,
+          REZICS_WEB_AUTH_PUBLIC_PATH: join(authDir, 'public.json'),
+          REZICS_WEB_AUTH_PRIVATE_PATH: join(authDir, 'private.json'),
+        });
+      });
+    }
     await measured('Application setup', budgets.setup, async () => {
       if (!env.MAIN_RELAY_DATABASE_URL || !env.MAIN_RELAY_CONSUMER || !env.MAIN_DATA_EPOCH) {
         throw new Error('The e2e stack needs a Main relay checkpoint');
@@ -400,7 +425,7 @@ async function runE2e(): Promise<void> {
       const account = launch('account', 'bun', ['services/account/src/index.ts']);
       await ready('Account', `http://127.0.0.1:${apps.ACCOUNT_PORT}/health/ready`, account, 30_000);
       if (!apps.ACCOUNTS_PORT) throw new Error('The e2e stack has no public Accounts origin');
-      const accounts = launch('accounts', 'bun', ['scripts/dev/accounts-preview.ts', '--profile', 'qa', '--run-id', runId], {
+      const accounts = launch('accounts', 'bun', ['scripts/dev/accounts-preview.ts', '--profile', 'qa', '--run-id', appRunId], {
         REZICS_WEB_E2E_BASE_URL: web.origin,
       });
       await ready('Accounts', `http://127.0.0.1:${apps.ACCOUNTS_PORT}/sign-in`, accounts, 240_000);
@@ -411,7 +436,7 @@ async function runE2e(): Promise<void> {
       await ready('Main', `http://127.0.0.1:${apps.MAIN_PORT}/health/ready`, main, 30_000);
       const relayProcess = launch('main-relay', 'bun', ['services/main/src/relay.ts']);
       await started('main-relay', relayProcess, '"event":"main_relay_started"', 30_000);
-      const preview = launch('preview', 'bun', ['scripts/dev/web-preview.ts', '--profile', 'qa', '--run-id', runId]);
+      const preview = launch('preview', 'bun', ['scripts/dev/web-preview.ts', '--profile', 'qa', '--run-id', appRunId]);
       await ready('Web Worker', `${web.origin}/search`, preview, 240_000);
     });
     const preparationFailures = await runPreparedJourneys(preparations, playwrightArgs, {
@@ -460,7 +485,8 @@ async function runE2e(): Promise<void> {
     process.exitCode = 1;
   } finally {
     stopAll();
-    if (ownedPort !== undefined) releaseOwnedClaim(ownedPort);
+    try { await stopRestoredStack?.(); }
+    finally { if (ownedPort !== undefined) releaseOwnedClaim(ownedPort); }
   }
 
   // The browser suite has finished using the services. Release them before

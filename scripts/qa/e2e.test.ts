@@ -3,7 +3,7 @@ import { join, resolve } from 'node:path';
 import { describe, expect, test } from 'bun:test';
 import { e2eArgs, failedSelection, parseJUnit, selectedTestExecuted } from './acceptance.ts';
 import { measuredBrowserStep, runPreparedJourneys, type BrowserStepResult } from './e2e.ts';
-import type { JourneyPreparation } from './e2e-preparation.ts';
+import { discoverJourneyPreparations, type JourneyPreparation } from './e2e-preparation.ts';
 
 const preparation = (name: string): JourneyPreparation => ({
   journey: `apps/web/tests/${name}.e2e.ts`, command: ['bun', 'prepare.ts'],
@@ -22,6 +22,41 @@ function fixture() {
 }
 
 describe('journey preparation isolation', () => {
+  test('discovery retains a stack restore hook instead of falling back to fresh data preparation', async () => {
+    const f = fixture();
+    try {
+      f.journey('retained');
+      writeFileSync(join(f.root, 'prepare.ts'), '');
+      writeFileSync(join(f.root, 'apps/web/tests/retained.prepare.ts'), `
+        export const preparation = ${JSON.stringify({ command: ['bun', 'prepare.ts'],
+          step: 'Retained corpus', slug: 'retained', budgetMs: 1000 })};
+        export async function restoreStack(input) {
+          return { runId: input.runId + '-copy', apps: { MAIN_PORT: '4321' }, stop: async () => {} };
+        }
+      `);
+      const [selected] = await discoverJourneyPreparations(f.root);
+      expect(selected?.restoreStack).toBeFunction();
+      const restored = await selected!.restoreStack!({ runId: 'browser', webOrigin: 'http://127.0.0.1:3003',
+        accountsPort: '3004' });
+      expect(restored.runId).toBe('browser-copy');
+      expect(restored.apps).toEqual({ MAIN_PORT: '4321' });
+      await restored.stop();
+    } finally { f.cleanup(); }
+  });
+
+  test('a malformed stack restore hook is refused before fresh preparation can run', async () => {
+    const f = fixture();
+    try {
+      f.journey('invalid');
+      writeFileSync(join(f.root, 'apps/web/tests/invalid.prepare.ts'), `
+        export const preparation = ${JSON.stringify({ command: ['bun', 'prepare.ts'],
+          step: 'Invalid restore', slug: 'invalid', budgetMs: 1000 })};
+        export const restoreStack = true;
+      `);
+      await expect(discoverJourneyPreparations(f.root)).rejects.toThrow('restoreStack must be a function');
+    } finally { f.cleanup(); }
+  });
+
   for (const error of ['Prepare first failed (1)', 'Prepare first exceeded its 1s budget']) {
     test(`${error}: the next preparation and journey run, with both file outcomes reported`, async () => {
       const f = fixture();

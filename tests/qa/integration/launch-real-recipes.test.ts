@@ -285,9 +285,19 @@ test('recipes / Catalogue browse and search in its Zone cover all 30 Works acros
   expect(pages.at(-1)?.window.complete).toBe(true);
   expect(pages.at(-1)?.matches).toEqual({ value: corpus.records.length, kind: 'exact' });
   expect(new Set(items.map(item => item.id))).toEqual(new Set(corpus.records.map(item => item.work)));
-  const search = await readAllBrowsePages(recipeApi, corpus.realm, 'Puff Paste');
+  // Title substring search for "e" matches 28 retained recipes, exceeding one page.
+  const searchText = 'e';
+  const expectedSearch = corpus.records.filter(item => item.title.toLowerCase().includes(searchText));
+  expect(expectedSearch).toHaveLength(28);
+  const search = await readAllBrowsePages(recipeApi, corpus.realm, searchText);
+  const searchIds = search.flatMap(page => page.items.map(item => item.id));
+  expect(search.map(page => page.items.length)).toEqual([20, 8]);
+  expect(search[0]?.window.complete).toBe(false);
+  expect(search[0]?.nextCursor).toBeString();
   expect(search.at(-1)?.window.complete).toBe(true);
-  expect(search.at(-1)?.matches.kind).toBe('exact');
-  expect(search.flatMap(page => page.items).map(item => item.id)).toContain(
-    corpus.records.find(item => item.recipeId === 'puff-paste')!.work);
+  expect(search.at(-1)?.nextCursor).toBeNull();
+  expect(search.at(-1)?.matches).toEqual({ value: expectedSearch.length, kind: 'exact' });
+  expect(searchIds).toHaveLength(expectedSearch.length);
+  expect(new Set(searchIds).size).toBe(searchIds.length);
+  expect(new Set(searchIds)).toEqual(new Set(expectedSearch.map(item => item.work)));
 });

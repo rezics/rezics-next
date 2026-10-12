@@ -5,7 +5,7 @@ import { Pool } from 'pg';
 import type { FixtureLock } from '../fixtures/pull.ts';
 import { prideEditionSet } from '../../tests/fixtures/sources/open-library.ts';
 import { stableId } from '../dev/seed/state.ts';
-import { readEnv } from '../dev/config.ts';
+import { appEnvironment, readEnv, replacePrivate } from '../dev/config.ts';
 import { stageQaBootstrap } from '../qa/bootstrap.ts';
 import { qaStackEnvironment } from '../qa/stack-environment.ts';
 import { runQaStartupChildAsync } from '../qa/stack-startup.ts';
@@ -691,55 +691,89 @@ async function buildRecipesApiBackup() {
   return corpus;
 }
 
+/** Browser and API proofs restore the same retained command-built owner stores. */
+export async function restoreBrowserRecipes(input: { runId: string; webOrigin: string; accountsPort: string }) {
+  const { runId } = input;
+  if (!runId || !/^[a-z0-9][a-z0-9-]{0,30}$/.test(runId))
+    throw new Error('Browser recipes restore requires an isolated QA run');
+  const corpus = loadLaunchRecipesCorpus();
+  const directory = join(root, '.temp/launch-corpus');
+  const path = join(directory, `browser-recipes-${runId}.json`);
+  if (existsSync(path)) throw new Error('Browser recipe restore evidence already exists');
+  const target = `launch-recipes-${runId}-browser`;
+  let copy: CorpusRestoreSmokeInput | undefined;
+  const { startMediaStack } = await import('../../tests/qa/integration/media-support.ts');
+  const driver = createCorpusBackupDriver({ sourceRunId: runId,
+    directory: join(root, '.temp/launch-corpus/recipes/backups'), resumeSource: false,
+    async quiesce() { throw new Error('Browser recipe QA restores a retained corpus and never backs it up'); },
+    async smokeRead(restored) {
+      copy = restored;
+      const env = { ...restored.apps, REZICS_QA_RUN_ID: restored.runId, REZICS_QA_STACK_MODE: 'scale',
+        REZICS_QA_STACK_TIER: 'integration', REZICS_STACK_PROFILE: 'qa' };
+      const previous = new Map(Object.keys(env).map(key => [key, Bun.env[key]]));
+      Object.assign(Bun.env, env);
+      let stack: MediaStack | undefined;
+      try {
+        stack = await startMediaStack('launch-recipes-browser-restored', { library: true, ownerUrls: {
+          access: restored.apps.ACCESS_DATABASE_URL!, content: restored.apps.CONTENT_DATABASE_URL!,
+          relay: restored.apps.ACCOUNT_RELAY_DATABASE_URL!,
+        } });
+        const projection = stack.composition.zoneBrowse;
+        if (!projection) throw new Error('Restored browser recipes have no Zone browse projection');
+        await projection.backfill();
+        restored.signal.throwIfAborted();
+        const importer = await stack.member('launch-recipes-importer', { stable: true, verified: true });
+        const api = workProfileCorpusApi('http://main.local', importer.token, {
+          fetch: ((request, init) => stack!.main.handle(new Request(request, init))) as typeof fetch });
+        const page = await api.read<{ items: { id: string }[]; nextCursor: string | null }>(
+          `/v1/realms/${short(corpus.realm)}/modules/browse?limit=20&language=en`);
+        if (page.items.length !== 20 || !page.nextCursor)
+          throw new Error('Restored browser recipes did not expose a complete first catalogue page');
+      } finally {
+        await stack?.stop();
+        for (const [key, value] of previous) {
+          if (value === undefined) delete Bun.env[key];
+          else Bun.env[key] = value;
+        }
+      }
+    },
+  });
+  const started = performance.now();
+  try {
+    await restoreLaunchRecipesCorpus(corpus, target, driver);
+    if (!copy) throw new Error('Browser recipe restore did not become ready');
+    const stackDir = join(root, '.temp/stack', `rezics-qa-${copy.runId}`);
+    // The retained API build has no Accounts app; use the browser runner's reserved port.
+    const composePath = join(stackDir, 'compose.env');
+    const compose = { ...readEnv(composePath), ACCOUNTS_PORT: input.accountsPort };
+    replacePrivate(composePath, compose);
+    replacePrivate(join(stackDir, 'apps.env'), appEnvironment(compose, stackDir));
+    const { bootstrapWebAuth } = await import('../dev/web-auth-bootstrap.ts');
+    await bootstrapWebAuth({ runId: copy.runId, redirectUris: [`${input.webOrigin}/auth/callback`] });
+    const preparation = { ...driver.preparation(target), totalMs: performance.now() - started };
+    if (preparation.totalMs > budgetMs) throw new Error('Browser recipe restore and readiness exceeded 600 seconds');
+    const prepared = { corpus, restored: true as const, restoreRunId: copy.runId, preparation };
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(`${path}.tmp`, JSON.stringify(prepared, null, 2) + '\n', { mode: 0o600 });
+    renameSync(`${path}.tmp`, path);
+    console.log(JSON.stringify({ launchCorpus: corpus.id, restored: true, restoreRunId: copy.runId, preparation }));
+    return { runId: copy.runId, apps: readEnv(join(stackDir, 'apps.env')), stop: () => driver.stop(target) };
+  } catch (error) {
+    await driver.stop(target);
+    throw error;
+  }
+}
+
 async function prepareBrowserRecipes() {
   const runId = process.env.REZICS_QA_RUN_ID;
   if (!runId || !/^[a-z0-9][a-z0-9-]{0,30}$/.test(runId))
     throw new Error('Browser recipes preparation requires an isolated QA run');
-  const directory = join(root, '.temp/launch-corpus');
-  const path = join(directory, `browser-recipes-${runId}.json`);
-  if (existsSync(path)) {
-    const saved = JSON.parse(readFileSync(path, 'utf8')) as { corpus: LaunchRecipesCorpus; restored: false };
-    if (saved.corpus.recipe !== launchRecipesRecipe || saved.restored !== false
-      || !compatibleLoadStorage(saved.corpus.compatibility, loadCompatibility(root)))
-      throw new Error('Incompatible browser recipes preparation');
-    console.log(JSON.stringify(saved));
-    return;
-  }
-  const objectDirectory = process.env.MAIN_OBJECT_DIRECTORY;
-  if (!objectDirectory) throw new Error('Browser recipes preparation needs the running stack object directory');
-  const { startMediaStack } = await import('../../tests/qa/integration/media-support.ts');
-  const stack = await startMediaStack('launch-recipes-browser-source', { library: true, profileCredits: true });
-  try {
-    const workObjects = stack.objects('semantic/work/');
-    const structureObjects = stack.objects('semantic/structure/');
-    await Promise.all([workObjects.initialize(), structureObjects.initialize()]);
-    Object.assign(stack.env, { objectDirectory, workObjects, structureObjects });
-    const editor = await stack.member('launch-recipes-browser-importer', { stable: true, verified: true });
-    const signal = AbortSignal.timeout(budgetMs);
-    const api = workProfileCorpusApi('http://main.local', editor.token, { signal,
-      fetch: ((request, init) => stack.main.handle(new Request(request, init))) as typeof fetch });
-    const started = performance.now();
-    const built = await buildRecipes(api, editor.actor, `browser-recipes:${runId}`,
-      (scope, action) => grantLaunchRecipeAuthority(stack.accessPool, editor.principalId, editor.actor, scope, action),
-      async (key, actor, composition, file, requestSignal) => {
-        const path = `/v1/recipes/${short(composition.structure)}/file-imports`
-          + `?actingSubject=${encodeURIComponent(actor)}&expectedHead=${encodeURIComponent(composition.revision)}`;
-        const response = await stack.main.handle(new Request(`http://main.local${path}`, { method: 'POST',
-          headers: { authorization: `Bearer ${editor.token}`, 'idempotency-key': key,
-            'content-type': 'application/ld+json' }, body: JSON.stringify(file), signal: requestSignal }));
-        if (![200, 201].includes(response.status)) throw new Error(`Recipe file import returned HTTP ${response.status}: ${await response.text()}`);
-        return await response.json() as RecipeFileImportReceipt;
-      }, signal);
-    const corpus: LaunchRecipesCorpus = { recipe: launchRecipesRecipe, id: `browser-recipes-${runId}`,
-      compatibility: loadCompatibility(root), sources: launchRecipeSourcesManifest(), ...built,
-      counts: { works: 30, recipes: 30, ingredientLines: 173, fractionLines: 47,
-        rangeLines: 2, englishRecipes: 20, italianRecipes: 10 }, backup: '', buildMs: performance.now() - started };
-    const prepared = { corpus, restored: false as const };
-    mkdirSync(directory, { recursive: true });
-    writeFileSync(`${path}.tmp`, JSON.stringify(prepared, null, 2) + '\n', { mode: 0o600 });
-    renameSync(`${path}.tmp`, path);
-    console.log(JSON.stringify(prepared));
-  } finally { await stack.stop(); }
+  const path = join(root, '.temp/launch-corpus', `browser-recipes-${runId}.json`);
+  const saved = JSON.parse(readFileSync(path, 'utf8')) as { corpus: LaunchRecipesCorpus; restored: true };
+  const retained = loadLaunchRecipesCorpus();
+  if (saved.restored !== true || saved.corpus.id !== retained.id || saved.corpus.backup !== retained.backup)
+    throw new Error('Browser recipes must use the restored retained API corpus');
+  console.log(JSON.stringify({ launchCorpus: saved.corpus.id, restored: true, recipes: saved.corpus.records.length }));
 }
 
 /** The current browser runner owns a fresh stack. Keep that preparation

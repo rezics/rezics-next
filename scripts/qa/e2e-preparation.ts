@@ -17,6 +17,10 @@ export interface JourneyPreparation {
   step: string;
   /** Log file `logs/e2e-<slug>.log`. */
   slug: string;
+  /** Restore retained owner stores before any application opens them. */
+  restoreStack?: (input: { runId: string; webOrigin: string; accountsPort: string }) => Promise<{
+    runId: string; apps: Record<string, string>; stop: () => Promise<void>;
+  }>;
 }
 
 /** Each preparation stays inside the shared data-preparation ceiling. A tier that
@@ -118,7 +122,7 @@ export async function discoverJourneyPreparations(root: string): Promise<Journey
     if (!existsSync(join(directory, journeyName))) {
       throw new Error(`${display(root, preparePath)} has no journey file ${journeyName}`);
     }
-    let imported: { preparation?: unknown };
+    let imported: { preparation?: unknown; restoreStack?: JourneyPreparation['restoreStack'] };
     try {
       imported = (await import(pathToFileURL(preparePath).href)) as { preparation?: unknown };
     } catch (error) {
@@ -128,10 +132,13 @@ export async function discoverJourneyPreparations(root: string): Promise<Journey
     if (imported.preparation === undefined) {
       throw new Error(`${display(root, preparePath)} must export preparation`);
     }
+    if (imported.restoreStack !== undefined && typeof imported.restoreStack !== 'function')
+      throw new Error(`${display(root, preparePath)} restoreStack must be a function`);
     remember(
       found,
       journey,
-      validatePreparation(imported.preparation, display(root, preparePath), root),
+      { ...validatePreparation(imported.preparation, display(root, preparePath), root),
+        ...(imported.restoreStack ? { restoreStack: imported.restoreStack } : {}) },
       file,
     );
   }
