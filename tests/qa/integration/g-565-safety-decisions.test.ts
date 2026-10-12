@@ -215,7 +215,7 @@ test('G-565: platform queue, exclusive claims, immutable reasons, resumable owne
       path: string,
       body?: unknown,
       token?: string,
-      key = randomUUID(),
+      key: string = randomUUID(),
       credential?: string,
     ) =>
       app.handle(
@@ -311,7 +311,7 @@ test('G-565: platform queue, exclusive claims, immutable reasons, resumable owne
     let cursor: string | null = null;
     do {
       const before = statements;
-      const page = await json<typeof queue>(
+      const page: typeof queue = await json<typeof queue>(
         await call(
           'GET',
           `/v1/safety-cases?actingSubject=${encodeURIComponent(staff.actor)}&category=spam_or_manipulation&limit=7` +
