@@ -60,7 +60,6 @@ import type { ReadFailure } from './types.ts';
 import { type AboutPerson, ListFailure, Pager, RealmAbout, RealmDecisions } from './views.tsx';
 import { profileHref } from '../profile/route.ts';
 import { CommunitySetupChecklist } from '../communities/setup-checklist.tsx';
-import { ZoneAboutDiscussion } from '../zones/about-discussion-entry.tsx';
 
 // The `/r/{realm}` routes are thin: each resolves the Realm view, renders the
 // Zone frame and its tab's content. Tabs render the frame themselves (not a
@@ -248,8 +247,6 @@ export function SiteHomeRoute(props: RealmRouteProps, loadView?: typeof loadReal
               }
             />
           </ResolvedMediaImages>
-          <ZoneAboutDiscussion zone={view.realm.zone?.id} path="/"
-            href={spaceHref(view.context.ref, 'site')} locale={locale} />
         </div>
       );
     },

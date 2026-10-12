@@ -181,8 +181,8 @@ test('a missing, mismatched or failed shared projection keeps the discussion una
   }
 });
 
-test('home and mounted document resources share the same command basis, while hidden and absent threads stay empty', async () => {
-  for (const routeKind of ['home', 'document', 'detail'] as const) {
+test('mounted documents and detail resources retain their command basis, while hidden and absent threads stay empty', async () => {
+  for (const routeKind of ['document', 'detail'] as const) {
     const hidden = reader({ routeKind, thread: null }), absent = reader({ routeKind, thread: null });
     const hiddenRead = await readAboutDiscussion(hidden.main, readInput);
     expect(hiddenRead).toEqual(await readAboutDiscussion(absent.main, readInput));
