@@ -1,7 +1,13 @@
 import { expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
+import { Script } from 'node:vm';
+import ts from 'typescript-6';
+import * as acceptance from '../../../scripts/qa/acceptance.ts';
+import * as qaCore from '../../../scripts/qa/core.ts';
+import { ownerTierBudgetMs } from '../../../scripts/qa/owner-tier-budget.ts';
+import { redactCommandOutput } from '../../../scripts/fixture/command-output.ts';
 import { failedSelection, nativeProofBatchDeadline, nativeProofDeclaration, nativeProofDeclarations, testArgs } from '../../../scripts/qa/acceptance.ts';
 import { NativeProofImageUnavailable, runPreparedNativeProofBatch } from '../../../scripts/qa/native-proof-execution.ts';
 import { fusekiBuildInputs } from '../../../scripts/dev/fuseki-image.ts';
@@ -317,6 +323,171 @@ COPY infra/jena/fuseki-text.ttl /build/fuseki-text.ttl
 FROM maven:pinned AS distribution
 COPY infra/jena/fuseki-text-qa.ttl /opt/qa.ttl
 `.trim();
+
+/** Execute the CLI's actual branch and runBunTier recorder; only host admission,
+ * process execution, time and the current image tag are supplied by the fixture. */
+function cliOwnerEntry(artifacts: string, configuration: {
+  durationMs?: number; imagePresent?: boolean; env?: NodeJS.ProcessEnv;
+} = {}) {
+  const root = resolve(import.meta.dir, '../../..');
+  const source = ts.createSourceFile('cli.ts', readFileSync(
+    process.env.REZICS_QA_OWNER_MUTATION_FILE ?? join(root, 'scripts/qa/cli.ts'), 'utf8'),
+  ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const functions = source.statements.filter(node => ts.isFunctionDeclaration(node)
+    && ['chosenFor', 'runBunTier'].includes(node.name?.text ?? ''));
+  let execution: ts.IfStatement | undefined;
+  const visit = (node: ts.Node) => {
+    if (ts.isIfStatement(node) && node.expression.getText(source) === "tier === 'unit' || tier === 'owner'") execution = node;
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  if (!execution || functions.length !== 2) throw new Error('Missing CLI owner execution entry');
+  const compile = (text: string) => ts.transpileModule(text, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+    transformers: { before: [context => {
+      const visit = (node: ts.Node): ts.Node => ts.isMetaProperty(node)
+        && node.keywordToken === ts.SyntaxKind.ImportKeyword
+        ? ts.factory.createIdentifier('harnessImportMeta') : ts.visitEachChild(node, visit, context);
+      return node => ts.visitNode(node, visit, ts.isSourceFile)!;
+    }] },
+  }).outputText;
+  const body = compile(functions.map(node => node.getText(source)).join('\n')
+    + `\n(async () => { const tier = 'owner'; ${execution.getText(source)} })();`);
+  const helper = compile(readFileSync(join(root, 'scripts/qa/native-proof-execution.ts'), 'utf8'));
+  const calls: { program: string; files: string[]; budget: number }[] = [];
+  const run = async (args: string[], runId: string) => {
+    const options = qaCore.parseArgs(args);
+    const selection = options.onlyFailed ? acceptance.failedSelection(artifacts, options.onlyFailed) : undefined;
+    const directory = join(artifacts, runId), logs = join(directory, 'logs');
+    mkdirSync(logs, { recursive: true });
+    const tiers: { name: qaCore.Tier; status: 'passed' | 'failed'; elapsedMs: number }[] = [];
+    const errors: string[] = [];
+    let now = 0;
+    const commandAsync: typeof qaCore.commandAsync = async (_root, program, args, budget) => {
+      const files = args.filter(arg => /\.test\.tsx?$/.test(arg));
+      calls.push({ program, files, budget });
+      const activeElapsedMs = program === 'bun' ? configuration.durationMs ?? 1 : 0;
+      now += activeElapsedMs;
+      if (program === 'bun') {
+        const report = args.find(arg => arg.startsWith('--reporter-outfile='));
+        if (!report) throw new Error('Owner execution did not provide its JUnit destination');
+        writeFileSync(report.slice('--reporter-outfile='.length), `<testsuite>${files.map(file =>
+          `<testcase name="Owner proof executed" file="${file}" />`).join('')}</testsuite>`);
+      }
+      const ok = program === 'docker' ? configuration.imagePresent !== false : activeElapsedMs <= budget;
+      return { ok, output: ok ? '' : 'No such image', stdout: '', stderr: '', elapsedMs: activeElapsedMs,
+        activeElapsedMs, admissionWaitMs: 0, timedOut: activeElapsedMs > budget };
+    };
+    const helperExports: Record<string, unknown> = {};
+    const dependencies: Record<string, unknown> = {
+      './acceptance.ts': acceptance,
+      './core.ts': { ...qaCore, commandAsync },
+      '../dev/fuseki-image.ts': { fusekiImageTag: () => 'rezics/fuseki:current-fixture-inputs' },
+      './container-reaper.ts': { preserveReapEnvironment: (env: NodeJS.ProcessEnv) => env },
+      '../fixture/command-output.ts': { redactCommandOutput },
+    };
+    const require = (name: string) => {
+      if (!(name in dependencies)) throw new Error(`Unexpected owner execution dependency: ${name}`);
+      return dependencies[name];
+    };
+    const processFixture = { env: configuration.env ?? {} };
+    new Script(helper).runInNewContext({ exports: helperExports, require, process: processFixture, Error });
+    dependencies['./native-proof-execution.ts'] = helperExports;
+    await new Script(body).runInNewContext({ exports: {}, require, Error, process: processFixture,
+      harnessImportMeta: { dir: join(root, 'scripts/qa') },
+      Date: { now: () => now }, root, directory, logs, join, appendFileSync, writeFileSync,
+      tiers, errors, options, selection, runDeadline: Number.MAX_SAFE_INTEGER,
+      tierGroups: options.groups ?? (options.tier ? [{ tier: options.tier, files: options.files, id: options.id }] : undefined),
+      testArgs: acceptance.testArgs, unitHarnessFiles: acceptance.unitHarnessFiles,
+      splitTestArgs: qaCore.splitTestArgs, tierBunTestArgs: qaCore.tierBunTestArgs,
+      ownerTierBudgetMs: () => ownerTierBudgetMs(processFixture.env),
+      commandAsync, admitRun: async (work: () => Promise<unknown>) => work(), noteMemory: () => {},
+      console: { error: () => {} },
+    });
+    const source = { head: 'fixture', fingerprint: 'stable', clean: true };
+    const tests = acceptance.junitResults(directory, ['owner']);
+    qaCore.writeSummary(directory, { runId, sourceBefore: source, sourceAfter: source,
+      partial: true, cases: [], tiers, errors, tests });
+    return { tiers, errors, tests, directory };
+  };
+  return { run, calls };
+}
+
+function ownerEntryArtifacts() {
+  const scratch = resolve(import.meta.dir, '../../../.temp');
+  mkdirSync(scratch, { recursive: true });
+  return mkdtempSync(join(scratch, 'owner-execution-contract-'));
+}
+
+test('CLI owner entry lets a 700-second prefix execution complete above the default deadline', async () => {
+  const artifacts = ownerEntryArtifacts();
+  try {
+    const entry = cliOwnerEntry(artifacts, { durationMs: 700_000 });
+    const result = await entry.run(['--tier', 'owner', '--file', 'infra/jena/tests/prefix-walk-native.test.ts'], 'prefix');
+    expect(entry.calls).toEqual([{ program: 'bun', files: ['infra/jena/tests/prefix-walk-native.test.ts'], budget: 1_240_000 }]);
+    expect(result.tiers).toEqual([{ name: 'owner', status: 'passed', elapsedMs: 700_000 }]);
+  } finally { rmSync(artifacts, { recursive: true, force: true }); }
+});
+
+test('CLI owner entry records a missing image per proof and only-failed retries after preparation', async () => {
+  const artifacts = ownerEntryArtifacts();
+  const restart = 'infra/jena/tests/search-journal-restart.test.ts';
+  const prefix = 'infra/jena/tests/prefix-walk-native.test.ts';
+  try {
+    const missing = cliOwnerEntry(artifacts, { imagePresent: false });
+    const result = await missing.run(['--tier', 'owner', '--file', restart, '--file', prefix], 'missing');
+    expect(result.tiers).toEqual([{ name: 'owner', status: 'failed', elapsedMs: 0 }]);
+    expect(missing.calls.map(call => call.program)).toEqual(['docker']);
+    expect(result.tests).toHaveLength(2);
+    for (const test of result.tests) expect(test).toMatchObject({ failed: true, preparationFailure: true,
+      detail: expect.stringContaining('native-proof-image-unavailable: build rezics/fuseki:current-fixture-inputs first') });
+    expect(JSON.parse(readFileSync(join(result.directory, 'acceptance.json'), 'utf8')).tiers)
+      .toEqual([{ name: 'owner', status: 'failed', elapsedMs: 0 }]);
+    const prepared = cliOwnerEntry(artifacts, { imagePresent: true });
+    const retried = await prepared.run(['--only-failed', 'missing'], 'retried');
+    expect(prepared.calls.map(call => call.program)).toEqual(['docker', 'bun']);
+    expect(prepared.calls[1]!.files.sort()).toEqual([prefix, restart].sort());
+    expect(retried.tiers).toEqual([{ name: 'owner', status: 'passed', elapsedMs: 1 }]);
+    expect(retried.tests.map(test => test.name)).toEqual(['Owner proof executed', 'Owner proof executed']);
+  } finally { rmSync(artifacts, { recursive: true, force: true }); }
+});
+
+test('CLI owner entry executes affected mixed proofs separately with their declared deadlines', async () => {
+  const artifacts = ownerEntryArtifacts();
+  try {
+    const result = plan([], {});
+    const prefix = 'infra/jena/tests/prefix-walk-native.test.ts';
+    const restart = 'infra/jena/tests/search-journal-restart.test.ts';
+    result.tests.owner = [prefix, restart];
+    const entry = cliOwnerEntry(artifacts, { imagePresent: true });
+    let number = 0;
+    for (const command of affectedCommands(result)) {
+      const outcome = await entry.run(command.command[1].slice(1), `affected-${++number}`);
+      expect(outcome.tiers[0]!.status).toBe('passed');
+    }
+    expect(entry.calls.filter(call => call.program === 'bun')).toEqual([
+      { program: 'bun', files: [prefix], budget: 1_240_000 },
+      { program: 'bun', files: [restart], budget: 720_000 },
+    ]);
+  } finally { rmSync(artifacts, { recursive: true, force: true }); }
+});
+
+test('CLI owner entry records unsupported selection and invalid deadline planning as preparation failures', async () => {
+  const artifacts = ownerEntryArtifacts();
+  try {
+    for (const [file, env, detail] of [
+      ['infra/jena/tests/not-registered.test.ts', {}, 'Selected owner path is not registered'],
+      ['infra/jena/tests/prefix-walk-native.test.ts', { REZICS_QA_OWNER_BUDGET_MS: 'invalid' }, 'REZICS_QA_OWNER_BUDGET_MS must be a positive integer'],
+    ] as const) {
+      const entry = cliOwnerEntry(artifacts, { env });
+      const result = await entry.run(['--tier', 'owner', '--file', file], `failure-${file.includes('prefix') ? 'deadline' : 'selection'}`);
+      expect(result.tiers[0]!.status).toBe('failed');
+      expect(result.tests).toHaveLength(1);
+      expect(result.tests[0]).toMatchObject({ file, failed: true, preparationFailure: true, detail: expect.stringContaining(detail) });
+      expect(entry.calls).toEqual([]);
+    }
+  } finally { rmSync(artifacts, { recursive: true, force: true }); }
+});
 
 test('runtime-image proofs follow every Fuseki build input, including later-stage scripts and patches', () => {
   const root = resolve(import.meta.dir, '../../..');

@@ -1018,21 +1018,35 @@ try {
   for (const tier of selected) {
     if (tier === 'static') await runTier(tier, 'bun', ['scripts/research/storage_architecture/check.ts', ...(options.backend ? ['--backend'] : [])], 120_000);
     if (tier === 'unit' || tier === 'owner') {
-      const { runPreparedNativeProofBatch } = await import('./native-proof-execution.ts');
-      const args = testArgs(tier, selection, chosenFor(tier));
-      await runPreparedNativeProofBatch(root, splitTestArgs(args).paths,
-        tier === 'owner' ? ownerTierBudgetMs() : 180_000, budget => runBunTier(
-          tier,
-          'bun',
-          tierBunTestArgs(tier, [
-            ...args,
-            ...(tier === 'unit' && !selection && !chosenFor(tier) ? unitHarnessFiles : []),
-            '--reporter=junit',
-            `--reporter-outfile=${join(directory, `${tier}.xml`)}`,
-            ...(options.timeoutArgs ?? []),
-          ]),
-          budget,
-        ));
+      const { runPreparedNativeProofBatch, nativeProofPreparationFailure } = await import('./native-proof-execution.ts');
+      const started = Date.now();
+      let args: string[] | undefined;
+      try {
+        args = testArgs(tier, selection, chosenFor(tier));
+        const selectedArgs = args;
+        await runPreparedNativeProofBatch(root, splitTestArgs(args).paths,
+          tier === 'owner' ? ownerTierBudgetMs() : 180_000, budget => runBunTier(
+            tier,
+            'bun',
+            tierBunTestArgs(tier, [
+              ...selectedArgs,
+              ...(tier === 'unit' && !selection && !chosenFor(tier) ? unitHarnessFiles : []),
+              '--reporter=junit',
+              `--reporter-outfile=${join(directory, `${tier}.xml`)}`,
+              ...(options.timeoutArgs ?? []),
+            ]),
+            budget,
+          ));
+      } catch (error) {
+        const elapsedMs = Date.now() - started;
+        const files = args ? splitTestArgs(args).paths : chosenFor(tier)?.files
+          ?? selection?.tests.filter(test => test.tier === tier).map(test => test.file) ?? [];
+        const failure = nativeProofPreparationFailure(tier, files, error, elapsedMs);
+        tiers.push({ name: tier, status: 'failed', elapsedMs });
+        errors.push(failure.detail);
+        writeFileSync(join(logs, `${tier}.log`), failure.detail);
+        writeFileSync(join(directory, `${tier}.xml`), failure.xml);
+      }
     }
     if (tier === 'model') {
       const projectRunId = `${runId}-m`;

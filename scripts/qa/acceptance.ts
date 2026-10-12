@@ -23,6 +23,7 @@ export interface TestResult {
 }
 
 export const UNEXECUTED_FILE_TEST = 'QA file did not complete';
+export const NATIVE_PROOF_PREPARATION_ERROR = 'NativeProofPreparationError';
 export const unitHarnessFiles = ['tests/qa/g-955-harness.test.ts'];
 
 export function caseInventory(_root?: string): Case[] {
@@ -67,7 +68,8 @@ function caseFailure(body: string): { failed: boolean; detail?: string; timeout?
   const message = attribute(tag[1] ?? '', 'message');
   const timeout = type === 'TimeoutError' || (message !== undefined && /^test timed out\b/i.test(message));
   return { failed: true, ...(message ? { detail: message } : {}), ...(timeout ? { timeout: true } : {}),
-    ...(type === 'JourneyPreparationError' ? { preparationFailure: true } : {}) };
+    ...(type === 'JourneyPreparationError' || type === NATIVE_PROOF_PREPARATION_ERROR
+      ? { preparationFailure: true } : {}) };
 }
 
 export function parseJUnit(xml: string, tier: Tier, options?: JUnitDecodeOptions): TestResult[] {
@@ -425,7 +427,7 @@ export function testArgs(
   }
   // A synthetic missing-file result has no real test title to grep. Rerun the
   // selected files completely so interrupted files can recover on the next run.
-  if (tests.some((test) => test.name === UNEXECUTED_FILE_TEST)) return files;
+  if (tests.some((test) => test.name === UNEXECUTED_FILE_TEST || test.preparationFailure)) return files;
   const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   // Bun matches describe ancestry as part of the full test title, while JUnit
   // stores the leaf name separately in each testcase.
