@@ -184,6 +184,7 @@ async function createReplyReportFixture(
       issuer: 'urn:reply-report:account',
       subject: randomUUID(),
       emailVerified: true,
+      currentAssertion: async () => principal,
     };
     await transaction(async (client) => {
       await client.query(
