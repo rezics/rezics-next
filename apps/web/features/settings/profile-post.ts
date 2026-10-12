@@ -27,4 +27,3 @@ export const profilePosts = {
     method: 'POST', body, credentials: 'same-origin',
   }),
 } satisfies Record<UiLocale, (body: FormData) => Promise<Response>>;
-
