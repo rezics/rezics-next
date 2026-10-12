@@ -88,26 +88,17 @@ afterAll(async () => {
 
 test('held topology reads disclose every inventory batch with unchanged visible, tombstone and hidden decisions', async () => {
   const targets = [...Array.from({ length: DISCLOSURE_COST.batch }, () => body), restricted, ...names];
-  const inventory = async (channel: 'thread' | 'search') => {
-    const decisions: DisclosureDecision[] = [];
-    for (let offset = 0; offset < targets.length; offset += DISCLOSURE_COST.batch) {
-      decisions.push(...await discloseInventory(environment, targets.slice(offset, offset + DISCLOSURE_COST.batch),
-        ANONYMOUS_VIEWER, channel));
-    }
-    return decisions;
-  };
   for (const channel of ['thread', 'search'] as const) {
-    await expect(discloseInventory(environment, targets, ANONYMOUS_VIEWER, channel))
-      .rejects.toBeInstanceOf(DisclosureUnavailable);
-    const ordinary = await inventory(channel);
+    const ordinary = await discloseInventory(environment, targets, ANONYMOUS_VIEWER, channel);
     const expected: DisclosureDecision[] = [...Array.from({ length: DISCLOSURE_COST.batch }, () => 'visible' as const),
       channel === 'thread' ? 'tombstone' : 'hidden', 'visible', 'hidden'];
     expect(ordinary).toEqual(expected);
     await controlRead(pool, async client => {
       expect(accessClient(pool)).toBe(client);
-      await expect(discloseInventory(environment, targets, ANONYMOUS_VIEWER, channel))
-        .rejects.toBeInstanceOf(DisclosureUnavailable);
-      expect(await inventory(channel)).toEqual(ordinary);
+      const held = await discloseInventory(environment, targets, ANONYMOUS_VIEWER, channel);
+      expect(held).toEqual(ordinary);
+      expect(held.cost!.ownerStatements).toBe(2);
+      expect(held.cost!.statements).toBe(ordinary.cost!.statements);
       expect((await client.query('SHOW lock_timeout')).rows[0]?.lock_timeout).toBe('2s');
       expect((await client.query('SHOW statement_timeout')).rows[0]?.statement_timeout).toBe('5s');
       // The detector remains armed against a real second checkout.

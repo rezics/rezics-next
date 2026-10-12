@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { DISCLOSURE_SUBMISSION_LIMIT } from '../../../services/main/src/modules/disclosure/contract-batching.ts';
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import {
@@ -90,6 +91,7 @@ function evidence(
 
 function fixture(parents: OwnerEstablishedGraphParents = [parent('work'), parent('realm')]) {
   let rows: DisclosureAncestryEvidence[] = [evidence(target, parents)];
+  let batchInputs: readonly DisclosureTarget[] | undefined;
   let unavailable = false;
   let decisions: DisclosureDecision[] | undefined;
   let fenceBasis: DisclosureFenceBasis = {
@@ -124,13 +126,13 @@ function fixture(parents: OwnerEstablishedGraphParents = [parent('work'), parent
   const source: DisclosureAncestrySource = {
     read: async inputs => {
       if (unavailable) throw new Error('owner source offline');
-      return inputs.flatMap(input => rows.filter(row => row.resource === input.resource));
+      return batchInputs ? inputs.map(input => rows[batchInputs!.findIndex(selected => selected.resource === input.resource)]!)
+        : rows;
     },
     reread: async bases => {
       if (unavailable) throw new Error('owner source offline');
-      return bases.flatMap(basis => rows.filter(row => row.relationshipBasis.token === basis.token
-        && row.relationshipBasis.targetResource === basis.targetResource
-        && row.relationshipBasis.targetRevision === basis.targetRevision));
+      return batchInputs ? bases.map(basis => rows[batchInputs!.findIndex(selected => selected.resource === basis.targetResource)]!)
+        : rows;
     },
   };
   const reader: DisclosureReader = {
@@ -155,8 +157,9 @@ function fixture(parents: OwnerEstablishedGraphParents = [parent('work'), parent
     anonymousFlags,
     source,
     reader,
-    setEvidence: (value: DisclosureAncestryEvidence[]) => {
+    setEvidence: (value: DisclosureAncestryEvidence[], inputs?: readonly DisclosureTarget[]) => {
       rows = value;
+      batchInputs = inputs;
     },
     setOffline: () => {
       unavailable = true;
@@ -327,8 +330,8 @@ test('disclosure ancestry: incomplete, ambiguous and malformed owner descriptors
   for (const rows of malformed) {
     const f = fixture();
     f.setEvidence(rows as DisclosureAncestryEvidence[]);
-    await expect(resolveDisclosureSelections(f.env, [target])).rejects.toBeInstanceOf(
-      DisclosureUnavailable,
+    await expect(resolveDisclosureSelections(f.env, [target])).rejects.toThrow(
+      (rows as unknown[]).length === 1 ? 'Disclosure ancestry is incomplete' : 'Disclosure ancestry result is incomplete',
     );
     expect(f.ownerReads).toHaveLength(0);
   }
@@ -443,7 +446,7 @@ test('disclosure final fence compares only a cut’s established dependencies in
   expect(await fenceDisclosure(f.env, [cuts[0]!], ANONYMOUS_VIEWER, 'read')).toEqual(['visible']);
 });
 
-test('disclosure public batch entries reject 1,025 targets before any owner or graph work', async () => {
+test('disclosure public batch entries reject over-cap targets before any owner or graph work', async () => {
   for (const entry of [disclose, discloseInventory, discloseInventoryWithCost, discloseInventoryWithAnonymousNames]) {
     const f = fixture();
     let sourceReads = 0;
@@ -451,7 +454,7 @@ test('disclosure public batch entries reject 1,025 targets before any owner or g
       read: async targets => { sourceReads++; return targets.map(input => evidence(input, [parent('realm', input)])); },
       reread: f.source.reread,
     });
-    const inputs = Array.from({ length: 1_025 }, () => target);
+    const inputs = Array.from({ length: DISCLOSURE_SUBMISSION_LIMIT + 1 }, () => target);
     await expect(entry(f.env, inputs, ANONYMOUS_VIEWER, 'read')).rejects.toBeInstanceOf(DisclosureUnavailable);
     expect(sourceReads).toBe(0);
     expect(f.headQueries).toHaveLength(0);
@@ -459,13 +462,13 @@ test('disclosure public batch entries reject 1,025 targets before any owner or g
   }
 });
 
-for (const size of [65, 501, 512, 1_024]) {
+for (const size of [65, 501, 512, 1_024, 1_536, 2_048]) {
   test(`public disclosure entries preserve ${size} ordered occurrences across sequential chunks`, async () => {
     const f = fixture();
     const inputs = Array.from({ length: size }, (_, index) => ({ ...target,
       resource: `urn:rezics:reply:public-${index % 70}` }));
     const unique = [...new Map(inputs.map(input => [input.resource, input])).values()];
-    f.setEvidence(unique.map(input => evidence(input, [parent('work', input), parent('realm', input)])));
+    f.setEvidence(unique.map(input => evidence(input, [parent('work', input), parent('realm', input)])), unique);
     const expected = inputs.map(input => Number(input.resource.split('-').at(-1)) % 2 ? 'tombstone' : 'visible');
     const chunks: number[] = [];
     const tokenFor = (input: DisclosureTarget) => ({ recoveryGeneration: '1', enforcementCut: hash(input.resource) });
@@ -522,15 +525,15 @@ test('resolve, capture, fence and direct owner entries refuse overflow before al
   });
   f.headQueries.length = 0;
   f.ownerReads.length = 0;
-  await expect(resolveDisclosureSelections(f.env, Array(1_025).fill(target))).rejects.toBeInstanceOf(DisclosureUnavailable);
-  await expect(captureDisclosure(f.env, Array(1_025).fill(selections[0]), ANONYMOUS_VIEWER, 'read'))
+  await expect(resolveDisclosureSelections(f.env, Array(DISCLOSURE_SUBMISSION_LIMIT + 1).fill(target))).rejects.toBeInstanceOf(DisclosureUnavailable);
+  await expect(captureDisclosure(f.env, Array(DISCLOSURE_SUBMISSION_LIMIT + 1).fill(selections[0]), ANONYMOUS_VIEWER, 'read'))
     .rejects.toBeInstanceOf(DisclosureUnavailable);
-  await expect(fenceDisclosure(f.env, Array(1_025).fill(cuts[0]), ANONYMOUS_VIEWER, 'read'))
+  await expect(fenceDisclosure(f.env, Array(DISCLOSURE_SUBMISSION_LIMIT + 1).fill(cuts[0]), ANONYMOUS_VIEWER, 'read'))
     .rejects.toBeInstanceOf(DisclosureUnavailable);
   let statements = 0;
   const reader = new DisclosureStore({ query: async () => { statements++; throw new Error('must not query'); } } as unknown as Pool);
   for (const entry of [reader.read.bind(reader), reader.readWithAnonymousNames.bind(reader), reader.readAtCut.bind(reader)]) {
-    await expect(entry(Array(1_025).fill(target), ANONYMOUS_VIEWER, 'read')).rejects.toBeInstanceOf(DisclosureUnavailable);
+    await expect(entry(Array(DISCLOSURE_SUBMISSION_LIMIT + 1).fill(target), ANONYMOUS_VIEWER, 'read')).rejects.toBeInstanceOf(DisclosureUnavailable);
   }
   expect(await reader.readAtCut([], ANONYMOUS_VIEWER, 'read')).toEqual({
     decisions: [], anonymousNames: [], fenceBases: [], cost: {},
@@ -579,8 +582,11 @@ test('disclosure ancestry: final fence refuses moved heads, changed placement/re
           },
         },
       ]);
-    await expect(fenceDisclosure(f.env, cuts, ANONYMOUS_VIEWER, 'read')).rejects.toBeInstanceOf(
-      DisclosureUnavailable,
+    await expect(fenceDisclosure(f.env, cuts, ANONYMOUS_VIEWER, 'read')).rejects.toThrow(
+      change === 'head' ? 'Disclosure parent head moved'
+        : change === 'missing-head' ? 'Disclosure parent heads are incomplete'
+        : change === 'offline' ? 'Disclosure ancestry source is unavailable'
+        : change === 'epoch' ? 'Disclosure ancestry is incomplete' : 'Disclosure relationship moved',
     );
   }
 });
@@ -605,7 +611,7 @@ test('disclosure ancestry: capture rereads owner proof so a move between resolut
   ]);
   await expect(
     captureDisclosure(f.env, selections, ANONYMOUS_VIEWER, 'read'),
-  ).rejects.toBeInstanceOf(DisclosureUnavailable);
+  ).rejects.toThrow('Disclosure relationship moved');
   expect(f.ownerReads).toHaveLength(0);
 });
 
@@ -905,7 +911,7 @@ test('disclosure ancestry: chunks bound 128 parent edges and inventory reports m
       }));
       for (const item of parents) f.heads.set(item.resource, item.head);
       return evidence(input, parents as unknown as OwnerEstablishedGraphParents);
-    }),
+    }), inputs,
   );
   const selections = await resolveDisclosureSelections(f.env, inputs);
   expect(selections.map((selection) => selection.target.resource)).toEqual(

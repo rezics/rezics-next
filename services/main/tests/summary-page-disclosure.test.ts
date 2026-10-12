@@ -93,7 +93,7 @@ function page(kind: Case) {
     read: async targets => decide(targets, false).decisions,
     readWithAnonymousNames: async targets => decide(targets, true),
     readAtCut: async (targets, _viewer, _channel, _client, anonymousNames) => ({
-      ...decide(targets, anonymousNames === true), fenceBasis: fixtureDisclosureCut,
+      ...decide(targets, anonymousNames === true), fenceBases: targets.map(() => fixtureDisclosureCut),
     }),
   });
   configureFixtureDisclosureAncestry(environment, target => target.work || target.resource === work
