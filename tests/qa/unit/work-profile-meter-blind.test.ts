@@ -111,24 +111,15 @@ test('attributed SQL or Fuseki satisfies observation', () => {
   }
 });
 
-test('a declared no-backend read requires a reason and cannot excuse unclassified or other fetches', () => {
+test('a zero-call successful profile is meter blind with or without a minimum', () => {
   const noCalls = profile();
-  const allowance = {
-    noBackendCalls: true,
-    reason: 'This read returns an in-process health snapshot.',
-  } as const;
-  expect(() => assertWorkCostAtScales([noCalls, noCalls, noCalls], allowance)).not.toThrow();
-  expect(() => assertWorkMeterObserved(noCalls, allowance)).not.toThrow();
+  expect(() => assertWorkCostAtScales([noCalls, noCalls, noCalls], {})).toThrow(
+    WorkMeterBlindError,
+  );
   expect(() =>
-    assertWorkCostAtScales([noCalls, noCalls, noCalls], { ...allowance, reason: ' ' }),
-  ).toThrow('requires a reason');
-  expect(() =>
-    assertWorkCostAtScales([noCalls, noCalls, noCalls], {
-      ...allowance,
-      minimumObserved: { postgresStatements: 1 },
-    }),
-  ).toThrow('contradicts');
-  for (const peer of ['other', 'unclassified']) blindAt(0, profile(peer), allowance);
+    assertWorkCostAtScales([noCalls, noCalls, noCalls], { minimumObserved: {} }),
+  ).toThrow(WorkMeterBlindError);
+  expect(() => assertWorkMeterObserved(noCalls)).toThrow(WorkMeterBlindError);
 });
 
 test('meter validation does not turn unsuccessful reads or incomplete attribution into growth verdicts', () => {

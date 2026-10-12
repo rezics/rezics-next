@@ -451,10 +451,7 @@ export type WorkCostGrowthDeclaration = {
 type NativeWorkCostGrowthDeclaration = WorkCostGrowthDeclaration &
   ({ class: 'constant' } | { class: Exclude<WorkCostGrowthClass, 'constant'>; reason: string });
 export type WorkMinimumObserved = Partial<Record<'postgresStatements' | 'fusekiRequests', number>>;
-export type WorkObservationContract = { minimumObserved?: WorkMinimumObserved } & (
-  | { noBackendCalls?: false; reason?: never }
-  | { noBackendCalls: true; reason: string }
-);
+export type WorkObservationContract = { minimumObserved?: WorkMinimumObserved };
 export type WorkCostContract = Partial<Record<WorkCostField, number>> &
   WorkObservationContract & {
     growth?: {
@@ -499,11 +496,7 @@ export function assertWorkMeterObserved(
   profile: WorkProfile,
   contract: WorkObservationContract = {},
 ): void {
-  const { minimumObserved, noBackendCalls } = contract;
-  if (noBackendCalls && !contract.reason?.trim())
-    throw new Error('No-backend-call allowance requires a reason');
-  if (noBackendCalls && Object.keys(minimumObserved ?? {}).length)
-    throw new Error('No-backend-call allowance contradicts minimum observed calls');
+  const { minimumObserved } = contract;
   for (const [field, minimum] of Object.entries(minimumObserved ?? {})) {
     if (!Number.isSafeInteger(minimum) || minimum < 1)
       throw new Error(`Invalid minimum observed cost: ${field}`);
@@ -519,7 +512,7 @@ export function assertWorkMeterObserved(
     );
   const status = profile.request.status;
   if (status === null || status < 200 || status >= 300) return;
-  if (profile.postgresStatements === 0 && profile.fusekiRequests === 0 && !noBackendCalls)
+  if (profile.postgresStatements === 0 && profile.fusekiRequests === 0)
     throw new WorkMeterBlindError(
       profile.traceId,
       'successful request has no attributed backend calls',
@@ -587,11 +580,8 @@ export function assertWorkCostAtScales(
   label = 'work-cost',
 ): void {
   if (profiles.length < 3) throw new Error('Cost growth checks require at least three scales');
-  const { growth = {}, minimumObserved, noBackendCalls, reason, ...maxima } = contract;
-  const observation: WorkObservationContract = noBackendCalls
-    ? { minimumObserved, noBackendCalls, reason }
-    : { minimumObserved };
-  for (const profile of profiles) assertWorkMeterObserved(profile, observation);
+  const { growth = {}, minimumObserved, ...maxima } = contract;
+  for (const profile of profiles) assertWorkMeterObserved(profile, { minimumObserved });
   const nativeFields = new Set<NativeWorkCostField>(['nativeVisitTotal']);
   for (const profile of profiles) {
     for (const name of Object.keys(profile.nativeVisits)) {
