@@ -1,5 +1,5 @@
 // sql-relations-allow: access.platform_administrator -- The setup inserts the pre-grant singleton before migration 1290 so the upgrade preserves that holder, then proves migration 1291 removed the table.
-import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -11,6 +11,8 @@ import { AccessExposure } from '../src/modules/access/exposure.ts';
 import { bindPlatformExposure } from '../src/modules/access/exposure-routes.ts';
 import { AccessGrants } from '../src/modules/access/grants.ts';
 import { AccessGroups, GroupDenied } from '../src/modules/access/groups.ts';
+import { AccessAdmissionRegistry } from '../src/modules/access/admission.ts';
+import { ensureFixtureScopeGate } from '../src/modules/access/fixture-authority.ts';
 import {
   AccessPlatformAdministrators,
   platformAdministratorProof,
@@ -563,6 +565,66 @@ test('administrator authority survives upgrade and removal of the legacy singlet
     await client.query('COMMIT');
   } finally {
     client.release();
+  }
+});
+
+describe('independent platform permission fences', () => {
+  const template = `platform_gate_template_${randomUUID().replaceAll('-', '')}`;
+  let holder: Awaited<ReturnType<typeof person>>;
+
+  beforeAll(async () => {
+    await pool.query(`CREATE DATABASE ${template}`);
+    const seed = new Pool({ ...pool.options, database: template });
+    try {
+      for (const file of schemaFiles(root, 'access'))
+        await seed.query(readFileSync(join(root, 'services/main/migrations/access', file), 'utf8'));
+      holder = await person(seed);
+      await new AccessPlatformAdministrators(seed).designateFirst(
+        holder.principal.issuer, holder.principal.subject, () => undefined);
+    } finally { await seed.end(); }
+  }, 60_000);
+
+  afterAll(async () => { await pool.query(`DROP DATABASE ${template}`); });
+
+  for (const dispatchOpen of [true, false]) {
+    test(`${dispatchOpen ? 'closed admission with open dispatch' : 'closed dispatch with reopened admission'} denies every live permission reader`, async () => {
+      const database = `platform_gate_${randomUUID().replaceAll('-', '')}`;
+      await pool.query(`CREATE DATABASE ${database} TEMPLATE ${template}`);
+      const owner = new Pool({ ...pool.options, database, max: 4 });
+      const authority = new AccessGrants(owner), registry = new AccessAdmissionRegistry(owner);
+      const heldExposure = new AccessExposure(owner, { REZICS_PLATFORM_OPEN_GROUPS: '' });
+      try {
+        const retained = await authority.platform.readPage(holder.principal, holder.actor);
+        const id = retained.grants[0]!.id;
+        expect(await authority.platform.readOne(holder.principal, holder.actor, id)).not.toBeNull();
+        expect(await readPlatformPermissions(owner, holder.id)).not.toEqual([]);
+        expect(await platformAdministratorProof(owner, holder.id, holder.actor, false)).not.toBeNull();
+        expect(await rateStore(owner).classify(holder.principal)).toBe('trusted');
+        expect((await heldExposure.summary(holder.principal)).groups).toContain('platform-admin');
+        const currentEpoch = (await owner.query<{ authority_epoch: string }>(
+          "SELECT authority_epoch FROM access.scope_gate WHERE id='platform:access'"))
+          .rows[0]!.authority_epoch;
+        if (dispatchOpen) await registry.closeScope('platform:access', currentEpoch);
+        else {
+          await registry.strongCloseScope('platform:access', currentEpoch);
+          await ensureFixtureScopeGate(owner, 'platform:access', { open: true });
+        }
+        expect((await owner.query(
+          "SELECT open,dispatch_open FROM access.scope_gate WHERE id='platform:access'"))
+          .rows[0]).toEqual({ open: !dispatchOpen, dispatch_open: dispatchOpen });
+        expect(await readPlatformPermissions(owner, holder.id)).toEqual([]);
+        await expect(authority.platform.readPage(holder.principal, holder.actor))
+          .rejects.toBeInstanceOf(PlatformGrantDenied);
+        await expect(authority.platform.readOne(holder.principal, holder.actor, id))
+          .rejects.toBeInstanceOf(PlatformGrantDenied);
+        expect(await platformAdministratorProof(owner, holder.id, holder.actor, false)).toBeNull();
+        expect(await rateStore(owner).classify(holder.principal)).toBe('new-account');
+        expect((await heldExposure.summary(holder.principal)).groups).toEqual([]);
+      } finally {
+        await owner.end();
+        await pool.query(`DROP DATABASE ${database}`);
+      }
+    }, 60_000);
   }
 });
 

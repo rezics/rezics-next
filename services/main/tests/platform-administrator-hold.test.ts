@@ -120,9 +120,14 @@ function fixture(pool: Pool) {
     "SELECT authority_epoch FROM access.scope_gate WHERE id='platform:access'",
   )).rows[0]!.authority_epoch;
   const gate = async (open: boolean, dispatchOpen: boolean) => {
-    if (open) await ensureFixtureScopeGate(pool, 'platform:access', { open: true });
+    if (open) {
+      if (!dispatchOpen) await access.strongCloseScope('platform:access', await epoch());
+      await ensureFixtureScopeGate(pool, 'platform:access', { open: true });
+    }
     else if (dispatchOpen) await access.closeScope('platform:access', await epoch());
     else await access.strongCloseScope('platform:access', await epoch());
+    expect((await pool.query("SELECT open, dispatch_open FROM access.scope_gate WHERE id='platform:access'"))
+      .rows[0]).toEqual({ open, dispatch_open: dispatchOpen });
   };
   const call = (field: 'labels' | 'conceal', key = randomUUID()) => {
     const path = field === 'labels'
@@ -145,7 +150,8 @@ function fixture(pool: Pool) {
 
 const holds = [
   { name: 'admission', open: false, dispatchOpen: true },
-  { name: 'dispatch', open: false, dispatchOpen: false },
+  { name: 'dispatch with admission reopened', open: true, dispatchOpen: false },
+  { name: 'strong', open: false, dispatchOpen: false },
 ];
 
 for (const hold of holds) {
