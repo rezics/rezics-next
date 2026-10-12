@@ -94,30 +94,46 @@ function requireSequence(value: string | undefined): string {
   return value;
 }
 
-/** Relay envelopes carry both domains. Read the graph cut from that durable
- * binding instead of treating a Main stream sequence as a graph revision. */
+/** Every retained header carries the graph cut, including empty batches.
+ * Event members must still prove the same binding before the cut is usable. */
 async function graphPositionAtRelay(relay: Pick<Pool, 'query'>, position: RelayHandoffPosition): Promise<GraphSourcePosition> {
   if (position.streamScope !== MAIN_RELAY_STREAM_SCOPE) throw new WorkReadUnavailable('Main feed stream position is unavailable');
   if (position.sequence === '0') return { dataEpoch: position.dataEpoch, sequence: '0' };
   const rows = (await relay.query<{
-    stream_sequence: string; dataset_id: string | null; graph_epoch: string | null; graph_sequence: string | null;
-    relay_scope: string | null; relay_epoch: string | null; envelope_stream_sequence: string | null;
-  }>(`SELECT DISTINCT sequence::text AS stream_sequence,
-      envelope #>> '{data,sourcePosition,datasetId}' AS dataset_id,
-      envelope #>> '{data,sourcePosition,dataEpoch}' AS graph_epoch,
-      envelope #>> '{data,sourcePosition,sequence}' AS graph_sequence,
-      envelope #>> '{data,relayPosition,streamScope}' AS relay_scope,
-      envelope #>> '{data,relayPosition,dataEpoch}' AS relay_epoch,
-      envelope #>> '{data,relayPosition,sequence}' AS envelope_stream_sequence
-    FROM relay.delivered_event WHERE stream_scope = $1 AND data_epoch = $2 AND sequence = $3::numeric LIMIT 2`,
+    graph_sequence: string | null; event_count: number; actual_count: string; ordinal_count: string; envelopes_match: boolean;
+  }>(`SELECT batch.graph_sequence::text, batch.event_count,
+      members.actual_count, members.ordinal_count, members.envelopes_match
+    FROM relay.delivered_batch AS batch CROSS JOIN LATERAL (
+      SELECT count(*)::text AS actual_count,
+        count(DISTINCT envelope #>> '{data,ordinal}')::text AS ordinal_count,
+        COALESCE(bool_and(COALESCE(
+          envelope #>> '{data,batchId}' = batch.batch_id
+          AND envelope #>> '{data,routingEpoch}' = batch.routing_epoch
+          AND envelope #>> '{data,sourcePosition,datasetId}' = 'product'
+          AND envelope #>> '{data,sourcePosition,dataEpoch}' = batch.data_epoch
+          AND envelope #>> '{data,sourcePosition,sequence}' = batch.graph_sequence::text
+          AND envelope #>> '{data,relayPosition,streamScope}' = batch.stream_scope
+          AND envelope #>> '{data,relayPosition,dataEpoch}' = batch.data_epoch
+          AND envelope #>> '{data,relayPosition,sequence}' = batch.sequence::text
+          AND CASE WHEN envelope #>> '{data,ordinal}' ~ '^(0|[1-9][0-9]?)$'
+            THEN (envelope #>> '{data,ordinal}')::integer < batch.event_count ELSE false END,
+          false)), true) AS envelopes_match
+      FROM relay.delivered_event AS event
+      WHERE event.stream_scope = batch.stream_scope AND event.data_epoch = batch.data_epoch AND event.sequence = batch.sequence
+    ) AS members
+    WHERE batch.stream_scope = $1 AND batch.data_epoch = $2 AND batch.sequence = $3::numeric`,
   [position.streamScope, position.dataEpoch, position.sequence])).rows;
   const row = rows[0];
-  if (rows.length !== 1 || !row || row.stream_sequence !== position.sequence || row.dataset_id !== 'product'
-    || row.graph_epoch !== position.dataEpoch || row.relay_scope !== position.streamScope
-    || row.relay_epoch !== position.dataEpoch || row.envelope_stream_sequence !== position.sequence) {
+  if (rows.length !== 1 || !row) {
     throw new WorkReadUnavailable('Main feed graph reference cut is unavailable');
   }
-  return { dataEpoch: row.graph_epoch, sequence: requireSequence(row.graph_sequence ?? undefined) };
+  if (row.graph_sequence === null) throw new WorkReadUnavailable(
+    'Main feed graph reference cut is unavailable; repair with task main:relay -- --repair-graph-cut --data-epoch <epoch> --sequence <sequence>');
+  if (row.actual_count !== String(row.event_count) || row.ordinal_count !== String(row.event_count)
+    || !row.envelopes_match || BigInt(requireSequence(row.graph_sequence)) <= 0n) {
+    throw new WorkReadUnavailable('Main feed graph reference cut is unavailable');
+  }
+  return { dataEpoch: position.dataEpoch, sequence: row.graph_sequence };
 }
 
 async function graphPositionAtReference(session: WorkReadSession, epoch: string, id: string): Promise<GraphSourcePosition> {

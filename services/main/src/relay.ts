@@ -9,6 +9,15 @@ import { runMainRelay } from './modules/outbox/worker.ts';
 import { S3ImmutableObjects } from './infrastructure/immutable-objects.ts';
 import { PostgresReceiptCustodyStore, ReceiptCustody } from './modules/outbox/receipt-custody.ts';
 import { proofRetirementSender } from './modules/graph/slim-command.ts';
+import { repairRetainedBatchGraphCut } from './modules/outbox/repair-graph-cut.ts';
+import { parseArgs } from 'node:util';
+
+const { values: args } = parseArgs({ args: process.argv.slice(2), options: {
+  'repair-graph-cut': { type: 'boolean' }, 'data-epoch': { type: 'string' }, sequence: { type: 'string' },
+} });
+if (args['repair-graph-cut'] ? !args['data-epoch'] || !args.sequence : args['data-epoch'] || args.sequence) {
+  throw new Error('Use task main:relay -- --repair-graph-cut --data-epoch <epoch> --sequence <sequence>');
+}
 
 const config = cleanEnv(process.env, relaySpec);
 const interval = config.MAIN_RELAY_INTERVAL_MS;
@@ -30,10 +39,15 @@ process.on('SIGINT', () => { running = false; });
 process.on('SIGTERM', () => { running = false; });
 
 try {
-  telemetryLog('main_relay_started');
-  await runMainRelay(() => withWorkerTelemetry('main.outbox.relay', async () => !!await relayMainOutboxOnce(fuseki, pool, consumer, { ownerOutbox }),
-    worked => ({ outcome: worked ? 'worked' : 'idle', processed: worked ? 1 : 0, unit: 'batch' })), () => running, interval,
-    { consumer });
+  if (args['repair-graph-cut']) {
+    const graphSequence = await repairRetainedBatchGraphCut(fuseki, pool, args['data-epoch']!, args.sequence!, ownerOutbox);
+    console.log(JSON.stringify({ event: 'main_relay_graph_cut_repaired', dataEpoch: args['data-epoch'], sequence: args.sequence, graphSequence }));
+  } else {
+    telemetryLog('main_relay_started');
+    await runMainRelay(() => withWorkerTelemetry('main.outbox.relay', async () => !!await relayMainOutboxOnce(fuseki, pool, consumer, { ownerOutbox }),
+      worked => ({ outcome: worked ? 'worked' : 'idle', processed: worked ? 1 : 0, unit: 'batch' })), () => running, interval,
+      { consumer });
+  }
 } catch (error) {
   console.error(JSON.stringify(error instanceof RelayEventBlocked
     ? { level: 'error', event: 'main_relay_blocked', consumer,

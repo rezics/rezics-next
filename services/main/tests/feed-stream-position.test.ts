@@ -60,12 +60,11 @@ function feedReferenceReader(graphByStream: ReadonlyMap<string, string>, mainByG
   referenceRows: { id: string; sequence: string; kind: string }[]) {
   const graphQueries: string[] = [];
   const relay = { query: async (sql: string, values: unknown[] = []) => {
-    if (sql.includes('sequence::text AS stream_sequence') && sql.includes('sequence = $3::numeric')) {
+    if (sql.includes('FROM relay.delivered_batch')) {
       const streamSequence = String(values[2]);
       const graphSequence = graphByStream.get(streamSequence);
-      return { rows: graphSequence ? [{ stream_sequence: streamSequence, dataset_id: 'product',
-        graph_epoch: 'epoch', graph_sequence: graphSequence, relay_scope: MAIN_RELAY_STREAM_SCOPE,
-        relay_epoch: 'epoch', envelope_stream_sequence: streamSequence }] : [] };
+      return { rows: graphSequence ? [{ graph_sequence: graphSequence, actual_count: '1',
+        event_count: 1, ordinal_count: '1', envelopes_match: true }] : [] };
     }
     if (sql.includes("AS graph_sequence")) {
       const sequences = values[2] as string[];

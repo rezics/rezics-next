@@ -111,3 +111,5 @@ header, or receipt custody for slim commands), never from the event rows only.
 The reverse lookup `mainSequencesForGraphReferences` only needs event rows and
 stays. Evidence needed before the fix: the `delivered_batch` and
 `delivered_event` rows at the failing position (see the mail to Launch).
+
+Resolved by retaining the graph cut on every Main batch header, validating its members at feed cuts, and source-verifying repairs of older unresolved headers through `task main:relay -- --repair-graph-cut --data-epoch <epoch> --sequence <sequence>`.

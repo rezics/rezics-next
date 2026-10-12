@@ -1697,16 +1697,19 @@ async function deliver(pool: Pool, event: DeliveredMainEvent): Promise<void> {
 }
 
 async function retainBatch(pool: Pool, batch: MainOutboxBatch): Promise<void> {
+  if (!batch.graphSequence || decimal(batch.graphSequence) <= 0n) {
+    throw new OutboxIncomplete('outbox graph position is missing or invalid');
+  }
   const inserted = await pool.query(
     `INSERT INTO relay.delivered_batch
-       (data_epoch, sequence, batch_id, routing_epoch, event_count, stream_scope)
-     VALUES ($1, $2, $3, $4, $5, '${MAIN_RELAY_STREAM_SCOPE}') ON CONFLICT DO NOTHING`,
-    [batch.dataEpoch, batch.sequence, batch.batchId, batch.routingEpoch, batch.eventIds.length]);
+       (data_epoch, sequence, batch_id, routing_epoch, event_count, graph_sequence, stream_scope)
+     VALUES ($1, $2, $3, $4, $5, $6, '${MAIN_RELAY_STREAM_SCOPE}') ON CONFLICT DO NOTHING`,
+    [batch.dataEpoch, batch.sequence, batch.batchId, batch.routingEpoch, batch.eventIds.length, batch.graphSequence]);
   if (inserted.rowCount === 0) {
     const existing = await pool.query<{ same: boolean }>(
-      `SELECT batch_id = $3 AND routing_epoch = $4 AND event_count = $5 AS same
+      `SELECT batch_id = $3 AND routing_epoch = $4 AND event_count = $5 AND graph_sequence = $6 AS same
        FROM relay.delivered_batch WHERE stream_scope = '${MAIN_RELAY_STREAM_SCOPE}' AND data_epoch = $1 AND sequence = $2`,
-      [batch.dataEpoch, batch.sequence, batch.batchId, batch.routingEpoch, batch.eventIds.length]);
+      [batch.dataEpoch, batch.sequence, batch.batchId, batch.routingEpoch, batch.eventIds.length, batch.graphSequence]);
     if (existing.rows[0]?.same !== true) {
       throw new OutboxIncomplete('batch position has a different durable header');
     }

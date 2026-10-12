@@ -13,7 +13,8 @@ Main's graph transaction commits its receipt, event intent and application
 Content and private PostgreSQL owners use their own transactional outboxes.
 Sequence is a decimal string in transport and comparable only inside one
 dataset and epoch. Each sequenced RDF mutation has one bounded batch header,
-including zero-event batches. Stable event IDs and ordinals identify members;
+including zero-event batches. The retained Main batch header carries its product graph cut independently of the Main stream position.
+Stable event IDs and ordinals identify members;
 independent owners have no shared total order.
 
 **Slim commands are the exception to "one physical header".** A slim command
