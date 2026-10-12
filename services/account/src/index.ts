@@ -46,9 +46,9 @@ const deliveryTimer = setInterval(() => {
 const app = createAccountApp(createAccountAuth({ baseURL, secret, resource, pool, operatorUserIds, email, requireEmailVerification: true,
   turnstileSecretKey: config.ACCOUNT_TURNSTILE_SECRET_KEY,
   turnstileMode: config.ACCOUNT_TURNSTILE_MODE as 'local' | 'cloudflare',
-  accessDeletionFence: access ? async subject => {
+  accessDeletionFence: access ? async (subject, options) => {
     const issuer = new URL('/api/auth', baseURL).toString();
-    const fence = await access.strongDeactivateAccountSubject(issuer, subject);
+    const fence = await access.strongDeactivateAccountSubject(issuer, subject, options);
     if (fence) {
       await mirrorAccountDeletionIntent(accessPool!, relayPool!, fence.principalId, fence.enforcementEpoch);
     }

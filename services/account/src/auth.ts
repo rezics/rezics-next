@@ -2,7 +2,7 @@ import { betterAuth } from 'better-auth';
 import { getAdapter } from 'better-auth/db/adapter';
 import { registerSchemaCheck, schemaCheckFor } from '@better-auth/core/db/internal';
 import { Kysely, PostgresDialect, sql } from 'kysely';
-import { getCurrentAdapter, getCurrentDBAdapterAsyncLocalStorage, queueAfterTransactionHook } from '@better-auth/core/context';
+import { defineRequestState, getCurrentAdapter, getCurrentDBAdapterAsyncLocalStorage, queueAfterTransactionHook } from '@better-auth/core/context';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { APIError, createAuthMiddleware, createEmailVerificationToken, getAuthoritativeSessionFromCtx, getSessionFromCtx, originCheckMiddleware } from 'better-auth/api';
@@ -29,6 +29,7 @@ import { consumeAccountLimit } from './rate-limit.ts';
 import { signupPolicyInput, policyAcceptanceRequired } from './policy-acceptance.ts';
 import { SignupPolicyProblem } from './market-policy.ts';
 import type { PolicyVersion } from './policy-versions.ts';
+import { AccountHasOwnedAgents } from '../../main/src/modules/access/account-deletion-agents.ts';
 
 export const AGENT_REGISTRATION_BUDGET = Object.freeze({ maximum: 10, seconds: 300 });
 const enrollmentEndpoints = ['/sign-up/email', '/request-password-reset', '/send-verification-email'];
@@ -176,7 +177,7 @@ export interface AccountConfig {
   turnstileMode?: 'local' | 'cloudflare';
   /** Embedded tests can substitute a local verifier; never configured by the HTTP process. */
   turnstileVerifyURL?: string;
-  accessDeletionFence?: (accountSubject: string) => Promise<void>;
+  accessDeletionFence?: (accountSubject: string, options: { leaveOwnedAgentsStanding: boolean }) => Promise<void>;
   /** Embedded fixtures can exercise a material policy update. */
   policyVersions?: readonly PolicyVersion[];
 }
@@ -208,6 +209,7 @@ export function accountAuthOptions(config: AccountConfig) {
   // The same owner also remains available to getMigrations and bootstrap.
   const db = new Kysely<unknown>({ dialect: new PostgresDialect({ pool: config.pool }) });
   const sessionOwners: SessionOwners = new WeakMap();
+  const deletionConsent = defineRequestState(() => false);
   const agentScopes = agentRegistrationScopes();
   const operatorHooks = operatorAuthHooks(config.pool, config.operatorUserIds);
   const requireEmailVerification = config.requireEmailVerification ?? !!config.email;
@@ -232,6 +234,17 @@ export function accountAuthOptions(config: AccountConfig) {
         fieldName: 'rezics_generation', required: false, input: false, returned: false } as const,
     } },
     hooks: { ...operatorHooks, before: createAuthMiddleware(async ctx => {
+      if (ctx.path === '/delete-user') {
+        const leaveOwnedAgentsStanding = (ctx.body as { leaveOwnedAgentsStanding?: unknown } | undefined)
+          ?.leaveOwnedAgentsStanding;
+        if (leaveOwnedAgentsStanding !== undefined && typeof leaveOwnedAgentsStanding !== 'boolean') {
+          throw new APIError('BAD_REQUEST', { code: 'invalid_deletion_consent',
+            message: 'leaveOwnedAgentsStanding must be a boolean' });
+        }
+        // The provider strips extra body fields. Retain validated consent in
+        // its request state so HTTP and embedded calls share the same hook.
+        await deletionConsent.set(leaveOwnedAgentsStanding ?? false);
+      }
       if (ctx.path === '/verify-email' && typeof ctx.query?.token === 'string') {
         // Email verification links are stateless JWTs, so deleting verification
         // rows cannot revoke them. Bind new links to the same recovery generation.
@@ -417,7 +430,7 @@ export function accountAuthOptions(config: AccountConfig) {
             throw new APIError('CONFLICT', { code: 'RECOVERY_GUARDIAN_DUTY',
               message: 'Withdraw accepted recovery guardianships in Accounts before deletion' });
           }
-          await config.accessDeletionFence!(user.id);
+          await config.accessDeletionFence!(user.id, { leaveOwnedAgentsStanding: await deletionConsent.get() });
           // Better Auth deletes credential rows before the user row. Mark the
           // fenced deletion so last-method protection permits only that path.
           await client.query(`UPDATE rezics_account_security SET deletion_started_at = now(), generation = generation + 1
@@ -427,6 +440,12 @@ export function accountAuthOptions(config: AccountConfig) {
         catch (error) {
           try { await client.query('ROLLBACK'); } catch { /* preserve the denial */ }
           if (error instanceof APIError) throw error;
+          if (error instanceof AccountHasOwnedAgents) {
+            throw new APIError('CONFLICT', { type: `https://rezics.com/problems/${error.code}`,
+              title: error.message, status: 409, code: error.code,
+              agents: error.agents, hasMore: error.hasMore, moreCount: error.moreCount },
+            { 'content-type': 'application/problem+json', 'cache-control': 'no-store' });
+          }
           throw new APIError('SERVICE_UNAVAILABLE',
             { message: 'Account deletion awaits the Access fence and retained deletion journal' });
         } finally { client.release(); }
