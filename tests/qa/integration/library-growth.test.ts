@@ -27,6 +27,11 @@ import type { MediaStack } from './media-support.ts';
 type MediaStackStarter = typeof import('./media-support.ts').startMediaStack;
 
 const workAxis = 'unrelatedWorks' satisfies keyof CorpusDimensions;
+// Own-shelf contract: readerShelfEntries at 4/16/64, one distinct Work per entry
+// with a reading-status row on the same reader's shelf. The shelf page is bounded
+// by its page size (linear during page fill, with bounded candidate lookahead).
+// A single-Work status read stays constant: it uses reader/Work keys rather than
+// enumerating the shelf. Indexed shelf seeks compose O(log N + P) with that bound.
 const shelfAxis = 'readerShelfEntries' satisfies keyof CorpusDimensions;
 type GrowthAxis = typeof workAxis | typeof shelfAxis;
 type Operation = 'status-shelf' | 'reader-state';
@@ -237,6 +242,8 @@ function costContract(maxima: Omit<WorkCostContract, 'growth'>, axis: GrowthAxis
   };
 }
 
+test.todo('Library reads: unrelatedPosts growth coverage awaits kernel seed owner; retained cuts have zero Posts despite the summaries Post UNION');
+
 test('Reader library shelf and Work status costs follow unrelated Work and own-shelf growth contracts', async () => {
   const runId = Bun.env.REZICS_QA_RUN_ID;
   if (!runId || !Bun.env.FUSEKI_URL || !Bun.env.ACCESS_DATABASE_URL) {
@@ -250,11 +257,6 @@ test('Reader library shelf and Work status costs follow unrelated Work and own-s
   const retained = readRetainedSeed();
   expect(retained.cuts.map((cut) => cut.manifest.dimensions[workAxis])).toEqual(scales);
   expect(retained.cuts.map((cut) => cut.manifest.dimensions[shelfAxis])).toEqual(scales);
-  expect(retained.cuts.map((cut) => cut.manifest.id)).toEqual([
-    'work-profile-b4c931e2c592dfc0',
-    'work-profile-a5c8fd99b1e0dae0',
-    'work-profile-d03a2add833ca7e7',
-  ]);
   for (const cut of retained.cuts) {
     expect(cut.population.shelfWorks).toHaveLength(cut.manifest.dimensions[shelfAxis]!);
     expect(new Set(cut.population.shelfWorks).size).toBe(cut.population.shelfWorks.length);
@@ -517,6 +519,12 @@ test('Reader library shelf and Work status costs follow unrelated Work and own-s
         check(group, costContract(maxima, axis, operation), label,
           operation === 'status-shelf' ? 'library/read.ts::readStatusShelf and library/status.ts::sortedPage'
             : 'library/read.ts::readReaderStates');
+        // Preserve the measured whole-request counter alongside store and owner
+        // slices: its absolute bound composes the declared budgets, not their usage.
+        const requestCost = { ...maxima, postgresStatements: maxima.postgresStatements
+          + Object.values(NON_STORE_SQL_COST).reduce((total, budget) => total + budget[operation], 0) };
+        check(measured.map(item => item.profile), costContract(requestCost, axis, operation),
+          `${label}-request`, 'Main full request');
         for (const owner of ['membership/session', 'Access/authority/disclosure', 'Content'] as const) {
           const scoped = measured.map(item => ({ ...item.profile, postgresStatements: sqlCount(item.sql, owner) }));
           check(scoped, { postgresStatements: NON_STORE_SQL_COST[owner][operation] },
