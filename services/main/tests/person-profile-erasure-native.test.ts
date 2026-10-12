@@ -286,7 +286,9 @@ public class PersonProfileCallerContractTest {
         const delivered = await readMainOutboxEnvelope(graph, batch, event.id, () => handler)
           .catch((error: unknown) => { throw new Error(`Person ${count}-Work event relay proof failed`, { cause: error }); });
         expect(delivered.data.receipt.id).toBe(receiptPlaceholder);
-        expect(delivered.data.receipt.systemProof).toEqual({ kind: 'relay-erasure',
+        const receipt = delivered.data.receipt;
+        if (!('systemProof' in receipt)) throw new Error('Person event lacks its system proof');
+        expect(receipt.systemProof).toEqual({ kind: 'relay-erasure',
           erasureId: proof.erasureId, erasureEpoch: proof.erasureEpoch });
       }
       console.log(`Person graph event relay proof passed for ${count} credited Works`);

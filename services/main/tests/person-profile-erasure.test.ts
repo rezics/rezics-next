@@ -451,7 +451,7 @@ test('Agent owner refuses an omitted historical revision before dispatching the 
   class Graph extends FusekiClient {
     constructor() { super('http://person-erasure.invalid'); }
     override async query() { return { boolean: true }; }
-    override async commandWithReceipt() { commands++; throw new Error('must never dispatch'); }
+    override async commandWithReceipt(): Promise<never> { commands++; throw new Error('must never dispatch'); }
   }
   await expect(erasePersonProfileGraph(access, relay, new Graph(),
     { dataEpoch: 'fixture', routingEpoch: '1' }, proof,
