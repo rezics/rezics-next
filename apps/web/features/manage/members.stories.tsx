@@ -7,12 +7,15 @@ import { messages } from './messages.ts';
 import zhHans from './messages/zh-Hans.ts';
 import { RealmFrame } from './realm-frame.tsx';
 import { chooseOption } from '../stories/choose-option.ts';
-import type { RoleCommand } from './types.ts';
+import type { Loaded, MemberPage, RoleCommand } from './types.ts';
 
 const record: AdminRecord = { members: [], roles: [], settings: [] };
 const roleReads: { search: string; after: string | null; role?: string | null }[] = [];
 const reset = () => { record.members.length = 0; record.roles.length = 0; };
 const first = { generation: '12', items: members, nextCursor: null };
+const unassigned = { ...first, items: members.filter(member => member.member === people.sophie) };
+let releasePendingSearch: (() => void) | null = null;
+let assignmentReads = 0;
 
 const meta = {
   title: 'Manage/Members',
@@ -211,7 +214,7 @@ export const GiveRoleWithImpact: Story = {
     roleReads.length = 0;
     const canvas = within(canvasElement);
     await userEvent.type(canvas.getByRole('searchbox', { name: 'Search members' }), 'sophie');
-    await userEvent.click(canvas.getByRole('button', { name: 'Search', exact: true }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Search' }));
     await waitFor(() => expect(within(canvas.getByRole('list', { name: 'Members' })).getAllByRole('listitem')).toHaveLength(1));
     const row = within(within(canvas.getByRole('list', { name: 'Members' })).getByRole('listitem'));
     await expect(row.getByText('No role', { exact: true })).toBeVisible();
@@ -232,6 +235,47 @@ export const GiveRoleWithImpact: Story = {
     await expect(row.queryByText('No role', { exact: true })).toBeNull();
     await expect(roleReads).toEqual([{ search: 'sophie', after: null, role: undefined },
       { search: 'sophie', after: null, role: undefined }]);
+  },
+};
+
+/** An earlier search can finish after the assignment's fresh member read. */
+export const AssignmentRefreshWinsPendingSearch: Story = {
+  args: { first: unassigned, api: { ...adminApi({ record }), members: async () => {
+    assignmentReads++;
+    if (assignmentReads === 1) return new Promise<Loaded<MemberPage>>(resolve => {
+      releasePendingSearch = () => resolve({ ok: true, data: unassigned });
+    });
+    return { ok: true, data: { ...unassigned, generation: '13', items: unassigned.items.map(member => ({
+      ...member, roles: [{ id: roles[0]!.id, name: roles[0]!.name,
+        validUntil: new Date(now + 86_400_000).toISOString() }],
+    })) } };
+  } } },
+  async play({ canvasElement }) {
+    reset();
+    assignmentReads = 0;
+    releasePendingSearch = null;
+    const canvas = within(canvasElement);
+    const row = within(within(canvas.getByRole('list', { name: 'Members' })).getByRole('listitem'));
+    await expect(row.getByText('No role', { exact: true })).toBeVisible();
+    await userEvent.type(canvas.getByRole('searchbox', { name: 'Search members' }), 'sophie');
+    await userEvent.click(canvas.getByRole('button', { name: 'Search' }));
+    await waitFor(() => expect(releasePendingSearch).not.toBeNull());
+    await openMenu(canvas, 'Sophie Li 李素菲', 'Give a role…');
+    const dialog = await openDialog('Give Sophie Li 李素菲 a role');
+    const impact = await dialog.findByRole('region', { name: 'Who this affects' });
+    await expect(await within(impact).findByText('1 member gains: Moderate the queue')).toBeVisible();
+    await userEvent.type(dialog.getByRole('textbox', { name: 'Reason' }), 'Share moderation.');
+    await userEvent.click(dialog.getByRole('button', { name: 'Give role' }));
+    await expect(await row.findByText('Community moderators', { exact: true })).toBeVisible();
+    await expect(assignmentReads).toBe(2);
+    releasePendingSearch!();
+    // Opening the row actions observes the settled row after the older read completes.
+    await userEvent.click(canvas.getByRole('button', { name: 'Actions for Sophie Li 李素菲' }));
+    const menu = await body().findByRole('menu');
+    await settledOverlay(menu);
+    await expect(row.getByText('Community moderators', { exact: true })).toBeVisible();
+    await expect(within(menu).getByRole('menuitem', { name: 'Remove role “Community moderators”…' })).toBeVisible();
+    await userEvent.keyboard('{Escape}');
   },
 };
 

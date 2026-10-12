@@ -77,14 +77,19 @@ export function MembersView({ realm, address = realm, actingSubject, first, agen
   const [query, setQuery] = useState('');
   const [searched, setSearched] = useState('');
   const [searching, setSearching] = useState(false);
+  const memberRead = useRef(0);
   const [open, setOpen] = useState<Open | null>(null);
   const [status, setStatus] = useState<string | null>(null);
 
   const nameOf = (iri: string) => agentLabel(agents[iri], iri, id => t.agentFallback({ id }));
 
   async function load(search: string, after: string | null = null) {
+    const request = ++memberRead.current;
     setSearching(true);
     const read = await api.members(search, after, roleFilter?.id);
+    // A search started before a command can arrive after its refreshed roster.
+    // Only the latest load may replace rows, pagination or the read status.
+    if (request !== memberRead.current) return;
     setSearching(false);
     if (!read.ok) { setStatus(t.unavailableTitle); return; }
     setPage(current => after ? { ...read.data, items: [...current.items, ...read.data.items] } : read.data);
