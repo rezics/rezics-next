@@ -12,6 +12,7 @@ import {
 } from './corpus.ts';
 import type { FixtureOwner } from './owners/types.ts';
 import type { FixtureEngines } from './stack.ts';
+import { fixtureModel } from './model.ts';
 
 export const MANIFEST_FORMAT = 'rezics-fixture-manifest-v1';
 /** Tracked per file: applied files must stay byte-identical; newer files apply at restore. */
@@ -60,6 +61,8 @@ export interface FixtureManifestCore {
   migrations: Record<string, string>;
   account: Record<string, string>;
   engines: FixtureEngines;
+  /** The backup's model head; restore advances it without rewriting this manifest. */
+  modelGeneration: string;
   samples: FixtureSample[];
 }
 
@@ -124,6 +127,7 @@ export function manifestCore(
     migrations: migrationInventory(root),
     account: fileDigests(root, [...ACCOUNT_SCHEMA_INPUTS]),
     engines,
+    modelGeneration: fixtureModel(root).generation,
     samples: sampleIndices(corpus).map((index) => {
       const work = workAt(corpus, index);
       return {
@@ -144,9 +148,11 @@ export function manifestCore(
   };
 }
 
-/** The same seed, profile, owner generators, schema inputs and engines give the same ID. */
+/** The same retained records, schema inputs and engines give the same ID.
+ * The installed model head is provenance; unrelated additions do not change it. */
 export function manifestIdentity(core: FixtureManifestCore): { digest: string; id: string } {
-  const digest = sha256(stable(core));
+  const { modelGeneration: _modelGeneration, ...identity } = core;
+  const digest = sha256(stable(identity));
   return { digest, id: `fx-${core.profile}-${digest.slice(0, 12)}` };
 }
 
@@ -156,15 +162,22 @@ export interface RestoreCompatibility {
   /** Newer migration files that restore applies in order. */
   pendingMigrations: string[];
   engineChanged: boolean;
+  /** Restore installs the current model while preserving the backup's generation. */
+  pendingModelAlignment: boolean;
 }
 
-/** Decide from the manifest alone whether a backup may serve the current checkout. */
+/** One retained-fixture rule: generators/used shapes and vocabulary, Jena/text
+ * configuration and Postgres/RustFS engines must match; applied migration bytes
+ * cannot change or gain a predecessor. Newer migrations and unrelated additive
+ * model definitions (separately or together) restore with migration/model alignment.
+ * Every incompatible change requires a rebuild. */
 export function restoreCompatibility(
   manifest: FixtureManifestCore,
   current: {
     owners: Record<string, { generator: string; inputs: Record<string, string> }>;
     migrations: Record<string, string>;
     engines: FixtureEngines;
+    modelGeneration: string;
   },
 ): RestoreCompatibility {
   const reasons: string[] = [];
@@ -175,8 +188,12 @@ export function restoreCompatibility(
     const stored = manifest.owners[name];
     if (!stored) reasons.push(`owner ${name} is absent from the backup`);
     else if (stored.generator !== owner.generator) reasons.push(`owner ${name} generator changed`);
-    else if (stable(stored.inputs) !== stable(owner.inputs))
-      reasons.push(`owner ${name} model inputs changed`);
+    else {
+      for (const input of new Set([...Object.keys(stored.inputs), ...Object.keys(owner.inputs)])) {
+        if (stored.inputs[input] !== owner.inputs[input])
+          reasons.push(`owner ${name} model input changed: ${input}`);
+      }
+    }
   }
   const pendingMigrations: string[] = [];
   for (const [path, digest] of Object.entries(manifest.migrations)) {
@@ -200,5 +217,6 @@ export function restoreCompatibility(
   }
   // A new command module is code; the Jena version and assembler are owner inputs above.
   const engineChanged = manifest.engines.fuseki.id !== current.engines.fuseki.id;
-  return { compatible: reasons.length === 0, reasons, pendingMigrations, engineChanged };
+  return { compatible: reasons.length === 0, reasons, pendingMigrations, engineChanged,
+    pendingModelAlignment: manifest.modelGeneration !== current.modelGeneration };
 }

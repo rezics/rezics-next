@@ -17,7 +17,8 @@ const engines = {
 };
 const core = (seed?: string) => manifestCore(root, fixtureCorpus('small', seed), fixtureOwners, engines);
 const current = (manifest: FixtureManifestCore) => ({ owners: manifest.owners,
-  migrations: { ...manifest.migrations }, engines: structuredClone(manifest.engines) });
+  migrations: { ...manifest.migrations }, engines: structuredClone(manifest.engines),
+  modelGeneration: manifest.modelGeneration });
 
 test('fixture: the same seed and profile give the same manifest digest and fixture ID', () => {
   const first = core();
@@ -78,7 +79,8 @@ test('fixture: imported component objects are byte-identical to the Work command
 test('fixture: restore compatibility applies only appended migrations and rejects stale owners', () => {
   const manifest = core();
   const same = restoreCompatibility(manifest, current(manifest));
-  expect(same).toEqual({ compatible: true, reasons: [], pendingMigrations: [], engineChanged: false });
+  expect(same).toEqual({ compatible: true, reasons: [], pendingMigrations: [], engineChanged: false,
+    pendingModelAlignment: false });
 
   const appended = current(manifest);
   // Number it past any real migration so it always sorts as appended.
@@ -88,7 +90,8 @@ test('fixture: restore compatibility applies only appended migrations and reject
 
   const inserted = current(manifest);
   inserted.migrations['services/main/migrations/access/000_first.sql'] = 'f'.repeat(64);
-  expect(restoreCompatibility(manifest, inserted).compatible).toBe(false);
+  expect(restoreCompatibility(manifest, inserted).reasons).toEqual([
+    'migration inserted before applied files: services/main/migrations/access/000_first.sql']);
 
   const changed = current(manifest);
   const [firstMigration] = Object.keys(changed.migrations);
@@ -102,13 +105,18 @@ test('fixture: restore compatibility applies only appended migrations and reject
   const analyzer = current(manifest);
   analyzer.owners = { ...analyzer.owners, graph: { ...analyzer.owners.graph!,
     inputs: { ...analyzer.owners.graph!.inputs, 'infra/jena/fuseki-text.ttl': '0'.repeat(64) } } };
-  expect(restoreCompatibility(manifest, analyzer).reasons).toEqual(['owner graph model inputs changed']);
+  expect(restoreCompatibility(manifest, analyzer).reasons).toEqual([
+    'owner graph model input changed: infra/jena/fuseki-text.ttl']);
 
   const module = current(manifest);
   module.engines.fuseki.id = `sha256:${'9'.repeat(64)}`;
   expect(restoreCompatibility(manifest, module)).toMatchObject({ compatible: true, engineChanged: true });
 
-  const postgres = current(manifest);
-  postgres.engines.postgres.id = `sha256:${'9'.repeat(64)}`;
-  expect(restoreCompatibility(manifest, postgres).reasons).toEqual(['postgres engine changed']);
+  for (const engine of ['postgres', 'rustfs'] as const) {
+    for (const field of ['id', 'image'] as const) {
+      const changedEngine = current(manifest);
+      changedEngine.engines[engine][field] = `sha256:${'9'.repeat(64)}`;
+      expect(restoreCompatibility(manifest, changedEngine).reasons).toEqual([`${engine} engine changed`]);
+    }
+  }
 });

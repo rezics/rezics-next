@@ -196,6 +196,7 @@ async function finalizeModelBootstrap(
   intent: ModelBootstrapIntent,
   active: ActiveModelGeneration,
   directory: string,
+  auditActor?: string,
 ): Promise<Record<string, unknown>> {
   if (
     active.generation !== intent.generation ||
@@ -219,9 +220,9 @@ async function finalizeModelBootstrap(
   if (rows.length !== 1 || !sequence)
     throw new Error('Model bootstrap lost its predecessor or exact sequenced zero-event receipt');
   const actorPath = datasetAdminPath(env.ACCOUNT_ORIGIN ?? env.ACCOUNT_BASE_URL!);
-  const actor = existsSync(actorPath)
+  const actor = auditActor ?? (existsSync(actorPath)
     ? (JSON.parse(readFileSync(actorPath, 'utf8')) as { id?: string }).id
-    : undefined;
+    : undefined);
   if (!actor)
     throw new Error(
       'Model bootstrap needs the existing dedicated dataset administrator audit identity',
@@ -253,10 +254,27 @@ async function finalizeModelBootstrap(
   return completed;
 }
 
+export interface FixtureModelBootstrap {
+  apps: Record<string, string>;
+  /** The retained fixture import is the audited tool identity, not an Account user. */
+  importOperation: string;
+}
+
+/** Storage-only fixture maintenance still uses the same local owner checks and
+ * append-only Account audit; a fixture identity is confined to an isolated QA stack. */
+export function fixtureModelAuditActor(stack: string, fixture: FixtureModelBootstrap): string {
+  if (!/^rezics-qa-[a-z0-9-]+$/.test(basename(stack))
+    || !/^urn:rezics:operation:fixture-[a-f0-9]{32}$/.test(fixture.importOperation))
+    throw new Error('Fixture model alignment requires an isolated QA stack and fixture import identity');
+  return fixture.importOperation;
+}
+
 export async function ensureLocalDatasetModelGeneration(
   stack = process.env.REZICS_DATASET_STACK ?? join(repository, '.temp/stack/rezics-dev'),
+  fixture?: FixtureModelBootstrap,
 ): Promise<Record<string, unknown>> {
-  const env = readEnv(join(stack, 'dev.env'));
+  const auditActor = fixture ? fixtureModelAuditActor(stack, fixture) : undefined;
+  const env = fixture?.apps ?? readEnv(join(stack, 'dev.env'));
   checkedLocalModelEndpoint(env.FUSEKI_URL!);
   const fuseki = new FusekiClient(
     env.FUSEKI_URL!,
@@ -299,13 +317,14 @@ export async function ensureLocalDatasetModelGeneration(
         JSON.parse(readFileSync(intentPath, 'utf8')) as ModelBootstrapIntent,
         predecessor,
         directory,
+        auditActor,
       );
     return { state: 'current', generation, generationNumber: predecessor.generationNumber };
   }
   const auditActorPath = datasetAdminPath(env.ACCOUNT_ORIGIN ?? env.ACCOUNT_BASE_URL!);
   if (
-    !existsSync(auditActorPath) ||
-    !(JSON.parse(readFileSync(auditActorPath, 'utf8')) as { id?: string }).id
+    !auditActor && (!existsSync(auditActorPath) ||
+    !(JSON.parse(readFileSync(auditActorPath, 'utf8')) as { id?: string }).id)
   )
     throw new Error(
       'Model bootstrap needs the existing dedicated dataset administrator audit identity',
@@ -521,7 +540,7 @@ sync`,
       active.generation,
       PROFILES.generation,
     );
-    return finalizeModelBootstrap(env, fuseki, intent, active, directory);
+    return finalizeModelBootstrap(env, fuseki, intent, active, directory, auditActor);
   } finally {
     maintenance.release();
   }

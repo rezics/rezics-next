@@ -57,6 +57,11 @@ and staging outside TDB2's single writer, with required post-state validation
 inside its transaction. `task fixture:build` creates the reusable backup;
 `task fixture:restore -- --fixture <id> --run-id <id>` makes a writable copy.
 `REZICS_FIXTURE_ROOT` places worker metadata in checkout-local `.temp/`.
+Retained fixtures survive newer SQL migrations and additive model definitions outside the loaders' declared profile use.
+Restore applies the newer migrations and the shared refresh model bootstrap before owner readiness.
+The backup manifest keeps its original model generation; restore evidence records both generations and installed artifacts.
+Changed generators, used profiles/shapes/vocabulary, Jena versions or text-index configuration require a rebuild.
+Postgres/RustFS image changes, edited applied migrations or migrations inserted before applied ones also require a rebuild.
 Full reconstruction and recovery proofs belong to final acceptance or a relevant
 defect investigation. Routine preparation and its evidence are separate from
 the timed operation.

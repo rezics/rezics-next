@@ -149,6 +149,7 @@ test('G-940: fixture restore accepts 1000 after 999 and refuses insertion before
   const current = {
     owners: {},
     engines,
+    modelGeneration: 'urn:rezics:model-generation:current',
     migrations: {
       ...manifest.migrations,
       ...Object.fromEntries(pending.map((path) => [path, 'new'])),

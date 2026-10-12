@@ -58,6 +58,8 @@ test('G1045: corpus and stopped-backup keys change at every owner migration and 
   try {
     for (const path of Object.keys(loadCompatibility(root).files))
       write(directory, path, 'baseline');
+    const modelManifest = JSON.parse(readFileSync(join(root, 'generated/model/manifest.json'), 'utf8'));
+    write(directory, 'generated/model/manifest.json', JSON.stringify(modelManifest));
     write(directory, 'services/account/src/auth.ts', 'Account provider schema');
     write(directory, 'infra/jena/Dockerfile', 'ARG FUSEKI_VERSION=6.2.0');
     const engine = { image: 'fixture:1', id: 'sha256:fixture' };
@@ -85,7 +87,8 @@ test('G1045: corpus and stopped-backup keys change at every owner migration and 
       expect(manifestIdentity(fixture()).id).not.toBe(fixtureId);
       rmSync(join(directory, path));
     }
-    write(directory, 'generated/model/manifest.json', 'new Fuseki model generation');
+    modelManifest.profiles.find((profile: { id: string }) => profile.id === 'work-metadata-v1').sha256 = 'changed used profile';
+    write(directory, 'generated/model/manifest.json', JSON.stringify(modelManifest));
     const model = loadCompatibility(directory);
     expect(workProfileCorpusId(recipe, 'unrelatedWorks', 'small', model)).not.toBe(id);
     expect(catalogueBackupProject('g1045', 1000, model)).not.toBe(backup);

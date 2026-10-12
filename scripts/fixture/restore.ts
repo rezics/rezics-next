@@ -19,6 +19,8 @@ import { assertGraphReady, checkSamples } from './smoke.ts';
 import { VOLUME_KINDS, composeArgs, copyVolume, currentEngines, dockerEnvironment, fixtureDirectory, fixtureProject, fixtureRoot,
   freshPorts, projectRunning, root, volumeExists } from './stack.ts';
 import { redactCommandOutput } from './command-output.ts';
+import { fixtureModel } from './model.ts';
+import { alignFixtureModel, type FixtureModelAlignment } from './align-model.ts';
 
 export const RESTORE_DEADLINE_MS = 600_000;
 
@@ -38,7 +40,8 @@ export function fixtureRestoreInputs(docker: NodeJS.ProcessEnv,
   owners: readonly FixtureOwner[] = fixtureOwners): Parameters<typeof restoreCompatibility>[1] {
   return { owners: Object.fromEntries(owners.map(owner => [owner.name,
     { generator: owner.generator, inputs: owner.compatibilityInputs(root) }])),
-  migrations: migrationInventory(root), engines: currentEngines(docker) };
+  migrations: migrationInventory(root), engines: currentEngines(docker),
+  modelGeneration: fixtureModel(root).generation };
 }
 
 /** Newest retained backup of this profile and seed that the current checkout can restore. */
@@ -56,6 +59,7 @@ export interface FixtureRestoreEvidence {
   fixture: string; target: string; profile: string; works: number; startedAt: string;
   deadlineMs: number; compatibility?: RestoreCompatibility; phases: Record<string, number>;
   copyMs?: Record<string, number>;
+  modelAlignment?: FixtureModelAlignment;
   appliedMigrations?: string[]; ready?: string[]; samples?: number; graph?: { generation: string; sequence: string };
   /** Active restore work; admission queueing is reported separately. */
   elapsedMs?: number; admissionWaitMs?: number;
@@ -153,6 +157,8 @@ export async function restoreFixture(id: string, target: string,
     });
     const apps = readEnv(join(targetDir, 'apps.env'));
     evidence.appliedMigrations = await phase('migrate', () => migrateFixtureOwners(apps));
+    remaining();
+    evidence.modelAlignment = await phase('align-model', () => alignFixtureModel(root, targetDir, apps, manifest));
     remaining();
     await phase('ready', async () => {
       for (const [key, database] of [

@@ -1,6 +1,5 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import {
   CONTINUITY,
@@ -10,8 +9,12 @@ import {
   PUBLIC_SEARCH_ANCHOR,
   RV,
 } from '../../../services/main/src/modules/work/activate.ts';
-import { PUBLIC_SEARCH_GRAPH } from '../../../services/main/src/modules/work/select-main.ts';
-import { SELECTION_POLICY } from '../../../services/main/src/modules/space/create.ts';
+import { MAIN_SELECTION_PROFILE, PUBLIC_SEARCH_GRAPH } from '../../../services/main/src/modules/work/select-main.ts';
+import { SELECTION_POLICY, SPACE_REALM_PROFILE_V1 } from '../../../services/main/src/modules/space/create.ts';
+import { CONTRIBUTION_PROFILE } from '../../../services/main/src/modules/contribution/draft.ts';
+import { PUBLICATION_PROFILE } from '../../../services/main/src/modules/contribution/publish.ts';
+import { REALM_SELECTION_PROFILE } from '../../../services/main/src/modules/work/select-realm.ts';
+import { fixtureModelInputs } from '../model.ts';
 import {
   type Corpus,
   type FixtureWork,
@@ -38,6 +41,12 @@ const LUCENE = '/fuseki/databases/rezics/lucene';
 const node = (value: string) => `<${value}>`;
 const text = (value: string) => JSON.stringify(value);
 type GraphKind = keyof typeof GRAPHS | 'public';
+
+// These imported records retain their original authored basis, as Work metadata
+// retains v1 even when the live commands admit newer revisions.
+const modelProfiles = [PROFILE, SPACE_REALM_PROFILE_V1, CONTRIBUTION_PROFILE,
+  PUBLICATION_PROFILE, MAIN_SELECTION_PROFILE, REALM_SELECTION_PROFILE,
+  'https://rezics.com/definition/content-match-unit-v1'] as const;
 
 /** The current and revision quads activateMetadataWork commits, minus its receipt and outbox. */
 function* workQuads(corpus: Corpus, work: FixtureWork): Generator<[GraphKind, string]> {
@@ -148,15 +157,13 @@ export const graphOwner: FixtureOwner = {
   name: 'graph',
   generator: 'graph-work-public-search-v4',
   phase: 'offline-graph',
+  modelProfiles,
   compatibilityInputs(root) {
     const dockerfile = readFileSync(join(root, 'infra/jena/Dockerfile'), 'utf8');
     return {
       jena: /^ARG FUSEKI_VERSION=(\d+\.\d+\.\d+)$/m.exec(dockerfile)?.[1] ?? 'unknown',
       'infra/jena/fuseki-text.ttl': sha256(readFileSync(join(root, 'infra/jena/fuseki-text.ttl'))),
-      'profile:work-metadata-v1': profileRegistry['work-metadata-v1'].sha256,
-      'generated/model/manifest.json': sha256(
-        readFileSync(join(root, 'generated/model/manifest.json')),
-      ),
+      ...fixtureModelInputs(root, modelProfiles),
     };
   },
   summarize(corpus) {
