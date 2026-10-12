@@ -34,11 +34,11 @@ CREATE FUNCTION access.person_profile_erasure_qualified(person text, principal u
     JOIN access.principal p ON p.id = a.principal_id
     JOIN access.authority_subject s ON s.id = a.agent_id
     JOIN access.outbox o ON o.principal_id = p.id AND o.kind = 'account.deletion_fenced'
-    WHERE a.agent_id = person AND a.principal_id = principal
+    WHERE a.agent_id = $1 AND a.principal_id = $2
       AND a.agent_kind = 'person' AND a.state = 'active'
       AND NOT p.active AND NOT s.active AND s.kind = 'agent'
-      AND p.enforcement_epoch = enforcement AND s.generation = subject_epoch
-      AND o.id = intent AND o.authority_epoch = enforcement)
+      AND p.enforcement_epoch = $4 AND s.generation = $5
+      AND o.id = $3 AND o.authority_epoch = $4)
 $$;
 
 -- Both SQL profile-copy owners consume the same transaction-local proof that
