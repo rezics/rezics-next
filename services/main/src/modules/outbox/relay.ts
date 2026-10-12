@@ -964,7 +964,6 @@ async function readMainOutboxGraphEnvelope(fuseki: FusekiClient, batch: MainOutb
       OPTIONAL { ?receipt rv:authorityEpoch ?authorityEpoch }
       OPTIONAL { ?receipt rv:admittedScope ?scope }
       OPTIONAL { ?receipt rv:operation ?operation }
-      OPTIONAL { ?receipt rv:work ?work }
       OPTIONAL { ?receipt rv:target ?target }
       OPTIONAL { ?receipt rv:mainVersion ?main }
       OPTIONAL { ?receipt rv:workRevision ?workRevision }
@@ -1041,6 +1040,28 @@ async function readMainOutboxGraphEnvelope(fuseki: FusekiClient, batch: MainOutb
       OPTIONAL { ?receipt rv:sourceByteDigest ?sourceByteDigest }
       OPTIONAL { ?receipt rv:sourceMappingRevision ?sourceMappingRevision }
     }
+    OPTIONAL {
+      GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:work ?work }
+      FILTER(?kind != rv:GraphErasureEvent || BOUND(?eventWork) && ?work = ?eventWork)
+    }
+    # Person erasure has one event per Work and one receipt for their full set.
+    # Match the individual Work above, then prove both directions of set equality
+    # inside this same read, without multiplying each event by the receipt set.
+    FILTER(?kind != rv:GraphErasureEvent || (
+      NOT EXISTS {
+        GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:work ?receiptWork }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.outbox)} {
+          ${iri(batch.batchId)} rv:event ?erasureEvent .
+          ?erasureEvent a rv:GraphErasureEvent ; rv:receipt ?receipt ; rv:work ?receiptWork .
+        } }
+      } && NOT EXISTS {
+        GRAPH ${iri(GRAPHS.outbox)} {
+          ${iri(batch.batchId)} rv:event ?erasureEvent .
+          ?erasureEvent a rv:GraphErasureEvent ; rv:receipt ?receipt ; rv:work ?erasedWork .
+        }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:work ?erasedWork } }
+      }
+    ))
   }`);
   const rows = result.results?.bindings ?? [];
   const row = rows[0];
