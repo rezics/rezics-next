@@ -192,6 +192,7 @@ export function commandBindingRead(profile: string, binding: RegistryBinding, sh
   const role = shapeRole(profile, shape);
   if (!binding.roles.includes(role)) throw new Error(`${profile} has no bound role ${role}`);
   const patterns: string[] = [];
+  const derived: string[] = [];
   let graphIndex = 0;
   const triple = (subject: string, predicate: string, object: string, optional: boolean | string = false) => {
     const graph = `?bindingGraph${graphIndex++}`;
@@ -237,7 +238,10 @@ export function commandBindingRead(profile: string, binding: RegistryBinding, sh
     }
     fields('context', { question: 'question', grain: 'targetGrain',
       timeZone: 'ratingTimeZone', displayThreshold: 'displayThreshold' });
-    if (keys.includes('language')) patterns.push(`BIND(LANG(${variable('question')}) AS ${variable('language')})`);
+    if (keys.includes('language')) {
+      patterns.push(`BIND(LANG(${variable('question')}) AS ${variable('language')})`);
+      derived.push('language');
+    }
   } else if (/rating.*-observation-/.test(profile)) {
     if (binding.roles.includes('realm')) {
       triple('realm', 'ratingContext', 'context');
@@ -297,7 +301,7 @@ export function commandBindingRead(profile: string, binding: RegistryBinding, sh
   for (const key of [...binding.roles, ...binding.required]) {
     if (!pattern.includes(variable(key))) throw new Error(`${profile} has no structural read for ${key}`);
   }
-  return { keys, variables, anchor: variable(role), pattern };
+  return { keys, variables, anchor: variable(role), pattern, derived };
 }
 
 /** Native binding arguments use lexical values, with the historical enum names. */

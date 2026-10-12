@@ -147,9 +147,11 @@ async function graphBindingValidations(env: WorkActivationEnvironment, resource:
       focus: [row![read.variables[role]!]!.value], graphs })), binding);
   // Pin the same structural witness in the writing transaction. BindingPolicy
   // then validates the complete focus/argument bundle against that transaction.
-  const guard = `VALUES (${read.keys.map(key => `?${read.variables[key]}`).join(' ')}) {
-    (${read.keys.map(key => row![read.variables[key]!] ? graphTerm(row![read.variables[key]!]!) : 'UNDEF').join(' ')})
-  } ${read.pattern}`;
+  const retained = read.keys.filter(key => !read.derived.includes(key));
+  const guard = `VALUES (${retained.map(key => `?${read.variables[key]}`).join(' ')}) {
+    (${retained.map(key => row![read.variables[key]!] ? graphTerm(row![read.variables[key]!]!) : 'UNDEF').join(' ')})
+  } ${read.pattern}
+    ${read.derived.map(key => `FILTER(?${read.variables[key]} = ${graphTerm(row![read.variables[key]!]!)})`).join('\n')}`;
   return { validations, guard };
 }
 
