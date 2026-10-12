@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
+import { startMediaStack, type MediaStack } from '../../../tests/qa/integration/media-support.ts';
 import {
   startPostgresCluster,
   type PostgresCluster,
@@ -25,6 +26,8 @@ import {
 } from '../src/modules/governance/store.ts';
 import { recordCounterNotice } from '../src/modules/rights/counter-notice.ts';
 import { SPACE_REALM_PROFILE } from '../src/modules/space/create.ts';
+import { RULE_PUBLISH_ACTION } from '../src/modules/governance/rules.ts';
+import { GRAPHS, RV, iri } from '../src/modules/work/activate.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import { reportRoutes } from '../src/routes/reports.ts';
 import { rightsRoutes } from '../src/routes/rights.ts';
@@ -35,6 +38,8 @@ const native = () => `https://rezics.com/id/${randomUUID()}`;
 const rule = { ref: 'urn:rule:realm-jurisdiction', revision: '1', digest: 'a'.repeat(64) };
 let cluster: PostgresCluster | undefined;
 let pool: Pool;
+let productionStack: Promise<MediaStack> | undefined;
+const production = () => productionStack ??= startMediaStack('realm-authority', { profileCredits: true });
 
 beforeAll(async () => {
   cluster = await startPostgresCluster();
@@ -55,6 +60,7 @@ beforeAll(async () => {
 }, 60_000);
 
 afterAll(async () => {
+  if (productionStack) await (await productionStack).stop();
   await pool?.end();
   cluster?.remove();
 });
@@ -192,6 +198,146 @@ async function fixture(options: {
 }
 
 type Fixture = Awaited<ReturnType<typeof fixture>>;
+
+async function productionJson<T>(response: Response, status = 201): Promise<T> {
+  const body = await response.text();
+  expect(response.status, body).toBe(status);
+  return JSON.parse(body) as T;
+}
+
+/** All heads, evidence, rules, plans and receipts come from Main's composition. */
+async function productionFixture(kind: 'content_report' | 'rights_complaint' = 'content_report',
+  resourceKind: 'Realm' | 'Space' | 'Agent' | 'Concept' = 'Realm') {
+  const stack = await production();
+  const member = await stack.member(`authority-${randomUUID()}`);
+  const grant = (scope: string, action: string) => grantFixtureAuthority(stack.accessPool, {
+    scope, requireDispatch: true,
+    representations: [{ principalId: member.principalId, actor: member.actor, action, lifetime: 'infinity' }],
+    grant: { actor: member.actor, action, lifetime: 'infinity' },
+  });
+  await grant('space:create:root', 'space.create');
+  const created = await productionJson<{ realm: string; space: string; realmRevision: string }>(
+    await member.send('POST', '/v1/spaces', { profile: 'space-realm-v1', name: 'Authority Realm',
+      capabilities: ['realm'], actingSubject: member.actor }));
+  await grant(`realm:profile:${created.realm}`, 'realm.profile.publish');
+  const published = await productionJson<{ revision: string }>(await member.send('PUT',
+    `/v1/realms/${created.realm.slice(-36)}/profile`, {
+      profile: 'realm-public-profile-v2', expectedHead: null, actingSubject: member.actor,
+      publication: { name: { original: 'en', labels: { en: 'Authority public profile' } },
+        description: { original: 'en', labels: { en: 'The retained public record.' } },
+        iconSelection: null, bannerSelection: null, rules: [], moderators: [],
+        count: { kind: 'unknown', value: null } },
+    }));
+  let resource = resourceKind === 'Space' ? created.space : resourceKind === 'Agent' ? member.actor : created.realm;
+  if (resourceKind === 'Concept') {
+    await grant('classification:define:global', 'classification.proposition.define');
+    resource = (await productionJson<{ concept: string }>(await member.send('POST',
+      '/v1/classification-propositions', { profile: 'classification-proposition-v1',
+        label: 'Authority Concept', actingSubject: member.actor }))).concept;
+  }
+  const head = (await stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head WHERE {
+    GRAPH ${iri(GRAPHS.current)} { ${iri(resource)} rv:head ?head }
+  }`)).results!.bindings[0]!.head!.value;
+  const report = await productionJson<{ caseId: string; reportId: string; credential: string }>(
+    await member.send('POST', '/v1/public-reports', { profile: 'public-report-v1', target: resource,
+      category: kind === 'rights_complaint' ? 'copyright' : 'spam_or_manipulation',
+      statement: 'Please review this public record.', contentLanguage: 'en',
+      actingSubject: member.actor,
+      ...(kind === 'rights_complaint' ? { contactEmail: 'claimant@authority.test', copyright: {
+        signature: 'Claimant', claimantName: 'Claimant', claimantAddress: 'Claimant address',
+        claimantPhone: '+1 555 555 5555', claimedWork: 'Original authored work', materialLocation: resource,
+        goodFaith: true, accurateAndAuthorizedUnderPerjury: true,
+      } } : {}),
+    }));
+  const basis = (await stack.accessPool.query<{ generation: string; evidence_digest: string }>(
+    `SELECT c.generation::text,r.evidence_digest FROM access.governance_case c
+     JOIN access.governance_report r ON r.case_id=c.id WHERE r.id=$1`, [report.reportId])).rows[0]!;
+  await grant('governance:platform', DECIDE_ACTION[kind]);
+  await grant('governance:platform', RULE_PUBLISH_ACTION);
+  const governance = stack.composition.dependencies.governance!;
+  const currentRule = await governance.rules!.publish(member.principal, {
+    ref: `urn:rule:authority:${randomUUID()}`, scopeId: 'governance:platform', actingSubject: member.actor,
+    expectedRevision: null, document: { reason: 'Protect the public record' }, idempotencyKey: randomUUID(),
+  });
+  await governance.store.safety.claim(member.principal, member.actor, report.caseId);
+  const input: DecisionInput = {
+    caseId: report.caseId, expectedGeneration: basis.generation, actingSubject: member.actor,
+    outcome: kind === 'rights_complaint' ? 'final_restrict' : 'restrict',
+    targets: [{ owner: 'graph', resource, component: 'record', locator: null, scopeKind: 'component',
+      revision: null, expectedHead: head, effect: 'disclosure' }],
+    rule: { ref: currentRule.ref, revision: currentRule.revision, digest: currentRule.digest },
+    evidenceDigest: basis.evidence_digest, reversesDecisionId: null, answersStepId: null,
+    rationale: null, disclosure: 'private', idempotencyKey: randomUUID(),
+    reasons: { facts: 'The retained public record was reviewed.', scope: 'The record.',
+      duration: 'Until reconsideration.', automation: false, contentLanguage: 'en',
+      appealRoute: '/v1/public-reports/{caseId}/correspondence' },
+  };
+  return { stack, member, grant, store: governance.store, rules: governance.rules!, input, report,
+    realm: created.realm, space: created.space, head, publicProfileHead: published.revision, resource };
+}
+
+test('production Realm public evidence is retained at publicProfileHead while closure CAS uses rv:head', async () => {
+  const f = await productionFixture();
+  expect(f.publicProfileHead).not.toBe(f.head);
+  expect((await f.stack.accessPool.query('SELECT revision,state,representation FROM access.governance_evidence WHERE report_id=$1',
+    [f.report.reportId])).rows).toEqual([{ revision: f.publicProfileHead, state: 'available', representation: 'graph-anchor-v1' }]);
+  await expect(f.store.decide(f.member.principal, { ...f.input,
+    targets: [{ ...f.input.targets[0]!, expectedHead: f.publicProfileHead }] })).rejects.toBeInstanceOf(GovernanceStale);
+  const result = await f.store.decide(f.member.principal, f.input);
+  expect(result.operation.status).toBe('completed');
+  expect(result.enforcement).toMatchObject([{ resource: f.realm, state: 'restricted' }]);
+  expect((await f.stack.accessPool.query('SELECT plan FROM access.safety_decision_effect WHERE decision_id=$1',
+    [result.decisionId])).rows[0]!.plan.realm).toEqual({ realm: f.realm, space: f.space });
+});
+
+test('production active Concept record/search remains an admitted Access restriction', async () => {
+  const f = await productionFixture('content_report', 'Concept');
+  const result = await f.store.decide(f.member.principal, { ...f.input,
+    targets: [{ ...f.input.targets[0]!, effect: 'search' }] });
+  expect(result.operation.status).toBe('completed');
+  expect(result.enforcement).toMatchObject([{ resource: f.resource, effect: 'search', state: 'restricted' }]);
+});
+
+for (const resourceKind of ['Agent', 'Space'] as const) {
+  test(`production confirmed legacy ${resourceKind} record/search replay needs no graph owner read`, async () => {
+    const f = await productionFixture('content_report', resourceKind);
+    const input = { ...f.input, targets: [{ ...f.input.targets[0]!, effect: 'search' as const }] };
+    const confirmed = await f.store.decide(f.member.principal, input);
+    expect(confirmed.operation.status).toBe('completed');
+    await f.stack.accessPool.query("UPDATE access.safety_decision_effect SET plan=plan-'realm' WHERE decision_id=$1",
+      [confirmed.decisionId]);
+    const original = f.stack.fuseki.query;
+    let reads = 0;
+    f.stack.fuseki.query = async () => { reads++; throw new Error('Graph owner unavailable during retained-key replay'); };
+    try {
+      const replay = await f.store.decide(f.member.principal, input);
+      expect(replay.decisionId).toBe(confirmed.decisionId);
+      expect(replay.operation.status).toBe('completed');
+      expect(reads).toBe(0);
+    } finally { f.stack.fuseki.query = original; }
+  });
+}
+
+for (const component of ['body', 'structure'] as const) {
+  for (const effect of ['participation', 'capability'] as const) {
+    test(`production resume rejects a persisted Realm ${component}/${effect} grain before Access confirmation`, async () => {
+      const f = await productionFixture();
+      const accepted = await f.store.decide(f.member.principal, { ...f.input,
+        targets: [{ ...f.input.targets[0]!, effect, expiresAt: new Date(Date.now() + 3_600_000).toISOString() }] }, true);
+      expect(accepted.operation.status).toBe('accepted');
+      // Model a saved pre-upgrade plan: resume must validate the dispatched grain
+      // even when the original acceptance bypassed today's owner classification.
+      await f.stack.accessPool.query('UPDATE access.moderation_decision_target SET component=$2 WHERE decision_id=$1',
+        [accepted.decisionId, component]);
+      const result = await f.store.resumeDecision(f.member.principal, f.member.actor, accepted.decisionId);
+      expect(result.operation.status).not.toBe('completed');
+      expect((await f.stack.accessPool.query('SELECT 1 FROM access.governance_enforcement WHERE decision_id=$1',
+        [accepted.decisionId])).rowCount).toBe(0);
+      expect((await f.stack.accessPool.query('SELECT state FROM access.safety_decision_effect WHERE decision_id=$1',
+        [accepted.decisionId])).rows[0]!.state).not.toBe('confirmed');
+    });
+  }
+}
 
 async function expectNoDecision(f: Fixture) {
   expect(f.applications()).toBe(0);
