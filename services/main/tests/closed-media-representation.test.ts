@@ -60,9 +60,9 @@ function fixture(duringAwait: (phase: DisclosureAwait) => Promise<void> = async 
       anonymousNames: [], fenceBasis: fixtureDisclosureCut };
     },
   });
-  const read = (withUse: boolean, duringHydration?: () => void) => readClosedRealmMedia(env,
+  const read = (withUse: boolean, duringHydration?: () => void | Promise<void>) => readClosedRealmMedia(env,
     { asset, representation, ...(withUse ? { use } : {}) }, async () => {
-      calls.hydrate++; duringHydration?.();
+      calls.hydrate++; await duringHydration?.();
       return { asset, representation, use: withUse ? use : null, sha256: 'a'.repeat(64), width: 100, height: 100 };
     }, ANONYMOUS_VIEWER);
   return { env, state, calls, read };
@@ -97,6 +97,18 @@ for (const hidden of [asset, representation, use]) {
     const f = fixture(); f.state.directHidden = hidden;
     expect(await f.read(true)).toBeNull();
     expect(f.calls.hydrate).toBe(0);
+  });
+
+  test(`only ${hidden === asset ? 'Asset' : hidden === representation ? 'Representation' : 'Use'} hidden during hydration makes delivery absent`, async () => {
+    const f = fixture();
+    expect(await f.read(true, async () => {
+      await Promise.resolve();
+      f.state.directHidden = hidden;
+    })).toBeNull();
+    expect(f.state.closed).toBe(false);
+    expect(f.calls.hydrate).toBe(1);
+    expect(f.calls.decisions).toBe(2);
+    expect(f.calls.targets.map(target => target.resource)).toEqual([asset, representation, use]);
   });
 }
 
