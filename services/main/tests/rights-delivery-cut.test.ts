@@ -9,10 +9,11 @@ import type { DisclosureChannel } from '../src/modules/disclosure/read.ts';
 import { disclosureViewer } from '../src/modules/disclosure/viewer.ts';
 import { withDeliveryCut } from '../src/modules/rights/delivery-cut.ts';
 import { ASSESS_ACTION, ASSESS_SCOPE, PUBLIC_DOMAIN_TEXT_USE, publicDomainWorkMaterial,
-  RightsInvalid, RightsUnavailable, type AssessmentInput } from '../src/modules/rights/store.ts';
+  RightsInvalid, RightsStore, RightsUnavailable, type AssessmentInput } from '../src/modules/rights/store.ts';
 import { suppressGraphContentRevisions } from '../src/modules/erasure/graph.ts';
 import { GRAPHS, iri } from '../src/modules/work/activate.ts';
 import { problem } from '../src/routes/problems.ts';
+import { meterPool } from '../../../tests/qa/integration/support/query-cost-meter.ts';
 
 let stack: MediaStack;
 beforeAll(async () => { stack = await startMediaStack('rights-delivery-cut'); }, 120_000);
@@ -358,37 +359,66 @@ test('a single head movement replays the full callback and returns only the fres
   expect(attempts).toBe(2);
 });
 
-test('token reads cost one indexed statement per store per snapshot, with and without movement', async () => {
+test('all snapshot statements cost one indexed read per store, independent of movement and 1,000 unrelated holds', async () => {
   const f = await fixture();
   const content = spyOn(stack.contentPool, 'query');
   const access = spyOn(stack.accessPool, 'query');
+  // Only the snapshot store uses these proxies. Movement commands and plan
+  // inspection use the original stores, so their work cannot pollute the cut.
+  // meterPool counts every pool AND checked-out client statement, with no SQL filter.
+  const contentMeter = meterPool(stack.contentPool), accessMeter = meterPool(stack.accessPool);
+  const measured = new RightsStore(contentMeter, accessMeter);
+  const plans: { query: unknown; parameters: unknown; pool: typeof stack.contentPool }[] = [];
+  let snapshots = 0;
+  const target = { ...f.target, rights: { deliveryCutSnapshot: async (resourceId: string, assessmentId: string | null) => {
+    content.mockClear(); access.mockClear();
+    const before = [contentMeter.queries, accessMeter.queries];
+    const value = await measured.deliveryCutSnapshot(resourceId, assessmentId);
+    expect(contentMeter.queries - before[0]!).toBe(1);
+    expect(accessMeter.queries - before[1]!).toBe(1);
+    // Capture every issued statement as well, so the index assertion covers
+    // the implementation's SQL, never a hand-written copy of the desired query.
+    expect(content.mock.calls).toHaveLength(1);
+    expect(access.mock.calls).toHaveLength(1);
+    if (snapshots++ === 0) {
+      for (const [query, parameters] of content.mock.calls) plans.push({ query, parameters, pool: stack.contentPool });
+      for (const [query, parameters] of access.mock.calls) plans.push({ query, parameters, pool: stack.accessPool });
+    }
+    return value;
+  } } };
   try {
-    for (const moving of [false, true]) {
-      content.mockClear(); access.mockClear();
-      await withDeliveryCut(f.target, async () => true, async () => { if (moving) await f.moveRights(); return f.text; }, async value => value);
-      const contentReads = content.mock.calls.filter(([query]) => typeof query === 'string'
-        && query.includes('AS assessment_head'));
-      const accessReads = access.mock.calls.filter(([query]) => typeof query === 'string'
-        && query.includes('FROM access.governance_preservation_delivery_head'));
-      expect(contentReads).toHaveLength(moving ? 4 : 2);
-      expect(accessReads).toHaveLength(moving ? 4 : 2);
-      for (const [query, actualParameters] of [...contentReads, ...accessReads]) {
-        if (typeof query !== 'string') throw new Error('Expected a delivery-cut SQL statement');
-        expect(query).not.toMatch(/\b(COUNT|SUM|ORDER BY)\b/i);
-        const parameters = query.includes('AS assessment_head')
-          ? [f.target.resourceId, f.target.assessmentId] : [f.target.resourceId];
-        expect<unknown>(actualParameters).toEqual(parameters);
-        const client = await (query.includes('AS assessment_head') ? stack.contentPool : stack.accessPool).connect();
-        try {
-          await client.query('BEGIN');
-          await client.query('SET LOCAL enable_seqscan = off');
-          const plan = await client.query(`EXPLAIN ${query}`, parameters);
-          expect(plan.rows.map(row => row['QUERY PLAN']).join('\n')).toMatch(/Index (Only )?Scan/);
-        } finally { await client.query('ROLLBACK'); client.release(); }
+    for (const history of [0, 1000]) {
+      if (history) {
+        for (let batch = 0; batch < 50; batch++) {
+          await Promise.all(Array.from({ length: 20 }, () => f.hold(`https://rezics.com/id/${randomUUID()}`)));
+        }
+      }
+      for (const moving of [false, true]) {
+        contentMeter.reset(); accessMeter.reset(); snapshots = 0;
+        const cut = await withDeliveryCut(target, async () => true,
+          async () => { if (moving) await f.moveRights(); return f.text; }, async value => value);
+        expect(cut).toEqual(moving ? { status: 'unavailable-retry' } : { status: 'stable', value: f.text });
+        expect(snapshots).toBe(moving ? 4 : 2);
+        expect(contentMeter.queries).toBe(moving ? 4 : 2);
+        expect(accessMeter.queries).toBe(moving ? 4 : 2);
+        expect(contentMeter.queries + accessMeter.queries).toBe(moving ? 8 : 4);
       }
     }
+    for (const { query, parameters, pool } of plans) {
+      if (typeof query !== 'string' || !Array.isArray(parameters)) throw new Error('Expected a recorded SQL statement');
+      expect(query).not.toMatch(/\b(COUNT|SUM|ORDER BY)\b/i);
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query('SET LOCAL enable_seqscan = off');
+        const plan = await client.query(`EXPLAIN ${query}`, parameters);
+        const text = plan.rows.map(row => row['QUERY PLAN']).join('\n');
+        expect(text).toMatch(/Index (Only )?Scan/);
+        expect(text).not.toMatch(/Seq Scan|governance_preservation_hold/);
+      } finally { await client.query('ROLLBACK'); client.release(); }
+    }
   } finally { content.mockRestore(); access.mockRestore(); }
-});
+}, 180_000);
 
 test('held and missing owners fail closed before the callback; owner failures after work discard bytes', async () => {
   const f = await fixture();
