@@ -35,6 +35,7 @@ import { CargoResolutionStore }
   from '../../../services/main/src/modules/package/cargo-resolution.ts';
 import { AccessAdmissionRegistry, engageAccessRecoveryFence }
   from '../../../services/main/src/modules/access/admission.ts';
+import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import { heldErasureMaintenanceClient } from '../../../services/main/src/modules/erasure/graph.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { publishAdmittedContent }
@@ -190,18 +191,12 @@ test('OPS03/PKG14/SYS12: signed owner cut restores Content and exact Go checksum
     await accessPool.query('INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1,$2,$3)',
       [principalId, principal.issuer, principal.subject]);
     await accessPool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1,'agent')", [actor]);
-    const grant = async (scope: string, action: string) => {
-      await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING',
-        [scope]);
-      await accessPool.query(`INSERT INTO access.representation
-        (id, principal_id, subject_id, action, valid_until)
-        VALUES ($1,$2,$3,$4,now() + interval '1 hour')`,
-      [randomUUID(), principalId, actor, action]);
-      await accessPool.query(`INSERT INTO access.permission_grant
-        (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
-        VALUES ($1,$2,$2,$3,$4,now() + interval '1 hour')`,
-      [randomUUID(), actor, scope, action]);
-    };
+    const grant = async (scope: string, action: string) => grantFixtureAuthority(accessPool, {
+      scope,
+      requireDispatch: false,
+      representations: [{ principalId, actor, action, lifetime: '8 hours' }],
+      grant: { actor, action, lifetime: '8 hours' },
+    });
     await grant('work:create:root', 'work.create');
     const fuseki = new FusekiClient(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN!,
       apps.FUSEKI_COMMAND_TOKEN!);

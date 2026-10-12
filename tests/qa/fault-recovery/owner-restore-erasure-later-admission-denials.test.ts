@@ -2,8 +2,10 @@ import { expect, spyOn, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import type { PoolClient } from 'pg';
 import { sealRecoveryPayload } from '../../../services/account/src/recovery-envelope.ts';
 import * as admission from '../../../services/main/src/modules/access/admission.ts';
+import { ensureFixtureScopeGate } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import { importAccessErasureRecoveryAttachment } from '../../../services/main/src/modules/access/erasure-recovery.ts';
 import * as nativeRecovery from '../../../services/main/src/modules/access/erasure-recovery.ts';
 import {
@@ -596,26 +598,24 @@ test(
             }
           }
           // Covered but unsupported writes cannot be admitted into an older cut.
-          const gate = (
-            await copy.owners.access.query<{ epoch: string }>(
-              'SELECT authority_epoch::text AS epoch FROM access.scope_gate WHERE id=$1',
-              [`work:edit:${fixture.work}`],
-            )
-          ).rows[0]!.epoch;
-          await controlled(
-            'unrelated-Access-authority',
-            () =>
-              replicaAccess(
-                copy,
-                'UPDATE access.scope_gate SET authority_epoch=authority_epoch+1 WHERE id=$1',
-                [`work:edit:${fixture.work}`],
-              ),
-            () =>
-              replicaAccess(copy, 'UPDATE access.scope_gate SET authority_epoch=$2 WHERE id=$1', [
-                `work:edit:${fixture.work}`,
-                gate,
-              ]),
+          const originalProof = binding.proveReleaseTransition;
+          const unrelatedAuthority = spyOn(binding, 'proveReleaseTransition').mockImplementation(
+            async (pool, client, basis, generation) => {
+              await ensureFixtureScopeGate(client, `work:edit:${fixture.work}`, { open: false });
+              return originalProof(pool, client, basis, generation);
+            },
           );
+          try {
+            await controlled(
+              'unrelated-Access-authority',
+              noChange,
+              noChange,
+              body,
+              'scope_gate',
+            );
+          } finally {
+            unrelatedAuthority.mockRestore();
+          }
           await faultAttachment(
             'auxiliary-admission-proof',
             'unknown native Access attachment schema or row',
@@ -692,10 +692,15 @@ test(
 
           // Prove both post-CAS denial variants on the real imported C1 and CAS,
           // rolling back only this uncommitted Access transaction each time.
-          for (const sql of [
-            'UPDATE access.scope_gate SET authority_epoch=authority_epoch+1 WHERE id=$1',
-            'INSERT INTO access.discovery_source_change DEFAULT VALUES',
-          ]) {
+          const postCasMutations: Array<(client: PoolClient) => Promise<void>> = [
+            async (client) => {
+              await ensureFixtureScopeGate(client, `work:edit:${fixture.work}`, { open: false });
+            },
+            async (client) => {
+              await client.query('INSERT INTO access.discovery_source_change DEFAULT VALUES');
+            },
+          ];
+          for (const mutate of postCasMutations) {
             const relay = await copy.retainedRelay.connect(),
               access = await copy.owners.access.connect();
             try {
@@ -720,7 +725,7 @@ test(
                 fixture.currentCoverage,
               );
               await admission.releaseAccessRecoveryFence(access, fixture.generation);
-              await access.query(sql, sql.includes('$1') ? [`work:edit:${fixture.work}`] : []);
+              await mutate(access);
               await expect(
                 proveReleaseTransition(copy.owners.access, access, basis, fixture.generation),
               ).rejects.toBeInstanceOf(RestoreLineageConflict);

@@ -37,6 +37,7 @@ import {
   engageAccessRecoveryFence,
   releaseAccessRecoveryFence,
 } from '../../../services/main/src/modules/access/admission.ts';
+import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import { AccessDownloadLeases } from '../../../services/main/src/modules/access/download-leases.ts';
 import type { AccessErasureRecoverySummary } from '../../../services/main/src/modules/access/erasure-recovery.ts';
 import { ContentSearchReadAccess } from '../../../services/main/src/modules/search-disclosure/content-read-lease.ts';
@@ -642,22 +643,12 @@ export async function ownerRestoreErasureFixture(options: OwnerRestoreErasureFix
       source.access,
       qa.composeEnv.FUSEKI_TITLE_ADMISSION_KEY,
     );
-    const grant = async (scope: string, action: string) => {
-      await source.access.query(
-        'INSERT INTO access.scope_gate(id) VALUES($1) ON CONFLICT DO NOTHING',
-        [scope],
-      );
-      await source.access.query(
-        `INSERT INTO access.representation(id,principal_id,subject_id,action,valid_until)
-        VALUES($1,$2,$3,$4,now()+interval '1 hour')`,
-        [randomUUID(), principalId, actor, action],
-      );
-      await source.access.query(
-        `INSERT INTO access.permission_grant(id,issuer_subject,recipient_subject,scope_id,action,valid_until)
-        VALUES($1,$2,$2,$3,$4,now()+interval '1 hour')`,
-        [randomUUID(), actor, scope, action],
-      );
-    };
+    const grant = async (scope: string, action: string) => grantFixtureAuthority(source.access, {
+      scope,
+      requireDispatch: false,
+      representations: [{ principalId, actor, action, lifetime: '8 hours' }],
+      grant: { actor, action, lifetime: '8 hours' },
+    });
     await grant('work:create:root', 'work.create');
     const createCustody = () =>
       new ReceiptCustody(
