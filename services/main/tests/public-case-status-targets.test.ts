@@ -40,6 +40,7 @@ afterAll(async () => {
 
 async function fixture(options: {
   hidden?: Partial<EvidenceTarget>;
+  hiddenOnSameResource?: boolean;
   scopeKind?: 'component' | 'exact_revision';
   hiddenState?: 'confirmed' | 'pending' | 'failed';
   anonymousRevision?: string;
@@ -58,14 +59,18 @@ async function fixture(options: {
   const a: EvidenceTarget = {
     owner: 'content', resource: native(), component: 'body', revision: native(), locator: null,
   };
-  const b: EvidenceTarget = { ...a, resource: native(), revision: native(), ...options.hidden };
+  const b: EvidenceTarget = { ...a, resource: options.hiddenOnSameResource ? a.resource : native(),
+    revision: options.hiddenOnSameResource ? a.revision : native(), ...options.hidden };
   const rule = { ref: 'urn:rule:status', revision: '1', digest: 'a'.repeat(64) };
   const capture = (target: EvidenceTarget) => ({
     ...target, state: 'available' as const, representation: 'Retained evidence.',
     revisionDigest: 'b'.repeat(64), provenance: {},
   });
   const store = new GovernanceStore(pool, { capture: async (_principal, _actor, target) => capture(target) },
-    { current: async target => target.revision }, { current: async () => rule }, {
+    { current: async target => target.revision ?? [a, b].find(e => e.owner === target.owner
+      && e.resource === target.resource && e.component === target.component && e.locator === target.locator)?.revision ?? null },
+    { current: async () => rule }, {
+      participants: async () => [],
       apply: async (_operationId, ordinal) => {
         const hiddenOrdinal = options.hiddenState ? 2 : 1;
         if (ordinal === hiddenOrdinal && options.hiddenState === 'failed') throw new KnownEffectFailure('private-error');
@@ -151,6 +156,17 @@ test('exact revision entitlement does not extend to another revision of the same
   const status = await f.reports.status(f.anonymous.caseId, f.anonymous.credential);
   expect(status.operation).toBeNull();
 });
+
+for (const hidden of [{ owner: 'graph' }, { component: 'title' }, { locator: 'private-location' },
+  { revision: 'urn:private:revision' }] satisfies Partial<EvidenceTarget>[]) {
+  test(`report entitlement matches the full evidence grain: ${Object.keys(hidden)[0]}`, async () => {
+    const f = await fixture({ hidden, hiddenOnSameResource: true });
+    const status = await f.reports.status(f.anonymous.caseId, f.anonymous.credential);
+    expect(status.operation?.items).toEqual([{ ordinal: 1, target: f.a.resource,
+      state: 'confirmed', receipt: 'public-receipt', continuation: null, error: null }]);
+    expect(JSON.stringify(status)).not.toContain('private-receipt');
+  });
+}
 
 test('component decisions remain visible through retained evidence on a different revision', async () => {
   const f = await fixture({ scopeKind: 'component', anonymousRevision: native() });
