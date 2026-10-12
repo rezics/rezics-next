@@ -89,7 +89,7 @@ if (process.env.REZICS_GROUP_MOVE_PROFILE_CHILD === '1') {
     mkdirSync(dirname(resultPath), { recursive: true });
     writeFileSync(resultPath, JSON.stringify({ readings }));
     await stack.stop();
-    sink.stop();
+    await sink.stop();
     await shutdownTelemetry();
   }
 } else {
@@ -112,10 +112,8 @@ if (process.env.REZICS_GROUP_MOVE_PROFILE_CHILD === '1') {
     const message = `Cross-parent group move work at 16/64/256: ${JSON.stringify(counts)}`;
     try {
       assertWorkCostAtScales(readings.map(reading => reading.profile), {
-        growth: {
-          postgresStatements: { class: 'constant', dimension: 'mainCalls' },
-          fusekiRequests: { class: 'constant', dimension: 'mainCalls' },
-        },
+        postgresStatements: readings[0]!.profile.postgresStatements! * 1.2,
+        fusekiRequests: readings[0]!.profile.fusekiRequests! * 1.2,
       }, 'structure-group-move-growth');
       for (const field of ['nativeAdds', 'validationFocuses'] as const) {
         expect(Math.max(...readings.map(reading => reading[field])), message)
