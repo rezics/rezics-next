@@ -83,8 +83,8 @@ function fixture(target: DisclosureTarget, resourceKind: DisclosureAncestryEvide
   return { env, reader, policyTargets, graphQueries, holdCurrent: () => { heldRevision = currentHead; } };
 }
 
-test('current Work and Realm names use the established identity head without a self-parent', async () => {
-  for (const resourceKind of ['work', 'realm'] as const) {
+test('current graph names use the established identity head without a self-parent', async () => {
+  for (const resourceKind of ['work', 'realm', 'other'] as const) {
     for (const component of ['name', 'title'] as const) {
       const target: DisclosureTarget = { owner: 'graph', resource, component };
       const f = fixture(target, resourceKind);
