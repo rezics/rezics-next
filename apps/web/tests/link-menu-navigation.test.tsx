@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { chromium, expect as browserExpect, type Browser, type Page } from 'playwright/test';
 import type { UiLocale } from '../i18n/define.ts';
+import { spaceHref } from '../features/address/path.ts';
 
 interface MenuFixture {
   locale: UiLocale;
@@ -13,7 +14,7 @@ interface TestWindow {
   pushes: string[];
 }
 
-const discussion = '/r/reader-circle/discussions';
+const discussion = spaceHref('reader-circle', 'community', ['discussions']);
 const newHref = `${discussion}?language=ar&sort=new#comments`;
 const topHref = `${discussion}?language=ar&sort=top#comments`;
 const periodHref = `${discussion}?language=ar&sort=top&t=all#comments`;
@@ -126,8 +127,8 @@ window.renderMenus = fixture => root.render(<Menus key={++generation} fixture={f
 
   test.each([
     '/api/main/v1/threads?sort=new#comments',
-    'https://other.test/r/circle?sort=new#comments',
-    '//other.test/r/circle?sort=new#comments',
+    `https://other.test${discussion}?sort=new#comments`,
+    `//other.test${discussion}?sort=new#comments`,
   ])('a non-page destination remains unchanged: %s', async href => {
     await mount({ locale: 'ja', sortHrefs: { best: discussion, new: href, top: topHref } });
     await choose('Sort: Best', 'New');
