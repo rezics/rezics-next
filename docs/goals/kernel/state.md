@@ -41,6 +41,7 @@ Inside the window (Program's cuts): eligibility chain (one branch, after the cla
 - [Gated reads: one admission rule](reports/gated-reads-design.md): rankings, public and private Content search and private contribution search are served or refused by their own scope; 6 to 8 sessions, native capture first.
 - [Imported covers: source evidence, rights mark and scoped takedown](reports/G-1800-specification.md): eleven A slices; slices 1 and 2 running, slice 3 in Trust-ops' area, 4 to 11 wait for owner answers now given.
 - [Rights notice path](reports/G-1803-specification.md): two API gaps and eight A slices; slices 6 to 8 wait on Trust-ops' erasure chain; the public decision read is B.
+- [Pinned catalogue import cost](reports/catalogue-import-cost.md): recipe and bounded Bangumi import measurements, including the refused native episode batch.
 
 ## Open
 
