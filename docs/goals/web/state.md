@@ -7,7 +7,7 @@ the launch manager's end-of-run table, archived at
 | Field | State (2026-10-12) |
 | --- | --- |
 | Manager | None. The program starts one when the first vertical's rows are proved |
-| Rows | 67 in scope; 44 have a browser proof, 23 have none |
+| Rows | 67 in scope; 44 have a browser proof, 23 have none. The Gutenberg recipes row was proved through the importing author's view only |
 | Shared stack | The web hot-reloads from the main checkout; the backend is the revision of the last refresh (the program's state file names it) |
 
 ## Carried work
@@ -18,7 +18,17 @@ dropped.
 
 | Work | Where it stands | What is left |
 | --- | --- | --- |
-| (the launch manager's end-of-run table is filed here in the commit that closes its Goal) | | |
+| Visual novel hub and release choice (`g-2035`) | Its API proof and the phone and desktop journey passed; the last review left one P1: the shared preference form erases a valid retained release pin when the release's languages change in a later revision | Compare the pin against its own edition revision; the registry row stays unproved until it lands |
+| Games: platform scheme, facts and facets (`g-1855`) | Stopped before its handoff; an earlier review left a P1 | Rerun its integration and journey on `main`; a genre can still show among the platforms |
+| Recipe one-button publish and the editor's native ingredient rules (`g-1961`) | Integration and the publish journey passed; the gate is red on a coverage declaration that names an old test title; the commits after its first review were never reviewed | Fix the declaration, review, land. The recipe reader still flattens sections |
+| Library lists continue in place; one Access-plus-disclosure shelf reader (`g-2048`) | Its reads pass; the gate is red because the new shelf read is not in the hidden-id inventory | Register it and land: until then the shelf directory on `main` can show a private shelf's name after its access was closed. Six further groups (Home Continue, tracking, ratings, Discover and invitations, the managed rail and attached Zones) were never started |
+| A saved release filter keeps its choices (`g-2055`) | One P1: applying a held URL with a retired facet still drops that choice | Fix or drop |
+| Recipe export and import round trip (`g-1987`) | A test commit only | Route sections at the root, a partial import restarting, export importability unused in the interface |
+| Zone home document identity | On `main`; two commits after its last review are unreviewed | The joint authority and disclosure fence race is a named expected failure; the discussion and browser proofs were not made |
+| Realm write isolation and closure acceptance | Steps on `main` | The Realm browser journeys; the closure notification store was never built |
+| Public hub parts and relations | On `main`; the relation link was fixed after the journey last failed | Rerun the journey |
+| Gutenberg recipes | 30 Works on the shared stack at `/en/z/launch-recipes/browse`; readers see the text only | Structure waits for the decision 55 design in the [api](../api/state.md) Goal; ten Italian recipes have no recognised amounts |
+| Search page "at least N" and the tests under the disclosure contract | Briefs only | Wait for the api Goal's search work |
 
 ## Known on main
 

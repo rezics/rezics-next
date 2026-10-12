@@ -52,7 +52,7 @@ and fourteen owner checks: cancelled or unconfirmed effects cannot retire a due
 case, and identical-copy suppression commits with its original restriction.
 Named responders and real mail delivery remain operator prerequisites.
 
-The G-1294 source review at `12186858a0f3b9c2fad0edcb28c25eb294574373`
+The source review of 2026-10-07 at `12186858a0f3b9c2fad0edcb28c25eb294574373`
 found four High issues and one Medium issue. Each repair has targeted evidence:
 
 | Finding | Repair and verification |

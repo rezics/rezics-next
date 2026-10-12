@@ -122,7 +122,7 @@ test('held restore startup excludes admission from its phase and still enforces 
 test('production recovery startup keeps its saved-profile bypass and active timeout', async () => {
   let at = 0;
   const budget = new RecoveryBudget(() => at);
-  const env = { REZICS_STACK_PROFILE: 'dev', GOAL_TASK_ID: 'G-1234',
+  const env = { REZICS_STACK_PROFILE: 'dev', GOAL_TASK_ID: 'G-0',
     REZICS_FUSEKI_MEMORY_LIMIT: '0', REZICS_QA_MEMORY_DEADLINE: 'invalid' };
   await budget.phase('start-held', () => budget.startup(env, () => {
     expect(budget.remaining()).toBe(600_000);

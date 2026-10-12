@@ -40,7 +40,7 @@ test('browser admission expires at the run deadline without launching or chargin
 test('saved non-QA browser contexts bypass reserve calculation despite Goal metadata', async () => {
   let now = 0;
   const result = await measuredBrowserStep('Storybook', 10, async () => { now += 10; }, {
-    root, env: { REZICS_STACK_PROFILE: 'prod', GOAL_TASK_ID: 'G-1234', REZICS_QA_HOST_RESERVE_GIB: 'invalid' },
+    root, env: { REZICS_STACK_PROFILE: 'prod', GOAL_TASK_ID: 'G-0', REZICS_QA_HOST_RESERVE_GIB: 'invalid' },
     deadline: -1, now: () => now, admission: async () => { throw new Error('Unexpected QA admission'); },
   });
   expect(result).toMatchObject({ elapsedMs: 10, admissionWaitMs: 0, passed: true });

@@ -86,13 +86,13 @@ test('admission uses existing Goal orchestration or the actual QA profile, never
     execFileSync('git', ['init', '--quiet'], { cwd: dir });
     expect(await isLocalQaRun(dir, {})).toBe(false);
     expect(await isLocalQaRun(dir, { REZICS_STACK_PROFILE: 'dev', REZICS_QA_RUN_ID: 'production-restore' })).toBe(false);
-    expect(await isLocalQaRun(dir, { GOAL_TASK_ID: 'G-1234' })).toBe(true);
+    expect(await isLocalQaRun(dir, { GOAL_TASK_ID: 'G-0' })).toBe(true);
     expect(await isLocalQaRun(dir, { REZICS_STACK_PROFILE: 'qa' })).toBe(true);
     mkdirSync(join(dir, '.temp', 'goal-orchestration', 'qa-slots'), { recursive: true });
     expect(await isLocalQaRun(dir, {})).toBe(true);
     for (const profile of ['dev', 'production', '']) {
       expect(await isLocalQaRun(dir, { REZICS_STACK_PROFILE: profile })).toBe(false);
-      expect(await isLocalQaRun(dir, { REZICS_STACK_PROFILE: profile, GOAL_TASK_ID: 'G-1234' })).toBe(false);
+      expect(await isLocalQaRun(dir, { REZICS_STACK_PROFILE: profile, GOAL_TASK_ID: 'G-0' })).toBe(false);
     }
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
@@ -104,7 +104,7 @@ test('saved dev restores bypass all admission entry points even with Goal metada
   try {
     execFileSync('git', ['init', '--quiet'], { cwd: dir });
     mkdirSync(join(dir, '.temp', 'goal-orchestration', 'qa-slots'), { recursive: true });
-    const env = { REZICS_STACK_PROFILE: 'dev', GOAL_TASK_ID: 'G-1234', REZICS_QA_MEMORY_DEADLINE: 'invalid',
+    const env = { REZICS_STACK_PROFILE: 'dev', GOAL_TASK_ID: 'G-0', REZICS_QA_MEMORY_DEADLINE: 'invalid',
       REZICS_FUSEKI_MEMORY_LIMIT: '0', REZICS_QA_HOST_RESERVE_GIB: 'invalid' };
     const options = { root: dir, env, lockFile, deadline: -1, pollMs: 0,
       now: () => { throw new Error('Production inspected a QA clock'); },

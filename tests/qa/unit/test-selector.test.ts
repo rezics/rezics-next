@@ -75,7 +75,7 @@ test('saved non-QA standalone stories bypass reserve calculation despite Goal me
   const root = resolve(import.meta.dir, '../../..');
   const file = [...new Bun.Glob('apps/web/**/*.stories.tsx').scanSync({ cwd: root })][0]!;
   expect(await dispatchTest([file], {
-    env: { REZICS_STACK_PROFILE: 'prod', GOAL_TASK_ID: 'G-1234', REZICS_QA_HOST_RESERVE_GIB: 'invalid',
+    env: { REZICS_STACK_PROFILE: 'prod', GOAL_TASK_ID: 'G-0', REZICS_QA_HOST_RESERVE_GIB: 'invalid',
       REZICS_QA_MEMORY_DEADLINE: 'invalid' }, admission: async () => { throw new Error('Unexpected QA admission'); },
     runner: async () => 0,
   })).toBe(0);
