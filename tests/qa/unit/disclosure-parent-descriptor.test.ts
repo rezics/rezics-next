@@ -457,7 +457,7 @@ test('disclosure ancestry: paired anonymous name reads use one registered ancest
     revision: native(21),
     nameOwnerResolved: true,
   };
-  f.setEvidence([evidence(named)]);
+  f.setEvidence([{ ...evidence(named), relationshipBasis: { ...basis(named), kind: 'publication' } }]);
   configureDisclosureAncestrySource(f.env, 'graph', f.source);
   const result = await discloseInventoryWithAnonymousNames(
     f.env,
