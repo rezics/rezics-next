@@ -693,3 +693,113 @@ test('production Realm ownership rejects an extra nonreciprocal Space before dis
     expect(receipts).toHaveLength(0);
   } finally { await f.stack.stop(); }
 }, 120_000);
+
+test('production Realm decision creates owner-controller notices and replays one mail receipt per recipient', async () => {
+  const f = await productionRealm('realm-notice-producer');
+  try {
+    const controller = await f.stack.member('additional-space-owner-controller');
+    const unrelated = await f.stack.member('unrelated-realm-member');
+    await f.grant(controller, 'work:create:root', 'agent.control', f.editor.actor);
+    await f.grant(unrelated, 'work:create:root', 'access.membership.consent');
+    for (const action of ['realm.members.manage', 'realm.settings.manage'])
+      await f.grant(f.editor, `governance:realm:${f.realm}`, action);
+    const deps = f.stack.composition.dependencies;
+    const settings = await deps.realmAdmin!.settings(f.editor.principal, f.realm, f.editor.actor, f.stack.env);
+    const policy = (await f.stack.accessPool.query<{ revision: string; terms_revision: string }>(
+      "SELECT revision::text,terms_revision FROM access.membership_policy WHERE kind='realm' AND owner_subject=$1",
+      [f.realm])).rows[0]!;
+    const consent = await deps.membershipConsents!.issue({ principal: unrelated.principal, kind: 'realm',
+      ownerSubject: f.realm, memberSubject: unrelated.actor, expectedGeneration: '0',
+      expectedPolicyRevision: policy.revision, termsRevision: policy.terms_revision,
+      idempotencyKey: randomUUID(), requestDigest: 'a'.repeat(64) });
+    await deps.realmAdmin!.changeMember(f.editor.principal, f.realm, {
+      actingSubject: f.editor.actor, expectedGeneration: settings.generation, member: unrelated.actor,
+      expectedMembershipGeneration: '0', action: 'add', consent: consent.consentReference,
+      durationSeconds: null, reason: 'Join the Realm without controlling its Space owner',
+    }, randomUUID(), f.stack.env);
+    const accepted = await f.governance.store.acceptDecision(f.staff.principal, f.input);
+    expect(accepted.operation.status).toBe('accepted');
+    expect((await f.stack.accessPool.query('SELECT 1 FROM access.safety_notice_job WHERE decision_id=$1',
+      [accepted.decisionId])).rowCount).toBe(1);
+    const sent: SafetyNoticeMail[] = [];
+    const mail = new SafetyDecisionMail(f.stack.accessPool, f.editor.principal.issuer,
+      async input => { sent.push(input); }, graphNoticeParticipants(f.stack.env), 1);
+    let complete = false;
+    for (let page = 0; page < 20 && !complete; page++) complete = await mail.enqueuePage(accepted.decisionId);
+    expect(complete).toBe(true);
+    const notices = (await f.stack.accessPool.query<{ principal_id: string }>(
+      'SELECT principal_id FROM access.safety_party_notice WHERE decision_id=$1 ORDER BY principal_id',
+      [accepted.decisionId])).rows.map(row => row.principal_id);
+    expect(notices).toEqual([f.editor.principalId, controller.principalId].sort());
+    expect(notices).not.toContain(unrelated.principalId);
+    expect(sent.map(input => 'userId' in input.recipient ? input.recipient.userId : null).sort())
+      .toEqual([f.editor.principal.subject, controller.principal.subject].sort());
+    expect(sent.every(input => input.credential && input.reasons?.facts === f.input.reasons!.facts)).toBe(true);
+    const confirmed = await f.governance.store.decide(f.staff.principal, f.input);
+    const replay = await f.governance.store.decide(f.staff.principal, f.input);
+    expect(replay.decisionId).toBe(confirmed.decisionId);
+    expect(await mail.enqueuePage(accepted.decisionId)).toBe(true);
+    expect(sent).toHaveLength(2);
+    expect((await f.stack.accessPool.query('SELECT 1 FROM access.safety_notice_mail_receipt WHERE decision_id=$1',
+      [accepted.decisionId])).rowCount).toBe(2);
+    expect((await f.stack.accessPool.query('SELECT 1 FROM access.governance_case_credential WHERE case_id=$1',
+      [f.report.caseId])).rowCount).toBe(3); // One reporter and two affected-party credentials.
+  } finally { await f.stack.stop(); }
+}, 120_000);
+
+test('production Realm moderationTarget receipt refreshes the directory without a publication slot', async () => {
+  const f = await productionRealm('realm-receipt-directory');
+  try {
+    const read = async () => {
+      const position = (await f.stack.accessPool.query<{ phase: string }>(
+        'SELECT phase FROM access.realm_directory_position WHERE singleton')).rows[0]!;
+      return position.phase === 'idle' ? f.stack.call('GET', '/v1/realms') : new Response('', { status: 503 });
+    };
+    await waitForRealmDirectory(f.stack.env, read, page => page.items.some(item => item.id === f.realm));
+    expect((await f.stack.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH <${GRAPHS.current}> {
+      ?slot a rv:RealmPublicationSlot ; rv:realm <${f.realm}> } }`, 1024)).boolean).toBe(false);
+    // A source-only fixture change has no receipt of its own. The real owner
+    // decision below must identify this exact Realm to incremental discovery.
+    await f.stack.fuseki.update(`PREFIX rv: <${RV}> DELETE { GRAPH <${GRAPHS.current}> {
+      <${f.space}> rv:listing ?listing } } INSERT { GRAPH <${GRAPHS.current}> {
+      <${f.space}> rv:listing "unlisted" } } WHERE { GRAPH <${GRAPHS.current}> {
+      <${f.space}> rv:listing ?listing } }`);
+    const confirmed = await f.governance.store.decide(f.staff.principal, f.input);
+    expect(confirmed.operation.status).toBe('completed');
+    const receipts = (await f.stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?receipt ?realm ?space WHERE {
+      GRAPH <${GRAPHS.receipts}> { ?receipt rv:moderationTarget <${f.realm}> ; rv:work <${f.realm}> .
+        OPTIONAL { ?receipt rv:realm ?realm } OPTIONAL { ?receipt rv:space ?space } }
+    } LIMIT 2`, 4096)).results?.bindings ?? [];
+    expect(receipts).toHaveLength(1);
+    expect(receipts[0]?.realm).toBeUndefined();
+    expect(receipts[0]?.space).toBeUndefined();
+    await waitForRealmDirectory(f.stack.env, read, page => page.items.every(item => item.id !== f.realm));
+    expect((await f.stack.accessPool.query(`SELECT d.realm FROM access.realm_directory d
+      JOIN access.realm_directory_position p ON p.generation=d.generation WHERE p.singleton AND d.realm=$1`,
+      [f.realm])).rowCount).toBe(0);
+  } finally { await f.stack.stop(); }
+}, 120_000);
+
+for (const narrow of ['title', 'search', 'publication', 'exact_revision'] as const) {
+  test(`production Realm ${narrow} restriction leaves its ordinary Works route available`, async () => {
+    const f = await productionRealm(`realm-narrow-${narrow}`);
+    try {
+      const ordinary = () => f.stack.call('GET', `/v1/realms/${f.realm.slice(-36)}/works`);
+      const before = await responseJson<{ items: unknown[] }>(await ordinary(), 200);
+      const candidate = { ...f.input.targets[0]!,
+        ...(narrow === 'title' ? { component: 'title' as const } : {}),
+        ...(narrow === 'search' ? { effect: 'search' as const } : {}),
+        ...(narrow === 'publication' ? { effect: 'publication' as const } : {}),
+        ...(narrow === 'exact_revision' ? { scopeKind: 'exact_revision' as const,
+          revision: f.published.revision } : {}),
+      };
+      const confirmed = await f.governance.store.decide(f.staff.principal, { ...f.input, targets: [candidate] });
+      expect(confirmed.operation.status).toBe('completed');
+      const after = await responseJson<{ items: unknown[] }>(await ordinary(), 200);
+      expect(after.items).toEqual(before.items);
+      expect((await f.stack.accessPool.query(`SELECT 1 FROM access.governance_enforcement
+        WHERE resource=$1 AND component='record' AND effect='disclosure' AND revision IS NULL`,
+        [f.realm])).rowCount).toBe(0);
+    } finally { await f.stack.stop(); }
+  }, 120_000);
+}
