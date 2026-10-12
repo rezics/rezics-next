@@ -153,7 +153,8 @@ test('an accepted control invitation lets the former sole controller delete thei
     fence: { principalId: sharedController.member.principalId, enforcementEpoch: '1' },
   });
   const controls = await mainStack().accessPool.query<{ principal_id: string }>(`SELECT principal_id
-    FROM access.representation WHERE subject_id = $1 AND action = 'agent.control'
-      AND active AND valid_until > clock_timestamp() ORDER BY principal_id`, [sharedController.personAgent]);
+    FROM access.representation r JOIN access.principal p ON p.id = r.principal_id AND p.active
+    WHERE r.subject_id = $1 AND r.action = 'agent.control'
+      AND r.active AND r.valid_until > clock_timestamp() ORDER BY r.principal_id`, [sharedController.personAgent]);
   expect(controls.rows.map(row => row.principal_id)).toEqual([sharedController.invitedMember.principalId]);
 });
