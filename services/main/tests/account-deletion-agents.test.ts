@@ -350,9 +350,11 @@ test('recovery hold refuses both deletion variants without partially ending or o
   expect(await deletion(owner, true)).toMatchObject({ enforcementEpoch: '1' });
 });
 
-test('a controller inventory beyond 256 is a bounded refusal followed by complete consented deletion', async () => {
+test('interruption beyond 256 retains active Access until atomic Person termination', async () => {
   const owner = await principal();
   const person = await provision(owner, 'person');
+  const persons = [person];
+  for (let index = 0; index < 256; index++) persons.push(await provision(owner, 'person'));
   const organizations: string[] = [];
   for (let index = 0; index < 257; index++) {
     organizations.push(await provision(owner, 'organization', `Organization ${index}`));
@@ -401,9 +403,9 @@ test('a controller inventory beyond 256 is a bounded refusal followed by complet
       .rejects.toBe(interruption);
   } finally { await interrupted.end(); }
   expect(batchSizes).toEqual([CONTROLLER_CONTINUITY_COST.maxSubjects]);
-  expect(await principalState(owner)).toEqual({ active: false, enforcement_epoch: '1' });
+  expect(await principalState(owner)).toEqual({ active: true, enforcement_epoch: '0' });
   expect(await fenceRows(owner)).toEqual([]);
-  expect(await subjectState(person)).toEqual({ active: true, controllers: 0 });
+  for (const subject of persons) expect(await subjectState(subject)).toEqual({ active: true, controllers: 1 });
   expect(await subjectState(intermediate)).toEqual({ active: true, controllers: 1 });
   const progress = (await pool.query<{ operation_id: string; completed: boolean }>(`SELECT operation_id,completed
     FROM access.account_deletion_progress WHERE principal_id = $1`, [owner.id])).rows[0]!;
@@ -419,8 +421,10 @@ test('a controller inventory beyond 256 is a bounded refusal followed by complet
   expect(await deletion(owner)).toMatchObject({ enforcementEpoch: '1' });
   expect((await fenceRows(owner))[0]?.id).toBe(progress.operation_id);
   expect((await orphanRows(owner)).every(row => row.operation_id === progress.operation_id)).toBe(true);
-  expect(await subjectState(person)).toEqual({ active: false, controllers: 0 });
-  expect(await subjectState(intermediate)).toEqual({ active: false, controllers: 0 });
+  for (const subject of [...persons, intermediate]) {
+    expect(await subjectState(subject)).toEqual({ active: false, controllers: 0 });
+    expect((await pool.query('SELECT generation::text FROM access.authority_subject WHERE id = $1', [subject])).rows[0]?.generation).toBe('1');
+  }
   const standing = await pool.query<{ count: string }>(`SELECT count(*) AS count
     FROM access.authority_subject WHERE id = ANY($1::text[]) AND active
       AND access.agent_controller_count(id) = 0`, [organizations]);
