@@ -14,6 +14,10 @@ export const repositoryGuards = [
     reason: 'Every counter the native module reports must be on the HTTP measurement allowlist; a Java change does not select this test.',
   },
   {
+    file: 'services/account/tests/authentication-subject.test.ts',
+    reason: 'Every Account request cookie parser must use the provider-exact authentication selector.',
+  },
+  {
     file: 'tests/qa/unit/g-1046-sql-relations.test.ts',
     reason: 'Every SQL source relation must exist in the complete migrated relation inventory.',
   },
