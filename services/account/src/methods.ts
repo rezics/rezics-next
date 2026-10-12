@@ -23,6 +23,14 @@ export async function requireStepUp(pool: Pool | PoolClient, session: { session:
   if (!current.rowCount) throw new AccountProblem('step_up_required', 403);
 }
 
+/** Raw signed-in TOTP and reauthentication prove the same factor, so they
+ * spend one atomic user budget even across sessions and ignored body fields. */
+export async function consumeStepUpAttempt(pool: Pool, secret: string, userId: string): Promise<void> {
+  if (!await consumeAccountLimit(pool, secret, `reauth:${userId}`, 5, 300)) {
+    throw new AccountProblem('rate_limited', 429);
+  }
+}
+
 // Recovery owns the policy lock before deleting sessions. Hold the same lock
 // and recheck the session inside local credential writes, so a request admitted
 // before recovery cannot remove the newly recovered user's sign-in methods.
@@ -93,9 +101,7 @@ export function methodsApi(auth: AccountAuth, pool: Pool) {
     }) }, async ({ request, body }) => {
       try {
         const session = await accountSession(auth, request);
-        if (!await consumeAccountLimit(pool, String(auth.options.secret), `reauth:${session.user.id}`, 5, 300)) {
-          throw new AccountProblem('rate_limited', 429);
-        }
+        await consumeStepUpAttempt(pool, String(auth.options.secret), session.user.id);
         try {
           await auth.api.verifyPassword({ headers: request.headers, body: { password: body.password } });
           const twoFactor = await pool.query('SELECT 1 FROM "user" WHERE id = $1 AND "twoFactorEnabled" = true', [session.user.id]);

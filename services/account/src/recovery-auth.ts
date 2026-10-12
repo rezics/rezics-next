@@ -3,6 +3,23 @@ import type { Pool } from 'pg';
 
 type VerificationRecord = { value: string; createdAt: Date };
 
+const jsonAuthenticationPaths = new Set([
+  '/api/auth/sign-in/email', '/api/auth/request-password-reset', '/api/auth/reset-password',
+  '/api/auth/passkey/verify-authentication', '/api/auth/passkey/verify-registration',
+]);
+
+/** Both admission wrappers read JSON. Refuse other provider encodings before
+ * either selects an owner; OAuth token and introspection forms remain valid. */
+export function authenticationMediaTypeFailure(request: Request): Response | null {
+  const path = new URL(request.url).pathname;
+  if (request.method !== 'POST' || (!jsonAuthenticationPaths.has(path)
+    && !path.startsWith('/api/auth/two-factor/verify-'))) return null;
+  const mediaType = request.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase();
+  return mediaType === 'application/json' ? null
+    : Response.json({ error: 'unsupported_media_type' },
+      { status: 415, headers: { 'cache-control': 'no-store' } });
+}
+
 function challengeIdentifier(request: Request, name: string): string | undefined {
   const cookie = request.headers
     .get('cookie')

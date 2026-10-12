@@ -12,7 +12,7 @@ import { guardedAuthorizationCodeExchange } from './oauth-code-guard.ts';
 import { guardedRefreshTokenExchange } from './refresh-token-guard.ts';
 import { consumeAccountLimit } from './rate-limit.ts';
 import { consentApi } from './consent.ts';
-import { methodsApi, requireStepUp, sensitiveAuthPaths } from './methods.ts';
+import { consumeStepUpAttempt, methodsApi, requireStepUp, sensitiveAuthPaths } from './methods.ts';
 import { accountFailure, accountSession } from './http.ts';
 import { observeAuthentication, securityActivityApi } from './security-activity.ts';
 import { recordSessionClient } from './sessions.ts';
@@ -29,7 +29,7 @@ import { safetyCorrespondenceApi } from './email-safety.ts';
 import { mailSuppressionApi } from './mail-suppression.ts';
 import { policyAcceptanceApi } from './policy-acceptance.ts';
 import { accountSchemaReady } from './schema-ready.ts';
-import { withRecoveryAuthentication } from './recovery-auth.ts';
+import { authenticationMediaTypeFailure, withRecoveryAuthentication } from './recovery-auth.ts';
 import { changeGuardianInvitation, readGuardianInvitations, readRecoveryPolicy } from './recovery-guardian.ts';
 import { bootstrapOperators, requireOperator } from './operators.ts';
 import { AccountRecoveryConflict, AccountRecoveryDenied, AccountRecoveryStale, AccountRecoveryRateLimited,
@@ -143,23 +143,28 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
   credentialPaths.add('/api/auth/two-factor/verify-totp');
   const guardedAuthHandler = async (request: Request): Promise<Response> => {
     const path = new URL(request.url).pathname;
+    let totpUserId: string | undefined;
     if (path === '/api/auth/two-factor/verify-totp') {
       const session = await auth.api.getSession({ headers: request.headers });
       if (session) {
-        const pending = await pool.query('SELECT 1 FROM "twoFactor" WHERE "userId" = $1 AND verified = false', [session.user.id]);
-        if (pending.rowCount) {
-          try { await requireStepUp(pool, session); } catch (error) { return accountFailure(error); }
-        }
+        totpUserId = session.user.id;
+        const factor = await pool.query<{ verified: boolean }>('SELECT verified FROM "twoFactor" WHERE "userId" = $1', [session.user.id]);
+        try {
+          if (factor.rows[0]?.verified === false) await requireStepUp(pool, session);
+          else if (factor.rows[0]?.verified === true) {
+            await consumeStepUpAttempt(pool, String(auth.options.secret), session.user.id);
+          }
+        } catch (error) { return accountFailure(error); }
       }
     }
     if (request.method === 'POST' && (path === '/api/auth/sign-in/email' || path === '/api/auth/reset-password'
       || path === '/api/auth/passkey/verify-authentication' || path.startsWith('/api/auth/two-factor/verify-'))) {
       try {
         const body = await request.clone().json().catch(() => ({})) as { email?: unknown; token?: unknown; response?: { id?: unknown } };
-        const target = typeof body.email === 'string' ? body.email.toLowerCase()
+        const target = totpUserId ?? (typeof body.email === 'string' ? body.email.toLowerCase()
           : typeof body.token === 'string' ? body.token
           : typeof body.response?.id === 'string' ? body.response.id
-          : request.headers.get('cookie')?.split(';').find(value => value.includes('two_factor='))?.trim() ?? 'anonymous';
+          : request.headers.get('cookie')?.split(';').find(value => value.includes('two_factor='))?.trim() ?? 'anonymous');
         if (!await consumeAccountLimit(pool, String(auth.options.secret), `authenticate:${path}:${target}`, 20, 300)) {
           return Response.json({ error: 'rate_limited' }, { status: 429, headers: { 'retry-after': '300' } });
         }
@@ -473,7 +478,7 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
       catch (error) { return recoveryError(error); }
     })
     .cleanup(async () => { await guardPool?.end(); })
-    .mount((request: Request) => observeAuthentication(auth, pool, request,
+    .mount((request: Request) => authenticationMediaTypeFailure(request) ?? observeAuthentication(auth, pool, request,
       () => withRecoveryAuthentication(guard(), request, () => guardedAuthHandler(request),
         () => auth.api.getSession({ headers: request.headers }))));
   return app.get('/api/account/openapi.json', () => ({ openapi: '3.1.2',
