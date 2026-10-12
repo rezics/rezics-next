@@ -16,7 +16,7 @@ let work: string;
 let mainVersion: string;
 const marker = randomUUID().replaceAll('-', '');
 const name = `Ended${marker} Author Person`;
-const alias = `Alias${marker}`;
+const alias = `alias${marker.slice(0, 20)}`;
 const liveName = `Continuing${marker} Author`;
 const similarName = `Ended${marker} Authorship`;
 const absent = `Absent${marker}`;
@@ -33,8 +33,8 @@ async function provision(member: Member, displayName: string): Promise<string> {
   }), 201)).agent;
 }
 
-async function credit(agent: string): Promise<void> {
-  const path = `/v1/works/${work.slice(-36)}`;
+async function credit(target: string, agent: string): Promise<void> {
+  const path = `/v1/works/${target.slice(-36)}`;
   const head = await json<{ revision: string }>(await stack.call('GET', path));
   await json(await reader.send('POST', `${path}/agent-credits`, {
     profile: 'native-agent-credit-v1', credit: `https://rezics.com/id/${randomUUID()}`,
@@ -56,22 +56,21 @@ beforeAll(async () => {
   person = await provision(closing, name);
   coauthor = await provision(reader, liveName);
   similar = await provision(await stack.member(`similar-${marker}`, { verified: true }), similarName);
-  // Retained catalogue aliases are a name-owner occurrence even though the
-  // current credit typeahead hydrates only the display name.
-  await stack.fuseki.update(`INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
-    ${iri(person)} <https://schema.org/alternateName> ${lit(alias)} } }`);
+  // Person aliases belong to the address owner; credit typeahead currently
+  // matches display names, so the alias must never resurrect an ended name.
+  await json(await closing.send('POST', '/v1/addresses/claims', {
+    profile: 'alias-write-v1', operation: 'claim', scope: 'agent', holder: person,
+    actingSubject: person, alias, expectedRevision: null,
+  }), 201);
   const created = await stack.publicWork(reader.actor, ['en'], `Surviving${marker} Work`);
   work = created.work;
   mainVersion = created.mainVersion;
   await reader.grant(`work:edit:${work}`, 'work.edit');
-  await credit(person);
-  await credit(coauthor);
+  await credit(work, person);
+  await credit(work, coauthor);
   const otherWork = (await stack.publicWork(reader.actor, ['en'], `Other${marker} Work`)).work;
-  const originalWork = work;
-  work = otherWork;
-  await reader.grant(`work:edit:${work}`, 'work.edit');
-  await credit(similar);
-  work = originalWork;
+  await reader.grant(`work:edit:${otherWork}`, 'work.edit');
+  await credit(otherWork, similar);
 }, 180_000);
 
 afterAll(async () => { await stack?.stop(); });
@@ -103,6 +102,8 @@ test('Account deletion with consent ends the Person while its graph and native c
 for (const phase of ['retained', 'refreshed'] as const) {
   test(`${phase} prefix index does not disclose an ended Person to anonymous or signed-in readers`, async () => {
     if (phase === 'refreshed') expect(await backfillCatalogueNames(stack.env)).toBeGreaterThan(0);
+    expect(JSON.stringify(await stack.fuseki.prefixWalk({ prefix: name.toLowerCase(),
+      language: null, pageSize: 10 }))).toContain(mainVersion);
     for (const token of [undefined, reader.token]) {
       const never = await bytes(await suggest(absent, token));
       expect(never.status).toBe(200);
