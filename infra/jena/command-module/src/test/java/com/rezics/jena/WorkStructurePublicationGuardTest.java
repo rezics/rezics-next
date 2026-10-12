@@ -5,6 +5,8 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import java.util.List;
+import java.util.Set;
 import org.apache.jena.graph.Node;
 import org.apache.jena.graph.NodeFactory;
 import org.apache.jena.query.DatasetFactory;
@@ -72,6 +74,77 @@ public class WorkStructurePublicationGuardTest {
         data.add(revisions, revision, p("generation"), generation);
         data.add(revisions, revision, p("manifest"), root);
         return data;
+    }
+
+    private static String deleteUpdate(String subject, String predicate, boolean addHead) {
+        return "PREFIX rv: <" + RV + "> DELETE { GRAPH " + nt(CommandPolicy.CURRENT) + " { "
+            + nt(subject) + " " + predicate + " ?value } } INSERT { GRAPH " + nt(CommandPolicy.CURRENT)
+            + " { " + nt(subject) + " a <https://schema.org/Person>"
+            + (addHead ? " ; rv:workStructurePublicationHead " + nt(DECISION) : "")
+            + " } GRAPH " + nt(CommandPolicy.RECEIPTS) + " { " + nt(RECEIPT)
+            + " a rv:OperationReceipt } } WHERE { GRAPH " + nt(CommandPolicy.CURRENT) + " { "
+            + nt(subject) + " " + predicate + " ?value } }";
+    }
+
+    private static String publicationScopeAfterUpdate(DatasetGraph data, String subject, String update,
+        Set<String> expectedChanges) {
+        var plan = CommandPolicy.parse(update, RECEIPT);
+        var changed = CommandService.workStructurePublicationHeadChanges(data, plan);
+        assertEquals(expectedChanges, changed);
+        UpdateAction.execute(plan.request(), DatasetFactory.wrap(data));
+        return CommandService.workStructurePublicationHeadScope(data, subject, List.of(), changed);
+    }
+
+    @Test public void wildcardDeleteWithoutPublicationHeadRequiresNoPublicationFocus() {
+        DatasetGraph data = publication();
+        data.begin(ReadWrite.WRITE);
+        try {
+            data.add(uri(CommandPolicy.CURRENT), uri(MAIN), RDF.type.asNode(), uri("https://schema.org/Person"));
+            assertNull(publicationScopeAfterUpdate(data, MAIN, deleteUpdate(MAIN, "?predicate", false), Set.of()));
+            assertTrue(data.contains(uri(CommandPolicy.CURRENT), uri(WORK), p("workStructurePublicationHead"),
+                uri(DECISION)));
+        } finally { data.abort(); data.end(); data.close(); }
+    }
+
+    @Test public void wildcardDeleteOfExistingPublicationHeadStillRequiresPublicationFocus() {
+        DatasetGraph data = publication();
+        data.begin(ReadWrite.WRITE);
+        try {
+            assertEquals("Work structure publication focus omitted: " + WORK,
+                publicationScopeAfterUpdate(data, WORK, deleteUpdate(WORK, "?predicate", false), Set.of(WORK)));
+            assertEquals(0, count(data, uri(CommandPolicy.CURRENT), uri(WORK), p("workStructurePublicationHead")));
+        } finally { data.abort(); data.end(); data.close(); }
+    }
+
+    @Test public void explicitPublicationHeadDeleteStillRequiresPublicationFocus() {
+        DatasetGraph data = publication();
+        data.begin(ReadWrite.WRITE);
+        try {
+            assertEquals("Work structure publication focus omitted: " + WORK,
+                publicationScopeAfterUpdate(data, WORK, deleteUpdate(WORK, "rv:workStructurePublicationHead", false),
+                    Set.of(WORK)));
+        } finally { data.abort(); data.end(); data.close(); }
+    }
+
+    @Test public void explicitPublicationHeadDeleteRequiresFocusEvenWhenHeadIsAbsent() {
+        DatasetGraph data = publication();
+        data.begin(ReadWrite.WRITE);
+        try {
+            assertEquals("Work structure publication focus omitted: " + MAIN,
+                publicationScopeAfterUpdate(data, MAIN, deleteUpdate(MAIN, "rv:workStructurePublicationHead", false),
+                    Set.of(MAIN)));
+        } finally { data.abort(); data.end(); data.close(); }
+    }
+
+    @Test public void wildcardDeleteWithPlannedPublicationHeadAdditionRequiresPublicationFocus() {
+        DatasetGraph data = publication();
+        data.begin(ReadWrite.WRITE);
+        try {
+            assertEquals("Work structure publication focus omitted: " + MAIN,
+                publicationScopeAfterUpdate(data, MAIN, deleteUpdate(MAIN, "?predicate", true), Set.of(MAIN)));
+            assertTrue(data.contains(uri(CommandPolicy.CURRENT), uri(MAIN), p("workStructurePublicationHead"),
+                uri(DECISION)));
+        } finally { data.abort(); data.end(); data.close(); }
     }
 
     @Test public void nativeSourceGuardPinsCurrentWorkMainStructureAndUnerasedManifest() {

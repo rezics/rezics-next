@@ -1248,6 +1248,7 @@ final class CommandService extends ActionService {
             java.util.Map<String, ReleasePolicy.Prior> releases = ReleasePolicy.capture(dataset, plan);
             OccurrenceLabelIndex.Capture occurrenceLabels = new OccurrenceLabelIndex.Capture(dataset);
             List<TemplateIndexService.Entity> templateBefore = slim ? List.of() : TemplateIndexService.capture(dataset,plan);
+            Set<String> publicationHeads = workStructurePublicationHeadChanges(dataset, plan);
             CommandWork.enter("update");
             // Inspect the bounded actual primary delta, not the declared
             // template size. Apply through the existing observation chain so
@@ -1288,7 +1289,8 @@ final class CommandService extends ActionService {
                 if (!dataset.find(NodeFactory.createURI(CommandPolicy.CURRENT), NodeFactory.createURI(subject),
                     Node.ANY, Node.ANY).hasNext()) retiredCurrent.add(subject);
             }
-            Map<String, Object> scope = validateScope(dataset, receipt, plan, validations, retiredCurrent, membership.validatedLists());
+            Map<String, Object> scope = validateScope(dataset, receipt, plan, validations, retiredCurrent,
+                membership.validatedLists(), publicationHeads);
             if (scope != null) return scope;
             String sourceBinding = SourceProjectionPolicy.check(dataset, receipt, plan);
             if (sourceBinding != null) return invalid(sourceBinding);
@@ -1364,7 +1366,8 @@ final class CommandService extends ActionService {
         if (snapshot.error() != null) return invalid(snapshot.error());
         if (System.nanoTime() >= deadline) return Map.of("status", "deadline");
         DatasetGraph logical = snapshot.logical();
-        Map<String, Object> scope = validateScope(logical, receipt, snapshot.plan(), validations, Set.of(), Set.of());
+        Map<String, Object> scope = validateScope(logical, receipt, snapshot.plan(), validations, Set.of(), Set.of(),
+            workStructurePublicationHeadChanges(logical, snapshot.plan()));
         if (scope != null) return scope;
         record Instance(String profile, Map<String, String> binding) {}
         Map<Instance, List<Validation>> grouped = new LinkedHashMap<>();
@@ -1411,6 +1414,9 @@ final class CommandService extends ActionService {
         var before = StatementUpgradePolicy.capture(dataset, receipt, digest, plan);
         if (before.error() != null) return invalid(before.error());
         if (System.nanoTime() >= deadline) return Map.of("status", "deadline");
+        boolean restoring = StatementUpgradePolicy.restoringReceipt(receipt);
+        CommandPolicy.Plan validationPlan = restoring ? StatementRestorePolicy.nativePlan(plan, receipt) : plan;
+        Set<String> publicationHeads = workStructurePublicationHeadChanges(dataset, validationPlan);
         CommandWork.enter("update");
         CommandOverlay primary = new CommandOverlay(CommandWork.observe(delta == null ? dataset : delta.observed()));
         UpdateAction.execute(plan.request(), DatasetFactory.wrap(primary));
@@ -1425,11 +1431,10 @@ final class CommandService extends ActionService {
         if (invariant != null) return invalid(invariant);
         String conversion = StatementUpgradePolicy.check(dataset, before);
         if (conversion != null) return invalid(conversion);
-        boolean restoring = StatementUpgradePolicy.restoringReceipt(receipt);
-        CommandPolicy.Plan validationPlan = restoring ? StatementRestorePolicy.nativePlan(plan, receipt) : plan;
         if (restoring && validations.stream().anyMatch(entry -> !Set.of("statement-v1", "statement-decision-v1")
             .contains(entry.profileId()))) return invalid("classification restore validates only native representation profiles");
-        Map<String, Object> scope = validateScope(dataset, receipt, validationPlan, validations, Set.of(), membership.validatedLists());
+        Map<String, Object> scope = validateScope(dataset, receipt, validationPlan, validations, Set.of(),
+            membership.validatedLists(), publicationHeads);
         if (scope != null) return scope;
         record Instance(String profile, Map<String, String> binding) {}
         Map<Instance, List<Validation>> grouped = new LinkedHashMap<>();
@@ -1461,7 +1466,8 @@ final class CommandService extends ActionService {
     }
 
     private Map<String, Object> validateScope(DatasetGraph dataset, String receipt, CommandPolicy.Plan plan,
-                                              List<Validation> validations, Set<String> retiredCoverage, Set<Node> membershipLists) {
+                                              List<Validation> validations, Set<String> retiredCoverage, Set<Node> membershipLists,
+                                              Set<String> publicationHeads) {
         boolean productData = !plan.current().isEmpty() || !plan.revisions().isEmpty()
             || !plan.source().isEmpty()
             || plan.graphs().contains(CommandPolicy.PUBLIC_SEARCH) && !plan.bootstrap();
@@ -1513,18 +1519,8 @@ final class CommandService extends ActionService {
                 String link = contentPublicationLinks(dataset, receipt, subject, false, freshPublication);
                 if (link != null) return invalid(link);
             }
-            Node work = NodeFactory.createURI(subject);
-            boolean publicationHeadTouched = touchesPredicate(plan, CommandPolicy.CURRENT, work,
-                RV + "workStructurePublicationHead");
-            if (publicationHeadTouched || hasSchemaType(dataset, CommandPolicy.CURRENT, subject, "CreativeWork")
-                && dataset.contains(NodeFactory.createURI(CommandPolicy.CURRENT), work,
-                    NodeFactory.createURI(RV + "workStructurePublicationHead"), Node.ANY)) {
-                if (publicationHeadTouched && !hasNamedFocus(validations, "work-structure-publication-v1",
-                    "work-shape", subject, CommandPolicy.CURRENT))
-                    return invalid("Work structure publication focus omitted: " + subject);
-                String link = workStructurePublicationHeadLinks(dataset, subject);
-                if (link != null) return invalid(link);
-            }
+            String publication = workStructurePublicationHeadScope(dataset, subject, validations, publicationHeads);
+            if (publication != null) return invalid(publication);
             String boundProfile = CanonicalPolicy.requiredBindingProfile(profiles, dataset, subject, false);
             if (boundProfile != null && !boundFocus(validations, boundProfile, subject))
                 return invalid("bound profile focus omitted: " + subject);
@@ -1589,12 +1585,40 @@ final class CommandService extends ActionService {
         }
         return null;
     }
-    private static boolean touchesPredicate(CommandPolicy.Plan plan, String graph, Node subject,
+    /** Capture before applying the delete: a wildcard may remove the head itself. */
+    static Set<String> workStructurePublicationHeadChanges(DatasetGraph dataset, CommandPolicy.Plan plan) {
+        Set<String> touched = new HashSet<>();
+        for (String subject : plan.current()) {
+            if (touchesPredicate(dataset, plan, CommandPolicy.CURRENT, NodeFactory.createURI(subject),
+                RV + "workStructurePublicationHead")) touched.add(subject);
+        }
+        return Set.copyOf(touched);
+    }
+    static String workStructurePublicationHeadScope(DatasetGraph dataset, String subject,
+        List<Validation> validations, Set<String> publicationHeads) {
+        boolean touched = publicationHeads.contains(subject);
+        if (touched || hasSchemaType(dataset, CommandPolicy.CURRENT, subject, "CreativeWork")
+            && dataset.contains(NodeFactory.createURI(CommandPolicy.CURRENT), NodeFactory.createURI(subject),
+                NodeFactory.createURI(RV + "workStructurePublicationHead"), Node.ANY)) {
+            if (touched && !hasNamedFocus(validations, "work-structure-publication-v1",
+                "work-shape", subject, CommandPolicy.CURRENT))
+                return "Work structure publication focus omitted: " + subject;
+            return workStructurePublicationHeadLinks(dataset, subject);
+        }
+        return null;
+    }
+    private static boolean touchesPredicate(DatasetGraph dataset, CommandPolicy.Plan plan, String graph, Node subject,
                                             String predicate) {
         for (var operation : plan.request().getOperations()) {
             List<Quad> changed = new ArrayList<>();
             if (operation instanceof org.apache.jena.sparql.modify.request.UpdateModify modify) {
-                changed.addAll(modify.getDeleteQuads()); changed.addAll(modify.getInsertQuads());
+                for (Quad quad : modify.getDeleteQuads()) {
+                    // A subject-wide compensation is a publication change only
+                    // when it can remove a head present in transaction prestate.
+                    if (!quad.getPredicate().isVariable() || dataset.contains(NodeFactory.createURI(graph),
+                        subject, NodeFactory.createURI(predicate), Node.ANY)) changed.add(quad);
+                }
+                changed.addAll(modify.getInsertQuads());
             } else if (operation instanceof org.apache.jena.sparql.modify.request.UpdateDataInsert insert) {
                 changed.addAll(insert.getQuads());
             }
