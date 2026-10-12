@@ -4,7 +4,8 @@ import {
 } from '../disclosure/read.ts';
 import { WorkReadMissing, type WorkReadSession } from '../work/read-session.ts';
 import { FEED_COST } from './contract.ts';
-import { feedReviewSources, feedSources, type FeedSource } from './source.ts';
+import type { FeedSource } from './source.ts';
+import { visibleFeedSources } from './read.ts';
 
 type FeedSession = Pick<WorkReadSession, 'deps' | 'viewer' | 'realm' | 'fenceRealms'>;
 export type FeedDisclosureOccurrence = Pick<FeedSource, 'id' | 'kind' | 'target' | 'work' | 'realm'
@@ -97,11 +98,7 @@ export async function captureClosedRealmFeedSources<Source extends FeedDisclosur
 export async function readClosedRealmFeedSources(session: WorkReadSession,
   rows: readonly { id: string; kind: string }[]) {
   if (rows.length > FEED_COST.refreshItems) throw new DisclosureUnavailable('Feed source budget exceeded');
-  const [activities, reviews] = await Promise.all([
-    feedSources(session, { ids: rows.filter(row => row.kind !== 'review').map(row => row.id) }),
-    feedReviewSources(session, rows.filter(row => row.kind === 'review').map(row => row.id)),
-  ]);
-  return captureClosedRealmFeedSources(session, [...activities, ...reviews]);
+  return captureClosedRealmFeedSources(session, await visibleFeedSources(session, rows));
 }
 
 /** Hidden and nonexistent Realm scopes use the route's ordinary missing result. */

@@ -19,7 +19,7 @@ import {
 import { rankCandidates } from '../src/modules/feed/ranking.ts';
 import type { FeedSource } from '../src/modules/feed/source.ts';
 import { retainedMembershipBasis } from '../src/modules/read-basis/membership.ts';
-import { WorkReadMissing, WorkReadSession } from '../src/modules/work/read-session.ts';
+import { WorkReadMissing, WorkReadMoved, WorkReadUnavailable, WorkReadSession } from '../src/modules/work/read-session.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import { RV, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { fixtureDisclosureCut } from './support/disclosure-ancestry.ts';
@@ -236,6 +236,31 @@ export function closedFeedCases(actor: ClosedFeedReader) {
     owner.state.hydrate = () => { owner.state.closed = true; };
     const batch = await readClosedRealmFeedSources(owner.session, owner.sources);
     expect((await batch.fence()).map(source => source.id)).toEqual(owner.sources.filter(source => !source.realm).map(source => source.id));
+  });
+  test(`closed-feed-${actor}: loader settles the slow graph failure before the fast review failure`, async () => {
+    const owner = closedFeedOwner(actor);
+    const graph = Promise.withResolvers<void>(), review = Promise.withResolvers<void>();
+    let graphFinished = false, returned = false;
+    owner.session.query = async () => {
+      await graph.promise;
+      graphFinished = true;
+      throw new WorkReadMoved('Graph moved');
+    };
+    owner.session.deps.reviews = { byIds: async () => {
+      review.resolve();
+      throw new WorkReadUnavailable('Review unavailable');
+    } } as unknown as MainWorkDependencies['reviews'];
+    const outcome = readClosedRealmFeedSources(owner.session, [owner.sources[0]!, { id: native(500), kind: 'review' }])
+      .then(() => { returned = true; return null; }, (error: unknown) => { returned = true; return error; });
+    await review.promise;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const returnedEarly = returned;
+    graph.resolve();
+    const error = await outcome;
+    expect(returnedEarly).toBe(false);
+    expect(graphFinished).toBe(true);
+    expect(error).toBeInstanceOf(WorkReadMoved);
+    expect(owner.calls).toEqual([]);
   });
   test(`closed-feed-${actor}: closure omits adoption, decision, review and Content publication occurrences`, async () => {
     for (const kind of ['adoption', 'decision', 'review', 'contribution'] as const) {
