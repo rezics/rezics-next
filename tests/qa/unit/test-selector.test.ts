@@ -101,7 +101,6 @@ test('QA10/MODEL17: native model matrix selects the isolated strict model tier',
     .toEqual(['bun', ['scripts/qa/cli.ts', '--tier', 'model', '--file',
       'model/tests/native-equivalence.test.ts', '--id', 'MODEL17']]);
   expect(testArgs('model')).toEqual(['infra/jena/tests/command.integration.test.ts',
-    'services/main/tests/read-snapshot-native.test.ts',
     'model/compiler/generate.test.ts',
     'model/tests/native-equivalence.test.ts', 'model/tests/daily-rating.test.ts',
     'model/tests/experience-rating.test.ts', 'model/tests/source-reification.test.ts',

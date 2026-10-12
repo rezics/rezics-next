@@ -91,8 +91,8 @@ const stackTiers: AffectedTier[] = ['model', 'integration', 'fault/recovery'];
 // Inputs staged or read by jena-cli.ts, including the pinned image definition.
 const jenaCheckInput = /^infra\/jena\/|^(?:model\/definitions|generated\/model\/shapes)\/.*\.ttl$|^tests\/fixtures\/jena-cli\/scratch\.trig$|^services\/main\/src\/modules\/query\/templates\/work-versions\.(?:rq|fixture\.json)$|^scripts\/qa\/jena-cli\.ts$|^infra\/dev\/compose\.yaml$/;
 const sharedStackSmoke = 'tests/qa/integration/shared-stack.test.ts';
-// Docker/Maven proofs selected from the module-stage COPY set. Shell and HTTP
-// checks under infra/jena/tests stay on the ordinary unit tier.
+// Docker/Maven proofs selected from the module-stage COPY set. Checks that need
+// no native image under infra/jena/tests stay on the ordinary unit tier.
 export const nativeModuleDockerfile = 'infra/jena/Dockerfile';
 /** Shown on the affected plan so a gate can see why native proof files were or were not selected. */
 export const nativeModuleCopyInputs = 'native module COPY inputs';

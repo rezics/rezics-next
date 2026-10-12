@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { loadDockerEnvironment } from '../../../scripts/load/docker-env.ts';
 
 /** Native Jena tests run with the repository's pinned Maven/JDK, through the
- * ordinary goalctl QA slot. The optional corpus probe never starts a service,
+ * image-input owner QA slot. The optional corpus probe never starts a service,
  * mounts the stopped backup read-only, and opens only its own /tmp copy. */
 test('native retained-read counterexamples and optional qualified-corpus cost probe', async () => {
   const root = resolve(import.meta.dir, '../../..');
@@ -45,7 +45,7 @@ test('native retained-read counterexamples and optional qualified-corpus cost pr
     return output;
   }
   try {
-    // A full package runs unrelated owner suites and exceeds the model tier.
+    // A focused Maven selection keeps unrelated native owner suites out of this proof.
     // Keep these two counterexamples in a fresh JVM with TDB2 on writable disk.
     const output = await container(['--user', `${process.getuid!()}:${process.getgid!()}`,
       '--memory', '1g', '--cpus', '2', '--volume', `${context}:/build`,

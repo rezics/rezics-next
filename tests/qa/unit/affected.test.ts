@@ -29,7 +29,13 @@ const sources = new Map<string, string>([
 ]);
 const files = new Set([...graph.map(module => module.source), 'scripts/operations/rebuild.ts']);
 const nativeProofs = [erasureCampaignNativeTest, nativeIntegerPreservationTest, nativeUnionTest,
-  workNameScopeBasisTest, heldReplayNativeTest];
+  workNameScopeBasisTest, heldReplayNativeTest,
+  'infra/jena/tests/command-module-startup.test.ts',
+  'infra/jena/tests/native-visit-profile.test.ts',
+  'infra/jena/tests/prefix-walk-native.test.ts',
+  'infra/jena/tests/search-journal-restart.test.ts',
+  'services/main/tests/read-snapshot-native.test.ts',
+].sort();
 const plan = (changed: string[], extra: Partial<Parameters<typeof planAffected>[0]> = {}) =>
   planAffected({ base: 'abc', changed, graph, sources, exists: path => files.has(path), ...extra });
 
@@ -323,12 +329,13 @@ test('native module proofs follow the Dockerfile COPY inputs into the owner tier
     || (inputSelectedNativeTests as readonly string[]).includes(path);
   const imported = plan(['services/main/src/access.ts', 'services/main/src/rating.ts'], {
     nativeModuleDockerfile: nativeDockerfile,
-    graph: [...graph, { source: nativeUnionTest, dependencies: [edge('services/main/src/access.ts')] }],
-    sources: new Map([...sources, [nativeUnionTest, "readFileSync(join(root, 'services/main/src/access.ts'))"]]),
+    graph: [...graph, ...nativeProofs.map(source => ({ source,
+      dependencies: [edge('services/main/src/access.ts')] }))],
+    sources: new Map([...sources, ...nativeProofs.map(file =>
+      [file, "readFileSync(join(root, 'services/main/src/access.ts'))"] as const)]),
     exists,
   });
-  expect(Object.values(imported.tests).flat()).not.toContain(nativeUnionTest);
-  expect(Object.values(imported.tests).flat()).not.toContain(erasureCampaignNativeTest);
+  for (const file of nativeProofs) expect(Object.values(imported.tests).flat()).not.toContain(file);
   expect(formatPlan(imported)).toContain(`${nativeModuleCopyInputs}: not selected`);
   expect(formatPlan(imported)).not.toContain(nativeUnionTest);
   expect(formatPlan(imported)).not.toContain(erasureCampaignNativeTest);
@@ -336,7 +343,8 @@ test('native module proofs follow the Dockerfile COPY inputs into the owner tier
   for (const path of ['infra/jena/Dockerfile', 'infra/jena/command-module/pom.xml',
     'infra/jena/command-module/src/main/java/com/rezics/jena/SemanticSourceBasis.java',
     'services/main/src/modules/query/templates/work-versions.schema.ts',
-    'generated/model/shapes/entity.ttl']) {
+    'generated/model/shapes/entity.ttl', 'generated/model/manifest.json',
+    'infra/jena/fuseki-text.ttl']) {
     const result = plan([path], { nativeModuleDockerfile: nativeDockerfile, exists });
     expect(result.nativeModuleCopySelection, path).toBe('selected');
     expect(result.tests.unit, path).toEqual([]);
@@ -350,6 +358,10 @@ test('native module proofs follow the Dockerfile COPY inputs into the owner tier
     expect(ownFile.tests.unit).toEqual([]);
     expect(unitFilesFromPlan('.', ownFile)).not.toContain(file);
     expect(ownerFilesFromPlan('.', ownFile)).toContain(file);
+    expect(testArgs('unit')).not.toContain(file);
+    expect(testArgs('model')).not.toContain(file);
+    expect(testArgs('owner')).not.toContain(file);
+    expect(testArgs('owner', undefined, { files: [file] })).toEqual([file]);
   }
   const heldReplayOwn = plan([heldReplayNativeTest], { nativeModuleDockerfile: nativeDockerfile, exists });
   expect(routeTest(heldReplayNativeTest)).toEqual({ tier: 'owner' });

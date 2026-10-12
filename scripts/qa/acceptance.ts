@@ -243,13 +243,18 @@ export const nativeIntegerPreservationTest = 'infra/jena/tests/native-integer-pr
 export const nativeUnionTest = 'infra/jena/tests/semantic-source-readiness-union.test.ts';
 export const workNameScopeBasisTest = 'infra/jena/tests/work-name-scope-basis.test.ts';
 export const heldReplayNativeTest = 'services/main/tests/erasure-held-replay-native.test.ts';
-/** Native proofs built from the module-stage Docker COPY set. */
+/** Docker/Maven proofs selected by image inputs or explicitly, outside ordinary tier batches. */
 export const inputSelectedNativeTests = [
   nativeUnionTest,
   erasureCampaignNativeTest,
   nativeIntegerPreservationTest,
   workNameScopeBasisTest,
   heldReplayNativeTest,
+  'infra/jena/tests/command-module-startup.test.ts',
+  'infra/jena/tests/native-visit-profile.test.ts',
+  'infra/jena/tests/prefix-walk-native.test.ts',
+  'infra/jena/tests/search-journal-restart.test.ts',
+  'services/main/tests/read-snapshot-native.test.ts',
 ] as const;
 export const nativeProofOwnerFiles = inputSelectedNativeTests;
 const nativeProofOwnerFileSet: ReadonlySet<string> = new Set(nativeProofOwnerFiles);
@@ -275,7 +280,6 @@ export function isQaIntegrationPath(path: string): boolean {
 }
 export const modelGateFiles = [
   'infra/jena/tests/command.integration.test.ts',
-  'services/main/tests/read-snapshot-native.test.ts',
   'model/compiler/generate.test.ts',
   'model/tests/native-equivalence.test.ts',
   'model/tests/daily-rating.test.ts',

@@ -547,14 +547,15 @@ test('Opt-in associates retired originals and removed records without changing s
   expect(f.reads.filter((read) => read.digest !== f.digest)).toHaveLength(
     Number(ordinary.objectCount) - 1,
   );
+  // Record-page v2 changes retained bytes; qualification must preserve this exact signed cut.
   expect(ordinary).toEqual({
     version: 1,
     referenceCount: '2',
     anchorCount: '1',
     objectCount: '7',
-    referenceDigest: '4038fd70cda897011a9a675ffee6d32ccaab8f06afee9e1c37523bd8a05b63f0',
-    anchorDigest: '5d6d232712ad2921b64a3a28e9c9bb69799c8528970313abfd7947509cc60619',
-    objectDigest: '8a3f8fe1270e7246185103729e7c3a0502998b35cf98ecb6766ba37d903eebf5',
+    referenceDigest: '727793b954e8f181a092555c71caeb1bb6bd76cc51ee7c9e23995a66285d7bce',
+    anchorDigest: '8181b4c3e666d49186d95bb40198c5cc12e1b104e880089ffbd7cdd8c7e06d78',
+    objectDigest: '5979e0ffed66d82a73ea3366b66dc7ca675b4008d15c293d85ca7a727344e8c0',
   });
   const measured = {
     coverage: ordinary,
