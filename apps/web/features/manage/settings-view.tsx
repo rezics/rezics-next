@@ -120,9 +120,15 @@ export function SettingsView({ principal, realm, actingSubject, initial, locale,
     const fresh = await api.settings();
     const latest = newestSettings(latestSettings.current, fresh.ok ? fresh.data : result);
     const newest = newestSettings(latest, result);
-    // What was changed after Publish is a newer draft: it stays, compared with the revision just published.
-    if (draftEdits.current !== editsAtPublish && editingNow.current) { setCurrent(newest); setConflict(null); }
-    else discard(newest);
+    // What was changed after Publish is a newer draft and it was written against this publication. It stays on that
+    // basis: a newer rules revision is shown as a conflict to review, never merged into the draft, and a save sends
+    // the basis it was written against, so Main refuses a stale one.
+    if (draftEdits.current !== editsAtPublish && editingNow.current) {
+      const moved = newest.ruleBasis.revision !== result.ruleBasis.revision
+        || newest.settings.whoMaySubmit !== result.settings.whoMaySubmit;
+      setCurrent(moved ? result : newest);
+      setConflict(moved ? newest : null);
+    } else discard(newest);
     setReviewing(false);
     setStatus(revision && BigInt(result.generation) >= BigInt(latest.generation) ? t.rulesPublished({ revision }) : t.settingsSaved);
     router.refresh();

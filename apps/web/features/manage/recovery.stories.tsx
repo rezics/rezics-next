@@ -465,6 +465,46 @@ export const EditsAfterPublishSurviveTheRead: Story = {
     await expect(canvas.getByRole('button', { name: 'Review changes' })).toBeEnabled();
   },
 };
+// Another moderator publishes revision 5, with an added rule, while this moderator keeps editing after publishing 4.
+export const NewerRevisionAfterPublishIsAConflict: Story = {
+  ...EditsAfterPublishSurviveTheRead,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    let release!: () => void;
+    settingsRead = new Promise<void>(resolve => { release = resolve; });
+    const dialog = await reviewDraft(canvas);
+    await userEvent.click(dialog.getByRole('button', { name: 'Publish' }));
+    await waitFor(() => expect(latestSettings.ruleBasis.revision).toBe('4'));
+    await userEvent.click(await dialog.findByRole('button', { name: 'Keep editing' }));
+    await userEvent.type(ruleTitle(canvas), ' (after publishing)');
+    const added = { ...latestSettings.settings.rules[0]!, id: 'added-by-another-moderator' };
+    latestSettings = { ...latestSettings, generation: '14', ruleBasis: { ...latestSettings.ruleBasis, revision: '5' },
+      settings: { ...latestSettings.settings, rules: [...latestSettings.settings.rules, { ...added,
+        title: { ...added.title, labels: { ...added.title.labels, en: 'Added by another moderator' } } }] } };
+    release();
+    // Neither version is lost: the newer revision is shown beside the kept draft and nothing publishes silently.
+    await expect(await canvas.findByText('Someone else published first')).toBeVisible();
+    await expect(canvas.getByText(/Revision 5 was published while you were editing/)).toBeVisible();
+    await expect(canvas.getByText('Added by another moderator')).toBeVisible();
+    await expect(ruleTitle(canvas)).toHaveValue('Mark spoilers in titles (after publishing)');
+    await expect(canvas.getByRole('button', { name: 'Review changes' })).toBeDisabled();
+    const stored = JSON.parse(localStorage.getItem(rulesDraftKey('storybook:account-one', realm, acting.iri)) ?? 'null');
+    await expect(stored.base).toBe('4');
+    await expect(JSON.stringify(stored.drafts)).toContain('(after publishing)');
+  },
+};
+// Choosing to publish on top is explicit, and the review names what it would remove.
+export const PublishingOnTopNamesTheLostRule: Story = {
+  ...NewerRevisionAfterPublishIsAConflict,
+  async play(context) {
+    await NewerRevisionAfterPublishIsAConflict.play!(context);
+    const canvas = within(context.canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Publish my draft on top' }));
+    const review = await body().findByRole('dialog', { name: 'Review before publishing' });
+    await settleOverlay(review);
+    await expect(within(review).getByText('Removes “Added by another moderator”')).toBeVisible();
+  },
+};
 export const OlderReceiptKeepsNewerPublication: Story = {
   ...PublicationResumeAfterReload,
   render: () => frame(<ReloadableSettings newer />),
