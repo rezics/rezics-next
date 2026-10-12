@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { createMainApp } from '../../../services/main/src/app.ts';
-import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
+import { ensureFixtureScopeGate, grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import { refreshReadRankingAdmissions } from '../../../services/main/src/modules/feed/ranking-admission.ts';
 import { ReadRankingProjection, RankingProjectionUnavailable, rankingBuckets } from '../../../services/main/src/modules/rankings/projection.ts';
 import { StructureProgressStore } from '../../../services/main/src/modules/progress/store.ts';
@@ -183,7 +183,7 @@ test('a selected Work scope removal after population capture is absent from deli
   const f = await fixture();
   try {
     const scope = `work:read:${f.first.work}`;
-    await f.stack.accessPool.query('INSERT INTO access.scope_gate(id) VALUES($1) ON CONFLICT DO NOTHING', [scope]);
+    await ensureFixtureScopeGate(f.stack.accessPool, scope);
     const epoch = (await f.stack.accessPool.query<{ authority_epoch: string }>(
       'SELECT authority_epoch::text FROM access.scope_gate WHERE id=$1', [scope])).rows[0]!.authority_epoch;
     const response = await afterCapture(f.projection, async () => {

@@ -4,6 +4,7 @@ import { startTelemetry, flushTelemetryTraces, shutdownTelemetry } from '../../.
 import { startWorkProfileSink, profileRequest, assertWorkCostAtScales } from '../../../tests/qa/support/work-profile.ts';
 import { workProfileCorpusApi, type CorpusApi } from '../../../scripts/load/work-profile-corpus.ts';
 import { seedPublicProfileWork } from '../../../scripts/load/work-profile-work.ts';
+import { ensureFixtureScopeGate } from '../src/modules/access/fixture-authority.ts';
 
 const sink = startWorkProfileSink({ settleMs: 25 });
 startTelemetry('main',{ ...process.env,...sink.env,OTEL_SERVICE_NAME: 'main' });
@@ -125,11 +126,10 @@ try {
   await projection.current();
   // Strong revocation updates admission in its transaction, without a graph
   // rescan or stale denied prefix in the next page.
-  await home.stack.accessPool.query(`INSERT INTO access.scope_gate(id,open) VALUES($1,false)
-    ON CONFLICT(id) DO UPDATE SET open=false`,[`work:read:${visible.work}`]);
+  await ensureFixtureScopeGate(home.stack.accessPool, `work:read:${visible.work}`, { open: false });
   const denied = await app.handle(new Request('http://main.local/v1/rankings/trending?metric=reads&interval=day&limit=1'));
   assert.equal(denied.status,200); assert.deepEqual((await denied.json() as { items: unknown[] }).items,[]);
-  await home.stack.accessPool.query('UPDATE access.scope_gate SET open=true WHERE id=$1',[`work:read:${visible.work}`]);
+  await ensureFixtureScopeGate(home.stack.accessPool, `work:read:${visible.work}`, { open: true });
   const reopened = await app.handle(new Request('http://main.local/v1/rankings/trending?metric=reads&interval=day&limit=1'));
   assert.equal(reopened.status,200); assert.deepEqual((await reopened.json() as { items: { id: string }[] }).items.map(row=>row.id),[visible.work]);
 } finally {

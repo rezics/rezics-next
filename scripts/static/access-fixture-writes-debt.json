@@ -48,7 +48,6 @@
   "services/main/tests/definition-controller-parity-owner.test.ts",
   "services/main/tests/full-work.integration.test.ts",
   "services/main/tests/g-1005-fixture-consent.test.ts",
-  "services/main/tests/g-1025-ranking-child.ts",
   "services/main/tests/g-1026-profile-child.ts",
   "services/main/tests/g-1034-profile-child.ts",
   "services/main/tests/g-514-preferences.integration.test.ts",
