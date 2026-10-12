@@ -362,8 +362,8 @@ export function accountAuthOptions(config: AccountConfig) {
         // The provider also catches deletion errors inside sign-out. Persist
         // retirement at admission so that failure cannot become success.
         await originCheckMiddleware(ctx);
-        const session = await getAuthoritativeSessionFromCtx(ctx);
-        if (session) await internal.deleteSession(session.session.token);
+        const token = await ctx.getSignedCookie(ctx.context.authCookies.sessionToken.name, ctx.context.secret);
+        if (token) await internal.deleteSession(token);
       }
       if (ctx.path === '/verify-email' && typeof ctx.query?.token === 'string') {
         // Email verification links are stateless JWTs, so deleting verification
