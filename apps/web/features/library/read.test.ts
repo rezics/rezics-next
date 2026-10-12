@@ -19,7 +19,7 @@ const resume = (work: string) => ({ work, nextUnread: work === complete ? null :
   title: `Chapter ${works.indexOf(work) + 2}`,
   href: `${workHref(work.slice(-36))}/read/chapter-${works.indexOf(work) + 2}?language=zh-Hans`,
 }, unreadCount: work === complete ? null : { value: 8 - works.indexOf(work),
-  kind: work === lowerBound ? 'lower-bound' : 'exact' } });
+  kind: work === lowerBound ? 'lower-bound' as const : 'exact' as const } });
 const shelf = (limit: number) => answer({ items: works.slice(0, limit).map(work => ({ work, status: 'reading',
   version: 1, changedAt: null, startedOn: null, finishedOn: null, card: { id: work, title: null, cover: null,
     types: ['https://schema.org/Book'] } })), nextCursor: null });
