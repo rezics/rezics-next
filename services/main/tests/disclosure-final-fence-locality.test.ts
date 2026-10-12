@@ -7,9 +7,9 @@ import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { grantFixtureAuthority, registerFixtureIdentity } from '../src/modules/access/fixture-authority.ts';
 import { engageAccessRecoveryFence, releaseAccessRecoveryFence } from '../src/modules/access/admission.ts';
-import { chunkDisclosureSubmission } from '../src/modules/disclosure/contract-batching.ts';
 import { scopedEnforcementBasis, SCOPED_ENFORCEMENT_BASIS_SQL } from '../src/modules/disclosure/fence-scope.ts';
-import { configureDisclosureAncestrySource, DisclosureStore, DisclosureUnavailable, resolveDisclosureSelections,
+import { captureDisclosure, configureDisclosure, configureDisclosureAncestrySource, discloseInventoryWithCost,
+  fenceDisclosure, DisclosureStore, DisclosureUnavailable, resolveDisclosureSelections,
   type DisclosureAncestryEvidence, type DisclosureChannel, type DisclosureTarget,
   type OwnerEstablishedGraphParents } from '../src/modules/disclosure/read.ts';
 import { GLOBAL_CONTEXT, GovernanceStore, type DecisionInput, type EvidenceTarget } from '../src/modules/governance/store.ts';
@@ -52,6 +52,10 @@ beforeAll(async () => {
   } finally { client.release(); }
   governance = governanceStore(pool);
   reader = new DisclosureStore(pool);
+  configureDisclosure(environment, reader);
+  environment.fuseki.query = async query => ({ results: { bindings: [...heads]
+    .filter(([resource]) => query.includes(`<${resource}>`))
+    .map(([resource, head]) => ({ resource: { type: 'uri', value: resource }, head: { type: 'uri', value: head } })) } });
   for (const owner of ['graph', 'content', 'media', 'review'] as const) configureDisclosureAncestrySource(environment, owner, {
     read: async targets => targets.map(target => evidence.get(target.resource)!),
     reread: async bases => bases.map(basis => evidence.get(basis.targetResource)!),
@@ -133,18 +137,14 @@ test('unrelated acknowledged Work changes the global cut but needs zero policy r
   const input = target(), unrelated = target();
   const selection = await select(input);
   const { client, statements } = measured(pool);
-  const captured = await scopedEnforcementBasis(client, [selection]);
+  const captured = await captureDisclosure(environment, [selection], ANONYMOUS_VIEWER, 'read', client as PoolClient);
   const globalBefore = (await pool.query('SELECT access.site_moderation_basis() AS basis')).rows[0]!.basis;
-  const initial = await reader.readAtCut([{ ...input, ancestry: selection.ancestry }], ANONYMOUS_VIEWER, 'read', client as PoolClient);
   await restrict(unrelated);
   const globalAfter = (await pool.query('SELECT access.site_moderation_basis() AS basis')).rows[0]!.basis;
   expect(globalAfter).not.toBe(globalBefore);
-  const final = await scopedEnforcementBasis(client, [selection]);
-  const evaluated = await reader.readAtCut([{ ...input, ancestry: selection.ancestry }], ANONYMOUS_VIEWER, 'read', client as PoolClient);
-  expect(final.results).toEqual(captured.results);
-  expect(evaluated.decisions).toEqual(initial.decisions);
-  expect(evaluated.decisions).toEqual(['visible']);
-  expect(statements).toHaveLength(4); // capture/final basis and capture/final policy, no replay
+  expect(await fenceDisclosure(environment, captured, ANONYMOUS_VIEWER, 'read', client as PoolClient)).toEqual(['visible']);
+  expect(statements).toHaveLength(3); // capture policy, isolation check, final policy; zero replays
+  expect(statements.filter(sql => sql.includes('WITH fence AS MATERIALIZED'))).toHaveLength(2);
 });
 
 for (const changed of ['target', 'parent Work', 'parent Realm', 'whole-Realm closure'] as const) {
@@ -158,15 +158,19 @@ for (const changed of ['target', 'parent Work', 'parent Realm', 'whole-Realm clo
     const independent = await select(target());
     const { client, statements } = measured(pool);
     const captured = await scopedEnforcementBasis(client, [selection, independent, selection]);
+    const cuts = await captureDisclosure(environment, [selection, independent, selection], ANONYMOUS_VIEWER, 'read', client as PoolClient);
     const affected = changed === 'target' ? input : changed === 'parent Work' ? work : realm;
     await restrict(affected, changed === 'whole-Realm closure' ? { component: 'record', revision: null } : {});
     const final = await scopedEnforcementBasis(client, [selection, independent, selection]);
     expect(final.results[0]).not.toBe(captured.results[0]);
     expect(final.results[1]).toBe(captured.results[1]);
     expect(final.results[2]).toBe(final.results[0]);
-    expect(statements).toHaveLength(2);
+    expect(statements).toHaveLength(3);
     expect(final.cost).toEqual({ enforcementBasisStatements: 1 });
     expect((await scopedEnforcementBasis(pool, [selection])).results[0]).toBe(final.results[0]);
+    await expect(fenceDisclosure(environment, cuts, ANONYMOUS_VIEWER, 'read', client as PoolClient))
+      .rejects.toBeInstanceOf(DisclosureUnavailable);
+    expect(await fenceDisclosure(environment, [cuts[1]!], ANONYMOUS_VIEWER, 'read', client as PoolClient)).toEqual(['visible']);
   });
 }
 
@@ -275,16 +279,36 @@ for (const size of [65, 501, 512, 1_024]) {
     expect(statements).toHaveLength(chunks);
     expect(scoped.results).toEqual(inputs.map((_item, index) => scoped.results[index % 2]!));
     statements.length = 0;
-    const read = await chunkDisclosureSubmission(inputs, async chunk => {
-      const before = statements.length;
-      const evaluated = await reader.readAtCut(chunk.map(selection => ({ ...selection.target,
-        ancestry: selection.ancestry })), ANONYMOUS_VIEWER, 'read', client as PoolClient);
-      return { results: evaluated.decisions, cost: { statements: statements.length - before } };
-    });
-    expect(read.results).toEqual(inputs.map((_item, index) => index % 2 ? 'tombstone' : 'visible'));
-    expect(read.submissions).toBe(chunks);
+    const targets = inputs.map(selection => ({ ...selection.target, ancestry: selection.ancestry }));
+    const read = await reader.readAtCut(targets, ANONYMOUS_VIEWER, 'read', client as PoolClient);
+    expect(read.decisions).toEqual(inputs.map((_item, index) => index % 2 ? 'tombstone' : 'visible'));
+    expect(read.fenceBases.map(basis => basis.enforcementCut)).toEqual(scoped.results);
     expect(read.cost.statements).toBe(statements.length);
+    expect(read.cost.ownerStatements).toBe(chunks);
+    expect(read.cost.recoveryStatements).toBe(chunks);
     expect(statements).toHaveLength(chunks);
+    for (const entry of [reader.read.bind(reader), reader.readWithAnonymousNames.bind(reader)]) {
+      statements.length = 0;
+      const result = await entry(targets, ANONYMOUS_VIEWER, 'read', client as PoolClient);
+      expect(Array.isArray(result) ? result : result.decisions).toEqual(read.decisions);
+      expect(statements).toHaveLength(chunks);
+    }
+    statements.length = 0;
+    const inventory = await discloseInventoryWithCost(environment, targets, ANONYMOUS_VIEWER, 'read', client as PoolClient);
+    expect(inventory.decisions).toEqual(read.decisions);
+    expect(inventory.cost.statements).toBe(statements.length);
+    expect(inventory.cost.ownerStatements).toBe(chunks);
+    expect(statements).toHaveLength(chunks);
+    statements.length = 0;
+    const cuts = await captureDisclosure(environment, inputs, ANONYMOUS_VIEWER, 'read', client as PoolClient);
+    expect(cuts.map(cut => cut.decision)).toEqual(read.decisions);
+    expect(statements).toHaveLength(chunks);
+    statements.length = 0;
+    expect(await fenceDisclosure(environment, cuts, ANONYMOUS_VIEWER, 'read', client as PoolClient)).toEqual(read.decisions);
+    expect(statements).toHaveLength(chunks * 2); // one isolation and one policy statement per chunk
+    const regrouped = [cuts[64]!, cuts[1]!, cuts[0]!, cuts.at(-1)!];
+    expect(await fenceDisclosure(environment, regrouped, ANONYMOUS_VIEWER, 'read', client as PoolClient))
+      .toEqual(regrouped.map(cut => cut.decision));
   }, 30_000);
 }
 
@@ -298,6 +322,7 @@ test('over-cap and empty scoped submissions perform no owner statements', async 
 test('the embeddable expression shares the policy statement snapshot and recovery remains a separate global fence', async () => {
   const input = target(), selection = await select(input);
   const basis = await scopedEnforcementBasis(pool, [selection]);
+  const cuts = await captureDisclosure(environment, [selection], ANONYMOUS_VIEWER, 'read');
   const rows = (await pool.query(`WITH requested AS (
     SELECT * FROM jsonb_to_recordset($1::jsonb) AS wanted(ordinal int, owner text, resource text,
       component text, revision text, context text, "resourceKind" text, parents jsonb))
@@ -311,6 +336,23 @@ test('the embeddable expression shares the policy statement snapshot and recover
   expect((await pool.query('SELECT generation::text FROM access.recovery_fence WHERE id')).rows[0]!.generation)
     .not.toBe(rows[0]!.generation);
   expect((await scopedEnforcementBasis(pool, [selection])).results).toEqual(basis.results);
+  await expect(fenceDisclosure(environment, cuts, ANONYMOUS_VIEWER, 'read')).rejects.toBeInstanceOf(DisclosureUnavailable);
+});
+
+test('public final fences refuse snapshot-isolated lent transactions before policy work', async () => {
+  const selection = await select(target());
+  const cuts = await captureDisclosure(environment, [selection], ANONYMOUS_VIEWER, 'read');
+  const held = await pool.connect();
+  try {
+    await held.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+    const { client, statements } = measured(held);
+    await expect(fenceDisclosure(environment, cuts, ANONYMOUS_VIEWER, 'read', client as PoolClient))
+      .rejects.toBeInstanceOf(DisclosureUnavailable);
+    expect(statements).toEqual(['SHOW transaction_isolation']);
+  } finally {
+    await held.query('ROLLBACK');
+    held.release();
+  }
 });
 
 test('missing, reordered, malformed or unavailable owner results fail closed', async () => {

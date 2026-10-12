@@ -458,6 +458,88 @@ test('disclosure public batch entries reject 1,025 targets before any owner or g
   }
 });
 
+for (const size of [65, 501, 512, 1_024]) {
+  test(`public disclosure entries preserve ${size} ordered occurrences across sequential chunks`, async () => {
+    const f = fixture();
+    const inputs = Array.from({ length: size }, (_, index) => ({ ...target,
+      resource: `urn:rezics:reply:public-${index % 70}` }));
+    const unique = [...new Map(inputs.map(input => [input.resource, input])).values()];
+    f.setEvidence(unique.map(input => evidence(input, [parent('work', input), parent('realm', input)])));
+    const expected = inputs.map(input => Number(input.resource.split('-').at(-1)) % 2 ? 'tombstone' : 'visible');
+    const chunks: number[] = [];
+    const tokenFor = (input: DisclosureTarget) => ({ recoveryGeneration: '1', enforcementCut: hash(input.resource) });
+    configureDisclosure(f.env, {
+      read: async inputs => inputs.map(() => 'visible'),
+      readAtCut: async inputs => {
+        chunks.push(inputs.length);
+        return { decisions: inputs.map(input => Number(input.resource.split('-').at(-1)) % 2 ? 'tombstone' : 'visible'),
+          anonymousNames: inputs.map(() => 'hidden'), fenceBases: inputs.map(tokenFor) };
+      },
+    });
+    const count = Math.ceil(size / 64);
+    for (const entry of [disclose, discloseInventory]) {
+      chunks.length = 0;
+      expect(await entry(f.env, inputs, ANONYMOUS_VIEWER, 'read')).toEqual(expected);
+      expect(chunks).toHaveLength(count);
+      expect(chunks.every(chunk => chunk <= 64)).toBe(true);
+    }
+    chunks.length = 0;
+    const inventory = await discloseInventoryWithCost(f.env, inputs, ANONYMOUS_VIEWER, 'read');
+    expect(inventory.decisions).toEqual(expected);
+    expect(inventory.parentHeadQueries).toBe(count);
+    expect(inventory.cost.parentHeadQueries).toBe(count);
+    expect(chunks).toHaveLength(count);
+    chunks.length = 0;
+    const names = await discloseInventoryWithAnonymousNames(f.env, inputs, ANONYMOUS_VIEWER, 'read');
+    expect(names.decisions).toEqual(expected);
+    expect(names.anonymousNames).toEqual(inputs.map(() => 'hidden'));
+    expect(chunks).toHaveLength(count);
+    const selections = await resolveDisclosureSelections(f.env, inputs);
+    expect(selections.map(selection => selection.target.resource)).toEqual(inputs.map(input => input.resource));
+    chunks.length = 0;
+    const cuts = await captureDisclosure(f.env, selections, ANONYMOUS_VIEWER, 'read');
+    expect(cuts.map(cut => cut.decision)).toEqual(expected);
+    expect(cuts.map(cut => cut.fenceBasis)).toEqual(inputs.map(tokenFor));
+    expect(chunks).toHaveLength(count);
+    chunks.length = 0;
+    expect(await fenceDisclosure(f.env, cuts, ANONYMOUS_VIEWER, 'read')).toEqual(expected);
+    expect(chunks).toHaveLength(count);
+    // Subsetting and regrouping cannot replace target-local tokens with a chunk token.
+    const subset = [cuts.at(-1)!, cuts[0]!, cuts[64]!, cuts[0]!];
+    expect(await fenceDisclosure(f.env, subset, ANONYMOUS_VIEWER, 'read')).toEqual(subset.map(cut => cut.decision));
+  });
+}
+
+test('resolve, capture, fence and direct owner entries refuse overflow before all work', async () => {
+  const f = fixture();
+  const selections = await resolveDisclosureSelections(f.env, [target]);
+  const cuts = await captureDisclosure(f.env, selections, ANONYMOUS_VIEWER, 'read');
+  let sourceWork = 0;
+  configureDisclosureAncestrySource(f.env, 'content', {
+    read: async () => { sourceWork++; throw new Error('must not read'); },
+    reread: async () => { sourceWork++; throw new Error('must not reread'); },
+  });
+  f.headQueries.length = 0;
+  f.ownerReads.length = 0;
+  await expect(resolveDisclosureSelections(f.env, Array(1_025).fill(target))).rejects.toBeInstanceOf(DisclosureUnavailable);
+  await expect(captureDisclosure(f.env, Array(1_025).fill(selections[0]), ANONYMOUS_VIEWER, 'read'))
+    .rejects.toBeInstanceOf(DisclosureUnavailable);
+  await expect(fenceDisclosure(f.env, Array(1_025).fill(cuts[0]), ANONYMOUS_VIEWER, 'read'))
+    .rejects.toBeInstanceOf(DisclosureUnavailable);
+  let statements = 0;
+  const reader = new DisclosureStore({ query: async () => { statements++; throw new Error('must not query'); } } as unknown as Pool);
+  for (const entry of [reader.read.bind(reader), reader.readWithAnonymousNames.bind(reader), reader.readAtCut.bind(reader)]) {
+    await expect(entry(Array(1_025).fill(target), ANONYMOUS_VIEWER, 'read')).rejects.toBeInstanceOf(DisclosureUnavailable);
+  }
+  expect(await reader.readAtCut([], ANONYMOUS_VIEWER, 'read')).toEqual({
+    decisions: [], anonymousNames: [], fenceBases: [], cost: {},
+  });
+  expect(statements).toBe(0);
+  expect(sourceWork).toBe(0);
+  expect(f.headQueries).toHaveLength(0);
+  expect(f.ownerReads).toHaveLength(0);
+});
+
 test('disclosure ancestry: final fence refuses moved heads, changed placement/review/attachment and owner outage', async () => {
   for (const change of [
     'head',
