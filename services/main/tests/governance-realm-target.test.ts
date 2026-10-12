@@ -8,7 +8,7 @@ import { loadDockerEnvironment } from '../../../scripts/load/docker-env.ts';
 import type { ContentModeration } from '../../content/src/moderation.ts';
 import type { CommandEnvelope } from '../src/infrastructure/fuseki.ts';
 import { graphNoticeParticipants, ownerModerationEffects, restrictionOwners } from '../src/modules/governance/effects.ts';
-import { ownerTargetHeads } from '../src/modules/governance/evidence.ts';
+import { ownerEvidenceCapture, ownerTargetHeads } from '../src/modules/governance/evidence.ts';
 import { prepareDecisionNotices, unrecordedReasons } from '../src/modules/governance/notices.ts';
 import { GovernanceConflict, GovernanceStale, GovernanceUnavailable,
   type DecisionTargetInput } from '../src/modules/governance/store.ts';
@@ -822,7 +822,33 @@ for (const narrow of ['title', 'search', 'publication', 'exact_revision'] as con
         ...(narrow === 'exact_revision' ? { scopeKind: 'exact_revision' as const,
           revision: f.published.revision } : {}),
       };
-      const confirmed = await f.governance.store.decide(f.staff.principal, { ...f.input, targets: [candidate] });
+      let input = f.input;
+      if (narrow === 'title') {
+        // This read-side scenario needs an existing title fence. Retain the
+        // authored name within its real immutable public-profile snapshot;
+        // public intake above ordinarily selects the full record instead.
+        const evidence = Reflect.get(f.governance.store, 'evidence');
+        const capture = ownerEvidenceCapture({ graph: { env: f.stack.env, canReadWork: async () => false } });
+        Object.assign(f.governance.store, { evidence: { capture: async (_principal: unknown,
+          _actor: string, selected: Parameters<typeof capture.admitted>[0]) => {
+          const retained = await capture.admitted({ ...selected, component: 'record' });
+          return { ...retained, component: selected.component };
+        } } });
+        try {
+          const selected = { owner: 'graph' as const, resource: f.realm, component: 'title' as const,
+            locator: null, revision: f.published.revision };
+          const report = await f.governance.store.submitReport(f.staff.principal, {
+            kind: 'content_report', actingSubject: f.staff.actor,
+            authority: { kind: 'platform', scopeId: 'governance:platform' }, context: GLOBAL_CONTEXT,
+            target: selected, evidence: [selected], disclosure: 'private', reasonCode: 'spam',
+            statement: 'Review the authored title in this retained Realm profile.', idempotencyKey: randomUUID(),
+          });
+          await f.governance.store.safety.claim(f.staff.principal, f.staff.actor, report.caseId);
+          input = { ...input, caseId: report.caseId, expectedGeneration: report.caseGeneration,
+            evidenceDigest: report.evidenceDigest };
+        } finally { Object.assign(f.governance.store, { evidence }); }
+      }
+      const confirmed = await f.governance.store.decide(f.staff.principal, { ...input, targets: [candidate] });
       expect(confirmed.operation.status).toBe('completed');
       const after = await responseJson<{ items: unknown[] }>(await ordinary(), 200);
       expect(after.items).toEqual(before.items);
