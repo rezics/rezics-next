@@ -84,7 +84,7 @@ const statement = { facts: 'The post names and threatens a private person.', sco
   rule: { ref: 'urn:rezics:rule:harassment', revision: '3', digest: 'a'.repeat(64) } };
 const operation = (state: 'completed' | 'accepted') => ({ operationId: 'o1', status: state, continuation: null,
   items: [{ ordinal: 1, target: 'content:post', state: state === 'completed' ? 'confirmed' as const : 'pending' as const,
-    receipt: state === 'completed' ? 'r1' : null, continuation: null, error: null }] });
+    receipt: state === 'completed' ? 'r1' : null, continuation: null, resumable: false, error: null }] });
 
 /** A staff decision's reasons are shown as the API returns them: facts, scope, duration, automation, rule and appeal. */
 export const StatementOfReasons: Story = {
