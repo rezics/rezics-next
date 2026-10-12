@@ -68,7 +68,10 @@ function fixture() {
     lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } };
   configureDisclosure(environment, new DisclosureStore(pool));
   configureFixtureDisclosureAncestry(environment, target => {
-    const work = target.work ?? (target.resource === id(2) ? id(1) : undefined);
+    // The selected publication Use belongs to the release's owning Work,
+    // including its Asset and Use probes, whose identities differ from it.
+    const work = target.work ?? (target.resource === id(2)
+      || target.occurrence?.resource === id(8) ? id(1) : undefined);
     return work ? { resource: work, head: id(11),
       ...(target.workRevision !== undefined ? { protectedRevision: target.workRevision } : {}) } : undefined;
   });
@@ -186,6 +189,14 @@ test('G-897: concurrent Content/media readers and exports preserve rated payload
   expect(admitted.content[0]?.status).toBe('available');
   expect(denied.media).toBe(asset);
   expect(denied.content[0]?.status).toBe('available');
+  const mediaTargets = f.requested.flat().filter(target => target.owner === 'media');
+  expect(new Set(mediaTargets.map(target => target.resource))).toEqual(new Set([
+    id(5), id(8), id(2),
+  ]));
+  for (const target of mediaTargets) expect(target.ancestry).toMatchObject({
+    relationshipBasis: { owner: 'media', kind: 'media-use', resource: id(8), revision: id(8) },
+    parents: [expect.objectContaining({ resource: id(1), head: id(11) })],
+  });
   expect(currentDisclosureViewer()).toBe(ANONYMOUS_VIEWER);
   const plan = await planExport({ targetProfile: 'g-897-export-v1', useScope: 'full', residuals: [],
     members: [{ sourceOwner: 'graph', sourceNamespace: 'product', sourceGrain: 'external_release', exactRef: id(2),
