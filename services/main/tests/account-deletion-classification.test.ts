@@ -233,3 +233,43 @@ test('long sole-controlled Person chains classify in bounded persisted steps and
   expect((await pool.query(`SELECT id FROM access.outbox WHERE principal_id = $1
     AND kind = 'account.deletion_fenced'`, [owner.id])).rows).toEqual([{ id: progress!.operation_id }]);
 }, 60_000);
+
+test('controller loss at an unfenced cut wakes only that frontier target', async () => {
+  const owner = await principal();
+  const survivor = await principal();
+  const persons: string[] = [];
+  for (let index = 0; index < 32; index++) {
+    const person = await provision(owner, 'person');
+    await addFixtureController(survivor, person);
+    persons.push(person);
+  }
+  const interruption = new Error('classification frontier committed');
+  let classified = false;
+  const measured = measuredPool(sql => {
+    if (sql.includes('account_deletion_classification_step')) classified = true;
+    if (sql === 'COMMIT' && classified) throw interruption;
+  });
+  try {
+    await expect(new AccessAdmissionRegistry(measured).strongDeactivateAccountSubject(
+      owner.verified.issuer, owner.verified.subject)).rejects.toBe(interruption);
+  } finally { await measured.end(); }
+  const progress = (await pool.query<{ operation_id: string; root_cursor: string }>(`SELECT operation_id,root_cursor
+    FROM access.account_deletion_progress WHERE principal_id = $1`, [owner.id])).rows[0]!;
+  expect((await pool.query('SELECT agent_id FROM access.account_deletion_progress_agent WHERE operation_id = $1',
+    [progress.operation_id])).rows).toEqual([]);
+  const cut = (await pool.query<{ subject_id: string }>(`SELECT subject_id FROM access.representation
+    WHERE principal_id = $1 AND action = 'agent.control' AND active AND id <= $2::uuid
+    ORDER BY id LIMIT 1`, [owner.id, progress.root_cursor])).rows[0]!.subject_id;
+  // This cut was already visited, so a root cursor alone would miss its loss.
+  await removeController(survivor, cut);
+  expect((await pool.query(`SELECT agent_id FROM access.account_deletion_classification_frontier
+    WHERE operation_id = $1`, [progress.operation_id])).rows).toEqual([{ agent_id: cut }]);
+  expect(await new AccessAdmissionRegistry(pool).strongDeactivateAccountSubject(
+    owner.verified.issuer, owner.verified.subject)).toMatchObject({ enforcementEpoch: '1' });
+  expect(await subjectState(cut)).toEqual({ active: false, controllers: 0 });
+  for (const person of persons.filter(person => person !== cut)) {
+    expect(await subjectState(person)).toEqual({ active: true, controllers: 1 });
+  }
+  expect((await pool.query('SELECT agent_id FROM access.account_deletion_progress_agent WHERE operation_id = $1',
+    [progress.operation_id])).rows).toEqual([{ agent_id: cut }]);
+}, 60_000);
