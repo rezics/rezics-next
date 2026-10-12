@@ -23,6 +23,7 @@ import { ImpactPreview } from './impact-preview.tsx';
 import type { ManageMessages } from './messages.ts';
 import { AgentMark } from './parts.tsx';
 import { mergeAgents } from './read.ts';
+import { MemberReads } from './members-state.ts';
 import { membersHref } from './routes.ts';
 import { REASON_LIMIT } from './reason-dialog.tsx';
 import type { AgentSummary, InvitationPage, Loaded, Member, MemberPage, Role, RoleChange } from './types.ts';
@@ -77,23 +78,22 @@ export function MembersView({ realm, address = realm, actingSubject, first, agen
   const [query, setQuery] = useState('');
   const [searched, setSearched] = useState('');
   const [searching, setSearching] = useState(false);
-  const memberRead = useRef(0);
+  const memberReads = useRef(new MemberReads());
   const [open, setOpen] = useState<Open | null>(null);
   const [status, setStatus] = useState<string | null>(null);
 
   const nameOf = (iri: string) => agentLabel(agents[iri], iri, id => t.agentFallback({ id }));
 
   async function load(search: string, after: string | null = null) {
-    const request = ++memberRead.current;
+    const request = after === null ? memberReads.current.replace(search) : memberReads.current.append(after);
+    if (!request) return;
+    setSearched(request.search);
     setSearching(true);
-    const read = await api.members(search, after, roleFilter?.id);
-    // A search started before a command can arrive after its refreshed roster.
-    // Only the latest load may replace rows, pagination or the read status.
-    if (request !== memberRead.current) return;
+    const read = await api.members(request.search, request.after, roleFilter?.id);
+    if (!memberReads.current.finish(request, read.ok)) return;
     setSearching(false);
     if (!read.ok) { setStatus(t.unavailableTitle); return; }
     setPage(current => after ? { ...read.data, items: [...current.items, ...read.data.items] } : read.data);
-    setSearched(search);
     const found = await api.names(read.data.items.map(item => item.member));
     setAgents(known => mergeAgents(known, found));
   }
@@ -107,7 +107,7 @@ export function MembersView({ realm, address = realm, actingSubject, first, agen
     setOpen(null);
     setStatus(message);
     router.refresh();
-    await load(searched);
+    await load(memberReads.current.search);
     const refreshed = await api.invitations(null);
     setInvitations(refreshed);
   }
@@ -220,6 +220,7 @@ export function MembersView({ realm, address = realm, actingSubject, first, agen
         })}
       </ul>}
     {page.nextCursor ? <div><Button variant="outline" size="sm" isLoading={searching}
+      disabled={!memberReads.current.canAppend}
       onClick={() => void load(searched, page.nextCursor)}>{t.loadMore}</Button></div> : null}
     <section aria-labelledby="outgoing-invitations" className="grid gap-3">
       <h2 id="outgoing-invitations" className="font-semibold text-lg">{t.outgoingInvitations}</h2>

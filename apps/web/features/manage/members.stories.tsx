@@ -13,9 +13,28 @@ const record: AdminRecord = { members: [], roles: [], settings: [] };
 const roleReads: { search: string; after: string | null; role?: string | null }[] = [];
 const reset = () => { record.members.length = 0; record.roles.length = 0; };
 const first = { generation: '12', items: members, nextCursor: null };
-const unassigned = { ...first, items: members.filter(member => member.member === people.sophie) };
 let releasePendingSearch: (() => void) | null = null;
-let assignmentReads = 0;
+let releasePendingRefresh: (() => void) | null = null;
+
+function memberPage(search: string, after: string | null, role?: string | null, limit = 50): MemberPage {
+  const items = members.map(member => {
+    let held = member.roles;
+    for (const { change } of record.roles as RoleCommand[]) {
+      if (change.kind !== 'assignment' || change.member !== member.member) continue;
+      held = held.filter(item => item.id !== change.roleId);
+      if (change.assigned) held = [...held, { id: change.roleId,
+        name: roles.find(item => item.id === change.roleId)!.name, validUntil: change.validUntil }];
+    }
+    return { ...member, roles: held };
+  }).filter(member => {
+    const agent = agents[member.member]!;
+    return (!role || member.roles.some(item => item.id === role))
+      && (!after || member.member > after)
+      && (!search || `${agent.label} @${agent.handle} ${member.member}`.toLowerCase().includes(search.toLowerCase()));
+  }).sort((left, right) => left.member < right.member ? -1 : left.member > right.member ? 1 : 0);
+  return { generation: record.roles.length ? '13' : '12', items: items.slice(0, limit),
+    nextCursor: items.length > limit ? items[limit - 1]!.member : null };
+}
 
 const meta = {
   title: 'Manage/Members',
@@ -197,17 +216,7 @@ export const ChangedMeanwhile: Story = {
 export const GiveRoleWithImpact: Story = {
   args: { api: { ...adminApi({ record }), members: async (search, after, role) => {
     roleReads.push({ search, after, role });
-    const read = await adminApi().members(search, after, role);
-    if (!read.ok) return read;
-    return { ok: true, data: { ...read.data, generation: '13', items: read.data.items.map(member => {
-      const changes = (record.roles as RoleCommand[]).filter(command => command.change.kind === 'assignment'
-        && command.change.member === member.member);
-      return { ...member, roles: [...member.roles, ...changes.flatMap(({ change }) => {
-        if (change.kind !== 'assignment' || !change.assigned) return [];
-        return [{ id: change.roleId, name: roles.find(item => item.id === change.roleId)!.name,
-          validUntil: change.validUntil }];
-      })] };
-    }) } };
+    return { ok: true, data: memberPage(search, after, role) };
   } } },
   async play({ canvasElement }) {
     reset();
@@ -240,22 +249,21 @@ export const GiveRoleWithImpact: Story = {
 
 /** An earlier search can finish after the assignment's fresh member read. */
 export const AssignmentRefreshWinsPendingSearch: Story = {
-  args: { first: unassigned, api: { ...adminApi({ record }), members: async () => {
-    assignmentReads++;
-    if (assignmentReads === 1) return new Promise<Loaded<MemberPage>>(resolve => {
-      releasePendingSearch = () => resolve({ ok: true, data: unassigned });
+  args: { api: { ...adminApi({ record }), members: async (search, after, role) => {
+    roleReads.push({ search, after, role });
+    const data = memberPage(search, after, role);
+    if (roleReads.length === 1) return new Promise<Loaded<MemberPage>>(resolve => {
+      releasePendingSearch = () => resolve({ ok: true, data });
     });
-    return { ok: true, data: { ...unassigned, generation: '13', items: unassigned.items.map(member => ({
-      ...member, roles: [{ id: roles[0]!.id, name: roles[0]!.name,
-        validUntil: new Date(now + 86_400_000).toISOString() }],
-    })) } };
+    return { ok: true, data };
   } } },
   async play({ canvasElement }) {
     reset();
-    assignmentReads = 0;
+    roleReads.length = 0;
     releasePendingSearch = null;
     const canvas = within(canvasElement);
-    const row = within(within(canvas.getByRole('list', { name: 'Members' })).getByRole('listitem'));
+    const memberList = within(canvas.getByRole('list', { name: 'Members' }));
+    const row = within(memberList.getAllByRole('listitem').find(item => item.textContent?.includes('Sophie Li 李素菲'))!);
     await expect(row.getByText('No role', { exact: true })).toBeVisible();
     await userEvent.type(canvas.getByRole('searchbox', { name: 'Search members' }), 'sophie');
     await userEvent.click(canvas.getByRole('button', { name: 'Search' }));
@@ -267,7 +275,10 @@ export const AssignmentRefreshWinsPendingSearch: Story = {
     await userEvent.type(dialog.getByRole('textbox', { name: 'Reason' }), 'Share moderation.');
     await userEvent.click(dialog.getByRole('button', { name: 'Give role' }));
     await expect(await row.findByText('Community moderators', { exact: true })).toBeVisible();
-    await expect(assignmentReads).toBe(2);
+    await expect(roleReads).toEqual([{ search: 'sophie', after: null, role: undefined },
+      { search: 'sophie', after: null, role: undefined }]);
+    await expect(memberList.getAllByRole('listitem')).toHaveLength(1);
+    await expect(canvas.getByRole('button', { name: 'Clear search' })).toBeVisible();
     releasePendingSearch!();
     // Opening the row actions observes the settled row after the older read completes.
     await userEvent.click(canvas.getByRole('button', { name: 'Actions for Sophie Li 李素菲' }));
@@ -276,6 +287,50 @@ export const AssignmentRefreshWinsPendingSearch: Story = {
     await expect(row.getByText('Community moderators', { exact: true })).toBeVisible();
     await expect(within(menu).getByRole('menuitem', { name: 'Remove role “Community moderators”…' })).toBeVisible();
     await userEvent.keyboard('{Escape}');
+    await expect(memberList.getAllByRole('listitem')).toHaveLength(1);
+  },
+};
+
+/** Pagination cannot overtake the replacement read started by assigning a role. */
+export const AssignmentRefreshBlocksPagination: Story = {
+  args: { first: memberPage('', null, undefined, 4), api: { ...adminApi({ record }),
+    members: async (search, after, role) => {
+      roleReads.push({ search, after, role });
+      const data = memberPage(search, after, role, 4);
+      if (!after) return new Promise<Loaded<MemberPage>>(resolve => {
+        releasePendingRefresh = () => resolve({ ok: true, data });
+      });
+      return { ok: true, data };
+    },
+  } },
+  async play({ canvasElement }) {
+    reset();
+    roleReads.length = 0;
+    releasePendingRefresh = null;
+    const canvas = within(canvasElement);
+    const memberList = within(canvas.getByRole('list', { name: 'Members' }));
+    await openMenu(canvas, 'Sophie Li 李素菲', 'Give a role…');
+    const dialog = await openDialog('Give Sophie Li 李素菲 a role');
+    const impact = await dialog.findByRole('region', { name: 'Who this affects' });
+    await expect(await within(impact).findByText('1 member gains: Moderate the queue')).toBeVisible();
+    await userEvent.type(dialog.getByRole('textbox', { name: 'Reason' }), 'Share moderation.');
+    await userEvent.click(dialog.getByRole('button', { name: 'Give role' }));
+    await waitFor(() => expect(releasePendingRefresh).not.toBeNull());
+    const more = canvas.getByRole('button', { name: 'Load more' });
+    await expect(more).toBeDisabled();
+    more.focus();
+    await userEvent.keyboard('{Enter}');
+    await expect(roleReads).toEqual([{ search: '', after: null, role: undefined }]);
+    releasePendingRefresh!();
+    await waitFor(() => expect(more).toBeEnabled());
+    const sophie = () => within(memberList.getAllByRole('listitem').find(item => item.textContent?.includes('Sophie Li 李素菲'))!);
+    await expect(sophie().getByText('Community moderators', { exact: true })).toBeVisible();
+    await userEvent.click(more);
+    await waitFor(() => expect(memberList.getAllByRole('listitem')).toHaveLength(members.length));
+    await expect(roleReads).toEqual([{ search: '', after: null, role: undefined },
+      { search: '', after: people.sophie, role: undefined }]);
+    for (const member of members) await expect(memberList.getByText(agents[member.member]!.label!, { exact: true })).toBeVisible();
+    await expect(sophie().getByText('Community moderators', { exact: true })).toBeVisible();
   },
 };
 
@@ -284,21 +339,22 @@ export const RoleFilter: Story = {
   args: {
     address: realm,
     roleFilter: { id: roles[0]!.id, name: roles[0]!.name },
-    first: { generation: '12', nextCursor: 'page-2',
-      items: members.filter(member => member.roles.some(role => role.id === roles[0]!.id)) },
+    first: memberPage('', null, roles[0]!.id, 1),
     api: { ...adminApi({ record }), members: async (search, after, role) => {
       roleReads.push({ search, after, role });
-      return { ok: true, data: { generation: '12', nextCursor: null, items: [] } };
+      return { ok: true, data: memberPage(search, after, role, 1) };
     } },
   },
   async play({ canvasElement }) {
+    reset();
     roleReads.length = 0;
     const canvas = within(canvasElement);
     await expect(canvas.getByText('Showing people who hold Community moderators.')).toBeVisible();
     const clear = canvas.getByRole('link', { name: 'Show every member' });
     await expect(clear).toHaveAttribute('href', expect.stringMatching(new RegExp(`/manage/r/${realm}/members$`)));
     await userEvent.click(canvas.getByRole('button', { name: 'Load more' }));
-    await waitFor(() => expect(roleReads).toEqual([{ search: '', after: 'page-2', role: roles[0]!.id }]));
+    await waitFor(() => expect(roleReads).toEqual([{ search: '', after: people.mei, role: roles[0]!.id }]));
+    await waitFor(() => expect(within(canvas.getByRole('list', { name: 'Members' })).getAllByRole('listitem')).toHaveLength(2));
   },
 };
 
