@@ -188,28 +188,27 @@ test(
               values: [sha(JSON.stringify(canonical(coverage)))],
             },
           ]);
-        const pristine = async (candidate: Copy = copy, expectedState = baseState) => {
-          expect(await accessStateCoverage(candidate.owners.access)).toEqual(expectedState);
-          expect(await accessOutboxCoverage(candidate.owners.access)).toEqual(baseOutbox);
+        const pristine = async () => {
+          expect(await accessStateCoverage(copy.owners.access)).toEqual(baseState);
+          expect(await accessOutboxCoverage(copy.owners.access)).toEqual(baseOutbox);
           expect(
-            await new ContentCore(candidate.owners.content).readExactBatch(
-              [fixture.revisionId, fixture.laterRevisionId],
-              (ids) => Promise.resolve(new Set(ids)),
+            await content.readExactBatch([fixture.revisionId, fixture.laterRevisionId], (ids) =>
+              Promise.resolve(new Set(ids)),
             ),
           ).toEqual(before);
-          expect(await graphReleased(candidate)).toBe(false);
-          expect(await accessFence(candidate)).toEqual([
+          expect(await graphReleased(copy)).toBe(false);
+          expect(await accessFence(copy)).toEqual([
             { open: false, generation: fixture.generation },
           ]);
-          expect((await candidate.ready()).status).toBe(503);
-          expect((await ownerLogins(candidate)).map((row) => row.rolcanlogin)).toEqual([
+          expect((await copy.ready()).status).toBe(503);
+          expect((await ownerLogins(copy)).map((row) => row.rolcanlogin)).toEqual([
             false,
             false,
             false,
             false,
           ]);
           await expect(
-            new admission.AccessAdmissionRegistry(candidate.owners.access).activePrincipalId(
+            new admission.AccessAdmissionRegistry(copy.owners.access).activePrincipalId(
               fixture.principal,
             ),
           ).rejects.toBeInstanceOf(admission.AdmissionUnavailable);
@@ -598,45 +597,6 @@ test(
               captured.mockRestore();
             }
           }
-          // A new scope outside signed C1 cannot enter the older physical cut.
-          const unrelatedAuthority = await fixture.copy();
-          try {
-            const unrelatedMaintenance = spyOn(
-              unrelatedAuthority.resources.erasures!.maintenance,
-              'command',
-            );
-            const unrelatedCommands = spyOn(
-              unrelatedAuthority.fuseki,
-              'commandWithReceipt',
-            );
-            const scope = `work:edit:unrelated:${randomUUID()}`;
-            await ensureFixtureScopeGate(unrelatedAuthority.owners.access, scope);
-            const changedState = await accessStateCoverage(unrelatedAuthority.owners.access);
-            expect(changedState).not.toEqual(baseState);
-            const key = 'later-denial:unrelated-Access-authority';
-            try {
-              const response = await unrelatedAuthority.request(key, undefined, body);
-              expect(response.status).toBe(201);
-              expect(await response.json()).toMatchObject({ state: 'held' });
-              const held = await outerOperation(unrelatedAuthority, key);
-              expect(held.hold_reason).toBeString();
-              expect(held.qualifications).toHaveLength(0);
-              expect(held.releases).toHaveLength(0);
-              expect(unrelatedMaintenance).not.toHaveBeenCalled();
-              expect(unrelatedCommands).not.toHaveBeenCalled();
-              await expect(attempt(unrelatedAuthority, key)).rejects.toBeInstanceOf(RecoveryRefusal);
-              await pristine(unrelatedAuthority, changedState);
-              console.info('later admission refusal proved', {
-                label: 'unrelated-Access-authority',
-                reason: held.hold_reason,
-              });
-            } finally {
-              unrelatedCommands.mockRestore();
-              unrelatedMaintenance.mockRestore();
-            }
-          } finally {
-            await unrelatedAuthority.dispose();
-          }
           await faultAttachment(
             'auxiliary-admission-proof',
             'unknown native Access attachment schema or row',
@@ -946,6 +906,55 @@ test(
           expect(extraWritten).toBe(true);
           expect((await outerOperation(copy, gapKey)).hold_reason).toMatch(/Access changed beyond/);
           expect(await graphReleased(copy)).toBe(true);
+          expect(await accessFence(copy)).toEqual([
+            { open: false, generation: fixture.generation },
+          ]);
+          expect((await copy.ready()).status).toBe(503);
+          expect((await ownerLogins(copy)).map((row) => row.rolcanlogin)).toEqual([
+            false,
+            false,
+            false,
+            false,
+          ]);
+
+          // A scope gate outside signed C1 must block a new release attempt before it can
+          // qualify or perform another native effect. This candidate is retired after the
+          // assertion, so the fixture row needs no reversal.
+          const unrelatedScope = `work:edit:unrelated:${randomUUID()}`;
+          await ensureFixtureScopeGate(copy.owners.access, unrelatedScope);
+          const changedState = await accessStateCoverage(copy.owners.access);
+          expect(changedState).not.toEqual(baseState);
+          const changedOutbox = await accessOutboxCoverage(copy.owners.access);
+          const changedContent = await copy.owners.content.query(
+            'SELECT to_jsonb(r) AS row FROM content.revision r WHERE id=ANY($1::uuid[]) ORDER BY id',
+            [[fixture.revisionId, fixture.laterRevisionId]],
+          );
+          const releasedBeforeUnrelated = await graphReleased(copy);
+          maintenance.mockClear();
+          commands.mockClear();
+          const unrelatedKey = randomUUID();
+          const unrelatedResponse = await copy.request(unrelatedKey, undefined, body);
+          expect(unrelatedResponse.status).toBe(201);
+          expect(await unrelatedResponse.json()).toMatchObject({ state: 'held' });
+          const unrelatedHeld = await outerOperation(copy, unrelatedKey);
+          expect(unrelatedHeld.hold_reason).toBeString();
+          expect(unrelatedHeld.qualifications).toHaveLength(0);
+          expect(unrelatedHeld.releases).toHaveLength(0);
+          expect(maintenance).not.toHaveBeenCalled();
+          expect(commands).not.toHaveBeenCalled();
+          await expect(attempt(copy, unrelatedKey)).rejects.toBeInstanceOf(RecoveryRefusal);
+          expect(await outerOperation(copy, unrelatedKey)).toEqual(unrelatedHeld);
+          expect(await accessStateCoverage(copy.owners.access)).toEqual(changedState);
+          expect(await accessOutboxCoverage(copy.owners.access)).toEqual(changedOutbox);
+          expect(
+            (
+              await copy.owners.content.query(
+                'SELECT to_jsonb(r) AS row FROM content.revision r WHERE id=ANY($1::uuid[]) ORDER BY id',
+                [[fixture.revisionId, fixture.laterRevisionId]],
+              )
+            ).rows,
+          ).toEqual(changedContent.rows);
+          expect(await graphReleased(copy)).toBe(releasedBeforeUnrelated);
           expect(await accessFence(copy)).toEqual([
             { open: false, generation: fixture.generation },
           ]);
