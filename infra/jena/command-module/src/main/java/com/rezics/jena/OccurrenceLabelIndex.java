@@ -29,6 +29,7 @@ public final class OccurrenceLabelIndex {
         try {
             if (!rows.hasNext()) return null;
             Node value = rows.next().getObject();
+            CommandWork.count("occurrence_fields_visited", 1);
             if (rows.hasNext()) throw new IllegalStateException("ambiguous occurrence projection field");
             return value;
         } finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
@@ -131,7 +132,10 @@ public final class OccurrenceLabelIndex {
             // inside its transaction. Restart resumes from retained descriptors.
             var rows = data.find(STATE, Node.ANY, p("indexedGeneration"), generation);
             List<Node> old = new ArrayList<>();
-            try { while (rows.hasNext() && old.size() < BATCH) old.add(rows.next().getSubject()); }
+            try { while (rows.hasNext() && old.size() < BATCH) {
+                old.add(rows.next().getSubject());
+                CommandWork.count("occurrence_clear_visited", 1);
+            } }
             finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
             for (Node placement : old) deleteProjection(data, placement);
             if (!old.isEmpty()) return;
@@ -144,6 +148,7 @@ public final class OccurrenceLabelIndex {
         // change discards the checkpoint. OFFSET retains no prefix inventory.
         try { while (rows.hasNext() && batch.size() < BATCH) {
             Node placement = rows.next().getSubject();
+            CommandWork.count("occurrence_placements_visited", 1);
             if (!data.contains(CURRENT, placement, RDF.type.asNode(), p("OccurrencePlacement"))
                 || data.contains(CURRENT, placement, p("removedBy"), Node.ANY)) continue;
             if (skipped++ < offset) continue;
@@ -179,6 +184,7 @@ public final class OccurrenceLabelIndex {
         var values = data.find(CURRENT, placement, p("occurrenceLabel"), Node.ANY);
         try { while (values.hasNext()) {
             Node value = values.next().getObject();
+            CommandWork.count("occurrence_labels_visited", 1);
             if (labels.size() >= 16 || !value.isLiteral() || value.getLiteralLanguage().isEmpty()
                 || value.getLiteralLexicalForm().length() > 500) throw new IllegalStateException("occurrence label exceeds its contract");
             JsonObject label = new JsonObject(); label.put("value", value.getLiteralLexicalForm());
