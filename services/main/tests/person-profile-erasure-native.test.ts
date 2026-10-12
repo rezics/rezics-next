@@ -360,6 +360,7 @@ public class PersonProfileCallerContractTest {
       execute(data,"CLEAR ALL");
       execute(data,"PREFIX rv: <${RV}> INSERT DATA { GRAPH <${GRAPHS.control}> { <${DATASET}> rv:dataEpoch \\\"${lineage.dataEpoch}\\\" ; rv:routingEpoch \\\"1\\\" ; rv:sequence 0 ; rv:textIndexGeneration \\\"${uuid(40)}\\\" ; rv:modelHead <${PROFILE}> ; rv:shapeHead <${PROFILE}> } }");
       for(var captured:command.get("commands").getAsArray())execute(data,captured.getAsObject().get("update").getAsString().value());
+      data.begin(ReadWrite.WRITE);try {PublicNameProjection.rebuildPrefix(data.asDatasetGraph());data.commit();}finally{data.end();}
       Node revision=iri(command.get("revision").getAsString().value());
       data.begin(ReadWrite.READ);try {
         assertTrue(data.asDatasetGraph().contains(iri("${GRAPHS.revisions}"),revision,rv("operation"),iri(command.get("operation").getAsString().value())));
@@ -597,7 +598,9 @@ public class PersonProfileCallerContractTest {
       '--tmpfs', `/build/.temp:rw,size=256m,uid=${process.getuid!()},gid=${process.getgid!()}`,
       '--env', 'MAVEN_CONFIG=/maven-cache', '--env', 'MAVEN_OPTS=-Xmx128m',
       '--workdir', containerModule, image, 'mvn', '-B', '-ntp', '-Dmaven.repo.local=/maven-cache',
-      `-Djava.io.tmpdir=${containerModule}/tmp`, `-DargLine=-Xmx384m -Djava.io.tmpdir=${containerModule}/tmp`,
+      `-Djava.io.tmpdir=${containerModule}/tmp`,
+      `-DargLine=-Xmx${fullNativeSuite ? '768m' : '384m'} -Djava.io.tmpdir=${containerModule}/tmp`,
+      ...(fullNativeSuite ? ['-DreuseForks=false', '-DforkCount=1'] : []),
       ...(fullNativeSuite ? [] : [`-Dtest=PersonProfileCallerContractTest,${nativeProofs.filter(name => name !== 'SlimCommandTest').join(',')}`]), 'test'],
     { cwd: root, encoding: 'utf8', timeout: nativeTimeout, maxBuffer: 16 * 1024 * 1024,
       env: preserveReapEnvironment(process.env) });
