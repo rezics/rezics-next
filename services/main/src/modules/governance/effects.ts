@@ -142,8 +142,6 @@ async function graphBindingValidations(env: WorkActivationEnvironment, resource:
   const binding = Object.fromEntries([...definition.required, ...definition.optional]
     .filter(key => row![read.variables[key]!])
     .map(key => [key, commandBindingValue(key, row![read.variables[key]!]!.value)]));
-  if (selected.profile === 'classification-direct-decision-v1' && binding['context-kind'] === 'global')
-    delete binding['context-revision'];
   const validations = await profileValidations(env.fuseki, selected.profile as ProfileId,
     definition.roles.map(role => ({ shape: `https://rezics.com/definition/${selected.profile}/${role}-shape`,
       focus: [row![read.variables[role]!]!.value], graphs })), binding);

@@ -177,6 +177,7 @@ export function buildCommandRegistry(profiles: readonly ProfileDefinition[],
   const bindingDemands = ordered([...demands].map(([type, profile]) => ({ type, profile })), demandOrder);
   return { canonical, bindingDemands, bindings };
 }
+
 /** Structural reads for registry bindings. These recover the author's retained
  * arguments; native BindingPolicy remains the validator of their relationships.
  * Roles and keys always come from the registry, never a consumer's profile table. */
@@ -192,11 +193,11 @@ export function commandBindingRead(profile: string, binding: RegistryBinding, sh
   if (!binding.roles.includes(role)) throw new Error(`${profile} has no bound role ${role}`);
   const patterns: string[] = [];
   let graphIndex = 0;
-  const triple = (subject: string, predicate: string, object: string, optional = false) => {
+  const triple = (subject: string, predicate: string, object: string, optional: boolean | string = false) => {
     const graph = `?bindingGraph${graphIndex++}`;
     const clause = `VALUES ${graph} { ${graphs.map(value => `<${value}>`).join(' ')} }
       GRAPH ${graph} { ${variable(subject)} <${predicate.includes('://') ? predicate : `https://rezics.com/vocab/${predicate}`}> ${variable(object)} }`;
-    patterns.push(optional ? `OPTIONAL { ${clause} }` : clause);
+    patterns.push(optional ? `OPTIONAL { ${typeof optional === 'string' ? `FILTER(${optional})` : ''} ${clause} }` : clause);
   };
   const fields = (subject: string, entries: Record<string, string>) => {
     for (const [key, predicate] of Object.entries(entries)) if (keys.includes(key))
@@ -225,7 +226,7 @@ export function commandBindingRead(profile: string, binding: RegistryBinding, sh
       slot: 'applicationKey', proposer: 'proposer', decision: 'decisionHead' });
     fields('decision', { application: 'application', outcome: 'outcome', decider: 'decidedBy', predecessor: 'predecessor' });
     fields('context', { 'context-kind': 'contextRole', realm: 'realm' });
-    triple('context', 'head', 'context-revision', true);
+    triple('context', 'head', 'context-revision', `BOUND(${variable('realm')})`);
     // Global Context has a head too, but its binding admits no context revision.
     patterns.push(`FILTER(${variable('context-kind')} != <https://rezics.com/vocab/GlobalClassification>
       || !BOUND(${variable('realm')}))`);

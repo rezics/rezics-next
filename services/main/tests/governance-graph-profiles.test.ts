@@ -17,7 +17,6 @@ const skos = 'http://www.w3.org/2004/02/skos/core#';
 
 function graph(kind: string, selectors: Record<string, string> = {}) {
   const resource = native(), head = native();
-  const definitions = { scheme: native(), concept: resource, path: native(), expression: native(), sense: native() };
   const target: DecisionTargetInput = { owner: 'graph', resource, component: 'record', locator: null,
     scopeKind: 'component', revision: null, expectedHead: head, effect: 'disclosure' };
   const state = { head, selectors, kinds: [kind], loseResponse: false, stale: false,
@@ -66,7 +65,8 @@ function graph(kind: string, selectors: Record<string, string> = {}) {
         if (!required) { expect(entries.every(entry => !entry.binding)).toBe(true); continue; }
         const args = entries[0]!.binding;
         expect(args, `${profile} needs its native bindings`).toBeDefined();
-        expect(Object.keys(args!).sort()).toEqual(expect.arrayContaining(required.required));
+        expect(required.required.every(key => typeof args![key] === 'string' && args![key]!.length > 0)).toBe(true);
+        expect(Object.values(args!).every(value => value.length <= 4096)).toBe(true);
         expect(Object.keys(args!).every(key => [...required.required, ...required.optional].includes(key))).toBe(true);
         const roles = entries.map(entry => entry.shape.split('/').at(-1)!.replace(/-shape$/, ''));
         expect(roles.sort()).toEqual([...required.roles].sort());
@@ -172,7 +172,7 @@ for (const kind of [`${RV}Character`, 'https://example.org/UnreviewedOwner',
 }
 
 for (const kind of semanticOwnerTypes) {
-  test(`PRIMARY ${kind} has its authored profile/shape row or an explicit Access-only row`, async () => {
+  test(`PRIMARY ${kind} dispatch matches the canonical registry selection`, async () => {
     const routes = manifest.canonical.find(entry => entry.type === kind)?.routes ?? [];
     expect(routes).toEqual(manifest.canonical.find(entry => entry.type === kind)?.routes ?? []);
 
@@ -195,7 +195,7 @@ for (const kind of semanticOwnerTypes) {
   });
 }
 
-test('a new PRIMARY kind without a table row remains eligible for Access-only disclosure', async () => {
+test('a new PRIMARY kind without a registry route remains eligible for Access-only disclosure', async () => {
   const kind = 'https://example.org/NewPrimaryOwner';
   (CANONICAL_TYPES as Set<string>).add(kind);
   (semanticOwnerTypes as Set<string>).add(kind);
