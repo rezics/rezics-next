@@ -15,6 +15,8 @@ import { configureMediaVisibility } from '../src/modules/media/visibility.ts';
 import { readZoneCampaignArt } from '../src/modules/zone/campaign-art.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import { ensureFixtureAuthoritySubject, ensureFixturePrincipal } from './support/access-fixture-identity.ts';
+import { configureFixtureDisclosureAncestry } from './support/disclosure-ancestry.ts';
+import { configureCampaignFixtureAncestry } from './support/campaign-disclosure.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const iri = (value: string) => `https://rezics.com/id/${value}`;
@@ -86,12 +88,20 @@ async function isolated(run: (f: { store: MediaStore; environment: MainWorkDepen
         ({ work: uri(reference), ...(entries.has(reference) ? { head: uri(reference),
           owningWork: uri(reference), owningHead: uri(reference) } : {}) })) } };
       if (query.includes('SELECT ?epoch ?hold ?context')) return { results: { bindings: [] } };
+      if (query.includes('SELECT ?resource ?head')) return { results: { bindings: refs('resource').map(reference =>
+        ({ resource: uri(reference), head: uri(reference) })) } };
       throw new Error(`Unexpected summary query: ${query.slice(0, 160)}`);
     };
     const store = new MediaStore(pool, new ContentCore(pool));
     const environment = { fuseki, objectDirectory: '.temp/campaign-art',
       lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } };
     configureDisclosure(environment, new DisclosureStore(pool));
+    configureFixtureDisclosureAncestry(environment, target => {
+      const resource = target.work ?? target.resource;
+      return { resource, head: resource, ...(target.workRevision !== undefined
+        ? { protectedRevision: target.workRevision } : {}) };
+    });
+    configureCampaignFixtureAncestry(environment, { resource: ownTarget, head: ownTarget });
     configureMediaVisibility({ environment, media: { store }, access: {
       canReadWork: async () => false,
     } } as unknown as MainWorkDependencies);
@@ -118,7 +128,7 @@ for (const entry of [{ public: false }, { public: true, hidden: true }]) {
       expect(images).toHaveLength(4);
       for (const rendered of images) expect(rendered?.url)
         .toBe(`/v1/media/representations/${basis.representation}/bytes?use=${ownUse}`);
-      expect(f.probes).toEqual([ownTarget]);
+      expect(f.probes).toEqual([ownTarget, ownTarget]);
     });
   });
 
@@ -131,7 +141,7 @@ for (const entry of [{ public: false }, { public: true, hidden: true }]) {
         { environment: f.environment, zone: iri(randomUUID()) })).toEqual([
         { id: 'campaign', art: { landscape: null, portrait: null, cutout: null, logos: [] } },
       ]);
-      expect(f.probes).toEqual([ownTarget]);
+      expect(f.probes).toEqual([ownTarget, ownTarget]);
     });
   });
 }

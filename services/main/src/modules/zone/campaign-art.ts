@@ -3,11 +3,11 @@ import { canonicalLanguage } from '../display-language/tag.ts';
 import { pixelCrop, RENDITION_LIMITS, type RenditionCandidate } from '../media-rendition/policy.ts';
 import { zoneCampaignUses, type ZoneCampaignArt, type ZoneSlide } from './presentation-format.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
-import { DISCLOSURE_COST, disclose, type DisclosureDecision } from '../disclosure/read.ts';
+import { captureDisclosure, DISCLOSURE_COST, fenceDisclosure, resolveDisclosureSelections,
+  type DisclosureReadCut } from '../disclosure/read.ts';
 import { currentDisclosureViewer } from '../disclosure/viewer.ts';
 import type { MediaDependencies } from '../media/commands.ts';
 import { requestUseRenditions } from '../media-rendition/request.ts';
-import { mediaVisibility } from '../media/visibility.ts';
 
 export const ZONE_CAMPAIGN_ART_COST = { maxSlides: 6, maxCampaignUses: RENDITION_LIMITS.batch,
   maxCampaignMediaReads: 2 } as const;
@@ -64,34 +64,39 @@ export async function readZoneCampaignArt(store: CampaignMediaStore | undefined,
     environment: WorkActivationEnvironment; zone: string; variantId?: string;
   }) {
   const items = await readZoneCampaignItems(store, realm, slides);
+  const viewer = currentDisclosureViewer();
+  const batches: { uses: string[]; cuts: readonly DisclosureReadCut[] }[] = [];
   if (disclosure && items.size) {
     const uses = [...items.keys()];
-    const viewer = currentDisclosureViewer();
-    // The Use proves its Asset state and exact attachment, without asking
-    // visibility about every other attachment of the Asset.
-    const useTargets = uses.map(use => ({
-      owner: 'media' as const, resource: `https://rezics.com/id/${use}`,
-      component: 'media_use' as const, context: items.get(use)!.context ?? DEFAULT_MEDIA_CONTEXT, work: realm,
-    }));
-    const attachments = await mediaVisibility(disclosure.environment, useTargets, viewer);
-    const targets = useTargets.flatMap((target, index) => [
-      { ...target, resource: `https://rezics.com/id/${items.get(uses[index]!)!.asset}`, component: 'cover' as const },
-      target,
-    ]);
-    const decisions: DisclosureDecision[] = [];
-    // Both fences for an image must share one policy cut. The even batch
-    // bound keeps each Asset/Use pair together, including a full Use batch.
-    for (let offset = 0; offset < targets.length; offset += DISCLOSURE_COST.batch) {
-      decisions.push(...await disclose(disclosure.environment,
-        targets.slice(offset, offset + DISCLOSURE_COST.batch), viewer, 'media'));
+    // The ancestry source proves the selected Use/Asset relationship and any
+    // mounted Realm parent. Context is a hint, never a parent revision proof.
+    for (let offset = 0; offset < uses.length; offset += DISCLOSURE_COST.batch / 2) {
+      const selected = uses.slice(offset, offset + DISCLOSURE_COST.batch / 2);
+      const targets = selected.flatMap(use => {
+        const context = items.get(use)!.context ?? DEFAULT_MEDIA_CONTEXT;
+        return [
+          { owner: 'media' as const, resource: `https://rezics.com/id/${items.get(use)!.asset}`,
+            component: 'cover' as const, context },
+          { owner: 'media' as const, resource: `https://rezics.com/id/${use}`,
+            component: 'media_use' as const, context },
+        ];
+      });
+      const selections = await resolveDisclosureSelections(disclosure.environment, targets);
+      const cuts = await captureDisclosure(disclosure.environment, selections, viewer, 'media');
+      batches.push({ uses: selected, cuts });
+      selected.forEach((use, index) => {
+        if (cuts[index * 2]!.decision !== 'visible' || cuts[index * 2 + 1]!.decision !== 'visible') items.delete(use);
+      });
     }
-    uses.forEach((use, index) => {
-      if (!attachments[index] || decisions[index * 2] !== 'visible'
-        || decisions[index * 2 + 1] !== 'visible') items.delete(use);
-    });
   }
   const candidates: Map<string, RenditionCandidate[]> = store && items.size
     ? await store.renditions.candidatesBatch([...items.keys()]) : new Map();
+  if (disclosure) for (const batch of batches) {
+    const decisions = await fenceDisclosure(disclosure.environment, batch.cuts, viewer, 'media');
+    batch.uses.forEach((use, index) => {
+      if (decisions[index * 2] !== 'visible' || decisions[index * 2 + 1] !== 'visible') items.delete(use);
+    });
+  }
   const resolve = (image: ZoneCampaignArt['landscape'], role: string) => {
     if (!image) return null;
     const use = image.use.slice(-36);

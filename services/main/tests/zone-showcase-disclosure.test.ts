@@ -3,13 +3,13 @@ import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { slideIsCurrent, ZONE_SHOWCASE_DISCLOSURE_COST } from '../src/modules/zone/showcase-disclosure.ts';
 import { bindZoneCampaignArtVariant, readZoneCampaignArt, requestNewZoneCampaignRenditions } from '../src/modules/zone/campaign-art.ts';
-import { configureDisclosure, type DisclosureTarget } from '../src/modules/disclosure/read.ts';
-import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
+import type { DisclosureTarget } from '../src/modules/disclosure/read.ts';
 import type { MediaStore } from '../src/modules/media/store.ts';
 import type { MediaDependencies } from '../src/modules/media/commands.ts';
 import { MediaPresentationStore } from '../src/modules/media/presentation.ts';
 import { withDisclosureViewer } from '../src/modules/disclosure/viewer.ts';
 import { ANONYMOUS_VIEWER } from '../src/modules/suitability/policy.ts';
+import { campaignFixtureEnvironment, configureCampaignFixtureReader } from './support/campaign-disclosure.ts';
 
 const ref = () => `https://rezics.com/id/${randomUUID()}`;
 
@@ -29,7 +29,7 @@ test('campaign disclosure hides a held Asset or Use before advertising source UR
   const zone = ref();
   const asset = randomUUID();
   const use = randomUUID();
-  const environment = { fuseki: { query: async () => ({ results: { bindings: [] } }) } } as unknown as WorkActivationEnvironment;
+  const environment = campaignFixtureEnvironment();
   let candidateReads = 0;
   const store = { itemDeliveryBatch: async () => new Map([[use, { asset, target: realm,
     availability: 'available', disclosure: 'public', moderation: 'none', lifecycle: 'active',
@@ -38,16 +38,17 @@ test('campaign disclosure hides a held Asset or Use before advertising source UR
   const slides = [{ id: 'campaign', href: '/launch', title: 'Launch', art: { landscape: { use: `https://rezics.com/id/${use}` } } }];
   for (const held of [asset, use]) {
     const checked: string[] = [];
-    configureDisclosure(environment, { read: async targets => {
+    configureCampaignFixtureReader(environment, async targets => {
       expect(targets).toHaveLength(2);
       expect(targets.every(target => target.context === 'urn:rezics:media:context:default')).toBe(true);
       checked.push(...targets.map(target => target.resource));
       return targets.map(target => target.resource.endsWith(held) ? 'hidden' : 'visible');
-    } });
+    });
     expect(await readZoneCampaignArt(store, realm, slides, { environment, zone })).toEqual([
       { id: 'campaign', art: { landscape: null, portrait: null, cutout: null, logos: [] } },
     ]);
-    expect(checked).toEqual([`https://rezics.com/id/${asset}`, `https://rezics.com/id/${use}`]);
+    expect(checked).toEqual([`https://rezics.com/id/${asset}`, `https://rezics.com/id/${use}`,
+      `https://rezics.com/id/${asset}`, `https://rezics.com/id/${use}`]);
   }
   expect(candidateReads).toBe(0);
   expect(slides[0]!.title).toBe('Launch');
@@ -55,13 +56,13 @@ test('campaign disclosure hides a held Asset or Use before advertising source UR
 
 test('campaign art checks Asset and Use fences at the same policy cut', async () => {
   const realm = ref(), zone = ref(), asset = randomUUID(), use = randomUUID();
-  const environment = { fuseki: { query: async () => ({ results: { bindings: [] } }) } } as unknown as WorkActivationEnvironment;
+  const environment = campaignFixtureEnvironment();
   let policyReads = 0, candidateReads = 0;
-  configureDisclosure(environment, { read: async targets => {
+  configureCampaignFixtureReader(environment, async targets => {
     // Each snapshot denies the image, even while the restriction moves.
     const held = policyReads++ % 2 === 0 ? use : asset;
     return targets.map(target => target.resource.endsWith(held) ? 'hidden' : 'visible');
-  } });
+  });
   const store = { itemDeliveryBatch: async () => new Map([[use, { asset, target: realm,
     availability: 'available', disclosure: 'public', moderation: 'none', lifecycle: 'active',
     width: 1280, height: 720, mediaType: 'image/png' }]]),
@@ -71,7 +72,7 @@ test('campaign art checks Asset and Use fences at the same policy cut', async ()
     { environment, zone })).toEqual([
     { id: 'campaign', art: { landscape: null, portrait: null, cutout: null, logos: [] } },
   ]);
-  expect(policyReads).toBe(1);
+  expect(policyReads).toBe(2);
   expect(candidateReads).toBe(0);
 });
 
@@ -81,17 +82,12 @@ for (const restrictedHead of ['historical', 'current'] as const) {
     const historical = ref(), current = ref();
     const restricted = restrictedHead === 'historical' ? historical : current;
     const checked: DisclosureTarget[] = [];
-    const environment = { fuseki: { query: async (query: string) => {
-      expect(query).toContain(`VALUES ?work { <${realm}> }`);
-      return { results: { bindings: [{ work: { type: 'uri', value: realm },
-        head: { type: 'uri', value: current } }] } };
-    } } } as unknown as WorkActivationEnvironment;
-    configureDisclosure(environment, { read: async targets => {
+    const environment = campaignFixtureEnvironment({ resource: realm, head: current });
+    configureCampaignFixtureReader(environment, async targets => {
       checked.push(...targets);
-      // The owner's unknown-parent rule fails closed for a revision fence.
-      return targets.map(target => target.work === realm
-        && (target.workRevision == null || target.workRevision === restricted) ? 'hidden' : 'visible');
-    } });
+      return targets.map(target => target.ancestry!.parents.some(parent => parent.kind === 'realm'
+        && parent.resource === realm && parent.head === restricted) ? 'hidden' : 'visible');
+    });
     let candidateReads = 0;
     const store = { itemDeliveryBatch: async () => new Map([[use, { asset, representation, target: realm,
       availability: 'available', disclosure: 'public', moderation: 'none', lifecycle: 'active',
@@ -103,8 +99,12 @@ for (const restrictedHead of ['historical', 'current'] as const) {
     if (restrictedHead === 'historical') expect(result[0]!.art.landscape?.url)
       .toBe(`/v1/media/representations/${representation}/bytes?use=${use}`);
     else expect(result[0]!.art.landscape).toBeNull();
-    expect(checked).toHaveLength(2);
-    for (const target of checked) expect(target).toMatchObject({ work: realm, workRevision: current });
+    expect(checked).toHaveLength(4);
+    for (const target of checked) {
+      expect(target.workRevision).toBeUndefined();
+      expect(target.ancestry!.parents).toMatchObject([{ kind: 'realm', resource: realm, head: current }]);
+      expect(target.ancestry!.relationshipBasis.resource).toBe(`https://rezics.com/id/${use}`);
+    }
     expect(candidateReads).toBe(restrictedHead === 'historical' ? 1 : 0);
   });
 }
@@ -113,9 +113,9 @@ test('a full campaign Use batch keeps each image policy together and filters the
   const realm = ref(), zone = ref();
   const uses = Array.from({ length: 64 }, () => randomUUID());
   const assets = uses.map(() => randomUUID());
-  const environment = { fuseki: { query: async () => ({ results: { bindings: [] } }) } } as unknown as WorkActivationEnvironment;
+  const environment = campaignFixtureEnvironment();
   let policyReads = 0;
-  configureDisclosure(environment, { read: async targets => {
+  configureCampaignFixtureReader(environment, async targets => {
     policyReads++;
     expect(targets).toHaveLength(64);
     for (let offset = 0; offset < targets.length; offset += 2) {
@@ -123,7 +123,7 @@ test('a full campaign Use batch keeps each image policy together and filters the
       expect(targets[offset + 1]!.component).toBe('media_use');
     }
     return targets.map(target => target.resource.endsWith(uses[63]!) ? 'hidden' : 'visible');
-  } });
+  });
   const store = { itemDeliveryBatch: async () => new Map(uses.map((use, index) => [use,
     { asset: assets[index], target: realm, availability: 'available', disclosure: 'public', moderation: 'none',
       lifecycle: 'active', width: 1280, height: 720, mediaType: 'image/png' }])),
@@ -137,14 +137,14 @@ test('a full campaign Use batch keeps each image policy together and filters the
       anchor: 'center-middle' as const })) } }));
   const result = await readZoneCampaignArt(store, realm, slides, { environment, zone });
   expect(result.flatMap(slide => slide.art.logos)).toHaveLength(63);
-  expect(policyReads).toBe(2);
+  expect(policyReads).toBe(4);
 });
 
 test('selected campaign art binds every original and rendition URL without mutating owner candidates', async () => {
   const realm = ref(), zone = ref(), asset = randomUUID(), use = randomUUID(), representation = randomUUID();
   const variantId = `urn:rezics:variant:${randomUUID()}`;
-  const environment = { fuseki: { query: async () => ({ results: { bindings: [] } }) } } as unknown as WorkActivationEnvironment;
-  configureDisclosure(environment, { read: async targets => targets.map(() => 'visible') });
+  const environment = campaignFixtureEnvironment();
+  configureCampaignFixtureReader(environment, async targets => targets.map(() => 'visible'));
   const item = { asset, target: realm, representation, availability: 'available', disclosure: 'public',
     moderation: 'none', lifecycle: 'active', width: 1280, height: 720, mediaType: 'image/png' };
   const candidates = [
