@@ -31,7 +31,7 @@ const binding = (value: string) => ({ type: 'uri' as const, value });
 export function closedFeedOwner(actor: ClosedFeedReader) {
   const state = { closed: false, workHidden: false, contentHidden: false, ancestry: true,
     realmParent: true, preparation: true, approval: true, placement: 'current', parentHead: head,
-    generation: '0', available: true, hydrate: () => {} };
+    generation: '0', enforcementCut: fixtureDisclosureCut.enforcementCut, available: true, hydrate: () => {} };
   const sources: FeedSource[] = Array.from({ length: 6 }, (_, index) => ({
     id: native(10 + index), sequence: String(index + 1), kind: index % 2 === 0 ? 'discussion' : 'work',
     target: index % 2 === 0 ? native(30 + index) : work, work, actor: native(40 + index),
@@ -93,7 +93,7 @@ export function closedFeedOwner(actor: ClosedFeedReader) {
         || target.ancestry?.parents.some(parent => parent.kind === 'realm' && parent.resource === realm))
         || state.workHidden && target.ancestry?.parents.some(parent => parent.resource === work)
         || state.contentHidden && target.owner === 'content' ? 'hidden' as const : 'visible' as const),
-      anonymousNames: [], fenceBasis: { ...fixtureDisclosureCut, recoveryGeneration: state.generation } };
+      anonymousNames: [], fenceBasis: { recoveryGeneration: state.generation, enforcementCut: state.enforcementCut } };
     },
   });
   const viewer = disclosureViewer(actor === 'anonymous' ? null : { issuer: 'account.test', subject: actor } as never);
@@ -167,13 +167,14 @@ export function closedFeedCases(actor: ClosedFeedReader) {
     }
   });
   test(`closed-feed-${actor}: changed placement, approval, preparation, parent and recovery discard captured hydration`, async () => {
-    for (const change of ['placement', 'approval', 'preparation', 'parent', 'recovery'] as const) {
+    for (const change of ['placement', 'approval', 'preparation', 'parent', 'recovery', 'enforcement'] as const) {
       const owner = closedFeedOwner(actor);
       const batch = await captureClosedRealmFeedSources(owner.session, owner.sources);
       if (change === 'placement') owner.state.placement = 'replaced';
       if (change === 'approval' || change === 'preparation') owner.state[change] = false;
       if (change === 'parent') owner.state.parentHead = 'urn:rezics:revision:feed-parent:2';
       if (change === 'recovery') owner.state.generation = '1';
+      if (change === 'enforcement') owner.state.enforcementCut = 'b'.repeat(64);
       await expect(batch.fence()).rejects.toBeInstanceOf(DisclosureUnavailable);
     }
   });
@@ -196,6 +197,55 @@ export function closedFeedCases(actor: ClosedFeedReader) {
     owner.state.hydrate = () => { owner.state.closed = true; };
     const batch = await readClosedRealmFeedSources(owner.session, owner.sources);
     expect((await batch.fence()).map(source => source.id)).toEqual(owner.sources.filter(source => !source.realm).map(source => source.id));
+  });
+  test(`closed-feed-${actor}: closure omits adoption, decision, review and Content publication occurrences`, async () => {
+    for (const kind of ['adoption', 'decision', 'review', 'contribution'] as const) {
+      const owner = closedFeedOwner(actor);
+      const source = owner.sources[0]!;
+      source.kind = kind;
+      source.reply = null;
+      source.target = owner.work;
+      if (kind === 'review') source.readerReview = { revision: 'review-revision', body: 'Review body' } as FeedSource['readerReview'];
+      if (kind === 'contribution') source.contentTarget = owner.work;
+      const captured = await captureClosedRealmFeedSources(owner.session, [source, owner.sources[1]!]);
+      expect(captured.sources.length).toBe(2);
+      owner.state.closed = true;
+      expect((await captured.fence()).map(row => row.id)).toEqual([owner.sources[1]!.id]);
+    }
+  });
+  test(`closed-feed-${actor}: captured identity and review bytes survive caller mutation`, async () => {
+    const owner = closedFeedOwner(actor);
+    const original = owner.sources[1]!;
+    original.kind = 'review';
+    original.readerReview = { revision: 'review-revision', body: 'Original review' } as FeedSource['readerReview'];
+    const source = { ...original, readerReview: { ...original.readerReview! } };
+    const captured = await captureClosedRealmFeedSources(owner.session, [source]);
+    source.actor = native(999);
+    source.readerReview!.body = 'Changed review';
+    const [safe] = await captured.fence();
+    expect(safe?.actor).not.toBe(source.actor);
+    expect(safe?.readerReview?.body).toBe('Original review');
+  });
+  test(`closed-feed-${actor}: a closure that moves the Access cut discards hydration and originals remain on retry`, async () => {
+    const owner = closedFeedOwner(actor);
+    const captured = await captureClosedRealmFeedSources(owner.session, owner.sources);
+    owner.state.closed = true;
+    owner.state.enforcementCut = 'b'.repeat(64);
+    await expect(captured.fence()).rejects.toBeInstanceOf(DisclosureUnavailable);
+    const retried = await captureClosedRealmFeedSources(owner.session, owner.sources);
+    expect((await retried.fence()).map(source => source.id)).toEqual(owner.sources.filter(source => !source.realm).map(source => source.id));
+  });
+  test(`closed-feed-${actor}: incomplete exact revision and oversized or duplicate batches are unavailable`, async () => {
+    const owner = closedFeedOwner(actor);
+    const incomplete = { ...owner.sources[0]!, contentRevision: null };
+    await expect(captureClosedRealmFeedSources(owner.session, [incomplete])).rejects.toBeInstanceOf(DisclosureUnavailable);
+    await expect(captureClosedRealmFeedSources(owner.session, [owner.sources[0]!, owner.sources[0]!])).rejects.toBeInstanceOf(DisclosureUnavailable);
+    await expect(captureClosedRealmFeedSources(owner.session, Array.from({ length: 21 }, (_, index) => ({ ...owner.sources[1]!, id: native(100 + index) }))))
+      .rejects.toBeInstanceOf(DisclosureUnavailable);
+    expect(owner.calls.length).toBe(0);
+    const empty = await captureClosedRealmFeedSources(owner.session, []);
+    expect(empty.sources).toEqual([]);
+    expect(await empty.fence()).toEqual([]);
   });
 }
 

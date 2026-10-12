@@ -13,6 +13,10 @@ type FeedSession = Pick<WorkReadSession, 'deps' | 'viewer'>;
  * the same Work. Its owner must revalidate publication, preparation and approval
  * when resolving and rereading this reference. Context is only a lookup hint. */
 export function closedRealmFeedTargets(source: FeedSource): readonly DisclosureTarget[] {
+  if (source.reply && !source.realm || (source.reply || source.contentTarget)
+    && !source.contentRevision?.match(/^urn:rezics:content:revision:.+$/)
+    || source.kind === 'review' && !source.readerReview?.revision)
+    throw new DisclosureUnavailable('Feed publication reference is incomplete');
   const occurrence = {
     owner: source.kind === 'review' ? 'review' as const : 'graph' as const,
     kind: source.reply ? 'realm-placement' as const : source.kind === 'adoption' ? 'realm-selection' as const
@@ -36,7 +40,8 @@ export async function captureClosedRealmFeedSources(session: FeedSession,
   sources: readonly FeedSource[], channel: 'feed' | 'count' = 'feed') {
   if (sources.length > FEED_COST.refreshItems || new Set(sources.map(source => source.id)).size !== sources.length)
     throw new DisclosureUnavailable('Feed occurrence batch is invalid');
-  sources = sources.map(source => Object.freeze({ ...source }));
+  sources = sources.map(source => Object.freeze({ ...source,
+    ...(source.readerReview ? { readerReview: Object.freeze({ ...source.readerReview }) } : {}) }));
   const env = session.deps.environment, viewer = session.viewer;
   const targets = sources.flatMap(source => [...closedRealmFeedTargets(source)]);
   if (targets.length > DISCLOSURE_COST.batch) throw new DisclosureUnavailable('Feed disclosure budget exceeded');
