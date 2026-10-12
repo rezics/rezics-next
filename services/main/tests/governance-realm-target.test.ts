@@ -642,7 +642,7 @@ async function productionRealm(label: string) {
     await grant(staff, 'governance:platform', DECIDE_ACTION.content_report);
     await grant(staff, 'governance:platform', 'governance.rule.publish');
     const governance = stack.composition.dependencies.governance!;
-    const rule = await governance.rules.publish(staff.principal, {
+    const rule = await governance.rules!.publish(staff.principal, {
       ref: `urn:rule:${randomUUID()}`, scopeId: 'governance:platform', actingSubject: staff.actor,
       expectedRevision: null, document: { purpose: 'Review Realm disclosure' }, idempotencyKey: randomUUID(),
     });

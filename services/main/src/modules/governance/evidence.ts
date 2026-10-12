@@ -24,13 +24,25 @@ export const governanceGraphKinds = {
   LegacyWork: `${RV}Work`,
   Occurrence: 'https://schema.org/ListItem',
   Concept: 'http://www.w3.org/2004/02/skos/core#Concept',
-  ...Object.fromEntries([
-    'Realm', 'MainVersion', 'Agent', 'Space', 'Zone', 'Structure', 'Release', 'FixedRelease',
-    'TextContribution', 'Realization', 'Collection', 'SemanticContext', 'Character', 'Role',
-    'SemanticDefinition', 'Projection', 'Post',
-  ].map(kind => [kind, `${RV}${kind}`])),
+  Realm: `${RV}Realm`,
+  MainVersion: `${RV}MainVersion`,
+  Agent: `${RV}Agent`,
+  Space: `${RV}Space`,
+  Zone: `${RV}Zone`,
+  Structure: `${RV}Structure`,
+  Release: `${RV}Release`,
+  FixedRelease: `${RV}FixedRelease`,
+  TextContribution: `${RV}TextContribution`,
+  Realization: `${RV}Realization`,
+  Collection: `${RV}Collection`,
+  SemanticContext: `${RV}SemanticContext`,
+  Character: `${RV}Character`,
+  Role: `${RV}Role`,
+  SemanticDefinition: `${RV}SemanticDefinition`,
+  Projection: `${RV}Projection`,
+  Post: `${RV}Post`,
 } as const;
-export const governanceGraphTargetKinds = Object.values(governanceGraphKinds);
+export const governanceGraphTargetKinds: readonly string[] = Object.values(governanceGraphKinds);
 const sourceId = (value: string): string | null => {
   const id = value.startsWith('https://rezics.com/id/') ? value.slice('https://rezics.com/id/'.length) : value;
   return uuid.test(id) ? id : null;
