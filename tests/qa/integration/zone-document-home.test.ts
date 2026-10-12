@@ -17,6 +17,7 @@ import { ContentDraftUnavailable } from '../../../services/main/src/modules/cont
 import { S3ImmutableObjects, type ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { readZoneConfiguration, readZoneSitePublicationReceipt, ZoneUnavailable, ZonePublicationUnavailable,
   type ZoneSitePublicationReceipt } from '../../../services/main/src/modules/zone/configuration.ts';
+import { readCompositionReceipt } from '../../../services/main/src/modules/structure/change.ts';
 import { isZonePublishedPageRevision, readZonePublication } from '../../../services/main/src/modules/zone/publication.ts';
 import { ZONE_SITE_PUBLICATION_COST, zonePublishedPageBinding } from '../../../services/main/src/modules/zone/config-format.ts';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
@@ -33,6 +34,7 @@ interface Home { kind: string; realm: string | null; page?: { reference: { revis
   showcaseData: { slides: Array<{ id: string }>; slideMedia: unknown[] } } }
 const boundPages = (pages: readonly Pick<SelectedPage, 'page' | 'variantId' | 'revisionId'>[]) => pages.map(({ page, variantId, revisionId }) =>
   ({ page, variantId, revisionId }));
+const fixtureScopes = 'openid work:create work:edit work:read space:create zone:edit collection:edit semantic:read';
 
 const documentHero: ZonePresentation['modules'][number] = { id: 'hero', type: 'hero-carousel',
   title: 'Document highlights', titles: { en: 'Document highlights', 'zh-Hant': '文件精選' },
@@ -49,11 +51,11 @@ function showcaseDocument(slides = documentSlides, titleEffect: ZonePresentation
 }
 
 async function fixture(initialDocument = fromPlainText('Published home', 'blocks'),
-  visibility: 'public' | 'private' = 'public') {
+  visibility: 'public' | 'private' = 'public', additionalScopes: readonly string[] = []) {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
   const f = await authorCreditFixture(Bun.env as Record<string, string>,
     resolve('.temp', `zone-document-home-${randomUUID()}`),
-    'openid work:create work:edit work:read space:create zone:edit collection:edit semantic:read');
+    [fixtureScopes, ...additionalScopes].join(' '));
   try {
     const accountPool = new Pool({ connectionString: Bun.env.ACCOUNT_DATABASE_URL });
     try {
@@ -988,6 +990,67 @@ test('concurrent publishers select one bundle and a membership lookup rechecks a
     expect(await isZonePublishedPageRevision(f.env, f.zone,
       f.selection.pages[0]!.page, f.selection.pages[0]!.revisionId)).toBe(false);
     expect((await readZoneSitePublicationReceipt(f.env, current.receipt))?.pages).toEqual(current.pages);
+  } finally { await f.close(); }
+}, 120_000);
+
+test('committed structural-theme save replays its original receipt after an administrator selects an official theme', async () => {
+  const f = await fixture(undefined, 'public', ['owner:operate']);
+  try {
+    const community = await f.json<{ space: string; realm: string }>(await f.call('POST', '/v1/spaces', {
+      profile: 'space-realm-v1', name: 'Theme replay host', capabilities: ['realm'], actingSubject: f.actor,
+    }), 201);
+    const zone = nativeId();
+    await f.grant(`zone:edit:${zone}`, 'zone.edit');
+    await f.json(await f.call('POST', '/v1/zones', {
+      zone, space: community.space, disclosure: 'public', actingSubject: f.actor,
+    }), 201);
+    const path = `/v1/zones/${shortId(zone)}`;
+    const editorToken = await f.account.tokenFor(f.account.a, fixtureScopes);
+    const before = await readZoneConfiguration(f.env, zone);
+    const key = randomUUID();
+    const structural: ZonePresentation = { ...DEFAULT_ZONE_PRESENTATION,
+      tokens: { ...DEFAULT_ZONE_PRESENTATION.tokens, density: 'compact', pageSurface: 'cards' } };
+    const body = { expectedHead: before.revision, actingSubject: f.actor, presentation: structural };
+    let committedAdmission: string | null = null;
+    const lostResponse = new Error('lost structural-theme response after commit');
+    const access = new Proxy(f.access, { get(target, property) {
+      if (property === 'recordGraphOutcome') return async (...args: Parameters<typeof target.recordGraphOutcome>) => {
+        await target.recordGraphOutcome(...args);
+        committedAdmission = args[0];
+        throw lostResponse;
+      };
+      const value = Reflect.get(target, property, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    } });
+    const interrupted = createMainApp(f.env.fuseki, { environment: f.env, account: f.account.verifier,
+      access, content: f.content, contentAuthoring: f.content, catalogueIntake: f.catalogueIntake,
+      realmAdmin: new AccessRealmManagement(f.accessPool) });
+    expect((await interrupted.handle(new Request(`http://main.local${path}/configuration`, {
+      method: 'PUT', headers: { authorization: `Bearer ${editorToken}`, 'idempotency-key': key,
+        'content-type': 'application/json' }, body: JSON.stringify(body),
+    }))).status).toBe(503);
+    const committed = await readCompositionReceipt(f.env, committedAdmission!, 'zone.edit');
+    if (!committed?.revision) throw new Error('Committed configuration receipt is unavailable');
+    expect(committed.outcome).toBe('succeeded');
+    expect((await readZoneConfiguration(f.env, zone)).revision).toBe(committed.revision);
+
+    const official: ZonePresentation = { ...structural, official: { theme: nativeId() } };
+    const officialBody = { expectedHead: committed.revision, actingSubject: f.actor,
+      official: {}, defaultRealm: community.realm, presentation: official };
+    expect((await f.call('PUT', `${path}/configuration`, officialBody)).status).toBe(403);
+    await f.grant(`zone:official:${zone}`, 'zone.official');
+    const administrator = await f.json<{ revision: string }>(
+      await f.call('PUT', `${path}/configuration`, officialBody), 200);
+
+    const replay = await f.json<{ revision: string; receipt: string; replayed: boolean;
+      sourcePosition: { dataEpoch: string; sequence: string } }>(
+      await f.call('PUT', `${path}/configuration`, body, key, editorToken), 200);
+    expect(replay).toMatchObject({ revision: committed.revision, receipt: committed.receipt, replayed: true,
+      sourcePosition: { dataEpoch: committed.dataEpoch, sequence: committed.sequence } });
+    const after = await readZoneConfiguration(f.env, zone);
+    expect(after.revision).toBe(administrator.revision);
+    expect(after.configuration.presentation).toEqual(official);
+    expect(await readCompositionReceipt(f.env, committedAdmission!, 'zone.edit')).toEqual(committed);
   } finally { await f.close(); }
 }, 120_000);
 

@@ -380,22 +380,6 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
     throw new InvalidZoneConfiguration('Only site publication may select page revisions');
   }
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
-  if (input.patch?.official !== undefined || input.patch?.defaultRealm !== undefined
-    || input.patch?.presentation !== undefined) {
-    const before = await readZoneConfiguration(env, input.zone);
-    const priorTheme = typeof before.configuration.presentation === 'object'
-      ? before.configuration.presentation.official?.theme : undefined;
-    const nextTheme = typeof input.patch?.presentation === 'object' && input.patch.presentation
-      ? input.patch.presentation.official?.theme : undefined;
-    if (input.patch?.official !== undefined
-      || (input.patch?.defaultRealm !== undefined && before.configuration.official)
-      || (input.patch?.presentation !== undefined && priorTheme !== nextTheme)) {
-      const official = await account.verify(request, ['owner:operate']);
-      if (!await access.canMarkOfficialZone?.(official, input.actingSubject, input.zone)) {
-        throw new ZoneOfficialDenied('Official Zone authority is unavailable');
-      }
-    }
-  }
   const digest = hash(JSON.stringify({ family: 'zone-revision-v1', ...input,
     idempotencyKey: undefined }));
   const principal = await account.verify(request, ['zone:edit']);
@@ -431,6 +415,23 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
       || input.operation === 'recover' && head.state !== 'retired'
       || (input.operation === 'configure' || input.operation === 'publish') && head.state !== 'active') {
       return invalid(new InvalidZoneConfiguration('Zone state transition is invalid'));
+    }
+    // Terminal replay keeps the original authority and outcome. Only a new
+    // dispatch compares official selections against its admitted configuration.
+    if (input.patch?.official !== undefined || input.patch?.defaultRealm !== undefined
+      || input.patch?.presentation !== undefined) {
+      const priorTheme = typeof head.configuration.presentation === 'object'
+        ? head.configuration.presentation.official?.theme : undefined;
+      const nextTheme = typeof input.patch?.presentation === 'object' && input.patch.presentation
+        ? input.patch.presentation.official?.theme : undefined;
+      if (input.patch?.official !== undefined
+        || (input.patch?.defaultRealm !== undefined && head.configuration.official)
+        || (input.patch?.presentation !== undefined && priorTheme !== nextTheme)) {
+        const official = await account.verify(request, ['owner:operate']);
+        if (!await access.canMarkOfficialZone?.(official, input.actingSubject, input.zone)) {
+          throw new ZoneOfficialDenied('Official Zone authority is unavailable');
+        }
+      }
     }
     if (input.publication) {
       // Routes are mount qualifiers in the navigation Structure. Both cuts name
