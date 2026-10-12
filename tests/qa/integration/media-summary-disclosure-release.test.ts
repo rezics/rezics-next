@@ -105,13 +105,15 @@ test('signed-in and anonymous Realm release queries retain both current summary 
       const calls = Math.max(...budgets.values());
       expect(RELEASE_QUERY_COST.graphCalls).toBe(12);
       expect(calls).toBeLessThanOrEqual(RELEASE_QUERY_COST.graphCalls);
-      expect(ownerProbes).toBe(4);
+      // The current Work rows prove their names have no Agent owner. Both
+      // summary disclosure passes still run, without redundant owner probes.
+      expect(ownerProbes).toBe(0);
       expect(statements - before).toBe(4);
       return { items: result.result.items, calls };
     };
     const anonymous = await read(false), signedIn = await read(true);
     expect(signedIn).toEqual(anonymous);
-    expect(signedIn.calls).toBe(11);
+    expect(signedIn.calls).toBe(7);
     s.fuseki.query = originalQuery;
 
     const provisioned = await json<{ agent: string }>(await app.handle(new Request('http://main.local/v1/agents', {
