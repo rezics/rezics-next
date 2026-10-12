@@ -655,9 +655,32 @@ test('launch outcomes retain landed proofs, the recipe reading name and all five
     launchCoverage.filter(row => row.kind === kind && row.capability === capability);
   const recipeHub = rows('recipes', 'Work hub and reading');
   expect(recipeHub).toHaveLength(1);
-  expect(recipeHub[0]!.api).toEqual({ missing: 'L21', reason: undefined });
-  expect(recipeHub[0]!.browser).toEqual({ missing: 'L21', reason: undefined });
+  expect(recipeHub[0]!.api).toMatchObject({
+    test: 'recipes / Pinned Schema.org imports retain ordered content, quantities and separate flour steps',
+  });
+  expect(recipeHub[0]!.browser).toMatchObject({
+    test: 'recipes / Search and open Puff Paste and Artusi in English UI',
+  });
   expect(rows('recipes', 'Work hub and edition choice')).toHaveLength(0);
+  const recipeCatalogue = rows('recipes', 'Catalogue browse and search in its Zone');
+  expect(recipeCatalogue).toHaveLength(1);
+  expect(recipeCatalogue[0]!.api).toMatchObject({
+    test: 'recipes / Catalogue browse and search in its Zone cover all 30 Works across pages',
+  });
+  expect(recipeCatalogue[0]!.browser).toMatchObject({
+    test: 'recipes / Search and open Puff Paste and Artusi in English UI',
+  });
+  const recipePagination = rows('recipes', 'Catalogue pagination in its Zone');
+  expect(recipePagination).toHaveLength(1);
+  expect(recipePagination[0]!.api).toMatchObject({
+    test: 'recipes / Catalogue browse and search in its Zone cover all 30 Works across pages',
+  });
+  expect(recipePagination[0]!.browser).toMatchObject({
+    test: 'recipes / Browse every recipe page in its Zone',
+  });
+  expect(rows('recipes', 'Collection tracking and progress')).toEqual([
+    expect.objectContaining({ api: { missing: 'L21', reason: undefined }, browser: { missing: 'L21', reason: undefined } }),
+  ]);
   expect(rows('zone', 'Publication')[0]!.browser).toMatchObject({
     test: 'Navigation and theme: a Realm-less Zone publishes the saved home, navigation, and layout as one site',
     evidence: 'Retries an interrupted publish with one key, verifies the original receipt and cuts, and checks anonymous readers retain the published page through later private drafts.',
@@ -670,6 +693,9 @@ test('launch outcomes retain landed proofs, the recipe reading name and all five
     ['manga', 'Continue progress across devices', 'tests/qa/integration/typed-progress.test.ts', 'apps/web/tests/tracking-media.e2e.ts'],
     ['games', 'Collection tracking and progress', 'tests/qa/integration/game-progress.test.ts', 'apps/web/tests/tracking-media.e2e.ts'],
     ['games', 'Continue progress across devices', 'tests/qa/integration/game-progress.test.ts', 'apps/web/tests/tracking-media.e2e.ts'],
+    ['recipes', 'Work hub and reading', 'tests/qa/integration/launch-real-recipes.test.ts', 'apps/web/tests/launch-real-recipes.e2e.ts'],
+    ['recipes', 'Catalogue browse and search in its Zone', 'tests/qa/integration/launch-real-recipes.test.ts', 'apps/web/tests/launch-real-recipes.e2e.ts'],
+    ['recipes', 'Catalogue pagination in its Zone', 'tests/qa/integration/launch-real-recipes.test.ts', 'apps/web/tests/launch-real-recipes.e2e.ts'],
     ['recipes', 'Exchange recipes', 'tests/qa/integration/recipe-structure.test.ts', 'apps/web/tests/recipe-exchange.e2e.ts'],
     ['zone', 'Navigation and theme', 'tests/qa/integration/zone-document-home.test.ts', 'apps/web/tests/zone-site-authoring.e2e.ts'],
     ['zone', 'Publish after editor revocation', 'tests/qa/integration/zone-document-home.test.ts', 'apps/web/tests/zone-site-authoring.e2e.ts'],
@@ -694,10 +720,10 @@ test('launch outcomes retain landed proofs, the recipe reading name and all five
   const missingRows = launchCoverage.filter(row => proofMissing(row.api) || proofMissing(row.browser));
   const missingProofs = launchCoverage.flatMap(row => [row.api, row.browser]).filter(proofMissing);
   expect({ rows: launchCoverage.length, provedPairs: provedPairs.length, missingRows: missingRows.length, missingProofs: missingProofs.length })
-    .toEqual({ rows: 65, provedPairs: 39, missingRows: 26, missingProofs: 44 });
+    .toEqual({ rows: 66, provedPairs: 42, missingRows: 24, missingProofs: 40 });
   expect(Object.fromEntries([...missingItems].map(item => [item,
     missingRows.filter(row => missingForRow(row).includes(item)).length,
-  ]))).toEqual({ L10: 1, L11: 1, L12: 2, L13: 0, L17: 0, L19: 0, L20: 0, L21: 10, L26: 0, gap: 12 });
+  ]))).toEqual({ L10: 1, L11: 1, L12: 2, L13: 0, L17: 0, L19: 0, L20: 0, L21: 8, L26: 0, gap: 12 });
 });
 
 test('literal loops and registered journeys retain all nine browser citations', () => {
