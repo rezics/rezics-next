@@ -246,6 +246,7 @@ export function accountAuthOptions(config: AccountConfig) {
         // its request state so HTTP and embedded calls share the same hook.
         await deletionConsent.set(leaveOwnedAgentsStanding ?? false);
       }
+      await operatorHooks.before(ctx);
       if (ctx.path === '/verify-email' && typeof ctx.query?.token === 'string') {
         // Email verification links are stateless JWTs, so deleting verification
         // rows cannot revoke them. Bind them to the immutable identity as well
@@ -325,7 +326,6 @@ export function accountAuthOptions(config: AccountConfig) {
         if (!admitted) throw new APIError('TOO_MANY_REQUESTS', { error: 'rate_limited' },
           { 'Retry-After': String(AGENT_REGISTRATION_BUDGET.seconds) });
       }
-      await operatorHooks.before(ctx);
       if (ctx.path === '/revoke-sessions' || ctx.path === '/revoke-other-sessions') {
         // This before hook short-circuits the provider endpoint and its
         // middleware, so retain its origin check and authoritative admission.
