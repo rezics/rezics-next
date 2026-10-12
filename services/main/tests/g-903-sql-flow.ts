@@ -41,19 +41,32 @@ export function sqlRequestFlows(project: Project, files: readonly ts.SourceFile[
     ts.isArrowFunction(node) || ts.isFunctionExpression(node) || ts.isFunctionDeclaration(node) || ts.isMethodDeclaration(node);
   const nameOf = (node: ts.Expression) => ts.isPropertyAccessExpression(node) ? node.name.text
     : ts.isIdentifier(node) ? node.text : '';
+  const httpCalls = new Map<ts.CallExpression, boolean>();
   const isHttp = (node: ts.CallExpression) => {
+    if (httpCalls.has(node)) return httpCalls.get(node)!;
     if (!/^(fetch|call|request|post|read|get|put|patch|move|revoke|handle)$/.test(nameOf(node.expression))) return false;
+    const declaration = declarationOf(node);
+    const file = declaration?.getSourceFile().fileName ?? '';
     // Router declarations install callbacks; they do not send those callbacks
-    // as request payloads. Calls inside each handler are still visited.
+    // as request payloads. Resolve the framework method: HTTP clients can also
+    // take response callbacks. Calls inside each handler are still visited.
     if (/^(get|post|put|patch)$/.test(nameOf(node.expression))
-      && node.arguments.slice(1).some(argument => ts.isArrowFunction(argument) || ts.isFunctionExpression(argument))) return false;
+      && /\/node_modules\/(?:elysia|hono|express|@types\/express(?:-serve-static-core)?)\//.test(file)) {
+      httpCalls.set(node, false);
+      return false;
+    }
     // Collection lookups (including nested provider.accepted Maps) are storage
     // inspection, not requests. Resolve the declaration rather than its spelling.
     if (nameOf(node.expression) === 'get'
-      && /(?:lib\..*\.d\.ts|\/infrastructure\/immutable-objects\.ts)$/.test(
-        declarationOf(node)?.getSourceFile().fileName ?? '')) return false;
-    return !/(Pool|pool|client|fuseki|store|owner|content|access|registry|library|roles|groups|Map|map)$/.test(
-      ts.isPropertyAccessExpression(node.expression) ? node.expression.expression.getText() : '');
+      && ((/lib\..*\.d\.ts$/.test(file) && declaration?.parent
+        && ts.isInterfaceDeclaration(declaration.parent)
+        && /^(Map|ReadonlyMap|WeakMap)$/.test(declaration.parent.name.text))
+        || /\/infrastructure\/immutable-objects\.ts$/.test(file))) {
+      httpCalls.set(node, false);
+      return false;
+    }
+    httpCalls.set(node, true);
+    return true;
   };
   const isSql = (node: ts.CallExpression) => /^(query|q)$/.test(nameOf(node.expression));
   const sqlText = (node: ts.Node | undefined, seen = new Set<ts.Node>()): string => {

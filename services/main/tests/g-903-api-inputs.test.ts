@@ -53,5 +53,30 @@ test('G-903 guard traces aliases, helper returns and request URLs while allowing
     app.get('/handler-request', () => fetch('/v1/replies/' + id));
     app.get('/v1/replies/' + id);
   ` });
-  expect(result.map(flow => flow.request)).toEqual([6, 8, 15, 18, 19, 21, 23, 24].map(line => `${fileName}:${line}`));
+  expect(result.map(flow => flow.request)).toEqual([6, 8, 15, 18, 19, 21, 22, 23, 24].map(line => `${fileName}:${line}`));
+});
+
+test('G-903 exclusions resolve routers and collections without hiding callback HTTP clients', async () => {
+  const root = resolve(import.meta.dir, '../../..');
+  const fileName = resolve(root, '.temp/g-903-guard/resolved-clients.ts');
+  const result = await flows(root, [fileName], { [fileName]: `
+    import { get } from 'node:http';
+    import { Elysia } from 'elysia';
+    const pool: any = {};
+    const id = (await pool.query('SELECT id FROM content.reply')).rows[0].id;
+    get('http://main.local/v1/replies/' + id, response => response.resume());
+    get('http://main.local/v1/replies/' + id);
+    const router = new Elysia();
+    router.get('/cards/' + id, () => id);
+    router.get('/handler-request', () => fetch('/v1/replies/' + id));
+    const collection = new Map<string, string>();
+    collection.get(id);
+    const client = { get: (path: string, callback: () => void) => {} };
+    client.get('/v1/replies/' + id, () => {});
+    const owner = { read: (path: string) => {} };
+    owner.read('/v1/replies/' + id);
+    const storage: any = {};
+    storage.get('/v1/replies/' + id, () => {});
+  ` });
+  expect(result.map(flow => flow.request)).toEqual([6, 7, 10, 14, 16, 18].map(line => `${fileName}:${line}`));
 });
