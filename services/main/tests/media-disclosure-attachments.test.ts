@@ -67,6 +67,7 @@ afterAll(async () => {
 type Entry = { public: boolean; hidden?: boolean };
 function fixture(pool: Pool) {
   const entries = new Map<string, Entry>([[ownTarget, { public: true }]]);
+  const authority = { manage: true, baseline: false };
   const probes: string[] = [];
   const graph = new FusekiClient('http://media-disclosure.invalid');
   const literal = (value: string) => ({ type: 'literal', value });
@@ -97,7 +98,9 @@ function fixture(pool: Pool) {
     lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } };
   configureDisclosure(environment, new DisclosureStore(pool));
   configureMediaVisibility({ environment, media: { store }, access: {
-    canManageMedia: async () => true, canReadWork: async () => false,
+    canManageMedia: async () => authority.manage,
+    canReadAsBaselineMember: async () => authority.baseline,
+    canReadWork: async () => false,
   } } as unknown as MainWorkDependencies);
   const read = (reference: string, viewer = ANONYMOUS_VIEWER) => discloseInventory(environment,
     [{ owner: 'media', resource: reference, component: 'media_use' }], viewer, 'media');
@@ -110,7 +113,7 @@ function fixture(pool: Pool) {
   const reset = () => { fuseki.reset(); contentPool.reset(); probes.length = 0; };
   const cost = () => ({ graphQueries: fuseki.queries, graphBytes: fuseki.bytes,
     ownerQueries: contentPool.queries, ownerBytes: contentPool.bytes, probes: [...probes] });
-  return { pool, entries, store, attach, read, reset, cost, probes };
+  return { pool, entries, authority, store, attach, read, reset, cost, probes };
 }
 
 async function isolated(run: (f: ReturnType<typeof fixture>) => Promise<void>) {
@@ -245,6 +248,20 @@ for (const state of ['private', 'deleted', 'moderated', 'queued', 'leased', 'fai
       expect(await f.read(iri(ownUse), ownerViewer)).toEqual(
         [state === 'private' || state === 'queued' || state === 'leased' ? 'visible' : 'hidden']);
       expect(await f.read(iri(ownUse), disclosureViewer(principal, iri(randomUUID())))).toEqual(['hidden']);
+      if (state === 'private' || state === 'queued' || state === 'leased') {
+        for (const decisions of [
+          { manage: false, baseline: false },
+          { manage: false, baseline: true },
+          { manage: true, baseline: false },
+        ]) {
+          Object.assign(f.authority, decisions);
+          for (const reference of [iri(ownUse), iri(basis.asset)]) {
+            expect(await f.read(reference, ownerViewer)).toEqual(
+              [decisions.manage || decisions.baseline ? 'visible' : 'hidden']);
+            expect(await f.read(reference, disclosureViewer(principal, iri(randomUUID())))).toEqual(['hidden']);
+          }
+        }
+      }
     });
   });
 }
