@@ -20,6 +20,10 @@ import {
 import { sanctionSentence } from './sanction.ts';
 import { RealmInvitations } from './invitations.tsx';
 import { NotificationsUnavailable, NotificationsView } from './notifications-view.tsx';
+import { AppShell } from '../app-shell.tsx';
+import { messages as shellMessages } from '../messages.ts';
+import { NotificationsLink } from '../notifications-link.tsx';
+import { setUnread } from '../unread.ts';
 
 // The notifications page, newest first, over an in-memory stream: sentences
 // built from Main's facts, groups shown once, unread marked, mark all read,
@@ -100,22 +104,22 @@ export const MoreOnRequest: Story = {
   },
 };
 
+function sparseSavedArgs(): Args {
+  const saved = [137, 274, 5000, 10000].map((sequence, index) =>
+    governance(sequence, 'proposal-revised', 'manual', { saved: true, proposal: 950 + index }));
+  const stream = [saved[0]!, saved[1]!, governance(1000, 'proposal-revised', 'manual'),
+    governance(2000, 'proposal-revised', 'author', { saved: true }), saved[2]!, saved[3]!];
+  const { main, calls } = memoryInbox(stream);
+  return { initial: inboxWindow(saved.slice(2), 'older:1:5000', '10000'), now: NOW, avatarQuery: '', main, calls,
+    selection: { view: 'saved', reason: 'manual' } as const };
+}
+
 /** Sparse Saved matches carry their reason and cursor across unrelated notifications. */
 export const SparseSavedPagination: Story = {
-  args: (() => {
-    const saved = [137, 274, 5000, 10000].map((sequence, index) =>
-      governance(sequence, 'proposal-revised', 'manual', { saved: true, proposal: 950 + index }));
-    const stream = [saved[0]!, saved[1]!, governance(1000, 'proposal-revised', 'manual'),
-      governance(2000, 'proposal-revised', 'author', { saved: true }), saved[2]!, saved[3]!];
-    const { main, calls } = memoryInbox(stream);
-    return { initial: inboxWindow(saved.slice(2), 'older:1:5000', '10000'), now: NOW, avatarQuery: '', main, calls,
-      selection: { view: 'saved', reason: 'manual' } as const };
-  })(),
+  args: sparseSavedArgs(),
   async play({ canvasElement, args }) {
     const canvas = within(canvasElement);
     await expect(canvas.getAllByRole('listitem')).toHaveLength(2);
-    // The shell's unread count is the whole inbox's; a filtered list never carries it as its own total.
-    await expect(canvas.queryByText(/\d+\s+unread/i)).toBeNull();
     await expect(canvas.getAllByRole('link', { name: 'A correction was revised' }).map(link => link.getAttribute('href')))
       .toEqual([953, 952].map(proposal => `/en/proposals/${streamId(proposal)}?revision=2`));
     await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
@@ -126,6 +130,31 @@ export const SparseSavedPagination: Story = {
       .toEqual([953, 952, 951, 950].map(proposal => `/en/proposals/${streamId(proposal)}?revision=2`));
     await expect(canvas.queryByRole('button', { name: 'Show more' })).toBeNull();
     await expect(args.calls).toEqual(['page:older:1:5000:50:saved:manual']);
+  },
+};
+
+/**
+ * The shell's count is every unread notification, not the filtered matches: with six unread and two Saved
+ * matches shown, the navigation says "6 unread" and the list states no total of its own.
+ */
+export const FilteredBesideShellCount: Story = {
+  args: sparseSavedArgs(),
+  // The generation is the view's own: a count of another generation is dropped when the view mounts.
+  beforeEach() { setUnread({ count: 6, overflow: false, generation: '1' }); },
+  render: ({ calls: _calls, ...args }: Args) => (
+    <AppShell locale="en" messages={shellMessages} theme="light" navCollapsed={false} signedIn
+      notifications={<NotificationsLink />} account={null}>
+      <NotificationsView {...args} />
+    </AppShell>
+  ),
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const nav = canvas.getByRole('navigation', { name: 'Main navigation' });
+    await expect(within(nav).getByRole('link', { name: 'Notifications, 6 unread' })).toBeVisible();
+    await expect(within(nav).getByText('6 unread')).toBeVisible();
+    const page = within(canvas.getByRole('main'));
+    await expect(page.getAllByRole('listitem')).toHaveLength(2);
+    await expect(page.queryByText(/\b6\b/)).toBeNull();
   },
 };
 

@@ -288,6 +288,8 @@ export const Communities: Story = {
       .toHaveAttribute('href', '/en/notifications');
     // The number is the reader's unread notifications; the navigation's name says so.
     await expect(within(nav).getByRole('link', { name: 'Notifications, 3 unread' })).toHaveTextContent('3');
+    // The visible label says what is counted; a bare number would not.
+    await expect(within(nav).getByText('3 unread')).toBeVisible();
   },
 };
 
@@ -364,6 +366,7 @@ export const PhoneCommunities: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Open navigation' }));
     const drawer = within(await within(document.body).findByRole('dialog', { name: 'Menu' }, { timeout: 5000 }));
     await waitFor(() => expect(drawer.getByRole('region', { name: 'Communities and sites' })).toBeVisible());
+    await expect(drawer.getByText('99+ unread')).toBeVisible();
     await whenSettled('Menu');
     await userEvent.click(drawer.getByRole('button', { name: 'Close' }));
     await waitFor(() => expect(within(document.body).queryByRole('dialog')).toBeNull(), { timeout: 5000 });

@@ -9,6 +9,7 @@ export default {
   collapseNavigation: 'Navigation einklappen', expandNavigation: 'Navigation ausklappen',
   notifications: 'Benachrichtigungen',
   notificationsUnread: insert('Benachrichtigungen, {{count}} ungelesen', { count: String }),
+  unreadCount: insert('{{count}} ungelesen', { count: String }),
   yourZones: 'Deine Zones', yourRealms: 'Deine Communities', officialZones: 'Offizielle Zones',
   moderation: 'Moderation', manage: 'Verwaltung', queueWaiting: insert('{{count}} warten', { count: String }),
   newActivity: 'neue Beiträge', showAll: insert('Alle {{count}} anzeigen', { count: String }), showFewer: 'Weniger anzeigen',

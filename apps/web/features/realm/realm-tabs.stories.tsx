@@ -13,6 +13,7 @@ import { cardRenderer } from '../zones/zone-home.tsx';
 import { profileHref } from '../profile/route.ts';
 import { realmHref, siteHref } from './route.ts';
 import { RealmNotFound, RealmUnavailable } from './states.tsx';
+import { rosterPeople } from './roster.ts';
 import { RealmPageStory, realmMessagesFor } from './story-page.tsx';
 import { type AboutPerson, ListFailure, RealmAbout, RealmDecisions } from './views.tsx';
 
@@ -44,8 +45,29 @@ const listed = [
 ];
 
 /** A Realm tab inside the Zone frame, under the Serial preset. */
-function TabPage({ tab, locale }: { tab: Tab; locale: UiLocale }) {
+function TabPage({ tab, locale, roster = 'listed' }: {
+  tab: Tab;
+  locale: UiLocale;
+  /** One page of the roster: names shown, names all private with a next page, an empty page with a next page, or no members. */
+  roster?: 'listed' | 'private-names' | 'empty-page' | 'none';
+}) {
   const messages = realmMessagesFor(locale);
+  const rosterPage = {
+    listed: { people: listed, more: true },
+    'private-names': {
+      people: rosterPeople(
+        [
+          { agent: 'a-private-1', displayName: null, featured: false },
+          { agent: 'a-private-2', displayName: null, featured: false },
+        ],
+        messages.memberUnnamed,
+        () => null,
+      ),
+      more: true,
+    },
+    'empty-page': { people: [], more: true },
+    none: { people: [], more: false },
+  }[roster];
   const zoneMessages = zoneMessagesFor(locale);
   const zone = { ...fictionZone(locale, presetTokens.serial), slug: 'fiction' };
   const state = parseBrowseState({ view: 'grid' });
@@ -112,7 +134,7 @@ function TabPage({ tab, locale }: { tab: Tab; locale: UiLocale }) {
         only={tab === 'rules' || tab === 'members' ? tab : undefined}
         members={locale === 'zh-Hans' ? '12,408 位成员' : '12,408 members'}
         moderators={moderators}
-        listed={{ people: listed }}
+        listed={rosterPage}
         others={[
           {
             href: realmHref(locale, 'classics'),
@@ -236,9 +258,40 @@ export const Members: Story = {
     await expect(canvas.queryByRole('heading', { name: 'Community rules' })).toBeNull();
     await expect(canvas.queryByRole('heading', { name: 'Moderators' })).toBeNull();
     // The header's membership is labelled as the community's, never as the roster's length.
-    await expect(canvas.getByText('Showing 4 listed members · 12,408 members in the community, listed or not'))
-      .toBeVisible();
+    await expect(canvas.getByText('Showing 4 listed members · Community membership: 12,408 members')).toBeVisible();
     await captureSection('members');
+  },
+};
+
+/** A page whose members all keep their names private is still a page of members, under a fallback name. */
+export const MembersPrivateNames: Story = {
+  args: { tab: 'members', roster: 'private-names' },
+  parameters: { route: { pathname: localizedPath(spaceHref('fiction', 'community', ['members']), 'en') } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const members = canvas.getByRole('region', { name: 'Members' });
+    await expect(within(members).getAllByRole('listitem')).toHaveLength(2);
+    await expect(within(members).getAllByText('Member')).toHaveLength(2);
+    await expect(canvas.queryByText('No members have chosen to be listed yet.')).toBeNull();
+  },
+};
+
+/** An empty page with a next cursor is not an empty community; only no members and no next page says so. */
+export const MembersEmptyPageWithCursor: Story = {
+  args: { tab: 'members', roster: 'empty-page' },
+  parameters: { route: { pathname: localizedPath(spaceHref('fiction', 'community', ['members']), 'en') } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('heading', { name: 'Members' })).toBeVisible();
+    await expect(canvas.queryByText('No members have chosen to be listed yet.')).toBeNull();
+  },
+};
+
+export const MembersNone: Story = {
+  args: { tab: 'members', roster: 'none' },
+  parameters: { route: { pathname: localizedPath(spaceHref('fiction', 'community', ['members']), 'en') } },
+  async play({ canvasElement }) {
+    await expect(within(canvasElement).getByText('No members have chosen to be listed yet.')).toBeVisible();
   },
 };
 
@@ -282,6 +335,7 @@ export const About: Story = {
     // The roster says what it shows; the Realm's membership stays in the About section above.
     await expect(within(members).getByText('Showing 4 listed members')).toBeVisible();
     await expect(within(members).queryByText(/12,408/)).toBeNull();
+    await expect(canvas.getByText('Community membership: 12,408 members')).toBeVisible();
     await expect(canvas.getByRole('link', { name: /Classic Literature/ })).toHaveAttribute(
       'href',
       localizedPath(spaceHref('classics', 'community'), 'en'),

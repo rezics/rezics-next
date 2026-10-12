@@ -74,7 +74,8 @@ export const messages = {
   membersTitle: 'Members',
   membersShown: plural({ one: insert('Showing {{count}} listed member'),
     other: insert('Showing {{count}} listed members') }, { count: asValue(number()) }),
-  membersInCommunity: insert('{{members}} in the community, listed or not', { members: String }),
+  communityMembership: insert('Community membership: {{members}}', { members: String }),
+  memberUnnamed: 'Member',
   membersNone: 'No members have chosen to be listed yet.',
   featured: 'Featured',
   // A Zone's own site: its mounted pages, and the pages this host cannot show yet.

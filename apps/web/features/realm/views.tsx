@@ -144,8 +144,8 @@ export function RealmAbout({ realmName, description, rules, moderators, members,
   realmName: string; description: { value: string; lang: string } | null; rules: readonly AboutRule[] | null;
   /** Null when the Realm does not publish its moderators. */
   moderators: readonly AboutPerson[] | null; members: string | null;
-  /** Members who chose to be listed; null when the roster is not public. */
-  listed: { people: readonly AboutPerson[] } | null;
+  /** Members who chose to be listed (this page of them, `more` when the roster goes on); null when the roster is not public. */
+  listed: { people: readonly AboutPerson[]; more: boolean } | null;
   /** Other communities to look at, from the Realm directory. */
   others: readonly { href: string; name: { value: string; lang: string }; members: string | null }[];
   locale: UiLocale; messages: RealmMessages;
@@ -161,7 +161,7 @@ export function RealmAbout({ realmName, description, rules, moderators, members,
         {description ? <p lang={description.lang} dir={direction(description.lang, description.value)}
           className="max-w-2xl whitespace-pre-line text-pretty leading-relaxed">
           {description.value}</p> : null}
-        {members ? <p className="text-muted-foreground text-sm">{members}</p> : null}
+        {members ? <p className="text-muted-foreground text-sm">{t.communityMembership({ members })}</p> : null}
       </section> : null}
       <section aria-labelledby="realm-rules" className="grid grid-cols-1 gap-3 rounded-(--zone-radius-card) bg-(--zone-panel)
         p-(--zone-panel-pad)">
@@ -195,15 +195,17 @@ export function RealmAbout({ realmName, description, rules, moderators, members,
       {listed ? <section aria-labelledby="realm-members" className="grid grid-cols-1 gap-2 rounded-(--zone-radius-card)
         bg-(--zone-panel) p-(--zone-panel-pad)">
         <ModuleHeading id="realm-members">{messages.membersTitle}</ModuleHeading>
-        {listed.people.length ? <>
-          {/* The roster response has no total: the count is of the rows shown, and the Realm's own membership,
-              read separately, is labelled as that. */}
+        {/* "None yet" is only true of a roster with no members and no further page; a page can be empty while
+            the cursor goes on (every candidate it examined was filtered out). */}
+        {listed.people.length || listed.more ? <>
+          {/* The roster response has no total: this counts the rows shown. The Realm's own membership is read
+              separately and says what it is. */}
           <p className="text-muted-foreground text-xs">{t.membersShown(listed.people.length)}
-            {only === 'members' && members ? <> · {t.membersInCommunity({ members })}</> : null}</p>
-          <ul className="grid grid-cols-1">
+            {only === 'members' && members ? <> · {t.communityMembership({ members })}</> : null}</p>
+          {listed.people.length ? <ul className="grid grid-cols-1">
             {listed.people.map(person => <li key={person.id}>
               <PersonRow person={person} note={person.featured ? messages.featured : undefined} /></li>)}
-          </ul>
+          </ul> : null}
         </> : <p className="text-muted-foreground text-sm">{messages.membersNone}</p>}
       </section> : null}
       {!only && others.length ? <nav aria-labelledby="realm-others" className="grid grid-cols-1 gap-2 rounded-(--zone-radius-card)

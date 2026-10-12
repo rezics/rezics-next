@@ -68,7 +68,8 @@ export default {
   moderatorsNone: '还没有公开的版主。',
   membersTitle: '成员',
   membersShown: plural({ other: insert('显示 {{count}} 位公开列名的成员') }, { count: asValue(number()) }),
-  membersInCommunity: insert('社区共有 {{members}}（含未公开列名者）', { members: String }),
+  communityMembership: insert('社区成员数：{{members}}', { members: String }),
+  memberUnnamed: '成员',
   membersNone: '还没有成员选择公开。',
   featured: '推荐',
   // A Zone's own site: its mounted pages, and the pages this host cannot show yet.

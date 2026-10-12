@@ -8,6 +8,7 @@ export const messages = {
   collapseNavigation: 'Collapse navigation', expandNavigation: 'Expand navigation',
   notifications: 'Notifications',
   notificationsUnread: insert('Notifications, {{count}} unread', { count: String }),
+  unreadCount: insert('{{count}} unread', { count: String }),
   yourZones: 'Your Zones', yourRealms: 'Your Realms', officialZones: 'Official Zones',
   moderation: 'Moderation', manage: 'Manage', queueWaiting: insert('{{count}} waiting', { count: String }),
   newActivity: 'new posts', showAll: insert('Show all {{count}}', { count: String }), showFewer: 'Show fewer',

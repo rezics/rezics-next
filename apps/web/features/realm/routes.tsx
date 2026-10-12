@@ -54,6 +54,7 @@ import { spaceHref, resourceHref } from '../address/path.ts';
 import { realmDiscovery } from '../address/space-read.ts';
 import { pageUrl, representationPath } from '../seo/address.ts';
 import { idOf, parseCursor, parseDecision, type RealmTab, realmHref, siteHref } from './route.ts';
+import { rosterPeople } from './roster.ts';
 import { RealmDiscussionsRoute } from './discussions-route.tsx';
 import { RealmUnavailable } from './states.tsx';
 import type { ReadFailure } from './types.ts';
@@ -483,22 +484,12 @@ export function RealmAboutRoute(props: RealmRouteProps) {
         listed={
           roster.ok
             ? {
-                people: [...roster.data.items]
-                  .sort((a, b) => Number(b.featured) - Number(a.featured))
-                  .flatMap((item) =>
-                    item.displayName
-                      ? [
-                          {
-                            id: item.agent,
-                            name: item.displayName,
-                            href: null,
-                            kind: 'person' as const,
-                            avatarUrl: null,
-                            featured: item.featured,
-                          },
-                        ]
-                      : [],
-                  ),
+                more: roster.data.nextCursor !== null,
+                people: rosterPeople(
+                  [...roster.data.items].sort((a, b) => Number(b.featured) - Number(a.featured)),
+                  view.messages.memberUnnamed,
+                  () => null,
+                ),
               }
             : null
         }
@@ -546,19 +537,8 @@ export function RealmMembersRoute(props: RealmRouteProps) {
     const cursor = parseCursor(search);
     const roster = await readRoster(view.context.realm, cursor);
     if (!roster.ok) return failure(view, 'members', roster.failure, roster.reference);
-    const people = roster.data.items.flatMap((item) =>
-      item.displayName
-        ? [
-            {
-              id: item.agent,
-              name: item.displayName,
-              href: resourceHref('/a/', item.agent),
-              kind: 'person' as const,
-              avatarUrl: null,
-              featured: item.featured,
-            },
-          ]
-        : [],
+    const people = rosterPeople(roster.data.items, view.messages.memberUnnamed, (agent) =>
+      resourceHref('/a/', agent),
     );
     return (
       <RealmAbout
@@ -569,7 +549,7 @@ export function RealmMembersRoute(props: RealmRouteProps) {
         members={membersText(view.realm.header.membership.count, locale, view.messages)}
         rules={null}
         others={[]}
-        listed={{ people }}
+        listed={{ people, more: roster.data.nextCursor !== null }}
         locale={locale}
         messages={view.messages}
       >

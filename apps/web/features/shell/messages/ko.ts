@@ -9,6 +9,7 @@ export default {
   collapseNavigation: '탐색 메뉴 접기', expandNavigation: '탐색 메뉴 펼치기',
   notifications: '알림',
   notificationsUnread: insert('알림, 읽지 않은 항목 {{count}}개', { count: String }),
+  unreadCount: insert('읽지 않음 {{count}}개', { count: String }),
   yourZones: '내 Zone', yourRealms: '내 커뮤니티', officialZones: '공식 Zone',
   moderation: '운영', manage: '관리', queueWaiting: insert('{{count}}건 대기 중', { count: String }),
   newActivity: '새 게시물', showAll: insert('{{count}}개 모두 보기', { count: String }), showFewer: '간단히 보기',

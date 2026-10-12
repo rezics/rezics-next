@@ -9,6 +9,7 @@ export default {
   collapseNavigation: 'ナビゲーションを折りたたむ', expandNavigation: 'ナビゲーションを展開',
   notifications: '通知',
   notificationsUnread: insert('未読{{count}}件の通知', { count: String }),
+  unreadCount: insert('未読{{count}}件', { count: String }),
   yourZones: 'フォロー中のZone', yourRealms: 'フォロー中のコミュニティ', officialZones: '公式 Zone',
   moderation: 'モデレーション', manage: '管理', queueWaiting: insert('{{count}}件が確認待ち', { count: String }),
   newActivity: '新着投稿', showAll: insert('{{count}}件すべて表示', { count: String }), showFewer: '表示を減らす',

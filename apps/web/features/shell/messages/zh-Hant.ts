@@ -9,6 +9,7 @@ export default {
   collapseNavigation: '收合導覽', expandNavigation: '展開導覽',
   notifications: '通知',
   notificationsUnread: insert('通知，{{count}} 則未讀', { count: String }),
+  unreadCount: insert('{{count}} 則未讀', { count: String }),
   yourZones: '你的 Zone', yourRealms: '你的社群', officialZones: '官方 Zone',
   moderation: '版主管理', manage: '管理', queueWaiting: insert('{{count}} 件待處理', { count: String }),
   newActivity: '新貼文', showAll: insert('顯示全部 {{count}} 項', { count: String }), showFewer: '顯示較少',
