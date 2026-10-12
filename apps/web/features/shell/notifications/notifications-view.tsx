@@ -333,7 +333,7 @@ export function NotificationsView({ initial, now, avatarQuery, invitations, main
       : patch.saved ? t.triageSaved : t.triageUnsaved);
   }
 
-  const rows = [...windows].reverse().flatMap(window => collapse(window));
+  const rows = windows.flatMap(window => collapse(window));
   const empty = selection.reason ? { title: t.noFiltered, description: t.noFilteredBody }
     : selection.view === 'saved' ? { title: t.noSaved, description: t.noSavedBody }
       : selection.view === 'done' ? { title: t.noDone, description: t.noDoneBody }

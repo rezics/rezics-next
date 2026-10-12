@@ -1,7 +1,7 @@
 import type { MainClient } from '../../feed/types.ts';
 import { settle, type Loaded } from '../../feed/types.ts';
 
-// Main pages filtered matches forward, oldest first. Its continuation owns
+// Main pages filtered matches newest first with `before`. Its continuation owns
 // coverage: sequence gaps cannot tell the client whether more matches remain.
 
 type Ok<Call> = Call extends (...args: never[]) => Promise<{ data: infer Data }> ? NonNullable<Data> : never;
@@ -44,27 +44,26 @@ export interface NotificationWindow {
   head: string;
   readThrough: string;
   reset: boolean;
-  /** Newest first within this page. */
+  /** Newest first, as Main returns this page. */
   items: StreamItem[];
   groups: StreamGroup[];
-  /** Main's forward continuation, or null after the last matching item. */
+  /** Main's older-page continuation, or null after the oldest matching item. */
   next: string | null;
 }
 
 /** Read at most 50 matches using Main's continuation unchanged. */
-export async function readWindow(main: MainClient, after: string | null,
+export async function readWindow(main: MainClient, before: string | null,
   selection: NotificationSelection = { view: 'inbox', reason: null }):
   Promise<Loaded<NotificationWindow>> {
-  const query: { after?: string; limit: number; view?: 'saved' | 'done'; reason?: InboxReason } = {
-    limit: NOTIFICATION_WINDOW };
-  if (after !== null) query.after = after;
+  const query: { before: string; limit: number; view?: 'saved' | 'done'; reason?: InboxReason } = {
+    before: before ?? 'latest', limit: NOTIFICATION_WINDOW };
   if (selection.view !== 'inbox') query.view = selection.view;
   if (selection.reason) query.reason = selection.reason;
   const page = await settle(() => main.v1.me.notifications.get({ query }));
   if (!page.ok) return page;
   return { ok: true, data: { generation: page.data.generation, head: page.data.head,
     readThrough: page.data.readThrough, reset: page.data.reset,
-    items: [...page.data.items].reverse(), groups: page.data.groups, next: page.data.next } };
+    items: page.data.items, groups: page.data.groups, next: page.data.next } };
 }
 
 /** Start the selected list; the page response carries the current head too. */

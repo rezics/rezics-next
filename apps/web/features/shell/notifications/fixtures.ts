@@ -134,17 +134,18 @@ export function memoryInbox(stream: StreamItem[], options: { refuse?: boolean; r
       return answer({ profile: 'notification-item-triage-v1', id: params.item, saved, done, revision });
     } },
   }), {
-    get: ({ query }: { query: { after?: string; limit: number; view?: string; reason?: string } }) => {
-      calls.push(`page:${query.after}:${query.limit}${query.view ? `:${query.view}` : ''}${query.reason ? `:${query.reason}` : ''}`);
-      const reset = query.after !== undefined && query.after.split(':')[0] !== generation;
-      const after = reset ? 0 : Number(query.after?.split(':')[1] ?? '0');
-      const remaining = stream.filter(entry => Number(entry.sequence) > after
+    get: ({ query }: { query: { before: string; limit: number; view?: string; reason?: string } }) => {
+      calls.push(`page:${query.before}:${query.limit}${query.view ? `:${query.view}` : ''}${query.reason ? `:${query.reason}` : ''}`);
+      // Fixture tokens belong to this simulated API, not the view consuming them.
+      const reset = query.before !== 'latest' && query.before.split(':')[1] !== generation;
+      const before = query.before === 'latest' || reset ? Infinity : Number(query.before.split(':')[2]);
+      const remaining = [...stream].reverse().filter(entry => Number(entry.sequence) < before
         && (query.view === 'saved' ? entry.saved : query.view === 'done' ? entry.done : !entry.done)
         && (!query.reason || entry.reason === query.reason));
       const page = remaining.slice(0, query.limit);
       return answer({ profile: 'notification-stream-page-v1', generation, head: stream.at(-1)?.sequence ?? '0', reset,
         readThrough: generation === '1' ? '100' : '0', items: page, groups: [],
-        next: remaining.length > query.limit ? `${generation}:${page.at(-1)!.sequence}` : null });
+        next: remaining.length > query.limit ? `older:${generation}:${page.at(-1)!.sequence}` : null });
     },
     hint: { get: () => answer({ profile: 'notification-stream-hint-v1', generation, head: stream.at(-1)?.sequence ?? '0' }) },
   });

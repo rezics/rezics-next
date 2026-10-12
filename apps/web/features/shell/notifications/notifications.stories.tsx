@@ -39,7 +39,7 @@ type Story = StoryObj<typeof meta>;
 
 function args(options: { next?: string; refuse?: boolean } = {}): Args {
   const { main, calls } = memoryInbox(inbox, { refuse: options.refuse });
-  const latest = options.next ? inbox.slice(0, 4) : inbox;
+  const latest = options.next ? inbox.slice(4) : inbox;
   return {
     initial: inboxWindow(latest, options.next ?? null),
     now: NOW,
@@ -85,13 +85,17 @@ export const Latest: Story = {
 };
 
 export const MoreOnRequest: Story = {
-  args: args({ next: '1:104' }),
+  args: args({ next: 'older:1:105' }),
   async play({ canvasElement, args }) {
     const canvas = within(canvasElement);
-    await expect(canvas.queryByText('Your submission “Middlemarch: A Study of Provincial Life” was accepted')).toBeNull();
+    await expect(canvas.queryByText('Aria Wang 王雅 followed you')).toBeNull();
+    const newest = canvas.getAllByRole('listitem')[0]!;
+    await expect(newest).toHaveTextContent('Also: chapter four is up!');
     await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
-    await expect(await canvas.findByText('Your submission “Middlemarch: A Study of Provincial Life” was accepted')).toBeVisible();
-    await expect(args.calls).toEqual(['page:1:104:50']);
+    await expect(await canvas.findByText('Aria Wang 王雅 followed you')).toBeVisible();
+    await expect(canvas.getAllByRole('listitem')[0]).toBe(newest);
+    await expect(canvas.getAllByRole('listitem').at(-1)).toHaveTextContent('This notification is no longer available.');
+    await expect(args.calls).toEqual(['page:older:1:105:50']);
     await expect(canvas.queryByRole('button', { name: 'Show more' })).toBeNull();
   },
 };
@@ -104,18 +108,22 @@ export const SparseSavedPagination: Story = {
     const stream = [saved[0]!, saved[1]!, governance(1000, 'proposal-revised', 'manual'),
       governance(2000, 'proposal-revised', 'author', { saved: true }), saved[2]!, saved[3]!];
     const { main, calls } = memoryInbox(stream);
-    return { initial: inboxWindow(saved.slice(0, 2), '1:274', '10000'), now: NOW, avatarQuery: '', main, calls,
+    return { initial: inboxWindow(saved.slice(2), 'older:1:5000', '10000'), now: NOW, avatarQuery: '', main, calls,
       selection: { view: 'saved', reason: 'manual' } as const };
   })(),
   async play({ canvasElement, args }) {
     const canvas = within(canvasElement);
     await expect(canvas.getAllByRole('listitem')).toHaveLength(2);
+    await expect(canvas.getAllByRole('link', { name: 'A correction was revised' }).map(link => link.getAttribute('href')))
+      .toEqual([953, 952].map(proposal => `/en/proposals/${streamId(proposal)}?revision=2`));
     await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
     await waitFor(() => expect(canvas.getAllByRole('listitem')).toHaveLength(4));
     const links = canvas.getAllByRole('link', { name: 'A correction was revised' });
     await expect(new Set(links.map(link => link.getAttribute('href'))).size).toBe(4);
+    await expect(links.map(link => link.getAttribute('href')))
+      .toEqual([953, 952, 951, 950].map(proposal => `/en/proposals/${streamId(proposal)}?revision=2`));
     await expect(canvas.queryByRole('button', { name: 'Show more' })).toBeNull();
-    await expect(args.calls).toEqual(['page:1:274:50:saved:manual']);
+    await expect(args.calls).toEqual(['page:older:1:5000:50:saved:manual']);
   },
 };
 
@@ -124,7 +132,7 @@ export const ContinuationReset: Story = {
   args: (() => {
     const replacement = [governance(1, 'proposal-revised', 'manual', { proposal: 960 })];
     const { main, calls } = memoryInbox(replacement, { generation: '2' });
-    return { initial: inboxWindow(inbox.slice(0, 4), '1:104'), now: NOW, avatarQuery: '', main, calls };
+    return { initial: inboxWindow(inbox.slice(0, 4), 'older:1:104'), now: NOW, avatarQuery: '', main, calls };
   })(),
   async play({ canvasElement, args }) {
     const canvas = within(canvasElement);
@@ -137,7 +145,7 @@ export const ContinuationReset: Story = {
     await expect(canvas.queryByRole('button', { name: 'Show more' })).toBeNull();
     await userEvent.click(canvas.getByRole('button', { name: 'Mark all as read' }));
     await waitFor(() => expect(canvas.queryByText('Unread')).toBeNull());
-    await expect(args.calls).toEqual(['page:1:104:50', 'read-through:1']);
+    await expect(args.calls).toEqual(['page:older:1:104:50', 'read-through:1']);
   },
 };
 
