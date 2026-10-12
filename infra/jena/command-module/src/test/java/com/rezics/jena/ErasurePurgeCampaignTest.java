@@ -94,6 +94,93 @@ public class ErasurePurgeCampaignTest {
         graph.close();
     }
 
+    @Test public void erasedHomePredecessorIsRejectedWhenCurrentHeadNamesAnotherRevision() {
+        DatasetGraph graph = DatasetGraphFactory.createTxnMem();
+        String old = target(1), next = target(2), page = "urn:home:document";
+        graph.add(REVISIONS, iri(old), RDF.type.asNode(), rv("ErasedRevision"));
+        graph.add(REVISIONS, iri(target(3)), RDF.type.asNode(), rv("ZoneHomeRevision"));
+        graph.add(iri(CommandPolicy.CURRENT), iri(page), rv("homeDocumentHead"), iri(target(3)));
+        try {
+            assertEquals("erased exact revision cannot be reactivated",
+                erasedReferenceRefusal(graph, next, "a rv:ZoneHomeRevision ; rv:component <" + page
+                    + "> ; rv:predecessor <" + old + "> ."));
+        } finally { graph.close(); }
+    }
+
+    @Test public void erasedHomePredecessorIsRejectedForOtherTypedAndUntypedSubjects() {
+        DatasetGraph graph = DatasetGraphFactory.createTxnMem();
+        String old = target(1), next = target(2), page = "urn:home:document";
+        graph.add(REVISIONS, iri(old), RDF.type.asNode(), rv("ErasedRevision"));
+        graph.add(iri(CommandPolicy.CURRENT), iri(page), rv("homeDocumentHead"), iri(old));
+        try {
+            for (String type : new String[]{"a rv:RevisionAnchor ; ", ""}) {
+                assertEquals("erased exact revision cannot be reactivated",
+                    erasedReferenceRefusal(graph, next, type + "rv:component <" + page
+                        + "> ; rv:predecessor <" + old + "> ."));
+            }
+        } finally { graph.close(); }
+    }
+
+    @Test public void erasedHomeRevisionIsRejectedAsObjectOfNonPredecessorPredicates() {
+        DatasetGraph graph = DatasetGraphFactory.createTxnMem();
+        String old = target(1), next = target(2), page = "urn:home:document";
+        graph.add(REVISIONS, iri(old), RDF.type.asNode(), rv("ErasedRevision"));
+        graph.add(iri(CommandPolicy.CURRENT), iri(page), rv("homeDocumentHead"), iri(old));
+        try {
+            for (String predicate : new String[]{"contentRevision", "publishedPage", "component", "homeRevision"}) {
+                assertEquals(predicate, "erased exact revision cannot be reactivated",
+                    erasedReferenceRefusal(graph, next, "a rv:ZoneHomeRevision ; rv:component <" + page
+                        + "> ; rv:" + predicate + " <" + old + "> ."));
+            }
+        } finally { graph.close(); }
+    }
+
+    private static String erasedReferenceRefusal(DatasetGraph graph, String next, String fields) {
+        var request = org.apache.jena.update.UpdateFactory.create(
+            "PREFIX rv: <https://rezics.com/vocab/> INSERT DATA { GRAPH <" + CommandPolicy.REVISIONS
+                + "> { <" + next + "> " + fields + " } }");
+        var plan = new CommandPolicy.Plan(request, Set.of(CommandPolicy.REVISIONS), Set.of(), Set.of(next),
+            Set.of(), false, false, false);
+        return ErasurePolicy.preflight(graph, plan, "urn:rezics:receipt:home-publication");
+    }
+
+    @Test public void purgedNonHomeRevisionRetainsEveryPublishedPageBindingSubject() throws Exception {
+        Path base = directory(), sourcePath = base.resolve("source"), destPath = base.resolve("destination");
+        String exact = "https://rezics.com/id/00000000-0000-4000-8000-0000000000d1";
+        Node revision = iri(exact);
+        Set<Quad> bindings = new HashSet<>();
+        Dataset source = TDB2Factory.connectDataset(sourcePath.toString());
+        source.begin(ReadWrite.WRITE);
+        try {
+            var graph = source.asDatasetGraph();
+            graph.add(REVISIONS, revision, RDF.type.asNode(), rv("RevisionAnchor"));
+            graph.add(REVISIONS, revision, RDF.type.asNode(), rv("ErasedRevision"));
+            graph.add(REVISIONS, revision, EPOCH,
+                NodeFactory.createLiteralDT("4", org.apache.jena.datatypes.xsd.XSDDatatype.XSDinteger));
+            for (int n = 1; n <= 2; n++) {
+                Node binding = iri("urn:home:binding:" + n);
+                graph.add(REVISIONS, revision, rv("publishedPage"), binding);
+                bindings.add(new Quad(REVISIONS, binding, rv("contentRevision"), iri(target(n + 1))));
+                bindings.add(new Quad(REVISIONS, binding, rv("byteDigest"), NodeFactory.createLiteralString("digest-" + n)));
+                bindings.add(new Quad(iri(CommandPolicy.CURRENT), binding, rv("page"), iri("urn:home:document")));
+            }
+            bindings.forEach(graph::add);
+            source.commit();
+        } finally { source.end(); source.close(); }
+        ErasurePurge.main(new String[]{sourcePath.toString(), destPath.toString(), exact, "4"});
+        Dataset output = TDB2Factory.connectDataset(destPath.toString());
+        output.begin(ReadWrite.READ);
+        try {
+            var copied = output.asDatasetGraph();
+            Set<Quad> retainedBindings = new HashSet<>();
+            for (int n = 1; n <= 2; n++)
+                copied.find(Node.ANY, iri("urn:home:binding:" + n), Node.ANY, Node.ANY).forEachRemaining(retainedBindings::add);
+            assertEquals(bindings, retainedBindings);
+            assertTrue(copied.contains(REVISIONS, revision, RDF.type.asNode(), rv("ErasedRevision")));
+            assertFalse(copied.contains(REVISIONS, revision, rv("publishedPage"), Node.ANY));
+        } finally { output.end(); output.close(); }
+    }
+
     @Test public void exactInputDigestBoundRejectsMixedDuplicateAndInvalidPairs() throws Exception {
         String exact = row(2) + row(1);
         var parsed = ErasurePurge.campaign(exact.getBytes(StandardCharsets.US_ASCII));
