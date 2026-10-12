@@ -25,7 +25,14 @@ for (const scheme of ['https', 'http']) for (const reverse of [false, true]) {
         const response = await request('/api/auth/sign-up/email', { email, name: 'Cookie selection', password });
         expect(response.status).toBe(200);
         const { user } = await response.json() as { user: { id: string } };
-        return { email, password, id: user.id, cookie: cookies(response) };
+        await f.email.drain();
+        const mail = [...f.messages].reverse().find(message => message.to === email)!;
+        const verification = new URL(/https?:\/\/\S+/.exec(mail.text)![0]);
+        const verified = await request(`${verification.pathname}${verification.search}`);
+        expect(verified.status).toBe(302);
+        const session = await request('/api/auth/sign-in/email', { email, password });
+        expect(session.status).toBe(200);
+        return { email, password, id: user.id, cookie: cookies(session) };
       };
       const a = await signup('cookie-a@example.test');
       const b = await signup('cookie-b@example.test');
