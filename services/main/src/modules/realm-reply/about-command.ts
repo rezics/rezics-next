@@ -130,15 +130,7 @@ export class RealmAboutPostCommand {
     let selected = await this.store.readIntent(principalKey, key, digest);
     // Exact successful replay consumes receipts, never a newer route/target cut.
     if (selected?.phase === 'posted') return { status: 200 as const, body: await this.posted(selected) };
-    if (selected?.terminalOutcome) {
-      if (selected.placementAdmissionId) {
-        const receipt = await readReplyGraphReceipt(this.work.environment,
-          { id: selected.placementAdmissionId, action: 'reply.place' });
-        if (receipt?.outcome !== 'cancelled') throw new RealmReplyUnavailable('Discussion cancellation receipt is unavailable');
-        await this.store.releaseReservation(selected, receipt);
-      }
-      throw terminalError(selected.terminalOutcome);
-    }
+    if (selected?.terminalOutcome) throw terminalError(selected.terminalOutcome);
     let draftAdmission: RegisteredAdmission | undefined;
     type Stage = 'basis' | 'draft' | 'identity' | 'admission' | 'dispatch' | 'placement' | 'receipt';
     let stage: Stage = 'receipt';
@@ -169,10 +161,8 @@ export class RealmAboutPostCommand {
             const outcome = terminalOutcome(error);
             if (!outcome) throw new RealmReplyUnavailable('Discussion cancellation recovery is pending');
             selected = await this.store.recordCancellation(selected!.id, terminal, outcome);
-            await this.store.releaseReservation(selected, terminal);
             throw terminalError(selected.terminalOutcome!);
-          }
-          else {
+          } else {
             // Unknown outcomes and graph winners remain recoverable when
             // settlement returns a refusal. The composer must keep the same intent, rather than
             // treating a committed post as a terminal pre-placement failure.
@@ -195,7 +185,6 @@ export class RealmAboutPostCommand {
         if (receipt?.outcome === 'cancelled') {
           selected = await this.store.recordCancellation(selected.id, receipt,
             { kind: 'reply-stale', message: 'Discussion placement was cancelled' });
-          await this.store.releaseReservation(selected, receipt);
           throw terminalError(selected.terminalOutcome!);
         }
         const draft = await this.store.savedDraft(selected);

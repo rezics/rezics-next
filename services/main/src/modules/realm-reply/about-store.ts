@@ -246,15 +246,21 @@ export class RealmAboutThreadStore {
   /** Retain a native cancellation's response without marking it pre-dispatch. */
   async recordCancellation(id: string, receipt: ReplyGraphReceipt,
     outcome: AboutTerminalOutcome): Promise<AboutPostOperation> {
+    assertOperationId(id);
     return this.transaction(async client => {
       const row = await this.selected(client, id);
       if (receipt.outcome !== 'cancelled' || receipt.admissionId !== row.placement_admission_id
         || receipt.scope !== `reply:place:${row.realm}` || row.phase === 'posted') {
         throw new RealmReplyUnavailable('Discussion cancellation receipt differs');
       }
-      if (row.terminal_outcome) return operation(row, true);
-      return operation((await client.query<OperationRow>(`UPDATE content.realm_about_post_operation
-        SET terminal_outcome=$2 WHERE id=$1 RETURNING *`, [id, outcome])).rows[0]!, false);
+      const saved = row.terminal_outcome ? row : (await client.query<OperationRow>(`UPDATE content.realm_about_post_operation
+        SET terminal_outcome=$2 WHERE id=$1 RETURNING *`, [id, outcome])).rows[0]!;
+      // Retaining the response and releasing its certified unsuccessful opener
+      // are one transition, so a lost response cannot strand the reservation.
+      await client.query(`DELETE FROM content.realm_about_thread
+        WHERE realm=$1 AND about=$2 AND opener_reply=$3 AND state='reserved'`,
+      [row.realm, row.about, row.reply]);
+      return operation(saved, Boolean(row.terminal_outcome));
     });
   }
 
