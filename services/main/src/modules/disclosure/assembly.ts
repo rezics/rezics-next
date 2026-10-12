@@ -1,20 +1,38 @@
 import type { ContentCore, ExactReadResult } from '../../../../content/src/core.ts';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
-import type { MediaStore } from '../media/store.ts';
+import { DEFAULT_MEDIA_CONTEXT, type MediaStore } from '../media/store.ts';
 import { ANONYMOUS_VIEWER, type Viewer } from '../suitability/policy.ts';
-import { configureDisclosure, discloseInventory, DisclosureUnavailable, type DisclosureChannel } from './read.ts';
+import { captureDisclosure, configureDisclosure, fenceDisclosure, resolveDisclosureSelections,
+  DISCLOSURE_COST, DisclosureUnavailable, type DisclosureChannel, type DisclosureDecision, type DisclosureReadCut,
+  type DisclosureTarget } from './read.ts';
 import { currentDisclosureViewer } from './viewer.ts';
 import { configureMediaVisibility } from '../media/visibility.ts';
 import { graphErasedContentRevisions } from '../erasure/graph.ts';
 
+/** Keep the owner-selected occurrence fixed across hydration and the final
+ * policy check. Sources establish ancestry; request context is only a hint.
+ * Owner inventory bounds remain native; expanded descriptor batches stay at 64. */
+async function finalDisclosure<T>(env: WorkActivationEnvironment, targets: readonly DisclosureTarget[],
+  viewer: Viewer, channel: DisclosureChannel, hydrate: () => Promise<T>) {
+  const batches: (readonly DisclosureReadCut[])[] = [];
+  for (let offset = 0; offset < Math.max(targets.length, 1); offset += DISCLOSURE_COST.batch) {
+    const selections = await resolveDisclosureSelections(env, targets.slice(offset, offset + DISCLOSURE_COST.batch));
+    batches.push(await captureDisclosure(env, selections, viewer, channel));
+  }
+  const value = await hydrate();
+  const decisions: DisclosureDecision[] = [];
+  for (const cuts of batches) decisions.push(...await fenceDisclosure(env, cuts, viewer, channel));
+  return { value, decisions };
+}
+
 export async function discloseContent(env: WorkActivationEnvironment, results: readonly ExactReadResult[],
   viewer: Viewer = ANONYMOUS_VIEWER, channel: DisclosureChannel = 'read'): Promise<ExactReadResult[]> {
   const available = results.filter(result => result.status === 'available');
-  const decisions = await discloseInventory(env, available.map(result => ({ owner: 'content' as const,
+  if (!available.length) return [...results];
+  const { value: erased, decisions } = await finalDisclosure(env, available.map(result => ({ owner: 'content' as const,
     resource: result.reference.resourceId, component: 'body' as const, revision: result.revisionId,
-    work: result.reference.resourceId })), viewer, channel);
-  const erased = await graphErasedContentRevisions(env.fuseki, available.map(result => result.revisionId));
+  })), viewer, channel, () => graphErasedContentRevisions(env.fuseki, available.map(result => result.revisionId)));
   const denied = new Set(available.filter((_, index) => decisions[index] !== 'visible').map(result => result.revisionId));
   return results.map(result => erased.has(result.revisionId)
     ? { revisionId: result.revisionId, status: 'erased' } : denied.has(result.revisionId)
@@ -36,38 +54,55 @@ export function disclosureContent<T extends Pick<ContentCore, 'readExactBatch'>>
 /** Asset state remains the media owner's responsibility. This adapter adds the
  * shared audience gate before either public avatars or private asset delivery. */
 export function disclosureMedia(store: MediaStore, env: WorkActivationEnvironment): MediaStore {
+  const itemTargets = (use: string, row: NonNullable<Awaited<ReturnType<MediaStore['itemDelivery']>>>): DisclosureTarget[] => {
+    const context = row.context ?? undefined;
+    return [
+      { owner: 'media', resource: `https://rezics.com/id/${row.asset}`, component: 'cover', context },
+      { owner: 'media', resource: `https://rezics.com/id/${use}`, component: 'media_use', context },
+      { owner: 'media', resource: row.target, component: 'media_use', context },
+      { owner: 'graph', resource: row.target, component: 'name', context },
+    ];
+  };
   return new Proxy(store, { get(target, property) {
     if (property === 'avatarDelivery') return async (...args: Parameters<MediaStore['avatarDelivery']>) => {
       const row = await target.avatarDelivery(...args);
       if (!row?.asset) return null;
-      const decisions = await discloseInventory(env, [
-        { owner: 'media', resource: `https://rezics.com/id/${row.asset}`, component: 'cover' },
+      const viewer = currentDisclosureViewer();
+      const context = row.context ?? undefined;
+      const { decisions } = await finalDisclosure(env, [
+        { owner: 'media', resource: `https://rezics.com/id/${args[0]}`, component: 'media_use', context },
+        { owner: 'media', resource: `https://rezics.com/id/${row.asset}`, component: 'cover', context },
         ...(row.use ? [{ owner: 'media' as const, resource: `https://rezics.com/id/${row.use}`,
-          component: 'media_use' as const }] : []),
-        { owner: 'graph', resource: row.target, component: 'name', context: row.context ?? undefined },
-      ], currentDisclosureViewer(), 'media');
+          component: 'media_use' as const, context }] : []),
+        { owner: 'graph', resource: row.target, component: 'name', context },
+      ], viewer, 'media', async () => row);
       return decisions.every(decision => decision === 'visible') ? row : null;
     };
     if (property === 'itemDelivery') return async (...args: Parameters<MediaStore['itemDelivery']>) => {
       const row = await target.itemDelivery(...args);
       if (!row) return null;
-      const asset: unknown = Reflect.get(row, 'asset');
-      const decisions = await discloseInventory(env, [
-        ...(typeof asset === 'string' ? [{ owner: 'media' as const,
-          resource: `https://rezics.com/id/${asset}`, component: 'cover' as const }] : []),
-        { owner: 'media', resource: `https://rezics.com/id/${args[0]}`, component: 'media_use' },
-        { owner: 'media', resource: row.target, component: 'media_use' },
-        { owner: 'graph', resource: row.target, component: 'name' },
-      ], currentDisclosureViewer(), 'media');
+      const viewer = currentDisclosureViewer();
+      const { decisions } = await finalDisclosure(env, itemTargets(args[0], row), viewer, 'media', async () => row);
       return decisions.every(decision => decision === 'visible') ? row : null;
+    };
+    if (property === 'itemDeliveryBatch') return async (...args: Parameters<MediaStore['itemDeliveryBatch']>) => {
+      const rows = await target.itemDeliveryBatch(...args);
+      if (!rows.size) return rows;
+      const entries = [...rows];
+      const viewer = currentDisclosureViewer();
+      const targets = entries.flatMap(([use, row]) => itemTargets(use, row));
+      const { decisions } = await finalDisclosure(env, targets, viewer, 'media', async () => rows);
+      return new Map(entries.filter((_, index) => decisions.slice(index * 4, index * 4 + 4)
+        .every(decision => decision === 'visible')));
     };
     if (property === 'assetDelivery') return async (...args: Parameters<MediaStore['assetDelivery']>) => {
       const row = await target.assetDelivery(...args);
       if (!row) return null;
-      const decisions = await discloseInventory(env, [
-        { owner: 'media', resource: `https://rezics.com/id/${args[0]}`, component: 'cover' },
-        { owner: 'graph', resource: args[1], component: 'name', context: args[2] },
-      ], currentDisclosureViewer(), 'media');
+      const viewer = currentDisclosureViewer(), context = args[2] ?? DEFAULT_MEDIA_CONTEXT;
+      const { decisions } = await finalDisclosure(env, [
+        { owner: 'media', resource: `https://rezics.com/id/${args[0]}`, component: 'cover', context },
+        { owner: 'graph', resource: args[1], component: 'name', context },
+      ], viewer, 'media', async () => row);
       return decisions.every(decision => decision === 'visible') ? row : null;
     };
     const value: unknown = Reflect.get(target, property, target);
@@ -75,7 +110,8 @@ export function disclosureMedia(store: MediaStore, env: WorkActivationEnvironmen
   } });
 }
 
-/** Missing governance preserves legacy fixtures; configured owner failures deny reads. */
+/** Every composed public reader requires configured disclosure and ancestry
+ * owners. Missing owners remain unavailable through the shared reader contract. */
 export function composeDisclosure(deps: MainWorkDependencies): void {
   if (!deps.environment) return;
   configureMediaVisibility(deps);
