@@ -120,6 +120,24 @@ function zoneSiteReadCost(owner: {
   };
 }
 
+function measuredCounters(profile: ScaledProfile) {
+  return {
+    unrelatedWorks: profile.unrelatedWorks,
+    status: profile.request.status,
+    mainCalls: profile.mainCalls,
+    fusekiRequests: profile.fusekiRequests,
+    fusekiSentBytes: profile.fusekiSentBytes,
+    fusekiReceivedBytes: profile.fusekiReceivedBytes,
+    fusekiEngineMs: profile.fusekiEngineMs,
+    postgresStatements: profile.postgresStatements,
+    accountCalls: profile.accountCalls,
+    otherFetches: profile.otherFetches,
+    unclassifiedFetches: profile.unclassifiedFetches,
+    serverLatencyMs: profile.serverLatencyMs,
+    totalLatencyMs: profile.totalLatencyMs,
+  };
+}
+
 test(
   'Zone keyed navigation and a populated mounted page keep constant cost as unrelated Works grow',
   async () => {
@@ -140,6 +158,7 @@ test(
     });
 
     let source: MediaStack | undefined;
+    let sourceStopped = false;
     let sourceRelay: import('pg').Pool | undefined;
     let driver: ManagedCorpusBackupDriver | undefined;
     let checkpoint: Awaited<ReturnType<typeof prepareWorkProfileCorpus>> | undefined;
@@ -172,7 +191,7 @@ test(
         Bun.env.MAIN_RELAY_CONSUMER!,
         source.env.lineage.dataEpoch,
       );
-      const api = apiFor(source, member.token);
+      let api = apiFor(source, member.token);
 
       const grant = async (stack: MediaStack, scope: string, action: string) =>
         grantFixtureAuthority(stack.accessPool, {
@@ -368,11 +387,39 @@ test(
         },
       };
 
-      const backupDriver = createCorpusBackupDriver({
+      const makeBackupDriver = (resumeSource: boolean) => createCorpusBackupDriver({
         sourceRunId,
         directory: join(root, '.temp/work-profiles/zone-navigation-growth/backups', sourceRunId),
+        resumeSource,
         async quiesce(signal) {
           signal.throwIfAborted();
+          const relay = sourceRelay;
+          sourceRelay = undefined;
+          await relay?.end();
+          await source!.stop();
+          sourceStopped = true;
+          return async () => {
+            const apps = readEnv(join(root, '.temp/stack', `rezics-qa-${sourceRunId}`, 'apps.env'));
+            Object.assign(Bun.env, apps);
+            for (;;) {
+              signal.throwIfAborted();
+              try {
+                await source!.objects('media/').initialize();
+                break;
+              } catch (error) {
+                if (!(error instanceof Error) || error.message !== 'cannot reach immutable object bucket')
+                  throw error;
+                await Bun.sleep(100);
+              }
+            }
+            source = await startMediaStack('zone-navigation-growth-source', { library: true });
+            sourceStopped = false;
+            const resumedMember = await source.member('zone-navigation-growth-author', {
+              stable: true,
+              verified: true,
+            });
+            api = apiFor(source, resumedMember.token);
+          };
         },
         async smokeRead(input) {
           const copy = await openRestoredStack(input);
@@ -399,7 +446,6 @@ test(
           }
         },
       });
-      driver = backupDriver;
 
       const sinkProfile = async (
         stack: MediaStack,
@@ -432,6 +478,8 @@ test(
       const routeProfiles: ScaledProfile[] = [];
       const presentationProfiles: ScaledProfile[] = [];
       for (const scale of WORK_PROFILE_SCALES) {
+        const backupDriver = makeBackupDriver(scale !== 'large');
+        driver = backupDriver;
         const checkpointInput = {
           recipe,
           api,
@@ -463,15 +511,25 @@ test(
         const copy = restored.get(target);
         const fusekiUrl = fusekiUrls.get(target);
         if (!copy || !fusekiUrl) throw new Error(`Zone navigation restore ${target} did not open`);
-        routeProfiles.push(
-          await sinkProfile(
-            copy,
-            fusekiUrl,
-            `/v1/zones/${short(site!.zone)}/routes?path=%2Freading`,
-          ),
+        const routeProfile = await sinkProfile(
+          copy,
+          fusekiUrl,
+          `/v1/zones/${short(site!.zone)}/routes?path=%2Freading`,
         );
-        presentationProfiles.push(
-          await sinkProfile(copy, fusekiUrl, `/v1/zones/${short(site!.zone)}/presentation`),
+        const presentationProfile = await sinkProfile(
+          copy,
+          fusekiUrl,
+          `/v1/zones/${short(site!.zone)}/presentation`,
+        );
+        routeProfiles.push(routeProfile);
+        presentationProfiles.push(presentationProfile);
+        console.log(
+          'Zone navigation checkpoint counters',
+          JSON.stringify({
+            scale,
+            route: measuredCounters(routeProfile),
+            presentation: measuredCounters(presentationProfile),
+          }),
         );
         await backupDriver.stop(target);
         expect(performance.now() - restoredAt).toBeLessThan(600_000);
@@ -488,7 +546,7 @@ test(
     } finally {
       for (const target of [...restored.keys()]) await driver?.stop(target);
       await sourceRelay?.end();
-      await source?.stop();
+      if (source && !sourceStopped) await source.stop();
       await shutdownTelemetry();
       await sink.stop();
     }
