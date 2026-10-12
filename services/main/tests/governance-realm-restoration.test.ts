@@ -41,6 +41,7 @@ afterAll(async () => { await pool?.end(); cluster?.remove(); });
 async function fixture(options: {
   kind?: ReportInput['kind']; process?: 'dmca_512' | 'ordinary_dispute';
   realm?: string; space?: string; head?: string; component?: 'record' | 'title';
+  legacyLocal?: boolean;
 } = {}) {
   const kind = options.kind ?? 'content_report';
   const realm = options.realm ?? native(), space = options.space ?? native();
@@ -55,7 +56,8 @@ async function fixture(options: {
     [principalId, principal.issuer, principal.subject]);
   await pool.query("INSERT INTO access.authority_subject (id,kind) VALUES ($1,'agent')", [actor]);
   const action = DECIDE_ACTION[kind];
-  await grantFixtureAuthority(pool, { scope: 'governance:platform', requireDispatch: true,
+  const scope = options.legacyLocal ? `governance:resource:${realm}` : 'governance:platform';
+  await grantFixtureAuthority(pool, { scope, requireDispatch: true,
     representations: [{ principalId, actor, action, lifetime: 'infinity' }],
     grant: { actor, action, lifetime: 'infinity' } });
   let now = new Date('2026-10-01T14:37:12Z');
@@ -100,7 +102,7 @@ async function fixture(options: {
       representation: target.revision, revisionDigest: 'b'.repeat(64), provenance: {} }),
   }, {
     current: async () => head,
-    realmBasis: async target => target.owner === 'graph' && target.component === 'record' && target.resource === realm
+    realmBasis: async target => !options.legacyLocal && target.owner === 'graph' && target.component === 'record' && target.resource === realm
       ? { realm: target.resource, space, head, profile: SPACE_REALM_PROFILE,
         profileId: 'space-realm-v3', legacy: false } : null,
   }, { current: async (_ref, _scope, client) => {
@@ -122,7 +124,7 @@ async function fixture(options: {
   const component = options.component ?? 'record';
   const evidence = { owner: 'graph' as const, resource: realm, component, locator: null, revision: evidenceHead };
   const report = await store.submitReport(principal, {
-    kind, actingSubject: actor, authority: { kind: 'platform', scopeId: 'governance:platform' },
+    kind, actingSubject: actor, authority: { kind: options.legacyLocal ? 'resource_owner' : 'platform', scopeId: scope },
     context: GLOBAL_CONTEXT, target: evidence, disclosure: 'private', reasonCode: 'spam',
     statement: 'Review this retained Realm record.',
     // Alternative grains are retained so tuple-change refusals exercise source
@@ -150,7 +152,7 @@ async function fixture(options: {
     },
   };
   async function claim() { await store.safety.claim(principal, actor, report.caseId); }
-  await claim();
+  if (!options.legacyLocal) await claim();
   return {
     store, principal, principalId, actor, realm, space, zone, reply, evidenceHead, alternate, report, input, claim,
     setHead(value: string) { head = value; }, setClock(value: Date) { now = value; },
@@ -229,6 +231,37 @@ for (const outcome of ['restore', 'reverse'] as const) {
     expect(f.ownerCalls()).toBe(1);
     expect(await closureFence(f)).toEqual([{ decision_id: superseding.decisionId, state: 'restricted', fence_epoch: '2' }]);
   });
+}
+
+for (const outcome of ['restore', 'reverse'] as const) {
+  for (const stage of ['acceptance', 'dispatch'] as const) {
+    test(`${outcome} refuses a distinct parallel Realm disclosure fence at ${stage} while preserving its original source`, async () => {
+      const f = await fixture();
+      const original = await f.store.decide(f.principal, f.input);
+      const release = await f.release(original, outcome);
+      const accepted = stage === 'dispatch' ? await f.store.decide(f.principal, release, true) : null;
+      // A retained pre-upgrade local restriction occupies a different scope
+      // key. It must neither supersede the source nor permit its release.
+      const peer = await fixture({ realm: f.realm, space: f.space, head: f.evidenceHead, legacyLocal: true });
+      const parallel = await peer.store.decide(peer.principal, peer.input);
+      expect(parallel.operation.status).toBe('completed');
+      const before = (await pool.query(`SELECT id,decision_id,authority_scope_id,state,fence_epoch::text
+        FROM access.governance_enforcement WHERE resource=$1 ORDER BY authority_scope_id`, [f.realm])).rows;
+      expect(before).toHaveLength(2);
+      expect(before.map(row => row.decision_id)).toEqual(expect.arrayContaining([original.decisionId, parallel.decisionId]));
+      expect(before.every(row => row.state === 'restricted' && row.fence_epoch === '1')).toBe(true);
+      if (accepted) {
+        const resumed = await f.store.resumeDecision(f.principal, f.actor, accepted.decisionId);
+        expect(resumed.operation.status).toBe('partial');
+        expect(resumed.operation.items[0]).toMatchObject({ state: 'failed', receipt: null });
+      } else {
+        await expect(f.store.decide(f.principal, release)).rejects.toBeInstanceOf(GovernanceStale);
+      }
+      expect((await pool.query(`SELECT id,decision_id,authority_scope_id,state,fence_epoch::text
+        FROM access.governance_enforcement WHERE resource=$1 ORDER BY authority_scope_id`, [f.realm])).rows).toEqual(before);
+      expect(f.ownerCalls()).toBe(1);
+    });
+  }
 }
 
 const changedTuple: Array<{ name: string; change: (f: Fixture) => Partial<DecisionTargetInput> }> = [
