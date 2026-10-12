@@ -431,7 +431,12 @@ for (const signed of [false, true]) {
     expect(page.items.map((item) => item.id)).toEqual([id(12)]);
     expect(page.count.value).toBe(1);
     expect(page.nextCursor).toBeNull();
-    expect(f.batches).toHaveLength(2); // Release identity and its live parent-summary admission.
+    expect(f.batches[0]!.map(target => target.resource)).toEqual([id(11), id(12), id(13)]);
+    // The selection probe uses the real summary owner, including its closing
+    // disclosure checks; only admitted Release parents enter that owner.
+    expect([...new Set(f.batches.slice(1).flatMap(batch => batch.map(target => target.resource)))])
+      .toEqual([id(2), id(3)]);
+    expect(f.batches.some(batch => batch.length === 1 && batch[0]!.resource === id(2))).toBe(true);
   });
 }
 
