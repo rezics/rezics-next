@@ -1,4 +1,4 @@
-import { pending, proved, rowOutcomes } from '../../outcome-cells.ts';
+import { proved, rowOutcomes } from '../../outcome-cells.ts';
 
 export default rowOutcomes('zone/withdraw-a-realm-attachment', {
   visitor: proved('authentication is required on both withdrawal paths'),
@@ -10,7 +10,7 @@ export default rowOutcomes('zone/withdraw-a-realm-attachment', {
   moderator: proved(
     'moderation alone refuses; delegated Realm stewardship withdraws without Zone authority',
   ),
-  operator: pending(
-    'bare platform authority refuses; exact resource intervention awaits a supported assignment-ceiling fixture',
+  operator: proved(
+    'bare platform authority refuses; exact Zone and Realm mandates independently withdraw',
   ),
 });
