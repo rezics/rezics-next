@@ -1,4 +1,56 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, relative, resolve } from 'node:path';
+
+/** Outcome proofs may depend on public clients and fixture support, never product internals. */
+export function outcomeTestViolations(
+  file: string,
+  source: string,
+  root = process.cwd(),
+): string[] {
+  const path = relative(root, resolve(root, file)).replaceAll('\\', '/');
+  if (!path.startsWith('tests/qa/integration/outcomes/')) return [];
+  const transpiler = new Bun.Transpiler({ loader: 'tsx' });
+  const violations = new Set<string>();
+  const checkImport = (specifier: string) => {
+    const target = specifier.startsWith('.')
+      ? relative(root, resolve(root, dirname(path), specifier)).replaceAll('\\', '/')
+      : specifier;
+    if (/^(?:services|apps)\/[^/]+\/src(?:\/|$)/.test(target))
+      violations.add(`imports product source: ${specifier}`);
+  };
+  for (const item of transpiler.scan(source).imports) checkImport(item.path);
+  // Bun erases type-only and unused import-equals declarations. Keep their
+  // literal dependencies in this conservative source inventory as well.
+  const withoutComments = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  for (const match of withoutComments.matchAll(
+    /\b(?:import|export)\s+[^;]*?\bfrom\s*['"]([^'"]+)['"]/g,
+  ))
+    checkImport(match[1]!);
+  for (const match of withoutComments.matchAll(/\b(?:require|import)\s*\(\s*['"]([^'"]+)['"]/g))
+    checkImport(match[1]!);
+  // Transformation removes comments; masking quoted values avoids treating examples as calls.
+  const executable = transpiler
+    .transformSync(source)
+    .replace(/\bmock\s*\[\s*['"]module['"]\s*\]/g, 'mock.module')
+    .replace(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/g, '""');
+  if (/\bmock\s*(?:\.|\?\.)\s*module\s*(?:\?\.)?\s*\(/.test(executable))
+    violations.add('calls mock.module');
+  return [...violations];
+}
+
+export function outcomeRepositoryViolations(root = process.cwd()): string[] {
+  return [
+    ...new Bun.Glob('tests/qa/integration/outcomes/**/*.{ts,tsx,js,jsx,mts,mjs,cts,cjs}').scanSync({
+      cwd: root,
+    }),
+  ]
+    .sort()
+    .flatMap((file) =>
+      outcomeTestViolations(file, readFileSync(resolve(root, file), 'utf8'), root).map(
+        (reason) => `${file}: ${reason}`,
+      ),
+    );
+}
 
 /** Inventory guards read files beyond their import graph, so affected selection
  * cannot establish their coverage. Merge runs these in its existing unit gate.
@@ -6,16 +58,23 @@ import { existsSync } from 'node:fs';
  * their normal affected tiers; these entries enforce an inventory-wide rule. */
 export const repositoryGuards = [
   {
+    file: 'scripts/qa/repository-guards.test.ts',
+    reason: 'Outcome tests use the public API without importing product source or mocking modules.',
+  },
+  {
     file: 'scripts/qa/raw-sparql-integration-files.test.ts',
-    reason: 'No new test file may write raw SPARQL; a new test selects only itself, never this inventory.',
+    reason:
+      'No new test file may write raw SPARQL; a new test selects only itself, never this inventory.',
   },
   {
     file: 'packages/observability/tests/http-measurement.test.ts',
-    reason: 'Every counter the native module reports must be on the HTTP measurement allowlist; a Java change does not select this test.',
+    reason:
+      'Every counter the native module reports must be on the HTTP measurement allowlist; a Java change does not select this test.',
   },
   {
     file: 'services/account/tests/authentication-subject.test.ts',
-    reason: 'Every Account request cookie parser must use the provider-exact authentication selector.',
+    reason:
+      'Every Account request cookie parser must use the provider-exact authentication selector.',
   },
   {
     file: 'tests/qa/unit/g-1046-sql-relations.test.ts',
@@ -127,7 +186,8 @@ export const repositoryGuards = [
   },
   {
     file: 'scripts/static/one-language-parser-debt.test.ts',
-    reason: 'Language-tag parsing outside the display-language module stays at the frozen violations.',
+    reason:
+      'Language-tag parsing outside the display-language module stays at the frozen violations.',
   },
   {
     file: 'scripts/static/docker-ownership.test.ts',
@@ -146,11 +206,18 @@ export const repositoryGuards = [
 
 // `task guards`: a worker runs the same rules before it hands off. Prints the failures or one summary line.
 if (import.meta.main) {
-  const files = repositoryGuards.map(guard => guard.file).filter(file => existsSync(file));
+  const files = repositoryGuards.map((guard) => guard.file).filter((file) => existsSync(file));
   const run = Bun.spawnSync(['bun', 'test', ...files], { stdout: 'pipe', stderr: 'pipe' });
   const lines = `${run.stdout.toString()}${run.stderr.toString()}`.split('\n');
-  const summary = lines.filter(line => /^\s*\d+ (pass|fail)\b|^Ran \d+ tests/.test(line));
-  if (run.exitCode === 0) console.log(`Repository guards passed: ${summary.join(',').replace(/\s+/g, ' ').trim()}`);
-  else console.log([...lines.filter(line => /^\(fail\)|^error:|^\s+error:/.test(line)).slice(0, 60), ...lines.slice(-25)].join('\n'));
+  const summary = lines.filter((line) => /^\s*\d+ (pass|fail)\b|^Ran \d+ tests/.test(line));
+  if (run.exitCode === 0)
+    console.log(`Repository guards passed: ${summary.join(',').replace(/\s+/g, ' ').trim()}`);
+  else
+    console.log(
+      [
+        ...lines.filter((line) => /^\(fail\)|^error:|^\s+error:/.test(line)).slice(0, 60),
+        ...lines.slice(-25),
+      ].join('\n'),
+    );
   process.exit(run.exitCode ?? 1);
 }
