@@ -83,9 +83,12 @@ async function foreign(name: PersonaName) {
   const read = await person.main('GET', `/v1/works/${short(work)}/progress?${query(victim)}`);
   if (read.status === 200) expect(await read.json()).toMatchObject({ standing: ownMark.standing, version: ownMark.version });
   else expect(read.status).toBe(403);
-  const write = await person.main('PUT', `/v1/works/${short(work)}/progress`, { actingSubject: victim.actingSubject, expectedVersion: ownMark.version, standing: 'completed' });
+  const path = `/v1/works/${short(work)}/progress`;
+  const command = { actingSubject: victim.actingSubject, expectedVersion: ownMark.version, standing: 'completed' };
+  const write = await person.main('PUT', path, command);
+  const reply = await write.text();
+  console.info(JSON.stringify({ row: collection.rowId, persona: name, request: { method: 'PUT', path, body: command }, answer: { status: write.status, body: JSON.parse(reply) } }));
   expect([200, 403]).toContain(write.status);
-  await write.body?.cancel();
   expect(await state(victim, work)).toEqual(before);
   expect(await mark(victim, work)).toEqual(victimMark);
   expect(await answer(victim.main('GET', `/v1/me/shelves?${query(victim)}`))).toEqual(shelvesBefore);
