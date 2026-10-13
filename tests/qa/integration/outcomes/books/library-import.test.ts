@@ -606,7 +606,7 @@ outcomeTest(libraryImport, 'owner', async () => {
   await json(sample('import-review-empty', 'GET', `${root()}/rows?${query()}&cursor=4999`, undefined, randomUUID()));
   await ensureApplied(person);
   const production = await json<Review>(sample(
-    'production-import-review', 'GET', `${root()}/rows?${query()}`,
+    'production-import-review', 'GET', `${root()}/rows?${query()}`, undefined, randomUUID(),
   ));
   expect(production.rows.find(item => item.index === 0)?.source).toEqual(originals[0]);
   expect(production.rows.find(item => item.index === 0)?.source).toMatchObject({
