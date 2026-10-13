@@ -2,7 +2,7 @@ import { existsSync, statSync, readFileSync, readdirSync, mkdirSync, writeFileSy
 import { join, resolve, relative, isAbsolute, dirname } from 'node:path';
 import { stateDir, root, git } from './ledger.ts';
 import { testArgs, unitHarnessFiles, type TestResult, parseJUnit, decodeXml } from '../qa/acceptance.ts';
-import { repositoryGuards } from '../qa/repository-guards.ts';
+import { repositoryGuards, selectRepositoryGuards, filterRepositoryGuardFiles, repositoryGuardSelectionLine } from '../qa/repository-guards.ts';
 import { affectedOwnerTierEntries, type AffectedPlan, affectedUnitTierEntries } from '../qa/affected.ts';
 import { type ChildProcess, spawn, spawnSync } from 'node:child_process';
 import { terminateProcessGroup } from '../qa/process/terminate.ts';
@@ -13,7 +13,7 @@ import { tierBunTestArgs, tierTestTimeoutMs, type TierTestTimeout } from '../qa/
 import { acquireDir } from './ledger.ts';
 import { type MergeEvent } from './regress.ts';
 import { postgresSocketRefusal, physicalPath } from './postgres-socket.ts';
-import { readMergeEvents, affectedSelection, selectedUnitFiles, selectedOwnerFiles } from './merge.ts';
+import { readMergeEvents, affectedSelection, selectedOwnerFiles } from './merge.ts';
 import { addGateWorktree } from './typecheck-gate.ts';
 import { selectSurface, runSurfaceGate, type SurfaceRunOptions } from './surface-gate.ts';
 import { type Brief } from './types.ts';
@@ -469,11 +469,11 @@ function existingTestFiles(worktree: string, entries: readonly string[], wholeTi
 }
 
 /** Unit files named by an affected-plan transcript. Fixtures and a checkout without the typed planner still use this; the merge gate reads the plan object. */
-export function mergeUnitFiles(worktree: string, plan: string): string[] {
+export function mergeUnitFiles(worktree: string, plan: string, changed?: readonly string[]): string[] {
   if (!/^Affected since /m.test(plan)) throw new Error('Affected unit plan was not produced');
   const entries = [...plan.matchAll(/^  unit: (.+)$/gm)].map(match => match[1]!);
-  const selected = new Set(existingTestFiles(worktree, entries, [...testArgs('unit'), ...unitHarnessFiles]));
-  for (const file of existingTestFiles(worktree, repositoryGuards.map(guard => guard.file), [])) selected.add(file);
+  const selected = new Set(filterRepositoryGuardFiles(existingTestFiles(worktree, entries, [...testArgs('unit'), ...unitHarnessFiles]), changed));
+  for (const file of existingTestFiles(worktree, selectRepositoryGuards(changed).map(guard => guard.file), [])) selected.add(file);
   return [...selected].sort();
 }
 
@@ -489,11 +489,11 @@ export function mergeOwnerFiles(worktree: string, plan: string): string[] {
 }
 
 /** Unit files from the typed plan. Widening lists the registered unit entries and omits input-selected native files unless the plan names them. */
-export function unitFilesFromPlan(worktree: string, plan: AffectedPlan): string[] {
+export function unitFilesFromPlan(worktree: string, plan: AffectedPlan, changed?: readonly string[]): string[] {
   const widened = plan.widened.some(item => item.tier === 'unit');
   const entries = [...(widened ? affectedUnitTierEntries() : []), ...plan.tests.unit];
-  const selected = new Set(existingTestFiles(worktree, entries, []));
-  for (const file of existingTestFiles(worktree, repositoryGuards.map(guard => guard.file), [])) selected.add(file);
+  const selected = new Set(filterRepositoryGuardFiles(existingTestFiles(worktree, entries, []), changed));
+  for (const file of existingTestFiles(worktree, selectRepositoryGuards(changed).map(guard => guard.file), [])) selected.add(file);
   return [...selected].sort();
 }
 
@@ -2293,8 +2293,9 @@ export async function preMergeUnitGate(worktree: string, mainRoot: string, curre
   const changed = streamSelectionFiles(own, readMergeEvents(), taskIds, mainRoot);
   console.log(`Pre-merge selection since ${currentMain.slice(0, 12)} (${changed.length} path(s))\n  ${changed.join('\n  ')}`);
   const selection = await affectedSelection(worktree, currentMain, changed);
-  const unit = selectedUnitFiles(worktree, selection);
-  const owner = new Set(selectedOwnerFiles(worktree, selection).filter(file => !unit.includes(file)));
+  console.log(repositoryGuardSelectionLine(own));
+  const unit = 'plan' in selection ? unitFilesFromPlan(worktree, selection.plan, own) : mergeUnitFiles(worktree, selection.text, own);
+  const owner = new Set(filterRepositoryGuardFiles(selectedOwnerFiles(worktree, selection), own).filter(file => !unit.includes(file)));
   const affected = [...unit, ...owner].sort();
   // Scope `changed` runs the test files the branch itself touches and the repository guards; program runs the
   // rest of the affected set on main for every merge together.

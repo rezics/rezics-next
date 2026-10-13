@@ -26,7 +26,7 @@ function fixture() {
   return { cwd, lines, commands, runner, print: (line: string) => { lines.push(line); },
     slotOptions: { slotDirectory: join(cwd, '.temp/slots'), slots: 1, reap: () => {}, announce: () => {} },
     historyDirectory: join(cwd, '.temp/history'),
-    changed: ['scripts/example.ts'], tests: ['scripts/example.test.ts'] };
+    changed: ['scripts/example.ts', 'tests/qa/integration/outcomes/example.test.ts'], tests: ['scripts/example.test.ts'] };
 }
 
 afterEach(() => {
@@ -65,6 +65,25 @@ test('a failing type check prints its diagnostic and returns failure without pas
   expect(f.lines.join('\n')).not.toContain('compiler startup noise');
   expect(f.lines.join('\n')).not.toContain('passing case');
   expect(result.checks.filter(check => check.code !== 0).map(check => check.name)).toEqual(['types']);
+});
+
+test('worker guards use changed inputs and report empty changes without acquiring a QA slot', async () => {
+  const f = fixture();
+  for (const [changed, runs] of [
+    [[], false],
+    [['apps/web/app/page.tsx'], false],
+    [['tests/qa/integration/outcomes/new.test.ts'], true],
+    [['scripts/qa/repository-guards.ts'], true],
+    [['scripts/qa/repository-guards.test.ts'], true],
+  ] as const) {
+    f.commands.length = 0;
+    f.lines.length = 0;
+    const result = await workerCheck({ ...f, changed, only: ['guards'] });
+    expect(result.code).toBe(0);
+    expect(f.commands.some(command => command.includes('goal:unit-files'))).toBe(runs);
+    expect(f.lines.filter(line => line.startsWith('Repository guards:'))).toHaveLength(1);
+    if (!changed.length) expect(f.lines.join('\n')).toContain('0/37 selected for changed paths: (none)');
+  }
 });
 
 test('a failed test prints the case name with its error and never passing cases', async () => {
@@ -150,7 +169,7 @@ test('compiler and lint commands are serialized while proofs and guards may run 
     if (heavy) activeHeavy--;
     return { code: 0, output: '' };
   };
-  await workerCheck({ ...f, changed: ['scripts/example.ts', 'apps/web/example.ts'], runner });
+  await workerCheck({ ...f, changed: [...f.changed, 'apps/web/example.ts'], runner });
   expect(maxHeavy).toBe(1);
   expect(testsDuringTypes).toBe(true);
   expect(guardsDuringTypes).toBe(true);

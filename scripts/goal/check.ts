@@ -5,6 +5,7 @@ import { parseBrief } from './briefs.ts';
 import { typecheckWorkspaces } from '../qa/affected.ts';
 import { typecheckDiagnostics } from './typecheck-gate.ts';
 import { mergeUnitFiles, timeoutOnlyTestFiles, failingTestFiles, unitFileErrorDetails, recoveredSlowTests, rememberSlowTests, slowTestLine, timeoutRetryArg, UNIT_JUNIT_MARKER } from './unit-gate.ts';
+import { repositoryGuardSelectionLine } from '../qa/repository-guards.ts';
 import { parseJUnit, isQaOwnerPath, isQaIntegrationPath, isQaFaultPath, isQaModelPath, isQaE2ePath, isQaLoadPath } from '../qa/acceptance.ts';
 import { tierBunTestArgs, type TierTestTimeout } from '../qa/core.ts';
 import { withSlot, type SlotRunOptions } from './qa-slots.ts';
@@ -247,7 +248,8 @@ export async function workerCheck(options: CheckOptions = {}): Promise<{ code: n
     }
   };
   // `task guards` summarizes its child output; running its gate-selected files keeps the full transcript for this log.
-  const guardFiles = only.includes('guards') ? mergeUnitFiles(cwd, 'Affected since worker check\n') : [];
+  const guardFiles = only.includes('guards') ? mergeUnitFiles(cwd, 'Affected since worker check\n', changed) : [];
+  if (only.includes('guards')) print(repositoryGuardSelectionLine(changed));
   const qaLane = async () => {
     const work = async () => {
       if (only.includes('tests')) await check('tests', tests.length ? [['bun', 'scripts/qa/test.ts', ...tests]] : [],

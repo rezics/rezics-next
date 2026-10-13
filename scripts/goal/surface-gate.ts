@@ -7,6 +7,7 @@ import { type Brief } from './types.ts';
 import { type CheckGroup, type CheckRunner, runCheckCommand, checkFailureLines } from './check.ts';
 import { affectedSelection } from './merge.ts';
 import { mergeUnitFiles, unitFilesFromPlan } from './unit-gate.ts';
+import { repositoryGuardSelectionLine } from '../qa/repository-guards.ts';
 import { withGateLane, withSlot, type SlotRunOptions } from './qa-slots.ts';
 import { type loadOutcomes, personas, type RowOutcomes } from '../qa/cases/outcomes.ts';
 import { isQaE2ePath, isQaFaultPath, isQaIntegrationPath, isQaLoadPath, isQaModelPath } from '../qa/acceptance.ts';
@@ -109,12 +110,12 @@ export async function selectSurface(cwd: string, brief: Brief, changed: readonly
     else refusals.push(`surface test must be a unit test or web *.stories.tsx: ${file}`);
   }
   if (!stories.length) refusals.push('surface requires tests: naming at least one web *.stories.tsx');
-  const guards = mergeUnitFiles(cwd, 'Affected since surface gate\n');
+  const guards = mergeUnitFiles(cwd, 'Affected since surface gate\n', changed);
   try {
     const affected = await affectedSelection(cwd, mainCommit, changed);
     const required = 'plan' in affected
-      ? [...unitFilesFromPlan(cwd, affected.plan), ...affected.plan.frontend.flatMap(workspace => workspace.tests)]
-      : mergeUnitFiles(cwd, affected.text).filter(file => !guards.includes(file));
+      ? [...unitFilesFromPlan(cwd, affected.plan, changed), ...affected.plan.frontend.flatMap(workspace => workspace.tests)]
+      : mergeUnitFiles(cwd, affected.text, changed).filter(file => !guards.includes(file));
     // The change's consumers run beside the named tests: the affected plan knows them, a brief written before the work cannot.
     for (const file of [...new Set(required)].sort()) {
       if (unitFile.test(file) && !guards.includes(file) && !units.includes(file)) units.push(file);
@@ -149,6 +150,7 @@ export async function runSurfaceGate(cwd: string, selection: SurfaceSelection, o
   const now = options.now ?? Date.now;
   const run = options.runner ?? runCheckCommand;
   const only = options.only ?? ['types', 'lint', 'tests', 'guards'];
+  if (only.includes('guards')) print(repositoryGuardSelectionLine(selection.changed));
   let env = process.env;
   writeFileSync(log, `${JSON.stringify(selection)}\n`);
   async function part(name: SurfacePart, commands: string[][], waitSeconds = 0): Promise<boolean> {

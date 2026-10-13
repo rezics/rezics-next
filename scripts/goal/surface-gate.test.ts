@@ -42,7 +42,7 @@ ${personas.map(persona => `test('${row} / ${persona}: reads catalogue', () => {}
   write('apps/web/features/zones/catalogue.ts', 'export const count = 1;');
   write('apps/web/features/zones/catalogue.test.ts', "import { test } from 'bun:test'; test('count', () => {});");
   write('apps/web/features/zones/catalogue.stories.tsx', 'export default {};');
-  write('scripts/qa/repository-guards.test.ts', 'export {};');
+  write('scripts/static/web-continuations.test.ts', 'export {};');
   write('.gitignore', '.temp/');
   git('init', '-q', '-b', 'main'); git('config', 'user.name', 'Surface tests'); git('config', 'user.email', 'surface@example.invalid');
   git('add', '.'); git('commit', '-qm', 'Prove catalogue'); git('switch', '-qc', 'surface');
@@ -56,6 +56,22 @@ ${personas.map(persona => `test('${row} / ${persona}: reads catalogue', () => {}
   const slotOptions = { slotDirectory: join(cwd, '.temp/slots'), slots: 1, reap: () => {}, announce: () => {} };
   return { cwd, row, brief, changed, write, git, commands, runner, slotOptions, print: () => {} };
 }
+
+test('surface guards follow changed inputs and cannot reappear through the affected transcript', async () => {
+  const f = fixture();
+  f.write('services/main/tests/api-contract.test.ts', 'export {};');
+  f.write('scripts/qa/repository-guards.test.ts', 'export {};');
+  f.write('.temp/plan', '  unit: services/main/tests/api-contract.test.ts\n  unit: scripts/static/web-continuations.test.ts\n');
+  const web = (await selectSurface(f.cwd, f.brief, f.changed))!.selection!;
+  expect(web.guards).toEqual(['scripts/static/web-continuations.test.ts']);
+  expect(web.units).not.toContain('services/main/tests/api-contract.test.ts');
+  const service = (await selectSurface(f.cwd, f.brief, ['services/main/src/modules/work/read.ts']))!.selection!;
+  expect(service.guards).toEqual(['services/main/tests/api-contract.test.ts']);
+  expect(service.units).not.toContain('scripts/static/web-continuations.test.ts');
+  expect((await selectSurface(f.cwd, f.brief, []))!.selection!.guards).toEqual([]);
+  const registry = (await selectSurface(f.cwd, f.brief, ['scripts/qa/repository-guards.ts']))!.selection!;
+  expect(registry.guards).toHaveLength(3);
+});
 
 test('surface selection reports every missing requirement on its own line', async () => {
   const f = fixture();
@@ -149,7 +165,7 @@ test.each(['contract', 'types', 'lint', 'ast', 'tests', 'guards', 'stories'])('a
     contract: command => command[1] === 'gen', types: command => command[1] === 'web:typecheck',
     lint: command => command[0]!.includes('oxlint'), ast: command => command[1] === 'ast-grep',
     tests: command => command.includes('apps/web/features/zones/catalogue.test.ts'),
-    guards: command => command.includes('scripts/qa/repository-guards.test.ts'),
+    guards: command => command.includes('scripts/static/web-continuations.test.ts'),
     stories: command => command.includes('apps/web/features/zones/catalogue.stories.tsx'),
   };
   const runner: CheckRunner = async command => {

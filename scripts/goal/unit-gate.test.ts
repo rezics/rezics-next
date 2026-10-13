@@ -4,6 +4,9 @@ import { join } from 'node:path';
 import { runUnitSide, runOwnerShard, rememberSlowTests, writeUnitEvidence, timeoutOnlyTestFiles, UNIT_JUNIT_MARKER, preMergeSurfaceGate,
   type SlowTestRecord, type UnitRunEvidence } from './unit-gate.ts';
 import { parseBrief } from './briefs.ts';
+import { mergeUnitFiles, unitFilesFromPlan } from './unit-gate.ts';
+import { repositoryGuards, selectRepositoryGuards } from '../qa/repository-guards.ts';
+import type { AffectedPlan } from '../qa/affected.ts';
 
 const scratch = join(import.meta.dir, '../../.temp/timeout-retry-tests');
 const directories: string[] = [];
@@ -45,6 +48,25 @@ test('busy host guard', async () => {
 afterEach(() => {
   restoreOutput();
   for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
+});
+
+test('typed and transcript unit gates select inventories, including guards widened into the affected plan', () => {
+  const f = fixture('expect(true).toBe(true);');
+  for (const guard of repositoryGuards) {
+    mkdirSync(join(f.cwd, guard.file, '..'), { recursive: true });
+    writeFileSync(join(f.cwd, guard.file), 'export {};');
+  }
+  const all = repositoryGuards.map(guard => guard.file);
+  const transcript = `Affected since main\n${all.map(file => `  unit: ${file}`).join('\n')}\n  unit: ${f.file}\n`;
+  const typed = { tests: { unit: [...all, f.file] }, widened: [] } as unknown as AffectedPlan;
+  for (const changed of [[], ['apps/web/app/page.tsx'], ['services/main/src/modules/work/read.ts'], ['scripts/qa/repository-guards.ts']]) {
+    const expected = [...selectRepositoryGuards(changed).map(guard => guard.file), f.file].sort();
+    expect(mergeUnitFiles(f.cwd, transcript, changed)).toEqual(expected);
+    expect(unitFilesFromPlan(f.cwd, typed, changed)).toEqual(expected);
+  }
+  // Omitted changes preserve the existing main-wide/regression contract.
+  expect(mergeUnitFiles(f.cwd, transcript)).toEqual([...all, f.file].sort());
+  expect(unitFilesFromPlan(f.cwd, typed)).toEqual([...all, f.file].sort());
 });
 
 test('surface landing refuses incomplete selection before generating or executing a gate', async () => {
