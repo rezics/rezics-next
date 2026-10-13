@@ -8,7 +8,7 @@ import { AwsClient } from 'aws4fetch';
 import { backfillLocalDatasetModelCustody, modelBootstrapUpdate } from '../../../scripts/datasets/model-bootstrap.ts';
 import { atomicJson } from '../../../scripts/datasets/store.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
-import { ObjectIntegrityError, ObjectUnavailable, S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
+import { evictVerifiedImmutableObject, ObjectIntegrityError, ObjectUnavailable, S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { engageAccessRecoveryFence, releaseAccessRecoveryFence } from '../../../services/main/src/modules/access/admission.ts';
 import { ObjectErasureConflict, protectedObjectDigests, replayObjectErasure } from '../../../services/main/src/modules/erasure/replay-objects.ts';
 import { assertObjectRecoveryCoverage, captureObjectRecoveryCoverage, ObjectRecoveryConflict } from '../../../services/main/src/modules/owner/object-coverage.ts';
@@ -267,6 +267,8 @@ test('exact original model custody backfills retained generations with bounded r
     });
     try {
       expect(corruptPut.ok).toBe(true);
+      // The fixture bypassed immutable writes; make every reader observe the injected store corruption.
+      evictVerifiedImmutableObject(missing.sha256);
       await expect(objects.get(missing.sha256)).rejects.toBeInstanceOf(ObjectIntegrityError);
       await expect(capture()).rejects.toMatchObject({ kind: 'corrupt' });
       await expect(protectedObjectDigests(fuseki, store)).rejects.toBeInstanceOf(ObjectErasureConflict);
