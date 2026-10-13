@@ -158,7 +158,7 @@ test('Source observation / operator: retains exact bounded source identity, link
     rightsEvidence: { basis: intakeRefusal ? 'unknown' : 'public-domain', note: intake.rightsEvidence.note } });
   expect(JSON.parse(Buffer.from(read.rawBytesBase64, 'base64').toString())).toEqual(retainedRecipe);
 });
-test.failing('Source intake / operator: accepts public-domain evidence under the import mandate', () => {
+test('Source intake / operator: accepts public-domain evidence under the import mandate', () => {
   expect(intakeRefusal, `SETUP intake: ${sourcedRecipePrerequisites.intake}; ${JSON.stringify(intakeRefusal)}`).toBeUndefined();
 });
 let supported: Promise<void> | undefined;

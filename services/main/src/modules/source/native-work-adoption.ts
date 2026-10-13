@@ -76,8 +76,7 @@ export interface NativeWorkSourceSupport {
   supportIdentity: string;
   latestApplication: NativeWorkSourceTitleApplication | null;
   withdrawal: NativeWorkSourceSupportWithdrawal | null;
-  rightsEvidence: { basis: 'unknown' | 'facts' | 'original' | 'license'
-    | 'permission' | 'exception'; note: string };
+  rightsEvidence: NativeWorkSourceProposal['rightsEvidence'];
   rightsStatus: 'undetermined';
 }
 
