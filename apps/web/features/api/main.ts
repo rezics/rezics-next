@@ -12,7 +12,7 @@ import { mainBodyRead } from './main-read-operation.ts';
 import { NO_PLATFORM_ACCESS, parsePlatformAccess, type PlatformAccess } from './platform-access.ts';
 
 const profileContentLanguages = cache(
-  async (token: string, sessionKey: string): Promise<string[]> => {
+  async (token: string, sessionKey: string, fetcher?: typeof fetch): Promise<string[]> => {
     if (!sessionKey) return [];
     try {
       const origin = serviceOrigin('MAIN_ORIGIN');
@@ -25,7 +25,7 @@ const profileContentLanguages = cache(
           }),
           cache: 'no-store',
         },
-        { timeoutMs: SERVER_READ_LIMITS.metadata },
+        { timeoutMs: SERVER_READ_LIMITS.metadata, fetch: fetcher },
       );
       if (!session.ok) return [];
       const state = (await session.json()) as {
@@ -36,7 +36,7 @@ const profileContentLanguages = cache(
       const preferences = await serverRead(
         `${origin}/v1/me/person-preferences?actingSubject=${encodeURIComponent(actor)}`,
         { headers: await mainReadHeaders({ authorization: `Bearer ${token}` }), cache: 'no-store' },
-        { timeoutMs: SERVER_READ_LIMITS.metadata },
+        { timeoutMs: SERVER_READ_LIMITS.metadata, fetch: fetcher },
       );
       if (!preferences.ok) return [];
       const value = (await preferences.json()) as { contentLanguages?: unknown };
@@ -56,7 +56,10 @@ const profileContentLanguages = cache(
  * session is not consulted: no private language preference is read, so a render meant for anonymous readers
  * and crawlers is the anonymous representation.
  */
-export function mainApiWithToken(accessToken: string | undefined) {
+export function mainApiWithToken(
+  accessToken: string | undefined,
+  { fetcher }: { fetcher?: typeof fetch } = {},
+) {
   return treaty<MainApp>(serviceOrigin('MAIN_ORIGIN'), {
     headers: async (_path: string) => {
       const result: Record<string, string> = {};
@@ -66,7 +69,7 @@ export function mainApiWithToken(accessToken: string | undefined) {
         Object.assign(result, Object.fromEntries(await mainReadHeaders(undefined, incoming)));
         const signedIn = Boolean(accessToken);
         const profile = accessToken
-          ? await profileContentLanguages(accessToken, jar.get(SESSION_KEY_COOKIE)?.value ?? '')
+          ? await profileContentLanguages(accessToken, jar.get(SESSION_KEY_COOKIE)?.value ?? '', fetcher)
           : null;
         Object.assign(
           result,
@@ -86,7 +89,7 @@ export function mainApiWithToken(accessToken: string | undefined) {
     fetch: { cache: 'no-store' },
     // Date-shaped JSON stays text. A literal's lexical form is the string Main recorded.
     parseDate: false,
-    fetcher: ((input, init) =>
+    fetcher: fetcher ?? ((input, init) =>
       serverRead(input, init, {
         idempotentRead: mainBodyRead(
           new URL(input instanceof Request ? input.url : String(input)).pathname,
@@ -99,8 +102,8 @@ export function mainApiWithToken(accessToken: string | undefined) {
 /** Server-side Eden client for Main with the session's bearer token, for
  * Server Components, Server Actions and route handlers. `proxy.ts` has already
  * refreshed the token for this request, so callers never handle refresh. */
-export async function mainApi() {
-  return mainApiWithToken((await cookies()).get(ACCESS_COOKIE)?.value);
+export async function mainApi(options: { fetcher?: typeof fetch } = {}) {
+  return mainApiWithToken((await cookies()).get(ACCESS_COOKIE)?.value, options);
 }
 
 /**
