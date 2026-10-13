@@ -1,6 +1,6 @@
 import { headers } from 'next/headers';
 import { materializeData } from 'native-i18n';
-import { type ReactNode, Suspense } from 'react';
+import { cache, type ReactNode, Suspense } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { getMessages } from '../../i18n/server.ts';
@@ -27,10 +27,11 @@ import { readContentsGroup } from './contents-actions.ts';
 import { ProvisionalNotice } from '../catalogue-intake/provisional-notice.tsx';
 import { ContentsRegion } from './contents.tsx';
 import { DiscussionRegion } from './discussion.tsx';
-import { oneTextLanguage, readAdoptions, readAgentCredits, readAgentWorks, readAlsoEnjoyed, readClassifications,
-  readContents, readCredits, readDiscussion, readHistory, readingAgent, readRatings, readReaderState, readRealm,
+import { readAnimeAgentCredits, readAnimeReaderState, readAnimeWorkCredits } from './anime-hub-recorded-page.ts';
+import { oneTextLanguage, readAdoptions, readAgentWorks, readAlsoEnjoyed, readClassifications,
+  readContents, readDiscussion, readHistory, readingAgent, readRatings, readRealm,
   readReviewer, readReviews, readVersions, readWorkStats, readRecipeWorkPage,
-  readHubWorkPage, readText, readRatingPopulations } from './read.ts';
+  readHubWorkPage, readText, readRatingPopulations, reader } from './read.ts';
 import { Region, RegionFailure, RegionSkeleton } from './region.tsx';
 import { WorkRecord } from './record.tsx';
 import { type ContentsQuery, EVERYONE, mainScope, type HistoryFilter, idOf, type VersionQuery, type WorkAt, type WorkScope,
@@ -92,8 +93,21 @@ async function ratingRealms(id: string, scope: WorkScope | null, locale: UiLocal
   return realms;
 }
 
+const animeAgentCredits = cache(async (id: string) => {
+  const { main, actingSubject } = await reader();
+  return readAnimeAgentCredits(main, actingSubject, id);
+});
+const animeWorkCredits = cache(async (id: string) => {
+  const { main, actingSubject } = await reader();
+  return readAnimeWorkCredits(main, actingSubject, id);
+});
+const animeReaderState = cache(async (id: string) => {
+  const { main, actingSubject } = await reader();
+  return readAnimeReaderState(main, actingSubject, id);
+});
+
 async function Credits({ id, locale, messages }: Common & { id: string }) {
-  const [agentCredits, credits] = await Promise.all([readAgentCredits(id), readCredits(id)]);
+  const [agentCredits, credits] = await Promise.all([animeAgentCredits(id), animeWorkCredits(id)]);
   return <WorkCredits agentCredits={agentCredits} credits={credits} locale={locale} messages={messages} />;
 }
 
@@ -101,7 +115,7 @@ async function Credits({ id, locale, messages }: Common & { id: string }) {
 async function Cover({ id, work, avatarQuery, locale, messages }: Common & {
   id: string; work: Header; avatarQuery?: string;
 }) {
-  const [agentCredits, externalCredits] = await Promise.all([readAgentCredits(id), readCredits(id)]);
+  const [agentCredits, externalCredits] = await Promise.all([animeAgentCredits(id), animeWorkCredits(id)]);
   const t = materializeData(messages, { locale });
   const authors = coverAuthors(agentCredits, externalCredits, key => t.openLibraryAuthor({ key }));
   return <WorkPageCover work={work} authors={authors} avatarQuery={avatarQuery} />;
@@ -154,7 +168,7 @@ export async function WorkFrameView({ workRef, id, work, locale, messages, lead,
   lead?: readonly HubSection[];
 }) {
   const [{ signedIn, actingSubject }, { avatarQuery }, seed, ratings, experience, plan, art, showcaseMessages] = await Promise.all([
-    readingAgent(), browseReader(), readReaderState(id), readRatings(id, EVERYONE, undefined), readExperience(id, work.types),
+    readingAgent(), browseReader(), animeReaderState(id), readRatings(id, EVERYONE, undefined), readExperience(id, work.types),
     readHubPlan(id),
     // One batch for the page, so the art costs one round trip however many layers it has, and one for
     // the header's images, so they are drawn (or masked) in the server's HTML.
@@ -220,7 +234,7 @@ async function Ratings(props: ScopedProps & { context: string | undefined }) {
  * address in this interface language, from the proxy's record of the request.
  */
 async function Record({ id, workRef, work, locale, messages }: Common & { id: string; workRef: WorkAt; work: Header }) {
-  const [credits, page] = await Promise.all([readAgentCredits(id), headers().then(list => list.get('x-rezics-page-url'))]);
+  const [credits, page] = await Promise.all([animeAgentCredits(id), headers().then(list => list.get('x-rezics-page-url'))]);
   const authors = citationAuthors(credits);
   // A citation names the Work's own address, never a Zone's frame around it.
   const url = page ? new URL(localizedPath(workHref(workRefOf(workRef)), locale), page).toString() : null;
@@ -230,7 +244,7 @@ async function Record({ id, workRef, work, locale, messages }: Common & { id: st
 }
 
 async function Author({ id, locale, messages }: Common & { id: string }) {
-  const [agents, external] = await Promise.all([readAgentCredits(id), readCredits(id)]);
+  const [agents, external] = await Promise.all([animeAgentCredits(id), animeWorkCredits(id)]);
   const native = agents.ok ? agents.data.items.find(credit => credit.role === 'author') : undefined;
   if (native) {
     const [works, { avatarQuery }] = await Promise.all([readAgentWorks(native.agent, locale), browseReader()]);

@@ -1,5 +1,6 @@
 import { cache } from 'react';
 import type { DiscussionPage, Loaded, RatingContextPage, RatingRead, RatingSummary, ReviewPage } from '../work-page/types.ts';
+import { readLinkedStatements, readResourcePage } from '../work-page/anime-hub-recorded-page.ts';
 import { reader, settle } from '../work-page/read.ts';
 import { followHref } from './href.ts';
 import type { EntityProjection, EntitySection, RelationsPage, StatementPage } from './types.ts';
@@ -14,7 +15,7 @@ import type { EntityProjection, EntitySection, RelationsPage, StatementPage } fr
  */
 export const readEntityProjection = cache(async (id: string, position?: string): Promise<Loaded<EntityProjection>> => {
   const { main, actingSubject } = await reader();
-  return settle(() => main.v1.resources({ resource: id }).page.get({ query: { actingSubject, position } }));
+  return readResourcePage(main, actingSubject, id, position);
 });
 
 export function sectionOf(page: EntityProjection, id: EntitySection['id']): EntitySection | undefined {
@@ -28,8 +29,7 @@ export function sectionOf(page: EntityProjection, id: EntitySection['id']): Enti
 export async function readStatements(section: EntitySection, cursor: string | undefined, position?: string,
   frame?: readonly string[]): Promise<Loaded<StatementPage>> {
   const { main, actingSubject } = await reader();
-  return settle(followHref<StatementPage>(main, section.href,
-    { actingSubject, cursor, position, ...frame?.length ? { frame: [...frame] } : {} }), cursor);
+  return readLinkedStatements(main, actingSubject, section.href, { cursor, position, frame });
 }
 
 /**

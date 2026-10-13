@@ -1,7 +1,7 @@
 import { cache } from 'react';
+import { readWorkParts, readWorkRealizations } from '../work-page/anime-hub-recorded-page.ts';
 import { failureOf } from '../work-page/failure.ts';
 import { reader, readReviewer } from '../work-page/read.ts';
-import { iriOf } from '../work-page/route.ts';
 import { agentsOf, relationRows } from './relation-rows.ts';
 import type { CollectionMember, CollectionMembers, Loaded, Names, PartsPage, RealizationPage, Realization,
   People, RelationEntry, RelationsPage, Release, ReleasePage, Summary, WholesPage } from './types.ts';
@@ -36,8 +36,7 @@ async function actor() {
 export async function readParts(id: string, query: { parent?: string; after?: string; limit?: number }):
   Promise<Loaded<PartsPage>> {
   const current = await reader();
-  return settle(() => current.main.v1.resources({ resource: id }).parts.get({ query: { actingSubject: current.actingSubject,
-    parent: query.parent ? iriOf(query.parent) : undefined, after: query.after, limit: query.limit } }), query.after);
+  return readWorkParts(current.main, current.actingSubject, id, query);
 }
 
 export async function readWholes(id: string, query: { after?: string; limit?: number } = {}): Promise<Loaded<WholesPage>> {
@@ -94,7 +93,7 @@ export async function readReleases(id: string, after?: string): Promise<Loaded<R
 
 export async function readRealizations(id: string, after?: string): Promise<Loaded<RealizationPage>> {
   const { main, actingSubject } = await reader();
-  return settle(() => main.v1.works({ id }).realizations.get({ query: { actingSubject, limit: 20, cursor: after } }), after);
+  return readWorkRealizations(main, actingSubject, id, after);
 }
 
 export async function readRealization(work: string, realization: string): Promise<Loaded<Realization>> {
