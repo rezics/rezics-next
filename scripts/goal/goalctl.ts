@@ -20,6 +20,8 @@ import { usageReport } from './usage.ts';
 import { goalMeasures } from './measures.ts';
 import { prepareCheckTree, warnHarnessCurrency } from './tree-currency.ts';
 import { spawn } from 'node:child_process';
+import { writeFileSync } from 'node:fs';
+import { landsOutsideTurn, startLandingOutsideTurn, reportLanding } from './land-outside-turn.ts';
 
 export { type State, type Engine, BRIEF_KINDS, type BriefKind, type Brief, type Attempt, type Task, type GoalRecord, type Ledger, type UsageWindow, type UsageSnapshot, type UsageSample, type UsageLevel, type UsageReport, type AccountUsage, type CodexResetStatus, type CodexResetLoad, MODEL, FABLE_MODEL, SONNET_MODEL, HAIKU_MODEL, CODEX_MODEL, LUNA_MODEL, GROK_MODEL, DEFAULT_ENGINE, CODEX_HOME, CODEX_1_HOME } from './types.ts';
 export { parseFrontmatter, parseBrief, validateBrief, mechanismSectionErrors, rangesOverlap, pathsOverlap, isGeneratedOutput, claimConflicts, outOfScope, GOALS_DIR, validGoalSlug, goalFile, goalBriefFile, goalOfBriefPath, goalAreas, areaConflicts, nextTaskId, HISTORY_EXEMPT, type ChangedFile, historyIntroductions, ownerRefusal, isHeavyTest } from './briefs.ts';
@@ -83,7 +85,24 @@ async function main(argv: string[]): Promise<number> {
       return 0;
     case 'merge': await mergeTask(positional[0] ?? '', flags); return 0;
     case 'gate': await mergeTask(positional[0] ?? '', flags, undefined, undefined, undefined, true); return 0;
-    case 'land': await landTask(positional[0] ?? '', flags.has('--step')); return 0;
+    case 'land': {
+      const id = positional[0] ?? '';
+      const step = flags.has('--step');
+      const task = taskOf(readLedger(), id);
+      const runDir = join(stateDir, 'runs', task.id);
+      if (landsOutsideTurn(process.env)) {
+        console.log(startLandingOutsideTurn({ id: task.id, step, runDir, root, script: import.meta.filename, env: process.env }));
+        return 0;
+      }
+      if (!flags.has('--report')) { await landTask(id, step); return 0; }
+      return reportLanding(task.id, step, () => landTask(id, step), (body, key) => {
+        const file = join(runDir, 'land-report.txt');
+        writeFileSync(file, `${body}\n`);
+        const directory = eventStateDirectory();
+        mailCommand(['send', task.goal ?? '', '--file', file, '--key', key],
+          { stateDir: directory, goals: Object.keys(eventLedger(directory).goals ?? {}), callerGoal: process.env.GOAL_ID ?? task.goal });
+      });
+    }
     case 'auto-land': await setAutoLand(positional[0] ?? '', positional[1] !== 'off'); return 0;
     case 'loan': await lendFiles(positional[0] ?? '', positional.slice(1)); return 0;
     case 'close': await closeTasks(positional.slice(0, -1), positional.at(-1) ?? ''); return 0;
