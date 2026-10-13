@@ -40,6 +40,7 @@ function subjectOf(item: AnswerSample): string {
 function textTitle(value: unknown): string {
   if (!value || typeof value !== 'object' || !('title' in value)) throw new Error('Recorded answer has no title');
   const title = (value as { title: unknown }).title;
+  if (typeof title === 'string' && title.length > 0) return title;
   if (title && typeof title === 'object' && 'value' in title && typeof title.value === 'string') return title.value;
   throw new Error('Recorded title is not text');
 }
@@ -276,3 +277,58 @@ export const OwnerCreatedPhone: Story = {
   ...OwnerCreated,
   globals: phone,
 };
+
+const refusedPersonas = ['visitor', 'stranger', 'member', 'moderator', 'operator'] as const;
+
+async function expectRefused(canvasElement: HTMLElement, persona: (typeof refusedPersonas)[number]) {
+  const item = sample(loans, persona, 'active-loans-refused');
+  await expect(item.status).toBe(persona === 'visitor' ? 401 : 403);
+  const canvas = within(canvasElement);
+  const alert = await canvas.findByRole('alert');
+  await expect(alert).toHaveTextContent(textTitle(item.answer));
+  await expect(within(alert).getByRole('heading', { name: t.loansUnavailable })).toBeVisible();
+  await expect(within(alert).getByRole('link', { name: t.retry })).toBeVisible();
+  await expect(canvas.queryByRole('list')).toBeNull();
+  await expect(canvas.queryByRole('region', { name: t.overdue })).toBeNull();
+  await expect(canvas.queryByRole('region', { name: t.dueSoon })).toBeNull();
+  await expect(canvas.queryByText(t.loanReturned)).toBeNull();
+  const root = canvasElement.ownerDocument.documentElement;
+  await expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth + 1);
+}
+
+const refusedArgs = { selections: [{ label: 'active-loans-refused', state: 'error' as const }] };
+
+/** Visitor, books/loans: the recorded active read answers 401. */
+export const VisitorRefused: Story = {
+  args: { ...refusedArgs, persona: 'visitor' },
+  async play({ canvasElement }) { await expectRefused(canvasElement, 'visitor'); },
+};
+export const VisitorRefusedPhone: Story = { ...VisitorRefused, globals: phone };
+
+/** Stranger, books/loans: the recorded active read answers 403. */
+export const StrangerRefused: Story = {
+  args: { ...refusedArgs, persona: 'stranger' },
+  async play({ canvasElement }) { await expectRefused(canvasElement, 'stranger'); },
+};
+export const StrangerRefusedPhone: Story = { ...StrangerRefused, globals: phone };
+
+/** Member, books/loans: the recorded active read answers 403. */
+export const MemberRefused: Story = {
+  args: { ...refusedArgs, persona: 'member' },
+  async play({ canvasElement }) { await expectRefused(canvasElement, 'member'); },
+};
+export const MemberRefusedPhone: Story = { ...MemberRefused, globals: phone };
+
+/** Moderator, books/loans: the recorded active read answers 403. */
+export const ModeratorRefused: Story = {
+  args: { ...refusedArgs, persona: 'moderator' },
+  async play({ canvasElement }) { await expectRefused(canvasElement, 'moderator'); },
+};
+export const ModeratorRefusedPhone: Story = { ...ModeratorRefused, globals: phone };
+
+/** Operator, books/loans: the recorded active read answers 403. */
+export const OperatorRefused: Story = {
+  args: { ...refusedArgs, persona: 'operator' },
+  async play({ canvasElement }) { await expectRefused(canvasElement, 'operator'); },
+};
+export const OperatorRefusedPhone: Story = { ...OperatorRefused, globals: phone };

@@ -185,10 +185,15 @@ test('a member with no active loans gets the recorded empty page', async () => {
   expect(read.data.complete).toBe(page.complete);
 });
 
-test('a recorded refusal stays a refusal and keeps its problem title', () => {
+test('a recorded refusal stays a refusal and keeps its problem title', async () => {
   for (const persona of ['visitor', 'stranger', 'member', 'moderator', 'operator'] as const) {
     const item = sample(loans, persona, 'active-loans-refused');
-    const mapped = refusedLoansRead(item.status, item.answer);
+    const query = new URL(item.path, 'https://recorded.invalid').searchParams;
+    expect(item.method).toBe('GET');
+    expect(query.get('state')).toBe('active');
+    expect(query.get('limit')).toBe('20');
+    expect(item.status).toBe(persona === 'visitor' ? 401 : 403);
+    const mapped = await readRecorded(loans, persona, [{ label: 'active-loans-refused', state: 'error' }]);
     expect(mapped.ok).toBe(false);
     if (mapped.ok) continue;
     expect(mapped.failure).toBe('sign-in');
