@@ -31,7 +31,8 @@ function listField(fields: Record<string, string>, key: string): string[] {
   const value = fields[key];
   if (!value) return [];
   if (!value.startsWith('[') || !value.endsWith(']')) throw new Error(`${key} must be a [a, b] list`);
-  return value.slice(1, -1).split(',').map(item => item.trim()).filter(Boolean);
+  // A manager that writes the list as JSON quotes each item; a quote kept in a path matches no file and no claim.
+  return value.slice(1, -1).split(',').map(item => item.trim().replace(/^(["'])(.*)\1$/, '$2')).filter(Boolean);
 }
 
 export function parseBrief(text: string): Brief {

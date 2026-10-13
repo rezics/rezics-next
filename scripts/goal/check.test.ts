@@ -84,6 +84,8 @@ test('tests frontmatter accepts inline and multiline lists and defaults to an em
     .toEqual(['scripts/a.test.ts', 'scripts/b.test.ts']);
   expect(parseBrief('---\ntests:\n  - scripts/a.test.ts\n  - scripts/b.test.ts\n---\n').tests)
     .toEqual(['scripts/a.test.ts', 'scripts/b.test.ts']);
+  expect(parseBrief('---\npaths: ["scripts/a.ts","scripts/b/**", \'scripts/c.ts\']\n---\n').paths)
+    .toEqual(['scripts/a.ts', 'scripts/b/**', 'scripts/c.ts']);
   expect(parseBrief('---\nid: example\n---\n').tests).toEqual([]);
 });
 
