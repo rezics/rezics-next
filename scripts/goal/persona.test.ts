@@ -31,6 +31,12 @@ describe('persona probe validation', () => {
     expect(parseProbeCalls([`${persona} GET /v1/zones/{zone}`], operations)[0]?.persona).toBe(persona);
   });
 
+  test('accepts surrounding whitespace and literal braces in JSON text', () => {
+    expect(parseProbeCalls(['  visitor GET /v1/zones/{zone}  '], operations)[0]?.body).toBeUndefined();
+    expect(parseProbeCalls([' owner POST /v1/spaces {"name":"A {literal} name"}  '], operations)[0]?.body)
+      .toEqual({ name: 'A {literal} name' });
+  });
+
   test('refuses unknown personas without echoing their input', () => {
     expect(() => parseProbeCalls(['secret-person GET /v1/zones/{zone}'], operations)).toThrow('Unknown persona');
   });

@@ -64,13 +64,13 @@ function operationMatches(operation: IndexedOperation, method: string, path: str
       ? Boolean(requested[index]) : part === requested[index]);
 }
 
-function checkPlaceholders(value: unknown, callNumber: number): void {
+function checkPlaceholders(value: unknown, callNumber: number, path = false): void {
   if (typeof value === 'string') {
     for (const match of value.matchAll(placeholder)) {
       const reference = /^([1-9]\d*)\./.exec(match[1]!);
       if (reference && Number(reference[1]) >= callNumber) throw new Error('Answer placeholders must refer to an earlier call');
     }
-    if (/\{[^{}]*\}/.test(value.replace(placeholder, ''))) throw new Error('Unknown or malformed placeholder');
+    if (path && /\{[^{}]*\}/.test(value.replace(placeholder, ''))) throw new Error('Unknown or malformed placeholder');
   } else if (Array.isArray(value)) {
     for (const item of value) checkPlaceholders(item, callNumber);
   } else if (value && typeof value === 'object') {
@@ -81,7 +81,7 @@ function checkPlaceholders(value: unknown, callNumber: number): void {
 export function parseProbeCalls(calls: readonly string[], operations: readonly IndexedOperation[]): ProbeCall[] {
   if (!calls.length) throw new Error('Provide at least one persona call');
   return calls.map((call, index) => {
-    const match = /^\s*(\S+)\s+(\S+)\s+(\S+)(?:\s+([\s\S]+))?\s*$/.exec(call);
+    const match = /^(\S+)\s+(\S+)\s+(\S+)(?:\s+([\s\S]+))?$/.exec(call.trim());
     if (!match) throw new Error('A call needs persona METHOD /path [json body]');
     const [, persona, rawMethod, path, json] = match;
     if (!probePersonas.some(name => name === persona)) throw new Error(`Unknown persona; choose ${probePersonas.join(', ')}`);
@@ -93,7 +93,7 @@ export function parseProbeCalls(calls: readonly string[], operations: readonly I
     if (JSON.stringify(redactProbe({ path, body })) !== JSON.stringify({ path, body })) {
       throw new Error('Credentials belong to persona sessions, not probe requests');
     }
-    checkPlaceholders(path, index + 1);
+    checkPlaceholders(path, index + 1, true);
     checkPlaceholders(body, index + 1);
     const matches = operations.filter(operation => operationMatches(operation, method, path!));
     const operation = matches.sort((a, b) => a.path.localeCompare(b.path))[0];
