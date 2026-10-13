@@ -12,7 +12,7 @@ import { eventStateDirectory, mailCommand, eventLedger, coordinatorCommand } fro
 import { resolve, join } from 'node:path';
 import { readdir } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
-import { provideGoalctl, runRegression, parseRegressArgs, appendInbox, inboxEntries } from './regress.ts';
+import { provideGoalctl, runRegression, parseRegressArgs, regressionTimingReport, appendInbox, inboxEntries } from './regress.ts';
 import { declaredTestTimeout, planUnitGateShards } from './unit-gate.ts';
 import { heavyQaStatus, withSlot, withRecovery } from './qa-slots.ts';
 import { usageReport } from './usage.ts';
@@ -118,8 +118,13 @@ async function main(argv: string[]): Promise<number> {
     case 'regress': {
       // Worktree smoke runs can keep reports/inboxes in their writable checkout; QA still uses the shared host lock.
       const regressionState = process.env.GOAL_REGRESS_STATE_DIR ? resolve(process.env.GOAL_REGRESS_STATE_DIR) : stateDir;
+      const options = parseRegressArgs(rest);
+      if (options.timing) {
+        console.log(regressionTimingReport(join(regressionState, 'regress', options.timing)));
+        return 0;
+      }
       provideGoalctl({ declaredTestTimeout, planUnitGateShards, heavyQaStatus });
-      const manifest = await runRegression({ ...parseRegressArgs(rest), repo: process.cwd(), stateDir: regressionState,
+      const manifest = await runRegression({ ...options, repo: process.cwd(), stateDir: regressionState,
         route: entry => regressionState === stateDir ? withLedger(() => appendInbox(stateDir, entry))
           : Promise.resolve(appendInbox(regressionState, entry)) });
       console.log(`Regression ${manifest.runId}: ${manifest.status} at ${manifest.atCommit}`);

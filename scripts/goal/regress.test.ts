@@ -20,6 +20,7 @@ import { appendInbox, checkoutNameLength, classify, regressionFailureCause, exec
   pruneRegressionCheckouts, regressionBatchArtifactPaths, regressionBatchCommand, regressionCheckoutRoot, regressionDiagnosisBudgetMs,
   regressionRegistry, runBatch,
   regressionBatchEnvironment, runRegression, waitForRegressionTurn, type Batch, type Execution, type ExpectedFile, type Manifest, type MergeEvent, type RegressionOptions } from './regress.ts';
+import { regressionTiming, regressionTimingReport } from './regress.ts';
 
 let repoSequence = 0;
 
@@ -1851,6 +1852,51 @@ test('the first runtime error determines a non-timeout failure', () => {
   expect(classify('error: Invalid application input\nerror: Cannot connect to the Docker daemon')).toBe('deterministic');
   expect(regressionFailureCause('error: Invalid application input\nerror: Cannot connect to the Docker daemon')).toBe('error: Invalid application input');
   expect(classify('error: Invalid application input\nCommand deadline exceeded')).toBe('deadline');
+});
+
+test('timing reads a relocated cut of the surveyed manifest and acceptance records', () => {
+  mkdirSync('.temp', { recursive: true });
+  const directory = mkdtempSync('.temp/regress-timing-');
+  const runId = '20261013t043515-585e9a';
+  const original = `/read-only/.temp/goal-orchestration/regress/${runId}`;
+  try {
+    const artifact = join(directory, 'qa/integration-1/attempt-1/20261013t055155-a11ff0');
+    mkdirSync(artifact, { recursive: true });
+    // Fields cut from the run's first unit attempt and first integration acceptance record.
+    const first: Execution = { code: 0, queuedAt: 1791866132385, startedAt: 1791866132465,
+      finishedAt: 1791866135366, queueMs: 80, testMs: 2901, totalMs: 2981, outcomes: {}, artifactPaths: [] };
+    const manifest = { version: 1, runId, atCommit: 'd2a2e3166ec207243d055b1faf28d310a26896dc',
+      startedAt: '2026-10-13T04:35:15Z', status: 'running', checkout: '/pinned',
+      batches: [
+        { id: 'unit-1', tier: 'unit', files: [], attempts: [first] },
+        { id: 'integration-1', tier: 'integration', files: [], attempts: [{ ...first,
+          queueMs: 1000, testMs: 121943, totalMs: 122943, finishedAt: first.queuedAt! + 122943,
+          artifactPaths: [`${original}/qa/integration-1/attempt-1/20261013t055155-a11ff0`] }] },
+        { id: 'jena-check-1', tier: 'jena:check', files: [], attempts: [{ code: 0,
+          queueMs: 0, testMs: 21462, totalMs: 21462, outcomes: {}, artifactPaths: [] }] },
+      ], diagnoses: [] } as unknown as Manifest;
+    writeFileSync(join(directory, 'manifest.json'), JSON.stringify(manifest));
+    writeFileSync(join(directory, 'checkouts.json'), JSON.stringify(Object.fromEntries([0, 1, 2].map(index =>
+      [`${manifest.atCommit}:lane-${index}`, `/pinned-${index}`]))));
+    writeFileSync(join(artifact, 'acceptance.json'), JSON.stringify({ tiers: [{ name: 'integration', elapsedMs: 121943,
+      shards: [{ startupMs: 6313, bootstrapMs: 1607, elapsedMs: 121943, cleanupMs: 588 }] }],
+      tests: [{ name: 'Accounts guardians', file: 'apps/accounts/tests/guardian-flow.integration.test.ts', tier: 'integration', durationMs: 48487 },
+        { name: 'second case', file: 'apps/accounts/tests/guardian-flow.integration.test.ts', tier: 'integration', durationMs: 1000 }] }));
+    const timing = regressionTiming(directory);
+    expect(timing.lanes).toEqual(['lane-0', 'lane-1', 'lane-2']);
+    expect(timing.wallMs).toBe(122943);
+    expect(timing.tiers.find(tier => tier.tier === 'integration')).toMatchObject({ wallMs: 122943, queueMs: 1000,
+      testMs: 121943, startupMs: 6313, bootstrapMs: 1607 });
+    expect(timing.tiers.find(tier => tier.tier === 'jena:check')!.wallMs).toBeUndefined();
+    expect(timing.batches.map(batch => batch.id)).toEqual(['integration-1', 'jena-check-1', 'unit-1']);
+    expect(timing.files).toEqual([{ file: 'apps/accounts/tests/guardian-flow.integration.test.ts', durationMs: 49487 }]);
+    const report = regressionTimingReport(directory);
+    expect(report).toContain('starting stacks: 0.11 min');
+    expect(report).toContain('jena:check | unrecorded');
+    expect(report).toContain('Ten slowest files');
+    expect(parseRegressArgs(['--timing', runId])).toEqual({ timing: runId });
+    expect(() => parseRegressArgs(['--timing', runId, '--only', 'unit'])).toThrow('cannot select');
+  } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
 test('classification ignores unexecuted branches in numbered Bun source excerpts', () => {

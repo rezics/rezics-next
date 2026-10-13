@@ -30,6 +30,9 @@ export interface Execution {
   queueMs: number; testMs: number; totalMs: number; evidence?: string; classification?: Classification;
   failingTests?: string[];
   cause?: string;
+  queuedAt?: number;
+  startedAt?: number;
+  finishedAt?: number;
   /** The file still running when this batch stopped on a timeout, and the tier log that shows it. */
   hang?: { file: string; log: string };
 }
@@ -207,7 +210,7 @@ export function checkoutNameLength(checkoutRoot: string): number {
   return length;
 }
 
-export function parseRegressArgs(args: string[]): Pick<RegressionOptions, 'at' | 'resume' | 'only' | 'integrationBatches' | 'nightly'> {
+export function parseRegressArgs(args: string[]): Pick<RegressionOptions, 'at' | 'resume' | 'only' | 'integrationBatches' | 'nightly'> & { timing?: string } {
   const options: ReturnType<typeof parseRegressArgs> = {};
   for (let index = 0; index < args.length; index++) {
     const flag = args[index];
@@ -215,6 +218,7 @@ export function parseRegressArgs(args: string[]): Pick<RegressionOptions, 'at' |
     const value = args[++index];
     if (!value || value.startsWith('--')) throw new Error(`${flag} needs a value`);
     if (flag === '--at' && /^[A-Za-z0-9._/@^~-]+$/.test(value)) options.at = value;
+    else if (flag === '--timing' && validId(value)) options.timing = value;
     else if (flag === '--resume' && validId(value)) options.resume = value;
     else if (flag === '--only' && value.split(',').every(tier => tiers.includes(tier as RegressionTier))) {
       options.only = [...new Set(value.split(',') as RegressionTier[])];
@@ -223,7 +227,93 @@ export function parseRegressArgs(args: string[]): Pick<RegressionOptions, 'at' |
   }
   if (options.resume && (options.only || options.nightly || options.integrationBatches !== undefined)) throw new Error('Resume keeps the original selection');
   if (options.nightly && (options.only || options.integrationBatches !== undefined)) throw new Error('--nightly runs all non-browser tiers and cannot restrict tiers or batches');
+  if (options.timing && Object.keys(options).length !== 1) throw new Error('--timing reads one existing run and cannot select or resume a regression');
   return options;
+}
+
+interface RegressionTimingTier {
+  tier: RegressionTier; wallMs?: number; queueMs: number; testMs: number; startupMs: number; bootstrapMs: number;
+}
+export interface RegressionTiming {
+  runId: string; atCommit: string; status: Manifest['status']; wallMs?: number;
+  lanes: string[]; tiers: RegressionTimingTier[];
+  batches: { id: string; attempts: number; totalMs: number; queueMs: number; testMs: number }[];
+  files: { file: string; durationMs: number }[];
+}
+
+/** Reads recorded initial attempts only. A cut copy of a run can relocate its artifacts. */
+export function regressionTiming(directory: string): RegressionTiming {
+  const manifest = json<Manifest>(join(directory, 'manifest.json'));
+  const tierRecords: RegressionTimingTier[] = [];
+  const fileTimes = new Map<string, number>();
+  const seenArtifacts = new Set<string>();
+  const timings = manifest.batches.map(batch => ({ id: batch.id, attempts: batch.attempts.length,
+    totalMs: batch.attempts.reduce((sum, attempt) => sum + attempt.totalMs, 0),
+    queueMs: batch.attempts.reduce((sum, attempt) => sum + attempt.queueMs, 0),
+    testMs: batch.attempts.reduce((sum, attempt) => sum + attempt.testMs, 0) }));
+  const allAttempts = manifest.batches.flatMap(batch => batch.attempts);
+  const span = (attempts: Execution[]): number | undefined => {
+    const starts = attempts.flatMap(attempt => attempt.queuedAt === undefined ? [] : [attempt.queuedAt]);
+    const finishes = attempts.flatMap(attempt => attempt.finishedAt === undefined ? [] : [attempt.finishedAt]);
+    return starts.length && finishes.length ? Math.max(...finishes) - Math.min(...starts) : undefined;
+  };
+  for (const tier of tiers) {
+    const batches = manifest.batches.filter(batch => batch.tier === tier);
+    if (!batches.length) continue;
+    const attempts = batches.flatMap(batch => batch.attempts);
+    const record: RegressionTimingTier = { tier, wallMs: span(attempts),
+      queueMs: attempts.reduce((sum, attempt) => sum + attempt.queueMs, 0),
+      testMs: attempts.reduce((sum, attempt) => sum + attempt.testMs, 0), startupMs: 0, bootstrapMs: 0 };
+    for (const attempt of attempts) for (const artifact of attempt.artifactPaths) {
+      const marker = `/regress/${manifest.runId}/`;
+      const suffix = artifact.includes(marker) ? artifact.slice(artifact.indexOf(marker) + marker.length) : undefined;
+      const path = suffix === undefined ? artifact : join(directory, suffix);
+      if (seenArtifacts.has(path)) continue;
+      seenArtifacts.add(path);
+      const acceptancePath = join(path, 'acceptance.json');
+      let tests: Pick<TestResult, 'file' | 'durationMs'>[] = [];
+      if (existsSync(acceptancePath)) {
+        const acceptance = json<{ tests?: TestResult[]; tiers?: { name: string;
+          shards?: { startupMs?: number; bootstrapMs?: number }[] }[] }>(acceptancePath);
+        tests = acceptance.tests?.filter(test => test.tier === tier) ?? [];
+        for (const shard of acceptance.tiers?.filter(entry => entry.name === tier).flatMap(entry => entry.shards ?? []) ?? []) {
+          record.startupMs += shard.startupMs ?? 0;
+          record.bootstrapMs += shard.bootstrapMs ?? 0;
+        }
+      } else {
+        const xml = [join(path, `${tier.replaceAll('/', '-')}.xml`), join(path, 'batch.xml')].find(existsSync);
+        if (xml) tests = parseJUnit(readFileSync(xml, 'utf8'), tier === 'jena:check' ? 'owner' : tier, { root: manifest.checkout });
+      }
+      for (const test of tests) if (test.durationMs !== undefined) {
+        fileTimes.set(test.file, (fileTimes.get(test.file) ?? 0) + test.durationMs);
+      }
+    }
+    tierRecords.push(record);
+  }
+  const checkoutsPath = join(directory, 'checkouts.json');
+  const lanes = existsSync(checkoutsPath) ? Object.keys(json<Record<string, string>>(checkoutsPath))
+    .filter(key => key.startsWith(`${manifest.atCommit}:lane-`)).map(key => key.slice(manifest.atCommit.length + 1)).sort() : [];
+  const start = Date.parse(manifest.startedAt);
+  const finish = manifest.finishedAt ? Date.parse(manifest.finishedAt) : undefined;
+  return { runId: manifest.runId, atCommit: manifest.atCommit, status: manifest.status,
+    wallMs: finish === undefined ? span(allAttempts) : finish - start, lanes, tiers: tierRecords,
+    batches: timings.sort((a, b) => b.totalMs - a.totalMs).slice(0, 10),
+    files: [...fileTimes].map(([file, durationMs]) => ({ file, durationMs })).sort((a, b) => b.durationMs - a.durationMs).slice(0, 10) };
+}
+
+export function regressionTimingReport(directory: string): string {
+  const report = regressionTiming(directory);
+  const minutes = (ms: number | undefined): string => ms === undefined ? 'unrecorded' : `${(ms / 60_000).toFixed(2)} min`;
+  return [`Regression ${report.runId}: ${report.atCommit}; ${report.status}`,
+    `Wall: ${minutes(report.wallMs)}${report.status === 'running' ? ' (recorded attempts; run has no finish yet)' : ''}`,
+    `Lanes used: ${report.lanes.join(', ') || 'unrecorded'}`,
+    'Tier | wall span | summed queue | summed runner/test | stack startup | bootstrap',
+    ...report.tiers.map(tier => `${tier.tier} | ${minutes(tier.wallMs)} | ${minutes(tier.queueMs)} | ${minutes(tier.testMs)} | ${minutes(tier.startupMs)} | ${minutes(tier.bootstrapMs)}`),
+    `Time queueing: ${minutes(report.tiers.reduce((sum, tier) => sum + tier.queueMs, 0))}; starting stacks: ${minutes(report.tiers.reduce((sum, tier) => sum + tier.startupMs, 0))}; bootstrap: ${minutes(report.tiers.reduce((sum, tier) => sum + tier.bootstrapMs, 0))}`,
+    'Ten slowest batches (all initial attempts; queue + runner/test):',
+    ...report.batches.map(batch => `${batch.id}: ${minutes(batch.totalMs)}; queue ${minutes(batch.queueMs)}; test ${minutes(batch.testMs)}; ${batch.attempts} attempt(s)`),
+    'Ten slowest files (summed testcase time in initial attempts):',
+    ...report.files.map(file => `${file.file}: ${minutes(file.durationMs)}`)].join('\n');
 }
 
 export interface PruneCheckoutEntry { path: string; reason: string; bytes?: number }
@@ -865,7 +955,8 @@ export async function runBatch(checkout: string, batch: Batch, directory: string
   if (nativeProof) env[admittedCommandBudgetEnv] = String(effectiveDeadlineMs);
   const code = await command(checkout, regressionBatchCommand(batch, report, junitXmlPath), join(directory, 'runner.log'),
     outerDeadlineMs, env);
-  const metadata = existsSync(report) ? json<Execution>(report) : { queueMs: 0, testMs: Date.now() - started, totalMs: Date.now() - started, artifactPaths: [] };
+  const metadata = existsSync(report) ? json<Execution>(report) : { queuedAt: started, startedAt: started, finishedAt: Date.now(),
+    queueMs: 0, testMs: Date.now() - started, totalMs: Date.now() - started, artifactPaths: [] };
   const artifactPaths = regressionBatchArtifactPaths(metadata.artifactPaths, artifactRoot);
   const tests: TestResult[] = [];
   let evidence = readFileSync(join(directory, 'runner.log'), 'utf8');
