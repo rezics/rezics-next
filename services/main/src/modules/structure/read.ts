@@ -2,14 +2,15 @@ import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activat
 import { checkOccurrenceRecord, checkStructureManifest, checkStructurePage, InvalidStructureObject, STRUCTURE_LIMITS,
   type OccurrenceRecord, type RecipeMeasure, type StructureManifest } from './format.ts';
 import { orderTree, recordTree, structureObjects } from './change.ts';
-import { CompositionCorrupt, CompositionUnavailable, NATIVE_ID, orderTreeKey,
+import { CompositionCorrupt, CompositionUnavailable, NATIVE_ID, orderTreeKey, compositionForMainVersion,
   readCompositionHeader, type CompositionHeader } from './graph.ts';
 import { isCatalogTarget, isContainerRole, structureProfileFor } from './profiles.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable, newCost, type TreeCost } from './tree.ts';
 import { ObjectIntegrityError, ObjectUnavailable, type ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
 import { resolvePreparedGroups } from './group-root.ts';
 import { fusekiReadBudget } from '../../infrastructure/fuseki.ts';
-import { encodeReadCursor, decodeReadCursor, WorkReadMoved } from '../work/read-session.ts';
+import { encodeReadCursor, decodeReadCursor, WorkReadMoved, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
+import { readPublishedStructuredWorkSource } from '../work/public-patterns.ts';
 import { qualifierKeyTree, qualifierKeyPrefix, qualifierKeyOf, requireQualifierKeyIndex, resolvePreparedQualifierKeys,
   QUALIFIER_KEY_COST, type QualifierKey } from './qualifier-index.ts';
 
@@ -18,6 +19,32 @@ import { qualifierKeyTree, qualifierKeyPrefix, qualifierKeyOf, requireQualifierK
 function disclosedRecord(record: OccurrenceRecord): OccurrenceRecord {
   const { subtreeLevels: _levels, ...disclosed } = record;
   return disclosed;
+}
+
+/** Published Work compositions share one revision selection across pages,
+ * occurrences and recipe calculations. An arbitrary revision is no capability. */
+export async function selectWorkCompositionRevision(session: WorkReadSession,
+  header: CompositionHeader, requestedRevision?: string): Promise<string> {
+  if (await session.canPreviewWork(header.work)) {
+    const mapping = () => compositionForMainVersion(session.deps.environment, header.component);
+    const structure = await mapping();
+    session.observeDependency(`composition-mapping:${header.component}`, structure, mapping);
+    if (structure !== header.structure) throw new CompositionUnavailable('Composition is unavailable');
+    session.observeDependency(`composition-header:${header.structure}`, header,
+      () => readCompositionHeader(session.deps.environment, header.structure));
+    return requestedRevision ?? header.head;
+  }
+  const read = () => readPublishedStructuredWorkSource(session.deps.environment, header.work, header.component);
+  let source;
+  try { source = await read(); }
+  catch (cause) { throw new WorkReadUnavailable('Published Structure source is unavailable', { cause }); }
+  session.observeDependency(`composition-publication:${header.work}:${header.component}`, source, read);
+  if (!source || source.structure !== header.structure
+    || source.structureProfile !== structureProfileFor(header.profile).graphProfile
+    || requestedRevision && requestedRevision !== source.structureRevision) {
+    throw new CompositionUnavailable('Composition is unavailable');
+  }
+  return source.structureRevision;
 }
 
 /** Source-bound candidates refine existing immutable membership. A miss never

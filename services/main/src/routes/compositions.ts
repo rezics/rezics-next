@@ -10,7 +10,7 @@ import { cancelCompositionStage, CompositionConflict, CompositionExists, Composi
   InvalidCompositionChange, StaleCompositionHead, StructureSummaryRepairRequired, type CompositionOperation } from '../modules/structure/change.ts';
 import { CompositionCorrupt, CompositionUnavailable, readCompositionHeader, derivedId }
   from '../modules/structure/graph.ts';
-import type { CompositionPage } from '../modules/structure/read.ts';
+import { selectWorkCompositionRevision, type CompositionPage } from '../modules/structure/read.ts';
 import { readVisibleCompositionPage } from '../modules/collection/visible-page.ts';
 import { readCompositionSeal } from '../modules/structure/seal-read.ts';
 import { canReadStructureTarget, structureProfileFor } from '../modules/structure/profiles.ts';
@@ -29,9 +29,8 @@ import { resourceTargetReader } from '../modules/target/resolve.ts';
 import { canReadCompositionWork, canReadCompositionResource,
   compositionTargetReader, compositionTargetBatchReader } from '../modules/composition/disclosure-read.ts';
 import { workRead, type WorkReadSession } from '../modules/work/read-session.ts';
-import { WorkReadMoved, WorkReadUnavailable } from '../modules/work/read-session.ts';
+import { WorkReadMoved } from '../modules/work/read-session.ts';
 import { structureRevisionDisclosureVisible } from '../modules/work/read-header.ts';
-import { readPublishedStructuredWorkSource } from '../modules/work/public-patterns.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
 import { groupUuid } from './shared.ts';
 
@@ -167,18 +166,7 @@ async function disclosedComposition<T>(work: MainWorkDependencies, request: Requ
     const requestedRevision = options.revision;
     let revision = requestedRevision ?? header.head;
     if (options.selectedRoot !== false && profile.workPublication === true) {
-      const hasPrivatePreview = !!session.principal && !!session.options.actingSubject
-        && await session.deps.access.canReadWork(session.principal, session.options.actingSubject, header.work);
-      if (!hasPrivatePreview) {
-        let source;
-        try { source = await readPublishedStructuredWorkSource(work.environment, header.work, header.component); }
-        catch (cause) { throw new WorkReadUnavailable('Published Structure source is unavailable', { cause }); }
-        if (!source || source.structure !== structure || source.structureProfile !== profile.graphProfile
-          || requestedRevision && requestedRevision !== source.structureRevision) {
-          throw new CompositionUnavailable('Composition is unavailable');
-        }
-        revision = source.structureRevision;
-      }
+      revision = await selectWorkCompositionRevision(session, header, requestedRevision);
       if (!await structureRevisionDisclosureVisible(session, { work: header.work,
         structure, revision })) throw new CompositionUnavailable('Composition is unavailable');
       const result = await read(session, header, revision);

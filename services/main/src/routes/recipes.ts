@@ -8,15 +8,15 @@ import { CompositionConflict, InvalidCompositionChange, StaleCompositionHead }
   from '../modules/structure/change.ts';
 import { CompositionCorrupt, CompositionUnavailable, NATIVE_ID, readCompositionHeader }
   from '../modules/structure/graph.ts';
-import { readCompositionPage, readStructureMeasures } from '../modules/structure/read.ts';
+import { readCompositionPage, readStructureMeasures, selectWorkCompositionRevision } from '../modules/structure/read.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable }
   from '../modules/structure/tree.ts';
 import { RecipeMeasure, STRUCTURE_LIMITS, OccurrenceRecord }
   from '../modules/structure/format.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import { AdmissionDenied, type VerifiedPrincipal } from '../modules/access/admission.ts';
-import { DisclosureUnavailable, discloseInventory } from '../modules/disclosure/read.ts';
-import { disclosureViewer } from '../modules/disclosure/viewer.ts';
+import { DisclosureUnavailable } from '../modules/disclosure/read.ts';
+import { structureRevisionDisclosureVisible } from '../modules/work/read-header.ts';
 import { structureProfileFor } from '../modules/structure/profiles.ts';
 import { calculateNutrition, scaleIngredients } from '../modules/recipe/operations.ts';
 import { exactRational, InexactQuantity } from '../modules/recipe/quantity.ts';
@@ -34,7 +34,7 @@ import { readRecipeWorkPage, RECIPE_WORK_PAGE_CURSOR_MAX } from '../modules/reci
 import { workRead } from '../modules/work/read-session.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
-import { commandError, problem } from './problems.ts';
+import { problem } from './problems.ts';
 import { problemResult } from '../api-contract.ts';
 import { authorizedReadProblems } from '../api-responses.ts';
 import { groupUuid } from './shared.ts';
@@ -170,32 +170,29 @@ function routeError(error: unknown): Response {
     || error instanceof StructureObjectUnavailable) {
     return problem(503, 'recipe_unavailable', 'Recipe history is unavailable');
   }
-  return commandError(error);
+  return workReadError(error);
 }
 
 async function withAuthorizedRecipeRevision<T>(work: MainWorkDependencies, request: Request, input: {
   structure: string; actingSubject: string; revision?: string; parent?: string; after?: string; limit: number;
 }, read: (principal: VerifiedPrincipal, revision: string) => Promise<T>): Promise<T> {
   await assertGraphAdmissionOpen(work.environment.fuseki, work.environment.lineage);
-  const principal = await work.account.verify(request, ['work:read']);
-  const header = await readCompositionHeader(work.environment, input.structure);
-  if (!header || header.profile !== 'recipe-composition'
-    || !await work.access.canReadWork(principal, input.actingSubject, header.owner)) {
-    throw new CompositionUnavailable('Recipe is unavailable');
-  }
-  const revision = input.revision ?? header.head;
-  const target = { owner: 'graph' as const, resource: input.structure, component: 'structure' as const,
-    revision, work: header.owner };
-  const visible = async () => {
-    const decisions = await discloseInventory(work.environment, [target],
-      disclosureViewer(principal, input.actingSubject), 'read');
-    if (decisions.length !== 1) throw new DisclosureUnavailable('Recipe Structure disclosure is incomplete');
-    return decisions[0] === 'visible';
-  };
-  if (!await visible()) throw new CompositionUnavailable('Recipe is unavailable');
-  const result = await read(principal, revision);
-  if (!await visible()) throw new CompositionUnavailable('Recipe is unavailable');
-  return result;
+  await work.account.verify(request, ['work:read']);
+  return workRead(work, request, { actingSubject: input.actingSubject, localBasis: true }, async session => {
+    const principal = session.principal!;
+    const header = await readCompositionHeader(work.environment, input.structure);
+    if (!header || header.profile !== 'recipe-composition'
+      || !await work.access.canReadWork(principal, input.actingSubject, header.owner)) {
+      throw new CompositionUnavailable('Recipe is unavailable');
+    }
+    const revision = await selectWorkCompositionRevision(session, header, input.revision);
+    const visible = () => structureRevisionDisclosureVisible(session,
+      { work: header.owner, structure: input.structure, revision });
+    if (!await visible()) throw new CompositionUnavailable('Recipe is unavailable');
+    const result = await read(principal, revision);
+    if (!await visible()) throw new CompositionUnavailable('Recipe is unavailable');
+    return result;
+  });
 }
 
 async function readPage(work: MainWorkDependencies, request: Request, input: {

@@ -1,7 +1,11 @@
 import { expect, test } from 'bun:test';
 import { readRecipeHierarchyPage, RECIPE_WORK_PAGE_BYTES, RECIPE_WORK_PAGE_OCCURRENCES,
   RECIPE_WORK_PAGE_READ_BOUND } from '../src/modules/recipe/work-page.ts';
-import { WorkReadInvalid, WorkReadLimit, WorkReadUnavailable } from '../src/modules/work/read-session.ts';
+import { WorkReadInvalid, WorkReadLimit, WorkReadUnavailable, WorkReadMoved, WorkReadSession }
+  from '../src/modules/work/read-session.ts';
+import { selectWorkCompositionRevision } from '../src/modules/structure/read.ts';
+import { CompositionUnavailable, type CompositionHeader } from '../src/modules/structure/graph.ts';
+import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import { STRUCTURE_LIMITS, type OccurrenceRecord, type RecipeMeasure } from '../src/modules/structure/format.ts';
 import { orderTreeKey } from '../src/modules/structure/graph.ts';
 
@@ -13,6 +17,70 @@ const structure = 'https://rezics.com/id/00000000-0000-4000-8000-000000000010';
 const revision = 'https://rezics.com/id/00000000-0000-4000-8000-000000000011';
 const otherRevision = 'https://rezics.com/id/00000000-0000-4000-8000-000000000012';
 const otherStructure = 'https://rezics.com/id/00000000-0000-4000-8000-000000000013';
+
+function revisionSelectionFixture(allowed = false) {
+  const header: CompositionHeader = { structure, profile: 'recipe-composition', owner: otherStructure,
+    component: structure, mainVersion: structure, work: otherStructure, head: otherRevision,
+    generation: structure, placementCount: 3, manifest: `urn:rezics:sha256:${'a'.repeat(64)}` };
+  let preview = allowed;
+  let publication = revision;
+  let mapping = structure;
+  const binding = (value: string) => ({ type: 'uri', value });
+  const deps = { access: { canPreviewWork: async () => preview }, environment: { fuseki: { query: async (query: string) => {
+    if (query.includes('SELECT ?structure WHERE')) return { results: { bindings: [{ structure: binding(mapping) }] } };
+    if (query.includes('SELECT ?owner')) return { results: { bindings: [{ owner: binding(header.owner) }] } };
+    if (query.includes('SELECT ?component')) return { results: { bindings: [{ component: binding(header.component),
+      profile: binding('https://rezics.com/vocab/RecipeComposition'), head: binding(header.head),
+      generation: binding(header.generation), count: binding('3'), manifest: binding(header.manifest) }] } };
+    return { results: { bindings: [{ structuredDecision: binding(structure), structuredSource: binding('urn:rezics:work-source:recipe'),
+      structuredStructure: binding(structure), structuredProfile: binding('https://rezics.com/vocab/RecipeComposition'),
+      structuredRevision: binding(publication), structuredGeneration: binding(structure),
+      structuredRoot: binding(header.manifest), structuredExact: binding('true') }] } };
+  } } } } as unknown as MainWorkDependencies;
+  const session = new WorkReadSession(deps, new Request('http://localhost/recipe'),
+    { actingSubject: otherStructure }, { dataEpoch: 'fixture', sequence: '1' });
+  session.principal = { issuer: 'http://account.test', subject: 'reader', emailVerified: true };
+  return { session, header, revoke: () => { preview = false; },
+    republish: () => { publication = otherRevision; }, remap: () => { mapping = otherStructure; } };
+}
+
+test('peer composition selection pins publication and treats an explicit draft like an absent revision', async () => {
+  const f = revisionSelectionFixture();
+  expect(await selectWorkCompositionRevision(f.session, f.header)).toBe(revision);
+  expect(await selectWorkCompositionRevision(f.session, f.header, revision)).toBe(revision);
+  for (const requested of [otherRevision, otherStructure]) {
+    await expect(selectWorkCompositionRevision(f.session, f.header, requested)).rejects.toThrow(CompositionUnavailable);
+  }
+  await f.session.fenceDependencies();
+  f.republish();
+  await expect(f.session.fenceDependencies()).rejects.toThrow(WorkReadMoved);
+});
+
+test('private composition preview keeps the live draft and detects revocation before delivery', async () => {
+  const f = revisionSelectionFixture(true);
+  expect(await selectWorkCompositionRevision(f.session, f.header)).toBe(otherRevision);
+  expect(await selectWorkCompositionRevision(f.session, f.header, revision)).toBe(revision);
+  await f.session.fenceDependencies();
+  f.revoke();
+  await expect(f.session.fenceDependencies()).rejects.toThrow(WorkReadMoved);
+});
+
+test('private composition preview fences the mapping and head through traversal', async () => {
+  const f = revisionSelectionFixture(true);
+  await selectWorkCompositionRevision(f.session, f.header);
+  f.remap();
+  await expect(f.session.fenceDependencies()).rejects.toThrow(WorkReadMoved);
+  const moved = revisionSelectionFixture(true);
+  await selectWorkCompositionRevision(moved.session, moved.header);
+  moved.header.head = revision;
+  await expect(moved.session.fenceDependencies()).rejects.toThrow(WorkReadMoved);
+});
+
+test('a missing preview authority adapter fails closed for authenticated recipe reads', async () => {
+  const f = revisionSelectionFixture();
+  f.session.deps.access.canPreviewWork = undefined;
+  await expect(selectWorkCompositionRevision(f.session, f.header)).rejects.toThrow(WorkReadUnavailable);
+});
 
 let sequence = 0;
 const id = () => {
@@ -135,6 +203,8 @@ test('a nested recipe fills depth-first in one call', async () => {
   const tomato = ingredient(sauce.occurrence, 0, '1 cup tomato');
   const salt = ingredient(sauce.occurrence, 1, '1 cup salt');
   const flour = ingredient(structure, 0, '1 cup flour');
+  // Rendering a scaled line consumes a supplied food name, never reparses source text.
+  if (flour.qualifier?.type === 'ingredient-line') flour.qualifier.name = 'flour';
   const empty = node(structure, 2, 'group', undefined, 'Empty');
   const bake = node(structure, 3, 'step', { type: 'recipe-step',
     instructionText: { value: 'Bake.', language: 'en' }, usesIngredient: [], media: [], scaling: 'linear' });

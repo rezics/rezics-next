@@ -383,7 +383,8 @@ function checkedReadTargets(targets: readonly string[]): string[] {
 /** Singleton and page reads load the same facts and use the same decision.
  * Exact baselines and policy evaluation below remain the owner's existing proofs. */
 async function scopedResourceDecisions(client: PoolClient, graph: Pick<FusekiClient, 'query'> | undefined,
-  principal: VerifiedPrincipal, actingSubject: string, scopes: readonly string[], action: string): Promise<ReadonlySet<string>> {
+  principal: VerifiedPrincipal, actingSubject: string, scopes: readonly string[], action: string,
+  privatePreview = false): Promise<ReadonlySet<string>> {
   const unique = [...new Set(scopes)], allowed = new Set<string>();
   if (!unique.length) return allowed;
   await requireRecoveryOpen(client);
@@ -422,7 +423,7 @@ async function scopedResourceDecisions(client: PoolClient, graph: Pick<FusekiCli
   }
   for (const scope of unique) {
     if (await scopedResourceDecision(client, graph, principal, actingSubject, scope, action,
-      { principalId, gateOpen: gateById.get(scope), hasPolicy: installed.has(scope), authority: authorities?.get(scope) })) {
+      { principalId, gateOpen: gateById.get(scope), hasPolicy: installed.has(scope), authority: authorities?.get(scope) }, privatePreview)) {
       allowed.add(scope);
     }
   }
@@ -431,10 +432,10 @@ async function scopedResourceDecisions(client: PoolClient, graph: Pick<FusekiCli
 
 async function scopedResourceDecision(client: PoolClient, graph: Pick<FusekiClient, 'query'> | undefined,
   principal: VerifiedPrincipal, actingSubject: string, scope: string, action: string,
-  facts: ScopedReadFacts): Promise<boolean> {
+  facts: ScopedReadFacts, privatePreview = false): Promise<boolean> {
   const { principalId, gateOpen, hasPolicy } = facts;
   if (gateOpen === false || !principalId) return false;
-  if (platformAdministratorAction(action, scope)
+  if (!privatePreview && platformAdministratorAction(action, scope)
     && !hasPolicy
     && await platformAdministratorProof(client, principalId, actingSubject)
     && await platformAdministratorTargetAllowed(client, graph, principalId, actingSubject, action, scope)) {
@@ -453,7 +454,7 @@ async function scopedResourceDecision(client: PoolClient, graph: Pick<FusekiClie
     && await zoneSpaceCreatorAllowed(client, graph, principalId, actingSubject, targetId)) {
     return true;
   }
-  if (readKind && principal.emailVerified === true
+  if (!privatePreview && readKind && principal.emailVerified === true
     && !hasPolicy
     && await baselineMemberProof(client, principalId, actingSubject)
     && await baselineTargetAllowed(client, graph, principalId, actingSubject,
@@ -645,6 +646,16 @@ export class AccessAdmissionRegistry {
   async canReadWork(principal: VerifiedPrincipal, actingSubject: string, work: string,
     client?: PoolClient): Promise<boolean> {
     return (await this.canReadWorks(principal, actingSubject, [work], client)).has(work);
+  }
+
+  /** Only the native maintainer proof or an explicit current read grant selects
+   * private revisions. Public reading and platform status supply no preview. */
+  async canPreviewWork(principal: VerifiedPrincipal, actingSubject: string, work: string): Promise<boolean> {
+    if (!nativeReadTarget.test(work) || !nativeReadTarget.test(actingSubject)) return false;
+    const scope = `work:read:${work}`;
+    return readAdmission(this.pool, undefined, async client =>
+      (await scopedResourceDecisions(client, this.baselineGraph, principal, actingSubject,
+        [scope], 'work.read', true)).has(scope));
   }
 
   canReadWorks(principal: VerifiedPrincipal, actingSubject: string, works: readonly string[],

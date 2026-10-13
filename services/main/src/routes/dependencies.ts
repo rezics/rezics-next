@@ -185,6 +185,7 @@ export interface MainWorkDependencies {
     | 'canReadStandingRating' | 'canLinkTranslation' | 'canEditWork' | 'activePrincipalId' | 'assertRecoveryOpen'>
     & Partial<Pick<AccessAdmissionRegistry, 'admitCatalogue' | 'recordCatalogueOutcomes'>>
     & Partial<Pick<AccessAdmissionRegistry, 'canReadAsBaselineMember'>>
+    & Partial<Pick<AccessAdmissionRegistry, 'canPreviewWork'>>
     & Partial<Pick<AccessAdmissionRegistry, 'canProtectMedia'|'canManageMedia'|'canActAsPlatformAdministrator'>>
     & Partial<Pick<AccessAdmissionRegistry, 'assertAuthority'>>
     & Partial<Pick<AccessAdmissionRegistry, 'withOwnerAuthority'>>

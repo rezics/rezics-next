@@ -284,11 +284,7 @@ export async function readRecipeHierarchyPage(input: {
 
 /** A private preview follows the live mapping and head, unlike a pinned public publication. */
 export async function readRecipePreviewGrant(session: WorkReadSession, work: string) {
-  if (!session.principal || !session.options.actingSubject) return false;
-  const read = async () => !!await session.deps.access.canReadWork(session.principal!, session.options.actingSubject!, work);
-  const allowed = await read();
-  session.observeDependency(`recipe-preview-grant:${work}:${session.options.actingSubject}`, allowed, read);
-  return allowed;
+  return session.canPreviewWork(work);
 }
 
 export async function readRecipePreviewStructure(session: WorkReadSession, mainVersion: string) {

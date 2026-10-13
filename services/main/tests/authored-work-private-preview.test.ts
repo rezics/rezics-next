@@ -99,9 +99,10 @@ async function fixture(kind = 'person') {
   await pool.query('INSERT INTO access.work_maintainer (work,agent,owner) VALUES ($1,$2,true)', [work, control.actor]);
   const queries: string[] = [];
   let receiptCurrent = true;
+  let isPublic = false;
   const graph = { query: async (query: string) => {
     queries.push(query);
-    if (query.includes('rv:disclosure rv:Public')) return { boolean: false };
+    if (query.includes('rv:disclosure rv:Public')) return { boolean: isPublic && query.includes(work) };
     if (query.includes('rv:admissionId')) return { boolean: receiptCurrent && query.includes(receipt) };
     return { boolean: true };
   } } as unknown as Pick<FusekiClient, 'query'>;
@@ -111,13 +112,53 @@ async function fixture(kind = 'person') {
   const absent = native();
   const read = async (who = owner, actor = control.actor) => {
     const scalar = await registry.canReadWork(who.verified, actor, work);
+    expect(await registry.canPreviewWork(who.verified, actor, work)).toBe(scalar);
     const batch = await registry.canReadWorks(who.verified, actor, [work, absent, work]);
     expect(batch).toEqual(new Set(scalar ? [work] : []));
     return scalar;
   };
   return { owner, control, work, mainVersion, graph, registry, scope, read, queries,
-    loseReceipt: () => { receiptCurrent = false; } };
+    loseReceipt: () => { receiptCurrent = false; }, publish: () => { isPublic = true; } };
 }
+
+test('public Work reading does not authorize peer preview while the native owner retains preview', async () => {
+  const f = await fixture();
+  const peer = await principal();
+  const peerAgent = await agent([peer]);
+  f.publish();
+  expect(await f.registry.canReadWork(peer.verified, peerAgent.actor, f.work)).toBe(true);
+  expect(await f.registry.canPreviewWork(peer.verified, peerAgent.actor, f.work)).toBe(false);
+  expect(await f.registry.canPreviewWork(f.owner.verified, f.control.actor, f.work)).toBe(true);
+});
+
+test.each(['representation-revoked', 'representation-expired', 'grant-revoked', 'grant-expired'] as const)(
+  'read-only Work preview is lost after %s even while publication stays readable', async loss => {
+    const f = await fixture();
+    const reader = await principal();
+    const readerAgent = await agent([reader]);
+    const proof = await authority(reader, readerAgent.actor, f.scope, 'work.read');
+    f.publish();
+    expect(await f.registry.canPreviewWork(reader.verified, readerAgent.actor, f.work)).toBe(true);
+    const table = loss.startsWith('representation') ? 'representation' : 'permission_grant';
+    const row = table === 'representation' ? proof.representationIds[0] : proof.grantId;
+    const assignment = loss.endsWith('expired') ? "valid_until = clock_timestamp() - interval '1 second'" : 'active = false';
+    await pool.query(`UPDATE access.${table} SET ${assignment}, generation = generation + 1 WHERE id = $1`, [row]);
+    expect(await f.registry.canReadWork(reader.verified, readerAgent.actor, f.work)).toBe(true);
+    expect(await f.registry.canPreviewWork(reader.verified, readerAgent.actor, f.work)).toBe(false);
+  });
+
+test('inactive identity cannot retain owner preview', async () => {
+  const f = await fixture();
+  expect(await f.read()).toBe(true);
+  await pool.query('UPDATE access.principal SET active = false WHERE id = $1', [f.owner.id]);
+  expect(await f.read()).toBe(false);
+});
+
+test('an unavailable Access store cannot become absent preview authority', async () => {
+  const f = await fixture();
+  const unavailable = new AccessAdmissionRegistry({ connect: async () => { throw new Error('Access offline'); } } as unknown as Pool);
+  await expect(unavailable.canPreviewWork(f.owner.verified, f.control.actor, f.work)).rejects.toThrow('Access offline');
+});
 
 test('private PREVIEW belongs to current native Work maintainer rows without individual work.read grants', async () => {
   const f = await fixture();
@@ -155,11 +196,13 @@ test('private PREVIEW belongs to represented maintainer rows as well as the owne
 test('private PREVIEW refuses an unverified Account', async () => {
   const f = await fixture();
   expect(await f.registry.canReadWork({ ...f.owner.verified, emailVerified: false }, f.control.actor, f.work)).toBe(false);
+  expect(await f.registry.canPreviewWork({ ...f.owner.verified, emailVerified: false }, f.control.actor, f.work)).toBe(false);
 });
 
 test('private PREVIEW refuses a non-native Work', async () => {
   const f = await fixture();
   expect(await f.registry.canReadWork(f.owner.verified, f.control.actor, 'https://other.example/work')).toBe(false);
+  expect(await f.registry.canPreviewWork(f.owner.verified, f.control.actor, 'https://other.example/work')).toBe(false);
 });
 
 test('private PREVIEW refuses a provenance-lost authored native Work', async () => {

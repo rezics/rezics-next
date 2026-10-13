@@ -125,6 +125,16 @@ export class WorkReadSession {
   async dependency(name: string, read: () => Promise<unknown>): Promise<string> {
     return this.observeDependency(name, await read(), read);
   }
+  async canPreviewWork(work: string): Promise<boolean> {
+    if (!this.principal || !this.options.actingSubject) return false;
+    const read = () => {
+      if (!this.deps.access.canPreviewWork) throw new WorkReadUnavailable('Work preview authority is unavailable');
+      return this.deps.access.canPreviewWork(this.principal!, this.options.actingSubject!, work);
+    };
+    const allowed = await read();
+    this.observeDependency(`work-preview:${work}:${this.options.actingSubject}`, allowed, read);
+    return allowed;
+  }
   observeDependency(name: string, value: unknown, read: () => Promise<unknown>): string {
     const token = readDependencyToken(value);
     if (this.fencesSelectedUnits && this.captureDependencies) {
