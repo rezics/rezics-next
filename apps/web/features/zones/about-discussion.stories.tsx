@@ -54,14 +54,14 @@ async function assertLocked(canvas: Canvas, text = message) {
   const body = canvas.getByRole('textbox', { name: t.body });
   await expect(body).toBeDisabled();
   await expect(body).toHaveValue(text);
-  await expect(canvas.getByRole('button', { name: /^Content language:/ })).toBeDisabled();
+  await expect(canvas.getByRole('button', { name: /^Message language:/ })).toBeDisabled();
   await expect(canvas.getByRole('checkbox', { name: t.spoiler })).toBeDisabled();
 }
 
 async function assertEditable(canvas: Canvas, text = message) {
   await expect(canvas.getByRole('textbox', { name: t.body })).toBeEnabled();
   await expect(canvas.getByRole('textbox', { name: t.body })).toHaveValue(text);
-  await expect(canvas.getByRole('button', { name: /^Content language:/ })).toBeEnabled();
+  await expect(canvas.getByRole('button', { name: /^Message language:/ })).toBeEnabled();
   await expect(canvas.getByRole('checkbox', { name: t.spoiler })).toBeEnabled();
   await expect(canvas.getByRole('button', { name: t.send })).toBeEnabled();
   await expect(canvas.queryByRole('button', { name: t.retry })).toBeNull();
@@ -96,7 +96,7 @@ export const OpenComposer: Story = {
     await expect(canvas.getByRole('button', { name: t.send })).toBeDisabled();
     await userEvent.type(canvas.getByRole('textbox', { name: t.body }), message);
     await expect(canvas.getByRole('button', { name: t.send })).toBeEnabled();
-    await expect(canvas.getByRole('button', { name: 'Content language: Language not specified' })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: `${t.language}: ${contentLanguageText.notSpecified.en}` })).toBeVisible();
     await expect(args.api!.post).not.toHaveBeenCalled();
   },
 };
