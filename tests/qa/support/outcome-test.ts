@@ -6,6 +6,7 @@ import { readFile } from 'node:fs/promises';
 import { AnswerRecordValidator, answerPersonas, answerRecord,
   type AnswerContract, type AnswerRecord, type AnswerSample } from '../../../scripts/api/answer-record.ts';
 import type { PersonaSession } from './personas.ts';
+import { duringPersonaProof } from './proof-phase.ts';
 import { matchesAnswerContractDebt, type AnswerContractDebt } from './answer-contract-debts.ts';
 import {
   outcomeTitle,
@@ -13,18 +14,38 @@ import {
   type RowOutcomes,
 } from '../../../scripts/qa/cases/outcome-cells.ts';
 
-/** A background read gets 45 seconds by default, repeating only its public refusal. */
+/** Repeat only named refusals, within the caller's existing request budget. */
 export async function outcomeResponse(
   request: (signal: AbortSignal) => Promise<Response>,
   deadlineMs = 45_000,
+  call: { method?: string; path?: string; idempotencyKey?: string } = {},
 ): Promise<Response> {
   const signal = AbortSignal.timeout(deadlineMs);
-  for (;;) {
-    const response = await request(signal);
+  const deadline = Date.now() + deadlineMs;
+  const method = (call.method ?? 'GET').toUpperCase();
+  const read = ['GET', 'HEAD'].includes(method);
+  let previous: Response | undefined;
+  for (let attempt = 1; ; attempt++) {
+    let response: Response;
+    try { response = await request(signal); }
+    catch (error) { if (signal.aborted && previous) return previous; throw error; }
+    await previous?.body?.cancel();
     if (response.status !== 503) return response;
-    const problem = await response.clone().json() as { code?: string };
-    if (problem.code !== 'work_read_unavailable' || signal.aborted) return response;
-    await response.body?.cancel();
+    const problem = await response.clone().json().catch(() => null) as { code?: string } | null;
+    // AdmissionUnavailable also occurs after committed writes. Its shared
+    // dependency code cannot establish that a command had no effects.
+    const repeat = (problem?.code === 'dependency_unavailable' && read)
+      || (problem?.code === 'work_read_unavailable' && (read || call.idempotencyKey !== undefined));
+    if (!repeat || signal.aborted) return response;
+    const retryAfter = response.headers.get('retry-after');
+    const seconds = retryAfter === null ? 1 : Number(retryAfter);
+    const date = retryAfter === null ? NaN : Date.parse(retryAfter);
+    const delay = Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000
+      : Number.isFinite(date) ? Math.max(0, date - Date.now()) : 1000;
+    await Bun.sleep(Math.min(delay, Math.max(0, deadline - Date.now())));
+    if (signal.aborted || Date.now() >= deadline) return response;
+    previous = response;
+    console.info(`Persona repeat ${method} ${call.path ?? '<read>'} ${problem!.code} try ${attempt + 1}`);
   }
 }
 
@@ -39,7 +60,7 @@ export function outcomeTest(
   const proof = recorder ? () => {
     onTestFinished(() => recorder.finish(persona));
     return recorder.prove(persona, fn as () => unknown);
-  } : fn;
+  } : () => duringPersonaProof(fn as () => unknown, leave => onTestFinished(() => { leave(); }));
   if (cell.state === 'pending') test.failing(title, proof);
   else test(title, proof);
 }
@@ -63,6 +84,7 @@ function answerValidator(contract?: AnswerContract): Promise<AnswerRecordValidat
 export class OutcomeRecorder {
   private readonly passed = new Set<Persona>();
   private readonly active = new Set<Persona>();
+  private readonly proofFinishes = new Map<Persona, () => void>();
   private readonly sampleFailures = new Map<Persona, unknown>();
   private failed = false;
   private published = false;
@@ -101,6 +123,7 @@ export class OutcomeRecorder {
       }
       const response = await session.main(...args);
       try {
+        if (response.status >= 500) throw new Error(`Persona proof ${persona} received HTTP ${response.status}: ${await response.clone().text()}`);
         if (this.passed.has(persona) || this.published) throw new Error('Samples must belong to an active persona proof');
         const [method, path, body] = args;
         const raw = await response.clone().text();
@@ -132,15 +155,16 @@ export class OutcomeRecorder {
     try {
       if (this.passed.has(persona) || this.active.has(persona)) throw new Error('A persona proof may run only once per record');
       this.active.add(persona);
-      await fn();
+      await duringPersonaProof(fn, leave => this.proofFinishes.set(persona, leave));
       if (this.sampleFailures.has(persona)) throw this.sampleFailures.get(persona);
       this.passed.add(persona);
     } catch (error) { this.failed = true; throw error; }
-    finally { this.active.delete(persona); }
+    finally { this.active.delete(persona); this.proofFinishes.delete(persona); }
   }
 
   /** A runner timeout can finish a test before its promise settles. */
   finish(persona: Persona): void {
+    this.proofFinishes.get(persona)?.();
     if (!this.passed.has(persona)) this.failed = true;
     this.active.delete(persona);
   }

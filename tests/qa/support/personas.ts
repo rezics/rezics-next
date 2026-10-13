@@ -17,6 +17,8 @@ import { AccessPlatformAdministrators } from '../../../services/main/src/modules
 import { joiningAuthFixture } from './joining-auth.ts';
 import { outcomeResponse } from './outcome-test.ts';
 import { provisionedAgent } from './provisioned-agent.ts';
+import { personaProofActive } from './proof-phase.ts';
+import { settledWrite } from './settled-write.ts';
 
 export const personaNames = [
   'visitor',
@@ -28,13 +30,17 @@ export const personaNames = [
 ] as const;
 export type PersonaName = (typeof personaNames)[number];
 type Call = (method: string, path: string, body?: unknown, key?: string,
-  options?: { headers?: Record<string, string>; bytes?: Uint8Array }) => Promise<Response>;
+  options?: { headers?: Record<string, string>; bytes?: Uint8Array;
+    /** Inspect the first preparation answer when deliberately preparing pending work. */
+    settle?: boolean }) => Promise<Response>;
 export interface PersonaSession {
   /** Null only for the signed-out visitor. Commands supply this as actingSubject. */
   actingSubject: string | null;
   accountId: string | null;
   main: Call;
   account: Call;
+  /** A captured bearer never renews, so expiry and revocation remain observable. */
+  snapshot(): { expiresAt: number | null; main: Call };
 }
 export interface PersonaSessions extends Record<PersonaName, PersonaSession> {
   realm: string;
@@ -55,43 +61,83 @@ async function json<T>(pending: Promise<Response>, status = 200): Promise<T> {
   return JSON.parse(body) as T;
 }
 
-function session(
+export function personaSession(
   main: string,
   account: string,
   accountId: string | null,
   cookie?: string,
   oauth?: LocalOAuthSession,
+  observeMain?: PersonaOptions['observeMain'],
 ): PersonaSession {
   const sessionKey = randomUUID();
+  const expiry = (token: string) => {
+    const claims = JSON.parse(Buffer.from(token.split('.')[1]!, 'base64url').toString('utf8')) as { exp: number };
+    if (!Number.isSafeInteger(claims.exp)) throw new Error('Persona bearer has no expiry');
+    return claims.exp * 1000;
+  };
   const call =
-    (base: string, credentials: () => Promise<Headers>): Call =>
+    (base: string, credentials: () => Promise<Headers>, renewExpired = false): Call =>
     async (method, path, body, key, options) => {
       const url = new URL(path, base);
       if (url.origin !== new URL(base).origin)
         throw new Error('A persona request must stay on its service origin');
-      const headers = await credentials();
-      for (const [name, value] of Object.entries(options?.headers ?? {})) {
+      for (const name of Object.keys(options?.headers ?? {})) {
         if (['authorization', 'cookie', 'x-session-key'].includes(name.toLowerCase()))
           throw new Error('A persona request cannot replace its identity');
-        headers.set(name, value);
       }
-      if (body !== undefined) headers.set('content-type', 'application/json');
       if (body !== undefined && options?.bytes) throw new Error('A request has one body');
-      if (key !== undefined || !['GET', 'HEAD'].includes(method.toUpperCase()))
-        headers.set('idempotency-key', key ?? randomUUID());
-      const request = (signal: AbortSignal) => fetch(url, {
-        method,
-        headers,
-        redirect: 'manual',
-        signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]),
-        ...(options?.bytes ? { body: new Blob([new Uint8Array(options.bytes)]) }
-          : body === undefined ? {} : { body: JSON.stringify(body) }),
-      });
-      return ['GET', 'HEAD'].includes(method.toUpperCase())
-        ? outcomeResponse(request)
-        : request(AbortSignal.timeout(30_000));
+      const read = ['GET', 'HEAD'].includes(method.toUpperCase());
+      const prepare = base === main && !read && !personaProofActive() && options?.settle !== false;
+      const commandKey = key ?? (!['GET', 'HEAD'].includes(method.toUpperCase()) ? randomUUID() : undefined);
+      let renewed = false;
+      const request = async (signal: AbortSignal) => {
+        for (;;) {
+          // Each read retry obtains current credentials. The command key and
+          // session choice stay fixed across a bearer renewal.
+          const headers = await credentials();
+          for (const [name, value] of Object.entries(options?.headers ?? {})) headers.set(name, value);
+          if (body !== undefined) headers.set('content-type', 'application/json');
+          if (commandKey !== undefined) headers.set('idempotency-key', commandKey);
+          const requestStartedAt = Date.now();
+          const response = await fetch(url, {
+            method, headers, redirect: 'manual',
+            signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]),
+            ...(options?.bytes ? { body: new Blob([new Uint8Array(options.bytes)]) }
+              : body === undefined ? {} : { body: JSON.stringify(body) }),
+          });
+          if (base === main && observeMain) {
+            const raw = await response.clone().text(), answeredAt = Date.now();
+            // Setup diagnostics never retain credentials, cookies or headers.
+            await observeMain({ caller: person,
+              request: { method, url: url.href, path: url.pathname + url.search,
+                body: body ?? null, key: commandKey ?? null },
+              response: { status: response.status, body: raw }, requestStartedAt, answeredAt });
+          }
+          const token = headers.get('authorization')?.slice('Bearer '.length);
+          if (!renewExpired || renewed || !token || expiry(token) > Date.now()
+            || ![401, 403].includes(response.status)) return response;
+          const problem = await response.clone().json() as { code?: string };
+          if (!['invalid_account_assertion', 'account_assertion_denied', 'authority_denied'].includes(problem.code ?? '')) return response;
+          console.info('Persona bearer expired during request', { method, path: url.pathname,
+            status: response.status, code: problem.code, expiresAt: new Date(expiry(token)).toISOString() });
+          renewed = true;
+          await response.body?.cancel();
+        }
+      };
+      const send = () => base === main
+        ? outcomeResponse(request, read ? 45_000 : 30_000,
+          { method, path: url.pathname + url.search, idempotencyKey: commandKey })
+        : request(AbortSignal.timeout(read ? 45_000 : 30_000));
+      const initial = await send();
+      if (!prepare || !await reconcilingAnswer(initial)) return initial;
+      console.info(`Persona preparation followed ${method} ${url.pathname + url.search}`);
+      let first = true;
+      return settledWrite(async () => {
+        if (first) { first = false; return initial; }
+        return send();
+      }, method, path, body, commandKey);
     };
-  return {
+  const person: PersonaSession = {
     accountId,
     actingSubject: null,
     main: call(
@@ -99,12 +145,34 @@ function session(
       async () =>
         new Headers(
           oauth
-            ? { authorization: `Bearer ${await oauth.current()}`, 'x-session-key': sessionKey }
+            ? { authorization: `Bearer ${await oauth.current(Date.now(), 30_000)}`, 'x-session-key': sessionKey }
             : {},
         ),
+      true,
     ),
     account: call(account, async () => new Headers(cookie ? { cookie, origin: account } : {})),
+    snapshot() {
+      const token = oauth?.accessToken;
+      return { expiresAt: token ? expiry(token) : null,
+        main: call(main, async () => new Headers(token
+          ? { authorization: `Bearer ${token}`, 'x-session-key': sessionKey } : {})) };
+    },
   };
+  return person;
+}
+
+/** Other 202 protocols (including Agent provision) retain their first answer. */
+async function reconcilingAnswer(response: Response): Promise<boolean> {
+  if (response.status !== 202) return false;
+  const pending = await response.clone().json().catch(() => null) as {
+    operationId?: unknown; status?: unknown; phase?: unknown; result?: unknown;
+    retry?: { allowed?: unknown; afterMs?: unknown };
+  } | null;
+  return pending?.status === 'reconciling' && pending.result === null
+    && typeof pending.operationId === 'string' && pending.operationId.length > 0
+    && typeof pending.phase === 'string' && pending.phase.length > 0
+    && pending.retry?.allowed === true && typeof pending.retry.afterMs === 'number'
+    && Number.isFinite(pending.retry.afterMs) && pending.retry.afterMs >= 0;
 }
 
 // The integration tier already owns storage, migrations and graph admission.
@@ -113,6 +181,15 @@ let firstOperator:
   | { runId: string; email: string; password: string; actingSubject: string }
   | undefined;
 interface PersonaOptions {
+  /** Observe actual public Main setup attempts, including fixed-key provisioning.
+   * A focused probe can end setup here before any joining command. */
+  observeMain?: (answer: {
+    caller: PersonaSession;
+    request: { method: string; url: string; path: string; body: unknown; key: string | null };
+    response: { status: number; body: string };
+    requestStartedAt: number;
+    answeredAt: number;
+  }) => Promise<void>;
   /** External delivery service exercised over HTTP by the production adapter. */
   notificationProvider?: { url: string; token: string; callbackSecret: string };
   /** A transparent HTTP proxy may delay real storage responses for race proofs. */
@@ -233,7 +310,7 @@ async function applications(options: PersonaOptions) {
         name === 'operator' && firstOperator?.runId === runId ? firstOperator : undefined;
       const emailAddress = previous?.email ?? `persona-${name}-${randomUUID()}@example.test`;
       const password = previous?.password ?? randomBytes(24).toString('base64url');
-      const anonymous = session(mainBase, accountBase, null);
+      const anonymous = personaSession(mainBase, accountBase, null);
       if (!previous) {
         await json(
           anonymous.account('POST', '/api/auth/sign-up/email', {
@@ -279,7 +356,7 @@ async function applications(options: PersonaOptions) {
         },
         cookie,
       );
-      const person = session(mainBase, accountBase, user.user.id, cookie, oauth);
+      const person = personaSession(mainBase, accountBase, user.user.id, cookie, oauth, options.observeMain);
       person.actingSubject =
         previous?.actingSubject ?? (await provisionedAgent(person.main, `Outcome ${name}`));
       await json(
@@ -310,7 +387,7 @@ async function applications(options: PersonaOptions) {
       throw new Error(
         'Persona stack must be fresh or retain this harness’s first platform administrator',
       );
-    return { signup, operator, visitor: session(mainBase, accountBase, null), close };
+    return { signup, operator, visitor: personaSession(mainBase, accountBase, null), close };
   } catch (error) {
     await close();
     throw error;
