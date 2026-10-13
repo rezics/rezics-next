@@ -3,7 +3,7 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { GoalCoordinator, TmuxLauncher, WAKE_LAST_MESSAGE, WAKE_PROMPT, claudeNativeSession, claudeProjectKey,
-  claudeWakeArgs, freshTurnDescriptor, MANAGER_ROLE_CARD, managerStartMessage, nativeOwner, nativeSession, processIdentity, runAttempt, sameProcess, tmuxServer, turnUsage,
+  claudeWakeArgs, eventTasks, freshTurnDescriptor, MANAGER_ROLE_CARD, managerStartMessage, nativeOwner, nativeSession, processIdentity, runAttempt, sameProcess, tmuxServer, turnUsage,
   type CoordinatorOptions, type IndependentLauncher, type LaunchDescriptor, type WakeEvent } from './coordinator.ts';
 import { GoalMailStore } from './mail.ts';
 import { coordinatorStartDescriptor, coordinatorStartOptions, managerEvents } from './goalctl.ts';
@@ -78,6 +78,68 @@ async function waitFor(predicate: () => boolean, timeout = 5_000): Promise<void>
 }
 
 describe('durable Goal wake coordinator', () => {
+  test('mail acknowledged during a cut turn still receives its one required cut retry', async () => {
+    const f = fixture();
+    try {
+      f.setEvents([{key:'mail:request',body:'Decide request'}]);
+      const coordinator = f.open(); coordinator.enroll(f.descriptor); coordinator.step();
+      f.setNow(1_600_000); coordinator.step();
+      f.setEvents([]); coordinator.step(); f.setNow(1_605_000); coordinator.step();
+      expect(coordinator.status().attempts).toHaveLength(2);
+      expect(coordinator.status().attempts[1]!.prompt).toContain('first turn was cut');
+      await runAttempt(f.stateDir,coordinator.status().attempts[1]!.token); coordinator.step();
+      expect(coordinator.status().wakes).toEqual([]);
+    } finally { f.cleanup(); }
+  });
+  test('an engine terminated by a signal records a crash and the tokens reported before it', async () => {
+    const f = fixture();
+    try {
+      writeFileSync(join(f.dir,'manager.ts'),`console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:90,cached_input_tokens:40,output_tokens:3}}));
+        process.kill(process.pid,'SIGTERM');
+        await Bun.sleep(60000);`);
+      const coordinator = f.open(); coordinator.enroll(f.descriptor); coordinator.step();
+      await runAttempt(f.stateDir,coordinator.status().attempts[0]!.token);
+      expect(coordinator.turns().turns[0]).toMatchObject({ending:'crash',code:128,input_tokens:90,cached_tokens:40,output_tokens:3});
+    } finally { f.cleanup(); }
+  });
+  test('task exclusions recognize brief filenames and mixed case without treating engine names as tasks', () => {
+    expect(eventTasks({key:'task:G-42:1',body:'See brief-g-42.md and G-43; engine codex-1'})).toEqual(['G-42','G-43']);
+  });
+  test('re-enrolling a role preserves a queued checkpoint and its covered-event boundary', async () => {
+    const f = fixture();
+    try {
+      f.setEvents(Array.from({length:10},(_,index)=>({key:`task:G-${index}:1`,body:'Decision'})));
+      const coordinator = f.open({maxTurns:10}); coordinator.enroll(f.descriptor); coordinator.step();
+      await Promise.all(coordinator.status().attempts.map(attempt=>runAttempt(f.stateDir,attempt.token)));
+      coordinator.step();
+      const before = coordinator.db.query('SELECT * FROM checkpoints').get();
+      expect(before).toMatchObject({covered_through:0,through_sequence:10});
+      coordinator.unenroll('program');
+      const {previousOwner: _previousOwner,...fresh} = f.descriptor;
+      coordinator.start({...fresh,generation:'replacement',startArgs:fresh.args});
+      expect(coordinator.db.query('SELECT * FROM checkpoints').get()).toEqual(before);
+      coordinator.step();
+      expect(coordinator.status().attempts.filter(attempt=>attempt.event_key?.startsWith('checkpoint:'))).toHaveLength(1);
+    } finally { f.cleanup(); }
+  });
+  test('a cut-notice delivery failure leaves it durable while other Goals keep launching', () => {
+    const f = fixture();
+    let unavailable = true;
+    const delivered: string[] = [];
+    try {
+      const coordinator = f.open({notifyCut:(goal,key)=>{
+        if (unavailable) throw new Error('mail temporarily unavailable');
+        delivered.push(`${goal}/${key}`);
+      }});
+      coordinator.db.query('INSERT INTO cut_notices(goal,event_key) VALUES(?,?)').run('program','task:G-5:1');
+      coordinator.enroll(f.otherDescriptor); coordinator.step();
+      expect(f.launcher.launches).toHaveLength(1);
+      expect(coordinator.db.query('SELECT sent FROM cut_notices').get()).toEqual({sent:0});
+      unavailable = false; coordinator.step(); coordinator.step();
+      expect(delivered).toEqual(['program/task:G-5:1']);
+      expect(coordinator.db.query('SELECT sent FROM cut_notices').get()).toEqual({sent:1});
+    } finally { f.cleanup(); }
+  });
   test('ten handled events queue one checkpoint and later decisions remain for the next checkpoint', async () => {
     const f = fixture();
     try {
@@ -259,14 +321,17 @@ describe('durable Goal wake coordinator', () => {
         {key:'task:G-44:1',body:'Independent exit'}]);
       const first = f.open({maxTurns:3}); first.enroll(f.descriptor); first.step();
       const active = first.status().attempts;
-      expect(active.map(attempt=>attempt.event_key)).toEqual(['mail:decision','task:G-44:1']);
+      expect(active.map(attempt=>attempt.event_key)).toEqual(['task:G-42:1','task:G-44:1']);
       first.close();
       const restarted = f.open({maxTurns:3}); restarted.step();
       expect(restarted.status().attempts).toHaveLength(2);
       await runAttempt(f.stateDir,active[0]!.token);
+      restarted.step(); restarted.step();
+      expect(restarted.status().attempts.map(attempt=>attempt.event_key)).toEqual(['task:G-42:1','task:G-44:1','mail:decision']);
+      await runAttempt(f.stateDir,restarted.status().attempts[2]!.token);
       f.setEvents([{key:'task:G-42:1',body:'First exit'},{key:'task:G-43:1',body:'Other exit'},{key:'task:G-44:1',body:'Independent exit'}]);
       restarted.step(); restarted.step();
-      expect(restarted.status().attempts.map(attempt=>attempt.event_key)).toEqual(['mail:decision','task:G-44:1','task:G-42:1','task:G-43:1']);
+      expect(restarted.status().attempts.map(attempt=>attempt.event_key)).toEqual(['task:G-42:1','task:G-44:1','mail:decision','task:G-43:1']);
     } finally { f.cleanup(); }
   });
   test('one failed event backs off without delaying another event of the same Goal', async () => {

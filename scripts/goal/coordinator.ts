@@ -195,7 +195,7 @@ interface Attempt {
 interface WakeRow { goal: string; due_at: number; failures: number; error: string | null; token: string | null }
 interface EventRow extends WakeRow {event_key: string; body: string; handled: number; cuts:number}
 export function eventTasks(event: Pick<WakeEvent,'key'|'body'>): string[] {
-  return [...new Set(`${event.key}\n${event.body}`.match(/\b[A-Z][A-Z0-9]*-\d+\b/g) ?? [])];
+  return [...new Set((`${event.key}\n${event.body}`.match(/\bG-\d+\b/gi) ?? []).map(task=>task.toUpperCase()))];
 }
 export interface CoordinatorOptions {
   stateDir: string;
@@ -284,7 +284,8 @@ export class TmuxLauncher implements IndependentLauncher {
   }
   stop(token: string, descriptor: LaunchDescriptor, child?: ProcessIdentity): void {
     stopTurnProcesses(token,child);
-    this.verify(descriptor);
+    // A lost launcher must not prevent bounding the independently registered process group.
+    try { this.verify(descriptor); } catch { return; }
     if (this.live(token,descriptor)) tmux(descriptor.socket,['kill-session','-t',`goal-wake-${token}`]);
   }
 }
@@ -301,12 +302,13 @@ function openStore(stateDir: string): Database {
       phase TEXT NOT NULL, descriptor TEXT NOT NULL, prompt TEXT NOT NULL, wrapper TEXT, child TEXT,
       code INTEGER, created_at INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS pump_owner(singleton INTEGER PRIMARY KEY CHECK(singleton=1), identity TEXT NOT NULL);`);
-  const columns = new Set((db.query('PRAGMA table_info(attempts)').all() as {name:string}[]).map(column=>column.name));
-  for (const [name,type] of Object.entries({event_key:'TEXT',started_at:'INTEGER',ended_at:'INTEGER',ending:'TEXT',
-    input_tokens:'INTEGER',cached_tokens:'INTEGER',output_tokens:'INTEGER'})) {
-    if (!columns.has(name)) db.exec(`ALTER TABLE attempts ADD COLUMN ${name} ${type}`);
-  }
-  db.exec(`CREATE TABLE IF NOT EXISTS turn_commands(id INTEGER PRIMARY KEY, token TEXT NOT NULL,
+  db.transaction(()=>{
+    const columns = new Set((db.query('PRAGMA table_info(attempts)').all() as {name:string}[]).map(column=>column.name));
+    for (const [name,type] of Object.entries({event_key:'TEXT',started_at:'INTEGER',ended_at:'INTEGER',ending:'TEXT',
+      input_tokens:'INTEGER',cached_tokens:'INTEGER',output_tokens:'INTEGER'})) {
+      if (!columns.has(name)) db.exec(`ALTER TABLE attempts ADD COLUMN ${name} ${type}`);
+    }
+    db.exec(`CREATE TABLE IF NOT EXISTS turn_commands(id INTEGER PRIMARY KEY, token TEXT NOT NULL,
     command TEXT NOT NULL, created_at INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS admissions(goal TEXT PRIMARY KEY,due_at INTEGER NOT NULL,failures INTEGER NOT NULL,error TEXT);
     CREATE TABLE IF NOT EXISTS cut_notices(goal TEXT NOT NULL,event_key TEXT NOT NULL,sent INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(goal,event_key));
@@ -314,10 +316,11 @@ function openStore(stateDir: string): Database {
       handled_at INTEGER NOT NULL,UNIQUE(goal,event_key));
     CREATE TABLE IF NOT EXISTS checkpoints(goal TEXT PRIMARY KEY,covered_through INTEGER NOT NULL DEFAULT 0,
       queued_key TEXT,through_sequence INTEGER)`);
-  const eventColumns = new Set((db.query('PRAGMA table_info(events)').all() as {name:string}[]).map(column=>column.name));
-  for (const [name,type] of Object.entries({failures:'INTEGER NOT NULL DEFAULT 0',error:'TEXT',cuts:'INTEGER NOT NULL DEFAULT 0'})) {
-    if (!eventColumns.has(name)) db.exec(`ALTER TABLE events ADD COLUMN ${name} ${type}`);
-  }
+    const eventColumns = new Set((db.query('PRAGMA table_info(events)').all() as {name:string}[]).map(column=>column.name));
+    for (const [name,type] of Object.entries({failures:'INTEGER NOT NULL DEFAULT 0',error:'TEXT',cuts:'INTEGER NOT NULL DEFAULT 0'})) {
+      if (!eventColumns.has(name)) db.exec(`ALTER TABLE events ADD COLUMN ${name} ${type}`);
+    }
+  }).immediate();
   return db;
 }
 
@@ -370,7 +373,7 @@ export class GoalCoordinator {
     this.maxTurns = options.maxTurns ?? Number(process.env.GOAL_MANAGER_TURNS ?? 6);
     if (!Number.isSafeInteger(this.maxTurns) || this.maxTurns < 1) throw new Error('GOAL_MANAGER_TURNS must be a positive integer');
     const minutes = options.turnMinutes ?? Number(process.env.GOAL_TURN_MINUTES ?? 10);
-    if (!Number.isFinite(minutes) || minutes <= 0) throw new Error('GOAL_TURN_MINUTES must be positive');
+    if (!Number.isFinite(minutes*60_000) || minutes <= 0) throw new Error('GOAL_TURN_MINUTES must be positive and finite');
     this.turnMs = minutes*60_000;
   }
   private sessionOwner(descriptor: LaunchDescriptor): string | undefined {
@@ -419,12 +422,10 @@ export class GoalCoordinator {
     if (descriptor.previousOwner || !descriptor.startArgs?.includes(WAKE_PROMPT)) throw new Error('Start needs a fresh manager, without a previous owner');
     this.db.transaction(() => {
       this.assertStartable(descriptor.goal);
-      // A missing native session cannot consume the prior generation's queued events.
-      // Incoming mail and task exits will be collected again for the replacement.
+      // Re-enrolling a role preserves the Goal's queued events and checkpoint coverage.
       this.db.query('DELETE FROM managers WHERE goal=?').run(descriptor.goal);
       this.db.query('DELETE FROM wakes WHERE goal=?').run(descriptor.goal);
-      // A replacement still shares the Goal's one-time deadline receipts.
-      this.db.query("DELETE FROM events WHERE goal=? AND NOT (event_key LIKE 'mail:overdue:%' AND handled=1)").run(descriptor.goal);
+      this.db.query('DELETE FROM admissions WHERE goal=?').run(descriptor.goal);
       this.enroll(descriptor);
       this.db.query('INSERT INTO events(goal,event_key,body,due_at) VALUES(?,?,?,?)')
         .run(descriptor.goal,`start:${descriptor.generation}`,managerStartMessage(descriptor.goal),this.now());
@@ -476,8 +477,12 @@ export class GoalCoordinator {
       .run(goal,admission?.due_at ?? event.due_at,admission?.failures ?? event.failures,admission?.error ?? event.error,event.token);
   }
   private cut(attempt: Attempt, descriptor: LaunchDescriptor): void {
-    this.db.query("UPDATE attempts SET phase='cutting',ending='cut' WHERE token=? AND phase!='done'").run(attempt.token);
-    const child = attempt.child ? JSON.parse(attempt.child) as ProcessIdentity : undefined;
+    const current = this.db.transaction(()=>{
+      const updated = this.db.query("UPDATE attempts SET phase='cutting',ending='cut' WHERE token=? AND phase!='done'").run(attempt.token);
+      return updated.changes ? this.db.query('SELECT child FROM attempts WHERE token=?').get(attempt.token) as {child:string|null} : null;
+    }).immediate();
+    if (!current) return;
+    const child = current.child ? JSON.parse(current.child) as ProcessIdentity : undefined;
     if (this.launcher.stop) this.launcher.stop(attempt.token,descriptor,child);
     else stopTurnProcesses(attempt.token,child);
     finishTurn(this.db,this.options.stateDir,attempt.token,'cut',137,this.now());
@@ -485,13 +490,15 @@ export class GoalCoordinator {
   private sendCutNotices(): void {
     const notices = this.db.query('SELECT goal,event_key FROM cut_notices WHERE sent=0').all() as {goal:string;event_key:string}[];
     for (const notice of notices) {
-      if (this.options.notifyCut) this.options.notifyCut(notice.goal,notice.event_key);
-      else {
-        const mail = new GoalMailStore({stateDir:this.options.stateDir,goals:['program',...new Set([notice.goal,...this.managers().map(role=>role.goal)])],sender:notice.goal});
-        try { mail.send('program',`Manager event ${notice.event_key} of Goal ${notice.goal} was cut twice and stopped. Inspect its turn records.`,
-          `manager-turn-cut:${notice.goal}:${notice.event_key}`); } finally { mail.close(); }
-      }
-      this.db.query('UPDATE cut_notices SET sent=1 WHERE goal=? AND event_key=?').run(notice.goal,notice.event_key);
+      try {
+        if (this.options.notifyCut) this.options.notifyCut(notice.goal,notice.event_key);
+        else {
+          const mail = new GoalMailStore({stateDir:this.options.stateDir,goals:['program',...new Set([notice.goal,...this.managers().map(role=>role.goal)])],sender:notice.goal});
+          try { mail.send('program',`Manager event ${notice.event_key} of Goal ${notice.goal} was cut twice and stopped. Inspect its turn records.`,
+            `manager-turn-cut:${notice.goal}:${notice.event_key}`); } finally { mail.close(); }
+        }
+        this.db.query('UPDATE cut_notices SET sent=1 WHERE goal=? AND event_key=?').run(notice.goal,notice.event_key);
+      } catch (error) { console.error(`Cut notice for ${notice.goal}/${notice.event_key} remains pending: ${String(error)}`); }
     }
   }
   private handled(event: EventRow): void {
@@ -528,7 +535,7 @@ export class GoalCoordinator {
             .run(goal,event.key,event.body,event.dueAt ?? this.now());
         }
         const pendingMail = new Set(incoming.filter(event => event.key.startsWith('mail:')).map(event => event.key));
-        const queuedMail = this.db.query("SELECT event_key FROM events WHERE goal=? AND event_key LIKE 'mail:%' AND token IS NULL AND handled=0")
+        const queuedMail = this.db.query("SELECT event_key FROM events WHERE goal=? AND event_key LIKE 'mail:%' AND token IS NULL AND handled=0 AND cuts=0")
           .all(goal) as {event_key:string}[];
         for (const event of queuedMail) {
           if (!pendingMail.has(event.event_key)) this.db.query('UPDATE events SET handled=1 WHERE goal=? AND event_key=?').run(goal,event.event_key);
@@ -599,14 +606,18 @@ export class GoalCoordinator {
         const locked = new Set(active.flatMap(event=>eventTasks({key:event.event_key,body:event.body})));
         let checkpointActive = active.some(event=>event.event_key.startsWith('checkpoint:'));
         let slots = this.maxTurns-active.length;
-        const queued = this.db.query("SELECT * FROM events WHERE goal=? AND handled=0 AND token IS NULL AND due_at<=? ORDER BY event_key LIKE 'start:%' DESC,event_key LIKE 'checkpoint:%' DESC,event_key LIKE 'mail:overdue:%' DESC,due_at,event_key")
+        const queued = this.db.query("SELECT * FROM events WHERE goal=? AND handled=0 AND token IS NULL AND due_at<=? ORDER BY event_key LIKE 'start:%' DESC,event_key LIKE 'checkpoint:%' DESC,event_key LIKE 'mail:overdue:%' DESC,due_at,rowid")
           .all(goal,this.now()) as EventRow[];
         for (const event of queued) {
           if (slots <= 0) break;
           const tasks = eventTasks({key:event.event_key,body:event.body});
           const checkpoint = event.event_key.startsWith('checkpoint:');
           if (checkpoint && checkpointActive) continue;
-          if (tasks.some(task=>locked.has(task))) continue;
+          if (tasks.some(task=>locked.has(task))) {
+            // A blocked earlier event reserves all the tasks it names; later events cannot pass it.
+            for (const task of tasks) locked.add(task);
+            continue;
+          }
           try {
             this.launcher.verify(descriptor);
             const owner = this.sessionOwner(descriptor);
@@ -684,8 +695,11 @@ export async function runAttempt(stateDir: string, token: string): Promise<void>
       return spawned;
     }).immediate();
     if (!child) return;
-    const code = await new Promise<number>(resolveCode => { child.on('error',()=>resolveCode(127)); child.on('exit',code=>resolveCode(code ?? 128)); });
-    finishTurn(db,stateDir,token,'exit',code,Date.now());
+    const result = await new Promise<{code:number;ending:'exit'|'crash'}>(resolveExit => {
+      child.on('error',()=>resolveExit({code:127,ending:'crash'}));
+      child.on('close',code=>resolveExit({code:code ?? 128,ending:code === null ? 'crash' : 'exit'}));
+    });
+    finishTurn(db,stateDir,token,result.ending,result.code,Date.now());
   } catch (error) {
     writeSync(stderr, `${String(error)}\n`);
     finishTurn(db,stateDir,token,'crash',127,Date.now());
