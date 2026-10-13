@@ -270,6 +270,7 @@ async function navigate(name: PersonaName) {
   const read = (fields: Record<string, string> = {}, label?: string) =>
     answer<Page>(label ? sample(label, 'GET', `${path}?${query(person, fields)}`)
       : person.main('GET', `${path}?${query(person, fields)}`));
+  await contentsPageReads(name, sample, person);
   await credit(person, published, sample);
   const seen: string[] = [];
   let cursor: string | null = null;
@@ -353,6 +354,30 @@ async function navigate(name: PersonaName) {
   const empty = await read({ q: 'An episode label that does not exist', limit: '2' }, 'inventory-search-empty');
   expect(empty.items).toEqual([]);
   if (name === 'owner') await inventoryPageReads(sample, person);
+}
+
+// Copy the contents route's own reads, including the inventory builder's key order.
+async function contentsPageReads(name: PersonaName, sample: ReturnType<OutcomeRecorder['session']>, person: PersonaSession) {
+  const id = short(published.work);
+  const viewer = new URLSearchParams(person.actingSubject ? { actingSubject: person.actingSubject } : {});
+  const suffix = viewer.size ? `?${viewer}` : '';
+  // The owner's header remains in inventoryPageReads with its existing label and request.
+  if (name !== 'owner') await answer(sample('work-header', 'GET', `/v1/works/${id}${suffix}`));
+  await answer(sample('contents-read', 'GET', `/v1/works/${id}/contents${suffix}`));
+  const inventoryQuery = (q?: string, cursor?: string) => new URLSearchParams({
+    position: 'start',
+    language: 'en',
+    ...(q ? { q } : {}),
+    limit: '100',
+    ...(cursor ? { cursor } : {}),
+    ...(person.actingSubject ? { actingSubject: person.actingSubject } : {}),
+  });
+  const read = (label: string, q?: string, cursor?: string) =>
+    answer<Page>(sample(label, 'GET', `/v1/reading-positions/${id}?${inventoryQuery(q, cursor)}`));
+  const first = await read('contents-first-page');
+  if (first.nextCursor) await read('contents-continuation', undefined, first.nextCursor);
+  const search = await read('contents-search-first-window', 'Episode 1000 重逢');
+  if (search.nextCursor) await read('contents-search-continuation', 'Episode 1000 重逢', search.nextCursor);
 }
 
 // ConnectionsPage, WorkFrameView and the series/episode panels read these alongside the positions inventory.
