@@ -251,31 +251,63 @@ async function writeRecipeImport(work: MainWorkDependencies, request: Request, i
   let expectedHead = input.expectedHead;
   const receipts: string[] = [];
   let sourcePosition: RecipeImportWrite['sourcePosition'];
-  const groupIndexes = input.parsed.sections.map((_, index) => index);
   const groups = new Map<number, string>();
-  for (let offset = 0; offset < groupIndexes.length; offset += 16) {
-    const batch = groupIndexes.slice(offset, offset + 16);
+  const importedOccurrences = new Map<string, string>();
+  const parentOf = (section: number) => {
+    if (section < 0) return input.structure;
+    const parent = groups.get(section);
+    if (!parent) throw new CompositionCorrupt('recipe import parent is unavailable');
+    return parent;
+  };
+  const stepOperation = (item: RecipeImport['steps'][number]) => ({ op: 'insert' as const,
+    parent: parentOf(item.section), position: 'last' as const, role: 'step' as const,
+    qualifier: { type: 'recipe-step' as const,
+      instructionText: { value: item.text, language: item.language },
+      usesIngredient: [], media: [], scaling: 'linear' as const }, sourceKey: item.sourceKey });
+  // Flat imports retain their existing write/replay batches. Nested or interleaved
+  // layout needs preorder writes so a step keeps its position among sibling groups.
+  const orderedLayout = input.parsed.sections.some(section => section.parent >= 0
+    || input.parsed.steps.some(step => step.section === section.parent && step.order < section.order));
+  const instructions = [
+    ...input.parsed.sections.map((section, index) => ({ kind: 'group' as const, index,
+      parent: section.parent, order: section.order, sourceKey: section.sourceKey })),
+    ...(orderedLayout ? input.parsed.steps.map(step => ({ kind: 'step' as const, step,
+      parent: step.section, order: step.order, sourceKey: step.sourceKey })) : []),
+  ].sort((left, right) => left.order - right.order);
+  for (let offset = 0, batchIndex = 0; offset < instructions.length; batchIndex++) {
+    const pending = instructions.slice(offset, offset + 16);
+    // Structure assigns occurrence IDs; children wait for their parent's receipt.
+    const unresolved = pending.findIndex(item => item.parent >= 0 && !groups.has(item.parent));
+    const batch = unresolved < 0 ? pending : pending.slice(0, unresolved);
+    if (!batch.length) throw new CompositionCorrupt('recipe import parent is unavailable');
     const result = await changeAdmittedComposition(work.environment, work.account, work.access,
       request, { structure: input.structure, expectedHead, actingSubject: input.actingSubject,
-        idempotencyKey: `${input.idempotencyKey}.groups.${offset / 16}`,
-        operations: batch.map(index => ({ op: 'insert' as const, parent: input.structure,
+        idempotencyKey: `${input.idempotencyKey}.groups.${batchIndex}`,
+        operations: batch.map(item => item.kind === 'step' ? stepOperation(item.step) : ({
+          op: 'insert' as const, parent: parentOf(item.parent),
           position: 'last' as const, role: 'group' as const,
-          label: { value: input.parsed.sections[index]!.label,
-            language: input.parsed.sections[index]!.language },
-          sourceKey: input.parsed.sections[index]!.sourceKey })) });
+          label: { value: input.parsed.sections[item.index]!.label,
+            language: input.parsed.sections[item.index]!.language },
+          sourceKey: item.sourceKey })) });
     if (!result.revision) throw new RecipeImportPending();
+    const remember = (index: number, occurrence: string) => {
+      const item = batch[index]!;
+      if (item.kind === 'group') groups.set(item.index, occurrence);
+      else importedOccurrences.set(item.sourceKey, occurrence);
+    };
     if (result.occurrences?.length === batch.length) {
-      result.occurrences.forEach((occurrence, index) => groups.set(batch[index]!, occurrence));
+      result.occurrences.forEach((occurrence, index) => remember(index, occurrence));
     } else {
       const { records } = await allOccurrences(work, request, input.structure,
         input.actingSubject, result.revision);
-      for (const index of batch) {
-        const matches = records.filter(record => record.state === 'active' && record.role === 'group'
-          && record.sourceKey === input.parsed.sections[index]!.sourceKey);
-        if (matches.length !== 1) throw new CompositionCorrupt('recipe import group is unavailable');
-        groups.set(index, matches[0]!.occurrence);
+      for (const [index, item] of batch.entries()) {
+        const matches = records.filter(record => record.state === 'active' && record.role === item.kind
+          && record.parent === parentOf(item.parent) && record.sourceKey === item.sourceKey);
+        if (matches.length !== 1) throw new CompositionCorrupt('recipe import occurrence is unavailable');
+        remember(index, matches[0]!.occurrence);
       }
     }
+    offset += batch.length;
     expectedHead = result.revision;
     receipts.push(result.receipt);
     sourcePosition = { datasetId: 'product', dataEpoch: result.dataEpoch, sequence: result.sequence };
@@ -287,13 +319,8 @@ async function writeRecipeImport(work: MainWorkDependencies, request: Request, i
         ...(item.qualifier.parseStatus !== 'parsed'
           ? { residual: `sha256:${input.parsed.residual}` } : {}) },
       sourceKey: item.sourceKey })),
-    ...input.parsed.steps.map(item => ({ op: 'insert' as const, parent: item.section >= 0
-      ? groups.get(item.section) ?? input.structure : input.structure, position: 'last' as const,
-      role: 'step' as const, qualifier: { type: 'recipe-step' as const,
-        instructionText: { value: item.text, language: item.language },
-        usesIngredient: [], media: [], scaling: 'linear' as const }, sourceKey: item.sourceKey })),
+    ...(orderedLayout ? [] : input.parsed.steps.map(stepOperation)),
   ];
-  const importedOccurrences = new Map<string, string>();
   for (let offset = 0; offset < operations.length; offset += 16) {
     const result = await changeAdmittedComposition(work.environment, work.account, work.access,
       request, { structure: input.structure, expectedHead, actingSubject: input.actingSubject,
