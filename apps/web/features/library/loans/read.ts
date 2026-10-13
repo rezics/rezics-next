@@ -1,7 +1,6 @@
 import { cache } from 'react';
 import type { UiLocale } from '../../../i18n/define.ts';
 import { isOfflineError } from '../../feed/types.ts';
-import { libraryReader } from '../read.ts';
 import { loansWithLabels, refusedLoansRead, type LoansPageData, type LoansPageRead, type LoansSource } from './books-loans-recorded-page.ts';
 import { asLoan } from './shape.ts';
 
@@ -14,7 +13,9 @@ export type { LoansPageData, LoansPageRead, LoansSource };
  */
 export const readLoans = cache(async (cursor: string | null, locale: UiLocale, source?: LoansSource):
   Promise<LoansPageRead> => {
-  const reader = source ?? await libraryReader();
+  // The session reader pulls the server shell. Stories pass the client, so this
+  // module stays loadable in the browser until a session read needs it.
+  const reader = source ?? await (await import('../read.ts')).libraryReader();
   if (!reader) return { ok: false, failure: 'sign-in' };
   const { main, actingSubject } = reader;
   let transport: 'offline' | 'unavailable' | null = null;

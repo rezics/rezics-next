@@ -51,8 +51,8 @@ const ownerRead = [
 
 interface Ready { read: LoansPageRead; main: ReturnType<typeof browserMainApi>; actingSubject: string }
 
-function RecordedLoans({ row, persona, selections, returning = false }: {
-  row: RowName; persona: AnswerPersona; selections: readonly RecordedSelection[]; returning?: boolean;
+function RecordedLoans({ row, persona, selections }: {
+  row: RowName; persona: AnswerPersona; selections: readonly RecordedSelection[];
 }) {
   const record = records[row];
   const t = materializeData(messages, { locale: 'en' });
@@ -77,7 +77,7 @@ function RecordedLoans({ row, persona, selections, returning = false }: {
   }, [record, persona, key, selections]);
   const region = !ready ? <p role="status">{t.loading}</p>
     : <LoansRecordedRegion read={ready.read} cursor={null} locale="en" messages={messages} />;
-  return <PageContainer className="py-6">{returning && ready
+  return <PageContainer className="py-6">{ready
     ? <LibraryProvider actingSubject={ready.actingSubject} seed={{}} ratingContext={null} titles={{}}
       api={memoryLibraryApi()} readerActions={storyReaderActions()} locale="en" messages={messages}>
       <CopiesApiProvider api={mainCopiesApi(ready.actingSubject, () => ready.main)}>{region}</CopiesApiProvider>
@@ -183,8 +183,7 @@ export const MemberEmptyPhone: Story = {
 
 /** Owner, books/return-an-expired-loan: both loans are overdue, and only the accepted return leaves the list. */
 export const OwnerReturnExpired: Story = {
-  args: { row: 'returned', selections: [...ownerRead, { label: 'return-overdue-loan', state: 'populated' }],
-    returning: true },
+  args: { row: 'returned', selections: [...ownerRead, { label: 'return-overdue-loan', state: 'populated' }] },
   async play({ canvasElement }) {
     await expectPopulated(canvasElement, returned);
     const canvas = within(canvasElement);
