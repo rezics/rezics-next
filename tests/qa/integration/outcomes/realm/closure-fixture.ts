@@ -5,6 +5,8 @@ import { personaNames, type PersonaName, type PersonaSession,
   type PersonaSessions } from '../../../support/personas.ts';
 
 type RequestEvidence = {
+  caller: string | null; actingSubject: string | null;
+  requestedAt: string; answeredAt: string; elapsedMs: number;
   method: string; path: string; body?: unknown;
   answer: { status: number; body: string; etag: string | null };
 };
@@ -29,12 +31,17 @@ function state(sessions: PersonaSessions) {
     const call = sessions[name].main;
     const proof = current;
     sessions[name].main = async (method, path, body, key, options) => {
+      const requestedAt = new Date().toISOString();
+      const started = performance.now();
       const response = await call(method, path, body, key, options);
+      const answeredAt = new Date().toISOString();
+      const elapsedMs = performance.now() - started;
       const copy = response.clone();
       const raw = copy.headers.get('content-type')?.includes('json')
         ? await copy.text()
         : `sha256:${createHash('sha256').update(new Uint8Array(await copy.arrayBuffer())).digest('hex')}`;
-      proof.last[name] = { method, path, ...(body === undefined ? {} : { body }),
+      proof.last[name] = { caller: sessions[name].accountId, actingSubject: sessions[name].actingSubject,
+        requestedAt, answeredAt, elapsedMs, method, path, ...(body === undefined ? {} : { body }),
         answer: { status: response.status, body: raw, etag: response.headers.get('etag') } };
       proof.history.push(proof.last[name]!);
       return response;
@@ -78,7 +85,6 @@ function ruleInput(person: PersonaSession, scopeId = scope) {
     document: { rule: 'Review the exact Realm record while preserving independent originals.' },
     idempotencyKey: randomUUID() };
 }
-
 /** Date headers have second resolution. A client clock cannot establish that
  * the server has passed a fractional grant deadline. Stay within the fixture's
  * existing HTTP exchange bound while obtaining a full-second expiry witness. */
@@ -112,93 +118,97 @@ async function denied(person: PersonaSession, input: ReturnType<typeof ruleInput
 export async function publishClosureRule(sessions: PersonaSessions): Promise<Rule> {
   const proof = state(sessions);
   const operator = sessions.operator;
-  const administration = await closureCommand<{ groups: string[] }>(operator, 'GET', '/v1/me/platform-access');
-  expect(administration.groups).toContain('platform-admin');
-  await denied(sessions.owner, ruleInput(sessions.owner));
-  await denied(operator, ruleInput(operator));
-  const path = `/v1/access/grants?profile=platform-grants-v1&issuerSubject=${encodeURIComponent(operator.actingSubject!)}`;
-  let page = await closureCommand<{ authorityEpoch: string; items: Grant[]; nextCursor: string | null }>(
-    operator, 'GET', path);
-  let principalId: string | undefined;
-  const cursors = new Set<string>();
-  for (;;) {
-    principalId ??= page.items.find(grant => grant.permission === 'platform:grant')?.recipient.principalId;
-    if (!page.nextCursor) break;
-    expect(cursors.has(page.nextCursor), 'Grant cursor must advance').toBe(false);
-    cursors.add(page.nextCursor);
-    page = await closureCommand(operator, 'GET', `${path}&after=${page.nextCursor}`);
-  }
-  expect(principalId, 'The existing first-administrator bootstrap must expose its grant recipient').toBeDefined();
-  const issue = async (validUntil: string) => {
-    const latest = await closureCommand<{ authorityEpoch: string }>(operator, 'GET', path);
-    const input = { profile: 'platform-grant-change-v1', issuerSubject: operator.actingSubject,
-      expectedAuthorityEpoch: latest.authorityEpoch, grantId: randomUUID(), action: 'create',
-      permission, scopeId: scope, recipient: { principalId }, validUntil };
-    const response = await operator.main('POST', '/v1/access/grant-changes', input);
-    const raw = await response.text();
-    const request = { method: 'POST', path: '/v1/access/grant-changes', body: input,
-      answer: { status: response.status, body: raw, etag: response.headers.get('etag') } };
-    console.log('Realm rule publisher designation', JSON.stringify(request));
-    if (response.status !== 200) proof.prerequisite = request;
-    expect(response.status, JSON.stringify(request)).toBe(200);
-    const result = JSON.parse(raw) as GrantResult;
-    expect(result.grant).toMatchObject({ id: input.grantId, permission, scopeId: scope,
-      recipient: { principalId }, active: true, validUntil });
-    return result;
-  };
-  const revoke = async (result: GrantResult) => {
-    const latest = await closureCommand<{ authorityEpoch: string }>(operator, 'GET', path);
-    const revoked = await closureCommand<GrantResult>(operator, 'POST', '/v1/access/grant-changes', {
-      profile: 'platform-grant-change-v1', issuerSubject: operator.actingSubject,
-      expectedAuthorityEpoch: latest.authorityEpoch, grantId: result.grant.id, action: 'revoke',
-      expectedObjectGeneration: result.grant.generation,
-    });
-    expect(revoked.grant.active).toBe(false);
-  };
-  const publish = async () => {
-    const input = ruleInput(operator);
-    const published = await closureCommand<Rule>(operator, 'POST', '/v1/governance/rules', input,
-      201, input.idempotencyKey);
-    expect(published).toMatchObject({ ref: input.ref, scopeId: scope, revision: '1', replayed: false });
-    expect(published.digest).toMatch(/^[0-9a-f]{64}$/);
-    const replay = await closureCommand<Rule>(operator, 'POST', '/v1/governance/rules', input,
-      200, input.idempotencyKey);
-    expect(replay).toEqual({ ...published, replayed: true });
-    return { published, input };
-  };
-  const temporary = await issue(new Date(Date.now() + 3_000).toISOString());
-  const expiring = await publish();
-  await denied(operator, ruleInput(operator, `governance:realm:${sessions.realm}`));
-  const expiry = await waitForPublisherExpiry(temporary.grant.validUntil!,
-    () => operator.main('GET', path));
-  // Even replay consumes live authority; an old publication receipt grants none.
-  const expiredReplay = await operator.main('POST', '/v1/governance/rules', expiring.input,
-    expiring.input.idempotencyKey);
-  const expiredRaw = await expiredReplay.text();
-  const replayDate = expiredReplay.headers.get('date');
-  const offsetMs = Date.parse(replayDate ?? '') - Date.parse(expiry.validUntil);
-  const expiredRequest = { method: 'POST', path: '/v1/governance/rules', body: expiring.input,
-    expiry, answer: { status: expiredReplay.status, body: expiredRaw,
-      etag: expiredReplay.headers.get('etag'), serverDate: replayDate, offsetMs } };
-  console.log('Realm rule publisher expired replay', JSON.stringify(expiredRequest));
-  if (expiredReplay.status !== 403 || !Number.isFinite(offsetMs) || offsetMs < 1_000)
-    proof.prerequisite = expiredRequest;
-  expect(offsetMs, JSON.stringify(expiredRequest)).toBeGreaterThanOrEqual(1_000);
-  expect(expiredReplay.status, JSON.stringify(expiredRequest)).toBe(403);
-  expect((JSON.parse(expiredRaw) as { code: string }).code).toBe('governance_denied');
-  await denied(operator, ruleInput(operator));
-  await revoke(temporary);
-  const revocable = await issue(new Date(Date.now() + 3_600_000).toISOString());
-  const revoked = await publish();
-  await revoke(revocable);
-  await denied(operator, revoked.input);
-  await denied(operator, ruleInput(operator));
-  const designated = await issue(new Date(Date.now() + 3_600_000).toISOString());
+  const episodeStart = proof.history.length;
   try {
-    return (await publish()).published;
+    const administration = await closureCommand<{ groups: string[] }>(operator, 'GET', '/v1/me/platform-access');
+    expect(administration.groups).toContain('platform-admin');
+    await denied(sessions.owner, ruleInput(sessions.owner));
+    await denied(operator, ruleInput(operator));
+    const path = `/v1/access/grants?profile=platform-grants-v1&issuerSubject=${encodeURIComponent(operator.actingSubject!)}`;
+    let page = await closureCommand<{ authorityEpoch: string; items: Grant[]; nextCursor: string | null }>(
+      operator, 'GET', path);
+    let principalId: string | undefined;
+    const cursors = new Set<string>();
+    for (;;) {
+      principalId ??= page.items.find(grant => grant.permission === 'platform:grant')?.recipient.principalId;
+      if (!page.nextCursor) break;
+      expect(cursors.has(page.nextCursor), 'Grant cursor must advance').toBe(false);
+      cursors.add(page.nextCursor);
+      page = await closureCommand(operator, 'GET', `${path}&after=${page.nextCursor}`);
+    }
+    expect(principalId, 'The existing first-administrator bootstrap must expose its grant recipient').toBeDefined();
+    const issue = async (validUntil: string) => {
+      const latest = await closureCommand<{ authorityEpoch: string }>(operator, 'GET', path);
+      const input = { profile: 'platform-grant-change-v1', issuerSubject: operator.actingSubject,
+        expectedAuthorityEpoch: latest.authorityEpoch, grantId: randomUUID(), action: 'create',
+        permission, scopeId: scope, recipient: { principalId }, validUntil };
+      const response = await operator.main('POST', '/v1/access/grant-changes', input);
+      const raw = await response.text();
+      const request = proof.last.operator!;
+      console.log('Realm rule publisher designation', JSON.stringify(request));
+      if (response.status !== 200) proof.prerequisite = request;
+      expect(response.status, JSON.stringify(request)).toBe(200);
+      const result = JSON.parse(raw) as GrantResult;
+      expect(result.grant).toMatchObject({ id: input.grantId, permission, scopeId: scope,
+        recipient: { principalId }, active: true, validUntil });
+      return result;
+    };
+    const revoke = async (result: GrantResult) => {
+      const latest = await closureCommand<{ authorityEpoch: string }>(operator, 'GET', path);
+      const revoked = await closureCommand<GrantResult>(operator, 'POST', '/v1/access/grant-changes', {
+        profile: 'platform-grant-change-v1', issuerSubject: operator.actingSubject,
+        expectedAuthorityEpoch: latest.authorityEpoch, grantId: result.grant.id, action: 'revoke',
+        expectedObjectGeneration: result.grant.generation,
+      });
+      expect(revoked.grant.active).toBe(false);
+    };
+    const publish = async () => {
+      const input = ruleInput(operator);
+      const published = await closureCommand<Rule>(operator, 'POST', '/v1/governance/rules', input,
+        201, input.idempotencyKey);
+      expect(published).toMatchObject({ ref: input.ref, scopeId: scope, revision: '1', replayed: false });
+      expect(published.digest).toMatch(/^[0-9a-f]{64}$/);
+      const replay = await closureCommand<Rule>(operator, 'POST', '/v1/governance/rules', input,
+        200, input.idempotencyKey);
+      expect(replay).toEqual({ ...published, replayed: true });
+      return { published, input };
+    };
+    const temporary = await issue(new Date(Date.now() + 3_000).toISOString());
+    const expiring = await publish();
+    await denied(operator, ruleInput(operator, `governance:realm:${sessions.realm}`));
+    const expiry = await waitForPublisherExpiry(temporary.grant.validUntil!,
+      () => operator.main('GET', path));
+    // Even replay consumes live authority; an old publication receipt grants none.
+    const expiredReplay = await operator.main('POST', '/v1/governance/rules', expiring.input,
+      expiring.input.idempotencyKey);
+    const expiredRaw = await expiredReplay.text();
+    const replayDate = expiredReplay.headers.get('date');
+    const offsetMs = Date.parse(replayDate ?? '') - Date.parse(expiry.validUntil);
+    const expiredRequest = { ...proof.last.operator!, expiry,
+      answer: { ...proof.last.operator!.answer, serverDate: replayDate, offsetMs } };
+    console.log('Realm rule publisher expired replay', JSON.stringify(expiredRequest));
+    if (expiredReplay.status !== 403 || !Number.isFinite(offsetMs) || offsetMs < 1_000)
+      proof.prerequisite = expiredRequest;
+    expect(offsetMs, JSON.stringify(expiredRequest)).toBeGreaterThanOrEqual(1_000);
+    expect(expiredReplay.status, JSON.stringify(expiredRequest)).toBe(403);
+    expect((JSON.parse(expiredRaw) as { code: string }).code).toBe('governance_denied');
+    await denied(operator, ruleInput(operator));
+    await revoke(temporary);
+    const revocable = await issue(new Date(Date.now() + 3_600_000).toISOString());
+    const revoked = await publish();
+    await revoke(revocable);
+    await denied(operator, revoked.input);
+    await denied(operator, ruleInput(operator));
+    const designated = await issue(new Date(Date.now() + 3_600_000).toISOString());
+    try {
+      return (await publish()).published;
+    } finally {
+      // Moderation consumes the immutable rule, not a standing publication power.
+      await revoke(designated);
+    }
   } finally {
-    // Moderation consumes the immutable rule, not a standing publication power.
-    await revoke(designated);
+    console.log('Realm publisher lifetime', JSON.stringify({ realm: sessions.realm,
+      requests: proof.history.slice(episodeStart) }));
   }
 }
 

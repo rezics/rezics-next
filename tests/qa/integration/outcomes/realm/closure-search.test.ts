@@ -94,11 +94,12 @@ async function publishOriginals() {
       semanticTypes: ['https://schema.org/Book'], authoring: 'own-work',
       actingSubject: owner.actingSubject,
     }), 201);
-    await answer(owner.main('POST', `/v1/works/${short(work.work)}/agent-credits`, {
-      profile: 'native-agent-credit-v1', credit: `https://rezics.com/id/${randomUUID()}`,
-      agent: owner.actingSubject, role: 'author', expectedWorkHead: work.workRevision,
-      actingSubject: owner.actingSubject,
-    }), 201);
+    const credits = await answer<{ items: { agent: string; role: string }[] }>(
+      owner.main('GET', `/v1/works/${short(work.work)}/agent-credits?${acting(owner)}`),
+    );
+    expect(credits.items).toContainEqual(
+      expect.objectContaining({ agent: owner.actingSubject, role: 'author' }),
+    );
     const draft = await answer<{ contribution: string; draftRevision: string }>(
       owner.main('POST', '/v1/contributions', {
         profile: 'text-contribution-v1', work: work.work, language: 'en',
