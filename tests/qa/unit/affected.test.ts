@@ -79,10 +79,12 @@ test('outcome tree inputs select the declarations guard without an import edge',
     'tests/qa/integration/outcomes/books/proof.json', 'scripts/qa/cases/outcomes/books/removed.ts']) {
     const result = plan([path], {
       exists: file => present.has(file),
+      graph: [...graph, { source: guard, dependencies: [edge(reader)] }],
       sources: new Map([...sources, [guard, "readFileSync('tests/qa/integration/outcomes/books/')"]]),
       typecheckRoot: '.temp/affected-empty-root',
     });
     expect(result.tests.unit).toContain(guard);
+    expect(result.tests.owner).not.toContain(guard);
     expect(result.widened).toEqual([]);
     expect(unitFilesFromPlan(resolve(import.meta.dir, '../../..'), result, [path])).toContain(guard);
   }

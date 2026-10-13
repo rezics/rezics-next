@@ -471,10 +471,13 @@ export function planAffected(input: {
   // stay listed individually when their own COPY rule matched.
   const unitWidened = plan.widened.some((item) => item.tier === 'unit');
   const ownerWidened = plan.widened.some((item) => item.tier === 'owner');
+  const guards = selectRepositoryGuards(plan.changed)
+    .filter(guard => input.sources.has(guard.file) && input.exists(guard.file));
+  const guardFiles = new Set(guards.map(guard => guard.file));
   for (const path of [...affected]
     .filter((path) => testFile.test(path) && input.exists(path))
     .sort()) {
-    const route = routeTest(path);
+    const route = guardFiles.has(path) ? { tier: 'unit' as const } : routeTest(path);
     if (!route) continue;
     if ('workspace' in route) frontend(route.workspace).tests.push(path);
     else if ('deferred' in route) plan.deferred.push({ file: path, reason: route.deferred });
@@ -489,8 +492,7 @@ export function planAffected(input: {
     }
   }
   // Inventory guards read trees without import edges; use the gate's input rules.
-  for (const guard of selectRepositoryGuards(plan.changed)) {
-    if (!input.sources.has(guard.file) || !input.exists(guard.file)) continue;
+  for (const guard of guards) {
     if (!(unitWidened && inRegisteredUnit(guard.file)) && !plan.tests.unit.includes(guard.file))
       plan.tests.unit.push(guard.file);
   }
