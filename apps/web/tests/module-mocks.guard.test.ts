@@ -72,6 +72,7 @@ function inspectModuleMocks(text: string): { count: number; violations: string[]
     if (ts.isVariableDeclaration(node) && node.initializer) {
       if (ts.isIdentifier(node.name)) {
         bindings.set(node.name.text, node);
+        if (isMock(node.initializer)) mocks.add(node.name.text);
         if (isModule(node.initializer)) moduleAliases.add(node.name.text);
       } else if (ts.isObjectBindingPattern(node.name) && isMock(node.initializer)) {
         for (const binding of node.name.elements) {
@@ -123,14 +124,25 @@ function inspectModuleMocks(text: string): { count: number; violations: string[]
     return ts.isObjectLiteralExpression(node) && node.properties.length === 1
       && ts.isSpreadAssignment(node.properties[0]!) && original(node.properties[0]!.expression, module, seen);
   }
+  function snapshot(node: ts.Expression, module: string, seen = new Set<string>()): boolean {
+    node = expression(node);
+    if (ts.isIdentifier(node)) {
+      if (seen.has(node.text)) return false;
+      seen.add(node.text);
+      const binding = bindings.get(node.text);
+      return !!binding?.initializer && snapshot(binding.initializer, module, seen);
+    }
+    return ts.isObjectLiteralExpression(node) && node.properties.length === 1
+      && ts.isSpreadAssignment(node.properties[0]!) && original(node.properties[0]!.expression, module);
+  }
   const violations: string[] = [];
   for (const call of calls) {
     const result = call.result;
-    const preserved = call.module && result && (original(result, call.module)
+    const preserved = call.module && result && (snapshot(result, call.module)
       || (ts.isObjectLiteralExpression(result) && result.properties.some(property =>
         ts.isSpreadAssignment(property) && original(property.expression, call.module!))));
     const restored = call.module && calls.some(other => other.module === call.module && other.cleanup
-      && other.result && original(other.result, call.module!));
+      && other.result && snapshot(other.result, call.module!));
     if (preserved || restored) continue;
     const line = source.getLineAndCharacterOfPosition(call.call.getStart(source)).line + 1;
     violations.push(`${line}: ${call.module ?? 'dynamic module'} must spread its real exports or restore them in afterAll/afterEach`);
@@ -169,10 +181,18 @@ test('the guard rejects partial, unrelated and late-captured module replacements
     `import { mock as replace } from 'bun:test'; replace['module']('next/navigation', () => ({}));`,
     `import * as tests from 'bun:test'; tests.mock.module('next/navigation', () => ({}));`,
     `import { mock } from 'bun:test'; const replace = mock.module; replace('next/navigation', () => ({}));`,
+    `import { mock } from 'bun:test'; const replacement = mock; replacement.module('next/navigation', () => ({}));`,
     `import { mock } from 'bun:test'; const { module: replace } = mock; replace('next/navigation', () => ({}));`,
     `import { mock } from 'bun:test'; mock.module(target, () => ({}));`,
   ];
   for (const source of bad) expect(inspectModuleMocks(source).violations).toHaveLength(1);
+  // Bun mutates namespace exports when mocking an already imported module.
+  // Returning that live namespace cannot restore its earlier implementation.
+  const liveNamespace = `import { mock, afterAll } from 'bun:test';
+    const real = await import('next/navigation');
+    mock.module('next/navigation', () => ({}));
+    afterAll(() => mock.module('next/navigation', () => real));`;
+  expect(inspectModuleMocks(liveNamespace).violations).toHaveLength(2);
 });
 
 test('the guard accepts matching real spreads and explicit cleanup, and ignores text mentions', () => {
