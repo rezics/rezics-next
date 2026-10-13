@@ -218,6 +218,21 @@ export async function expireFixtureAuthority(client: Sql, actor: string): Promis
       WHERE issuer_subject = $1 AND valid_until > clock_timestamp()`, [actor]);
 }
 
+/** Negative authority fixtures can end or shorten an existing grant, never
+ * create authority, widen its lifetime or reactivate a terminal episode. */
+export async function reduceFixtureGrant(client: Sql, grantId: string,
+  change: { validUntil: Date } | { active: false }): Promise<void> {
+  requireToken(grantId, /^[0-9a-f-]{36}$/, grantId);
+  await recoveryOpen(client);
+  if ('validUntil' in change) {
+    if (!Number.isFinite(change.validUntil.getTime())) throw new FixtureAuthorityDenied('gate', grantId);
+    await client.query(`UPDATE access.permission_grant SET valid_until = LEAST(valid_until,$2)
+      WHERE id = $1`, [grantId, change.validUntil]);
+  } else {
+    await client.query('UPDATE access.permission_grant SET active = false WHERE id = $1', [grantId]);
+  }
+}
+
 /** Record a scope gate without granting. An existing closed gate stays closed
  * unless a test explicitly changes its state; state changes advance the fence. */
 export async function ensureFixtureScopeGate(client: Sql, scope: string,

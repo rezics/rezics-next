@@ -8,7 +8,9 @@ import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { AccessGrants } from '../src/modules/access/grants.ts';
 import { AccessPlatformAdministrators } from '../src/modules/access/platform-administrator.ts';
-import { expireFixtureAuthority, grantFixtureAuthority, registerFixtureIdentity } from '../src/modules/access/fixture-authority.ts';
+import { deactivateFixtureController, ensureFixtureScopeGate, expireFixtureAuthority,
+  grantFixtureAuthority, reduceFixtureGrant, registerFixtureIdentity } from '../src/modules/access/fixture-authority.ts';
+import { AccessAdmissionRegistry } from '../src/modules/access/admission.ts';
 import { GovernanceRules, RULE_PUBLISH_ACTION } from '../src/modules/governance/rules.ts';
 import { accessAuthorityRoutes } from '../src/routes/access-authority.ts';
 import { reportRoutes } from '../src/routes/reports.ts';
@@ -52,12 +54,12 @@ async function person(pool: Pool) {
   try {
     await client.query('BEGIN');
     await registerFixtureIdentity(client, { principalId: id, actor, ...principal });
-    await grantFixtureAuthority(client, { scope: `agent:control:${actor}`, requireDispatch: true,
+    const authority = await grantFixtureAuthority(client, { scope: `agent:control:${actor}`, requireDispatch: true,
       representations: [{ principalId: id, actor, action: 'agent.control', lifetime: 'infinity' }],
       grant: { actor, action: 'agent.control', lifetime: 'infinity' } });
     await client.query('COMMIT');
+    return { id, actor, principal, control: authority.representationIds[0]! };
   } finally { client.release(); }
-  return { id, actor, principal };
 }
 type Person = Awaited<ReturnType<typeof person>>;
 type Grant = { grant: { id: string; generation: string; active: boolean } };
@@ -103,11 +105,13 @@ async function fixture(upgrade = false) {
     profile: 'platform-grant-change-v1', issuerSubject: deployment.actor, expectedAuthorityEpoch: await epoch(),
     action: 'revoke', grantId: grant.grant.id, expectedObjectGeneration: grant.grant.generation,
   });
+  const ceiling = async () => (await pool.query<{ id: string }>(`SELECT id FROM access.permission_grant
+    WHERE recipient_subject = $1 AND action = 'access.grant.assign.governance.rule.publish'`, [deployment.actor])).rows[0]!.id;
   const input = (who = publisher, scopeId = scope) => ({ profile: 'governance-rule-v1',
     ref: `urn:rezics:rule:${randomUUID()}`, scopeId, actingSubject: who.actor, expectedRevision: null as string | null,
     document: { rule: 'Review the exact record while preserving original contributions.' }, idempotencyKey: randomUUID() });
   const publish = (who = publisher, body = input(who)) => call(who, '/v1/governance/rules', body, body.idempotencyKey);
-  return { pool, deployment, publisher, ordinary, expiredController, bootstrap, upgradeSchema, designate, revoke, input, publish,
+  return { pool, deployment, publisher, ordinary, expiredController, bootstrap, upgradeSchema, designate, revoke, ceiling, input, publish,
     close: async () => { await pool.end(); await admin.query(`DROP DATABASE ${database}`); } };
 }
 
@@ -152,8 +156,7 @@ test('upgrade equips only the original deployment holder and preserves revoked p
     await f.bootstrap();
     expect(await f.publish(f.publisher, body)).toMatchObject({ status: 403 });
     expect(await f.publish(f.publisher)).toMatchObject({ status: 403 });
-    await f.pool.query(`UPDATE access.permission_grant SET active = false
-      WHERE action = 'access.grant.assign.governance.rule.publish'`);
+    await reduceFixtureGrant(f.pool, await f.ceiling(), { active: false });
     await f.bootstrap();
     expect(await f.designate()).toMatchObject({ status: 403, body: { code: 'grant_denied' } });
   } finally { await f.close(); }
@@ -164,8 +167,8 @@ test('resource assignment obeys scope and lifetime ceilings; designation expiry 
   try {
     expect(await f.designate(f.publisher, { scope: `governance:realm:${f.ordinary.actor}` }))
       .toMatchObject({ status: 403, body: { code: 'grant_denied' } });
-    await f.pool.query(`UPDATE access.permission_grant SET valid_until = clock_timestamp() + interval '10 seconds'
-      WHERE action = 'access.grant.assign.governance.rule.publish'`);
+    await reduceFixtureGrant(f.pool, await f.ceiling(), { validUntil: new Date(Date.now() + 10_000) });
+    await reduceFixtureGrant(f.pool, await f.ceiling(), { validUntil: new Date(Date.now() + 60_000) });
     expect(await f.designate()).toMatchObject({ status: 403, body: { code: 'grant_denied' } });
     expect(await f.designate(f.publisher, { until: new Date(Date.now() + 500).toISOString() })).toMatchObject({ status: 200 });
     const body = f.input();
@@ -191,14 +194,18 @@ for (const state of ['principal', 'subject', 'controller', 'resource-gate', 'pla
         await grantFixtureAuthority(f.pool, { scope: `agent:control:${f.publisher.actor}`, requireDispatch: true,
           representations: [{ principalId: f.ordinary.id, actor: f.publisher.actor, action: 'agent.control', lifetime: 'infinity' }],
           grant: { actor: f.publisher.actor, action: 'agent.control', lifetime: 'infinity' } });
-        await f.pool.query('UPDATE access.representation SET active = false WHERE principal_id = $1', [f.publisher.id]);
+        await deactivateFixtureController(f.pool, f.publisher.control);
         // An unrelated live representation must not substitute for the lost controller.
         await grantFixtureAuthority(f.pool, { scope: `governance:realm:${f.publisher.actor}`, requireDispatch: true,
           representations: [{ principalId: f.publisher.id, actor: f.publisher.actor, action: RULE_PUBLISH_ACTION, lifetime: 'infinity' }],
           grant: { actor: f.publisher.actor, action: RULE_PUBLISH_ACTION, lifetime: 'infinity' } });
       }
-      if (state === 'resource-gate' || state === 'platform-gate') await f.pool.query('UPDATE access.scope_gate SET open = false WHERE id = $1', [state === 'resource-gate' ? scope : 'platform:access']);
-      if (state === 'dispatch') await f.pool.query('UPDATE access.scope_gate SET open = false, dispatch_open = false WHERE id = $1', [scope]);
+      if (state === 'resource-gate' || state === 'platform-gate') await ensureFixtureScopeGate(f.pool,
+        state === 'resource-gate' ? scope : 'platform:access', { open: false });
+      if (state === 'dispatch') {
+        const gate = (await f.pool.query<{ authority_epoch: string }>('SELECT authority_epoch FROM access.scope_gate WHERE id = $1', [scope])).rows[0]!;
+        await new AccessAdmissionRegistry(f.pool).strongCloseScope(scope, gate.authority_epoch);
+      }
       if (state === 'recovery') await f.pool.query('UPDATE access.recovery_fence SET open = false WHERE id = true');
       const status = state === 'recovery' ? 503 : 403;
       expect((await f.publish(f.publisher, body)).status).toBe(status);
