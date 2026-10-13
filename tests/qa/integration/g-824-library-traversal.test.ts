@@ -123,15 +123,18 @@ test('G-824: 1,000 Works traverse each status in every SQL sort/direction withou
       expect(readyOwned.items.every(item => item.card?.id === item.work)).toBe(true);
       const publicPath = `/v1/agents/${agent.slice(-36)}/shelves`;
       const faults = spyOn(observability, 'logWorkerFault');
+      const avatars = spyOn(home.deps.media.store, 'avatarRows');
       let publicResponse: Response;
       try {
         publicResponse = await home.call('GET', publicPath);
         console.info('G824 public shelves qualification:', { readyOwnedItems: readyOwned.items.length, works: works.length,
           request: { method: 'GET', path: publicPath, persona: 'anonymous shelf reader' },
-          status: publicResponse.status, body: await publicResponse.clone().json(), faults: faults.mock.calls.map(([worker, error]) => ({ worker,
+          status: publicResponse.status, body: await publicResponse.clone().json(),
+          avatarRequests: avatars.mock.calls.map(([targets, context]) => ({ targets: targets.length, context,
+            outsideFixture: targets.filter(target => target !== agent && !works.includes(target)) })), faults: faults.mock.calls.map(([worker, error]) => ({ worker,
             type: error instanceof Error ? error.constructor.name : typeof error,
             message: error instanceof Error ? error.message : String(error) })) });
-      } finally { faults.mockRestore(); }
+      } finally { avatars.mockRestore(); faults.mockRestore(); }
       let ownedTraversals = 0;
       for (const status of statuses) for (const sort of sorts.filter(sort => sort !== 'finished' || status === 'read')) {
         for (const order of ['asc', 'desc'] as ShelfOrder[]) {

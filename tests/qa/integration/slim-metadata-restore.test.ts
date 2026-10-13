@@ -1244,8 +1244,16 @@ test('OPS12: post-erasure Content pins capture and restore exact historical owne
         } catch (evidence) { outcomes.push({ ...conflict, accepted: false, evidence }); }
         expect(await captureContentRecoveryCoverage(contentPool!, references, context)).toEqual(signedCut.content);
       }
-      console.info('Content conflicting pin qualification:', { nativePin, position,
-        captured: signedCut.content, withoutPin, outcomes });
+      const cutEvidence = (cut: typeof signedCut.content) => ({ version: cut.version,
+        dataEpoch: cut.dataEpoch, sequence: cut.sequence, catalogDigest: cut.catalogDigest,
+        graphReferencesCount: cut.graphReferencesCount, graphReferencesDigest: cut.graphReferencesDigest });
+      console.info('Content conflicting pin qualification:', JSON.stringify({ nativePin, position,
+        captured: cutEvidence(signedCut.content), withoutPin: cutEvidence(withoutPin),
+        outcomes: outcomes.map(outcome => ({ ...outcome, evidence: outcome.accepted
+          ? cutEvidence(outcome.evidence as typeof signedCut.content)
+          : outcome.evidence instanceof Error
+            ? { type: outcome.evidence.constructor.name, message: outcome.evidence.message }
+            : String(outcome.evidence) })) }));
       for (const outcome of outcomes) {
         const captured = outcome.accepted ? Promise.resolve(outcome.evidence) : Promise.reject(outcome.evidence);
         await expect(captured).rejects.toThrow(`retained graph Content pin ${outcome.field} conflicts`);
