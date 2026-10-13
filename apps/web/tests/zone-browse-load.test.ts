@@ -2,7 +2,7 @@ import { expect, mock, test } from 'bun:test';
 
 // The route module loads official packages through Vite's glob. This runner has no glob, so the
 // package table is replaced before the route is imported. The count is the route's own loader.
-mock.module('../zones/official/index.ts', () => ({
+await mock.module('../zones/official/index.ts', () => ({
   installedDigest: async () => null,
   loadPackage: async () => null,
 }));
