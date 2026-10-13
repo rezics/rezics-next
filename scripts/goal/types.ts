@@ -129,7 +129,7 @@ export const MAX_TRANSPORT_CONTINUATIONS = 2;
 // minutes on 2026-10-12, each waiting for a manager to resume it). Wait resumes the same session itself.
 export const MAX_CAPACITY_CONTINUATIONS = 4;
 export const CAPACITY_WAIT_MS = 30_000;
-export const DEFAULT_ENGINE: Engine = (process.env.GOAL_ENGINE as Engine | undefined) ?? 'claude';
+export const DEFAULT_ENGINE: Engine = (process.env.GOAL_ENGINE as Engine | undefined) ?? 'sol';
 // `codex` (Sol) and `luna` use the default Codex account; `codex-1` runs Sol on the second account in a
 // separate CODEX_HOME (the `codex-1` wrapper sets the same directory), so Sol work can continue on
 // whichever account still has usage.

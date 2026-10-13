@@ -1,4 +1,4 @@
-import { type Brief, DEFAULT_ENGINE, HOLDING, type Task, isClaudeCode, modelOf, programOf, engineOf, MAX_CAPACITY_CONTINUATIONS, MAX_TRANSPORT_CONTINUATIONS, type Attempt, type Engine, effortsOf } from './types.ts';
+import { type Brief, DEFAULT_ENGINE, BRIEF_KINDS, HOLDING, type Task, isClaudeCode, modelOf, programOf, engineOf, MAX_CAPACITY_CONTINUATIONS, MAX_TRANSPORT_CONTINUATIONS, type Attempt, type Engine, effortsOf } from './types.ts';
 import { root, withLedger, briefGoal, unlandedChangeConflicts, areasOf, activeGoals, stateDir, git, managerOf, readLedger, pidAlive, claimingTasks, assertOwner, acquireDir, briefPathOf, landScope, archiveClosedBriefs, treeMentions, archiveDirOf, archiveFiles, removeFromTree, ARCHIVE_BRANCH } from './ledger.ts';
 import { pathToFileURL } from 'node:url';
 import { join, resolve, basename, relative, dirname } from 'node:path';
@@ -643,7 +643,12 @@ export async function closeGoal(slug: string, flags: Set<string>): Promise<numbe
 /** Reserves the next task ID for a Goal and writes its brief skeleton, so two managers never take the same number. */
 export async function newBrief(args: string[]): Promise<void> {
   const goalArg = valueOf(args, '--goal');
-  const title = args.filter((arg, at) => arg !== '--goal' && args[at - 1] !== '--goal').join(' ').trim();
+  const kind = valueOf(args, '--kind');
+  if (!kind || !(BRIEF_KINDS as readonly string[]).includes(kind)) {
+    throw new Error(`new needs --kind <kind>; kinds: ${BRIEF_KINDS.join(', ')}: ${kind ?? '(missing)'}`);
+  }
+  const options = ['--goal', '--kind'];
+  const title = args.filter((arg, at) => !options.includes(arg) && !options.includes(args[at - 1] ?? '')).join(' ').trim();
   if (!title) throw new Error('new needs a title');
   await withLedger(ledger => {
     const active = activeGoals(ledger);
@@ -657,9 +662,18 @@ export async function newBrief(args: string[]): Promise<void> {
     const id = nextTaskId([...Object.keys(ledger.tasks), ...Object.keys(ledger.reserved ?? {}), ...onDisk], ledger.lastId);
     const path = join(root, goalBriefFile(goal, id));
     mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, ['---', `id: ${id}`, `title: ${title}`, `engine: ${DEFAULT_ENGINE}`, 'effort: high', 'cases: []',
-      'paths: []                             # name new files by capability, never g-NNN', 'migrations: []', 'shared: []',
-      'depends: []', '---', '', '## Outcome', '', '## Mechanisms', '', 'none',
+    writeFileSync(path, ['---', `id: ${id}`, `title: ${title}`,
+      `kind: ${kind}                        # ${BRIEF_KINDS.join(' | ')}`,
+      'rows: []                             # required for implementation; optional otherwise',
+      'engine: sol', 'effort: high', 'cases: []                             # acceptance IDs such as IAM02, when the task has them',
+      'paths: []                             # name new files by capability, never g-NNN',
+      'tests: []                             # optional: the files `task goal -- check` runs in one QA slot',
+      'refs: []                              # optional: files `dispatch` copies to `.temp/ref/` in the worktree before the worker starts',
+      'operations: []                        # optional: operations whose index entry the first prompt carries',
+      'migrations: []                        # <directory>:<first>-<last>', 'shared: []', 'depends: []',
+      '# worktree: wave-9                    # optional: tasks naming one worktree share its tree and branch',
+      `${['outcome', 'surface', 'tooling'].includes(kind) ? '' : '# '}land: auto                           # optional: wait lands a done handoff on an exclusive branch`,
+      '---', '', '## Outcome', '', '## Mechanisms', '', 'none',
       '# <id>: consume | configure | extend | new — <why no owner fits>', '', '## Checks', ''].join('\n'));
     ledger.reserved = { ...ledger.reserved, [id]: goal };
     console.log(`${id} reserved for Goal ${goal}: ${relative(root, path)}`);
