@@ -13,6 +13,7 @@ import { HOLDING, type Brief, type Ledger } from './types.ts';
 export interface QueuedBrief {
   id: string; brief: string; goal?: string; queuedAt: string; waits: string[];
   waitedFor?: string[];
+  allowArea?: boolean;
   owner?: { pid: number; start?: string; boot?: string };
 }
 export type QueueLedger = Ledger & {
@@ -56,11 +57,11 @@ function waitsFor(ledger: Ledger, brief: Brief, entry?: QueuedBrief): string[] {
   return waits;
 }
 
-function assertDispatchable(ledger: Ledger, brief: Brief, goal: string | undefined): void {
+function assertDispatchable(ledger: Ledger, brief: Brief, goal: string | undefined, allowArea = false): void {
   if (ledger.tasks[brief.id]) throw new Error(`${brief.id} already exists (${ledger.tasks[brief.id]!.state}); use resume`);
   const reserved = ledger.reserved?.[brief.id];
   if (reserved && reserved !== goal) throw new Error(`${brief.id} is reserved for Goal ${reserved}; take an ID with \`new\``);
-  const areas = areaConflicts(brief.paths, goal, areasOf(activeGoals(ledger)));
+  const areas = allowArea ? [] : areaConflicts(brief.paths, goal, areasOf(activeGoals(ledger)));
   if (areas.length) throw new Error(`Claim conflict for ${brief.id}:\n  ${areas.join('\n  ')}`);
   const worktree = join(root, '.temp/worktrees', brief.worktree ? `${goal ?? 'legacy'}-${brief.worktree}` : brief.id.toLowerCase());
   const socket = postgresSocketRefusal(physicalPath(worktree));
@@ -101,7 +102,7 @@ async function startQueued(id: string, submission = false): Promise<void> {
       if (brief.id !== id) throw new Error(`Queued brief ID changed from ${id} to ${brief.id}`);
       const fromPath = goalOfBriefPath(relative(root, entry.brief));
       if (fromPath && fromPath !== entry.goal) throw new Error('Queued brief Goal changed');
-      assertDispatchable(ledger, brief, entry.goal);
+      assertDispatchable(ledger, brief, entry.goal, entry.allowArea);
       entry.waits = waitsFor(ledger, brief, entry);
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
@@ -121,7 +122,7 @@ async function startQueued(id: string, submission = false): Promise<void> {
   try {
     // Dispatch resolves Goal ownership from its caller. Isolate that caller so one
     // manager's settling pass can pump every Goal without changing process.env.
-    const source = `import { dispatch } from ${JSON.stringify(pathToFileURL(join(import.meta.dir, 'tasks.ts')).href)}; try { await dispatch(${JSON.stringify(entry.brief)}, new Set()); } catch (error) { console.error(error.message); process.exit(1); }`;
+    const source = `import { dispatch } from ${JSON.stringify(pathToFileURL(join(import.meta.dir, 'tasks.ts')).href)}; try { await dispatch(${JSON.stringify(entry.brief)}, new Set(${JSON.stringify(entry.allowArea ? ['--allow-area'] : [])})); } catch (error) { console.error(error.message); process.exit(1); }`;
     const child = Bun.spawn([process.execPath, '-e', source], {
       cwd: root, env: { ...process.env, GOAL_ID: entry.goal ?? '' }, stdout: 'pipe', stderr: 'pipe',
     });
@@ -147,15 +148,16 @@ async function startQueued(id: string, submission = false): Promise<void> {
   if (submission && refusal && !(readLedger() as QueueLedger).queue?.[id]) throw new Error(refusal);
 }
 
-export async function queueBrief(path: string): Promise<void> {
+export async function queueBrief(path: string, flags = new Set<string>()): Promise<void> {
   const absolute = resolve(path);
   const brief = await validatedBrief(absolute);
   await withLedger((ledger: QueueLedger) => {
     // The program can enqueue any Goal, even when invoked with GOAL_ID=program.
     const goal = briefGoalForProgram(ledger, absolute);
     assertManager(goal);
-    assertDispatchable(ledger, brief, goal);
-    const entry: QueuedBrief = { id: brief.id, brief: absolute, goal, queuedAt: new Date().toISOString(), waits: [] };
+    const allowArea = flags.has('--allow-area');
+    assertDispatchable(ledger, brief, goal, allowArea);
+    const entry: QueuedBrief = { id: brief.id, brief: absolute, goal, queuedAt: new Date().toISOString(), waits: [], allowArea };
     entry.waits = waitsFor(ledger, brief, entry);
     if (ledger.queue?.[brief.id]) throw new Error(`${brief.id} is already queued`);
     (ledger.queue ??= {})[brief.id] = entry;

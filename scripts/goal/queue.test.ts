@@ -99,6 +99,40 @@ test('a path claim waits until its holder closes', () => {
   ok(f.run('settle')); expect(f.ledger().tasks['G-002']).toBeDefined();
 });
 
+test('an area loan is refused without the flag and retained through a claim wait until dispatch', () => {
+  const f = repository();
+  const path = f.brief();
+  const area = join(f.directory, 'docs/goals/api/GOAL.md');
+  mkdirSync(join(f.directory, 'docs/goals/api'), {recursive:true});
+  writeFileSync(area, '---\nareas: [claimed.ts]\n---\n');
+  const ledger = f.ledger(); ledger.tasks['G-001'] = f.holder('stopped', ['claimed.ts']); f.save(ledger);
+  const refused = f.run('queue', path);
+  expect(refused.status).toBe(1);
+  expect(refused.stderr).toContain("path claimed.ts lies in Goal api's area");
+  expect(f.ledger().queue?.['G-002']).toBeUndefined();
+  expect(ok(f.run('queue', path, '--allow-area'))).toContain('overlaps G-001');
+  expect(f.ledger().queue!['G-002']!.allowArea).toBe(true);
+  ok(f.run('settle'));
+  expect(f.ledger().queue!['G-002']!.allowArea).toBe(true);
+  const closed = f.ledger(); closed.tasks['G-001']!.state = 'verified'; f.save(closed);
+  ok(f.run('settle'));
+  expect(f.ledger().tasks['G-002']!.state).toBe('running');
+  expect(f.ledger().queue?.['G-002']).toBeUndefined();
+});
+
+test('an area loan survives a dispatch memory refusal and accepts the flag before the brief', () => {
+  const f = repository();
+  const path = f.brief();
+  mkdirSync(join(f.directory, 'docs/goals/api'), {recursive:true});
+  writeFileSync(join(f.directory, 'docs/goals/api/GOAL.md'), '---\nareas: [claimed.ts]\n---\n');
+  writeFileSync(f.meminfo, 'MemAvailable: 1024 kB\n');
+  expect(ok(f.run('queue', '--allow-area', path))).toContain('Memory floor reached');
+  expect(f.ledger().queue!['G-002']!.allowArea).toBe(true);
+  writeFileSync(f.meminfo, 'MemAvailable: 67108864 kB\n');
+  ok(f.run('settle'));
+  expect(f.ledger().tasks['G-002']!.state).toBe('running');
+});
+
 test('an out-of-claim path waits until the branch lands', () => {
   const f = repository();
   f.git('checkout', '-qb', 'goal/holder'); writeFileSync(join(f.directory, 'claimed.ts'), 'export const changed = true;\n');
