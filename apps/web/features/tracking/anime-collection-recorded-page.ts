@@ -1,6 +1,6 @@
 import type { ReadingStatus } from '../catalogue/reader-actions.tsx';
 import type { MainClient } from '../discover/types.ts';
-import { failedRead, failureOf, isOfflineError, uuidOf, type ReadFailure } from '../feed/types.ts';
+import { failedRead, failureOf, isOfflineError, uuidOf, type Loaded, type ReadFailure } from '../feed/types.ts';
 import { resumeName } from './media.ts';
 
 // The series resume read (`position=mine`, one item) and one occurrence's progress.
@@ -197,14 +197,14 @@ export function putAnimeEpisodeProgress(
 }
 
 /** `Loaded` for the episode adapter. The problem title stays on the fact the page renders. */
-export function loadedResume(fact: AnimeResumeFact) {
-  if (fact.kind === 'place') return { ok: true as const, data: { occurrence: fact.occurrence, label: fact.label } };
-  if (fact.kind === 'absent') return { ok: true as const, data: null };
+export function loadedResume(fact: AnimeResumeFact): Loaded<{ occurrence: string; label: string | null } | null> {
+  if (fact.kind === 'place') return { ok: true, data: { occurrence: fact.occurrence, label: fact.label } };
+  if (fact.kind === 'absent') return { ok: true, data: null };
   return failedRead(fact.failure, fact.body, fact.headers);
 }
 
-export function loadedProgress(fact: AnimeProgressFact) {
-  if (fact.kind === 'progress') return { ok: true as const, data: fact.data };
+export function loadedProgress(fact: AnimeProgressFact): Loaded<{ completed: boolean; position: string | null; version: number }> {
+  if (fact.kind === 'progress') return { ok: true, data: fact.data };
   return failedRead(fact.failure, fact.body, fact.headers);
 }
 
