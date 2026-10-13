@@ -589,14 +589,29 @@ async function batchesFor(checkout: string, files: ExpectedFile[], options: Regr
   return batches;
 }
 
-export function classify(evidence: string, code = 1): Classification {
+function runtimeLines(evidence: string): string[] {
   // Bun prints nearby source branches even when they did not execute; their error literals are not runtime evidence.
   // Nor is a test's title: a passing case named "classifies ECONNREFUSED as Docker failure" voided its whole
   // batch as an infrastructure failure in every run from 2026-10-09 to 2026-10-12.
-  const runtime = evidence.replace(/^\s*\d+\s*\|.*$/gm, '').replace(/^\((?:pass|fail|skip|todo)\) .*$/gm, '');
+  return evidence.split('\n').filter(line => line.trim() && !/^\s*\d+\s*\||^\((?:pass|fail|skip|todo)\) |\bkernel:|\bclocksource:/i.test(line));
+}
+
+const timeoutLine = (line: string): boolean => !/failed or exceeded/i.test(line)
+  && /exceeded[^\n]*(?:budget|deadline)|timed out|ETIMEDOUT|deadline exceeded|admission deadline reached|reached its run deadline|heavy QA lock stayed held|No QA slot became free/i.test(line);
+
+export function regressionFailureCause(evidence: string, code = 1): string {
+  const lines = runtimeLines(evidence);
+  return (lines.find(timeoutLine)
+    ?? lines.find(line => /\b(?:\w*Error|error):|Error response from daemon:/i.test(line) && !/failed or exceeded/i.test(line))
+    ?? lines[0] ?? `Batch runner exited ${code}`).trim().slice(0, 500);
+}
+
+export function classify(evidence: string, code = 1): Classification {
+  const lines = runtimeLines(evidence);
+  if (lines.some(timeoutLine)) return 'deadline';
+  const runtime = regressionFailureCause(evidence, code);
   if (/cannot connect to the docker daemon|failed to connect to (?:the )?docker (?:daemon|API)|docker.*ECONNREFUSED|ECONNREFUSED.*(?:docker|237[56])|(?:docker\.sock|dockerDesktopLinuxEngine)[^\n]*(?:connection refused|no such file|cannot find)|is the docker daemon running|mounts denied|is not shared from the host and is not known to Docker|all predefined address pools|no available.*address pool|could not find an available, non-overlapping.*address pool|network pool exhausted|oom-kill|Out of memory: Killed process/i.test(runtime)) return 'infrastructure';
   if (code === 137 || /heap out of memory|SIGKILL|resource exhausted|ENOMEM/.test(runtime)) return 'resource';
-  if (/exceeded[^\n]*(?:budget|deadline)|timed out|ETIMEDOUT|deadline exceeded|admission deadline reached|reached its run deadline|heavy QA lock stayed held|No QA slot became free/i.test(runtime)) return 'deadline';
   return 'deterministic';
 }
 
@@ -868,8 +883,6 @@ export async function runBatch(checkout: string, batch: Batch, directory: string
   if (batch.tier === 'jena:check' && batch.files.some(file => nativeImageProofs.has(file)) && existsSync(junitXmlPath)) {
     tests.push(...parseJUnit(readFileSync(junitXmlPath, 'utf8'), 'owner', { root: checkout }));
   }
-  const kernel = spawnSync('journalctl', ['-k', '--since', new Date(started).toISOString(), '--no-pager', '-q'], { encoding: 'utf8', timeout: 5000 });
-  if (kernel.status === 0) evidence += `\n${kernel.stdout}`;
   const storyXml = batch.tier !== 'jena:check' && existsSync(junitXmlPath) ? readFileSync(junitXmlPath, 'utf8') : '';
   const outcomes = executionOutcomes(checkout, batch, tests, storyXml, storyLog, code);
   for (const entry of isolated.filter(entry => entry.status === 'order-dependent')) outcomes[entry.file] = 'failed';
@@ -1206,9 +1219,7 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
       result.classification ??= result.code ? classify(result.evidence ?? '', result.code) : undefined;
       if (result.code && result.classification) {
         // Keep the runtime cause when checkpoints discard the unabridged log evidence.
-        result.cause ??= (result.evidence ?? '').replace(/^\s*\d+\s*\|.*$/gm, '').split('\n').reverse()
-          .find(line => line.trim() && classify(line) === result.classification && result.classification !== 'deterministic')?.trim()
-          .slice(0, 500) ?? `Batch runner ended with ${result.classification} (exit ${result.code})`;
+        result.cause ??= regressionFailureCause(result.evidence ?? '', result.code);
       }
       if (git(tree, ['rev-parse', 'HEAD']) !== commit || git(tree, ['status', '--porcelain'])) throw new Error(`Source changed during regression: ${tree}`);
       return result;

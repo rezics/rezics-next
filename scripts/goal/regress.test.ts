@@ -14,7 +14,7 @@ import { verticalJourneys, verticalJourneyFilter, type VerticalJourney } from '.
 import * as goalctl from './goalctl.ts';
 import { tryAcquireDirectoryLease } from '../qa/process/lease.ts';
 import { reapScopeLabel } from '../qa/container-reaper.ts';
-import { appendInbox, checkoutNameLength, classify, executionOutcomes, inboxEntries, isRamBackedFileSystem, parseRegressArgs, provideGoalctl, regressionLaneLimit,
+import { appendInbox, checkoutNameLength, classify, regressionFailureCause, executionOutcomes, inboxEntries, isRamBackedFileSystem, parseRegressArgs, provideGoalctl, regressionLaneLimit,
   pruneRegressionCheckouts, regressionBatchArtifactPaths, regressionBatchCommand, regressionCheckoutRoot, regressionDiagnosisBudgetMs,
   regressionRegistry, runBatch,
   regressionBatchEnvironment, runRegression, waitForRegressionTurn, type Batch, type Execution, type ExpectedFile, type Manifest, type MergeEvent, type RegressionOptions } from './regress.ts';
@@ -1796,6 +1796,28 @@ test('classification uses engine evidence without treating application ECONNREFU
   expect(classify('The heavy QA lock stayed held for six hours')).toBe('deadline');
   expect(classify('model failed or exceeded 180s')).toBe('deterministic');
   expect(classify('', 137)).toBe('resource');
+});
+
+// Cut from attempt-1 runner.log and logs/unit.log, owner.log or integration.log
+// in the pinned regression 20261013t043515-585e9a (d2a2e3166).
+for (const [batch, error, expected] of [
+  ['unit-8', "SyntaxError: Export named 'readReviewer' not found in module '/home/edge/.cache/rezics-r/686ad1445ceb/3cc9affe6b51db38/apps/web/features/work-page/read.ts'.", 'deterministic'],
+  ['unit-8-rest', 'error: The real browse route did not render its browse view', 'deterministic'],
+  ['unit-11', 'error: expect(received).toBe(expected)', 'deterministic'],
+  ['owner-37', 'bun timed out after 600000 ms of active work', 'deadline'],
+  ['integration-6', '  ^ this test timed out after 120000ms.', 'deadline'],
+] as const) {
+  test(`recorded ${batch} failure uses its own evidence`, () => {
+    const evidence = `- Error: unit failed or exceeded 180s (see logs/unit.log)\n${error}\n10月 13 12:07:18 ah-ipv6 kernel: clocksource: Watchdog remote CPU 2 read timed out`;
+    expect(classify(evidence)).toBe(expected);
+    expect(regressionFailureCause(evidence)).toBe(error.trim());
+  });
+}
+
+test('the first runtime error determines a non-timeout failure', () => {
+  expect(classify('error: Invalid application input\nerror: Cannot connect to the Docker daemon')).toBe('deterministic');
+  expect(regressionFailureCause('error: Invalid application input\nerror: Cannot connect to the Docker daemon')).toBe('error: Invalid application input');
+  expect(classify('error: Invalid application input\nCommand deadline exceeded')).toBe('deadline');
 });
 
 test('classification ignores unexecuted branches in numbered Bun source excerpts', () => {
