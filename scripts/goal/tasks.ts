@@ -337,6 +337,19 @@ export async function setAutoLand(id: string, on: boolean): Promise<void> {
   });
 }
 
+/** A blocked attempt that left the branch as it found it reports an inquiry, not the branch: the landing reads the
+ * handoff of the last attempt before it. */
+export function landingAttempt(task: Task, read: (attempt: Attempt) => { text: string; error: boolean } = readResult,
+  unchanged: (task: Task, attempt: Attempt) => boolean = blockedAttemptUnchanged): Attempt {
+  let at = task.attempts.length - 1;
+  while (at > 0) {
+    const result = read(task.attempts[at]!);
+    if (result.error || handoffResult(result.text) !== 'blocked' || !unchanged(task, task.attempts[at]!)) break;
+    at--;
+  }
+  return task.attempts[at] ?? lastAttempt(task);
+}
+
 export async function landTask(id: string, step = false): Promise<void> {
   const initial = taskOf(readLedger(), id);
   assertOwner(initial);
@@ -354,7 +367,7 @@ export async function landTask(id: string, step = false): Promise<void> {
         && other.worktree === task.worktree && HOLDING.includes(other.state));
       if (sharers.length) throw new Error(`${task.id}: land requires a task with its own branch; open sharers: ${sharers.map(other => other.id).join(', ')}`);
       if (changedFiles(task).dirty.length) throw new Error(`${task.id}: land requires a clean worktree`);
-      const attempt = lastAttempt(task);
+      const attempt = landingAttempt(task);
       const result = readResult(attempt);
       if (result.error) throw new Error(`${task.id}: land stopped: worker handoff is missing or reports an error`);
       const brief = briefPathOf(task);
@@ -373,8 +386,8 @@ export async function landTask(id: string, step = false): Promise<void> {
       scope: () => landScope(id),
       checkpoint: () => {
         const current = taskOf(readLedger(), id);
-        if (current.state !== 'exited' || lastAttempt(current).n !== snapshot.attempt
-          || readResult(lastAttempt(current)).text !== snapshot.handoff
+        if (current.state !== 'exited' || landingAttempt(current).n !== snapshot.attempt
+          || readResult(landingAttempt(current)).text !== snapshot.handoff
           || readFileSync(briefPathOf(current) ?? '', 'utf8') !== snapshot.brief) throw new Error(`${id}: task or brief changed during review`);
       },
       checkTargets: files => {
