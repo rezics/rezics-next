@@ -38,18 +38,29 @@ run by a manager from the main checkout with `GOAL_ID` set to its Goal:
 | `task goal -- close G-NNN... verified\|cancelled` | Removes the worktrees and releases the claims, then moves the briefs and handoffs to `archive/goals` and removes the briefs from the tree in one commit. |
 | `task goal -- tidy [--legacy <dir>]` / `task goal -- goal close <goal> [--dry-run]` | Archives closed briefs still in the tree / ends a Goal once nothing of it remains ([convergence](#convergence)). |
 | `task goal -- status` / `task goal -- usage` | Running Goals and their managers, live workers, unacknowledged regression counts, the heavy QA and shared lifecycle holders, gate-lane holders and their waiters, and the usage of every account. |
-| `task goal -- test [--heavy] <task test args>` / `task goal -- slot [--heavy \| --recovery] -- <cmd>` | Checks take a shared QA slot or the [heavy QA lock](#integration-and-qa); `slot --recovery` takes only the shared lifecycle lock. |
+| `task goal -- settle` | One settling pass over every active Goal. An exited task whose handoff is `RESULT: done` is landed and closed when its brief has `land: auto` or its kind is outcome, surface or tooling; any other exited task gets its reason recorded, which `status` prints beside it. The coordinator's pump runs the pass each interval, and a `wait` does the same for its task. |
+| `task goal -- check [--only types,lint,tests,guards]` | Run by a worker in its worktree: the types, the lint, the files its brief lists under `tests:` in one QA slot, and the guards, in one blocking call that prints only what failed. |
+| `task goal -- windows [--remove]` / `task goal -- follow G-NNN` | `windows` runs one pass that keeps, in the termspaces session `Rezics Agents`, one window `goal-<goal>-<task>` for each live worker and one `goal-<goal>-turn-<n>` for each live manager turn, and removes the windows of those that ended; it touches no window with another name. The coordinator's pump runs it each interval. `--remove` removes every `goal-` window, for a `termspaces reset`. `follow` prints a worker's steps as its window shows them. A window is a view: closing it changes nothing for the worker. |
+| `task goal -- coordinator turns [--goal <goal>] [--since <UTC time>]` | The manager turns the coordinator ran: the event, the start and end, how it ended, its tokens and the commands it ran. A manager enrolled with the coordinator is a role: each event (a settled task that is not closed, a mail) starts one fresh turn bounded at ten minutes (`GOAL_TURN_MINUTES`), up to six side by side (`GOAL_MANAGER_TURNS`). |
+| `task goal -- efficiency [--since <UTC time>] [--until <UTC time>] [--record] [--last] [--json]` | The token measures of the worker sessions begun in the window, from the engines' session logs and the ledger: steps and input tokens by kind of step, by engine and by task. `--record` keeps the reading as an audit; `--last` prints the last one kept. |
+| `task goal -- ask ...` / `tell --event <start\|pause\|stop\|fault\|allowance\|host> --goal <goal> [--task <id>] [--note <text>]` / `decide <D-n> <letter>` / `decisions [--all]` / `flush` | The notice board to the maintainer on Telegram ([charter](manager.md)): `ask` records a question under a decision code and sends it, `tell` sends a notice, `decide` records his answer given in the supermanager's terminal, `decisions` lists the open ones, and `flush` retries the outbox. A message carries a Goal, a task, a question and numbers, never code or a secret. |
+| `task operation -- <query> [--json]` | Not a `goalctl` command: prints an API operation's route file, exposure, credentials and calling tests from the generated index, by `"<METHOD> /path"` or by words of its id. |
+| `task goal -- test [--heavy] <task test args>` / `task goal -- slot [--heavy \| --recovery] -- <cmd>` | Checks take a shared QA slot or the [heavy QA lock](#integration-and-qa); `slot --recovery` takes only the shared lifecycle lock. A wide run (a whole tier, a browser run, `regress`) is the program's: a worker and another Goal's manager are refused on every way in, and the program's own wide runs go one at a time and wait while a worker is live (`--beside-workers` overrides, and is counted). `slot --holders` lists who holds each slot, by Goal and task; each Goal has a share of the ordinary slots. |
 | `task goal -- regress [--at <rev>] [--resume <run-id>]` | Pins `main` (or the selected revision) in a detached worktree, checks committed generated artifacts and runs the harness manifest. Pinned checkouts default to verified disk storage under `~/.cache/rezics-r/<repo-key>/`; `GOAL_REGRESS_CHECKOUT_ROOT` selects another short disk path. Memory-backed checkout and report roots are refused, and child commands use a separate disk-backed `TMPDIR` in each checkout. Owner and fault/recovery batches contain at most 15 files; integration batches contain at most 5 files to fit the active-work deadline under concurrent load. They run concurrently up to `GOAL_QA_SLOTS` (default 3), with checkout-local state isolated per batch and harness memory admission; only browser journeys and Storybook take the heavy lock. The default selection excludes e2e and Storybook; a nightly full run uses `--only unit,owner,model,integration,fault/recovery,e2e,accounts:storybook`. `REZICS_QA_SHARDS` defaults to 1. Reports and checkpoints live under `.temp/goal-orchestration/regress/<run-id>/`; resume keeps the SHA and skips finished batches. `--only unit,model --integration-batches 2` runs a restricted check, which cannot certify a complete pass. `GOAL_REGRESS_STATE_DIR` keeps smoke-run reports in a writable worktree. Restricted selections are partial reports; the default certifies the selected nonbrowser tiers. |
 | `task goal -- inbox [--ack <n>]` | Lists the caller Goal's regression inbox (`GOAL_ID`, default `program`) and acknowledges the displayed line number. Verified merge boundaries route deterministic failures to their Goal; uncertain ownership, inherited, flaky and order-dependent failures go to `program`. Infrastructure results are void and re-queued. |
 
-Engines are `claude`, `sonnet`, `haiku`, `fable`, `codex`, `codex-1`, `luna`, `grok` and `cursor`; the
+Engines are `claude`, `sonnet`, `haiku`, `fable`, `sol`, `codex`, `codex-1`, `luna`, `grok` and `cursor`
+(`sol` is Sol on the Codex account with more of its week left when the task starts); the
 [charter](manager.md#resources) lists their models and accounts; the
 [`goalctl` launcher](../../scripts/goal/goalctl.ts) owns their executable commands.
 A brief without `engine` runs on `claude` (`GOAL_ENGINE` changes the default).
 To add an engine, extend `launchCommand` and its tests in `goalctl.ts`.
 
-The lifecycle is dispatch, background `wait`, handoff, then merge or resume,
-and close after the wave verifies it. Worker processes are detached and survive
+The lifecycle is dispatch, handoff, then landing or resume, and close. With the
+coordinator's service running, its pump settles each exited task and no `wait`
+is needed; without it, a background `wait` does the same for its task.
+A command of the tool that needs no shared state is one file in
+[`scripts/goal/commands/`](../../scripts/goal/commands/), named as the command. Worker processes are detached and survive
 a manager restart; after one, `status` shows them and `wait` is re-armed for each
 live one. The manager does not send instructions into a running worker: to
 change a task, `stop` it and `resume` it with the new instruction.
@@ -65,11 +76,13 @@ id: G-101
 title: Accounts admin user search
 kind: surface                        # outcome | implementation | surface | mechanism | tooling
 rows: [account/user-search]           # required for implementation; optional otherwise
-engine: claude                        # claude | sonnet | haiku | codex | codex-1 | luna | grok | cursor
+engine: claude                        # claude | sonnet | haiku | sol | codex | codex-1 | luna | grok | cursor
 effort: xhigh
 cases: []                             # acceptance IDs such as IAM02, when the task has them
 paths: [apps/accounts/**, packages/ui/src/data-table/**]   # name new files by capability, never g-NNN
 tests: [apps/accounts/src/admin/user-search.test.ts]   # optional: the files `task goal -- check` runs in one QA slot
+refs: [.temp/goal-api/refs/user-search-facts.md]        # optional: files `dispatch` copies to `.temp/ref/` in the worktree before the worker starts
+operations: [searchAccountUsers]       # optional: operations whose index entry the first prompt carries
 migrations: []                        # <directory>:<first>-<last>
 shared: [route:accounts-admin]
 depends: [G-099]
