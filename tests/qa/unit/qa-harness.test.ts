@@ -440,7 +440,7 @@ function startupHarness(directory: string) {
             fixture: process.env.QA_HARNESS_PREPARED_FIXTURE ?? 'prepared-source', elapsedMs: 0,
           }));
           writeFileSync(join(process.env.QA_HARNESS_CONTROL, process.env.QA_HARNESS_NAME + '-prepared'), '');
-        }, { lockFile: ${JSON.stringify(lockFile)}, pollMs: 10,
+        }, { lockFile: ${JSON.stringify(lockFile)}, pollMs: 10, readingMaxAgeMs: 0,
           read: async () => ({ vmTotal: 64 * 1024 ** 3, vmUsed: 0, hostAvailable: 64 * 1024 ** 3 }) });
       }
     } else if (args[0] === 'test') {
@@ -468,7 +468,7 @@ function startupHarness(directory: string) {
         appendFileSync(join(control, name + '-startups'), String(process.pid) + '\\n');
         while (!existsSync(join(control, name + '-finish'))) await Bun.sleep(10);
         throw new Error('Intentional stack startup stub failure');
-      }, { lockFile: ${JSON.stringify(lockFile)}, pollMs: 10,
+      }, { lockFile: ${JSON.stringify(lockFile)}, pollMs: 10, readingMaxAgeMs: 0,
         announce: message => {
           console.log(message);
           // Captured output can be replayed in the same chunk before reservation finishes.
@@ -1049,7 +1049,8 @@ test('direct QA harness publishes memory waits through its inherited startup env
   try {
     harnessAdmission(env, directory);
     await waitForMemory({ vm: 0, vmReserve: 0, host: 1, hostReserve: 0 }, {
-      env: { ...env }, deadline: 2, now: () => now, announce: () => {}, pollMs: 1,
+      env: { ...env }, lockFile: join(directory, 'memory.sqlite'), readingMaxAgeMs: 0,
+      deadline: 2, now: () => now, announce: () => {}, pollMs: 1,
       read: async () => ({ vmTotal: 0, vmUsed: 0, hostAvailable: now }),
       sleep: async ms => {
         const lines = qaWaitStatusLines(directory);
@@ -1072,6 +1073,7 @@ test('direct Storybook test dispatch publishes memory waits before launching bro
     const result = await dispatchTest([story], {
       env, deadline: 2,
       admission: (need, options) => waitForMemory(need, { ...options,
+        lockFile: join(directory, 'memory.sqlite'), readingMaxAgeMs: 0,
         now: () => now, pollMs: 1, announce: () => {},
         read: async () => ({ vmTotal: 0, vmUsed: 0, hostAvailable: now ? need.host + need.hostReserve : 0 }),
         sleep: async ms => {
