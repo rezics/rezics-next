@@ -83,6 +83,28 @@ function shown<Kind extends RealmRulesMapped['kind']>(mapped: RealmRulesMapped, 
   return mapped as Extract<RealmRulesMapped, { kind: Kind }>;
 }
 
+function publishedOf(rules: RealmHeader['rules']) {
+  const mapped = publishedRealmRules(rules);
+  if (!mapped) throw new Error('recorded rules did not map');
+  return mapped;
+}
+
+function firstRule(header: RealmHeader) {
+  const rule = header.rules?.[0];
+  if (!rule) throw new Error('recorded header has no rule');
+  return rule;
+}
+
+function englishBody(text: string | null | undefined, label: string): string {
+  if (typeof text !== 'string') throw new Error(`${label} has no English body`);
+  return text;
+}
+
+function revisionOf(revision: string | null, label: string): string {
+  if (revision === null) throw new Error(`${label} has no revision`);
+  return revision;
+}
+
 test('published rules keep the recorded title, body and language', () => {
   const { header } = headerOf('visitor', 'public-rules-en');
   const rules = header.rules;
@@ -100,39 +122,32 @@ test('visitor published rules replay the recorded English answer', async () => {
   const { sample, header } = headerOf('visitor', 'public-rules-en');
   const loaded = await replay('visitor', [{ label: 'public-rules-en', state: 'populated' }]);
   const mapped = shown(loaded.mapped, 'published');
+  const rule = firstRule(header);
   expect(mapped.name).toEqual({ value: header.name.value, lang: header.name.language, dir: header.name.direction });
-  expect(mapped.rules).toEqual(publishedRealmRules(header.rules));
-  expect(mapped.rules[0]?.title).toBe(header.rules?.[0]?.title.value);
-  expect(mapped.rules[0]?.body).toBe(header.rules?.[0]?.body.value);
-  expect(mapped.rules[0]?.lang).toBe(header.rules?.[0]?.title.language);
+  expect(mapped.rules).toEqual(publishedOf(header.rules));
+  expect(mapped.rules[0]?.title).toBe(rule.title.value);
+  expect(mapped.rules[0]?.body).toBe(rule.body.value);
+  expect(mapped.rules[0]?.lang).toBe(rule.title.language);
   expect(sample.status).toBe(200);
 });
 
 test('visitor Chinese and French answers keep their recorded language', async () => {
-  const chinese = headerOf('visitor', 'public-rules-zh');
-  const french = headerOf('visitor', 'public-rules-fr');
+  const chinese = firstRule(headerOf('visitor', 'public-rules-zh').header);
+  const french = firstRule(headerOf('visitor', 'public-rules-fr').header);
   const zh = shown((await replay('visitor', [{ label: 'public-rules-zh', state: 'populated' }])).mapped, 'published');
   const fr = shown((await replay('visitor', [{ label: 'public-rules-fr', state: 'populated' }])).mapped, 'published');
-  expect(zh.rules[0]).toMatchObject({
-    title: chinese.header.rules?.[0]?.title.value,
-    body: chinese.header.rules?.[0]?.body.value,
-    lang: chinese.header.rules?.[0]?.title.language,
-  });
-  expect(chinese.header.rules?.[0]?.title.language).toBe('zh-Hans');
-  expect(fr.rules[0]).toMatchObject({
-    title: french.header.rules?.[0]?.title.value,
-    body: french.header.rules?.[0]?.body.value,
-    lang: french.header.rules?.[0]?.title.language,
-  });
-  expect(french.header.rules?.[0]?.title.basis).toBe('fallback');
-  expect(french.header.rules?.[0]?.title.language).toBe('en');
+  expect(zh.rules[0]).toMatchObject({ title: chinese.title.value, body: chinese.body.value, lang: chinese.title.language });
+  expect(chinese.title.language).toBe('zh-Hans');
+  expect(fr.rules[0]).toMatchObject({ title: french.title.value, body: french.body.value, lang: french.title.language });
+  expect(french.title.basis).toBe('fallback');
+  expect(french.title.language).toBe('en');
 });
 
 test('member private rules stay the recorded Chinese rule', async () => {
   const { header } = headerOf('member', 'private-rules-zh');
   const mapped = shown((await replay('member', [{ label: 'private-rules-zh', state: 'populated' }])).mapped, 'published');
   expect(mapped.name.value).toBe(header.name.value);
-  expect(mapped.rules).toEqual(publishedRealmRules(header.rules));
+  expect(mapped.rules).toEqual(publishedOf(header.rules));
 });
 
 test('owner rules with an empty list stay empty', async () => {
@@ -157,7 +172,7 @@ test('visitor private realm shows the recorded landing, not the refusal', async 
     { label: 'private-rules-zh', state: 'error' },
     { label: 'private-request-landing', state: 'populated' },
   ])).mapped, 'landing');
-  expect(mapped.page).toEqual(landing);
+  expect(mapped.page).toEqual(landing as typeof mapped.page);
   expect(mapped.page.name.value).not.toBe(refused.title);
   expect(refused.sample.status).toBe(404);
 });
@@ -188,6 +203,12 @@ test('owner settings keep the recorded rules, revision and acting person', async
   const { settings, sample } = settingsOf('owner', 'rule-settings');
   const { header } = headerOf('owner', 'public-rules-en');
   const profile = objectAnswer('owner', 'acting-agent-profile');
+  if (typeof profile.id !== 'string' || typeof profile.displayName !== 'string' || profile.kind !== 'person'
+    || (profile.handle !== null && typeof profile.handle !== 'string')) {
+    throw new Error('owner profile is not the recorded person');
+  }
+  const actor = new URL(sample.path, 'https://recorded.invalid').searchParams.get('actingSubject');
+  if (actor === null) throw new Error('settings read has no acting subject');
   const mapped = shown((await replay('owner', [
     { label: 'public-rules-en', state: 'populated' },
     { label: 'acting-agent-profile', state: 'populated' },
@@ -197,7 +218,7 @@ test('owner settings keep the recorded rules, revision and acting person', async
   expect(mapped.agent).toEqual({
     iri: profile.id, label: profile.displayName, handle: profile.handle, kind: profile.kind, path: null,
   });
-  expect(mapped.agent?.iri).toBe(new URL(sample.path, 'https://recorded.invalid').searchParams.get('actingSubject'));
+  expect(mapped.agent?.iri).toBe(actor);
   expect(mapped.header?.name).toEqual(header.name);
   expect(sample.status).toBe(200);
 });
@@ -212,11 +233,11 @@ test('a refused amendment keeps the last accepted rules', async () => {
   ])).mapped, 'refused');
   expect(mapped.problem).toEqual({ status: conflict.sample.status, title: conflict.title, code: conflict.code });
   expect(mapped.accepted).toEqual(accepted.settings);
-  const kept = mapped.accepted?.settings.rules[0]?.body.labels.en;
-  expect(kept).toBe(accepted.settings.settings.rules[0]?.body.labels.en);
+  const kept = englishBody(mapped.accepted?.settings.rules[0]?.body.labels.en, 'accepted rule');
+  expect(kept).toBe(englishBody(accepted.settings.settings.rules[0]?.body.labels.en, 'recorded rule'));
   expect(kept).not.toBe(command.text);
   expect(command.expectedGeneration).toBe(accepted.settings.generation);
-  expect(command.expectedRulesRevision).toBe(accepted.settings.ruleBasis.revision);
+  expect(command.expectedRulesRevision).toBe(revisionOf(accepted.settings.ruleBasis.revision, 'accepted rules'));
   expect(conflict.sample.status).toBe(409);
 });
 
@@ -234,10 +255,11 @@ test('an accepted amendment shows the recorded receipt', async () => {
     settings: receipt.settings.settings,
     ruleBasis: receipt.settings.ruleBasis,
   });
-  expect(mapped.settings.settings.rules[0]?.body.labels.en).toBe(command.text);
-  expect(mapped.settings.settings.rules[0]?.body.labels.en).not.toBe(before.settings.settings.rules[0]?.body.labels.en);
+  const shownBody = englishBody(mapped.settings.settings.rules[0]?.body.labels.en, 'receipt rule');
+  expect(shownBody).toBe(command.text);
+  expect(shownBody).not.toBe(englishBody(before.settings.settings.rules[0]?.body.labels.en, 'previous rule'));
   expect(command.expectedGeneration).toBe(before.settings.generation);
-  expect(command.expectedRulesRevision).toBe(before.settings.ruleBasis.revision);
+  expect(command.expectedRulesRevision).toBe(revisionOf(before.settings.ruleBasis.revision, 'previous rules'));
   expect(sample.status).toBe(201);
   expect((sample.answer as { replayed?: unknown }).replayed).toBe(false);
 });

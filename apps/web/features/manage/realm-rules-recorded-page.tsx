@@ -1,6 +1,7 @@
 'use client';
 
 import { Button } from '@rezics/ui/button';
+import type { ZoneText } from '@rezics/zone-sdk';
 import { PencilIcon, ScaleIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import { useEffect, useState } from 'react';
@@ -44,7 +45,6 @@ import {
   type RealmRulesProblem,
   type RealmRulesRecordedLoad,
 } from './realm-rules-recorded-page.ts';
-import type { ZoneText } from '../realm/adapt.ts';
 
 const realmOverlays = new Map<UiLocale, Partial<RealmMessages>>([
   ['zh-Hant', realmZhHant], ['zh-Hans', realmZhHans], ['ja', realmJa], ['ko', realmKo],

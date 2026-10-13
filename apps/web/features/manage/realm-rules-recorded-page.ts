@@ -1,6 +1,8 @@
+import type { ZoneText } from '@rezics/zone-sdk';
 import type { AgentOption } from '../auth/acting-identity.ts';
 import { browserMainApi } from '../api/browser.ts';
-import { zoneText, type ZoneText } from '../realm/adapt.ts';
+import { zoneText } from '../realm/adapt.ts';
+import type { MainName } from '../realm/types.ts';
 import type { AnswerPersona, AnswerRecord, AnswerSample } from '../../../../scripts/api/answer-record.ts';
 import type { RecordedSelection } from '../stories/recorded-fetch.ts';
 import { saveSettings } from './commands.ts';
@@ -142,12 +144,19 @@ function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
+const displayBases = ['fallback', 'other-script', 'requested', 'same-script'] as const;
+
 function nameOf(value: unknown, label: string): ZoneText | { detail: string } {
   const name = record(value);
   if (!name || typeof name.value !== 'string' || !name.value) return { detail: `${label} name is not text` };
   if (typeof name.language !== 'string' || !name.language) return { detail: `${label} name has no language` };
   if (name.direction !== 'ltr' && name.direction !== 'rtl') return { detail: `${label} name direction is not ltr or rtl` };
-  const text = zoneText({ value: name.value, language: name.language, direction: name.direction });
+  if (typeof name.basis !== 'string' || !(displayBases as readonly string[]).includes(name.basis)) {
+    return { detail: `${label} name basis is not a display basis` };
+  }
+  const text = zoneText({
+    value: name.value, language: name.language, direction: name.direction, basis: name.basis as MainName['basis'],
+  });
   return text ?? { detail: `${label} name is empty` };
 }
 
