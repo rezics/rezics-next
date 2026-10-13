@@ -1,13 +1,14 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import collection from '../../../../../scripts/qa/cases/outcomes/visual-novels/collection-tracking-and-progress.ts';
-import { outcomeTest } from '../../../support/outcome-test.ts';
+import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
 setDefaultTimeout(60_000);
 const short = (id: string) => id.slice(-36);
 const query = (person: PersonaSession) => `actingSubject=${encodeURIComponent(person.actingSubject!)}`;
 let sessions: PersonaSessions;
+const recording = new OutcomeRecorder(collection);
 const pairs = new Map<PersonaName, string[]>();
 async function answer<T>(request: Promise<Response>, status = 200): Promise<T> {
   const response = await request;
@@ -17,6 +18,7 @@ async function answer<T>(request: Promise<Response>, status = 200): Promise<T> {
 }
 beforeAll(async () => {
   sessions = await personaSessions('public');
+  await recording.prepare();
   const owner = sessions.owner;
   const actingSubject = owner.actingSubject;
   for (const name of ['visitor', 'member', 'owner'] as const) {
@@ -45,7 +47,10 @@ beforeAll(async () => {
   }
   for (const name of ['stranger', 'moderator', 'operator'] as const) pairs.set(name, pairs.get('visitor')!);
 }, 180_000);
-afterAll(async () => { await sessions?.close(); });
+afterAll(async () => {
+  try { await recording.publish(); }
+  finally { await sessions?.close(); }
+});
 type State = { status: { work: string; status: string | null; version: number; changedAt: string | null }; progress: unknown };
 type Mark = { standing: string; version: number; replayed?: boolean };
 const state = (person: PersonaSession, work: string) => answer<State>(person.main('GET', `/v1/works/${short(work)}/reader-state?${query(person)}`));
@@ -65,7 +70,7 @@ async function shelf(person: PersonaSession, selected: string[]) {
 }
 
 async function foreign(name: PersonaName) {
-  const person = sessions[name];
+  const person = proofSession(name);
   const victim = name === 'owner' ? sessions.member : sessions.owner;
   const [work, other] = pairs.get(name)! as [string, string];
   for (const id of [work, other]) {
@@ -95,8 +100,52 @@ async function foreign(name: PersonaName) {
   expect(await shelf(victim, [work, other])).toEqual([other, work]);
 }
 
-async function track(name: PersonaName) {
+// Stable route labels keep repeated reads and saves distinct without recording fixture setup.
+const sampleCounts = new Map<string, number>();
+function proofSession(name: PersonaName, session = sessions[name], device = 'primary'): PersonaSession {
+  const sample = recording.session(name, session);
+  return { ...session, main: (method, path, ...args) => {
+    const route = path.split('?')[0]!.split('/').slice(2)
+      .filter(part => !/^[0-9a-f]{8}-[0-9a-f-]{27}$/.test(part)).join('-');
+    const label = `${device}-${method.toLowerCase()}-${route}`;
+    const key = `${name}:${label}`;
+    const index = sampleCounts.get(key) ?? 0;
+    sampleCounts.set(key, index + 1);
+    return sample(`${label}-${index}`, method, path, ...args);
+  } };
+}
+
+// Library overview, status rows and the Work's tracking control read these answers.
+async function pageReads(name: PersonaName, checkpoint: string) {
   const person = sessions[name];
+  const sample = recording.session(name, person);
+  const works = pairs.get(name)!;
+  const work = works[0]!;
+  const viewer = (path: string) => `${path}${path.includes('?') ? '&' : '?'}${query(person)}`;
+  const read = <T>(label: string, path: string) => answer<T>(sample(`library-${checkpoint}-${label}`, 'GET', viewer(path)));
+  await read('overview', '/v1/me/shelves?limit=20');
+  await answer(sample(`library-${checkpoint}-visibility`, 'GET', `/v1/agents/${short(person.actingSubject!)}/library-visibility`));
+  const contexts = await answer<{ items: Array<{ context: string }> }>(sample(`library-${checkpoint}-rating-context`, 'GET', '/v1/rating-contexts?scope=global&limit=1'));
+  await read('work-states', `/v1/me/work-states?works=${encodeURIComponent(works.join(','))}`);
+  await read('reading-preview', '/v1/me/shelves/status/reading/works?sort=last-read&order=desc&limit=3');
+  await read('work-header', `/v1/works/${short(work)}`);
+  await read('progress-summary', `/v1/me/progress-summaries/${short(work)}?language=en`);
+  const resume = await sample(`library-${checkpoint}-resume`, 'GET', viewer(`/v1/me/continue/${short(work)}`));
+  expect([200, 404]).toContain(resume.status);
+  await resume.body?.cancel();
+  await read('reading-goal', `/v1/me/reading-goal?year=${new Date().getUTCFullYear()}`);
+  await read('reading-stats', `/v1/me/reading-stats?year=${new Date().getUTCFullYear()}`);
+  await read('followed-authors', '/v1/me/follows/authors');
+  if (checkpoint === 'read') {
+    const context = contexts.items[0]?.context;
+    if (context) await read('reviews-empty', `/v1/resources/${short(work)}/reviews?context=${encodeURIComponent(context)}&limit=1&showSpoilers=true`);
+    await read('import-reviews-empty', `/v1/me/import-reviews?works=${encodeURIComponent(work)}`);
+  }
+}
+
+async function track(name: PersonaName) {
+  if (name === 'member') await pageReads(name, 'empty');
+  const person = proofSession(name);
   const work = pairs.get(name)![0]!;
   const root = `/v1/works/${short(work)}`;
   if (name === 'visitor') {
@@ -113,6 +162,7 @@ async function track(name: PersonaName) {
   for (const value of ['want-to-read', 'reading', 'read', null]) {
     expect(await status(person, work, value, version++)).toMatchObject({ status: value, version });
     expect((await state(person, work)).status).toMatchObject({ status: value, version });
+    if (name === 'member' && (value === 'reading' || value === 'read')) await pageReads(name, value);
     if (value) {
       const shelves = await answer<{ statusShelves: Array<{ status: string; count: number }> }>(person.main('GET', `/v1/me/shelves?${query(person)}`));
       expect(shelves.statusShelves.find(item => item.status === value)!.count).toBeGreaterThanOrEqual(1);
@@ -133,9 +183,9 @@ async function track(name: PersonaName) {
   if (name === 'owner') await foreign(name);
 }
 
-outcomeTest(collection, 'visitor', () => track('visitor'));
-outcomeTest(collection, 'stranger', () => track('stranger'));
-outcomeTest(collection, 'member', () => track('member'));
-outcomeTest(collection, 'owner', () => track('owner'));
-outcomeTest(collection, 'moderator', () => track('moderator'));
-outcomeTest(collection, 'operator', () => track('operator'));
+outcomeTest(collection, 'visitor', () => track('visitor'), recording);
+outcomeTest(collection, 'stranger', () => track('stranger'), recording);
+outcomeTest(collection, 'member', () => track('member'), recording);
+outcomeTest(collection, 'owner', () => track('owner'), recording);
+outcomeTest(collection, 'moderator', () => track('moderator'), recording);
+outcomeTest(collection, 'operator', () => track('operator'), recording);

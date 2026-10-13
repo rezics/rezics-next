@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { fromPlainText } from '@rezics/document';
 import catalogue from '../../../../../scripts/qa/cases/outcomes/visual-novels/catalogue-browse-and-search-in-its-zone.ts';
-import { outcomeTest } from '../../../support/outcome-test.ts';
+import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import {
   personaSessions,
   type PersonaName,
@@ -14,6 +14,7 @@ type Work = { work: string; mainVersion: string };
 type Page<T> = { items: T[]; nextCursor: string | null; matches: { value: number; kind: string } };
 setDefaultTimeout(60_000);
 let sessions: PersonaSessions;
+const recording = new OutcomeRecorder(catalogue);
 const works: Work[] = [];
 const phrase = `LanternGarden${randomUUID().replaceAll('-', '')}`;
 let excluded: Work;
@@ -30,6 +31,7 @@ async function answer<T>(request: Promise<Response>, status = 200): Promise<T> {
 // Setup exceptions stay in beforeAll: a failed fixture is never an expected product failure.
 beforeAll(async () => {
   sessions = await personaSessions('public');
+  await recording.prepare();
   const owner = sessions.owner,
     actor = owner.actingSubject;
   const root = `/v1/realms/${short(sessions.realm)}`;
@@ -168,11 +170,56 @@ beforeAll(async () => {
   }), 201);
 }, 240_000);
 afterAll(async () => {
-  await sessions?.close();
+  try { await recording.publish(); }
+  finally { await sessions?.close(); }
 });
 
-async function browse(name: PersonaName) {
+// Stable route labels keep repeated reads and saves distinct without recording fixture setup.
+const sampleCounts = new Map<string, number>();
+function proofSession(name: PersonaName, session = sessions[name], device = 'primary'): PersonaSession {
+  const sample = recording.session(name, session);
+  return { ...session, main: (method, path, ...args) => {
+    const route = path.split('?')[0]!.split('/').slice(2)
+      .filter(part => !/^[0-9a-f]{8}-[0-9a-f-]{27}$/.test(part)).join('-');
+    const label = `${device}-${method.toLowerCase()}-${route}`;
+    const key = `${name}:${label}`;
+    const index = sampleCounts.get(key) ?? 0;
+    sampleCounts.set(key, index + 1);
+    return sample(`${label}-${index}`, method, path, ...args);
+  } };
+}
+
+// The Realm browse frame, release filter and shelf controls read these answers.
+async function pageReads(name: PersonaName) {
   const person = sessions[name];
+  const sample = recording.session(name, person);
+  const viewer = (path: string) => `${path}${path.includes('?') ? '&' : '?'}${acting(person)}`;
+  await answer(sample('realm-context', 'GET', viewer(`/v1/realms/${short(sessions.realm)}`)));
+  await answer(sample('space-address', 'GET', viewer(`/v1/addresses/resolve?${new URLSearchParams({ scope: 'space', key: short(sessions.space) })}`)));
+  await answer(sample('joining-context', 'GET', `/v1/realms/${short(sessions.realm)}/joining?${acting(person)}`));
+  await answer(sample('follow-context', 'GET', `/v1/follows/${short(sessions.realm)}?kind=realm&${acting(person)}`));
+  await answer(sample('facet-labels', 'GET', '/v1/facets'));
+  await answer(sample('browse-route-fallback', 'GET', viewer(`/v1/zones/${short(sessions.zone)}/routes?path=browse`)), 404);
+  const empty = await answer<Page<{ id: string }>>(sample('search-no-match', 'GET', `/v1/realms/${short(sessions.realm)}/modules/browse?${new URLSearchParams({
+    sort: 'relevance', limit: '20', type: 'https://schema.org/VideoGame', q: `${phrase}nomatch`,
+  })}`));
+  expect(empty.items).toEqual([]);
+  expect(empty.nextCursor).toBeNull();
+  await answer(sample('catalogue-search-no-match', 'GET', `/v1/search/catalogue?${new URLSearchParams({ q: `${phrase}nomatch`, realm: sessions.realm, limit: '10' })}`));
+  await answer(sample('release-filter-no-match', 'POST', '/v1/query', {
+    context: { realm: sessions.realm }, scope: { kind: 'realm', realm: sessions.realm },
+    filter: { all: [{ facet: 'release', where: { all: [
+      { facet: 'releaseLanguage', any: ['en'] },
+      { facet: 'releaseStatus', any: ['official', 'unofficial'] },
+    ] } }] }, sort: 'newest', page: { size: 20 },
+  }));
+  await answer(sample('platform-access', 'GET', '/v1/me/platform-access'));
+  await answer(sample('catalogue-reader-states', 'GET', `/v1/me/work-states?${new URLSearchParams({ actingSubject: person.actingSubject!, works: works.map(work => work.work).join(',') })}`));
+}
+
+async function browse(name: PersonaName) {
+  if (name === 'member') await pageReads(name);
+  const person = proofSession(name);
   const root = `/v1/realms/${short(sessions.realm)}/modules`;
   const searchParams = new URLSearchParams({ q: phrase, realm: sessions.realm, limit: '10' });
   const found: string[] = [];
@@ -246,9 +293,9 @@ async function browse(name: PersonaName) {
   expect(credits.items).toContainEqual(expect.objectContaining({ agent: sessions.owner.actingSubject, role: 'author' }));
 }
 
-outcomeTest(catalogue, 'visitor', () => browse('visitor'));
-outcomeTest(catalogue, 'stranger', () => browse('stranger'));
-outcomeTest(catalogue, 'member', () => browse('member'));
-outcomeTest(catalogue, 'owner', () => browse('owner'));
-outcomeTest(catalogue, 'moderator', () => browse('moderator'));
-outcomeTest(catalogue, 'operator', () => browse('operator'));
+outcomeTest(catalogue, 'visitor', () => browse('visitor'), recording);
+outcomeTest(catalogue, 'stranger', () => browse('stranger'), recording);
+outcomeTest(catalogue, 'member', () => browse('member'), recording);
+outcomeTest(catalogue, 'owner', () => browse('owner'), recording);
+outcomeTest(catalogue, 'moderator', () => browse('moderator'), recording);
+outcomeTest(catalogue, 'operator', () => browse('operator'), recording);

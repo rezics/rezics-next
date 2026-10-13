@@ -4,13 +4,14 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import continuity from '../../../../../scripts/qa/cases/outcomes/visual-novels/continue-progress-across-devices-two-device-progress.ts';
 import { signIn } from '../../../../../scripts/lib/oauth-client.ts';
-import { outcomeResponse, outcomeTest } from '../../../support/outcome-test.ts';
+import { OutcomeRecorder, outcomeResponse, outcomeTest } from '../../../support/outcome-test.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
 setDefaultTimeout(60_000);
 const short = (id: string) => id.slice(-36);
 const query = (person: PersonaSession) => `actingSubject=${encodeURIComponent(person.actingSubject!)}`;
 let sessions: PersonaSessions;
+const recording = new OutcomeRecorder(continuity);
 const pairs = new Map<PersonaName, string[]>();
 async function answer<T>(request: Promise<Response>, status = 200): Promise<T> {
   const response = await request;
@@ -20,6 +21,7 @@ async function answer<T>(request: Promise<Response>, status = 200): Promise<T> {
 }
 beforeAll(async () => {
   sessions = await personaSessions('public');
+  await recording.prepare();
   const owner = sessions.owner;
   const actingSubject = owner.actingSubject;
   for (const name of ['visitor', 'member', 'owner'] as const) {
@@ -48,7 +50,10 @@ beforeAll(async () => {
   }
   for (const name of ['stranger', 'moderator', 'operator'] as const) pairs.set(name, pairs.get('visitor')!);
 }, 180_000);
-afterAll(async () => { await sessions?.close(); });
+afterAll(async () => {
+  try { await recording.publish(); }
+  finally { await sessions?.close(); }
+});
 type State = { status: { work: string; status: string | null; version: number; changedAt: string | null }; progress: unknown };
 type Mark = { standing: string; version: number; replayed?: boolean };
 const state = (person: PersonaSession, work: string) => answer<State>(person.main('GET', `/v1/works/${short(work)}/reader-state?${query(person)}`));
@@ -68,7 +73,7 @@ async function shelf(person: PersonaSession, selected: string[]) {
 }
 
 async function foreign(name: PersonaName) {
-  const person = sessions[name];
+  const person = proofSession(name);
   const victim = name === 'owner' ? sessions.member : sessions.owner;
   const [work, other] = pairs.get(name)! as [string, string];
   for (const id of [work, other]) {
@@ -126,8 +131,50 @@ async function secondDevice(person: PersonaSession): Promise<PersonaSession> {
   } };
 }
 
-async function continueReading(name: PersonaName) {
+// Stable route labels keep repeated reads and saves distinct without recording fixture setup.
+const sampleCounts = new Map<string, number>();
+function proofSession(name: PersonaName, session = sessions[name], device = 'primary'): PersonaSession {
+  const sample = recording.session(name, session);
+  return { ...session, main: (method, path, ...args) => {
+    const route = path.split('?')[0]!.split('/').slice(2)
+      .filter(part => !/^[0-9a-f]{8}-[0-9a-f-]{27}$/.test(part)).join('-');
+    const label = `${device}-${method.toLowerCase()}-${route}`;
+    const key = `${name}:${label}`;
+    const index = sampleCounts.get(key) ?? 0;
+    sampleCounts.set(key, index + 1);
+    return sample(`${label}-${index}`, method, path, ...args);
+  } };
+}
+
+// Home Continue, Library resume and the work-page identity/progress panel.
+async function pageReads(name: PersonaName, checkpoint: string) {
   const person = sessions[name];
+  const sample = recording.session(name, person);
+  const work = pairs.get(name)![0]!;
+  const root = `/v1/works/${short(work)}`;
+  const viewer = (path: string) => `${path}${path.includes('?') ? '&' : '?'}${query(person)}`;
+  const read = <T>(label: string, path: string) => answer<T>(sample(`continue-${checkpoint}-${label}`, 'GET', viewer(path)));
+  await read('home', '/v1/me/continue?limit=6');
+  const resume = await sample(`continue-${checkpoint}-work-resume`, 'GET', viewer(`/v1/me/continue/${short(work)}`));
+  expect([200, 404]).toContain(resume.status);
+  await resume.body?.cancel();
+  const header = await read<{ mainVersion: string; selectedLanguage: string | null }>('header', root);
+  if (checkpoint === 'empty') {
+    const contents = await sample('continue-contents', 'GET', viewer(`${root}/contents`));
+    expect([200, 404]).toContain(contents.status);
+    await contents.body?.cancel();
+    await answer(sample('continue-selected-text', 'GET', `/v1/main-versions/${short(header.mainVersion)}/selection?language=${header.selectedLanguage ?? 'en'}`));
+  }
+  await read('reader-state', `${root}/reader-state`);
+  await read('edition-preference', `/v1/me/edition-preferences/${short(work)}`);
+  await read('progress-summary', `/v1/me/progress-summaries/${short(work)}?language=en`);
+  await read('releases-empty', `${root}/releases?limit=20`);
+  await read('work-states', `/v1/me/work-states?works=${encodeURIComponent(work)}`);
+}
+
+async function continueReading(name: PersonaName) {
+  if (name === 'member') await pageReads(name, 'empty');
+  const person = proofSession(name);
   const work = pairs.get(name)![0]!;
   const root = `/v1/works/${short(work)}`;
   if (name === 'visitor') {
@@ -137,11 +184,12 @@ async function continueReading(name: PersonaName) {
     return;
   }
   if (['stranger', 'moderator', 'operator'].includes(name)) return foreign(name);
-  const deviceB = await secondDevice(person);
+  const deviceB = proofSession(name, await secondDevice(person), 'second-device');
   const initial = await mark(deviceB, work);
   expect(initial).toMatchObject({ parts: false, standing: 'not-started', version: 0 });
   expect(await progress(person, work, 'started', initial.version)).toMatchObject({ standing: 'started', version: 1 });
   expect(await mark(deviceB, work)).toMatchObject({ standing: 'started', version: 1 });
+  if (name === 'member') await pageReads(name, 'started');
   expect(await answer(deviceB.main('PUT', `${root}/progress`, { actingSubject: person.actingSubject, expectedVersion: initial.version, standing: 'completed' }), 409)).toMatchObject({ code: 'stale_progress' });
   const current = await mark(deviceB, work);
   expect(current).toMatchObject({ standing: 'started', version: 1 });
@@ -150,6 +198,7 @@ async function continueReading(name: PersonaName) {
   expect(saved).toMatchObject({ standing: 'completed', version: 2 });
   expect(await progress(deviceB, work, 'completed', current.version, key)).toMatchObject({ ...saved, replayed: true });
   expect(await mark(person, work)).toMatchObject({ standing: 'completed', version: 2 });
+  if (name === 'member') await pageReads(name, 'completed');
   expect(await answer(person.main('GET', `/v1/me/progress-summaries/${short(work)}?${query(person)}`))).toMatchObject({ status: 'finished' });
   expect(await progress(deviceB, work, 'not-started', saved.version)).toMatchObject({ standing: 'not-started', version: 3 });
   expect(await mark(person, work)).toMatchObject({ standing: 'not-started', version: 3 });
@@ -157,9 +206,9 @@ async function continueReading(name: PersonaName) {
   if (name === 'owner') await foreign(name);
 }
 
-outcomeTest(continuity, 'visitor', () => continueReading('visitor'));
-outcomeTest(continuity, 'stranger', () => continueReading('stranger'));
-outcomeTest(continuity, 'member', () => continueReading('member'));
-outcomeTest(continuity, 'owner', () => continueReading('owner'));
-outcomeTest(continuity, 'moderator', () => continueReading('moderator'));
-outcomeTest(continuity, 'operator', () => continueReading('operator'));
+outcomeTest(continuity, 'visitor', () => continueReading('visitor'), recording);
+outcomeTest(continuity, 'stranger', () => continueReading('stranger'), recording);
+outcomeTest(continuity, 'member', () => continueReading('member'), recording);
+outcomeTest(continuity, 'owner', () => continueReading('owner'), recording);
+outcomeTest(continuity, 'moderator', () => continueReading('moderator'), recording);
+outcomeTest(continuity, 'operator', () => continueReading('operator'), recording);
