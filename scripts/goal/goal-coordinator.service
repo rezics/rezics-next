@@ -23,7 +23,9 @@ Restart=on-failure
 RestartSec=10
 KillMode=control-group
 TimeoutStopSec=15
-# Manager turns and their workers live under the independent tmux server, outside this cgroup.
+# Passes use systemd-run --user --scope --collect; their workers, capacity continuations
+# and landing wrappers inherit that scope outside this group. Manager turns use independent tmux.
+# A scope-launch fallback stays in this group and is killed with a hung supervisor on stop.
 
 [Install]
 WantedBy=default.target

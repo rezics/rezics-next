@@ -1,16 +1,18 @@
 import { resolve, join } from 'node:path';
 import { stateDir, activeGoals, root, managerOf } from './ledger.ts';
 import { type Ledger, effortsOf, modelOf, engineEnv } from './types.ts';
-import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
 import { GoalMailStore } from './mail.ts';
 import { type WakeEvent, type LaunchDescriptor, processIdentity, claudeConfigHome, WAKE_PROMPT, WAKE_LAST_MESSAGE, tmuxServer, GoalCoordinator, TmuxLauncher, claudeNativeSession, claudeWakeArgs, nativeSession } from './coordinator.ts';
 import { lastAttempt, running, launchCommand, managerWakeGates } from './launch.ts';
 import { validGoalSlug } from './briefs.ts';
 import { randomUUID } from 'node:crypto';
-import { homedir } from 'node:os';
+import { constants, homedir } from 'node:os';
 import { ensureTermspacesSession, termspacesTarget, reconcileWindows } from './windows.ts';
 import { startGoal } from './tasks.ts';
 import { planningEvent } from './planning.ts';
+import { coordinatorPassCommand } from './pass-scope.ts';
 
 /** The override confines disposable mail/pump trials to their own ledger and local state. */
 export function eventStateDirectory(): string {
@@ -190,7 +192,8 @@ export async function coordinatorCommand(args: string[]): Promise<void> {
     if (action === 'status') {
       if (rest.length) throw new Error('coordinator status takes no options');
       const mail = new GoalMailStore({stateDir:directory,goals:Object.keys(eventLedger(directory).goals ?? {})});
-      try { console.log(JSON.stringify({...coordinator.status(),overdueMail:mail.overdue()},null,2)); }
+      try { console.log(JSON.stringify({...coordinator.status(),overdueMail:mail.overdue(),
+        lastFailedPass:lastFailedCoordinatorPass(directory)},null,2)); }
       finally { mail.close(); }
       return;
     }
@@ -242,25 +245,85 @@ export async function coordinatorCommand(args: string[]): Promise<void> {
     const interval = Number(flags['--interval-ms'] ?? 5000);
     if (!Number.isSafeInteger(interval) || interval < 100 || interval > 60_000) throw new Error('interval must be 100..60000 ms');
     coordinator.acquire();
-    let stopped = false;
-    const stop = () => { stopped = true; };
-    process.on('SIGTERM',stop); process.on('SIGINT',stop);
-    try {
-      do {
-        await freshCoordinatorPass(directory);
-        if (!once && !stopped) await Bun.sleep(interval);
-      } while (!once && !stopped);
-    } finally { process.off('SIGTERM',stop); process.off('SIGINT',stop); coordinator.release(); }
+    try { await coordinatorSupervisor(directory,{interval,once}); }
+    finally { coordinator.release(); }
   } finally { coordinator.close(); }
 }
 
-/** Keep ownership in the supervisor, but load the current tool for every pass.
- * Normal child exit leaves asynchronous landings and independent turns alive. */
-export async function freshCoordinatorPass(directory: string, module = import.meta.url): Promise<void> {
-  const source = `const { coordinatorPass } = await import(${JSON.stringify(module)}); await coordinatorPass(${JSON.stringify(directory)});`;
-  const child = Bun.spawn([process.execPath, '-e', source], {cwd:root,stdout:'inherit',stderr:'inherit'});
-  const code = await child.exited;
-  if (code !== 0) throw new Error(`Coordinator pass exited ${code}`);
+type PassResult = { code: number; lastError: string };
+type FailedPass = { at: string; line: string };
+
+export function lastFailedCoordinatorPass(directory: string): FailedPass | null {
+  const path = join(directory,'coordinator-last-failed-pass.json');
+  return existsSync(path) ? JSON.parse(readFileSync(path,'utf8')) as FailedPass : null;
+}
+
+/** Ownership stays in the supervisor; a failed pass costs only the next interval. */
+export async function coordinatorSupervisor(directory: string,
+  options: { interval: number; once?: boolean; module?: string }): Promise<void> {
+  let stopped = false;
+  let interruptWait: (() => void) | undefined;
+  const stop = () => { stopped = true; interruptWait?.(); };
+  process.on('SIGTERM',stop); process.on('SIGINT',stop);
+  try {
+    do {
+      const result = await freshCoordinatorPass(directory,options.module);
+      if (result.code !== 0) {
+        const line = `Coordinator pass exited ${result.code}: ${result.lastError || 'no error output'}`;
+        console.error(line);
+        // SQLite may be the fault that ended the pass. Keep its diagnostic independent.
+        const path = join(directory,'coordinator-last-failed-pass.json');
+        const temporary = `${path}.${randomUUID()}.tmp`;
+        try {
+          writeFileSync(temporary,JSON.stringify({at:new Date().toISOString(),line}));
+          renameSync(temporary,path);
+        } finally { rmSync(temporary,{force:true}); }
+      }
+      if (!options.once && !stopped) await new Promise<void>(resolveWait => {
+        const timer = setTimeout(() => { interruptWait = undefined; resolveWait(); },options.interval);
+        interruptWait = () => { clearTimeout(timer); interruptWait = undefined; resolveWait(); };
+      });
+    } while (!options.once && !stopped);
+  } finally { process.off('SIGTERM',stop); process.off('SIGINT',stop); }
+}
+
+/** Do not wait for descendants to close inherited pipes: they may outlive the pass. */
+async function runCoordinatorPass(command: string[]): Promise<PassResult> {
+  const child = spawn(command[0]!,command.slice(1),{cwd:root,stdio:['ignore','inherit','pipe']});
+  let tail = '';
+  const capture = (chunk: Buffer) => {
+    process.stderr.write(chunk);
+    tail = (tail + chunk.toString('utf8')).slice(-16_384);
+  };
+  child.stderr!.on('data',capture);
+  try {
+    const code = await new Promise<number>((resolveExit,reject) => {
+      child.once('error',reject);
+      child.once('exit',(code,signal) => resolveExit(code ?? 128 + (signal ? constants.signals[signal] : 0)));
+    });
+    let remaining: Buffer | null;
+    while ((remaining = child.stderr!.read() as Buffer | null) !== null) capture(remaining);
+    return {code,lastError:tail.trim().split(/\r?\n/).at(-1) ?? ''};
+  } finally { child.stderr!.destroy(); }
+}
+
+/** Every pass loads current code in a scope whose descendants survive a service fault. */
+export async function freshCoordinatorPass(directory: string, module = import.meta.url,
+  cgroup = existsSync('/proc/self/cgroup') ? readFileSync('/proc/self/cgroup','utf8') : ''): Promise<PassResult> {
+  const started = join(directory,`coordinator-pass-${randomUUID()}.started`);
+  const source = `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(started)}, 'started'); const { coordinatorPass } = await import(${JSON.stringify(module)}); await coordinatorPass(${JSON.stringify(directory)});`;
+  const direct = [process.execPath,'-e',source];
+  const command = coordinatorPassCommand(cgroup,direct);
+  try {
+    if (command[0] === direct[0]) return await runCoordinatorPass(direct);
+    let result: PassResult;
+    try { result = await runCoordinatorPass(command); }
+    catch (error) { result = {code:1,lastError:error instanceof Error ? error.message : String(error)}; }
+    // A failed pass is never retried. Only failure before its first instruction falls back.
+    if (existsSync(started)) return result;
+    console.error(`Coordinator pass scope unavailable; running in supervisor group: ${result.lastError || `launcher exited ${result.code}`}`);
+    return await runCoordinatorPass(direct);
+  } finally { rmSync(started,{force:true}); }
 }
 
 export async function coordinatorPass(directory: string): Promise<void> {

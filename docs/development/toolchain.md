@@ -598,8 +598,18 @@ the checked-in `scripts/goal/goalctl.ts` and its tests.
 no mail daemon or additional package is required. `task goal -- coordinator`
 uses the host's tmux and systemd user manager for the Codex pilot. tmux launches
 finite native resumes through an existing server outside the coordinator unit's
-cgroup; killing the coordinator therefore leaves manager-dispatched workers
-running. Launch descriptors retain goalctl's model, effort, tier and account home.
+cgroup. When the supervisor's `/proc/self/cgroup` identifies a systemd unit, each
+fresh pass runs through `systemd-run --user --scope --collect`; its queue workers,
+capacity continuations and landing wrappers inherit that separate scope and survive
+a coordinator service fault. Scope execution preserves the caller's environment
+([systemd-run](https://www.freedesktop.org/software/systemd/man/latest/systemd-run.html));
+argument expansion is disabled so the pass source is passed literally. If scope
+creation fails before the pass starts, it runs in the supervisor's group and emits
+a diagnostic; stopping the unit also kills those fallback processes. Outside
+systemd, passes run directly. A failed pass reports its exit code and last error
+line, records the failure time and line for `coordinator status`, and waits the
+interval before the next pass; it does not end the supervisor. Launch descriptors
+retain goalctl's model, effort, tier and account home.
 The pilot verified tmux 3.7c and systemd 259.9 (259.9-1.fc44); these are host
 installations rather than repository pins.
 
