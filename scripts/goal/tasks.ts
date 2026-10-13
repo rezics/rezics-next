@@ -74,7 +74,7 @@ export async function dispatch(briefPath: string, flags: Set<string>): Promise<v
   const methodErrors = await dispatchMethodErrors(brief, text);
   if (methodErrors.length) throw new Error(`Invalid brief ${briefPath}:\n  ${methodErrors.join('\n  ')}`);
   const handover = await prepareHandover(brief, text);
-  await withLedger(async ledger => {
+  const reservation = await withLedger(ledger => {
     if (ledger.tasks[brief.id]) throw new Error(`${brief.id} already exists (${ledger.tasks[brief.id]!.state}); use resume`);
     const goal = briefGoal(ledger, absolute);
     const reservedBy = ledger.reserved?.[brief.id];
@@ -97,7 +97,7 @@ export async function dispatch(briefPath: string, flags: Set<string>): Promise<v
     const needs = neededFileWaits(brief);
     if (needs.length) throw new Error(needs.join('\n'));
     const engine = dispatchEngine(brief.engine ?? DEFAULT_ENGINE);
-    const { live, limit, usage, account } = launchGates(tasks, engine, flags.has('--force-usage'));
+    const { live, limit, usage, account } = admitWorkers(tasks, engine, flags.has('--force-usage'));
     const name = brief.worktree ? `${goal ?? 'legacy'}-${brief.worktree}` : brief.id.toLowerCase();
     const worktree = join(root, '.temp', 'worktrees', name);
     const socket = postgresSocketRefusal(physicalPath(worktree));
@@ -110,8 +110,25 @@ export async function dispatch(briefPath: string, flags: Set<string>): Promise<v
       console.log(`${brief.id}: claims ok; ${live}/${limit} live; ${account ? describeAccount(account) : `Claude usage ${usage.level}`}`);
       return;
     }
+    const preparing = tasks.find(task => task.worktree === worktree && task.state === 'starting');
+    if (preparing) throw new Error(`${worktree} is being prepared by ${preparing.id}; try again after its launch`);
     const reuse = brief.worktree !== undefined && existsSync(worktree);
-    if (!reuse) removeDispatchLeftover(ledger, brief.id, worktree, branch);
+    const cleanupLedger = { ...ledger, tasks: { ...ledger.tasks } };
+    const { worktree: _shared, ...claims } = brief;
+    const task: Task = { ...claims, engine, brief: absolute, worktree, branch, base: '',
+      state: 'starting', attempts: [], ...brief.worktree ? { worktreeName: brief.worktree } : {},
+      ...goal ? { goal } : {}, historyGate: true };
+    ledger.tasks[brief.id] = task;
+    ledger.lastId = Math.max(ledger.lastId ?? 0, Number(brief.id.slice(2)));
+    ledger.startedAt ??= new Date().toISOString();
+    return { task, reuse, cleanupLedger };
+  });
+  if (!reservation) return;
+  const { task, reuse, cleanupLedger } = reservation;
+  const { worktree, branch, engine = DEFAULT_ENGINE } = task;
+  try {
+    // The published starting task holds its claims and width while preparation does I/O.
+    if (!reuse) removeDispatchLeftover(cleanupLedger, brief.id, worktree, branch);
     mkdirSync(join(stateDir, 'runs', brief.id), { recursive: true });
     if (!reuse) {
       // A shared branch outlives its worktree once its last task closes; reattach to it.
@@ -122,24 +139,40 @@ export async function dispatch(briefPath: string, flags: Set<string>): Promise<v
       writeFileSync(join(stateDir, 'runs', brief.id, 'install.log'), `${install.stdout}\n${install.stderr}`);
       if (install.status !== 0) throw new Error(`yarn install failed in ${worktree}; see runs/${brief.id}/install.log`);
     }
+    task.base = reuse ? git(worktree, ['merge-base', 'HEAD', 'main']) : git(worktree, ['rev-parse', 'HEAD']);
     mkdirSync(join(worktree, '.temp', 'goal'), { recursive: true });
-    const { worktree: _shared, ...claims } = brief;
-    const task: Task = { ...claims, engine, brief: absolute, worktree, branch,
-      base: reuse ? git(worktree, ['merge-base', 'HEAD', 'main']) : git(root, ['rev-parse', 'main']),
-      state: 'running', attempts: [], ...brief.worktree ? { worktreeName: brief.worktree } : {},
-      ...goal ? { goal } : {}, historyGate: true };
-    copyFileSync(absolute, join(worktree, briefFile({ ...task, shared: !!task.worktreeName })));
+    writeFileSync(join(worktree, briefFile({ ...task, shared: !!task.worktreeName })), text);
     stageHandover(worktree, handover);
-    const manager = managerOf(ledger, goal);
-    task.attempts.push(launch(task, brief.effort, isClaudeCode(engine) ? randomUUID() : '',
-      await workerPrompt(task, manager, engine, task.effort, handover), false, manager, engine));
-    ledger.tasks[brief.id] = task;
-    if (ledger.reserved) delete ledger.reserved[brief.id];
-    ledger.lastId = Math.max(ledger.lastId ?? 0, Number(brief.id.slice(2)));
-    ledger.startedAt ??= new Date().toISOString();
-    console.log(`${brief.id} started: ${modelOf(engine)}/${brief.effort} pid ${lastAttempt(task).pid} in ${worktree}`);
-    console.log(`Next: run \`bun scripts/goal/goalctl.ts wait ${brief.id}\` in the background.`);
-  });
+    await withLedger(async ledger => {
+      const current = taskOf(ledger, brief.id);
+      if (current.state !== 'starting') throw new Error(`${brief.id} is no longer being prepared (${current.state})`);
+      const manager = managerOf(ledger, task.goal);
+      current.base = task.base;
+      current.attempts.push(launch(current, brief.effort, isClaudeCode(engine) ? randomUUID() : '',
+        await workerPrompt(current, manager, engine, current.effort, handover), false, manager, engine));
+      current.state = 'running';
+      if (ledger.reserved) delete ledger.reserved[brief.id];
+      console.log(`${brief.id} started: ${modelOf(engine)}/${brief.effort} pid ${lastAttempt(current).pid} in ${worktree}`);
+      console.log(`Next: run \`bun scripts/goal/goalctl.ts wait ${brief.id}\` in the background.`);
+    });
+  } catch (error) {
+    await withLedger(ledger => {
+      if (ledger.tasks[brief.id]?.state === 'starting') delete ledger.tasks[brief.id];
+    });
+    throw error;
+  }
+}
+
+/** A preparation has no worker pid yet, but has already consumed admission capacity. */
+function admitWorkers(tasks: Task[], engine: Engine, forceUsage: boolean) {
+  const live = tasks.filter(task => task.state === 'starting' || running(task)).length;
+  const limit = Number(process.env.GOAL_MAX_WORKERS ?? 25);
+  if (live >= limit) throw new Error(`Concurrency limit reached: ${live}/${limit} live workers`);
+  return { ...launchGates(tasks, engine, forceUsage), live };
+}
+
+function assertPrepared(task: Task): void {
+  if (task.state === 'starting') throw new Error(`${task.id} is being prepared; try again after its launch`);
 }
 
 /** The worker exit decision is shared by wait and the coordinator's settlement pass. */
@@ -160,7 +193,7 @@ export async function finishAttempt(id: string, attemptNumber: number) {
     if (refusedTurn && open && last.session && transportContinuations(current, 'capacity') < MAX_CAPACITY_CONTINUATIONS) {
       const engine = engineOf(last);
       try {
-        launchGates(Object.values(ledger.tasks), engine, false);
+        admitWorkers(Object.values(ledger.tasks), engine, false);
         const next = launch(current, last.effort, last.session,
           'The service refused your last request for capacity; nothing else changed. Continue where you stopped.',
           true, managerOf(ledger, current.goal), engine, 'continuation');
@@ -179,7 +212,7 @@ export async function finishAttempt(id: string, attemptNumber: number) {
       const effort = last.effort;
       // A refused gate or a failed start must still record this attempt as ended.
       try {
-        launchGates(Object.values(ledger.tasks), engine, false);
+        admitWorkers(Object.values(ledger.tasks), engine, false);
         const manager = managerOf(ledger, current.goal);
         const session = isClaudeCode(engine) ? randomUUID() : '';
         const prompt = `${await workerPrompt(current, manager, engine, effort)}\n\n${transportContinuationPrompt(changedFiles(current).dirty)}`;
@@ -198,7 +231,7 @@ export async function finishAttempt(id: string, attemptNumber: number) {
       && last.session && handoffContinuations(current) === 0) {
       const engine = engineOf(last);
       try {
-        launchGates(Object.values(ledger.tasks), engine, false);
+        admitWorkers(Object.values(ledger.tasks), engine, false);
         const next = launch(current, last.effort, last.session,
           'The turn ended before the handoff; nothing else changed. A command you started may have ended meanwhile. '
           + 'Continue your work and finish with the handoff. If a command is still running, wait with one call using yield_time_ms: 300000.',
@@ -235,7 +268,9 @@ export async function waitFor(id: string, options: { pollMs?: number; settleMs?:
   // A killed waiter must never record the worker as ended.
   for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const) process.on(signal, () => process.exit(143));
   const { settleTask } = await import('./settle.ts');
-  let watching = lastAttempt(taskOf(readLedger(), id));
+  const initial = taskOf(readLedger(), id);
+  assertPrepared(initial);
+  let watching = lastAttempt(initial);
   for (;;) {
     const alive = () => pidAlive(watching.pid, programOf(engineOf(watching)));
     while (alive() || (await Bun.sleep(options.settleMs ?? 3000), alive())) await Bun.sleep(options.pollMs ?? 5000);
@@ -291,6 +326,7 @@ export async function setAutoLand(id: string, on: boolean): Promise<void> {
   await withLedger(ledger => {
     const task = taskOf(ledger, id);
     assertOwner(task);
+    assertPrepared(task);
     if (task.state !== 'running' && task.state !== 'exited') throw new Error(`${task.id}: auto-land needs a running or exited task (${task.state})`);
     if (on) task.land = 'auto'; else delete task.land;
     console.log(`${task.id}: ${on ? 'lands by itself when its worker hands off done' : 'lands on the manager\'s command only'}`);
@@ -308,6 +344,7 @@ export async function landTask(id: string, step = false): Promise<void> {
     const snapshot = await withLedger(ledger => {
       const task = taskOf(ledger, id);
       assertOwner(task);
+      assertPrepared(task);
       if (running(task) || task.state !== 'exited') throw new Error(`${task.id}: land requires an exited task (${task.state})`);
       const sharers = Object.values(ledger.tasks).filter(other => other.id !== task.id
         && other.worktree === task.worktree && HOLDING.includes(other.state));
@@ -385,6 +422,7 @@ export async function resumeTask(id: string, args: string[]): Promise<void> {
   await withLedger(async ledger => {
     const task = taskOf(ledger, id);
     assertOwner(task);
+    assertPrepared(task);
     if (running(task)) throw new Error(`${task.id} is still running; stop it first or message it`);
     if (['verified', 'cancelled'].includes(task.state)) throw new Error(`${task.id} is closed`);
     const previous = lastAttempt(task);
@@ -406,7 +444,7 @@ export async function resumeTask(id: string, args: string[]): Promise<void> {
     if (!effortsOf(nextEngine).includes(nextEffort)) {
       throw new Error(`${nextEngine} effort must be one of ${effortsOf(nextEngine).join(', ')}`);
     }
-    launchGates(Object.values(ledger.tasks), nextEngine, forceUsage);
+    admitWorkers(Object.values(ledger.tasks), nextEngine, forceUsage);
     const manager = managerOf(ledger, task.goal);
     // A session continues only on its own engine: switching back resumes that engine's latest session,
     // and an engine without one starts fresh on the same worktree.
@@ -418,7 +456,7 @@ export async function resumeTask(id: string, args: string[]): Promise<void> {
     const text = readFileSync(briefPathOf(task) ?? task.brief, 'utf8');
     const handover = await prepareHandover(task, text);
     const sharers = Object.values(ledger.tasks).filter(other => other.id !== task.id
-      && resolve(other.worktree) === resolve(task.worktree) && running(other));
+      && resolve(other.worktree) === resolve(task.worktree) && (other.state === 'starting' || running(other)));
     const worktreeUpdate = updateResumeWorktree(task, sharers);
     console.log(worktreeUpdate);
     copyFileSync(briefPathOf(task) ?? task.brief, join(task.worktree, briefFile({ ...task, shared: !!task.worktreeName })));
@@ -493,6 +531,7 @@ export async function stopTask(id: string): Promise<void> {
   await withLedger(async ledger => {
     const task = taskOf(ledger, id);
     assertOwner(task);
+    assertPrepared(task);
     const attempt = lastAttempt(task);
     const program = programOf(engineOf(attempt));
     const signalGroup = (signal: NodeJS.Signals) => {
@@ -510,7 +549,7 @@ export async function stopTask(id: string): Promise<void> {
     signalGroup('SIGKILL');
     killWorktreeProcesses(task.worktree, task.id, 'SIGKILL');
     const liveSharers = Object.values(ledger.tasks).some(other => other.id !== task.id
-      && other.worktree === task.worktree && HOLDING.includes(other.state) && running(other));
+      && other.worktree === task.worktree && HOLDING.includes(other.state) && (other.state === 'starting' || running(other)));
     if (!liveSharers) {
       killWorktreeProcesses(task.worktree);
       removeWorktreeStack(task.worktree);
@@ -539,6 +578,7 @@ export async function reclaimTask(id: string, briefPath: string, flags: Set<stri
   await withLedger(ledger => {
     const task = taskOf(ledger, id);
     assertOwner(task);
+    assertPrepared(task);
     if (brief.id !== task.id) throw new Error(`${briefPath} is for ${brief.id}, not ${task.id}`);
     if (running(task)) throw new Error(`${task.id} is still running`);
     if (['verified', 'cancelled'].includes(task.state)) throw new Error(`${task.id} is closed`);
@@ -586,6 +626,7 @@ export function canVerifyReadOnly(task: Task): boolean {
 async function closeTask(id: string, outcome: 'verified' | 'cancelled'): Promise<void> {
   await withLedger(ledger => {
     const task = taskOf(ledger, id);
+    assertPrepared(task);
     if (running(task)) throw new Error(`${task.id} is still running; stop it first`);
     const readOnly = canVerifyReadOnly(task);
     if (outcome === 'verified' && task.state !== 'merged' && !readOnly) {

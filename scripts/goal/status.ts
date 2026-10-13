@@ -28,7 +28,7 @@ export async function status(): Promise<void> {
   });
   const tasks = Object.values(ledger.tasks);
   const usage = currentUsage();
-  const live = tasks.filter(running);
+  const live = tasks.filter(task => task.state === 'starting' || running(task));
   console.log(termspacesSession()
     ? `Goal windows: ${termspacesTarget().session} on ${termspacesTarget().socket}`
     : `Goal windows unavailable: termspaces session ${termspacesTarget().session} missing on ${termspacesTarget().socket}; workers run unwatched, manager turns wait`);
@@ -56,7 +56,7 @@ export async function status(): Promise<void> {
   await goalMeasures(ledger, { root, print: line => console.log(line) });
   for (const slug of active) {
     const own = tasks.filter(task => task.goal === slug);
-    console.log(`Goal ${slug}: manager ${managerOf(ledger, slug)}; ${own.filter(running).length} live, `
+    console.log(`Goal ${slug}: manager ${managerOf(ledger, slug)}; ${own.filter(task => task.state === 'starting' || running(task)).length} live, `
       + `${own.filter(task => !['verified', 'cancelled'].includes(task.state)).length} open; `
       + `${inboxEntries(stateDir, slug).filter(entry => !entry.acknowledged).length} unacknowledged regressions`);
   }
@@ -69,6 +69,10 @@ export async function status(): Promise<void> {
     if (count) console.log(`Goal ${slug}: inactive; ${count} unacknowledged regressions`);
   }
   for (const task of tasks.filter(t => !['verified', 'cancelled'].includes(t.state))) {
+    if (task.state === 'starting') {
+      console.log(`${task.id} starting ${task.goal ?? '-'} ${task.engine}/${task.effort} preparing worktree [${task.cases.join(' ')}] ${task.title}`);
+      continue;
+    }
     const attempt = lastAttempt(task);
     const continuations = transportContinuations(task);
     const repeated = task.state === 'exited' && transportDrop(attempt) && continuations >= MAX_TRANSPORT_CONTINUATIONS;

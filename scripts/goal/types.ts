@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 
-export type State = 'running' | 'exited' | 'conflict' | 'merged' | 'stopped' | 'verified' | 'cancelled';
+export type State = 'starting' | 'running' | 'exited' | 'conflict' | 'merged' | 'stopped' | 'verified' | 'cancelled';
 export type Engine = 'claude' | 'sonnet' | 'haiku' | 'fable' | 'sol' | 'codex' | 'codex-1' | 'luna' | 'grok' | 'cursor';
 export const BRIEF_KINDS = ['outcome', 'implementation', 'surface', 'mechanism', 'tooling'] as const;
 export type BriefKind = typeof BRIEF_KINDS[number];
@@ -150,7 +150,7 @@ export const programOf = (engine: Engine): string =>
   isCodex(engine) ? 'codex' : engine === 'cursor' ? 'cursor-agent' : isClaudeCode(engine) ? 'claude' : engine;
 export const engineEnv = (engine: Engine): Record<string, string> =>
   engine === 'codex-1' ? { CODEX_HOME: CODEX_1_HOME } : isCodex(engine) ? { CODEX_HOME } : {};
-export const HOLDING: State[] = ['running', 'exited', 'conflict', 'merged', 'stopped'];
-// Landed (`merged`) and closed tasks no longer have to land. Every other holding state
-// still does, including files it committed outside its claim.
+export const HOLDING: State[] = ['starting', 'running', 'exited', 'conflict', 'merged', 'stopped'];
+// Preparations have no commits yet. Landed (`merged`) and closed tasks no longer
+// have to land; the remaining holders do, including their out-of-claim commits.
 export const UNLANDED: State[] = ['running', 'exited', 'conflict', 'stopped'];

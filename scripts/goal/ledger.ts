@@ -216,10 +216,11 @@ function unlandedOutOfClaim(task: Task, sharers: readonly Task[]): string[] {
   return outOfClaimFiles(watched, [...sharers], regeneratedOnBranch(task.branch));
 }
 
-/** Out-of-claim commits of a task that has not landed or closed, matched the way a path claim is. */
-export function unlandedChangeConflicts(brief: Brief, tasks: readonly Task[]): string[] {
-  if (!brief.paths.some(path => !isGeneratedOutput(path))) return [];
-  const conflicts: string[] = [];
+export interface UnlandedChanges { worktree: string; branch: string; files: string[] }
+
+/** Read each unlanded branch once, outside a queue pass's ledger lock. */
+export function unlandedChanges(tasks: readonly Task[], excludeId?: string): UnlandedChanges[] {
+  const changes: UnlandedChanges[] = [];
   const seen = new Set<string>();
   for (const task of tasks) {
     if (!UNLANDED.includes(task.state) || !task.branch) continue;
@@ -228,14 +229,25 @@ export function unlandedChangeConflicts(brief: Brief, tasks: readonly Task[]): s
     seen.add(key);
     const sharers = tasks.filter(other => other.worktree === task.worktree && other.branch === task.branch
       && HOLDING.includes(other.state));
-    // A sharer may adopt the file into its own claim. Another task may not take it.
+    if (sharers.some(sharer => sharer.id === excludeId)) continue;
+    changes.push({ worktree: task.worktree, branch: task.branch, files: unlandedOutOfClaim(task, sharers) });
+  }
+  return changes;
+}
+
+/** Out-of-claim commits of a task that has not landed or closed, matched the way a path claim is. */
+export function unlandedChangeConflicts(brief: Brief, tasks: readonly Task[], snapshot?: readonly UnlandedChanges[]): string[] {
+  if (!brief.paths.some(path => !isGeneratedOutput(path))) return [];
+  const conflicts: string[] = [];
+  for (const change of snapshot ?? unlandedChanges(tasks, brief.id)) {
+    const sharers = tasks.filter(task => task.worktree === change.worktree && task.branch === change.branch
+      && HOLDING.includes(task.state));
     if (sharers.some(sharer => sharer.id === brief.id)) continue;
-    const files = unlandedOutOfClaim(task, sharers);
-    if (!files.length) continue;
     const names = sharers.filter(sharer => UNLANDED.includes(sharer.state)).map(sharer => sharer.id).sort().join(', ');
+    if (!names) continue;
     for (const path of brief.paths) {
       if (isGeneratedOutput(path)) continue;
-      const held = files.some(file => new Bun.Glob(path).match(file) || pathsOverlap(path, file));
+      const held = change.files.some(file => new Bun.Glob(path).match(file) || pathsOverlap(path, file));
       if (held) conflicts.push(`path ${path} changed by ${names} (unlanded)`);
     }
   }

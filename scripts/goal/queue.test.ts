@@ -1,7 +1,6 @@
 import { afterEach, expect, test } from 'bun:test';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { fixtureSpawns } from './fixtures/spawn-deadline.ts';
 import type { QueueLedger } from './queue.ts';
 import type { Task } from './types.ts';
@@ -11,7 +10,7 @@ const spawnSync = fixtureSpawns(60_000);
 const fixtures: { directory: string }[] = [];
 
 function repository() {
-  const scratch = join(tmpdir(), '.temp');
+  const scratch = join(process.cwd(), '.temp');
   mkdirSync(scratch, { recursive: true });
   const directory = mkdtempSync(join(scratch, 'brief-queue-'));
   const git = (...args: string[]) => {
@@ -312,4 +311,66 @@ test('a restarted pass recovers a dead launch owner and an already published tas
   const published = f.ledger(); published.queue = { 'G-002': entry }; f.save(published);
   ok(f.run('settle'));
   expect(f.ledger().queue?.['G-002']).toBeUndefined(); expect(f.ledger().queueRefusals?.['G-002']).toBeUndefined();
+});
+
+function recordingGit(f: ReturnType<typeof repository>) {
+  const log = join(f.local, 'git-calls.jsonl');
+  const executable = Bun.which('git')!;
+  writeFileSync(join(f.local, 'bin/git'), `#!${process.execPath}
+    import { appendFileSync } from 'node:fs';
+    import { spawnSync } from 'node:child_process';
+    const args = process.argv.slice(2);
+    if (!args.includes('--git-common-dir')) appendFileSync(${JSON.stringify(log)}, JSON.stringify(args) + '\\n');
+    const result = spawnSync(${JSON.stringify(executable)}, args, { stdio: 'inherit' });
+    process.exit(result.status ?? 1);
+  `);
+  chmodSync(join(f.local, 'bin/git'), 0o755);
+  writeFileSync(log, '');
+  return { clear: () => writeFileSync(log, ''), calls: (): string[][] =>
+    readFileSync(log, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line) as string[]) };
+}
+
+function pump(f: ReturnType<typeof repository>) {
+  return spawnSync(process.execPath, ['-e', `import { pumpQueue } from ${JSON.stringify(join(import.meta.dir, 'queue.ts'))}; await pumpQueue();`],
+    { cwd: f.directory, encoding: 'utf8', env: f.env });
+}
+
+test('a pass waiting on running dependencies performs no git work or outcome loads', () => {
+  const f = repository(); const git = recordingGit(f);
+  const loads = join(f.local, 'outcome-loads');
+  const outcomeDir = join(f.directory, 'scripts/qa/cases'); mkdirSync(outcomeDir, { recursive: true });
+  writeFileSync(join(outcomeDir, 'outcomes.ts'), `import { appendFileSync } from 'node:fs';
+    export const personas = ['reader'];
+    export async function loadOutcomes() {
+      appendFileSync(${JSON.stringify(loads)}, 'load\\n');
+      return new Map([['program/lock', { cells: { reader: { state: 'pending' } } }]]);
+    }
+  `);
+  const ledger = f.ledger(); ledger.tasks['G-001'] = f.holder('running'); f.save(ledger);
+  const paths: string[] = [];
+  for (const id of ['G-002', 'G-003', 'G-004']) {
+    const path = f.brief(id, ['kind: implementation', 'rows: [program/lock]', 'depends: [G-001]', `paths: [${id.toLowerCase()}.ts]`]);
+    paths.push(path); expect(ok(f.run('queue', path))).toContain('which is running');
+  }
+  // Edited validation is deferred until the dependency would permit dispatch.
+  writeFileSync(paths[0]!, readFileSync(paths[0]!, 'utf8').replace('effort: high', 'effort: invalid'));
+  git.clear(); writeFileSync(loads, '');
+  expect(pump(f).status).toBe(0);
+  expect(git.calls()).toEqual([]); expect(readFileSync(loads, 'utf8')).toBe('');
+  expect(Object.keys(f.ledger().queue!)).toHaveLength(3);
+  const ready = f.ledger(); ready.tasks['G-001']!.state = 'verified'; f.save(ready);
+  writeFileSync(f.meminfo, 'MemAvailable: 1024 kB\n');
+  const result = pump(f); expect(result.status, result.stderr).toBe(0);
+  expect(f.ledger().queueRefusals!['G-002']!.reason).toContain('effort must be');
+});
+
+test('a pass scans an unlanded branch only once for several otherwise ready entries', () => {
+  const f = repository();
+  f.git('checkout', '-qb', 'goal/holder'); writeFileSync(join(f.directory, 'claimed.ts'), 'export const changed = true;\n');
+  f.git('commit', '-qam', 'Change path outside claim'); f.git('checkout', '-q', 'main');
+  const ledger = f.ledger(); const holder = f.holder(); holder.branch = 'goal/holder'; ledger.tasks[holder.id] = holder; f.save(ledger);
+  for (const id of ['G-002', 'G-003', 'G-004']) expect(ok(f.run('queue', f.brief(id)))).toContain('changed by G-001');
+  const git = recordingGit(f); const result = pump(f); expect(result.status, result.stderr).toBe(0);
+  const scans = git.calls().filter(args => args[0] === 'diff' && args.includes('main...goal/holder'));
+  expect(scans).toHaveLength(1); expect(Object.keys(f.ledger().queue!)).toHaveLength(3);
 });

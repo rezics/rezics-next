@@ -217,6 +217,7 @@ export async function mergeTask(id: string, flags: Set<string>, expectedHead?: s
       if (sharer.goal !== task.goal) throw new Error(`${sharer.id} belongs to another Goal; cannot merge a shared branch`);
       if (sharer.branch !== task.branch) throw new Error(`${sharer.id} uses another branch in ${task.worktree}`);
       // Rebase, renumber and regeneration write this worktree. A live worker still owns it.
+      if (sharer.state === 'starting') throw new Error(`${sharer.id} is being prepared; try again after its launch`);
       if (running(sharer)) throw new Error(`${sharer.id} is still running; stop it first`);
     }
     if (!gateOnly && !['exited', 'conflict', 'stopped', 'merged'].includes(task.state)) throw new Error(`${task.id} is ${task.state}`);
@@ -396,7 +397,7 @@ export async function mergeTask(id: string, flags: Set<string>, expectedHead?: s
         || git(task.worktree, ['rev-parse', 'HEAD']) !== current.after
         || changedFiles(task).dirty.length
         || sharers.map(sharer => sharer.id).sort().join(',') !== current.sharers.join(',')
-        || sharers.some(sharer => sharer.goal !== task.goal || sharer.branch !== task.branch || (!gateOnly && running(sharer)))
+        || sharers.some(sharer => sharer.state === 'starting' || sharer.goal !== task.goal || sharer.branch !== task.branch || (!gateOnly && running(sharer)))
         || (!gateOnly && !['exited', 'conflict', 'stopped', 'merged'].includes(task.state));
       if (drifted) {
         return recordRefusal(task, `${task.id} main, task branch or sharers changed during the unit gate; retry merge to rebase, normalize and test again`, gateOnly);

@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { activeGoals, areasOf, briefGoal, readLedger, root, stateDir, unlandedChangeConflicts, withLedger } from './ledger.ts';
+import { activeGoals, areasOf, briefGoal, readLedger, root, stateDir, unlandedChangeConflicts, unlandedChanges, type UnlandedChanges, withLedger } from './ledger.ts';
 import { areaConflicts, claimConflicts, goalOfBriefPath, mechanismSectionErrors, parseBrief, validateBrief } from './briefs.ts';
-import { dispatchMethodErrors, neededFileWaits, removeDispatchLeftover } from './tasks.ts';
+import { dispatchMethodErrors, neededFileWaits } from './tasks.ts';
 import { prepareHandover } from './handover.ts';
 import { processAlive, processIdentity } from '../qa/process/identity.ts';
 import { postgresSocketRefusal, physicalPath } from './postgres-socket.ts';
@@ -37,14 +37,12 @@ async function validatedBrief(path: string): Promise<Brief> {
   return brief;
 }
 
-function waitsFor(ledger: QueueLedger, brief: Brief, entry?: QueuedBrief): string[] {
+function ledgerWaits(ledger: QueueLedger, brief: Brief, entry?: QueuedBrief): string[] {
   const tasks = Object.values(ledger.tasks);
-  const waits = [...claimConflicts(brief, tasks), ...unlandedChangeConflicts(brief, tasks), ...neededFileWaits(brief)];
+  const waits = claimConflicts(brief, tasks);
   if (entry) {
     const holders = tasks.filter(task => claimConflicts(brief, [task]).length).map(task => task.id);
-    const changers = unlandedChangeConflicts(brief, tasks).flatMap(line =>
-      / changed by ([^(]+) \(unlanded\)$/.exec(line)?.[1]?.split(', ') ?? []);
-    entry.waitedFor = [...new Set([...entry.waitedFor ?? [], ...holders, ...changers, ...brief.depends])];
+    entry.waitedFor = [...new Set([...entry.waitedFor ?? [], ...holders, ...brief.depends])];
   }
   for (const id of brief.depends) {
     const dependency = ledger.tasks[id];
@@ -60,6 +58,21 @@ function waitsFor(ledger: QueueLedger, brief: Brief, entry?: QueuedBrief): strin
   return waits;
 }
 
+function waitsFor(ledger: QueueLedger, brief: Brief, entry: QueuedBrief,
+  changes: readonly UnlandedChanges[], needs: readonly string[]): string[] {
+  const waits = ledgerWaits(ledger, brief, entry);
+  if (waits.length) return waits;
+  const conflicts = unlandedChangeConflicts(brief, Object.values(ledger.tasks), changes);
+  const changers = conflicts.flatMap(line => / changed by ([^(]+) \(unlanded\)$/.exec(line)?.[1]?.split(', ') ?? []);
+  entry.waitedFor = [...new Set([...entry.waitedFor ?? [], ...changers])];
+  return [...conflicts, ...needs];
+}
+
+function passChanges(): () => UnlandedChanges[] {
+  let snapshot: UnlandedChanges[] | undefined;
+  return () => snapshot ??= unlandedChanges(Object.values(readLedger().tasks));
+}
+
 function assertDispatchable(ledger: Ledger, brief: Brief, goal: string | undefined, allowArea = false): void {
   if (ledger.tasks[brief.id]) throw new Error(`${brief.id} already exists (${ledger.tasks[brief.id]!.state}); use resume`);
   const reserved = ledger.reserved?.[brief.id];
@@ -69,7 +82,6 @@ function assertDispatchable(ledger: Ledger, brief: Brief, goal: string | undefin
   const worktree = join(root, '.temp/worktrees', brief.worktree ? `${goal ?? 'legacy'}-${brief.worktree}` : brief.id.toLowerCase());
   const socket = postgresSocketRefusal(physicalPath(worktree));
   if (socket) throw new Error(socket);
-  if (!brief.worktree) removeDispatchLeftover(ledger, brief.id, worktree, `goal/${brief.id.toLowerCase()}`);
   if (brief.worktree && Object.values(ledger.tasks).some(task => task.worktree === worktree
     && HOLDING.includes(task.state) && task.goal !== goal)) throw new Error(`${worktree} has open tasks belonging to another Goal; use a different shared worktree`);
 }
@@ -90,31 +102,79 @@ function recordRefusal(ledger: QueueLedger, entry: QueuedBrief, reason: string):
   }
 }
 
-async function startQueued(id: string, submission = false): Promise<void> {
-  const entry = await withLedger(async (ledger: QueueLedger) => {
-    const entry = ledger.queue?.[id];
-    if (!entry || (entry.owner && processAlive(entry.owner))) return;
+async function startQueued(id: string, submission = false, changes = passChanges()): Promise<void> {
+  const captured = (readLedger() as QueueLedger).queue?.[id];
+  if (!captured) return;
+  let brief: Brief | undefined;
+  let parseError: unknown;
+  try { brief = parseBrief(readFileSync(captured.brief, 'utf8')); }
+  catch (error) { parseError = error; }
+  const candidate = await withLedger((ledger: QueueLedger) => {
+    const current = ledger.queue?.[id];
+    if (!current || current.queuedAt !== captured.queuedAt || (current.owner && processAlive(current.owner))) return;
     // Recover a crash between dispatch publishing its task and removing its queue entry.
-    if (ledger.tasks[id]) { delete ledger.queue![id]; return; }
-    if (entry.goal && !activeGoals(ledger).includes(entry.goal)) {
-      entry.waits = [`Goal ${entry.goal} is not active`];
+    if (ledger.tasks[id]) {
+      if (ledger.tasks[id]!.state === 'starting') current.waits = [`${id} is being prepared`];
+      else delete ledger.queue![id];
+      return;
+    }
+    if (current.goal && !activeGoals(ledger).includes(current.goal)) {
+      current.waits = [`Goal ${current.goal} is not active`];
       return;
     }
     try {
-      const brief = await validatedBrief(entry.brief);
-      if (brief.id !== id) throw new Error(`Queued brief ID changed from ${id} to ${brief.id}`);
-      const fromPath = goalOfBriefPath(relative(root, entry.brief));
-      if (fromPath && fromPath !== entry.goal) throw new Error('Queued brief Goal changed');
-      assertDispatchable(ledger, brief, entry.goal, entry.allowArea);
-      entry.waits = waitsFor(ledger, brief, entry);
+      if (parseError) throw parseError;
+      current.waits = ledgerWaits(ledger, brief!, current);
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
-      recordRefusal(ledger, entry, reason);
-      return { ...entry, refusal: reason };
+      recordRefusal(ledger, current, reason);
+      return { ...current, refusal: reason };
     }
-    if (entry.waits.length) return;
-    entry.owner = processIdentity(process.pid) ?? { pid: process.pid };
-    return { ...entry, refusal: undefined };
+    if (current.waits.length) return;
+    return { ...current, refusal: undefined };
+  });
+  if (!candidate) return;
+  let reason = candidate.refusal;
+  let computed: { brief: Brief; changes: UnlandedChanges[]; needs: string[] } | undefined;
+  if (!reason) {
+    try {
+      const validated = await validatedBrief(candidate.brief);
+      if (validated.id !== id) throw new Error(`Queued brief ID changed from ${id} to ${validated.id}`);
+      const fromPath = goalOfBriefPath(relative(root, candidate.brief));
+      if (fromPath && fromPath !== candidate.goal) throw new Error('Queued brief Goal changed');
+      computed = { brief: validated, changes: changes(), needs: neededFileWaits(validated) };
+    } catch (error) { reason = error instanceof Error ? error.message : String(error); }
+  }
+  if (candidate.refusal) {
+    if (submission) throw new Error(candidate.refusal);
+    return;
+  }
+  const entry = await withLedger((ledger: QueueLedger) => {
+    const current = ledger.queue?.[id];
+    if (!current || current.queuedAt !== candidate.queuedAt || (current.owner && processAlive(current.owner))) return;
+    if (ledger.tasks[id]) {
+      if (ledger.tasks[id]!.state === 'starting') current.waits = [`${id} is being prepared`];
+      else delete ledger.queue![id];
+      return;
+    }
+    if (current.goal && !activeGoals(ledger).includes(current.goal)) {
+      current.waits = [`Goal ${current.goal} is not active`];
+      return;
+    }
+    try {
+      if (reason) throw new Error(reason);
+      assertDispatchable(ledger, computed!.brief, current.goal, current.allowArea);
+      // A branch moving after the scan is seen next pass. Dispatch repeats claims,
+      // including unlanded changes, under its own lock before reserving the task.
+      current.waits = waitsFor(ledger, computed!.brief, current, computed!.changes, computed!.needs);
+    } catch (error) {
+      const refusal = error instanceof Error ? error.message : String(error);
+      recordRefusal(ledger, current, refusal);
+      return { ...current, refusal };
+    }
+    if (current.waits.length) return;
+    current.owner = processIdentity(process.pid) ?? { pid: process.pid };
+    return { ...current, refusal: undefined };
   });
   if (!entry) return;
   if (entry.refusal) {
@@ -143,9 +203,9 @@ async function startQueued(id: string, submission = false): Promise<void> {
     else if (gateRefusal(refusal)) current.waits = [refusal];
     else if (refusal.startsWith(`Claim conflict for ${id}:`) || refusal.startsWith(`${id} depends on `) || refusal.startsWith(`${id} needs `)) {
       // Claims and main may have changed while dispatch waited for the ledger lock.
-      try { current.waits = waitsFor(ledger, parseBrief(readFileSync(entry.brief, 'utf8')), current); }
+      try { current.waits = ledgerWaits(ledger, computed!.brief, current); }
       catch { current.waits = []; }
-      if (!current.waits.length) recordRefusal(ledger, current, refusal);
+      if (!current.waits.length) current.waits = [refusal];
     } else recordRefusal(ledger, current, refusal);
   });
   if (submission && refusal && !(readLedger() as QueueLedger).queue?.[id]) throw new Error(refusal);
@@ -161,7 +221,7 @@ export async function queueBrief(path: string, flags = new Set<string>()): Promi
     const allowArea = flags.has('--allow-area');
     assertDispatchable(ledger, brief, goal, allowArea);
     const entry: QueuedBrief = { id: brief.id, brief: absolute, goal, queuedAt: new Date().toISOString(), waits: [], allowArea };
-    entry.waits = waitsFor(ledger, brief, entry);
+    entry.waits = ledgerWaits(ledger, brief, entry);
     if (ledger.queue?.[brief.id]) throw new Error(`${brief.id} is already queued`);
     (ledger.queue ??= {})[brief.id] = entry;
     ledger.lastId = Math.max(ledger.lastId ?? 0, Number(brief.id.slice(2)));
@@ -183,15 +243,29 @@ function queueLine(entry: QueuedBrief): string {
 }
 
 export async function listQueue(): Promise<void> {
+  const snapshot = readLedger() as QueueLedger;
+  const entries = Object.values(snapshot.queue ?? {}).filter(entry => !process.env.GOAL_ID
+    || process.env.GOAL_ID === 'program' || entry.goal === process.env.GOAL_ID);
+  const changes = passChanges();
+  const computed = new Map<string, { brief: Brief; changes: UnlandedChanges[]; needs: string[] }>();
+  const errors = new Map<string, string>();
+  for (const entry of entries) {
+    try {
+      const brief = parseBrief(readFileSync(entry.brief, 'utf8'));
+      const blocked = ledgerWaits(snapshot, brief, entry).length || (entry.goal && !activeGoals(snapshot).includes(entry.goal));
+      computed.set(entry.id, { brief, changes: blocked ? [] : changes(), needs: blocked ? [] : neededFileWaits(brief) });
+    } catch (error) { errors.set(entry.id, error instanceof Error ? error.message : String(error)); }
+  }
   await withLedger((ledger: QueueLedger) => {
-    const entries = Object.values(ledger.queue ?? {}).filter(entry => !process.env.GOAL_ID
-      || process.env.GOAL_ID === 'program' || entry.goal === process.env.GOAL_ID);
-    for (const entry of entries.sort((a, b) => a.queuedAt.localeCompare(b.queuedAt))) {
+    for (const captured of entries.sort((a, b) => a.queuedAt.localeCompare(b.queuedAt))) {
+      const entry = ledger.queue?.[captured.id];
+      if (!entry || entry.queuedAt !== captured.queuedAt) continue;
       try {
+        if (errors.has(entry.id)) throw new Error(errors.get(entry.id));
+        const result = computed.get(entry.id)!;
         entry.waits = entry.goal && !activeGoals(ledger).includes(entry.goal) ? [`Goal ${entry.goal} is not active`]
-          : [...waitsFor(ledger, parseBrief(readFileSync(entry.brief, 'utf8')), entry), ...entry.waits.filter(gateRefusal)];
-      }
-      catch (error) { entry.waits = [error instanceof Error ? error.message : String(error)]; }
+          : [...waitsFor(ledger, result.brief, entry, result.changes, result.needs), ...entry.waits.filter(gateRefusal)];
+      } catch (error) { entry.waits = [error instanceof Error ? error.message : String(error)]; }
       console.log(queueLine(entry));
     }
     if (!entries.length) console.log('No queued briefs');
@@ -212,5 +286,6 @@ export async function dropQueue(id: string): Promise<void> {
 export async function pumpQueue(): Promise<void> {
   const ledger = readLedger() as QueueLedger;
   const entries = Object.values(ledger.queue ?? {}).sort((a, b) => a.queuedAt.localeCompare(b.queuedAt));
-  for (const entry of entries) await startQueued(entry.id);
+  const changes = passChanges();
+  for (const entry of entries) await startQueued(entry.id, false, changes);
 }
