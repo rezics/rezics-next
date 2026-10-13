@@ -34,14 +34,20 @@ A retained old-lineage receipt may resolve an old command, while a missing one
 after rollback needs recovery reconciliation before any replay of external
 effects. Broker dedupe windows do not supply this guarantee.
 
+Current authorization governs replay disclosure. Check current authorization
+before disclosing receipt existence or its saved result, and give an unauthorized
+caller the ordinary refusal whether a receipt exists or not. Authorized replay
+preserves the original effect and receipt; it neither repeats the effect nor
+requires the original state prerequisites to remain current.
+
 ## Protected editorial effects
 
 [Editorial protection](editorial-protection.md) adds exact candidate, approval,
 control and decision dependencies to a guarded transition. Approval and bounded
 application commit together only within one owner; cross-owner work remains
 pending until each owner confirms its effect. A new key cannot apply one proposal
-revision twice. Current authorization governs replay disclosure, and a state
-conflict is terminal only after its typed rejection receipt wins the same race.
+revision twice. A state conflict is terminal only after its typed rejection
+receipt wins the same race.
 
 ## Cross-service workflows
 
