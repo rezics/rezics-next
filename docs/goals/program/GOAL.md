@@ -132,10 +132,24 @@ lands, a manager applies its rule by hand and says so.
   talks to, in its own window. It owns the scope and the method, arbitrates
   what two managers cannot settle, reads the measures, and brings the
   maintainer what needs him. It holds no wait on any task and relays no mail.
-  Resident means the identity and the window, not one growing session: when
-  its context passes 150,000 tokens it writes `state.md` and starts fresh. The
+  It is one session that compacts itself and is not restarted by hand; the
   program's own tooling tasks are run by a program manager role in short turns,
   like any Goal's.
+- **A session's cost is its calls times its average context.** Every call sends
+  the whole context again, and a session that compacts at a limit carries about
+  half that limit on average. On 2026-10-13 the supermanager never compacted,
+  grew by about 2,400 tokens a call from 45,000 and averaged 267,000 over 149
+  calls; a limit of 500,000 would have changed nothing, 300,000 would have cost
+  a third less and 200,000 half, with two compactions in three and a half
+  hours. So, in this order: fewer calls (the tool does what needs no judgment),
+  a small start (a role card and the state, not a history), and a compaction
+  limit as the backstop.
+
+  | Who | Session | Compaction |
+  | --- | --- | --- |
+  | Supermanager | One resident session; `state.md` written at each checkpoint | 200,000 (`claude --autocompact 200000`) |
+  | A Goal's manager | A fresh turn for an event, several side by side. Compaction alone would not let two turns run at once, let mail in between turns, or spare a session woken after an hour from sending its history uncached | Not reached; while managers are still resumed, 150,000 |
+  | Worker, researcher | One session for an attempt. A fix round resumes it when it is under 200,000 tokens and was active within the hour, and starts fresh from the brief, the findings and the changed files otherwise | 400,000 for Sol and 200,000 for Luna, a backstop: a compaction in the middle of a task loses what was read. The control is the brief and a budget of calls for an attempt |
 - **termspaces is the agents' terminal, and `goalctl` maintains it.** `goalctl`
   registers a window when a turn or a worker starts and removes it when it
   ends: windows named `goal-…` in the session `rezics-agents`, and no other
@@ -234,7 +248,7 @@ measures in `status`; `coordinator start` and mail with a sender and a deadline;
 | N0 | The regression of 2026-10-13 on `main` is read: its failures are clustered by first error line with no model, the clusters the run caused itself (a host shared with workers, an agent's environment) are rerun alone, and each cluster that remains is a pending cell of a row or one task of the Goal that owns it. [state.md](state.md) has the counts |
 | N1 | One Books row is proved from end to end by the program: its declaration, its six outcome tests through the persona harness, landed through the gates, and `status` shows 1 of 67. It removes what stopped the pilots (the guard that cannot follow the loader's import, the harness's missing read) |
 | N2 | `scripts/goal/goalctl.ts` is split along its commands, with no change of behaviour, so that tooling tasks stop sharing one file of 6,300 lines |
-| N3 | The coordinator lands and closes what needs no judgment, starts a short fresh turn for an event, bounds a turn, delivers mail by level, and records each turn (reason, context, actions) |
+| N3 | The coordinator lands and closes what needs no judgment, starts a short fresh turn for an event, bounds a turn, delivers mail by level, and records each turn (reason, context, actions). A manager session that is still resumed compacts at 150,000 |
 | N4 | `goalctl` maintains termspaces: it registers and removes the window of every turn and worker, `status` names each one's window, and nothing of a Goal runs on another tmux server |
 | N5 | One command answers what a persona gets from an operation on a pooled QA stack and can record the response for a story; a generated index gives each operation's route file, owner and tests |
 | N6 | The surface gate (types, unit tests, the changed stories fed by recorded responses); the measures read each attempt's recorded round; a cancelled task names its reason and what replaces it; an attempt has a budget of model calls; a mechanism brief's note is marked read by its Goal's manager |
@@ -255,7 +269,7 @@ The maintainer starts the supermanager in termspaces, window `super-manager` of 
 session `rezics-agents` (`termspaces attach rezics-agents`):
 
 ```sh
-GOAL_ID=program claude --model <model> --effort xhigh --dangerously-skip-permissions
+GOAL_ID=program claude --model <model> --effort xhigh --autocompact 200000 --dangerously-skip-permissions
 ```
 
 and sends: `You are the REZICS supermanager. Read
@@ -264,8 +278,8 @@ docs/goals/manager.md, register with task goal -- goal start program --manager
 supermanager, and run the Goal from its next tasks.`
 
 Until N3 is on `main` the supermanager runs the program's tooling tasks itself,
-with one background wait for each task, and keeps to the 150,000-token limit by
-starting fresh from `state.md`.
+with one background wait for each task; that is when the compaction limit
+matters most.
 
 ## Completion
 
