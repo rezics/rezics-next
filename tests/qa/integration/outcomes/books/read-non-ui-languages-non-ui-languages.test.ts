@@ -205,10 +205,8 @@ async function read(name: PersonaName) {
   if (name === 'visitor' || name === 'member')
     await answer(sample('credits-zh-Hant', 'GET',
       `/v1/works/${short(published.work)}/credits?${query(person, 'zh-Hant')}`));
-  // Settings currently return numeric fontSize against a string response contract.
-  // Read them without recording until that API contract admits the actual answer.
   if (person.actingSubject)
-    await answer(person.main('GET', `/v1/reader/settings${caller}`));
+    await answer(sample('reader-settings', 'GET', `/v1/reader/settings${caller}`));
 }
 
 outcomeTest(reading, 'visitor', () => read('visitor'), recording);
