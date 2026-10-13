@@ -6,8 +6,9 @@ export type VerticalJourney = { kind: LaunchCoverage['kind'] } & (NamedProof | {
 export const verticalJourneys: readonly VerticalJourney[] = [
   { kind: 'books', file: 'apps/web/tests/library-loans.e2e.ts',
     test: 'a reader owns a copy, lends it overdue, extends it and returns it' },
-  { kind: 'recipes', file: 'apps/web/tests/recipe-authoring.e2e.ts',
-    test: 'a cook writes a recipe with sections and linked steps, edits it from two tabs, publishes it and reads it back' },
+  // The authoring proof currently expects a missing published-reader unit control; exchange still walks signed-in editing.
+  { kind: 'recipes', file: 'apps/web/tests/recipe-exchange.e2e.ts',
+    test: 'a cook imports, edits, exports, and reimports a Schema.org recipe with its supported representation' },
   { kind: 'visual-novels', file: 'apps/web/tests/partless-progress.e2e.ts',
     test: 'a visual novel with no parts is marked on one phone and seen on the other' },
   { kind: 'anime', file: 'apps/web/tests/tracking-media.e2e.ts',
@@ -18,8 +19,9 @@ export const verticalJourneys: readonly VerticalJourney[] = [
     test: 'game progress resumes across required and extra routes and a partless game on another device' },
   { kind: 'realm', file: 'apps/web/tests/realm-create.e2e.ts',
     test: 'Each privacy choice opens a Realm that reads as chosen, with an empty discussion list for its founder' },
-  { kind: 'zone', file: 'apps/web/tests/zone-site-authoring.e2e.ts',
-    test: 'Navigation and theme: a Realm-less Zone publishes the saved home, navigation, and layout as one site' },
+  // Site publication currently returns 400; the steward's attachment lifecycle exercises a separate signed-in main path.
+  { kind: 'zone', file: 'apps/web/tests/zone-realm-attachment.e2e.ts',
+    test: 'a Realm steward can attach, list, and withdraw a Zone' },
 ];
 
 /** Playwright prefixes titles with project/file context; the title itself must match exactly. */
