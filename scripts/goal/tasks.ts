@@ -1,5 +1,5 @@
 import { type Brief, DEFAULT_ENGINE, BRIEF_KINDS, HOLDING, type Task, type Ledger, isClaudeCode, modelOf, programOf, engineOf, MAX_CAPACITY_CONTINUATIONS, MAX_TRANSPORT_CONTINUATIONS, type Attempt, type Engine, effortsOf } from './types.ts';
-import { root, withLedger, briefGoal, unlandedChangeConflicts, areasOf, activeGoals, stateDir, git, managerOf, readLedger, pidAlive, claimingTasks, assertOwner, acquireDir, briefPathOf, landScope, archiveClosedBriefs, treeMentions, archiveDirOf, archiveFiles, removeFromTree, ARCHIVE_BRANCH } from './ledger.ts';
+import { root, withLedger, briefGoal, unlandedChangeConflicts, areasOf, activeGoals, stateDir, git, managerOf, readLedger, pidAlive, claimingTasks, assertOwner, acquireDir, briefPathOf, landScope, archiveClosedBriefs, treeMentions, archiveDirOf, archiveFiles, removeFromTree, ARCHIVE_BRANCH, REGENERATION_COMMIT_SUBJECT } from './ledger.ts';
 import { pathToFileURL } from 'node:url';
 import { join, resolve, basename, relative, dirname, posix } from 'node:path';
 import { readFileSync, existsSync, mkdirSync, writeFileSync, copyFileSync, readdirSync, readlinkSync, renameSync } from 'node:fs';
@@ -340,8 +340,18 @@ export async function setAutoLand(id: string, on: boolean): Promise<void> {
 
 /** A blocked attempt that left the branch as it found it reports an inquiry, not the branch: the landing reads the
  * handoff of the last attempt before it. */
+/** A blocked attempt added nothing when the branch carries no patch beyond main that its launch head lacked, apart
+ * from the tool's own regeneration. A landing rebases the branch and regenerates, so the heads cannot be compared. */
+export function blockedAttemptAddedNothing(task: Task, attempt: Attempt): boolean {
+  const checkpoint = `${attempt.output}.head`;
+  const start = existsSync(checkpoint) ? readFileSync(checkpoint, 'utf8').trim() : task.base;
+  return !git(task.worktree, ['cherry', '-v', start, 'HEAD', 'main']).split('\n')
+    .some(line => line.startsWith('+') && !line.endsWith(` ${REGENERATION_COMMIT_SUBJECT}`))
+    && git(task.worktree, ['status', '--porcelain', '--untracked-files=all']) === '';
+}
+
 export function landingAttempt(task: Task, read: (attempt: Attempt) => { text: string; error: boolean } = readResult,
-  unchanged: (task: Task, attempt: Attempt) => boolean = blockedAttemptUnchanged): Attempt {
+  unchanged: (task: Task, attempt: Attempt) => boolean = blockedAttemptAddedNothing): Attempt {
   let at = task.attempts.length - 1;
   while (at > 0) {
     const result = read(task.attempts[at]!);
