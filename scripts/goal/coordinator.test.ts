@@ -73,7 +73,7 @@ test('the manager role card sends program readings and rulings immediately with 
 
 test('a second event writer waits for the first and a permanent lock ends with the statement named', async () => {
   const f = fixture();
-  let writer: ReturnType<typeof Bun.spawn> | undefined;
+  let writer: Bun.Subprocess<'ignore', 'ignore', 'pipe'> | undefined;
   try {
     const first = f.open();
     const second = f.open({storeWaitMs:1000});
@@ -129,7 +129,7 @@ test('a stale event transaction rolls back and rereads before retrying its write
 
 test('a reader blocking transaction commit produces a bounded COMMIT error and no partial event', async () => {
   const f = fixture();
-  let reader: ReturnType<typeof Bun.spawn> | undefined;
+  let reader: Bun.Subprocess<'ignore', 'ignore', 'pipe'> | undefined;
   try {
     const coordinator = f.open({storeWaitMs:75});
     const ready = join(f.dir, 'reader-ready');
