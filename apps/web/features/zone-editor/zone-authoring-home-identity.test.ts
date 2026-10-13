@@ -31,11 +31,11 @@ function session() {
     'mount-target-collection-name', 'publish-site-bundle',
   ].map(label => ({ label, state: 'populated' as const }))], { pathPrefix: BFF_PREFIX });
   const statuses: number[] = [];
-  const fetcher: typeof fetch = async (input, init) => {
+  const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const answer = await replay.fetcher(input, init);
     statuses.push(answer.status);
     return answer;
-  };
+  }) as typeof fetch;
   const main = browserMainApi('https://recorded.invalid', { fetcher });
   return { replay, main, statuses, authoring: browserZoneAuthoring(main) };
 }

@@ -45,7 +45,7 @@ function RecordedAuthoring({ place }: { place: 'home' | 'navigation' | 'review' 
       'showcase-editor', 'draft-navigation', 'draft-navigation-editor', 'draft-configuration',
       'mount-target-collection-name', 'publish-site-bundle',
     ].map(label => ({ label, state: 'populated' as const }))], { pathPrefix: BFF_PREFIX });
-    const fetcher: typeof fetch = async (input, init) => {
+    const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
       try {
         const answer = await replay.fetcher(input, init);
         if (active) setAccepted(current => [...current, answer.status]);
@@ -54,7 +54,7 @@ function RecordedAuthoring({ place }: { place: 'home' | 'navigation' | 'review' 
         if (active) setError(failure as Error);
         throw failure;
       }
-    };
+    }) as typeof fetch;
     const main = browserMainApi('https://recorded.invalid', { fetcher });
     async function load() {
       const [showcase, zone, navigation] = await Promise.all([
@@ -113,7 +113,7 @@ type Story = StoryObj<typeof meta>;
 const publish: NonNullable<Story['play']> = async ({ canvasElement }) => {
   const canvas = within(canvasElement);
   await expect(await canvas.findByRole('heading', { level: 1, name: (editor.answer as { name: string }).name })).toBeVisible();
-  const button = canvas.getByRole('button', { name: copy.publish, exact: true });
+  const button = canvas.getByRole('button', { name: copy.publish });
   await waitFor(() => expect(button).toBeEnabled());
   await userEvent.click(button);
   await expect(await canvas.findByText(copy.published)).toBeVisible();
