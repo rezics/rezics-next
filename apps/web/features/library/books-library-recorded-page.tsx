@@ -26,7 +26,9 @@ function useRecordedClient(record: AnswerRecord, persona: AnswerPersona, selecti
   const [client, setClient] = useState<MainClient | null>(null);
   useEffect(() => {
     const replay = recordedFetch(record, persona, selections, { pathPrefix: BFF_PREFIX });
-    setClient(browserMainApi(window.location.origin, { fetcher: replay.fetcher }));
+    const next = browserMainApi(window.location.origin, { fetcher: replay.fetcher });
+    // The Eden client is a function. Passing it to the setter would run it as an updater.
+    setClient(() => next);
     return () => { replay.dispose(); setClient(null); };
   }, [record, persona, selections]);
   return client;
