@@ -8,6 +8,7 @@ import {
   personas,
   rowOutcomes,
   outcomeTitle,
+  type OutcomeCell,
   type Persona,
   type RowOutcomes,
 } from './outcome-cells.ts';
