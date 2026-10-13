@@ -193,7 +193,7 @@ describe('Goal landing', () => {
     const r = repo({ result: 'partial', auto: true });
     try {
       const result = r.run('wait');
-      expect(result.status).toBe(1); expect(result.stderr).toContain('RESULT is partial');
+      expect(result.status).toBe(0); expect(result.stdout).toContain('RESULT: partial');
       expect(r.ledger().tasks[r.task.id]!.state).toBe('exited');
       expect(existsSync(r.log)).toBe(false);
     } finally { r.cleanup(); }
