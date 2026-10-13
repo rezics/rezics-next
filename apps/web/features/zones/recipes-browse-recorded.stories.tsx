@@ -60,7 +60,7 @@ function creditOf(source: Source, label: string) {
 
 /** The generated cover keeps its author hidden below 7rem. The card byline is the credit a visitor reads. */
 function shownCredit(canvas: ReturnType<typeof within>, name: string) {
-  const shown = canvas.getAllByText(name).find(element => {
+  const shown = canvas.getAllByText(name).find((element: HTMLElement) => {
     const style = getComputedStyle(element);
     return style.display !== 'none' && style.visibility !== 'hidden';
   });
