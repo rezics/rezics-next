@@ -123,6 +123,30 @@ async function hub(name: PersonaName) {
     editionStatement: 'Desktop PC; version 1.0; digital format',
   }));
   await answer(sample('release-details', 'GET', `${root}/releases/${short(release.release)}?${acting(person)}`));
+  // Match the bounded reads PrimaryAction and non-book Availability send.
+  const viewer = (path: string) => person.actingSubject
+    ? `${path}${path.includes('?') ? '&' : '?'}${acting(person)}` : path;
+  const hubReleases = await answer<{ items: { id: string; revision: string }[] }>(
+    sample('hub-releases', 'GET', viewer(`${root}/releases?limit=20`)));
+  expect(hubReleases.items).toContainEqual(expect.objectContaining({
+    id: release.release, revision: release.revision,
+  }));
+  expect(await answer(sample('hub-partless-parts', 'GET',
+    viewer(`/v1/resources/${short(game.work)}/parts?limit=1`)), 404))
+    .toMatchObject({ code: 'work_unavailable' });
+  if (name !== 'member') {
+    expect(await answer(sample('hub-realizations-empty', 'GET', viewer(`${root}/realizations?limit=20`))))
+      .toMatchObject({ items: [] });
+    expect(await answer(sample('hub-contents-unavailable', 'GET', viewer(`${root}/contents`)), 404))
+      .toMatchObject({ code: 'work_unavailable' });
+    if (person.actingSubject) {
+      expect(await answer(sample('hub-continue-reading', 'GET', viewer('/v1/me/continue?limit=6'))))
+        .toMatchObject({ items: [] });
+      expect(await answer(sample('hub-progress-summary', 'GET',
+        viewer(`/v1/me/progress-summaries/${short(game.work)}?language=en`))))
+        .toMatchObject({ resource: game.work, language: 'en', status: 'not-started' });
+    }
+  }
   const preferencePath = `/v1/me/edition-preferences/${short(game.work)}`;
   const choice = { actingSubject: person.actingSubject ?? sessions.owner.actingSubject,
     expectedVersion: 0, language: 'en',
