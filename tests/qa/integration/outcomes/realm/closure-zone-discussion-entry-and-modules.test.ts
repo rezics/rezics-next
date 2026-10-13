@@ -1,5 +1,4 @@
 import { fromPlainText } from '@rezics/document';
-import { DEFAULT_ZONE_PRESENTATION } from '../../../../../services/main/src/modules/zone/presentation-format.ts';
 import closure from '../../../../../scripts/qa/cases/outcomes/realm/closure-zone-discussion-entry-and-modules.ts';
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
@@ -208,10 +207,18 @@ async function prepareSurface() {
   const config = await answer<{ revision: string }>(owner.main('GET', `${root}/configuration?${acting(owner)}`));
   await answer(owner.main('PUT', `${root}/configuration`, {
     actingSubject: owner.actingSubject, expectedHead: config.revision, defaultRealm: sessions.realm,
-    presentation: { ...DEFAULT_ZONE_PRESENTATION, modules: [{
+    presentation: {
+      profile: 'zone-presentation-v2', preset: 'clean',
+      tokens: {
+        colorScheme: 'system', accent: '#2563eb', density: 'comfortable',
+        cardRadius: 'md', headingFontScale: 'md', surfaceTint: 'none',
+        fontPairing: 'sans', pageSurface: 'flat', coverStyle: 'portrait', titleEffect: 'plain',
+      },
+      navigation: [], slides: [], modules: [{
       id: 'latest', type: 'shelf', title: 'Original Realm adoptions',
       source: { kind: 'query-block', block: 'new-adoptions' },
-    }] },
+      }],
+    },
   }));
   const navigation = await answer<{ revision: string }>(owner.main('GET', `${root}?${acting(owner)}`));
   const mount = await answer<{ revision: string }>(owner.main('POST', `${root}/mounts`, {
