@@ -70,6 +70,30 @@ async function waitUntil(check: () => boolean): Promise<void> {
   }
 }
 
+/** Pauses a waiter on each poll so the test can choose who looks at the lock next. */
+function gatedSleep() {
+  const pending: Array<() => void> = [];
+  let arm = () => {};
+  return {
+    next(): Promise<void> {
+      return new Promise(resolve => { arm = resolve; });
+    },
+    sleep(): Promise<void> {
+      return new Promise(resolve => {
+        pending.push(resolve);
+        arm();
+      });
+    },
+    waiting(): boolean { return pending.length > 0; },
+    wake(): void {
+      const resume = pending.shift();
+      if (!resume) throw new Error('waiter is not sleeping');
+      resume();
+    },
+  };
+}
+
+
 const brief = `---
 id: G-040
 kind: tooling
@@ -3633,7 +3657,7 @@ process.exit(0);
         mkdirSync(join(r.dir, dirname(inventory)), { recursive: true });
         // The scan input is in the guard's declared inventory, outside its imports.
         const source = `import { test, expect } from 'bun:test';\nimport { readFileSync } from 'node:fs';\n`
-          + `test('repository inventory is valid', () => expect(readFileSync(${JSON.stringify(inventory)}, 'utf8')).toBe('valid'));\n`;
+          + `test('repository inventory is valid', () => expect(readFileSync(${JSON.stringify(inventory)}, 'utf8').trim()).toBe('valid'));\n`;
         mkdirSync(join(r.dir, guard, '..'), { recursive: true });
         writeFileSync(join(r.dir, guard), source);
         writeFileSync(join(r.dir, inventory), outcome === 'inherited' ? 'invalid' : 'valid');
@@ -3641,7 +3665,8 @@ process.exit(0);
         const task = await r.start('G-001');
         const ledger = r.ledger(); ledger.tasks[task.id]!.paths.push(inventory); r.save(ledger);
         r.commit(task);
-        writeFileSync(join(task.worktree, inventory), 'invalid');
+        // Keep the inherited finding identical while changing an actual scan input.
+        writeFileSync(join(task.worktree, inventory), 'invalid\n');
         expect(spawnSync('git', ['-C', task.worktree, 'commit', '--allow-empty', '-qam', 'Change inventory']).status).toBe(0);
         await r.stopFixture(task.id);
         const before = r.git('rev-parse', 'main');
@@ -5194,7 +5219,7 @@ describe('gate lanes', () => {
       }));
       const note = notes.find(line => line.includes('gate lanes busy')) ?? 'none waited';
       for (const [index, holder] of holders.entries()) {
-        gates[index]!.wake();
+        if (gates[index]!.waiting()) gates[index]!.wake();
         await Promise.resolve();
         releases.shift()?.();
         await holder;
@@ -5439,27 +5464,6 @@ describe('heavy QA lock', () => {
     }).sort((a, b) => a[3] - b[3] || a[0] - b[0]);
   }
 
-  /** Pauses a waiter on each poll so the test can choose who looks at the lock next. */
-  function gatedSleep() {
-    const pending: Array<() => void> = [];
-    let arm = () => {};
-    return {
-      next(): Promise<void> {
-        return new Promise(resolve => { arm = resolve; });
-      },
-      sleep(): Promise<void> {
-        return new Promise(resolve => {
-          pending.push(resolve);
-          arm();
-        });
-      },
-      wake(): void {
-        const resume = pending.shift();
-        if (!resume) throw new Error('waiter is not sleeping');
-        resume();
-      },
-    };
-  }
 
   test('shared refresh starts while an isolated browser run owns the heavy lock', async () => {
     const root = mkdtempSync(join(tmpdir(), 'lifecycle-beside-browser-'));
@@ -5668,7 +5672,7 @@ describe('heavy QA lock', () => {
         served.push(JSON.parse(readFileSync(join(lockDir, 'identity.json'), 'utf8')).command);
         release();
       }
-      expect(served).toEqual(order);
+      expect(served).toEqual([...order]);
       expect(ticketRows(join(root, 'heavy-queue'))).toEqual([]);
     } finally { rmSync(root, { recursive: true, force: true }); }
   });
