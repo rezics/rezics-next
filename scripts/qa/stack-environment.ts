@@ -8,6 +8,11 @@ import {
 /** Product assembler: query and the native command only, so startup can admit the Work-name writer. */
 export const exclusiveWorkScopeAssembler = '/fuseki/fuseki-text.ttl';
 
+/** Ranked fixture: 22,004 Work advisory locks + two ordinary locks in one
+ * transaction. At 100 connections, 256 reserves at least 25,600 lock entries.
+ * This fits the existing 2 GiB PostgreSQL slot allocation. */
+export const qaPostgresMaxLocksPerTransaction = 256;
+
 export type QaStackMode = 'test' | 'scale';
 
 /** Leave 60 seconds for smoke/shutdown within the complete preparation ceiling.
@@ -60,6 +65,7 @@ export function qaStackEnvironment(
   return {
     ...env,
     REZICS_QA_STACK_MODE: mode,
+    REZICS_POSTGRES_MAX_LOCKS_PER_TRANSACTION: String(qaPostgresMaxLocksPerTransaction),
     REZICS_FUSEKI_MEMORY_LIMIT: env.REZICS_QA_FUSEKI_MEMORY_LIMIT ?? allocation.memory,
     REZICS_FUSEKI_JVM_ARGS: env.REZICS_QA_FUSEKI_JVM_ARGS ?? allocation.jvmArgs,
   };

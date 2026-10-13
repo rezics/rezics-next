@@ -27,7 +27,8 @@ export function stackMemorySettings(options: StackOptions,
     : { REZICS_FUSEKI_OOM_SCORE_ADJ: '0', REZICS_POSTGRES_OOM_SCORE_ADJ: '0',
       REZICS_FUSEKI_MEMORY_LIMIT: env.REZICS_FUSEKI_MEMORY_LIMIT ?? '7g',
       REZICS_FUSEKI_JVM_ARGS: env.REZICS_FUSEKI_JVM_ARGS
-        ?? '-Xms128m -Xmx1536m -XX:MaxDirectMemorySize=512m' };
+        ?? '-Xms128m -Xmx1536m -XX:MaxDirectMemorySize=512m',
+      REZICS_POSTGRES_MAX_LOCKS_PER_TRANSACTION: env.REZICS_POSTGRES_MAX_LOCKS_PER_TRANSACTION ?? '64' };
 }
 
 export function assertSavedStackStorage(options: StackOptions, saved: Record<string, string>): void {
