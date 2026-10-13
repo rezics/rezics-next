@@ -202,7 +202,7 @@ export function publishedFrameModel(answer: ZonePresentationRead, zoneId: string
     zone,
     cuts,
     theme: zoneTheme(cuts.tokens, { reader: 'light', enabled: true }),
-    home: answer.home ?? null,
+    home: answer.home,
     hero: highlightHero(answer, { locale, ref, realm: answer.zone }, heroTitle),
     mounts: answer.navigation.map(mount => ({
       id: mount.target,

@@ -37,19 +37,24 @@ function sample(persona: AnswerPersona, label: string) {
 function open(persona: AnswerPersona, selections: readonly RecordedSelection[]) {
   const replay = recordedFetch(record, persona, selections, { pathPrefix: BFF_PREFIX });
   let unmatched: unknown;
-  const fetcher: typeof fetch = async (input, init) => {
+  const fetcher: typeof fetch = Object.assign(async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
     try {
       return await replay.fetcher(input, init);
     } catch (error) {
       unmatched = error;
       throw error;
     }
-  };
+  }, { preconnect: globalThis.fetch.preconnect });
   disposals.push(replay.dispose);
   return {
     main: browserMainApi('https://recorded.invalid', { anonymous: true, fetcher }),
     unmatched: () => unmatched,
   };
+}
+
+function recordedZoneName(answer: ZonePresentationRead): string {
+  if (typeof answer.name !== 'string') throw new Error('Recorded presentation has no name');
+  return answer.name;
 }
 
 function creditOf(home: unknown): { provenance?: { rightsBasis?: string; author?: string } } | null {
@@ -67,7 +72,7 @@ test('a recorded published presentation keeps navigation, home text and original
     realmMessages.home, zoneMessages.moduleHeroCarousel);
   if (!frame.ok) throw new Error(String(session.unmatched() ?? frame.failure));
   const answer = item.answer as ZonePresentationRead;
-  expect(frame.data.zone.name.value).toBe(answer.name);
+  expect(frame.data.zone.name.value).toBe(recordedZoneName(answer));
   expect(frame.data.cuts.navigation.map(link => link.label.value)).toEqual([
     realmMessages.home, ...answer.navigation.map(mount => mount.name.value),
   ]);
@@ -110,10 +115,11 @@ test('a recorded empty home is a site with no mounts and no home document', asyn
     realmMessages.home, zoneMessages.moduleHeroCarousel);
   if (!frame.ok) throw new Error(String(session.unmatched() ?? frame.failure));
   const answer = item.answer as ZonePresentationRead;
-  expect(frame.data.zone.name.value).toBe(answer.name);
+  expect(frame.data.zone.name.value).toBe(recordedZoneName(answer));
   expect(answer.navigation).toEqual([]);
   expect(frame.data.cuts.navigation.map(link => link.label.value)).toEqual([realmMessages.home]);
-  expect(frame.data.home).toBeNull();
+  expect(answer.home ?? null).toBeNull();
+  expect(frame.data.home).toBe(answer.home);
   expect(frame.data.hero).toBeNull();
   expect(frame.data.mounts).toEqual([]);
   expect(frame.data.navigationNext).toBeNull();
