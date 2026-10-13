@@ -32,6 +32,7 @@ export function launchCommand(options: { id: string; effort: string; session: st
     const tier = process.env.GOAL_CODEX_SERVICE_TIER ?? codexServiceTier();
     const common = ['-m', MODELS[engine], '-c', `model_reasoning_effort=${effort}`,
       '-c', 'features.multi_agent=false', '-c', 'features.multi_agent_v2=false',
+      ...codexMcpOverrides(engine),
       ...(engine === 'luna' ? [] : ['-c', `model_context_window=${SOL_CONTEXT_WINDOW}`]),
       '-c', `model_auto_compact_token_limit=${codexCompactTokens(engine)}`,
       '-c', `tool_output_token_limit=${codexToolOutputTokens()}`,
@@ -44,6 +45,15 @@ export function launchCommand(options: { id: string; effort: string; session: st
     '--disallowedTools', 'Agent',
     ...(resume ? ['--resume', session] : ['--session-id', session]), '-n', id.toLowerCase(),
     '--output-format', 'json', '--', prompt]];
+}
+
+function codexMcpOverrides(engine: Engine): string[] {
+  const config = join(engineEnv(engine).CODEX_HOME!, 'config.toml');
+  if (!existsSync(config)) return [];
+  const { mcp_servers: servers } = Bun.TOML.parse(readFileSync(config, 'utf8'));
+  // Codex merges tables, so an empty mcp_servers override does not clear the account's servers.
+  const disabled = Object.keys(servers ?? {}).map(name => `${JSON.stringify(name)}={enabled=false}`);
+  return disabled.length ? ['-c', `mcp_servers={${disabled.join(',')}}`] : [];
 }
 
 /** Sol's context window in Codex since 2026-10-12 (it was 272,000). The account's own config still declares

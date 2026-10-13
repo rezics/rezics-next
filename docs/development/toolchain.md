@@ -591,6 +591,7 @@ The [Goal program](../goals/README.md) owns the worker lifecycle and commands;
 the [manager charter](../goals/manager.md#resources) owns engine selection and
 usage limits. CLI versions are host installations, not product pins. Workers use
 the checked-in `scripts/goal/goalctl.ts` and its tests.
+Fresh and resumed Codex workers and manager turns disable every MCP server listed in their account's `config.toml` with a `-c mcp_servers={...}` override that sets each server's `enabled=false`, leaving the maintainer's configuration untouched.
 
 ### Goal mail and manager coordinator
 
