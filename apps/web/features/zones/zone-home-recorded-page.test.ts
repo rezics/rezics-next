@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from 'bun:test';
 import type { AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import homeRendering from '../../../../tests/qa/fixtures/outcomes/zone/home-rendering.json';
-import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
+import { BFF_PREFIX } from '../api/browser.ts';
 import { messages as realmMessages } from '../realm/messages.ts';
 import { recordedFetch, type RecordedState } from '../stories/recorded-fetch.ts';
 import { zoneHomeProse } from '../zone-editor/home-document.tsx';
@@ -30,10 +30,10 @@ function queryValue(label: string, name: string) {
   return value;
 }
 
-function client(labels: readonly { label: string; state: RecordedState }[]) {
+function recorded(labels: readonly { label: string; state: RecordedState }[]) {
   const replay = recordedFetch(record, persona, labels, { pathPrefix: BFF_PREFIX });
   disposals.push(replay.dispose);
-  return browserMainApi('https://recorded.invalid', { anonymous: true, fetcher: replay.fetcher });
+  return replay.fetcher;
 }
 
 function nodes(value: unknown): Record<string, unknown>[] {
@@ -56,13 +56,13 @@ function extensionBlocks(value: unknown) {
 }
 
 test('recorded published home keeps its slide, document, rights and continuation', async () => {
-  const main = client([
+  const fetcher = recorded([
     { label: 'published-presentation', state: 'populated' },
     { label: 'published-home-route', state: 'populated' },
     { label: 'published-content-revision', state: 'populated' },
   ]);
   const zone = pathId('published-presentation');
-  const presentation = await readCompleteZonePresentation(main, zone);
+  const presentation = await readCompleteZonePresentation(fetcher, zone);
   expect(presentation.ok).toBe(true);
   if (!presentation.ok) throw new Error('The recorded presentation did not load');
   const data = presentation.data;
@@ -107,12 +107,12 @@ test('recorded published home keeps its slide, document, rights and continuation
     resolved.some(item => item.id === block.id) ? [] : [block.payload]));
   expect(JSON.stringify(page.document)).not.toContain(privateDraftText());
 
-  const route = await readZoneRouteAnswer(main, zone, queryValue('published-home-route', 'path'));
+  const route = await readZoneRouteAnswer(fetcher, zone, queryValue('published-home-route', 'path'));
   expect(route.ok).toBe(true);
   if (!route.ok || route.data.kind !== 'home' || !route.data.page) throw new Error('The recorded home route was not a home');
   expect(route.data.page.document).toEqual(page.document);
 
-  const revision = await readContentRevisionAnswer(main, pathId('published-content-revision'));
+  const revision = await readContentRevisionAnswer(fetcher, pathId('published-content-revision'));
   expect(revision.ok).toBe(true);
   if (!revision.ok) throw new Error('The recorded content revision did not load');
   expect(revision.data.body.document).toEqual(page.document);
@@ -124,26 +124,26 @@ test('recorded published home keeps its slide, document, rights and continuation
 test('a recorded route refusal stays missing rather than an empty home', async () => {
   const routeSample = sample('unpublished-route-refused');
   const draftSample = sample('draft-content-revision');
-  const main = client([
+  const fetcher = recorded([
     { label: 'unpublished-route-refused', state: 'error' },
     { label: 'draft-content-revision', state: 'error' },
   ]);
-  const route = await readZoneRouteAnswer(main, pathId('unpublished-route-refused'), queryValue('unpublished-route-refused', 'path'));
+  const route = await readZoneRouteAnswer(fetcher, pathId('unpublished-route-refused'), queryValue('unpublished-route-refused', 'path'));
   expect(routeSample.status).toBe(404);
   expect(routeSample.answer).toMatchObject({ code: 'route_missing' });
   expect(route).toEqual({ ok: false, failure: 'missing' });
-  const draft = await readContentRevisionAnswer(main, pathId('draft-content-revision'));
+  const draft = await readContentRevisionAnswer(fetcher, pathId('draft-content-revision'));
   expect(draftSample.status).toBe(404);
   expect(draftSample.answer).toMatchObject({ code: 'revision_unavailable' });
   expect(draft).toEqual({ ok: false, failure: 'missing' });
 });
 
 test('an empty published home and an empty mount keep their recorded continuation', async () => {
-  const main = client([
+  const fetcher = recorded([
     { label: 'empty-home-presentation', state: 'empty' },
     { label: 'published-index-empty', state: 'empty' },
   ]);
-  const presentation = await readCompleteZonePresentation(main, pathId('empty-home-presentation'));
+  const presentation = await readCompleteZonePresentation(fetcher, pathId('empty-home-presentation'));
   expect(presentation.ok).toBe(true);
   if (!presentation.ok) throw new Error('The recorded empty presentation did not load');
   expect(zoneHomePage(presentation.data.home)).toBeNull();
@@ -158,7 +158,7 @@ test('an empty published home and an empty mount keep their recorded continuatio
   expect(presentation.data.navigationNext).toBeNull();
   expect(presentation.data.navigationComplete).toBe(true);
 
-  const index = await readZoneRouteAnswer(main, pathId('published-index-empty'), queryValue('published-index-empty', 'path'));
+  const index = await readZoneRouteAnswer(fetcher, pathId('published-index-empty'), queryValue('published-index-empty', 'path'));
   expect(index.ok).toBe(true);
   if (!index.ok || index.data.kind !== 'index') throw new Error('The recorded index was not an index');
   expect(index.data.items).toEqual([]);

@@ -5,7 +5,7 @@ import type { AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import homeRendering from '../../../../tests/qa/fixtures/outcomes/zone/home-rendering.json';
 import { surfaceText } from '../address/messages.ts';
 import { spaceHref } from '../address/path.ts';
-import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
+import { BFF_PREFIX } from '../api/browser.ts';
 import { ReaderActionsProvider } from '../catalogue/reader-actions.tsx';
 import { localizedPath } from '../../i18n/locale.ts';
 import { zoneText } from '../realm/adapt.ts';
@@ -139,14 +139,13 @@ function RecordedZoneHome({ label, state }: { label: string; state: RecordedStat
       ? [{ label: 'published-presentation', state: 'populated' as const }, { label, state }]
       : [{ label, state }];
     const replay = recordedFetch(record, persona, selections, { pathPrefix: BFF_PREFIX });
-    const main = browserMainApi('https://recorded.invalid', { anonymous: true, fetcher: replay.fetcher });
     async function load() {
       const zone = pathId(selected.operationId === 'getV1ZonesByIdRoutes' ? 'published-presentation' : label);
-      const presentation = await readCompleteZonePresentation(main, zone);
+      const presentation = await readCompleteZonePresentation(replay.fetcher, zone);
       if (!presentation.ok) throw new Error(`Recorded zone presentation failed: ${presentation.failure}`);
       const identity = zoneHomeIdentity(presentation.data, locale, realmMessages.home);
       if (selected.operationId === 'getV1ZonesByIdRoutes') {
-        const route = await readZoneRouteAnswer(main, zone, queryValue(label, 'path'));
+        const route = await readZoneRouteAnswer(replay.fetcher, zone, queryValue(label, 'path'));
         if (route.ok) throw new Error('Recorded route refusal resolved as a page');
         if (route.failure !== 'missing') throw new Error(`Recorded route failed as ${route.failure}`);
         if (!active) return;

@@ -2,8 +2,8 @@ import { ResolvedMediaImages } from '@rezics/ui/media-image';
 import type { ZoneContext, ZonePackage } from '@rezics/zone-sdk';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
+import { browserMainApi } from '../api/browser.ts';
 import { readShowcaseWorks } from '../api/showcase.ts';
-import type { MainClient } from '../discover/types.ts';
 import { zoneContentText } from '../language/untagged.ts';
 import { zoneText, type AdaptContext } from '../realm/adapt.ts';
 import { settleRealmRead } from '../realm/browse-page-read.ts';
@@ -20,8 +20,12 @@ import { ZoneHome } from './zone-home.tsx';
 import { zoneHomeDocument, type ZoneHomePage } from '../zone-editor/home-document.tsx';
 import { loadDocumentHomeModules, localizedHomePresentation, type HomeSourceSelection } from '../zone-editor/home-modules.ts';
 
+/** Public recorded reader. No eligible Agent, so the client stays anonymous and sends no acting Subject. */
+const recordedOrigin = 'https://recorded.invalid';
+
 /** Visitor reads omit an empty query: the recorded path has none, and an empty query object does not match it. */
-export function readZonePresentationAnswer(main: MainClient, zone: string, actingSubject?: string, after?: string): Promise<Loaded<ZonePresentationRead>> {
+export function readZonePresentationAnswer(fetcher: typeof fetch, zone: string, actingSubject?: string, after?: string): Promise<Loaded<ZonePresentationRead>> {
+  const main = browserMainApi(recordedOrigin, { anonymous: true, fetcher });
   return settleRealmRead(() => {
     if (!actingSubject && !after) return main.v1.zones({ id: zone }).presentation.get();
     return main.v1.zones({ id: zone }).presentation.get({
@@ -31,19 +35,21 @@ export function readZonePresentationAnswer(main: MainClient, zone: string, actin
 }
 
 /** The same continuation walk the public frame uses, over the typed presentation read. */
-export function readCompleteZonePresentation(main: MainClient, zone: string, actingSubject?: string): Promise<Loaded<ZonePresentationRead>> {
-  return completePublicNavigation(after => readZonePresentationAnswer(main, zone, actingSubject, after));
+export function readCompleteZonePresentation(fetcher: typeof fetch, zone: string, actingSubject?: string): Promise<Loaded<ZonePresentationRead>> {
+  return completePublicNavigation(after => readZonePresentationAnswer(fetcher, zone, actingSubject, after));
 }
 
 /** A path under the Zone, with the same failure mapping as the public route read. */
-export function readZoneRouteAnswer(main: MainClient, zone: string, path: string, actingSubject?: string, cursor?: string): Promise<Loaded<ZoneRouteRead>> {
+export function readZoneRouteAnswer(fetcher: typeof fetch, zone: string, path: string, actingSubject?: string, cursor?: string): Promise<Loaded<ZoneRouteRead>> {
+  const main = browserMainApi(recordedOrigin, { anonymous: true, fetcher });
   return settleRealmRead(() => main.v1.zones({ id: zone }).routes.get({
     query: { path, ...(actingSubject ? { actingSubject } : {}), ...(cursor ? { cursor } : {}) },
   }), cursor);
 }
 
 /** The published document's content revision. A visitor read has no acting subject. */
-export function readContentRevisionAnswer(main: MainClient, revision: string, actingSubject?: string) {
+export function readContentRevisionAnswer(fetcher: typeof fetch, revision: string, actingSubject?: string) {
+  const main = browserMainApi(recordedOrigin, { anonymous: true, fetcher });
   return settleRealmRead(() => actingSubject
     ? main.v1['content-revisions']({ revision }).get({ query: { actingSubject } })
     : main.v1['content-revisions']({ revision }).get());

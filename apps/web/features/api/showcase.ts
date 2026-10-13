@@ -3,12 +3,6 @@ import { mediaImageKey } from '@rezics/ui/media-image-key';
 import type { MainClient } from '../discover/types.ts';
 import { imageReferenceFromUrl, mediaMetadataItems, mediaMetadataOf } from './media-metadata.ts';
 
-/** The anonymous Main client, loaded only when a batch has targets. Stories can import these reads. */
-async function anonymousMain() {
-  const { mainApiWithToken } = await import('./main.ts');
-  return mainApiWithToken(undefined);
-}
-
 type Result<Call> = Call extends (...args: never[]) => Promise<{ data: infer Data }>
   ? NonNullable<Data>
   : never;
@@ -30,7 +24,8 @@ export async function readShowcaseHeaders(
 ): Promise<ReadonlyMap<string, WorkHeader>> {
   const wanted = showcaseTargets(targets);
   if (wanted.length > 5) throw new Error('Showcase header bound exceeded');
-  const main = await anonymousMain();
+  const { mainApiWithToken } = await import('./main.ts');
+  const main = mainApiWithToken(undefined);
   const items = await Promise.all(
     wanted.map(async (target) => {
       try {
@@ -74,7 +69,8 @@ async function readShowcaseBatch(
   const wanted = showcaseTargets(targets);
   if (!wanted.length) return new Map();
   try {
-    const { data, error } = await (await anonymousMain()).v1.resources.showcase.post({
+    const { mainApiWithToken } = await import('./main.ts');
+    const { data, error } = await mainApiWithToken(undefined).v1.resources.showcase.post({
       profile: 'work-showcase-batch-v1',
       targets: wanted,
       ...(context ? { context } : {}),
@@ -99,7 +95,8 @@ export async function readShowcaseWorks(
   const wanted = showcaseTargets(targets);
   if (!wanted.length) return new Map();
   try {
-    const { data, error } = await (await anonymousMain()).v1.resources.summaries.post({
+    const { mainApiWithToken } = await import('./main.ts');
+    const { data, error } = await mainApiWithToken(undefined).v1.resources.summaries.post({
       profile: 'resource-summary-batch-v1',
       resources: wanted,
       context,
@@ -138,7 +135,8 @@ export async function readShowcaseImages(
   ].slice(0, 64);
   if (!references.length) return {};
   try {
-    const { data, error } = await (await anonymousMain()).v1.media.metadata.post({
+    const { mainApiWithToken } = await import('./main.ts');
+    const { data, error } = await mainApiWithToken(undefined).v1.media.metadata.post({
       items: mediaMetadataItems(references),
     });
     if (error || !data) return {};
