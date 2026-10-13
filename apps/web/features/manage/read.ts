@@ -1,5 +1,5 @@
 import { type AgentSummary, type ChapterSummary, failureOf, iriOf, type Loaded, type MainClient, type ModerationKind,
-  type PersonRecord, type RoleList, uuidOf, type WorkFacts, type WorkSummary } from './types.ts';
+  type PersonRecord, problemOf, recordedReplayGap, type RoleList, uuidOf, type WorkFacts, type WorkSummary } from './types.ts';
 
 // Reads shared by the server render and the browser (load more, refresh after
 // a decision). Each takes the Eden client for its side and returns `Loaded`
@@ -16,9 +16,14 @@ export async function settle<T>(call: () => Promise<Answer<T>>, options: { manag
   try {
     let { data, error } = await call();
     if (error?.status === 409 && !options.cursor) ({ data, error } = await call());
-    if (error) return { ok: false, failure: failureOf(error.status, options.management) };
+    if (error && recordedReplayGap(error.value)) throw error.value;
+    if (error) {
+      const problem = problemOf(error.status, error.value);
+      return { ok: false, failure: failureOf(error.status, options.management), ...problem ? { problem } : {} };
+    }
     return data === null ? { ok: false, failure: 'unavailable' } : { ok: true, data };
-  } catch {
+  } catch (error) {
+    if (recordedReplayGap(error)) throw error;
     return { ok: false, failure: 'unavailable' };
   }
 }

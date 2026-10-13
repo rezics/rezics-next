@@ -4,7 +4,7 @@ import { automationOf } from './reason-presets.ts';
 import { type AttemptStorage, forgetCommand, performCommand, readCommand, readReportAttempt, refusalProvesNoCommit, retainCommand, updateCommand, type ReportAttempt } from './safety-pending.ts';
 import { readDecisionBasis, readMembers, readRoles, readSettings, readSubmission } from './read.ts';
 import { type DecisionBasis, type InvitationCommand, type MainClient, type MemberCommand, type ModerationDecisionCommand,
-  type ModerationItem, problemCode, type ReadFailure, type RoleCommand, type SettingsView, type SubmissionDecision, uuidOf } from './types.ts';
+  type ModerationItem, problemCode, problemOf, type ReadFailure, recordedReplayGap, type RoleCommand, type SettingsView, type SubmissionDecision, uuidOf } from './types.ts';
 
 // Commands from the browser through the BFF. Each intent carries one
 // Idempotency-Key, so a retry after a lost response replays the same receipt
@@ -20,7 +20,9 @@ export type CommandFailure =
   | 'pending'
   | 'unavailable';
 
-export type Outcome<T> = { ok: true; data: T } | { ok: false; failure: CommandFailure; code?: string };
+export type Outcome<T> = { ok: true; data: T } | {
+  ok: false; failure: CommandFailure; code?: string; status?: number; title?: string;
+};
 
 type Answer<T> = { data: T | null; error: { status: number; value: unknown } | null; status?: number };
 
@@ -40,16 +42,20 @@ export function commandFailure(status: number, code: string | undefined): Comman
 export async function send<T>(call: () => Promise<Answer<T>>, options: { receipt?: true } = {}): Promise<Outcome<T>> {
   try {
     const { data, error, status } = await call();
+    if (error && recordedReplayGap(error.value)) throw error.value;
     if (error) {
-      const code = problemCode(error.value);
-      return { ok: false, failure: commandFailure(error.status, code), ...code ? { code } : {} };
+      const problem = problemOf(error.status, error.value);
+      const code = problem?.code ?? problemCode(error.value);
+      return { ok: false, failure: commandFailure(error.status, code), ...code ? { code } : {},
+        ...problem ? { status: problem.status, title: problem.title } : {} };
     }
     const operation = decisionStatus(data);
     const receipt = options.receipt && (operation === 'accepted' || operation === 'partial' || operation === 'cancelled');
     if (status === 202 && !receipt || !options.receipt && admitted(data))
       return { ok: false, failure: 'pending' };
     return data === null ? { ok: false, failure: 'unavailable' } : { ok: true, data };
-  } catch {
+  } catch (error) {
+    if (recordedReplayGap(error)) throw error;
     return { ok: false, failure: 'unavailable' };
   }
 }

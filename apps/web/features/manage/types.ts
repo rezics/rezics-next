@@ -80,7 +80,9 @@ export type Avatar = RealmHeader['icon'];
  * cannot manage it; `moved` is its 409 when the basis changed under a cursor.
  */
 export type ReadFailure = 'denied' | 'missing' | 'sign-in' | 'moved' | 'invalid' | 'budget' | 'unavailable';
-export type Loaded<T> = { ok: true; data: T } | { ok: false; failure: ReadFailure };
+/** Main's problem, kept when the body names both a title and a code. Absent fields stay absent so an older result still compares equal. */
+export interface ServiceProblem { status: number; title: string; code: string }
+export type Loaded<T> = { ok: true; data: T } | { ok: false; failure: ReadFailure; problem?: ServiceProblem };
 
 export function failureOf(status: number, management = false): ReadFailure {
   if (status === 404) return management ? 'denied' : 'missing';
@@ -96,6 +98,24 @@ export function failureOf(status: number, management = false): ReadFailure {
 export function problemCode(value: unknown): string | undefined {
   return typeof value === 'object' && value !== null && 'code' in value && typeof value.code === 'string'
     ? value.code : undefined;
+}
+
+/** Status, title and code, only when the body has both a title and a code for this status. */
+export function problemOf(status: number, value: unknown): ServiceProblem | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const body = value as Record<string, unknown>;
+  if (typeof body.title !== 'string' || typeof body.code !== 'string') return undefined;
+  if (typeof body.status === 'number' && body.status !== status) return undefined;
+  return { status, title: body.title, code: body.code };
+}
+
+/**
+ * A replaying transport names a request this reader did not make. Production
+ * never throws these; an aborted request stays a failed read.
+ */
+export function recordedReplayGap(error: unknown): boolean {
+  return error instanceof Error
+    && /Unmatched recorded request|Recorded sample|Ambiguous recorded request|cannot supply/.test(error.message);
 }
 
 /** A person or organization as the workspace names them; `label` is null until Main answers. */

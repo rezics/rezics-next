@@ -1,4 +1,5 @@
 import type { CommandFailure, Outcome } from './commands.ts';
+import { recordedReplayGap } from './types.ts';
 import { admitted } from '../api/command.ts';
 import type { SafetyDecisionInput, SafetyDecisionResult, SafetyReasons } from './safety-types.ts';
 import type { Decision } from './queue-state.ts';
@@ -177,7 +178,11 @@ export async function performCommand<Input, Receipt>(operation: string, proposed
   const attempt = await retainCommand(operation, proposed, store, true);
   if (!attempt) return { ok: false, failure: 'unavailable' };
   let result: Outcome<Receipt>;
-  try { result = await send(attempt); } catch { result = { ok: false, failure: 'unavailable' }; }
+  try { result = await send(attempt); }
+  catch (error) {
+    if (recordedReplayGap(error)) throw error;
+    result = { ok: false, failure: 'unavailable' };
+  }
   if (result.ok && admitted(result.data)) result = { ok: false, failure: 'pending' };
   if (result.ok || refusalProvesNoCommit(attempt, result.failure)) await forgetCommand(operation, attempt, store);
   else await updateCommand(operation, attempt, { status: result.failure === 'pending' ? 'pending' : attempt.status, uncertain: true }, store);

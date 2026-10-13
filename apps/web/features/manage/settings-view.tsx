@@ -53,6 +53,7 @@ export function SettingsView({ principal, realm, actingSubject, initial, locale,
   const [conflict, setConflict] = useState<Settings | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [recovering, setRecovering] = useState(false);
+  const [refusal, setRefusal] = useState<string | null>(null);
   // Counts what this person changed in the draft, so a result that lands later can tell whether the draft moved on.
   const draftEdits = useRef(0);
   const editingNow = useRef(editing);
@@ -91,6 +92,14 @@ export function SettingsView({ principal, realm, actingSubject, initial, locale,
     setConflict(null);
   }
 
+  /** A refused command keeps its retry key and the last accepted rules. The draft is not the published revision. */
+  function refusedAmendment(title: string) {
+    discard(current);
+    setRecovering(false);
+    setReviewing(false);
+    setRefusal(title);
+  }
+
   function review() {
     const found = ruleProblems(rules);
     setProblems(found);
@@ -112,12 +121,14 @@ export function SettingsView({ principal, realm, actingSubject, initial, locale,
       setConflict(moved ? newest : null);
     } else discard(newest);
     setReviewing(false);
+    setRefusal(null);
     setStatus(revision && BigInt(result.generation) >= BigInt(latest.generation) ? t.rulesPublished({ revision }) : t.settingsSaved);
     router.refresh();
   }
 
   return <div className="grid gap-8">
     <div role="status" aria-live="polite" className="empty:hidden">{status ? <p className="text-sm">{status}</p> : null}</div>
+    {refusal ? <p role="alert">{refusal}</p> : null}
     <section aria-labelledby="realm-submissions" className="grid max-w-3xl gap-3">
       <div className="space-y-1">
         <h2 id="realm-submissions" className="font-semibold text-xl tracking-tight">{t.submissionsTitle}</h2>
@@ -167,7 +178,7 @@ export function SettingsView({ principal, realm, actingSubject, initial, locale,
       rules={rules} api={api} actingSubject={actingSubject} locale={locale} messages={messages}
       onRecovery={setRecovering} draftEdits={() => draftEdits.current}
       onClose={() => setReviewing(false)} onPublished={(result, revision, edits) => void published(result, revision, edits)}
-      onConflict={theirs => { setReviewing(false); setConflict(theirs); }} />
+      onConflict={theirs => { setReviewing(false); setConflict(theirs); }} onRefused={refusedAmendment} />
   </div>;
 }
 
@@ -183,11 +194,12 @@ function changeText(change: RuleChange, t: ReturnType<typeof materializeData<Man
 }
 
 function PublishDialog({ principal, realm, open, current, changes, whoMaySubmit, whoChanged, rules, api, actingSubject, locale, messages, onRecovery,
-  draftEdits, onClose, onPublished, onConflict }: {
+  draftEdits, onClose, onPublished, onConflict, onRefused }: {
   principal: string; realm: string; open: boolean; current: Settings; changes: RuleChange[]; whoMaySubmit: WhoMaySubmit; whoChanged: boolean;
   rules: RealmRule[]; api: AdminApi; actingSubject: string; locale: UiLocale; messages: ManageMessages;
   onClose: () => void; onPublished: (result: Settings, revision: string | null, edits: number) => void;
   onConflict: (theirs: Settings) => void;
+  onRefused: (title: string) => void;
   onRecovery: (recovering: boolean) => void;
   draftEdits: () => number;
 }) {
@@ -225,10 +237,16 @@ function PublishDialog({ principal, realm, open, current, changes, whoMaySubmit,
           result.data.ruleBasis.revision, edits);
         return;
       }
+      if (result.failure === 'conflict') {
+        setPending(false);
+        onRecovery(false);
+        onRefused(result.title ?? t.failedNotice);
+        return;
+      }
       if (retained || result.failure !== 'stale') {
         setPending(false);
         setError(retained ? t.decisionStillPending : result.failure === 'denied' ? t.settingsDenied : result.failure === 'invalid' ? t.settingsInvalid
-          : t.failedNotice);
+          : result.title ?? t.failedNotice);
         return;
       }
       // Stale: another management change moved the Realm. Only a different rules revision or submission
