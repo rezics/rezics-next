@@ -145,7 +145,8 @@ for (const name of personaNames) {
     const response = await sessions[name].main('POST', '/v1/sources/intakes', intake);
     expect(response.status).toBe(name === 'visitor' ? 401 : 403);
     const retained = await sessions[name].main('GET', `/v1/sources/observations/${short(observation.observation)}`);
-    expect(retained.status).toBe(name === 'visitor' ? 401 : 403);
+    expect(retained.status).toBe(name === 'visitor' ? 401 : 404);
+    expect(await retained.json()).toMatchObject({ code: name === 'visitor' ? 'account_assertion_denied' : 'source_observation_unavailable' });
   });
 }
 test('Source observation / operator: retains exact bounded source identity, link, author and evidence', async () => {
