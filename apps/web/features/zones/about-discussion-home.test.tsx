@@ -1,9 +1,11 @@
-import { beforeEach, expect, mock, test } from 'bun:test';
+import { afterAll, beforeEach, expect, mock, test } from 'bun:test';
+import '../../tests/support/official-package-fixture.ts';
 import { fromPlainText } from '@rezics/document';
 import { direction } from '@rezics/main/language';
 import { cloneElement, createElement, isValidElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import * as navigation from 'next/navigation';
+import { AppRouterContext } from 'next/dist/shared/lib/app-router-context.shared-runtime';
+import { PathnameContext, PathParamsContext, SearchParamsContext } from 'next/dist/shared/lib/hooks-client-context.shared-runtime';
 import type { RealmView } from '../realm/realm-page.tsx';
 import type { ZonePresentationRead } from '../realm/types.ts';
 import { messages } from '../realm/messages.ts';
@@ -23,38 +25,32 @@ let publication: ZonePresentationRead;
 let pageKind: 'work' | 'resource' | 'document';
 const discussionAddresses: Array<{ zone?: string; ref?: string; path: string; href: string }> = [];
 
+const originalHeaders = { ...(await import('next/headers')) };
+const i18n = { ...(await import('../../i18n/server.ts')) };
 void mock.module('next/headers', () => ({
+  ...originalHeaders,
   cookies: async () => ({ get: () => undefined }),
   headers: async () => new Headers(),
 }));
-void mock.module('next/navigation', () => ({
-  ...navigation,
-  usePathname: () => siteHref('en', zone, []),
-  useParams: () => ({ locale: 'en' }),
-  useSearchParams: () => new URLSearchParams(),
-  useRouter: () => ({ refresh: () => {}, push: () => {}, replace: () => {} }),
-  notFound: () => { throw new Error('Unexpected missing home'); },
-}));
-// The route renders supplied packages; Vite's installed-package glob is not part of this Bun fixture.
-void mock.module('../../zones/official/index.ts', () => ({
-  installedDigest: async () => null,
-  loadPackage: async () => null,
-}));
 void mock.module('../../i18n/server.ts', () => ({
+  ...i18n,
   requestLocale: async () => 'en',
   getMessages: async (namespace: string) => namespace === 'realm' ? messages
     : namespace === 'workPage' ? workMessages.en : zoneMessages,
   getTranslation: async () => ({ t: {} }),
 }));
+const discussionEntry = { ...(await import('./about-discussion-entry.tsx')) };
 void mock.module('./about-discussion-entry.tsx', () => ({
+  ...discussionEntry,
   ZoneAboutDiscussion: (address: typeof discussionAddresses[number]) => {
     discussionCalls += 1;
     discussionAddresses.push(address);
     return <aside data-zone-discussion-entry aria-label="Discussion">Discussion sentinel</aside>;
   },
 }));
-void mock.module('../zone-editor/edit-link.tsx', () => ({ ZoneEditLink: () => null }));
-const reads = await import('../realm/read.ts');
+const editLink = { ...(await import('../zone-editor/edit-link.tsx')) };
+void mock.module('../zone-editor/edit-link.tsx', () => ({ ...editLink, ZoneEditLink: () => null }));
+const reads = { ...(await import('../realm/read.ts')) };
 void mock.module('../realm/read.ts', () => ({ ...reads,
   resolveSite: async () => ({ kind: 'site', zone, realm: attached ? zone : null, address: { canonical } }),
   readCompletePresentation: async () => ({ ok: true, data: publication }),
@@ -64,27 +60,27 @@ void mock.module('../realm/read.ts', () => ({ ...reads,
     resource: { id: metadataOnlyWork.id }, mount: null, tab: null,
   } }),
 }));
-const modules = await import('../realm/modules.ts');
+const modules = { ...(await import('../realm/modules.ts')) };
 void mock.module('../realm/modules.ts', () => ({ ...modules,
   loadHomeModules: async () => ({ modules: [], images: [] }),
 }));
-const frames = await import('../realm/realm-page.tsx');
+const frames = { ...(await import('../realm/realm-page.tsx')) };
 void mock.module('../realm/realm-page.tsx', () => ({ ...frames,
   loadRealmView: async () => currentView,
 }));
-const workReads = await import('../work-page/read.ts');
+const workReads = { ...(await import('../work-page/read.ts')) };
 void mock.module('../work-page/read.ts', () => ({ ...workReads,
   loadWork: async () => ({ ok: true, id: metadataOnlyWork.id.slice(-36), header: metadataOnlyWork }),
   readText: async () => ({ ok: true, data: { language: 'en', body: 'Mounted guide prose' } }),
 }));
 // These content regions have their own reads; the Zone route and the components that own its entry stay real.
-const workViews = await import('../work-page/work-views.tsx');
+const workViews = { ...(await import('../work-page/work-views.tsx')) };
 void mock.module('../work-page/work-views.tsx', () => ({ ...workViews,
   WorkFrameView: ({ work, children }: { work: typeof metadataOnlyWork; children: ReactNode }) =>
     <section><h1>{work.title.value}</h1>{children}</section>,
   WorkOverview: () => <article>Work overview body</article>,
 }));
-const entityReads = await import('../entity-page/read.ts');
+const entityReads = { ...(await import('../entity-page/read.ts')) };
 void mock.module('../entity-page/read.ts', () => ({ ...entityReads,
   readEntityProjection: async () => ({ ok: true, data: {
     target: { base: pageKind === 'work' ? 'work' : 'resource' },
@@ -92,10 +88,23 @@ void mock.module('../entity-page/read.ts', () => ({ ...entityReads,
       direction: direction('en', 'Harbor resource') } },
   } }),
 }));
-const entityViews = await import('../entity-page/entity-page.tsx');
+const entityViews = { ...(await import('../entity-page/entity-page.tsx')) };
 void mock.module('../entity-page/entity-page.tsx', () => ({ ...entityViews,
   EntityPage: () => <article><h1>Harbor resource</h1></article>,
 }));
+afterAll(async () => {
+  await mock.module('../entity-page/entity-page.tsx', () => entityViews);
+  await mock.module('../entity-page/read.ts', () => entityReads);
+  await mock.module('../work-page/work-views.tsx', () => workViews);
+  await mock.module('../work-page/read.ts', () => workReads);
+  await mock.module('../realm/realm-page.tsx', () => frames);
+  await mock.module('../realm/modules.ts', () => modules);
+  await mock.module('../realm/read.ts', () => reads);
+  await mock.module('../zone-editor/edit-link.tsx', () => editLink);
+  await mock.module('./about-discussion-entry.tsx', () => discussionEntry);
+  await mock.module('../../i18n/server.ts', () => i18n);
+  await mock.module('next/headers', () => originalHeaders);
+});
 const { ZoneSiteHome } = await import('./site-home.tsx');
 const { ZoneHomeContent } = await import('../zone-editor/home-content.tsx');
 const { ZoneWorkPage } = await import('./site-work.tsx');
@@ -154,6 +163,21 @@ function publishHome() {
       predecessor: null, provenance: {} } };
 }
 
+// Components already loaded by another test can retain Next's real hooks.
+// Supply their real contexts rather than depend on replacing that module again.
+function renderPage(node: ReactNode) {
+  const router = { back() {}, forward() {}, refresh() {}, push() {}, replace() {}, prefetch() {} };
+  return renderToStaticMarkup(
+    <AppRouterContext.Provider value={router}>
+      <PathnameContext.Provider value={siteHref('en', zone, [])}>
+        <PathParamsContext.Provider value={{ locale: 'en' }}>
+          <SearchParamsContext.Provider value={new URLSearchParams()}>{node}</SearchParamsContext.Provider>
+        </PathParamsContext.Provider>
+      </PathnameContext.Provider>
+    </AppRouterContext.Provider>,
+  );
+}
+
 for (const home of ['package', 'fallback', 'standalone published', 'standalone unpublished'] as const) {
   test(`${home} home renders its page without invoking the discussion helper`, async () => {
     let content: string;
@@ -172,7 +196,7 @@ for (const home of ['package', 'fallback', 'standalone published', 'standalone u
     }
     const page = await ZoneSiteRoute({ params: Promise.resolve({ locale: 'en', space: zone }),
       searchParams: Promise.resolve({}) });
-    const html = renderToStaticMarkup(await resolveServerContent(page));
+    const html = renderPage(await resolveServerContent(page));
     expect(html).toContain(content);
     expect(html).not.toContain('data-zone-discussion-entry');
     expect(html).not.toContain('aria-label="Discussion"');
@@ -185,7 +209,7 @@ test('an attached Realm published home renders its page without invoking the dis
   publishHome();
   const page = await ZoneSiteRoute({ params: Promise.resolve({ locale: 'en', space: zone }),
     searchParams: Promise.resolve({}) });
-  const html = renderToStaticMarkup(await resolveServerContent(page));
+  const html = renderPage(await resolveServerContent(page));
   expect(html).toContain('Published Harbor home');
   expect(html).not.toContain('data-zone-discussion-entry');
   expect(discussionCalls).toBe(0);
@@ -197,7 +221,7 @@ for (const kind of ['work', 'resource', 'document'] as const) {
     const path = ['guide', 'harbor-field-guide'];
     const page = await ZoneSiteRoute({ params: Promise.resolve({ locale: 'en', space: zone, path }),
       searchParams: Promise.resolve({}) });
-    const html = renderToStaticMarkup(await resolveServerContent(page));
+    const html = renderPage(await resolveServerContent(page));
     expect(html).toContain(kind === 'work' ? 'Work overview body'
       : kind === 'resource' ? 'Harbor resource' : 'Mounted guide prose');
     expect(html).toContain('data-zone-discussion-entry');

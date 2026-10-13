@@ -1,11 +1,5 @@
-import { expect, mock, test } from 'bun:test';
-
-// The route module loads official packages through Vite's glob. This runner has no glob, so the
-// package table is replaced before the route is imported. The count is the route's own loader.
-await mock.module('../zones/official/index.ts', () => ({
-  installedDigest: async () => null,
-  loadPackage: async () => null,
-}));
+import { expect, test } from 'bun:test';
+import './support/official-package-fixture.ts';
 
 test('a Zone browse page loads its view once', async () => {
   const { RealmBrowseRoute } = await import('../features/realm/routes.tsx');

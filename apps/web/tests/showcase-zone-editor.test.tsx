@@ -414,6 +414,7 @@ describe('the writes the editor asks Main for', () => {
   }) } };
   // Installed only while these tests run, then put back, so a later file in the same process still reads wiki data.
   const installReader = () => mock.module('../features/work-page/read.ts', () => ({
+    ...workPageRead,
     reader: async () => ({ main, actingSubject: acting, signedIn: Boolean(acting) }),
   }));
   const restoreReader = () => mock.module('../features/work-page/read.ts', () => workPageRead);
@@ -556,7 +557,9 @@ describe('the writes the editor asks Main for', () => {
   });
 });
 
-void mock.module('next/navigation', () => ({ useRouter: () => ({ refresh() {} }), usePathname: () => '/', useSearchParams: () => new URLSearchParams() }));
+const navigation = { ...(await import('next/navigation')) };
+void mock.module('next/navigation', () => ({ ...navigation, useRouter: () => ({ refresh() {} }), usePathname: () => '/', useSearchParams: () => new URLSearchParams() }));
+afterAll(() => mock.module('next/navigation', () => navigation));
 
 describe('the editor on the server', () => {
   const never = async () => { throw new Error('not called while rendering'); };

@@ -1,8 +1,8 @@
-import { beforeEach, expect, mock, test } from 'bun:test';
+import { afterAll, beforeEach, expect, mock, test } from 'bun:test';
+import '../../tests/support/official-package-fixture.ts';
 import { fromPlainText } from '@rezics/document';
 import { direction } from '@rezics/main/language';
 import { isValidElement, type ReactElement, type ReactNode } from 'react';
-import * as reads from '../realm/read.ts';
 import type { RealmView } from '../realm/realm-page.tsx';
 import type { ZonePresentationRead } from '../realm/types.ts';
 import { fictionZone, zoneMessagesFor } from './fixtures.ts';
@@ -36,12 +36,11 @@ const view = () => ({ kind: 'view', publication: presentation, presentation: pre
   execution: { state: 'fallback', reason: 'none_approved' }, lookEnabled: true,
   reader: { signedIn: false, actingSubject: null, avatarQuery: '' }, membership: null, ban: null }) as unknown as RealmView;
 
-void mock.module('next/headers', () => ({ cookies: async () => ({ get: () => undefined }),
+const originalHeaders = { ...(await import('next/headers')) };
+const reads = { ...(await import('../realm/read.ts')) };
+const i18n = { ...(await import('../../i18n/server.ts')) };
+void mock.module('next/headers', () => ({ ...originalHeaders, cookies: async () => ({ get: () => undefined }),
   headers: async () => new Headers() }));
-void mock.module('../../zones/official/index.ts', () => ({
-  installedDigest: async () => null,
-  loadPackage: async () => null,
-}));
 
 void mock.module('../realm/read.ts', () => ({ ...reads,
   resolveSite: async () => ({ kind: 'site', zone, realm: attached ? zone : null, address: { canonical } }),
@@ -53,13 +52,20 @@ void mock.module('../realm/read.ts', () => ({ ...reads,
     : { ok: true, data: presentation },
 }));
 void mock.module('../../i18n/server.ts', () => ({
+  ...i18n,
   getMessages: async (namespace: string) => namespace === 'realm' ? messages : zoneMessagesFor('en'),
   getTranslation: async () => ({ t: {} }),
 }));
-const frames = await import('../realm/realm-page.tsx');
+const frames = { ...(await import('../realm/realm-page.tsx')) };
 void mock.module('../realm/realm-page.tsx', () => ({ ...frames,
   loadRealmView: async () => refused ? { kind: 'unavailable', failure: 'unavailable' } : view(),
 }));
+afterAll(async () => {
+  await mock.module('../realm/realm-page.tsx', () => frames);
+  await mock.module('../../i18n/server.ts', () => i18n);
+  await mock.module('../realm/read.ts', () => reads);
+  await mock.module('next/headers', () => originalHeaders);
+});
 const { ZoneSiteRoute, StandaloneZoneSiteFrame } = await import('./site-route.tsx');
 
 function find(node: ReactNode, type: unknown): ReactElement<Record<string, unknown>> | null {

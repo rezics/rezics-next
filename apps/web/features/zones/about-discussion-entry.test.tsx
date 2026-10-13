@@ -1,9 +1,6 @@
-import { expect, mock, test } from 'bun:test';
+import { afterAll, expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import * as mainApi from '../api/main.ts';
-import * as platformAccess from '../api/platform-access.ts';
-import * as authSession from '../auth/session.ts';
 import type { AboutDiscussionTargetReader } from './about-discussion-api.ts';
 
 const actingSubject = 'https://rezics.com/id/00000000-0000-4000-8000-000000000004';
@@ -14,19 +11,30 @@ let postingOpen = true;
 const projections: Array<[string, string | undefined]> = [];
 let target: Awaited<ReturnType<AboutDiscussionTargetReader>>;
 
+const mainApi = { ...(await import('../api/main.ts')) };
+const platformAccess = { ...(await import('../api/platform-access.ts')) };
+const authSession = { ...(await import('../auth/session.ts')) };
+const workReads = { ...(await import('../work-page/read.ts')) };
+const entityReads = { ...(await import('../entity-page/read.ts')) };
+const discussionApi = { ...(await import('./about-discussion-api.ts')) };
+const discussionView = { ...(await import('./about-discussion.tsx')) };
+
 void mock.module('../auth/session.ts', () => ({ ...authSession, readSession: async () => null }));
 void mock.module('../work-page/read.ts', () => ({
+  ...workReads,
   reader: async () => ({ main: {}, signedIn: true, actingSubject }),
 }));
 void mock.module('../api/main.ts', () => ({ ...mainApi, readPlatformAccess: async () => ({}) }));
 void mock.module('../api/platform-access.ts', () => ({ ...platformAccess, gateFor: () => () => postingOpen }));
 void mock.module('../entity-page/read.ts', () => ({
+  ...entityReads,
   readEntityProjection: async (resource: string, position?: string) => {
     projections.push([resource, position]);
     return { ok: true, data: { target: { resource: about, revision } } };
   },
 }));
 void mock.module('./about-discussion-api.ts', () => ({
+  ...discussionApi,
   readAboutDiscussion: async (_main: unknown, _input: unknown, readTarget?: AboutDiscussionTargetReader) => {
     if (lookupFailure) throw new Error('DisclosureUnavailable');
     if (!readTarget) throw new Error('Current projection reader is missing');
@@ -35,11 +43,21 @@ void mock.module('./about-discussion-api.ts', () => ({
   },
 }));
 void mock.module('./about-discussion.tsx', () => ({
+  ...discussionView,
   AboutDiscussion: ({ read, recoveryScope }: {
     read: { kind: string }; recoveryScope?: { actingSubject: string | null; postingOpen: boolean };
   }) => <aside data-zone-discussion-entry data-discussion-state={read.kind}
     data-acting-subject={recoveryScope?.actingSubject} data-posting-open={recoveryScope?.postingOpen} />,
 }));
+afterAll(async () => {
+  await mock.module('./about-discussion.tsx', () => discussionView);
+  await mock.module('./about-discussion-api.ts', () => discussionApi);
+  await mock.module('../entity-page/read.ts', () => entityReads);
+  await mock.module('../api/platform-access.ts', () => platformAccess);
+  await mock.module('../api/main.ts', () => mainApi);
+  await mock.module('../work-page/read.ts', () => workReads);
+  await mock.module('../auth/session.ts', () => authSession);
+});
 
 const { ZoneAboutDiscussion } = await import('./about-discussion-entry.tsx');
 

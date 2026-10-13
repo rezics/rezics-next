@@ -1,4 +1,5 @@
 import { afterAll, expect, mock, test } from 'bun:test';
+import '../../tests/support/official-package-fixture.ts';
 import { createElement, isValidElement, type ReactNode, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ZoneBrowse } from './browse.tsx';
@@ -86,10 +87,6 @@ test('a year view preserves the API second page, response counts and year-filter
 
 // Keep RealmBrowseRoute and readZoneBrowse real. Only the Main transport is
 // supplied here, so dropping the route's year query cannot pass this test.
-await mock.module('../../zones/official/index.ts', () => ({
-  installedDigest: async () => null,
-  loadPackage: async () => null,
-}));
 const mainExports = { ...(await import('../api/main.ts')) };
 const calls: { realm: string; query: Record<string, unknown> }[] = [];
 let transport: (query: Record<string, unknown>) => unknown;
