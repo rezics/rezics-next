@@ -103,6 +103,25 @@ test('the default brief supplies all test files to one QA call, and an absent li
   expect(f.lines.join('\n')).toContain('no test files named in brief');
 });
 
+test('a surface cannot hide missing rows and stories behind a types-only check', async () => {
+  const f = fixture();
+  const brief = join(f.cwd, '.temp/goal/brief.md');
+  mkdirSync(join(brief, '..'), { recursive: true });
+  writeFileSync(brief, '---\nkind: surface\nrows: []\ntests: []\n---\n');
+  const plan = join(f.cwd, '.temp/plan'); writeFileSync(plan, '');
+  const saved = process.env.GOAL_TEST_PLAN; process.env.GOAL_TEST_PLAN = plan;
+  try {
+    const result = await workerCheck({ ...f, tests: undefined, changed: [], only: ['types'] });
+    expect(result.code).toBe(1);
+    expect(result.checks.map(check => check.name)).toEqual(['selection']);
+    expect(f.commands).toHaveLength(0);
+    expect(f.lines.join('\n')).toContain('surface requires rows:');
+    expect(f.lines.join('\n')).toContain('at least one web *.stories.tsx');
+  } finally {
+    if (saved === undefined) delete process.env.GOAL_TEST_PLAN; else process.env.GOAL_TEST_PLAN = saved;
+  }
+});
+
 test('failed diagnostics are bounded to sixty lines per check while the disk log remains complete', async () => {
   const f = fixture();
   const output = Array.from({ length: 100 }, (_, i) => `error: diagnostic ${i}`).join('\n');

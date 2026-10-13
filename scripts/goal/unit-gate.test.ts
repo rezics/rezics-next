@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { runUnitSide, runOwnerShard, rememberSlowTests, writeUnitEvidence, timeoutOnlyTestFiles, UNIT_JUNIT_MARKER,
+import { runUnitSide, runOwnerShard, rememberSlowTests, writeUnitEvidence, timeoutOnlyTestFiles, UNIT_JUNIT_MARKER, preMergeSurfaceGate,
   type SlowTestRecord, type UnitRunEvidence } from './unit-gate.ts';
+import { parseBrief } from './briefs.ts';
 
 const scratch = join(import.meta.dir, '../../.temp/timeout-retry-tests');
 const directories: string[] = [];
@@ -44,6 +45,24 @@ test('busy host guard', async () => {
 afterEach(() => {
   restoreOutput();
   for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
+});
+
+test('surface landing refuses incomplete selection before generating or executing a gate', async () => {
+  const f = fixture('expect(true).toBe(true);');
+  const plan = join(f.cwd, 'plan'); writeFileSync(plan, '');
+  const saved = process.env.GOAL_TEST_PLAN; process.env.GOAL_TEST_PLAN = plan;
+  let generated = false;
+  try {
+    const refusal = await preMergeSurfaceGate(f.cwd, 'main', parseBrief('---\nkind: surface\nrows: []\ntests: []\n---\n'), [], new Set(), {
+      generate: async () => { generated = true; return undefined; },
+      runner: async () => { throw new Error('selection must refuse before execution'); },
+    });
+    expect(refusal).toContain('surface requires rows:');
+    expect(refusal).toContain('at least one web *.stories.tsx');
+    expect(generated).toBe(false);
+  } finally {
+    if (saved === undefined) delete process.env.GOAL_TEST_PLAN; else process.env.GOAL_TEST_PLAN = saved;
+  }
 });
 
 test('a passing file’s printed timeout cannot become a failure beside a real assertion failure', async () => {

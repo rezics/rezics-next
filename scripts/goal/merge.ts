@@ -1,4 +1,4 @@
-import { type RecordedMerge, unitFilesFromPlan, mergeUnitFiles, ownerFilesFromPlan, mergeOwnerFiles, streamUnitBaseline, preMergeUnitGate } from './unit-gate.ts';
+import { type RecordedMerge, unitFilesFromPlan, mergeUnitFiles, ownerFilesFromPlan, mergeOwnerFiles, streamUnitBaseline, preMergeUnitGate, preMergeSurfaceGate } from './unit-gate.ts';
 import { join } from 'node:path';
 import { stateDir, git, REGENERATION_COMMIT_SUBJECT, assertOwner, root, regenerationOnlyFiles, scopeViolations, landScopeRefusal, withLedger, retryGitIndexLock } from './ledger.ts';
 import { existsSync, readFileSync, appendFileSync, writeFileSync } from 'node:fs';
@@ -6,10 +6,10 @@ import { type MergeEvent } from './regress.ts';
 import { type AffectedPlan, affectedPlanForChanges, typecheckWorkspaces } from '../qa/affected.ts';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
-import { type Task, type Ledger, HOLDING } from './types.ts';
+import { type Task, type Ledger, type Brief, HOLDING } from './types.ts';
 import { taskOf, running, changedFiles, branchChanges } from './launch.ts';
 import { landedBoundary, prepareCompositionMerge, compositionSyntaxFailure, type MigrationRename, normalizeMigrations } from './merge-normalise.ts';
-import { historyIntroductions } from './briefs.ts';
+import { historyIntroductions, parseBrief, parseFrontmatter } from './briefs.ts';
 import { COMPOSITION_ROOTS } from './composition-roots.ts';
 import { preMergeTypecheckGate, reinstallStaleDependencies, missingPinnedImage } from './typecheck-gate.ts';
 import { withGateLane } from './qa-slots.ts';
@@ -97,6 +97,7 @@ export interface PreparedMerge {
   before: string; baseline: string; after: string; worktree: string; branch: string; sharers: string[]; committed: string[];
   /** Files checked against claims. The regeneration commit is not one of them. */
   scopeFiles?: string[];
+  surface?: Brief;
 }
 
 /** The git operations a fast-forward needs, so a moving `main` can be played back without a repository. */
@@ -330,8 +331,15 @@ export async function mergeTask(id: string, flags: Set<string>, expectedHead?: s
     const committedNow = changedFiles(task).committed;
     const exempt = new Set(regenerationOnlyFiles(task.worktree));
     const scopeFiles = committedNow.filter(file => !exempt.has(file));
+    const surfaceBriefs = sharers.flatMap(sharer => {
+      const source = existsSync(sharer.brief) ? readFileSync(sharer.brief, 'utf8') : '';
+      return parseFrontmatter(source)?.kind === 'surface' ? [parseBrief(source)] : [];
+    });
+    const surface = surfaceBriefs.length ? { ...surfaceBriefs[0]!,
+      rows: [...new Set(surfaceBriefs.flatMap(brief => brief.rows ?? []))],
+      tests: [...new Set(surfaceBriefs.flatMap(brief => brief.tests ?? []))] } : undefined;
     return { before, baseline, after, worktree: task.worktree, branch: task.branch,
-      sharers: sharers.map(sharer => sharer.id).sort(), committed: committedNow, scopeFiles };
+      sharers: sharers.map(sharer => sharer.id).sort(), committed: committedNow, scopeFiles, surface };
   };
   let preparedMerge = await withLedger(prepareMerge);
   // The reviewed head may be rewritten by our own rebase/normalization on a busy main.
@@ -359,6 +367,10 @@ export async function mergeTask(id: string, flags: Set<string>, expectedHead?: s
     if (installed) return installed;
     const unbuilt = missingPinnedImage(merge.worktree, root);
     if (unbuilt) return unbuilt;
+    if (merge.surface) return preMergeSurfaceGate(merge.worktree, merge.before, merge.surface, merge.committed, gatedFiles, {
+      generate: async () => regenerateGeneratedOutputs(merge) ?? missingPinnedImage(merge.worktree, root),
+      evidenceDirectory: join(stateDir, 'merges/surface-gate'),
+    });
     const generated = regenerateGeneratedOutputs(merge);
     if (generated) return generated;
     // Again after the regeneration: the pin is derived from the generated model, so a shape change moves it
@@ -402,7 +414,7 @@ export async function mergeTask(id: string, flags: Set<string>, expectedHead?: s
         changed: (from, to) => git(root, ['diff', '--name-only', '--no-renames', `${from}..${to}`]).split('\n').filter(Boolean),
         refresh: () => prepareMerge(ledger),
         fastForward: after => retryGitIndexLock(() => spawnSync('git', ['merge', '--ff-only', after], { cwd: root, encoding: 'utf8' })),
-      }, current, { gatedFiles, regated, retyped, typechecked: skipTypes ? [] : typecheckWorkspaces(current.committed) }, console.log, gateOnly);
+      }, current, { gatedFiles, regated, retyped, typechecked: current.surface ? ['web'] : skipTypes ? [] : typecheckWorkspaces(current.committed) }, console.log, gateOnly);
       if (advance.kind === 'stopped') {
         if (advance.conflict && advance.message) {
           return recordRefusal(task, `${task.id} ${advance.message}`, gateOnly);
@@ -436,7 +448,7 @@ export async function mergeTask(id: string, flags: Set<string>, expectedHead?: s
     // a rerun of the unit gate is still allowed once.
     typeRechecks++;
     retyped = !outcome.workspaces || typeRechecks >= MAX_TYPE_RECHECKS;
-    if (outcome.workspaces) {
+    if (outcome.workspaces && !outcome.rerun.surface) {
       const workspaces = outcome.workspaces;
       const rerun = () => typecheck(outcome.rerun, workspaces);
       gateFailure = skipTypes ? await rerun() : await onLane(rerun);

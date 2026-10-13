@@ -8,9 +8,10 @@ import { mergeUnitFiles, timeoutOnlyTestFiles, failingTestFiles, unitFileErrorDe
 import { parseJUnit, isQaOwnerPath, isQaIntegrationPath, isQaFaultPath, isQaModelPath, isQaE2ePath, isQaLoadPath } from '../qa/acceptance.ts';
 import { tierBunTestArgs, type TierTestTimeout } from '../qa/core.ts';
 import { withSlot, type SlotRunOptions } from './qa-slots.ts';
+import { selectSurface, runSurfaceGate } from './surface-gate.ts';
 
 export type CheckGroup = 'types' | 'lint' | 'tests' | 'guards';
-export type CheckName = CheckGroup | 'ast';
+export type CheckName = CheckGroup | 'ast' | 'contract' | 'stories' | 'selection';
 const GROUPS: CheckGroup[] = ['types', 'lint', 'tests', 'guards'];
 
 export function parseCheckArgs(args: readonly string[]): CheckGroup[] {
@@ -87,7 +88,7 @@ export interface CheckOptions {
   slotOptions?: Omit<SlotRunOptions, 'runCommand'>;
   historyDirectory?: string;
 }
-export interface CheckResult { name: CheckName; code: number; seconds: number; note?: string }
+export interface CheckResult { name: CheckName; code: number; seconds: number; waitSeconds?: number; note?: string }
 
 /** Hosted QA prints a report link rather than its case diagnostics. Read this invocation's isolated artifact root. */
 function testArtifactOutput(directory: string): { output: string; failures: string; diagnostics: string; report: string } {
@@ -124,7 +125,21 @@ export async function workerCheck(options: CheckOptions = {}): Promise<{ code: n
   const cwd = resolve(options.cwd ?? process.cwd());
   const changed = options.changed ?? checkChangedFiles(cwd);
   const briefPath = join(cwd, '.temp/goal/brief.md');
-  const tests = options.tests ?? (existsSync(briefPath) ? parseBrief(readFileSync(briefPath, 'utf8')).tests ?? [] : []);
+  const brief = existsSync(briefPath) ? parseBrief(readFileSync(briefPath, 'utf8')) : undefined;
+  const tests = options.tests ?? brief?.tests ?? [];
+  if (brief?.kind === 'surface') {
+    const selected = await selectSurface(cwd, { ...brief, tests: [...tests] }, changed);
+    if (!selected?.selection) {
+      const root = join(cwd, '.temp/goal/check');
+      mkdirSync(root, { recursive: true });
+      const log = join(mkdtempSync(join(root, 'run-')), 'output.log');
+      const refusal = selected?.refusals.join('\n') ?? 'surface selection unavailable';
+      writeFileSync(log, refusal);
+      for (const line of refusal.split('\n')) (options.print ?? console.log)(line);
+      return { code: 1, log, checks: [{ name: 'selection', code: 1, seconds: 0 }] };
+    }
+    return runSurfaceGate(cwd, selected.selection, options);
+  }
   for (const file of tests) {
     const path = relative(cwd, resolve(cwd, file));
     if (isAbsolute(file) || path === '..' || path.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`)) {

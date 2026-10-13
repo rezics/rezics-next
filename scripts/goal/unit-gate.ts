@@ -15,6 +15,23 @@ import { type MergeEvent } from './regress.ts';
 import { postgresSocketRefusal, physicalPath } from './postgres-socket.ts';
 import { readMergeEvents, affectedSelection, selectedUnitFiles, selectedOwnerFiles } from './merge.ts';
 import { addGateWorktree } from './typecheck-gate.ts';
+import { selectSurface, runSurfaceGate, type SurfaceRunOptions } from './surface-gate.ts';
+import { type Brief } from './types.ts';
+
+/** Surface landing consumes exactly the worker's selection and ordered gate on the rebased candidate. */
+export async function preMergeSurfaceGate(worktree: string, main: string, brief: Brief,
+  changed: readonly string[], gatedFiles: Set<string>, options: SurfaceRunOptions = {}): Promise<string | undefined> {
+  const selected = await selectSurface(worktree, brief, changed, main);
+  if (!selected?.selection) return selected?.refusals.join('\n') ?? 'surface selection unavailable';
+  const selection = selected.selection;
+  for (const file of [...changed, ...selection.units, ...selection.stories, ...selection.guards,
+    ...selection.rows.map(row => `tests/qa/fixtures/outcomes/${row}.json`),
+    ...selection.proofs]) gatedFiles.add(file);
+  // A new API contract on main must rerun the record guards and stories together.
+  for (const file of git(worktree, ['ls-files', 'generated/openapi/main']).split('\n').filter(Boolean)) gatedFiles.add(file);
+  const result = await runSurfaceGate(worktree, selection, options);
+  return result.code ? `surface gate failed; not merging (evidence: ${result.evidence})` : undefined;
+}
 
 /** Longest declared per-test timeout. `unparseable` means a timeout argument was not a numeric literal. */
 export interface DeclaredTestTimeout {

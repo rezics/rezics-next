@@ -9,7 +9,7 @@ import { parseBrief, validateBrief, type Ledger, type Task } from './goalctl.ts'
 // A refused review pass is run again after a wait; the tests do not wait.
 process.env.GOAL_REVIEW_RETRY_MS = '1';
 
-function repo(options: { result?: string; auto?: boolean; files?: Record<string, string>; paths?: string[] } = {}) {
+function repo(options: { result?: string; auto?: boolean; files?: Record<string, string>; paths?: string[]; surface?: boolean } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'goal-land-'));
   const git = (cwd: string, ...args: string[]) => {
     const result = spawnSync('git', args, { cwd, encoding: 'utf8' });
@@ -28,10 +28,29 @@ function repo(options: { result?: string; auto?: boolean; files?: Record<string,
   write('scripts/goal/composition-roots.ts', readFileSync(join(import.meta.dir, 'composition-roots.ts'), 'utf8'));
   for (const file of ['app.ts', 'index.ts', 'composition.ts', 'routes/dependencies.ts']) write(`services/main/src/${file}`, 'export {};\n');
   for (const [path, content] of Object.entries(options.files ?? {})) write(path, content);
+  if (options.surface) {
+    for (const file of ['outcomes.ts', 'outcome-cells.ts']) write(`scripts/qa/cases/${file}`,
+      readFileSync(join(import.meta.dir, '../qa/cases', file), 'utf8'));
+    write('scripts/qa/cases/launch-coverage.ts', `export interface LaunchCoverage { kind: string; capability: string; hardCase?: string }
+export const launchCoverage = [{ kind: 'books', capability: 'catalogue' }];`);
+    const personas = ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'];
+    write('scripts/qa/cases/outcomes/books/catalogue.ts', `import { proved, rowOutcomes } from '../../outcome-cells.ts';
+export default rowOutcomes('books/catalogue', {${personas.map(persona => `${persona}: proved('reads catalogue')`).join(',')}});`);
+    write('tests/qa/integration/outcomes/books/catalogue.test.ts', `import { test } from 'bun:test';
+${personas.map(persona => `test('books/catalogue / ${persona}: reads catalogue', () => {});`).join('\n')}`);
+    write('tests/qa/fixtures/outcomes/books/catalogue.json', '{}');
+    write('apps/web/features/zones/catalogue.test.ts', "import { test } from 'bun:test'; test('catalogue', () => {});");
+    write('apps/web/features/zones/catalogue.stories.tsx', "if (process.env.FAIL_SURFACE_STORY === '1') throw new Error('fixture story failed'); export default {};");
+    write('scripts/qa/test.ts', `const stories = process.argv.slice(2).filter(file => file.endsWith('.stories.tsx'));
+const command = stories.length ? ['task', 'storybook:test', '--', ...stories] : ['task', 'goal:unit-files', '--', ...process.argv.slice(2)];
+process.exit(await Bun.spawn(command, { stdout: 'inherit', stderr: 'inherit' }).exited);`);
+    write('node_modules/.bin/oxlint', '#!/usr/bin/env bun\nprocess.exit(0);');
+    chmodSync(join(dir, 'node_modules/.bin/oxlint'), 0o755);
+  }
   write('services/account/src/value.ts', 'export const value = 0;\n');
   const paths = options.paths ?? ['services/account/src/value.ts', 'value.test.ts'];
   const brief = 'docs/goals/alpha/tasks/G-001.md';
-  write(brief, `---\nid: G-001\ntitle: Deliver value\nkind: implementation\nengine: codex\neffort: high\npaths: [${paths.join(', ')}]\n${options.auto ? 'land: auto\n' : ''}---\nDeliver value.\n`);
+  write(brief, `---\nid: G-001\ntitle: Deliver value\nkind: ${options.surface ? 'surface' : 'implementation'}\nengine: codex\neffort: high\npaths: [${paths.join(', ')}]\n${options.surface ? 'rows: [books/catalogue]\ntests: [apps/web/features/zones/catalogue.test.ts, apps/web/features/zones/catalogue.stories.tsx]\n' : ''}${options.auto ? 'land: auto\n' : ''}---\nDeliver value.\n`);
   git(dir, 'add', '.'); git(dir, 'commit', '-qm', 'Initial');
   const base = git(dir, 'rev-parse', 'HEAD');
   const worktree = join(dir, '.temp/worktrees/worker');
@@ -90,6 +109,11 @@ if (args.includes('--result-file')) {
   process.exit(status === 'passed' ? 0 : 1);
 }
 if (args[0] === 'install' || args.some(arg => arg.endsWith(':typecheck'))) process.exit(0);
+if (args[0] === 'gen' || args[0] === 'gen:check' || args[0] === 'ast-grep') process.exit(0);
+if (args[0] === 'storybook:test') {
+  for (const file of args.slice(2)) await import(process.cwd() + '/' + file);
+  process.exit(0);
+}
 if (args.includes('--list')) {
   console.log('Affected since HEAD: fixture');
   if (process.env.GOAL_TEST_PLAN) console.log(readFileSync(process.env.GOAL_TEST_PLAN, 'utf8'));
@@ -362,7 +386,7 @@ echo '{"findings":[]}' > "$out"
     }
   });
 
-  test.each(['outcome', 'surface', 'tooling'])('%s lands sensitive changes on gates without review', kind => {
+  test.each(['outcome', 'tooling'])('%s lands sensitive changes on gates without review', kind => {
     const r = repo();
     try {
       writeFileSync(r.task.brief, readFileSync(r.task.brief, 'utf8').replace('kind: implementation', `kind: ${kind}`));
@@ -370,6 +394,25 @@ echo '{"findings":[]}' > "$out"
       expect(result.status).toBe(0);
       expect(existsSync(r.log)).toBe(false);
       expect(r.ledger().tasks[r.task.id]!.state).toBe('verified');
+    } finally { r.cleanup(); }
+  });
+
+  test.each([false, true])('surface landing runs named stories and records seconds; failing=%s', failing => {
+    const r = repo({ surface: true });
+    try {
+      const before = r.git(r.dir, 'rev-parse', 'HEAD');
+      const result = r.run('land', { FAIL_SURFACE_STORY: failing ? '1' : '0' });
+      expect(result.status, result.stderr).toBe(failing ? 1 : 0);
+      expect(existsSync(r.log)).toBe(false);
+      if (failing) {
+        expect(result.stderr).toContain('surface gate failed');
+        expect(r.git(r.dir, 'rev-parse', 'HEAD')).toBe(before);
+      } else expect(r.ledger().tasks[r.task.id]!.state).toBe('verified');
+      const evidenceRoot = join(r.dir, '.temp/goal-orchestration/merges/surface-gate');
+      const evidence = JSON.parse(readFileSync(join(evidenceRoot, readdirSync(evidenceRoot)[0]!, 'evidence.json'), 'utf8'));
+      expect(evidence.checks.map((part: { name: string }) => part.name)).toEqual(['contract', 'types', 'lint', 'ast', 'tests', 'guards', 'stories']);
+      expect(evidence.checks.every((part: { seconds: number; waitSeconds: number }) => part.seconds >= part.waitSeconds && part.waitSeconds >= 0)).toBe(true);
+      expect(evidence.code).toBe(failing ? 1 : 0);
     } finally { r.cleanup(); }
   });
 
