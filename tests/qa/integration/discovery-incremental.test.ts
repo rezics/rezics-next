@@ -60,7 +60,7 @@ test('Discovery incremental: appended Works preserve a partial pin and later bir
       g.state, g.lease_expires_at FROM access.discovery_generation d
       JOIN access.derived_generation g ON g.id = d.generation_id WHERE d.generation_id = $1`,
     [pinned.generation_id])).rows[0];
-    expect(pending).toMatchObject({ complete: true, work_count: '3', state: 'active', lease_expires_at: null });
+    expect(pending).toMatchObject({ complete: true, work_count: '3', state: 'ready', lease_expires_at: null });
     expect((await stack.accessPool.query('SELECT count(*) FROM access.discovery_entry WHERE generation_id = $1 AND work = $2',
       [pending.generation_id, appended.work])).rows[0].count).toBe('1');
     await drain();

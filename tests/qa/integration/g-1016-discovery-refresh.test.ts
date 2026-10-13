@@ -142,7 +142,9 @@ test('G1016: Discovery resumes one generation under steady appends after graph o
       JOIN access.derived_generation_input i ON i.generation_id=g.id AND i.source='main-graph'
       WHERE d.generation_id=$1`, [building.generation_id])).rows[0];
     expect(completed).toEqual({ checkpoint: building.checkpoint, work_count: building.work_count,
-      validated: building.validated, complete: true, state: 'active', lease_expires_at: null });
+      validated: building.validated, complete: true, state: 'ready', lease_expires_at: null });
+    expect((await f.accessPool.query(`SELECT active_generation FROM access.derived_generation_head
+      WHERE scope_key=$1`, [key])).rows[0].active_generation).toBe(building.generation_id);
     await drain();
     // Edits to original Works join the catch-up journal instead of cancelling
     // the scan. Reconciliation prevents mixed-position activation.

@@ -124,12 +124,12 @@ test('SEARCH11/SEARCH12 foundation: native private posting follows one current C
     });
     expect(await publicHits(firstTerm)).toEqual([]);
     expect(await publicHits(secondTerm)).toEqual([]);
-    expect(await queryPrivateContributionPhrase(env,
-      { contribution: first.contribution, phrase: firstTerm })).toMatchObject({ complete: true, total: 0, results: [] });
-    expect(await queryPrivateContributionPhrase(env,
-      { contribution: first.contribution, phrase: secondTerm })).toMatchObject({
-      complete: true, total: 1, results: [{ revision: edited.draftRevision }],
-    });
+    // These synthetic native edit admissions have no registered Access proof.
+    // A current posting alone must not qualify the edited exact source.
+    for (const phrase of [firstTerm, secondTerm]) {
+      await expect(queryPrivateContributionPhrase(env,
+        { contribution: first.contribution, phrase })).rejects.toBeInstanceOf(PrivateSearchUnavailable);
+    }
 
     const replay = await activateTextContribution(env, createAdmission, firstInput);
     expect(replay).toEqual(first);
