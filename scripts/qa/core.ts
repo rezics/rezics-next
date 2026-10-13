@@ -566,13 +566,14 @@ export function qaRunDeadline(deadline: number, env: NodeJS.ProcessEnv = process
 
 export async function commandAsync(root: string, name: string, args: string[], timeoutMs: number,
   env: NodeJS.ProcessEnv = process.env, onOutputLine?: (line: string) => void,
-  options: { runDeadline?: number | QaRunDeadline; phaseDeadline?: (sample: CommandPhaseSample) => { activeLimitMs: number; reason?: string } } = {}): Promise<{ ok: boolean; output: string; stdout: string; stderr: string; elapsedMs: number;
+  options: { now?: () => number; runDeadline?: number | QaRunDeadline; phaseDeadline?: (sample: CommandPhaseSample) => { activeLimitMs: number; reason?: string } } = {}): Promise<{ ok: boolean; output: string; stdout: string; stderr: string; elapsedMs: number;
   activeElapsedMs: number; admissionWaitMs: number; timedOut: boolean }> {
-  const start = Date.now();
+  const clock = options.now ?? Date.now;
+  const start = clock();
   // A child's admission instant stays fixed even after its parent's work clock
   // moves. Carry the remaining work duration separately across that boundary.
   const runDeadline = typeof options.runDeadline === 'number'
-    ? qaRunDeadline(options.runDeadline, env)
+    ? qaRunDeadline(options.runDeadline, env, clock)
     : options.runDeadline;
   const environment = spawnEnvironment(name, args, runDeadline
     ? { ...env, REZICS_QA_RUN_REMAINING_MS: String(Math.ceil(runDeadline.activeRemainingMs())) } : env);
@@ -607,12 +608,12 @@ export async function commandAsync(root: string, name: string, args: string[], t
     // A capped grandparent must see child admission before the wait completes.
     if (env.REZICS_QA_MEMORY_EVENTS === '1') console.log(line);
     if (event[1] === 'BEGIN') {
-      if (!waiting.size) { admissionStarted = Date.now(); resumeRun = runDeadline?.wait(); }
+      if (!waiting.size) { admissionStarted = clock(); resumeRun = runDeadline?.wait(); }
       waiting.add(event[2]!);
     } else {
       if (!waiting.delete(event[2]!)) return;
       if (!waiting.size) {
-        const ended = Date.now();
+        const ended = clock();
         admissionSpans.push({ start: admissionStarted, end: ended });
         admissionWaitMs += ended - admissionStarted;
         resumeRun?.(); resumeRun = undefined;
@@ -645,8 +646,8 @@ export async function commandAsync(root: string, name: string, args: string[], t
     timedOut = true;
     if (timer) clearTimeout(timer);
     timer = undefined;
-    timeoutReason = reason ?? (waiting.size && runDeadline !== undefined && Date.now() >= runDeadline.waitDeadline
-      ? qaWaitFailure('memory, a startup turn or a QA lease', admissionStarted, Date.now())
+    timeoutReason = reason ?? (waiting.size && runDeadline !== undefined && clock() >= runDeadline.waitDeadline
+      ? qaWaitFailure('memory, a startup turn or a QA lease', admissionStarted, clock())
       : runDeadline !== undefined && runDeadline.remainingMs() <= 0
       ? `${name} reached its run deadline` : `${name} timed out after ${timeoutMs} ms of active work`);
     // The group, including an in-progress child stack:up, stops before this returns.
@@ -658,11 +659,11 @@ export async function commandAsync(root: string, name: string, args: string[], t
     if (timer) clearTimeout(timer);
     timer = undefined;
     const runRemaining = runDeadline?.remainingMs() ?? Infinity;
-    const waitRemaining = waiting.size && runDeadline ? runDeadline.waitDeadline - Date.now() : Infinity;
-    if (waitRemaining <= 0) { expire(qaWaitFailure('memory, a startup turn or a QA lease', admissionStarted, Date.now())); return; }
+    const waitRemaining = waiting.size && runDeadline ? runDeadline.waitDeadline - clock() : Infinity;
+    if (waitRemaining <= 0) { expire(qaWaitFailure('memory, a startup turn or a QA lease', admissionStarted, clock())); return; }
     if (runRemaining <= 0) { expire(`${name} reached its run deadline`); return; }
     if (options.phaseDeadline) {
-      const now = Date.now();
+      const now = clock();
       const admissionOpen = waiting.size > 0;
       const activeElapsedMs = now - start - admissionWaitMs - (admissionOpen ? now - admissionStarted : 0);
       const admission = admissionOpen ? [...admissionSpans, { start: admissionStarted, end: now }] : admissionSpans;
@@ -700,13 +701,11 @@ export async function commandAsync(root: string, name: string, args: string[], t
       timer = setTimeout(armTimer, delay);
       return;
     }
-    const activeElapsed = Date.now() - start - admissionWaitMs;
+    const activeElapsed = clock() - start - admissionWaitMs;
     const remaining = waiting.size ? Infinity : timeoutMs - activeElapsed;
+    if (remaining <= 0) { expire(); return; }
     const delay = Math.min(remaining, runRemaining, waitRemaining);
-    if (Number.isFinite(delay)) timer = setTimeout(() => {
-      if (!waiting.size && remaining <= runRemaining) expire();
-      else armTimer();
-    }, Math.max(1, delay));
+    if (Number.isFinite(delay)) timer = setTimeout(armTimer, Math.max(1, delay));
   }
   const unsubscribe = runDeadline?.subscribe(armTimer);
   armTimer();
@@ -718,8 +717,8 @@ export async function commandAsync(root: string, name: string, args: string[], t
       child.on('close', resolve);
     });
   } finally {
-    elapsedMs = Date.now() - start;
-    if (waiting.size) admissionWaitMs += Date.now() - admissionStarted;
+    elapsedMs = clock() - start;
+    if (waiting.size) admissionWaitMs += clock() - admissionStarted;
     unsubscribe?.();
     resumeRun?.();
     clearTimeout(timer);

@@ -75,27 +75,39 @@ test('QA CLI child admission can outlast its active budget, then execution keeps
 });
 
 test('QA CLI admission stays bounded by the waiter deadline and active work still times out afterward', async () => {
+  let now = 0;
+  const clock = {
+    now: () => now, runDeadline: 250,
+  };
+  const advance = (line: string) => { if (line.startsWith('CLOCK ')) now = Number(line.slice(6)); };
   const waiting = `
     console.log('QA_MEMORY_WAIT_BEGIN 1-1');
-    await Bun.sleep(2000);
+    console.log('CLOCK 250');
+    setInterval(() => {}, 1000);
   `;
-  const blocked = await commandAsync(scratch, 'bun', ['-e', waiting], 100, process.env, undefined,
-    { runDeadline: Date.now() + 250 });
+  const blocked = await commandAsync(scratch, 'bun', ['-e', waiting], 100, process.env, advance, clock);
   expect(blocked.timedOut).toBe(true);
-  expect(blocked.output).toContain('QA waited for memory, a startup turn or a QA lease');
+  expect(blocked.output).toContain('QA waited for memory, a startup turn or a QA lease for 250 ms');
   expect(blocked.output).not.toContain('reached its run deadline');
+  expect(blocked.elapsedMs).toBe(250);
+  expect(blocked.admissionWaitMs).toBe(250);
+  expect(blocked.activeElapsedMs).toBe(0);
+  now = 0;
   const execution = `
     console.log('QA_MEMORY_WAIT_BEGIN 1-1');
-    await Bun.sleep(400);
+    console.log('CLOCK 400');
     console.log('QA_MEMORY_WAIT_END 1-1 400');
-    await Bun.sleep(2000);
+    console.log('CLOCK 551');
+    setInterval(() => {}, 1000);
   `;
-  const expired = await commandAsync(scratch, 'bun', ['-e', execution], 150, process.env, undefined,
-    { runDeadline: Date.now() + 2_000 });
+  const expired = await commandAsync(scratch, 'bun', ['-e', execution], 150, process.env, advance, { ...clock, runDeadline: 2_000 });
   expect(expired.timedOut).toBe(true);
   expect(expired.output).toContain('150 ms of active work');
-  expect(expired.admissionWaitMs).toBeGreaterThanOrEqual(350);
-  expect(expired.activeElapsedMs).toBeLessThan(300);
+  expect(expired.stdout).toContain('QA_MEMORY_WAIT_END 1-1 400');
+  expect(expired.elapsedMs).toBe(551);
+  expect(expired.admissionWaitMs).toBe(400);
+  expect(expired.activeElapsedMs).toBe(151);
+  expect(expired.elapsedMs).toBe(expired.admissionWaitMs + expired.activeElapsedMs);
 });
 
 test('parallel QA preparation and tier budgets exclude overlapping admissions once', () => {
@@ -642,22 +654,25 @@ test('QA shards: Goal QA slots bound extra projects, keep the caller slot and re
     writeFileSync(join(dir, '2', 'pid'), '999999999');
     utimesSync(join(dir, '2'), new Date(0), new Date(0));
     const env = { GOAL_QA_SLOTS: '4' };
-    const slots = await acquireQaSlots(dir, 4, env);
+    const slotOptions = { workerGoals: () => [] };
+    const slots = await acquireQaSlots(dir, 4, env, process.pid, slotOptions);
     expect(slots.count).toBe(3);
     expect(readFileSync(join(dir, '2', 'pid'), 'utf8')).toBe(String(process.pid));
     expect(existsSync(join(dir, '3'))).toBe(true);
-    const borrowed = await acquireQaSlots(dir, 2, env);
+    const borrowed = await acquireQaSlots(dir, 2, env, process.pid, slotOptions);
     expect(borrowed.count).toBe(1);
     borrowed.release();
     slots.release();
     expect([0, 1, 2, 3].map(k => existsSync(join(dir, String(k))))).toEqual([true, true, false, false]);
-    const one = await acquireQaSlots(dir, 1, env);
+    const one = await acquireQaSlots(dir, 1, env, process.pid, slotOptions);
     expect(one.count).toBe(1);
     expect(existsSync(join(dir, '2'))).toBe(false);
     // A run outside any slot takes one for itself.
     rmSync(join(dir, '0'), { recursive: true });
     one.release();
-    const outside = await acquireQaSlots(dir, 2, env, 999_999_998);
+    // A live waiter with inheritance disabled models an independent project.
+    // A nonexistent PID is discarded by admission before it can acquire a lease.
+    const outside = await acquireQaSlots(dir, 2, env, process.pid, { ...slotOptions, inherit: false });
     expect(outside.count).toBe(2);
     outside.release();
   } finally { rmSync(dir, { recursive: true, force: true }); }
@@ -714,17 +729,18 @@ test('QA slots: zero leases wait until the deadline without starting a stack', a
 
 test('QA slots: a waiter takes a newly released lease before it starts a stack', async () => {
   const dir = mkdtempSync(join(scratch, 'qa-slot-turnover-'));
-  let now = 0;
+  let now = 0, waits = 0;
   try {
     mkdirSync(join(dir, '0'));
     writeFileSync(join(dir, '0', 'pid'), String(process.pid));
-    const slots = await acquireQaSlots(dir, 1, { GOAL_QA_SLOTS: '1' }, 999_999_998, {
-      deadline: 20, now: () => now, announce: () => {},
-      sleep: async ms => { now += ms; rmSync(join(dir, '0'), { recursive: true }); }, pollMs: 10,
+    const slots = await acquireQaSlots(dir, 1, { GOAL_QA_SLOTS: '1' }, process.pid, {
+      inherit: false, workerGoals: () => [], deadline: 20, now: () => now, announce: () => {},
+      sleep: async ms => { waits++; now += ms; rmSync(join(dir, '0'), { recursive: true }); }, pollMs: 10,
     });
     expect(now).toBe(10);
+    expect(waits).toBe(1);
     expect(slots.count).toBe(1);
-    expect(readFileSync(join(dir, '0', 'pid'), 'utf8')).toBe('999999998');
+    expect(readFileSync(join(dir, '0', 'pid'), 'utf8')).toBe(String(process.pid));
     slots.release();
     expect(existsSync(join(dir, '0'))).toBe(false);
   } finally { rmSync(dir, { recursive: true, force: true }); }
