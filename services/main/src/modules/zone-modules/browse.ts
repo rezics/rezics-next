@@ -247,7 +247,9 @@ async function readBrowseBatch(session: WorkReadSession, realm: string, ids: str
     readSerialStatistics(session, visibleIds).then(stats =>
       stats ?? new Map<string, { wordCount: number | null; lastUpdatedAt: string | null }>()),
     readTags(session, realm, visibleIds)]);
-  if ((filter.concept?.length || filter.conceptExclude?.length) && tags.state === 'unavailable') {
+  // An older classification cut cannot prove absence, including exclusions.
+  // Keep the existing unavailable answer until the owner has current Tags.
+  if ((filter.concept?.length || filter.conceptExclude?.length) && tags.state !== 'current') {
     throw new WorkReadUnavailable('Zone Tags are unavailable');
   }
   const candidates = visibleIds.flatMap((work, order): BrowseCandidate[] => {
@@ -302,7 +304,6 @@ export async function readZoneBrowse(session: WorkReadSession, realm: string, qu
     for (const [work, summary] of batch.summaries) summaries.set(work, summary);
     const found = new Set(browseCandidates(batch.candidates, filter,
       text, appliedSort).found.map(item => item.work));
-    if ((filter.concept?.length || filter.conceptExclude?.length) && tags !== 'current') found.clear();
     return { candidates: batch.candidates, found };
   };
   const projection = session.deps.zoneBrowse;

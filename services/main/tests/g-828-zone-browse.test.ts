@@ -147,10 +147,10 @@ test('G828: newest resumes after an adoption; changed filter and restore epoch i
   await expect(readZoneBrowse(restored, realm, {})).rejects.toBeInstanceOf(WorkReadExpired);
 });
 
-test('G828: stale Tags withhold conditioned Works; unavailable Tags refuse', async () => {
+test('G828: stale and unavailable Tags refuse Conditions; unconditioned browse remains available', async () => {
   const data = fixture(6);
   data.setTags('stale');
-  expect((await readZoneBrowse(data.make(), realm, { concept: [concept] })).items).toEqual([]);
+  await expect(readZoneBrowse(data.make(), realm, { concept: [concept] })).rejects.toBeInstanceOf(WorkReadUnavailable);
   expect((await readZoneBrowse(data.make(), realm, {})).items).toHaveLength(6);
   data.setTags('unavailable');
   await expect(readZoneBrowse(data.make(), realm, { concept: [concept] })).rejects.toBeInstanceOf(WorkReadUnavailable);

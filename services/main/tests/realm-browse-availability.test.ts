@@ -3,7 +3,8 @@ import type { Pool } from 'pg';
 import type { ContentCore } from '../../content/src/core.ts';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { MediaStore } from '../src/modules/media/store.ts';
-import { WorkReadMoved, WorkReadSession } from '../src/modules/work/read-session.ts';
+import { WorkReadMoved, WorkReadSession, WorkReadUnavailable } from '../src/modules/work/read-session.ts';
+import { readZoneBrowse } from '../src/modules/zone-modules/browse.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 
 const id = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -80,4 +81,24 @@ test('a restored media owner still rejects the retained summary basis', async ()
   await f.prepare();
   f.state.epoch = 'restored';
   await expect(f.session.fenceSummaryMedia()).rejects.toBeInstanceOf(WorkReadMoved);
+});
+
+test('stale classification cannot assert an exact empty Condition inventory', async () => {
+  const eligible = [id(1)], concept = id(2), realm = id(3);
+  const session = { options: { limit: 5 }, position: { dataEpoch: 'epoch', sequence: '7' },
+    realm: async () => ({ visibility: 'public', realmRevision: id(4) }),
+    query: async (body: string) => body.includes('?evidence')
+      ? eligible.map(work => ({ work: uri(work), main: uri(id(5)), head: uri(id(6)),
+        evidence: uri(id(7)), revisionEpoch: term('epoch'), sequence: term('1') }))
+      : body.includes('SELECT ?work ?type') ? eligible.map(work => ({ work: uri(work), type: uri('https://schema.org/TVSeries') })) : [],
+    summaries: async (resources: string[]) => resources.map(reference => ({ reference, status: 'available',
+      disclosure: 'public', type: reference === concept ? 'concept' : 'work',
+      name: { value: 'Selected animation', language: 'en', direction: 'ltr', basis: 'requested' } })),
+    deps: { zoneBrowse: { current: () => true, batch: async (_realm: string, _sort: string, after: unknown) => after ? []
+      : eligible.map(work => ({ work, adoptedOrder: '1', updatedAt: null, words: null })) },
+    discovery: { active: async () => ({ stale: true }), workTerms: async () => eligible.map(work => ({ work, concept })) } },
+  } as unknown as WorkReadSession;
+  for (const filter of [{ concept: [concept] }, { excludeConcept: [id(8)] }]) {
+    await expect(readZoneBrowse(session, realm, filter)).rejects.toBeInstanceOf(WorkReadUnavailable);
+  }
 });
