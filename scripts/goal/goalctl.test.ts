@@ -2693,10 +2693,15 @@ child.on('close', code => process.exit(code ?? 1));
     const ledgerPath = join(dir, '.temp/goal-orchestration/ledger.json');
     const ledger = (): Ledger => JSON.parse(readFileSync(ledgerPath, 'utf8')) as Ledger;
     const save = (value: Ledger) => writeFileSync(ledgerPath, JSON.stringify(value));
-    const run = (args: string[], overrides: NodeJS.ProcessEnv = {}) => {
+    const run = (args: string[], overrides: NodeJS.ProcessEnv = {}, nowMs?: number) => {
       const command = args[0] === 'wait'
         ? [join(import.meta.dir, 'fixtures/wait-cli.ts'), ...args.slice(1)]
         : [join(import.meta.dir, 'goalctl.ts'), ...args];
+      if (nowMs !== undefined) {
+        const clock = join(dir, '.temp/clock.ts');
+        writeFileSync(clock, `Date.now = () => ${nowMs};\n`);
+        command.unshift('--preload', clock);
+      }
       const result = spawnSync('bun', command, { cwd: dir, encoding: 'utf8', env: { ...env, ...overrides } });
       return result;
     };
@@ -4460,7 +4465,7 @@ process.exit(0);
   test('status shows the rounded weekly range while Claude dispatch uses its low end', () => {
     const r = repo();
     try {
-      const now = Math.floor(Date.now() / 1000);
+      const now = Date.parse('2026-10-07T00:00:00.000Z') / 1000;
       const resets = now + 3600;
       const weekResets = now + 160 * 3600;
       const snapshot = (week: number) => JSON.stringify({ at: now, rate_limits: {
@@ -4470,14 +4475,14 @@ process.exit(0);
       writeFileSync(join(r.dir, '.temp/goal-orchestration/usage-history.json'), JSON.stringify([
         { at: now - 3600, used: 5, resets, week: 6, weekResets },
       ]));
-      const status = r.run(['status']);
+      const status = r.run(['status'], {}, now * 1000);
       expect(status.status).toBe(0);
       expect(status.stdout).toContain('projected 7–327%');
       expect(status.stdout).toContain('warning');
       const brief = r.brief('G-001', { engine: 'claude' });
-      expect(r.run(['dispatch', brief, '--dry-run']).status).toBe(0);
+      expect(r.run(['dispatch', brief, '--dry-run'], {}, now * 1000).status).toBe(0);
       writeFileSync(r.env.GOAL_USAGE_FILE!, snapshot(12));
-      const dispatch = r.run(['dispatch', brief, '--dry-run']);
+      const dispatch = r.run(['dispatch', brief, '--dry-run'], {}, now * 1000);
       expect(dispatch.status).toBe(1);
       expect(dispatch.stderr).toContain('7d projected');
     } finally { r.cleanup(); }
