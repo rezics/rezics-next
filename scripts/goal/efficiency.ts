@@ -86,6 +86,7 @@ export interface EfficiencyOptions {
   env?: NodeJS.ProcessEnv;
   print?: (line: string) => void;
   reportError?: (line: string) => void;
+  reportDiagnostic?: (line: string) => void;
 }
 
 interface ParsedArgs {
@@ -137,41 +138,51 @@ function roleFor(session: Pick<Session, 'kind' | 'task'>): SessionRole {
   return session.task ? 'worker' : 'other';
 }
 
-async function readSession(file: string, account: string): Promise<Session | undefined> {
+async function readSession(file: string, account: string, since: number, until: number): Promise<Session | undefined> {
   let task: string | undefined;
   let kind: string | undefined;
   let turns = 0;
   let firstAt = '';
   let pending: Action[] = [];
   const steps: Step[] = [];
-  const lines = createInterface({ input: createReadStream(file), crlfDelay: Infinity });
-  for await (const line of lines) {
-    if (!task) task = startTask(line);
-    if (!KEYS.some(key => line.includes(key))) continue;
-    let value: unknown;
-    try { value = JSON.parse(line); } catch { continue; }
-    if (!value || typeof value !== 'object') continue;
-    const event = value as Record<string, unknown>;
-    if (!firstAt && typeof event.timestamp === 'string') firstAt = event.timestamp;
-    const payload = event.payload && typeof event.payload === 'object'
-      ? event.payload as Record<string, unknown> : {};
-    const type = payload.type;
-    if (type === 'task_started') turns++;
-    else if (type === 'message' && kind === undefined) kind = messageKind(payload);
-    else if (type === 'custom_tool_call' || type === 'function_call') {
-      const input = payload.input || payload.arguments || '';
-      pending.push(actionFor(payload.name, textValue(input)));
-    } else if (type === 'token_count' && payload.info && typeof payload.info === 'object') {
-      const info = payload.info as Record<string, unknown>;
-      const usage = info.last_token_usage && typeof info.last_token_usage === 'object'
-        ? info.last_token_usage as Record<string, unknown> : {};
-      const uniqueActions = [...new Set(pending)].sort();
-      steps.push({ turn: Math.max(turns, 1),
-        inputTokens: typeof usage.input_tokens === 'number' ? usage.input_tokens : 0,
-        cachedInputTokens: typeof usage.cached_input_tokens === 'number' ? usage.cached_input_tokens : 0,
-        actions: uniqueActions.length ? uniqueActions : ['think'] });
-      pending = [];
+  const input = createReadStream(file);
+  const lines = createInterface({ input, crlfDelay: Infinity });
+  try {
+    for await (const line of lines) {
+      if (!task) task = startTask(line);
+      if (!KEYS.some(key => line.includes(key))) continue;
+      let value: unknown;
+      try { value = JSON.parse(line); } catch { continue; }
+      if (!value || typeof value !== 'object') continue;
+      const event = value as Record<string, unknown>;
+      if (!firstAt && typeof event.timestamp === 'string') {
+        firstAt = event.timestamp;
+        const started = Date.parse(firstAt);
+        if (!Number.isFinite(started) || started < since || started > until) return undefined;
+      }
+      const payload = event.payload && typeof event.payload === 'object'
+        ? event.payload as Record<string, unknown> : {};
+      const type = payload.type;
+      if (type === 'task_started') turns++;
+      else if (type === 'message' && kind === undefined) kind = messageKind(payload);
+      else if (type === 'custom_tool_call' || type === 'function_call') {
+        const input = payload.input || payload.arguments || '';
+        pending.push(actionFor(payload.name, textValue(input)));
+      } else if (type === 'token_count' && payload.info && typeof payload.info === 'object') {
+        const info = payload.info as Record<string, unknown>;
+        const usage = info.last_token_usage && typeof info.last_token_usage === 'object'
+          ? info.last_token_usage as Record<string, unknown> : {};
+        const uniqueActions = [...new Set(pending)].sort();
+        steps.push({ turn: Math.max(turns, 1),
+          inputTokens: typeof usage.input_tokens === 'number' ? usage.input_tokens : 0,
+          cachedInputTokens: typeof usage.cached_input_tokens === 'number' ? usage.cached_input_tokens : 0,
+          actions: uniqueActions.length ? uniqueActions : ['think'] });
+        pending = [];
+      }
     }
+  } finally {
+    lines.close();
+    input.destroy();
   }
   if (!steps.length) return undefined;
   const session: Session = { account, task, kind: kind ?? '?', turns: Math.max(turns, 1), firstAt, steps, role: 'other' };
@@ -189,22 +200,29 @@ function sessionHomes(env: NodeJS.ProcessEnv): Array<{ path: string; account: st
       : basename(path).includes('codex') ? 'codex' : index === 0 ? 'codex' : `codex-${index}` }));
 }
 
-async function collectSessions(homes: Array<{ path: string; account: string }>): Promise<Session[]> {
+async function collectSessions(homes: Array<{ path: string; account: string }>, since: number, until: number): Promise<{ sessions: Session[]; opened: number }> {
   const seen = new Set<string>();
   const sessions: Session[] = [];
+  const dayMs = 24 * 60 * 60 * 1000;
+  // Directories use local start dates; resumed sessions stay in their original file.
+  const firstDay = Number.isFinite(since) ? new Date(since - dayMs).toISOString().slice(0, 10).replaceAll('-', '/') : '';
+  const lastDay = new Date(until + dayMs).toISOString().slice(0, 10).replaceAll('-', '/');
   for (const home of homes) {
     const root = join(home.path, 'sessions');
     if (!existsSync(root)) continue;
-    const files = [...new Bun.Glob('**/*.jsonl').scanSync({ cwd: root, onlyFiles: true })].sort();
+    const days = [...new Bun.Glob('????/??/??').scanSync({ cwd: root, onlyFiles: false })]
+      .filter(day => /^\d{4}\/\d{2}\/\d{2}$/u.test(day) && day >= firstDay && day <= lastDay).sort();
+    const files = days.flatMap(day => [...new Bun.Glob('**/*.jsonl').scanSync({ cwd: join(root, day), onlyFiles: true })]
+      .sort().map(file => join(day, file)));
     for (const relativeFile of files) {
       const file = join(root, relativeFile);
       if (seen.has(file)) continue;
       seen.add(file);
-      const session = await readSession(file, home.account);
+      const session = await readSession(file, home.account, since, until);
       if (session) sessions.push(session);
     }
   }
-  return sessions;
+  return { sessions, opened: seen.size };
 }
 
 function engineFor(session: Session): string {
@@ -504,7 +522,8 @@ export async function efficiencyCommand(args: string[], options: EfficiencyOptio
     reportError('--since must be no later than --until');
     return 2;
   }
-  const sessions = await collectSessions(sessionHomes(env));
+  const { sessions, opened } = await collectSessions(sessionHomes(env), since === undefined ? -Infinity : Date.parse(since), Date.parse(until));
+  if (since === undefined) (options.reportDiagnostic ?? console.error)(`Opened ${quantity(opened, 'session log')} (no lower time bound).`);
   const selected = sessions.filter(session => {
     const started = Date.parse(session.firstAt);
     return Number.isFinite(started) && started <= Date.parse(until)

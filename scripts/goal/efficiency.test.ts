@@ -1,5 +1,6 @@
-import { describe, expect, test } from 'bun:test';
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { describe, expect, spyOn, test } from 'bun:test';
+import * as fs from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { delimiter, dirname, join } from 'node:path';
 import { efficiencyCommand, type EfficiencyRecord } from './efficiency.ts';
 
@@ -30,14 +31,26 @@ function fixture() {
 async function run(f: ReturnType<typeof fixture>, args: string[], at = '2026-10-14T00:00:00Z') {
   const output: string[] = [];
   const errors: string[] = [];
+  const diagnostics: string[] = [];
   const status = await efficiencyCommand(args, {
     stateDirectory: f.stateDirectory,
     nowMs: Date.parse(at),
     env: { ...process.env, GOAL_CODEX_HOMES: f.homes.join(delimiter) },
     print: line => output.push(line),
     reportError: line => errors.push(line),
+    reportDiagnostic: line => diagnostics.push(line),
   });
-  return { status, output, errors };
+  return { status, output, errors, diagnostics };
+}
+
+function writeSession(home: string, day: string, name: string, started: string, resumed = started): string {
+  const file = join(home, 'sessions', day, `${name}.jsonl`);
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, [
+    { timestamp: started, payload: { type: 'task_started' } },
+    { timestamp: resumed, payload: { type: 'token_count', info: { last_token_usage: { input_tokens: 100 } } } },
+  ].map(event => JSON.stringify(event)).join('\n'));
+  return file;
 }
 
 function record(output: string[]): EfficiencyRecord {
@@ -46,6 +59,47 @@ function record(output: string[]): EfficiencyRecord {
 }
 
 describe('Goal efficiency command', () => {
+  test.each([
+    { since: '2026-10-01T00:00:00Z', until: '2026-10-01T23:59:59Z', days: ['2026/09/30', '2026/10/01', '2026/10/02'] },
+    { since: '2026-12-31T23:30:00Z', until: '2027-01-01T00:30:00Z', days: ['2026/12/30', '2026/12/31', '2027/01/01', '2027/01/02'] },
+  ])('opens only day directories in the window with a timezone margin: $since', async ({ since, until, days }) => {
+    const f = fixture();
+    const open = spyOn(fs, 'createReadStream');
+    try {
+      // Both neighboring local dates can contain starts in the UTC window.
+      const expected = days.map((day, index) => writeSession(f.homes[0]!, day, `inside-${index}`, index % 2 ? until : since,
+        '2027-02-01T00:00:00Z'));
+      writeSession(f.homes[0]!, '2025/12/31', 'old', since);
+      writeSession(f.homes[0]!, '2027/02/01', 'resumed-day', since);
+      const excluded = writeSession(f.homes[0]!, days[1]!, 'outside-start', '2025-01-01T00:00:00Z', since);
+      // Repeated configuration must not read the same log twice.
+      f.homes = [f.homes[0]!, f.homes[0]!];
+      const result = await run(f, ['--since', since, '--until', until, '--json']);
+      expect(result.status).toBe(0);
+      expect(record(result.output).sessions.total).toBe(days.length);
+      expect(record(result.output).steps).toBe(days.length);
+      expect(record(result.output).tokens.input).toBe(days.length * 100);
+      expect(open.mock.calls.map(call => call[0]).sort()).toEqual([...expected, excluded].sort());
+      expect(result.diagnostics).toEqual([]);
+    } finally { open.mockRestore(); f.cleanup(); }
+  });
+
+  test('an unbounded start reads earlier logs and reports the count without changing JSON', async () => {
+    const f = fixture();
+    const open = spyOn(fs, 'createReadStream');
+    try {
+      const old = writeSession(f.homes[0]!, '2025/12/31', 'old', '2025-12-31T23:00:00Z');
+      const nextLocalDay = writeSession(f.homes[0]!, '2026/01/02', 'timezone', '2026-01-01T23:00:00Z');
+      writeSession(f.homes[0]!, '2026/01/03', 'later', '2026-01-01T23:00:00Z');
+      const result = await run(f, ['--until', '2026-01-01T23:59:59Z', '--json']);
+      expect(result.status).toBe(0);
+      expect(record(result.output).sessions.total).toBe(2);
+      expect(record(result.output).window.since).toBeNull();
+      expect(open.mock.calls.map(call => call[0]).sort()).toEqual([old, nextLocalDay].sort());
+      expect(result.diagnostics).toEqual(['Opened 2 session logs (no lower time bound).']);
+    } finally { open.mockRestore(); f.cleanup(); }
+  });
+
   test('keeps the staged Python measures on the trimmed session fixtures', async () => {
     const f = fixture();
     try {
