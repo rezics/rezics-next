@@ -50,7 +50,7 @@ interface ReplayFamily {
 beforeAll(async () => {
   mkdirSync(evidenceDirectory, { recursive: true });
   if (!process.env.FUSEKI_URL || !process.env.REZICS_QA_RUN_ID) {
-    selfHostedRun = `command-replay-${randomUUID()}`;
+    selfHostedRun = `replay-${randomUUID().slice(0, 18)}`;
     const environment = { ...qaStackEnvironment(process.env),
       REZICS_FUSEKI_ASSEMBLER: exclusiveWorkScopeAssembler };
     const startup = await runQaStartupChildAsync(root,
