@@ -16,3 +16,10 @@ sweep and audit reports beside them.
 - The release filter broadens for visual novels and games.
 - Three test expectations of the single-year browse: an owner regression a mock cannot falsify, a string-date fixture swallowed into an undated Work, facet counts no longer asserted.
 - Zone withdrawal attempts survive only for the component lifetime; reload persistence needs a row's stated persona outcome before it is built.
+- Studio contributions/submissions scans stop after five pages or a later failure and return successful partial arrays without a continuation; api is checking the per-Work listing gap against its matrix.
+- Saved-filter concept choices drop the continuation after the first twelve results.
+- Scoped-rating question choices drain an unbounded rating-context population.
+- Wiki label reads ignore the page bound when specific labels are requested.
+- Wiki continuity choices drop capped remainders and treat later failures as successful partial choices.
+- Work-page rating choices expose the first context page as all available choices.
+- Relationship navigation without a live loader rewrites an incomplete initial page as complete.

@@ -10,7 +10,7 @@ launch manager's 2026-10-12 table, archived at
 | Manager | web; no watcher, polling or held task wait; coordinator wakes on mail/task exits |
 | Rows | 0 of 67 proved through persona API outcomes; old browser proofs do not prove rows under today's method |
 | Shared stack | Cold-started today, serving main; Account 3002, Main 3001, web 3000 and Storybook 6006 healthy (`task urls`) |
-| Measures | Program confirms 4 first + 3 fixes = 57% (4/7); last status reported 80% because it mislabeled two fixes as steps. Landed median/max 1 (G-2094); last reading 22.3M input / 156.1k output tokens, one session unavailable; tokens/proved row n/a |
+| Measures | Manager count: 5 first + 3 fixes = 63% (5/8); status reports 83% because two fixes remain mislabeled as steps (Program acknowledged). Landed median 1.5, max 2 (G-2090); last reading 26.8M input / 194.1k output tokens, one session unavailable; tokens/proved row n/a |
 
 ## Authorized work now
 
@@ -24,33 +24,35 @@ work and the measures; no task is added to spend allowance.
 
 | Task | Claim and next action |
 | --- | --- |
-| G-2090 | First handoff partial: bounded Library read fixes and twelve-instance inventory, unlanded. Fresh attempt 2 is fix round 1: replace the whole-source hash review gate; benign-comment fixture fails in QA `20261013t050302-bdbdd8` |
+| G-2090 | Landed at `5124002cd676`, closed verified on attempt 2 (one fix round). Structural guard plus bounded Library read/loan fixes; web/scripts types and all 33 merge unit/guard files pass. Worker QA: 27 guard + 6 Library tests pass |
 | G-2091 | First handoff partial, unlanded; pending key/Manage/Zone/proposal fixes preserved. Fresh attempt 2 is fix round 1: replace adapter hash reviews; comment-only fixture fails in QA `20261013t051545-d31a21`. Minimal proposal file added to claim via reclaim |
 | G-2092 | First handoff done, unlanded; Work-page Realm-header identity fix preserved. Fresh attempt 2 is fix round 1: replace hash-based exception reviews; harmless-comment fixture fails in QA `20261013t052140-4a2e0c`. Minimal Work-page file added via reclaim |
-| G-2093 | Capped-page filtering; brief ready, dispatch after G-2090 closes because zones claims overlap |
+| G-2093 | Running on first attempt after G-2090 released the catalogue claim; structural capped-page filter guard, no hash review inventory |
 | G-2094 | Landed at `775d67f79132` on attempt 1; canonical suffix expectations in both tests/story; 16 story cases, web types and all 31 merge unit/guard files pass; e2e execution stays with nightly regression |
 
-G-2090, G-2091 and G-2092 run fresh fix round 1. G-2094 is
-landed and closed. Program's mail `program-web-guards-released` confirmed G-2071 landed
+G-2091 and G-2092 run fresh fix round 1; G-2093 runs its first attempt.
+G-2090 and G-2094 are landed and closed. Program's mail `program-web-guards-released` confirmed G-2071 landed
 and released `scripts/qa/repository-guards.ts`. This manager appended all four
 inventory guard entries there; existing absent-file filtering allows each guard
 to join the gate when its task lands. Workers do not edit that registry.
 An API gap goes to Program as one operation/persona line, never a client workaround.
 Mail `web-continuation-api-gaps-20261013` reports three G-2090 gaps: continuing
 ranked Home candidates, Realm/Conditions-constrained year paging, and a writer's
-contributions/submissions for one Work. The exact twelve remaining instances
-are retained in G-2090's inventory; no further surface work in this fix round.
+contributions/submissions for one Work. Twelve remaining path/operation instances
+are retained in `scripts/static/web-continuations.inventory.json`; no follow-up
+surface work is dispatched before the row proofs. The guard and bounded-read fixes
+landed; the remaining defects are not claimed fixed.
 Program forwarded all three gaps to api to check against each row's matrix.
 G-2091's exact remaining client instances are Library collection/change/rating
 commands, scoped-rating projection/observation keys and Studio metadata/create
-keys. No extra work on them in this guard fix round; Library remains claimed by
-G-2090. The worker's reload-persistence proposal has no proved persona outcome
+keys. No extra work on them in this guard fix round; Library is now unclaimed.
+The worker's reload-persistence proposal has no proved persona outcome
 and is recorded in later.md rather than dispatched.
 All three initial guards used source hashes requiring review after harmless
 edits; concrete comment-only fixtures fail. Each brief now requires executable
 rules accepting correct edits automatically. Program was mailed
 `web-partial-conformance-fixes-measures-20261013`: the tool labels the two fixes
-after partial handoffs as steps; manager uses the stricter 57% measure meanwhile.
+after partial handoffs as steps; manager uses the stricter count meanwhile.
 Program's `program-web-measure-classification` confirms that count. Guards must
 state executable rules over code structure; source/hash exception inventories
 requiring harmless-change reviews are refused. If still needed at fix round 2,
