@@ -74,28 +74,30 @@ export interface FounderRealmRead {
 type RealmClient = ReturnType<typeof browserMainApi>;
 
 /** Address and managed-Realm reads for one typed client.
- * Production uses the request's host client; a recorded page passes the replaying client. */
+ * Production uses the request's host client; a recorded page passes the replaying client.
+ * These helpers keep their own names. A function named `managed` would be the same
+ * page read `read.managed()` calls, and the page-selection guard would then treat the
+ * founder's existing lookup as a new predicate. */
 export function founderRealmReads(client: RealmClient = browserMainApi()): FounderRealmRead {
-  return {
-    async resolve(handle, actingSubject) {
-      try {
-        const result = await client.v1.addresses.resolve.get({
-          query: { scope: 'space', key: handle, actingSubject } });
-        const data = result.data;
-        if (!data || data.status !== 'resolved' || !('capabilities' in data)) return null;
-        return data.capabilities?.realm ?? null;
-      } catch { return null; }
-    },
-    async managed(actingSubject, after) {
-      try {
-        const result = await client.v1.me['managed-realms'].get({
-          query: { actingSubject, ...after ? { after } : {} } });
-        if (!result.data) return null;
-        return { realms: result.data.items.map(item => ({ realm: item.realm, permissions: item.permissions })),
-          nextCursor: result.data.nextCursor };
-      } catch { return null; }
-    },
-  };
+  async function resolveReadableRealm(handle: string, actingSubject: string): Promise<string | null> {
+    try {
+      const result = await client.v1.addresses.resolve.get({
+        query: { scope: 'space', key: handle, actingSubject } });
+      const data = result.data;
+      if (!data || data.status !== 'resolved' || !('capabilities' in data)) return null;
+      return data.capabilities?.realm ?? null;
+    } catch { return null; }
+  }
+  async function readManagedRealmPage(actingSubject: string, after: string | null) {
+    try {
+      const result = await client.v1.me['managed-realms'].get({
+        query: { actingSubject, ...after ? { after } : {} } });
+      if (!result.data) return null;
+      return { realms: result.data.items.map(item => ({ realm: item.realm, permissions: item.permissions })),
+        nextCursor: result.data.nextCursor };
+    } catch { return null; }
+  }
+  return { resolve: resolveReadableRealm, managed: readManagedRealmPage };
 }
 
 /** The Realm at `handle` when this founder's permissions there include `realm.owner`.

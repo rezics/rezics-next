@@ -155,14 +155,16 @@ export function mapRealmCreation(input: {
     return { kind: 'created', identity: { ...receipt, name: input.name, handle: input.handle,
       visibility: input.visibility, listing: null, admission: null } };
   }
-  const mismatches = [
-    sameText(header.id, receipt.realm, 'realm header id'),
-    sameText(header.space, receipt.space, 'realm header space'),
-    sameText(header.revision, receipt.realmRevision, 'realm header revision'),
-    sameText(header.name, input.name, 'realm header name'),
-    sameText(header.visibility, input.visibility, 'realm header visibility'),
-  ].filter((item): item is string => item !== null);
-  if (mismatches.length > 0) return { kind: 'discrepancy', detail: mismatches.join('; ') };
+  let detail = '';
+  const note = (item: string | null) => {
+    if (item) detail = detail ? `${detail}; ${item}` : item;
+  };
+  note(sameText(header.id, receipt.realm, 'realm header id'));
+  note(sameText(header.space, receipt.space, 'realm header space'));
+  note(sameText(header.revision, receipt.realmRevision, 'realm header revision'));
+  note(sameText(header.name, input.name, 'realm header name'));
+  note(sameText(header.visibility, input.visibility, 'realm header visibility'));
+  if (detail) return { kind: 'discrepancy', detail };
   return { kind: 'created', identity: { ...receipt, name: header.name, handle: input.handle,
     visibility: header.visibility, listing: header.listing, admission: header.admission } };
 }
