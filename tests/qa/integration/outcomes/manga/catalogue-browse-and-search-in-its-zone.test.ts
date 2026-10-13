@@ -4,7 +4,7 @@ import { Pool } from 'pg';
 import catalogue from '../../../../../scripts/qa/cases/outcomes/manga/catalogue-browse-and-search-in-its-zone.ts';
 import { classificationContextBody, classifiedStatementBody, discloseClassificationConcept, type ClassificationPost } from '../../../../../scripts/dev/seed/classified-statement.ts';
 import { seedFirstPublicationDate } from '../../../../../scripts/dev/seed/relation-lexicon.ts';
-import { grantFixtureAuthority } from '../../../../../services/main/src/modules/access/fixture-authority.ts';
+import { grantMangaFixtureAuthority } from '../../../../../scripts/qa/cases/outcomes/manga/work-hub-and-edition-choice.ts';
 import { outcomeTest } from '../../../support/outcome-test.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
@@ -23,19 +23,7 @@ async function answer<T>(request: Promise<Response>, status = 200): Promise<T> {
   expect(response.status, `${response.status}: ${raw}`).toBe(status);
   return JSON.parse(raw) as T;
 }
-async function grant(person: PersonaSession, scope: string, action: string) {
-  const principal = await pool.query<{ id: string }>('SELECT id FROM access.principal WHERE account_subject = $1', [person.accountId]);
-  expect(principal.rows).toHaveLength(1);
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    await grantFixtureAuthority(client, { scope, requireDispatch: true,
-      representations: [{ principalId: principal.rows[0]!.id, actor: person.actingSubject!, action, lifetime: '8 hours' }],
-      grant: { actor: person.actingSubject!, action, lifetime: '8 hours' } });
-    await client.query('COMMIT');
-  } catch (error) { await client.query('ROLLBACK'); throw error; }
-  finally { client.release(); }
-}
+const grant = (person: PersonaSession, scope: string, action: string) => grantMangaFixtureAuthority(pool, person, scope, action);
 beforeAll(async () => {
   sessions = await personaSessions('public');
   pool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
@@ -62,13 +50,13 @@ beforeAll(async () => {
       broader: [], narrower: [], actingSubject: actor,
     }), 201);
     terms.push(term);
-    const post: ClassificationPost = <T>(path: string, body: unknown, _token: string, key: string) => answer<T>(owner.main('POST', path, body, key), 201);
+    const post: ClassificationPost = <T,>(path: string, body: unknown, _token: string, key: string) => answer<T>(owner.main('POST', path, body, key), 201);
     await discloseClassificationConcept(post, '', actor, term.concept, randomUUID());
   }
   manga = terms[0]!.concept; oneShot = terms[1]!.concept;
   const context = await answer<{ context: string; semanticRevision: string }>(owner.main('POST', '/v1/contexts', classificationContextBody(actor, terms)), 201);
   const published = await seedFirstPublicationDate({
-    post: <T>(path: string, body: object, key: string) => answer<T>(owner.main('POST', path, body, key), 201),
+    post: <T,>(path: string, body: object, key: string) => answer<T>(owner.main('POST', path, body, key), 201),
     authorizeDefinition: receipt => grant(owner, `semantic:read:${receipt.component}`, 'semantic.read'),
     currentDefinition: async notation => {
       const response = await owner.main('GET', `/v1/lexicon/definitions/${notation}?${acting(owner)}`);
