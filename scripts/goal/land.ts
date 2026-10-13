@@ -182,7 +182,10 @@ function classifyScope(scope: LandScope): { permitted: string[]; claimed: string
  * separator, so the handoff can start right after a sentence ("...in place.RESULT: done"). */
 export function handoffResult(text: string): string | undefined {
   const results = [...text.matchAll(/(?:^|(?<=[.!?)\]`'"’”]))RESULT:[^\r\n]*/gm)];
-  return results.length === 1 ? /^RESULT:[ \t]*(\S+)[ \t]*$/.exec(results[0]![0])?.[1] : undefined;
+  if (results.length !== 1) return undefined;
+  const line = results[0]![0];
+  // A qualified `done` is not done. A result that claims less may say why on its own line.
+  return /^RESULT:[ \t]*(\S+)[ \t]*$/.exec(line)?.[1] ?? /^RESULT:[ \t]*(partial|blocked)[ \t]+\S/.exec(line)?.[1];
 }
 
 /** Reviewers `GOAL_REVIEW_ENGINE` may select. Sol on the default Codex account is the norm; the others keep
@@ -247,6 +250,8 @@ export const SENSITIVE_REVIEW_PATHS = [
   'services/main/src/modules/governance/',
   'services/main/src/routes/rights.ts', 'services/main/src/routes/erasures.ts',
   'services/main/src/modules/composition/disclosure-read.ts',
+  // Decides what a closed Realm or Zone discloses on its direct routes.
+  'services/main/src/modules/realm-reads/',
   'services/main/src/modules/outbox/account-deletion-journal.ts',
   'services/main/src/modules/outbox/account-subject-deletion.ts',
 ] as const;

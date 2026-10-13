@@ -179,6 +179,9 @@ describe('Goal landing', () => {
     expect(handoffResult('RESULT: done\nRESULT: partial because unfinished')).toBeUndefined();
     expect(handoffResult('RESULT:\n done')).toBeUndefined();
     expect(handoffResult('RESULT: done but unfinished')).toBeUndefined();
+    expect(handoffResult('RESULT: partial — acceptance held for review.\n\nCASES: x')).toBe('partial');
+    expect(handoffResult('RESULT: blocked by the owner test\nCASES: x')).toBe('blocked');
+    expect(handoffResult('RESULT: partial — one\nRESULT: done')).toBeUndefined();
     expect(handoffResult('no handoff')).toBeUndefined();
   });
 
@@ -399,7 +402,8 @@ echo '{"findings":[]}' > "$out"
         'services/main/src/modules/disclosure/read.ts', 'services/main/src/modules/rights/store.ts',
         'services/main/src/modules/erasure/request.ts', 'services/main/src/routes/erasures.ts',
         'services/main/migrations/access/123_authority.sql', 'services/content/migrations/123_rights.sql',
-        'services/main/src/modules/media/erasure.ts']) expect(needsReview(kind, [path])).toBe(true);
+        'services/main/src/modules/media/erasure.ts', 'services/main/src/modules/realm-reads/read-zone.ts'])
+        expect(needsReview(kind, [path])).toBe(true);
       expect(needsReview(kind, ['apps/web/page.tsx', 'scripts/goal/land.ts'])).toBe(false);
     }
     for (const kind of ['outcome', 'surface', 'tooling', undefined]) {
