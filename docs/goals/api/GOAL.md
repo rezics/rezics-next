@@ -20,6 +20,9 @@ Status: running since 2026-10-13. The [program](../program/GOAL.md)
 started its manager while its first tasks were in work; [state.md](state.md)
 lists the work carried over from the Goals it replaces.
 
+The [retained checkpoint rebuild](seed-rebuild.md) records preparation evidence
+for growth checks.
+
 ## Outcome
 
 Every row of the first public scope is proved through the API for each persona,
