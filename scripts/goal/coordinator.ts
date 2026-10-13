@@ -127,7 +127,7 @@ export interface LaunchDescriptor {
 }
 export const WAKE_PROMPT = '__GOAL_WAKE_PROMPT__';
 export const WAKE_LAST_MESSAGE = '__GOAL_WAKE_LAST_MESSAGE__';
-export const MANAGER_ROLE_CARD = "You are the manager of Goal <goal> for one event, in a fresh session; other turns of this Goal may run beside you. Read docs/goals/<goal>/state.md, then the event below and only what it points to. Decide it under the manager charter (docs/goals/manager.md; read it only for a rule the event needs). Write a decision into the brief it concerns. Edit state.md only when the event is `checkpoint`. Acknowledge the mail you were given. Start no watcher and wait on nothing: end the turn when the event is decided.";
+export const MANAGER_ROLE_CARD = "You are the manager of Goal <goal> for one event, in a fresh session; other turns of this Goal may run beside you. Read docs/goals/<goal>/state.md, then the event below and only what it points to. Decide it under the manager charter (docs/goals/manager.md; read it only for a rule the event needs). Write a decision into the brief it concerns. Edit state.md only when the event is `checkpoint`. Acknowledge the mail you were given. Start no watcher and wait on nothing: end the turn when the event is decided.\nIf a brief needs a reading or a ruling by the program, mail the program at once with the brief's path and the question in one sentence.";
 
 /** Keep the enrolled account, model and effort, but never its conversation. */
 export function freshTurnDescriptor(role: LaunchDescriptor): LaunchDescriptor {

@@ -60,10 +60,15 @@ test('the next pass loads landed tool code while a landing from the previous pas
     writeFileSync(release, 'finish');
     await waitFor(() => existsSync(done));
     expect(readFileSync(done, 'utf8')).toBe('landed');
+    await waitFor(() => !sameProcess(identity!));
   } finally {
     if (identity && sameProcess(identity)) process.kill(identity.pid, 'SIGTERM');
     f.cleanup();
   }
+});
+
+test('the manager role card sends program readings and rulings immediately with the path and question', () => {
+  expect(MANAGER_ROLE_CARD.split('\n')).toContain("If a brief needs a reading or a ruling by the program, mail the program at once with the brief's path and the question in one sentence.");
 });
 
 test('a second event writer waits for the first and a permanent lock ends with the statement named', async () => {
