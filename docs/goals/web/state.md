@@ -10,7 +10,7 @@ launch manager's 2026-10-12 table, archived at
 | Manager | web; no watcher, polling or held task wait; coordinator wakes on mail/task exits |
 | Rows | 0 of 67 proved through persona API outcomes; old browser proofs do not prove rows under today's method |
 | Shared stack | Cold-started today, serving main; Account 3002, Main 3001, web 3000 and Storybook 6006 healthy (`task urls`) |
-| Measures | Four first attempts plus one manager-counted fix round; first-attempt share 80% (4/5); one landed task, G-2094, attempt 1 (median/max 1); automated measures pending Program G-2088 |
+| Measures | Status reports 100% (4/4), 4 first + 1 step; manager conservatively counts G-2090's conformance repair as a fix: 80% (4/5). Landed median/max 1 (G-2094); 12.8M input / 85.3k output tokens; tokens/proved row n/a |
 
 ## Authorized work now
 
@@ -18,6 +18,9 @@ Only the four client-contract classes and stale canonical-href expectations are
 authorized before rows are proved. Every task is `kind: tooling`, Sol on
 `codex`/`codex-1`, high effort (medium for href expectations), default service
 tier. At most eight live web workers. Briefs are at most forty lines.
+Program's `program-web-reset-early` mail voids the leftover-spending order: both
+Codex accounts reset around 04:58 UTC. Dispatch width depends only on settled
+work and the measures; no task is added to spend allowance.
 
 | Task | Claim and next action |
 | --- | --- |
@@ -37,8 +40,10 @@ Mail `web-continuation-api-gaps-20261013` reports three G-2090 gaps: continuing
 ranked Home candidates, Realm/Conditions-constrained year paging, and a writer's
 contributions/submissions for one Work. The exact twelve remaining instances
 are retained in G-2090's inventory; no further surface work in this fix round.
+Program forwarded all three gaps to api to check against each row's matrix.
 
-Until G-2072 enforces the method, the manager enforces it in every brief: merge
+G-2072 step 1 is on main (kind validation, landing rules and attempt cap). The
+manager continues to enforce the web rules in every brief: merge
 with `task goal -- merge`, no model diff review or task browser journey, targeted
 types/unit tests/guards and changed stories. Two fix rounds maximum, fresh
 resumes; then write cut/split/design note in the brief. On an exited task's wake,
