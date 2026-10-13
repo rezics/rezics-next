@@ -188,6 +188,8 @@ outcomeTest(attachment, 'owner', async () => {
   const current = await head(target.zone);
   await answer(configure(sessions.owner, target.zone, current.revision, sessions.realm));
   expect((await head(target.zone)).configuration.defaultRealm).toBe(sessions.realm);
+  // The operator variant must request a new attachment, rather than retain this owner's link.
+  await answer(configure(sessions.owner, target.zone, (await head(target.zone)).revision, null));
 });
 outcomeTest(attachment, 'moderator', async () => {
   await denied('moderator', 403);
@@ -209,6 +211,25 @@ outcomeTest(attachment, 'moderator', async () => {
 outcomeTest(attachment, 'operator', async () => {
   await denied('operator', 403);
   await resourceMandate('zone.edit', `zone:edit:${target.zone}`);
+  const zoneOnly = await head(target.zone);
+  const attempted = await configure(
+    sessions.operator,
+    target.zone,
+    zoneOnly.revision,
+    sessions.realm,
+  );
+  console.info(
+    JSON.stringify({
+      operatorZoneAuthority: {
+        operation: 'attach-realm-without-stewardship',
+        status: attempted.status,
+        answer: await attempted.clone().json(),
+      },
+    }),
+  );
+  const refusal = await answer<{ code: string }>(Promise.resolve(attempted), 403);
+  expect(refusal.code).toBe('authority_denied');
+  expect(await head(target.zone)).toEqual(zoneOnly);
   await resourceMandate('realm.attach', `realm:attach:${sessions.realm}`);
   const current = await head(target.zone);
   await answer(configure(sessions.operator, target.zone, current.revision, sessions.realm));
