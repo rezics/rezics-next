@@ -314,6 +314,8 @@ export interface ZoneCardOptions {
 
 export interface WorkCardSlotProps extends ZoneSlotProps {
   work: ZoneWork;
+  /** The host's Try destination for a Hub Work; absent when the viewer cannot open it. */
+  tryHref?: string;
   layout: ZoneCardLayout;
   rank?: number;
   /** The releases that matched the reader's release filter, when the card is a filtered result. */

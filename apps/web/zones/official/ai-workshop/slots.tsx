@@ -6,7 +6,6 @@ import { ArrowRightIcon, CornerDownLeftIcon, FolderOpenIcon, SquareTerminalIcon 
 import type { ComponentType } from 'react';
 import { CopyButton } from './copy-button.tsx';
 import { strings } from './strings.ts';
-import { OperationGate } from '../../../features/shell/operation-gate.tsx';
 
 // Slots of the official AI Workshop Zone, a gallery of prompts and skills.
 // Every card leads with copying the pick and trying it; the platform keeps
@@ -24,18 +23,20 @@ function Thumb({ work, Link }: { work: ZoneWork; Link: ComponentType<ZoneLinkPro
  * Copy first, then try: the two things a reader does with a prompt. A
  * published prompt or Skill copies its own text; any other pick its address.
  */
-function Actions({ zone, work, title, t, Link, compact }: {
+function Actions({ zone, work, title, t, Link, compact, tryHref }: {
   zone: ZoneSlotProps['zone']; work: ZoneWork; title: string; t: Strings; Link: ComponentType<ZoneLinkProps>; compact?: boolean;
+  tryHref?: string;
 }) {
   const { hub } = work;
   const words = t.copy[hub?.kind ?? 'link'];
-  const tryIt = <Link href={work.href} className="aw-try" data-compact={compact ? '' : undefined}>
+  const destination = hub ? tryHref : work.href;
+  const tryIt = destination === undefined ? null : <Link href={destination} className="aw-try" data-compact={compact ? '' : undefined}>
     <span className={compact ? 'sr-only' : undefined}>{t.tryIt}</span><span className="sr-only"> {title}</span>
     <ArrowRightIcon aria-hidden="true" /></Link>;
   return <div className="aw-actions">
     <CopyButton text={hub?.copyText ?? null} href={zoneLocalizedHref(work.href, zone.locale)} title={title} label={words.label}
       copied={words.copied} failed={words.failed} compact={compact} />
-    {hub ? <OperationGate operation="getV1HubWorksById">{tryIt}</OperationGate> : tryIt}
+    {tryIt}
   </div>;
 }
 
@@ -71,7 +72,7 @@ function Disclosed({ hub, t }: { hub: ZoneHubItem; t: Strings }) {
 }
 
 /** A copy-first card: a gallery card in grids, a row in lists and a one-line entry in the rail. */
-export function WorkshopCard({ zone, work, layout, Link }: WorkCardSlotProps) {
+export function WorkshopCard({ zone, work, layout, Link, tryHref }: WorkCardSlotProps) {
   const t = strings(zone.locale);
   const title = work.title?.value ?? t.untitled;
   const full = layout !== 'rail';
@@ -89,7 +90,7 @@ export function WorkshopCard({ zone, work, layout, Link }: WorkCardSlotProps) {
         {work.tagline.value}</p> : null}
       {work.hub ? <Disclosed hub={work.hub} t={t} /> : null}
     </div> : null}
-    <Actions zone={zone} work={work} title={title} t={t} Link={Link} compact={layout !== 'cover'} />
+    <Actions zone={zone} work={work} title={title} t={t} Link={Link} compact={layout !== 'cover'} tryHref={tryHref} />
   </article>;
 }
 

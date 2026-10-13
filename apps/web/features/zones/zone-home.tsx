@@ -4,6 +4,7 @@ import type { ModuleSlotProps, WorkCardSlotProps, ZoneBrowseEntry, ZoneCardOptio
 import { materializeData } from 'native-i18n';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
+import { operationOpen } from '../api/platform-access.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { PageContainer } from '../shell/page.tsx';
 import { installHostZoneAddresses } from './addresses.ts';
@@ -42,6 +43,17 @@ export function isType<Type extends ZoneModuleType>(placed: PlacedModule, type: 
 /** Whether a placed module has anything to show. */
 const shows = (placed: PlacedModule) => placed.state.state === 'ready' || placed.state.state === 'failed';
 
+/** Resolve the request's viewer decision before the package receives its Hub Try destination. */
+async function HubSlotCard({ Slot, ...props }: WorkCardSlotProps & { Slot: ComponentType<WorkCardSlotProps> }) {
+  const { readPlatformAccess } = await import('../api/main.ts');
+  const access = await readPlatformAccess();
+  return <Slot {...props} {...(operationOpen('getV1HubWorksById', access) ? { tryHref: props.work.href } : {})} />;
+}
+
+function slotCard(Slot: ComponentType<WorkCardSlotProps>, props: WorkCardSlotProps): ReactNode {
+  return props.work.hub ? <HubSlotCard Slot={Slot} {...props} /> : <Slot {...props} />;
+}
+
 /**
  * A catalogue card whose facts were not already loaded. The package only renders them;
  * this read is the statements and classifications the Work page already uses.
@@ -56,8 +68,8 @@ async function CatalogueSlotCard({ zone, work, options, locale, count, formatNam
   const { catalogueYears, readCatalogueFacts } = await import('./catalogue-facts.ts');
   const read = options.facts ?? await readCatalogueFacts(work.id, locale, count, formatNames);
   const facts = read.unavailable ? read : { ...read, years: catalogueYears(read.years, options.publicationYears) };
-  return <Slot zone={zone} work={work} layout={options.layout ?? 'cover'} rank={options.rank} matches={options.matches}
-    facts={facts} nextVolume={<NextVolume work={work.id} locale={locale} />} fallback={fallback} Link={LocalizedLink} />;
+  return slotCard(Slot, { zone, work, layout: options.layout ?? 'cover', rank: options.rank, matches: options.matches,
+    facts, nextVolume: <NextVolume work={work.id} locale={locale} />, fallback, Link: LocalizedLink });
 }
 
 /**
@@ -83,9 +95,8 @@ export function cardRenderer(zone: ZoneContext, pkg: ZonePackage | null, locale:
     const card = catalogue && options.facts === undefined
       ? <CatalogueSlotCard zone={zone} work={work} options={options} locale={locale} count={catalogue.count}
         formatNames={catalogue.formatNames} Slot={Slot} fallback={fallback} />
-      : <Slot zone={zone} work={work} layout={options.layout ?? 'cover'} rank={options.rank} matches={options.matches}
-        facts={options.facts} nextVolume={<NextVolume work={work.id} locale={locale} />} fallback={fallback}
-        Link={LocalizedLink} />;
+      : slotCard(Slot, { zone, work, layout: options.layout ?? 'cover', rank: options.rank, matches: options.matches,
+        facts: options.facts, nextVolume: <NextVolume work={work.id} locale={locale} />, fallback, Link: LocalizedLink });
     return <div key={work.id} className="relative">
       <SlotBoundary slot="workCard" fallback={fallback}>
         {card}
