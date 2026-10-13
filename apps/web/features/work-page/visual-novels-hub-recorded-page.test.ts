@@ -108,8 +108,8 @@ test('member: the edition seam consumes the recorded Work, exact releases and em
   if (!offered.ok) return;
   const releasePage = releases.answer as { items: unknown; nextCursor: string | null };
   const realizationPage = realizations.answer as { items: unknown; nextCursor: string | null };
-  expect(offered.data.releases).toEqual(releasePage.items);
-  expect(offered.data.realizations).toEqual(realizationPage.items);
+  expect<unknown>(offered.data.releases).toEqual(releasePage.items);
+  expect<unknown>(offered.data.realizations).toEqual(realizationPage.items);
   expect(offered.data.releasesCursor).toBe(releasePage.nextCursor);
   expect(offered.data.realizationsCursor).toBe(realizationPage.nextCursor);
   expect(await mainTrackingApi(actingSubject, () => main).preference((header.answer as { id: string }).id))

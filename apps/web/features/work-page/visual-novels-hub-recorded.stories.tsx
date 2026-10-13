@@ -67,19 +67,17 @@ function RecordedVisualNovelsHub({ persona, state, locale }: Props) {
     const main = browserMainApi(window.location.origin, { anonymous: persona === 'visitor', fetcher });
     const reads = booksEditionReads({ main, actingSubject });
     const actions = actingSubject ? createReaderStore({ actingSubject, main: () => main }) : undefined;
-    const pending = persona === 'member'
-      ? readBooksEditionPage(reads, id, locale).then(page => {
-        if (!page.header.ok) return { fault: `Work header: ${page.header.failure}` } as const;
-        return { shown: { kind: 'member' as const, page: { ...page, actions } } } as const;
-      })
-      : reads.readWorkHeader(id).then(read => {
-        if (!read.ok) return { fault: `Work header: ${read.failure}` } as const;
-        return { shown: { kind: 'visitor' as const, header: read.data } } as const;
-      });
+    const pending: Promise<{ ok: true; shown: Shown } | { ok: false; fault: string }> = persona === 'member'
+      ? readBooksEditionPage(reads, id, locale).then(page => (page.header.ok
+        ? { ok: true, shown: { kind: 'member', page: { ...page, actions } } }
+        : { ok: false, fault: `Work header: ${page.header.failure}` }))
+      : reads.readWorkHeader(id).then(read => (read.ok
+        ? { ok: true, shown: { kind: 'visitor', header: read.data } }
+        : { ok: false, fault: `Work header: ${read.failure}` }));
     void pending.then(result => {
       if (!mounted) return;
-      if ('fault' in result) setFault(result.fault);
-      else setShown(result.shown);
+      if (result.ok) setShown(result.shown);
+      else setFault(result.fault);
     });
     return () => { mounted = false; replay.dispose(); };
   }, [persona, state, locale]);
