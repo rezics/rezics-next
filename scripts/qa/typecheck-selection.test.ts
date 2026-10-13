@@ -1,8 +1,9 @@
 import { afterEach, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { TYPECHECK_WORKSPACES, typecheckWorkspaces } from './affected.ts';
+import { planAffected, TYPECHECK_WORKSPACES, typecheckWorkspaces } from './affected.ts';
 import { workerCheck } from '../goal/check.ts';
+import { preMergeTypecheckGate } from '../goal/typecheck-gate.ts';
 
 const scratch = join(import.meta.dir, '../../.temp/typecheck-selection-tests');
 const fixtures: string[] = [];
@@ -75,4 +76,20 @@ test('worker check selects the changed worktree project for an imported support 
   });
   expect(result.code).toBe(0);
   expect(commands).toEqual([['task', 'scripts:typecheck']]);
+});
+
+test('affected planning selects the scripts task from the worktree import graph', () => {
+  const p = project();
+  const plan = planAffected({ base: 'base', changed: ['tests/anywhere/detail.ts', 'tests/unread.test.ts'],
+    graph: [], sources: new Map(), exists: () => true, typecheckRoot: p.root });
+  expect(plan.tasks).toEqual([{ task: 'scripts:typecheck', because: 'tests/anywhere/detail.ts: script type check' }]);
+});
+
+test('the merge gate selects scripts from the branch imports before landing', async () => {
+  const p = project();
+  p.write('.temp/typechecks.txt', '');
+  p.write('Taskfile.yml', 'version: "3"\ntasks:\n  scripts:typecheck:\n    cmds:\n      - echo scripts:typecheck >> .temp/typechecks.txt\n');
+  const refusal = await preMergeTypecheckGate(p.root, p.root, 'unused-on-a-passing-branch', ['tests/anywhere/detail.ts'], false);
+  expect(refusal).toBeUndefined();
+  expect(readFileSync(join(p.root, '.temp/typechecks.txt'), 'utf8')).toBe('scripts:typecheck\n');
 });

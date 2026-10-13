@@ -78,7 +78,8 @@ export function prepareCheckTree(cwd: string, print: (line: string) => void = co
     warnHarnessCurrency(cwd, print);
     return;
   }
-  const result = updateWorktree(cwd, branch.replace(/^goal\//, ''));
+  const id = branch.replace(/^goal\//, '').replace(/^g-(\d+)$/i, 'G-$1');
+  const result = updateWorktree(cwd, id);
   print(result.line);
   return result;
 }

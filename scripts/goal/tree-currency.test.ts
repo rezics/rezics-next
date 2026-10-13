@@ -69,6 +69,13 @@ test('a tree with the last harness commit is current even with later unrelated m
   expect(lines).toEqual([]);
 });
 
+test('check uses the same task identifier as resume for a lowercase worker branch', () => {
+  const r = repository();
+  r.git(r.cwd, 'branch', '-m', 'goal/g-012');
+  const result = prepareCheckTree(r.cwd, () => {});
+  expect(result?.line).toStartWith('G-012 worktree:');
+});
+
 test('equivalent patches without ancestry still warn', () => {
   const r = repository();
   const fix = r.commit('scripts/qa/fix.ts', 'export {};\n');
