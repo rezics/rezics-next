@@ -9,7 +9,7 @@ import { goalMeasures, measureLines } from './measures.ts';
 import type { Attempt, Ledger, Task } from './types.ts';
 
 const scratch = join(import.meta.dir, '../../.temp/no-handoff-tests');
-const fixtures: ReturnType<typeof fixture>[] = [];
+const fixtures: { directory: string; task: Task; ledger: () => Ledger }[] = [];
 const progress = "I'm still waiting for the verification runs.";
 
 function fixture(text = progress, state: Task['state'] = 'running') {
