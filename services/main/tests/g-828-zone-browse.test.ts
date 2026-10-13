@@ -178,18 +178,29 @@ test('G828: title queries use adoption order, describe the fallback, and travers
   expect((await readZoneBrowse(data.make(), realm, { q: 'S' })).items).toHaveLength(20);
 });
 
-test('G828: lagging projection serves candidates with lower-bound counts through continuation', async () => {
+test('an incomplete projection cannot admit a traversal of all 65 eligible Works', async () => {
+  const data = fixture(65), session = data.make();
+  session.deps.zoneBrowse!.current = () => false;
+  await expect(readZoneBrowse(session, realm, {})).rejects.toBeInstanceOf(WorkReadUnavailable);
+});
+
+test('projection coverage lost during hydration cannot publish a continuation', async () => {
+  const data = fixture(65), session = data.make();
+  let probes = 0;
+  session.deps.zoneBrowse!.current = () => ++probes === 1;
+  await expect(readZoneBrowse(session, realm, {})).rejects.toBeInstanceOf(WorkReadUnavailable);
+  expect(probes).toBe(2);
+});
+
+test('G828: projection lag refuses reads until a complete traversal can resume', async () => {
   const data = fixture(30), first = data.make();
   first.deps.zoneBrowse!.current = () => false;
-  const page = await readZoneBrowse(first, realm, {});
-  expect(page.items).toHaveLength(20);
-  expect(page.matches).toEqual({ value: 20, kind: 'lower-bound' });
-  const second = await readZoneBrowse(data.make(page.nextCursor!), realm, {});
-  expect(second.items).toHaveLength(10);
-  expect(second.nextCursor).toBeNull();
-  expect(second.matches).toEqual({ value: 30, kind: 'lower-bound' });
-  expect(second.window.complete).toBe(false);
+  await expect(readZoneBrowse(first, realm, {})).rejects.toBeInstanceOf(WorkReadUnavailable);
   const fresh = await readZoneBrowse(data.make(), realm, {});
+  const lagged = data.make(fresh.nextCursor!);
+  lagged.deps.zoneBrowse!.current = () => false;
+  await expect(readZoneBrowse(lagged, realm, {})).rejects.toBeInstanceOf(WorkReadUnavailable);
   const end = await readZoneBrowse(data.make(fresh.nextCursor!), realm, {});
+  expect(end.items).toHaveLength(10);
   expect(end.matches.kind).toBe('exact');
 });

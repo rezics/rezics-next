@@ -46,7 +46,8 @@ async function publish(title: string): Promise<Work & { contribution: string; pu
   }), 201);
   return { ...work, contribution: draft.contribution, publicationDecision: publication.publicationDecision };
 }
-afterAll(async () => { await sessions?.close(); });
+const originalFetch = globalThis.fetch;
+afterAll(async () => { globalThis.fetch = originalFetch; await sessions?.close(); });
 
 import { acceptClassifiedStatement, discloseClassificationConcept, shareClassificationContext,
   type ClassificationPost } from '../../../scripts/dev/seed/classified-statement.ts';
@@ -58,6 +59,14 @@ const adoptionOrder = new Map<string, bigint>();
 let tv: string;
 const evidence: unknown[] = [];
 const preparationAnswers: unknown[] = [];
+let evidenceWrites = Promise.resolve();
+function saveEvidence() {
+  const serialized = JSON.stringify(evidence, null, 2);
+  evidenceWrites = evidenceWrites.then(async () => {
+    await Bun.write(`.temp/realm-browse-availability-${Bun.env.REZICS_QA_RUN_ID}.json`, serialized);
+  });
+  return evidenceWrites;
+}
 beforeAll(async () => {
   const started = Date.now();
   try {
@@ -133,7 +142,20 @@ beforeAll(async () => {
   }
   evidence.push({ preparationMs: Date.now() - started, inventory: works.map(work => work.work),
     conditionInventory: tvWorks.map(work => work.work) });
-  await Bun.write(`.temp/realm-browse-availability-${Bun.env.REZICS_QA_RUN_ID}.json`, JSON.stringify(evidence, null, 2));
+  await saveEvidence();
+  globalThis.fetch = Object.assign(async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+    const response = await originalFetch(input, init);
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    const persona = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined))
+      .get('x-qa-realm-browse-persona');
+    if (persona && url.origin === `http://127.0.0.1:${Bun.env.MAIN_PORT}`
+      && url.pathname === `/v1/realms/${short(sessions.realm)}/modules/browse`) {
+      evidence.push({ persona, request: `GET ${url.pathname}${url.search}`, status: response.status,
+        answer: await response.clone().text() });
+      await saveEvidence();
+    }
+    return response;
+  }, { preconnect: originalFetch.preconnect });
   expect(Date.now() - started).toBeLessThan(600_000);
   } finally {
     await Bun.write(`.temp/realm-browse-preparation-${Bun.env.REZICS_QA_RUN_ID}.json`,
@@ -142,28 +164,16 @@ beforeAll(async () => {
 }, 360_000);
 
 for (const name of ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const) {
-  test(`Realm Condition browse admits the complete Anime inventory for ${name}`, async () => {
+  test.concurrent(`Realm Condition browse admits the complete Anime inventory for ${name}`, async () => {
     const person = sessions[name];
-    const original = globalThis.fetch;
-    globalThis.fetch = Object.assign(async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
-      const response = await original(input, init);
-      const url = new URL(input instanceof Request ? input.url : String(input));
-      if (url.origin === `http://127.0.0.1:${Bun.env.MAIN_PORT}`
-        && url.pathname === `/v1/realms/${short(sessions.realm)}/modules/browse`) {
-        evidence.push({ persona: name, request: `GET ${url.pathname}${url.search}`, status: response.status,
-          answer: await response.clone().text() });
-        await Bun.write(`.temp/realm-browse-availability-${Bun.env.REZICS_QA_RUN_ID}.json`, JSON.stringify(evidence, null, 2));
-      }
-      return response;
-    }, { preconnect: original.preconnect });
-    try {
     // Inventory comes from successful command receipts, independently of browse.
     const traverse = async (condition: string | null, expected: Work[]) => {
       const params = new URLSearchParams({ sort: 'newest', limit: '5', ...(condition ? { concept: condition } : {}) });
       const seen: string[] = [], cursors = new Set<string>();
       do {
         const path = `/v1/realms/${short(sessions.realm)}/modules/browse?${params}`;
-        const response = await person.main('GET', path);
+        const response = await person.main('GET', path, undefined, undefined,
+          { headers: { 'x-qa-realm-browse-persona': name } });
         const page = await answer<Page>(Promise.resolve(response));
         expect(page.items.length).toBeLessThanOrEqual(5);
         expect(page.items.every(item => item.primaryCredits.some(credit => credit.role === 'author'
@@ -184,6 +194,5 @@ for (const name of ['visitor', 'stranger', 'member', 'owner', 'moderator', 'oper
     };
     const traversals = await Promise.allSettled([traverse(tv, tvWorks), traverse(null, works)]);
     for (const traversal of traversals) if (traversal.status === 'rejected') throw traversal.reason;
-    } finally { globalThis.fetch = original; }
   });
 }

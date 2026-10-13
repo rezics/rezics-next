@@ -12,7 +12,7 @@ import { RecommendationUnavailable } from '../recommendation/derived-generation.
 import { readRealmBasis } from '../realm-reads/read-realm.ts';
 import { GRAPHS, WORK_SEMANTIC_TYPES, iri } from '../work/activate.ts';
 import { serialStatuses, type SerialStatus } from '../work/metadata-schema.ts';
-import { decodeReadCursor, encodeReadCursor, pageResult, publicWork, WorkReadInvalid, WorkReadUnavailable,
+import { decodeReadCursor, encodeReadCursor, pageResult, publicWork, WorkReadExpired, WorkReadInvalid, WorkReadUnavailable,
   type WorkReadSession, type ReadRow } from '../work/read-session.ts';
 import { readSerialSummaries, readSerialStatistics } from '../work/summary-serial.ts';
 import { ZONE_BROWSE_COST, type zoneBrowseQuery, type ZoneBrowseSort, zoneLengthBands } from './contract.ts';
@@ -308,7 +308,11 @@ export async function readZoneBrowse(session: WorkReadSession, realm: string, qu
   };
   const projection = session.deps.zoneBrowse;
   if (!projection) throw new WorkReadUnavailable('Zone browse projection is unavailable');
+  if (!prior.current) throw new WorkReadExpired('Zone browse inventory changed; restart from a current projection');
   let current = prior.current && await projection.current(session.position);
+  // A lagging index can omit an already admitted selection ahead of the seek
+  // key. No continuation can recover that missing prefix without restarting.
+  if (!current) throw new WorkReadUnavailable('Zone browse projection is not current');
   for (let batchIndex = 0; batchIndex < ZONE_BROWSE_COST.batches; batchIndex++) {
     const entries = await projection.batch(realm, appliedSort, after, session.position);
     if (!entries.length) { more = false; break; }
@@ -325,6 +329,7 @@ export async function readZoneBrowse(session: WorkReadSession, realm: string, qu
     if (!more || page.length === limit) break;
   }
   current = current && await projection.current(session.position);
+  if (!current) throw new WorkReadUnavailable('Zone browse projection is not current');
   const counts = browseCandidates(examined, filter, text, appliedSort).facets;
   const pageIds = page.map(item => item.work);
   const conceptIds = [...new Set([...(filter.concept ?? []), ...(filter.conceptExclude ?? []),
