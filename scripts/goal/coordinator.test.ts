@@ -9,6 +9,7 @@ import { GoalCoordinator, TmuxLauncher, WAKE_LAST_MESSAGE, WAKE_PROMPT, claudeNa
 import { GoalMailStore } from './mail.ts';
 import { coordinatorStartDescriptor, coordinatorStartOptions, managerEvents } from './goalctl.ts';
 import { goalWindows, termspacesSession, turnWindowName, windowTurns, reconcileWindows } from './windows.ts';
+import { freshCoordinatorPass } from './manager-commands.ts';
 
 class RecordingLauncher implements IndependentLauncher {
   readonly launches: string[] = [];
@@ -18,6 +19,52 @@ class RecordingLauncher implements IndependentLauncher {
   live(token: string): boolean { return this.running.has(token); }
   launch(token: string): void { this.launches.push(token); this.running.add(token); }
 }
+
+test('the next pass loads landed tool code while a landing from the previous pass completes', async () => {
+  const f = fixture();
+  const landing = join(f.dir, 'landing.ts');
+  const pass = join(f.dir, 'pass.ts');
+  const entry = join(f.dir, 'tool.ts');
+  const ready = join(f.dir, 'landing-ready');
+  const release = join(f.dir, 'landing-release');
+  const done = join(f.dir, 'landing-done');
+  const output = join(f.dir, 'pass-output');
+  let identity: ReturnType<typeof processIdentity>;
+  try {
+    writeFileSync(landing, `import { existsSync, writeFileSync } from 'node:fs';
+      writeFileSync(${JSON.stringify(ready)}, String(process.pid));
+      while (!existsSync(${JSON.stringify(release)})) await Bun.sleep(10);
+      writeFileSync(${JSON.stringify(done)}, 'landed');`);
+    writeFileSync(entry, "export { coordinatorPass } from './pass.ts';\n");
+    const version = (value: string, launch: boolean) => `import { spawn } from 'node:child_process';
+      import { writeFileSync } from 'node:fs';
+      export function coordinatorPass() {
+        writeFileSync(${JSON.stringify(output)}, ${JSON.stringify(value)});
+        ${launch ? `spawn(process.execPath, [${JSON.stringify(landing)}], {stdio:'ignore'}).unref();` : ''}
+      }`;
+    writeFileSync(pass, version('old', true));
+    git(f.dir, ['init', '-q', '-b', 'main']);
+    git(f.dir, ['add', '.']);
+    git(f.dir, ['-c', 'user.name=Test', '-c', 'user.email=test@example.test', 'commit', '-qm', 'Original tool']);
+    await freshCoordinatorPass(f.stateDir, entry);
+    expect(readFileSync(output, 'utf8')).toBe('old');
+    await waitFor(() => existsSync(ready));
+    identity = processIdentity(Number(readFileSync(ready, 'utf8')));
+    expect(identity).toBeDefined();
+    writeFileSync(pass, version('new', false));
+    git(f.dir, ['add', 'pass.ts']);
+    git(f.dir, ['-c', 'user.name=Test', '-c', 'user.email=test@example.test', 'commit', '-qm', 'Land new tool']);
+    await freshCoordinatorPass(f.stateDir, entry);
+    expect(readFileSync(output, 'utf8')).toBe('new');
+    expect(sameProcess(identity!)).toBe(true);
+    writeFileSync(release, 'finish');
+    await waitFor(() => existsSync(done));
+    expect(readFileSync(done, 'utf8')).toBe('landed');
+  } finally {
+    if (identity && sameProcess(identity)) process.kill(identity.pid, 'SIGTERM');
+    f.cleanup();
+  }
+});
 
 function fixture() {
   const root = join(import.meta.dir, '../../.temp/coordinator-tests');

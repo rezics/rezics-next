@@ -137,9 +137,8 @@ export function coordinatorStartDescriptor(options: ReturnType<typeof coordinato
       ...Object.fromEntries(['GOAL_MAX_WORKERS','GOAL_MEMORY_FLOOR_GIB','STORYBOOK_MAX_WORKERS','GOAL_CODEX_HOME',
         'GOAL_CODEX_1_HOME','GOAL_CODEX_SERVICE_TIER'].filter(key=>process.env[key] !== undefined).map(key=>[key,process.env[key]!]))}};
 }
-export async function coordinatorCommand(args: string[]): Promise<void> {
-  const directory = eventStateDirectory();
-  const coordinator = new GoalCoordinator({stateDir:directory,
+function eventCoordinator(directory: string): GoalCoordinator {
+  return new GoalCoordinator({stateDir:directory,
     events:goal => {
       const goals = Object.keys(eventLedger(directory).goals ?? {});
       if (!goals.includes(goal)) return [];
@@ -152,6 +151,10 @@ export async function coordinatorCommand(args: string[]): Promise<void> {
       if (!home || realpathSync(home) !== descriptor.home) throw new Error('Selected engine account home changed; handover required');
       managerWakeGates(descriptor.engine);
     }});
+}
+export async function coordinatorCommand(args: string[]): Promise<void> {
+  const directory = eventStateDirectory();
+  const coordinator = eventCoordinator(directory);
   try {
     const [action, ...rest] = args;
     if (action === 'turns') {
@@ -244,14 +247,30 @@ export async function coordinatorCommand(args: string[]): Promise<void> {
     process.on('SIGTERM',stop); process.on('SIGINT',stop);
     try {
       do {
-        if (directory === stateDir) await (await import('./settle.ts')).settlePass();
-        const mail = new GoalMailStore({stateDir:directory,goals:Object.keys(eventLedger(directory).goals ?? {})});
-        try { mail.notifyOverdue(); } finally { mail.close(); }
-        coordinator.step();
-        const windows = reconcileWindows(directory,eventLedger(directory));
-        if (windows.error) console.error(windows.error);
+        await freshCoordinatorPass(directory);
         if (!once && !stopped) await Bun.sleep(interval);
       } while (!once && !stopped);
     } finally { process.off('SIGTERM',stop); process.off('SIGINT',stop); coordinator.release(); }
+  } finally { coordinator.close(); }
+}
+
+/** Keep ownership in the supervisor, but load the current tool for every pass.
+ * Normal child exit leaves asynchronous landings and independent turns alive. */
+export async function freshCoordinatorPass(directory: string, module = import.meta.url): Promise<void> {
+  const source = `const { coordinatorPass } = await import(${JSON.stringify(module)}); await coordinatorPass(${JSON.stringify(directory)});`;
+  const child = Bun.spawn([process.execPath, '-e', source], {cwd:root,stdout:'inherit',stderr:'inherit'});
+  const code = await child.exited;
+  if (code !== 0) throw new Error(`Coordinator pass exited ${code}`);
+}
+
+export async function coordinatorPass(directory: string): Promise<void> {
+  const coordinator = eventCoordinator(directory);
+  try {
+    if (directory === stateDir) await (await import('./settle.ts')).settlePass();
+    const mail = new GoalMailStore({stateDir:directory,goals:Object.keys(eventLedger(directory).goals ?? {})});
+    try { mail.notifyOverdue(); } finally { mail.close(); }
+    coordinator.step();
+    const windows = reconcileWindows(directory,eventLedger(directory));
+    if (windows.error) console.error(windows.error);
   } finally { coordinator.close(); }
 }
