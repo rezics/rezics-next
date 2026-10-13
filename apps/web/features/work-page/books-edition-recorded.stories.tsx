@@ -117,6 +117,7 @@ async function compare(canvasElement: HTMLElement, args: Props) {
   const canvas = within(canvasElement);
   const header = sample(args.row, args.persona, 'work-header').answer as WorkHeader;
   await expect(canvas.findByRole('heading', { level: 1, name: header.title.value })).resolves.toBeVisible();
+  await document.fonts.ready;
   const label = args.row === 'hub' ? 'availability-releases' : 'release-choices';
   const releases = sample(args.row, args.persona, label).answer as BooksReleasePage;
   for (const release of releases.items) {

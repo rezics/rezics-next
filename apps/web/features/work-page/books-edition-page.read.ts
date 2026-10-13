@@ -39,7 +39,7 @@ export async function settleNullable<T>(call: () => Promise<Answer<T>>, keepProb
   } catch { return { ok: false, failure: 'unavailable' }; }
 }
 
-/** The four Work reads shared by the server page and its recorded surface. */
+/** Work reads shared by the server page and its recorded surface. */
 export function booksEditionReads({ main, actingSubject }: { main: MainClient; actingSubject?: string }) {
   return {
     readWorkHeader: (id: string): Promise<BooksRead<WorkHeader>> =>
