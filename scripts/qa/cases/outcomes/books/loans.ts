@@ -1,6 +1,5 @@
-import { proved, rowOutcomes } from '../../outcomes.ts';
+import { proved, rowOutcomes } from '../../outcome-cells.ts';
 
-// Registration draft: the QA planner blocks execution; these cells are not certified.
 const file = 'tests/qa/integration/outcomes/books/collection-tracking-and-progress.test.ts';
 export default rowOutcomes('books/loans', {
   visitor: proved('private copies and loans require authentication', file),
