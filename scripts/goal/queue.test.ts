@@ -354,11 +354,12 @@ async function endedWorker(f: ReturnType<typeof repository>) {
 
 test.each(['memory', 'cap', 'account'])('a resume waits for %s admission and preserves its message and options', async gate => {
   const f = repository(); const task = await endedWorker(f);
-  const usage = join(f.env.GOAL_CODEX_1_HOME, 'sessions/usage.jsonl');
+  const usageDirectory = join(f.env.GOAL_CODEX_1_HOME, 'sessions/2026/10/13');
+  const usage = join(usageDirectory, 'usage.jsonl');
   if (gate === 'memory') writeFileSync(f.meminfo, 'MemAvailable: 1024 kB\n');
   if (gate === 'cap') f.env.GOAL_MAX_WORKERS = '0';
   if (gate === 'account') {
-    mkdirSync(join(f.env.GOAL_CODEX_1_HOME, 'sessions'), { recursive: true });
+    mkdirSync(usageDirectory, { recursive: true });
     writeFileSync(usage, JSON.stringify({ timestamp: new Date().toISOString(), payload: { rate_limits: {
       primary: { used_percent: 100, window_minutes: 300, resets_at: Date.now() / 1000 + 3600 },
     } } }));
