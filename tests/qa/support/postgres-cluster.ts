@@ -5,7 +5,7 @@ import { createServer } from 'node:net';
 import { userInfo } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { Client } from 'pg';
-import { physicalPath, POSTGRES_SOCKET_LIMIT, postgresSocketRefusal } from '../../../scripts/goal/postgres-socket.ts';
+import { ensurePostgresSocketDirectory, releasePostgresSocketDirectory } from '../../../scripts/goal/postgres-socket.ts';
 import { processRunning } from './process-liveness.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -72,14 +72,9 @@ function clusterUser(role: string | undefined): string {
   return user;
 }
 
-/** TCP is always enabled. A Unix socket is used only when its path fits `sun_path`. */
-function socketArgument(port: number): string {
-  const directory = join(root, '.temp', 'pg-sock');
-  const socket = join(directory, `.s.PGSQL.${port}`);
-  const tooLong = postgresSocketRefusal(root) !== undefined
-    || Buffer.byteLength(physicalPath(socket)) > POSTGRES_SOCKET_LIMIT;
-  if (tooLong) return '-c unix_socket_directories=';
-  mkdirSync(directory, { recursive: true, mode: 0o700 });
+/** TCP and a Unix socket remain available even under a deeply nested checkout. */
+function socketArgument(): string {
+  const directory = ensurePostgresSocketDirectory(root);
   chmodSync(directory, 0o700);
   return `-k ${directory}`;
 }
@@ -132,7 +127,7 @@ function ensureStopped(dataDirectory: string, mode: 'fast' | 'immediate'): void 
       ...(pid !== undefined && processRunning(pid) ? [pid] : []),
       ...pidsUsing(dataDirectory).filter(candidate => processRunning(candidate)),
     ];
-    if (!alive.length) return;
+    if (!alive.length) { releasePostgresSocketDirectory(root); return; }
     pause(20);
   }
   throw new Error(`PostgreSQL is still running in ${dataDirectory}`);
@@ -141,7 +136,7 @@ function ensureStopped(dataDirectory: string, mode: 'fast' | 'immediate'): void 
 function launch(dataDirectory: string, log: string, port: number): void {
   execFileSync('pg_ctl', [
     '-D', dataDirectory, '-l', log,
-    '-o', `-h 127.0.0.1 -p ${port} ${socketArgument(port)}`,
+    '-o', `-h 127.0.0.1 -p ${port} ${socketArgument()}`,
     '-t', '60', '-w', 'start',
   ], { stdio: 'pipe', timeout: 90_000 });
 }

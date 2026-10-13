@@ -1,5 +1,6 @@
-import { existsSync, realpathSync } from 'node:fs';
-import { dirname, relative, resolve } from 'node:path';
+import { createHash } from 'node:crypto';
+import { existsSync, lstatSync, mkdirSync, readdirSync, readlinkSync, realpathSync, symlinkSync, unlinkSync } from 'node:fs';
+import { dirname, join, relative, resolve } from 'node:path';
 
 /** Linux `sun_path` is 108 bytes including the terminating NUL.
  * https://man7.org/linux/man-pages/man7/unix.7.html */
@@ -14,8 +15,17 @@ export function physicalPath(path: string): string {
   return resolve(realpathSync(parent), relative(parent, resolve(path)));
 }
 
-export function postgresSocketPath(checkout: string): string {
-  return checkout + postgresSocketSuffix;
+/** A short alias points into the worktree: removing the worktree also removes
+ * the actual socket directory. Cluster shutdown removes the now-unused alias. */
+export function postgresSocketDirectory(checkout: string, aliasRoot = '/tmp'): string {
+  const owned = join(physicalPath(checkout), '.temp', 'pg-sock');
+  if (Buffer.byteLength(join(owned, '.s.PGSQL.65535')) <= POSTGRES_SOCKET_LIMIT) return owned;
+  const key = createHash('sha256').update(physicalPath(checkout)).digest('hex').slice(0, 24);
+  return join(physicalPath(aliasRoot), `rezics-pg-${key}`);
+}
+
+export function postgresSocketPath(checkout: string, aliasRoot = '/tmp'): string {
+  return join(postgresSocketDirectory(checkout, aliasRoot), '.s.PGSQL.65535');
 }
 
 export function postgresSocketByteLength(checkout: string): number {
@@ -23,9 +33,34 @@ export function postgresSocketByteLength(checkout: string): number {
 }
 
 /** Names the socket path and its byte length when the checkout cannot bind one. */
-export function postgresSocketRefusal(checkout: string): string | undefined {
-  const path = postgresSocketPath(checkout);
+export function postgresSocketRefusal(checkout: string, aliasRoot = '/tmp'): string | undefined {
+  const path = postgresSocketPath(checkout, aliasRoot);
   const bytes = Buffer.byteLength(path);
   if (bytes <= POSTGRES_SOCKET_LIMIT) return undefined;
   return `runner configuration: PostgreSQL socket path is ${bytes} bytes, above the ${POSTGRES_SOCKET_LIMIT}-byte limit: ${path}`;
+}
+
+export function ensurePostgresSocketDirectory(checkout: string, aliasRoot = '/tmp'): string {
+  const refusal = postgresSocketRefusal(checkout, aliasRoot);
+  if (refusal) throw new Error(refusal);
+  const owned = join(physicalPath(checkout), '.temp', 'pg-sock');
+  const directory = postgresSocketDirectory(checkout, aliasRoot);
+  mkdirSync(owned, { recursive: true, mode: 0o700 });
+  if (directory !== owned) {
+    try { symlinkSync(owned, directory); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST'
+        || !lstatSync(directory).isSymbolicLink() || readlinkSync(directory) !== owned) throw error;
+    }
+  }
+  return directory;
+}
+
+export function releasePostgresSocketDirectory(checkout: string, aliasRoot = '/tmp'): void {
+  const owned = join(physicalPath(checkout), '.temp', 'pg-sock');
+  const directory = postgresSocketDirectory(checkout, aliasRoot);
+  if (directory === owned || (existsSync(owned) && readdirSync(owned).length)) return;
+  try {
+    if (lstatSync(directory).isSymbolicLink() && readlinkSync(directory) === owned) unlinkSync(directory);
+  } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
 }
