@@ -135,7 +135,7 @@ async function proveOwner() {
   } });
   await answer(sessions.visitor.main('GET', `/v1/content-revisions/${f.page.revisionId}`), 404);
   const replay = await answer<Receipt>(sample('replay-original-publication', 'POST', `${f.path}/site-publications`,
-    f.body, f.key), 201);
+    f.body, f.key));
   expect(replay).toEqual({ ...f.receipt, replayed: true });
   await answer(sample('stale-publication-refused', 'POST', `${f.path}/site-publications`, f.body), 409);
   expect((await home()).page?.document).toEqual(f.draftDocument);
