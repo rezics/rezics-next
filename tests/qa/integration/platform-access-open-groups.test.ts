@@ -202,6 +202,7 @@ beforeAll(async () => {
     await answer(http(configuration, 'visitor', memberBanPath), 404);
     expect(await answer(http(configuration, 'member', siblingPath), 403)).toMatchObject({ code: 'platform_closed' });
   }
+  controls.push('all callers: HTTP 200, declared groups/operations/generation shape and private, no-store caching');
   controls.push('explicit closed and omitted outside QA fallback: all six baseline summaries; member/visitor ban hidden; commerce refused');
 
   for (const persona of personaNames) {
