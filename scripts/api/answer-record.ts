@@ -125,7 +125,9 @@ export class AnswerRecordValidator {
   private validator(schema: XSchema): Validator {
     let validator = this.schemas.get(schema);
     if (!validator) {
-      validator = Compile({ ...this.contract, allOf: [schema] });
+      // Only a schema that holds a reference needs the document as its root; a root costs its whole size at every compile.
+      const root = JSON.stringify(schema).includes('"$ref"') ? this.contract : {};
+      validator = Compile({ ...root, allOf: [schema] });
       this.schemas.set(schema, validator);
     }
     return validator;
