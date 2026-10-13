@@ -46,6 +46,7 @@ function harness() {
     author: false,
     owns: false,
     grant: '',
+    grants: [] as string[],
     administrator: true,
     provision: true,
     control: true,
@@ -106,18 +107,16 @@ function harness() {
                   },
                 ]
               : []),
-            ...(state.grant
-              ? [
-                  {
-                    id: '00000000-0000-4000-8000-000000000031',
-                    action: 'platform:resource:zone.edit',
-                    scope_id: state.grant,
-                    generation: '1',
-                    valid_until: null,
-                    witness: `zone-edit:${state.grantGeneration}`,
-                  },
-                ]
-              : []),
+            ...(state.grants.length ? state.grants : state.grant ? [state.grant] : []).map(
+              (scope, index) => ({
+                id: `00000000-0000-4000-8000-${String(31 + index).padStart(12, '0')}`,
+                action: 'platform:resource:zone.edit',
+                scope_id: scope,
+                generation: '1',
+                valid_until: null,
+                witness: `zone-edit:${state.grantGeneration}`,
+              }),
+            ),
           ],
         };
       }
@@ -353,6 +352,30 @@ test('a wildcard zone.edit grant still needs Zone or Space ownership', async () 
   expect(
     env.sparql.some((query) => query.startsWith('PREFIX rv: <https://rezics.com/vocab/> ASK')),
   ).toBe(true);
+});
+
+test('Zone content uses the exact mandate in either grant order and fences its saved proof', async () => {
+  for (const grants of [['zone:edit:*', zoneEditScope(zone)], [zoneEditScope(zone), 'zone:edit:*']]) {
+    const env = harness();
+    env.state.grants = grants;
+    const saved = await platformAdministratorProof(env.client, principalId, actor, true, {
+      action: 'zone.edit', scope: zoneEditScope(zone),
+    });
+    expect(saved).not.toBeNull();
+    expect(await platformAdministratorProofCurrent(env.client, saved!, principalId, actor)).toBe(true);
+    for (const action of ['content.draft', 'content.publish']) {
+      expect(await zonePageAdministratorAllowed(env.client, env.graph, principalId, actor,
+        { ...saved!, resolved_zone_page: zone }, action)).toBe(true);
+    }
+    env.sql.length = 0;
+    expect(await zonePageContentAllowed(env.client, env.graph, principalId, actor, zone, false)).toBe(true);
+    expect(env.sql.filter(query => query.includes('read_platform_permissions'))).toHaveLength(2);
+    expect(env.sparql).toEqual([]);
+    env.state.grants = ['zone:edit:*'];
+    expect(await zonePageAdministratorAllowed(env.client, env.graph, principalId, actor,
+      { ...saved!, resolved_zone_page: zone }, 'content.publish')).toBe(false);
+    expect(await platformAdministratorProofCurrent(env.client, saved!, principalId, actor)).toBe(false);
+  }
 });
 
 test('draft reads refuse an administrator resource grant without platform use or current control', async () => {

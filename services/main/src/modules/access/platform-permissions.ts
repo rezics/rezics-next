@@ -63,6 +63,12 @@ export function findPlatformPermission(
   action: string,
   scope = PLATFORM_SCOPE,
 ): PlatformPermission | null {
+  // Resource consumers distinguish an exact mandate from a wildcard that
+  // still needs owner checks. Storage order must not hide the exact proof.
+  if (action !== 'platform:grant' && !action.startsWith('platform:use:')) {
+    const exact = permissions.find((row) => row.action === action && row.scope_id === scope);
+    if (exact) return exact;
+  }
   return (
     permissions.find(
       (row) =>
