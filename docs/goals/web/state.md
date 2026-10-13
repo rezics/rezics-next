@@ -10,7 +10,7 @@ launch manager's 2026-10-12 table, archived at
 | Manager | web; no watcher, polling or held task wait; coordinator wakes on mail/task exits |
 | Rows | 0 of 67 proved through persona API outcomes; old browser proofs do not prove rows under today's method |
 | Shared stack | Cold-started today, serving main; Account 3002, Main 3001, web 3000 and Storybook 6006 healthy (`task urls`) |
-| Measures | Four first attempts, no fix rounds; first-attempt share 100% (4/4); one landed task, G-2094, attempt 1 (median/max 1); automated measures pending Program G-2088 |
+| Measures | Four first attempts plus one manager-counted fix round; first-attempt share 80% (4/5); one landed task, G-2094, attempt 1 (median/max 1); automated measures pending Program G-2088 |
 
 ## Authorized work now
 
@@ -21,18 +21,22 @@ tier. At most eight live web workers. Briefs are at most forty lines.
 
 | Task | Claim and next action |
 | --- | --- |
-| G-2090 | Continuations and capped lists; home/library/zones and its guard |
+| G-2090 | First handoff partial: bounded Library read fixes and twelve-instance inventory, unlanded. Fresh attempt 2 is fix round 1: replace the whole-source hash review gate; benign-comment fixture fails in QA `20261013t050302-bdbdd8` |
 | G-2091 | Accepted commands stay pending; manage/command adapter and its guard |
 | G-2092 | Identity-required reads; realm/client adapters and its guard |
 | G-2093 | Capped-page filtering; brief ready, dispatch after G-2090 closes because zones claims overlap |
 | G-2094 | Landed at `775d67f79132` on attempt 1; canonical suffix expectations in both tests/story; 16 story cases, web types and all 31 merge unit/guard files pass; e2e execution stays with nightly regression |
 
-G-2090, G-2091 and G-2092 are running on first attempts; G-2094 is landed and
-closed. Program's mail `program-web-guards-released` confirmed G-2071 landed
+G-2090 runs fresh fix round 1; G-2091 and G-2092 run first attempts. G-2094 is
+landed and closed. Program's mail `program-web-guards-released` confirmed G-2071 landed
 and released `scripts/qa/repository-guards.ts`. This manager appended all four
 inventory guard entries there; existing absent-file filtering allows each guard
 to join the gate when its task lands. Workers do not edit that registry.
 An API gap goes to Program as one operation/persona line, never a client workaround.
+Mail `web-continuation-api-gaps-20261013` reports three G-2090 gaps: continuing
+ranked Home candidates, Realm/Conditions-constrained year paging, and a writer's
+contributions/submissions for one Work. The exact twelve remaining instances
+are retained in G-2090's inventory; no further surface work in this fix round.
 
 Until G-2072 enforces the method, the manager enforces it in every brief: merge
 with `task goal -- merge`, no model diff review or task browser journey, targeted
