@@ -1,0 +1,4587 @@
+{
+  "version": 1,
+  "row": "books/choose-among-mixed-formats-mixed-formats",
+  "personas": {
+    "visitor": [
+      {
+        "label": "work-header",
+        "operationId": "getV1WorksById",
+        "method": "GET",
+        "path": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9?",
+        "status": 200,
+        "answer": {
+          "profile": "work-read-v1",
+          "id": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "revision": "https://rezics.com/id/01a135fe-9a98-761d-8b20-bd15e0a207d4",
+          "mainVersion": "https://rezics.com/id/01a135fe-9a98-761c-96f7-511e59732d14",
+          "title": {
+            "value": "Bookgarden2002b07d2f8f4c0b9565ace11cf95ee3",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "cover": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "work",
+            "key": "e090960391a0ba31326754bfd6e1dc75"
+          },
+          "types": [
+            "https://schema.org/Book"
+          ],
+          "tagline": null,
+          "completionStatus": null,
+          "chapterCount": null,
+          "wordCount": null,
+          "lastUpdatedAt": null,
+          "disclosure": "public",
+          "publicationState": "unpublished",
+          "descriptionObligations": {
+            "status": "unassessed"
+          },
+          "description": null,
+          "metadataRevision": null,
+          "originalTitle": null,
+          "mainVersionRevision": "https://rezics.com/id/01a135fe-a019-728b-a0ca-f059068dad6a",
+          "mainVersionLabel": null,
+          "selectedLanguage": "en",
+          "sourcePosition": {
+            "dataEpoch": "a3527a64-fa41-425a-aca1-1ae21566a101",
+            "sequence": "62",
+            "dependencyToken": "d389debf3b5255084347d5b411328b31fc7cc691f51efa1f0aa90d9f1fab7b53"
+          },
+          "links": {
+            "versions": "/v1/query#work-versions",
+            "classifications": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/classifications",
+            "adoptions": "/v1/query#work-adoptions",
+            "ratings": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/ratings",
+            "history": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/history",
+            "credits": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/credits",
+            "metadata": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/metadata",
+            "editions": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/editions"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "work-credits",
+        "operationId": "getV1WorksByIdCredits",
+        "method": "GET",
+        "path": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/credits?",
+        "status": 200,
+        "answer": {
+          "profile": "template-result-v1",
+          "query": "https://rezics.com/query/work-credits",
+          "revision": 1,
+          "items": [
+            {
+              "id": "https://rezics.com/id/01a135fe-9aa2-743f-b631-75264cc28927",
+              "role": "author",
+              "participantKind": "agent",
+              "provider": null,
+              "key": null,
+              "ordinal": null,
+              "agent": "https://rezics.com/id/3f125024-3738-428f-b2b4-44c35a439fcb",
+              "displayName": null,
+              "handle": null
+            }
+          ],
+          "complete": true,
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "a3527a64-fa41-425a-aca1-1ae21566a101",
+            "sequence": "62",
+            "dependencyToken": "24c61e7b34f1c28b4e7e1d31f8e3e5b076a0c30880e570f0223e506cb28d7f70"
+          },
+          "count": {
+            "value": 1,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8",
+          "etag": "W/\"242c5c0f98ea0600b10e27cc1c36164200ea5017b22abf9f4b9f556c51a10585\""
+        }
+      },
+      {
+        "label": "release-choices",
+        "operationId": "getV1WorksByIdReleases",
+        "method": "GET",
+        "path": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/releases?&limit=20",
+        "status": 200,
+        "answer": {
+          "items": [
+            {
+              "profile": "release-v2",
+              "id": "https://rezics.com/id/2493d569-be9d-4dfd-88f8-cf06af5eedcd",
+              "revision": "https://rezics.com/id/01a135fe-a721-75b8-9e54-b147976400e4",
+              "kind": "formal",
+              "status": "official",
+              "contentLanguages": [
+                "en"
+              ],
+              "isTranslation": false,
+              "originalLanguages": [],
+              "titleLanguage": "en",
+              "tracklistLanguage": null,
+              "title": {
+                "value": "Bookgarden2002b07d2f8f4c0b9565ace11cf95ee3",
+                "language": "en"
+              },
+              "publisher": "Original fixture owner",
+              "editionStatement": "ebook",
+              "isbn13": null,
+              "publicationYear": 2026,
+              "originalUrl": null,
+              "fixedRelease": null,
+              "coverage": [
+                {
+                  "realization": "https://rezics.com/id/5bed5375-caf2-49aa-98a4-5e4696217311",
+                  "revision": "https://rezics.com/id/01a135fe-a3ca-70a1-bb3f-dac2d5deab27",
+                  "completeness": "complete",
+                  "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+                  "mainVersion": "https://rezics.com/id/01a135fe-9a98-761c-96f7-511e59732d14",
+                  "language": "en"
+                }
+              ],
+              "legacyCoverage": null,
+              "identifiers": [],
+              "platform": "ebook",
+              "territory": null,
+              "snapshots": []
+            },
+            {
+              "profile": "release-v2",
+              "id": "https://rezics.com/id/8a569afe-958b-452a-83f4-402aa9b77674",
+              "revision": "https://rezics.com/id/01a135fe-a8cf-7140-832d-6038eedb5ccd",
+              "kind": "formal",
+              "status": "official",
+              "contentLanguages": [
+                "en"
+              ],
+              "isTranslation": false,
+              "originalLanguages": [],
+              "titleLanguage": "en",
+              "tracklistLanguage": null,
+              "title": {
+                "value": "Bookgarden2002b07d2f8f4c0b9565ace11cf95ee3",
+                "language": "en"
+              },
+              "publisher": "Original fixture owner",
+              "editionStatement": "audiobook",
+              "isbn13": null,
+              "publicationYear": 2026,
+              "originalUrl": null,
+              "fixedRelease": null,
+              "coverage": [
+                {
+                  "realization": "https://rezics.com/id/5bed5375-caf2-49aa-98a4-5e4696217311",
+                  "revision": "https://rezics.com/id/01a135fe-a3ca-70a1-bb3f-dac2d5deab27",
+                  "completeness": "complete",
+                  "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+                  "mainVersion": "https://rezics.com/id/01a135fe-9a98-761c-96f7-511e59732d14",
+                  "language": "en"
+                }
+              ],
+              "legacyCoverage": null,
+              "identifiers": [],
+              "platform": "audiobook",
+              "territory": null,
+              "snapshots": []
+            },
+            {
+              "profile": "release-v2",
+              "id": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+              "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2",
+              "kind": "formal",
+              "status": "official",
+              "contentLanguages": [
+                "en"
+              ],
+              "isTranslation": false,
+              "originalLanguages": [],
+              "titleLanguage": "en",
+              "tracklistLanguage": null,
+              "title": {
+                "value": "Bookgarden2002b07d2f8f4c0b9565ace11cf95ee3",
+                "language": "en"
+              },
+              "publisher": "Original fixture owner",
+              "editionStatement": "paperback",
+              "isbn13": null,
+              "publicationYear": 2026,
+              "originalUrl": null,
+              "fixedRelease": null,
+              "coverage": [
+                {
+                  "realization": "https://rezics.com/id/5bed5375-caf2-49aa-98a4-5e4696217311",
+                  "revision": "https://rezics.com/id/01a135fe-a3ca-70a1-bb3f-dac2d5deab27",
+                  "completeness": "complete",
+                  "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+                  "mainVersion": "https://rezics.com/id/01a135fe-9a98-761c-96f7-511e59732d14",
+                  "language": "en"
+                }
+              ],
+              "legacyCoverage": null,
+              "identifiers": [],
+              "platform": "paperback",
+              "territory": null,
+              "snapshots": []
+            }
+          ],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "a3527a64-fa41-425a-aca1-1ae21566a101",
+            "sequence": "62"
+          },
+          "count": {
+            "value": 3,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "preference-sign-in",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 401,
+        "answer": {
+          "type": "https://rezics.com/problems/account_assertion_denied",
+          "title": "Account assertion is invalid or inactive",
+          "status": 401,
+          "code": "account_assertion_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "save-preference-sign-in",
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "method": "PUT",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9",
+        "body": {
+          "actingSubject": "https://rezics.com/id/a35466d3-4f5b-476f-86a5-6f277f9fb91a",
+          "expectedVersion": 0,
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          }
+        },
+        "status": 401,
+        "answer": {
+          "type": "https://rezics.com/problems/account_assertion_denied",
+          "title": "Account assertion is invalid or inactive",
+          "status": 401,
+          "code": "account_assertion_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      }
+    ],
+    "stranger": [
+      {
+        "label": "work-header",
+        "operationId": "getV1WorksById",
+        "method": "GET",
+        "path": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fbc646d70-158b-4b33-b351-6ad63de74352",
+        "status": 200,
+        "answer": {
+          "profile": "work-read-v1",
+          "id": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "revision": "https://rezics.com/id/01a135fe-9a98-761d-8b20-bd15e0a207d4",
+          "mainVersion": "https://rezics.com/id/01a135fe-9a98-761c-96f7-511e59732d14",
+          "title": {
+            "value": "Bookgarden2002b07d2f8f4c0b9565ace11cf95ee3",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "cover": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "work",
+            "key": "e090960391a0ba31326754bfd6e1dc75"
+          },
+          "types": [
+            "https://schema.org/Book"
+          ],
+          "tagline": null,
+          "completionStatus": null,
+          "chapterCount": null,
+          "wordCount": null,
+          "lastUpdatedAt": null,
+          "disclosure": "public",
+          "publicationState": "unpublished",
+          "descriptionObligations": {
+            "status": "unassessed"
+          },
+          "description": null,
+          "metadataRevision": null,
+          "originalTitle": null,
+          "mainVersionRevision": "https://rezics.com/id/01a135fe-a019-728b-a0ca-f059068dad6a",
+          "mainVersionLabel": null,
+          "selectedLanguage": "en",
+          "sourcePosition": {
+            "dataEpoch": "a3527a64-fa41-425a-aca1-1ae21566a101",
+            "sequence": "62",
+            "dependencyToken": "d389debf3b5255084347d5b411328b31fc7cc691f51efa1f0aa90d9f1fab7b53"
+          },
+          "links": {
+            "versions": "/v1/query#work-versions",
+            "classifications": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/classifications",
+            "adoptions": "/v1/query#work-adoptions",
+            "ratings": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/ratings",
+            "history": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/history",
+            "credits": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/credits",
+            "metadata": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/metadata",
+            "editions": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/editions"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "work-credits",
+        "operationId": "getV1WorksByIdCredits",
+        "method": "GET",
+        "path": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/credits?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fbc646d70-158b-4b33-b351-6ad63de74352",
+        "status": 200,
+        "answer": {
+          "profile": "template-result-v1",
+          "query": "https://rezics.com/query/work-credits",
+          "revision": 1,
+          "items": [
+            {
+              "id": "https://rezics.com/id/01a135fe-9aa2-743f-b631-75264cc28927",
+              "role": "author",
+              "participantKind": "agent",
+              "provider": null,
+              "key": null,
+              "ordinal": null,
+              "agent": "https://rezics.com/id/3f125024-3738-428f-b2b4-44c35a439fcb",
+              "displayName": null,
+              "handle": null
+            }
+          ],
+          "complete": true,
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "a3527a64-fa41-425a-aca1-1ae21566a101",
+            "sequence": "62",
+            "dependencyToken": "24c61e7b34f1c28b4e7e1d31f8e3e5b076a0c30880e570f0223e506cb28d7f70"
+          },
+          "count": {
+            "value": 1,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8",
+          "etag": "W/\"d88fc1a54a477fd4616a55efd48c495d63cb5427f7b3efd7c7880616b1d1c12b\""
+        }
+      },
+      {
+        "label": "release-choices",
+        "operationId": "getV1WorksByIdReleases",
+        "method": "GET",
+        "path": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/releases?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fbc646d70-158b-4b33-b351-6ad63de74352&limit=20",
+        "status": 200,
+        "answer": {
+          "items": [
+            {
+              "profile": "release-v2",
+              "id": "https://rezics.com/id/2493d569-be9d-4dfd-88f8-cf06af5eedcd",
+              "revision": "https://rezics.com/id/01a135fe-a721-75b8-9e54-b147976400e4",
+              "kind": "formal",
+              "status": "official",
+              "contentLanguages": [
+                "en"
+              ],
+              "isTranslation": false,
+              "originalLanguages": [],
+              "titleLanguage": "en",
+              "tracklistLanguage": null,
+              "title": {
+                "value": "Bookgarden2002b07d2f8f4c0b9565ace11cf95ee3",
+                "language": "en"
+              },
+              "publisher": "Original fixture owner",
+              "editionStatement": "ebook",
+              "isbn13": null,
+              "publicationYear": 2026,
+              "originalUrl": null,
+              "fixedRelease": null,
+              "coverage": [
+                {
+                  "realization": "https://rezics.com/id/5bed5375-caf2-49aa-98a4-5e4696217311",
+                  "revision": "https://rezics.com/id/01a135fe-a3ca-70a1-bb3f-dac2d5deab27",
+                  "completeness": "complete",
+                  "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+                  "mainVersion": "https://rezics.com/id/01a135fe-9a98-761c-96f7-511e59732d14",
+                  "language": "en"
+                }
+              ],
+              "legacyCoverage": null,
+              "identifiers": [],
+              "platform": "ebook",
+              "territory": null,
+              "snapshots": []
+            },
+            {
+              "profile": "release-v2",
+              "id": "https://rezics.com/id/8a569afe-958b-452a-83f4-402aa9b77674",
+              "revision": "https://rezics.com/id/01a135fe-a8cf-7140-832d-6038eedb5ccd",
+              "kind": "formal",
+              "status": "official",
+              "contentLanguages": [
+                "en"
+              ],
+              "isTranslation": false,
+              "originalLanguages": [],
+              "titleLanguage": "en",
+              "tracklistLanguage": null,
+              "title": {
+                "value": "Bookgarden2002b07d2f8f4c0b9565ace11cf95ee3",
+                "language": "en"
+              },
+              "publisher": "Original fixture owner",
+              "editionStatement": "audiobook",
+              "isbn13": null,
+              "publicationYear": 2026,
+              "originalUrl": null,
+              "fixedRelease": null,
+              "coverage": [
+                {
+                  "realization": "https://rezics.com/id/5bed5375-caf2-49aa-98a4-5e4696217311",
+                  "revision": "https://rezics.com/id/01a135fe-a3ca-70a1-bb3f-dac2d5deab27",
+                  "completeness": "complete",
+                  "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+                  "mainVersion": "https://rezics.com/id/01a135fe-9a98-761c-96f7-511e59732d14",
+                  "language": "en"
+                }
+              ],
+              "legacyCoverage": null,
+              "identifiers": [],
+              "platform": "audiobook",
+              "territory": null,
+              "snapshots": []
+            },
+            {
+              "profile": "release-v2",
+              "id": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+              "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2",
+              "kind": "formal",
+              "status": "official",
+              "contentLanguages": [
+                "en"
+              ],
+              "isTranslation": false,
+              "originalLanguages": [],
+              "titleLanguage": "en",
+              "tracklistLanguage": null,
+              "title": {
+                "value": "Bookgarden2002b07d2f8f4c0b9565ace11cf95ee3",
+                "language": "en"
+              },
+              "publisher": "Original fixture owner",
+              "editionStatement": "paperback",
+              "isbn13": null,
+              "publicationYear": 2026,
+              "originalUrl": null,
+              "fixedRelease": null,
+              "coverage": [
+                {
+                  "realization": "https://rezics.com/id/5bed5375-caf2-49aa-98a4-5e4696217311",
+                  "revision": "https://rezics.com/id/01a135fe-a3ca-70a1-bb3f-dac2d5deab27",
+                  "completeness": "complete",
+                  "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+                  "mainVersion": "https://rezics.com/id/01a135fe-9a98-761c-96f7-511e59732d14",
+                  "language": "en"
+                }
+              ],
+              "legacyCoverage": null,
+              "identifiers": [],
+              "platform": "paperback",
+              "territory": null,
+              "snapshots": []
+            }
+          ],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "a3527a64-fa41-425a-aca1-1ae21566a101",
+            "sequence": "62"
+          },
+          "count": {
+            "value": 3,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "foreign-preference-before",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": null,
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "own-preference-before",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fbc646d70-158b-4b33-b351-6ad63de74352",
+        "status": 200,
+        "answer": null,
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "save-preference-ebook",
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "method": "PUT",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9",
+        "body": {
+          "actingSubject": "https://rezics.com/id/bc646d70-158b-4b33-b351-6ad63de74352",
+          "expectedVersion": 0,
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/2493d569-be9d-4dfd-88f8-cf06af5eedcd",
+            "revision": "https://rezics.com/id/01a135fe-a721-75b8-9e54-b147976400e4"
+          }
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/2493d569-be9d-4dfd-88f8-cf06af5eedcd",
+            "revision": "https://rezics.com/id/01a135fe-a721-75b8-9e54-b147976400e4"
+          },
+          "version": 1,
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "own-preference-ebook",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fbc646d70-158b-4b33-b351-6ad63de74352",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/2493d569-be9d-4dfd-88f8-cf06af5eedcd",
+            "revision": "https://rezics.com/id/01a135fe-a721-75b8-9e54-b147976400e4"
+          },
+          "language": "en",
+          "version": 1
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "save-preference-replay",
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "method": "PUT",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9",
+        "body": {
+          "actingSubject": "https://rezics.com/id/bc646d70-158b-4b33-b351-6ad63de74352",
+          "expectedVersion": 0,
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/2493d569-be9d-4dfd-88f8-cf06af5eedcd",
+            "revision": "https://rezics.com/id/01a135fe-a721-75b8-9e54-b147976400e4"
+          }
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/2493d569-be9d-4dfd-88f8-cf06af5eedcd",
+            "revision": "https://rezics.com/id/01a135fe-a721-75b8-9e54-b147976400e4"
+          },
+          "version": 1,
+          "language": "en",
+          "replayed": true
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "save-preference-stale",
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "method": "PUT",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9",
+        "body": {
+          "actingSubject": "https://rezics.com/id/bc646d70-158b-4b33-b351-6ad63de74352",
+          "expectedVersion": 0,
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/2493d569-be9d-4dfd-88f8-cf06af5eedcd",
+            "revision": "https://rezics.com/id/01a135fe-a721-75b8-9e54-b147976400e4"
+          }
+        },
+        "status": 409,
+        "answer": {
+          "type": "https://rezics.com/problems/stale_edition_preference",
+          "title": "Edition preference changed",
+          "status": 409,
+          "code": "stale_edition_preference",
+          "current": {
+            "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+            "edition": {
+              "kind": "release",
+              "resource": "https://rezics.com/id/2493d569-be9d-4dfd-88f8-cf06af5eedcd",
+              "revision": "https://rezics.com/id/01a135fe-a721-75b8-9e54-b147976400e4"
+            },
+            "language": "en",
+            "version": 1
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "foreign-preference-after-ebook",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": null,
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "save-preference-audiobook",
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "method": "PUT",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9",
+        "body": {
+          "actingSubject": "https://rezics.com/id/bc646d70-158b-4b33-b351-6ad63de74352",
+          "expectedVersion": 1,
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/8a569afe-958b-452a-83f4-402aa9b77674",
+            "revision": "https://rezics.com/id/01a135fe-a8cf-7140-832d-6038eedb5ccd"
+          }
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/8a569afe-958b-452a-83f4-402aa9b77674",
+            "revision": "https://rezics.com/id/01a135fe-a8cf-7140-832d-6038eedb5ccd"
+          },
+          "version": 2,
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "own-preference-audiobook",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fbc646d70-158b-4b33-b351-6ad63de74352",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/8a569afe-958b-452a-83f4-402aa9b77674",
+            "revision": "https://rezics.com/id/01a135fe-a8cf-7140-832d-6038eedb5ccd"
+          },
+          "language": "en",
+          "version": 2
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "foreign-preference-after-audiobook",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": null,
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "save-preference-paperback",
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "method": "PUT",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9",
+        "body": {
+          "actingSubject": "https://rezics.com/id/bc646d70-158b-4b33-b351-6ad63de74352",
+          "expectedVersion": 2,
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          }
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          },
+          "version": 3,
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "own-preference-paperback",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fbc646d70-158b-4b33-b351-6ad63de74352",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          },
+          "language": "en",
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "foreign-preference-after-paperback",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": null,
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "foreign-preference-denied",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/progress_denied",
+          "title": "Progress and preferences are private to the principal’s own Person",
+          "status": 403,
+          "code": "progress_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "foreign-save-preference-denied",
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "method": "PUT",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9",
+        "body": {
+          "actingSubject": "https://rezics.com/id/a35466d3-4f5b-476f-86a5-6f277f9fb91a",
+          "expectedVersion": 0,
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          }
+        },
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/progress_denied",
+          "title": "Progress and preferences are private to the principal’s own Person",
+          "status": 403,
+          "code": "progress_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "foreign-preference-after-denial",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": null,
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "own-preference-after-denial",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fbc646d70-158b-4b33-b351-6ad63de74352",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          },
+          "language": "en",
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      }
+    ],
+    "member": [
+      {
+        "label": "work-header",
+        "operationId": "getV1WorksById",
+        "method": "GET",
+        "path": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": {
+          "profile": "work-read-v1",
+          "id": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "revision": "https://rezics.com/id/01a135fe-9a98-761d-8b20-bd15e0a207d4",
+          "mainVersion": "https://rezics.com/id/01a135fe-9a98-761c-96f7-511e59732d14",
+          "title": {
+            "value": "Bookgarden2002b07d2f8f4c0b9565ace11cf95ee3",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "cover": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "work",
+            "key": "e090960391a0ba31326754bfd6e1dc75"
+          },
+          "types": [
+            "https://schema.org/Book"
+          ],
+          "tagline": null,
+          "completionStatus": null,
+          "chapterCount": null,
+          "wordCount": null,
+          "lastUpdatedAt": null,
+          "disclosure": "public",
+          "publicationState": "unpublished",
+          "descriptionObligations": {
+            "status": "unassessed"
+          },
+          "description": null,
+          "metadataRevision": null,
+          "originalTitle": null,
+          "mainVersionRevision": "https://rezics.com/id/01a135fe-a019-728b-a0ca-f059068dad6a",
+          "mainVersionLabel": null,
+          "selectedLanguage": "en",
+          "sourcePosition": {
+            "dataEpoch": "a3527a64-fa41-425a-aca1-1ae21566a101",
+            "sequence": "62",
+            "dependencyToken": "d389debf3b5255084347d5b411328b31fc7cc691f51efa1f0aa90d9f1fab7b53"
+          },
+          "links": {
+            "versions": "/v1/query#work-versions",
+            "classifications": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/classifications",
+            "adoptions": "/v1/query#work-adoptions",
+            "ratings": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/ratings",
+            "history": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/history",
+            "credits": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/credits",
+            "metadata": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/metadata",
+            "editions": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/editions"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "work-credits",
+        "operationId": "getV1WorksByIdCredits",
+        "method": "GET",
+        "path": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/credits?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": {
+          "profile": "template-result-v1",
+          "query": "https://rezics.com/query/work-credits",
+          "revision": 1,
+          "items": [
+            {
+              "id": "https://rezics.com/id/01a135fe-9aa2-743f-b631-75264cc28927",
+              "role": "author",
+              "participantKind": "agent",
+              "provider": null,
+              "key": null,
+              "ordinal": null,
+              "agent": "https://rezics.com/id/3f125024-3738-428f-b2b4-44c35a439fcb",
+              "displayName": null,
+              "handle": null
+            }
+          ],
+          "complete": true,
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "a3527a64-fa41-425a-aca1-1ae21566a101",
+            "sequence": "62",
+            "dependencyToken": "24c61e7b34f1c28b4e7e1d31f8e3e5b076a0c30880e570f0223e506cb28d7f70"
+          },
+          "count": {
+            "value": 1,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8",
+          "etag": "W/\"5b36d8d43bea2d137f4842ae4129185dcd564439659d55fac98b8e3a37018cd8\""
+        }
+      },
+      {
+        "label": "release-choices",
+        "operationId": "getV1WorksByIdReleases",
+        "method": "GET",
+        "path": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/releases?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a&limit=20",
+        "status": 200,
+        "answer": {
+          "items": [
+            {
+              "profile": "release-v2",
+              "id": "https://rezics.com/id/2493d569-be9d-4dfd-88f8-cf06af5eedcd",
+              "revision": "https://rezics.com/id/01a135fe-a721-75b8-9e54-b147976400e4",
+              "kind": "formal",
+              "status": "official",
+              "contentLanguages": [
+                "en"
+              ],
+              "isTranslation": false,
+              "originalLanguages": [],
+              "titleLanguage": "en",
+              "tracklistLanguage": null,
+              "title": {
+                "value": "Bookgarden2002b07d2f8f4c0b9565ace11cf95ee3",
+                "language": "en"
+              },
+              "publisher": "Original fixture owner",
+              "editionStatement": "ebook",
+              "isbn13": null,
+              "publicationYear": 2026,
+              "originalUrl": null,
+              "fixedRelease": null,
+              "coverage": [
+                {
+                  "realization": "https://rezics.com/id/5bed5375-caf2-49aa-98a4-5e4696217311",
+                  "revision": "https://rezics.com/id/01a135fe-a3ca-70a1-bb3f-dac2d5deab27",
+                  "completeness": "complete",
+                  "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+                  "mainVersion": "https://rezics.com/id/01a135fe-9a98-761c-96f7-511e59732d14",
+                  "language": "en"
+                }
+              ],
+              "legacyCoverage": null,
+              "identifiers": [],
+              "platform": "ebook",
+              "territory": null,
+              "snapshots": []
+            },
+            {
+              "profile": "release-v2",
+              "id": "https://rezics.com/id/8a569afe-958b-452a-83f4-402aa9b77674",
+              "revision": "https://rezics.com/id/01a135fe-a8cf-7140-832d-6038eedb5ccd",
+              "kind": "formal",
+              "status": "official",
+              "contentLanguages": [
+                "en"
+              ],
+              "isTranslation": false,
+              "originalLanguages": [],
+              "titleLanguage": "en",
+              "tracklistLanguage": null,
+              "title": {
+                "value": "Bookgarden2002b07d2f8f4c0b9565ace11cf95ee3",
+                "language": "en"
+              },
+              "publisher": "Original fixture owner",
+              "editionStatement": "audiobook",
+              "isbn13": null,
+              "publicationYear": 2026,
+              "originalUrl": null,
+              "fixedRelease": null,
+              "coverage": [
+                {
+                  "realization": "https://rezics.com/id/5bed5375-caf2-49aa-98a4-5e4696217311",
+                  "revision": "https://rezics.com/id/01a135fe-a3ca-70a1-bb3f-dac2d5deab27",
+                  "completeness": "complete",
+                  "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+                  "mainVersion": "https://rezics.com/id/01a135fe-9a98-761c-96f7-511e59732d14",
+                  "language": "en"
+                }
+              ],
+              "legacyCoverage": null,
+              "identifiers": [],
+              "platform": "audiobook",
+              "territory": null,
+              "snapshots": []
+            },
+            {
+              "profile": "release-v2",
+              "id": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+              "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2",
+              "kind": "formal",
+              "status": "official",
+              "contentLanguages": [
+                "en"
+              ],
+              "isTranslation": false,
+              "originalLanguages": [],
+              "titleLanguage": "en",
+              "tracklistLanguage": null,
+              "title": {
+                "value": "Bookgarden2002b07d2f8f4c0b9565ace11cf95ee3",
+                "language": "en"
+              },
+              "publisher": "Original fixture owner",
+              "editionStatement": "paperback",
+              "isbn13": null,
+              "publicationYear": 2026,
+              "originalUrl": null,
+              "fixedRelease": null,
+              "coverage": [
+                {
+                  "realization": "https://rezics.com/id/5bed5375-caf2-49aa-98a4-5e4696217311",
+                  "revision": "https://rezics.com/id/01a135fe-a3ca-70a1-bb3f-dac2d5deab27",
+                  "completeness": "complete",
+                  "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+                  "mainVersion": "https://rezics.com/id/01a135fe-9a98-761c-96f7-511e59732d14",
+                  "language": "en"
+                }
+              ],
+              "legacyCoverage": null,
+              "identifiers": [],
+              "platform": "paperback",
+              "territory": null,
+              "snapshots": []
+            }
+          ],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "a3527a64-fa41-425a-aca1-1ae21566a101",
+            "sequence": "62"
+          },
+          "count": {
+            "value": 3,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "page-projection",
+        "operationId": "getV1ResourcesByResourcePage",
+        "method": "GET",
+        "path": "/v1/resources/01a135fe-9a98-761b-814f-4a3905b086f9/page?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": {
+          "profile": "entity-page-v1",
+          "target": {
+            "resource": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+            "base": "work",
+            "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+            "revision": "https://rezics.com/id/01a135fe-9a98-761d-8b20-bd15e0a207d4",
+            "types": [
+              "https://schema.org/Book",
+              "https://schema.org/CreativeWork"
+            ],
+            "disclosure": "public"
+          },
+          "summary": {
+            "reference": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+            "status": "available",
+            "type": "work",
+            "address": {
+              "prefix": "/w/",
+              "key": "1CfzWr3pFNB1XtcusdR9YL",
+              "suffixSource": "Bookgarden2002b07d2f8f4c0b9565ace11cf95ee3"
+            },
+            "base": "work",
+            "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+            "disclosure": "public",
+            "name": {
+              "value": "Bookgarden2002b07d2f8f4c0b9565ace11cf95ee3",
+              "language": "en",
+              "direction": "ltr",
+              "basis": "fallback"
+            },
+            "avatar": {
+              "kind": "fallback",
+              "policy": "avatar-fallback-v1",
+              "resourceType": "work",
+              "key": "e090960391a0ba31326754bfd6e1dc75"
+            }
+          },
+          "registry": {
+            "type": "https://schema.org/Book",
+            "base": "work",
+            "default": false,
+            "creatable": true,
+            "creation": "contributor",
+            "interest": "books",
+            "primaryAction": "read",
+            "presentation": "book",
+            "cover": "portrait",
+            "priority": 5,
+            "labels": {
+              "en": {
+                "one": "Book",
+                "other": "Books"
+              },
+              "zh-Hant": {
+                "one": "書籍",
+                "other": "書籍"
+              },
+              "zh-Hans": {
+                "one": "图书",
+                "other": "图书"
+              },
+              "ja": {
+                "one": "本",
+                "other": "本"
+              },
+              "ko": {
+                "one": "책",
+                "other": "책"
+              },
+              "de": {
+                "one": "Buch",
+                "other": "Bücher"
+              },
+              "fr": {
+                "one": "Livre",
+                "other": "Livres"
+              },
+              "es": {
+                "one": "Libro",
+                "other": "Libros"
+              }
+            }
+          },
+          "work": {
+            "profile": "work-read-v1",
+            "id": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+            "revision": "https://rezics.com/id/01a135fe-9a98-761d-8b20-bd15e0a207d4",
+            "mainVersion": "https://rezics.com/id/01a135fe-9a98-761c-96f7-511e59732d14",
+            "title": {
+              "value": "Bookgarden2002b07d2f8f4c0b9565ace11cf95ee3",
+              "language": "en",
+              "direction": "ltr",
+              "basis": "fallback"
+            },
+            "cover": {
+              "kind": "fallback",
+              "policy": "avatar-fallback-v1",
+              "resourceType": "work",
+              "key": "e090960391a0ba31326754bfd6e1dc75"
+            },
+            "types": [
+              "https://schema.org/Book"
+            ],
+            "tagline": null,
+            "completionStatus": null,
+            "chapterCount": null,
+            "wordCount": null,
+            "lastUpdatedAt": null,
+            "disclosure": "public",
+            "publicationState": "unpublished",
+            "descriptionObligations": {
+              "status": "unassessed"
+            },
+            "description": null,
+            "metadataRevision": null,
+            "originalTitle": null,
+            "mainVersionRevision": "https://rezics.com/id/01a135fe-a019-728b-a0ca-f059068dad6a",
+            "mainVersionLabel": null,
+            "selectedLanguage": "en",
+            "sourcePosition": {
+              "dataEpoch": "a3527a64-fa41-425a-aca1-1ae21566a101",
+              "sequence": "62"
+            },
+            "links": {
+              "versions": "/v1/query#work-versions",
+              "classifications": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/classifications",
+              "adoptions": "/v1/query#work-adoptions",
+              "ratings": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/ratings",
+              "history": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/history",
+              "credits": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/credits",
+              "metadata": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/metadata",
+              "editions": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/editions"
+            }
+          },
+          "sections": [
+            {
+              "id": "statements",
+              "href": "/v1/resources/01a135fe-9a98-761b-814f-4a3905b086f9/statements",
+              "actions": []
+            },
+            {
+              "id": "releases",
+              "href": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/releases",
+              "actions": []
+            },
+            {
+              "id": "contents",
+              "href": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/contents",
+              "actions": []
+            },
+            {
+              "id": "relations",
+              "href": "/v1/resources/01a135fe-9a98-761b-814f-4a3905b086f9/relations",
+              "actions": []
+            },
+            {
+              "id": "credits",
+              "href": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/credits",
+              "actions": []
+            },
+            {
+              "id": "ratings",
+              "href": "/v1/resources/01a135fe-9a98-761b-814f-4a3905b086f9/ratings",
+              "actions": []
+            },
+            {
+              "id": "reviews",
+              "href": "/v1/resources/01a135fe-9a98-761b-814f-4a3905b086f9/reviews",
+              "actions": []
+            },
+            {
+              "id": "discussion",
+              "href": "/v1/resources/01a135fe-9a98-761b-814f-4a3905b086f9/discussion",
+              "actions": []
+            }
+          ],
+          "mergedFacts": {
+            "origins": [],
+            "nextCursor": null
+          },
+          "sourcePosition": {
+            "dataEpoch": "a3527a64-fa41-425a-aca1-1ae21566a101",
+            "sequence": "62"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json"
+        }
+      },
+      {
+        "label": "realization-choices",
+        "operationId": "getV1WorksByIdRealizations",
+        "method": "GET",
+        "path": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/realizations?limit=20&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": {
+          "items": [
+            {
+              "profile": "realization-v1",
+              "id": "https://rezics.com/id/5bed5375-caf2-49aa-98a4-5e4696217311",
+              "language": "en",
+              "kind": "original",
+              "translators": [],
+              "publishers": [],
+              "source": {
+                "kind": "main-version",
+                "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+                "mainVersion": "https://rezics.com/id/01a135fe-9a98-761c-96f7-511e59732d14",
+                "revision": "https://rezics.com/id/01a135fe-a019-728b-a0ca-f059068dad6a"
+              },
+              "status": "official",
+              "verification": "verified",
+              "evidence": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+              "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+              "revision": "https://rezics.com/id/01a135fe-a3ca-70a1-bb3f-dac2d5deab27",
+              "legacy": null
+            }
+          ],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "a3527a64-fa41-425a-aca1-1ae21566a101",
+            "sequence": "62"
+          },
+          "count": {
+            "value": 1,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "edition-source-names",
+        "operationId": "postV1ResourcesSummaries",
+        "method": "POST",
+        "path": "/v1/resources/summaries",
+        "body": {
+          "profile": "resource-summary-batch-v1",
+          "resources": [
+            "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+            "https://rezics.com/id/01a135fe-9a98-761c-96f7-511e59732d14"
+          ],
+          "actingSubject": "https://rezics.com/id/a35466d3-4f5b-476f-86a5-6f277f9fb91a"
+        },
+        "status": 200,
+        "answer": {
+          "profile": "resource-summary-batch-v1",
+          "complete": true,
+          "summaries": [
+            {
+              "reference": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+              "status": "available",
+              "type": "work",
+              "address": {
+                "prefix": "/w/",
+                "key": "1CfzWr3pFNB1XtcusdR9YL",
+                "suffixSource": "Bookgarden2002b07d2f8f4c0b9565ace11cf95ee3"
+              },
+              "base": "work",
+              "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+              "disclosure": "public",
+              "name": {
+                "value": "Bookgarden2002b07d2f8f4c0b9565ace11cf95ee3",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "fallback"
+              },
+              "avatar": {
+                "kind": "fallback",
+                "policy": "avatar-fallback-v1",
+                "resourceType": "work",
+                "key": "e090960391a0ba31326754bfd6e1dc75"
+              }
+            },
+            {
+              "reference": "https://rezics.com/id/01a135fe-9a98-761c-96f7-511e59732d14",
+              "status": "available",
+              "type": "main-version",
+              "address": {
+                "prefix": "/e/",
+                "key": "1CfzWr3pFNBoyWFvrjCviX",
+                "suffixSource": "Bookgarden2002b07d2f8f4c0b9565ace11cf95ee3"
+              },
+              "base": null,
+              "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+              "disclosure": "public",
+              "name": {
+                "value": "Bookgarden2002b07d2f8f4c0b9565ace11cf95ee3",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "fallback"
+              },
+              "avatar": {
+                "kind": "fallback",
+                "policy": "avatar-fallback-v1",
+                "resourceType": "main-version",
+                "key": "6efda91b26bd21df7ab7b09f375e5236"
+              }
+            }
+          ],
+          "generation": {
+            "graph": "6309fd3baaad05484ed50d6e91e4bdc87664843edde14e94dce241a024d1be14",
+            "media": "939281e0-65a4-49ac-808e-d6d827eb1aeb:0",
+            "addresses": "a74e5234a1c29402295057a1ff9dbeaf86fc9d6d1973ade7914efbf3d1afa93d"
+          },
+          "cost": {
+            "graphQueries": 5,
+            "mediaQueries": 0,
+            "accessChecks": 0,
+            "accessQueries": 0
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8",
+          "etag": "\"c61d15906e663fe9cebc11ea27d5c9ad\""
+        }
+      },
+      {
+        "label": "selected-release-paperback",
+        "operationId": "getV1WorksByIdReleasesByRelease",
+        "method": "GET",
+        "path": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/releases/c6d62e59-f267-4e5a-8058-e277517fa8d4?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": {
+          "profile": "release-v2",
+          "id": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+          "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2",
+          "kind": "formal",
+          "status": "official",
+          "contentLanguages": [
+            "en"
+          ],
+          "isTranslation": false,
+          "originalLanguages": [],
+          "titleLanguage": "en",
+          "tracklistLanguage": null,
+          "title": {
+            "value": "Bookgarden2002b07d2f8f4c0b9565ace11cf95ee3",
+            "language": "en"
+          },
+          "publisher": "Original fixture owner",
+          "editionStatement": "paperback",
+          "isbn13": null,
+          "publicationYear": 2026,
+          "originalUrl": null,
+          "fixedRelease": null,
+          "coverage": [
+            {
+              "realization": "https://rezics.com/id/5bed5375-caf2-49aa-98a4-5e4696217311",
+              "revision": "https://rezics.com/id/01a135fe-a3ca-70a1-bb3f-dac2d5deab27",
+              "completeness": "complete",
+              "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+              "mainVersion": "https://rezics.com/id/01a135fe-9a98-761c-96f7-511e59732d14",
+              "language": "en"
+            }
+          ],
+          "legacyCoverage": null,
+          "identifiers": [],
+          "platform": "paperback",
+          "territory": null,
+          "snapshots": [],
+          "sourcePosition": {
+            "dataEpoch": "a3527a64-fa41-425a-aca1-1ae21566a101",
+            "sequence": "62"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "selected-release-ebook",
+        "operationId": "getV1WorksByIdReleasesByRelease",
+        "method": "GET",
+        "path": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/releases/2493d569-be9d-4dfd-88f8-cf06af5eedcd?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": {
+          "profile": "release-v2",
+          "id": "https://rezics.com/id/2493d569-be9d-4dfd-88f8-cf06af5eedcd",
+          "revision": "https://rezics.com/id/01a135fe-a721-75b8-9e54-b147976400e4",
+          "kind": "formal",
+          "status": "official",
+          "contentLanguages": [
+            "en"
+          ],
+          "isTranslation": false,
+          "originalLanguages": [],
+          "titleLanguage": "en",
+          "tracklistLanguage": null,
+          "title": {
+            "value": "Bookgarden2002b07d2f8f4c0b9565ace11cf95ee3",
+            "language": "en"
+          },
+          "publisher": "Original fixture owner",
+          "editionStatement": "ebook",
+          "isbn13": null,
+          "publicationYear": 2026,
+          "originalUrl": null,
+          "fixedRelease": null,
+          "coverage": [
+            {
+              "realization": "https://rezics.com/id/5bed5375-caf2-49aa-98a4-5e4696217311",
+              "revision": "https://rezics.com/id/01a135fe-a3ca-70a1-bb3f-dac2d5deab27",
+              "completeness": "complete",
+              "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+              "mainVersion": "https://rezics.com/id/01a135fe-9a98-761c-96f7-511e59732d14",
+              "language": "en"
+            }
+          ],
+          "legacyCoverage": null,
+          "identifiers": [],
+          "platform": "ebook",
+          "territory": null,
+          "snapshots": [],
+          "sourcePosition": {
+            "dataEpoch": "a3527a64-fa41-425a-aca1-1ae21566a101",
+            "sequence": "62"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "selected-release-audiobook",
+        "operationId": "getV1WorksByIdReleasesByRelease",
+        "method": "GET",
+        "path": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/releases/8a569afe-958b-452a-83f4-402aa9b77674?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": {
+          "profile": "release-v2",
+          "id": "https://rezics.com/id/8a569afe-958b-452a-83f4-402aa9b77674",
+          "revision": "https://rezics.com/id/01a135fe-a8cf-7140-832d-6038eedb5ccd",
+          "kind": "formal",
+          "status": "official",
+          "contentLanguages": [
+            "en"
+          ],
+          "isTranslation": false,
+          "originalLanguages": [],
+          "titleLanguage": "en",
+          "tracklistLanguage": null,
+          "title": {
+            "value": "Bookgarden2002b07d2f8f4c0b9565ace11cf95ee3",
+            "language": "en"
+          },
+          "publisher": "Original fixture owner",
+          "editionStatement": "audiobook",
+          "isbn13": null,
+          "publicationYear": 2026,
+          "originalUrl": null,
+          "fixedRelease": null,
+          "coverage": [
+            {
+              "realization": "https://rezics.com/id/5bed5375-caf2-49aa-98a4-5e4696217311",
+              "revision": "https://rezics.com/id/01a135fe-a3ca-70a1-bb3f-dac2d5deab27",
+              "completeness": "complete",
+              "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+              "mainVersion": "https://rezics.com/id/01a135fe-9a98-761c-96f7-511e59732d14",
+              "language": "en"
+            }
+          ],
+          "legacyCoverage": null,
+          "identifiers": [],
+          "platform": "audiobook",
+          "territory": null,
+          "snapshots": [],
+          "sourcePosition": {
+            "dataEpoch": "a3527a64-fa41-425a-aca1-1ae21566a101",
+            "sequence": "62"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "rating-contexts",
+        "operationId": "getV1ResourcesByResourceRating-contexts",
+        "method": "GET",
+        "path": "/v1/resources/01a135fe-9a98-761b-814f-4a3905b086f9/rating-contexts?scope=global&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": {
+          "items": [],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "a3527a64-fa41-425a-aca1-1ae21566a101",
+            "sequence": "62"
+          },
+          "count": {
+            "value": 0,
+            "kind": "exact-page",
+            "total": null
+          },
+          "scope": {
+            "kind": "global",
+            "realm": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "person-preferences",
+        "operationId": "getV1MePerson-preferences",
+        "method": "GET",
+        "path": "/v1/me/person-preferences?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": {
+          "profile": "person-preferences-v1",
+          "profileVisibility": "public",
+          "followPolicy": "everyone",
+          "hideReadingActivity": false,
+          "contentLanguages": [],
+          "spoilerPolicy": "hide-unread",
+          "version": 0,
+          "blockedPeople": []
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "session-agent",
+        "operationId": "getV1MeSession-agent",
+        "method": "GET",
+        "path": "/v1/me/session-agent?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": {
+          "profile": "session-agent-v1",
+          "sessionAgent": {
+            "actingSubject": "https://rezics.com/id/a35466d3-4f5b-476f-86a5-6f277f9fb91a",
+            "revision": "17416952-96f9-4109-9506-285bb9a14628",
+            "eligible": true
+          },
+          "mainAgent": {
+            "actingSubject": null,
+            "revision": null,
+            "eligible": false
+          },
+          "initialActingSubject": null
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "reader-state",
+        "operationId": "getV1WorksByIdReader-state",
+        "method": "GET",
+        "path": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/reader-state?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": {
+          "profile": "reader-work-state-v1",
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "status": {
+            "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+            "status": null,
+            "startedOn": null,
+            "finishedOn": null,
+            "version": 0,
+            "changedAt": null
+          },
+          "customShelves": [],
+          "rating": {
+            "global": null,
+            "realm": null
+          },
+          "progress": null,
+          "sourcePosition": {
+            "dataEpoch": "a3527a64-fa41-425a-aca1-1ae21566a101",
+            "sequence": "62"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "rating-summary",
+        "operationId": "getV1ResourcesByResourceRatings",
+        "method": "GET",
+        "path": "/v1/resources/01a135fe-9a98-761b-814f-4a3905b086f9/ratings?scope=global&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": {
+          "profile": "work-rating-read-v1",
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "mainVersion": "https://rezics.com/id/01a135fe-9a98-761c-96f7-511e59732d14",
+          "scope": {
+            "kind": "global",
+            "realm": null
+          },
+          "context": null,
+          "status": "no-context",
+          "aggregationScope": null,
+          "scale": null,
+          "count": 0,
+          "mean": null,
+          "distribution": [],
+          "sourcePosition": {
+            "dataEpoch": "a3527a64-fa41-425a-aca1-1ae21566a101",
+            "sequence": "62"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "external-credits",
+        "operationId": "postV1Query",
+        "method": "POST",
+        "path": "/v1/query",
+        "body": {
+          "profile": "template-query-v1",
+          "query": "https://rezics.com/query/work-credits",
+          "revision": 1,
+          "parameters": {
+            "roots": [
+              "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9"
+            ]
+          },
+          "presentation": {
+            "actingSubject": "https://rezics.com/id/a35466d3-4f5b-476f-86a5-6f277f9fb91a"
+          }
+        },
+        "status": 200,
+        "answer": {
+          "profile": "query-v1",
+          "template": "https://rezics.com/query/work-credits",
+          "selection": {
+            "context": "global",
+            "scope": {
+              "kind": "all"
+            },
+            "filter": {
+              "roots": [
+                "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9"
+              ]
+            },
+            "text": null,
+            "sort": "identity",
+            "pageSize": 20,
+            "facetRefs": [],
+            "semanticRevisions": []
+          },
+          "result": {
+            "profile": "template-result-v1",
+            "query": "https://rezics.com/query/work-credits",
+            "revision": 1,
+            "items": [
+              {
+                "id": "https://rezics.com/id/01a135fe-9aa2-743f-b631-75264cc28927",
+                "role": "author",
+                "participantKind": "agent",
+                "provider": null,
+                "key": null,
+                "ordinal": null,
+                "agent": "https://rezics.com/id/3f125024-3738-428f-b2b4-44c35a439fcb",
+                "displayName": null,
+                "handle": null
+              }
+            ],
+            "complete": true,
+            "nextCursor": null,
+            "sourcePosition": {
+              "dataEpoch": "a3527a64-fa41-425a-aca1-1ae21566a101",
+              "sequence": "62",
+              "dependencyToken": "24c61e7b34f1c28b4e7e1d31f8e3e5b076a0c30880e570f0223e506cb28d7f70"
+            },
+            "count": {
+              "value": 1,
+              "kind": "exact-page",
+              "total": null
+            }
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8",
+          "etag": "W/\"5b36d8d43bea2d137f4842ae4129185dcd564439659d55fac98b8e3a37018cd8\""
+        }
+      },
+      {
+        "label": "native-agent-credits",
+        "operationId": "getV1WorksByIdAgent-credits",
+        "method": "GET",
+        "path": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/agent-credits?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": {
+          "items": [
+            {
+              "id": "https://rezics.com/id/01a135fe-9aa2-743f-b631-75264cc28927",
+              "role": "author",
+              "agent": "https://rezics.com/id/3f125024-3738-428f-b2b4-44c35a439fcb",
+              "identityStatus": "active",
+              "displayName": "Outcome owner",
+              "handle": null,
+              "address": {
+                "prefix": "/a/",
+                "key": "8niyzwLFWJ2UZ5BVrvHtYi",
+                "suffixSource": ""
+              }
+            }
+          ],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "a3527a64-fa41-425a-aca1-1ae21566a101",
+            "sequence": "62"
+          },
+          "count": {
+            "value": 1,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json"
+        }
+      },
+      {
+        "label": "continue-reading",
+        "operationId": "getV1MeContinue",
+        "method": "GET",
+        "path": "/v1/me/continue?limit=6&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": {
+          "profile": "home-continue-v1",
+          "sourcePosition": {
+            "dataEpoch": "a3527a64-fa41-425a-aca1-1ae21566a101",
+            "sequence": "62"
+          },
+          "items": [],
+          "scanned": {
+            "reading": 0,
+            "followed": 0,
+            "limit": 16
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json"
+        }
+      },
+      {
+        "label": "contents-unavailable",
+        "operationId": "getV1WorksByIdContents",
+        "method": "GET",
+        "path": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/contents?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "reader-statistics",
+        "operationId": "getV1WorksByIdReader-stats",
+        "method": "GET",
+        "path": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/reader-stats?&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": {
+          "profile": "work-reader-stats-v1",
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "reading": {
+            "value": 0,
+            "kind": "exact"
+          },
+          "wantToRead": {
+            "value": 0,
+            "kind": "exact"
+          },
+          "reviews": null,
+          "sourcePosition": {
+            "dataEpoch": "a3527a64-fa41-425a-aca1-1ae21566a101",
+            "sequence": "62"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "work-showcase",
+        "operationId": "postV1ResourcesShowcase",
+        "method": "POST",
+        "path": "/v1/resources/showcase",
+        "body": {
+          "profile": "work-showcase-batch-v1",
+          "targets": [
+            "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9"
+          ]
+        },
+        "status": 200,
+        "answer": {
+          "profile": "work-showcase-batch-v1",
+          "complete": true,
+          "items": [
+            {
+              "reference": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+              "status": "available",
+              "images": [],
+              "trailer": null
+            }
+          ],
+          "generation": {
+            "graph": "a4f2a29f945c7820a714b2bfca073e89a9470172603204445f64cee4b2b50b17",
+            "media": "939281e0-65a4-49ac-808e-d6d827eb1aeb:0",
+            "addresses": "7121b087ec05a8a1842dfd603f9a44ced097f05034e58c3b31dac59faa8a31fd"
+          },
+          "cost": {
+            "graphQueries": 4,
+            "mediaQueries": 0,
+            "accessChecks": 0,
+            "accessQueries": 0,
+            "disclosureQueries": 0
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "accepted-statements",
+        "operationId": "getV1ResourcesByResourceStatements",
+        "method": "GET",
+        "path": "/v1/resources/01a135fe-9a98-761b-814f-4a3905b086f9/statements?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": {
+          "profile": "subject-statements-v1",
+          "resource": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "acceptanceContext": "urn:rezics:classification-context:global",
+          "factObligations": {
+            "status": "unassessed"
+          },
+          "groups": [],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "a3527a64-fa41-425a-aca1-1ae21566a101",
+            "sequence": "62"
+          },
+          "count": {
+            "value": 0,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json"
+        }
+      },
+      {
+        "label": "progress-in-language",
+        "operationId": "getV1MeProgress-summariesByResource",
+        "method": "GET",
+        "path": "/v1/me/progress-summaries/01a135fe-9a98-761b-814f-4a3905b086f9?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": {
+          "resource": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "scope": "work",
+          "policy": "composition-progress-v2",
+          "status": "not-started",
+          "counts": {
+            "completed": 0,
+            "required": 1,
+            "completedRequired": 0
+          },
+          "partial": false,
+          "states": {
+            "correspondenceUnresolved": false
+          },
+          "language": "en",
+          "preference": null,
+          "revisions": {
+            "work": {
+              "resource": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+              "revision": "https://rezics.com/id/01a135fe-9a98-761d-8b20-bd15e0a207d4"
+            },
+            "sessions": [],
+            "library": [],
+            "selections": [],
+            "graph": {
+              "dataEpoch": "a3527a64-fa41-425a-aca1-1ae21566a101",
+              "sequence": "62"
+            }
+          },
+          "continuation": {
+            "sessions": null,
+            "releases": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "work-without-editions",
+        "operationId": "getV1WorksById",
+        "method": "GET",
+        "path": "/v1/works/01a135fe-92b0-736c-ab8e-50637f665d19?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": {
+          "profile": "work-read-v1",
+          "id": "https://rezics.com/id/01a135fe-92b0-736c-ab8e-50637f665d19",
+          "revision": "https://rezics.com/id/01a135fe-92b0-736e-b9cb-0bc05b9c49ee",
+          "mainVersion": "https://rezics.com/id/01a135fe-92b0-736d-9d94-8868a5376e37",
+          "title": {
+            "value": "Bookgarden2002b07d2f8f4c0b9565ace11cf95ee3 without editions",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "cover": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "work",
+            "key": "d4fe3f88b9b50ccb294ccf4ea7baf4e1"
+          },
+          "types": [
+            "https://schema.org/Book"
+          ],
+          "tagline": null,
+          "completionStatus": null,
+          "chapterCount": null,
+          "wordCount": null,
+          "lastUpdatedAt": null,
+          "disclosure": "public",
+          "publicationState": "unpublished",
+          "descriptionObligations": {
+            "status": "unassessed"
+          },
+          "description": null,
+          "metadataRevision": null,
+          "originalTitle": null,
+          "mainVersionRevision": "https://rezics.com/id/01a135fe-98e8-74d3-a726-42a602cf91c9",
+          "mainVersionLabel": null,
+          "selectedLanguage": "en",
+          "sourcePosition": {
+            "dataEpoch": "a3527a64-fa41-425a-aca1-1ae21566a101",
+            "sequence": "62",
+            "dependencyToken": "2511d3ff841605b3a61d9cad2f0620ade982c8c28f2fe618c5537b3ee2438ae1"
+          },
+          "links": {
+            "versions": "/v1/query#work-versions",
+            "classifications": "/v1/works/01a135fe-92b0-736c-ab8e-50637f665d19/classifications",
+            "adoptions": "/v1/query#work-adoptions",
+            "ratings": "/v1/works/01a135fe-92b0-736c-ab8e-50637f665d19/ratings",
+            "history": "/v1/works/01a135fe-92b0-736c-ab8e-50637f665d19/history",
+            "credits": "/v1/works/01a135fe-92b0-736c-ab8e-50637f665d19/credits",
+            "metadata": "/v1/works/01a135fe-92b0-736c-ab8e-50637f665d19/metadata",
+            "editions": "/v1/works/01a135fe-92b0-736c-ab8e-50637f665d19/editions"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "release-choices-empty",
+        "operationId": "getV1WorksByIdReleases",
+        "method": "GET",
+        "path": "/v1/works/01a135fe-92b0-736c-ab8e-50637f665d19/releases?limit=20&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": {
+          "items": [],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "a3527a64-fa41-425a-aca1-1ae21566a101",
+            "sequence": "62"
+          },
+          "count": {
+            "value": 0,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "realization-choices-empty",
+        "operationId": "getV1WorksByIdRealizations",
+        "method": "GET",
+        "path": "/v1/works/01a135fe-92b0-736c-ab8e-50637f665d19/realizations?limit=20&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": {
+          "items": [],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "a3527a64-fa41-425a-aca1-1ae21566a101",
+            "sequence": "62"
+          },
+          "count": {
+            "value": 0,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "foreign-preference-before",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fbc646d70-158b-4b33-b351-6ad63de74352",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          },
+          "language": "en",
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "own-preference-before",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": null,
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "save-preference-ebook",
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "method": "PUT",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9",
+        "body": {
+          "actingSubject": "https://rezics.com/id/a35466d3-4f5b-476f-86a5-6f277f9fb91a",
+          "expectedVersion": 0,
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/2493d569-be9d-4dfd-88f8-cf06af5eedcd",
+            "revision": "https://rezics.com/id/01a135fe-a721-75b8-9e54-b147976400e4"
+          }
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/2493d569-be9d-4dfd-88f8-cf06af5eedcd",
+            "revision": "https://rezics.com/id/01a135fe-a721-75b8-9e54-b147976400e4"
+          },
+          "version": 1,
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "own-preference-ebook",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/2493d569-be9d-4dfd-88f8-cf06af5eedcd",
+            "revision": "https://rezics.com/id/01a135fe-a721-75b8-9e54-b147976400e4"
+          },
+          "language": "en",
+          "version": 1
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "save-preference-replay",
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "method": "PUT",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9",
+        "body": {
+          "actingSubject": "https://rezics.com/id/a35466d3-4f5b-476f-86a5-6f277f9fb91a",
+          "expectedVersion": 0,
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/2493d569-be9d-4dfd-88f8-cf06af5eedcd",
+            "revision": "https://rezics.com/id/01a135fe-a721-75b8-9e54-b147976400e4"
+          }
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/2493d569-be9d-4dfd-88f8-cf06af5eedcd",
+            "revision": "https://rezics.com/id/01a135fe-a721-75b8-9e54-b147976400e4"
+          },
+          "version": 1,
+          "language": "en",
+          "replayed": true
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "save-preference-stale",
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "method": "PUT",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9",
+        "body": {
+          "actingSubject": "https://rezics.com/id/a35466d3-4f5b-476f-86a5-6f277f9fb91a",
+          "expectedVersion": 0,
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/2493d569-be9d-4dfd-88f8-cf06af5eedcd",
+            "revision": "https://rezics.com/id/01a135fe-a721-75b8-9e54-b147976400e4"
+          }
+        },
+        "status": 409,
+        "answer": {
+          "type": "https://rezics.com/problems/stale_edition_preference",
+          "title": "Edition preference changed",
+          "status": 409,
+          "code": "stale_edition_preference",
+          "current": {
+            "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+            "edition": {
+              "kind": "release",
+              "resource": "https://rezics.com/id/2493d569-be9d-4dfd-88f8-cf06af5eedcd",
+              "revision": "https://rezics.com/id/01a135fe-a721-75b8-9e54-b147976400e4"
+            },
+            "language": "en",
+            "version": 1
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "foreign-preference-after-ebook",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fbc646d70-158b-4b33-b351-6ad63de74352",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          },
+          "language": "en",
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "save-preference-audiobook",
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "method": "PUT",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9",
+        "body": {
+          "actingSubject": "https://rezics.com/id/a35466d3-4f5b-476f-86a5-6f277f9fb91a",
+          "expectedVersion": 1,
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/8a569afe-958b-452a-83f4-402aa9b77674",
+            "revision": "https://rezics.com/id/01a135fe-a8cf-7140-832d-6038eedb5ccd"
+          }
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/8a569afe-958b-452a-83f4-402aa9b77674",
+            "revision": "https://rezics.com/id/01a135fe-a8cf-7140-832d-6038eedb5ccd"
+          },
+          "version": 2,
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "own-preference-audiobook",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/8a569afe-958b-452a-83f4-402aa9b77674",
+            "revision": "https://rezics.com/id/01a135fe-a8cf-7140-832d-6038eedb5ccd"
+          },
+          "language": "en",
+          "version": 2
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "foreign-preference-after-audiobook",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fbc646d70-158b-4b33-b351-6ad63de74352",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          },
+          "language": "en",
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "save-preference-paperback",
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "method": "PUT",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9",
+        "body": {
+          "actingSubject": "https://rezics.com/id/a35466d3-4f5b-476f-86a5-6f277f9fb91a",
+          "expectedVersion": 2,
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          }
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          },
+          "version": 3,
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "own-preference-paperback",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          },
+          "language": "en",
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "foreign-preference-after-paperback",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fbc646d70-158b-4b33-b351-6ad63de74352",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          },
+          "language": "en",
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "foreign-preference-denied",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fbc646d70-158b-4b33-b351-6ad63de74352",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/progress_denied",
+          "title": "Progress and preferences are private to the principal’s own Person",
+          "status": 403,
+          "code": "progress_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "foreign-save-preference-denied",
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "method": "PUT",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9",
+        "body": {
+          "actingSubject": "https://rezics.com/id/bc646d70-158b-4b33-b351-6ad63de74352",
+          "expectedVersion": 3,
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          }
+        },
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/progress_denied",
+          "title": "Progress and preferences are private to the principal’s own Person",
+          "status": 403,
+          "code": "progress_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "foreign-preference-after-denial",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fbc646d70-158b-4b33-b351-6ad63de74352",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          },
+          "language": "en",
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "own-preference-after-denial",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          },
+          "language": "en",
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      }
+    ],
+    "owner": [
+      {
+        "label": "work-header",
+        "operationId": "getV1WorksById",
+        "method": "GET",
+        "path": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F3f125024-3738-428f-b2b4-44c35a439fcb",
+        "status": 200,
+        "answer": {
+          "profile": "work-read-v1",
+          "id": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "revision": "https://rezics.com/id/01a135fe-9a98-761d-8b20-bd15e0a207d4",
+          "mainVersion": "https://rezics.com/id/01a135fe-9a98-761c-96f7-511e59732d14",
+          "title": {
+            "value": "Bookgarden2002b07d2f8f4c0b9565ace11cf95ee3",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "cover": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "work",
+            "key": "e090960391a0ba31326754bfd6e1dc75"
+          },
+          "types": [
+            "https://schema.org/Book"
+          ],
+          "tagline": null,
+          "completionStatus": null,
+          "chapterCount": null,
+          "wordCount": null,
+          "lastUpdatedAt": null,
+          "disclosure": "public",
+          "publicationState": "unpublished",
+          "descriptionObligations": {
+            "status": "unassessed"
+          },
+          "description": null,
+          "metadataRevision": null,
+          "originalTitle": null,
+          "mainVersionRevision": "https://rezics.com/id/01a135fe-a019-728b-a0ca-f059068dad6a",
+          "mainVersionLabel": null,
+          "selectedLanguage": "en",
+          "sourcePosition": {
+            "dataEpoch": "a3527a64-fa41-425a-aca1-1ae21566a101",
+            "sequence": "62",
+            "dependencyToken": "d389debf3b5255084347d5b411328b31fc7cc691f51efa1f0aa90d9f1fab7b53"
+          },
+          "links": {
+            "versions": "/v1/query#work-versions",
+            "classifications": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/classifications",
+            "adoptions": "/v1/query#work-adoptions",
+            "ratings": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/ratings",
+            "history": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/history",
+            "credits": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/credits",
+            "metadata": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/metadata",
+            "editions": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/editions"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "work-credits",
+        "operationId": "getV1WorksByIdCredits",
+        "method": "GET",
+        "path": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/credits?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F3f125024-3738-428f-b2b4-44c35a439fcb",
+        "status": 200,
+        "answer": {
+          "profile": "template-result-v1",
+          "query": "https://rezics.com/query/work-credits",
+          "revision": 1,
+          "items": [
+            {
+              "id": "https://rezics.com/id/01a135fe-9aa2-743f-b631-75264cc28927",
+              "role": "author",
+              "participantKind": "agent",
+              "provider": null,
+              "key": null,
+              "ordinal": null,
+              "agent": "https://rezics.com/id/3f125024-3738-428f-b2b4-44c35a439fcb",
+              "displayName": null,
+              "handle": null
+            }
+          ],
+          "complete": true,
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "a3527a64-fa41-425a-aca1-1ae21566a101",
+            "sequence": "62",
+            "dependencyToken": "24c61e7b34f1c28b4e7e1d31f8e3e5b076a0c30880e570f0223e506cb28d7f70"
+          },
+          "count": {
+            "value": 1,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8",
+          "etag": "W/\"01c850eb5f2eb1b83cdf86bfa8fe6efeba232defb9c4549b37096cd7463bc4a4\""
+        }
+      },
+      {
+        "label": "release-choices",
+        "operationId": "getV1WorksByIdReleases",
+        "method": "GET",
+        "path": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/releases?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F3f125024-3738-428f-b2b4-44c35a439fcb&limit=20",
+        "status": 200,
+        "answer": {
+          "items": [
+            {
+              "profile": "release-v2",
+              "id": "https://rezics.com/id/2493d569-be9d-4dfd-88f8-cf06af5eedcd",
+              "revision": "https://rezics.com/id/01a135fe-a721-75b8-9e54-b147976400e4",
+              "kind": "formal",
+              "status": "official",
+              "contentLanguages": [
+                "en"
+              ],
+              "isTranslation": false,
+              "originalLanguages": [],
+              "titleLanguage": "en",
+              "tracklistLanguage": null,
+              "title": {
+                "value": "Bookgarden2002b07d2f8f4c0b9565ace11cf95ee3",
+                "language": "en"
+              },
+              "publisher": "Original fixture owner",
+              "editionStatement": "ebook",
+              "isbn13": null,
+              "publicationYear": 2026,
+              "originalUrl": null,
+              "fixedRelease": null,
+              "coverage": [
+                {
+                  "realization": "https://rezics.com/id/5bed5375-caf2-49aa-98a4-5e4696217311",
+                  "revision": "https://rezics.com/id/01a135fe-a3ca-70a1-bb3f-dac2d5deab27",
+                  "completeness": "complete",
+                  "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+                  "mainVersion": "https://rezics.com/id/01a135fe-9a98-761c-96f7-511e59732d14",
+                  "language": "en"
+                }
+              ],
+              "legacyCoverage": null,
+              "identifiers": [],
+              "platform": "ebook",
+              "territory": null,
+              "snapshots": []
+            },
+            {
+              "profile": "release-v2",
+              "id": "https://rezics.com/id/8a569afe-958b-452a-83f4-402aa9b77674",
+              "revision": "https://rezics.com/id/01a135fe-a8cf-7140-832d-6038eedb5ccd",
+              "kind": "formal",
+              "status": "official",
+              "contentLanguages": [
+                "en"
+              ],
+              "isTranslation": false,
+              "originalLanguages": [],
+              "titleLanguage": "en",
+              "tracklistLanguage": null,
+              "title": {
+                "value": "Bookgarden2002b07d2f8f4c0b9565ace11cf95ee3",
+                "language": "en"
+              },
+              "publisher": "Original fixture owner",
+              "editionStatement": "audiobook",
+              "isbn13": null,
+              "publicationYear": 2026,
+              "originalUrl": null,
+              "fixedRelease": null,
+              "coverage": [
+                {
+                  "realization": "https://rezics.com/id/5bed5375-caf2-49aa-98a4-5e4696217311",
+                  "revision": "https://rezics.com/id/01a135fe-a3ca-70a1-bb3f-dac2d5deab27",
+                  "completeness": "complete",
+                  "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+                  "mainVersion": "https://rezics.com/id/01a135fe-9a98-761c-96f7-511e59732d14",
+                  "language": "en"
+                }
+              ],
+              "legacyCoverage": null,
+              "identifiers": [],
+              "platform": "audiobook",
+              "territory": null,
+              "snapshots": []
+            },
+            {
+              "profile": "release-v2",
+              "id": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+              "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2",
+              "kind": "formal",
+              "status": "official",
+              "contentLanguages": [
+                "en"
+              ],
+              "isTranslation": false,
+              "originalLanguages": [],
+              "titleLanguage": "en",
+              "tracklistLanguage": null,
+              "title": {
+                "value": "Bookgarden2002b07d2f8f4c0b9565ace11cf95ee3",
+                "language": "en"
+              },
+              "publisher": "Original fixture owner",
+              "editionStatement": "paperback",
+              "isbn13": null,
+              "publicationYear": 2026,
+              "originalUrl": null,
+              "fixedRelease": null,
+              "coverage": [
+                {
+                  "realization": "https://rezics.com/id/5bed5375-caf2-49aa-98a4-5e4696217311",
+                  "revision": "https://rezics.com/id/01a135fe-a3ca-70a1-bb3f-dac2d5deab27",
+                  "completeness": "complete",
+                  "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+                  "mainVersion": "https://rezics.com/id/01a135fe-9a98-761c-96f7-511e59732d14",
+                  "language": "en"
+                }
+              ],
+              "legacyCoverage": null,
+              "identifiers": [],
+              "platform": "paperback",
+              "territory": null,
+              "snapshots": []
+            }
+          ],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "a3527a64-fa41-425a-aca1-1ae21566a101",
+            "sequence": "62"
+          },
+          "count": {
+            "value": 3,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "foreign-preference-before",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          },
+          "language": "en",
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "own-preference-before",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F3f125024-3738-428f-b2b4-44c35a439fcb",
+        "status": 200,
+        "answer": null,
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "save-preference-ebook",
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "method": "PUT",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9",
+        "body": {
+          "actingSubject": "https://rezics.com/id/3f125024-3738-428f-b2b4-44c35a439fcb",
+          "expectedVersion": 0,
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/2493d569-be9d-4dfd-88f8-cf06af5eedcd",
+            "revision": "https://rezics.com/id/01a135fe-a721-75b8-9e54-b147976400e4"
+          }
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/2493d569-be9d-4dfd-88f8-cf06af5eedcd",
+            "revision": "https://rezics.com/id/01a135fe-a721-75b8-9e54-b147976400e4"
+          },
+          "version": 1,
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "own-preference-ebook",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F3f125024-3738-428f-b2b4-44c35a439fcb",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/2493d569-be9d-4dfd-88f8-cf06af5eedcd",
+            "revision": "https://rezics.com/id/01a135fe-a721-75b8-9e54-b147976400e4"
+          },
+          "language": "en",
+          "version": 1
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "save-preference-replay",
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "method": "PUT",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9",
+        "body": {
+          "actingSubject": "https://rezics.com/id/3f125024-3738-428f-b2b4-44c35a439fcb",
+          "expectedVersion": 0,
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/2493d569-be9d-4dfd-88f8-cf06af5eedcd",
+            "revision": "https://rezics.com/id/01a135fe-a721-75b8-9e54-b147976400e4"
+          }
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/2493d569-be9d-4dfd-88f8-cf06af5eedcd",
+            "revision": "https://rezics.com/id/01a135fe-a721-75b8-9e54-b147976400e4"
+          },
+          "version": 1,
+          "language": "en",
+          "replayed": true
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "save-preference-stale",
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "method": "PUT",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9",
+        "body": {
+          "actingSubject": "https://rezics.com/id/3f125024-3738-428f-b2b4-44c35a439fcb",
+          "expectedVersion": 0,
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/2493d569-be9d-4dfd-88f8-cf06af5eedcd",
+            "revision": "https://rezics.com/id/01a135fe-a721-75b8-9e54-b147976400e4"
+          }
+        },
+        "status": 409,
+        "answer": {
+          "type": "https://rezics.com/problems/stale_edition_preference",
+          "title": "Edition preference changed",
+          "status": 409,
+          "code": "stale_edition_preference",
+          "current": {
+            "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+            "edition": {
+              "kind": "release",
+              "resource": "https://rezics.com/id/2493d569-be9d-4dfd-88f8-cf06af5eedcd",
+              "revision": "https://rezics.com/id/01a135fe-a721-75b8-9e54-b147976400e4"
+            },
+            "language": "en",
+            "version": 1
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "foreign-preference-after-ebook",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          },
+          "language": "en",
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "save-preference-audiobook",
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "method": "PUT",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9",
+        "body": {
+          "actingSubject": "https://rezics.com/id/3f125024-3738-428f-b2b4-44c35a439fcb",
+          "expectedVersion": 1,
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/8a569afe-958b-452a-83f4-402aa9b77674",
+            "revision": "https://rezics.com/id/01a135fe-a8cf-7140-832d-6038eedb5ccd"
+          }
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/8a569afe-958b-452a-83f4-402aa9b77674",
+            "revision": "https://rezics.com/id/01a135fe-a8cf-7140-832d-6038eedb5ccd"
+          },
+          "version": 2,
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "own-preference-audiobook",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F3f125024-3738-428f-b2b4-44c35a439fcb",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/8a569afe-958b-452a-83f4-402aa9b77674",
+            "revision": "https://rezics.com/id/01a135fe-a8cf-7140-832d-6038eedb5ccd"
+          },
+          "language": "en",
+          "version": 2
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "foreign-preference-after-audiobook",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          },
+          "language": "en",
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "save-preference-paperback",
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "method": "PUT",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9",
+        "body": {
+          "actingSubject": "https://rezics.com/id/3f125024-3738-428f-b2b4-44c35a439fcb",
+          "expectedVersion": 2,
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          }
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          },
+          "version": 3,
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "own-preference-paperback",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F3f125024-3738-428f-b2b4-44c35a439fcb",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          },
+          "language": "en",
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "foreign-preference-after-paperback",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          },
+          "language": "en",
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "foreign-preference-denied",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/progress_denied",
+          "title": "Progress and preferences are private to the principal’s own Person",
+          "status": 403,
+          "code": "progress_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "foreign-save-preference-denied",
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "method": "PUT",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9",
+        "body": {
+          "actingSubject": "https://rezics.com/id/a35466d3-4f5b-476f-86a5-6f277f9fb91a",
+          "expectedVersion": 3,
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          }
+        },
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/progress_denied",
+          "title": "Progress and preferences are private to the principal’s own Person",
+          "status": 403,
+          "code": "progress_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "foreign-preference-after-denial",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          },
+          "language": "en",
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "own-preference-after-denial",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F3f125024-3738-428f-b2b4-44c35a439fcb",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          },
+          "language": "en",
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      }
+    ],
+    "moderator": [
+      {
+        "label": "work-header",
+        "operationId": "getV1WorksById",
+        "method": "GET",
+        "path": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F79e52c89-5743-42a7-aa89-9c6738881504",
+        "status": 200,
+        "answer": {
+          "profile": "work-read-v1",
+          "id": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "revision": "https://rezics.com/id/01a135fe-9a98-761d-8b20-bd15e0a207d4",
+          "mainVersion": "https://rezics.com/id/01a135fe-9a98-761c-96f7-511e59732d14",
+          "title": {
+            "value": "Bookgarden2002b07d2f8f4c0b9565ace11cf95ee3",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "cover": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "work",
+            "key": "e090960391a0ba31326754bfd6e1dc75"
+          },
+          "types": [
+            "https://schema.org/Book"
+          ],
+          "tagline": null,
+          "completionStatus": null,
+          "chapterCount": null,
+          "wordCount": null,
+          "lastUpdatedAt": null,
+          "disclosure": "public",
+          "publicationState": "unpublished",
+          "descriptionObligations": {
+            "status": "unassessed"
+          },
+          "description": null,
+          "metadataRevision": null,
+          "originalTitle": null,
+          "mainVersionRevision": "https://rezics.com/id/01a135fe-a019-728b-a0ca-f059068dad6a",
+          "mainVersionLabel": null,
+          "selectedLanguage": "en",
+          "sourcePosition": {
+            "dataEpoch": "a3527a64-fa41-425a-aca1-1ae21566a101",
+            "sequence": "62",
+            "dependencyToken": "d389debf3b5255084347d5b411328b31fc7cc691f51efa1f0aa90d9f1fab7b53"
+          },
+          "links": {
+            "versions": "/v1/query#work-versions",
+            "classifications": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/classifications",
+            "adoptions": "/v1/query#work-adoptions",
+            "ratings": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/ratings",
+            "history": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/history",
+            "credits": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/credits",
+            "metadata": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/metadata",
+            "editions": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/editions"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "work-credits",
+        "operationId": "getV1WorksByIdCredits",
+        "method": "GET",
+        "path": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/credits?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F79e52c89-5743-42a7-aa89-9c6738881504",
+        "status": 200,
+        "answer": {
+          "profile": "template-result-v1",
+          "query": "https://rezics.com/query/work-credits",
+          "revision": 1,
+          "items": [
+            {
+              "id": "https://rezics.com/id/01a135fe-9aa2-743f-b631-75264cc28927",
+              "role": "author",
+              "participantKind": "agent",
+              "provider": null,
+              "key": null,
+              "ordinal": null,
+              "agent": "https://rezics.com/id/3f125024-3738-428f-b2b4-44c35a439fcb",
+              "displayName": null,
+              "handle": null
+            }
+          ],
+          "complete": true,
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "a3527a64-fa41-425a-aca1-1ae21566a101",
+            "sequence": "62",
+            "dependencyToken": "24c61e7b34f1c28b4e7e1d31f8e3e5b076a0c30880e570f0223e506cb28d7f70"
+          },
+          "count": {
+            "value": 1,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8",
+          "etag": "W/\"234b35e1630a2519c291a89ad6e3302eff9603f227d895c9c5fe84b3bb72cfcd\""
+        }
+      },
+      {
+        "label": "release-choices",
+        "operationId": "getV1WorksByIdReleases",
+        "method": "GET",
+        "path": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/releases?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F79e52c89-5743-42a7-aa89-9c6738881504&limit=20",
+        "status": 200,
+        "answer": {
+          "items": [
+            {
+              "profile": "release-v2",
+              "id": "https://rezics.com/id/2493d569-be9d-4dfd-88f8-cf06af5eedcd",
+              "revision": "https://rezics.com/id/01a135fe-a721-75b8-9e54-b147976400e4",
+              "kind": "formal",
+              "status": "official",
+              "contentLanguages": [
+                "en"
+              ],
+              "isTranslation": false,
+              "originalLanguages": [],
+              "titleLanguage": "en",
+              "tracklistLanguage": null,
+              "title": {
+                "value": "Bookgarden2002b07d2f8f4c0b9565ace11cf95ee3",
+                "language": "en"
+              },
+              "publisher": "Original fixture owner",
+              "editionStatement": "ebook",
+              "isbn13": null,
+              "publicationYear": 2026,
+              "originalUrl": null,
+              "fixedRelease": null,
+              "coverage": [
+                {
+                  "realization": "https://rezics.com/id/5bed5375-caf2-49aa-98a4-5e4696217311",
+                  "revision": "https://rezics.com/id/01a135fe-a3ca-70a1-bb3f-dac2d5deab27",
+                  "completeness": "complete",
+                  "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+                  "mainVersion": "https://rezics.com/id/01a135fe-9a98-761c-96f7-511e59732d14",
+                  "language": "en"
+                }
+              ],
+              "legacyCoverage": null,
+              "identifiers": [],
+              "platform": "ebook",
+              "territory": null,
+              "snapshots": []
+            },
+            {
+              "profile": "release-v2",
+              "id": "https://rezics.com/id/8a569afe-958b-452a-83f4-402aa9b77674",
+              "revision": "https://rezics.com/id/01a135fe-a8cf-7140-832d-6038eedb5ccd",
+              "kind": "formal",
+              "status": "official",
+              "contentLanguages": [
+                "en"
+              ],
+              "isTranslation": false,
+              "originalLanguages": [],
+              "titleLanguage": "en",
+              "tracklistLanguage": null,
+              "title": {
+                "value": "Bookgarden2002b07d2f8f4c0b9565ace11cf95ee3",
+                "language": "en"
+              },
+              "publisher": "Original fixture owner",
+              "editionStatement": "audiobook",
+              "isbn13": null,
+              "publicationYear": 2026,
+              "originalUrl": null,
+              "fixedRelease": null,
+              "coverage": [
+                {
+                  "realization": "https://rezics.com/id/5bed5375-caf2-49aa-98a4-5e4696217311",
+                  "revision": "https://rezics.com/id/01a135fe-a3ca-70a1-bb3f-dac2d5deab27",
+                  "completeness": "complete",
+                  "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+                  "mainVersion": "https://rezics.com/id/01a135fe-9a98-761c-96f7-511e59732d14",
+                  "language": "en"
+                }
+              ],
+              "legacyCoverage": null,
+              "identifiers": [],
+              "platform": "audiobook",
+              "territory": null,
+              "snapshots": []
+            },
+            {
+              "profile": "release-v2",
+              "id": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+              "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2",
+              "kind": "formal",
+              "status": "official",
+              "contentLanguages": [
+                "en"
+              ],
+              "isTranslation": false,
+              "originalLanguages": [],
+              "titleLanguage": "en",
+              "tracklistLanguage": null,
+              "title": {
+                "value": "Bookgarden2002b07d2f8f4c0b9565ace11cf95ee3",
+                "language": "en"
+              },
+              "publisher": "Original fixture owner",
+              "editionStatement": "paperback",
+              "isbn13": null,
+              "publicationYear": 2026,
+              "originalUrl": null,
+              "fixedRelease": null,
+              "coverage": [
+                {
+                  "realization": "https://rezics.com/id/5bed5375-caf2-49aa-98a4-5e4696217311",
+                  "revision": "https://rezics.com/id/01a135fe-a3ca-70a1-bb3f-dac2d5deab27",
+                  "completeness": "complete",
+                  "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+                  "mainVersion": "https://rezics.com/id/01a135fe-9a98-761c-96f7-511e59732d14",
+                  "language": "en"
+                }
+              ],
+              "legacyCoverage": null,
+              "identifiers": [],
+              "platform": "paperback",
+              "territory": null,
+              "snapshots": []
+            }
+          ],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "a3527a64-fa41-425a-aca1-1ae21566a101",
+            "sequence": "62"
+          },
+          "count": {
+            "value": 3,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "foreign-preference-before",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          },
+          "language": "en",
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "own-preference-before",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F79e52c89-5743-42a7-aa89-9c6738881504",
+        "status": 200,
+        "answer": null,
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "save-preference-ebook",
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "method": "PUT",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9",
+        "body": {
+          "actingSubject": "https://rezics.com/id/79e52c89-5743-42a7-aa89-9c6738881504",
+          "expectedVersion": 0,
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/2493d569-be9d-4dfd-88f8-cf06af5eedcd",
+            "revision": "https://rezics.com/id/01a135fe-a721-75b8-9e54-b147976400e4"
+          }
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/2493d569-be9d-4dfd-88f8-cf06af5eedcd",
+            "revision": "https://rezics.com/id/01a135fe-a721-75b8-9e54-b147976400e4"
+          },
+          "version": 1,
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "own-preference-ebook",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F79e52c89-5743-42a7-aa89-9c6738881504",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/2493d569-be9d-4dfd-88f8-cf06af5eedcd",
+            "revision": "https://rezics.com/id/01a135fe-a721-75b8-9e54-b147976400e4"
+          },
+          "language": "en",
+          "version": 1
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "save-preference-replay",
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "method": "PUT",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9",
+        "body": {
+          "actingSubject": "https://rezics.com/id/79e52c89-5743-42a7-aa89-9c6738881504",
+          "expectedVersion": 0,
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/2493d569-be9d-4dfd-88f8-cf06af5eedcd",
+            "revision": "https://rezics.com/id/01a135fe-a721-75b8-9e54-b147976400e4"
+          }
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/2493d569-be9d-4dfd-88f8-cf06af5eedcd",
+            "revision": "https://rezics.com/id/01a135fe-a721-75b8-9e54-b147976400e4"
+          },
+          "version": 1,
+          "language": "en",
+          "replayed": true
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "save-preference-stale",
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "method": "PUT",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9",
+        "body": {
+          "actingSubject": "https://rezics.com/id/79e52c89-5743-42a7-aa89-9c6738881504",
+          "expectedVersion": 0,
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/2493d569-be9d-4dfd-88f8-cf06af5eedcd",
+            "revision": "https://rezics.com/id/01a135fe-a721-75b8-9e54-b147976400e4"
+          }
+        },
+        "status": 409,
+        "answer": {
+          "type": "https://rezics.com/problems/stale_edition_preference",
+          "title": "Edition preference changed",
+          "status": 409,
+          "code": "stale_edition_preference",
+          "current": {
+            "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+            "edition": {
+              "kind": "release",
+              "resource": "https://rezics.com/id/2493d569-be9d-4dfd-88f8-cf06af5eedcd",
+              "revision": "https://rezics.com/id/01a135fe-a721-75b8-9e54-b147976400e4"
+            },
+            "language": "en",
+            "version": 1
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "foreign-preference-after-ebook",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          },
+          "language": "en",
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "save-preference-audiobook",
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "method": "PUT",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9",
+        "body": {
+          "actingSubject": "https://rezics.com/id/79e52c89-5743-42a7-aa89-9c6738881504",
+          "expectedVersion": 1,
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/8a569afe-958b-452a-83f4-402aa9b77674",
+            "revision": "https://rezics.com/id/01a135fe-a8cf-7140-832d-6038eedb5ccd"
+          }
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/8a569afe-958b-452a-83f4-402aa9b77674",
+            "revision": "https://rezics.com/id/01a135fe-a8cf-7140-832d-6038eedb5ccd"
+          },
+          "version": 2,
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "own-preference-audiobook",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F79e52c89-5743-42a7-aa89-9c6738881504",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/8a569afe-958b-452a-83f4-402aa9b77674",
+            "revision": "https://rezics.com/id/01a135fe-a8cf-7140-832d-6038eedb5ccd"
+          },
+          "language": "en",
+          "version": 2
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "foreign-preference-after-audiobook",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          },
+          "language": "en",
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "save-preference-paperback",
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "method": "PUT",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9",
+        "body": {
+          "actingSubject": "https://rezics.com/id/79e52c89-5743-42a7-aa89-9c6738881504",
+          "expectedVersion": 2,
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          }
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          },
+          "version": 3,
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "own-preference-paperback",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F79e52c89-5743-42a7-aa89-9c6738881504",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          },
+          "language": "en",
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "foreign-preference-after-paperback",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          },
+          "language": "en",
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "foreign-preference-denied",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/progress_denied",
+          "title": "Progress and preferences are private to the principal’s own Person",
+          "status": 403,
+          "code": "progress_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "foreign-save-preference-denied",
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "method": "PUT",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9",
+        "body": {
+          "actingSubject": "https://rezics.com/id/a35466d3-4f5b-476f-86a5-6f277f9fb91a",
+          "expectedVersion": 3,
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          }
+        },
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/progress_denied",
+          "title": "Progress and preferences are private to the principal’s own Person",
+          "status": 403,
+          "code": "progress_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "foreign-preference-after-denial",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          },
+          "language": "en",
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "own-preference-after-denial",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F79e52c89-5743-42a7-aa89-9c6738881504",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          },
+          "language": "en",
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      }
+    ],
+    "operator": [
+      {
+        "label": "work-header",
+        "operationId": "getV1WorksById",
+        "method": "GET",
+        "path": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F4a3738aa-15b1-4b24-9c11-ddef7ad8afdb",
+        "status": 200,
+        "answer": {
+          "profile": "work-read-v1",
+          "id": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "revision": "https://rezics.com/id/01a135fe-9a98-761d-8b20-bd15e0a207d4",
+          "mainVersion": "https://rezics.com/id/01a135fe-9a98-761c-96f7-511e59732d14",
+          "title": {
+            "value": "Bookgarden2002b07d2f8f4c0b9565ace11cf95ee3",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "cover": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "work",
+            "key": "e090960391a0ba31326754bfd6e1dc75"
+          },
+          "types": [
+            "https://schema.org/Book"
+          ],
+          "tagline": null,
+          "completionStatus": null,
+          "chapterCount": null,
+          "wordCount": null,
+          "lastUpdatedAt": null,
+          "disclosure": "public",
+          "publicationState": "unpublished",
+          "descriptionObligations": {
+            "status": "unassessed"
+          },
+          "description": null,
+          "metadataRevision": null,
+          "originalTitle": null,
+          "mainVersionRevision": "https://rezics.com/id/01a135fe-a019-728b-a0ca-f059068dad6a",
+          "mainVersionLabel": null,
+          "selectedLanguage": "en",
+          "sourcePosition": {
+            "dataEpoch": "a3527a64-fa41-425a-aca1-1ae21566a101",
+            "sequence": "62",
+            "dependencyToken": "d389debf3b5255084347d5b411328b31fc7cc691f51efa1f0aa90d9f1fab7b53"
+          },
+          "links": {
+            "versions": "/v1/query#work-versions",
+            "classifications": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/classifications",
+            "adoptions": "/v1/query#work-adoptions",
+            "ratings": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/ratings",
+            "history": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/history",
+            "credits": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/credits",
+            "metadata": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/metadata",
+            "editions": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/editions"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "work-credits",
+        "operationId": "getV1WorksByIdCredits",
+        "method": "GET",
+        "path": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/credits?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F4a3738aa-15b1-4b24-9c11-ddef7ad8afdb",
+        "status": 200,
+        "answer": {
+          "profile": "template-result-v1",
+          "query": "https://rezics.com/query/work-credits",
+          "revision": 1,
+          "items": [
+            {
+              "id": "https://rezics.com/id/01a135fe-9aa2-743f-b631-75264cc28927",
+              "role": "author",
+              "participantKind": "agent",
+              "provider": null,
+              "key": null,
+              "ordinal": null,
+              "agent": "https://rezics.com/id/3f125024-3738-428f-b2b4-44c35a439fcb",
+              "displayName": null,
+              "handle": null
+            }
+          ],
+          "complete": true,
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "a3527a64-fa41-425a-aca1-1ae21566a101",
+            "sequence": "62",
+            "dependencyToken": "24c61e7b34f1c28b4e7e1d31f8e3e5b076a0c30880e570f0223e506cb28d7f70"
+          },
+          "count": {
+            "value": 1,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8",
+          "etag": "W/\"efca41831b283a810302e242fe3c59d5639dba1aa482a5f9005dd83c2e879315\""
+        }
+      },
+      {
+        "label": "release-choices",
+        "operationId": "getV1WorksByIdReleases",
+        "method": "GET",
+        "path": "/v1/works/01a135fe-9a98-761b-814f-4a3905b086f9/releases?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F4a3738aa-15b1-4b24-9c11-ddef7ad8afdb&limit=20",
+        "status": 200,
+        "answer": {
+          "items": [
+            {
+              "profile": "release-v2",
+              "id": "https://rezics.com/id/2493d569-be9d-4dfd-88f8-cf06af5eedcd",
+              "revision": "https://rezics.com/id/01a135fe-a721-75b8-9e54-b147976400e4",
+              "kind": "formal",
+              "status": "official",
+              "contentLanguages": [
+                "en"
+              ],
+              "isTranslation": false,
+              "originalLanguages": [],
+              "titleLanguage": "en",
+              "tracklistLanguage": null,
+              "title": {
+                "value": "Bookgarden2002b07d2f8f4c0b9565ace11cf95ee3",
+                "language": "en"
+              },
+              "publisher": "Original fixture owner",
+              "editionStatement": "ebook",
+              "isbn13": null,
+              "publicationYear": 2026,
+              "originalUrl": null,
+              "fixedRelease": null,
+              "coverage": [
+                {
+                  "realization": "https://rezics.com/id/5bed5375-caf2-49aa-98a4-5e4696217311",
+                  "revision": "https://rezics.com/id/01a135fe-a3ca-70a1-bb3f-dac2d5deab27",
+                  "completeness": "complete",
+                  "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+                  "mainVersion": "https://rezics.com/id/01a135fe-9a98-761c-96f7-511e59732d14",
+                  "language": "en"
+                }
+              ],
+              "legacyCoverage": null,
+              "identifiers": [],
+              "platform": "ebook",
+              "territory": null,
+              "snapshots": []
+            },
+            {
+              "profile": "release-v2",
+              "id": "https://rezics.com/id/8a569afe-958b-452a-83f4-402aa9b77674",
+              "revision": "https://rezics.com/id/01a135fe-a8cf-7140-832d-6038eedb5ccd",
+              "kind": "formal",
+              "status": "official",
+              "contentLanguages": [
+                "en"
+              ],
+              "isTranslation": false,
+              "originalLanguages": [],
+              "titleLanguage": "en",
+              "tracklistLanguage": null,
+              "title": {
+                "value": "Bookgarden2002b07d2f8f4c0b9565ace11cf95ee3",
+                "language": "en"
+              },
+              "publisher": "Original fixture owner",
+              "editionStatement": "audiobook",
+              "isbn13": null,
+              "publicationYear": 2026,
+              "originalUrl": null,
+              "fixedRelease": null,
+              "coverage": [
+                {
+                  "realization": "https://rezics.com/id/5bed5375-caf2-49aa-98a4-5e4696217311",
+                  "revision": "https://rezics.com/id/01a135fe-a3ca-70a1-bb3f-dac2d5deab27",
+                  "completeness": "complete",
+                  "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+                  "mainVersion": "https://rezics.com/id/01a135fe-9a98-761c-96f7-511e59732d14",
+                  "language": "en"
+                }
+              ],
+              "legacyCoverage": null,
+              "identifiers": [],
+              "platform": "audiobook",
+              "territory": null,
+              "snapshots": []
+            },
+            {
+              "profile": "release-v2",
+              "id": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+              "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2",
+              "kind": "formal",
+              "status": "official",
+              "contentLanguages": [
+                "en"
+              ],
+              "isTranslation": false,
+              "originalLanguages": [],
+              "titleLanguage": "en",
+              "tracklistLanguage": null,
+              "title": {
+                "value": "Bookgarden2002b07d2f8f4c0b9565ace11cf95ee3",
+                "language": "en"
+              },
+              "publisher": "Original fixture owner",
+              "editionStatement": "paperback",
+              "isbn13": null,
+              "publicationYear": 2026,
+              "originalUrl": null,
+              "fixedRelease": null,
+              "coverage": [
+                {
+                  "realization": "https://rezics.com/id/5bed5375-caf2-49aa-98a4-5e4696217311",
+                  "revision": "https://rezics.com/id/01a135fe-a3ca-70a1-bb3f-dac2d5deab27",
+                  "completeness": "complete",
+                  "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+                  "mainVersion": "https://rezics.com/id/01a135fe-9a98-761c-96f7-511e59732d14",
+                  "language": "en"
+                }
+              ],
+              "legacyCoverage": null,
+              "identifiers": [],
+              "platform": "paperback",
+              "territory": null,
+              "snapshots": []
+            }
+          ],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "a3527a64-fa41-425a-aca1-1ae21566a101",
+            "sequence": "62"
+          },
+          "count": {
+            "value": 3,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "foreign-preference-before",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          },
+          "language": "en",
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "own-preference-before",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F4a3738aa-15b1-4b24-9c11-ddef7ad8afdb",
+        "status": 200,
+        "answer": null,
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "save-preference-ebook",
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "method": "PUT",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9",
+        "body": {
+          "actingSubject": "https://rezics.com/id/4a3738aa-15b1-4b24-9c11-ddef7ad8afdb",
+          "expectedVersion": 0,
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/2493d569-be9d-4dfd-88f8-cf06af5eedcd",
+            "revision": "https://rezics.com/id/01a135fe-a721-75b8-9e54-b147976400e4"
+          }
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/2493d569-be9d-4dfd-88f8-cf06af5eedcd",
+            "revision": "https://rezics.com/id/01a135fe-a721-75b8-9e54-b147976400e4"
+          },
+          "version": 1,
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "own-preference-ebook",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F4a3738aa-15b1-4b24-9c11-ddef7ad8afdb",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/2493d569-be9d-4dfd-88f8-cf06af5eedcd",
+            "revision": "https://rezics.com/id/01a135fe-a721-75b8-9e54-b147976400e4"
+          },
+          "language": "en",
+          "version": 1
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "save-preference-replay",
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "method": "PUT",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9",
+        "body": {
+          "actingSubject": "https://rezics.com/id/4a3738aa-15b1-4b24-9c11-ddef7ad8afdb",
+          "expectedVersion": 0,
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/2493d569-be9d-4dfd-88f8-cf06af5eedcd",
+            "revision": "https://rezics.com/id/01a135fe-a721-75b8-9e54-b147976400e4"
+          }
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/2493d569-be9d-4dfd-88f8-cf06af5eedcd",
+            "revision": "https://rezics.com/id/01a135fe-a721-75b8-9e54-b147976400e4"
+          },
+          "version": 1,
+          "language": "en",
+          "replayed": true
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "save-preference-stale",
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "method": "PUT",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9",
+        "body": {
+          "actingSubject": "https://rezics.com/id/4a3738aa-15b1-4b24-9c11-ddef7ad8afdb",
+          "expectedVersion": 0,
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/2493d569-be9d-4dfd-88f8-cf06af5eedcd",
+            "revision": "https://rezics.com/id/01a135fe-a721-75b8-9e54-b147976400e4"
+          }
+        },
+        "status": 409,
+        "answer": {
+          "type": "https://rezics.com/problems/stale_edition_preference",
+          "title": "Edition preference changed",
+          "status": 409,
+          "code": "stale_edition_preference",
+          "current": {
+            "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+            "edition": {
+              "kind": "release",
+              "resource": "https://rezics.com/id/2493d569-be9d-4dfd-88f8-cf06af5eedcd",
+              "revision": "https://rezics.com/id/01a135fe-a721-75b8-9e54-b147976400e4"
+            },
+            "language": "en",
+            "version": 1
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "foreign-preference-after-ebook",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          },
+          "language": "en",
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "save-preference-audiobook",
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "method": "PUT",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9",
+        "body": {
+          "actingSubject": "https://rezics.com/id/4a3738aa-15b1-4b24-9c11-ddef7ad8afdb",
+          "expectedVersion": 1,
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/8a569afe-958b-452a-83f4-402aa9b77674",
+            "revision": "https://rezics.com/id/01a135fe-a8cf-7140-832d-6038eedb5ccd"
+          }
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/8a569afe-958b-452a-83f4-402aa9b77674",
+            "revision": "https://rezics.com/id/01a135fe-a8cf-7140-832d-6038eedb5ccd"
+          },
+          "version": 2,
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "own-preference-audiobook",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F4a3738aa-15b1-4b24-9c11-ddef7ad8afdb",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/8a569afe-958b-452a-83f4-402aa9b77674",
+            "revision": "https://rezics.com/id/01a135fe-a8cf-7140-832d-6038eedb5ccd"
+          },
+          "language": "en",
+          "version": 2
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "foreign-preference-after-audiobook",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          },
+          "language": "en",
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "save-preference-paperback",
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "method": "PUT",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9",
+        "body": {
+          "actingSubject": "https://rezics.com/id/4a3738aa-15b1-4b24-9c11-ddef7ad8afdb",
+          "expectedVersion": 2,
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          }
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          },
+          "version": 3,
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "own-preference-paperback",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F4a3738aa-15b1-4b24-9c11-ddef7ad8afdb",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          },
+          "language": "en",
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "foreign-preference-after-paperback",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          },
+          "language": "en",
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "foreign-preference-denied",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/progress_denied",
+          "title": "Progress and preferences are private to the principal’s own Person",
+          "status": 403,
+          "code": "progress_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "foreign-save-preference-denied",
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "method": "PUT",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9",
+        "body": {
+          "actingSubject": "https://rezics.com/id/a35466d3-4f5b-476f-86a5-6f277f9fb91a",
+          "expectedVersion": 3,
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          }
+        },
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/progress_denied",
+          "title": "Progress and preferences are private to the principal’s own Person",
+          "status": 403,
+          "code": "progress_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "foreign-preference-after-denial",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa35466d3-4f5b-476f-86a5-6f277f9fb91a",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          },
+          "language": "en",
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "own-preference-after-denial",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135fe-9a98-761b-814f-4a3905b086f9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F4a3738aa-15b1-4b24-9c11-ddef7ad8afdb",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135fe-9a98-761b-814f-4a3905b086f9",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/c6d62e59-f267-4e5a-8058-e277517fa8d4",
+            "revision": "https://rezics.com/id/01a135fe-a564-7198-84f2-3ebf2f5742b2"
+          },
+          "language": "en",
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      }
+    ]
+  }
+}
