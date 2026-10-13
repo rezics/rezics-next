@@ -122,33 +122,32 @@ test('Selected context vocabulary traverses disclosed Concepts with exact query 
     expect(resumed.items.some(item => item.id === hidden.concept)).toBe(false);
     expect(await traverse({ q: 'Selected hidden' })).toEqual([]);
 
-    // Build once through the command API, then measure only the foreground
-    // bounded read. Each retained population uses the same selected scheme.
-    let bulk = await define('Population zero');
-    const bulkScheme = bulk.scheme;
+    // Independent schemes permit bounded parallel preparation without sharing
+    // a write head. Both populations are selected by the same inherited context.
     const costs: number[] = [];
-    let population = 1;
+    let population = 0;
     const schemeHead = async () => (await stack.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
       SELECT ?head WHERE { GRAPH ${iri(GRAPHS.current)} {
-        ${iri(bulkScheme)} rv:schemeRevisionHead ?head } } LIMIT 2`)).results?.bindings.map(row => row.head?.value);
+        ${iri(root.scheme)} rv:schemeRevisionHead ?head } } LIMIT 2`)).results?.bindings.map(row => row.head?.value);
     for (const size of [128, 512]) {
       while (population < size) {
-        bulk = await define(`Population ${population}`, bulk);
-        population++;
+        await Promise.all([define(`Population ${population}`), define(`Population ${population + 1}`)]);
+        population += 2;
       }
-      expect(await schemeHead(), 'The prepared scheme head matches the last command receipt').toEqual([bulk.schemeHead]);
-      const measured = await measureGraphReads(() => stack.call('GET', path({ scheme: bulkScheme })));
+      expect(await schemeHead(), 'The prepared scheme head matches the last command receipt').toEqual([hidden.schemeHead]);
+      const contextPath = `/v1/classification-vocabulary?${new URLSearchParams({ context: firstContext, language: 'en', limit: '1' })}`;
+      const measured = await measureGraphReads(() => stack.call('GET', contextPath));
       const page = await json<Page>(measured.value);
       expect(page.items).toHaveLength(1);
       expect(page.nextCursor).toBeString();
       expect(measured.calls).toBeLessThanOrEqual(64);
       costs.push(measured.calls);
       console.log(`Context vocabulary cost: ${JSON.stringify({ population: size, graphReads: measured.calls })}`);
-      expect(await schemeHead(), 'A vocabulary read preserves the prepared scheme head').toEqual([bulk.schemeHead]);
+      expect(await schemeHead(), 'A vocabulary read preserves the prepared scheme head').toEqual([hidden.schemeHead]);
     }
     expect(costs[1]).toBeLessThanOrEqual(costs[0]! + 4);
     // A previously empty lookup is live; it is not retained in a process cache.
-    expect(await json<Page>(await stack.call('GET', path({ scheme: bulkScheme, limit: '20' }))))
+    expect(await json<Page>(await stack.call('GET', path({ limit: '20' }))))
       .toMatchObject({ count: { kind: 'exact-page', total: null } });
     const live = await json<Page>(await stack.call('GET', path()));
     const realm = realms.get(firstContext)!;
