@@ -14,7 +14,7 @@ type Occurrence = { occurrence: string; parent: string; role: string; sourceKey:
 type RecipePage = { revision: string; next?: string; occurrences: Occurrence[];
   ingredients: Array<{ originalText: string; amount?: { numerator: number; denominator: number } }> };
 type Imported = { revision: string; sourceObservation: string; supports?: string[];
-  unboundSourceKeys?: string[]; receipts: string[] };
+  unboundSourceKeys?: string[]; receipts: string[]; replayed?: boolean };
 
 test('Recipe imports preserve retained parents, interleaved siblings and empty groups through HTTP', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
@@ -134,7 +134,8 @@ test('Recipe imports preserve retained parents, interleaved siblings and empty g
               index < 2 ? 'recipeIngredient' : 'recipeInstructions', pointers[index]!) });
         }
       }
-      expect(await f.json<Imported>(await importRecipe(created.revision), 200)).toMatchObject(imported);
+      expect(await f.json<Imported>(await importRecipe(created.revision), 200))
+        .toMatchObject(mode === 'file' ? { ...imported, replayed: true } : imported);
       expect((await readRecipe()).occurrences).toEqual(page.occurrences);
       expect((await importRecipe(created.revision, `stale-${randomUUID()}`)).status).toBe(409);
       if (mode === 'file') {
@@ -151,7 +152,7 @@ test('Recipe imports preserve retained parents, interleaved siblings and empty g
         expect(flatPage.occurrences.slice(0, page.occurrences.length)).toEqual(page.occurrences);
         expect(flatPage.occurrences.slice(page.occurrences.length).map(text))
           .toEqual(['Flat layout', 'Mix the salt.', '1 cup salt']);
-        expect(await f.json<Imported>(await flatImport(), 200)).toMatchObject(flat);
+        expect(await f.json<Imported>(await flatImport(), 200)).toMatchObject({ ...flat, replayed: true });
         expect((await readRecipe()).occurrences).toEqual(flatPage.occurrences);
       }
       await ensureFixtureScopeGate(f.accessPool, `work:edit:${work.work}`, { open: false });
