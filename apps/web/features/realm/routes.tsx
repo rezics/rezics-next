@@ -11,12 +11,11 @@ import LocalizedLink from '../shell/localized-link.tsx';
 import { PageContainer } from '../shell/page.tsx';
 import { ZoneBrowse } from '../zones/browse.tsx';
 import {
-  type BrowseFacet,
-  browseFacets,
   mainBrowseQuery,
   parseBrowseState,
 } from '../zones/browse-state.ts';
-import { browseEntry, browseModel, type FacetCounts } from '../zones/browse-view.ts';
+import { browseEntry } from '../zones/browse-view.ts';
+import { browseFacetCounts as facetCounts, buildBrowsePage } from './browse-page.ts';
 import { ZoneSiteHome } from '../zones/site-home.tsx';
 import { cardRenderer, ZoneHome } from '../zones/zone-home.tsx';
 import { ReleaseBrowse, ReleaseBrowseHeader } from '../release-filter/browse.tsx';
@@ -42,7 +41,6 @@ import {
   readZoneBrowse,
   resolveRealm,
 } from './read.ts';
-import type { ZoneBrowsePage } from './types.ts';
 import {
   loadRealmView,
   membersText,
@@ -170,19 +168,6 @@ function failure(view: RealmView, tab: CommunityPage, reason: ReadFailure, refer
       />
     </PageContainer>
   );
-}
-
-/** Main's value counts per Facet, with Concept names as the SDK's text. */
-function facetCounts(page: ZoneBrowsePage): FacetCounts {
-  const counts = {} as Record<BrowseFacet, FacetCounts[BrowseFacet]>;
-  for (const facet of browseFacets) {
-    counts[facet] = page.facets[facet].map((item) => ({
-      value: item.value,
-      count: item.count,
-      name: item.name ? zoneText(item.name) : null,
-    }));
-  }
-  return counts;
 }
 
 export function RealmHomeRoute(props: RealmRouteProps) {
@@ -336,33 +321,20 @@ export function RealmBrowseRoute(props: RealmRouteProps, loadView?: typeof loadR
           view.pkg?.catalogue ? catalogueBrowseQuery(search) : mainBrowseQuery(state)),
         readFacets(),
       ]);
-      if (!page.ok) return failure(view, 'browse', page.failure, page.reference);
-      const admitted = new Map(
-        (facets.ok ? facets.data.facets : [])
-          .filter((facet) => facet.current)
-          .map((facet) => [facet.name, facet.labels[locale]] as const),
-      );
-      const counts = facetCounts(page.data);
       const catalogue = view.pkg?.catalogue;
-      if (catalogue) {
-        const formats = new Set(catalogue.formatNames);
-        counts.concept = counts.concept.filter(item =>
-          (item.name ? formats.has(item.name.value) : false) || state.filter.concept?.includes(item.value));
-      }
-      const model = browseModel({
+      const built = buildBrowsePage({
+        page,
+        facets,
         base,
         zoneName: view.zone.name.value,
         state,
-        admitted,
+        context: view.context,
+        catalogue,
         locale,
         messages: view.zoneMessages,
-        page: {
-          ...page.data,
-          facets: counts,
-          sort: page.data.query.sort,
-          items: page.data.items.map((item) => zoneWork(item, view.context, item.evidence)),
-        },
       });
+      if (!built.ok) return failure(view, 'browse', built.failure, built.reference);
+      const model = built.data;
       const year = catalogue ? await applyCatalogueYear({ view, search, model }) : null;
       if (year?.failure) return <>
         {year.header ? <PageContainer className="pb-0 sm:pb-0 lg:pb-0">{year.header}</PageContainer> : null}

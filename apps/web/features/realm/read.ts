@@ -14,10 +14,9 @@ import { sessionAgentState, sessionReadSubject } from '../auth/session.ts';
 import { displayLanguages } from '../../i18n/display-languages.ts';
 import { readSpacePage } from '../address/space-read.ts';
 import type { JoinPage } from '../manage/settings-api.ts';
-import { failedRead, isOfflineError } from '../feed/types.ts';
+import { readBrowseAnswer, readFacetAnswer, settleRealmRead as settle } from './browse-page-read.ts';
 import {
   type AgentRead,
-  failureOf,
   type FacetList,
   type Loaded,
   type ModReleasePage,
@@ -52,31 +51,6 @@ const readerMain = cache(async () => {
   const actingSubject = sessionReadSubject(token ? await sessionAgentState() : null) ?? undefined;
   return { main: mainApiWithToken(actingSubject ? token : undefined), actingSubject };
 });
-
-type Answer<T> = {
-  data: T | null;
-  error: { status: number; value?: unknown } | null;
-  headers?: unknown;
-  response?: { headers?: unknown };
-};
-
-/**
- * One Main read as a `Loaded` result. Main answers 409 when the graph moved
- * during a first-page read; that read simply starts again, once. A moved
- * cursor is the reader's to restart.
- */
-async function settle<T>(call: () => Promise<Answer<T>>, cursor?: string): Promise<Loaded<T>> {
-  try {
-    let answer = await call();
-    if (answer.error?.status === 409 && !cursor) answer = await call();
-    const { data, error } = answer;
-    if (error) return failedRead(failureOf(error.status, error.value), error.value,
-      answer.headers ?? answer.response?.headers);
-    return data === null ? { ok: false, failure: 'unavailable' } : { ok: true, data };
-  } catch (error) {
-    return { ok: false, failure: isOfflineError(error) ? 'offline' : 'unavailable' };
-  }
-}
 
 export type RealmResolution =
   | {
@@ -299,10 +273,7 @@ export const readZoneGenres = cache(
 const browsePage = cache(
   async (realm: string, _locale: UiLocale, query: string): Promise<Loaded<ZoneBrowsePage>> => {
     const parsed = JSON.parse(query) as ZoneBrowseQuery;
-    return settle(
-      () => main().v1.realms({ realm }).modules.browse.get({ query: parsed }),
-      parsed.cursor,
-    );
+    return readBrowseAnswer(main(), realm, parsed);
   },
 );
 
@@ -312,7 +283,7 @@ export const readZoneBrowse = (realm: string, locale: UiLocale, query: ZoneBrows
 
 /** Main's admitted Facets, for the labels of the Facets a browse page shows. */
 export const readFacets = cache(async (): Promise<Loaded<FacetList>> =>
-  settle(() => main().v1.facets.get()),
+  readFacetAnswer(main()),
 );
 
 /** A mod Work's disclosed releases, newest first; `closed` while the platform has not opened the read. */
