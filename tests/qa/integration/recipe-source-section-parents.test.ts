@@ -123,9 +123,9 @@ test('Recipe imports preserve retained parents, interleaved siblings and empty g
         expect(imported.supports).toHaveLength(8);
         const lines = [...page.occurrences.filter(row => row.role === 'ingredient'), ...steps];
         const pointers = ['/recipeIngredient/0', '/recipeIngredient/1',
-          '/recipeInstructions/0/itemListElement/0', '/recipeInstructions/0/itemListElement/1/itemListElement/0',
-          '/recipeInstructions/0/itemListElement/1/itemListElement/2', '/recipeInstructions/0/itemListElement/2',
-          '/recipeInstructions/1', '/recipeInstructions/2/itemListElement/0'];
+          '/recipeInstructions/0/itemListElement/0/text', '/recipeInstructions/0/itemListElement/1/itemListElement/0/text',
+          '/recipeInstructions/0/itemListElement/1/itemListElement/2/text', '/recipeInstructions/0/itemListElement/2/text',
+          '/recipeInstructions/1/text', '/recipeInstructions/2/itemListElement/0/text'];
         for (const [index, support] of imported.supports!.entries()) {
           const binding = await f.json<{ occurrence: string; sourceOccurrence: string; nativeRevision: string }>(
             await f.call('GET', `/v1/sources/field-supports/${shortId(support)}`), 200);
