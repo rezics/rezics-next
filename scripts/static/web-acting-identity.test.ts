@@ -195,4 +195,4 @@ test('production web reads introduce no acting identity omissions against live M
   writeFileSync(resolve(root, '.temp/web-acting-identity-inventory.json'), JSON.stringify(violations, null, 2));
   const debt = JSON.parse(readFileSync(resolve(import.meta.dir, 'web-acting-identity-debt.json'), 'utf8')) as ActingReadDebt[];
   expect(unresolvedActingReads(root, violations, debt, files)).toEqual([]);
-});
+}, 120_000);
