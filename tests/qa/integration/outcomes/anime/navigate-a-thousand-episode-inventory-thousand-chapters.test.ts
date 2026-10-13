@@ -165,6 +165,32 @@ beforeAll(async () => {
     );
     occurrences.push(...composition.occurrences);
   }
+  // Ordinary reading sessions follow bulk preparation. The fresh member joins
+  // the affected Realm through its public policy before any reader outcome.
+  const readers = await personaSessions();
+  const member = readers.member;
+  const realm = `/v1/realms/${short(sessions.realm)}`;
+  const policy = await answer<{
+    membershipGeneration: string;
+    policyRevision: string;
+    termsRevision: string;
+  }>(
+    member.main(
+      'GET',
+      `${realm}/joining?actingSubject=${encodeURIComponent(member.actingSubject!)}`,
+    ),
+  );
+  await answer(
+    member.main('POST', `${realm}/join`, {
+      actingSubject: member.actingSubject,
+      expectedMembershipGeneration: policy.membershipGeneration,
+      expectedPolicyRevision: policy.policyRevision,
+      termsRevision: policy.termsRevision,
+      listed: false,
+    }),
+  );
+  sessions.stranger = readers.stranger;
+  sessions.member = member;
   expect(performance.now() - started).toBeLessThan(600_000);
 }, 600_000);
 afterAll(async () => {
@@ -191,20 +217,8 @@ async function credit(person: PersonaSession, work: Work) {
 async function navigate(name: PersonaName) {
   const person = sessions[name];
   const path = `/v1/reading-positions/${short(published.work)}`;
-  const read = async (fields: Record<string, string> = {}) => {
-    const url = `${path}?${query(person, fields)}`;
-    let response = await person.main('GET', url);
-    // A token can expire inside a long read. The next call lets the same
-    // session's OAuth owner renew credentials; no other refusal is retried.
-    if (
-      response.status === 401 &&
-      ((await response.clone().json()) as { code?: string }).code === 'account_assertion_denied'
-    ) {
-      await response.body?.cancel();
-      response = await person.main('GET', url);
-    }
-    return answer<Page>(Promise.resolve(response));
-  };
+  const read = (fields: Record<string, string> = {}) =>
+    answer<Page>(person.main('GET', `${path}?${query(person, fields)}`));
   await credit(person, published);
   const seen: string[] = [];
   let cursor: string | null = null;
