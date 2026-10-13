@@ -7,8 +7,7 @@ import record from '../../../../tests/qa/fixtures/outcomes/anime/continue-progre
 import { browserMainApi } from '../api/browser.ts';
 import type { MainClient } from '../discover/types.ts';
 import type { RecordedSelection } from '../stories/recorded-fetch.ts';
-import { booksEditionReads, settle } from '../work-page/books-edition-page.read.ts';
-import { iriOf } from '../work-page/route.ts';
+import { booksEditionReads } from '../work-page/books-edition-page.read.ts';
 import { mainEpisodeApi } from './episode-api.ts';
 
 // The Work page's episode controls, header and credits, with the client supplied
@@ -108,26 +107,8 @@ export function readAnimeTwoDeviceHeader(main: MainClient, id: string, actingSub
 
 /** The Work page credit reads (`readAgentCredits` and `readCredits`) for a supplied client. */
 export function readAnimeTwoDeviceCredits(main: MainClient, id: string, actingSubject?: string) {
-  return Promise.all([
-    settle(() => main.v1.works({ id })['agent-credits'].get({ query: { actingSubject } })),
-    settle(async () => {
-      const result = await main.v1.query.post({
-        profile: 'template-query-v1',
-        query: 'https://rezics.com/query/work-credits',
-        revision: 1,
-        parameters: { roots: [iriOf(id)] },
-        presentation: { actingSubject },
-      });
-      return {
-        error: result.error,
-        data:
-          result.data?.result.profile === 'template-result-v1' &&
-          result.data.result.query === 'https://rezics.com/query/work-credits'
-            ? result.data.result
-            : null,
-      };
-    }),
-  ]);
+  const reads = booksEditionReads({ main, actingSubject });
+  return Promise.all([reads.readAgentCredits(id), reads.readCredits(id)]);
 }
 
 export function animeTwoDeviceEpisodes(actingSubject: string, main: MainClient) {

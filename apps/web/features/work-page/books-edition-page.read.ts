@@ -3,7 +3,8 @@ import type { MainClient } from '../discover/types.ts';
 import { releaseChoiceName } from '../tracking/display.ts';
 import { copyOf } from '../tracking/messages.ts';
 import type { EditionPreference, ProgressSummary } from '../tracking/types.ts';
-import type { Loaded, WorkHeader } from './types.ts';
+import { iriOf } from './route.ts';
+import type { AgentCreditPage, CreditPage, Loaded, WorkHeader } from './types.ts';
 import { failureOf } from './failure.ts';
 
 export type Answer<T> = { data: T | null; error: { status: number; value?: unknown } | null };
@@ -56,6 +57,20 @@ export function booksEditionReads({ main, actingSubject }: { main: MainClient; a
       ? settle(() => main.v1.me['progress-summaries']({ resource: id }).get({
         query: { actingSubject, ...(language ? { language } : {}) } }), undefined, true)
       : Promise.resolve({ ok: false, failure: 'sign-in' }),
+    readAgentCredits: (id: string): Promise<BooksRead<AgentCreditPage>> =>
+      settle(() => main.v1.works({ id })['agent-credits'].get({ query: { actingSubject } })),
+    readCredits: (id: string): Promise<BooksRead<CreditPage>> => settle(async () => {
+      const result = await main.v1.query.post({
+        profile: 'template-query-v1', query: 'https://rezics.com/query/work-credits', revision: 1,
+        parameters: { roots: [iriOf(id)] }, presentation: { actingSubject },
+      });
+      return {
+        error: result.error,
+        data: result.data?.result.profile === 'template-result-v1'
+          && result.data.result.query === 'https://rezics.com/query/work-credits'
+          ? result.data.result : null,
+      };
+    }),
   };
 }
 

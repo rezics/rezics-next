@@ -206,11 +206,7 @@ export const readEditionRelease = cache(async (id: string, release: string) =>
 
 export const readCredits = cache(async (id: string): Promise<Loaded<CreditPage>> => {
   const { main, actingSubject } = await reader();
-  return settle(async () => {
-    const result=await main.v1.query.post({profile:'template-query-v1',query:'https://rezics.com/query/work-credits',revision:1,
-      parameters:{roots:[iriOf(id)]},presentation:{actingSubject}});
-    return {error:result.error,data:result.data?.result.profile==='template-result-v1' && result.data.result.query==='https://rezics.com/query/work-credits' ? result.data.result:null};
-  });
+  return booksEditionReads({ main, actingSubject }).readCredits(id);
 });
 
 export const readAdoptions = cache(async (id: string, _locale: UiLocale): Promise<Loaded<AdoptionPage>> => {
@@ -340,7 +336,7 @@ export const readReaderState = cache(async (id: string): Promise<ReaderSeed | nu
 
 export const readAgentCredits = cache(async (id: string): Promise<Loaded<AgentCreditPage>> => {
   const { main, actingSubject } = await reader();
-  return settle(() => main.v1.works({ id })['agent-credits'].get({ query: { actingSubject } }));
+  return booksEditionReads({ main, actingSubject }).readAgentCredits(id);
 });
 
 /** One level of the Main Version's table of contents: a group's children, or the top level. */
