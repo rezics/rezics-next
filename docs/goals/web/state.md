@@ -10,7 +10,7 @@ launch manager's 2026-10-12 table, archived at
 | Manager | web; no watcher, polling or held task wait; coordinator wakes on mail/task exits |
 | Rows | 0 of 67 proved through persona API outcomes; old browser proofs do not prove rows under today's method |
 | Shared stack | Cold-started today, serving main; Account 3002, Main 3001, web 3000 and Storybook 6006 healthy (`task urls`) |
-| Measures | Manager count: 5 first + 3 fixes = 63% (5/8); status reports 83% because two fixes remain mislabeled as steps (Program acknowledged). Landed median 1.5, max 2 (G-2090); last reading 26.8M input / 194.1k output tokens, one session unavailable; tokens/proved row n/a |
+| Measures | Manager count: 5 first + 3 fixes = 63% (5/8); status reports 83% because two fixes remain mislabeled as steps (Program acknowledged). Landed median/max 2 (G-2090 and G-2092 at 2, G-2094 at 1); last reading 32.4M input / 229.6k output tokens; tokens/proved row n/a |
 
 ## Authorized work now
 
@@ -26,12 +26,12 @@ work and the measures; no task is added to spend allowance.
 | --- | --- |
 | G-2090 | Landed at `5124002cd676`, closed verified on attempt 2 (one fix round). Structural guard plus bounded Library read/loan fixes; web/scripts types and all 33 merge unit/guard files pass. Worker QA: 27 guard + 6 Library tests pass |
 | G-2091 | First handoff partial, unlanded; pending key/Manage/Zone/proposal fixes preserved. Fresh attempt 2 is fix round 1: replace adapter hash reviews; comment-only fixture fails in QA `20261013t051545-d31a21`. Minimal proposal file added to claim via reclaim |
-| G-2092 | First handoff done, unlanded; Work-page Realm-header identity fix preserved. Fresh attempt 2 is fix round 1: replace hash-based exception reviews; harmless-comment fixture fails in QA `20261013t052140-4a2e0c`. Minimal Work-page file added via reclaim |
+| G-2092 | Landed at `bef644b340a5`, closed verified on attempt 2 (one fix round). Structural identity guard and Work-page Realm-header fix; web/scripts types and all 34 merge unit/guard files pass; 18 exact analyzer debts remain named |
 | G-2093 | Running on first attempt after G-2090 released the catalogue claim; structural capped-page filter guard, no hash review inventory |
 | G-2094 | Landed at `775d67f79132` on attempt 1; canonical suffix expectations in both tests/story; 16 story cases, web types and all 31 merge unit/guard files pass; e2e execution stays with nightly regression |
 
-G-2091 and G-2092 run fresh fix round 1; G-2093 runs its first attempt.
-G-2090 and G-2094 are landed and closed. Program's mail `program-web-guards-released` confirmed G-2071 landed
+G-2091 runs fresh fix round 1; G-2093 runs its first attempt.
+G-2090, G-2092 and G-2094 are landed and closed. Program's mail `program-web-guards-released` confirmed G-2071 landed
 and released `scripts/qa/repository-guards.ts`. This manager appended all four
 inventory guard entries there; existing absent-file filtering allows each guard
 to join the gate when its task lands. Workers do not edit that registry.
@@ -48,6 +48,11 @@ commands, scoped-rating projection/observation keys and Studio metadata/create
 keys. No extra work on them in this guard fix round; Library is now unclaimed.
 The worker's reload-persistence proposal has no proved persona outcome
 and is recorded in later.md rather than dispatched.
+G-2092 replaced hashes with executable typed/rest identity forwarding checks.
+Its 18 exact debts in `scripts/static/web-acting-identity-debt.json` name analyzer
+limits (operation/persona discrimination, imported/contextual types and anonymous
+provenance), not 18 proved product failures. The dormant join-page omission has
+no production caller; the guard refuses adding one, and the finding is in later.md.
 All three initial guards used source hashes requiring review after harmless
 edits; concrete comment-only fixtures fail. Each brief now requires executable
 rules accepting correct edits automatically. Program was mailed

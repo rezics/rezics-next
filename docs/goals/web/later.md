@@ -23,3 +23,5 @@ sweep and audit reports beside them.
 - Wiki continuity choices drop capped remainders and treat later failures as successful partial choices.
 - Work-page rating choices expose the first context page as all available choices.
 - Relationship navigation without a live loader rewrites an incomplete initial page as complete.
+- Identity guard coverage has 18 exact named debts in `scripts/static/web-acting-identity-debt.json` for operation/persona discrimination, imported/contextual types and anonymous-client provenance; these are analyzer limits, not 18 proved product failures.
+- The dormant `readPrivateSpaceJoinPage` omits acting identity; only its test calls it, and the guard refuses a new production caller until forwarding is resolved.
