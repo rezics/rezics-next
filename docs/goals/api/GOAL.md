@@ -16,9 +16,19 @@ areas:
 
 # API
 
-Status: resumed by Program on 2026-10-13 after N1 to N4 landed. One of 67
-rows is proved; all 18 outcome tasks are running step two. [state.md](state.md)
-preserves the wrap-up checkpoint and Program's subsequent resume decision.
+Status: resumed by Program on 2026-10-13 after N1 to N4 landed. The latest
+[checkpoint](state.md) records proved rows, running work and the decisions
+that supersede the earlier wrap-up.
+
+## Decision — checkpoint event, 2026-10-13
+
+Acknowledged `checkpoint:e2c00179-8e6d-485a-bca3-318a3fb82bd5`. Updated
+`state.md` from the handled start, G-2076 attempt-three and G-2077 attempt-three
+decisions. Program's subsequent acknowledged mail and completed landings
+supersede the initial gate holds; preserve those historical decisions and leave
+both verified tasks closed. Archived briefs stay archived. This checkpoint
+dispatches nothing, starts no watcher and waits for no worker. The durable
+inbox has no unacknowledged mail.
 
 ## Decision — start event, 2026-10-13
 
