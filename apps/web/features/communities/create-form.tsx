@@ -20,6 +20,7 @@ import { communityNames, type NameTranslation } from './name-fields.ts';
 import { ruleFromText } from '../manage/rules.ts';
 import { communityText as words } from './messages.ts';
 import { TopicPicker, type TopicChoice } from './topics.tsx';
+import { mapRealmCreation, type RealmCreationProblem } from './realm-create-recorded-page.ts';
 import { CommunityUploadField, type UploadOutcome } from './upload-field.tsx';
 
 type Rule = { key: string; title: string; body: string };
@@ -70,24 +71,31 @@ export interface FounderRealmRead {
     realms: readonly ManagedRealmEntry[]; nextCursor: string | null } | null>;
 }
 
-async function resolveReadableRealm(handle: string, actingSubject: string): Promise<string | null> {
-  try {
-    const result = await browserMainApi().v1.addresses.resolve.get({
-      query: { scope: 'space', key: handle, actingSubject } });
-    const data = result.data;
-    if (!data || data.status !== 'resolved' || !('capabilities' in data)) return null;
-    return data.capabilities?.realm ?? null;
-  } catch { return null; }
-}
+type RealmClient = ReturnType<typeof browserMainApi>;
 
-async function readManagedRealmPage(actingSubject: string, after: string | null) {
-  try {
-    const result = await browserMainApi().v1.me['managed-realms'].get({
-      query: { actingSubject, ...after ? { after } : {} } });
-    if (!result.data) return null;
-    return { realms: result.data.items.map(item => ({ realm: item.realm, permissions: item.permissions })),
-      nextCursor: result.data.nextCursor };
-  } catch { return null; }
+/** Address and managed-Realm reads for one typed client.
+ * Production uses the request's host client; a recorded page passes the replaying client. */
+export function founderRealmReads(client: RealmClient = browserMainApi()): FounderRealmRead {
+  return {
+    async resolve(handle, actingSubject) {
+      try {
+        const result = await client.v1.addresses.resolve.get({
+          query: { scope: 'space', key: handle, actingSubject } });
+        const data = result.data;
+        if (!data || data.status !== 'resolved' || !('capabilities' in data)) return null;
+        return data.capabilities?.realm ?? null;
+      } catch { return null; }
+    },
+    async managed(actingSubject, after) {
+      try {
+        const result = await client.v1.me['managed-realms'].get({
+          query: { actingSubject, ...after ? { after } : {} } });
+        if (!result.data) return null;
+        return { realms: result.data.items.map(item => ({ realm: item.realm, permissions: item.permissions })),
+          nextCursor: result.data.nextCursor };
+      } catch { return null; }
+    },
+  };
 }
 
 /** The Realm at `handle` when this founder's permissions there include `realm.owner`.
@@ -95,7 +103,7 @@ async function readManagedRealmPage(actingSubject: string, after: string | null)
  * and a Realm they cannot read are null: the same answer as a missing address.
  * Nothing sent earlier is kept; both answers come from the API. */
 export async function founderRealmAtHandle(handle: string, actingSubject: string,
-  read: FounderRealmRead = { resolve: resolveReadableRealm, managed: readManagedRealmPage }): Promise<string | null> {
+  read: FounderRealmRead = founderRealmReads()): Promise<string | null> {
   const realm = await read.resolve(handle, actingSubject);
   if (!realm) return null;
   let after: string | null = null;
@@ -116,7 +124,7 @@ export async function founderRealmAtHandle(handle: string, actingSubject: string
 export async function stepAfterCreation(
   response: { data: CreationResponse['data']; error: CreationResponse['error'] },
   handle: string, actingSubject: string,
-  read: FounderRealmRead = { resolve: resolveReadableRealm, managed: readManagedRealmPage },
+  read: FounderRealmRead = founderRealmReads(),
 ): Promise<{ step: 'write'; realm: string } | { step: 'owned'; realm: string } | { step: 'taken' } | { step: 'keep' }> {
   const data = response.data;
   if (data && 'realm' in data && data.realm) return { step: 'write', realm: data.realm };
@@ -179,6 +187,7 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
   const [ownedRealm, setOwnedRealm] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<'create' | 'handle' | 'configure' | null>(null);
+  const [problem, setProblem] = useState<RealmCreationProblem | null>(null);
   const [translationError, setTranslationError] = useState(false);
   // What screening said about each image, or that its upload budget is spent.
   const [outcomes, setOutcomes] = useState<Record<'icon' | 'banner', UploadOutcome>>({ icon: null, banner: null });
@@ -193,6 +202,7 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
     setTranslationError(false);
     setBusy(true);
     setFailure(null);
+    setProblem(null);
     setOwnedRealm(null);
     key.current ??= crypto.randomUUID();
     const operation = key.current;
@@ -206,8 +216,17 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
         creationIntent.current ??= { profile: 'space-realm-v2', language: nameLanguage,
           name: name.trim(), handle, topics: topics.map(topic => topic.id), capabilities: ['realm'], actingSubject,
           initialSettings: initialCommunitySettings(visibility, publishedRules) };
-        const response = await createCommunityWithReadback(creationIntent.current, `${operation}:create`);
+        const intent = creationIntent.current;
+        if (!intent?.name || !intent.handle) {
+          setFailure('create');
+          return;
+        }
+        const response = await createCommunityWithReadback(intent, `${operation}:create`);
         const step = await stepAfterCreation(response, handle, actingSubject);
+        const mapped = mapRealmCreation({
+          response, name: intent.name, handle: intent.handle,
+          visibility: intent.initialSettings?.visibility ?? visibility, actingSubject, step,
+        });
         // A Realm this founder owns is only linked. The form cannot tell a lost
         // submission from an older Realm, so it never writes over either one.
         if (step.step === 'owned') {
@@ -223,6 +242,7 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
           return;
         }
         if (step.step === 'keep') {
+          setProblem(mapped.kind === 'refusal' ? mapped.problem : null);
           setFailure('create');
           return;
         }
@@ -360,6 +380,7 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
     {failure ? <Alert variant="destructive" role="alert"><CircleAlertIcon aria-hidden="true" />
       <AlertDescription>{words[failure === 'create' ? 'createFailed' : failure === 'handle' ? 'handleTaken'
         : 'configureFailed'][locale]}
+        {problem ? <span className="mt-1 block">{problem.title}</span> : null}
         {createdRealm ? <> <Link href={`/manage/r/${createdRealm.slice(-36)}`}
           className="font-medium underline">{words.manage[locale]}</Link></> : null}</AlertDescription>
     </Alert> : null}
