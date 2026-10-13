@@ -56,7 +56,7 @@ function fixture() {
       return processIdentity(pid, procRoot)!;
     },
     open(overrides: Partial<CoordinatorOptions> = {}) {
-      const coordinator = new GoalCoordinator({ stateDir, launcher, now: () => now,
+      const coordinator = new GoalCoordinator({ stateDir, launcher, maxTurns:1, now: () => now,
         events: () => events, admit: () => {}, owner: () => undefined, ...overrides });
       coordinators.push(coordinator);
       return coordinator;
@@ -78,6 +78,61 @@ async function waitFor(predicate: () => boolean, timeout = 5_000): Promise<void>
 }
 
 describe('durable Goal wake coordinator', () => {
+  test('six fresh event turns run side by side by default and retain the cap after restart', async () => {
+    const f = fixture();
+    try {
+      f.setEvents(Array.from({length:18},(_,index)=>({key:`task:G-${100+index}:1`,body:`G-${100+index} exited`})));
+      const first = f.open({maxTurns:undefined}); first.enroll(f.descriptor); first.step();
+      expect(first.status().attempts).toHaveLength(6);
+      expect(new Set(first.status().attempts.map(attempt=>JSON.parse(attempt.descriptor).session)).size).toBe(6);
+      first.close();
+      const restarted = f.open({maxTurns:undefined}); restarted.step();
+      expect(restarted.status().attempts).toHaveLength(6);
+      for (let wave = 0; wave < 3; wave++) {
+        const batch = restarted.status().attempts.filter(attempt=>attempt.phase !== 'done');
+        expect(batch).toHaveLength(6);
+        await Promise.all(batch.map(attempt=>runAttempt(f.stateDir,attempt.token)));
+        restarted.step(); restarted.step();
+      }
+      expect(restarted.status().attempts).toHaveLength(18);
+      expect(restarted.status().wakes).toEqual([]);
+      expect(f.calls()).toHaveLength(18);
+    } finally { f.cleanup(); }
+  });
+  test('events naming the same task wait while unrelated task events run, including after restart', async () => {
+    const f = fixture();
+    try {
+      f.setEvents([{key:'task:G-42:1',body:'First exit'},
+        {key:'mail:decision',body:'Decide G-42 with G-43'},
+        {key:'task:G-43:1',body:'Other exit'},
+        {key:'task:G-44:1',body:'Independent exit'}]);
+      const first = f.open({maxTurns:3}); first.enroll(f.descriptor); first.step();
+      const active = first.status().attempts;
+      expect(active.map(attempt=>attempt.event_key)).toEqual(['mail:decision','task:G-44:1']);
+      first.close();
+      const restarted = f.open({maxTurns:3}); restarted.step();
+      expect(restarted.status().attempts).toHaveLength(2);
+      await runAttempt(f.stateDir,active[0]!.token);
+      f.setEvents([{key:'task:G-42:1',body:'First exit'},{key:'task:G-43:1',body:'Other exit'},{key:'task:G-44:1',body:'Independent exit'}]);
+      restarted.step(); restarted.step();
+      expect(restarted.status().attempts.map(attempt=>attempt.event_key)).toEqual(['mail:decision','task:G-44:1','task:G-42:1','task:G-43:1']);
+    } finally { f.cleanup(); }
+  });
+  test('one failed event backs off without delaying another event of the same Goal', async () => {
+    const f = fixture();
+    try {
+      f.setEvents([{key:'task:G-1:1',body:'First'},{key:'task:G-2:1',body:'Second'}]);
+      const coordinator = f.open({maxTurns:2}); coordinator.enroll({...f.descriptor,env:{...f.descriptor.env,EXIT_CODE:'7'}});
+      coordinator.step(); const [first,second] = coordinator.status().attempts;
+      await runAttempt(f.stateDir,first!.token); coordinator.step();
+      f.setEvents([{key:'task:G-1:1',body:'First'},{key:'task:G-2:1',body:'Second'},{key:'task:G-3:1',body:'Third'}]);
+      coordinator.step();
+      expect(coordinator.status().attempts.map(attempt=>attempt.event_key)).toEqual(['task:G-1:1','task:G-2:1','task:G-3:1']);
+      expect(coordinator.db.query('SELECT due_at,failures FROM events WHERE event_key=?').get('task:G-1:1'))
+        .toEqual({due_at:1_005_000,failures:1});
+      expect(second!.phase).toBe('intent');
+    } finally { f.cleanup(); }
+  });
   test('turn records survive restart during execution and record real CLI commands and reported usage', async () => {
     const f = fixture();
     const mail = new GoalMailStore({stateDir:f.stateDir,goals:['program'],sender:'program'});

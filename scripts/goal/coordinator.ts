@@ -191,6 +191,10 @@ interface Attempt {
   input_tokens: number | null; cached_tokens: number | null; output_tokens: number | null;
 }
 interface WakeRow { goal: string; due_at: number; failures: number; error: string | null; token: string | null }
+interface EventRow extends WakeRow {event_key: string; body: string; handled: number}
+export function eventTasks(event: Pick<WakeEvent,'key'|'body'>): string[] {
+  return [...new Set(`${event.key}\n${event.body}`.match(/\b[A-Z][A-Z0-9]*-\d+\b/g) ?? [])];
+}
 export interface CoordinatorOptions {
   stateDir: string;
   events: (goal: string) => WakeEvent[];
@@ -201,6 +205,7 @@ export interface CoordinatorOptions {
   now?: () => number;
   afterIntent?: (token: string) => void;
   afterLaunch?: (token: string) => void;
+  maxTurns?: number;
 }
 export interface IndependentLauncher {
   verify(descriptor: LaunchDescriptor): void;
@@ -277,7 +282,12 @@ function openStore(stateDir: string): Database {
     if (!columns.has(name)) db.exec(`ALTER TABLE attempts ADD COLUMN ${name} ${type}`);
   }
   db.exec(`CREATE TABLE IF NOT EXISTS turn_commands(id INTEGER PRIMARY KEY, token TEXT NOT NULL,
-    command TEXT NOT NULL, created_at INTEGER NOT NULL)`);
+    command TEXT NOT NULL, created_at INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS admissions(goal TEXT PRIMARY KEY,due_at INTEGER NOT NULL,failures INTEGER NOT NULL,error TEXT)`);
+  const eventColumns = new Set((db.query('PRAGMA table_info(events)').all() as {name:string}[]).map(column=>column.name));
+  for (const [name,type] of Object.entries({failures:'INTEGER NOT NULL DEFAULT 0',error:'TEXT'})) {
+    if (!eventColumns.has(name)) db.exec(`ALTER TABLE events ADD COLUMN ${name} ${type}`);
+  }
   return db;
 }
 
@@ -321,10 +331,13 @@ export class GoalCoordinator {
   readonly db: Database;
   private readonly launcher: IndependentLauncher;
   private readonly now: () => number;
+  private readonly maxTurns: number;
   constructor(private readonly options: CoordinatorOptions) {
     this.db = openStore(options.stateDir);
     this.launcher = options.launcher ?? new TmuxLauncher(options.stateDir);
     this.now = options.now ?? Date.now;
+    this.maxTurns = options.maxTurns ?? Number(process.env.GOAL_MANAGER_TURNS ?? 6);
+    if (!Number.isSafeInteger(this.maxTurns) || this.maxTurns < 1) throw new Error('GOAL_MANAGER_TURNS must be a positive integer');
   }
   private sessionOwner(descriptor: LaunchDescriptor): string | undefined {
     if (this.options.owner) return this.options.owner(descriptor.home, descriptor.session, descriptor.previousOwner);
@@ -402,15 +415,31 @@ export class GoalCoordinator {
     ackOnlyTurns:turns.filter(turn=>turn.commands.length > 0 && turn.commands.every(command=>command === 'mail ack')).length}};
   }
   unenroll(goal: string): void {
-    const wake = this.db.query('SELECT * FROM wakes WHERE goal=?').get(goal) as WakeRow | null;
-    if (wake?.token) throw new Error('Cannot unenroll with an unresolved attempt; reconcile it first');
+    if (this.db.query('SELECT token FROM events WHERE goal=? AND token IS NOT NULL').get(goal)) throw new Error('Cannot unenroll with an unresolved attempt; reconcile it first');
     this.db.query('DELETE FROM managers WHERE goal=?').run(goal);
   }
   private defer(goal: string, error: string): void {
-    const row = this.db.query('SELECT * FROM wakes WHERE goal=?').get(goal) as WakeRow;
-    const failures = row.failures + 1;
+    const row = this.db.query('SELECT * FROM admissions WHERE goal=?').get(goal) as WakeRow | null;
+    const failures = (row?.failures ?? 0) + 1;
     const delay = Math.min(15 * 60_000, 5_000 * 2 ** Math.min(failures - 1, 8));
-    this.db.query('UPDATE wakes SET due_at=?,failures=?,error=? WHERE goal=?').run(this.now()+delay, failures, error, goal);
+    this.db.query('INSERT OR REPLACE INTO admissions VALUES(?,?,?,?)').run(goal,this.now()+delay,failures,error);
+  }
+  private deferEvent(event: EventRow, error: string): void {
+    const failures = event.failures+1;
+    const delay = Math.min(15*60_000,5_000*2 ** Math.min(failures-1,8));
+    this.db.query('UPDATE events SET due_at=?,failures=?,error=? WHERE goal=? AND event_key=?')
+      .run(this.now()+delay,failures,error,event.goal,event.event_key);
+  }
+  private refreshWake(goal: string): void {
+    const event = this.db.query('SELECT * FROM events WHERE goal=? AND handled=0 ORDER BY token IS NOT NULL DESC,due_at,event_key LIMIT 1').get(goal) as EventRow | null;
+    if (!event) {
+      this.db.query('DELETE FROM wakes WHERE goal=?').run(goal);
+      this.db.query('DELETE FROM admissions WHERE goal=?').run(goal);
+      return;
+    }
+    const admission = this.db.query('SELECT * FROM admissions WHERE goal=?').get(goal) as WakeRow|null;
+    this.db.query('INSERT OR REPLACE INTO wakes VALUES(?,?,?,?,?)')
+      .run(goal,admission?.due_at ?? event.due_at,admission?.failures ?? event.failures,admission?.error ?? event.error,event.token);
   }
   step(): void {
     for (const descriptor of this.managers()) {
@@ -427,36 +456,21 @@ export class GoalCoordinator {
         for (const event of queuedMail) {
           if (!pendingMail.has(event.event_key)) this.db.query('UPDATE events SET handled=1 WHERE goal=? AND event_key=?').run(goal,event.event_key);
         }
-        const next = this.db.query('SELECT MIN(due_at) AS due FROM events WHERE goal=? AND handled=0').get(goal) as {due:number|null};
-        if (next.due !== null) this.db.query(`INSERT INTO wakes(goal,due_at) VALUES(?,?)
-          ON CONFLICT(goal) DO UPDATE SET due_at=MIN(wakes.due_at,excluded.due_at)
-          WHERE wakes.failures=0 AND wakes.token IS NULL`).run(goal,next.due);
-        else this.db.query('DELETE FROM wakes WHERE goal=? AND token IS NULL').run(goal);
       }).immediate();
-      let wake = this.db.query('SELECT * FROM wakes WHERE goal=?').get(goal) as WakeRow | null;
-      if (!wake) continue;
-      if (wake.token) {
-        const attempt = this.db.query('SELECT * FROM attempts WHERE token=?').get(wake.token) as Attempt;
+      let reconciled = false;
+      const assigned = this.db.query('SELECT * FROM events WHERE goal=? AND token IS NOT NULL ORDER BY due_at,event_key').all(goal) as EventRow[];
+      for (const event of assigned) {
+        const attempt = this.db.query('SELECT * FROM attempts WHERE token=?').get(event.token!) as Attempt;
         if (attempt.phase === 'done') {
           // Acknowledgements, rather than starting a process, determine durable mail delivery.
           const remaining = new Set(incoming.map(event => event.key));
-          let retry = false;
-          this.db.transaction(() => {
-            const batch = this.db.query('SELECT event_key FROM events WHERE token=?').all(attempt.token) as {event_key:string}[];
-            for (const event of batch) {
-              const handled = !event.event_key.startsWith('mail:') ? attempt.code === 0
-                : event.event_key.startsWith('mail:overdue:') ? attempt.code === 0 || !remaining.has(event.event_key)
-                : !remaining.has(event.event_key);
-              if (!handled) retry = true;
-              this.db.query('UPDATE events SET token=NULL,handled=? WHERE goal=? AND event_key=?')
-                .run(handled ? 1 : 0,goal,event.event_key);
-            }
-            this.db.query('UPDATE wakes SET token=NULL WHERE goal=?').run(goal);
-          }).immediate();
-          const pending = this.db.query('SELECT COUNT(*) AS n FROM events WHERE goal=? AND handled=0').get(goal) as {n:number};
-          if (!pending.n) this.db.query('DELETE FROM wakes WHERE goal=?').run(goal);
-          else if (retry) this.defer(goal, attempt.code === 0 ? 'Turn ended with pending events/acknowledgements' : `Manager exit ${attempt.code}`);
-          else this.db.query('UPDATE wakes SET due_at=?,failures=0,error=NULL WHERE goal=?').run(this.now(),goal);
+          const handled = !event.event_key.startsWith('mail:') ? attempt.code === 0
+            : event.event_key.startsWith('mail:overdue:') ? attempt.code === 0 || !remaining.has(event.event_key)
+            : !remaining.has(event.event_key);
+          this.db.query('UPDATE events SET token=NULL,handled=? WHERE goal=? AND event_key=?')
+            .run(handled ? 1 : 0,goal,event.event_key);
+          if (!handled) this.deferEvent(event,attempt.code === 0 ? 'Turn ended with pending events/acknowledgements' : `Manager exit ${attempt.code}`);
+          reconciled = true;
           continue;
         }
         try {
@@ -471,43 +485,58 @@ export class GoalCoordinator {
             continue;
           }
           if (this.launcher.live(attempt.token,descriptor)) continue;
-          if (this.now() < wake.due_at) continue;
+          if (this.now() < event.due_at) continue;
+          const admission = this.db.query('SELECT * FROM admissions WHERE goal=?').get(goal) as WakeRow|null;
+          if (admission && this.now() < admission.due_at) continue;
           const owner = this.sessionOwner(descriptor);
           if (owner) throw new Error(owner);
           this.options.admit(descriptor);
-          this.defer(goal, 'Retrying unregistered independent wrapper');
+          this.db.query('DELETE FROM admissions WHERE goal=?').run(goal);
+          this.deferEvent(event, 'Retrying unregistered independent wrapper');
           this.launcher.launch(attempt.token,descriptor);
           this.options.afterLaunch?.(attempt.token);
         } catch (error) { this.defer(goal, String(error)); }
-        continue;
       }
-      if (this.now() < wake.due_at) continue;
-      try {
-        this.launcher.verify(descriptor);
-        const owner = this.sessionOwner(descriptor);
-        if (owner) throw new Error(owner);
-        this.options.admit(descriptor);
-      } catch (error) { this.defer(goal,String(error)); continue; }
-      const token = randomUUID();
-      const batch = this.db.query("SELECT event_key,body FROM events WHERE goal=? AND handled=0 AND due_at<=? ORDER BY event_key LIKE 'start:%' DESC,event_key LIKE 'mail:overdue:%' DESC,due_at,event_key LIMIT 1")
-          .all(goal,this.now()) as {event_key:string;body:string}[];
-      if (!batch.length) continue;
-      const prompt = MANAGER_ROLE_CARD.replaceAll('<goal>',goal) + `\n\nEvent: ${batch[0]!.event_key}\n${batch[0]!.body}`;
-      const turn = freshTurnDescriptor(descriptor);
-      this.db.transaction(() => {
-        this.db.query('INSERT INTO attempts(token,goal,generation,phase,descriptor,prompt,created_at,event_key) VALUES(?,?,?,?,?,?,?,?)')
-          .run(token,goal,descriptor.generation,'intent',JSON.stringify(turn),prompt,this.now(),batch[0]!.event_key);
-        for (const event of batch) this.db.query('UPDATE events SET token=? WHERE goal=? AND event_key=?').run(token,goal,event.event_key);
-        this.db.query('UPDATE wakes SET token=? WHERE goal=?').run(token,goal);
-      }).immediate();
-      this.options.afterIntent?.(token);
-      try {
-        this.launcher.launch(token,descriptor);
-        this.db.query('UPDATE wakes SET due_at=?,error=? WHERE goal=?')
-          .run(this.now()+5000, 'Awaiting independent wrapper claim', goal);
-        this.options.afterLaunch?.(token);
+      const admission = this.db.query('SELECT * FROM admissions WHERE goal=?').get(goal) as WakeRow|null;
+      if (!reconciled && (!admission || this.now() >= admission.due_at)) {
+        const active = this.db.query('SELECT * FROM events WHERE goal=? AND token IS NOT NULL').all(goal) as EventRow[];
+        const locked = new Set(active.flatMap(event=>eventTasks({key:event.event_key,body:event.body})));
+        let slots = this.maxTurns-active.length;
+        const queued = this.db.query("SELECT * FROM events WHERE goal=? AND handled=0 AND token IS NULL AND due_at<=? ORDER BY event_key LIKE 'start:%' DESC,event_key LIKE 'mail:overdue:%' DESC,due_at,event_key")
+          .all(goal,this.now()) as EventRow[];
+        for (const event of queued) {
+          if (slots <= 0) break;
+          const tasks = eventTasks({key:event.event_key,body:event.body});
+          if (tasks.some(task=>locked.has(task))) continue;
+          try {
+            this.launcher.verify(descriptor);
+            const owner = this.sessionOwner(descriptor);
+            if (owner) throw new Error(owner);
+            this.options.admit(descriptor);
+          } catch (error) { this.defer(goal,String(error)); break; }
+          this.db.query('DELETE FROM admissions WHERE goal=?').run(goal);
+          const token = randomUUID();
+          const prompt = MANAGER_ROLE_CARD.replaceAll('<goal>',goal) + `\n\nEvent: ${event.event_key}\n${event.body}`;
+          const turn = freshTurnDescriptor(descriptor);
+          this.db.transaction(() => {
+            this.db.query('INSERT INTO attempts(token,goal,generation,phase,descriptor,prompt,created_at,event_key) VALUES(?,?,?,?,?,?,?,?)')
+              .run(token,goal,descriptor.generation,'intent',JSON.stringify(turn),prompt,this.now(),event.event_key);
+            this.db.query('UPDATE events SET token=? WHERE goal=? AND event_key=?')
+              .run(token,goal,event.event_key);
+          }).immediate();
+          slots--;
+          for (const task of tasks) locked.add(task);
+          this.refreshWake(goal);
+          this.options.afterIntent?.(token);
+          try {
+            this.launcher.launch(token,descriptor);
+            this.db.query('UPDATE events SET due_at=?,error=? WHERE goal=? AND event_key=?')
+              .run(this.now()+5000,'Awaiting independent wrapper claim',goal,event.event_key);
+            this.options.afterLaunch?.(token);
+          } catch (error) { this.deferEvent(event,String(error)); }
+        }
       }
-      catch (error) { this.defer(goal,String(error)); }
+      this.refreshWake(goal);
     }
   }
   acquire(): void {
