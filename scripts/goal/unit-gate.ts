@@ -8,7 +8,9 @@ import { type ChildProcess, spawn, spawnSync } from 'node:child_process';
 import { terminateProcessGroup } from '../qa/process/terminate.ts';
 import { sweepOrphanContainers, reapSettleMs, newReapScope, reapScopeChain, removeScopedContainers } from '../qa/container-reaper.ts';
 import { randomUUID } from 'node:crypto';
-import { tierBunTestArgs } from '../qa/core.ts';
+import { loadavg } from 'node:os';
+import { tierBunTestArgs, tierTestTimeoutMs, type TierTestTimeout } from '../qa/core.ts';
+import { acquireDir } from './ledger.ts';
 import { type MergeEvent } from './regress.ts';
 import { postgresSocketRefusal, physicalPath } from './postgres-socket.ts';
 import { readMergeEvents, affectedSelection, selectedUnitFiles, selectedOwnerFiles } from './merge.ts';
@@ -714,7 +716,64 @@ export interface UnitShardResult {
   budgetExpired?: boolean;
 }
 
-export type UnitShardRunner = (cwd: string, files: readonly string[], deadline: number) => Promise<UnitShardResult>;
+export interface TimeoutRetryOptions { testTimeoutMultiplier?: number }
+export type UnitShardRunner = (cwd: string, files: readonly string[], deadline: number, options?: TimeoutRetryOptions) => Promise<UnitShardResult>;
+
+export const TIMEOUT_RETRY_MULTIPLIER = 6;
+export function timeoutRetryArg(tier: TierTestTimeout): string {
+  return `--timeout=${tierTestTimeoutMs[tier] * TIMEOUT_RETRY_MULTIPLIER}`;
+}
+
+export interface SlowTestRecord {
+  file: string;
+  test: string;
+  seconds: number;
+  loadAverage: number[];
+}
+
+export function slowTestLine(test: SlowTestRecord): string {
+  return `Timeout retry passed: ${test.file} > ${test.test} (${test.seconds.toFixed(3)}s)`;
+}
+
+/** Only failures attributed to runner timeouts qualify. A mixed assertion/timeout file stays a failure. */
+export function timeoutOnlyTestFiles(output: string, files: readonly string[], cwd?: string, attributed: readonly string[] = []): string[] {
+  const timed = [...new Set([...timedOutTestFiles(output, files, cwd), ...attributed])];
+  const failures = junitFailures(output, files, cwd);
+  const covered = junitReportedFiles(output, files, cwd);
+  const errors = unitFileErrorDetails(output, files, cwd);
+  return timed.filter(file => !errors.some(error => error.file === file) && (covered.has(file)
+    ? failures!.some(test => test.file === file && test.timeout) && !failures!.some(test => test.file === file && !test.timeout)
+    : unitFileEvidence(output, [file], [file], [file], cwd).every(item =>
+      item.cases.every(test => /timed out|timeout.*exceeded/i.test(test.error)))));
+}
+
+/** Use the report, including in agent sessions where passing console names are suppressed. */
+export function recoveredSlowTests(before: string | readonly string[], after: string, file: string, cwd?: string): SlowTestRecord[] {
+  const failed = (typeof before === 'string' ? [before] : before).flatMap(output =>
+    reportCases(output, cwd)?.filter(test => test.file === file && test.failed && test.timeout).map(test => test.name)
+      ?? unitFileEvidence(output, [file], [file], [file], cwd).flatMap(item => item.cases.map(test => test.test)));
+  const names = new Set(failed);
+  const reported = reportCases(after, cwd);
+  const passed = reported ?? [...fileSection(after, file, cwd).matchAll(/^\(pass\) (.+?) \[(\d+(?:\.\d+)?)(ms|s)\]\s*$/gm)]
+    .map(match => ({ file, name: match[1]!, failed: false, skipped: false,
+      durationMs: Number(match[2]) * (match[3] === 's' ? 1000 : 1) }));
+  return passed.filter(test => test.file === file && names.has(test.name)
+    && !test.failed && !test.skipped && test.durationMs !== undefined).map(test => ({
+      file, test: test.name, seconds: test.durationMs! / 1000, loadAverage: loadavg(),
+    }));
+}
+
+/** Gate lanes and worker slots can finish together; serialize the bounded history append. */
+export async function rememberSlowTests(records: readonly SlowTestRecord[], directory = stateDir): Promise<void> {
+  if (!records.length) return;
+  mkdirSync(directory, { recursive: true });
+  const release = await acquireDir(join(directory, 'timeout-retry-history.lock'), 120_000, 'timeout retry history');
+  try {
+    const path = join(directory, 'timeout-retry-history.json');
+    const previous = existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) as SlowTestRecord[] : [];
+    writeFileSync(path, `${JSON.stringify([...previous, ...records].slice(-200), null, 2)}\n`);
+  } finally { release.release(); }
+}
 
 function unitFileFromHeader(output: string, files: readonly string[], cwd: string): string | undefined {
   const known = new Set(files);
@@ -915,6 +974,7 @@ export interface UnitRunEvidence {
   side: 'affected' | 'main';
   kind: UnitGateRunKind;
   files: UnitFileEvidence[];
+  slowTests?: SlowTestRecord[];
 }
 export interface UnitGatePass {
   kind: 'first' | 'never-started-rerun';
@@ -922,6 +982,7 @@ export interface UnitGatePass {
   files: string[];
   failing: string[];
   timedOut: string[];
+  slowTests?: SlowTestRecord[];
 }
 
 function unitHeaderFile(header: string, root?: string): string {
@@ -1187,7 +1248,10 @@ function noteUnitRun(evidence: UnitRunEvidence[], side: 'affected' | 'main', kin
 
 function notePasses(evidence: UnitRunEvidence[], side: 'affected' | 'main', passes: readonly UnitGatePass[],
   kindOf: (pass: UnitGatePass) => UnitGateRunKind, root?: string): void {
-  for (const pass of passes) noteUnitRun(evidence, side, kindOf(pass), pass.output, pass.files, pass.failing, pass.timedOut, root);
+  for (const pass of passes) {
+    noteUnitRun(evidence, side, kindOf(pass), pass.output, pass.files, pass.failing, pass.timedOut, root);
+    if (pass.slowTests?.length) evidence.push({ side, kind: kindOf(pass), files: [], slowTests: pass.slowTests });
+  }
 }
 
 /** A later run replaces an earlier one when it names cases. A timeout that names only the running test does not drop cases already kept.
@@ -1280,7 +1344,7 @@ function readUnitEvidence(path: string): UnitEvidenceFile {
 /** Writes the kept cases beside the merge log when stdout is that log, otherwise under the orchestration merges directory.
  * A gate that runs again after main moves appends its own invocation instead of replacing the first. */
 export function writeUnitEvidence(runs: readonly UnitRunEvidence[]): string | undefined {
-  if (!runs.some(run => run.files.length)) return;
+  if (!runs.some(run => run.files.length || run.slowTests?.length)) return;
   const log = mergeLogPath();
   const path = log
     ? `${log.endsWith('.log') ? log.slice(0, -4) : log}.json`
@@ -1374,7 +1438,7 @@ function indentedTranscriptTail(text: string, maxChars = 20_000): string {
   return indented.slice(start);
 }
 
-async function runUnitShard(cwd: string, files: readonly string[], deadline: number, invocation?: ShardInvocation): Promise<UnitShardResult> {
+async function runUnitShard(cwd: string, files: readonly string[], deadline: number, options: TimeoutRetryOptions = {}, invocation?: ShardInvocation): Promise<UnitShardResult> {
   const startedAt = Date.now();
   const unfinished = (output: string, timedOut: string[] = timedOutTestFiles(output, files, cwd)): UnitShardResult =>
     ({ done: false, failing: [], timedOut, failures: unitFailureDetails(output, files, cwd),
@@ -1400,6 +1464,7 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
   if (junitFile) mkdirSync(dirname(junitFile), { recursive: true });
   const child = spawn('task', invocation?.args ?? ['goal:unit-files', '--',
     ...tierBunTestArgs('unit', [
+      ...options.testTimeoutMultiplier ? [`--timeout=${tierTestTimeoutMs.unit * options.testTimeoutMultiplier}`] : [],
       `--preload=${join(import.meta.dir, '../qa/container-reaper.ts')}`,
       ...junitFile ? ['--reporter=junit', `--reporter-outfile=${junitFile}`] : [],
       ...files.map(file => `./${file}`),
@@ -1501,26 +1566,28 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
 
 /** Owner files go through `task test`, the same command as the owner tier, so their environment matches.
  * The CLI's budget is this shard's remaining deadline; without it the tier stops at its own 600s ceiling. */
-export function runOwnerShard(cwd: string, files: readonly string[], deadline: number, now: () => number = Date.now): Promise<UnitShardResult> {
+export function runOwnerShard(cwd: string, files: readonly string[], deadline: number, now: () => number = Date.now, options: TimeoutRetryOptions = {}): Promise<UnitShardResult> {
   const budgetMs = Math.max(1, deadline - now());
   const progressFile = join(cwd, '.temp', 'owner-shard-progress', `${process.pid}-${now()}-${Math.random().toString(16).slice(2)}`);
   mkdirSync(dirname(progressFile), { recursive: true });
   const env: NodeJS.ProcessEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !['AGENT', 'CLAUDECODE', 'REPL_ID'].includes(key)));
   env.REZICS_QA_OWNER_BUDGET_MS = String(budgetMs);
   env.REZICS_QA_PROGRESS_FILE = progressFile;
-  return runUnitShard(cwd, files, deadline, {
-    args: ['test', '--', ...tierBunTestArgs('owner', files).slice(1)], label: 'test', env, progressFile,
+  return runUnitShard(cwd, files, deadline, options, {
+    args: ['test', '--', ...tierBunTestArgs('owner', [...files,
+      ...options.testTimeoutMultiplier ? [`--timeout=${tierTestTimeoutMs.owner * options.testTimeoutMultiplier}`] : [],
+    ]).slice(1)], label: 'test', env, progressFile,
   });
 }
 
 function gateShardRunner(owner: ReadonlySet<string>): UnitShardRunner {
-  return (cwd, group, deadline) => {
+  return (cwd, group, deadline, options) => {
     const owners = group.filter(file => owner.has(file));
     const units = group.filter(file => !owner.has(file));
     if (owners.length && units.length) return Promise.all([
-      runUnitShard(cwd, units, deadline), runOwnerShard(cwd, owners, deadline),
+      runUnitShard(cwd, units, deadline, options), runOwnerShard(cwd, owners, deadline, Date.now, options),
     ]).then(mergeShardResults);
-    return owners.length ? runOwnerShard(cwd, owners, deadline) : runUnitShard(cwd, units, deadline);
+    return owners.length ? runOwnerShard(cwd, owners, deadline, Date.now, options) : runUnitShard(cwd, units, deadline, options);
   };
 }
 
@@ -1636,9 +1703,10 @@ async function mapPool<T, R>(items: readonly T[], concurrency: number, run: (ite
   return results;
 }
 
-export interface UnitGateOptions {
+export interface UnitGateOptions extends TimeoutRetryOptions {
   now?: () => number;
   durations?: ReadonlyMap<string, number>;
+  historyDirectory?: string;
 }
 
 /** One schedule of the files still without a verdict. A wide plan is many shards; only `shards` run at once. */
@@ -1670,7 +1738,7 @@ export async function runUnitGate(cwd: string, files: readonly string[], shards?
       return snapshot(left, false);
     }
     const scheduled = pending;
-    const pass = await runUnitGatePass(cwd, scheduled, concurrency, runShard, durations, now);
+    const pass = await runUnitGatePass(cwd, scheduled, concurrency, runShard, durations, now, options);
     wave++;
     outputs.push(pass.result.output);
     if (pass.result.runnerErrors.length) {
@@ -1777,7 +1845,7 @@ function attributeShard(result: UnitShardResult): UnitShardResult {
 }
 
 async function runUnitGatePass(cwd: string, files: readonly string[], shards: number | undefined,
-  runShard: UnitShardRunner, durations: ReadonlyMap<string, number>, now: () => number): Promise<{ result: UnitGateResult; shards: UnitShardResult[] }> {
+  runShard: UnitShardRunner, durations: ReadonlyMap<string, number>, now: () => number, options: TimeoutRetryOptions): Promise<{ result: UnitGateResult; shards: UnitShardResult[] }> {
   const empty: UnitGateResult = { done: true, failing: [], timedOut: [], failures: [], fileErrors: [], runnerErrors: [], unfinished: [], output: '', passes: [] };
   if (!files.length) return { result: empty, shards: [] };
   const budget = unitGateBudgetMs();
@@ -1792,7 +1860,7 @@ async function runUnitGatePass(cwd: string, files: readonly string[], shards: nu
   // At most `concurrency` shards run at once. Each budget starts when that shard starts.
   const slowest = Math.max(budget, ...planned.shards.map(shard => shard.budgetMs));
   console.log(`Unit gate: ${files.length} file(s) in ${planned.shards.length} shard(s), slowest budget ${slowest}ms`);
-  const results = (await mapPool(planned.shards, concurrency, shard => runShard(cwd, shard.files, now() + shard.budgetMs))).map(attributeShard);
+  const results = (await mapPool(planned.shards, concurrency, shard => runShard(cwd, shard.files, now() + shard.budgetMs, options))).map(attributeShard);
   for (const result of results) {
     console.log(`Unit gate shard: ${result.files.length} file(s), ${result.done ? `${result.failing.length} failing` : 'unfinished'} in ${result.ms}ms`);
   }
@@ -1821,11 +1889,18 @@ interface TimeoutRetryResult {
 }
 
 async function retryTimedOutFiles(cwd: string, files: readonly string[], side: 'affected' | 'main',
-  runShard?: UnitShardRunner, onRun?: (result: UnitGateResult) => void, options: UnitGateOptions = {}): Promise<TimeoutRetryResult> {
+  runShard?: UnitShardRunner, onRun?: (result: UnitGateResult) => void, options: UnitGateOptions = {}, before: string | readonly string[] = ''): Promise<TimeoutRetryResult> {
   const result: TimeoutRetryResult = { failing: [], passing: [], unfinished: [], inconclusive: [], failures: [], fileErrors: [], runnerErrors: [] };
   for (const file of [...new Set(files)].sort()) {
     console.log(`Unit gate: ${file} timed out on ${side}; rerunning alone`);
-    const retry = await runUnitGate(cwd, [file], 1, runShard, options);
+    const retry = await runUnitGate(cwd, [file], 1, runShard, { ...options, testTimeoutMultiplier: TIMEOUT_RETRY_MULTIPLIER });
+    if (retry.done) retry.timedOut = timeoutOnlyTestFiles(retry.output, retry.timedOut, cwd, retry.timedOut);
+    if (retry.done && !retry.runnerErrors.length && !retry.failing.includes(file) && !retry.timedOut.includes(file)) {
+      const slowTests = recoveredSlowTests(before, retry.output, file, cwd);
+      if (retry.passes[0]) retry.passes[0].slowTests = slowTests;
+      await rememberSlowTests(slowTests, options.historyDirectory);
+      for (const test of slowTests) console.log(slowTestLine(test));
+    }
     // Keep the case before the timeout classification discards the transcript.
     onRun?.(retry);
     if (retry.runnerErrors.length) {
@@ -1900,6 +1975,8 @@ export async function runUnitSide(cwd: string, files: readonly string[], side: '
   const isolatedKind = (pass: UnitGatePass): UnitGateRunKind => pass.kind === 'never-started-rerun' ? 'never-started-rerun' : 'isolated-retry';
   const confirmKind = (pass: UnitGatePass): UnitGateRunKind => pass.kind === 'never-started-rerun' ? 'never-started-rerun' : 'confirm';
   const branch = await runUnitGate(cwd, files, undefined, runShard, options);
+  // Wall-clock kills have no complete report; completed files must fail only by test timeouts.
+  if (branch.done) branch.timedOut = timeoutOnlyTestFiles(branch.output, branch.timedOut, cwd, branch.timedOut);
   notePasses(evidence, side, branch.passes, pass => pass.kind, cwd);
   if (branch.runnerErrors.length) return none({ runnerErrors: branch.runnerErrors, initialDone: branch.done });
   let failureFiles = branch.failing;
@@ -1908,7 +1985,7 @@ export async function runUnitSide(cwd: string, files: readonly string[], side: '
   if (!branch.done) {
     timeoutRetry = await retryTimedOutFiles(cwd, branch.timedOut, side, runShard, retry => {
       notePasses(evidence, side, retry.passes, isolatedKind, cwd);
-    }, options);
+    }, options, branch.output);
     if (timeoutRetry.runnerErrors.length) return none({ runnerErrors: timeoutRetry.runnerErrors, initialDone: false });
     failureFiles = [...new Set([...branch.failing, ...timeoutRetry.failing])].sort();
     const unresolved = [...new Set([
@@ -1933,11 +2010,12 @@ export async function runUnitSide(cwd: string, files: readonly string[], side: '
   // then retry every timeout alone so the side's decision comes from its isolated run.
   const together = failureFiles.filter(file => !timedOut.includes(file));
   const confirmed = together.length ? await runUnitGate(cwd, together, 1, runShard, options) : emptyGate();
+  if (confirmed.done) confirmed.timedOut = timeoutOnlyTestFiles(confirmed.output, confirmed.timedOut, cwd, confirmed.timedOut);
   notePasses(evidence, side, confirmed.passes, confirmKind, cwd);
   if (confirmed.runnerErrors.length) return none({ runnerErrors: confirmed.runnerErrors, initialDone: branch.done });
   const alreadyRetried = new Set(branch.done ? [] : branch.timedOut);
   const retry = await retryTimedOutFiles(cwd, [...new Set([...timedOut, ...confirmed.timedOut])].filter(file => !alreadyRetried.has(file)),
-    side, runShard, result => { notePasses(evidence, side, result.passes, isolatedKind, cwd); }, options);
+    side, runShard, result => { notePasses(evidence, side, result.passes, isolatedKind, cwd); }, options, [branch.output, confirmed.output]);
   const confirmedFailures = [...new Set([
     ...(!branch.done ? timeoutRetry.failing : []),
     ...confirmed.failing.filter(file => !confirmed.timedOut.includes(file)),
@@ -2226,11 +2304,12 @@ export async function preMergeUnitGate(worktree: string, mainRoot: string, curre
         const install = spawnSync('task', ['install'], { cwd: directory, encoding: 'utf8', timeout: 120_000 });
         if (install.status !== 0) throw new Error(`Unit baseline dependency install failed:\n${install.stdout}\n${install.stderr}`);
         const main = await runUnitGate(directory, existing, undefined, runShard);
+        if (main.done) main.timedOut = timeoutOnlyTestFiles(main.output, main.timedOut, directory, main.timedOut);
         notePasses(evidence, 'main', main.passes, pass => pass.kind, directory);
         if (main.runnerErrors.length) return runnerErrorRefusal('main', main.runnerErrors);
         const mainRetry = await retryTimedOutFiles(directory, main.timedOut, 'main', runShard, retry => {
           notePasses(evidence, 'main', retry.passes, pass => pass.kind === 'never-started-rerun' ? 'never-started-rerun' : 'isolated-retry', directory);
-        });
+        }, {}, main.output);
         if (mainRetry.runnerErrors.length) return runnerErrorRefusal('main', mainRetry.runnerErrors);
         const mainUnresolved = [...new Set([
           ...main.unfinished.filter(file => !main.timedOut.includes(file)),

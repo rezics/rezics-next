@@ -1,9 +1,11 @@
 import { afterEach, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseBrief } from './briefs.ts';
 import { checkChangedFiles, checkFailureLines, parseCheckArgs, runCheckCommand, workerCheck, type CheckRunner } from './check.ts';
+import { tierBunTestArgs } from '../qa/core.ts';
+import { type SlowTestRecord } from './unit-gate.ts';
 
 const scratch = join(import.meta.dir, '../../.temp/worker-check-tests');
 const fixtures: string[] = [];
@@ -22,6 +24,8 @@ function fixture() {
     return { code: 0, output: '(pass) passing case\nall passing output\n' };
   };
   return { cwd, lines, commands, runner, print: (line: string) => { lines.push(line); },
+    slotOptions: { slotDirectory: join(cwd, '.temp/slots'), slots: 1, reap: () => {}, announce: () => {} },
+    historyDirectory: join(cwd, '.temp/history'),
     changed: ['scripts/example.ts'], tests: ['scripts/example.test.ts'] };
 }
 
@@ -43,9 +47,10 @@ test('one passing invocation prints five ok lines and retains every command outp
   expect(f.commands).toContainEqual(['task', 'scripts:typecheck']);
   expect(f.commands).toContainEqual(['node_modules/.bin/oxlint', '--type-aware', 'scripts']);
   expect(f.commands).toContainEqual(['task', 'ast-grep', '--', 'scan', 'scripts/example.ts']);
-  expect(f.commands.find(command => command.includes('test'))?.slice(0, 4))
-    .toEqual(['bun', 'scripts/goal/goalctl.ts', 'test', 'scripts/example.test.ts']);
-  expect(f.commands).toContainEqual(['task', 'goal:unit-files', '--', 'scripts/qa/repository-guards.test.ts']);
+  expect(f.commands.find(command => command[1] === 'scripts/qa/test.ts')?.slice(0, 3))
+    .toEqual(['bun', 'scripts/qa/test.ts', 'scripts/example.test.ts']);
+  expect(f.commands.find(command => command[1] === 'goal:unit-files')?.slice(0, 5))
+    .toEqual(['task', 'goal:unit-files', '--', '--timeout=5000', 'scripts/qa/repository-guards.test.ts']);
 });
 
 test('a failing type check prints its diagnostic and returns failure without passing transcripts', async () => {
@@ -64,7 +69,7 @@ test('a failing type check prints its diagnostic and returns failure without pas
 
 test('a failed test prints the case name with its error and never passing cases', async () => {
   const f = fixture();
-  const runner: CheckRunner = async (command, cwd, log) => command.includes('test')
+  const runner: CheckRunner = async (command, cwd, log) => command[1] === 'scripts/qa/test.ts'
     ? { code: 1, output: 'bun test\n(pass) unrelated case\nerror: expected 2 to be 3\n\n(fail) explicit proof > preserves the person\n(pass) next case\n1 fail\n' }
     : f.runner(command, cwd, log);
   const result = await workerCheck({ ...f, runner });
@@ -89,7 +94,7 @@ test('the default brief supplies all test files to one QA call, and an absent li
   writeFileSync(brief, '---\ntests: [scripts/example.test.ts, scripts/another.test.ts]\n---\n');
   await workerCheck({ ...f, tests: undefined, only: ['tests'] });
   expect(f.commands).toHaveLength(1);
-  expect(f.commands[0]?.slice(0, 5)).toEqual(['bun', 'scripts/goal/goalctl.ts', 'test', 'scripts/example.test.ts', 'scripts/another.test.ts']);
+  expect(f.commands[0]?.slice(0, 4)).toEqual(['bun', 'scripts/qa/test.ts', 'scripts/example.test.ts', 'scripts/another.test.ts']);
   f.commands.length = 0;
   writeFileSync(brief, '---\nid: example\n---\n');
   const result = await workerCheck({ ...f, tests: undefined, only: ['tests'] });
@@ -118,7 +123,7 @@ test('compiler and lint commands are serialized while proofs and guards may run 
   const runner: CheckRunner = async command => {
     const heavy = command[1]?.endsWith(':typecheck') || command[0]?.endsWith('/oxlint');
     if (heavy) { activeHeavy++; maxHeavy = Math.max(maxHeavy, activeHeavy); }
-    if (command.includes('test')) testsDuringTypes = activeHeavy === 1;
+    if (command[1] === 'scripts/qa/test.ts') testsDuringTypes = activeHeavy === 1;
     if (command.includes('goal:unit-files')) { guardsDuringTypes = activeHeavy === 1; releaseTypes(); }
     if (command[1]?.endsWith(':typecheck')) await typesBlocked;
     if (heavy) activeHeavy--;
@@ -217,9 +222,11 @@ test('hosted QA failures print attributed JUnit case names and preserve full cas
   writeFileSync(join(artifacts, 'logs/owner.log'), '(pass) hidden passing case\ncomplete hosted transcript\n');
   writeFileSync(join(artifacts, 'owner.xml'),
     '<testsuites><testsuite name="proof"><testcase name="person &amp; program" file="scripts/example.test.ts"><failure message="expected authority"/></testcase></testsuite></testsuites>');
-  const runner: CheckRunner = async command => {
-    const at = command.indexOf('--result-file');
-    writeFileSync(command[at + 1]!, JSON.stringify({ artifactPaths: [artifacts] }));
+  const runner: CheckRunner = async (_command, _cwd, _log, env) => {
+    const target = env!.REZICS_QA_ARTIFACT_ROOT!;
+    mkdirSync(join(target, 'logs'), { recursive: true });
+    writeFileSync(join(target, 'logs/owner.log'), readFileSync(join(artifacts, 'logs/owner.log')));
+    writeFileSync(join(target, 'owner.xml'), readFileSync(join(artifacts, 'owner.xml')));
     return { code: 1, output: `QA artifacts: ${artifacts}\n` };
   };
   const result = await workerCheck({ ...f, only: ['tests'], runner });
@@ -228,6 +235,25 @@ test('hosted QA failures print attributed JUnit case names and preserve full cas
   expect(f.lines.join('\n')).toContain('error: expected authority');
   expect(f.lines.join('\n')).not.toContain('hidden passing case');
   expect(readFileSync(result.log, 'utf8')).toContain('complete hosted transcript');
+});
+
+test('a hosted owner timeout uses six times its tier budget and retains its recovered report', async () => {
+  const f = fixture();
+  const commands: string[][] = [];
+  const runner: CheckRunner = async (command, _cwd, _log, env) => {
+    commands.push([...command]);
+    const failure = commands.length === 1 ? '<failure type="TimeoutError" message="test timed out"/>' : '';
+    writeFileSync(join(env!.REZICS_QA_ARTIFACT_ROOT!, 'owner.xml'),
+      `<testsuites><testcase file="scripts/example.test.ts" name="owner guard" time="32.5">${failure}</testcase></testsuites>`);
+    return { code: failure ? 1 : 0, output: 'hosted owner report\n' };
+  };
+  const result = await workerCheck({ ...f, only: ['tests'], runner });
+  expect(result.code).toBe(0);
+  expect(commands).toHaveLength(2);
+  expect(commands[0]).not.toContain('--timeout=180000');
+  expect(commands[1]).toContain('--timeout=180000');
+  expect(commands[1]).not.toContain('--reporter=junit');
+  expect(f.lines.join('\n')).toContain('Timeout retry passed: scripts/example.test.ts > owner guard (32.500s)');
 });
 
 test('the discovered goal command exits zero for a passing subset and nonzero for invalid arguments', async () => {
@@ -246,3 +272,82 @@ test('the discovered goal command exits zero for a passing subset and nonzero fo
   expect(failing.code).toBe(1);
   expect(failing.output).toContain('Unknown check group');
 });
+
+function sleepFixture(testBody: string, guardBody = '') {
+  const f = fixture();
+  const file = 'tests/qa/unit/slow.test.ts';
+  const guard = 'scripts/qa/repository-guards.test.ts';
+  writeFileSync(join(f.cwd, 'Taskfile.yml'), 'version: "3"\ntasks:\n  goal:unit-files:\n    cmds:\n      - bun test {{.CLI_ARGS}}\n');
+  for (const [path, body] of [[file, testBody], [guard, guardBody]]) {
+    mkdirSync(join(f.cwd, path!, '..'), { recursive: true });
+    writeFileSync(join(f.cwd, path!), `import { test, expect } from 'bun:test';
+import { appendFileSync } from 'node:fs';
+test('busy ${path === file ? 'test' : 'guard'}', async () => {
+  appendFileSync('attempts', ${JSON.stringify(path)} + ' ' + process.argv.join(' ') + '\\n');
+  ${body}
+});\n`);
+  }
+  const calls: string[][] = [];
+  const runner: CheckRunner = async (command, cwd, log, env) => {
+    expect(env!.GOAL_IN_SLOT).toBe('1');
+    expect(existsSync(join(f.slotOptions.slotDirectory, '0'))).toBe(true);
+    calls.push([...command]);
+    // This fixture has its own checkout's Task command, so it executes real Bun tests without the repository's hosted stack.
+    const invocation = command[1] === 'scripts/qa/test.ts'
+      ? ['task', 'goal:unit-files', '--', ...tierBunTestArgs('unit', command.slice(2)).slice(1)] : command;
+    return runCheckCommand(invocation, cwd, log, env);
+  };
+  return { ...f, tests: [file], file, guard, runner, calls };
+}
+
+test('tests and guards recover with the longer retry inside one slot, tests first, released after guards', async () => {
+  const f = sleepFixture('await Bun.sleep(5_100);', 'await Bun.sleep(5_100);');
+  const result = await workerCheck({ ...f, only: ['tests', 'guards'] });
+  expect(result.code).toBe(0);
+  expect(result.checks.map(check => check.name)).toEqual(['tests', 'guards']);
+  expect(f.calls).toHaveLength(4);
+  expect(f.calls.slice(0, 2).every(command => command[1] === 'scripts/qa/test.ts')).toBe(true);
+  expect(f.calls.slice(2).every(command => command[1] === 'goal:unit-files')).toBe(true);
+  expect(f.calls[1]).toContain('--timeout=30000');
+  expect(f.calls[3]).toContain('--timeout=30000');
+  expect(f.lines.filter(line => line.startsWith('Timeout retry passed:'))).toHaveLength(2);
+  expect(f.lines.join('\n')).toContain(`${f.file} > busy test (`);
+  expect(f.lines.join('\n')).toContain(`${f.guard} > busy guard (`);
+  expect(existsSync(join(f.slotOptions.slotDirectory, '0'))).toBe(false);
+  const records = JSON.parse(readFileSync(join(f.historyDirectory, 'timeout-retry-history.json'), 'utf8')) as SlowTestRecord[];
+  expect(records.map(record => record.file)).toEqual([f.file, f.guard]);
+  expect(records.every(record => record.seconds > 5 && record.loadAverage.length === 3)).toBe(true);
+  expect(readFileSync(join(result.log, '../timeout-retries.jsonl'), 'utf8').trim().split('\n')).toHaveLength(2);
+}, 65_000);
+
+test('an assertion is never retried and guards still finish inside the slot', async () => {
+  const f = sleepFixture('expect(1).toBe(2);');
+  const result = await workerCheck({ ...f, only: ['tests', 'guards'] });
+  expect(result.code).toBe(1);
+  expect(result.checks.find(check => check.name === 'guards')!.code).toBe(0);
+  expect(f.calls).toHaveLength(2);
+  expect(f.calls.some(command => command.includes('--timeout=30000'))).toBe(false);
+  expect(f.lines.join('\n')).toContain('(fail) busy test');
+  expect(existsSync(join(f.slotOptions.slotDirectory, '0'))).toBe(false);
+});
+
+test('a timeout beside a passing file retries only the timed out file and the check passes', async () => {
+  const f = sleepFixture('await Bun.sleep(5_100);');
+  const other = 'tests/qa/unit/fast.test.ts';
+  writeFileSync(join(f.cwd, other), "import { test } from 'bun:test'; test('fast companion', () => {});\n");
+  const result = await workerCheck({ ...f, tests: [f.file, other], only: ['tests'] });
+  expect(result.code).toBe(0);
+  expect(f.calls).toHaveLength(2);
+  expect(f.calls[0]).toContain(other);
+  expect(f.calls[1]).not.toContain(other);
+}, 40_000);
+
+test('a worker test that times out again fails after exactly one retry and releases its slot', async () => {
+  const f = sleepFixture('await Bun.sleep(31_000);');
+  const result = await workerCheck({ ...f, only: ['tests'] });
+  expect(result.code).toBe(1);
+  expect(f.calls).toHaveLength(2);
+  expect(f.lines.join('\n')).toContain('(fail) busy test');
+  expect(f.lines.filter(line => line.startsWith('Timeout retry passed:'))).toHaveLength(0);
+  expect(existsSync(join(f.slotOptions.slotDirectory, '0'))).toBe(false);
+}, 65_000);

@@ -4,8 +4,10 @@ import { dirname, join, resolve, relative, isAbsolute } from 'node:path';
 import { parseBrief } from './briefs.ts';
 import { typecheckWorkspaces } from '../qa/affected.ts';
 import { typecheckDiagnostics } from './typecheck-gate.ts';
-import { mergeUnitFiles } from './unit-gate.ts';
-import { parseJUnit } from '../qa/acceptance.ts';
+import { mergeUnitFiles, timeoutOnlyTestFiles, failingTestFiles, unitFileErrorDetails, recoveredSlowTests, rememberSlowTests, slowTestLine, timeoutRetryArg, UNIT_JUNIT_MARKER } from './unit-gate.ts';
+import { parseJUnit, isQaOwnerPath, isQaIntegrationPath, isQaFaultPath, isQaModelPath, isQaE2ePath, isQaLoadPath } from '../qa/acceptance.ts';
+import { tierBunTestArgs, type TierTestTimeout } from '../qa/core.ts';
+import { withSlot, type SlotRunOptions } from './qa-slots.ts';
 
 export type CheckGroup = 'types' | 'lint' | 'tests' | 'guards';
 export type CheckName = CheckGroup | 'ast';
@@ -35,13 +37,13 @@ export function checkChangedFiles(cwd: string): string[] {
 }
 
 export interface CheckCommandResult { code: number; output: string }
-export type CheckRunner = (command: readonly string[], cwd: string, log: string) => Promise<CheckCommandResult>;
+export type CheckRunner = (command: readonly string[], cwd: string, log: string, env?: NodeJS.ProcessEnv) => Promise<CheckCommandResult>;
 
 /** Capture to disk as it arrives, including passing output, without making the worker read it. */
-export const runCheckCommand: CheckRunner = (command, cwd, log) => new Promise(resolveResult => {
+export const runCheckCommand: CheckRunner = (command, cwd, log, env = process.env) => new Promise(resolveResult => {
   writeFileSync(log, `$ ${command.join(' ')}\n`);
   const child = spawn(command[0]!, command.slice(1), {
-    cwd, env: { ...process.env, AGENT: '1', NO_COLOR: '1', FORCE_COLOR: '0' }, stdio: ['ignore', 'pipe', 'pipe'],
+    cwd, env: { ...env, AGENT: '1', NO_COLOR: '1', FORCE_COLOR: '0' }, stdio: ['ignore', 'pipe', 'pipe'],
   });
   for (const stream of [child.stdout, child.stderr]) {
     stream?.on('data', (chunk: Buffer) => appendFileSync(log, chunk));
@@ -82,30 +84,40 @@ export interface CheckOptions {
   runner?: CheckRunner;
   print?: (line: string) => void;
   now?: () => number;
+  slotOptions?: Omit<SlotRunOptions, 'runCommand'>;
+  historyDirectory?: string;
 }
 export interface CheckResult { name: CheckName; code: number; seconds: number; note?: string }
 
-/** Hosted QA prints a report link rather than its case diagnostics. Read only artifacts attributed by its slot result. */
-function testArtifactOutput(resultFile: string): { output: string; failures: string; diagnostics: string } {
-  if (!existsSync(resultFile)) return { output: '', failures: '', diagnostics: '' };
-  const result = JSON.parse(readFileSync(resultFile, 'utf8')) as { artifactPaths?: string[] };
+/** Hosted QA prints a report link rather than its case diagnostics. Read this invocation's isolated artifact root. */
+function testArtifactOutput(directory: string): { output: string; failures: string; diagnostics: string; report: string } {
   const outputs: string[] = [];
   const failures: string[] = [];
   const diagnostics: string[] = [];
-  for (const directory of result.artifactPaths ?? []) {
+  const reports: string[] = [];
+  if (existsSync(directory)) {
     for (const file of new Bun.Glob('**/*.{log,xml}').scanSync({ cwd: directory })) {
       const path = join(directory, file);
       const content = readFileSync(path, 'utf8');
       outputs.push(`\n=== QA artifact: ${path} ===\n${content}`);
       if (file.endsWith('.log')) diagnostics.push(content);
       if (file.endsWith('.xml')) {
+        reports.push(content.replace(/<\?xml[^>]*\?>|<\/?testsuites\b[^>]*>/g, ''));
         for (const test of parseJUnit(content, 'e2e').filter(test => test.failed)) {
           failures.push(`(fail) ${test.name}\n${test.detail ? `error: ${test.detail}` : ''}`);
         }
       }
     }
   }
-  return { output: outputs.join('\n'), failures: failures.join('\n'), diagnostics: diagnostics.join('\n') };
+  return { output: outputs.join('\n'), failures: failures.join('\n'), diagnostics: diagnostics.join('\n'),
+    report: reports.length ? `${UNIT_JUNIT_MARKER}\n<testsuites>${reports.join('\n')}</testsuites>` : '' };
+}
+
+function checkTestTier(file: string): TierTestTimeout | undefined {
+  if (file.includes('.stories.') || isQaModelPath(file) || isQaE2ePath(file) || isQaLoadPath(file)) return undefined;
+  if (isQaFaultPath(file)) return 'fault/recovery';
+  if (isQaIntegrationPath(file)) return 'integration';
+  return isQaOwnerPath(file) ? 'owner' : 'unit';
 }
 
 export async function workerCheck(options: CheckOptions = {}): Promise<{ code: number; log: string; checks: CheckResult[] }> {
@@ -132,22 +144,28 @@ export async function workerCheck(options: CheckOptions = {}): Promise<{ code: n
   const print = options.print ?? console.log;
   const now = options.now ?? Date.now;
   const checks: CheckResult[] = [];
-  const testResult = join(directory, 'test-result.json');
+  let qaEnv = process.env;
 
-  async function check(name: CheckName, commands: string[][], note?: string): Promise<void> {
+  async function check(name: CheckName, commands: string[][], note?: string, testFiles: readonly string[] = []): Promise<void> {
     const start = now();
     const outputs: string[] = [];
     let code = 0;
-    for (let i = 0; i < commands.length; i++) {
+    async function execute(command: string[], label: string, selected: readonly string[]): Promise<{ result: CheckCommandResult; failureOutput: string }> {
+      const artifactsDirectory = join(directory, `${label}-artifacts`);
+      mkdirSync(artifactsDirectory, { recursive: true });
+      // Each invocation owns its artifact root; another worker's failures cannot enter this check.
+      const env = { ...qaEnv, REZICS_QA_ARTIFACT_ROOT: artifactsDirectory };
+      const direct = name === 'guards' || (name === 'tests' && selected.every(file => checkTestTier(file) === 'unit'));
+      const invocation = direct ? [...command, '--reporter=junit', `--reporter-outfile=${join(artifactsDirectory, 'unit.xml')}`] : command;
       let result: CheckCommandResult;
-      try { result = await run(commands[i]!, cwd, join(directory, `${name}-${i}.log`)); }
+      try { result = await run(invocation, cwd, join(directory, `${label}.log`), env); }
       catch (error) { result = { code: 1, output: `error: ${error instanceof Error ? error.message : String(error)}` }; }
       let failureOutput = result.output;
-      if (name === 'tests') {
+      if (name === 'tests' || name === 'guards') {
         try {
-          const artifacts = testArtifactOutput(testResult);
+          const artifacts = testArtifactOutput(artifactsDirectory);
           failureOutput = artifacts.failures || `${result.output}\n${artifacts.diagnostics}`;
-          result.output += artifacts.output;
+          result.output += `${artifacts.output}\n${artifacts.diagnostics}\n${artifacts.report}`;
         } catch (error) {
           result.code = 1;
           const diagnostic = `\nerror: Unable to read test artifacts: ${String(error)}`;
@@ -155,8 +173,32 @@ export async function workerCheck(options: CheckOptions = {}): Promise<{ code: n
           failureOutput += diagnostic;
         }
       }
-      appendFileSync(log, `\n=== ${name}: ${commands[i]!.join(' ')} ===\n${result.output}\n`);
-      if (result.code !== 0) { code = 1; outputs.push(failureOutput); }
+      appendFileSync(log, `\n=== ${name}: ${invocation.join(' ')} ===\n${result.output}\n`);
+      return { result, failureOutput };
+    }
+    for (let i = 0; i < commands.length; i++) {
+      const initial = await execute(commands[i]!, `${name}-${i}`, testFiles);
+      if (initial.result.code === 0) continue;
+      const retryFiles = timeoutOnlyTestFiles(initial.result.output, testFiles, cwd)
+        .filter(file => name === 'guards' || checkTestTier(file) !== undefined);
+      const allFailures = failingTestFiles(initial.result.output, testFiles, cwd);
+      // An unclassified runner failure is never replaced by successful retries.
+      const onlyTimeouts = retryFiles.length > 0 && allFailures.length > 0
+        && allFailures.every(file => retryFiles.includes(file))
+        && !unitFileErrorDetails(initial.result.output, testFiles, cwd).length
+        && !/QA tier budget exceeded:|error: Unable to read test artifacts:/.test(initial.result.output);
+      if (!onlyTimeouts) { code = 1; outputs.push(initial.failureOutput); }
+      for (const file of retryFiles) {
+        const tier = name === 'guards' ? 'unit' : checkTestTier(file)!;
+        const command = name === 'guards' ? ['task', 'goal:unit-files', '--', file, timeoutRetryArg(tier)]
+          : ['bun', 'scripts/qa/test.ts', file, timeoutRetryArg(tier)];
+        const retried = await execute(command, `${name}-${i}-retry-${testFiles.indexOf(file)}`, [file]);
+        if (retried.result.code !== 0) { code = 1; outputs.push(retried.failureOutput); continue; }
+        const recovered = recoveredSlowTests(initial.result.output, retried.result.output, file, cwd);
+        await rememberSlowTests(recovered, options.historyDirectory);
+        appendFileSync(join(directory, 'timeout-retries.jsonl'), recovered.map(test => `${JSON.stringify(test)}\n`).join(''));
+        for (const test of recovered) { const line = slowTestLine(test); print(line); appendFileSync(log, `${line}\n`); }
+      }
     }
     const seconds = (now() - start) / 1000;
     const result = { name, code, seconds, ...(note ? { note } : {}) };
@@ -180,14 +222,21 @@ export async function workerCheck(options: CheckOptions = {}): Promise<{ code: n
   };
   // `task guards` summarizes its child output; running its gate-selected files keeps the full transcript for this log.
   const guardFiles = only.includes('guards') ? mergeUnitFiles(cwd, 'Affected since worker check\n') : [];
-  await Promise.all([
-    staticLane(),
-    only.includes('tests') ? check('tests', tests.length ? [['bun', 'scripts/goal/goalctl.ts', 'test', ...tests,
-      '--result-file', testResult]] : [],
-      tests.length ? undefined : 'no test files named in brief') : Promise.resolve(),
-    only.includes('guards') ? check('guards', guardFiles.length ? [['task', 'goal:unit-files', '--', ...guardFiles]] : [],
-      guardFiles.length ? undefined : 'no repository guard files present') : Promise.resolve(),
-  ]);
+  const qaLane = async () => {
+    const work = async () => {
+      if (only.includes('tests')) await check('tests', tests.length ? [['bun', 'scripts/qa/test.ts', ...tests]] : [],
+        tests.length ? undefined : 'no test files named in brief', tests);
+      if (only.includes('guards')) await check('guards', guardFiles.length
+        ? [['task', 'goal:unit-files', '--', ...tierBunTestArgs('unit', guardFiles).slice(1)]] : [],
+        guardFiles.length ? undefined : 'no repository guard files present', guardFiles);
+      return checks.some(check => (check.name === 'tests' || check.name === 'guards') && check.code !== 0) ? 1 : 0;
+    };
+    if ((only.includes('tests') && tests.length) || guardFiles.length) {
+      await withSlot(['worker-check', ...tests, ...guardFiles], false, undefined, { ...options.slotOptions,
+        runCommand: async (_command, env, onStart) => { qaEnv = env; onStart(); return work(); } });
+    } else await work();
+  };
+  await Promise.all([staticLane(), qaLane()]);
   print(`Full output: ${log}`);
   return { code: checks.some(check => check.code !== 0) ? 1 : 0, log, checks };
 }
