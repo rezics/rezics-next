@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import pg from 'pg';
 import { createRealmSpace, spaceCreationDigest } from '../../../services/main/src/modules/space/create.ts';
 import { ensureGlobalClassificationContext } from '../../../services/main/src/modules/classification/global.ts';
@@ -27,6 +28,16 @@ test('a hidden id and an absent id get the same answer on the registered reads',
   const stack = await startMediaStack('hidden-id-equality');
   const prototype = pg.Client.prototype as unknown as { query: (...args: unknown[]) => unknown };
   const originalQuery = prototype.query;
+  const poolPrototype = pg.Pool.prototype as unknown as { connect: (...args: unknown[]) => unknown };
+  const originalConnect = poolPrototype.connect;
+  poolPrototype.connect = function (this: unknown, ...args: unknown[]) {
+    const callback = args[0];
+    if (typeof callback !== 'function') return originalConnect.apply(this, args);
+    // An idle client can be lent from a background worker's release callback.
+    // Attribute the driver's SQL to the caller that requested the checkout.
+    const resume = AsyncLocalStorage.snapshot();
+    return originalConnect.call(this, (...values: unknown[]) => resume(callback, ...values));
+  };
   let statements = 0;
   let countSql = true;
   let bytes = 0;
@@ -421,6 +432,7 @@ test('a hidden id and an absent id get the same answer on the registered reads',
     }
   } finally {
     prototype.query = originalQuery;
+    poolPrototype.connect = originalConnect;
     await stack.stop();
   }
 }, 300_000);
