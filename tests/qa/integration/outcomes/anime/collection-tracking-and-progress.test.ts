@@ -128,6 +128,48 @@ async function publicOpening(person: PersonaSession, sample: Sample) {
     sample('episode-opening', 'GET', `/v1/reading-positions/${short(show.work)}?position=start&limit=1${query}`));
   expect(opening.items).toMatchObject([{ occurrence: occurrences[0], target: targets[0] }]);
   expect(opening.nextCursor).not.toBeNull();
+  const page = await answer<{ items: { occurrence: string; target: string }[]; nextCursor: string | null }>(
+    sample('episode-opening-page', 'GET', `/v1/reading-positions/${short(show.work)}?position=start&limit=20${query}`));
+  expect(page.items).toMatchObject(occurrences.map((occurrence, index) => ({ occurrence, target: targets[index] })));
+  expect(page.nextCursor).toBeNull();
+}
+
+/** A control can show a refusal too; dependencies failing is never a recorded answer. */
+type ControlAnswer = { items: unknown[]; nextCursor: string | null; next: string | null;
+  definition: string; resource: string; structure: string; scope: string;
+  occurrences: { occurrence: string }[] };
+async function controlRead(sample: Sample, label: string, path: string, shown: (body: ControlAnswer) => void, status = 200) {
+  const response = await sample(label, 'GET', path);
+  const body = await answer<ControlAnswer>(Promise.resolve(response), status);
+  shown(body);
+}
+
+async function collectionControls(person: PersonaSession, sample: Sample) {
+  const query = acting(person), work = short(show.work);
+  await controlRead(sample, 'collection-reader-seed', `/v1/me/work-states?${new URLSearchParams({ works: show.work, actingSubject: person.actingSubject! })}`,
+    body => expect(body.items).toMatchObject([{ work: show.work, status: { status: null, version: 0 } }]));
+  await controlRead(sample, 'collection-custom-shelves', `/v1/me/shelves?${query}&limit=20`,
+    body => expect(body).toMatchObject({ items: [], nextCursor: null }));
+  await controlRead(sample, 'collection-attempts', `/v1/me/sessions?${query}&target=${encodeURIComponent(show.work)}&limit=50`,
+    body => expect(body).toMatchObject({ items: [], nextCursor: null }));
+  await controlRead(sample, 'collection-realizations', `/v1/works/${work}/realizations?${query}&limit=20`,
+    body => expect(body).toMatchObject({ items: [], nextCursor: null }));
+  await controlRead(sample, 'collection-releases', `/v1/works/${work}/releases?${query}&limit=20`,
+    body => expect(body).toMatchObject({ items: [], nextCursor: null }));
+  await controlRead(sample, 'collection-edition-preference', `/v1/me/edition-preferences/${work}?${query}`,
+    body => expect(body).toBeNull());
+  await controlRead(sample, 'collection-relations', `/v1/resources/${work}/relations?${query}&limit=20`,
+    body => expect(body).toMatchObject({ items: [], next: null }));
+  await controlRead(sample, 'collection-equivalence-definition', `/v1/lexicon/definitions/correspondence-equivalent?${query}`,
+    body => expect(body).toMatchObject({ code: 'definition_unavailable' }), 404);
+  await controlRead(sample, 'collection-series-progress', `/v1/me/progress-summaries/${work}?${query}&language=en`,
+    body => expect(body).toMatchObject({ resource: show.work }));
+  await controlRead(sample, 'episode-structure', `/v1/resources/${work}/parts?${query}&limit=20`,
+    body => expect(body.structure).toBe(structure));
+  await controlRead(sample, 'episode-structure-page', `/v1/compositions/${short(structure)}?${query}&limit=20`,
+    body => expect(body.occurrences.map((item: { occurrence: string }) => item.occurrence)).toEqual(occurrences));
+  await controlRead(sample, 'episode-resume-before-watching', `/v1/reading-positions/${work}?${query}&position=mine&limit=1`,
+    body => expect(body).toMatchObject({ scope: 'positions', items: [{ occurrence: occurrences[0] }] }));
 }
 async function isolated(name: PersonaName, person: PersonaSession, affected: PersonaSession, sample: Sample) {
   const affectedSample = recording.session(name, affected);
@@ -175,6 +217,9 @@ async function journey(name: PersonaName) {
     await answer(sample('shelves-sign-in', 'GET', `/v1/me/shelves?${acting(sessions.member)}`), 401);
     return;
   }
+  await collectionControls(person, sample);
+  expect(await answer(sample('reader-state-before-watching', 'GET', `${path}/reader-state?${acting(person)}`)))
+    .toMatchObject({ work: show.work, status: { status: null, version: 0 }, progress: null });
   const statusBody = { actingSubject: person.actingSubject, expectedVersion: 0, status: 'reading' };
   expect(await answer(sample('start-watching', 'PUT', `${path}/reader-status`, statusBody)))
     .toMatchObject({ work: show.work, status: 'reading', version: 1 });
@@ -182,6 +227,8 @@ async function journey(name: PersonaName) {
     sample('watching-shelf', 'GET', `/v1/me/shelves/status/reading/works?${acting(person)}&sort=added&order=desc&limit=1`));
   expect(shelf.items).toMatchObject([{ work: show.work, status: 'reading', version: 1 }]);
   expect(shelf.nextCursor).toBeNull();
+  expect(await answer(sample('episode-progress-before-completion', 'GET', `${progressPath()}?${acting(person)}`)))
+    .toMatchObject({ completed: false, version: 0, position: null });
   expect(await answer<Progress>(write(person, sample, true, 0))).toMatchObject({ completed: true, version: 1 });
   const completed = await answer<{ items: { occurrence: string }[] }>(
     sample('completed-episodes', 'GET', `/v1/compositions/${short(structure)}/progress?${acting(person)}&limit=1`));
