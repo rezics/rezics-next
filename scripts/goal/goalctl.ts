@@ -23,6 +23,7 @@ import { physicalPath, postgresSocketRefusal } from './postgres-socket.ts';
 import { COMPOSITION_ROOTS } from './composition-roots.ts';
 import { land, type LandScope } from './land.ts';
 import { mechanisms } from '../static/mechanisms.ts';
+import { printScopeProgress } from '../qa/cases/outcomes.ts';
 import { GoalMailStore } from './mail.ts';
 import { GoalCoordinator, claudeConfigHome, claudeNativeSession, claudeWakeArgs, nativeSession, processIdentity, tmuxServer,
   WAKE_LAST_MESSAGE, WAKE_PROMPT, type LaunchDescriptor, type WakeEvent } from './coordinator.ts';
@@ -5295,6 +5296,7 @@ async function tidy(args: string[]): Promise<void> {
 }
 
 async function status(): Promise<void> {
+  await printScopeProgress();
   const ledger = await withLedger(current => {
     for (const task of Object.values(current.tasks)) {
       if (task.state === 'running' && !running(task)) {
