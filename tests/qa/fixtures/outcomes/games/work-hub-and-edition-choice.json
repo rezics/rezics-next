@@ -1,0 +1,4827 @@
+{
+  "version": 1,
+  "row": "games/work-hub-and-edition-choice",
+  "personas": {
+    "visitor": [
+      {
+        "label": "work-header",
+        "operationId": "getV1WorksById",
+        "method": "GET",
+        "path": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2?",
+        "status": 200,
+        "answer": {
+          "profile": "work-read-v1",
+          "id": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+          "revision": "https://rezics.com/id/01a13627-3758-7333-9045-03b6b3e9ab49",
+          "mainVersion": "https://rezics.com/id/01a13627-3758-7332-8563-85194ab1c2b7",
+          "title": {
+            "value": "Original garden game",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "cover": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "work",
+            "key": "a5c45efb04060ee4b784fb88086c75cb"
+          },
+          "types": [
+            "https://schema.org/VideoGame"
+          ],
+          "tagline": null,
+          "completionStatus": null,
+          "chapterCount": null,
+          "wordCount": null,
+          "lastUpdatedAt": null,
+          "disclosure": "public",
+          "publicationState": "unpublished",
+          "descriptionObligations": {
+            "status": "unassessed"
+          },
+          "description": {
+            "value": "An original game about planting lights in a synthetic garden.",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "metadataRevision": "https://rezics.com/id/01a13627-403d-7490-8d42-7a21447bf748",
+          "originalTitle": null,
+          "mainVersionRevision": "https://rezics.com/id/01a13627-3e7f-7712-ab20-68367a571059",
+          "mainVersionLabel": null,
+          "selectedLanguage": "en",
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49",
+            "dependencyToken": "9cd4a27c1963fd514e10ba8d636fc8ad605e0cb335f6c073c3e1d50c75e9b716"
+          },
+          "links": {
+            "versions": "/v1/query#work-versions",
+            "classifications": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/classifications",
+            "adoptions": "/v1/query#work-adoptions",
+            "ratings": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/ratings",
+            "history": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/history",
+            "credits": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/credits",
+            "metadata": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/metadata",
+            "editions": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/editions"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "work-credits",
+        "operationId": "getV1WorksByIdCredits",
+        "method": "GET",
+        "path": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/credits?",
+        "status": 200,
+        "answer": {
+          "profile": "template-result-v1",
+          "query": "https://rezics.com/query/work-credits",
+          "revision": 1,
+          "items": [
+            {
+              "id": "https://rezics.com/id/01a13627-375e-7423-8fef-150a262db19d",
+              "role": "author",
+              "participantKind": "agent",
+              "provider": null,
+              "key": null,
+              "ordinal": null,
+              "agent": "https://rezics.com/id/f16c68c1-5c33-49c9-9688-a9defe640279",
+              "displayName": null,
+              "handle": null
+            }
+          ],
+          "complete": true,
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49",
+            "dependencyToken": "6735bf060c91dcbc9399e504eb6d195cee76ac952f3d74b8275945802e7af47a"
+          },
+          "count": {
+            "value": 1,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8",
+          "etag": "W/\"9c3076a32f0fe1e7bf18d795215e13a6c15dfc5a29e54c7b895bd69569a8b11b\""
+        }
+      },
+      {
+        "label": "partless-parts",
+        "operationId": "getV1ResourcesByResourceParts",
+        "method": "GET",
+        "path": "/v1/resources/01a13627-3758-7331-ad06-d97709ffe3f2/parts?",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "editions-empty",
+        "operationId": "getV1WorksByIdEditions",
+        "method": "GET",
+        "path": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/editions?",
+        "status": 200,
+        "answer": {
+          "items": [],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49",
+            "dependencyToken": "5beab506430f442356724f9ff31319c9793deaa549edf34dae14a7165d0ad390"
+          },
+          "count": {
+            "value": 0,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "releases",
+        "operationId": "getV1WorksByIdReleases",
+        "method": "GET",
+        "path": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/releases?",
+        "status": 200,
+        "answer": {
+          "items": [
+            {
+              "profile": "release-v2",
+              "id": "https://rezics.com/id/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+              "revision": "https://rezics.com/id/01a13627-4292-720f-8624-650e1222aefb",
+              "kind": "formal",
+              "status": "official",
+              "contentLanguages": [
+                "en"
+              ],
+              "isTranslation": false,
+              "originalLanguages": [],
+              "titleLanguage": "en",
+              "tracklistLanguage": null,
+              "title": {
+                "value": "Garden game desktop release",
+                "language": "en"
+              },
+              "publisher": null,
+              "editionStatement": "Desktop PC; version 1.0; digital format",
+              "isbn13": null,
+              "publicationYear": null,
+              "originalUrl": null,
+              "fixedRelease": null,
+              "coverage": [
+                {
+                  "realization": null,
+                  "revision": null,
+                  "work": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+                  "mainVersion": "https://rezics.com/id/01a13627-3758-7332-8563-85194ab1c2b7",
+                  "completeness": "unknown",
+                  "language": null
+                }
+              ],
+              "legacyCoverage": null,
+              "identifiers": [],
+              "platform": null,
+              "territory": null,
+              "snapshots": []
+            }
+          ],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49"
+          },
+          "count": {
+            "value": 1,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "release-details",
+        "operationId": "getV1WorksByIdReleasesByRelease",
+        "method": "GET",
+        "path": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/releases/800bd89c-3cbc-44da-b9b4-c95f0692f105?",
+        "status": 200,
+        "answer": {
+          "profile": "release-v2",
+          "id": "https://rezics.com/id/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+          "revision": "https://rezics.com/id/01a13627-4292-720f-8624-650e1222aefb",
+          "kind": "formal",
+          "status": "official",
+          "contentLanguages": [
+            "en"
+          ],
+          "isTranslation": false,
+          "originalLanguages": [],
+          "titleLanguage": "en",
+          "tracklistLanguage": null,
+          "title": {
+            "value": "Garden game desktop release",
+            "language": "en"
+          },
+          "publisher": null,
+          "editionStatement": "Desktop PC; version 1.0; digital format",
+          "isbn13": null,
+          "publicationYear": null,
+          "originalUrl": null,
+          "fixedRelease": null,
+          "coverage": [
+            {
+              "realization": null,
+              "revision": null,
+              "work": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+              "mainVersion": "https://rezics.com/id/01a13627-3758-7332-8563-85194ab1c2b7",
+              "completeness": "unknown",
+              "language": null
+            }
+          ],
+          "legacyCoverage": null,
+          "identifiers": [],
+          "platform": null,
+          "territory": null,
+          "snapshots": [],
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "preference-sign-in",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a13627-3758-7331-ad06-d97709ffe3f2?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ff16c68c1-5c33-49c9-9688-a9defe640279",
+        "status": 401,
+        "answer": {
+          "type": "https://rezics.com/problems/account_assertion_denied",
+          "title": "Account assertion is invalid or inactive",
+          "status": 401,
+          "code": "account_assertion_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "choose-edition-sign-in",
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "method": "PUT",
+        "path": "/v1/me/edition-preferences/01a13627-3758-7331-ad06-d97709ffe3f2",
+        "body": {
+          "actingSubject": "https://rezics.com/id/f16c68c1-5c33-49c9-9688-a9defe640279",
+          "expectedVersion": 0,
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+            "revision": "https://rezics.com/id/01a13627-4292-720f-8624-650e1222aefb"
+          }
+        },
+        "status": 401,
+        "answer": {
+          "type": "https://rezics.com/problems/account_assertion_denied",
+          "title": "Account assertion is invalid or inactive",
+          "status": 401,
+          "code": "account_assertion_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "unpublished-work",
+        "operationId": "getV1WorksById",
+        "method": "GET",
+        "path": "/v1/works/01a13627-38d3-762d-9635-8cb0a0a8e983?",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "release-edit-refused",
+        "operationId": "putV1WorksByIdReleasesByRelease",
+        "method": "PUT",
+        "path": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/releases/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+        "body": {
+          "profile": "release-v1",
+          "expectedHead": "https://rezics.com/id/01a13627-4292-720f-8624-650e1222aefb",
+          "id": "https://rezics.com/id/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+          "actingSubject": "https://rezics.com/id/f16c68c1-5c33-49c9-9688-a9defe640279",
+          "kind": "formal",
+          "status": "official",
+          "contentLanguages": [
+            "en"
+          ],
+          "isTranslation": false,
+          "originalLanguages": [],
+          "titleLanguage": "en",
+          "tracklistLanguage": null,
+          "title": {
+            "value": "Garden game desktop release",
+            "language": "en"
+          },
+          "editionStatement": "Desktop PC; version 1.0; digital format",
+          "publisher": null,
+          "publicationYear": null,
+          "isbn13": null,
+          "originalUrl": null,
+          "fixedRelease": null,
+          "coverage": null,
+          "evidence": null
+        },
+        "status": 401,
+        "answer": {
+          "type": "https://rezics.com/problems/account_assertion_denied",
+          "title": "Account assertion is invalid or inactive",
+          "status": 401,
+          "code": "account_assertion_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      }
+    ],
+    "stranger": [
+      {
+        "label": "work-header",
+        "operationId": "getV1WorksById",
+        "method": "GET",
+        "path": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F5db42764-d7b4-4aea-a4b9-0a9470d7350e",
+        "status": 200,
+        "answer": {
+          "profile": "work-read-v1",
+          "id": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+          "revision": "https://rezics.com/id/01a13627-3758-7333-9045-03b6b3e9ab49",
+          "mainVersion": "https://rezics.com/id/01a13627-3758-7332-8563-85194ab1c2b7",
+          "title": {
+            "value": "Original garden game",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "cover": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "work",
+            "key": "a5c45efb04060ee4b784fb88086c75cb"
+          },
+          "types": [
+            "https://schema.org/VideoGame"
+          ],
+          "tagline": null,
+          "completionStatus": null,
+          "chapterCount": null,
+          "wordCount": null,
+          "lastUpdatedAt": null,
+          "disclosure": "public",
+          "publicationState": "unpublished",
+          "descriptionObligations": {
+            "status": "unassessed"
+          },
+          "description": {
+            "value": "An original game about planting lights in a synthetic garden.",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "metadataRevision": "https://rezics.com/id/01a13627-403d-7490-8d42-7a21447bf748",
+          "originalTitle": null,
+          "mainVersionRevision": "https://rezics.com/id/01a13627-3e7f-7712-ab20-68367a571059",
+          "mainVersionLabel": null,
+          "selectedLanguage": "en",
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49",
+            "dependencyToken": "9cd4a27c1963fd514e10ba8d636fc8ad605e0cb335f6c073c3e1d50c75e9b716"
+          },
+          "links": {
+            "versions": "/v1/query#work-versions",
+            "classifications": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/classifications",
+            "adoptions": "/v1/query#work-adoptions",
+            "ratings": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/ratings",
+            "history": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/history",
+            "credits": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/credits",
+            "metadata": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/metadata",
+            "editions": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/editions"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "work-credits",
+        "operationId": "getV1WorksByIdCredits",
+        "method": "GET",
+        "path": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/credits?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F5db42764-d7b4-4aea-a4b9-0a9470d7350e",
+        "status": 200,
+        "answer": {
+          "profile": "template-result-v1",
+          "query": "https://rezics.com/query/work-credits",
+          "revision": 1,
+          "items": [
+            {
+              "id": "https://rezics.com/id/01a13627-375e-7423-8fef-150a262db19d",
+              "role": "author",
+              "participantKind": "agent",
+              "provider": null,
+              "key": null,
+              "ordinal": null,
+              "agent": "https://rezics.com/id/f16c68c1-5c33-49c9-9688-a9defe640279",
+              "displayName": null,
+              "handle": null
+            }
+          ],
+          "complete": true,
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49",
+            "dependencyToken": "6735bf060c91dcbc9399e504eb6d195cee76ac952f3d74b8275945802e7af47a"
+          },
+          "count": {
+            "value": 1,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8",
+          "etag": "W/\"fc3dfc1d244b05f24d7a7c05a43748b3910a7c67e9dfd00ae7e0f64ee1338767\""
+        }
+      },
+      {
+        "label": "partless-parts",
+        "operationId": "getV1ResourcesByResourceParts",
+        "method": "GET",
+        "path": "/v1/resources/01a13627-3758-7331-ad06-d97709ffe3f2/parts?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F5db42764-d7b4-4aea-a4b9-0a9470d7350e",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "editions-empty",
+        "operationId": "getV1WorksByIdEditions",
+        "method": "GET",
+        "path": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/editions?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F5db42764-d7b4-4aea-a4b9-0a9470d7350e",
+        "status": 200,
+        "answer": {
+          "items": [],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49",
+            "dependencyToken": "5beab506430f442356724f9ff31319c9793deaa549edf34dae14a7165d0ad390"
+          },
+          "count": {
+            "value": 0,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "releases",
+        "operationId": "getV1WorksByIdReleases",
+        "method": "GET",
+        "path": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/releases?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F5db42764-d7b4-4aea-a4b9-0a9470d7350e",
+        "status": 200,
+        "answer": {
+          "items": [
+            {
+              "profile": "release-v2",
+              "id": "https://rezics.com/id/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+              "revision": "https://rezics.com/id/01a13627-4292-720f-8624-650e1222aefb",
+              "kind": "formal",
+              "status": "official",
+              "contentLanguages": [
+                "en"
+              ],
+              "isTranslation": false,
+              "originalLanguages": [],
+              "titleLanguage": "en",
+              "tracklistLanguage": null,
+              "title": {
+                "value": "Garden game desktop release",
+                "language": "en"
+              },
+              "publisher": null,
+              "editionStatement": "Desktop PC; version 1.0; digital format",
+              "isbn13": null,
+              "publicationYear": null,
+              "originalUrl": null,
+              "fixedRelease": null,
+              "coverage": [
+                {
+                  "realization": null,
+                  "revision": null,
+                  "work": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+                  "mainVersion": "https://rezics.com/id/01a13627-3758-7332-8563-85194ab1c2b7",
+                  "completeness": "unknown",
+                  "language": null
+                }
+              ],
+              "legacyCoverage": null,
+              "identifiers": [],
+              "platform": null,
+              "territory": null,
+              "snapshots": []
+            }
+          ],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49"
+          },
+          "count": {
+            "value": 1,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "release-details",
+        "operationId": "getV1WorksByIdReleasesByRelease",
+        "method": "GET",
+        "path": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/releases/800bd89c-3cbc-44da-b9b4-c95f0692f105?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F5db42764-d7b4-4aea-a4b9-0a9470d7350e",
+        "status": 200,
+        "answer": {
+          "profile": "release-v2",
+          "id": "https://rezics.com/id/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+          "revision": "https://rezics.com/id/01a13627-4292-720f-8624-650e1222aefb",
+          "kind": "formal",
+          "status": "official",
+          "contentLanguages": [
+            "en"
+          ],
+          "isTranslation": false,
+          "originalLanguages": [],
+          "titleLanguage": "en",
+          "tracklistLanguage": null,
+          "title": {
+            "value": "Garden game desktop release",
+            "language": "en"
+          },
+          "publisher": null,
+          "editionStatement": "Desktop PC; version 1.0; digital format",
+          "isbn13": null,
+          "publicationYear": null,
+          "originalUrl": null,
+          "fixedRelease": null,
+          "coverage": [
+            {
+              "realization": null,
+              "revision": null,
+              "work": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+              "mainVersion": "https://rezics.com/id/01a13627-3758-7332-8563-85194ab1c2b7",
+              "completeness": "unknown",
+              "language": null
+            }
+          ],
+          "legacyCoverage": null,
+          "identifiers": [],
+          "platform": null,
+          "territory": null,
+          "snapshots": [],
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "preference-empty",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a13627-3758-7331-ad06-d97709ffe3f2?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F5db42764-d7b4-4aea-a4b9-0a9470d7350e",
+        "status": 200,
+        "answer": null,
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "choose-edition",
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "method": "PUT",
+        "path": "/v1/me/edition-preferences/01a13627-3758-7331-ad06-d97709ffe3f2",
+        "body": {
+          "actingSubject": "https://rezics.com/id/5db42764-d7b4-4aea-a4b9-0a9470d7350e",
+          "expectedVersion": 0,
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+            "revision": "https://rezics.com/id/01a13627-4292-720f-8624-650e1222aefb"
+          }
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+            "revision": "https://rezics.com/id/01a13627-4292-720f-8624-650e1222aefb"
+          },
+          "version": 1,
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "preference-saved",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a13627-3758-7331-ad06-d97709ffe3f2?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F5db42764-d7b4-4aea-a4b9-0a9470d7350e",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+            "revision": "https://rezics.com/id/01a13627-4292-720f-8624-650e1222aefb"
+          },
+          "language": "en",
+          "version": 1
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "preference-private",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a13627-3758-7331-ad06-d97709ffe3f2?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F89d3521f-ba8c-4f8f-86da-2e8f62676f6e",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/progress_denied",
+          "title": "Progress and preferences are private to the principal’s own Person",
+          "status": 403,
+          "code": "progress_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "choose-edition-private",
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "method": "PUT",
+        "path": "/v1/me/edition-preferences/01a13627-3758-7331-ad06-d97709ffe3f2",
+        "body": {
+          "actingSubject": "https://rezics.com/id/89d3521f-ba8c-4f8f-86da-2e8f62676f6e",
+          "expectedVersion": 0,
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+            "revision": "https://rezics.com/id/01a13627-4292-720f-8624-650e1222aefb"
+          }
+        },
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/progress_denied",
+          "title": "Progress and preferences are private to the principal’s own Person",
+          "status": 403,
+          "code": "progress_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "unpublished-work",
+        "operationId": "getV1WorksById",
+        "method": "GET",
+        "path": "/v1/works/01a13627-38d3-762d-9635-8cb0a0a8e983?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F5db42764-d7b4-4aea-a4b9-0a9470d7350e",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "release-edit-refused",
+        "operationId": "putV1WorksByIdReleasesByRelease",
+        "method": "PUT",
+        "path": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/releases/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+        "body": {
+          "profile": "release-v1",
+          "expectedHead": "https://rezics.com/id/01a13627-4292-720f-8624-650e1222aefb",
+          "id": "https://rezics.com/id/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+          "actingSubject": "https://rezics.com/id/5db42764-d7b4-4aea-a4b9-0a9470d7350e",
+          "kind": "formal",
+          "status": "official",
+          "contentLanguages": [
+            "en"
+          ],
+          "isTranslation": false,
+          "originalLanguages": [],
+          "titleLanguage": "en",
+          "tracklistLanguage": null,
+          "title": {
+            "value": "Garden game desktop release",
+            "language": "en"
+          },
+          "editionStatement": "Desktop PC; version 1.0; digital format",
+          "publisher": null,
+          "publicationYear": null,
+          "isbn13": null,
+          "originalUrl": null,
+          "fixedRelease": null,
+          "coverage": null,
+          "evidence": null
+        },
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/authority_denied",
+          "title": "Authority is not admitted",
+          "status": 403,
+          "code": "authority_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      }
+    ],
+    "member": [
+      {
+        "label": "work-header",
+        "operationId": "getV1WorksById",
+        "method": "GET",
+        "path": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F89d3521f-ba8c-4f8f-86da-2e8f62676f6e",
+        "status": 200,
+        "answer": {
+          "profile": "work-read-v1",
+          "id": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+          "revision": "https://rezics.com/id/01a13627-3758-7333-9045-03b6b3e9ab49",
+          "mainVersion": "https://rezics.com/id/01a13627-3758-7332-8563-85194ab1c2b7",
+          "title": {
+            "value": "Original garden game",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "cover": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "work",
+            "key": "a5c45efb04060ee4b784fb88086c75cb"
+          },
+          "types": [
+            "https://schema.org/VideoGame"
+          ],
+          "tagline": null,
+          "completionStatus": null,
+          "chapterCount": null,
+          "wordCount": null,
+          "lastUpdatedAt": null,
+          "disclosure": "public",
+          "publicationState": "unpublished",
+          "descriptionObligations": {
+            "status": "unassessed"
+          },
+          "description": {
+            "value": "An original game about planting lights in a synthetic garden.",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "metadataRevision": "https://rezics.com/id/01a13627-403d-7490-8d42-7a21447bf748",
+          "originalTitle": null,
+          "mainVersionRevision": "https://rezics.com/id/01a13627-3e7f-7712-ab20-68367a571059",
+          "mainVersionLabel": null,
+          "selectedLanguage": "en",
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49",
+            "dependencyToken": "9cd4a27c1963fd514e10ba8d636fc8ad605e0cb335f6c073c3e1d50c75e9b716"
+          },
+          "links": {
+            "versions": "/v1/query#work-versions",
+            "classifications": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/classifications",
+            "adoptions": "/v1/query#work-adoptions",
+            "ratings": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/ratings",
+            "history": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/history",
+            "credits": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/credits",
+            "metadata": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/metadata",
+            "editions": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/editions"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "work-credits",
+        "operationId": "getV1WorksByIdCredits",
+        "method": "GET",
+        "path": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/credits?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F89d3521f-ba8c-4f8f-86da-2e8f62676f6e",
+        "status": 200,
+        "answer": {
+          "profile": "template-result-v1",
+          "query": "https://rezics.com/query/work-credits",
+          "revision": 1,
+          "items": [
+            {
+              "id": "https://rezics.com/id/01a13627-375e-7423-8fef-150a262db19d",
+              "role": "author",
+              "participantKind": "agent",
+              "provider": null,
+              "key": null,
+              "ordinal": null,
+              "agent": "https://rezics.com/id/f16c68c1-5c33-49c9-9688-a9defe640279",
+              "displayName": null,
+              "handle": null
+            }
+          ],
+          "complete": true,
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49",
+            "dependencyToken": "6735bf060c91dcbc9399e504eb6d195cee76ac952f3d74b8275945802e7af47a"
+          },
+          "count": {
+            "value": 1,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8",
+          "etag": "W/\"0a2bccbb6a19f34e5a6e87f5b3da74aa02190ac532425db9b160846128685370\""
+        }
+      },
+      {
+        "label": "partless-parts",
+        "operationId": "getV1ResourcesByResourceParts",
+        "method": "GET",
+        "path": "/v1/resources/01a13627-3758-7331-ad06-d97709ffe3f2/parts?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F89d3521f-ba8c-4f8f-86da-2e8f62676f6e",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "editions-empty",
+        "operationId": "getV1WorksByIdEditions",
+        "method": "GET",
+        "path": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/editions?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F89d3521f-ba8c-4f8f-86da-2e8f62676f6e",
+        "status": 200,
+        "answer": {
+          "items": [],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49",
+            "dependencyToken": "5beab506430f442356724f9ff31319c9793deaa549edf34dae14a7165d0ad390"
+          },
+          "count": {
+            "value": 0,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "releases",
+        "operationId": "getV1WorksByIdReleases",
+        "method": "GET",
+        "path": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/releases?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F89d3521f-ba8c-4f8f-86da-2e8f62676f6e",
+        "status": 200,
+        "answer": {
+          "items": [
+            {
+              "profile": "release-v2",
+              "id": "https://rezics.com/id/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+              "revision": "https://rezics.com/id/01a13627-4292-720f-8624-650e1222aefb",
+              "kind": "formal",
+              "status": "official",
+              "contentLanguages": [
+                "en"
+              ],
+              "isTranslation": false,
+              "originalLanguages": [],
+              "titleLanguage": "en",
+              "tracklistLanguage": null,
+              "title": {
+                "value": "Garden game desktop release",
+                "language": "en"
+              },
+              "publisher": null,
+              "editionStatement": "Desktop PC; version 1.0; digital format",
+              "isbn13": null,
+              "publicationYear": null,
+              "originalUrl": null,
+              "fixedRelease": null,
+              "coverage": [
+                {
+                  "realization": null,
+                  "revision": null,
+                  "work": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+                  "mainVersion": "https://rezics.com/id/01a13627-3758-7332-8563-85194ab1c2b7",
+                  "completeness": "unknown",
+                  "language": null
+                }
+              ],
+              "legacyCoverage": null,
+              "identifiers": [],
+              "platform": null,
+              "territory": null,
+              "snapshots": []
+            }
+          ],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49"
+          },
+          "count": {
+            "value": 1,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "release-details",
+        "operationId": "getV1WorksByIdReleasesByRelease",
+        "method": "GET",
+        "path": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/releases/800bd89c-3cbc-44da-b9b4-c95f0692f105?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F89d3521f-ba8c-4f8f-86da-2e8f62676f6e",
+        "status": 200,
+        "answer": {
+          "profile": "release-v2",
+          "id": "https://rezics.com/id/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+          "revision": "https://rezics.com/id/01a13627-4292-720f-8624-650e1222aefb",
+          "kind": "formal",
+          "status": "official",
+          "contentLanguages": [
+            "en"
+          ],
+          "isTranslation": false,
+          "originalLanguages": [],
+          "titleLanguage": "en",
+          "tracklistLanguage": null,
+          "title": {
+            "value": "Garden game desktop release",
+            "language": "en"
+          },
+          "publisher": null,
+          "editionStatement": "Desktop PC; version 1.0; digital format",
+          "isbn13": null,
+          "publicationYear": null,
+          "originalUrl": null,
+          "fixedRelease": null,
+          "coverage": [
+            {
+              "realization": null,
+              "revision": null,
+              "work": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+              "mainVersion": "https://rezics.com/id/01a13627-3758-7332-8563-85194ab1c2b7",
+              "completeness": "unknown",
+              "language": null
+            }
+          ],
+          "legacyCoverage": null,
+          "identifiers": [],
+          "platform": null,
+          "territory": null,
+          "snapshots": [],
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "preference-empty",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a13627-3758-7331-ad06-d97709ffe3f2?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F89d3521f-ba8c-4f8f-86da-2e8f62676f6e",
+        "status": 200,
+        "answer": null,
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "choose-edition",
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "method": "PUT",
+        "path": "/v1/me/edition-preferences/01a13627-3758-7331-ad06-d97709ffe3f2",
+        "body": {
+          "actingSubject": "https://rezics.com/id/89d3521f-ba8c-4f8f-86da-2e8f62676f6e",
+          "expectedVersion": 0,
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+            "revision": "https://rezics.com/id/01a13627-4292-720f-8624-650e1222aefb"
+          }
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+            "revision": "https://rezics.com/id/01a13627-4292-720f-8624-650e1222aefb"
+          },
+          "version": 1,
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "preference-saved",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a13627-3758-7331-ad06-d97709ffe3f2?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F89d3521f-ba8c-4f8f-86da-2e8f62676f6e",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+            "revision": "https://rezics.com/id/01a13627-4292-720f-8624-650e1222aefb"
+          },
+          "language": "en",
+          "version": 1
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "preference-private",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a13627-3758-7331-ad06-d97709ffe3f2?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F5db42764-d7b4-4aea-a4b9-0a9470d7350e",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/progress_denied",
+          "title": "Progress and preferences are private to the principal’s own Person",
+          "status": 403,
+          "code": "progress_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "choose-edition-private",
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "method": "PUT",
+        "path": "/v1/me/edition-preferences/01a13627-3758-7331-ad06-d97709ffe3f2",
+        "body": {
+          "actingSubject": "https://rezics.com/id/5db42764-d7b4-4aea-a4b9-0a9470d7350e",
+          "expectedVersion": 0,
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+            "revision": "https://rezics.com/id/01a13627-4292-720f-8624-650e1222aefb"
+          }
+        },
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/progress_denied",
+          "title": "Progress and preferences are private to the principal’s own Person",
+          "status": 403,
+          "code": "progress_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "unpublished-work",
+        "operationId": "getV1WorksById",
+        "method": "GET",
+        "path": "/v1/works/01a13627-38d3-762d-9635-8cb0a0a8e983?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F89d3521f-ba8c-4f8f-86da-2e8f62676f6e",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "release-edit-refused",
+        "operationId": "putV1WorksByIdReleasesByRelease",
+        "method": "PUT",
+        "path": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/releases/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+        "body": {
+          "profile": "release-v1",
+          "expectedHead": "https://rezics.com/id/01a13627-4292-720f-8624-650e1222aefb",
+          "id": "https://rezics.com/id/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+          "actingSubject": "https://rezics.com/id/89d3521f-ba8c-4f8f-86da-2e8f62676f6e",
+          "kind": "formal",
+          "status": "official",
+          "contentLanguages": [
+            "en"
+          ],
+          "isTranslation": false,
+          "originalLanguages": [],
+          "titleLanguage": "en",
+          "tracklistLanguage": null,
+          "title": {
+            "value": "Garden game desktop release",
+            "language": "en"
+          },
+          "editionStatement": "Desktop PC; version 1.0; digital format",
+          "publisher": null,
+          "publicationYear": null,
+          "isbn13": null,
+          "originalUrl": null,
+          "fixedRelease": null,
+          "coverage": null,
+          "evidence": null
+        },
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/authority_denied",
+          "title": "Authority is not admitted",
+          "status": 403,
+          "code": "authority_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "hub-projection",
+        "operationId": "getV1ResourcesByResourcePage",
+        "method": "GET",
+        "path": "/v1/resources/01a13627-3758-7331-ad06-d97709ffe3f2/page?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F89d3521f-ba8c-4f8f-86da-2e8f62676f6e",
+        "status": 200,
+        "answer": {
+          "profile": "entity-page-v1",
+          "target": {
+            "resource": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+            "base": "work",
+            "work": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+            "revision": "https://rezics.com/id/01a13627-3758-7333-9045-03b6b3e9ab49",
+            "types": [
+              "https://schema.org/CreativeWork",
+              "https://schema.org/VideoGame"
+            ],
+            "disclosure": "public"
+          },
+          "summary": {
+            "reference": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+            "status": "available",
+            "type": "work",
+            "address": {
+              "prefix": "/w/",
+              "key": "1CfzaEFALKLdLu9Pg4TYoB",
+              "suffixSource": "Original garden game"
+            },
+            "base": "work",
+            "work": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+            "disclosure": "public",
+            "name": {
+              "value": "Original garden game",
+              "language": "en",
+              "direction": "ltr",
+              "basis": "fallback"
+            },
+            "avatar": {
+              "kind": "fallback",
+              "policy": "avatar-fallback-v1",
+              "resourceType": "work",
+              "key": "a5c45efb04060ee4b784fb88086c75cb"
+            }
+          },
+          "registry": {
+            "type": "https://schema.org/VideoGame",
+            "base": "work",
+            "default": false,
+            "creatable": true,
+            "creation": "contributor",
+            "interest": "media",
+            "primaryAction": "visit",
+            "presentation": "game",
+            "cover": "landscape",
+            "priority": 4,
+            "labels": {
+              "en": {
+                "one": "Game",
+                "other": "Games"
+              },
+              "zh-Hant": {
+                "one": "遊戲",
+                "other": "遊戲"
+              },
+              "zh-Hans": {
+                "one": "游戏",
+                "other": "游戏"
+              },
+              "ja": {
+                "one": "ゲーム",
+                "other": "ゲーム"
+              },
+              "ko": {
+                "one": "게임",
+                "other": "게임"
+              },
+              "de": {
+                "one": "Spiel",
+                "other": "Spiele"
+              },
+              "fr": {
+                "one": "Jeu",
+                "other": "Jeux"
+              },
+              "es": {
+                "one": "Juego",
+                "other": "Juegos"
+              }
+            }
+          },
+          "work": {
+            "profile": "work-read-v1",
+            "id": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+            "revision": "https://rezics.com/id/01a13627-3758-7333-9045-03b6b3e9ab49",
+            "mainVersion": "https://rezics.com/id/01a13627-3758-7332-8563-85194ab1c2b7",
+            "title": {
+              "value": "Original garden game",
+              "language": "en",
+              "direction": "ltr",
+              "basis": "fallback"
+            },
+            "cover": {
+              "kind": "fallback",
+              "policy": "avatar-fallback-v1",
+              "resourceType": "work",
+              "key": "a5c45efb04060ee4b784fb88086c75cb"
+            },
+            "types": [
+              "https://schema.org/VideoGame"
+            ],
+            "tagline": null,
+            "completionStatus": null,
+            "chapterCount": null,
+            "wordCount": null,
+            "lastUpdatedAt": null,
+            "disclosure": "public",
+            "publicationState": "unpublished",
+            "descriptionObligations": {
+              "status": "unassessed"
+            },
+            "description": {
+              "value": "An original game about planting lights in a synthetic garden.",
+              "language": "en",
+              "direction": "ltr",
+              "basis": "fallback"
+            },
+            "metadataRevision": "https://rezics.com/id/01a13627-403d-7490-8d42-7a21447bf748",
+            "originalTitle": null,
+            "mainVersionRevision": "https://rezics.com/id/01a13627-3e7f-7712-ab20-68367a571059",
+            "mainVersionLabel": null,
+            "selectedLanguage": "en",
+            "sourcePosition": {
+              "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+              "sequence": "49"
+            },
+            "links": {
+              "versions": "/v1/query#work-versions",
+              "classifications": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/classifications",
+              "adoptions": "/v1/query#work-adoptions",
+              "ratings": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/ratings",
+              "history": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/history",
+              "credits": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/credits",
+              "metadata": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/metadata",
+              "editions": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/editions"
+            }
+          },
+          "sections": [
+            {
+              "id": "statements",
+              "href": "/v1/resources/01a13627-3758-7331-ad06-d97709ffe3f2/statements",
+              "actions": []
+            },
+            {
+              "id": "releases",
+              "href": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/releases",
+              "actions": []
+            },
+            {
+              "id": "contents",
+              "href": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/contents",
+              "actions": []
+            },
+            {
+              "id": "relations",
+              "href": "/v1/resources/01a13627-3758-7331-ad06-d97709ffe3f2/relations",
+              "actions": []
+            },
+            {
+              "id": "credits",
+              "href": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/credits",
+              "actions": []
+            },
+            {
+              "id": "ratings",
+              "href": "/v1/resources/01a13627-3758-7331-ad06-d97709ffe3f2/ratings",
+              "actions": []
+            },
+            {
+              "id": "reviews",
+              "href": "/v1/resources/01a13627-3758-7331-ad06-d97709ffe3f2/reviews",
+              "actions": []
+            },
+            {
+              "id": "discussion",
+              "href": "/v1/resources/01a13627-3758-7331-ad06-d97709ffe3f2/discussion",
+              "actions": []
+            }
+          ],
+          "mergedFacts": {
+            "origins": [],
+            "nextCursor": null
+          },
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json"
+        }
+      },
+      {
+        "label": "agent-credits",
+        "operationId": "getV1WorksByIdAgent-credits",
+        "method": "GET",
+        "path": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/agent-credits?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F89d3521f-ba8c-4f8f-86da-2e8f62676f6e",
+        "status": 200,
+        "answer": {
+          "items": [
+            {
+              "id": "https://rezics.com/id/01a13627-375e-7423-8fef-150a262db19d",
+              "role": "author",
+              "agent": "https://rezics.com/id/f16c68c1-5c33-49c9-9688-a9defe640279",
+              "identityStatus": "active",
+              "displayName": "Outcome owner",
+              "handle": null,
+              "address": {
+                "prefix": "/a/",
+                "key": "Wp6ZtrTBw25qRJa9HhT5Hz",
+                "suffixSource": ""
+              }
+            }
+          ],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49"
+          },
+          "count": {
+            "value": 1,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json"
+        }
+      },
+      {
+        "label": "reader-state",
+        "operationId": "getV1WorksByIdReader-state",
+        "method": "GET",
+        "path": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/reader-state?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F89d3521f-ba8c-4f8f-86da-2e8f62676f6e",
+        "status": 200,
+        "answer": {
+          "profile": "reader-work-state-v1",
+          "work": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+          "status": {
+            "work": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+            "status": null,
+            "startedOn": null,
+            "finishedOn": null,
+            "version": 0,
+            "changedAt": null
+          },
+          "customShelves": [],
+          "rating": {
+            "global": null,
+            "realm": null
+          },
+          "progress": null,
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "realizations-empty",
+        "operationId": "getV1WorksByIdRealizations",
+        "method": "GET",
+        "path": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/realizations?limit=20&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F89d3521f-ba8c-4f8f-86da-2e8f62676f6e",
+        "status": 200,
+        "answer": {
+          "items": [],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49"
+          },
+          "count": {
+            "value": 0,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "work-relations",
+        "operationId": "getV1ResourcesByResourceRelations",
+        "method": "GET",
+        "path": "/v1/resources/01a13627-3758-7331-ad06-d97709ffe3f2/relations?limit=20&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F89d3521f-ba8c-4f8f-86da-2e8f62676f6e",
+        "status": 200,
+        "answer": {
+          "profile": "resource-relations-v1",
+          "resource": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+          "items": [],
+          "next": null,
+          "sourcePosition": {
+            "datasetId": "product",
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "progress-summary",
+        "operationId": "getV1MeProgress-summariesByResource",
+        "method": "GET",
+        "path": "/v1/me/progress-summaries/01a13627-3758-7331-ad06-d97709ffe3f2?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F89d3521f-ba8c-4f8f-86da-2e8f62676f6e",
+        "status": 200,
+        "answer": {
+          "resource": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+          "scope": "work",
+          "policy": "composition-progress-v2",
+          "status": "not-started",
+          "counts": {
+            "completed": 0,
+            "required": 1,
+            "completedRequired": 0
+          },
+          "partial": false,
+          "states": {
+            "correspondenceUnresolved": false
+          },
+          "language": "en",
+          "preference": {
+            "work": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+            "edition": {
+              "kind": "release",
+              "resource": "https://rezics.com/id/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+              "revision": "https://rezics.com/id/01a13627-4292-720f-8624-650e1222aefb"
+            },
+            "language": "en",
+            "version": 1
+          },
+          "revisions": {
+            "work": {
+              "resource": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+              "revision": "https://rezics.com/id/01a13627-3758-7333-9045-03b6b3e9ab49"
+            },
+            "sessions": [],
+            "library": [],
+            "selections": [],
+            "graph": {
+              "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+              "sequence": "49"
+            }
+          },
+          "continuation": {
+            "sessions": null,
+            "releases": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "continue-reading",
+        "operationId": "getV1MeContinue",
+        "method": "GET",
+        "path": "/v1/me/continue?limit=6&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F89d3521f-ba8c-4f8f-86da-2e8f62676f6e",
+        "status": 200,
+        "answer": {
+          "profile": "home-continue-v1",
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49"
+          },
+          "items": [],
+          "scanned": {
+            "reading": 0,
+            "followed": 0,
+            "limit": 16
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json"
+        }
+      },
+      {
+        "label": "reader-stats",
+        "operationId": "getV1WorksByIdReader-stats",
+        "method": "GET",
+        "path": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/reader-stats?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F89d3521f-ba8c-4f8f-86da-2e8f62676f6e",
+        "status": 200,
+        "answer": {
+          "profile": "work-reader-stats-v1",
+          "work": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+          "reading": {
+            "value": 0,
+            "kind": "exact"
+          },
+          "wantToRead": {
+            "value": 0,
+            "kind": "exact"
+          },
+          "reviews": null,
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "also-enjoyed",
+        "operationId": "getV1WorksByIdAlso-enjoyed",
+        "method": "GET",
+        "path": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/also-enjoyed?limit=12&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F89d3521f-ba8c-4f8f-86da-2e8f62676f6e",
+        "status": 200,
+        "answer": {
+          "profile": "also-enjoyed-v1",
+          "projectionPosition": null,
+          "stale": true,
+          "items": [
+            {
+              "id": "https://rezics.com/id/01a13624-9ebd-74c9-a463-c8e102e57230",
+              "revision": "https://rezics.com/id/01a13624-9ebd-74cb-8364-c0afb1cc8d68",
+              "mainVersion": "https://rezics.com/id/01a13624-9ebd-74ca-abc5-3b18077a0be1",
+              "title": {
+                "value": "Original partless garden game",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "fallback"
+              },
+              "cover": {
+                "kind": "fallback",
+                "policy": "avatar-fallback-v1",
+                "resourceType": "work",
+                "key": "b1599c1fa3842d2e98af413cd2444e90"
+              },
+              "types": [
+                "https://schema.org/VideoGame"
+              ],
+              "tagline": null,
+              "completionStatus": null,
+              "unavailablePreviews": [
+                "serial"
+              ],
+              "chapterCount": null,
+              "wordCount": null,
+              "lastUpdatedAt": null,
+              "primaryCredits": [
+                {
+                  "id": "https://rezics.com/id/01a13624-9ec6-76c4-939c-0e8fd5e6e270",
+                  "role": "author",
+                  "participantKind": "agent",
+                  "provider": null,
+                  "key": null,
+                  "ordinal": null,
+                  "agent": "https://rezics.com/id/b6c53e7d-5f09-4121-a2e6-bdf5bcad9ddc",
+                  "displayName": "Outcome owner",
+                  "handle": null,
+                  "identityStatus": "active",
+                  "address": {
+                    "prefix": "/a/",
+                    "key": "Pa246aoAtkhEefk4rsiVoR",
+                    "suffixSource": ""
+                  }
+                }
+              ],
+              "rating": null,
+              "basis": "similar"
+            },
+            {
+              "id": "https://rezics.com/id/01a13624-a08a-7584-9b14-79dec7565a2b",
+              "revision": "https://rezics.com/id/01a13624-a08a-7586-a276-9f4a7da76031",
+              "mainVersion": "https://rezics.com/id/01a13624-a08a-7585-bc99-fae7b25139d4",
+              "title": {
+                "value": "Original garden with main and bonus routes",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "fallback"
+              },
+              "cover": {
+                "kind": "fallback",
+                "policy": "avatar-fallback-v1",
+                "resourceType": "work",
+                "key": "a618aa5f73f11e208da9cf7360e05768"
+              },
+              "types": [
+                "https://schema.org/VideoGame"
+              ],
+              "tagline": null,
+              "completionStatus": null,
+              "unavailablePreviews": [
+                "serial"
+              ],
+              "chapterCount": null,
+              "wordCount": null,
+              "lastUpdatedAt": null,
+              "primaryCredits": [
+                {
+                  "id": "https://rezics.com/id/01a13624-a095-70d6-83aa-3e730e1fb51f",
+                  "role": "author",
+                  "participantKind": "agent",
+                  "provider": null,
+                  "key": null,
+                  "ordinal": null,
+                  "agent": "https://rezics.com/id/b6c53e7d-5f09-4121-a2e6-bdf5bcad9ddc",
+                  "displayName": "Outcome owner",
+                  "handle": null,
+                  "identityStatus": "active",
+                  "address": {
+                    "prefix": "/a/",
+                    "key": "Pa246aoAtkhEefk4rsiVoR",
+                    "suffixSource": ""
+                  }
+                }
+              ],
+              "rating": null,
+              "basis": "similar"
+            },
+            {
+              "id": "https://rezics.com/id/01a13624-a256-72aa-9875-5c3ea1d7e12a",
+              "revision": "https://rezics.com/id/01a13624-a256-72ac-94bf-ff9c758f68b9",
+              "mainVersion": "https://rezics.com/id/01a13624-a256-72ab-b8ee-2c2ab6e8086d",
+              "title": {
+                "value": "Original neighbouring garden game",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "fallback"
+              },
+              "cover": {
+                "kind": "fallback",
+                "policy": "avatar-fallback-v1",
+                "resourceType": "work",
+                "key": "e2357ed88de52c83be3330618f16e236"
+              },
+              "types": [
+                "https://schema.org/VideoGame"
+              ],
+              "tagline": null,
+              "completionStatus": null,
+              "unavailablePreviews": [
+                "serial"
+              ],
+              "chapterCount": null,
+              "wordCount": null,
+              "lastUpdatedAt": null,
+              "primaryCredits": [
+                {
+                  "id": "https://rezics.com/id/01a13624-a265-72e3-96cf-926e8bfc28ae",
+                  "role": "author",
+                  "participantKind": "agent",
+                  "provider": null,
+                  "key": null,
+                  "ordinal": null,
+                  "agent": "https://rezics.com/id/b6c53e7d-5f09-4121-a2e6-bdf5bcad9ddc",
+                  "displayName": "Outcome owner",
+                  "handle": null,
+                  "identityStatus": "active",
+                  "address": {
+                    "prefix": "/a/",
+                    "key": "Pa246aoAtkhEefk4rsiVoR",
+                    "suffixSource": ""
+                  }
+                }
+              ],
+              "rating": null,
+              "basis": "similar"
+            },
+            {
+              "id": "https://rezics.com/id/01a13624-a632-73e3-bff0-54f685f3c9a9",
+              "revision": "https://rezics.com/id/01a13624-a632-73e5-91c3-7eb88f4ed144",
+              "mainVersion": "https://rezics.com/id/01a13624-a632-73e4-bb6b-1bd4a7dbb7a9",
+              "title": {
+                "value": "Original required garden route",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "fallback"
+              },
+              "cover": {
+                "kind": "fallback",
+                "policy": "avatar-fallback-v1",
+                "resourceType": "work",
+                "key": "975152c90720f8c1dd260da787a98f90"
+              },
+              "types": [
+                "https://schema.org/VideoGame"
+              ],
+              "tagline": null,
+              "completionStatus": null,
+              "unavailablePreviews": [
+                "serial"
+              ],
+              "chapterCount": null,
+              "wordCount": null,
+              "lastUpdatedAt": null,
+              "primaryCredits": [
+                {
+                  "id": "https://rezics.com/id/01a13624-a645-7082-a147-7f986bda6977",
+                  "role": "author",
+                  "participantKind": "agent",
+                  "provider": null,
+                  "key": null,
+                  "ordinal": null,
+                  "agent": "https://rezics.com/id/b6c53e7d-5f09-4121-a2e6-bdf5bcad9ddc",
+                  "displayName": "Outcome owner",
+                  "handle": null,
+                  "identityStatus": "active",
+                  "address": {
+                    "prefix": "/a/",
+                    "key": "Pa246aoAtkhEefk4rsiVoR",
+                    "suffixSource": ""
+                  }
+                }
+              ],
+              "rating": null,
+              "basis": "similar"
+            },
+            {
+              "id": "https://rezics.com/id/01a13624-aafd-72c0-baee-d5811a97371d",
+              "revision": "https://rezics.com/id/01a13624-aafd-72c2-9b19-73ad5f8200b7",
+              "mainVersion": "https://rezics.com/id/01a13624-aafd-72c1-8660-02803f558abd",
+              "title": {
+                "value": "Original bonus garden route",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "fallback"
+              },
+              "cover": {
+                "kind": "fallback",
+                "policy": "avatar-fallback-v1",
+                "resourceType": "work",
+                "key": "17f21fc27cb0cb21db8e52c2ffef4a90"
+              },
+              "types": [
+                "https://schema.org/VideoGame"
+              ],
+              "tagline": null,
+              "completionStatus": null,
+              "unavailablePreviews": [
+                "serial"
+              ],
+              "chapterCount": null,
+              "wordCount": null,
+              "lastUpdatedAt": null,
+              "primaryCredits": [
+                {
+                  "id": "https://rezics.com/id/01a13624-ab0f-775d-9372-afaf61800372",
+                  "role": "author",
+                  "participantKind": "agent",
+                  "provider": null,
+                  "key": null,
+                  "ordinal": null,
+                  "agent": "https://rezics.com/id/b6c53e7d-5f09-4121-a2e6-bdf5bcad9ddc",
+                  "displayName": "Outcome owner",
+                  "handle": null,
+                  "identityStatus": "active",
+                  "address": {
+                    "prefix": "/a/",
+                    "key": "Pa246aoAtkhEefk4rsiVoR",
+                    "suffixSource": ""
+                  }
+                }
+              ],
+              "rating": null,
+              "basis": "similar"
+            }
+          ],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49"
+          },
+          "count": {
+            "value": 5,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "author-works",
+        "operationId": "getV1AgentsByIdWorks",
+        "method": "GET",
+        "path": "/v1/agents/f16c68c1-5c33-49c9-9688-a9defe640279/works?limit=12&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F89d3521f-ba8c-4f8f-86da-2e8f62676f6e",
+        "status": 200,
+        "answer": {
+          "items": [
+            {
+              "id": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+              "title": {
+                "value": "Original garden game",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "fallback"
+              },
+              "cover": {
+                "kind": "fallback",
+                "policy": "avatar-fallback-v1",
+                "resourceType": "work",
+                "key": "a5c45efb04060ee4b784fb88086c75cb"
+              },
+              "types": [
+                "https://schema.org/VideoGame"
+              ],
+              "tagline": null,
+              "completionStatus": null,
+              "rating": null,
+              "attribution": [
+                {
+                  "credit": "https://rezics.com/id/01a13627-375e-7423-8fef-150a262db19d",
+                  "role": "author"
+                }
+              ]
+            }
+          ],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49"
+          },
+          "count": {
+            "value": 1,
+            "kind": "exact-page",
+            "total": null
+          },
+          "listing": "listed",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json"
+        }
+      },
+      {
+        "label": "facets",
+        "operationId": "getV1Facets",
+        "method": "GET",
+        "path": "/v1/facets?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F89d3521f-ba8c-4f8f-86da-2e8f62676f6e",
+        "status": 200,
+        "answer": {
+          "profile": "facets-v1",
+          "digest": "67aa1dbfabeec816a2c859bbfe9f16f2df35dc4cafa6672c5b85d7cf8bb1ed82",
+          "facets": [
+            {
+              "id": "https://rezics.com/definition/facet-author-v1",
+              "name": "author",
+              "version": 1,
+              "appliesTo": "resource",
+              "subject": "https://schema.org/CreativeWork",
+              "path": [
+                {
+                  "kind": "credit",
+                  "role": "author"
+                }
+              ],
+              "values": [
+                {
+                  "kind": "class",
+                  "class": "https://rezics.com/vocab/Agent"
+                },
+                {
+                  "kind": "external",
+                  "provider": "open-library",
+                  "namespace": "author"
+                }
+              ],
+              "operators": [
+                "any",
+                "all",
+                "none"
+              ],
+              "source": "global",
+              "parameters": [],
+              "qualifiers": [],
+              "occurrence": false,
+              "labels": {
+                "en": "Author",
+                "zh-Hant": "作者",
+                "zh-Hans": "作者",
+                "ja": "著者",
+                "ko": "저자",
+                "de": "Autor",
+                "fr": "Auteur",
+                "es": "Autor"
+              },
+              "cost": {
+                "maxValues": 8,
+                "graphReads": 1
+              },
+              "digest": "2c16a404d3c13f1161102c924763ef302e4695fca2f09965f96a2e4193d9b48b",
+              "current": true
+            },
+            {
+              "id": "https://rezics.com/definition/facet-concept-v1",
+              "name": "concept",
+              "version": 1,
+              "appliesTo": "resource",
+              "subject": "https://schema.org/CreativeWork",
+              "path": [
+                {
+                  "kind": "triple",
+                  "predicate": "https://rezics.com/vocab/mainVersion"
+                },
+                {
+                  "kind": "statement",
+                  "predicate": "https://rezics.com/vocab/classifiedAs",
+                  "relation": "https://rezics.com/definition/classification-proposition-v1"
+                }
+              ],
+              "values": [
+                {
+                  "kind": "concept"
+                }
+              ],
+              "operators": [
+                "any",
+                "all",
+                "none"
+              ],
+              "source": "context",
+              "parameters": [],
+              "qualifiers": [
+                "interpretation"
+              ],
+              "occurrence": false,
+              "labels": {
+                "en": "Tags",
+                "zh-Hant": "標籤",
+                "zh-Hans": "标签",
+                "ja": "タグ",
+                "ko": "태그",
+                "de": "Tags",
+                "fr": "Étiquettes",
+                "es": "Etiquetas"
+              },
+              "cost": {
+                "maxValues": 8,
+                "graphReads": 3
+              },
+              "digest": "6a2438d45d2616af705374094389676616c09e0fbbc8eda2330754b4d325a5d5",
+              "current": true
+            },
+            {
+              "id": "https://rezics.com/definition/facet-contributor-v1",
+              "name": "contributor",
+              "version": 1,
+              "appliesTo": "resource",
+              "subject": "https://schema.org/CreativeWork",
+              "path": [
+                {
+                  "kind": "triple",
+                  "predicate": "https://rezics.com/vocab/mainVersion"
+                },
+                {
+                  "kind": "selection"
+                },
+                {
+                  "kind": "triple",
+                  "predicate": "https://rezics.com/vocab/contribution",
+                  "graph": "revisions",
+                  "types": [
+                    "https://rezics.com/vocab/TextContribution"
+                  ]
+                },
+                {
+                  "kind": "triple",
+                  "predicate": "https://rezics.com/vocab/author"
+                }
+              ],
+              "values": [
+                {
+                  "kind": "class",
+                  "class": "https://rezics.com/vocab/Agent"
+                }
+              ],
+              "operators": [
+                "any",
+                "none"
+              ],
+              "source": "context",
+              "parameters": [],
+              "qualifiers": [],
+              "occurrence": false,
+              "labels": {
+                "en": "Contributor",
+                "zh-Hant": "貢獻者",
+                "zh-Hans": "贡献者",
+                "ja": "寄稿者",
+                "ko": "기고자",
+                "de": "Beitragende",
+                "fr": "Contributeur",
+                "es": "Colaborador"
+              },
+              "cost": {
+                "maxValues": 8,
+                "graphReads": 0
+              },
+              "digest": "93579a0f6b18f88af7560a8e0ca63bd8673cfcf0049690144b1d5e951564ea97",
+              "current": true
+            },
+            {
+              "id": "https://rezics.com/definition/facet-language-v1",
+              "name": "language",
+              "version": 1,
+              "appliesTo": "resource",
+              "subject": "https://schema.org/CreativeWork",
+              "path": [
+                {
+                  "kind": "triple",
+                  "predicate": "https://rezics.com/vocab/mainVersion"
+                },
+                {
+                  "kind": "selection"
+                },
+                {
+                  "kind": "triple",
+                  "predicate": "https://rezics.com/vocab/language",
+                  "graph": "revisions"
+                }
+              ],
+              "values": [
+                {
+                  "kind": "datatype",
+                  "datatype": "http://www.w3.org/2001/XMLSchema#string",
+                  "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+                }
+              ],
+              "operators": [
+                "any",
+                "all",
+                "none"
+              ],
+              "source": "context",
+              "parameters": [],
+              "qualifiers": [],
+              "occurrence": false,
+              "labels": {
+                "en": "Language",
+                "zh-Hant": "語言",
+                "zh-Hans": "语言",
+                "ja": "言語",
+                "ko": "언어",
+                "de": "Sprache",
+                "fr": "Langue",
+                "es": "Idioma"
+              },
+              "cost": {
+                "maxValues": 8,
+                "graphReads": 0
+              },
+              "digest": "6fccc1a9beb900132c2a247a691b5fbef7df2572fc62e3000a87d6722f83a9f5",
+              "current": true
+            },
+            {
+              "id": "https://rezics.com/definition/facet-length-v1",
+              "name": "length",
+              "version": 1,
+              "appliesTo": "resource",
+              "subject": "https://schema.org/CreativeWork",
+              "path": [
+                {
+                  "kind": "units",
+                  "unit": "https://rezics.com/vocab/Word"
+                }
+              ],
+              "values": [
+                {
+                  "kind": "datatype",
+                  "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+                  "min": "0",
+                  "max": "9007199254740991"
+                }
+              ],
+              "operators": [
+                "range"
+              ],
+              "source": "global",
+              "parameters": [],
+              "qualifiers": [],
+              "occurrence": false,
+              "labels": {
+                "en": "Length",
+                "zh-Hant": "篇幅",
+                "zh-Hans": "篇幅",
+                "ja": "長さ",
+                "ko": "분량",
+                "de": "Länge",
+                "fr": "Longueur",
+                "es": "Extensión"
+              },
+              "cost": {
+                "maxValues": 2,
+                "graphReads": 0
+              },
+              "digest": "e9e5794ed99df79c9599e318717da495e6ebcc14422137a67f88433a14055208",
+              "current": true
+            },
+            {
+              "id": "https://rezics.com/definition/facet-publication-year-v1",
+              "name": "publicationYear",
+              "version": 1,
+              "appliesTo": "resource",
+              "subject": "https://schema.org/CreativeWork",
+              "path": [
+                {
+                  "kind": "publication-year"
+                }
+              ],
+              "values": [
+                {
+                  "kind": "datatype",
+                  "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+                  "min": "1",
+                  "max": "9999"
+                }
+              ],
+              "operators": [
+                "range"
+              ],
+              "source": "global",
+              "parameters": [],
+              "qualifiers": [],
+              "occurrence": false,
+              "labels": {
+                "en": "Publication year",
+                "zh-Hant": "出版年份",
+                "zh-Hans": "出版年份",
+                "ja": "公開年",
+                "ko": "발행 연도",
+                "de": "Veröffentlichungsjahr",
+                "fr": "Année de publication",
+                "es": "Año de publicación"
+              },
+              "cost": {
+                "maxValues": 2,
+                "graphReads": 1
+              },
+              "digest": "eb8bbc7b6ad8dac2cddabd3b54dc8c98178b5956cc8c52abbddd52d6d61fb32e",
+              "current": true
+            },
+            {
+              "id": "https://rezics.com/definition/facet-rating-v1",
+              "name": "rating",
+              "version": 1,
+              "appliesTo": "resource",
+              "subject": "https://schema.org/CreativeWork",
+              "path": [
+                {
+                  "kind": "triple",
+                  "predicate": "https://rezics.com/vocab/mainVersion"
+                },
+                {
+                  "kind": "rating",
+                  "target": "https://rezics.com/vocab/MainVersion",
+                  "cadence": "https://rezics.com/definition/rating-standing-v1",
+                  "population": "https://rezics.com/definition/rating-account-principal-population-v1",
+                  "aggregation": "https://rezics.com/definition/rating-latest-per-rater-mean-v1",
+                  "scale": {
+                    "min": 1,
+                    "max": 10
+                  }
+                }
+              ],
+              "values": [
+                {
+                  "kind": "datatype",
+                  "datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+                  "min": "1",
+                  "max": "10"
+                }
+              ],
+              "operators": [
+                "range"
+              ],
+              "source": "context",
+              "parameters": [
+                {
+                  "key": "ratingContext",
+                  "value": {
+                    "kind": "class",
+                    "class": "https://rezics.com/vocab/RatingContext"
+                  }
+                }
+              ],
+              "qualifiers": [],
+              "occurrence": false,
+              "labels": {
+                "en": "Rating",
+                "zh-Hant": "評分",
+                "zh-Hans": "评分",
+                "ja": "評価",
+                "ko": "평점",
+                "de": "Bewertung",
+                "fr": "Note",
+                "es": "Valoración"
+              },
+              "cost": {
+                "maxValues": 2,
+                "graphReads": 1
+              },
+              "digest": "22962ff8e656c18b6bc7e3b40de8a49bf42022b45161a27b45a730664e7aa074",
+              "current": true
+            },
+            {
+              "id": "https://rezics.com/definition/facet-realm-v1",
+              "name": "realm",
+              "version": 1,
+              "appliesTo": "resource",
+              "subject": "https://schema.org/CreativeWork",
+              "path": [
+                {
+                  "kind": "triple",
+                  "predicate": "https://rezics.com/vocab/work",
+                  "inverse": true,
+                  "types": [
+                    "https://rezics.com/vocab/RealmPublicationSlot"
+                  ]
+                },
+                {
+                  "kind": "triple",
+                  "predicate": "https://rezics.com/vocab/realm"
+                }
+              ],
+              "values": [
+                {
+                  "kind": "class",
+                  "class": "https://rezics.com/vocab/Realm"
+                }
+              ],
+              "operators": [
+                "any",
+                "all",
+                "none"
+              ],
+              "source": "global",
+              "parameters": [],
+              "qualifiers": [],
+              "occurrence": false,
+              "labels": {
+                "en": "Community",
+                "zh-Hant": "社群",
+                "zh-Hans": "社区",
+                "ja": "コミュニティ",
+                "ko": "커뮤니티",
+                "de": "Community",
+                "fr": "Communauté",
+                "es": "Comunidad"
+              },
+              "cost": {
+                "maxValues": 8,
+                "graphReads": 1
+              },
+              "digest": "1eef10945c692bf3f4a15d74a6222ac454023f81831710de16b986f78a05ee65",
+              "current": true
+            },
+            {
+              "id": "https://rezics.com/definition/facet-relation-v1",
+              "name": "relation",
+              "version": 1,
+              "appliesTo": "resource",
+              "subject": "https://schema.org/CreativeWork",
+              "path": [
+                {
+                  "kind": "occurrence"
+                }
+              ],
+              "values": [
+                {
+                  "kind": "class",
+                  "class": "http://www.w3.org/2000/01/rdf-schema#Resource"
+                }
+              ],
+              "operators": [
+                "any",
+                "none"
+              ],
+              "source": "global",
+              "parameters": [
+                {
+                  "key": "definition",
+                  "value": {
+                    "kind": "definition"
+                  }
+                },
+                {
+                  "key": "role",
+                  "value": {
+                    "kind": "role"
+                  }
+                }
+              ],
+              "qualifiers": [],
+              "occurrence": true,
+              "labels": {
+                "en": "Relation",
+                "zh-Hant": "關係",
+                "zh-Hans": "关系",
+                "ja": "関係",
+                "ko": "관계",
+                "de": "Beziehung",
+                "fr": "Relation",
+                "es": "Relación"
+              },
+              "cost": {
+                "maxValues": 8,
+                "graphReads": 2,
+                "nested": 4
+              },
+              "digest": "34681c142eb5ce28e53f81618a125bf66e26c49fa89739c1675d3ebf2a1dad89",
+              "current": true
+            },
+            {
+              "id": "https://rezics.com/definition/facet-release-v1",
+              "name": "release",
+              "version": 1,
+              "appliesTo": "resource",
+              "subject": "https://schema.org/CreativeWork",
+              "path": [
+                {
+                  "kind": "related",
+                  "path": [
+                    {
+                      "predicate": "https://rezics.com/vocab/coverageWork",
+                      "inverse": true
+                    }
+                  ],
+                  "types": [
+                    "https://rezics.com/vocab/Release"
+                  ],
+                  "correlation": {
+                    "predicate": "https://rezics.com/vocab/coverage",
+                    "resource": "https://rezics.com/vocab/work",
+                    "types": [
+                      "https://rezics.com/vocab/ReleaseCoverage"
+                    ]
+                  }
+                }
+              ],
+              "values": [
+                {
+                  "kind": "class",
+                  "class": "https://rezics.com/vocab/Release"
+                }
+              ],
+              "operators": [
+                "any",
+                "none"
+              ],
+              "source": "global",
+              "parameters": [],
+              "qualifiers": [],
+              "occurrence": true,
+              "labels": {
+                "en": "Release",
+                "zh-Hant": "發行版本",
+                "zh-Hans": "发行版本",
+                "ja": "リリース",
+                "ko": "발매판",
+                "de": "Veröffentlichung",
+                "fr": "Édition",
+                "es": "Edición"
+              },
+              "cost": {
+                "maxValues": 8,
+                "graphReads": 2,
+                "nested": 8
+              },
+              "digest": "1a0b1d5151d292cc63fae417268a2369c3ddab6b8f7b81f52e3d3d870cf3d752",
+              "current": true
+            },
+            {
+              "id": "https://rezics.com/definition/facet-release-completeness-v1",
+              "name": "releaseCompleteness",
+              "version": 1,
+              "appliesTo": "participant",
+              "subject": "https://rezics.com/vocab/Release",
+              "path": [
+                {
+                  "kind": "triple",
+                  "predicate": "https://rezics.com/vocab/coverage"
+                },
+                {
+                  "kind": "triple",
+                  "predicate": "https://rezics.com/vocab/completeness"
+                }
+              ],
+              "values": [
+                {
+                  "kind": "datatype",
+                  "datatype": "http://www.w3.org/2001/XMLSchema#string",
+                  "pattern": "^(complete|partial|trial|unknown)$"
+                }
+              ],
+              "operators": [
+                "any",
+                "all",
+                "none"
+              ],
+              "source": "global",
+              "parameters": [],
+              "qualifiers": [],
+              "occurrence": false,
+              "within": "https://rezics.com/definition/facet-release-v1",
+              "labels": {
+                "en": "Release completeness",
+                "zh-Hant": "發行完整度",
+                "zh-Hans": "发行完整度",
+                "ja": "リリースの完全性",
+                "ko": "발매판 완전성",
+                "de": "Vollständigkeit der Ausgabe",
+                "fr": "Complétude de l’édition",
+                "es": "Integridad de la edición"
+              },
+              "cost": {
+                "maxValues": 8,
+                "graphReads": 0
+              },
+              "digest": "691aa13c51613fe66453545e2959e5a177649c7132b497b459dd39e3f6c5456d",
+              "current": true
+            },
+            {
+              "id": "https://rezics.com/definition/facet-release-language-v1",
+              "name": "releaseLanguage",
+              "version": 1,
+              "appliesTo": "participant",
+              "subject": "https://rezics.com/vocab/Release",
+              "path": [
+                {
+                  "kind": "triple",
+                  "predicate": "https://rezics.com/vocab/coverage"
+                },
+                {
+                  "kind": "triple",
+                  "predicate": "https://rezics.com/vocab/contentLanguage"
+                }
+              ],
+              "values": [
+                {
+                  "kind": "datatype",
+                  "datatype": "http://www.w3.org/2001/XMLSchema#string",
+                  "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$"
+                }
+              ],
+              "operators": [
+                "any",
+                "all",
+                "none"
+              ],
+              "source": "global",
+              "parameters": [],
+              "qualifiers": [],
+              "occurrence": false,
+              "within": "https://rezics.com/definition/facet-release-v1",
+              "labels": {
+                "en": "Release language",
+                "zh-Hant": "發行內容語言",
+                "zh-Hans": "发行内容语言",
+                "ja": "リリース言語",
+                "ko": "발매판 언어",
+                "de": "Veröffentlichungssprache",
+                "fr": "Langue de l’édition",
+                "es": "Idioma de la edición"
+              },
+              "cost": {
+                "maxValues": 8,
+                "graphReads": 0
+              },
+              "digest": "52b856d7e5ddf5cf62c7144a253e9fcb468c5042bd605d1c4d42dc46ec3c6c31",
+              "current": true
+            },
+            {
+              "id": "https://rezics.com/definition/facet-release-platform-v1",
+              "name": "releasePlatform",
+              "version": 1,
+              "appliesTo": "participant",
+              "subject": "https://rezics.com/vocab/Release",
+              "path": [
+                {
+                  "kind": "triple",
+                  "predicate": "https://rezics.com/vocab/platform"
+                }
+              ],
+              "values": [
+                {
+                  "kind": "datatype",
+                  "datatype": "http://www.w3.org/2001/XMLSchema#string",
+                  "pattern": "^.{1,120}$"
+                }
+              ],
+              "operators": [
+                "any",
+                "all",
+                "none"
+              ],
+              "source": "global",
+              "parameters": [],
+              "qualifiers": [],
+              "occurrence": false,
+              "within": "https://rezics.com/definition/facet-release-v1",
+              "labels": {
+                "en": "Platform or format",
+                "zh-Hant": "平台或載體",
+                "zh-Hans": "平台或载体",
+                "ja": "プラットフォーム・形式",
+                "ko": "플랫폼 또는 형식",
+                "de": "Plattform oder Format",
+                "fr": "Plateforme ou format",
+                "es": "Plataforma o formato"
+              },
+              "cost": {
+                "maxValues": 8,
+                "graphReads": 0
+              },
+              "digest": "0e2b4b9a2905aeefe6e5123a6c97528b076d95e8484981c072948db25c251c2f",
+              "current": true
+            },
+            {
+              "id": "https://rezics.com/definition/facet-release-status-v1",
+              "name": "releaseStatus",
+              "version": 1,
+              "appliesTo": "participant",
+              "subject": "https://rezics.com/vocab/Release",
+              "path": [
+                {
+                  "kind": "triple",
+                  "predicate": "https://rezics.com/vocab/releaseStatus"
+                }
+              ],
+              "values": [
+                {
+                  "kind": "datatype",
+                  "datatype": "http://www.w3.org/2001/XMLSchema#string",
+                  "pattern": "^(official|unofficial|virtual|withdrawn|cancelled)$"
+                }
+              ],
+              "operators": [
+                "any",
+                "all",
+                "none"
+              ],
+              "source": "global",
+              "parameters": [],
+              "qualifiers": [],
+              "occurrence": false,
+              "within": "https://rezics.com/definition/facet-release-v1",
+              "labels": {
+                "en": "Release status",
+                "zh-Hant": "發行狀態",
+                "zh-Hans": "发行状态",
+                "ja": "リリース状態",
+                "ko": "발매 상태",
+                "de": "Veröffentlichungsstatus",
+                "fr": "Statut de l’édition",
+                "es": "Estado de la edición"
+              },
+              "cost": {
+                "maxValues": 8,
+                "graphReads": 0
+              },
+              "digest": "541d9caf10ff71efcd74ebb9d71e4212142b586927f097f12fa9b9d9acc5f7b9",
+              "current": true
+            },
+            {
+              "id": "https://rezics.com/definition/facet-release-territory-v1",
+              "name": "releaseTerritory",
+              "version": 1,
+              "appliesTo": "participant",
+              "subject": "https://rezics.com/vocab/Release",
+              "path": [
+                {
+                  "kind": "triple",
+                  "predicate": "https://rezics.com/vocab/territory"
+                }
+              ],
+              "values": [
+                {
+                  "kind": "datatype",
+                  "datatype": "http://www.w3.org/2001/XMLSchema#string",
+                  "pattern": "^(?:[A-Z]{2}|[0-9]{3})$"
+                }
+              ],
+              "operators": [
+                "any",
+                "all",
+                "none"
+              ],
+              "source": "global",
+              "parameters": [],
+              "qualifiers": [],
+              "occurrence": false,
+              "within": "https://rezics.com/definition/facet-release-v1",
+              "labels": {
+                "en": "Release territory",
+                "zh-Hant": "發行地區",
+                "zh-Hans": "发行地区",
+                "ja": "リリース地域",
+                "ko": "발매 지역",
+                "de": "Veröffentlichungsgebiet",
+                "fr": "Territoire de l’édition",
+                "es": "Territorio de la edición"
+              },
+              "cost": {
+                "maxValues": 8,
+                "graphReads": 0
+              },
+              "digest": "ecfc69ba05556b2e65bf1cdc686e8bc7f9f682f01ff728ff369fa33d5e211971",
+              "current": true
+            },
+            {
+              "id": "https://rezics.com/definition/facet-role-v1",
+              "name": "role",
+              "version": 1,
+              "appliesTo": "participation",
+              "subject": "https://rezics.com/vocab/RelationParticipation",
+              "path": [
+                {
+                  "kind": "triple",
+                  "predicate": "https://rezics.com/vocab/role",
+                  "graph": "revisions"
+                }
+              ],
+              "values": [
+                {
+                  "kind": "role"
+                }
+              ],
+              "operators": [
+                "any",
+                "none"
+              ],
+              "source": "global",
+              "parameters": [],
+              "qualifiers": [],
+              "occurrence": false,
+              "labels": {
+                "en": "Role",
+                "zh-Hant": "角色",
+                "zh-Hans": "角色",
+                "ja": "役割",
+                "ko": "역할",
+                "de": "Rolle",
+                "fr": "Rôle",
+                "es": "Rol"
+              },
+              "cost": {
+                "maxValues": 8,
+                "graphReads": 0
+              },
+              "digest": "50a1601af2fce441d8eb60d8f56b6a98b7492e64569836477536dbeec4c18229",
+              "current": true
+            },
+            {
+              "id": "https://rezics.com/definition/facet-statement-v1",
+              "name": "statement",
+              "version": 1,
+              "appliesTo": "participant",
+              "subject": "http://www.w3.org/2000/01/rdf-schema#Resource",
+              "path": [
+                {
+                  "kind": "statement"
+                }
+              ],
+              "values": [
+                {
+                  "kind": "class",
+                  "class": "http://www.w3.org/2000/01/rdf-schema#Resource"
+                }
+              ],
+              "operators": [
+                "any",
+                "all",
+                "none"
+              ],
+              "source": "context",
+              "parameters": [
+                {
+                  "key": "predicate",
+                  "value": {
+                    "kind": "class",
+                    "class": "http://www.w3.org/1999/02/22-rdf-syntax-ns#Property"
+                  }
+                },
+                {
+                  "key": "relationDefinition",
+                  "value": {
+                    "kind": "definition"
+                  }
+                }
+              ],
+              "qualifiers": [
+                "interpretation",
+                "applicability"
+              ],
+              "occurrence": false,
+              "labels": {
+                "en": "Statement",
+                "zh-Hant": "陳述",
+                "zh-Hans": "陈述",
+                "ja": "記述",
+                "ko": "진술",
+                "de": "Aussage",
+                "fr": "Énoncé",
+                "es": "Afirmación"
+              },
+              "cost": {
+                "maxValues": 8,
+                "graphReads": 2
+              },
+              "digest": "834feca0b51901b385dad5fd3e6a78195c048e391ad4ece66c87b64850ec2986",
+              "current": true
+            },
+            {
+              "id": "https://rezics.com/definition/facet-status-v1",
+              "name": "status",
+              "version": 1,
+              "appliesTo": "resource",
+              "subject": "https://schema.org/CreativeWork",
+              "path": [
+                {
+                  "kind": "triple",
+                  "predicate": "https://rezics.com/vocab/completionStatus"
+                }
+              ],
+              "values": [
+                {
+                  "kind": "datatype",
+                  "datatype": "http://www.w3.org/2001/XMLSchema#string",
+                  "pattern": "^(ongoing|completed|hiatus)$"
+                }
+              ],
+              "operators": [
+                "any",
+                "none"
+              ],
+              "source": "global",
+              "parameters": [],
+              "qualifiers": [],
+              "occurrence": false,
+              "labels": {
+                "en": "Status",
+                "zh-Hant": "狀態",
+                "zh-Hans": "状态",
+                "ja": "状態",
+                "ko": "상태",
+                "de": "Status",
+                "fr": "Statut",
+                "es": "Estado"
+              },
+              "cost": {
+                "maxValues": 3,
+                "graphReads": 1
+              },
+              "digest": "51275e8dc39d61531d594b5806b7e620d3bc8111bd366a85bb0759b188b12375",
+              "current": false
+            },
+            {
+              "id": "https://rezics.com/definition/facet-status-v2",
+              "name": "status",
+              "version": 2,
+              "appliesTo": "resource",
+              "subject": "https://schema.org/CreativeWork",
+              "path": [
+                {
+                  "kind": "triple",
+                  "predicate": "https://rezics.com/vocab/completionStatus"
+                }
+              ],
+              "values": [
+                {
+                  "kind": "datatype",
+                  "datatype": "http://www.w3.org/2001/XMLSchema#string",
+                  "pattern": "^(ongoing|completed|hiatus|upcoming|cancelled)$"
+                }
+              ],
+              "operators": [
+                "any",
+                "none"
+              ],
+              "source": "global",
+              "parameters": [],
+              "qualifiers": [],
+              "occurrence": false,
+              "labels": {
+                "en": "Status",
+                "zh-Hant": "狀態",
+                "zh-Hans": "状态",
+                "ja": "状態",
+                "ko": "상태",
+                "de": "Status",
+                "fr": "Statut",
+                "es": "Estado"
+              },
+              "cost": {
+                "maxValues": 5,
+                "graphReads": 1
+              },
+              "digest": "e0112fe950994feb1a575b1565c5d78203c9b7def82b95a7905181f670e04ee7",
+              "current": true
+            },
+            {
+              "id": "https://rezics.com/definition/facet-type-v1",
+              "name": "type",
+              "version": 1,
+              "appliesTo": "resource",
+              "subject": "https://schema.org/CreativeWork",
+              "path": [
+                {
+                  "kind": "triple",
+                  "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+                }
+              ],
+              "values": [
+                {
+                  "kind": "class",
+                  "class": "http://www.w3.org/2000/01/rdf-schema#Class"
+                }
+              ],
+              "operators": [
+                "any",
+                "all",
+                "none"
+              ],
+              "source": "global",
+              "parameters": [],
+              "qualifiers": [],
+              "occurrence": false,
+              "labels": {
+                "en": "Type",
+                "zh-Hant": "種類",
+                "zh-Hans": "种类",
+                "ja": "種類",
+                "ko": "유형",
+                "de": "Typ",
+                "fr": "Type",
+                "es": "Tipo"
+              },
+              "cost": {
+                "maxValues": 16,
+                "graphReads": 1
+              },
+              "digest": "053c6b68d9822f3089323503b30c71269c0dd9a52cab3384ac8a35949e9405c5",
+              "current": true
+            }
+          ]
+        },
+        "headers": {
+          "cache-control": "public, max-age=300",
+          "content-type": "application/json",
+          "etag": "\"67aa1dbfabeec816a2c859bbfe9f16f2df35dc4cafa6672c5b85d7cf8bb1ed82\""
+        }
+      },
+      {
+        "label": "classifications",
+        "operationId": "getV1WorksByIdClassifications",
+        "method": "GET",
+        "path": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/classifications?scope=global&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F89d3521f-ba8c-4f8f-86da-2e8f62676f6e",
+        "status": 200,
+        "answer": {
+          "items": [],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49"
+          },
+          "count": {
+            "value": 0,
+            "kind": "exact-page",
+            "total": null
+          },
+          "scope": {
+            "kind": "global",
+            "realm": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "follow-context",
+        "operationId": "getV1FollowsById",
+        "method": "GET",
+        "path": "/v1/follows/01a13627-3758-7331-ad06-d97709ffe3f2?kind=work&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F89d3521f-ba8c-4f8f-86da-2e8f62676f6e",
+        "status": 200,
+        "answer": {
+          "profile": "follow-state-v1",
+          "target": {
+            "id": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+            "kind": "work",
+            "name": {
+              "value": "Original garden game",
+              "language": "en",
+              "direction": "ltr",
+              "basis": "fallback"
+            },
+            "icon": {
+              "kind": "fallback",
+              "policy": "avatar-fallback-v1",
+              "resourceType": "work",
+              "key": "a5c45efb04060ee4b784fb88086c75cb"
+            },
+            "realm": null,
+            "href": "/w/01a13627-3758-7331-ad06-d97709ffe3f2"
+          },
+          "following": false,
+          "revision": null,
+          "level": null,
+          "source": null,
+          "pinPosition": null,
+          "followers": {
+            "value": 0,
+            "kind": "exact"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "edition-sessions-empty",
+        "operationId": "getV1MeSessions",
+        "method": "GET",
+        "path": "/v1/me/sessions?target=https%3A%2F%2Frezics.com%2Fid%2F01a13627-3758-7331-ad06-d97709ffe3f2&limit=50&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F89d3521f-ba8c-4f8f-86da-2e8f62676f6e",
+        "status": 200,
+        "answer": {
+          "items": [],
+          "nextCursor": null
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "text-selection",
+        "operationId": "getV1Main-versionsByMainVersionSelection",
+        "method": "GET",
+        "path": "/v1/main-versions/01a13627-3758-7332-8563-85194ab1c2b7/selection?language=en",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+          "mainVersion": "https://rezics.com/id/01a13627-3758-7332-8563-85194ab1c2b7",
+          "selection": "https://rezics.com/id/01a13627-3e7f-7711-9465-3396f9926895",
+          "contribution": "https://rezics.com/id/01a13627-3ae9-7095-9af6-3f6898217f0c",
+          "selectedDraft": "https://rezics.com/id/01a13627-3ae9-7096-a0ee-56a9009ff6bd",
+          "language": "en",
+          "body": "Original fixture game: plant a light, visit the garden, and find a new route."
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "contents-unavailable",
+        "operationId": "getV1WorksByIdContents",
+        "method": "GET",
+        "path": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/contents?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F89d3521f-ba8c-4f8f-86da-2e8f62676f6e",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "work-showcase-empty",
+        "operationId": "postV1ResourcesShowcase",
+        "method": "POST",
+        "path": "/v1/resources/showcase",
+        "body": {
+          "profile": "work-showcase-batch-v1",
+          "targets": [
+            "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2"
+          ]
+        },
+        "status": 200,
+        "answer": {
+          "profile": "work-showcase-batch-v1",
+          "complete": true,
+          "items": [
+            {
+              "reference": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+              "status": "available",
+              "images": [],
+              "trailer": null
+            }
+          ],
+          "generation": {
+            "graph": "a210b4f2d389a15e242767f65bc37f35bb6be50fc00edaa6ace2b5eac97a9878",
+            "media": "f84cb2ef-fb59-4497-819d-c6da64e0a2cc:40",
+            "addresses": "2e28488b040c8f15238534c63dc9a09940528c9fe9ce842e5e057b7ddee1dc4c"
+          },
+          "cost": {
+            "graphQueries": 4,
+            "mediaQueries": 0,
+            "accessChecks": 0,
+            "accessQueries": 0,
+            "disclosureQueries": 0
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "rating-populations",
+        "operationId": "getV1Rating-populations",
+        "method": "GET",
+        "path": "/v1/rating-populations?target=https%3A%2F%2Frezics.com%2Fid%2F01a13627-3758-7331-ad06-d97709ffe3f2&limit=20&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F89d3521f-ba8c-4f8f-86da-2e8f62676f6e",
+        "status": 200,
+        "answer": {
+          "profile": "rating-populations-v1",
+          "target": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49"
+          },
+          "stale": false,
+          "items": [],
+          "nextCursor": null,
+          "complete": true,
+          "count": {
+            "value": 0,
+            "kind": "exact"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "correspondence-definition",
+        "operationId": "getV1LexiconDefinitionsByKey",
+        "method": "GET",
+        "path": "/v1/lexicon/definitions/correspondence-equivalent?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F89d3521f-ba8c-4f8f-86da-2e8f62676f6e",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/definition_unavailable",
+          "title": "Definition is unavailable",
+          "status": 404,
+          "code": "definition_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "work-credits-template",
+        "operationId": "postV1Query",
+        "method": "POST",
+        "path": "/v1/query",
+        "body": {
+          "profile": "template-query-v1",
+          "query": "https://rezics.com/query/work-credits",
+          "revision": 1,
+          "parameters": {
+            "roots": [
+              "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2"
+            ]
+          },
+          "presentation": {
+            "actingSubject": "https://rezics.com/id/89d3521f-ba8c-4f8f-86da-2e8f62676f6e"
+          }
+        },
+        "status": 200,
+        "answer": {
+          "profile": "query-v1",
+          "template": "https://rezics.com/query/work-credits",
+          "selection": {
+            "context": "global",
+            "scope": {
+              "kind": "all"
+            },
+            "filter": {
+              "roots": [
+                "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2"
+              ]
+            },
+            "text": null,
+            "sort": "identity",
+            "pageSize": 20,
+            "facetRefs": [],
+            "semanticRevisions": []
+          },
+          "result": {
+            "profile": "template-result-v1",
+            "query": "https://rezics.com/query/work-credits",
+            "revision": 1,
+            "items": [
+              {
+                "id": "https://rezics.com/id/01a13627-375e-7423-8fef-150a262db19d",
+                "role": "author",
+                "participantKind": "agent",
+                "provider": null,
+                "key": null,
+                "ordinal": null,
+                "agent": "https://rezics.com/id/f16c68c1-5c33-49c9-9688-a9defe640279",
+                "displayName": null,
+                "handle": null
+              }
+            ],
+            "complete": true,
+            "nextCursor": null,
+            "sourcePosition": {
+              "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+              "sequence": "49",
+              "dependencyToken": "6735bf060c91dcbc9399e504eb6d195cee76ac952f3d74b8275945802e7af47a"
+            },
+            "count": {
+              "value": 1,
+              "kind": "exact-page",
+              "total": null
+            }
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8",
+          "etag": "W/\"0a2bccbb6a19f34e5a6e87f5b3da74aa02190ac532425db9b160846128685370\""
+        }
+      },
+      {
+        "label": "work-adoptions-template",
+        "operationId": "postV1Query",
+        "method": "POST",
+        "path": "/v1/query",
+        "body": {
+          "profile": "template-query-v1",
+          "query": "https://rezics.com/query/work-adoptions",
+          "revision": 1,
+          "parameters": {
+            "roots": [
+              "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2"
+            ]
+          },
+          "presentation": {
+            "actingSubject": "https://rezics.com/id/89d3521f-ba8c-4f8f-86da-2e8f62676f6e"
+          }
+        },
+        "status": 200,
+        "answer": {
+          "profile": "query-v1",
+          "template": "https://rezics.com/query/work-adoptions",
+          "selection": {
+            "context": "global",
+            "scope": {
+              "kind": "all"
+            },
+            "filter": {
+              "roots": [
+                "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2"
+              ]
+            },
+            "text": null,
+            "sort": "identity",
+            "pageSize": 20,
+            "facetRefs": [],
+            "semanticRevisions": []
+          },
+          "result": {
+            "profile": "template-result-v1",
+            "query": "https://rezics.com/query/work-adoptions",
+            "revision": 1,
+            "items": [],
+            "complete": true,
+            "nextCursor": null,
+            "sourcePosition": {
+              "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+              "sequence": "49",
+              "dependencyToken": "9302b5be695751548a7464fd21010bfb56fde3a71d17ee7b977891288642e59f"
+            },
+            "count": {
+              "value": 0,
+              "kind": "exact-page",
+              "total": null
+            }
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8",
+          "etag": "W/\"e0c394340e49c4462f91759b861d9763a6dbc972fb80968e458bc04d15992e1b\""
+        }
+      },
+      {
+        "label": "rating-contexts",
+        "operationId": "getV1ResourcesByResourceRating-contexts",
+        "method": "GET",
+        "path": "/v1/resources/01a13627-3758-7331-ad06-d97709ffe3f2/rating-contexts?scope=global&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F89d3521f-ba8c-4f8f-86da-2e8f62676f6e",
+        "status": 200,
+        "answer": {
+          "items": [],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49"
+          },
+          "count": {
+            "value": 0,
+            "kind": "exact-page",
+            "total": null
+          },
+          "scope": {
+            "kind": "global",
+            "realm": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "rating-summary",
+        "operationId": "getV1ResourcesByResourceRatings",
+        "method": "GET",
+        "path": "/v1/resources/01a13627-3758-7331-ad06-d97709ffe3f2/ratings?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F89d3521f-ba8c-4f8f-86da-2e8f62676f6e",
+        "status": 200,
+        "answer": {
+          "profile": "work-rating-read-v1",
+          "work": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+          "mainVersion": "https://rezics.com/id/01a13627-3758-7332-8563-85194ab1c2b7",
+          "scope": {
+            "kind": "global",
+            "realm": null
+          },
+          "context": null,
+          "status": "no-context",
+          "aggregationScope": null,
+          "scale": null,
+          "count": 0,
+          "mean": null,
+          "distribution": [],
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "hub-statements",
+        "operationId": "getV1ResourcesByResourceStatements",
+        "method": "GET",
+        "path": "/v1/resources/01a13627-3758-7331-ad06-d97709ffe3f2/statements?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F89d3521f-ba8c-4f8f-86da-2e8f62676f6e",
+        "status": 200,
+        "answer": {
+          "profile": "subject-statements-v1",
+          "resource": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+          "acceptanceContext": "urn:rezics:classification-context:global",
+          "factObligations": {
+            "status": "unassessed"
+          },
+          "groups": [],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49"
+          },
+          "count": {
+            "value": 0,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json"
+        }
+      },
+      {
+        "label": "hub-discussion",
+        "operationId": "getV1ResourcesByResourceDiscussion",
+        "method": "GET",
+        "path": "/v1/resources/01a13627-3758-7331-ad06-d97709ffe3f2/discussion?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F89d3521f-ba8c-4f8f-86da-2e8f62676f6e",
+        "status": 200,
+        "answer": {
+          "items": [],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49"
+          },
+          "count": {
+            "value": 0,
+            "kind": "exact-page",
+            "total": null
+          },
+          "complete": true
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      }
+    ],
+    "owner": [
+      {
+        "label": "work-header",
+        "operationId": "getV1WorksById",
+        "method": "GET",
+        "path": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ff16c68c1-5c33-49c9-9688-a9defe640279",
+        "status": 200,
+        "answer": {
+          "profile": "work-read-v1",
+          "id": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+          "revision": "https://rezics.com/id/01a13627-3758-7333-9045-03b6b3e9ab49",
+          "mainVersion": "https://rezics.com/id/01a13627-3758-7332-8563-85194ab1c2b7",
+          "title": {
+            "value": "Original garden game",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "cover": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "work",
+            "key": "a5c45efb04060ee4b784fb88086c75cb"
+          },
+          "types": [
+            "https://schema.org/VideoGame"
+          ],
+          "tagline": null,
+          "completionStatus": null,
+          "chapterCount": null,
+          "wordCount": null,
+          "lastUpdatedAt": null,
+          "disclosure": "public",
+          "publicationState": "unpublished",
+          "descriptionObligations": {
+            "status": "unassessed"
+          },
+          "description": {
+            "value": "An original game about planting lights in a synthetic garden.",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "metadataRevision": "https://rezics.com/id/01a13627-403d-7490-8d42-7a21447bf748",
+          "originalTitle": null,
+          "mainVersionRevision": "https://rezics.com/id/01a13627-3e7f-7712-ab20-68367a571059",
+          "mainVersionLabel": null,
+          "selectedLanguage": "en",
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49",
+            "dependencyToken": "9cd4a27c1963fd514e10ba8d636fc8ad605e0cb335f6c073c3e1d50c75e9b716"
+          },
+          "links": {
+            "versions": "/v1/query#work-versions",
+            "classifications": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/classifications",
+            "adoptions": "/v1/query#work-adoptions",
+            "ratings": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/ratings",
+            "history": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/history",
+            "credits": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/credits",
+            "metadata": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/metadata",
+            "editions": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/editions"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "work-credits",
+        "operationId": "getV1WorksByIdCredits",
+        "method": "GET",
+        "path": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/credits?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ff16c68c1-5c33-49c9-9688-a9defe640279",
+        "status": 200,
+        "answer": {
+          "profile": "template-result-v1",
+          "query": "https://rezics.com/query/work-credits",
+          "revision": 1,
+          "items": [
+            {
+              "id": "https://rezics.com/id/01a13627-375e-7423-8fef-150a262db19d",
+              "role": "author",
+              "participantKind": "agent",
+              "provider": null,
+              "key": null,
+              "ordinal": null,
+              "agent": "https://rezics.com/id/f16c68c1-5c33-49c9-9688-a9defe640279",
+              "displayName": null,
+              "handle": null
+            }
+          ],
+          "complete": true,
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49",
+            "dependencyToken": "6735bf060c91dcbc9399e504eb6d195cee76ac952f3d74b8275945802e7af47a"
+          },
+          "count": {
+            "value": 1,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8",
+          "etag": "W/\"8f1c5ba342c59eaddd0d83b95edf4f22b53bc851c0a2bc6680895581cd41ef00\""
+        }
+      },
+      {
+        "label": "partless-parts",
+        "operationId": "getV1ResourcesByResourceParts",
+        "method": "GET",
+        "path": "/v1/resources/01a13627-3758-7331-ad06-d97709ffe3f2/parts?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ff16c68c1-5c33-49c9-9688-a9defe640279",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "editions-empty",
+        "operationId": "getV1WorksByIdEditions",
+        "method": "GET",
+        "path": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/editions?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ff16c68c1-5c33-49c9-9688-a9defe640279",
+        "status": 200,
+        "answer": {
+          "items": [],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49",
+            "dependencyToken": "5beab506430f442356724f9ff31319c9793deaa549edf34dae14a7165d0ad390"
+          },
+          "count": {
+            "value": 0,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "releases",
+        "operationId": "getV1WorksByIdReleases",
+        "method": "GET",
+        "path": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/releases?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ff16c68c1-5c33-49c9-9688-a9defe640279",
+        "status": 200,
+        "answer": {
+          "items": [
+            {
+              "profile": "release-v2",
+              "id": "https://rezics.com/id/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+              "revision": "https://rezics.com/id/01a13627-4292-720f-8624-650e1222aefb",
+              "kind": "formal",
+              "status": "official",
+              "contentLanguages": [
+                "en"
+              ],
+              "isTranslation": false,
+              "originalLanguages": [],
+              "titleLanguage": "en",
+              "tracklistLanguage": null,
+              "title": {
+                "value": "Garden game desktop release",
+                "language": "en"
+              },
+              "publisher": null,
+              "editionStatement": "Desktop PC; version 1.0; digital format",
+              "isbn13": null,
+              "publicationYear": null,
+              "originalUrl": null,
+              "fixedRelease": null,
+              "coverage": [
+                {
+                  "realization": null,
+                  "revision": null,
+                  "work": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+                  "mainVersion": "https://rezics.com/id/01a13627-3758-7332-8563-85194ab1c2b7",
+                  "completeness": "unknown",
+                  "language": null
+                }
+              ],
+              "legacyCoverage": null,
+              "identifiers": [],
+              "platform": null,
+              "territory": null,
+              "snapshots": []
+            }
+          ],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49"
+          },
+          "count": {
+            "value": 1,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "release-details",
+        "operationId": "getV1WorksByIdReleasesByRelease",
+        "method": "GET",
+        "path": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/releases/800bd89c-3cbc-44da-b9b4-c95f0692f105?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ff16c68c1-5c33-49c9-9688-a9defe640279",
+        "status": 200,
+        "answer": {
+          "profile": "release-v2",
+          "id": "https://rezics.com/id/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+          "revision": "https://rezics.com/id/01a13627-4292-720f-8624-650e1222aefb",
+          "kind": "formal",
+          "status": "official",
+          "contentLanguages": [
+            "en"
+          ],
+          "isTranslation": false,
+          "originalLanguages": [],
+          "titleLanguage": "en",
+          "tracklistLanguage": null,
+          "title": {
+            "value": "Garden game desktop release",
+            "language": "en"
+          },
+          "publisher": null,
+          "editionStatement": "Desktop PC; version 1.0; digital format",
+          "isbn13": null,
+          "publicationYear": null,
+          "originalUrl": null,
+          "fixedRelease": null,
+          "coverage": [
+            {
+              "realization": null,
+              "revision": null,
+              "work": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+              "mainVersion": "https://rezics.com/id/01a13627-3758-7332-8563-85194ab1c2b7",
+              "completeness": "unknown",
+              "language": null
+            }
+          ],
+          "legacyCoverage": null,
+          "identifiers": [],
+          "platform": null,
+          "territory": null,
+          "snapshots": [],
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "preference-empty",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a13627-3758-7331-ad06-d97709ffe3f2?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ff16c68c1-5c33-49c9-9688-a9defe640279",
+        "status": 200,
+        "answer": null,
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "choose-edition",
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "method": "PUT",
+        "path": "/v1/me/edition-preferences/01a13627-3758-7331-ad06-d97709ffe3f2",
+        "body": {
+          "actingSubject": "https://rezics.com/id/f16c68c1-5c33-49c9-9688-a9defe640279",
+          "expectedVersion": 0,
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+            "revision": "https://rezics.com/id/01a13627-4292-720f-8624-650e1222aefb"
+          }
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+            "revision": "https://rezics.com/id/01a13627-4292-720f-8624-650e1222aefb"
+          },
+          "version": 1,
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "preference-saved",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a13627-3758-7331-ad06-d97709ffe3f2?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ff16c68c1-5c33-49c9-9688-a9defe640279",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+            "revision": "https://rezics.com/id/01a13627-4292-720f-8624-650e1222aefb"
+          },
+          "language": "en",
+          "version": 1
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "preference-private",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a13627-3758-7331-ad06-d97709ffe3f2?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F89d3521f-ba8c-4f8f-86da-2e8f62676f6e",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/progress_denied",
+          "title": "Progress and preferences are private to the principal’s own Person",
+          "status": 403,
+          "code": "progress_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "choose-edition-private",
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "method": "PUT",
+        "path": "/v1/me/edition-preferences/01a13627-3758-7331-ad06-d97709ffe3f2",
+        "body": {
+          "actingSubject": "https://rezics.com/id/89d3521f-ba8c-4f8f-86da-2e8f62676f6e",
+          "expectedVersion": 0,
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+            "revision": "https://rezics.com/id/01a13627-4292-720f-8624-650e1222aefb"
+          }
+        },
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/progress_denied",
+          "title": "Progress and preferences are private to the principal’s own Person",
+          "status": 403,
+          "code": "progress_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "unpublished-work",
+        "operationId": "getV1WorksById",
+        "method": "GET",
+        "path": "/v1/works/01a13627-38d3-762d-9635-8cb0a0a8e983?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ff16c68c1-5c33-49c9-9688-a9defe640279",
+        "status": 200,
+        "answer": {
+          "profile": "work-read-v1",
+          "id": "https://rezics.com/id/01a13627-38d3-762d-9635-8cb0a0a8e983",
+          "revision": "https://rezics.com/id/01a13627-38d3-762f-b745-375e6f6128ec",
+          "mainVersion": "https://rezics.com/id/01a13627-38d3-762e-8fd7-d2320ae6a0fa",
+          "title": {
+            "value": "Unpublished garden draft",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "cover": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "work",
+            "key": "c5316d9c63d4ca6d077137366c8b7fa3"
+          },
+          "types": [
+            "https://schema.org/VideoGame"
+          ],
+          "tagline": null,
+          "completionStatus": null,
+          "chapterCount": null,
+          "wordCount": null,
+          "lastUpdatedAt": null,
+          "disclosure": "restricted",
+          "publicationState": "unpublished",
+          "descriptionObligations": {
+            "status": "unassessed"
+          },
+          "description": null,
+          "metadataRevision": null,
+          "originalTitle": null,
+          "mainVersionRevision": "https://rezics.com/id/01a13627-38d3-7630-9a56-3b35b9b19011",
+          "mainVersionLabel": null,
+          "selectedLanguage": null,
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49",
+            "dependencyToken": "bd08450460ec6579d0b777be70eedeb60e3bed35ab7c4ab21e78594a442b3fc0"
+          },
+          "links": {
+            "versions": "/v1/query#work-versions",
+            "classifications": "/v1/works/01a13627-38d3-762d-9635-8cb0a0a8e983/classifications",
+            "adoptions": "/v1/query#work-adoptions",
+            "ratings": "/v1/works/01a13627-38d3-762d-9635-8cb0a0a8e983/ratings",
+            "history": "/v1/works/01a13627-38d3-762d-9635-8cb0a0a8e983/history",
+            "credits": "/v1/works/01a13627-38d3-762d-9635-8cb0a0a8e983/credits",
+            "metadata": "/v1/works/01a13627-38d3-762d-9635-8cb0a0a8e983/metadata",
+            "editions": "/v1/works/01a13627-38d3-762d-9635-8cb0a0a8e983/editions"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      }
+    ],
+    "moderator": [
+      {
+        "label": "work-header",
+        "operationId": "getV1WorksById",
+        "method": "GET",
+        "path": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F9052e9ad-72de-4a7b-ac69-b5f0c109ddd7",
+        "status": 200,
+        "answer": {
+          "profile": "work-read-v1",
+          "id": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+          "revision": "https://rezics.com/id/01a13627-3758-7333-9045-03b6b3e9ab49",
+          "mainVersion": "https://rezics.com/id/01a13627-3758-7332-8563-85194ab1c2b7",
+          "title": {
+            "value": "Original garden game",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "cover": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "work",
+            "key": "a5c45efb04060ee4b784fb88086c75cb"
+          },
+          "types": [
+            "https://schema.org/VideoGame"
+          ],
+          "tagline": null,
+          "completionStatus": null,
+          "chapterCount": null,
+          "wordCount": null,
+          "lastUpdatedAt": null,
+          "disclosure": "public",
+          "publicationState": "unpublished",
+          "descriptionObligations": {
+            "status": "unassessed"
+          },
+          "description": {
+            "value": "An original game about planting lights in a synthetic garden.",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "metadataRevision": "https://rezics.com/id/01a13627-403d-7490-8d42-7a21447bf748",
+          "originalTitle": null,
+          "mainVersionRevision": "https://rezics.com/id/01a13627-3e7f-7712-ab20-68367a571059",
+          "mainVersionLabel": null,
+          "selectedLanguage": "en",
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49",
+            "dependencyToken": "9cd4a27c1963fd514e10ba8d636fc8ad605e0cb335f6c073c3e1d50c75e9b716"
+          },
+          "links": {
+            "versions": "/v1/query#work-versions",
+            "classifications": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/classifications",
+            "adoptions": "/v1/query#work-adoptions",
+            "ratings": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/ratings",
+            "history": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/history",
+            "credits": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/credits",
+            "metadata": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/metadata",
+            "editions": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/editions"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "work-credits",
+        "operationId": "getV1WorksByIdCredits",
+        "method": "GET",
+        "path": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/credits?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F9052e9ad-72de-4a7b-ac69-b5f0c109ddd7",
+        "status": 200,
+        "answer": {
+          "profile": "template-result-v1",
+          "query": "https://rezics.com/query/work-credits",
+          "revision": 1,
+          "items": [
+            {
+              "id": "https://rezics.com/id/01a13627-375e-7423-8fef-150a262db19d",
+              "role": "author",
+              "participantKind": "agent",
+              "provider": null,
+              "key": null,
+              "ordinal": null,
+              "agent": "https://rezics.com/id/f16c68c1-5c33-49c9-9688-a9defe640279",
+              "displayName": null,
+              "handle": null
+            }
+          ],
+          "complete": true,
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49",
+            "dependencyToken": "6735bf060c91dcbc9399e504eb6d195cee76ac952f3d74b8275945802e7af47a"
+          },
+          "count": {
+            "value": 1,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8",
+          "etag": "W/\"fe78e9b0ebed3420241b305c5abcbb73875a3468c5c743d27b58894eaead0a94\""
+        }
+      },
+      {
+        "label": "partless-parts",
+        "operationId": "getV1ResourcesByResourceParts",
+        "method": "GET",
+        "path": "/v1/resources/01a13627-3758-7331-ad06-d97709ffe3f2/parts?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F9052e9ad-72de-4a7b-ac69-b5f0c109ddd7",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "editions-empty",
+        "operationId": "getV1WorksByIdEditions",
+        "method": "GET",
+        "path": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/editions?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F9052e9ad-72de-4a7b-ac69-b5f0c109ddd7",
+        "status": 200,
+        "answer": {
+          "items": [],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49",
+            "dependencyToken": "5beab506430f442356724f9ff31319c9793deaa549edf34dae14a7165d0ad390"
+          },
+          "count": {
+            "value": 0,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "releases",
+        "operationId": "getV1WorksByIdReleases",
+        "method": "GET",
+        "path": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/releases?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F9052e9ad-72de-4a7b-ac69-b5f0c109ddd7",
+        "status": 200,
+        "answer": {
+          "items": [
+            {
+              "profile": "release-v2",
+              "id": "https://rezics.com/id/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+              "revision": "https://rezics.com/id/01a13627-4292-720f-8624-650e1222aefb",
+              "kind": "formal",
+              "status": "official",
+              "contentLanguages": [
+                "en"
+              ],
+              "isTranslation": false,
+              "originalLanguages": [],
+              "titleLanguage": "en",
+              "tracklistLanguage": null,
+              "title": {
+                "value": "Garden game desktop release",
+                "language": "en"
+              },
+              "publisher": null,
+              "editionStatement": "Desktop PC; version 1.0; digital format",
+              "isbn13": null,
+              "publicationYear": null,
+              "originalUrl": null,
+              "fixedRelease": null,
+              "coverage": [
+                {
+                  "realization": null,
+                  "revision": null,
+                  "work": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+                  "mainVersion": "https://rezics.com/id/01a13627-3758-7332-8563-85194ab1c2b7",
+                  "completeness": "unknown",
+                  "language": null
+                }
+              ],
+              "legacyCoverage": null,
+              "identifiers": [],
+              "platform": null,
+              "territory": null,
+              "snapshots": []
+            }
+          ],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49"
+          },
+          "count": {
+            "value": 1,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "release-details",
+        "operationId": "getV1WorksByIdReleasesByRelease",
+        "method": "GET",
+        "path": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/releases/800bd89c-3cbc-44da-b9b4-c95f0692f105?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F9052e9ad-72de-4a7b-ac69-b5f0c109ddd7",
+        "status": 200,
+        "answer": {
+          "profile": "release-v2",
+          "id": "https://rezics.com/id/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+          "revision": "https://rezics.com/id/01a13627-4292-720f-8624-650e1222aefb",
+          "kind": "formal",
+          "status": "official",
+          "contentLanguages": [
+            "en"
+          ],
+          "isTranslation": false,
+          "originalLanguages": [],
+          "titleLanguage": "en",
+          "tracklistLanguage": null,
+          "title": {
+            "value": "Garden game desktop release",
+            "language": "en"
+          },
+          "publisher": null,
+          "editionStatement": "Desktop PC; version 1.0; digital format",
+          "isbn13": null,
+          "publicationYear": null,
+          "originalUrl": null,
+          "fixedRelease": null,
+          "coverage": [
+            {
+              "realization": null,
+              "revision": null,
+              "work": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+              "mainVersion": "https://rezics.com/id/01a13627-3758-7332-8563-85194ab1c2b7",
+              "completeness": "unknown",
+              "language": null
+            }
+          ],
+          "legacyCoverage": null,
+          "identifiers": [],
+          "platform": null,
+          "territory": null,
+          "snapshots": [],
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "preference-empty",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a13627-3758-7331-ad06-d97709ffe3f2?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F9052e9ad-72de-4a7b-ac69-b5f0c109ddd7",
+        "status": 200,
+        "answer": null,
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "choose-edition",
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "method": "PUT",
+        "path": "/v1/me/edition-preferences/01a13627-3758-7331-ad06-d97709ffe3f2",
+        "body": {
+          "actingSubject": "https://rezics.com/id/9052e9ad-72de-4a7b-ac69-b5f0c109ddd7",
+          "expectedVersion": 0,
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+            "revision": "https://rezics.com/id/01a13627-4292-720f-8624-650e1222aefb"
+          }
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+            "revision": "https://rezics.com/id/01a13627-4292-720f-8624-650e1222aefb"
+          },
+          "version": 1,
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "preference-saved",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a13627-3758-7331-ad06-d97709ffe3f2?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F9052e9ad-72de-4a7b-ac69-b5f0c109ddd7",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+            "revision": "https://rezics.com/id/01a13627-4292-720f-8624-650e1222aefb"
+          },
+          "language": "en",
+          "version": 1
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "preference-private",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a13627-3758-7331-ad06-d97709ffe3f2?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F89d3521f-ba8c-4f8f-86da-2e8f62676f6e",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/progress_denied",
+          "title": "Progress and preferences are private to the principal’s own Person",
+          "status": 403,
+          "code": "progress_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "choose-edition-private",
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "method": "PUT",
+        "path": "/v1/me/edition-preferences/01a13627-3758-7331-ad06-d97709ffe3f2",
+        "body": {
+          "actingSubject": "https://rezics.com/id/89d3521f-ba8c-4f8f-86da-2e8f62676f6e",
+          "expectedVersion": 0,
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+            "revision": "https://rezics.com/id/01a13627-4292-720f-8624-650e1222aefb"
+          }
+        },
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/progress_denied",
+          "title": "Progress and preferences are private to the principal’s own Person",
+          "status": 403,
+          "code": "progress_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "unpublished-work",
+        "operationId": "getV1WorksById",
+        "method": "GET",
+        "path": "/v1/works/01a13627-38d3-762d-9635-8cb0a0a8e983?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F9052e9ad-72de-4a7b-ac69-b5f0c109ddd7",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "release-edit-refused",
+        "operationId": "putV1WorksByIdReleasesByRelease",
+        "method": "PUT",
+        "path": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/releases/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+        "body": {
+          "profile": "release-v1",
+          "expectedHead": "https://rezics.com/id/01a13627-4292-720f-8624-650e1222aefb",
+          "id": "https://rezics.com/id/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+          "actingSubject": "https://rezics.com/id/9052e9ad-72de-4a7b-ac69-b5f0c109ddd7",
+          "kind": "formal",
+          "status": "official",
+          "contentLanguages": [
+            "en"
+          ],
+          "isTranslation": false,
+          "originalLanguages": [],
+          "titleLanguage": "en",
+          "tracklistLanguage": null,
+          "title": {
+            "value": "Garden game desktop release",
+            "language": "en"
+          },
+          "editionStatement": "Desktop PC; version 1.0; digital format",
+          "publisher": null,
+          "publicationYear": null,
+          "isbn13": null,
+          "originalUrl": null,
+          "fixedRelease": null,
+          "coverage": null,
+          "evidence": null
+        },
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/authority_denied",
+          "title": "Authority is not admitted",
+          "status": 403,
+          "code": "authority_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      }
+    ],
+    "operator": [
+      {
+        "label": "work-header",
+        "operationId": "getV1WorksById",
+        "method": "GET",
+        "path": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F224af468-1934-4555-bd9e-a53d1d9b8d80",
+        "status": 200,
+        "answer": {
+          "profile": "work-read-v1",
+          "id": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+          "revision": "https://rezics.com/id/01a13627-3758-7333-9045-03b6b3e9ab49",
+          "mainVersion": "https://rezics.com/id/01a13627-3758-7332-8563-85194ab1c2b7",
+          "title": {
+            "value": "Original garden game",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "cover": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "work",
+            "key": "a5c45efb04060ee4b784fb88086c75cb"
+          },
+          "types": [
+            "https://schema.org/VideoGame"
+          ],
+          "tagline": null,
+          "completionStatus": null,
+          "chapterCount": null,
+          "wordCount": null,
+          "lastUpdatedAt": null,
+          "disclosure": "public",
+          "publicationState": "unpublished",
+          "descriptionObligations": {
+            "status": "unassessed"
+          },
+          "description": {
+            "value": "An original game about planting lights in a synthetic garden.",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "metadataRevision": "https://rezics.com/id/01a13627-403d-7490-8d42-7a21447bf748",
+          "originalTitle": null,
+          "mainVersionRevision": "https://rezics.com/id/01a13627-3e7f-7712-ab20-68367a571059",
+          "mainVersionLabel": null,
+          "selectedLanguage": "en",
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49",
+            "dependencyToken": "9cd4a27c1963fd514e10ba8d636fc8ad605e0cb335f6c073c3e1d50c75e9b716"
+          },
+          "links": {
+            "versions": "/v1/query#work-versions",
+            "classifications": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/classifications",
+            "adoptions": "/v1/query#work-adoptions",
+            "ratings": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/ratings",
+            "history": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/history",
+            "credits": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/credits",
+            "metadata": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/metadata",
+            "editions": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/editions"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "work-credits",
+        "operationId": "getV1WorksByIdCredits",
+        "method": "GET",
+        "path": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/credits?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F224af468-1934-4555-bd9e-a53d1d9b8d80",
+        "status": 200,
+        "answer": {
+          "profile": "template-result-v1",
+          "query": "https://rezics.com/query/work-credits",
+          "revision": 1,
+          "items": [
+            {
+              "id": "https://rezics.com/id/01a13627-375e-7423-8fef-150a262db19d",
+              "role": "author",
+              "participantKind": "agent",
+              "provider": null,
+              "key": null,
+              "ordinal": null,
+              "agent": "https://rezics.com/id/f16c68c1-5c33-49c9-9688-a9defe640279",
+              "displayName": null,
+              "handle": null
+            }
+          ],
+          "complete": true,
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49",
+            "dependencyToken": "6735bf060c91dcbc9399e504eb6d195cee76ac952f3d74b8275945802e7af47a"
+          },
+          "count": {
+            "value": 1,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8",
+          "etag": "W/\"658427591d1810ee586fe92164dcdce3d1f3ee62f39bf548286da6f5d2b9ea0c\""
+        }
+      },
+      {
+        "label": "partless-parts",
+        "operationId": "getV1ResourcesByResourceParts",
+        "method": "GET",
+        "path": "/v1/resources/01a13627-3758-7331-ad06-d97709ffe3f2/parts?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F224af468-1934-4555-bd9e-a53d1d9b8d80",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "editions-empty",
+        "operationId": "getV1WorksByIdEditions",
+        "method": "GET",
+        "path": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/editions?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F224af468-1934-4555-bd9e-a53d1d9b8d80",
+        "status": 200,
+        "answer": {
+          "items": [],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49",
+            "dependencyToken": "5beab506430f442356724f9ff31319c9793deaa549edf34dae14a7165d0ad390"
+          },
+          "count": {
+            "value": 0,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "releases",
+        "operationId": "getV1WorksByIdReleases",
+        "method": "GET",
+        "path": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/releases?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F224af468-1934-4555-bd9e-a53d1d9b8d80",
+        "status": 200,
+        "answer": {
+          "items": [
+            {
+              "profile": "release-v2",
+              "id": "https://rezics.com/id/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+              "revision": "https://rezics.com/id/01a13627-4292-720f-8624-650e1222aefb",
+              "kind": "formal",
+              "status": "official",
+              "contentLanguages": [
+                "en"
+              ],
+              "isTranslation": false,
+              "originalLanguages": [],
+              "titleLanguage": "en",
+              "tracklistLanguage": null,
+              "title": {
+                "value": "Garden game desktop release",
+                "language": "en"
+              },
+              "publisher": null,
+              "editionStatement": "Desktop PC; version 1.0; digital format",
+              "isbn13": null,
+              "publicationYear": null,
+              "originalUrl": null,
+              "fixedRelease": null,
+              "coverage": [
+                {
+                  "realization": null,
+                  "revision": null,
+                  "work": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+                  "mainVersion": "https://rezics.com/id/01a13627-3758-7332-8563-85194ab1c2b7",
+                  "completeness": "unknown",
+                  "language": null
+                }
+              ],
+              "legacyCoverage": null,
+              "identifiers": [],
+              "platform": null,
+              "territory": null,
+              "snapshots": []
+            }
+          ],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49"
+          },
+          "count": {
+            "value": 1,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "release-details",
+        "operationId": "getV1WorksByIdReleasesByRelease",
+        "method": "GET",
+        "path": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/releases/800bd89c-3cbc-44da-b9b4-c95f0692f105?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F224af468-1934-4555-bd9e-a53d1d9b8d80",
+        "status": 200,
+        "answer": {
+          "profile": "release-v2",
+          "id": "https://rezics.com/id/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+          "revision": "https://rezics.com/id/01a13627-4292-720f-8624-650e1222aefb",
+          "kind": "formal",
+          "status": "official",
+          "contentLanguages": [
+            "en"
+          ],
+          "isTranslation": false,
+          "originalLanguages": [],
+          "titleLanguage": "en",
+          "tracklistLanguage": null,
+          "title": {
+            "value": "Garden game desktop release",
+            "language": "en"
+          },
+          "publisher": null,
+          "editionStatement": "Desktop PC; version 1.0; digital format",
+          "isbn13": null,
+          "publicationYear": null,
+          "originalUrl": null,
+          "fixedRelease": null,
+          "coverage": [
+            {
+              "realization": null,
+              "revision": null,
+              "work": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+              "mainVersion": "https://rezics.com/id/01a13627-3758-7332-8563-85194ab1c2b7",
+              "completeness": "unknown",
+              "language": null
+            }
+          ],
+          "legacyCoverage": null,
+          "identifiers": [],
+          "platform": null,
+          "territory": null,
+          "snapshots": [],
+          "sourcePosition": {
+            "dataEpoch": "8e660dda-b55c-443f-88b4-9eba2b66794f",
+            "sequence": "49"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "preference-empty",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a13627-3758-7331-ad06-d97709ffe3f2?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F224af468-1934-4555-bd9e-a53d1d9b8d80",
+        "status": 200,
+        "answer": null,
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "choose-edition",
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "method": "PUT",
+        "path": "/v1/me/edition-preferences/01a13627-3758-7331-ad06-d97709ffe3f2",
+        "body": {
+          "actingSubject": "https://rezics.com/id/224af468-1934-4555-bd9e-a53d1d9b8d80",
+          "expectedVersion": 0,
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+            "revision": "https://rezics.com/id/01a13627-4292-720f-8624-650e1222aefb"
+          }
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+            "revision": "https://rezics.com/id/01a13627-4292-720f-8624-650e1222aefb"
+          },
+          "version": 1,
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "preference-saved",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a13627-3758-7331-ad06-d97709ffe3f2?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F224af468-1934-4555-bd9e-a53d1d9b8d80",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a13627-3758-7331-ad06-d97709ffe3f2",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+            "revision": "https://rezics.com/id/01a13627-4292-720f-8624-650e1222aefb"
+          },
+          "language": "en",
+          "version": 1
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "preference-private",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a13627-3758-7331-ad06-d97709ffe3f2?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F89d3521f-ba8c-4f8f-86da-2e8f62676f6e",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/progress_denied",
+          "title": "Progress and preferences are private to the principal’s own Person",
+          "status": 403,
+          "code": "progress_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "choose-edition-private",
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "method": "PUT",
+        "path": "/v1/me/edition-preferences/01a13627-3758-7331-ad06-d97709ffe3f2",
+        "body": {
+          "actingSubject": "https://rezics.com/id/89d3521f-ba8c-4f8f-86da-2e8f62676f6e",
+          "expectedVersion": 0,
+          "language": "en",
+          "edition": {
+            "kind": "release",
+            "resource": "https://rezics.com/id/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+            "revision": "https://rezics.com/id/01a13627-4292-720f-8624-650e1222aefb"
+          }
+        },
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/progress_denied",
+          "title": "Progress and preferences are private to the principal’s own Person",
+          "status": 403,
+          "code": "progress_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "unpublished-work",
+        "operationId": "getV1WorksById",
+        "method": "GET",
+        "path": "/v1/works/01a13627-38d3-762d-9635-8cb0a0a8e983?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F224af468-1934-4555-bd9e-a53d1d9b8d80",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "release-edit-refused",
+        "operationId": "putV1WorksByIdReleasesByRelease",
+        "method": "PUT",
+        "path": "/v1/works/01a13627-3758-7331-ad06-d97709ffe3f2/releases/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+        "body": {
+          "profile": "release-v1",
+          "expectedHead": "https://rezics.com/id/01a13627-4292-720f-8624-650e1222aefb",
+          "id": "https://rezics.com/id/800bd89c-3cbc-44da-b9b4-c95f0692f105",
+          "actingSubject": "https://rezics.com/id/224af468-1934-4555-bd9e-a53d1d9b8d80",
+          "kind": "formal",
+          "status": "official",
+          "contentLanguages": [
+            "en"
+          ],
+          "isTranslation": false,
+          "originalLanguages": [],
+          "titleLanguage": "en",
+          "tracklistLanguage": null,
+          "title": {
+            "value": "Garden game desktop release",
+            "language": "en"
+          },
+          "editionStatement": "Desktop PC; version 1.0; digital format",
+          "publisher": null,
+          "publicationYear": null,
+          "isbn13": null,
+          "originalUrl": null,
+          "fixedRelease": null,
+          "coverage": null,
+          "evidence": null
+        },
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/authority_denied",
+          "title": "Authority is not admitted",
+          "status": 403,
+          "code": "authority_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      }
+    ]
+  }
+}

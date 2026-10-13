@@ -1,12 +1,13 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import declaration from '../../../../../scripts/qa/cases/outcomes/games/collection-tracking-and-progress.ts';
-import { outcomeTest } from '../../../support/outcome-test.ts';
+import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
 setDefaultTimeout(90_000);
 type Work = { work: string; mainVersion: string };
 let sessions: PersonaSessions;
+const recording = new OutcomeRecorder(declaration);
 const short = (id: string) => id.slice(-36);
 const acting = (person: PersonaSession) => person.actingSubject
   ? `actingSubject=${encodeURIComponent(person.actingSubject)}` : '';
@@ -55,7 +56,10 @@ async function publish(game: Work) {
   }), 201);
   return selection;
 }
-afterAll(async () => { await sessions?.close(); });
+afterAll(async () => {
+  try { await recording.publish(); }
+  finally { await sessions?.close(); }
+});
 
 type Standing = { standing: string; version: number; replayed?: boolean };
 type Mark = { completed: boolean; position: string | null; version: number; replayed?: boolean };
@@ -72,6 +76,7 @@ const statePath = (work: Work, person: PersonaSession) => `/v1/works/${short(wor
 const summaryPath = (work: Work, person: PersonaSession) => `/v1/me/progress-summaries/${short(work.work)}?${acting(person)}`;
 async function setupProgress() {
   sessions = await personaSessions('public');
+  await recording.prepare();
   game = await createGame('Original partless garden game');
   composed = await createGame('Original garden with main and bonus routes');
   sentinel = await createGame('Original neighbouring garden game');
@@ -93,13 +98,18 @@ async function setupProgress() {
       ] }));
   [required, extra] = changed.occurrences as [string, string];
 }
-async function status(person: PersonaSession, work: Work, value: string | null) {
-  const current = await answer<ReaderState>(person.main('GET', statePath(work, person)));
-  return answer(person.main('PUT', `/v1/works/${short(work.work)}/reader-status`, {
+async function status(person: PersonaSession, work: Work, value: string | null,
+  sample?: ReturnType<typeof recording.session>, label = `status-${value ?? 'removed'}`) {
+  const current = await answer<ReaderState>(sample
+    ? sample(`${label}-before`, 'GET', statePath(work, person))
+    : person.main('GET', statePath(work, person)));
+  const body = {
     actingSubject: person.actingSubject, expectedVersion: current.status.version, status: value,
     startedOn: value === 'reading' || value === 'read' ? '2026-10-10' : null,
     finishedOn: value === 'read' ? '2026-10-12' : null,
-  }));
+  };
+  const path = `/v1/works/${short(work.work)}/reader-status`;
+  return answer(sample ? sample(label, 'PUT', path, body) : person.main('PUT', path, body));
 }
 async function privateBoundary(person: PersonaSession, name: PersonaName) {
   const victim = person === sessions.member ? sessions.stranger : sessions.member;
@@ -172,87 +182,123 @@ async function privateBoundary(person: PersonaSession, name: PersonaName) {
 beforeAll(setupProgress, 180_000);
 async function collection(name: PersonaName) {
   const person = sessions[name];
+  const sample = recording.session(name, person);
   if (name === 'visitor') {
     const before = await answer<ReaderState>(sessions.member.main('GET', statePath(game, sessions.member)));
-    expect(await answer<ReaderState>(person.main('GET', statePath(game, person))))
+    expect(await answer<ReaderState>(sample('reader-state-public', 'GET', statePath(game, person))))
       .toMatchObject({ status: { status: null, version: 0 }, progress: null });
     for (const path of [`${wholePath()}?${acting(sessions.member)}`,
       `${partPath()}?${acting(sessions.member)}`, summaryPath(game, sessions.member),
       `/v1/me/shelves?${acting(sessions.member)}`,
       `/v1/me/shelves/status/reading/works?${acting(sessions.member)}`])
-      await answer(person.main('GET', path), 401);
+      await answer(sample(`sign-in-${path.split('?')[0]}`, 'GET', path), 401);
     for (const [path, body] of [
       [wholePath(), { expectedVersion: 0, standing: 'completed' }],
       [partPath(), { expectedVersion: 0, completed: true, position: 'completed' }],
       [`/v1/works/${short(game.work)}/reader-status`, { expectedVersion: 0, status: 'read' }],
-    ] as const) await answer(person.main('PUT', path, { ...body, actingSubject: sessions.member.actingSubject }), 401);
+    ] as const) await answer(sample(`write-sign-in-${path}`, 'PUT', path, { ...body, actingSubject: sessions.member.actingSubject }), 401);
     expect((await answer<ReaderState>(sessions.member.main('GET', statePath(game, sessions.member)))).status)
       .toEqual(before.status);
     return;
   }
   for (const value of ['want-to-read', 'reading', 'read', null]) {
-    expect(await status(person, game, value)).toMatchObject({ status: value });
-    expect((await answer<ReaderState>(person.main('GET', statePath(game, person)))).status)
+    expect(await status(person, game, value, sample)).toMatchObject({ status: value });
+    expect((await answer<ReaderState>(sample(`status-${value ?? 'removed'}-saved`, 'GET', statePath(game, person)))).status)
       .toMatchObject({ status: value, startedOn: value === 'reading' || value === 'read' ? '2026-10-10' : null,
         finishedOn: value === 'read' ? '2026-10-12' : null });
     if (value) {
-      const shelf = await answer<{ items: { work: string }[] }>(person.main('GET',
+      const shelf = await answer<{ items: { work: string }[] }>(sample(`shelf-${value}`, 'GET',
         `/v1/me/shelves/status/${value}/works?${acting(person)}`));
       expect(shelf.items.map(item => item.work)).toContain(game.work);
     }
   }
-  await status(person, game, 'want-to-read');
-  const library = (await answer<ReaderState>(person.main('GET', statePath(game, person)))).status;
-  let current = await answer<Standing>(person.main('GET', `${wholePath()}?${acting(person)}`));
+  await status(person, game, 'want-to-read', sample, 'collect-game');
+  const library = (await answer<ReaderState>(sample('library-status', 'GET', statePath(game, person)))).status;
+  let current = await answer<Standing>(sample('whole-progress-initial', 'GET', `${wholePath()}?${acting(person)}`));
   for (const standing of ['started', 'completed', 'dropped', 'not-started'] as const) {
-    current = await answer<Standing>(person.main('PUT', wholePath(), {
+    current = await answer<Standing>(sample(`whole-${standing}`, 'PUT', wholePath(), {
       actingSubject: person.actingSubject, expectedVersion: current.version, standing }));
     expect(current.standing).toBe(standing);
     const summary = await answer<{ status: string; counts: { completed: number } }>(
-      person.main('GET', summaryPath(game, person)));
+      sample(`summary-${standing}`, 'GET', summaryPath(game, person)));
     expect(summary.status).toBe(({ started: 'reading', completed: 'finished',
       dropped: 'dropped', 'not-started': 'not-started' })[standing]);
     expect(summary.counts.completed).toBe(standing === 'completed' ? 1 : 0);
-    expect((await answer<ReaderState>(person.main('GET', statePath(game, person)))).status).toEqual(library);
+    expect((await answer<ReaderState>(sample(`reader-state-${standing}`, 'GET', statePath(game, person)))).status).toEqual(library);
   }
-  const parts = await answer<{ parts: { occurrence: string; inclusion: string }[] }>(person.main('GET',
+  const parts = await answer<{ parts: { occurrence: string; inclusion: string }[] }>(sample('game-parts', 'GET',
     `/v1/resources/${short(composed.work)}/parts?${acting(person)}`));
   expect(parts.parts.map(part => [part.occurrence, part.inclusion]))
     .toEqual([[required, 'required'], [extra, 'extra']]);
-  expect(await answer(person.main('GET', `/v1/works/${short(composed.work)}/progress?${acting(person)}`)))
+  expect(await answer(sample('composed-progress', 'GET', `/v1/works/${short(composed.work)}/progress?${acting(person)}`)))
     .toEqual({ work: composed.work, parts: true });
-  expect(await answer(person.main('PUT', `/v1/works/${short(composed.work)}/progress`, {
+  expect(await answer(sample('whole-write-has-parts', 'PUT', `/v1/works/${short(composed.work)}/progress`, {
     actingSubject: person.actingSubject, expectedVersion: 0, standing: 'completed' }), 409))
     .toMatchObject({ code: 'work_has_parts' });
   for (const occurrence of [extra, required]) {
     const path = partPath(occurrence);
-    const initial = await answer<Mark>(person.main('GET', `${path}?${acting(person)}`));
-    const completed = await answer<Mark>(person.main('PUT', path, {
+    const label = occurrence === extra ? 'bonus' : 'required';
+    const initial = await answer<Mark>(sample(`${label}-initial`, 'GET', `${path}?${acting(person)}`));
+    const completed = await answer<Mark>(sample(`${label}-completed`, 'PUT', path, {
       actingSubject: person.actingSubject, expectedVersion: initial.version,
       completed: true, position: 'completed' }));
     expect(completed.completed).toBe(true);
-    const saved = await answer<{ items: { occurrence: string }[] }>(person.main('GET',
+    const saved = await answer<{ items: { occurrence: string }[] }>(sample(`${label}-completion-list`, 'GET',
       `/v1/compositions/${short(structure)}/progress?${acting(person)}`));
     expect(saved.items.map(item => item.occurrence)).toContain(occurrence);
   }
-  const mark = await answer<Mark>(person.main('GET', `${partPath()}?${acting(person)}`));
-  await answer(person.main('PUT', partPath(), { actingSubject: person.actingSubject,
+  const mark = await answer<Mark>(sample('required-before-undo', 'GET', `${partPath()}?${acting(person)}`));
+  await answer(sample('required-undone', 'PUT', partPath(), { actingSubject: person.actingSubject,
     expectedVersion: mark.version, completed: false, position: null }));
-  const saved = await answer<{ items: { occurrence: string }[] }>(person.main('GET',
+  const saved = await answer<{ items: { occurrence: string }[] }>(sample('remaining-completions', 'GET',
     `/v1/compositions/${short(structure)}/progress?${acting(person)}`));
   expect(saved.items.map(item => item.occurrence)).toEqual([extra]);
   await privateBoundary(person, name);
+  if (name === 'member') await supportingReads(person, sample);
 }
 
-outcomeTest(declaration, 'visitor', () => collection('visitor'));
+async function supportingReads(person: PersonaSession, sample: ReturnType<typeof recording.session>) {
+  const viewer = (path: string) => `${path}${path.includes('?') ? '&' : '?'}${acting(person)}`;
+  for (const [label, path] of [
+    ['library-overview', '/v1/me/shelves?limit=20'],
+    ['reading-goal', '/v1/me/reading-goal?year=2026'],
+    ['reading-year', '/v1/me/reading-stats?year=2026'],
+    ['followed-authors', '/v1/me/follows/authors'],
+    ['shelf-empty', '/v1/me/shelves/status/read/works?sort=last-read&order=desc&limit=20'],
+    ['currently-reading', '/v1/me/shelves/status/reading/works?sort=last-read&order=desc&limit=6'],
+    ['library-work-states', `/v1/me/work-states?${new URLSearchParams({ works: [game.work, composed.work, sentinel.work].join(',') })}`],
+    ['private-import-reviews', `/v1/me/import-reviews?${new URLSearchParams({ works: [game.work, composed.work, sentinel.work].join(',') })}`],
+    ['game-header', `/v1/works/${short(game.work)}`],
+    ['composed-header', `/v1/works/${short(composed.work)}`],
+    ['game-parts-empty', `/v1/resources/${short(game.work)}/parts?limit=20`],
+    ['series-structure', `/v1/compositions/${short(structure)}?limit=20`],
+    ['resume-game', `/v1/me/continue/${short(game.work)}`],
+    ['resume-composed', `/v1/me/continue/${short(composed.work)}`],
+    ['edition-preference-empty', `/v1/me/edition-preferences/${short(composed.work)}`],
+    ['realizations-empty', `/v1/works/${short(composed.work)}/realizations?limit=20`],
+    ['releases-empty', `/v1/works/${short(composed.work)}/releases?limit=20`],
+    ['composed-summary', `/v1/me/progress-summaries/${short(composed.work)}?language=en`],
+    ['resume-position', `/v1/reading-positions/${short(composed.work)}?position=mine&limit=1`],
+    ['work-relations', `/v1/resources/${short(composed.work)}/relations?limit=20`],
+    ['edition-sessions-empty', `/v1/me/sessions?${new URLSearchParams({ target: composed.work, limit: '50' })}`],
+  ] as const) await answer(sample(label, 'GET', viewer(path)), label === 'game-parts-empty' ? 404 : 200);
+  await answer(sample('library-visibility', 'GET', `/v1/agents/${short(person.actingSubject!)}/library-visibility`));
+  await answer(sample('library-rating-context', 'GET', '/v1/rating-contexts?scope=global&limit=1'));
+  await answer(sample('private-reader-state', 'GET', statePath(game, sessions.stranger)), 403);
+  const definition = await sample('correspondence-definition', 'GET', viewer('/v1/lexicon/definitions/correspondence-equivalent'));
+  expect([200, 404]).toContain(definition.status);
+  await definition.body?.cancel();
+}
 
-outcomeTest(declaration, 'stranger', () => collection('stranger'));
+outcomeTest(declaration, 'visitor', () => collection('visitor'), recording);
 
-outcomeTest(declaration, 'member', () => collection('member'));
+outcomeTest(declaration, 'stranger', () => collection('stranger'), recording);
 
-outcomeTest(declaration, 'owner', () => collection('owner'));
+outcomeTest(declaration, 'member', () => collection('member'), recording);
 
-outcomeTest(declaration, 'moderator', () => collection('moderator'));
+outcomeTest(declaration, 'owner', () => collection('owner'), recording);
 
-outcomeTest(declaration, 'operator', () => collection('operator'));
+outcomeTest(declaration, 'moderator', () => collection('moderator'), recording);
+
+outcomeTest(declaration, 'operator', () => collection('operator'), recording);
 
