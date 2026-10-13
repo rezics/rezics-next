@@ -3,6 +3,7 @@ import type { ZoneBrowseEntry, ZoneContext, ZonePackage } from '@rezics/zone-sdk
 import { LibraryBigIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
+import { NO_PLATFORM_ACCESS, type PlatformAccess } from '../api/platform-access.ts';
 import { ReaderActionsProvider } from '../catalogue/reader-actions.tsx';
 import { EmptyState } from '../shell/empty-state.tsx';
 import type { Execution } from '../zones/execution.ts';
@@ -28,7 +29,8 @@ export const realmMessagesFor = (locale: UiLocale): RealmMessages => locale === 
  */
 export function RealmPageStory({ zone, modules = [], pkg = null, execution = { mode: 'fallback', reason: 'none-approved' },
   look = true, reader = 'light', members = null, navigation = [], membership = null,
-  membershipActions = { kind: 'signed-out', signInHref: '/auth/start' }, browse, position, locale, children, site = false }: {
+  membershipActions = { kind: 'signed-out', signInHref: '/auth/start' }, browse, position, locale, children, site = false,
+  platformAccess = NO_PLATFORM_ACCESS }: {
   zone: ZoneContext; modules?: readonly PlacedModule[]; pkg?: ZonePackage | null; execution?: Execution;
   look?: boolean; reader?: ReaderTheme; members?: string | null;
   navigation?: readonly { label: string; href: string }[];
@@ -39,6 +41,8 @@ export function RealmPageStory({ zone, modules = [], pkg = null, execution = { m
   /** The position control of a Zone that reads at the reader's place in a story. */
   position?: ReactNode;
   locale: UiLocale; children?: ReactNode; site?: boolean;
+  /** The host's resolved access read; browser stories cannot execute request-backed server cards. */
+  platformAccess?: PlatformAccess | null;
 }) {
   const zoneMessages = zoneMessagesFor(locale);
   const messages = realmMessagesFor(locale);
@@ -67,7 +71,7 @@ export function RealmPageStory({ zone, modules = [], pkg = null, execution = { m
     {/* Signed out, as a first visit: shelf controls lead to sign-in. */}
     <ReaderActionsProvider signedIn={false} signInHref="/auth/start">
       {children ?? <ZoneHome modules={modules} zone={zone} pkg={pkg} locale={locale} messages={zoneMessages}
-        browse={browse}
+        browse={browse} slotAccess={platformAccess}
         empty={<EmptyState icon={LibraryBigIcon} title={messages.emptyHomeTitle} description={messages.emptyHomeBody} />} />}
     </ReaderActionsProvider>
   </ZoneFrame>;

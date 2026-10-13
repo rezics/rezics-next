@@ -8,6 +8,7 @@ import books from '../../zones/official/books/index.tsx';
 import mods from '../../zones/official/mods/index.tsx';
 import type { UiLocale } from '../../i18n/define.ts';
 import { RealmPageStory } from '../realm/story-page.tsx';
+import { NO_PLATFORM_ACCESS, operationOpen, type PlatformAccess } from '../api/platform-access.ts';
 import {
   type Catalogue,
   officialBrowse,
@@ -25,11 +26,13 @@ function Page({
   look,
   catalogue,
   locale,
+  platformAccess,
 }: {
   slug: OfficialSlug;
   look: 'package' | 'fallback';
   catalogue: Catalogue;
   locale: UiLocale;
+  platformAccess: PlatformAccess | null;
 }) {
   const pkg = look === 'package' ? packages[slug] : null;
   return (
@@ -38,6 +41,7 @@ function Page({
       zone={officialZone(slug, locale)}
       modules={officialModules(slug, locale, catalogue)}
       locale={locale}
+      platformAccess={platformAccess}
       members={locale === 'zh-Hans' ? '3,204 位成员' : '3,204 members'}
       pkg={pkg}
       browse={officialBrowse(slug, locale, catalogue)}
@@ -49,7 +53,8 @@ function Page({
 const meta = {
   title: 'Zones/Official packages',
   component: Page,
-  args: { slug: 'books', look: 'package', catalogue: 'rich', locale: 'en' },
+  args: { slug: 'books', look: 'package', catalogue: 'rich', locale: 'en',
+    platformAccess: { ...NO_PLATFORM_ACCESS, operations: ['getV1HubWorksById'] } },
   parameters: { route: { pathname: localizedPath(spaceHref('books', 'site'), 'en') } },
   render: (args, { globals }) => (
     <Page {...args} locale={(globals.locale as UiLocale | undefined) ?? args.locale} />
@@ -110,7 +115,7 @@ function unstamped(root: Element, slug: OfficialSlug, locale: UiLocale): string[
 
 const holds =
   (slug: OfficialSlug) =>
-  async ({ canvasElement, globals }: Context) => {
+  async ({ canvasElement, globals, args }: Context) => {
     const locale = (globals.locale as UiLocale | undefined) ?? 'en';
     await expect(unstamped(canvasElement, slug, locale)).toEqual([]);
     // Package links keep the reader's locale on every public page destination.
@@ -121,6 +126,22 @@ const holds =
     await expect(pageLinks.filter(href => href !== localizedPath(href, locale))).toEqual([]);
     await expect(overflowing(canvasElement)).toEqual([]);
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+    if (slug === 'ai-workshop' && args.look === 'package') {
+      const cards = [...canvasElement.querySelectorAll<HTMLElement>('.aw-card')];
+      await expect(cards.length).toBeGreaterThan(0);
+      const works = officialWorks(slug, locale, args.catalogue);
+      for (const card of cards) {
+        const href = card.querySelector('.aw-card-title a')!.getAttribute('href');
+        const work = works.find(item => localizedPath(item.href, locale) === href)!;
+        await expect(work).toBeDefined();
+        const action = card.querySelector('.aw-try');
+        if (!work.hub || operationOpen('getV1HubWorksById', args.platformAccess)) {
+          await expect(action).toBeVisible();
+          await expect(action).toHaveAttribute('href', localizedPath(work.href, locale));
+          await expect(action).toHaveAccessibleName(`${locale === 'zh-Hans' ? '试一试' : 'Try it'} ${work.title!.value}`);
+        } else await expect(action).toBeNull();
+      }
+    }
   };
 
 const packageRuns = async (canvasElement: HTMLElement, slug: OfficialSlug) => {
@@ -449,6 +470,18 @@ export const AiWorkshopDark: Story = {
   args: { slug: 'ai-workshop' },
   parameters: workshopRoute,
   globals: { theme: 'dark' },
+  play: holds('ai-workshop'),
+};
+
+export const AiWorkshopClosed: Story = {
+  args: { slug: 'ai-workshop', platformAccess: NO_PLATFORM_ACCESS },
+  parameters: workshopRoute,
+  play: holds('ai-workshop'),
+};
+
+export const AiWorkshopUnavailableAccess: Story = {
+  args: { slug: 'ai-workshop', platformAccess: null },
+  parameters: workshopRoute,
   play: holds('ai-workshop'),
 };
 

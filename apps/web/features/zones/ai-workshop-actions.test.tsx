@@ -63,35 +63,39 @@ for (const locale of ['en', 'zh-Hans'] as const) {
     for (const kind of ['prompt', 'skill'] as const) {
       const work = works.find(item => item.hub?.kind === kind)!;
       for (const state of states) {
-        test(`${locale} ${layout} ${kind} Try: ${state.name}`, async () => {
-          answer = state.access;
-          reads = 0;
-          let supplied: WorkCardSlotProps | undefined;
-          const pkg: ZonePackage = { slug: 'ai-workshop', css: '', slots: {
-            workCard: props => { supplied = props; return <WorkshopCard {...props} />; },
-          } };
-          const card = await resolveCard(cardRenderer(zone, pkg, locale, zoneMessagesFor(locale))(work, { layout }));
-          const access = typeof state.access === 'string' ? NO_PLATFORM_ACCESS : state.access;
-          const html = renderToStaticMarkup(<ShellProvider locale={locale} messages={shellMessages}
-            initialTheme="light" initialCollapsed={false} platformAccess={access}>{card}</ShellProvider>);
-          expect(reads).toBe(1);
-          expect(supplied?.Link).toBe(LocalizedLink);
-          expect(supplied?.tryHref).toBe(state.open ? work.href : undefined);
-          expect(Object.hasOwn(supplied!, 'tryHref')).toBe(state.open);
-          const action = html.match(/<a\b[^>]*class="aw-try"[^>]*>[\s\S]*?<\/a>/)?.[0];
-          expect(Boolean(action)).toBe(state.open);
-          if (state.open) {
-            expect(action).toContain(`href="${localizedPath(work.href, locale)}"`);
-            expect(action).toContain(locale === 'en' ? 'Try it' : '试一试');
-            expect(action).toContain(work.title!.value);
-          }
-          expect(html).toContain('class="aw-copy"');
-          const existing = renderToStaticMarkup(<ShellProvider locale={locale} messages={shellMessages}
-            initialTheme="light" initialCollapsed={false} platformAccess={access}>
-            <OperationGate operation="getV1HubWorksById"><span>Try available</span></OperationGate>
-          </ShellProvider>);
-          expect(existing.includes('Try available')).toBe(Boolean(action));
-        });
+        for (const resolved of [false, true]) {
+          test(`${locale} ${layout} ${kind} Try: ${state.name}, ${resolved ? 'resolved host data' : 'server adapter'}`, async () => {
+            answer = state.access;
+            reads = 0;
+            let supplied: WorkCardSlotProps | undefined;
+            const pkg: ZonePackage = { slug: 'ai-workshop', css: '', slots: {
+              workCard: props => { supplied = props; return <WorkshopCard {...props} />; },
+            } };
+            const resolvedAccess = typeof state.access === 'string' ? null : state.access;
+            const card = await resolveCard(cardRenderer(zone, pkg, locale, zoneMessagesFor(locale), undefined,
+              resolved ? resolvedAccess : undefined)(work, { layout }));
+            const access = typeof state.access === 'string' ? NO_PLATFORM_ACCESS : state.access;
+            const html = renderToStaticMarkup(<ShellProvider locale={locale} messages={shellMessages}
+              initialTheme="light" initialCollapsed={false} platformAccess={access}>{card}</ShellProvider>);
+            expect(reads).toBe(resolved ? 0 : 1);
+            expect(supplied?.Link).toBe(LocalizedLink);
+            expect(supplied?.tryHref).toBe(state.open ? work.href : undefined);
+            expect(Object.hasOwn(supplied!, 'tryHref')).toBe(state.open);
+            const action = html.match(/<a\b[^>]*class="aw-try"[^>]*>[\s\S]*?<\/a>/)?.[0];
+            expect(Boolean(action)).toBe(state.open);
+            if (state.open) {
+              expect(action).toContain(`href="${localizedPath(work.href, locale)}"`);
+              expect(action).toContain(locale === 'en' ? 'Try it' : '试一试');
+              expect(action).toContain(work.title!.value);
+            }
+            expect(html).toContain('class="aw-copy"');
+            const existing = renderToStaticMarkup(<ShellProvider locale={locale} messages={shellMessages}
+              initialTheme="light" initialCollapsed={false} platformAccess={access}>
+              <OperationGate operation="getV1HubWorksById"><span>Try available</span></OperationGate>
+            </ShellProvider>);
+            expect(existing.includes('Try available')).toBe(Boolean(action));
+          });
+        }
       }
     }
     for (const hub of [null, undefined]) {

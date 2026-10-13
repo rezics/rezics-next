@@ -4,7 +4,7 @@ import type { ModuleSlotProps, WorkCardSlotProps, ZoneBrowseEntry, ZoneCardOptio
 import { materializeData } from 'native-i18n';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
-import { operationOpen } from '../api/platform-access.ts';
+import { operationOpen, type PlatformAccess } from '../api/platform-access.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { PageContainer } from '../shell/page.tsx';
 import { installHostZoneAddresses } from './addresses.ts';
@@ -47,21 +47,27 @@ const shows = (placed: PlacedModule) => placed.state.state === 'ready' || placed
 async function HubSlotCard({ Slot, ...props }: WorkCardSlotProps & { Slot: ComponentType<WorkCardSlotProps> }) {
   const { readPlatformAccess } = await import('../api/main.ts');
   const access = await readPlatformAccess();
-  return <Slot {...props} {...(operationOpen('getV1HubWorksById', access) ? { tryHref: props.work.href } : {})} />;
+  return slotCard(Slot, props, access);
 }
 
-function slotCard(Slot: ComponentType<WorkCardSlotProps>, props: WorkCardSlotProps): ReactNode {
-  return props.work.hub ? <HubSlotCard Slot={Slot} {...props} /> : <Slot {...props} />;
+function slotCard(Slot: ComponentType<WorkCardSlotProps>, props: WorkCardSlotProps,
+  access?: PlatformAccess | null): ReactNode {
+  if (!props.work.hub) return <Slot {...props} />;
+  // Browser compositions supply a resolved answer, including null for an unavailable read.
+  // Only an omitted answer needs the request-cached server adapter.
+  if (access === undefined) return <HubSlotCard Slot={Slot} {...props} />;
+  return <Slot {...props} {...(operationOpen('getV1HubWorksById', access) ? { tryHref: props.work.href } : {})} />;
 }
 
 /**
  * A catalogue card whose facts were not already loaded. The package only renders them;
  * this read is the statements and classifications the Work page already uses.
  */
-async function CatalogueSlotCard({ zone, work, options, locale, count, formatNames, Slot, fallback }: {
+async function CatalogueSlotCard({ zone, work, options, locale, count, formatNames, Slot, fallback, access }: {
   zone: ZoneContext; work: ZoneWork; options: ZoneCardOptions; locale: UiLocale;
   count: 'episodes' | 'volumes'; formatNames: readonly string[];
   Slot: ComponentType<WorkCardSlotProps>; fallback: ReactNode;
+  access?: PlatformAccess | null;
 }) {
   // Loaded only when a card still needs the read. Stories pass facts and never pull the server reader.
   // The year listing already holds the template's year. Use it when the statement page omitted the date.
@@ -69,7 +75,7 @@ async function CatalogueSlotCard({ zone, work, options, locale, count, formatNam
   const read = options.facts ?? await readCatalogueFacts(work.id, locale, count, formatNames);
   const facts = read.unavailable ? read : { ...read, years: catalogueYears(read.years, options.publicationYears) };
   return slotCard(Slot, { zone, work, layout: options.layout ?? 'cover', rank: options.rank, matches: options.matches,
-    facts, nextVolume: <NextVolume work={work.id} locale={locale} />, fallback, Link: LocalizedLink });
+    facts, nextVolume: <NextVolume work={work.id} locale={locale} />, fallback, Link: LocalizedLink }, access);
 }
 
 /**
@@ -78,7 +84,7 @@ async function CatalogueSlotCard({ zone, work, options, locale, count, formatNam
  * keyed by its Work, since modules set cards out as lists.
  */
 export function cardRenderer(zone: ZoneContext, pkg: ZonePackage | null, locale: UiLocale, messages: ZoneMessages,
-  avatarQuery?: string): CardRenderer {
+  avatarQuery?: string, access?: PlatformAccess | null): CardRenderer {
   installHostZoneAddresses();
   const Slot = pkg?.slots.workCard;
   const platform = (work: ZoneWork, options: ZoneCardOptions, whyHere: boolean) => options.layout === 'row'
@@ -94,9 +100,9 @@ export function cardRenderer(zone: ZoneContext, pkg: ZonePackage | null, locale:
     const fallback = platform(catalogue ? cataloguePlatformWork(work) : work, options, false);
     const card = catalogue && options.facts === undefined
       ? <CatalogueSlotCard zone={zone} work={work} options={options} locale={locale} count={catalogue.count}
-        formatNames={catalogue.formatNames} Slot={Slot} fallback={fallback} />
+        formatNames={catalogue.formatNames} Slot={Slot} fallback={fallback} access={access} />
       : slotCard(Slot, { zone, work, layout: options.layout ?? 'cover', rank: options.rank, matches: options.matches,
-        facts: options.facts, nextVolume: <NextVolume work={work.id} locale={locale} />, fallback, Link: LocalizedLink });
+        facts: options.facts, nextVolume: <NextVolume work={work.id} locale={locale} />, fallback, Link: LocalizedLink }, access);
     return <div key={work.id} className="relative">
       <SlotBoundary slot="workCard" fallback={fallback}>
         {card}
@@ -138,15 +144,17 @@ function renderModule(placed: PlacedModule, zone: ZoneContext, pkg: ZonePackage 
  * it on wide screens and after it on phones. Each module renders from the
  * platform registry unless the Zone's approved package fills its slot.
  */
-export function ZoneHome({ modules, zone, pkg, locale, messages, avatarQuery, empty, browse }: {
+export function ZoneHome({ modules, zone, pkg, locale, messages, avatarQuery, empty, browse, slotAccess }: {
   modules: readonly PlacedModule[]; zone: ZoneContext; pkg: ZonePackage | null;
   locale: UiLocale; messages: ZoneMessages; avatarQuery?: string;
   /** Shown when no module has anything yet. */
   empty: ReactNode;
   /** The search and filters the home leads with; none on a page without a browse page. */
   browse?: ZoneBrowseEntry;
+  /** A resolved host answer for browser compositions; omitted in the request-backed production flow. */
+  slotAccess?: PlatformAccess | null;
 }) {
-  const card = cardRenderer(zone, pkg, locale, messages, avatarQuery);
+  const card = cardRenderer(zone, pkg, locale, messages, avatarQuery, slotAccess);
   const visible = modules.filter(shows);
   // Navigation and dismissible notices cannot stand in for the home's actual content.
   const hasContent = visible.some(placed => placed.module.type !== 'announcement' && placed.module.type !== 'chip-nav');
