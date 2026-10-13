@@ -92,9 +92,25 @@ test('slow exchanges count token life from the request and renew within the defa
   // The renewal's ten-second response delay must not extend its lifetime either.
   now = 549_000;
   expect(await session.current()).toBe(`${client.clientId}-renewed`);
-  now = 560_000;
+  now = 550_000;
   expect(await session.current()).toBe(`${client.clientId}-renewed-2`);
   expect(calls.filter(call => call === 'POST /api/auth/oauth2/token')).toHaveLength(3);
+});
+
+test('a caller with no validity margin still expires a slow sign-in at its request-based deadline', async () => {
+  const { client } = issuer(false, false, 300);
+  let now = 0;
+  const send = client.fetch!;
+  client.fetch = async (input, init) => {
+    const response = await send(input, init);
+    if (new URL(String(input)).pathname === '/api/auth/oauth2/token') now += 10_000;
+    return response;
+  };
+  const session = await signIn(client, 'session=local', { now: () => now });
+  now = 299_999;
+  expect(await session.current(undefined, 0)).toBe(`${client.clientId}-access`);
+  now = 300_000;
+  expect(await session.current(undefined, 0)).toBe(`${client.clientId}-renewed`);
 });
 
 test('a request validity window refreshes before expiry and shares one rotating grant across concurrent callers', async () => {
