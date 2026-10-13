@@ -70,6 +70,26 @@ async function waitUntil(check: () => boolean): Promise<void> {
   }
 }
 
+/** Creation and truncation precede a fixture's write. Readiness is the complete
+ * record, including the detached child, and a resume publishes a new worker. */
+async function waitForWorkerReady(path: string, previousWorker?: number): Promise<{ worker: number; child: number }> {
+  let ready: { worker: number; child: number } | undefined;
+  await waitUntil(() => {
+    try {
+      const record = JSON.parse(readFileSync(path, 'utf8')) as { worker?: unknown; child?: unknown };
+      if (typeof record.worker !== 'number' || !Number.isSafeInteger(record.worker) || record.worker <= 0
+        || typeof record.child !== 'number' || !Number.isSafeInteger(record.child) || record.child <= 0
+        || record.worker === previousWorker) return false;
+      ready = { worker: record.worker, child: record.child };
+      return true;
+    } catch (error) {
+      if (error instanceof SyntaxError || (error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+      throw error;
+    }
+  });
+  return ready!;
+}
+
 /** Pauses a waiter on each poll so the test can choose who looks at the lock next. */
 function gatedSleep() {
   const pending: Array<() => void> = [];
@@ -92,7 +112,6 @@ function gatedSleep() {
     },
   };
 }
-
 
 const brief = `---
 id: G-040
@@ -2724,10 +2743,7 @@ child.on('close', code => process.exit(code ?? 1));
       const result = run(['dispatch', brief(id, { worktree })], { GOAL_ID: goal });
       expect(result.stderr).toBe('');
       expect(result.status).toBe(0);
-      const deadline = Date.now() + CLI_SPAWN_DEADLINE_MS;
-      while (!existsSync(join(ready, id)) && Date.now() < deadline) await Bun.sleep(20);
-      if (!existsSync(join(ready, id))) throw new Error(`dispatch ${id} did not become ready within ${CLI_SPAWN_DEADLINE_MS}ms`);
-      const pids = JSON.parse(readFileSync(join(ready, id), 'utf8')) as { worker: number; child: number };
+      const pids = await waitForWorkerReady(join(ready, id));
       workers.set(id, pids);
       return ledger().tasks[id]!;
     };
@@ -4500,15 +4516,13 @@ process.exit(0);
         writeFileSync(task.attempts.at(-1)!.output, JSON.stringify({ result: 'RESULT: partial\nNEXT: next step' }));
         r.save(ledger);
         expect(r.run(['resume', id, '-m', 'next step']).status).toBe(0);
-        await waitUntil(() => JSON.parse(readFileSync(join(r.dir, '.temp/ready', id), 'utf8')).worker !== r.workers.get(id)!.worker);
-        r.workers.set(id, JSON.parse(readFileSync(join(r.dir, '.temp/ready', id), 'utf8')));
+        r.workers.set(id, await waitForWorkerReady(join(r.dir, '.temp/ready', id), r.workers.get(id)!.worker));
         await r.stopFixture(id);
         expect(r.ledger().tasks[id]!.attempts.at(-1)!.round).toBe('step');
       }
       for (let fix = 0; fix < 2; fix++) {
         expect(r.run(['resume', id, '-m', 'fix the failing test']).status).toBe(0);
-        await waitUntil(() => JSON.parse(readFileSync(join(r.dir, '.temp/ready', id), 'utf8')).worker !== r.workers.get(id)!.worker);
-        r.workers.set(id, JSON.parse(readFileSync(join(r.dir, '.temp/ready', id), 'utf8')));
+        r.workers.set(id, await waitForWorkerReady(join(r.dir, '.temp/ready', id), r.workers.get(id)!.worker));
         await r.stopFixture(id);
         expect(r.ledger().tasks[id]!.attempts.at(-1)!.round).toBe('fix');
       }
@@ -4568,8 +4582,7 @@ process.exit(0);
       expect(resumed.stderr).toBe(''); expect(resumed.status).toBe(0);
       expect(r.ledger().tasks[id]!.attempts.at(-1)!.round).toBe('step');
       expect(r.ledger().tasks[id]!.attempts.filter(attempt => attempt.round === 'fix')).toHaveLength(2);
-      await waitUntil(() => JSON.parse(readFileSync(join(r.dir, '.temp/ready', id), 'utf8')).worker !== r.workers.get(id)!.worker);
-      r.workers.set(id, JSON.parse(readFileSync(join(r.dir, '.temp/ready', id), 'utf8')));
+      r.workers.set(id, await waitForWorkerReady(join(r.dir, '.temp/ready', id), r.workers.get(id)!.worker));
       await r.stopFixture(id);
       const refused = r.run(['resume', id, '-m', 'fix the tests']);
       expect(refused.status).toBe(1); expect(refused.stderr).toContain('two fix rounds exhausted');
@@ -4657,11 +4670,7 @@ process.exit(0);
       const result = r.run(['resume', 'G-001', '-m', 'continue', '--engine', 'claude', '--force-usage']);
       expect(result.stderr).toBe('');
       expect(result.status).toBe(0);
-      const deadline = Date.now() + CLI_SPAWN_DEADLINE_MS;
-      while (r.workers.get('G-001')!.worker === (JSON.parse(readFileSync(join(r.dir, '.temp/ready/G-001'), 'utf8')) as { worker: number }).worker
-        && Date.now() < deadline) await Bun.sleep(20);
-      const pids = JSON.parse(readFileSync(join(r.dir, '.temp/ready/G-001'), 'utf8')) as { worker: number; child: number };
-      if (pids.worker === r.workers.get('G-001')!.worker) throw new Error(`resume G-001 did not become ready within ${CLI_SPAWN_DEADLINE_MS}ms`);
+      const pids = await waitForWorkerReady(join(r.dir, '.temp/ready/G-001'), r.workers.get('G-001')!.worker);
       r.workers.set('G-001', pids);
       expect(r.ledger().tasks['G-001']!.attempts).toHaveLength(2);
     } finally { r.cleanup(); }
@@ -4689,11 +4698,7 @@ process.exit(0);
       expect(status.stdout).toContain(refusal!);
       const resumed = r.run(['resume', task.id, '-m', 'continue']);
       expect(resumed.status).toBe(0);
-      const deadline = Date.now() + CLI_SPAWN_DEADLINE_MS;
-      while (r.workers.get(task.id)!.worker === (JSON.parse(readFileSync(join(r.dir, '.temp/ready', task.id), 'utf8')) as { worker: number }).worker
-        && Date.now() < deadline) await Bun.sleep(20);
-      const pids = JSON.parse(readFileSync(join(r.dir, '.temp/ready', task.id), 'utf8')) as { worker: number; child: number };
-      if (pids.worker === r.workers.get(task.id)!.worker) throw new Error(`resume ${task.id} did not become ready within ${CLI_SPAWN_DEADLINE_MS}ms`);
+      const pids = await waitForWorkerReady(join(r.dir, '.temp/ready', task.id), r.workers.get(task.id)!.worker);
       r.workers.set(task.id, pids);
       expect(r.ledger().tasks[task.id]!.state).toBe('running');
       expect(r.ledger().tasks[task.id]!.refusal).toBeUndefined();
