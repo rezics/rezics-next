@@ -507,6 +507,7 @@ Pass command arguments after `--`; run `task --list` for the live command menu.
 | `task api:fuzz` | Run Schemathesis against Main's generated OpenAPI contract on an isolated stack. |
 | `task gen` | Regenerate model, OpenAPI and pinned-image artifacts and the toolchain inventory. |
 | `task gen:check` | Fail if generated artifacts are stale. |
+| `task operation` | Find Main API operation declarations, handlers and calling tests. |
 | `task jena:check` | Validate Turtle and assemblers, parse one reviewed query, and record scratch TDB2 statistics with the pinned Jena CLI. |
 | `task toolchain:inventory` | Regenerate the toolchain inventory from manifests and root commands. |
 | `task dataset:fetch` | Explicitly capture complete real-world series into the external local dataset store. |
