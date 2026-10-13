@@ -16,6 +16,7 @@ import { finishOperatorRestore, type OperatorRestoreReleaseContext }
   from '../../../scripts/ops/restore.ts';
 import { ownerRestoreErasureFixture, restoreKey } from './owner-restore-erasure-fixture.ts';
 import { pinnedImage } from './search-ops-support.ts';
+import { fusekiImageTag } from '../../../scripts/dev/fuseki-image.ts';
 
 const quotedPayload = 'erased native HTTP fixture payload';
 const authoredBody = 'authored annotation stays';
@@ -129,7 +130,7 @@ function assertPresent(row: SourceRow, cut: QuotedCut) {
 }
 
 test('physical owner restore replays one retained journal over an independent copy and drops the quote', async () => {
-  expect(pinnedImage()).toBe('rezics/fuseki:6.2.0-cmd0.5.39-835daa8774ac');
+  expect(pinnedImage()).toBe(fusekiImageTag(join(import.meta.dir, '../../..')));
   const fixture = await ownerRestoreErasureFixture();
   const operationStarted = Date.now();
   try {

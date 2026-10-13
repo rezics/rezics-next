@@ -52,6 +52,43 @@ test('standalone creation grants Fuseki sixty seconds and stop records the succe
   expect(record).toMatchObject({ container: containerName, durationMs: 25, succeeded: true });
 });
 
+test('readiness preserves the JVM refusal and redacts secrets before failed-copy disposal', async () => {
+  const artifactDir = join(scratch, 'readiness');
+  mkdirSync(artifactDir, { recursive: true });
+  const readinessFailure = new Error('Fuseki did not become ready');
+  const { docker, calls } = createExecutor(args => args[0] === 'logs'
+    ? result(0, `Exception: incompatible retained source ${input.secrets.FUSEKI_COMMAND_TOKEN}`)
+    : result());
+  let allocated: Awaited<ReturnType<typeof standaloneFuseki>> | undefined;
+
+  await expect(standaloneFuseki({}, input, {
+    docker, artifactDir, onAllocated: graph => { allocated = graph; },
+    waitForReady: async () => { throw readinessFailure; },
+  })).rejects.toBe(readinessFailure);
+
+  expect(allocated?.name).toBe(containerName);
+  expect(calls.map(call => call.args[0])).toEqual(['run', 'logs']);
+  expect(calls[1]?.timeout).toBe(5_000);
+  const logs = readFileSync(join(artifactDir, `standalone-fuseki-readiness-${containerName}.log`), 'utf8');
+  expect(logs).toContain('Exception: incompatible retained source');
+  expect(logs).not.toContain(input.secrets.FUSEKI_COMMAND_TOKEN);
+
+  await expect(allocated!.runner.start()).rejects.toBe(readinessFailure);
+  expect(calls.map(call => call.args[0])).toEqual(['run', 'logs', 'start', 'logs']);
+});
+
+test('readiness preserves its failure when Docker cannot collect startup evidence', async () => {
+  const readinessFailure = new Error('Fuseki did not become ready');
+  const { docker, calls } = createExecutor(args => args[0] === 'logs'
+    ? result(1, '', 'daemon unavailable') : result());
+
+  await expect(standaloneFuseki({}, input, {
+    docker, waitForReady: async () => { throw readinessFailure; },
+  })).rejects.toBe(readinessFailure);
+
+  expect(calls.map(call => call.args[0])).toEqual(['run', 'logs']);
+});
+
 test('stop preserves the daemon failure when bounded evidence commands fail', async () => {
   const artifactDir = join(scratch, 'failed-diagnostics');
   const daemonFailure = new Error(`docker stop failed: Error response from daemon: cannot stop container: ${containerName}: tried to kill container, but did not receive an exit event`);

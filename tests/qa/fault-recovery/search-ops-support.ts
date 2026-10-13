@@ -171,7 +171,8 @@ export function qaStack(runId: string, stackOptions: { rawUpdate?: boolean } = {
       },
       start: async () => {
         // Restart the stopped container without making Compose reconcile its retained volume.
-        const id = stoppedFusekiContainer ?? ok(['ps', '-q', '--no-trunc', 'fuseki']).trim();
+        // Fault drills can kill it without going through this runner's stop().
+        const id = stoppedFusekiContainer ?? ok(['ps', '-a', '-q', '--no-trunc', 'fuseki']).trim();
         if (!id) throw new Error('Fuseki container is unavailable before start');
         const result = docker(['start', id]);
         if (result.error || result.status !== 0) {
@@ -347,6 +348,21 @@ dependencies: StandaloneFusekiDependencies = {}): Promise<StandaloneFuseki> {
   const now = dependencies.now ?? (() => performance.now());
   const artifacts = dependencies.artifactDir ?? process.env.REZICS_QA_ARTIFACT_DIR;
   const secrets = Object.values(input.secrets);
+  const ready = async () => {
+    try {
+      await waitForReady(url);
+    } catch (error) {
+      // Keep the JVM's startup refusal before callers dispose of the failed copy.
+      try {
+        const logs = redactDiagnostic(dockerOutput(execute,
+          ['logs', '--tail', '80', input.name], owned, 5_000), secrets).slice(-8_000);
+        if (artifacts) writeFileSync(join(artifacts,
+          `standalone-fuseki-readiness-${input.name.replace(/[^a-zA-Z0-9_.-]/g, '_')}.log`), logs, { mode: 0o600 });
+        console.error(`standalone Fuseki readiness failed: ${input.name}\n${logs}`);
+      } catch { /* diagnostics must preserve the readiness failure */ }
+      throw error;
+    }
+  };
   const container: StandaloneFuseki = { name: input.name, url,
     runner: {
       exec: script => dockerOutput(execute, ['exec', input.name, 'sh', '-ec', script], owned, 120_000),
@@ -372,7 +388,7 @@ dependencies: StandaloneFusekiDependencies = {}): Promise<StandaloneFuseki> {
           throw error;
         }
       },
-      start: async () => { dockerOutput(execute, ['start', input.name], owned, 60_000); await waitForReady(url); },
+      start: async () => { dockerOutput(execute, ['start', input.name], owned, 60_000); await ready(); },
       container: () => dockerOutput(execute, ['ps', '-q', '--no-trunc', '--filter', `name=^${input.name}$`], owned, 10_000).trim(),
     },
     remove: () => {
@@ -394,7 +410,7 @@ dependencies: StandaloneFusekiDependencies = {}): Promise<StandaloneFuseki> {
     ...(input.mounts ?? []).flatMap(mount => ['--volume', mount]),
     ...Object.entries(input.secrets).flatMap(([key, value]) => ['--env', `${key}=${value}`]),
     input.image, ...(input.command ?? [])], owned, 60_000);
-  await waitForReady(url);
+  await ready();
   return container;
 }
 
