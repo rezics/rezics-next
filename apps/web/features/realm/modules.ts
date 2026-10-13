@@ -34,20 +34,25 @@ import {
   zoneText,
   zoneWork,
 } from './adapt.ts';
-import {
-  readLatestChapters,
-  readNewAdoptions,
-  readRankings,
-  readRealmWorks,
-  readRecentDecisions,
-  readRecentlyCompleted,
-  readRising,
-  readZoneDiscussions,
-  readZoneEditorLists,
-  readZoneGenres,
-  readZoneQuotes,
-  readZoneRoute,
-} from './read.ts';
+// Loaded when a module actually reads Main. Importing this file must stay usable in a browser story:
+// `read.ts` reaches the server request store, and a slide with no Works never calls these.
+type RealmRead = typeof import('./read.ts');
+function lazyRead<K extends keyof RealmRead>(name: K): RealmRead[K] {
+  return ((...args: Parameters<RealmRead[K]>) => import('./read.ts').then(reads =>
+    (reads[name] as (...args: Parameters<RealmRead[K]>) => ReturnType<RealmRead[K]>)(...args))) as RealmRead[K];
+}
+const readLatestChapters = lazyRead('readLatestChapters');
+const readNewAdoptions = lazyRead('readNewAdoptions');
+const readRankings = lazyRead('readRankings');
+const readRealmWorks = lazyRead('readRealmWorks');
+const readRecentDecisions = lazyRead('readRecentDecisions');
+const readRecentlyCompleted = lazyRead('readRecentlyCompleted');
+const readRising = lazyRead('readRising');
+const readZoneDiscussions = lazyRead('readZoneDiscussions');
+const readZoneEditorLists = lazyRead('readZoneEditorLists');
+const readZoneGenres = lazyRead('readZoneGenres');
+const readZoneQuotes = lazyRead('readZoneQuotes');
+const readZoneRoute = lazyRead('readZoneRoute');
 import { idOf, realmHref, siteHref } from './route.ts';
 import type { Loaded, MainAvatar, MainName, RankingMetric, ZonePresentationRead } from './types.ts';
 
