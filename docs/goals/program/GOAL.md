@@ -77,8 +77,8 @@ never run together.
 ## How managers run from now on
 
 Decided on 2026-10-13 by the supermanager at the maintainer's request (context
-length is the cost; managers are autonomous and supervise each other; agents
-maintain termspaces).
+length is the cost; managers are trusted and main's scheduled checks trust no
+one; agents maintain termspaces).
 The [next tasks](#next-tasks) build what is not yet in the tool; until one
 lands, a manager applies its rule by hand and says so.
 
@@ -107,16 +107,27 @@ lands, a manager applies its rule by hand and says so.
   starts one with that mail first. Half of the supermanager's mail on
   2026-10-13 said "no reply needed" and still cost a turn of over 100,000
   tokens each.
-- **Managers are autonomous and supervise each other.** A manager decides
-  everything inside its Goal and settles a cross-Goal matter with the other
-  manager by mail, without the supermanager; on 2026-10-13 every such matter
-  went through the supermanager and cost it a turn. They supervise each other
-  by what can be checked: the consumer's tests and guards on the producer's
-  contract, the nightly regression that routes a failure to its owner, the
-  measures `status` prints for every Goal, and a design note for a shared
-  mechanism read by the manager whose callers it touches. Supervision is not
-  one manager reading another's diffs: that is the review without a limit that
-  the method ended.
+- **Managers are autonomous and trusted.** A manager decides everything inside
+  its Goal, reads its own workers' design notes, and settles a cross-Goal
+  matter with the other manager by mail, without the supermanager; on
+  2026-10-13 every such matter went through the supermanager and cost it a
+  turn. No manager checks another.
+- **Main's scheduled checks trust no one.** The run on a pinned commit of `main`
+  belongs to the program's schedule and to no manager, and it is there to find
+  fault. It runs every tier outside the browser, one journey for each vertical
+  and every outcome test. A row counts as proved when that run passed it on
+  `main`: `status` prints the rows declared beside the rows confirmed. A bounded
+  audit, by an auditor identity that proved none of them, tries each newly
+  proved row as its personas and reports a fault only with a failing test
+  through the public API. A fault reopens the cell and goes to its owner's
+  inbox; a manager can acknowledge it and cannot clear it.
+- **Tests are admitted by the tool, not by a manager's wish.** The host is the
+  limit (62 GB; the full run took over three and a half hours beside workers on
+  2026-10-13). A worker runs its own files in one QA slot. A landing runs the
+  affected unit files and the guards in a gate lane. Whole tiers, browser runs
+  and the regression start only from the schedule, one at a time and when no
+  worker is live. Each Goal has a share of the QA slots, and `goalctl` refuses
+  the rest. Autonomy is over decisions, not over the host.
 - **One resident supermanager, not split.** It is the session the maintainer
   talks to, in its own window. It owns the scope and the method, arbitrates
   what two managers cannot settle, reads the measures, and brings the
@@ -163,17 +174,20 @@ at run time.
    known.
 4. **Shared host and allowance.** Host memory, QA slots, gate lanes, the shared
    development stack and its refresh, each account's allowance.
-5. **Main-wide regression.** `task goal -- regress --nightly` on a pinned commit
-   each night, with one browser journey for each vertical.
+5. **Main's scheduled checks.** `task goal -- regress --nightly` on a pinned
+   commit each night, and the audit of newly proved rows. They are the
+   program's, they trust no manager, and their result is the progress figure.
 6. **Managers.** Configure each delivery Goal's manager role when its row in the
-   table above says so, and arbitrate what two managers cannot settle. A
-   manager brings the supermanager a scope promotion, a disagreement with
-   another manager, and what it would ask the maintainer; nothing else.
+   table above says so, and trust it. A manager brings the supermanager a scope
+   promotion, a matter two managers could not settle, and what it would ask the
+   maintainer; nothing else.
 7. **Mechanism design notes.** A design note for a shared mechanism is read
-   before its code is written by the manager whose callers it touches, and by
-   the supermanager when it touches several Goals or the two disagree. A note
-   that names a mechanism to build instead of an observable outcome is refused.
-8. **One row first.** Before a Goal writes tests against new tooling, the
+   before its code is written by its Goal's manager, who refuses one that names
+   a mechanism to build instead of an observable outcome. The supermanager
+   reads a note when a manager asks.
+8. **The host.** Tests are admitted by the tool; whole tiers and browser runs
+   are the schedule's.
+9. **One row first.** Before a Goal writes tests against new tooling, the
    program proves one row with it from end to end.
 
 ## Next tasks
@@ -190,9 +204,12 @@ measures in `status`; `coordinator start` and mail with a sender and a deadline;
 | N3 | The coordinator lands and closes what needs no judgment, starts a short fresh turn for an event, bounds a turn, delivers mail by level, and records each turn (reason, context, actions) |
 | N4 | `goalctl` maintains termspaces: it registers and removes the window of every turn and worker, `status` names each one's window, and nothing of a Goal runs on another tmux server |
 | N5 | One command answers what a persona gets from an operation on a pooled QA stack and can record the response for a story; a generated index gives each operation's route file, owner and tests |
-| N6 | The surface gate (types, unit tests, the changed stories fed by recorded responses); the measures read each attempt's recorded round; a cancelled task names its reason and what replaces it; an attempt has a budget of model calls |
+| N6 | The surface gate (types, unit tests, the changed stories fed by recorded responses); the measures read each attempt's recorded round; a cancelled task names its reason and what replaces it; an attempt has a budget of model calls; a mechanism brief's note is marked read by its Goal's manager |
+| N7 | Main's scheduled run is the judge: `status` prints the rows the last run on `main` confirmed beside the rows declared; a bounded audit tries each newly proved row as its personas and reports only with a failing test; a fault reopens the cell for its owner, who can acknowledge it and cannot clear it |
+| N8 | Tests are admitted by the tool: whole tiers, browser runs and `regress` start only from the program's schedule, one at a time and when no worker is live; each Goal has a share of the QA slots; `goalctl` refuses the rest. The full run's three and a half hours are measured by batch and cut |
 
-N1 and N2 start together. N3 follows N2, N4 follows N3, N5 runs beside N3. The
+N1 and N2 start together. N3 follows N2, N4 follows N3, N5 and N8 run beside N3,
+N7 follows N1. The
 api Goal resumes its 18 tasks after N4, with its matrices read by turns side by
 side. termspaces needs one thing it lacks in 0.2.0 for N4, removing a single
 window; until it has it, `goalctl` removes the window on termspaces' socket.

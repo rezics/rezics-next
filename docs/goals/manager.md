@@ -90,13 +90,17 @@ wording and directions that later ones replaced are in this file's history.
 10. **Maintainer edits win** (2026-09-27). The maintainer may change any
     document at any time. Detect such changes, adapt, and never revert one
     silently ([documentation changes](README.md#maintainer-documentation-changes)).
-11. **Managers are autonomous; the supermanager arbitrates** (2026-10-07,
-    2026-10-13). "各个 manager 自治，互相监督." The maintainer does not see
-    managers' sessions. A manager settles a cross-Goal matter with the other
-    manager, and they check each other by what the tool can check. What two
-    managers cannot settle, a scope promotion and what a manager would ask the
-    maintainer go to the [program](program/GOAL.md)'s supermanager, who decides
-    within this charter and passes on only what needs him.
+11. **Managers are trusted; main's checks are not theirs** (2026-10-07,
+    2026-10-13). "我们得信任 manager，然后不需要 manager 之间的互相监督，但是 main
+    的定时回归检查，包括全量测试之类的则不应该信任 manager，就是要找毛病的." A
+    manager decides inside its Goal and settles a cross-Goal matter with the
+    other manager; no manager checks another. The scheduled run on `main` is the
+    program's, trusts no manager and is there to find fault. Autonomy is not
+    over the host: "manager 自治肯定是不能随便测试的，不然本机资源不是很够", so
+    tests are admitted by the tool. The maintainer does not see managers'
+    sessions: a scope promotion, what two managers cannot settle and what a
+    manager would ask him go to the [program](program/GOAL.md)'s supermanager,
+    who passes on only what needs him.
 12. **Context length is the cost** (2026-10-13). "opus 用量到不是不够，主要是 token
     效率 … 就是上下文太长." A manager's state lives in the repository and the
     ledger, and a session is short and starts from them. Manager and researcher
