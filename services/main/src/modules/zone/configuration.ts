@@ -273,6 +273,20 @@ const siteReceiptMetadata = ['zone', 'revision', 'routesRevision', 'navigationRe
  * or retirement. O(pages), one bounded receipt lookup, no Content body reads. */
 export async function readZoneSitePublicationReceipt(env: WorkActivationEnvironment,
   receipt: string, allowErasedHome = false): Promise<ZoneSitePublicationReceipt | null> {
+  return readSiteReceipt(env, receipt, allowErasedHome);
+}
+
+/** A terminal pin needs only its own retained binding. Never reuse this proof
+ * across pins or publications; erasure and retained authority are checked anew. */
+export async function readZoneSitePublishedPageReceipt(env: WorkActivationEnvironment, receipt: string,
+  pin: { resourceId: string; variantId: string; revisionId: string; byteDigest: string }):
+  Promise<ZoneSitePublicationReceipt | null> {
+  return readSiteReceipt(env, receipt, false, pin);
+}
+
+async function readSiteReceipt(env: WorkActivationEnvironment, receipt: string, allowErasedHome: boolean,
+  pin?: { resourceId: string; variantId: string; revisionId: string; byteDigest: string }):
+  Promise<ZoneSitePublicationReceipt | null> {
   const result = await env.fuseki.query(`PREFIX rv: <${RV}>
     SELECT ?zone ?revision ?routesRevision ?navigationRevision ?themeRevision ?count
       ?admissionId ?digest ?authorityEpoch ?scope ?dataEpoch ?sequence ?binding ?page ?variant ?contentRevision ?language
@@ -311,11 +325,20 @@ export async function readZoneSitePublicationReceipt(env: WorkActivationEnvironm
         FILTER NOT EXISTS { ?homeRevision rv:publishedPage ?foreignBinding .
           FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} rv:publishedPage ?foreignBinding } } }
         } })
+      ${pin ? `FILTER(?page = ${iri(pin.resourceId)} && ?variant = ${iri(pin.variantId)}
+        && ?contentRevision = ${iri(`urn:rezics:content:revision:${pin.revisionId}`)}
+        && ?byteDigest = ${lit(pin.byteDigest)})
+      { SELECT (COUNT(?retainedBinding) AS ?retainedCount) WHERE {
+        { SELECT ?retainedBinding WHERE { GRAPH ${iri(GRAPHS.receipts)} {
+          ${iri(receipt)} rv:publishedPage ?retainedBinding }
+        } LIMIT ${ZONE_SITE_PUBLICATION_COST.receiptRows} }
+      } }
+      FILTER(?count = ?retainedCount)` : ''}
       } ORDER BY STR(?binding) LIMIT ${ZONE_SITE_PUBLICATION_COST.receiptRows} }
       OPTIONAL { SELECT ?firstBinding WHERE {
         GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} rv:publishedPage ?firstBinding }
       } ORDER BY STR(?firstBinding) LIMIT 1 }
-      BIND(!BOUND(?binding) || ?binding = ?firstBinding AS ?receiptMetadata)
+      BIND(${pin ? 'true' : '!BOUND(?binding) || ?binding = ?firstBinding'} AS ?receiptMetadata)
       ${siteReceiptMetadata.map(field =>
         `BIND(IF(?receiptMetadata, ?receipt_${field}, ?receiptAbsent) AS ?${field})`).join('\n      ')}
     } ORDER BY STR(?binding) LIMIT ${ZONE_SITE_PUBLICATION_COST.receiptRows}`, ZONE_SITE_PUBLICATION_COST.receiptResponseBytes);
@@ -334,6 +357,7 @@ export async function readZoneSitePublicationReceipt(env: WorkActivationEnvironm
   if (rows.length > ZONE_SITE_PUBLICATION_COST.maxPages
     || metadata.some(key => !get(key) || rows.some(row => row[key]?.value !== get(key)))
     || (homeErased ? rows.length !== 1 || !/^(?:[1-9]|[12][0-9]|3[0-2])$/.test(get('count') ?? '')
+      : pin ? rows.length !== 1 || !/^(?:[1-9]|[12][0-9]|3[0-2])$/.test(get('count') ?? '')
       : get('count') !== String(rows.length))
     || get('scope') !== `zone:edit:${get('zone')}`
     || !!get('publishedThemeRevision') !== !!get('publishedThemeActivation')

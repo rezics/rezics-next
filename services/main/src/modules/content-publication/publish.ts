@@ -12,7 +12,7 @@ import { ContentEmbedDenied, assertPublicContentEmbeds, publicContentEmbedCondit
   publicContentEmbedGuards }
   from './embed-closure.ts';
 import { contentTargetGuard, type ContentTarget } from './draft.ts';
-import { readZoneSitePublicationReceipt } from '../zone/configuration.ts';
+import { readZoneSitePublishedPageReceipt } from '../zone/configuration.ts';
 
 const NONE = 'urn:rezics:none';
 const REVISION_IRI_PREFIX = 'urn:rezics:content:revision:';
@@ -555,8 +555,8 @@ export async function settleZonePageContentPublication(env: WorkActivationEnviro
   Awaited<ReturnType<ContentCore['settlePublication']>>> {
   const preparation = await content.readPublicationPreparation(preparationId);
   if (!preparation) throw new ContentPublicationConflict('Content page pin is absent');
-  const publication = await readZoneSitePublicationReceipt(env, siteReceipt);
   const ref = preparation.reference;
+  const publication = await readZoneSitePublishedPageReceipt(env, siteReceipt, ref);
   if (!publication
     || !publication.pages.some(page => page.page === ref.resourceId
       && page.variantId === ref.variantId && page.revisionId === ref.revisionId

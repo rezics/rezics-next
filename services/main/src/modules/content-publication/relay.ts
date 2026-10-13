@@ -7,7 +7,7 @@ import { DATASET, GRAPHS, PUBLIC_SEARCH_ANCHOR, RV, hash, iri, lit,
 import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
 import { ContentProjectionUnavailable, extractProjectionText, projectionRecipeFor } from './projection-recipes.ts';
 import { graphRevisionSuppressed } from '../erasure/graph.ts';
-import { readZoneSitePublicationReceipt } from '../zone/configuration.ts';
+import { readZoneSitePublishedPageReceipt } from '../zone/configuration.ts';
 import { zonePublishedPageBinding } from '../zone/config-format.ts';
 import { compositionReceiptIri, readCompositionReceipt } from '../structure/change.ts';
 import { readContentEligibilityStatesForVariants } from './eligibility-state.ts';
@@ -185,7 +185,7 @@ async function sitePublicationProof(env: WorkActivationEnvironment, publication:
       GRAPH ${iri(GRAPHS.receipts)} { ${iri(graph.receipt)} rv:sitePublicationRevision ?site . }
     }`, 1024);
     if (marker.boolean !== true) return false;
-    const site = await readZoneSitePublicationReceipt(env, graph.receipt);
+    const site = await readZoneSitePublishedPageReceipt(env, graph.receipt, ref);
     if (!site) throw new ContentProjectionUnavailable('site publication receipt is incomplete');
     if (site.dataEpoch !== graph.dataEpoch || site.sequence !== graph.sequence
       || !site.pages.some(page => page.page === ref.resourceId && page.variantId === ref.variantId

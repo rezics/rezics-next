@@ -9,8 +9,13 @@ import { preserveReapEnvironment } from '../../../scripts/qa/container-reaper.ts
 import { FusekiClient, type SparqlResult } from '../src/infrastructure/fuseki.ts';
 import { compositionReceiptIri } from '../src/modules/structure/change.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
-import { readZoneSitePublicationReceipt, ZoneUnavailable } from '../src/modules/zone/configuration.ts';
+import { readZoneSitePublicationReceipt, readZoneSitePublishedPageReceipt, ZoneUnavailable } from '../src/modules/zone/configuration.ts';
 import { ZONE_SITE_PUBLICATION_COST, zonePublishedPageBinding } from '../src/modules/zone/config-format.ts';
+
+import type { ContentCore, ContentOutboxEvent, ProjectionPublication } from '../../content/src/core.ts';
+import type { ContentProjectionCursor } from '../../content/src/projection-cursor.ts';
+import { settleZonePageContentPublication } from '../src/modules/content-publication/publish.ts';
+import { relayContentProjectionOnce } from '../src/modules/content-publication/relay.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const resource = () => `https://rezics.com/id/${randomUUID()}`;
@@ -68,7 +73,10 @@ function fixture(count: number, erased = false) {
   return { data, receipt, pages, expected, environment };
 }
 
-async function nativeProjection(f: ReturnType<typeof fixture>, allowErasedHome = false) {
+async function nativeProjection(f: ReturnType<typeof fixture>, allowErasedHome = false, pin?: Parameters<typeof readZoneSitePublishedPageReceipt>[2]) {
+  const read = (fuseki: FusekiClient) => pin
+    ? readZoneSitePublishedPageReceipt(f.environment(fuseki), f.receipt, pin)
+    : readZoneSitePublicationReceipt(f.environment(fuseki), f.receipt, allowErasedHome);
   let query = '';
   class Capture extends FusekiClient {
     override async query(sparql: string, limit?: number): Promise<SparqlResult> {
@@ -77,7 +85,7 @@ async function nativeProjection(f: ReturnType<typeof fixture>, allowErasedHome =
       return { results: { bindings: [] } };
     }
   }
-  await readZoneSitePublicationReceipt(f.environment(new Capture('http://receipt.invalid')), f.receipt, allowErasedHome);
+  await read(new Capture('http://receipt.invalid'));
   const prefix = randomUUID();
   writeFileSync(join(directory, `${prefix}.trig`), f.data);
   writeFileSync(join(directory, `${prefix}.rq`), query);
@@ -96,7 +104,7 @@ async function nativeProjection(f: ReturnType<typeof fixture>, allowErasedHome =
     return new Response(result.stdout, { headers: { 'content-type': 'application/sparql-results+json' } });
   } });
   try {
-    const receipt = await readZoneSitePublicationReceipt(f.environment(new FusekiClient(server.url.href)), f.receipt, allowErasedHome);
+    const receipt = await read(new FusekiClient(server.url.href));
     expect(calls).toBe(1);
     return { receipt, wire, bytes: Buffer.byteLength(result.stdout) };
   } finally { await server.stop(true); }
@@ -149,3 +157,91 @@ test('an erased home retains campaign proof even after its page links are remove
   expect(wire.results!.bindings).toHaveLength(1);
   expect(receipt).toEqual({ ...f.expected, homeErased: true, pages: [] });
 }, 120_000);
+
+
+test('request settlement and relay recovery read one retained row per exact pin, including replay', async () => {
+  for (const count of [8, 16, 32]) {
+    const f = fixture(count), full = await nativeProjection(f);
+    const first = f.pages[0]!;
+    const nativePin = await nativeProjection(f, false, { resourceId: first.page, ...first });
+    expect(nativePin.wire.results!.bindings).toHaveLength(1);
+    expect(nativePin.receipt!.pages).toEqual([first]);
+    const header = full.wire.results!.bindings[0]!;
+    const retained = full.wire.results!.bindings.map(row => ({ ...header, ...row }));
+    const contentEpoch = randomUUID();
+    const position = (sequence: string) => ({ owner: 'content' as const, dataEpoch: contentEpoch, sequence });
+    const publications = f.pages.map((page, index): ProjectionPublication => ({
+      preparationId: `content-site-pin:${f.expected.admissionId}:${page.revisionId}`,
+      preparationPosition: position(String(index + 1)), status: 'active',
+      reference: { resourceId: page.page, variantId: page.variantId, revisionId: page.revisionId,
+        format: 'rezics-content-json-v1', model: 'content-shape-v1', byteDigest: page.byteDigest, byteLength: 12,
+        language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr', sourceRevision: null,
+        predecessor: null, provenance: {} },
+      graph: { outcome: 'active', revisionId: page.revisionId, receipt: f.receipt,
+        dataEpoch: f.expected.dataEpoch, sequence: f.expected.sequence },
+    }));
+    const events = publications.map((p, index): ContentOutboxEvent => ({ id: `terminal-${index}`,
+      position: position(String(index + 1)), operationId: `settle-${index}`,
+      eventType: 'content.publication.active', recipe: 'content-body-v1', revisionId: p.reference.revisionId, payload: {} }));
+    let rows = 0, settlements = 0, custodyOpen = true, epoch = contentEpoch;
+    class RetainedProof extends FusekiClient {
+      override async query(query: string): Promise<SparqlResult> {
+        if (query.includes('SELECT ?zone ?revision')) {
+          // The native projections above verify the selected query. Count actual
+          // returned rows here: a former full-receipt loop returns count² rows.
+          const selected = query.includes('FILTER(?page =')
+            ? retained.filter(row => query.includes(`?contentRevision = <${row.contentRevision!.value}>`)) : retained;
+          rows += selected.length;
+          return { results: { bindings: selected } };
+        }
+        return { boolean: custodyOpen };
+      }
+    }
+    const env = f.environment(new RetainedProof('http://receipt.invalid'));
+    const content = { ownerPosition: async () => ({ ...position(String(count)), dataEpoch: epoch }),
+      readPublicationPreparation: async (id: string) => {
+        const p = publications.find(p => p.preparationId === id);
+        return p ? { operationId: id, reference: p.reference, position: p.preparationPosition,
+          status: 'pending', pinActive: true, replayed: false } : null;
+      },
+      settlePublication: async (_id: string, pin: string, proof: unknown, expectedEpoch: string) => {
+        const p = publications.find(p => p.preparationId === pin)!;
+        expect(proof).toEqual(p.graph); expect(expectedEpoch).toBe(contentEpoch); settlements++;
+        return { position: position(String(count)), replayed: false };
+      },
+      readProjectionPublication: async (event: ContentOutboxEvent) => publications[events.indexOf(event)],
+      readPublicationErasureSupersession: async () => null,
+      readOutbox: async () => [], sequencePending: async () => false,
+    } as unknown as ContentCore;
+    for (let replay = 0; replay < 2; replay++) {
+      rows = 0;
+      for (const p of publications) await settleZonePageContentPublication(env, content, p.preparationId, f.receipt);
+      expect(rows).toBe(count);
+    }
+    expect(settlements).toBe(2 * count);
+    for (let recovery = 0; recovery < 2; recovery++) {
+      rows = 0; let finished = 0;
+      const cursor = { retries: async () => events, readScan: async () => position(String(count)),
+        finishRetry: async (_consumer: string, _event: unknown, succeeded: boolean) => {
+          expect(succeeded).toBe(true); finished++;
+        },
+      } as unknown as ContentProjectionCursor;
+      expect((await relayContentProjectionOnce(env, content, cursor, 'public-search'))?.disposition).toBe('ignored');
+      expect(finished).toBe(count); expect(rows).toBe(count);
+    }
+    // A later invocation must recheck authority, rather than reuse success.
+    custodyOpen = false;
+    let refused = 0;
+    const cursor = { retries: async () => events, readScan: async () => position(String(count)),
+      finishRetry: async (_consumer: string, _event: unknown, succeeded: boolean) => {
+        expect(succeeded).toBe(false); refused++;
+      },
+    } as unknown as ContentProjectionCursor;
+    await relayContentProjectionOnce(env, content, cursor, 'public-search', randomUUID());
+    expect(refused).toBe(count);
+    epoch = randomUUID();
+    await expect(settleZonePageContentPublication(env, content, publications[0]!.preparationId, f.receipt)).rejects.toThrow();
+    await expect(settleZonePageContentPublication(env, content, 'absent-pin', f.receipt)).rejects.toThrow();
+    expect(settlements).toBe(2 * count);
+  }
+}, 300_000);
