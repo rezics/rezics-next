@@ -78,6 +78,76 @@ async function waitFor(predicate: () => boolean, timeout = 5_000): Promise<void>
 }
 
 describe('durable Goal wake coordinator', () => {
+  test('ten handled events queue one checkpoint and later decisions remain for the next checkpoint', async () => {
+    const f = fixture();
+    try {
+      const events = (start: number, length: number) => Array.from({length},(_,index)=>({key:`task:G-${start+index}:1`,body:`G-${start+index} completed`}));
+      f.setEvents(events(1,10));
+      const first = f.open({maxTurns:6}); first.enroll(f.descriptor); first.step();
+      for (let wave=0; wave<2; wave++) {
+        await Promise.all(first.status().attempts.filter(attempt=>attempt.phase !== 'done').map(attempt=>runAttempt(f.stateDir,attempt.token)));
+        first.step(); first.step();
+      }
+      const checkpoint = first.status().attempts.find(attempt=>attempt.event_key?.startsWith('checkpoint:'))!;
+      expect(checkpoint).toBeDefined();
+      expect(checkpoint.prompt).toContain('Checkpoint: update docs/goals/program/state.md');
+      expect(checkpoint.prompt).toContain('Edit state.md only when the event is `checkpoint`');
+      expect(checkpoint.prompt).toContain('task:G-10:1');
+      f.setEvents(events(11,10)); first.step();
+      // Keep the checkpoint live while ten other decisions complete beside it.
+      for (let wave=0; wave<2; wave++) {
+        const ordinary = first.status().attempts.filter(attempt=>attempt.phase !== 'done' && !attempt.event_key?.startsWith('checkpoint:'));
+        expect(ordinary).toHaveLength(5);
+        await Promise.all(ordinary.map(attempt=>runAttempt(f.stateDir,attempt.token)));
+        first.step(); first.step();
+      }
+      expect(first.status().attempts.filter(attempt=>attempt.event_key?.startsWith('checkpoint:'))).toHaveLength(1);
+      first.close(); const restarted = f.open({maxTurns:6}); restarted.step();
+      expect(restarted.status().attempts.filter(attempt=>attempt.event_key?.startsWith('checkpoint:'))).toHaveLength(1);
+      await runAttempt(f.stateDir,checkpoint.token); restarted.step(); restarted.step();
+      const checkpoints = restarted.status().attempts.filter(attempt=>attempt.event_key?.startsWith('checkpoint:'));
+      expect(checkpoints).toHaveLength(2);
+      expect(checkpoints.filter(attempt=>attempt.phase !== 'done')).toHaveLength(1);
+      expect(checkpoints[1]!.prompt).toContain('task:G-20:1');
+      expect(checkpoints[1]!.prompt).not.toContain('task:G-10:1');
+      await runAttempt(f.stateDir,checkpoints[1]!.token); restarted.step();
+      expect(restarted.status().wakes).toEqual([]);
+    } finally { f.cleanup(); }
+  });
+  test('the first uncovered handled event starts a durable thirty-minute checkpoint clock', async () => {
+    const f = fixture();
+    try {
+      const first = f.open(); first.enroll(f.descriptor); first.step();
+      await runAttempt(f.stateDir,first.status().attempts[0]!.token); first.step();
+      first.close(); const restarted = f.open();
+      f.setNow(2_799_999); restarted.step();
+      expect(restarted.status().attempts).toHaveLength(1);
+      f.setNow(2_800_000); restarted.step();
+      const checkpoint = restarted.status().attempts[1]!;
+      expect(checkpoint.event_key).toStartWith('checkpoint:');
+      expect(checkpoint.prompt).toContain('exit:worker:1');
+      await runAttempt(f.stateDir,checkpoint.token); restarted.step();
+      f.setNow(5_000_000); restarted.step();
+      expect(restarted.status().attempts).toHaveLength(2);
+      expect(restarted.status().wakes).toEqual([]);
+    } finally { f.cleanup(); }
+  });
+  test('a checkpoint failure retries the same checkpoint without covering its events', async () => {
+    const f = fixture();
+    try {
+      const coordinator = f.open(); coordinator.enroll(f.descriptor); coordinator.step();
+      await runAttempt(f.stateDir,coordinator.status().attempts[0]!.token); coordinator.step();
+      f.setNow(2_800_000); coordinator.step();
+      const checkpoint = coordinator.status().attempts[1]!;
+      coordinator.db.query("UPDATE attempts SET phase='done',code=7 WHERE token=?").run(checkpoint.token);
+      coordinator.step();
+      expect(coordinator.db.query('SELECT covered_through,queued_key FROM checkpoints').get())
+        .toEqual({covered_through:0,queued_key:checkpoint.event_key});
+      f.setNow(2_805_000); coordinator.step();
+      expect(coordinator.status().attempts[2]!.event_key).toBe(checkpoint.event_key);
+      expect(coordinator.db.query("SELECT COUNT(*) AS n FROM events WHERE event_key LIKE 'checkpoint:%'").get()).toEqual({n:1});
+    } finally { f.cleanup(); }
+  });
   test('a restart completes a durable cut intent without launching the old turn again', () => {
     const f = fixture();
     try {
@@ -167,15 +237,17 @@ describe('durable Goal wake coordinator', () => {
       first.close();
       const restarted = f.open({maxTurns:undefined}); restarted.step();
       expect(restarted.status().attempts).toHaveLength(6);
-      for (let wave = 0; wave < 3; wave++) {
+      for (let wave = 0; wave < 4; wave++) {
         const batch = restarted.status().attempts.filter(attempt=>attempt.phase !== 'done');
-        expect(batch).toHaveLength(6);
+        expect(batch.length).toBeLessThanOrEqual(6);
+        expect(batch.length).toBeGreaterThan(0);
         await Promise.all(batch.map(attempt=>runAttempt(f.stateDir,attempt.token)));
         restarted.step(); restarted.step();
       }
-      expect(restarted.status().attempts).toHaveLength(18);
+      expect(restarted.status().attempts.filter(attempt=>attempt.event_key?.startsWith('task:'))).toHaveLength(18);
+      expect(restarted.status().attempts.filter(attempt=>attempt.event_key?.startsWith('checkpoint:'))).toHaveLength(1);
       expect(restarted.status().wakes).toEqual([]);
-      expect(f.calls()).toHaveLength(18);
+      expect(f.calls()).toHaveLength(19);
     } finally { f.cleanup(); }
   });
   test('events naming the same task wait while unrelated task events run, including after restart', async () => {

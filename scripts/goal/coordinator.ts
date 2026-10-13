@@ -309,7 +309,11 @@ function openStore(stateDir: string): Database {
   db.exec(`CREATE TABLE IF NOT EXISTS turn_commands(id INTEGER PRIMARY KEY, token TEXT NOT NULL,
     command TEXT NOT NULL, created_at INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS admissions(goal TEXT PRIMARY KEY,due_at INTEGER NOT NULL,failures INTEGER NOT NULL,error TEXT);
-    CREATE TABLE IF NOT EXISTS cut_notices(goal TEXT NOT NULL,event_key TEXT NOT NULL,sent INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(goal,event_key))`);
+    CREATE TABLE IF NOT EXISTS cut_notices(goal TEXT NOT NULL,event_key TEXT NOT NULL,sent INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(goal,event_key));
+    CREATE TABLE IF NOT EXISTS handled_events(sequence INTEGER PRIMARY KEY,goal TEXT NOT NULL,event_key TEXT NOT NULL,
+      handled_at INTEGER NOT NULL,UNIQUE(goal,event_key));
+    CREATE TABLE IF NOT EXISTS checkpoints(goal TEXT PRIMARY KEY,covered_through INTEGER NOT NULL DEFAULT 0,
+      queued_key TEXT,through_sequence INTEGER)`);
   const eventColumns = new Set((db.query('PRAGMA table_info(events)').all() as {name:string}[]).map(column=>column.name));
   for (const [name,type] of Object.entries({failures:'INTEGER NOT NULL DEFAULT 0',error:'TEXT',cuts:'INTEGER NOT NULL DEFAULT 0'})) {
     if (!eventColumns.has(name)) db.exec(`ALTER TABLE events ADD COLUMN ${name} ${type}`);
@@ -490,6 +494,29 @@ export class GoalCoordinator {
       this.db.query('UPDATE cut_notices SET sent=1 WHERE goal=? AND event_key=?').run(notice.goal,notice.event_key);
     }
   }
+  private handled(event: EventRow): void {
+    if (event.event_key.startsWith('checkpoint:')) {
+      this.db.query('UPDATE checkpoints SET covered_through=through_sequence,queued_key=NULL,through_sequence=NULL WHERE goal=? AND queued_key=?')
+        .run(event.goal,event.event_key);
+    } else this.db.query('INSERT OR IGNORE INTO handled_events(goal,event_key,handled_at) VALUES(?,?,?)')
+      .run(event.goal,event.event_key,this.now());
+  }
+  private queueCheckpoint(goal: string): void {
+    const state = this.db.query('SELECT * FROM checkpoints WHERE goal=?').get(goal) as {covered_through:number;queued_key:string|null}|null;
+    if (state?.queued_key) return;
+    const uncovered = this.db.query('SELECT sequence,event_key,handled_at FROM handled_events WHERE goal=? AND sequence>? ORDER BY sequence')
+      .all(goal,state?.covered_through ?? 0) as {sequence:number;event_key:string;handled_at:number}[];
+    if (!uncovered.length || (uncovered.length < 10 && this.now()-uncovered[0]!.handled_at < 30*60_000)) return;
+    const key = `checkpoint:${randomUUID()}`;
+    this.db.transaction(()=>{
+      this.db.query('INSERT INTO events(goal,event_key,body,due_at) VALUES(?,?,?,?)')
+        .run(goal,key,`Checkpoint: update docs/goals/${goal}/state.md from the decisions for these handled events:\n`
+          + uncovered.map(event=>event.event_key).join('\n'),this.now());
+      this.db.query(`INSERT INTO checkpoints(goal,queued_key,through_sequence) VALUES(?,?,?)
+        ON CONFLICT(goal) DO UPDATE SET queued_key=excluded.queued_key,through_sequence=excluded.through_sequence`)
+        .run(goal,key,uncovered.at(-1)!.sequence);
+    }).immediate();
+  }
   step(): void {
     this.sendCutNotices();
     for (const descriptor of this.managers()) {
@@ -528,9 +555,12 @@ export class GoalCoordinator {
           const handled = !event.event_key.startsWith('mail:') ? attempt.code === 0
             : event.event_key.startsWith('mail:overdue:') ? attempt.code === 0 || !remaining.has(event.event_key)
             : !remaining.has(event.event_key);
-          this.db.query('UPDATE events SET token=NULL,handled=? WHERE goal=? AND event_key=?')
-            .run(handled ? 1 : 0,goal,event.event_key);
-          if (!handled) this.deferEvent(event,attempt.code === 0 ? 'Turn ended with pending events/acknowledgements' : `Manager exit ${attempt.code}`);
+          this.db.transaction(()=>{
+            this.db.query('UPDATE events SET token=NULL,handled=? WHERE goal=? AND event_key=?')
+              .run(handled ? 1 : 0,goal,event.event_key);
+            if (handled) this.handled(event);
+            else this.deferEvent(event,attempt.code === 0 ? 'Turn ended with pending events/acknowledgements' : `Manager exit ${attempt.code}`);
+          }).immediate();
           reconciled = true;
           continue;
         }
@@ -562,16 +592,20 @@ export class GoalCoordinator {
           this.options.afterLaunch?.(attempt.token);
         } catch (error) { this.defer(goal, String(error)); }
       }
+      this.queueCheckpoint(goal);
       const admission = this.db.query('SELECT * FROM admissions WHERE goal=?').get(goal) as WakeRow|null;
       if (!reconciled && (!admission || this.now() >= admission.due_at)) {
         const active = this.db.query('SELECT * FROM events WHERE goal=? AND token IS NOT NULL').all(goal) as EventRow[];
         const locked = new Set(active.flatMap(event=>eventTasks({key:event.event_key,body:event.body})));
+        let checkpointActive = active.some(event=>event.event_key.startsWith('checkpoint:'));
         let slots = this.maxTurns-active.length;
-        const queued = this.db.query("SELECT * FROM events WHERE goal=? AND handled=0 AND token IS NULL AND due_at<=? ORDER BY event_key LIKE 'start:%' DESC,event_key LIKE 'mail:overdue:%' DESC,due_at,event_key")
+        const queued = this.db.query("SELECT * FROM events WHERE goal=? AND handled=0 AND token IS NULL AND due_at<=? ORDER BY event_key LIKE 'start:%' DESC,event_key LIKE 'checkpoint:%' DESC,event_key LIKE 'mail:overdue:%' DESC,due_at,event_key")
           .all(goal,this.now()) as EventRow[];
         for (const event of queued) {
           if (slots <= 0) break;
           const tasks = eventTasks({key:event.event_key,body:event.body});
+          const checkpoint = event.event_key.startsWith('checkpoint:');
+          if (checkpoint && checkpointActive) continue;
           if (tasks.some(task=>locked.has(task))) continue;
           try {
             this.launcher.verify(descriptor);
@@ -590,6 +624,7 @@ export class GoalCoordinator {
               .run(token,goal,event.event_key);
           }).immediate();
           slots--;
+          if (checkpoint) checkpointActive = true;
           for (const task of tasks) locked.add(task);
           this.refreshWake(goal);
           this.options.afterIntent?.(token);
