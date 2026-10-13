@@ -159,8 +159,8 @@ function canonical(value: unknown): unknown {
 
 const schemaValues = new Set(['const', 'default', 'enum', 'example', 'examples']);
 
-/** TypeBox emits draft-07 tuples (`items: [...]`, `additionalItems`); OpenAPI 3.1
- * schemas are JSON Schema 2020-12, which spells them `prefixItems` and `items`. */
+/** Translate legacy tuples and Elysia nullable literals to JSON Schema 2020-12.
+ * Adding null to `type` alone cannot widen an enum or const constraint. */
 export function jsonSchema2020Tuples(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(jsonSchema2020Tuples);
   if (value === null || typeof value !== 'object') return value;
@@ -173,6 +173,14 @@ export function jsonSchema2020Tuples(value: unknown): unknown {
   } else {
     if (items !== undefined) result.items = jsonSchema2020Tuples(items);
     if (additionalItems !== undefined) result.additionalItems = jsonSchema2020Tuples(additionalItems);
+  }
+  if (result.nullable === true) {
+    if (Object.hasOwn(result, 'const')) {
+      result.enum = [result.const, null];
+      delete result.const;
+    } else if (Array.isArray(result.enum) && !result.enum.includes(null)) {
+      result.enum = [...result.enum, null];
+    }
   }
   return result;
 }

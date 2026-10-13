@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, 
 import { join, resolve } from 'node:path';
 import { OutcomeRecorder } from '../../tests/qa/support/outcome-test.ts';
 import { proved, rowOutcomes } from '../qa/cases/outcome-cells.ts';
+import { jsonSchema2020Tuples } from './generate.ts';
 import { AnswerRecordValidator, answerPersonas, answerRecord, recordAnswer, redactAnswer,
   type AnswerContract, type AnswerRecord, type AnswerSample } from './answer-record.ts';
 
@@ -11,8 +12,8 @@ const sample: AnswerSample = { label: 'populated', operationId: 'browse', method
   answer: { id: 'https://rezics.com/id/123', at: '2026-10-13T12:34:56.000Z', nextCursor: 'opaque+cursor' } };
 
 test('records labelled answers without measurements or rewriting API data', () => {
-  const personas = Object.fromEntries(answerPersonas.map(persona => [persona, [sample]]));
-  const record = answerRecord('books/browse', personas as Record<typeof answerPersonas[number], AnswerSample[]>);
+  const personas = Object.fromEntries(answerPersonas.map(persona => [persona, [sample]])) as AnswerRecord['personas'];
+  const record = answerRecord('books/browse', personas);
   expect(record).toEqual({ version: 1, row: 'books/browse', personas });
   expect(record.personas.visitor[0]).not.toBe(sample);
 });
@@ -69,6 +70,28 @@ test('validates local references, unions, nullable values, numeric wire queries 
   const before = JSON.stringify(record);
   validator.validate(record);
   expect(JSON.stringify(record)).toBe(before);
+});
+
+test('generated nullable enums and constants preserve the authored null answer under JSON Schema validation', () => {
+  const response = { type: 'object', required: ['status', 'policy'], properties: {
+    status: { type: ['string', 'null'], enum: ['ongoing', 'completed'], nullable: true },
+    policy: { type: ['string', 'null'], const: 'no-referrer', nullable: true },
+  } };
+  const tree = { paths: { '/v1/browse': { get: { operationId: 'browse', responses: {
+    '200': { content: { 'application/json': { schema: response } } },
+  } } } } };
+  const generated = jsonSchema2020Tuples(tree) as AnswerContract;
+  const validator = new AnswerRecordValidator(generated);
+  const record = answerRecord('books/browse', Object.fromEntries(answerPersonas.map(persona => [persona,
+    [{ ...sample, answer: { status: null, policy: null } }],
+  ])) as AnswerRecord['personas']);
+  validator.validate(record);
+  record.personas.visitor[0]!.answer = { status: 'ongoing', policy: 'no-referrer' };
+  validator.validate(record);
+  record.personas.visitor[0]!.answer = { status: 'invented', policy: null };
+  expect(() => validator.validate(record)).toThrow('/answer/status');
+  expect(response.properties.status.enum).toEqual(['ongoing', 'completed']);
+  expect(jsonSchema2020Tuples({ example: response })).toEqual({ example: response });
 });
 
 test('names the row, persona, sample and JSON pointer on a changed nested field', () => {
@@ -149,6 +172,20 @@ test('a failed persona proof or an invalid sample publishes nothing', async () =
       expect(existsSync(join(directory, 'books/browse.json'))).toBe(false);
     } finally { rmSync(directory, { recursive: true, force: true }); }
   }
+});
+
+test('setup calls cannot enter a persona outcome record', async () => {
+  const directory = scratch();
+  try {
+    const recorder = new OutcomeRecorder(declaration, { directory, contract });
+    await expect(recorder.session('owner', session)('setup', 'GET', '/v1/browse?limit=10'))
+      .rejects.toThrow('active persona proof');
+    for (const persona of answerPersonas) await recorder.prove(persona, async () => {
+      await recorder.session(persona, session)('empty', 'GET', '/v1/browse?limit=10');
+    });
+    await recorder.publish();
+    expect(existsSync(join(directory, 'books/browse.json'))).toBe(false);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
 test('recording is off by default, and output cannot escape .temp or overwrite an existing record', async () => {

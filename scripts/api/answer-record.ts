@@ -1,4 +1,6 @@
 import { Compile, type Validator, type XSchema } from 'typebox/schema';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 /** Application answers, shared by outcome records and the interactive persona probe. */
 export const answerPersonas = ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const;
@@ -149,7 +151,7 @@ export class AnswerRecordValidator {
     return id;
   }
 
-  validate(value: unknown): asserts value is AnswerRecord {
+  validate(value: unknown): AnswerRecord {
     const candidate = value as Partial<AnswerRecord> | null;
     const row = candidate?.row ?? '<unknown>';
     const fail = (persona: string, label: string, pointer: string, message: string): never => {
@@ -224,5 +226,19 @@ export class AnswerRecordValidator {
         }
       }
     }
+    return record;
   }
+}
+
+/** Inventory validation must receive a contract freshly generated from the candidate tree. */
+export function answerRecordViolations(root: string, contract: AnswerContract): string[] {
+  const validator = new AnswerRecordValidator(contract);
+  return [...new Bun.Glob('tests/qa/fixtures/outcomes/**/*.json').scanSync({ cwd: root })].sort().flatMap(file => {
+    try {
+      const record = validator.validate(JSON.parse(readFileSync(resolve(root, file), 'utf8')) as unknown);
+      const row = file.slice('tests/qa/fixtures/outcomes/'.length, -'.json'.length);
+      if (row !== record.row) throw new Error(`row ${record.row}, persona <all>, sample <all>, /row: Record path names ${row}`);
+      return [];
+    } catch (error) { return [`${file}: ${error instanceof Error ? error.message : String(error)}`]; }
+  });
 }

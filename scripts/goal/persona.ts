@@ -2,7 +2,7 @@ import { existsSync, lstatSync, realpathSync } from 'node:fs';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { searchOperations, type IndexedOperation } from '../api/operation-index.ts';
 import type { PersonaName } from '../../tests/qa/support/personas.ts';
-import { answerPersonas, redactAnswer, type AnswerCall, type RecordedAnswer } from '../api/answer-record.ts';
+import { answerPersonas, recordAnswer, redactAnswer, type AnswerCall, type RecordedAnswer } from '../api/answer-record.ts';
 
 // Keep validation independent of the test-only application composition and its environment.
 export const probePersonas = answerPersonas satisfies readonly PersonaName[];
@@ -141,10 +141,10 @@ export function formatProbeAnswer(call: ProbeAnswer, full = false): string {
 }
 
 export function probeRecord(result: ProbeResult): unknown {
-  return redactProbe({ visibility: result.visibility, calls: result.calls.map(call => ({
-    persona: call.persona, operationId: call.operationId, method: call.method, path: call.path,
-    ...(Object.hasOwn(call, 'body') ? { body: call.body } : {}), status: call.status, answer: call.answer,
-  })) });
+  return redactProbe({ visibility: result.visibility, calls: result.calls.map(call => {
+    const { headers: _headers, ...data } = recordAnswer(call);
+    return { persona: call.persona, ...data };
+  }) });
 }
 
 /** Resolve existing ancestors too, so a repository symlink cannot export a record. */

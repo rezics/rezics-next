@@ -134,6 +134,15 @@ describe('persona output and recordings', () => {
     expect(formatProbeAnswer({ ...answer, answer: 'Bearer token', headers: { location: '/?session_key=secret' } }))
       .not.toMatch(/\btoken\b|\bsecret\b/);
   });
+  test('the shared envelope keeps probe recordings free of idempotency secrets', () => {
+    expect(() => parseProbeCalls(['owner POST /v1/spaces {"idempotencyKey":"secret"}'], operations))
+      .toThrow('Credentials belong');
+    const result: ProbeResult = { visibility: 'public', setupSeconds: 1,
+      calls: [{ ...answer, body: { name: 'keep', idempotencyKey: 'request-secret' },
+        answer: { id: 'resource', idempotency_secret: 'response-secret' } }] };
+    expect(probeRecord(result)).toEqual({ visibility: 'public', calls: [{ ...call,
+      body: { name: 'keep' }, status: 201, answer: { id: 'resource' } }] });
+  });
   test('refuses records outside the repository, including symlink escapes', () => {
     const parent = resolve('.temp/persona-unit');
     mkdirSync(parent, { recursive: true });

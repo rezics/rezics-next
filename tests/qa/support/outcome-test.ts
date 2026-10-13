@@ -1,5 +1,6 @@
-import { afterAll, onTestFinished, test } from 'bun:test';
-import { existsSync, lstatSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs';
+import { onTestFinished, test } from 'bun:test';
+import { existsSync, linkSync, lstatSync, mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { AnswerRecordValidator, answerPersonas, answerRecord,
   type AnswerContract, type AnswerRecord, type AnswerSample } from '../../../scripts/api/answer-record.ts';
@@ -44,9 +45,10 @@ export function outcomeTest(
 /** Opt in with OUTCOME_RECORD_DIR=.temp/<directory>. Normal proofs do not load a contract or write. */
 export class OutcomeRecorder {
   private readonly passed = new Set<Persona>();
+  private readonly active = new Set<Persona>();
   private failed = false;
   private published = false;
-  private readonly samples = Object.fromEntries(answerPersonas.map(persona => [persona, []])) as AnswerRecord['personas'];
+  private readonly samples = Object.fromEntries(answerPersonas.map(persona => [persona, [] as AnswerSample[]])) as AnswerRecord['personas'];
   private readonly directory?: string;
   private readonly root: string;
   private contract?: Promise<AnswerRecordValidator>;
@@ -66,9 +68,18 @@ export class OutcomeRecorder {
       new AnswerRecordValidator(JSON.parse(await buildMainOpenApi()) as AnswerContract));
   }
 
+  /** Prepare the contract in fixture setup so generation does not spend a persona's proof budget. */
+  async prepare(): Promise<void> {
+    if (this.directory) await this.validator();
+  }
+
   /** Wrap the session's call, never its credential handling or fixture setup. */
   session(persona: Persona, session: Pick<PersonaSession, 'main'>) {
     return async (label: string, ...args: Parameters<PersonaSession['main']>): Promise<Response> => {
+      if (this.directory && !this.active.has(persona)) {
+        this.failed = true;
+        throw new Error('Samples must belong to an active persona proof');
+      }
       const response = await session.main(...args);
       if (!this.directory) return response;
       try {
@@ -89,15 +100,18 @@ export class OutcomeRecorder {
 
   async prove(persona: Persona, fn: () => unknown): Promise<void> {
     try {
-      if (this.passed.has(persona)) throw new Error('A persona proof may run only once per record');
+      if (this.passed.has(persona) || this.active.has(persona)) throw new Error('A persona proof may run only once per record');
+      this.active.add(persona);
       await fn();
       this.passed.add(persona);
     } catch (error) { this.failed = true; throw error; }
+    finally { this.active.delete(persona); }
   }
 
   /** A runner timeout can finish a test before its promise settles. */
   finish(persona: Persona): void {
     if (!this.passed.has(persona)) this.failed = true;
+    this.active.delete(persona);
   }
 
   /** Call after the file's proofs; validation finishes before the one exclusive write. */
@@ -113,15 +127,14 @@ export class OutcomeRecorder {
     const file = resolve(directory, `${record.row}.json`);
     recordingDirectory(this.root, dirname(file));
     mkdirSync(dirname(file), { recursive: true });
-    writeFileSync(file, `${JSON.stringify(record, null, 2)}\n`, { flag: 'wx' });
+    const staged = resolve(dirname(file), `.answer-${randomUUID()}.json`);
+    try {
+      writeFileSync(staged, `${JSON.stringify(record, null, 2)}\n`, { flag: 'wx' });
+      // Linking a fully written file publishes atomically and refuses an existing destination.
+      linkSync(staged, file);
+    } finally { rmSync(staged, { force: true }); }
     this.published = true;
   }
-}
-
-export function outcomeRecorder(declaration: RowOutcomes): OutcomeRecorder {
-  const recorder = new OutcomeRecorder(declaration);
-  afterAll(() => recorder.publish());
-  return recorder;
 }
 
 function recordingDirectory(root: string, directory: string): string {
