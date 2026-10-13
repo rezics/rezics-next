@@ -29,6 +29,25 @@ function paged(active: RecordPage<LoanRecord>[], returned: RecordPage<LoanRecord
 }
 
 describe('stale loan recovery', () => {
+  test('a capped search cannot claim the loan is absent or start searching another state', async () => {
+    const active = Array.from({ length: 201 }, (_, index) => page([], `opaque:+/%?=${index + 1}`));
+    const { api, reads } = paged(active, [page([], null)]);
+    expect(await api.findLoan('missing')).toEqual({ ok: false, failure: 'unavailable' });
+    expect(reads).toHaveLength(200);
+    expect(reads[199]).toBe('active:opaque:+/%?=199');
+  });
+
+  test('a repeated continuation is unavailable rather than evidence of absence', async () => {
+    const { api, reads } = paged([page([], 'opaque-next'), page([], 'opaque-next')], [page([], null)]);
+    expect(await api.findLoan('missing')).toEqual({ ok: false, failure: 'unavailable' });
+    expect(reads).toEqual(['active:', 'active:opaque-next']);
+  });
+
+  test('only exhausted active and returned lists prove absence', async () => {
+    const { api } = paged([page([], null)], [page([], 'returned-next'), page([], null)]);
+    expect(await api.findLoan('missing')).toEqual({ ok: true, data: null });
+  });
+
   test('finds a loan that is only on a later active page', async () => {
     const later = loan('https://rezics.com/id/00000000-0000-4000-8000-000000000021');
     const first = Array.from({ length: 20 }, (_, index) => loan(`https://rezics.com/id/00000000-0000-4000-8000-0000000000${index.toString(16).padStart(2, '0')}`));

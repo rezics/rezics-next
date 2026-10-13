@@ -123,7 +123,7 @@ export function mainCopiesApi(actingSubject: string, main: () => MainClient = br
     },
 
     async findLoan(id) {
-      // A 409 recovery has only the loan id. Walk every page; the first page is not the whole list.
+      // A 409 recovery has only the loan id. An unfinished search cannot prove absence.
       const search = async (state: 'active' | 'returned'): Promise<RecordResult<LoanRecord | null>> => {
         let cursor: string | null = null;
         const seen = new Set<string>();
@@ -132,11 +132,12 @@ export function mainCopiesApi(actingSubject: string, main: () => MainClient = br
           if (!read.ok) return read;
           const found = read.data.items.find(loan => loan.id === id);
           if (found) return { ok: true, data: found };
-          if (!read.data.nextCursor || seen.has(read.data.nextCursor)) return { ok: true, data: null };
+          if (!read.data.nextCursor) return { ok: true, data: null };
+          if (seen.has(read.data.nextCursor)) return { ok: false, failure: 'unavailable' };
           seen.add(read.data.nextCursor);
           cursor = read.data.nextCursor;
         }
-        return { ok: true, data: null };
+        return { ok: false, failure: 'unavailable' };
       };
       const active = await search('active');
       if (!active.ok || active.data) return active;

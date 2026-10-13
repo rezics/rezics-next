@@ -50,8 +50,42 @@ beforeEach(() => {
   unavailable = null; complete = null; lowerBound = null;
 });
 
-const { readShelfView, readCurrentlyReading } = await import('./read.ts');
+const { readShelfView, readCurrentlyReading, readCustomShelves } = await import('./read.ts');
 const state = parseLibraryState({ shelf: 'reading' });
+
+test('a bounded directory forwards every opaque cursor and returns the last remainder', async () => {
+  const cursors = ['opaque:+/%?=1', 'opaque:+/%?=2', 'opaque:+/%?=3', 'opaque:+/%?=4', 'opaque:+/%?=5'];
+  const seen: (string | undefined)[] = [];
+  const directory = { v1: { me: { shelves: { get: ({ query }: { query: { cursor?: string } }) => {
+    seen.push(query.cursor);
+    return answer({ items: [{ id: String(seen.length) }], statusShelves: [],
+      nextCursor: cursors[seen.length - 1] });
+  } } } } } as unknown as MainClient;
+  const result = await readCustomShelves(directory, agent);
+  expect(seen).toEqual([undefined, ...cursors.slice(0, 4)]);
+  expect(result.ok).toBe(true);
+  if (result.ok) {
+    expect(result.data.items).toHaveLength(5);
+    expect(result.data.nextCursor).toBe(cursors[4]!);
+  }
+});
+
+test('a failed later directory page stays a failure rather than a complete partial list', async () => {
+  let calls = 0;
+  const directory = { v1: { me: { shelves: { get: () => ++calls === 1
+    ? answer({ items: [], statusShelves: [], nextCursor: 'opaque-next' })
+    : Promise.reject(new Error('unavailable')) } } } } as unknown as MainClient;
+  expect(await readCustomShelves(directory, agent)).toEqual({ ok: false, failure: 'unavailable' });
+});
+
+test('a directory that ends after several pages keeps its terminal continuation', async () => {
+  let calls = 0;
+  const directory = { v1: { me: { shelves: { get: () => answer({ items: [], statusShelves: [],
+    nextCursor: ++calls === 1 ? 'opaque-next' : null }) } } } } as unknown as MainClient;
+  const result = await readCustomShelves(directory, agent);
+  expect(calls).toBe(2);
+  expect(result.ok && result.data.nextCursor).toBeNull();
+});
 
 test('each of eight reading Works keeps its own Continue at its exact position', async () => {
   const view = await readShelfView(state, 'en');

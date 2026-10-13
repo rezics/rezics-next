@@ -26,7 +26,7 @@ import type { CustomShelf, FollowedAuthors, LibraryItem, LibraryOverview, Librar
 const MAIN_SHELF_LIMIT = 20;
 /** The reading strip on All: one short Main page, not a window over a larger read. */
 const READING_PREVIEW = 3;
-// Main's `/v1/me/shelves` page; five pages is more custom shelves than anyone keeps in view.
+// Bounds one directory read; the last page's cursor still belongs to the remainder.
 const MAX_CUSTOM_PAGES = 5;
 const PARALLEL = 6;
 
@@ -82,19 +82,21 @@ export const readOverview = cache(async (): Promise<Loaded<LibraryOverview>> => 
     ratingContext: context.ok ? context.data.items[0]?.context ?? null : null } };
 });
 
-async function readCustomShelves(main: MainClient, actingSubject: string) {
+export async function readCustomShelves(main: MainClient, actingSubject: string) {
   let first: Awaited<ReturnType<MainClient['v1']['me']['shelves']['get']>>['data'] = null;
   const items: CustomShelf[] = [];
   let cursor: string | undefined;
+  let nextCursor: string | null = null;
   for (let page = 0; page < MAX_CUSTOM_PAGES; page++) {
     const read = await settle(() => main.v1.me.shelves.get({ query: { actingSubject, limit: 20, cursor } }));
-    if (!read.ok) return page ? { ok: true as const, data: { ...first!, items } } : read;
+    if (!read.ok) return read;
     first ??= read.data;
     items.push(...read.data.items);
-    if (!read.data.nextCursor) break;
-    cursor = read.data.nextCursor;
+    nextCursor = read.data.nextCursor;
+    if (!nextCursor) break;
+    cursor = nextCursor;
   }
-  return { ok: true as const, data: { ...first!, items } };
+  return { ok: true as const, data: { ...first!, items, nextCursor } };
 }
 
 /** One Main read. A 409 on the first page is read again once; a stale cursor stays a 409. */
