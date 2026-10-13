@@ -80,7 +80,9 @@ function proofSession(name: PersonaName, session = sessions[name], device = 'pri
     const key = `${name}:${label}`;
     const index = sampleCounts.get(key) ?? 0;
     sampleCounts.set(key, index + 1);
-    return sample(`${label}-${index}`, method, path, ...args);
+    const [body, commandKey, options] = args;
+    const stableKey = commandKey ?? (method === 'GET' ? undefined : `${hub.rowId}:${key}:${index}`);
+    return sample(`${label}-${index}`, method, path, body, stableKey, options);
   } };
 }
 
@@ -144,8 +146,47 @@ async function pageReads(name: PersonaName) {
   await answer(sample('hub-showcase-empty', 'POST', '/v1/resources/showcase', { profile: 'work-showcase-batch-v1', targets: [work.work] }));
 }
 
+// These are the bounded reads PrimaryAction and Availability actually send.
+// The member's initial page proof already supplies its inventory and start reads.
+async function chooserReads(name: PersonaName) {
+  const person = sessions[name];
+  const sample = recording.session(name, person);
+  const id = short(work.work);
+  const viewer = (path: string) => person.actingSubject
+    ? `${path}${path.includes('?') ? '&' : '?'}${query(person)}` : path;
+  if (name !== 'member') {
+    for (const kind of ['releases', 'realizations']) {
+      const page = await answer<{ items: Array<{ id: string }> }>(sample(`chooser-${kind}`, 'GET',
+        viewer(`/v1/works/${id}/${kind}?limit=20`)));
+      expect(page.items.map(item => item.id).sort()).toEqual(kind === 'releases'
+        ? releases.map(item => item.resource).sort() : [realization.resource]);
+    }
+    expect(await answer(sample('chooser-parts', 'GET', viewer(`/v1/resources/${id}/parts?limit=1`)), 404))
+      .toMatchObject({ code: expect.any(String) });
+    if (person.actingSubject) {
+      expect(await answer(sample('chooser-continue', 'GET', viewer('/v1/me/continue?limit=6'))))
+        .toMatchObject({ items: [] });
+    }
+    const contents = await sample('chooser-contents', 'GET', viewer(`/v1/works/${id}/contents`));
+    expect([200, 404]).toContain(contents.status);
+    const body = await contents.json();
+    expect(body).toMatchObject(contents.status === 200 ? { items: [] } : { code: expect.any(String) });
+  }
+  if (person.actingSubject) {
+    if (name === 'stranger') {
+      expect(await answer(sample('chooser-preference-empty', 'GET', viewer(`/v1/me/edition-preferences/${id}`))))
+        .toBeNull();
+    }
+    if (name !== 'member') {
+      expect(await answer(sample('chooser-progress-empty', 'GET', viewer(`/v1/me/progress-summaries/${id}?language=en`))))
+        .toMatchObject({ preference: null });
+    }
+  }
+}
+
 async function choice(name: PersonaName) {
   if (name === 'member') await pageReads(name);
+  await chooserReads(name);
   const person = proofSession(name);
   const root = `/v1/works/${short(work.work)}`;
   const publicQuery = person.actingSubject ? query(person) : '';
@@ -178,11 +219,14 @@ async function choice(name: PersonaName) {
   if (name === 'stranger') return;
   expect(await answer(person.main('GET', `${path}?${query(person)}`))).toBeNull();
   const body = { actingSubject: person.actingSubject, expectedVersion: 0, language: 'en', edition: pin };
-  const key = randomUUID();
+  const key = `${hub.rowId}:${name}:edition-choice`;
   const saved = await answer<Preference>(person.main('PUT', path, body, key));
   expect(saved).toMatchObject({ work: work.work, edition: pin, language: 'en', version: 1, replayed: false });
   const { replayed: _replayed, ...persisted } = saved;
   expect(await answer(person.main('GET', `${path}?${query(person)}`))).toEqual(persisted);
+  expect(await answer(recording.session(name, sessions[name])('chooser-progress-release', 'GET',
+    `/v1/me/progress-summaries/${short(work.work)}?language=en&${query(person)}`)))
+    .toMatchObject({ preference: { edition: pin, version: 1 } });
   expect(await answer(person.main('PUT', path, body, key))).toEqual({ ...saved, replayed: true });
   expect(await answer(person.main('PUT', path, { ...body, edition: { kind: 'realization', ...realization } }), 409)).toMatchObject({ code: 'stale_edition_preference', current: persisted });
   const recovered = await answer<Preference>(person.main('PUT', path, { ...body, expectedVersion: 1, edition: { kind: 'realization', ...realization } }));
