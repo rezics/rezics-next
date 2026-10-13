@@ -47,6 +47,8 @@ test('inventory reviews cannot bless another read or survive a changed query ini
     const reviews = { [path]: { sha256: createHash('sha256').update(source).digest('hex'),
       reason: 'Fixture forwarding review', reads: violations.map(item => `${item.operation}: ${item.read}`) } };
     expect(unreviewedActingReads(root, violations, reviews)).toEqual([]);
+    writeFileSync(resolve(root, path), `// Explain the unchanged identity transport.\n${source}`);
+    expect(unreviewedActingReads(root, webActingIdentityViolations(root, [path], contract), reviews)).toEqual([]);
     expect(unreviewedActingReads(root, [{ ...violations[0]!, operation: 'GET /v1/new-read' }], reviews)).toHaveLength(1);
     writeFileSync(resolve(root, path), source.replace('incoming', '{}'));
     expect(unreviewedActingReads(root, webActingIdentityViolations(root, [path], contract), reviews)).toHaveLength(1);
