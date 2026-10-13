@@ -8,6 +8,7 @@ import { mainCopiesApi } from './api.ts';
 import { refusedLoansRead, type LoansPageRead } from './books-loans-recorded-page.ts';
 import { readLoans } from './read.ts';
 import { asLoan } from './shape.ts';
+import type { LoanDraft } from './types.ts';
 
 const loans = loansRecord as AnswerRecord;
 const returned = returnRecord as AnswerRecord;
@@ -24,6 +25,25 @@ function subjectOf(item: AnswerSample): string {
   if (item.body && typeof item.body === 'object' && 'actingSubject' in item.body
     && typeof item.body.actingSubject === 'string') return item.body.actingSubject;
   throw new Error(`Recorded sample ${item.label} names no acting Person`);
+}
+
+/** The recorded create body, unchanged. A new loan is version 0; the adapter sends that. */
+function recordedCreate(body: unknown): { actingSubject: string; draft: LoanDraft } {
+  if (!body || typeof body !== 'object') throw new Error('Recorded create has no body');
+  const value = body as Record<string, unknown>;
+  const party = value.counterparty;
+  if (typeof value.actingSubject !== 'string' || value.expectedVersion !== 0 || typeof value.copy !== 'string'
+    || (value.direction !== 'lent' && value.direction !== 'borrowed')
+    || typeof value.startedAt !== 'string' || typeof value.dueAt !== 'string'
+    || !party || typeof party !== 'object') throw new Error('Recorded create is not a new loan');
+  const counterparty = party as Record<string, unknown>;
+  const named = counterparty.kind === 'name' && typeof counterparty.name === 'string'
+    ? { kind: 'name' as const, name: counterparty.name }
+    : counterparty.kind === 'person' && typeof counterparty.person === 'string'
+      ? { kind: 'person' as const, person: counterparty.person } : null;
+  if (!named) throw new Error('Recorded create names no borrower');
+  return { actingSubject: value.actingSubject, draft: {
+    copy: value.copy, direction: value.direction, counterparty: named, startedAt: value.startedAt, dueAt: value.dueAt } };
 }
 
 function titleOf(value: unknown): string {
@@ -92,6 +112,32 @@ test('the owner active page keeps recorded loans, titles and the backup out of t
     .filter(row => row.sourceId.startsWith('loan:')).map(row => row.sourceId.slice('loan:'.length));
   const shownIds = new Set(read.data.items.map(row => row.loan.id));
   expect(exportLoans.filter(id => !shownIds.has(id)).length).toBeGreaterThan(0);
+});
+
+test('the accepted create stays an open loan at the recorded version', async () => {
+  const command = sample(loans, 'owner', 'open-loan');
+  const recorded = recordedCreate(command.body);
+  const replay = recordedFetch(loans, 'owner', [{ label: 'open-loan', state: 'populated' }], { pathPrefix: BFF_PREFIX });
+  try {
+    const api = mainCopiesApi(recorded.actingSubject, () => browserMainApi('https://recorded.invalid', {
+      fetcher: replay.fetcher }));
+    const written = await api.openLoan(recorded.draft, 'open-loan');
+    expect(written.ok).toBe(true);
+    if (!written.ok) return;
+    const answer = asLoan(command.answer);
+    if (!answer) throw new Error('Recorded loan did not parse');
+    expect(written.data).toEqual(answer);
+    expect(written.data.state).toBe('open');
+    expect(written.data.version).toBe(answer.version);
+    expect(written.data.returnedAt).toBeNull();
+    const read = await readRecorded(loans, 'owner', ownerLabels);
+    expect(read.ok).toBe(true);
+    if (!read.ok) return;
+    const shown = read.data.items.find(row => row.loan.id === written.data.id);
+    expect(shown?.loan).toEqual(written.data);
+    expect(read.data.items.some(row => row.loan.id !== written.data.id && row.loan.state === 'overdue'
+      && row.loan.returnedAt === null)).toBe(true);
+  } finally { replay.dispose(); }
 });
 
 test('an expired loan stays due until the recorded return, and the return settles only that loan', async () => {

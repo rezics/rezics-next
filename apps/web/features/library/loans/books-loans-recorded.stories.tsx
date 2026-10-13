@@ -16,6 +16,8 @@ import { mainCopiesApi } from './api.ts';
 import { LoansRecordedRegion } from './books-loans-recorded-page.tsx';
 import type { LoansPageRead } from './books-loans-recorded-page.ts';
 import { readLoans } from './read.ts';
+import { asLoan } from './shape.ts';
+import type { LoanDraft } from './types.ts';
 import { CopiesApiProvider } from './provider.tsx';
 
 const loans = loansRecord as AnswerRecord;
@@ -51,6 +53,32 @@ const ownerRead = [
 
 interface Ready { read: LoansPageRead; main: ReturnType<typeof browserMainApi>; actingSubject: string }
 
+/** The recorded create body, unchanged. Its replay is the only open-loan sample: the replayed twin shares it. */
+function recordedCreate(body: unknown): { actingSubject: string; draft: LoanDraft } {
+  if (!body || typeof body !== 'object') throw new Error('Recorded create has no body');
+  const value = body as Record<string, unknown>;
+  const party = value.counterparty;
+  if (typeof value.actingSubject !== 'string' || value.expectedVersion !== 0 || typeof value.copy !== 'string'
+    || (value.direction !== 'lent' && value.direction !== 'borrowed')
+    || typeof value.startedAt !== 'string' || typeof value.dueAt !== 'string'
+    || !party || typeof party !== 'object') throw new Error('Recorded create is not a new loan');
+  const counterparty = party as Record<string, unknown>;
+  const named = counterparty.kind === 'name' && typeof counterparty.name === 'string'
+    ? { kind: 'name' as const, name: counterparty.name }
+    : counterparty.kind === 'person' && typeof counterparty.person === 'string'
+      ? { kind: 'person' as const, person: counterparty.person } : null;
+  if (!named) throw new Error('Recorded create names no borrower');
+  return { actingSubject: value.actingSubject, draft: {
+    copy: value.copy, direction: value.direction, counterparty: named, startedAt: value.startedAt, dueAt: value.dueAt } };
+}
+
+async function acceptRecordedCreate(record: AnswerRecord, persona: AnswerPersona,
+  main: ReturnType<typeof browserMainApi>, actingSubject: string) {
+  const recorded = recordedCreate(sample(record, persona, 'open-loan').body);
+  if (recorded.actingSubject !== actingSubject) throw new Error('Recorded create names another Person');
+  return mainCopiesApi(actingSubject, () => main).openLoan(recorded.draft, 'open-loan');
+}
+
 function RecordedLoans({ row, persona, selections }: {
   row: RowName; persona: AnswerPersona; selections: readonly RecordedSelection[];
 }) {
@@ -64,15 +92,26 @@ function RecordedLoans({ row, persona, selections }: {
     const main = browserMainApi(window.location.origin, { fetcher: replay.fetcher });
     const actingSubject = subjectOf(sample(record, persona, selections[0]!.label));
     let mounted = true;
-    void readLoans(null, 'en', { main, actingSubject }).then(read => {
-      if (!mounted) return;
-      if (!read.ok && !selections.some(item => item.state === 'error')) {
-        throw new Error(`Recorded loans read failed: ${read.failure}`);
+    void (async () => {
+      try {
+        // The page is shown only after the accepted create, so the open loan is that command's result.
+        if (selections.some(item => item.label === 'open-loan' && item.state === 'populated')) {
+          const created = await acceptRecordedCreate(record, persona, main, actingSubject);
+          if (!mounted) return;
+          if (!created.ok || created.data.state !== 'open' || created.data.returnedAt !== null) {
+            throw new Error(`Recorded loan create failed: ${created.ok ? created.data.state : created.failure}`);
+          }
+        }
+        const read = await readLoans(null, 'en', { main, actingSubject });
+        if (!mounted) return;
+        if (!read.ok && !selections.some(item => item.state === 'error')) {
+          throw new Error(`Recorded loans read failed: ${read.failure}`);
+        }
+        setReady({ read, main, actingSubject });
+      } catch (error: unknown) {
+        if (!(error instanceof DOMException && error.name === 'AbortError')) throw error;
       }
-      setReady({ read, main, actingSubject });
-    }).catch((error: unknown) => {
-      if (!(error instanceof DOMException && error.name === 'AbortError')) throw error;
-    });
+    })();
     return () => { mounted = false; replay.dispose(); };
   }, [record, persona, key, selections]);
   const region = !ready ? <p role="status">{t.loading}</p>
@@ -207,5 +246,33 @@ export const OwnerReturnExpired: Story = {
 
 export const OwnerReturnExpiredPhone: Story = {
   ...OwnerReturnExpired,
+  globals: phone,
+};
+
+/** Owner, books/loans: the accepted create stays open on its recorded due date and does not return the loan. */
+export const OwnerCreated: Story = {
+  args: { selections: [...ownerRead, { label: 'open-loan', state: 'populated' }] },
+  async play({ canvasElement }) {
+    await expectPopulated(canvasElement, loans);
+    const created = asLoan(sample(loans, 'owner', 'open-loan').answer);
+    if (!created || created.state !== 'open' || created.returnedAt !== null) {
+      throw new Error('Recorded create did not stay open');
+    }
+    const name = created.counterparty.kind === 'name' ? created.counterparty.name : null;
+    if (!name) throw new Error('Recorded loan names no borrower');
+    const canvas = within(canvasElement);
+    const region = canvas.getByRole('region', { name: t.dueSoon });
+    const title = textTitle(sample(loans, 'owner', 'loan-work-label').answer);
+    await expect(within(region).getByRole('heading', { name: title })).toBeVisible();
+    await expect(within(region).getByText(t.lentTo({ name }))).toBeVisible();
+    await expect(within(region).getByText(t.dueOn({ date: formatDay(created.dueAt, 'en') }))).toBeVisible();
+    await expect(within(region).getAllByRole('listitem')).toHaveLength(1);
+    await expect(canvas.getByRole('region', { name: t.overdue })).toBeVisible();
+    await expect(canvas.queryByText(t.loanReturned)).toBeNull();
+  },
+};
+
+export const OwnerCreatedPhone: Story = {
+  ...OwnerCreated,
   globals: phone,
 };
