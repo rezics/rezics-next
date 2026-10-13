@@ -1,6 +1,7 @@
 import { browserMainApi } from '../api/browser.ts';
 import { relationshipsChanged } from '../relationships/events.ts';
 import type { MainClient } from '../discover/types.ts';
+import { putAnimeReaderStatus, readerStatusBody } from '../tracking/anime-collection-recorded-page.ts';
 import { mainTrackingApi, type TrackingApi } from '../tracking/api.ts';
 import type { ReaderActions, ReaderWorkState, ReadingStatus } from './reader-actions.tsx';
 
@@ -265,9 +266,8 @@ export function createReaderStore({ actingSubject, seed = {}, ratingTarget, main
   }
 
   async function writeStatus(life: Lifetime, work: string, status: ReadingStatus | null, round: Round) {
-    const api = main().v1.works({ id: work.slice(-36) })['reader-status'];
-    const put = (entry: ReaderEntry) => api.put({ actingSubject, expectedVersion: entry.version, status },
-      { headers: { 'idempotency-key': crypto.randomUUID() } });
+    const put = (entry: ReaderEntry) => putAnimeReaderStatus(main(), work,
+      readerStatusBody(actingSubject, entry.version, status), crypto.randomUUID());
     const base = entries.get(work) ?? await refresh(work, life);
     if (!base || life.signal.aborted) return false;
     // The last round read what Main holds and was superseded by this choice: no write if Main already has it.

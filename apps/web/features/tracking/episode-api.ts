@@ -2,7 +2,10 @@ import { browserMainApi } from '../api/browser.ts';
 import type { MainClient } from '../discover/types.ts';
 import { commandKey } from '../feed/api.ts';
 import { failureOf, type Loaded, settle, uuidOf } from '../feed/types.ts';
-import { resumeName } from './media.ts';
+import {
+  episodeProgressBody, loadedProgress, loadedResume, putAnimeEpisodeProgress, readAnimeEpisodeProgress,
+  readAnimeEpisodeResume,
+} from './anime-collection-recorded-page.ts';
 
 // The browser side of episode progress. A series Structure places its episodes as occurrences, with
 // specials in a group of their own: Main lists them page by page (`/v1/compositions/{id}`) and keeps
@@ -78,9 +81,7 @@ async function restarted<T>(read: () => Promise<Loaded<T>>): Promise<Loaded<T>> 
 }
 
 export function mainEpisodeApi(actingSubject: string, main: () => MainClient = browserMainApi): EpisodeApi {
-  const progress = (episode: EpisodeRef) =>
-    main().v1.compositions({ id: uuidOf(episode.structure) }).occurrences({ occurrence: uuidOf(episode.occurrence) }).progress;
-  const read = (episode: EpisodeRef) => restarted(() => settle(() => progress(episode).get({ query: { actingSubject } })));
+  const read = (episode: EpisodeRef) => restarted(() => readAnimeEpisodeProgress(main(), actingSubject, episode).then(loadedProgress));
   return {
     async structure(work) {
       const parts = await restarted(() => settle(() => main().v1.resources({ resource: uuidOf(work) }).parts.get({
@@ -101,31 +102,23 @@ export function mainEpisodeApi(actingSubject: string, main: () => MainClient = b
         groups: page.data.occurrences.filter(item => item.role === 'group')
           .map(item => ({ occurrence: item.occurrence, label: item.labels[0]?.value ?? null })) } };
     },
-    async resume(work) {
-      const read = await restarted(() => settle(() => main().v1['reading-positions']({ work: uuidOf(work) }).get({
-        query: { actingSubject, position: 'mine', limit: 1 } })));
-      if (!read.ok) return read;
-      const page = read.data as { scope?: string; resolved?: string; complete?: boolean; items?: {
-        occurrence?: string; displayLabel?: string; labels?: { value: string }[] }[] };
-      // A positions window may resolve a place without ever reading private saved progress.
-      if (page.scope !== 'resume' || page.complete !== true) return { ok: true, data: null };
-      const item = page.items?.[0];
-      const occurrence = item?.occurrence ?? (page.resolved?.startsWith('https://') ? page.resolved : null);
-      if (!occurrence) return { ok: true, data: null };
-      return { ok: true, data: { occurrence, label: resumeName(item) } };
+    resume(work) {
+      return restarted(() => readAnimeEpisodeResume(main(), actingSubject, work).then(loadedResume));
     },
     progress: read,
     async mark(episode, change, options) {
       for (let attempt = 0; attempt < MARK_ATTEMPTS; attempt++) {
         const current = await read(episode);
         if (!current.ok) return current;
-        const body = { actingSubject, expectedVersion: current.data.version, completed: change.completed,
-          position: change.position === undefined ? current.data.position : change.position };
+        const body = episodeProgressBody({
+          actingSubject, completed: change.completed, expectedVersion: current.data.version,
+          position: change.position === undefined ? current.data.position : change.position,
+        });
         // One key per intent: a write Main could not answer is sent again as the same command, and replays.
         const key = commandKey();
         for (let tries = 0; tries < SEND_ATTEMPTS; tries++) {
           try {
-            const { data, error } = await progress(episode).put(body, { headers: { 'idempotency-key': key } });
+            const { data, error } = await putAnimeEpisodeProgress(main(), episode, body, key);
             if (!error) return data ? { ok: true, data } : { ok: false, failure: 'unavailable' };
             if (error.status === 409) {
               const code = (error.value as { code?: string } | null)?.code;
