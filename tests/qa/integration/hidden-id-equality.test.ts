@@ -16,7 +16,7 @@ import { resolveTargets, targetRead } from '../../../services/main/src/modules/t
 import { registeredHiddenIdReads } from '../../../scripts/qa/hidden-id-equality.ts';
 import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { assertHiddenIdEquality, comparableBody, type HiddenIdCounters } from '../support/hidden-id-equality.ts';
-import { foregroundCounted } from './support/query-cost-meter.ts';
+import { attributeSqlCheckoutCallers, foregroundCounted } from './support/query-cost-meter.ts';
 import { startMediaStack } from './media-support.ts';
 
 const ID = 'https://rezics.com/id/';
@@ -27,6 +27,7 @@ test('a hidden id and an absent id get the same answer on the registered reads',
   const stack = await startMediaStack('hidden-id-equality');
   const prototype = pg.Client.prototype as unknown as { query: (...args: unknown[]) => unknown };
   const originalQuery = prototype.query;
+  const restoreCheckoutCallers = attributeSqlCheckoutCallers();
   let statements = 0;
   let countSql = true;
   let bytes = 0;
@@ -421,6 +422,7 @@ test('a hidden id and an absent id get the same answer on the registered reads',
     }
   } finally {
     prototype.query = originalQuery;
+    restoreCheckoutCallers();
     await stack.stop();
   }
 }, 300_000);

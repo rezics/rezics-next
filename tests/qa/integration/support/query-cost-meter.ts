@@ -1,10 +1,27 @@
 import type { FusekiClient } from '../../../../services/main/src/infrastructure/fuseki.ts';
-import type { Pool, PoolClient } from 'pg';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { Pool, type PoolClient } from 'pg';
 import type { WorkProfile } from '../../support/work-profile.ts';
 import { commandCounters } from '../../../../packages/observability/src/http-measurement.ts';
 import { foregroundCounted } from './operation-cost.ts';
 
 export { foregroundCounted } from './operation-cost.ts';
+
+/** Keep SQL issued by a checkout callback in its caller's counting context. */
+export function attributeSqlCheckoutCallers(): () => void {
+  const prototype = Pool.prototype as unknown as { connect: (...args: unknown[]) => unknown };
+  const originalConnect = prototype.connect;
+  prototype.connect = function (this: unknown, ...args: unknown[]) {
+    const callback = args[0];
+    if (typeof callback !== 'function') return originalConnect.apply(this, args);
+    // A waiting caller can receive an idle client from a background release.
+    const resume = AsyncLocalStorage.snapshot();
+    return originalConnect.call(this, function (this: unknown, ...values: unknown[]) {
+      return resume(() => callback.apply(this, values));
+    });
+  };
+  return () => { prototype.connect = originalConnect; };
+}
 
 /** Actual native work, including rejected candidates. Missing evidence stays unknown. */
 export function nativeCounter(profile: WorkProfile, name: typeof commandCounters[number]): number | null {
