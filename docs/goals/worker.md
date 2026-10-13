@@ -124,6 +124,12 @@ list. Do not read again what you already have. A command's output is cut at abou
 16,000 characters, so ask for the part you need. `task --summary <task>`
 describes one task; `task --list` prints every one.
 
+`task operation -- <query>` answers where a Main API operation lives without a
+search: its operationId, method and path, exposure, rate-limit family, whether
+it takes a bearer and an idempotency key, the route's file and line, and the
+test files that call it. The query is part of an operationId or of a path;
+`--json` prints the same as data.
+
 A test run or a check takes minutes. Start it, then wait for it in one call: an
 empty `write_stdin` with `yield_time_ms: 300000` returns the moment the command
 ends. Asking every 30 seconds resends your whole context each time; a quarter
