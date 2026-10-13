@@ -315,12 +315,13 @@ async function loanRenderReads(sample: Sample, bookStatus: 'reading' | 'read', c
   let cursor: string | null = null, snapshot: string | undefined, page = 0;
   const exported: { sourceId: string; work: string; target: string; raw: unknown }[] = [];
   do {
-    const answer = await json<{ snapshot: string; nextCursor: string | null; items: typeof exported }>(sample(`copy-export-${page++}`, 'GET',
+    const answer = await json<{ snapshot: string; nextCursor: string | null; rows: typeof exported }>(sample(`copy-export-${page++}`, 'GET',
       `/v1/me/library-export?${query()}&limit=20${snapshot ? `&snapshot=${encodeURIComponent(snapshot)}` : ''}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`));
     expect(answer.snapshot).toBeTruthy();
     if (snapshot) expect(answer.snapshot).toBe(snapshot);
-    expect(answer.items.length).toBeLessThanOrEqual(20);
-    exported.push(...answer.items);
+    expect(answer).toMatchObject({ profile: 'rezics-library-export-v1' });
+    expect(answer.rows.length).toBeLessThanOrEqual(20);
+    exported.push(...answer.rows);
     snapshot = answer.snapshot;
     cursor = answer.nextCursor;
   } while (cursor);
