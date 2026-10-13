@@ -47,6 +47,6 @@ export function bffSafetyApi(actingSubject: string): SafetyApi {
     rule: ref => send(() => main().v1.governance['rule-queries'].post({ profile: 'governance-rule-query-v1', ref,
       scopeId: PLATFORM, actingSubject })),
     decide: input => send(() => main().v1['safety-cases']({ caseId: input.caseId }).decisions.post(input,
-      { headers: { 'idempotency-key': input.idempotencyKey } })),
+      { headers: { 'idempotency-key': input.idempotencyKey } }), { receipt: true }),
   };
 }

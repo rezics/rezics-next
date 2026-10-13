@@ -15,16 +15,18 @@ import type { BaseHead, Blocker, CommandResult, Evidence, HeaderState, Loaded, M
 export { newKey };
 export type Outcome<T> = { ok: true; data: T } | { ok: false; failure: CommandFailure; blocker?: Blocker; code?: string };
 
-type Answer<T> = { data: T | null; error: { status: number; value: unknown } | null };
+type Answer<T> = { data: T | null; error: { status: number; value: unknown } | null; status?: number };
 
 export async function send<T>(call: () => Promise<Answer<T>>): Promise<Outcome<T>> {
   try {
-    const { data, error } = await call();
+    const { data, error, status } = await call();
     if (error) {
       const code = problemCode(error.value);
       const blocker = blockerOf(error.value);
       return { ok: false, failure: commandFailure(error.status, code), ...code ? { code } : {}, ...blocker ? { blocker } : {} };
     }
+    if (status === 202 || typeof data === 'object' && data !== null && 'outcome' in data && data.outcome === 'apply_pending')
+      return { ok: false, failure: 'pending' };
     return data === null ? { ok: false, failure: 'unavailable' } : { ok: true, data };
   } catch {
     return { ok: false, failure: 'unavailable' };

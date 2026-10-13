@@ -1,4 +1,5 @@
 import type { Decision } from './queue-state.ts';
+import { admitted } from '../api/command.ts';
 import { automationOf } from './reason-presets.ts';
 import { type AttemptStorage, forgetCommand, performCommand, readCommand, readReportAttempt, refusalProvesNoCommit, retainCommand, updateCommand, type ReportAttempt } from './safety-pending.ts';
 import { readDecisionBasis, readMembers, readRoles, readSettings, readSubmission } from './read.ts';
@@ -21,9 +22,10 @@ export type CommandFailure =
 
 export type Outcome<T> = { ok: true; data: T } | { ok: false; failure: CommandFailure; code?: string };
 
-type Answer<T> = { data: T | null; error: { status: number; value: unknown } | null };
+type Answer<T> = { data: T | null; error: { status: number; value: unknown } | null; status?: number };
 
 export function commandFailure(status: number, code: string | undefined): CommandFailure {
+  if (status === 202) return 'pending';
   if (status === 409) return code === 'idempotency_conflict' ? 'conflict' : 'stale';
   if (status === 403) return 'denied';
   if (status === 400) return 'invalid';
@@ -34,13 +36,18 @@ export function commandFailure(status: number, code: string | undefined): Comman
   return 'unavailable';
 }
 
-export async function send<T>(call: () => Promise<Answer<T>>): Promise<Outcome<T>> {
+/** Receipt consumers must examine operation.status before confirming effects. */
+export async function send<T>(call: () => Promise<Answer<T>>, options: { receipt?: true } = {}): Promise<Outcome<T>> {
   try {
-    const { data, error } = await call();
+    const { data, error, status } = await call();
     if (error) {
       const code = problemCode(error.value);
       return { ok: false, failure: commandFailure(error.status, code), ...code ? { code } : {} };
     }
+    const operation = decisionStatus(data);
+    const receipt = options.receipt && (operation === 'accepted' || operation === 'partial' || operation === 'cancelled');
+    if (status === 202 && !receipt || !options.receipt && admitted(data))
+      return { ok: false, failure: 'pending' };
     return data === null ? { ok: false, failure: 'unavailable' } : { ok: true, data };
   } catch {
     return { ok: false, failure: 'unavailable' };
@@ -228,8 +235,8 @@ async function sendReport(main: MainClient, attempt: NonNullable<ReturnType<type
   const result = command.profile === 'rights-restriction-v1'
     ? await send(() => main.v1.rights.restrictions.post({ ...command, profile: command.profile as 'rights-restriction-v1',
       // Main's `literals()` helper currently reads as `never` through Eden.
-      outcome: command.outcome as never }, keyed(attempt.key)))
-    : await send(() => main.v1.moderation.decisions.post({ ...command, profile: command.profile as 'moderation-decision-v1' }, keyed(attempt.key)));
+      outcome: command.outcome as never }, keyed(attempt.key)), { receipt: true })
+    : await send(() => main.v1.moderation.decisions.post({ ...command, profile: command.profile as 'moderation-decision-v1' }, keyed(attempt.key)), { receipt: true });
   if (result.ok && (decisionStatus(result.data) === 'completed' || decisionStatus(result.data) === 'cancelled')) {
     await forgetCommand(`report:${attempt.item.id}`, attempt, store);
   } else if (result.ok) {
@@ -237,7 +244,8 @@ async function sendReport(main: MainClient, attempt: NonNullable<ReturnType<type
   } else if (refusalProvesNoCommit(attempt, result.failure)) {
     // These are authoritative refusals. A key conflict does not establish that nothing committed.
     await forgetCommand(`report:${attempt.item.id}`, attempt, store);
-  } else await updateCommand(`report:${attempt.item.id}`, attempt, { status: attempt.status, uncertain: true }, store);
+  } else await updateCommand(`report:${attempt.item.id}`, attempt, {
+    status: result.failure === 'pending' ? 'pending' : attempt.status, uncertain: true }, store);
   return result;
 }
 

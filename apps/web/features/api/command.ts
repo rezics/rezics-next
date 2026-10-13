@@ -1,11 +1,20 @@
-/** Failures other than `unavailable` definitively settle a command. */
+/** Admission and transport uncertainty retain a command's identity. */
 export type CommandResult<T, F extends string = string> = { ok: true; data: T } | { ok: false; failure: F };
+
+/** Main's pending operation or a decision receipt with effects still outstanding. */
+export function admitted(data: unknown): boolean {
+  if (typeof data !== 'object' || data === null) return false;
+  if ('status' in data && data.status === 'reconciling') return true;
+  const operation = 'operation' in data ? data.operation : null;
+  return typeof operation === 'object' && operation !== null && 'status' in operation
+    && (operation.status === 'accepted' || operation.status === 'partial');
+}
 
 /**
  * The newest intent replaces anything waiting. A superseded round can confirm
  * a read so the next round checks whether its complete intent is already held.
  * `key` is this command's Idempotency-Key. Retries of the unresolved command
- * reuse it. A confirmed success or a definitive refusal retires it.
+ * reuse it. After admission, only confirmed completion retires it.
  */
 export interface WriteRound {
   seq: number;
@@ -26,13 +35,15 @@ export interface CommandInstance {
 
 export function commandInstance(): CommandInstance {
   let current: string | null = null;
+  let admitted = false;
   return {
     id() {
       current ??= crypto.randomUUID();
       return current;
     },
     finish(result) {
-      if (result.ok || result.failure !== 'unavailable') current = null;
+      if (!result.ok && result.failure === 'pending') admitted = true;
+      if (result.ok || !admitted && !unresolved(result)) { current = null; admitted = false; }
     },
   };
 }
@@ -48,7 +59,7 @@ function intentText(value: unknown): string {
 
 export function unresolved(result: unknown): boolean {
   return !!result && typeof result === 'object' && 'ok' in result && (result as { ok: boolean }).ok === false
-    && 'failure' in result && (result as { failure?: string }).failure === 'unavailable';
+    && 'failure' in result && ['unavailable', 'pending'].includes((result as { failure?: string }).failure ?? '');
 }
 
 interface Ticket<T, R> {
@@ -70,16 +81,19 @@ export function commandLane<T, R>(failed: R) {
   let open = false;
   let intentChoice = '';
   let intentKey = '';
+  let admitted = false;
   const keyFor = (choice: T) => {
     const text = intentText(choice);
     if (open && text === intentChoice && intentKey) return intentKey;
     intentChoice = text;
     intentKey = crypto.randomUUID();
+    admitted = false;
     open = true;
     return intentKey;
   };
   const retire = (result: R) => {
-    if (unresolved(result)) return;
+    if (result && typeof result === 'object' && 'failure' in result && result.failure === 'pending') admitted = true;
+    if (unresolved(result) || admitted && !(result && typeof result === 'object' && 'ok' in result && result.ok === true)) return;
     open = false;
     intentKey = '';
   };

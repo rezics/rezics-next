@@ -1,4 +1,5 @@
 import type { CommandFailure, Outcome } from './commands.ts';
+import { admitted } from '../api/command.ts';
 import type { SafetyDecisionInput, SafetyDecisionResult, SafetyReasons } from './safety-types.ts';
 import type { Decision } from './queue-state.ts';
 import { object, validDecision, validItem, validRecoveryInput } from './recovery-input.ts';
@@ -48,7 +49,7 @@ export async function settleDecision(decide: (input: SafetyDecisionInput) => Pro
   for (let round = 0; round < tries; round++) {
     if (round > 0) await sleep(wait * round);
     const sent = await decide(input);
-    if (!sent.ok) return { kind: 'failed', failure: sent.failure, recorded: last !== null };
+    if (!sent.ok) return { kind: 'failed', failure: sent.failure, recorded: last !== null || sent.failure === 'pending' };
     last = sent.data;
     if (sent.data.operation.status === 'completed') return { kind: 'completed', result: sent.data };
   }
@@ -177,6 +178,7 @@ export async function performCommand<Input, Receipt>(operation: string, proposed
   if (!attempt) return { ok: false, failure: 'unavailable' };
   let result: Outcome<Receipt>;
   try { result = await send(attempt); } catch { result = { ok: false, failure: 'unavailable' }; }
+  if (result.ok && admitted(result.data)) result = { ok: false, failure: 'pending' };
   if (result.ok || refusalProvesNoCommit(attempt, result.failure)) await forgetCommand(operation, attempt, store);
   else await updateCommand(operation, attempt, { status: result.failure === 'pending' ? 'pending' : attempt.status, uncertain: true }, store);
   return result;

@@ -3,7 +3,7 @@
 import { Button } from '@rezics/ui/button';
 import { LocalizedText } from '@rezics/ui/localized-text';
 import { materializeData } from 'native-i18n';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { LinkIcon } from 'lucide-react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { spaceHref } from '../address/path.ts';
@@ -11,6 +11,8 @@ import { browserMainApi } from '../api/browser.ts';
 import type { ManageMessages } from './messages.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
+import { commandInstance, type CommandInstance } from '../api/command.ts';
+import { send as sendCommand } from './commands.ts';
 
 export interface ZoneAttachmentItem {
   zone: string;
@@ -48,22 +50,28 @@ export function ZoneAttachments({ realm, actingSubject, locale, messages, items,
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const commands = useRef(new Map<string, CommandInstance>());
   useEffect(() => { setReady(true); }, []);
 
   async function withdraw(item: ZoneAttachmentItem) {
     setBusy(item.zone);
     setNotice(null);
     try {
-      const key = crypto.randomUUID();
+      const slot = JSON.stringify([realm, actingSubject, item.zone]);
+      const command = commands.current.get(slot) ?? commandInstance();
+      commands.current.set(slot, command);
+      const key = command.id();
       const bodyRealm = realmIri(realm);
       const send = () => browserMainApi().v1.zones({ id: item.zone.slice(-36) })['realm-attachment-withdrawals'].post(
         { realm: bodyRealm, actingSubject }, { headers: { 'idempotency-key': key } });
-      let answer = await send();
-      if (answer.error && answer.error.status >= 500) answer = await send();
-      if (answer.error && answer.error.status !== 404) {
+      let answer = await sendCommand(send);
+      if (!answer.ok && answer.failure === 'unavailable') answer = await sendCommand(send);
+      command.finish(answer);
+      if (!answer.ok) {
         setNotice(t.zonesWithdrawFailed);
         return;
       }
+      commands.current.delete(slot);
       setRows(current => current.filter(row => row.zone !== item.zone));
       setNotice(t.zonesWithdrawn);
     } catch {
