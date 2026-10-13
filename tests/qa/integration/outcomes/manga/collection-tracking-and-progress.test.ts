@@ -127,7 +127,15 @@ async function foreign(name: Exclude<PersonaName, 'visitor'>) {
   expect(await answer(person.main('PUT', `/v1/works/${short(volume2.work)}/reader-status`, {
     actingSubject: actor, status: 'read', expectedVersion: before.status.version,
   }), 403)).toMatchObject({ code: 'reader_library_denied' });
-  const ownForeignView = await read(person, second, second.occurrences[1]!, actor);
+  const foreignPath = `${path(second, second.occurrences[1]!)}?${acting(actor)}`;
+  const foreignResponse = await person.main('GET', foreignPath), foreignAnswer = await foreignResponse.json();
+  const readEvidence = { persona: name, method: 'GET', path: foreignPath,
+    callerAccount: person.accountId, callerPerson: person.actingSubject,
+    targetAccount: target.accountId, targetPerson: actor, status: foreignResponse.status, answer: foreignAnswer };
+  console.info('foreign_progress_read_outcome', JSON.stringify(readEvidence));
+  expect(foreignResponse.status, JSON.stringify(readEvidence)).toBe(403);
+  expect(foreignAnswer).toMatchObject({ code: 'authority_denied' });
+  const ownForeignView = await read(person, second, second.occurrences[1]!);
   expect(ownForeignView).toMatchObject({ completed: false, version: 0 });
   const fallback = await positions(person, manga, 'mine', actor);
   expect(fallback.scope).not.toBe('resume');
