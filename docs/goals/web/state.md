@@ -10,7 +10,7 @@ launch manager's 2026-10-12 table, archived at
 | Manager | web; no watcher, polling or held task wait; coordinator wakes on mail/task exits |
 | Rows | 0 of 67 proved through persona API outcomes; old browser proofs do not prove rows under today's method |
 | Shared stack | Cold-started today, serving main; Account 3002, Main 3001, web 3000 and Storybook 6006 healthy (`task urls`) |
-| Measures | Status reports 80% (4/5), 4 first + 2 steps + 1 fix; manager counts all three conformance repairs as fixes: 57% (4/7). Landed median/max 1 (G-2094); 22.3M input / 156.1k output tokens, one session unavailable; tokens/proved row n/a |
+| Measures | Program confirms 4 first + 3 fixes = 57% (4/7); last status reported 80% because it mislabeled two fixes as steps. Landed median/max 1 (G-2094); last reading 22.3M input / 156.1k output tokens, one session unavailable; tokens/proved row n/a |
 
 ## Authorized work now
 
@@ -51,6 +51,10 @@ edits; concrete comment-only fixtures fail. Each brief now requires executable
 rules accepting correct edits automatically. Program was mailed
 `web-partial-conformance-fixes-measures-20261013`: the tool labels the two fixes
 after partial handoffs as steps; manager uses the stricter 57% measure meanwhile.
+Program's `program-web-measure-classification` confirms that count. Guards must
+state executable rules over code structure; source/hash exception inventories
+requiring harmless-change reviews are refused. If still needed at fix round 2,
+cut to structurally expressible violations and put the remainder in later.md.
 
 G-2072 step 1 is on main (kind validation, landing rules and attempt cap). The
 manager continues to enforce the web rules in every brief: merge
@@ -83,6 +87,9 @@ dropped.
 
 ## Known on main
 
+- `recipe-authoring.e2e.ts`: published Recipe reader lacks the "As written" radio; hold until the recipe rows are proved, no dispatch now.
+- `recipe-exchange.e2e.ts`: expects ASCII `1 1/2` and `1/3`, while the reader shows `1 ½` and `⅓`; hold until the recipe rows are proved, no dispatch now.
+- Program's nightly vertical regression has seven passing journeys on a clean QA profile and recipes recorded as missing; Zone site publish's 400 is with api.
 - Related-Work links and the two browser tests (`g-841-q04-reboot-spinoff`,
   `g-841-q03-identity`) plus `entity-page.stories.tsx` now expect canonical
   addresses with readable suffixes. The story passes; nightly regression will
