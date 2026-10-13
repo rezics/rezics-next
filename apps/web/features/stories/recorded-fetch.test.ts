@@ -22,7 +22,20 @@ function recordWith(...samples: AnswerSample[]): AnswerRecord {
   } };
 }
 
-test('matches the exact method, path, query and JSON body and prints any unmatched request', async () => {
+test('a query matches by its parameters in any order; one name\'s repeated values keep theirs', async () => {
+  const sample: AnswerSample = { label: 'list', operationId: 'transport', method: 'GET',
+    path: '/v1/transport?limit=20&type=a&type=b&actingSubject=person%3A1',
+    status: 200, headers: { 'content-type': 'application/json' }, answer: { items: [] } };
+  const { fetcher } = replay(recordWith(sample), [{ label: 'list', state: 'populated' }]);
+  const response = await fetcher('https://offline.invalid/v1/transport?actingSubject=person:1&type=a&limit=20&type=b');
+  expect(await response.json()).toEqual(sample.answer);
+  await expect(fetcher('https://offline.invalid/v1/transport?actingSubject=person:1&type=b&limit=20&type=a'))
+    .rejects.toThrow('Unmatched recorded request');
+  expect(() => replay(recordWith(sample, { ...sample, label: 'again', path: '/v1/transport?type=a&type=b&limit=20&actingSubject=person%3A1' }),
+    [{ label: 'list', state: 'populated' }, { label: 'again', state: 'populated' }])).toThrow('Ambiguous recorded request');
+});
+
+test('matches the method, path, query parameters and JSON body and prints any unmatched request', async () => {
   const sample: AnswerSample = { label: 'command', operationId: 'transport', method: 'POST',
     path: '/v1/transport?first=1&second=2', body: { nested: { yes: true }, list: [1, 2] },
     status: 200, headers: { 'content-type': 'application/json', etag: 'opaque' }, answer: { accepted: true } };
@@ -38,7 +51,6 @@ test('matches the exact method, path, query and JSON body and prints any unmatch
   for (const [method, path, body] of [
     ['PUT', sample.path, sample.body],
     ['POST', '/v1/other?first=1&second=2', sample.body],
-    ['POST', '/v1/transport?second=2&first=1', sample.body],
     ['POST', '/v1/transport?first=1&second=2&extra=3', sample.body],
     ['POST', sample.path, { nested: { yes: false }, list: [1, 2] }],
     ['POST', sample.path, { nested: { yes: true }, list: [2, 1] }],

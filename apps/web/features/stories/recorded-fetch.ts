@@ -15,9 +15,19 @@ function sameBody(left: unknown, right: unknown): boolean {
     Object.hasOwn(right, key) && sameBody(value, (right as Record<string, unknown>)[key]));
 }
 
+/** A query is its parameters: two callers write the same ones in different orders and the API reads
+ * them by name. The values of one repeated name keep their order. */
+function requestKey(path: string): string {
+  const at = path.indexOf('?');
+  if (at < 0) return path;
+  const pairs = [...new URLSearchParams(path.slice(at + 1))];
+  pairs.sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
+  return `${path.slice(0, at)}?${new URLSearchParams(pairs)}`;
+}
+
 /** Each mount owns a transport and disposes it at teardown. Labels choose answers;
  * the caller knows which 200 sample is empty. No domain rules run in this fetch.
- * JSON bodies match by value; path and query retain their exact wire spelling. */
+ * JSON bodies and query parameters match by value; the path retains its exact wire spelling. */
 export function recordedFetch(
   record: AnswerRecord,
   persona: AnswerPersona,
@@ -41,7 +51,7 @@ export function recordedFetch(
   for (let i = 0; i < samples.length; i++) {
     const current = samples[i]!.sample;
     if (samples.slice(0, i).some(({ sample }) => sample.method === current.method &&
-      sample.path === current.path && sameBody(sample.body, current.body))) {
+      requestKey(sample.path) === requestKey(current.path) && sameBody(sample.body, current.body))) {
       throw new Error(`Ambiguous recorded request: ${current.method} ${current.path}`);
     }
   }
@@ -66,8 +76,9 @@ export function recordedFetch(
     }
     if (disposed) throw ended();
     request.signal.throwIfAborted();
+    const key = requestKey(path);
     const match = samples.find(({ sample }) => sample.method === request.method &&
-      sample.path === path && sameBody(sample.body, body));
+      requestKey(sample.path) === key && sameBody(sample.body, body));
     if (!match) throw new Error(`Unmatched recorded request (${record.row}/${persona}): ${JSON.stringify({
       method: request.method, path: url.pathname + url.search, body: body === undefined ? '<absent>' : body,
     })}`);
