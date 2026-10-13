@@ -270,6 +270,41 @@ async function traverse(person: PersonaSession, limit: number) {
   expect(seen).toEqual([...zones].sort());
   expect(new Set(seen).size).toBe(zones.length);
 }
+async function traverseBeyondMaximumPage(person: PersonaSession) {
+  const roleId = await role(sessions.member, true);
+  try {
+    await answer(
+      configure(
+        sessions.member,
+        zoneOnly.zone,
+        (await head(zoneOnly.zone, sessions.member)).revision,
+        sessions.realm,
+      ),
+    );
+  } finally {
+    await role(sessions.member, false, roleId);
+  }
+  zones.push(zoneOnly.zone);
+  try {
+    const first = await answer<Page>(list(person, sessions.realm, 50));
+    expect(first.items).toHaveLength(50);
+    expect(first.complete).toBe(false);
+    expect(first.nextCursor).not.toBeNull();
+    await traverse(person, 50);
+  } finally {
+    await answer(
+      sessions.owner.main(
+        'POST',
+        `/v1/zones/${short(zoneOnly.zone)}/realm-attachment-withdrawals`,
+        {
+          realm: sessions.realm,
+          actingSubject: sessions.owner.actingSubject,
+        },
+      ),
+    );
+    zones.splice(zones.indexOf(zoneOnly.zone), 1);
+  }
+}
 outcomeTest(inventory, 'visitor', () => concealed('visitor'));
 outcomeTest(inventory, 'stranger', () => concealed('stranger'));
 outcomeTest(inventory, 'member', async () => {
@@ -287,6 +322,7 @@ outcomeTest(inventory, 'owner', async () => {
   await traverse(sessions.owner, 1);
   await traverse(sessions.owner, 24);
   await traverse(sessions.owner, 50);
+  await traverseBeyondMaximumPage(sessions.owner);
 });
 outcomeTest(inventory, 'moderator', async () => {
   await concealed('moderator');
@@ -294,6 +330,7 @@ outcomeTest(inventory, 'moderator', async () => {
   let cursor: string | null = null;
   try {
     await traverse(sessions.moderator, 24);
+    await traverseBeyondMaximumPage(sessions.moderator);
     cursor = (await answer<Page>(list(sessions.moderator, sessions.realm, 1))).nextCursor;
     expect(cursor).not.toBeNull();
   } finally {
