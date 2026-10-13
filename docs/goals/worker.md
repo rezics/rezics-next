@@ -130,10 +130,15 @@ it takes a bearer and an idempotency key, the route's file and line, and the
 test files that call it. The query is part of an operationId or of a path;
 `--json` prints the same as data.
 
-A test run or a check takes minutes. Start it, then wait for it in one call: an
-empty `write_stdin` with `yield_time_ms: 300000` returns the moment the command
-ends. Asking every 30 seconds resends your whole context each time; a quarter
-of all worker input on 2026-10-11 was such polls.
+A test run or a check takes minutes. Start it with the call's own
+`yield_time_ms: 300000`. If the call still returns before the command has
+ended, receive it with one wait of 300000 ms (`wait`, or an empty `write_stdin`,
+whichever your harness gives you) and never a shorter one: a wait returns the
+moment the command ends, so a long one costs no time. While it runs, read no
+log and list no process, and do not sleep; read the failure once, when it has
+ended. Every shorter wait resends your whole context: on 2026-10-13 the six
+dearest sessions spent a third of their input on 232 such polls of one second
+or one minute, about 150,000 tokens each.
 
 ## After a review
 
