@@ -3,6 +3,7 @@ import { browserMainApi } from '../api/browser.ts';
 import { platformClosed, type OperationGate } from '../api/platform-access.ts';
 import type { MainClient } from '../discover/types.ts';
 import type { ThreadRead } from '../feed/thread.ts';
+import { attachedDiscussionAbout, zoneDiscussionEntry } from './zone-discussion-recorded-page.ts';
 
 export interface AboutDiscussionBasis {
   realm: string;
@@ -80,43 +81,45 @@ export async function readAboutDiscussion(main: MainClient, input: {
   zone: string; path: string; signedIn: boolean; actingSubject?: string; personal: boolean; postingOpen?: boolean;
 }, readCurrentTarget?: AboutDiscussionTargetReader): Promise<AboutDiscussionRead> {
   try {
-    const query = { actingSubject: input.actingSubject };
-    const routeRead = await main.v1.zones({ id: uuid(input.zone) }).routes.get({ query: { ...query, path: input.path } });
+    // Eden keeps object key order. Recorded requests name the page or about first, then the actor.
+    const actor = input.actingSubject === undefined ? {} : { actingSubject: input.actingSubject };
+    const routeRead = await main.v1.zones({ id: uuid(input.zone) }).routes.get({
+      query: { path: input.path, ...actor },
+    });
     const route = routeRead.data;
     if (!route || routeRead.error) return { kind: 'unavailable' };
     if (!route.realm) return { kind: 'none' };
-    const about = route.kind === 'home' ? route.page?.reference.resourceId
-      : route.kind === 'detail' || route.kind === 'document' ? route.resource.id : undefined;
+    const about = attachedDiscussionAbout(route);
     // An index or an unpublished home has no page resource the command can address.
     if (!about) return { kind: 'none' };
     const realm = uuid(route.realm);
     const [target, lookup, header, joining] = await Promise.all([
       readCurrentTarget ? readCurrentTarget(about)
-        : main.v1.resources({ resource: uuid(about) }).page.get({ query })
+        : main.v1.resources({ resource: uuid(about) }).page.get({ query: { ...actor } })
           .then(read => read.error ? null : read.data?.target ?? null),
-      main.v1.realms({ realm })['about-thread'].get({ query: { ...query, about } }),
-      main.v1.realms({ realm }).get({ query }),
+      main.v1.realms({ realm })['about-thread'].get({ query: { about, ...actor } }),
+      main.v1.realms({ realm }).get({ query: { ...actor } }),
       input.actingSubject ? main.v1.realms({ realm }).joining.get({ query: { actingSubject: input.actingSubject } }) : null,
     ]);
-    if (!target || target.resource !== about || !lookup.data || lookup.error || !header.data || header.error)
-      return { kind: 'unavailable' };
-    let thread: ThreadRead | null = null;
-    if (lookup.data.thread) {
-      const read = await main.v1.realms({ realm }).threads({ reply: uuid(lookup.data.thread.reply) }).get({ query });
-      if (!read.data || read.error) return { kind: 'unavailable' };
-      thread = read.data;
+    const frameReady = Boolean(target && target.resource === about && lookup.data && !lookup.error
+      && header.data && !header.error);
+    let thread: { ok: true; data: ThreadRead } | { ok: false } | null = null;
+    if (frameReady && lookup.data?.thread) {
+      const read = await main.v1.realms({ realm }).threads({ reply: uuid(lookup.data.thread.reply) }).get({
+        query: { ...actor },
+      });
+      thread = !read.data || read.error ? { ok: false } : { ok: true, data: read.data };
     }
-    const mode: AboutDiscussionMode = !input.signedIn ? 'sign-in'
-      : input.postingOpen === false ? 'closed'
-      : !input.actingSubject || !input.personal ? 'identity'
-      : header.data.reviewMode === 'mandatory' ? 'reviewed'
-      : header.data.reviewMode === 'trusted-members'
-        ? !joining || joining.error || !joining.data ? 'unavailable'
-          : joining.data.state === 'joined' ? 'open' : 'join'
-        : 'open';
-    return { kind: 'ready', basis: { realm: route.realm, about,
-      targetRevision: target.revision, zone: `https://rezics.com/id/${uuid(route.zone)}`,
-      path: route.path, routeRevision: route.revision }, thread, mode,
-      realmName: header.data.name, actingSubject: input.actingSubject ?? null };
+    return zoneDiscussionEntry({
+      route: { realm: route.realm, zone: route.zone, path: route.path, revision: route.revision },
+      about, target: target && target.resource === about ? target : null,
+      lookup: lookup.data && !lookup.error ? { ok: true, thread: lookup.data.thread ?? null } : { ok: false },
+      header: header.data && !header.error
+        ? { ok: true, name: header.data.name, reviewMode: header.data.reviewMode } : { ok: false },
+      joining: joining === null ? null : joining.data && !joining.error
+        ? { ok: true, state: joining.data.state } : { ok: false },
+      thread, signedIn: input.signedIn, actingSubject: input.actingSubject, personal: input.personal,
+      postingOpen: input.postingOpen,
+    });
   } catch { return { kind: 'unavailable' }; }
 }
