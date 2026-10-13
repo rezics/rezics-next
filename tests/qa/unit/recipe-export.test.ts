@@ -26,10 +26,12 @@ test('RECIPE03: exact Schema.org export preserves grouped step order and unparse
       residual: `sha256:${'a'.repeat(64)}` } };
   const result = exportRecipe([group, ingredient, first, second], structure);
   expect(result.recipe.recipeInstructions).toEqual([{ '@type': 'HowToSection',
-    name: 'Finish', inLanguage: 'en', sourceKey: group.sourceKey,
+    name: 'Finish', inLanguage: 'en',
     itemListElement: [{ '@type': 'HowToStep', text: 'Stir.', inLanguage: 'en' },
       { '@type': 'HowToStep', text: 'Serve.', inLanguage: 'en' }] }]);
-  expect(result.recipe.recipeIngredient).toEqual(['a handful of herbs']);
+  expect(result.recipe.recipeIngredient).toEqual([{ '@type': 'PropertyValue',
+    text: 'a handful of herbs', amountLexical: 'a handful of herbs',
+    parseStatus: 'unparsed', inLanguage: 'en' }]);
   expect(result.residuals).toEqual([{ sourceKey: ingredient.sourceKey,
     text: 'a handful of herbs', parseStatus: 'unparsed', residual: ingredient.qualifier.residual }]);
   expect(result.sourceObservations).toEqual([id(8)]);
