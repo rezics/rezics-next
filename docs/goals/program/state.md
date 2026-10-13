@@ -3,17 +3,34 @@
 The supermanager's checkpoint for [this Goal](GOAL.md); live tasks:
 `task goal -- status`.
 
-| Field | State (2026-10-13 05:05 UTC) |
+| Field | State (2026-10-13 06:11 UTC) |
 | --- | --- |
-| Manager | `program`, an interactive Claude session started by the maintainer on 2026-10-13. It wakes on its own background waits and on Goal mail (`scripts/goal/next-event.sh program`) |
-| Delivery Goals | `api`: manager `api`, GPT-6.1 Sol on `codex-1`; 18 outcome tasks cover all 67 rows in two steps (the persona matrix, read by the manager, then the declaration and tests), plus three design analyses and the load-set rebuild. `web`: manager `web`, Sol on `codex`, started for the four client-contract guards and the tests red on `main`; no surface task before a vertical is proved. Both are headless and enrolled with the coordinator (start messages in `.temp/goal-orchestration/managers/`). `operations`: not started |
-| First tasks | On `main`: P1 (G-2070, 04:50 UTC), P2 (G-2071, 04:58), P4 (G-2072 step 1, 05:01), P6 (G-2088, 05:03). In work: P3 (G-2072 step 2), P7 (G-2073), P8 (G-2089). The tool now refuses a brief without `kind:`, reviews only implementation and mechanism tasks in sensitive paths, and refuses a third fix round without a dated decision |
-| Decided for P1 to P3 | A row's proofs are one declaration file, `scripts/qa/cases/outcomes/<kind>/<slug>.ts`, with a cell for each persona: `proved`, `pending`, `notApplicable` or missing. `outcomeTest` runs a pending cell as an expected failure, so a test that starts passing is red until its cell says `proved`. That is how "fails on `main`" is checked without a run at dispatch, and why no two tasks share a registry file. Delivery Goals file each row's existing proofs under their personas; the program does not |
-| Host | Cold-started on 2026-10-13: Docker, the storage stack, `task dev`, the third swap device and the coordinator service are up. tmux for manager wakes is its own server and scope: `tmux -L goal` (`goal-tmux.scope`) |
-| Verified | One integration file passed on `main` d2a2e3166 in 11.9 s on a pooled stack, so the tier outcome tests run in works. `task goal -- regress` started at 04:35 UTC in `tmux -L goal`, window `regress` (log `.temp/program-regress.log`); the first main-wide run on the final `main` |
-| Tree | `main` and the archive (`archive/goals`); 55 unmerged branch tips of the stopped run under `refs/archive/2026-10-12/` |
-| Allowances | Claude: managers only. Codex: both accounts reset on 2026-10-13 at about 04:58 UTC (0% of a new 7-day window, next reset about 2026-10-20 05:00 UTC), two hours before the time codex-resets.com listed. Service tier `default`. Width is set by settled work and the measures, not by spending. No top-up, no reset credits |
+| Run | Paused at the maintainer's order of about 05:39 UTC ("finish what is in flight, converge and pause; Codex has reset, we plan again"). Started the same day at about 04:20 UTC |
+| Running | No worker and no manager turn. The coordinator service is stopped and disabled, so nothing wakes by itself. The main-wide regression still runs (below) |
+| Managers | `program`: the maintainer's interactive Claude session. `api` (GPT-6.1 Sol, `codex-1`, session `01a13389`) and `web` (Sol, `codex`, session `01a13391`) are headless, still enrolled and idle; each wrote its checkpoint ([api](../api/state.md), [web](../web/state.md)). `operations` was not started |
+| Scope | 0 of 67 rows proved; 402 persona cells missing (`task goal -- status`). All 67 rows have a persona matrix, read and corrected by the api manager, in 18 briefs |
+| First tasks | On `main`: P1 (registry cells and `outcomeTest`), P2 (`tests/qa/support/personas.ts`), P3 and P4 (`dispatch`, `land`, `resume` enforce the method), P6 (measures in `status`), P7 steps 1 and 2 (`coordinator start`, mail with sender and deadline), P8 (`regress --nightly`, one journey for each vertical; recipes has none that passes). Not built: P5 (the surface gate), P7 step 3 (the coordinator lands `land: auto` tasks) |
+| Open tasks | program: none. api: 22 (three Books drafts refused at their first merge, 15 matrix tasks idle before step two, the load-set rebuild merged and incomplete, three design notes read). web: 2 (one guard refused for scope, one merged). Their state files list each |
+| Regression | `task goal -- regress` on `main` d2a2e3166, run `20261013t043515-585e9a`, in `tmux -L goal`, window `regress`, log `.temp/program-regress.log`. At 06:10 UTC: unit, model, jena and all 54 owner batches done, 19 of 152 integration batches started. It uses no model. `task goal -- regress --resume 20261013t043515-585e9a` continues it after a stop |
+| Allowances | Claude: managers only. Codex: both accounts reset on 2026-10-13 at about 04:58 UTC, two hours before the time codex-resets.com listed; 1% of the new week used by 05:45. Service tier `default`. No top-up, no reset credits |
 | Capacity settings | `.temp/goal-orchestration/`: QA slots 8, gate lanes 4, regress lanes 3, review engine `codex-1` |
+
+## What the run of 2026-10-13 showed
+
+For the next plan. Figures are the managers' own counts where the tool's differ.
+
+| Subject | Finding |
+| --- | --- |
+| Attempts | program: 6 tasks in 11 attempts, 6 first, 1 step, 4 fixes (one refused by a gate, one by a rebase, two sent back after I read the code), 60% first; api: 22 first, 8 step resumes, 2 fixes, 92%; web: 5 first, 3 fixes, 62% |
+| The pilot found the seam | The three Books step-two drafts (11 rows, 66 candidate cells) did not land: a repository guard cannot resolve the loader's `pathToFileURL` import at `scripts/qa/cases/outcomes.ts:234` once a test imports a declaration, and one draft needed a change in `tests/qa/support/personas.ts`. The registry, the harness and the guards each passed alone and were never run together. First task of the next plan: one Books row proved end to end, by the program, before any other test is written |
+| Width | Useful width was about 20 workers for ten minutes (the matrices), then the api manager read 18 matrices serially: three were resumed after 20 minutes and five more after 45. One manager reading every matrix is the limit of this design |
+| Mail does not interrupt | The api manager worked in one turn for 37 minutes without reading its inbox, missed the wrap-up for six minutes and resumed five tasks after it. I ended its turn by signal and stopped the five. Mail needs a way to reach a manager inside a turn, or turns need a bound |
+| Coordinator | It wakes within about two seconds of a mail. Enrolment by hand needed three corrections (service stopped, tmux server in its own scope, session id from the log); `coordinator start` replaces that and has not been run on a real Goal yet |
+| Gate environment | A gate run from an agent session has `CLAUDECODE=1`; `bun test` then prints no passing test names. One landing was refused for that; the worker protocol now says so |
+| Measures | `status` counted a fix after a `partial` handoff as a step. `resume` now records each attempt's round; `scripts/goal/measures.ts` still infers it and should read the record |
+| One file, many tasks | Four tasks changed `scripts/goal/goalctl.ts` (6,300 lines) through loans; one did not rebase and cost a round. Split the file before the next tooling wave |
+| Product facts met on the way | Publishing a Zone site returns 400 on `main` in a browser journey and in the seed helper; the recipes vertical has no passing signed-in journey; the retained load set still does not build (`Catalogue backups must stay in this checkout .temp`); the short-prefix typeahead's slow query is an identity read of about 0.58 s that the fence replays, inferred and not yet captured |
+| The reset | The leftover of the old week (about 13% and 17%) was not used: I ramped up over twenty minutes and the reset came two hours early |
 
 ## After a cold start of the host
 
@@ -32,10 +49,9 @@ The supermanager's checkpoint for [this Goal](GOAL.md); live tasks:
 4. The host's third swap device (`zram2`, 16 GiB) does not survive a restart;
    add it again before running more than about fifteen workers.
 5. `systemd-run --user --scope --unit=goal-tmux -- tmux -L goal new-session -d -s goal-host`,
-   then `systemctl --user enable --now goal-coordinator.service`. Enrolment is
-   refused while the service runs and when the tmux server shares the enrolling
-   shell's cgroup; stop the service, enrol with `--tmux-socket /tmp/tmux-1000/goal`,
-   start it again.
+   then `systemctl --user enable --now goal-coordinator.service`. A manager is
+   started with `task goal -- coordinator start <goal> --engine <engine> --effort high`;
+   the api and web managers are still enrolled and wake on their next mail.
 6. Ports 3000, 3001, 3002, 3004 and 8025 are forwarded to the tailnet
    (`tailscale serve status`); remove one with `sudo tailscale serve --tcp=<port> off`.
 

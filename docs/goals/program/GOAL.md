@@ -26,7 +26,7 @@ areas:
 
 # Program
 
-Status: running since 2026-10-13. The maintainer stopped the run
+Status: paused on 2026-10-13 for a new plan ([state.md](state.md)). The maintainer stopped the run
 of 2026-10-07 to 2026-10-12 because its efficiency was not acceptable, asked for
 the way of working to be redesigned, and started this Goal's manager on 2026-10-13.
 [state.md](state.md) records where everything stands.
