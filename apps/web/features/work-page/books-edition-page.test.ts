@@ -7,7 +7,7 @@ import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
 import { mainTrackingApi } from '../tracking/api.ts';
 import type { EditionChoice, Editions } from '../tracking/types.ts';
-import { booksEditionReads } from './books-edition-page.read.ts';
+import { booksEditionReads, readBooksEditionStatus } from './books-edition-page.read.ts';
 
 const records = [hub, ambiguous, formats] as AnswerRecord[];
 const disposals: (() => void)[] = [];
@@ -39,6 +39,32 @@ function command(record: AnswerRecord, persona: AnswerPersona, label: string) {
 }
 
 for (const record of records) {
+  test(`${record.row}: the saved status resolves its exact release without an inventory page`, async () => {
+    const hubRow = record === records[0];
+    const sameTitleRow = record === records[1];
+    const own = sample(record, 'member', hubRow ? 'own-preference-paperback'
+      : sameTitleRow ? 'own-preference-audiobook' : 'own-preference-ebook');
+    const release = sample(record, 'member', hubRow ? 'release-detail-paperback'
+      : sameTitleRow ? 'selected-release-audiobook' : 'selected-release-ebook');
+    const progress = sample(record, 'member', 'progress-in-language');
+    const failures: string[] = [];
+    const main = transport(record, 'member', [
+      { label: own.label, state: 'populated' }, { label: release.label, state: 'populated' },
+      { label: progress.label, state: 'populated' },
+    ], failures);
+    const url = new URL(own.path, 'https://recorded.invalid');
+    const id = url.pathname.split('/').at(-1)!;
+    const reads = booksEditionReads({ main, actingSubject: url.searchParams.get('actingSubject')! });
+    const status = await readBooksEditionStatus(reads, id, 'en');
+    expect<unknown>(status.preference).toEqual({ ok: true, data: own.answer });
+    expect<unknown>(status.progress).toEqual({ ok: true, data: progress.answer });
+    const detail = release.answer as { id: string; title: { value: string }; editionStatement: string };
+    expect(status.editionName).toContain(detail.title.value);
+    expect(status.editionName).toContain(detail.editionStatement);
+    expect<unknown>(await reads.readEditionRelease(id, detail.id)).toEqual({ ok: true, data: release.answer });
+    expect(failures).toEqual([]);
+  });
+
   test(`${record.row}: the server page seam consumes the same recorded Work and public releases`, async () => {
     const header = sample(record, 'member', 'work-header');
     const preference = sample(record, 'member', 'own-preference-before');

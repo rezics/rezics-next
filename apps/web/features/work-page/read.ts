@@ -199,6 +199,10 @@ export const readReleases = cache(async (id: string) => {
   return booksEditionReads(await reader()).readReleases(id);
 });
 
+/** The saved release has an exact address independent of the inventory's current page. */
+export const readEditionRelease = cache(async (id: string, release: string) =>
+  booksEditionReads(await reader()).readEditionRelease(id, release));
+
 export const readCredits = cache(async (id: string): Promise<Loaded<CreditPage>> => {
   const { main, actingSubject } = await reader();
   return settle(async () => {

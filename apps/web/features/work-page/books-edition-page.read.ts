@@ -46,6 +46,9 @@ export function booksEditionReads({ main, actingSubject }: { main: MainClient; a
       settle(() => main.v1.works({ id }).get({ query: { actingSubject } }), undefined, true),
     readReleases: (id: string) =>
       settle(() => main.v1.works({ id }).releases.get({ query: { limit: 20, actingSubject } }), undefined, true),
+    readEditionRelease: (id: string, release: string) =>
+      settle(() => main.v1.works({ id }).releases({ release: release.slice(-36) }).get({
+        query: { actingSubject } }), undefined, true),
     readEditionPreference: (id: string): Promise<BooksRead<EditionPreference | null>> => actingSubject
       ? settleNullable(() => main.v1.me['edition-preferences']({ work: id }).get({ query: { actingSubject } }), true)
       : Promise.resolve({ ok: false, failure: 'sign-in' }),
@@ -59,20 +62,19 @@ export function booksEditionReads({ main, actingSubject }: { main: MainClient; a
 export type BooksReleasePage = Extract<Awaited<ReturnType<ReturnType<typeof booksEditionReads>['readReleases']>>, { ok: true }>['data'];
 
 type BooksReads = ReturnType<typeof booksEditionReads>;
-type StatusReads = Pick<BooksReads, 'readEditionPreference' | 'readReleases'> & {
+type StatusReads = Pick<BooksReads, 'readEditionPreference' | 'readEditionRelease'> & {
   readProgressSummary: (id: string, language?: string) => Promise<{ ok: true; data: ProgressSummary } | { ok: false }>;
 };
 
-/** The server status and recorded surface resolve the saved exact identity in the same release page. */
+/** Resolve the saved identity directly: it need not appear in the first inventory page. */
 export async function readBooksEditionStatus(reads: StatusReads,
   id: string, locale: UiLocale, savedPreference?: Loaded<EditionPreference | null>) {
   const preference = savedPreference ?? await reads.readEditionPreference(id);
   const language = preference.ok && preference.data ? preference.data.language : locale;
-  const [progress, releases] = await Promise.all([reads.readProgressSummary(id, language), reads.readReleases(id)]);
   const chosen = preference.ok ? preference.data?.edition : null;
-  const release = chosen?.kind === 'release' && releases.ok
-    ? releases.data.items.find(item => item.id === chosen.resource) : undefined;
-  return { preference, progress, editionName: release ? releaseChoiceName(release, locale, copyOf(locale)) : null };
+  const [progress, release] = await Promise.all([reads.readProgressSummary(id, language),
+    chosen?.kind === 'release' ? reads.readEditionRelease(id, chosen.resource) : Promise.resolve(null)]);
+  return { preference, progress, editionName: release?.ok ? releaseChoiceName(release.data, locale, copyOf(locale)) : null };
 }
 
 /** Bounded page reads; the host frame and the recorded frame supply the same readers. */
