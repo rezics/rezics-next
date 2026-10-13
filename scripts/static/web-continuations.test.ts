@@ -17,6 +17,12 @@ test('unchanged opaque forwarding passes, including punctuation in cursor values
   expect(changedContinuationGroups(continuationInventory(sources), continuationInventory(sources))).toEqual([]);
 });
 
+test('benign edits to a correctly forwarding consumer need no review or baseline update', () => {
+  const baseline = continuationInventory([source(forwarded)]);
+  const harmless = `// Explain the response.\n${forwarded}`;
+  expect(changedContinuationGroups(continuationInventory([source(harmless)]), baseline)).toEqual([]);
+});
+
 test.each([
   forwarded.replace('nextCursor: page.nextCursor', 'nextCursor: null'),
   forwarded.replace('cursor, limit', 'cursor: Number(cursor) + 20, limit'),
