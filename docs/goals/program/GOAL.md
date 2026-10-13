@@ -199,6 +199,23 @@ lands, a manager applies its rule by hand and says so.
   before. The matrices of 2026-10-13 state what the API answers today from
   reading code, which is the dear way to learn it. The web is checked by
   stories fed with responses recorded from the same calls.
+- **The model is called for a decision; a program does the rest.** This holds
+  for workers as for managers, and it lies under the count of turns: a turn
+  costs what its steps cost. Over 2026-10-11 and 2026-10-12, 39% of worker
+  tokens went to steps that held no decision (waiting on a running command 29%,
+  starting tests and checks 9%, committing 1%), 35% to fetching what to read
+  one piece at a time, and 16% to editing and thinking; a task finished in one
+  turn had the same shares. So the harness, not the model, waits, runs the
+  checks, commits, rebases and lands, and it hands the model what the brief
+  names before the first step; the model is called again when a check fails,
+  with the failure and not the log. Some turns come from the same cause: a gate
+  refuses what a worker forgot to run.
+- **A limit is a breaker, not a saving** (maintainer, 2026-10-13). A cap on
+  attempts, steps or tokens bounds a task that was defined wrongly; it does not
+  make the same work cost less, and a task cut at a count is read again by
+  whoever continues it. A limit therefore asks for a decision and is never
+  counted as efficiency. What is counted is the tokens for a landed task of a
+  kind, measured on the same tasks before and after a change.
 - **Every turn is measured.** Why it started, the context it carried, what it
   did. `status` prints the managers' share of tokens beside the first-attempt
   share, and a wake that did nothing is counted.
@@ -285,9 +302,9 @@ measures in `status`; `coordinator start` and mail with a sender and a deadline;
 | N3 | The coordinator lands and closes what needs no judgment, starts a short fresh turn for an event, bounds a turn, delivers mail by level, and records each turn (reason, context, actions). A manager session that is still resumed compacts at 300,000 |
 | N4 | `goalctl` maintains termspaces: it registers and removes the window of every turn and worker, `status` names each one's window, and nothing of a Goal runs on another tmux server |
 | N5 | One command answers what a persona gets from an operation on a pooled QA stack and can record the response for a story; a generated index gives each operation's route file, owner and tests |
-| N6 | The surface gate (types, unit tests, the changed stories fed by recorded responses); the measures read each attempt's recorded round; a cancelled task names its reason and what replaces it; an attempt stops at 150 model steps and hands off what it has (nine sessions in ten were shorter); a worker starts no sub-agent; a mechanism brief's note is marked read by its Goal's manager; `dispatch` chooses the Codex account with more of its week left |
+| N6 | The surface gate (types, unit tests, the changed stories fed by recorded responses); the measures read each attempt's recorded round; a cancelled task names its reason and what replaces it; at 150 model steps of one attempt the manager is told and decides (nine sessions in ten were shorter; nothing stops on the count alone); a worker starts no sub-agent; a mechanism brief's note is marked read by its Goal's manager; `dispatch` chooses the Codex account with more of its week left |
 | N7 | Main's scheduled run is the judge: `status` prints the rows the last run on `main` confirmed beside the rows declared; a bounded audit tries each newly proved row as its personas and reports only with a failing test; a fault reopens the cell for its owner, who can acknowledge it and cannot clear it |
-| N10 | A worker learns before its handoff what the landing would refuse, and checks in one step: `task goal -- selfgate` runs the merge's own checks in the gate's environment against the current `main` (the rebase, the claim and scope, the affected unit files, the guards); `task goal -- check` runs types, lint, the task's tests and the guards in one call and prints only what failed. Over 2026-10-11 and 2026-10-12 waiting on running commands took 29% of worker tokens and tests 9%; on 2026-10-13 at least six of thirteen fix rounds were refusals a worker could have met itself |
+| N10 | The harness does what needs no decision in a worker's task. It hands the worker the files, tests and operations the brief names before the first step; `task goal -- check` runs types, lint, the task's tests and the guards in one blocking call and prints only what failed; at a handoff the harness itself commits, rebases onto the current `main` and runs the merge's checks in the gate's environment, and a refusal goes back to the same session as the failure alone. A worker never waits on a command, never commits and never learns of a refusal from a manager. Accepted on a comparison: five landed tasks of one kind done again this way, tokens and steps for each beside the first time. Over 2026-10-11 and 2026-10-12, 39% of worker tokens went to steps with no decision |
 | N9 | The maintainer is told on Telegram and answers in the supermanager's terminal: `task goal -- ask` records a question under a decision code and sends it with that code first, in code style, then the options, the one recommended and any default with its time; `tell` sends a notice; `decide` records his answer and `decisions` lists the open ones; a failed send is retried from an outbox. No listener, no button, no library; its tests run against a fake Bot API |
 | N8 | Tests are admitted by the tool: whole tiers, browser runs and `regress` start only from the program's schedule, one at a time and when no worker is live; each Goal has a share of the QA slots; `goalctl` refuses the rest. The full run's three and a half hours are measured by batch and cut |
 
