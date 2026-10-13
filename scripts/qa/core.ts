@@ -494,12 +494,88 @@ export interface CommandPhaseSample {
 /** A phase callback that throws or returns an unusable limit. Not a caller-supplied message. */
 export const phaseDeadlineFailure = 'phase deadline failed';
 
+/** One active-work clock shared by commands and lifetime lease owners. Waits
+ * overlap across children, so only their union pauses the run. The waiter's
+ * absolute deadline is deliberately never moved. */
+export class QaRunDeadline {
+  readonly waitDeadline: number;
+  private readonly budgetMs: number;
+  private readonly startedAt: number;
+  private waitStartedAt = 0;
+  private waitedMs = 0;
+  private remaining: number;
+  private resumedAt: number;
+  private waits = new Set<symbol>();
+  private listeners = new Set<() => void>();
+
+  constructor(deadline: number, private now: () => number = Date.now, waitDeadline = deadline) {
+    this.resumedAt = now();
+    this.startedAt = this.resumedAt;
+    this.remaining = Math.max(0, deadline - this.resumedAt);
+    this.budgetMs = this.remaining;
+    this.waitDeadline = waitDeadline;
+  }
+
+  remainingMs(): number {
+    return this.waits.size ? Infinity : this.activeRemainingMs();
+  }
+
+  activeRemainingMs(): number {
+    return Math.max(0, this.remaining - (this.waits.size ? 0 : this.now() - this.resumedAt));
+  }
+
+  wait(): () => void {
+    const token = Symbol();
+    if (!this.waits.size) { this.remaining = this.remainingMs(); this.waitStartedAt = this.now(); }
+    this.waits.add(token);
+    this.changed();
+    return () => {
+      if (!this.waits.delete(token)) return;
+      if (!this.waits.size) { this.resumedAt = this.now(); this.waitedMs += this.resumedAt - this.waitStartedAt; }
+      this.changed();
+    };
+  }
+
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => { this.listeners.delete(listener); };
+  }
+
+  sample(): { budgetMs: number; activeElapsedMs: number; admissionWaitMs: number; waitDeadline: number } {
+    const now = this.now();
+    const admissionWaitMs = this.waitedMs + (this.waits.size ? now - this.waitStartedAt : 0);
+    return { budgetMs: this.budgetMs, activeElapsedMs: now - this.startedAt - admissionWaitMs,
+      admissionWaitMs, waitDeadline: this.waitDeadline };
+  }
+
+  private changed(): void { for (const listener of this.listeners) listener(); }
+}
+
+export function qaWaitFailure(resource: string, started: number, ended: number): string {
+  return `QA waited for ${resource} for ${Math.max(0, ended - started)} ms; admission deadline reached; no work started`;
+}
+
+/** Nested commands inherit a duration; the admission instant remains fixed. */
+export function qaRunDeadline(deadline: number, env: NodeJS.ProcessEnv = process.env, now: () => number = Date.now): QaRunDeadline {
+  const remaining = env.REZICS_QA_RUN_REMAINING_MS;
+  if (remaining !== undefined && (!/^\d+$/.test(remaining) || !Number.isSafeInteger(Number(remaining))))
+    throw new Error('Invalid REZICS_QA_RUN_REMAINING_MS');
+  return new QaRunDeadline(remaining !== undefined && env.REZICS_QA_MEMORY_DEADLINE === String(deadline)
+    ? now() + Number(remaining) : deadline, now, deadline);
+}
+
 export async function commandAsync(root: string, name: string, args: string[], timeoutMs: number,
   env: NodeJS.ProcessEnv = process.env, onOutputLine?: (line: string) => void,
-  options: { runDeadline?: number; phaseDeadline?: (sample: CommandPhaseSample) => { activeLimitMs: number; reason?: string } } = {}): Promise<{ ok: boolean; output: string; stdout: string; stderr: string; elapsedMs: number;
+  options: { runDeadline?: number | QaRunDeadline; phaseDeadline?: (sample: CommandPhaseSample) => { activeLimitMs: number; reason?: string } } = {}): Promise<{ ok: boolean; output: string; stdout: string; stderr: string; elapsedMs: number;
   activeElapsedMs: number; admissionWaitMs: number; timedOut: boolean }> {
   const start = Date.now();
-  const environment = spawnEnvironment(name, args, env);
+  // A child's admission instant stays fixed even after its parent's work clock
+  // moves. Carry the remaining work duration separately across that boundary.
+  const runDeadline = typeof options.runDeadline === 'number'
+    ? qaRunDeadline(options.runDeadline, env)
+    : options.runDeadline;
+  const environment = spawnEnvironment(name, args, runDeadline
+    ? { ...env, REZICS_QA_RUN_REMAINING_MS: String(Math.ceil(runDeadline.activeRemainingMs())) } : env);
   const scope = childScope(name, args, environment);
   noteChildScope(scope);
   const child = spawn(name, args, { cwd: root, detached: true,
@@ -520,6 +596,7 @@ export async function commandAsync(root: string, name: string, args: string[], t
   const stderrRedactor = createCommandOutputRedactor();
   const trackAdmission = options.runDeadline !== undefined || options.phaseDeadline !== undefined || env.REZICS_QA_MEMORY_EVENTS === '1';
   const waiting = new Set<string>();
+  let resumeRun: (() => void) | undefined;
   const admissionSpans: { start: number; end: number }[] = [];
   let admissionStarted = 0, admissionWaitMs = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -530,7 +607,7 @@ export async function commandAsync(root: string, name: string, args: string[], t
     // A capped grandparent must see child admission before the wait completes.
     if (env.REZICS_QA_MEMORY_EVENTS === '1') console.log(line);
     if (event[1] === 'BEGIN') {
-      if (!waiting.size) admissionStarted = Date.now();
+      if (!waiting.size) { admissionStarted = Date.now(); resumeRun = runDeadline?.wait(); }
       waiting.add(event[2]!);
     } else {
       if (!waiting.delete(event[2]!)) return;
@@ -538,6 +615,7 @@ export async function commandAsync(root: string, name: string, args: string[], t
         const ended = Date.now();
         admissionSpans.push({ start: admissionStarted, end: ended });
         admissionWaitMs += ended - admissionStarted;
+        resumeRun?.(); resumeRun = undefined;
       }
     }
     if (options.runDeadline !== undefined || options.phaseDeadline !== undefined) armTimer();
@@ -567,7 +645,9 @@ export async function commandAsync(root: string, name: string, args: string[], t
     timedOut = true;
     if (timer) clearTimeout(timer);
     timer = undefined;
-    timeoutReason = reason ?? (options.runDeadline !== undefined && Date.now() >= options.runDeadline
+    timeoutReason = reason ?? (waiting.size && runDeadline !== undefined && Date.now() >= runDeadline.waitDeadline
+      ? qaWaitFailure('memory, a startup turn or a QA lease', admissionStarted, Date.now())
+      : runDeadline !== undefined && runDeadline.remainingMs() <= 0
       ? `${name} reached its run deadline` : `${name} timed out after ${timeoutMs} ms of active work`);
     // The group, including an in-progress child stack:up, stops before this returns.
     // Otherwise it could recreate containers while the runner resets the recorded stacks.
@@ -576,14 +656,15 @@ export async function commandAsync(root: string, name: string, args: string[], t
   function armTimer(): void {
     if (timedOut) return;
     if (timer) clearTimeout(timer);
+    timer = undefined;
+    const runRemaining = runDeadline?.remainingMs() ?? Infinity;
+    const waitRemaining = waiting.size && runDeadline ? runDeadline.waitDeadline - Date.now() : Infinity;
+    if (waitRemaining <= 0) { expire(qaWaitFailure('memory, a startup turn or a QA lease', admissionStarted, Date.now())); return; }
+    if (runRemaining <= 0) { expire(`${name} reached its run deadline`); return; }
     if (options.phaseDeadline) {
       const now = Date.now();
       const admissionOpen = waiting.size > 0;
       const activeElapsedMs = now - start - admissionWaitMs - (admissionOpen ? now - admissionStarted : 0);
-      if (options.runDeadline !== undefined && now >= options.runDeadline) {
-        expire(`${name} reached its run deadline`);
-        return;
-      }
       const admission = admissionOpen ? [...admissionSpans, { start: admissionStarted, end: now }] : admissionSpans;
       let phase: { activeLimitMs: number; reason?: string };
       try {
@@ -611,8 +692,7 @@ export async function commandAsync(root: string, name: string, args: string[], t
         return;
       }
       const remaining = admissionOpen ? Number.POSITIVE_INFINITY : limit - activeElapsedMs;
-      const runRemaining = options.runDeadline === undefined ? Number.POSITIVE_INFINITY : options.runDeadline - now;
-      const delay = Math.max(1, Math.min(remaining, runRemaining, 200));
+      const delay = Math.max(1, Math.min(remaining, runRemaining, waitRemaining, 200));
       if (!Number.isFinite(delay)) {
         expire(phaseDeadlineFailure);
         return;
@@ -622,9 +702,13 @@ export async function commandAsync(root: string, name: string, args: string[], t
     }
     const activeElapsed = Date.now() - start - admissionWaitMs;
     const remaining = waiting.size ? Infinity : timeoutMs - activeElapsed;
-    const runRemaining = options.runDeadline === undefined ? Infinity : options.runDeadline - Date.now();
-    timer = setTimeout(expire, Math.max(1, Math.min(remaining, runRemaining)));
+    const delay = Math.min(remaining, runRemaining, waitRemaining);
+    if (Number.isFinite(delay)) timer = setTimeout(() => {
+      if (!waiting.size && remaining <= runRemaining) expire();
+      else armTimer();
+    }, Math.max(1, delay));
   }
+  const unsubscribe = runDeadline?.subscribe(armTimer);
   armTimer();
   let code: number | null;
   let elapsedMs = 0;
@@ -636,6 +720,8 @@ export async function commandAsync(root: string, name: string, args: string[], t
   } finally {
     elapsedMs = Date.now() - start;
     if (waiting.size) admissionWaitMs += Date.now() - admissionStarted;
+    unsubscribe?.();
+    resumeRun?.();
     clearTimeout(timer);
     if (stopping) await stopping;
     if (child.pid) untrackCommandProcess(child.pid);
@@ -650,12 +736,32 @@ export async function commandAsync(root: string, name: string, args: string[], t
 }
 
 /** Keep a burst of disposable stack starts below the Docker daemon's setup capacity. */
-export function concurrencyGate(limit: number): <T>(work: () => Promise<T>) => Promise<T> {
+export function concurrencyGate(limit: number, options: { runDeadline?: QaRunDeadline; now?: () => number;
+  onAdmissionWait?: (span: { start: number; end: number }) => void } = {}): <T>(work: () => Promise<T>) => Promise<T> {
   if (!Number.isInteger(limit) || limit < 1) throw new Error('concurrency limit must be positive');
   let active = 0;
   const waiting: (() => void)[] = [];
   return async <T>(work: () => Promise<T>): Promise<T> => {
-    if (active >= limit) await new Promise<void>(resolve => waiting.push(resolve));
+    if (active >= limit) {
+      const now = options.now ?? Date.now;
+      const started = now();
+      const resume = options.runDeadline?.wait();
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await new Promise<void>((resolve, reject) => {
+          waiting.push(resolve);
+          if (options.runDeadline) timer = setTimeout(() => {
+            const index = waiting.indexOf(resolve);
+            if (index >= 0) waiting.splice(index, 1);
+            reject(new Error(qaWaitFailure('its startup turn', started, now())));
+          }, Math.max(0, options.runDeadline.waitDeadline - now()));
+        });
+      } finally {
+        clearTimeout(timer);
+        resume?.();
+        options.onAdmissionWait?.({ start: started, end: now() });
+      }
+    }
     else active++;
     try { return await work(); }
     finally {
@@ -667,8 +773,15 @@ export function concurrencyGate(limit: number): <T>(work: () => Promise<T>) => P
 }
 
 export async function withQaMemory<T>(need: MemoryNeed, options: MemoryWaitOptions,
-  work: () => Promise<T>): Promise<T> {
-  await waitForMemory(need, options);
+  work: () => Promise<T>, runDeadline?: QaRunDeadline): Promise<T> {
+  const now = options.now ?? Date.now;
+  const started = now();
+  const resume = runDeadline?.wait();
+  try { await waitForMemory(need, options); }
+  catch (error) {
+    if (now() >= options.deadline) throw new Error(`${qaWaitFailure('memory', started, now())}; ${String(error)}`);
+    throw error;
+  } finally { resume?.(); }
   return work();
 }
 
@@ -1172,8 +1285,8 @@ export interface QaSlotOptions {
   sleep?: (ms: number) => Promise<void>;
   pollMs?: number;
   announce?: (message: string) => void;
-  /** The run must exit at its wall deadline rather than continue with released leases. */
-  runDeadline?: number;
+  /** The run must exit after its active-work bound, releasing its leases. */
+  runDeadline?: number | QaRunDeadline;
 }
 
 // Share goalctl's directory leases. An inherited slot stays the caller's; extra
@@ -1203,7 +1316,10 @@ export async function acquireQaSlots(
   if (!directory) return { count: wanted, release: () => {} };
   const total = configuredQaSlots(directory, env);
   const now = options.now ?? Date.now;
+  const started = now();
   const deadline = options.deadline ?? now() + 3_600_000;
+  const runDeadline = typeof options.runDeadline === 'number' ? qaRunDeadline(options.runDeadline, env, now) : options.runDeadline;
+  const resumeRun = runDeadline?.wait();
   const sleep = options.sleep ?? (ms => Bun.sleep(ms));
   const lineage = new Set(processAncestors(pid));
   const owner = (path: string) => readDirectoryLease(path)?.pid ?? 0;
@@ -1213,8 +1329,10 @@ export async function acquireQaSlots(
   const waiter = qaSlotAdmission(directory, total, { now, pid, env,
     alive: candidate => processAlive({ pid: candidate }), workerGoals: options.workerGoals });
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let unsubscribe: (() => void) | undefined;
   const release = () => {
     waiter.release();
+    unsubscribe?.();
     if (timer) clearTimeout(timer);
     process.off('exit', onExit);
     process.off('SIGINT', onSignal);
@@ -1248,17 +1366,26 @@ export async function acquireQaSlots(
       }
       if (held + acquired.length > 0) {
         waiter.release();
-        if (options.runDeadline !== undefined) {
-          timer = setTimeout(() => {
-            console.error('QA run reached its deadline; releasing QA leases');
-            onExit();
-            process.exit(124);
-          }, Math.max(0, options.runDeadline - now()));
-          timer.unref();
+        resumeRun?.();
+        if (runDeadline !== undefined) {
+          const armTimer = () => {
+            if (timer) clearTimeout(timer);
+            timer = undefined;
+            const remaining = runDeadline.remainingMs();
+            if (!Number.isFinite(remaining)) return;
+            timer = setTimeout(() => {
+              console.error('QA run reached its deadline; releasing QA leases');
+              onExit();
+              process.exit(124);
+            }, remaining);
+            timer.unref();
+          };
+          unsubscribe = runDeadline.subscribe(armTimer);
+          armTimer();
         }
         return { count: held + acquired.length, release };
       }
-      if (now() >= deadline) throw new Error('No QA slot became free before the deadline; no stack started');
+      if (now() >= deadline) throw new Error(`No QA slot became free before the deadline; ${qaWaitFailure('a QA slot', started, now())}; no stack started`);
 
       if (!announced) {
         const busy = paths.every(path => directoryLeaseHeld(path));
@@ -1271,7 +1398,7 @@ export async function acquireQaSlots(
   } catch (error) {
     release();
     throw error;
-  }
+  } finally { resumeRun?.(); }
 }
 
 const qaRunnerEntries = new Set([

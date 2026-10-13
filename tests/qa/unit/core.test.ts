@@ -74,7 +74,7 @@ test('QA CLI child admission can outlast its active budget, then execution keeps
   expect(result.activeElapsedMs).toBeLessThan(300);
 });
 
-test('QA CLI admission stays bounded by the run deadline and active work still times out afterward', async () => {
+test('QA CLI admission stays bounded by the waiter deadline and active work still times out afterward', async () => {
   const waiting = `
     console.log('QA_MEMORY_WAIT_BEGIN 1-1');
     await Bun.sleep(2000);
@@ -82,7 +82,8 @@ test('QA CLI admission stays bounded by the run deadline and active work still t
   const blocked = await commandAsync(scratch, 'bun', ['-e', waiting], 100, process.env, undefined,
     { runDeadline: Date.now() + 250 });
   expect(blocked.timedOut).toBe(true);
-  expect(blocked.output).toContain('reached its run deadline');
+  expect(blocked.output).toContain('QA waited for memory, a startup turn or a QA lease');
+  expect(blocked.output).not.toContain('reached its run deadline');
   const execution = `
     console.log('QA_MEMORY_WAIT_BEGIN 1-1');
     await Bun.sleep(400);

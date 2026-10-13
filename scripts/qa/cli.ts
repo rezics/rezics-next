@@ -11,6 +11,8 @@ import {
   command,
   commandAsync,
   concurrencyGate,
+  qaRunDeadline,
+  qaWaitFailure,
   estimatedDurations,
   expandTestPaths,
   faultRecoveryBaselineDurations,
@@ -123,8 +125,10 @@ function chosenFor(tier: Tier): { files?: string[]; id?: string } | undefined {
   if (!group || (!group.files?.length && !group.id)) return undefined;
   return { files: group.files, id: group.id };
 }
-const runDeadline = qaMemoryDeadline(process.env, Date.now() + 6 * 3_600_000);
-process.env.REZICS_QA_MEMORY_DEADLINE = String(runDeadline);
+const admissionDeadline = qaMemoryDeadline(process.env, Date.now() + 6 * 3_600_000);
+const runDeadline = qaRunDeadline(admissionDeadline);
+const finishInitialWait = runDeadline.wait();
+process.env.REZICS_QA_MEMORY_DEADLINE = String(admissionDeadline);
 process.env.REZICS_STACK_PROFILE = 'qa';
 process.env.REZICS_QA_MEMORY_EVENTS = '1';
 const admissionIntervals: { start: number; end: number }[] = [];
@@ -148,10 +152,10 @@ function noteMemory(message: string): void {
 async function admit<T>(kind: 'other' | 'browser', work: () => Promise<T>, env: NodeJS.ProcessEnv = process.env): Promise<T> {
   return withQaMemory(qaMemoryNeed(root, kind, undefined, env), {
     root, env,
-    deadline: runDeadline,
+    deadline: admissionDeadline,
     announce: noteMemory,
     onAdmissionWait: ms => { const end = Date.now(); admissionIntervals.push({ start: end - ms, end }); },
-  }, work);
+  }, work, runDeadline);
 }
 let runSlots: Awaited<ReturnType<typeof acquireQaSlots>> | undefined;
 const qaSlotDirectory = process.env.GOAL_QA_SLOT_DIRECTORY ?? goalSlotDirectory(root);
@@ -192,27 +196,30 @@ async function integrationInfrastructureFingerprint(environment: NodeJS.ProcessE
     assembler: environment.REZICS_FUSEKI_ASSEMBLER ?? '/fuseki/fuseki-text-qa.ttl', environment: settings });
 }
 async function acquireRunSlots(wanted: number, slotOptions: Parameters<typeof acquireQaSlots>[4] = {}) {
+  const waitStarted = Date.now();
   let waitPath: string | undefined;
   const removeWait = () => { if (waitPath) rmSync(waitPath, { force: true }); };
   process.on('exit', removeWait);
   try {
     if (heavyQaRun && process.env.GOAL_QA_DEFERRED_HEAVY === '1' && !releaseDeferredHeavy) {
       const { acquireHeavy } = await import('../goal/qa-slots.ts');
+      const started = Date.now();
+      const resume = runDeadline.wait();
       try {
         releaseDeferredHeavy = await acquireHeavy([process.env.GOAL_QA_COMMAND ?? 'QA'], {
           lockDir: process.env.GOAL_QA_HEAVY_LOCK, lifecycleLockDir: process.env.GOAL_QA_LIFECYCLE_LOCK,
           waitForWorkers: process.env.GOAL_QA_WIDE_RUN === '1',
           besideWorkers: process.env.GOAL_QA_BESIDE_WORKERS === '1',
-          goal: process.env.GOAL_ID, deadline: runDeadline, signal: slotOptions.signal,
+          goal: process.env.GOAL_ID, deadline: admissionDeadline, signal: slotOptions.signal,
           arrivedAt: Number(process.env.GOAL_QA_ARRIVED_AT_MS) || undefined,
           now: slotOptions.now, sleep: slotOptions.sleep, announce: slotOptions.announce,
           bindExit: false,
         });
       } catch (error) {
         if (error instanceof Error && error.message.startsWith('The heavy QA lock stayed held'))
-          throw new Error('No QA slot became free before the deadline; heavy turn is held');
+          throw new Error(`No QA slot became free before the deadline; ${qaWaitFailure('the heavy QA turn', started, Date.now())}`);
         throw error;
-      }
+      } finally { resume(); }
     }
     const lease = await acquireQaSlots(heavyQaRun ? undefined : qaSlotDirectory, wanted, process.env, process.pid, {
       ...slotOptions,
@@ -230,6 +237,7 @@ async function acquireRunSlots(wanted: number, slotOptions: Parameters<typeof ac
         (slotOptions.announce ?? console.error)(message);
       },
     });
+    finishInitialWait();
     if (releaseDeferredHeavy) {
       deferredHeavyUsers++;
       const release = lease.release;
@@ -243,6 +251,7 @@ async function acquireRunSlots(wanted: number, slotOptions: Parameters<typeof ac
     }
     return lease;
   } finally {
+    admissionIntervals.push({ start: waitStarted, end: Date.now() });
     removeWait();
     process.off('exit', removeWait);
   }
@@ -271,6 +280,7 @@ async function withStartupSlot<T>(env: NodeJS.ProcessEnv,
   const requests = new Set<string>();
   const cancellations = new Set<string>();
   const grants = new Map<string, () => void>();
+  const admissionWaits = new Map<string, () => void>();
   try {
     return await start({ ...env, REZICS_QA_STARTUP_SLOT_GATE: gatePath }, line => {
       const cancellation = /^QA_STARTUP_SLOT_CANCEL (\S+) (\S+) (\d+)$/.exec(line);
@@ -315,6 +325,9 @@ async function withStartupSlot<T>(env: NodeJS.ProcessEnv,
         });
         admissions.push(admission);
       } else {
+        const event = /^QA_MEMORY_WAIT_(BEGIN|END) (\d+-\d+)(?: (\d+))?$/.exec(line);
+        if (event?.[1] === 'BEGIN' && !admissionWaits.has(event[2]!)) admissionWaits.set(event[2]!, runDeadline.wait());
+        if (event?.[1] === 'END') { admissionWaits.get(event[2]!)?.(); admissionWaits.delete(event[2]!); }
         if (line.startsWith('Waiting; QA memory:') || line.startsWith('Waiting for another QA startup;')) removeWait();
         noteMemory(line);
       }
@@ -326,6 +339,7 @@ async function withStartupSlot<T>(env: NodeJS.ProcessEnv,
     }
     finally {
       removeGate();
+      for (const resume of admissionWaits.values()) resume();
       process.off('exit', removeGate);
     }
   }
@@ -357,6 +371,7 @@ async function withWorkSlot<T>(work: (reserve: ReserveQaSlot) => Promise<T>): Pr
 async function admitRun<T>(work: () => Promise<T>, env: NodeJS.ProcessEnv = process.env,
   reserve?: ReserveQaSlot): Promise<T> {
   if (!reserve) return withWorkSlot(reserveWork => admitRun(work, env, reserveWork));
+  const started = Date.now();
   for (;;) {
     try {
       return await admit('other', async () => {
@@ -365,15 +380,18 @@ async function admitRun<T>(work: () => Promise<T>, env: NodeJS.ProcessEnv = proc
       }, env);
     } catch (error) {
       if (!(error instanceof Error) || !error.message.startsWith('No QA slot became free before the deadline')) throw error;
-      if (Date.now() >= runDeadline) throw error;
-      await Bun.sleep(Math.min(3_000, runDeadline - Date.now()));
+      if (Date.now() >= admissionDeadline) throw new Error(qaWaitFailure('a QA slot', started, Date.now()));
+      const resume = runDeadline.wait();
+      const waitStarted = Date.now();
+      try { await Bun.sleep(Math.min(3_000, admissionDeadline - Date.now())); }
+      finally { admissionIntervals.push({ start: waitStarted, end: Date.now() }); resume(); }
     }
   }
 }
 
 async function startRunStack(args: string[], budget: number, env: NodeJS.ProcessEnv = process.env,
   reserve: ReserveQaSlot = reserveRunSlot) {
-  return withStartupSlot(env,
+  return withStartupSlot({ ...env, REZICS_QA_RUN_REMAINING_MS: String(Math.ceil(runDeadline.activeRemainingMs())) },
     (environment, onLine) => runQaStartupChildAsync(root, args, budget, environment, onLine), reserve);
 }
 
@@ -705,7 +723,7 @@ async function runShardWork(
     ...environment,
     ...apps,
     REZICS_QA_RUN_ID: projectRunId,
-    REZICS_QA_MEMORY_DEADLINE: String(runDeadline),
+    REZICS_QA_MEMORY_DEADLINE: String(admissionDeadline),
     REZICS_QA_PREPARATION_STARTED_AT: String(preparationStartedAt
       + admissionIntervalMs(admissionIntervals, preparationStartedAt, testStart)),
     [QA_STACK_REGISTRY]: registry,
@@ -994,7 +1012,8 @@ async function runStackTier(tier: StackTier): Promise<void> {
       tier === 'integration' ? count => planIntegrationShards(estimates, count).map(shard => shard.files) : undefined);
     if (warning) console.warn(warning);
     // Local workers bound the plan; each project takes its global lease only after admission.
-    const startInitialStack = concurrencyGate(tier === 'integration' ? capacity : Math.min(capacity, 3));
+    const startupAdmission = { runDeadline, onAdmissionWait: (span: { start: number; end: number }) => admissionIntervals.push(span) };
+    const startInitialStack = concurrencyGate(tier === 'integration' ? capacity : Math.min(capacity, 3), startupAdmission);
     const runs = await runQueuedProjects(projects, capacity, budget, (index, files) => runShard(
       tier, `${runId}-${prefix}${index + 1}`, files, flags, projectBudget(files), false, startInitialStack,
       integration?.[index]?.batches,
@@ -1003,7 +1022,7 @@ async function runStackTier(tier: StackTier): Promise<void> {
       && run.record.files.length > 1)
       .flatMap(run => isolationCandidates(run.xml ?? '', tier)
         .map(candidate => ({ run, ...candidate })));
-    const startRerunStack = concurrencyGate(Math.min(capacity, 3));
+    const startRerunStack = concurrencyGate(Math.min(capacity, 3), startupAdmission);
     const reruns = await runQueuedProjects(candidates, capacity, budget, (index, candidate, commandBudget) =>
       runShard(tier, `${runId}-${prefix}r${index + 1}`, [candidate.file], flags, commandBudget, true, startRerunStack));
     const replaced = new Map<string, ShardRun>();
@@ -1173,10 +1192,10 @@ try {
             let restored: BrowserStack | undefined;
             try {
               await measuredBrowserStep(`${preparation.step} restore`, preparation.budgetMs, async () => {
-                await reserveRunSlot({ deadline: runDeadline, runDeadline });
+                await reserveRunSlot({ deadline: admissionDeadline, runDeadline });
                 restored = await preparation.restoreStack!({ runId: projectRunId, webOrigin: origin,
                   accountsPort: String(accounts.port) });
-              }, { root, env: { ...process.env, REZICS_STACK_PROFILE: 'qa' }, deadline: runDeadline,
+              }, { root, env: { ...process.env, REZICS_STACK_PROFILE: 'qa' }, deadline: admissionDeadline,
                 record: result => {
                   restoreSteps.push(result);
                   writeFileSync(join(directory, 'e2e-steps.json'), JSON.stringify(restoreSteps, null, 2));
@@ -1377,6 +1396,7 @@ try {
       inventoryFingerprint: backendSelection?.inventoryFingerprint });
     noteBrowserPlan(directory);
     noteIntegrationBudget(directory);
+    writeFileSync(join(directory, 'run-deadline.json'), JSON.stringify(runDeadline.sample(), null, 2));
     if (stackLeaseNotes.length) appendFileSync(join(directory, 'summary.md'), `${stackLeaseNotes.join('\n')}\n`);
     if (options.record && errors.length === 0) {
       const record = JSON.parse(readFileSync(join(directory, 'acceptance.json'), 'utf8')) as QualificationRecord;
