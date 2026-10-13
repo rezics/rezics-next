@@ -10,7 +10,7 @@ launch manager's 2026-10-12 table, archived at
 | Manager | web; no watcher, polling or held task wait; coordinator wakes on mail/task exits |
 | Rows | 0 of 67 proved through persona API outcomes; old browser proofs do not prove rows under today's method |
 | Shared stack | Cold-started today, serving main; Account 3002, Main 3001, web 3000 and Storybook 6006 healthy (`task urls`) |
-| Measures | First attempts only, no fix rounds or landed web tasks yet; first-attempt share 100%, attempts per landed task n/a; automated measures pending Program G-2088 |
+| Measures | Four first attempts, no fix rounds or landed tasks; first-attempt share 100% (4/4), attempts per landed task n/a; automated measures pending Program G-2088 |
 
 ## Authorized work now
 
@@ -27,9 +27,11 @@ tier. At most eight live web workers. Briefs are at most forty lines.
 | G-2093 | Capped-page filtering; brief ready, dispatch after G-2090 closes because zones claims overlap |
 | G-2094 | Two relation browser tests and entity-page story expect canonical suffixes; no e2e execution |
 
-G-2090, G-2091, G-2092 and G-2094 are dispatched first. Program was mailed
-`web-contract-guards-registration-20261013` to register the four inventory guard
-tests: G-2071 owns `scripts/qa/repository-guards.ts`; web workers do not edit it.
+G-2090, G-2091, G-2092 and G-2094 are running on first attempts. Program's mail
+`program-web-guards-registry` directs this manager to append all four inventory
+guard entries in one own-only commit after Program mails G-2071's landing and
+release of `scripts/qa/repository-guards.ts`. Workers do not edit that file;
+their own guard tests run in their unit gates meanwhile. No reply is required.
 An API gap goes to Program as one operation/persona line, never a client workaround.
 
 Until G-2072 enforces the method, the manager enforces it in every brief: merge
