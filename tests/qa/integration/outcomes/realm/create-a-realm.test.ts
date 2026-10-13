@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
+import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import creation from '../../../../../scripts/qa/cases/outcomes/realm/create-a-realm.ts';
 import { outcomeTest } from '../../../support/outcome-test.ts';
@@ -199,9 +199,7 @@ async function exhaustedAccountRecovers() {
 }
 outcomeTest(creation, 'stranger', () => found('stranger'));
 outcomeTest(creation, 'member', () => found('member'));
-// Run the candidate as a normal test while its declaration remains pending;
-// promote the cell only after a stable admitted check proves every assertion.
-test('realm/create-a-realm / owner: enrolls naturally, recovers creation and reserves one handle under concurrency', async () => {
+outcomeTest(creation, 'owner', async () => {
   await found('owner', founder.person, founder.realm);
   await concurrentHandle();
   await exhaustedAccountRecovers();
