@@ -111,6 +111,12 @@ wording and directions that later ones replaced are in this file's history.
 14. **Reports are references** (2026-10-13). An analysis the maintainer passes on
     informs the manager. What is best practice is the manager's to work out and
     decide, and it is judged by measured efficiency.
+15. **Decide; ask only what only he can decide** (2026-10-13). "我不一定盯着
+    supermanager 的消息，我也可能不能及时回复，所以 supermanager 应当尽量自主决定，
+    可以派发调研来辅助决定." The supermanager decides, and sends a researcher
+    first where it lacks evidence. What only the maintainer can decide reaches
+    him over Telegram, and other work continues meanwhile
+    ([program](program/GOAL.md#asking-the-maintainer)).
 
 ## Resources
 
