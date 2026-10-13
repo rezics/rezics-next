@@ -206,10 +206,11 @@ async function editions(name: PersonaName, mode: 'hub' | 'ambiguous' | 'formats'
   if (name === 'member') await supportingReads(mode, sample, choices);
 
   const path = `/v1/me/edition-preferences/${short(book.work)}`;
+  const paperback = releases.find(release => release.platform === 'paperback')!;
   const body = {
     actingSubject: person.actingSubject ?? sessions.member.actingSubject,
     expectedVersion: 0, language: 'en',
-    edition: { kind: 'release', resource: releases[0]!.id, revision: releases[0]!.revision },
+    edition: { kind: 'release', resource: paperback.id, revision: paperback.revision },
   };
   if (name === 'visitor') {
     await answer(() => sample('preference-sign-in', 'GET', `${path}?actingSubject=${encodeURIComponent(body.actingSubject!)}`), 401);
@@ -225,7 +226,9 @@ async function editions(name: PersonaName, mode: 'hub' | 'ambiguous' | 'formats'
   const before = await privateAnswer<Preference | null>(() => foreignSample('foreign-preference-before', 'GET', foreignPath));
   const ownPath = `${path}?${acting(person)}`;
   let current = await privateAnswer<Preference | null>(() => sample('own-preference-before', 'GET', ownPath));
-  for (const release of mode === 'hub' ? choices.slice(0, 1) : choices) {
+  // Release pages seek by identity; fresh fixture IDs do not preserve format order.
+  const preferenceChoices = mode === 'hub' ? choices.filter(release => release.platform === 'paperback') : choices;
+  for (const release of preferenceChoices) {
     const key = randomUUID();
     const command = {
       ...body, expectedVersion: current?.version ?? 0,
@@ -243,7 +246,7 @@ async function editions(name: PersonaName, mode: 'hub' | 'ambiguous' | 'formats'
       work: saved.work, language: saved.language, edition: saved.edition, version: saved.version,
     });
     // One lost-response replay and one stale command prove these owner-store outcomes.
-    if (release === choices[0]) {
+    if (release === preferenceChoices[0]) {
       expect(await privateAnswer(() => sample('save-preference-replay', 'PUT', path, command, key))).toEqual({
         ...current, replayed: true,
       });
