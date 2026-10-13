@@ -1,8 +1,8 @@
 # REZICS Goals
 
-No Goal is running. The maintainer stopped the run of 2026-10-07 to 2026-10-12
-on 2026-10-12 and had the way of working redesigned; the Goals below are written
-and not started. He starts the program's manager himself, from its `GOAL.md`.
+The program and the api Goal run since 2026-10-13; web and operations start when
+their rows in the table say so. The way of working was redesigned on 2026-10-12
+after the maintainer stopped the run of 2026-10-07 to 2026-10-12.
 
 Each Goal's directory states its outcome, its areas (the paths other Goals'
 briefs may not claim) and its state. The [method](docs/goals/method.md) says how
@@ -13,8 +13,8 @@ the [goal page](docs/product/goal.md) and the
 
 | Goal | Outcome | Starts |
 | --- | --- | --- |
-| [Program](docs/goals/program/GOAL.md) | Supermanager: the scope, the method and the tool that enforces it, the shared host | When the maintainer starts it |
-| [API](docs/goals/api/GOAL.md) | Every row of the first public scope is proved through the API, for each persona | After the program's first three tasks |
+| [Program](docs/goals/program/GOAL.md) | Supermanager: the scope, the method and the tool that enforces it, the shared host | Running |
+| [API](docs/goals/api/GOAL.md) | Every row of the first public scope is proved through the API, for each persona | Running; outcome tasks start when the program's first tasks are on `main` |
 | [Web](docs/goals/web/GOAL.md) | Every proved row has its surface | When the first vertical's rows are proved |
 | [Operations](docs/goals/operations/GOAL.md) | Erasure and restore proved on physical fixtures; deployment prepared | When the erasure and recovery contracts are stable |
 

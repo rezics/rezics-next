@@ -26,9 +26,9 @@ areas:
 
 # Program
 
-Status: redesigned on 2026-10-12 and not started. The maintainer stopped the run
+Status: running since 2026-10-13. The maintainer stopped the run
 of 2026-10-07 to 2026-10-12 because its efficiency was not acceptable, asked for
-the way of working to be redesigned, and starts this Goal's manager himself.
+the way of working to be redesigned, and started this Goal's manager on 2026-10-13.
 [state.md](state.md) records where everything stands.
 
 The program's manager is the **supermanager**. It runs no product work. It owns

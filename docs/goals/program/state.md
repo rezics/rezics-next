@@ -3,20 +3,19 @@
 The supermanager's checkpoint for [this Goal](GOAL.md); live tasks:
 `task goal -- status`.
 
-| Field | State (2026-10-12 16:30 UTC) |
+| Field | State (2026-10-13 04:35 UTC) |
 | --- | --- |
-| Manager | None. The maintainer starts one ([GOAL.md](GOAL.md#starting)). No delivery Goal has a manager |
-| Running | Nothing. Every worker, every manager session, the shell waiter and the coordinator service were stopped on the maintainer's order; the coordinator is disabled, so nothing wakes by itself |
-| Tree | One branch (`main`) and the archive (`archive/goals`); no worktree but the shared stack's staged revision; no open task, no brief |
-| Unmerged work | 55 branch tips kept under `refs/archive/2026-10-12/` (`git for-each-ref refs/archive/2026-10-12`). The new Goals' state files say what each is and what it lacks |
-| Archive | `archive/goals` holds the kernel, trust-ops and launch Goals of 2026-10-06 with their briefs and handoffs; `program-2026-10-06/study-2026-10-12/` has the efficiency research with its sources, the measured causes, the review findings of the whole run as data, the three managers' end-of-run tables, the supermanager's scripts and notes, and the reports sent to the maintainer; `architecture-review-2026-10-07/` has the evidence behind the target architecture |
-| Not verified | No main-wide integration or fault/recovery run was made on the final `main`; the retained seed set does not restore there. Unit gates passed for each merge. This is the first thing to establish |
-| Allowances | Claude: managers only (maintainer, 2026-10-12); the week began on 2026-10-12 at about 15:00 UTC. Codex `codex` 86% used, resets about 2026-10-18 07:00 UTC; `codex-1` 82% used, resets about 2026-10-19 05:00 UTC. Grok reset on 2026-10-12; Cursor unknown. No top-up, no reset credits |
+| Manager | `program`, an interactive Claude session started by the maintainer on 2026-10-13. It wakes on its own background waits and on Goal mail (`scripts/goal/next-event.sh program`) |
+| Delivery Goals | `api`: manager `api`, GPT-6.1 Sol on `codex-1`, headless and enrolled with the coordinator from its first turn (start message kept at `.temp/goal-orchestration/managers/api-start.md`). `web` and `operations`: not started; their start conditions in [GOAL.md](GOAL.md) hold |
+| First tasks | P1 (G-2070), P2 (G-2071), P4 then P3 (G-2072) and P7 (G-2073) dispatched at 04:32 UTC, two on each Codex account. The api Goal dispatches no outcome task before P1 and P2 are on `main`; then one pilot row, then wide |
+| Decided for P1 to P3 | A row's proofs are one declaration file, `scripts/qa/cases/outcomes/<kind>/<slug>.ts`, with a cell for each persona: `proved`, `pending`, `notApplicable` or missing. `outcomeTest` runs a pending cell as an expected failure, so a test that starts passing is red until its cell says `proved`. That is how "fails on `main`" is checked without a run at dispatch, and why no two tasks share a registry file. Delivery Goals file each row's existing proofs under their personas; the program does not |
+| Host | Cold-started on 2026-10-13: Docker, the storage stack, `task dev`, the third swap device and the coordinator service are up. tmux for manager wakes is its own server and scope: `tmux -L goal` (`goal-tmux.scope`) |
+| Verified | One integration file passed on `main` d2a2e3166 in 11.9 s on a pooled stack, so the tier outcome tests run in works. `task goal -- regress` started at 04:35 UTC in `tmux -L goal`, window `regress` (log `.temp/program-regress.log`); the first main-wide run on the final `main` |
+| Tree | `main` and the archive (`archive/goals`); 55 unmerged branch tips of the stopped run under `refs/archive/2026-10-12/` |
+| Allowances | Claude: managers only. Codex: a regular global reset is scheduled for 2026-10-13 07:00 UTC (codex-resets.com); before it `codex` had 14% of its week left and `codex-1` 18%. Service tier `default`. No top-up, no reset credits |
 | Capacity settings | `.temp/goal-orchestration/`: QA slots 8, gate lanes 4, regress lanes 3, review engine `codex-1` |
 
 ## After a cold start of the host
-
-The maintainer powered the host off after this state was written.
 
 1. `systemctl --user start docker-desktop`, then wait until `docker info` answers.
 2. In the main checkout, `task stack:up` (the Compose storage stack was stopped
@@ -32,8 +31,11 @@ The maintainer powered the host off after this state was written.
    relay again ([search index](../../operations/search-index.md)).
 4. The host's third swap device (`zram2`, 16 GiB) does not survive a restart;
    add it again before running more than about fifteen workers.
-5. `systemctl --user enable --now goal-coordinator.service` once a manager is to
-   be woken by it.
+5. `systemd-run --user --scope --unit=goal-tmux -- tmux -L goal new-session -d -s goal-host`,
+   then `systemctl --user enable --now goal-coordinator.service`. Enrolment is
+   refused while the service runs and when the tmux server shares the enrolling
+   shell's cgroup; stop the service, enrol with `--tmux-socket /tmp/tmux-1000/goal`,
+   start it again.
 6. Ports 3000, 3001, 3002, 3004 and 8025 are forwarded to the tailnet
    (`tailscale serve status`); remove one with `sudo tailscale serve --tcp=<port> off`.
 

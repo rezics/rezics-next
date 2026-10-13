@@ -16,8 +16,8 @@ areas:
 
 # API
 
-Status: written on 2026-10-12 and not started. The [program](../program/GOAL.md)
-starts this Goal's manager after its first three tasks land; [state.md](state.md)
+Status: running since 2026-10-13. The [program](../program/GOAL.md)
+started its manager while its first tasks were in work; [state.md](state.md)
 lists the work carried over from the Goals it replaces.
 
 ## Outcome
