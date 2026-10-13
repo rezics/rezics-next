@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
+  corpusManifestDirectory,
   prepareWorkProfileCorpus,
   restoreWorkProfileCorpus,
   workProfileCorpusApi,
@@ -29,6 +30,21 @@ function directory() {
   mkdirSync('.temp/work-profiles/tests', { recursive: true });
   return mkdtempSync(resolve('.temp/work-profiles/tests/g-1024-'));
 }
+
+test('corpus manifests accept the configured retained store across worktrees and reject unrelated or sibling paths', () => {
+  const checkout = '/repo/.temp/worktrees/worker';
+  for (const fixtures of ['/repo/.temp/fixture', '/configured/.temp/fixture']) {
+    const retained = resolve(fixtures, '../work-profiles');
+    for (const allowed of [checkout, join(checkout, '.temp/manifests'), '/tmp', '/tmp/manifests',
+      retained, join(retained, 'seed-checkpoints/run/manifests')])
+      expect(corpusManifestDirectory(allowed, checkout, fixtures)).toBe(allowed);
+    for (const denied of ['/unrelated/manifests', '/repo/.temp/fixture', '/repo/.temp/unrelated',
+      `${checkout}-sibling/manifests`, '/tmp-sibling/manifests', `${retained}-sibling/manifests`,
+      join(retained, '../unrelated/manifests'), ...(fixtures.startsWith('/configured/')
+        ? ['/repo/.temp/work-profiles/seed-checkpoints/run/manifests'] : [])])
+      expect(() => corpusManifestDirectory(denied, checkout, fixtures)).toThrow('Corpus manifests must stay');
+  }
+});
 
 test('G1024: each axis grows alone at three strictly increasing scales with stable dataset identities', () => {
   for (const dimension of WORK_PROFILE_DIMENSIONS) {

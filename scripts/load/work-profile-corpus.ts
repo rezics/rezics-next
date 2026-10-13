@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { fixtureRoot } from '../fixture/stack.ts';
 import { runBoundedIndices } from './schedule.ts';
 import {
   compatibleLoadStorage,
@@ -257,6 +258,17 @@ function checkDimensions(actual: CorpusDimensions, expected: CorpusDimensions): 
       throw new Error(`Corpus dimension ${key}: ${actual[key]} != ${expected[key]}`);
 }
 
+/** Retained manifests use the same configured fixture authority as their backups. */
+export function corpusManifestDirectory(path: string, checkout = root, fixtures = fixtureRoot): string {
+  const directory = resolve(path);
+  const within = (base: string) => {
+    const child = relative(base, directory);
+    return child !== '..' && !child.startsWith(`..${sep}`) && !isAbsolute(child);
+  };
+  if ([checkout, '/tmp', resolve(fixtures, '../work-profiles')].some(within)) return directory;
+  throw new Error('Corpus manifests must stay in this checkout, /tmp or the declared shared work-profiles');
+}
+
 /** Build one dimension through public APIs and retain each scale's stopped cut.
  * Stable entity identities belong to the retained backup: restoring it preserves
  * ids; a fresh API build generates new ids. The corpus id identifies the recipe
@@ -281,13 +293,7 @@ export async function prepareWorkProfileCorpus(input: {
   const id = workProfileCorpusId(recipe, dimension, scale, compatibility);
   // Manifest ids vary by scale; command keys stay stable as the live corpus grows.
   const buildId = workProfileCorpusId(recipe, dimension, 'small', compatibility);
-  const directory = resolve(input.directory);
-  if (
-    relative(root, directory).startsWith('..') &&
-    directory !== '/tmp' &&
-    !directory.startsWith('/tmp/')
-  )
-    throw new Error('Corpus manifests must stay in this checkout or /tmp');
+  const directory = corpusManifestDirectory(input.directory);
   mkdirSync(directory, { recursive: true });
   const path = join(directory, `${id}.json`);
   const retained = (): WorkProfileCorpusManifest | undefined => {
