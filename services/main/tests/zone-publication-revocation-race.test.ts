@@ -31,15 +31,17 @@ function competingSite() {
   } }, ZONE_PROFILE);
   const provenance = { kind: 'admitted-original-contribution-v1', rightsBasis: 'original-contribution',
     author: actor, scope: `content:draft:${homeDocument}` };
-  function saved(text: string): ExactReadResult & { status: 'available' } {
+  function saved(text: string, variant = variantId): ExactReadResult & { status: 'available' } {
     const revisionId = randomUUID(), body = { body: text, document: fromPlainText(text, 'blocks') }, serializedJson = JSON.stringify(body);
     return { status: 'available', revisionId, body, serializedJson, reference: {
-      owner: 'content', resourceId: homeDocument, variantId, revisionId, format: 'rezics-content-json-v1',
+      owner: 'content', resourceId: homeDocument, variantId: variant, revisionId, format: 'rezics-content-json-v1',
       model: 'content-shape-v1', byteDigest: hash(serializedJson), byteLength: Buffer.byteLength(serializedJson),
       language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr',
       sourceRevision: null, predecessor: null, provenance } };
   }
-  const previous = saved('Prior public cut'), retained = saved('Retained rejected saved cut'), competing = saved('Competing public cut');
+  const previous = saved('Prior public cut'), retained = saved('Retained rejected saved cut');
+  const competing = saved('Competing public cut', `urn:rezics:variant:${randomUUID()}`);
+  const draftHeads = new Map([retained, competing].map(exact => [exact.reference.variantId, exact.revisionId]));
   const exacts = new Map([previous, retained, competing].map(exact => [exact.revisionId, exact]));
   const admissions = new Map<string, RegisteredAdmission>(), terminals = new Map<string, Record<string, string>>();
   const publications = new Map<string, Record<string, string>>(), pins = new Map<string, PublicationPreparation>();
@@ -102,7 +104,7 @@ function competingSite() {
           themeRevision: selectedHead!, count: '1', admissionId: admission.id, digest: envelope.digest,
           authorityEpoch: admission.authorityEpoch, scope: admission.scope, dataEpoch: lineage.dataEpoch,
           sequence: String(sequence + 1), binding: zonePublishedPageBinding(head, homeDocument, selected.revisionId),
-          page: homeDocument, variant: variantId, contentRevision: `urn:rezics:content:revision:${selected.revisionId}`,
+          page: homeDocument, variant: selected.reference.variantId, contentRevision: `urn:rezics:content:revision:${selected.revisionId}`,
           byteDigest: selected.reference.byteDigest, language: 'en', homeDocument, homeRevision: home });
       } else events.push(`cancel:${admission.id}`);
       terminals.set(envelope.receipt, { outcome: `${RV}${nextHome ? 'Succeeded' : 'Cancelled'}`, digest: envelope.digest,
@@ -117,8 +119,13 @@ function competingSite() {
     owningResourceForRevision: async (revision: string) => exacts.has(revision) ? homeDocument : null,
     ownerPosition: async () => position,
     readExactBatch: async (ids: string[]) => ids.map(id => exacts.get(id)),
-    preparePublication: async (operationId: string, revisionId: string) => {
-      const preparation: PublicationPreparation = { operationId, reference: exacts.get(revisionId)!.reference,
+    preparePublication: async (operationId: string, revisionId: string, digest: string, requireHead: boolean, epoch: string) => {
+      const reference = exacts.get(revisionId)!.reference;
+      expect(requireHead).toBe(true);
+      expect(draftHeads.get(reference.variantId)).toBe(revisionId);
+      expect(digest).toBe(reference.byteDigest);
+      expect(epoch).toBe(contentEpoch);
+      const preparation: PublicationPreparation = { operationId, reference,
         position, status: 'pending', pinActive: true, replayed: false };
       pins.set(operationId, preparation);
       events.push(`pin:${revisionId}`);
@@ -172,7 +179,8 @@ function competingSite() {
   } as unknown as Parameters<typeof publishZoneSite>[2];
   const input = (exact: typeof retained, expectedHead = head): ZoneSitePublicationInput => ({ zone, expectedHead,
     actingSubject: actor, idempotencyKey: randomUUID(), routesRevision: navigationRevision, navigationRevision,
-    pages: [{ page: homeDocument, variantId, revisionId: exact.revisionId, byteDigest: exact.reference.byteDigest, contentEpoch }] });
+    pages: [{ page: homeDocument, variantId: exact.reference.variantId, revisionId: exact.revisionId,
+      byteDigest: exact.reference.byteDigest, contentEpoch }] });
   const publish = (body: ZoneSitePublicationInput, name = 'editor') => publishZoneSite(environment, account, access,
     new Request('http://main.test/v1/zone-site-publications', { headers: { authorization: name } }), body, content);
   return { input, publish, pinned, releasePin, retained, competing, provenance, pins, events, nativeAttempts,
