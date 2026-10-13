@@ -129,8 +129,13 @@ afterAll(async () => {
 async function browse(name: PersonaName) {
   const person = sessions[name];
   const root = `/v1/realms/${short(sessions.realm)}/modules`;
+  const refused = await answer<{ code: string }>(
+    person.main('GET', `${root}/browse?sort=relevance&limit=10&type=https%3A%2F%2Fschema.org%2FBook`),
+    400,
+  );
+  expect(refused.code).toBe('unsupported_query_shape');
   for (const sort of ['newest', 'updated', 'relevance']) {
-    for (const q of ['', phrase]) {
+    for (const q of sort === 'relevance' ? [phrase] : ['', phrase]) {
       const params = new URLSearchParams({
         sort,
         limit: '10',

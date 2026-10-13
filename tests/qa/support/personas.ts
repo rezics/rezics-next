@@ -15,6 +15,7 @@ import { mainConfig } from '../../../services/main/src/config.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessPlatformAdministrators } from '../../../services/main/src/modules/access/platform-administrator.ts';
 import { joiningAuthFixture } from './joining-auth.ts';
+import { outcomeResponse } from './outcome-test.ts';
 
 export const personaNames = [
   'visitor',
@@ -70,13 +71,16 @@ function session(
       if (body !== undefined) headers.set('content-type', 'application/json');
       if (key !== undefined || !['GET', 'HEAD'].includes(method.toUpperCase()))
         headers.set('idempotency-key', key ?? randomUUID());
-      return fetch(url, {
+      const request = (signal: AbortSignal) => fetch(url, {
         method,
         headers,
         redirect: 'manual',
-        signal: AbortSignal.timeout(30_000),
+        signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]),
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
+      return ['GET', 'HEAD'].includes(method.toUpperCase())
+        ? outcomeResponse(request)
+        : request(AbortSignal.timeout(30_000));
     };
   return {
     accountId,
@@ -135,6 +139,7 @@ async function applications() {
   let account: ReturnType<typeof createAccountApp> | undefined;
   let main: Awaited<ReturnType<typeof composeMain>>['app'] | undefined;
   let lifecycle: ReturnType<typeof mainLifecycle> | undefined;
+  let relay: ReturnType<typeof Bun.spawn> | undefined;
   let closed = false;
   const close = async () => {
     if (closed) return;
@@ -142,7 +147,13 @@ async function applications() {
     active = undefined;
     try {
       try {
-        await lifecycle?.stop();
+        try {
+          if (relay?.exitCode === null) relay.kill('SIGTERM');
+          const code = await relay?.exited;
+          if (code !== undefined && code !== 0) throw new Error(`Main relay exited with ${code}`);
+        } finally {
+          await lifecycle?.stop();
+        }
       } finally {
         await account?.stop(true);
       }
@@ -165,6 +176,14 @@ async function applications() {
       accountPool,
     ).listen({ hostname: '127.0.0.1', port: Number(Bun.env.ACCOUNT_PORT) });
     await migrateContent(contentPool);
+    const relayEnvironment = { ...process.env, ...runtime };
+    const relayStarted = performance.now();
+    const initialization = Bun.spawn([process.execPath, 'services/main/src/relay-init.ts'], {
+      env: relayEnvironment, stdout: 'inherit', stderr: 'inherit',
+    });
+    const initialized = await initialization.exited;
+    if (initialized !== 0) throw new Error(`Main relay initialization exited with ${initialized}`);
+    console.log(`Persona Main relay initialization: ${((performance.now() - relayStarted) / 1000).toFixed(2)}s`);
     const composed = await composeMain({
       config: mainConfig({ ...process.env, ...runtime, PLATFORM_FIRST_ADMIN_ACCOUNT: undefined }),
       fuseki: new FusekiClient(
@@ -184,6 +203,10 @@ async function applications() {
       main!.listen({ hostname: '127.0.0.1', port: Number(Bun.env.MAIN_PORT) });
     }, () => main!.stop(true));
     await lifecycle.start();
+    relay = Bun.spawn([process.execPath, '--preload', './services/main/src/relay-telemetry.ts',
+      'services/main/src/relay.ts'], {
+      env: relayEnvironment, stdout: 'inherit', stderr: 'inherit',
+    });
     const signup = async (name: string): Promise<PersonaSession> => {
       const previous =
         name === 'operator' && firstOperator?.runId === runId ? firstOperator : undefined;
