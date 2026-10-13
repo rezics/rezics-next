@@ -23,8 +23,9 @@ const afterListenerStop = [
   'notificationRealtime', 'recommendationWorker', 'contentProjectionWorker',
 ] as const;
 type WorkerName = typeof startOrder[number] | 'notificationRealtime';
-type Worker = { start(): void | Promise<void>; stop(): void | Promise<void> };
-type Resources = Partial<Record<WorkerName, Worker>> & {
+type Worker = { start(): void; stop(): void | Promise<void> };
+type Resources = Partial<Record<typeof startOrder[number], Worker>> & {
+  notificationRealtime?: Omit<Worker, 'start'> & { start(): void | Promise<void> };
   recommendationWorker?: Worker & { enablePublicRefresh(): void };
   templateSeek: {
     backfill(epoch: string): Promise<unknown>;
@@ -37,7 +38,7 @@ interface Preparation {
   chapters(): Promise<unknown>;
   shelves(signal: AbortSignal): Promise<unknown>;
   listen(): void;
-  stopListening(): Promise<unknown>;
+  stopListening(): void | Promise<unknown>;
 }
 
 /** One startup/shutdown order for the process entry and in-process applications. */

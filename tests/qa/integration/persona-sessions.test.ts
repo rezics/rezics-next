@@ -71,11 +71,14 @@ test('sessions distinguish membership, moderation and platform authority', async
 test('persona callers preserve an explicit idempotency key on every HTTP method', async () => {
   const fetchRequest = globalThis.fetch;
   const sent: (string | null)[] = [];
-  const observer = spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+  const observe = (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
     if (new URL(String(input)).pathname === '/v1/me/platform-access')
       sent.push(new Headers(init?.headers).get('idempotency-key'));
     return fetchRequest(input, init);
-  });
+  };
+  const observer = spyOn(globalThis, 'fetch').mockImplementation(
+    Object.assign(observe, { preconnect: fetchRequest.preconnect }),
+  );
   try {
     for (const method of ['GET', 'HEAD', 'POST'])
       await publicRealm.operator.main(method, '/v1/me/platform-access', undefined, 'caller-key');
