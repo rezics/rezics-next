@@ -68,21 +68,26 @@ same for the earlier run: 44% of the cost in managers, about 505,000 cached
 tokens for each manager call, 36 tasks of 407 taking 44% of the task cost. Its
 figures for the four managers agree with their session logs.
 
-The workers of that day, 39 Sol sessions and 141 million input tokens, about 1%
-of each Codex account's week, by what each model step did:
+That day's tasks were short and show little about workers. The two days before
+do: every Codex session of 2026-10-11 and 2026-10-12 on both accounts, 1,986
+sessions, 95,751 model steps and 9.2 billion input tokens (97% cached), read
+from the session logs step by step.
 
-| | Tooling tasks (13, 93 million) | Read-only tasks (18 matrices and 3 analyses, 48 million) |
-| --- | --- | --- |
-| Reading and searching | 33% | 81% |
-| Running tests and checks, and waiting on them | 22% and 8% | 4% and 3% |
-| Editing | 20% | 3% |
-| Other commands, thinking, commits | 10%, 3%, 3% | 2%, 6%, 1% |
-| For one task | 7.9 million tokens and 86 steps at the median; two attempts for most | 2.1 million and 28 steps |
+| Workers on 2026-10-11 and 2026-10-12 | Value |
+| --- | --- |
+| Worker sessions and landing reviews | 8.5 billion and 0.7 billion tokens: 92% and 8% |
+| By the task's turn (its first prompt and every resume, over all its sessions) | Turns 1 to 3: 53% of worker tokens; 4 to 6: 19%; 7 to 12: 11%; 13 and later: 18% |
+| By task | 79 tasks finished in one turn at a median 4 million tokens; 44 tasks took 13 turns or more at a median 82 million and used 48% of all tokens; the 36 tasks over 500 steps used 48% |
+| By what a step did | Reading and searching 35%; waiting on a running command 29%; editing 10%; running tests and checks 9%; thinking 6%; sub-agents 6%; other commands and commits 5% |
+| The same for tasks finished in one turn | Reading 32%, waiting 31%, tests 14%, editing 10%: the waiting does not come from rework |
+| By session length | 126 of 1,181 worker sessions ran past 150 steps and used 55% of worker tokens, 28% in the steps after the 150th. A step carried 72,000 tokens in a session's first 50 steps and 115,000 to 134,000 after |
+| By engine | Sol: 2.4 million tokens a turn, a median 9.0 million and 5 turns for a task done on it alone. Luna: 7.7 million a turn, 8.0 million and 2 turns. Tasks were not assigned alike, so this compares little |
+| By account | `codex` 6.9 billion, `codex-1` 2.4 billion |
 
-A step carried 88,000 tokens on average. Tooling sessions spent a median 8% of
-their tokens before their first edit, so the reading is spread through the work
-and is not a survey at its start. Waiting was 25% of worker input in the run
-before; the one long wait call the protocol now asks for brought it to 8%.
+Waiting was 30% of worker tokens in sessions begun on 2026-10-11 and 26% on
+2026-10-12, when the protocol began to ask for one long wait call; in the short
+tasks of 2026-10-13 it was 8% for tooling tasks. Whether that holds for long
+tasks is not measured.
 
 Three more things happened that day. One api manager read 18 persona matrices
 one after another, so 15 worker sessions stood idle. Mail could not reach that
@@ -176,8 +181,8 @@ lands, a manager applies its rule by hand and says so.
 
   | Who | Session | Compaction |
   | --- | --- | --- |
-  | Supermanager | One resident session; `state.md` written at each checkpoint | 500,000 for now, the maintainer's number (`claude --autocompact 500000`; the flag was not tried); the estimate above favours a lower one |
-  | A Goal's manager | A fresh turn for an event, several side by side. Compaction alone would not let two turns run at once, let mail in between turns, or spare a session woken after an hour from sending its history uncached | Not reached; while managers are still resumed, 150,000 |
+  | Supermanager | One resident session; `state.md` written at each checkpoint | 300,000, the maintainer's choice on 2026-10-13 (`claude --autocompact 300000`; the flag was not tried) |
+  | A Goal's manager | A fresh turn for an event, several side by side. Compaction alone would not let two turns run at once, let mail in between turns, or spare a session woken after an hour from sending its history uncached | Not reached; while managers are still resumed, 300,000 |
   | Worker, researcher | One session for an attempt. The report's long tasks carried about 100,000 tokens a call and one made 3,182 calls, so their cost is their calls. A fix round resumes it when it is under 200,000 tokens and was active within the hour, and starts fresh from the brief, the findings and the changed files otherwise | 400,000 for Sol and 200,000 for Luna, a backstop: a compaction in the middle of a task loses what was read. The control is the brief and a budget of calls for an attempt |
 - **termspaces is the agents' terminal, and `goalctl` maintains it.** `goalctl`
   registers a window when a turn or a worker starts and removes it when it
@@ -277,12 +282,12 @@ measures in `status`; `coordinator start` and mail with a sender and a deadline;
 | N0 | The regression of 2026-10-13 on `main` is read: its failures are clustered by first error line with no model, the clusters the run caused itself (a host shared with workers, an agent's environment) are rerun alone, and each cluster that remains is a pending cell of a row or one task of the Goal that owns it. [state.md](state.md) has the counts |
 | N1 | One Books row is proved from end to end by the program: its declaration, its six outcome tests through the persona harness, landed through the gates, and `status` shows 1 of 67. It removes what stopped the pilots (the guard that cannot follow the loader's import, the harness's missing read) |
 | N2 | `scripts/goal/goalctl.ts` is split along its commands, with no change of behaviour, so that tooling tasks stop sharing one file of 6,300 lines |
-| N3 | The coordinator lands and closes what needs no judgment, starts a short fresh turn for an event, bounds a turn, delivers mail by level, and records each turn (reason, context, actions). A manager session that is still resumed compacts at 150,000 |
+| N3 | The coordinator lands and closes what needs no judgment, starts a short fresh turn for an event, bounds a turn, delivers mail by level, and records each turn (reason, context, actions). A manager session that is still resumed compacts at 300,000 |
 | N4 | `goalctl` maintains termspaces: it registers and removes the window of every turn and worker, `status` names each one's window, and nothing of a Goal runs on another tmux server |
 | N5 | One command answers what a persona gets from an operation on a pooled QA stack and can record the response for a story; a generated index gives each operation's route file, owner and tests |
-| N6 | The surface gate (types, unit tests, the changed stories fed by recorded responses); the measures read each attempt's recorded round; a cancelled task names its reason and what replaces it; an attempt has a budget of model calls; a mechanism brief's note is marked read by its Goal's manager; `dispatch` chooses the Codex account with more of its week left |
+| N6 | The surface gate (types, unit tests, the changed stories fed by recorded responses); the measures read each attempt's recorded round; a cancelled task names its reason and what replaces it; an attempt stops at 150 model steps and hands off what it has (nine sessions in ten were shorter); a worker starts no sub-agent; a mechanism brief's note is marked read by its Goal's manager; `dispatch` chooses the Codex account with more of its week left |
 | N7 | Main's scheduled run is the judge: `status` prints the rows the last run on `main` confirmed beside the rows declared; a bounded audit tries each newly proved row as its personas and reports only with a failing test; a fault reopens the cell for its owner, who can acknowledge it and cannot clear it |
-| N10 | A worker learns before its handoff what the landing would refuse, and checks in one step: `task goal -- selfgate` runs the merge's own checks in the gate's environment against the current `main` (the rebase, the claim and scope, the affected unit files, the guards); `task goal -- check` runs types, lint, the task's tests and the guards in one call and prints only what failed. On 2026-10-13 at least six of thirteen fix rounds were refusals a worker could have met itself, and tests with their waits took 30% of tooling tokens over about 23 steps a task |
+| N10 | A worker learns before its handoff what the landing would refuse, and checks in one step: `task goal -- selfgate` runs the merge's own checks in the gate's environment against the current `main` (the rebase, the claim and scope, the affected unit files, the guards); `task goal -- check` runs types, lint, the task's tests and the guards in one call and prints only what failed. Over 2026-10-11 and 2026-10-12 waiting on running commands took 29% of worker tokens and tests 9%; on 2026-10-13 at least six of thirteen fix rounds were refusals a worker could have met itself |
 | N9 | The maintainer is told on Telegram and answers in the supermanager's terminal: `task goal -- ask` records a question under a decision code and sends it with that code first, in code style, then the options, the one recommended and any default with its time; `tell` sends a notice; `decide` records his answer and `decisions` lists the open ones; a failed send is retried from an outbox. No listener, no button, no library; its tests run against a fake Bot API |
 | N8 | Tests are admitted by the tool: whole tiers, browser runs and `regress` start only from the program's schedule, one at a time and when no worker is live; each Goal has a share of the QA slots; `goalctl` refuses the rest. The full run's three and a half hours are measured by batch and cut |
 
@@ -300,7 +305,7 @@ The maintainer starts the supermanager in termspaces, window `super-manager` of 
 session `rezics-agents` (`termspaces attach rezics-agents`):
 
 ```sh
-GOAL_ID=program claude --model <model> --effort xhigh --autocompact 500000 --dangerously-skip-permissions
+GOAL_ID=program claude --model <model> --effort xhigh --autocompact 300000 --dangerously-skip-permissions
 ```
 
 and sends: `You are the REZICS supermanager. Read
