@@ -92,4 +92,5 @@ export const integrationGateFiles = [
   'services/main/tests/account-deletion-person-avatar.test.ts',
   'services/main/tests/governance-graph-disclosure.integration.test.ts',
   'services/main/tests/disclosure-composition-public-reads.test.ts',
+  'services/main/tests/erasure-media-composition.test.ts',
 ] as const;
