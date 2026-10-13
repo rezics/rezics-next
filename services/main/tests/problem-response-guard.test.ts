@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 
 interface Node {
   file: string;
@@ -12,13 +12,18 @@ interface Node {
 const root = resolve(import.meta.dir, '../../..');
 function nodes(files: string[], source?: string): Node[] {
   return ['object', 'pair', 'shorthand_property_identifier', 'call_expression', 'function_declaration'].flatMap(kind => {
-    const result = execFileSync('task', ['ast-grep', '--', 'run', '--lang', 'typescript', '--json=compact',
+    const result = spawnSync('task', ['ast-grep', '--', 'run', '--lang', 'typescript', '--json=compact',
       ...(kind === 'call_expression' ? ['--pattern', '$NS.Object($$$)'] : ['--kind', kind]),
       ...(source === undefined ? files : ['--stdin'])], {
       cwd: root, encoding: 'utf8', input: source, maxBuffer: 64 * 1024 * 1024, timeout: 30_000,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
-    return (JSON.parse(result) as Node[]).map(node => ({ ...node, kind }));
+    if (result.error) throw result.error;
+    // ast-grep exits 1 for an empty selection; Task maps a failed command to 201.
+    if (result.status !== 0 && !(result.status === 201 && result.stdout.trim() === '[]')) {
+      throw new Error(`ast-grep ${kind} failed: ${result.stderr}`);
+    }
+    return (JSON.parse(result.stdout) as Node[]).map(node => ({ ...node, kind }));
   });
 }
 const contains = (outer: Node, inner: Node) => outer.file === inner.file
