@@ -10,7 +10,7 @@ import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import type {} from '../../routes/media.ts';
 import { AccountAssertionDenied, verifyRequestAccount } from '../account/verify-assertion.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
-import { readResourceSummaries, type ResourceSummary, type SummaryInput, type SummaryReader,
+import { MAX_SUMMARY_BATCH, readResourceSummaries, type ResourceSummary, type SummaryInput, type SummaryReader,
   type SummaryMedia } from '../media/summary.ts';
 import { readerLanguages } from '../display-language/select.ts';
 import { readRealmPolicy } from '../space/policy.ts';
@@ -349,13 +349,24 @@ export class WorkReadSession {
     return result;
   }
 
-  /** One mutable-media fence per context for every summary section together.
-   * Graph labels/publication heads use the selected summary dependency token. */
+  /** Summary sections share a context but can exceed one owner's batch.
+   * Close every target in bounded batches at one media cut per context;
+   * graph labels/publication heads use the selected summary dependency token. */
   async fenceSummaryMedia() {
     for (const [context, prior] of this.avatarSnapshots) {
-      const row = await this.deps.media!.store.avatarRows([...prior.targets], context);
-      if (row.generation.dataEpoch !== prior.epoch || [...prior.targets].some(target =>
-        JSON.stringify(row.rows.get(target) ?? null) !== prior.rows.get(target))) throw new WorkReadMoved('Avatar changed');
+      const targets = [...prior.targets];
+      let sequence: string | undefined;
+      for (let offset = 0; offset < targets.length; offset += MAX_SUMMARY_BATCH) {
+        this.checkDeadline();
+        const batch = targets.slice(offset, offset + MAX_SUMMARY_BATCH);
+        const row = await this.deps.media!.store.avatarRows(batch, context);
+        if (row.generation.dataEpoch !== prior.epoch
+          || sequence !== undefined && row.generation.sequence !== sequence
+          || batch.some(target => JSON.stringify(row.rows.get(target) ?? null) !== prior.rows.get(target))) {
+          throw new WorkReadMoved('Avatar changed');
+        }
+        sequence = row.generation.sequence;
+      }
     }
     const assets = [...this.deliveredSummaryAssets];
     if (assets.length && (await this.disclosure(assets.map(resource => ({ owner: 'media',resource,component: 'cover' })), 'summary'))
