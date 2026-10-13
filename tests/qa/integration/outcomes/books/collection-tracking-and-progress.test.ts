@@ -7,7 +7,7 @@ import devices from '../../../../../scripts/qa/cases/outcomes/books/continue-pro
 import loans from '../../../../../scripts/qa/cases/outcomes/books/loans.ts';
 import expired from '../../../../../scripts/qa/cases/outcomes/books/return-an-expired-loan-expired-loans.ts';
 import { signIn } from '../../../../../scripts/lib/oauth-client.ts';
-import { outcomeResponse, outcomeTest } from '../../../support/outcome-test.ts';
+import { OutcomeRecorder, outcomeResponse, outcomeTest } from '../../../support/outcome-test.ts';
 import { personaSessions, type PersonaName, type PersonaSessions } from '../../../support/personas.ts';
 
 type Work = { work: string; mainVersion: string; workRevision: string };
@@ -27,6 +27,11 @@ const progressPath = (index = 0) => `/v1/compositions/${short(chapters.structure
 const statusPath = () => `/v1/works/${short(book.work)}/reader-status`;
 const readerPath = () => `/v1/works/${short(book.work)}/reader-state?${query()}`;
 const loanPage = (state: string) => `/v1/me/library-loans?${query()}&state=${state}`;
+const recordings = {
+  tracking: new OutcomeRecorder(tracking), devices: new OutcomeRecorder(devices),
+  loans: new OutcomeRecorder(loans), expired: new OutcomeRecorder(expired),
+};
+type Sample = ReturnType<OutcomeRecorder['session']>;
 async function json<T>(request: Promise<Response>, status = 200): Promise<T> {
   const response = await request, raw = await response.text();
   expect({ status: response.status, ...(response.status === status ? {} : { raw }) }).toEqual({ status });
@@ -65,7 +70,7 @@ async function compose(work: Work, profile: string, operations: (root: string) =
   }));
   return { ...changed, structure: base.structure };
 }
-const makeCopy = () => json<RecordState>(ownerCall('POST', '/v1/me/library-copies', {
+const makeCopy = (sample: Sample = (_label, ...args) => ownerCall(...args)) => json<RecordState>(sample('create-copy', 'POST', '/v1/me/library-copies', {
   ...own(), expectedVersion: 0, release, format: 'paperback', acquiredFrom: { kind: 'name', name: 'Private fixture library' },
 }), 201);
 const openBody = (copy: string, overdue = true) => ({
@@ -76,6 +81,7 @@ const openBody = (copy: string, overdue = true) => ({
 
 beforeAll(async () => {
   people = await personaSessions('public');
+  for (const recording of Object.values(recordings)) await recording.prepare();
   // A second OAuth grant and session key represent another device, with the same Account/Person.
   const directory = join('.temp/stack', `rezics-qa-${Bun.env.REZICS_QA_RUN_ID}`);
   const auth = readdirSync(directory).filter(name => name.startsWith('g-1005-auth-'));
@@ -122,7 +128,10 @@ beforeAll(async () => {
   privateCopy = await makeCopy();
   privateLoan = await json<RecordState>(ownerCall('POST', '/v1/me/library-loans', openBody(privateCopy.id)), 201);
 }, 120_000);
-afterAll(async () => { await people?.close(); });
+afterAll(async () => {
+  try { for (const recording of Object.values(recordings)) await recording.publish(); }
+  finally { await people?.close(); }
+});
 
 async function ownerLibrary() {
   const state = await json<Record<string, unknown>>(ownerCall('GET', readerPath()));
@@ -134,6 +143,7 @@ async function ownerLibrary() {
 async function deniedTracking(name: PersonaName) {
   // Operator requests use ordinary member routes; these rows have no platform operation.
   const person = people[name], expected = name === 'visitor' ? 401 : 403;
+  const sample = recordings.tracking.session(name, person);
   // Establish a different most-recent Work before each attempted foreign write.
   // Reader-state alone cannot reveal a changed last-read shelf ordering.
   const anchor = `/v1/compositions/${short(seriesParts.structure)}/occurrences/${short(seriesParts.occurrences[0]!)}/progress`;
@@ -142,11 +152,11 @@ async function deniedTracking(name: PersonaName) {
   const before = await ownerLibrary();
   expect(before.shelf).toEqual([series.work, book.work]);
   if (name === 'visitor') {
-    const empty = await json<{ status: { status: null }; progress: null }>(person.main('GET', readerPath()));
+    const empty = await json<{ status: { status: null }; progress: null }>(sample('signed-out-reader-state', 'GET', readerPath()));
     expect(empty).toMatchObject({ status: { status: null }, progress: null });
-  } else await privateReply(await person.main('GET', readerPath()), expected);
-  await privateReply(await person.main('PUT', statusPath(), { ...own(), expectedVersion: 1, status: 'want-to-read' }), expected);
-  const response = await person.main('PUT', progressPath(), { ...own(), expectedVersion: 0, completed: true, position: null });
+  } else await privateReply(await sample('foreign-reader-state', 'GET', readerPath()), expected);
+  await privateReply(await sample('status-refused', 'PUT', statusPath(), { ...own(), expectedVersion: 1, status: 'want-to-read' }), expected);
+  const response = await sample('chapter-save-refused', 'PUT', progressPath(), { ...own(), expectedVersion: 0, completed: true, position: null });
   const raw = await response.text(), after = await ownerLibrary();
   const observed = { status: response.status, ...(response.status === expected ? {} : { raw }),
     ownerReaderStateUnchanged: JSON.stringify(before.readerState) === JSON.stringify(after.readerState),
@@ -157,11 +167,15 @@ async function deniedTracking(name: PersonaName) {
       ...observed, shelfBefore: before.shelf, shelfAfter: after.shelf }));
   }
   expect(observed).toEqual({ status: expected, ownerReaderStateUnchanged: true, ownerShelfUnchanged: true });
+  if (name === 'member') {
+    await json(sample('empty-reading-shelf', 'GET', `/v1/me/shelves/status/reading/works?actingSubject=${encodeURIComponent(person.actingSubject!)}&sort=last-read&order=desc&limit=3`));
+  }
 }
 async function deniedDevices(name: PersonaName) {
   const person = people[name], expected = name === 'visitor' ? 401 : 403;
-  const occurrence = await person.main('GET', `${progressPath()}?${query()}`);
-  const completed = await person.main('GET', `/v1/compositions/${short(chapters.structure)}/progress?${query()}`);
+  const sample = recordings.devices.session(name, person);
+  const occurrence = await sample('chapter-progress-refused', 'GET', `${progressPath()}?${query()}`);
+  const completed = await sample('completions-refused', 'GET', `/v1/compositions/${short(chapters.structure)}/progress?${query()}`);
   const replies = [{ status: occurrence.status, raw: await occurrence.text() },
     { status: completed.status, raw: await completed.text() }];
   if (replies.some(reply => reply.status !== expected)) {
@@ -171,102 +185,181 @@ async function deniedDevices(name: PersonaName) {
   expect(replies.map(reply => ({ status: reply.status,
     ...(reply.status === expected ? {} : { raw: reply.raw }) }))).toEqual([{ status: expected }, { status: expected }]);
   for (const reply of replies) expect(reply.raw).not.toContain('private owner bookmark');
+  if (name === 'member') {
+    const actor = `actingSubject=${encodeURIComponent(person.actingSubject!)}`;
+    await json(sample('empty-chapter-progress', 'GET', `${progressPath()}?${actor}`));
+    await json(sample('empty-completions', 'GET', `/v1/compositions/${short(chapters.structure)}/progress?${actor}&limit=20`));
+    await json(sample('no-saved-position', 'GET', `/v1/reading-positions/${short(book.work)}?${actor}&position=mine&limit=20`));
+  }
 }
 async function deniedLoans(name: PersonaName) {
   const person = people[name], expected = name === 'visitor' ? 401 : 403;
-  await privateReply(await person.main('GET', `/v1/works/${short(book.work)}/copies?${query()}`), expected);
-  await privateReply(await person.main('GET', loanPage('active')), expected);
-  await privateReply(await person.main('POST', '/v1/me/library-loans', openBody(privateCopy.id)), expected);
-  await privateReply(await person.main('POST', `/v1/me/library-loans/${short(privateLoan.id)}/extend`, {
+  const sample = recordings.loans.session(name, person);
+  await privateReply(await sample('copies-refused', 'GET', `/v1/works/${short(book.work)}/copies?${query()}`), expected);
+  await privateReply(await sample('active-loans-refused', 'GET', loanPage('active')), expected);
+  await privateReply(await sample('open-loan-refused', 'POST', '/v1/me/library-loans', openBody(privateCopy.id)), expected);
+  await privateReply(await sample('extend-loan-refused', 'POST', `/v1/me/library-loans/${short(privateLoan.id)}/extend`, {
     ...own(), expectedVersion: 1, dueAt: new Date(Date.now() + 10 * 86_400_000).toISOString(),
   }), expected);
-  await privateReply(await person.main('POST', `/v1/me/library-loans/${short(privateLoan.id)}/return`, { ...own(), expectedVersion: 1 }), expected);
+  await privateReply(await sample('return-loan-refused', 'POST', `/v1/me/library-loans/${short(privateLoan.id)}/return`, { ...own(), expectedVersion: 1 }), expected);
+  if (name === 'member') await json(sample('empty-active-loans', 'GET',
+    `/v1/me/library-loans?actingSubject=${encodeURIComponent(person.actingSubject!)}&state=active&limit=20`));
 }
 async function deniedExpired(name: PersonaName) {
   const expected = name === 'visitor' ? 401 : 403;
-  await privateReply(await people[name].main('GET', loanPage('overdue')), expected);
-  await privateReply(await people[name].main('GET', loanPage('returned')), expected);
-  await privateReply(await people[name].main('POST', `/v1/me/library-loans/${short(privateLoan.id)}/return`, { ...own(), expectedVersion: 1 }), expected);
+  const sample = recordings.expired.session(name, people[name]);
+  await privateReply(await sample('overdue-loans-refused', 'GET', loanPage('overdue')), expected);
+  await privateReply(await sample('returned-loans-refused', 'GET', loanPage('returned')), expected);
+  await privateReply(await sample('return-loan-refused', 'POST', `/v1/me/library-loans/${short(privateLoan.id)}/return`, { ...own(), expectedVersion: 1 }), expected);
   const page = await json<{ items: RecordState[] }>(ownerCall('GET', loanPage('overdue')));
   expect(page.items.find(loan => loan.id === privateLoan.id)).toMatchObject({ state: 'overdue', version: 1, returnedAt: null });
+  if (name === 'member') await json(sample('empty-active-loans', 'GET',
+    `/v1/me/library-loans?actingSubject=${encodeURIComponent(people[name].actingSubject!)}&state=active&limit=20`));
 }
 
-outcomeTest(expired, 'visitor', () => deniedExpired('visitor'));
-outcomeTest(expired, 'stranger', () => deniedExpired('stranger'));
-outcomeTest(expired, 'member', () => deniedExpired('member'));
-outcomeTest(expired, 'moderator', () => deniedExpired('moderator'));
-outcomeTest(expired, 'operator', () => deniedExpired('operator'));
+// `/library` and `/library/loans` share the shelf navigation reads.
+async function libraryOverviewReads(sample: Sample) {
+  await json(sample('shelf-directory', 'GET', `/v1/me/shelves?${query()}&limit=20`));
+  await json(sample('library-visibility', 'GET', `/v1/agents/${short(subject())}/library-visibility`));
+  return json<{ items: { context: string }[] }>(sample('global-rating-context', 'GET', '/v1/rating-contexts?scope=global&limit=1'));
+}
+
+// The reading strip and a status shelf use different page sizes and their own reader-state batch.
+async function libraryRenderReads(sample: Sample) {
+  await libraryOverviewReads(sample);
+  await json(sample('yearly-reading-goal', 'GET', `/v1/me/reading-goal?${query()}&year=${new Date().getUTCFullYear()}`));
+  await json(sample('followed-authors', 'GET', `/v1/me/follows/authors?${query()}`));
+  await json(sample('currently-reading-preview', 'GET', `/v1/me/shelves/status/reading/works?${query()}&sort=last-read&order=desc&limit=3`));
+  await json(sample('reading-shelf', 'GET', `/v1/me/shelves/status/reading/works?${query()}&sort=last-read&order=desc&limit=20`));
+  await json(sample('reading-work-states', 'GET', `/v1/me/work-states?${query()}&works=${encodeURIComponent(`${book.work},${series.work}`)}`));
+  for (const [label, work] of [['book', book], ['series', series]] as const) {
+    await json(sample(`${label}-card-and-chapter-count`, 'GET', `/v1/works/${short(work.work)}?${query()}`));
+    await json(sample(`${label}-reading-resume`, 'GET', `/v1/me/continue/${short(work.work)}?${query()}`));
+  }
+}
+
+async function finishedShelfReads(sample: Sample) {
+  await json(sample('finished-shelf', 'GET', `/v1/me/shelves/status/read/works?${query()}&sort=added&order=desc&limit=20`));
+  await json(sample('finished-work-states', 'GET', `/v1/me/work-states?${query()}&works=${encodeURIComponent(book.work)}`));
+  await json(sample('private-import-reviews', 'GET', `/v1/me/import-reviews?${query()}&works=${encodeURIComponent(book.work)}`));
+  const contexts = await json<{ items: { context: string }[] }>(sample('finished-rating-context', 'GET', '/v1/rating-contexts?scope=global&limit=1'));
+  if (contexts.items[0]) await json(sample('finished-work-reviews', 'GET',
+    `/v1/resources/${short(book.work)}/reviews?${query()}&context=${encodeURIComponent(contexts.items[0].context)}&limit=1&showSpoilers=true`));
+}
+
+// Loan labels come from the private export, the Work and its exact release, rather than invented cards.
+async function loanRenderReads(sample: Sample) {
+  await libraryOverviewReads(sample);
+  await json(sample('active-loans-page', 'GET', `${loanPage('active')}&limit=20`));
+  let cursor: string | null = null, snapshot: string | undefined, page = 0;
+  do {
+    const answer = await json<{ snapshot: string; nextCursor: string | null }>(sample(`copy-export-${page++}`, 'GET',
+      `/v1/me/library-export?${query()}&limit=20${snapshot ? `&snapshot=${encodeURIComponent(snapshot)}` : ''}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`));
+    snapshot = answer.snapshot;
+    cursor = answer.nextCursor;
+  } while (cursor);
+  await json(sample('loan-work-label', 'GET', `/v1/works/${short(book.work)}?${query()}&language=en`));
+  await json(sample('loan-release-label', 'GET', `/v1/works/${short(book.work)}/releases/${short(release)}?${query()}`));
+}
+
+// ChapterProgress reads the saved position, then the chapter choices and the selected occurrence.
+async function progressRenderReads(sample: Sample) {
+  await json(sample('book-type', 'GET', `/v1/works/${short(book.work)}?${query()}`));
+  // These fixture chapters target DigitalDocument, not chapter Posts; keep the API's unavailable answer too.
+  await sample('book-contents', 'GET', `/v1/works/${short(book.work)}/contents?${query()}&limit=20`);
+  await json(sample('series-volumes', 'GET', `/v1/resources/${short(series.work)}/parts?${query()}&limit=20`));
+  await json(sample('chapter-resume', 'GET', `/v1/reading-positions/${short(book.work)}?${query()}&position=mine&limit=20`));
+  await json(sample('chapter-choices', 'GET', `/v1/reading-positions/${short(book.work)}?${query()}&position=start&limit=20`));
+  await json(sample('completed-chapters', 'GET', `/v1/compositions/${short(chapters.structure)}/progress?${query()}&limit=20`));
+  await json(sample('series-composition', 'GET', `/v1/compositions/${short(seriesParts.structure)}?${query()}&limit=20`));
+}
+
+outcomeTest(expired, 'visitor', () => deniedExpired('visitor'), recordings.expired);
+outcomeTest(expired, 'stranger', () => deniedExpired('stranger'), recordings.expired);
+outcomeTest(expired, 'member', () => deniedExpired('member'), recordings.expired);
+outcomeTest(expired, 'moderator', () => deniedExpired('moderator'), recordings.expired);
+outcomeTest(expired, 'operator', () => deniedExpired('operator'), recordings.expired);
 outcomeTest(expired, 'owner', async () => {
-  const copy = await makeCopy(), loan = await json<RecordState>(ownerCall('POST', '/v1/me/library-loans', openBody(copy.id)), 201);
-  const before = await json<{ items: RecordState[] }>(ownerCall('GET', loanPage('overdue')));
+  const sample = recordings.expired.session('owner', people.owner);
+  const copy = await makeCopy(sample), loan = await json<RecordState>(sample('open-overdue-loan', 'POST', '/v1/me/library-loans', openBody(copy.id)), 201);
+  const before = await json<{ items: RecordState[] }>(sample('overdue-before-return', 'GET', loanPage('overdue')));
   expect(before.items.find(item => item.id === loan.id)).toMatchObject({ state: 'overdue', returnedAt: null });
-  await json(ownerCall('DELETE', `/v1/me/library-copies/${short(copy.id)}`, { ...own(), expectedVersion: 1 }), 409);
+  await loanRenderReads(sample);
+  await json(sample('loaned-copy-removal-refused', 'DELETE', `/v1/me/library-copies/${short(copy.id)}`, { ...own(), expectedVersion: 1 }), 409);
   const path = `/v1/me/library-loans/${short(loan.id)}/return`, key = randomUUID(), body = { ...own(), expectedVersion: 1 };
-  const returned = await json<RecordState>(ownerCall('POST', path, body, key));
+  const returned = await json<RecordState>(sample('return-overdue-loan', 'POST', path, body, key));
   expect(returned).toMatchObject({ state: 'returned', version: 2 });
   expect(returned.returnedAt).toBeTruthy();
-  expect(await json(ownerCall('POST', path, body, key))).toEqual({ ...returned, replayed: true });
-  await json(ownerCall('POST', path, body), 409);
-  expect((await json<{ items: RecordState[] }>(ownerCall('GET', loanPage('overdue')))).items.some(item => item.id === loan.id)).toBe(false);
-  expect((await json<{ items: RecordState[] }>(ownerCall('GET', loanPage('returned')))).items.find(item => item.id === loan.id)).toMatchObject({ state: 'returned', version: 2 });
-  expect(await json(ownerCall('DELETE', `/v1/me/library-copies/${short(copy.id)}`, { ...own(), expectedVersion: 1 }))).toMatchObject({ removed: true });
-});
+  expect(await json(sample('return-replayed', 'POST', path, body, key))).toEqual({ ...returned, replayed: true });
+  await json(sample('stale-return-refused', 'POST', path, body), 409);
+  expect((await json<{ items: RecordState[] }>(sample('overdue-after-return', 'GET', loanPage('overdue')))).items.some(item => item.id === loan.id)).toBe(false);
+  expect((await json<{ items: RecordState[] }>(sample('returned-history', 'GET', loanPage('returned')))).items.find(item => item.id === loan.id)).toMatchObject({ state: 'returned', version: 2 });
+  expect(await json(sample('remove-returned-copy', 'DELETE', `/v1/me/library-copies/${short(copy.id)}`, { ...own(), expectedVersion: 1 }))).toMatchObject({ removed: true });
+}, recordings.expired);
 
-outcomeTest(tracking, 'visitor', () => deniedTracking('visitor'));
-outcomeTest(tracking, 'stranger', () => deniedTracking('stranger'));
-outcomeTest(tracking, 'member', () => deniedTracking('member'));
-outcomeTest(tracking, 'moderator', () => deniedTracking('moderator'));
-outcomeTest(tracking, 'operator', () => deniedTracking('operator'));
+outcomeTest(tracking, 'visitor', () => deniedTracking('visitor'), recordings.tracking);
+outcomeTest(tracking, 'stranger', () => deniedTracking('stranger'), recordings.tracking);
+outcomeTest(tracking, 'member', () => deniedTracking('member'), recordings.tracking);
+outcomeTest(tracking, 'moderator', () => deniedTracking('moderator'), recordings.tracking);
+outcomeTest(tracking, 'operator', () => deniedTracking('operator'), recordings.tracking);
 outcomeTest(tracking, 'owner', async () => {
+  const sample = recordings.tracking.session('owner', people.owner);
+  await libraryRenderReads(sample);
   const date = new Date().toISOString().slice(0, 10);
   const key = randomUUID(), body = { ...own(), expectedVersion: 1, status: 'reading', startedOn: date };
-  const saved = await json<{ version: number }>(ownerCall('PUT', statusPath(), body, key));
+  const saved = await json<{ version: number }>(sample('save-reading-status', 'PUT', statusPath(), body, key));
   expect(saved.version).toBe(2);
-  expect(await json(ownerCall('PUT', statusPath(), body, key))).toMatchObject({ ...saved, replayed: true });
-  await json(ownerCall('PUT', statusPath(), body), 409);
-  expect(await json(ownerCall('GET', readerPath())))
+  expect(await json(sample('status-replayed', 'PUT', statusPath(), body, key))).toMatchObject({ ...saved, replayed: true });
+  await json(sample('stale-status-refused', 'PUT', statusPath(), body), 409);
+  expect(await json(sample('reading-reader-state', 'GET', readerPath())))
     .toMatchObject({ status: { status: 'reading', version: 2, startedOn: date } });
-  const current = await json<Progress>(ownerCall('GET', `${progressPath()}?${query()}`));
-  await json(ownerCall('PUT', progressPath(), { ...own(), expectedVersion: current.version, completed: true, position: null }));
-  const stats = await ownerCall('GET', `/v1/me/reading-stats?${query()}&year=${new Date().getUTCFullYear()}`);
+  const current = await json<Progress>(sample('chapter-before-completion', 'GET', `${progressPath()}?${query()}`));
+  await json(sample('complete-chapter', 'PUT', progressPath(), { ...own(), expectedVersion: current.version, completed: true, position: null }));
+  const stats = await sample('chapter-reading-stats', 'GET', `/v1/me/reading-stats?${query()}&year=${new Date().getUTCFullYear()}`);
   expect(stats.headers.get('cache-control')).toBe('private, no-store');
   expect(await json(Promise.resolve(stats))).toMatchObject({ books: 0, chapters: 1 });
-  expect(await json(ownerCall('GET', `/v1/me/continue/${short(book.work)}?${query()}`)))
+  expect(await json(sample('continue-next-chapter', 'GET', `/v1/me/continue/${short(book.work)}?${query()}`)))
     .toMatchObject({ nextUnread: { occurrence: chapters.occurrences[1] } });
-  await json(ownerCall('PUT', statusPath(), { ...own(), expectedVersion: 2, status: 'read', finishedOn: date }));
-  expect(await json(ownerCall('GET', `/v1/me/reading-stats?${query()}&year=${new Date().getUTCFullYear()}`)))
+  await json(sample('finish-book', 'PUT', statusPath(), { ...own(), expectedVersion: 2, status: 'read', finishedOn: date }));
+  expect(await json(sample('finished-reading-stats', 'GET', `/v1/me/reading-stats?${query()}&year=${new Date().getUTCFullYear()}`)))
     .toMatchObject({ books: 1, chapters: 2 });
-});
-outcomeTest(devices, 'visitor', () => deniedDevices('visitor'));
-outcomeTest(devices, 'stranger', () => deniedDevices('stranger'));
-outcomeTest(devices, 'member', () => deniedDevices('member'));
-outcomeTest(devices, 'moderator', () => deniedDevices('moderator'));
-outcomeTest(devices, 'operator', () => deniedDevices('operator'));
+  await finishedShelfReads(sample);
+}, recordings.tracking);
+outcomeTest(devices, 'visitor', () => deniedDevices('visitor'), recordings.devices);
+outcomeTest(devices, 'stranger', () => deniedDevices('stranger'), recordings.devices);
+outcomeTest(devices, 'member', () => deniedDevices('member'), recordings.devices);
+outcomeTest(devices, 'moderator', () => deniedDevices('moderator'), recordings.devices);
+outcomeTest(devices, 'operator', () => deniedDevices('operator'), recordings.devices);
 outcomeTest(devices, 'owner', async () => {
-  const path = progressPath(1), stale = await json<Progress>(secondDevice('GET', `${path}?${query()}`));
-  await json(ownerCall('PUT', path, { ...own(), expectedVersion: stale.version, completed: true, position: 'device one paragraph' }));
-  expect(await json(secondDevice('GET', `${path}?${query()}`))).toMatchObject({ completed: true, position: 'device one paragraph', version: stale.version + 1 });
-  expect(await json(secondDevice('GET', `/v1/reading-positions/${short(series.work)}?${query()}&position=mine&limit=1`)))
+  const sample = recordings.devices.session('owner', people.owner);
+  const deviceSample = recordings.devices.session('owner', { main: secondDevice });
+  const path = progressPath(1), stale = await json<Progress>(deviceSample('device-two-before-save', 'GET', `${path}?${query()}`));
+  await json(sample('device-one-save', 'PUT', path, { ...own(), expectedVersion: stale.version, completed: true, position: 'device one paragraph' }));
+  expect(await json(deviceSample('device-two-resumed-chapter', 'GET', `${path}?${query()}`))).toMatchObject({ completed: true, position: 'device one paragraph', version: stale.version + 1 });
+  expect(await json(deviceSample('device-two-series-resume', 'GET', `/v1/reading-positions/${short(series.work)}?${query()}&position=mine&limit=1`)))
     .toMatchObject({ resolved: chapters.occurrences[1] });
-  await json(secondDevice('PUT', path, { ...own(), expectedVersion: stale.version, completed: false, position: null }), 409);
-  const fresh = await json<Progress>(secondDevice('GET', `${path}?${query()}`));
-  await json(secondDevice('PUT', path, { ...own(), expectedVersion: fresh.version, completed: false, position: null }));
-  expect(await json(ownerCall('GET', `${path}?${query()}`))).toMatchObject({ completed: false, version: fresh.version + 1 });
-});
-outcomeTest(loans, 'visitor', () => deniedLoans('visitor'));
-outcomeTest(loans, 'stranger', () => deniedLoans('stranger'));
-outcomeTest(loans, 'member', () => deniedLoans('member'));
-outcomeTest(loans, 'moderator', () => deniedLoans('moderator'));
-outcomeTest(loans, 'operator', () => deniedLoans('operator'));
+  await json(deviceSample('device-two-stale-save-refused', 'PUT', path, { ...own(), expectedVersion: stale.version, completed: false, position: null }), 409);
+  const fresh = await json<Progress>(deviceSample('device-two-conflict-current', 'GET', `${path}?${query()}`));
+  await json(deviceSample('device-two-recovered-save', 'PUT', path, { ...own(), expectedVersion: fresh.version, completed: false, position: null }));
+  expect(await json(sample('device-one-sees-recovery', 'GET', `${path}?${query()}`))).toMatchObject({ completed: false, version: fresh.version + 1 });
+  await progressRenderReads(sample);
+}, recordings.devices);
+outcomeTest(loans, 'visitor', () => deniedLoans('visitor'), recordings.loans);
+outcomeTest(loans, 'stranger', () => deniedLoans('stranger'), recordings.loans);
+outcomeTest(loans, 'member', () => deniedLoans('member'), recordings.loans);
+outcomeTest(loans, 'moderator', () => deniedLoans('moderator'), recordings.loans);
+outcomeTest(loans, 'operator', () => deniedLoans('operator'), recordings.loans);
 outcomeTest(loans, 'owner', async () => {
-  const copy = await makeCopy(), key = randomUUID(), body = openBody(copy.id, false);
-  const loan = await json<RecordState>(ownerCall('POST', '/v1/me/library-loans', body, key), 201);
+  const sample = recordings.loans.session('owner', people.owner);
+  const copy = await makeCopy(sample), key = randomUUID(), body = openBody(copy.id, false);
+  const loan = await json<RecordState>(sample('open-loan', 'POST', '/v1/me/library-loans', body, key), 201);
   expect(loan).toMatchObject({ state: 'open', copy: copy.id, version: 1 });
-  expect(await json(ownerCall('POST', '/v1/me/library-loans', body, key), 201)).toMatchObject({ ...loan, replayed: true });
+  expect(await json(sample('open-loan-replayed', 'POST', '/v1/me/library-loans', body, key), 201)).toMatchObject({ ...loan, replayed: true });
+  await loanRenderReads(sample);
   const root = `/v1/me/library-loans/${short(loan.id)}`;
-  await json(ownerCall('POST', `${root}/extend`, { ...own(), expectedVersion: 1, dueAt: new Date(Date.now() + 14 * 86_400_000).toISOString() }));
-  await json(ownerCall('POST', `${root}/return`, { ...own(), expectedVersion: 1 }), 409);
-  expect(await json(ownerCall('POST', `${root}/return`, { ...own(), expectedVersion: 2 }))).toMatchObject({ state: 'returned', version: 3 });
-  expect(await json(ownerCall('GET', `/v1/works/${short(book.work)}/copies?${query()}`)))
+  await json(sample('extend-loan', 'POST', `${root}/extend`, { ...own(), expectedVersion: 1, dueAt: new Date(Date.now() + 14 * 86_400_000).toISOString() }));
+  await json(sample('stale-return-refused', 'POST', `${root}/return`, { ...own(), expectedVersion: 1 }), 409);
+  expect(await json(sample('return-loan', 'POST', `${root}/return`, { ...own(), expectedVersion: 2 }))).toMatchObject({ state: 'returned', version: 3 });
+  expect(await json(sample('release-copies', 'GET', `/v1/works/${short(book.work)}/copies?${query()}`)))
     .toMatchObject({ items: expect.arrayContaining([expect.objectContaining({ id: copy.id, release })]) });
-});
+}, recordings.loans);
