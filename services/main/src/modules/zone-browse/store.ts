@@ -540,7 +540,15 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
     if (this.handoffDeferred || !this.usableCut || position.dataEpoch !== this.env.lineage.dataEpoch) return false;
     try {
       const coverage = await this.mainStreamCoverage();
-      return compareRelayPositions(this.checkpoint, coverage) === 0;
+      const cut = fusekiReadBudget.getStore() ? await this.graphCut()
+        : await fusekiReadBudget.run({ signal: AbortSignal.timeout(ZONE_BROWSE_PROJECTION_COST.recoveryPageMs),
+          callsLeft: 1, bytesLeft: 8192 }, () => this.graphCut());
+      // Delivered coverage can itself lag committed Main selections. The
+      // existing Main stream cut, never the graph diagnostic counter, proves
+      // that a seek cannot omit an already admitted candidate.
+      return compareRelayPositions(this.checkpoint, coverage) === 0
+        && compareRelayPositions(this.checkpoint, { streamScope: MAIN_RELAY_STREAM_SCOPE,
+          dataEpoch: cut.dataEpoch, sequence: cut.relaySequence }) === 0;
     } catch { return false; }
   }
 

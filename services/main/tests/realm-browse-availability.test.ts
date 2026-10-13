@@ -5,6 +5,9 @@ import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { MediaStore } from '../src/modules/media/store.ts';
 import { WorkReadMoved, WorkReadSession, WorkReadUnavailable } from '../src/modules/work/read-session.ts';
 import { readZoneBrowse } from '../src/modules/zone-modules/browse.ts';
+import { ZoneBrowseProjection } from '../src/modules/zone-browse/store.ts';
+import { MAIN_RELAY_STREAM_SCOPE, type RelayHandoffPosition } from '../src/modules/outbox/relay-position.ts';
+import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 
 const id = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -102,4 +105,19 @@ test('stale classification cannot assert an exact empty Condition inventory', as
   for (const filter of [{ concept: [concept] }, { excludeConcept: [id(8)] }]) {
     await expect(readZoneBrowse(session, realm, filter)).rejects.toBeInstanceOf(WorkReadUnavailable);
   }
+});
+
+test('a delivered watermark before the 65th committed selection cannot prove a current inventory', async () => {
+  const eligible = Array.from({ length: 65 }, (_, index) => id(index + 1));
+  const relay = { query: async () => ({ rows: [{ stream_scope: MAIN_RELAY_STREAM_SCOPE,
+    data_epoch: 'epoch', sequence: String(eligible.length - 1) }] }) } as unknown as Pool;
+  const env = { lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' }, fuseki: {
+    query: async () => ({ results: { bindings: [{ sequence: term('1000'),
+      relaySequence: term(String(eligible.length)) }] } }),
+  } } as unknown as WorkActivationEnvironment;
+  const projection = new ZoneBrowseProjection({} as Pool, relay, env);
+  const state = projection as unknown as { usableCut: boolean; checkpoint: RelayHandoffPosition };
+  state.usableCut = true;
+  state.checkpoint = { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: 'epoch', sequence: '64' };
+  expect(await projection.current({ dataEpoch: 'epoch', sequence: '1000' })).toBe(false);
 });

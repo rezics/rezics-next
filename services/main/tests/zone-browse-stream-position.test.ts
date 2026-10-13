@@ -26,7 +26,9 @@ function projection(checkpoint: string, coverage: RelayHandoffPosition, nextBatc
     },
   } as unknown as Pool;
   const instance = new ZoneBrowseProjection({} as Pool, relay,
-    { lineage: { dataEpoch: 'epoch' } } as WorkActivationEnvironment);
+    { lineage: { dataEpoch: 'epoch' }, fuseki: { query: async () => ({ results: { bindings: [{
+      sequence: { value: '100' }, relaySequence: { value: coverage.sequence },
+    }] } }) } } as unknown as WorkActivationEnvironment);
   const state = instance as unknown as { usableCut: boolean; checkpoint: RelayHandoffPosition };
   state.usableCut = true;
   state.checkpoint = { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: 'epoch', sequence: checkpoint };

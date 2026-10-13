@@ -144,13 +144,22 @@ beforeAll(async () => {
     conditionInventory: tvWorks.map(work => work.work) });
   await saveEvidence();
   globalThis.fetch = Object.assign(async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+    const requestHeaders = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
+    let bearerExpiresAt: number | null = null;
+    const bearer = requestHeaders.get('authorization')?.replace(/^Bearer /, '');
+    if (bearer) {
+      try {
+        const payload = JSON.parse(Buffer.from(bearer.split('.')[1]!, 'base64url').toString()) as { exp?: number };
+        if (typeof payload.exp === 'number') bearerExpiresAt = payload.exp * 1000;
+      } catch { /* The actual HTTP verifier remains the authority. */ }
+    }
     const response = await originalFetch(input, init);
     const url = new URL(input instanceof Request ? input.url : String(input));
-    const persona = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined))
-      .get('x-qa-realm-browse-persona');
+    const persona = requestHeaders.get('x-qa-realm-browse-persona');
     if (persona && url.origin === `http://127.0.0.1:${Bun.env.MAIN_PORT}`
       && url.pathname === `/v1/realms/${short(sessions.realm)}/modules/browse`) {
       evidence.push({ persona, request: `GET ${url.pathname}${url.search}`, status: response.status,
+        observedAt: Date.now(), bearerExpiresAt,
         answer: await response.clone().text() });
       await saveEvidence();
     }

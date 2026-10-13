@@ -369,7 +369,7 @@ test('a restored Zone cursor ahead of acknowledgement preserves its cut and resu
     })));
     f.acknowledged.sequence = '3';
     expect(await f.instance.tick()).toBe(0);
-    expect(await f.current()).toBe(true);
+    expect(await f.current()).toBe(false);
     expect(f.state.checkpoint.sequence).toBe('3');
   } finally { error.mockRestore(); warn.mockRestore(); }
 });
