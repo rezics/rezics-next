@@ -2,7 +2,6 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { startMediaStack } from './media-support.ts';
 import { measureGraphReads } from './support/graph-reads.ts';
-import { backfillPublicNames } from '../../../services/main/src/modules/search/names.ts';
 import { GLOBAL_CLASSIFICATION_CONTEXT } from '../../../services/main/src/modules/classification/context.ts';
 
 type Definition = { scheme: string; schemeHead: string; concept: string; conceptHead: string };
@@ -133,13 +132,13 @@ test('Selected context vocabulary traverses disclosed Concepts with exact query 
         bulk = await define(`Population ${population}`, bulk);
         population++;
       }
-      await backfillPublicNames(stack.env);
       const measured = await measureGraphReads(() => stack.call('GET', path({ scheme: bulkScheme })));
       const page = await json<Page>(measured.value);
       expect(page.items).toHaveLength(1);
       expect(page.nextCursor).toBeString();
       expect(measured.calls).toBeLessThanOrEqual(64);
       costs.push(measured.calls);
+      console.log(`Context vocabulary cost: ${JSON.stringify({ population: size, graphReads: measured.calls })}`);
     }
     expect(costs[1]).toBeLessThanOrEqual(costs[0]! + 4);
     // A previously empty lookup is live; it is not retained in a process cache.
