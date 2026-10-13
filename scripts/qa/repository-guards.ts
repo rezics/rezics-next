@@ -15,7 +15,7 @@ export function outcomeTestViolations(
     const target = specifier.startsWith('.')
       ? relative(root, resolve(root, dirname(path), specifier)).replaceAll('\\', '/')
       : specifier;
-    if (/^(?:services|apps)\/[^/]+\/src(?:\/|$)/.test(target))
+    if (/(?:^|\/)(?:services|apps)\/[^/]+\/src(?:\/|$)/.test(target))
       violations.add(`imports product source: ${specifier}`);
   };
   for (const item of transpiler.scan(source).imports) checkImport(item.path);
