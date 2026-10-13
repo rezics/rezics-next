@@ -121,7 +121,7 @@ export const repositoryGuards = [
   },
   {
     file: 'scripts/static/web-accepted-commands.test.ts',
-    // This registry slot currently has no file in the tree: keep the conservative default.
+    reads: ['apps/web/**/*.{ts,tsx}', 'packages/**', ...generatedContractReads, 'scripts/static/web-accepted-commands*'],
     reason: 'Web command consumers distinguish accepted pending operations from completed effects.',
   },
   {

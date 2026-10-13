@@ -77,7 +77,7 @@ const guardFiles = (changed?: string[]) => selectRepositoryGuards(changed).map(g
 
 test('web changes select web inventories and leave unrelated service guards out', () => {
   const selected = guardFiles(['apps/web/features/realm/browse-page.ts']);
-  for (const file of ['web-continuations', 'web-acting-identity', 'web-page-filtering'])
+  for (const file of ['web-continuations', 'web-accepted-commands', 'web-acting-identity', 'web-page-filtering'])
     expect(selected).toContain(`scripts/static/${file}.test.ts`);
   expect(selected).not.toContain('services/main/tests/api-contract.test.ts');
   expect(selected).not.toContain('services/main/tests/g-829-public-reads.test.ts');
@@ -89,6 +89,7 @@ test('service changes select service inventories without generated-contract web 
   expect(selected).toContain('services/main/tests/api-contract.test.ts');
   expect(selected).not.toContain('scripts/static/web-continuations.test.ts');
   expect(selected).not.toContain('scripts/static/web-page-filtering.test.ts');
+  expect(selected).not.toContain('scripts/static/web-accepted-commands.test.ts');
   // This scan generates its contract from Main instead of opening the generated file.
   expect(selected).toContain('scripts/static/web-acting-identity.test.ts');
 });
@@ -151,6 +152,7 @@ test('declared inventories retain the scan patterns from executable guard source
     ['scripts/api/answer-records.guard.test.ts', 'scripts/api/answer-record.ts', ['']],
     ['scripts/static/web-continuations.test.ts', 'scripts/static/web-continuations.ts', ['']],
     ['scripts/static/web-page-filtering.test.ts', 'scripts/static/web-continuations.ts', ['']],
+    ['scripts/static/web-accepted-commands.test.ts', 'scripts/static/web-accepted-commands.ts', ['apps/web/']],
     ['scripts/static/web-acting-identity.test.ts', 'scripts/static/web-acting-identity.test.ts', ['apps/web/']],
     ['tests/qa/unit/g-1046-sql-relations.test.ts', 'scripts/qa/sql-relations.ts', ['services/', 'scripts/', 'tests/']],
     ['tests/qa/unit/serialization-points.test.ts', 'scripts/qa/serialization-points.ts', ['services/']],
