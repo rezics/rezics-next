@@ -8,14 +8,6 @@ import { resumeName } from './media.ts';
 
 export interface AnimeEpisodeRef { structure: string; occurrence: string }
 
-export function episodeResumeQuery(actingSubject: string) {
-  return { actingSubject, position: 'mine' as const, limit: 1 };
-}
-
-export function episodeProgressQuery(actingSubject: string) {
-  return { actingSubject };
-}
-
 /** The reader-status compare-and-set body the shelf write sends. */
 export function readerStatusBody(actingSubject: string, expectedVersion: number, status: ReadingStatus | null) {
   return { actingSubject, expectedVersion, status };
@@ -154,7 +146,7 @@ export function mapAnimeReaderStatus(answer: TreatyAnswer<StatusPage>): AnimeSta
 export async function readAnimeEpisodeResume(main: MainClient, actingSubject: string, work: string): Promise<AnimeResumeFact> {
   try {
     return mapAnimeResume(await main.v1['reading-positions']({ work: uuidOf(work) }).get({
-      query: episodeResumeQuery(actingSubject),
+      query: { actingSubject, position: 'mine', limit: 1 },
     }));
   } catch (error) {
     return transportRefusal(error);
@@ -166,7 +158,7 @@ export async function readAnimeEpisodeProgress(main: MainClient, actingSubject: 
   try {
     return mapAnimeProgress(await main.v1.compositions({ id: uuidOf(episode.structure) })
       .occurrences({ occurrence: uuidOf(episode.occurrence) }).progress.get({
-        query: episodeProgressQuery(actingSubject),
+        query: { actingSubject },
       }), episode);
   } catch (error) {
     return transportRefusal(error);
