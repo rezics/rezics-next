@@ -1190,8 +1190,13 @@ try {
             const previousRegistry = process.env[QA_STACK_REGISTRY];
             process.env[QA_STACK_REGISTRY] = registry;
             let restored: BrowserStack | undefined;
+            const restoreWaitStarted = Date.now();
+            const resumeRestore = runDeadline.wait();
+            let restoreAdmitted = false;
             try {
               await measuredBrowserStep(`${preparation.step} restore`, preparation.budgetMs, async () => {
+                restoreAdmitted = true;
+                resumeRestore();
                 await reserveRunSlot({ deadline: admissionDeadline, runDeadline });
                 restored = await preparation.restoreStack!({ runId: projectRunId, webOrigin: origin,
                   accountsPort: String(accounts.port) });
@@ -1205,7 +1210,12 @@ try {
                 await copy.stop();
                 forgetQaStack({ profile: 'qa', runId: copy.runId, persistent: true }, registry);
               } };
+            } catch (error) {
+              if (!restoreAdmitted && Date.now() >= admissionDeadline)
+                throw new Error(qaWaitFailure('browser memory', restoreWaitStarted, Date.now()));
+              throw error;
             } finally {
+              resumeRestore();
               if (previousRegistry === undefined) delete process.env[QA_STACK_REGISTRY];
               else process.env[QA_STACK_REGISTRY] = previousRegistry;
               accounts.release();
