@@ -20,6 +20,7 @@ import { newCost, StructureObjectCorrupt, StructureObjectUnavailable }
   from '../src/modules/structure/tree.ts';
 import { WorkReadLimit, WorkReadSession } from '../src/modules/work/read-session.ts';
 import { chapterStoryNumber } from '../src/modules/work-contents/read.ts';
+import { structureProfileFor } from '../src/modules/structure/profiles.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 
 
@@ -160,6 +161,38 @@ async function populatedChapterFixture(chapters: number) {
 }
 
 const readableChapterTarget = async () => true;
+
+test('Catalog and concealed native chapters retain bounded ordered inventory positions', async () => {
+  const root = chapterTestId(1);
+  const catalogTargets = structureProfileFor('book-composition').catalogTargetTypes!;
+  const records = [placedChapterRecord(10, root, 1), placedChapterRecord(11, root, 2),
+    ...catalogTargets.map((target, index) => {
+      const { selection: _selection, ...record } = placedChapterRecord(12 + index, root, 3 + index);
+      return { ...record, target };
+    })];
+  const fixture = await chapterTreeFixture(records);
+  const targetReads: string[] = [];
+  const page = await readCompositionPage(fixture.env, { structure: fixture.header.structure,
+    header: fixture.header, parent: root, limit: records.length, outline: true,
+    canReadTarget: async target => {
+      targetReads.push(target);
+      // Both an absent target and a hidden target have no disclosed native identity.
+      return false;
+    } });
+  expect(targetReads).toEqual(records.slice(0, 2).map(record => record.target!));
+  expect(page.occurrences.map(record => record.occurrence)).toEqual(records.map(record => record.occurrence));
+  expect(page.occurrences.slice(0, 2)).toMatchObject([{ labels: [] }, { labels: [] }]);
+  for (const record of page.occurrences.slice(0, 2)) {
+    expect(record.target).toBeUndefined();
+    expect(record.selection).toBeUndefined();
+  }
+  expect(page.occurrences.slice(2).map(record => record.target)).toEqual([...catalogTargets]);
+  expect(page.occurrences.slice(2).map(record => record.labels)).toEqual(records.slice(2).map(record => record.labels));
+  expect(page.next).toBeNull();
+  expect(page.offset).toBe(0);
+  expect(fixture.graphQueries).toHaveLength(1);
+  expect(fixture.objects.gets).toBeLessThanOrEqual(12);
+});
 
 for (const chapters of [1000, 5000, 10_000]) {
   test(`Chapter seeks and numbering read counted immutable neighbourhoods in a ${chapters} chapter Book`, async () => {

@@ -5,6 +5,7 @@ import { orderTree, recordTree, structureObjects } from '../structure/change.ts'
 import { seekChapter } from '../structure/reading-order.ts';
 import { ReadingOrderIndex } from '../reading-position/immutable-order.ts';
 import { checkOccurrenceRecord, InvalidStructureObject, type OccurrenceRecord } from '../structure/format.ts';
+import { isCatalogTarget } from '../structure/profiles.ts';
 import { orderTreeKey } from '../structure/graph.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable } from '../structure/tree.ts';
 import { ObjectIntegrityError, ObjectUnavailable } from '../../infrastructure/immutable-objects.ts';
@@ -78,6 +79,7 @@ function structureError(error: unknown): never {
 }
 
 async function canReadTarget(session: WorkReadSession, target: string): Promise<boolean> {
+  if (isCatalogTarget('book-composition', target)) return false;
   if (session.principal && session.options.actingSubject
     && await session.deps.access.canReadWork(session.principal, session.options.actingSubject, target)) {
     const rows = await session.query(`SELECT ?target WHERE { GRAPH ${iri(GRAPHS.current)} {
@@ -102,6 +104,8 @@ async function canReadTarget(session: WorkReadSession, target: string): Promise<
 /** Current public Content publication is the only body source, including for a private reader. */
 async function selectedContent(session: WorkReadSession, target: string, language: string,
   fixed: string | null): Promise<{ revision: string; variant: string } | null> {
+  // Catalog markers retain their placement without naming a native Content resource.
+  if (isCatalogTarget('book-composition', target)) return null;
   const rows = await session.query(`SELECT DISTINCT ?variant ?revision WHERE {
     GRAPH ${iri(GRAPHS.current)} { ?variant a rv:ContentVariant ; rv:resource ${iri(target)} ;
       rv:contentPublicationHead ?decision ; rv:publicSearchEligibilityHead ?eligibility . }

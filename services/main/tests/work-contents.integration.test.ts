@@ -10,6 +10,7 @@ import { checkStructureManifest, checkStructurePage, STRUCTURE_MANIFEST_FORMAT, 
   STRUCTURE_PROFILE, type OccurrenceRecord, type OrderEntry, type StructureManifest } from '../src/modules/structure/format.ts';
 import { orderTreeKey } from '../src/modules/structure/graph.ts';
 import { readCompositionPage, readCompositionSnapshot } from '../src/modules/structure/read.ts';
+import { structureProfileFor } from '../src/modules/structure/profiles.ts';
 import { newCost } from '../src/modules/structure/tree.ts';
 import { chapterStoryNumber } from '../src/modules/work-contents/read.ts';
 import { WorkReadSession } from '../src/modules/work/read-session.ts';
@@ -210,6 +211,67 @@ test('Reader: public and private composition pages, current Content, cursor and 
     expect((await get(`${chapterPath}?revision=${encodeURIComponent(made.revision)}`)).status).toBe(409);
     expect((await get(`/v1/chapters/${short(changed.occurrences[2]!)}`)).status).toBe(404);
     expect((await get(`/v1/chapters/${randomUUID()}`)).status).toBe(404);
+    const catalogTargets = structureProfileFor('book-composition').catalogTargetTypes!;
+    const catalog = await json<{ revision: string; occurrences: string[] }>(await a.send('POST',
+      `/v1/compositions/${short(made.structure)}/changes`, { profile: 'book-composition',
+        expectedHead: changed.revision, actingSubject: a.actor,
+        operations: catalogTargets.map((target, index) => ({ op: 'insert', parent: made.structure,
+          position: 'last', role: 'chapter', target,
+          ...(index === 0 ? { label: { value: 'Catalog chapter', language: 'en' } } : {}) })) }), 200);
+    const catalogQueries: string[] = [];
+    const queryCatalog = stack.fuseki.query.bind(stack.fuseki);
+    stack.fuseki.query = async (...args: Parameters<typeof stack.fuseki.query>) => {
+      catalogQueries.push(args[0]);
+      return queryCatalog(...args);
+    };
+    const readCatalogBody = stack.content.readExactBatch.bind(stack.content);
+    let catalogBodyReads = 0;
+    stack.content.readExactBatch = async (...args: Parameters<typeof stack.content.readExactBatch>) => {
+      catalogBodyReads++;
+      return readCatalogBody(...args);
+    };
+    try {
+      type CatalogPage = { language: string; compositionRevision: string;
+        items: Array<{ occurrence: string; parent: string; number: number; label: unknown;
+          target: string | null; selectedRevision: string | null; progress: unknown;
+          availability: string; childCount: number | null }>; nextCursor: string | null };
+      let cursor: string | null = null;
+      const cursors = new Set<string>();
+      for (let index = 0; index < changed.occurrences.length + catalogTargets.length; index++) {
+        const before = stack.fuseki.queries;
+        const page: CatalogPage = await json<CatalogPage>(
+          await get(`${root}?limit=1&language=en${cursor ? `&cursor=${cursor}` : ''}`));
+        expect(stack.fuseki.queries - before).toBeLessThanOrEqual(64);
+        expect(page.language).toBe('en');
+        expect(page.compositionRevision).toBe(catalog.revision);
+        expect(page.items).toHaveLength(1);
+        if (index >= changed.occurrences.length) {
+          const at = index - changed.occurrences.length;
+          expect(page.items[0]).toMatchObject({ occurrence: catalog.occurrences[at],
+            parent: made.structure, number: index + 1, childCount: null,
+            label: at === 0 ? { value: 'Catalog chapter', language: 'en' } : null,
+            availability: 'unavailable', target: null, selectedRevision: null, progress: null });
+          expect((await get(`/v1/chapters/${short(catalog.occurrences[at]!)}`)).status).toBe(404);
+        } else {
+          expect(page.items[0]?.availability).toBe(index < 2 ? 'available' : 'unavailable');
+          expect(page.items[0]?.target).toBe(index < 2 ? chapterTarget.work : null);
+        }
+        if (page.nextCursor) {
+          expect(cursors.has(page.nextCursor)).toBe(false);
+          cursors.add(page.nextCursor);
+        }
+        expect(page.nextCursor === null).toBe(index === changed.occurrences.length + catalogTargets.length - 1);
+        cursor = page.nextCursor;
+      }
+      expect(catalogBodyReads).toBe(0);
+      for (const target of catalogTargets) {
+        expect(catalogQueries.some(query => query.includes(`rv:resource <${target}>`)
+          || query.includes(`BIND(<${target}> AS ?target)`))).toBe(false);
+      }
+    } finally {
+      stack.fuseki.query = queryCatalog;
+      stack.content.readExactBatch = readCatalogBody;
+    }
     const privateTitle = `Private Reader Book ${randomUUID()}`;
     const privateBook = await activateMetadataWork(stack.env, { title: privateTitle,
       semanticTypes: ['https://schema.org/Book'],
@@ -226,7 +288,7 @@ test('Reader: public and private composition pages, current Content, cursor and 
     expect((await a.read(`${privatePath}?actingSubject=${encodeURIComponent(a.actor)}&language=en`)).status).toBe(200);
     const moved = await json<{ revision: string }>(await a.send('POST',
       `/v1/compositions/${short(made.structure)}/changes`, { profile: 'book-composition',
-        expectedHead: changed.revision, actingSubject: a.actor,
+        expectedHead: catalog.revision, actingSubject: a.actor,
         operations: [{ op: 'insert', parent: made.structure, position: 'last', role: 'group',
           label: { value: 'After cursor', language: 'en' } }] }), 200);
     expect(moved.revision).not.toBe(changed.revision);
