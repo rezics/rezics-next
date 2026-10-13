@@ -239,7 +239,8 @@ export class ImportCommands {
       result.applied.push('public-review');
     }
     for (const name of row.shelves) {
-      if (builtin.has(name.toLowerCase())) continue;
+      // An explicit Collection identity takes precedence over a status-shelf label.
+      if (builtin.has(name.toLowerCase()) && !existing.has(name)) continue;
       const step = await this.shelf(work, name, existing, state);
       if (step === 'retry') return null;
       if (step !== 'complete') return { ...result, issues: ['shelf-failed'] };

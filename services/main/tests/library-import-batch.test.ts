@@ -257,6 +257,19 @@ test('a portable membership page restores its own shelf before the shelf metadat
   expect(library.counts()).toEqual({ creates: 1, inserts: 1 });
 });
 
+test.each(['read', 'to-read'])('a portable custom shelf named %s retains its explicit identity and membership', async name => {
+  const library = portableLibrary();
+  await library.apply(agent, [portableRow('shelf', populatedShelf, name),
+    portableRow('entry', populatedShelf, name)], 'restore-status-name');
+  const restored = portableShelfId(agent, populatedShelf);
+  await library.apply(agent, [portableRow('shelf', restored, name),
+    portableRow('entry', restored, name)], 'reimport-status-name');
+  expect(library.shelves.get(restored)).toEqual({
+    curator: agent, name, disclosure: 'private', members: new Set([work]) });
+  expect(library.shelves.size).toBe(1);
+  expect(library.counts()).toEqual({ creates: 1, inserts: 1 });
+});
+
 test.each(['shelf', 'entry'] as const)('a conflicting curator at the derived identity refuses the %s rather than adopting it', async kind => {
   const library = portableLibrary(), id = portableShelfId(agent, emptyShelf);
   library.shelves.set(id, { curator: iri('000000000098'), name: 'Private shelf', disclosure: 'public', members: new Set() });
