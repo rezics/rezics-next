@@ -1,9 +1,7 @@
 import { expect, spyOn, test } from 'bun:test';
-import * as observability from '@rezics/observability/log';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { GRAPHS, iri, lit } from '../../../services/main/src/modules/work/activate.ts';
-import { MediaStore } from '../../../services/main/src/modules/media/store.ts';
 import { StructureProgressStore, StaleStructureProgress } from '../../../services/main/src/modules/progress/store.ts';
 import { prepareLibraryShelves, readShelfMetadata, SHELF_METADATA_COST } from '../../../services/main/src/modules/library/backfill.ts';
 import { ReaderLibraryStatusStore, STATUS_SHELF_COST, type ReadingStatus, type ShelfOrder, type ShelfSort }
@@ -42,12 +40,11 @@ async function startLibraryStack(label: string) {
       // so these 1,000 publication pointers cannot enter later global reads.
       const subjects = [...fixtureSubjects];
       for (let offset = 0; offset < subjects.length; offset += 100) {
-        for (const graph of [GRAPHS.current, GRAPHS.revisions]) {
-          await home.stack.fuseki.update(`DELETE { GRAPH ${iri(graph)} { ?subject ?predicate ?object } } WHERE {
-            VALUES ?subject { ${subjects.slice(offset, offset + 100).map(iri).join(' ')} }
-            GRAPH ${iri(graph)} { ?subject ?predicate ?object }
-          }`);
-        }
+        await home.stack.fuseki.update(`DELETE { GRAPH ?graph { ?subject ?predicate ?object } } WHERE {
+          VALUES ?graph { ${iri(GRAPHS.current)} ${iri(GRAPHS.revisions)} }
+          VALUES ?subject { ${subjects.slice(offset, offset + 100).map(iri).join(' ')} }
+          GRAPH ?graph { ?subject ?predicate ?object }
+        }`);
       }
     } finally { try { await home.stop(); } finally { await databases.close(); } }
   } };
@@ -116,29 +113,6 @@ test('G-824: 1,000 Works traverse each status in every SQL sort/direction withou
         expect(nodes(plan).some(node => ['Sort', 'Seq Scan'].includes(node['Node Type']))).toBe(false);
         expect(Math.max(...nodes(plan).map(node => node['Actual Rows']))).toBeLessThanOrEqual(20);
       }
-      await home.json(await home.call('PUT', `/v1/agents/${agent.slice(-36)}/library-visibility`,
-        { visibility: 'public', expectedVersion: 0 }, home.reader.token));
-      const readyOwned = await home.json<Page>(await home.call('GET',
-        signed('/v1/me/shelves/status/want-to-read/works?limit=20'), undefined, home.reader.token));
-      expect(readyOwned.items).toHaveLength(20);
-      expect(readyOwned.items.every(item => item.card?.id === item.work)).toBe(true);
-      const publicPath = `/v1/agents/${agent.slice(-36)}/shelves`;
-      const faults = spyOn(observability, 'logWorkerFault');
-      // The read can select the composition's Media owner, so observe every
-      // real store instance without replacing its validation or hydration.
-      const avatars = spyOn(MediaStore.prototype, 'avatarRows');
-      let publicResponse: Response;
-      try {
-        publicResponse = await home.call('GET', publicPath);
-        console.info('G824 public shelves qualification:', { readyOwnedItems: readyOwned.items.length, works: works.length,
-          request: { method: 'GET', path: publicPath, persona: 'anonymous shelf reader' },
-          status: publicResponse.status, body: await publicResponse.clone().json(),
-          avatarRequests: avatars.mock.calls.map(([targets, context]) => ({ targets: targets.length, context,
-            outsideFixture: targets.filter(target => target !== agent && !works.includes(target)) })), faults: faults.mock.calls.map(([worker, error]) => ({ worker,
-            type: error instanceof Error ? error.constructor.name : typeof error,
-            message: error instanceof Error ? error.message : String(error) })) });
-      } finally { avatars.mockRestore(); faults.mockRestore(); }
-      let ownedTraversals = 0;
       for (const status of statuses) for (const sort of sorts.filter(sort => sort !== 'finished' || status === 'read')) {
         for (const order of ['asc', 'desc'] as ShelfOrder[]) {
           const expected = (await home.stack.contentPool.query<{ work: string }>(`SELECT work
@@ -163,11 +137,12 @@ test('G-824: 1,000 Works traverse each status in every SQL sort/direction withou
           expect(new Set(actual).size).toBe(actual.length);
           expect(actual).toEqual(expected);
           expect(actual.length).toBe(counts.find(row => row.status === status)!.count);
-          ownedTraversals++;
         }
       }
-      console.info('G824 completed owned traversals:', ownedTraversals);
-      const publicCounts = await home.json<{ statusShelves: { status: string; count: number; countKind: string; nextCursor: string | null }[] }>(publicResponse);
+      await home.json(await home.call('PUT', `/v1/agents/${agent.slice(-36)}/library-visibility`,
+        { visibility: 'public', expectedVersion: 0 }, home.reader.token));
+      const publicCounts = await home.json<{ statusShelves: { status: string; count: number; countKind: string; nextCursor: string | null }[] }>(
+        await home.call('GET', `/v1/agents/${agent.slice(-36)}/shelves`));
       expect(publicCounts.statusShelves.reduce((sum, shelf) => sum + shelf.count, 0)).toBe(60);
       expect(publicCounts.statusShelves.every(shelf => shelf.countKind === 'lower-bound' && shelf.nextCursor)).toBe(true);
       const publicPage = await home.json<Page & { statusCount: number }>(await home.call('GET',

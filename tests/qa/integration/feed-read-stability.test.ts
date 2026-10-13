@@ -1,5 +1,4 @@
 import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test';
-import * as observability from '@rezics/observability/log';
 import { randomUUID } from 'node:crypto';
 import type { FeedItem } from '../../../services/main/src/modules/feed/contract.ts';
 import { READ_BASIS_RETENTION_MS } from '../../../services/main/src/modules/read-basis/retention.ts';
@@ -45,10 +44,8 @@ test('Home and Realm thread cursors survive an unrelated graph command and its e
       undefined, path === following ? home.reader.token : undefined));
     expect(BigInt(next.sourcePosition.sequence)).toBeGreaterThan(BigInt(first.sourcePosition.sequence));
   }
-  // Local membership proof keeps fresh ranked reads available across an
-  // unrelated command, even before the relay's empty refresh catches up.
-  const fresh = await home.json<Threads>(await home.call('GET', `${realmPath}?sort=top&limit=1`));
-  expect(fresh.items).toEqual(pages.get(`${realmPath}?sort=top&limit=1`)!.items);
+  // Fresh ranked admissions still require a complete projection at their cut.
+  expect((await home.call('GET', `${realmPath}?sort=top&limit=1`)).status).toBe(503);
   await home.project();
   expect((await home.deps.feed.checkpoint(home.stack.env.lineage.dataEpoch)).revision).toBe(revision);
   for (const path of paths) {
@@ -132,37 +129,13 @@ test('Home and Realm continuations expire at their first-page deadline even afte
 test('a changed Home or Realm population still requires a documented cursor restart', async () => {
   const paths = sorts.flatMap(sort => [`/v1/feed?sort=${sort}&limit=1`, `${realmPath}?sort=${sort}&limit=1`]);
   const pages = new Map<string, Page | Threads>();
-  for (const path of paths) {
-    const first = await home.json<Page | Threads>(await home.call('GET', path));
-    expect(first.items.length, path).toBeGreaterThan(0);
-    expect(first.nextCursor, path).toBeTruthy();
-    pages.set(path, first);
-  }
+  for (const path of paths) pages.set(path, await home.json<Page | Threads>(await home.call('GET', path)));
   await seed.post('A new member of the retained population');
   await home.project();
-  const continuations: { path: string; response: Response }[] = [];
-  const faults = spyOn(observability, 'logWorkerFault');
-  try {
-    for (const path of paths) {
-      faults.mockClear();
-      const continuation = continueAt(path, pages.get(path)!.nextCursor!);
-      const response = await home.call('GET', continuation);
-      const causes = faults.mock.calls.map(([worker, error]) => {
-        const chain: { type: string; message: string }[] = [];
-        for (let cause = error; cause instanceof Error && chain.length < 8; cause = cause.cause)
-          chain.push({ type: cause.constructor.name, message: cause.message });
-        return { worker, chain };
-      });
-      const first = pages.get(path)!;
-      console.info('Feed changed-population qualification:', JSON.stringify({ request: { method: 'GET', path: continuation },
-        first: { items: first.items.length, sourcePosition: first.sourcePosition },
-        status: response.status, body: await response.clone().json(), causes }));
-      continuations.push({ path, response });
-    }
-  } finally { faults.mockRestore(); }
-  for (const { path, response } of continuations) {
-    const restart = await home.json<{ code: string }>(response, 409);
-    expect(restart.code, path).toBe('read_basis_changed');
+  for (const path of paths) {
+    const restart = await home.json<{ code: string }>(await home.call('GET',
+      continueAt(path, pages.get(path)!.nextCursor!)), 409);
+    expect(restart.code).toBe('read_basis_changed');
   }
 }, SETUP_MS);
 

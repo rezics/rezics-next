@@ -109,12 +109,7 @@ test('MODEL07/MODEL12/SYS08/COMP07: verified move retains Work and Structure his
     const oldManifestDigest = oldManifestRows.results!.bindings[0]!.manifest!.value.slice(-64);
     const oldManifest = checkStructureManifest(await structureObjects.get(oldManifestDigest));
     const retainedPageDigest = oldManifest.records.page.slice(7);
-    // The target command owner rebuilds derived membership proofs. Copy only
-    // retained facts; a raw import cannot forge server-owned proof markers.
-    const snapshot = await source.query(`SELECT ?graph ?subject ?predicate ?object WHERE {
-      GRAPH ?graph { ?subject ?predicate ?object }
-      FILTER (?graph NOT IN (<urn:rezics:graph:template-index>, <urn:rezics:projection:public-name-repair>))
-    }`);
+    const snapshot = await source.query('SELECT ?graph ?subject ?predicate ?object WHERE { GRAPH ?graph { ?subject ?predicate ?object } }');
     const facts = snapshot.results?.bindings;
     if (!facts?.length) throw new Error('relocation source snapshot is empty');
     for (let offset = 0; offset < facts.length; offset += 100) {

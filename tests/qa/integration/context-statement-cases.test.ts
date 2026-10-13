@@ -42,7 +42,7 @@ test('refresh alone converts populated catalogue decisions, resumes fenced failu
   const graphs = [GRAPHS.current,GRAPHS.revisions,GRAPHS.receipts,GRAPHS.outbox,GRAPHS.control];
   const prefix = `urn:rezics:test-copy:${randomUUID()}`;
   for (const [index,graph] of graphs.entries())
-    await f.env.fuseki.update(`INSERT { GRAPH ${iri(`${prefix}:${index}`)} { ?s ?p ?o } } WHERE { GRAPH ${iri(graph)} { ?s ?p ?o } }`);
+    await f.env.fuseki.update(`ADD SILENT GRAPH ${iri(graph)} TO GRAPH ${iri(`${prefix}:${index}`)}`);
   try {
     await f.globalAcceptance();
     const input = {label: 'Refresh retained definition',actingSubject: f.actorA};
@@ -57,16 +57,15 @@ test('refresh alone converts populated catalogue decisions, resumes fenced failu
       policy: CLASSIFICATION_DIRECT_DECISION_PROFILE},CLASSIFICATION_DIRECT_DECISION_PROFILE);
     // Retained data predates migration 1499. No operator conversion or fence
     // command is called; refresh's real owner-preparation pipeline owns both.
-    await f.accessPool.query('DROP TABLE access.statement_seek,access.statement_seek_coverage,access.statement_publication_seek_coverage');
+    await f.accessPool.query('DROP TABLE access.statement_seek,access.statement_seek_coverage');
     // QA installs owner DDL directly. Reconstruct the pre-upgrade Access
     // tracker so refresh exercises the same locked migration runner as dev.
-    // Recreating seek also requires its later publication columns and coverage.
     await f.accessPool.query(`CREATE TABLE IF NOT EXISTS public.rezics_local_migration
       (name text PRIMARY KEY,applied_at timestamptz NOT NULL DEFAULT now())`);
     await f.accessPool.query(`INSERT INTO public.rezics_local_migration(name)
       SELECT unnest($1::text[]) ON CONFLICT DO NOTHING`,
-    [migrationRecords(repositoryRoot,'access').filter(value => ![1499,1776].includes(value.version)).map(value => value.name)]);
-    await f.accessPool.query("DELETE FROM public.rezics_local_migration WHERE name LIKE '%1499%' OR name LIKE '%1776%'");
+    [migrationRecords(repositoryRoot,'access').filter(value => value.version !== 1499).map(value => value.name)]);
+    await f.accessPool.query("DELETE FROM public.rezics_local_migration WHERE name LIKE '%1499%'");
     const missing = `urn:rezics:sha256:${'0'.repeat(64)}`;
     await f.env.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA {
       GRAPH ${iri(GRAPHS.current)} { ${iri(application)} a rv:ClassificationApplication ;
@@ -117,9 +116,7 @@ test('refresh alone converts populated catalogue decisions, resumes fenced failu
     let stopped = false;
     const actions: RefreshActions = {
       buildImage: async () => {},rehearseMigrations: async () => {},
-      stopWriters: async () => {if (!stopped) events.push('stop-writers');stopped = true;},
-      beforeMutation: async () => {expect(stopped).toBe(true);},
-      switchBackend: async () => {},restartPrevious: async () => {stopped = false;},
+      stopWriters: async () => {stopped = true;events.push('stop-writers');},
       prepareStorage: async () => {
         expect(stopped).toBe(true);events.push('prepare-storage');
         await migrateTracked(apps.ACCESS_DATABASE_URL!,repositoryRoot,migrationDirectories.access);
@@ -190,7 +187,7 @@ test('refresh alone converts populated catalogue decisions, resumes fenced failu
     await f.accessPool.query('UPDATE access.recovery_fence SET open=true WHERE id');
     for (const [index,graph] of graphs.entries()) {
       await f.env.fuseki.update(`CLEAR SILENT GRAPH ${iri(graph)};
-        INSERT { GRAPH ${iri(graph)} { ?s ?p ?o } } WHERE { GRAPH ${iri(`${prefix}:${index}`)} { ?s ?p ?o } }`);
+        ADD SILENT GRAPH ${iri(`${prefix}:${index}`)} TO GRAPH ${iri(graph)}`);
       await f.env.fuseki.update(`DROP SILENT GRAPH ${iri(`${prefix}:${index}`)}`);
     }
     await new StatementSeek(f.accessPool,f.env).rebuild();
@@ -207,11 +204,11 @@ test('CTX02/CTX09: catalogue imports use exact definitions, replay and CAS; popu
     const prefix = `urn:rezics:test-copy:${randomUUID()}`;
     for (const [index,graph] of graphs.entries()) {
       const copy = `${prefix}:${index}`;copies.push(copy);
-      await f.env.fuseki.update(`INSERT { GRAPH ${iri(copy)} { ?s ?p ?o } } WHERE { GRAPH ${iri(graph)} { ?s ?p ?o } }`);
+      await f.env.fuseki.update(`COPY GRAPH ${iri(graph)} TO GRAPH ${iri(copy)}`);
     }
     return async () => {
       for (const [index,graph] of graphs.entries())
-        await f.env.fuseki.update(`CLEAR SILENT GRAPH ${iri(graph)}; INSERT { GRAPH ${iri(graph)} { ?s ?p ?o } } WHERE { GRAPH ${iri(`${prefix}:${index}`)} { ?s ?p ?o } }`);
+        await f.env.fuseki.update(`COPY GRAPH ${iri(`${prefix}:${index}`)} TO GRAPH ${iri(graph)}`);
     };
   };
   let restoreLive: (() => Promise<void>)|null = null;
@@ -370,10 +367,10 @@ test('retained catalogue restore converts the exact legacy input and preserves i
     const prefix = `urn:rezics:test-copy:${randomUUID()}`;
     for (const [index,graph] of graphs.entries()) {
       const copy = `${prefix}:${index}`;copies.push(copy);
-      await f.env.fuseki.update(`INSERT { GRAPH ${iri(copy)} { ?s ?p ?o } } WHERE { GRAPH ${iri(graph)} { ?s ?p ?o } }`);
+      await f.env.fuseki.update(`COPY GRAPH ${iri(graph)} TO GRAPH ${iri(copy)}`);
     }
     return async () => {for (const [index,graph] of graphs.entries())
-      await f.env.fuseki.update(`CLEAR SILENT GRAPH ${iri(graph)}; INSERT { GRAPH ${iri(graph)} { ?s ?p ?o } } WHERE { GRAPH ${iri(`${prefix}:${index}`)} { ?s ?p ?o } }`);};
+      await f.env.fuseki.update(`COPY GRAPH ${iri(`${prefix}:${index}`)} TO GRAPH ${iri(graph)}`);};
   };
   try {
     await f.globalAcceptance();

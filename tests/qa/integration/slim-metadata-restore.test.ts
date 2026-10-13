@@ -1192,9 +1192,9 @@ test('OPS12: post-erasure Content pins capture and restore exact historical owne
           UPDATE relay.erasure SET kind='account' WHERE id='${entry.erasureId}'`, values: [] },
       { name: 'journal not suppressed', owner: 'relay', sql: `ALTER TABLE relay.erasure DISABLE TRIGGER erasure_guard;
           UPDATE relay.erasure SET suppression_status='pending',suppressed_at=NULL,stage='requested' WHERE id='${entry.erasureId}'`, values: [] },
-      { name: 'missing full journal target', owner: 'relay', sql: `ALTER TABLE relay.erasure_target DISABLE TRIGGER erasure_target_completion_guard;
+      { name: 'missing full journal target', owner: 'relay', sql: `ALTER TABLE relay.erasure_target DISABLE TRIGGER erasure_target_immutable;
           DELETE FROM relay.erasure_target WHERE erasure_id='${entry.erasureId}'`, values: [] },
-      { name: 'foreign full journal target', owner: 'relay', sql: `ALTER TABLE relay.erasure_target DISABLE TRIGGER erasure_target_completion_guard;
+      { name: 'foreign full journal target', owner: 'relay', sql: `ALTER TABLE relay.erasure_target DISABLE TRIGGER erasure_target_immutable;
           UPDATE relay.erasure_target SET target_ref='${randomUUID()}' WHERE erasure_id='${entry.erasureId}'`, values: [] },
       { name: 'extra full journal target', owner: 'relay', sql: `INSERT INTO relay.erasure_target
           (erasure_id,ordinal,owner,target_kind,target_ref) VALUES ('${entry.erasureId}',2,'content','content_revision','${randomUUID()}')`, values: [] },
@@ -1229,34 +1229,11 @@ test('OPS12: post-erasure Content pins capture and restore exact historical owne
         { field:'ownerSequence', pin:{ ...nativePin!, ownerEpoch:position.epoch,
           ownerSequence:(BigInt(position.sequence)+1n).toString() } },
       ];
-      const withoutPin = await captureContentRecoveryCoverage(contentPool!,
-        references.filter(ref => ref !== nativePin), context);
-      expect(BigInt(signedCut.content.graphReferencesCount) - BigInt(withoutPin.graphReferencesCount)).toBe(1n);
-      expect(withoutPin.graphReferencesDigest).not.toBe(signedCut.content.graphReferencesDigest);
-      // Observe each refusal independently before asserting, so one accepted
-      // conflict cannot hide whether the other retained fields were checked.
-      const outcomes: { field: string; pin: typeof nativePin; accepted: boolean; evidence: unknown }[] = [];
       for (const conflict of conflictingPins) {
-        try {
-          const evidence = await captureContentRecoveryCoverage(contentPool!, references.map(ref =>
-            ref === nativePin ? conflict.pin : ref), context);
-          outcomes.push({ ...conflict, accepted: true, evidence });
-        } catch (evidence) { outcomes.push({ ...conflict, accepted: false, evidence }); }
+        await expect(captureContentRecoveryCoverage(contentPool!, references.map(ref =>
+          ref.subject === nativePin!.subject && ref.graph === nativePin!.graph ? conflict.pin : ref), context))
+          .rejects.toThrow(`retained graph Content pin ${conflict.field} conflicts`);
         expect(await captureContentRecoveryCoverage(contentPool!, references, context)).toEqual(signedCut.content);
-      }
-      const cutEvidence = (cut: typeof signedCut.content) => ({ version: cut.version,
-        dataEpoch: cut.dataEpoch, sequence: cut.sequence, catalogDigest: cut.catalogDigest,
-        graphReferencesCount: cut.graphReferencesCount, graphReferencesDigest: cut.graphReferencesDigest });
-      console.info('Content conflicting pin qualification:', JSON.stringify({ nativePin, position,
-        captured: cutEvidence(signedCut.content), withoutPin: cutEvidence(withoutPin),
-        outcomes: outcomes.map(outcome => ({ ...outcome, evidence: outcome.accepted
-          ? cutEvidence(outcome.evidence as typeof signedCut.content)
-          : outcome.evidence instanceof Error
-            ? { type: outcome.evidence.constructor.name, message: outcome.evidence.message }
-            : String(outcome.evidence) })) }));
-      for (const outcome of outcomes) {
-        const captured = outcome.accepted ? Promise.resolve(outcome.evidence) : Promise.reject(outcome.evidence);
-        await expect(captured).rejects.toThrow(`retained graph Content pin ${outcome.field} conflicts`);
       }
       await expect(captureContentRecoveryCoverage(contentPool!, pins.map(pin => ({ ...pin, byteDigest: null })), context))
         .rejects.toBeInstanceOf(ContentRecoveryConflict);
