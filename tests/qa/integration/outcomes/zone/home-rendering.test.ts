@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { fromPlainText, type DocumentSnapshot } from '@rezics/document';
+import { platformOperationOpen, type PlatformAccessSummary } from '../../../../../generated/openapi/main/exposure.ts';
 import row from '../../../../../scripts/qa/cases/outcomes/zone/home-rendering.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
@@ -110,8 +111,10 @@ async function prepareSite() {
   const configured = await answer<{ revision: string }>(owner.main('PUT', `${path}/configuration`, {
     expectedHead: receipt.revision, presentation: draftPresentation, actingSubject: owner.actingSubject,
   }));
+  const empty = await answer<{ address: { key: string } }>(
+    sessions.visitor.main('GET', `/v1/zones/${short(sessions.zone)}/presentation`));
   return { space: created.space, path, homeDocument, page, draft, publishedDocument, draftDocument, draftBody, publishBody, body, key, receipt,
-    collection, mounted, draftNavigation, publishedPresentation, draftPresentation, configured, unknownPayload };
+    collection, mounted, draftNavigation, publishedPresentation, draftPresentation, configured, unknownPayload, emptyAddress: empty.address.key };
 }
 
 async function publicBundle(f: Awaited<ReturnType<typeof site>>, person: PersonaSession,
@@ -148,6 +151,7 @@ async function render(name: PersonaName) {
   const f = await site();
   const person = sessions[name];
   const sample = recording.session(name, person);
+  await frameReads(name, person, f);
   if (name === 'visitor') await supportingReads(sample, f);
   await publicBundle(f, person, sample);
   const home = await answer<Home>(sample('published-home-route', 'GET', `${f.path}/routes?path=%2F`));
@@ -187,6 +191,45 @@ async function render(name: PersonaName) {
       await answer(sample('draft-configuration-refused', 'GET', `${f.path}/configuration${query(person)}`), 404);
     }
     await privateNavigation(f, person);
+  }
+}
+
+async function frameReads(name: PersonaName, person: PersonaSession, f: Awaited<ReturnType<typeof site>>) {
+  // The frame's public client stays anonymous even in a signed-in proof.
+  const anonymous = recording.session(name, sessions.visitor);
+  const personal = recording.session(name, person);
+  const language = { headers: { 'accept-language': 'en', 'x-rezics-display-languages': 'en' } };
+  const realm = short(sessions.realm);
+  for (const home of [
+    { label: 'published', path: f.path, address: short(f.space) },
+    { label: 'empty', path: `/v1/zones/${short(sessions.zone)}`, address: f.emptyAddress },
+  ]) {
+    const prefix = `frame-${home.label}`;
+    await answer(anonymous(`${prefix}-space-address`, 'GET', `/v1/addresses/resolve?${new URLSearchParams({
+      scope: 'space', key: home.address,
+    })}`, undefined, undefined, language));
+    await answer(anonymous(`${prefix}-realm-header`, 'GET', `/v1/realms/${realm}`, undefined, undefined, language));
+    await answer(anonymous(`${prefix}-facets`, 'GET', '/v1/facets', undefined, undefined, language));
+    if (person.actingSubject) {
+      // PersonaSession supplies its opaque x-session-key alongside its bearer.
+      await answer(personal(`${prefix}-session-agent`, 'GET', '/v1/me/session-agent', undefined, undefined, language));
+      await answer(personal(`${prefix}-person-preferences`, 'GET', `/v1/me/person-preferences${query(person)}`));
+      await answer(personal(`${prefix}-joining`, 'GET', `/v1/realms/${realm}/joining${query(person)}`, undefined, undefined, language));
+      await answer(personal(`${prefix}-follow`, 'GET', `/v1/follows/${realm}?${new URLSearchParams({
+        kind: 'realm', actingSubject: person.actingSubject,
+      })}`, undefined, undefined, language));
+      const access = await answer<PlatformAccessSummary>(personal(`${prefix}-platform-access`, 'GET', '/v1/me/platform-access'));
+      if (platformOperationOpen('getV1RealmsByRealmMember-ban', access)) {
+        await answer(personal(`${prefix}-own-ban`, 'GET', `/v1/realms/${realm}/member-ban${query(person)}`));
+      }
+    }
+    await answer(personal(`${prefix}-presentation`, 'GET', `${home.path}/presentation${query(person)}`, undefined, undefined, language));
+    await answer(personal(`${prefix}-home-route`, 'GET', `${home.path}/routes?${new URLSearchParams({
+      ...(person.actingSubject ? { actingSubject: person.actingSubject } : {}), path: '/',
+    })}`, undefined, undefined, language));
+    if (home.label === 'empty') {
+      await answer(anonymous(`${prefix}-browse-counts`, 'GET', `/v1/realms/${realm}/modules/browse?limit=1`, undefined, undefined, language));
+    }
   }
 }
 
