@@ -1,14 +1,15 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { sealRecoveryPayload } from '../../account/src/recovery-envelope.ts';
 import { migrateContent } from '../../content/src/migrate.ts';
 import { cloneQaOwnerDatabases } from '../../../tests/qa/support/databases.ts';
-import { fusekiSecrets, pinnedImage, qaStack, standaloneFuseki } from
-  '../../../tests/qa/fault-recovery/search-ops-support.ts';
+import { qaStack } from '../../../tests/qa/fault-recovery/search-ops-support.ts';
+import { stageQaBootstrap } from '../../../scripts/qa/bootstrap.ts';
+import { qaStartupTestTimeout, runQaAdmissionChildAsync, runQaStartupChildAsync } from
+  '../../../scripts/qa/stack-startup.ts';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { engageAccessRecoveryFence } from '../src/modules/access/admission.ts';
 import { assertRetainedAuthorityCapture } from '../src/modules/erasure/authority.ts';
@@ -21,41 +22,49 @@ import { assertRecoveryCoverage, captureGraphRecoveryCoverage, type RecoveryCove
   '../src/modules/work/restore-lineage.ts';
 
 let databases: Awaited<ReturnType<typeof cloneQaOwnerDatabases>>;
-let graph: Awaited<ReturnType<typeof standaloneFuseki>>;
 let access: Pool, account: Pool, content: Pool, sourceRelay: Pool, retainedRelay: Pool;
 let fuseki: FusekiClient, consumer: string, generation: string;
 let qa: ReturnType<typeof qaStack>;
 const hmacKey = 'd3'.repeat(32);
-const volume = `rezics-coverage-epoch-${randomUUID()}`;
+const root = resolve(import.meta.dir, '../../..');
+const runId = `coverage-${randomUUID().slice(0, 18)}`;
+const stackArgs = ['--profile', 'qa', '--run-id', runId];
+const evidenceDirectory = join(root, '.temp', 'goal', `recovery-coverage-head-${runId}`);
 
 beforeAll(async () => {
-  const started = Date.now(), runId = Bun.env.REZICS_QA_RUN_ID;
-  if (!runId) throw new Error('Run through the isolated QA owner tier');
+  const started = Date.now();
+  const startup = await runQaStartupChildAsync(root, ['stack:up', ...stackArgs], 180_000);
+  if (!startup.ok) throw new Error(`Coverage qualification stack startup failed: ${startup.output.slice(-4000)}`);
   qa = qaStack(runId);
+  const staged = stageQaBootstrap(qa.directory);
+  const bootstrap = await runQaAdmissionChildAsync(root, 'bun', staged.args, 120_000,
+    { ...process.env, ...staged.apps });
+  if (!bootstrap.ok) throw new Error(`Coverage qualification bootstrap failed: ${bootstrap.output.slice(-4000)}`);
   databases = await cloneQaOwnerDatabases(runId, ['account', 'access', 'content', 'relay'], 'owner');
   const pool = (url: string) => new Pool({ connectionString: url, max: 2, connectionTimeoutMillis: 1500 });
   access = pool(databases.urls.access); account = pool(databases.urls.account);
   content = pool(databases.urls.content); sourceRelay = pool(databases.urls.relay);
   await migrateContent(content);
-  graph = await standaloneFuseki(qa.dockerEnv, {
-    name: volume, volume, image: pinnedImage(),
-    secrets: fusekiSecrets(qa.composeEnv),
-  });
-  fuseki = new FusekiClient(graph.url, qa.composeEnv.FUSEKI_MAINTENANCE_TOKEN, qa.composeEnv.FUSEKI_COMMAND_TOKEN);
+  fuseki = qa.fuseki;
   const lineage = { dataEpoch: randomUUID(), routingEpoch: '1' };
   await initializeFreshGraph(fuseki, lineage);
   consumer = `coverage-epoch:${randomUUID()}`;
   await initializeRelayCheckpoint(sourceRelay, consumer, lineage.dataEpoch);
   generation = await engageAccessRecoveryFence(access);
-  expect(Date.now() - started).toBeLessThan(600_000);
-}, 120_000);
+  const preparationMs = Date.now() - started - startup.admissionWaitMs;
+  expect(preparationMs).toBeLessThan(600_000);
+  console.info(`Coverage qualification preparation: ${preparationMs}ms`);
+}, qaStartupTestTimeout(300_000));
 
 afterAll(async () => {
   await Promise.allSettled([access?.end(), account?.end(), content?.end(), sourceRelay?.end(), retainedRelay?.end()]);
-  graph?.remove();
-  if (qa) spawnSync('docker', ['volume', 'rm', '-f', volume], { env: qa.dockerEnv, timeout: 60_000 });
-  await databases?.close();
-}, 60_000);
+  try { await databases?.close(); }
+  finally {
+    const disposal = await runQaAdmissionChildAsync(root, 'bun',
+      ['scripts/dev/cli.ts', 'stack:reset', ...stackArgs, '--yes'], 60_000);
+    if (!disposal.ok) throw new Error(`Coverage qualification disposal failed: ${disposal.output.slice(-4000)}`);
+  }
+}, qaStartupTestTimeout(60_000));
 
 async function capture(relay: Pool) {
   const coverage = await captureGraphRecoveryCoverage(fuseki, account, access, relay, consumer, content);
@@ -176,12 +185,13 @@ test('signed current coverage publishes at the retained journal epoch; historica
     .rejects.toThrow();
   expect(await retainedState()).toEqual(latestPublished);
 
-  const artifacts = Bun.env.REZICS_QA_ARTIFACT_DIR;
-  if (!artifacts) throw new Error('QA evidence directory is unavailable');
-  writeFileSync(join(artifacts, 'recovery-coverage-head-epoch.json'), JSON.stringify({
+  mkdirSync(evidenceDirectory, { recursive: true, mode: 0o700 });
+  const evidencePath = join(evidenceDirectory, 'epochs.json');
+  writeFileSync(evidencePath, JSON.stringify({
     historical: historical.coverage, historicalNewer: historicalNewer.coverage,
     current: current.coverage, latest: latest.coverage, firstErasure, secondErasure,
     beforeHistoricalRefusal, afterHistoricalRefusal, published,
     beforeStaleRefusal, afterStaleRefusal, latestPublished,
   }, null, 2), { mode: 0o600 });
+  console.info(`Coverage qualification evidence: ${evidencePath}`);
 }, 60_000);
