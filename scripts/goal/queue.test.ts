@@ -1,0 +1,214 @@
+import { afterEach, expect, test } from 'bun:test';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { fixtureSpawns } from './fixtures/spawn-deadline.ts';
+import type { QueueLedger } from './queue.ts';
+import type { Task } from './types.ts';
+import { GoalMailStore } from './mail.ts';
+
+const spawnSync = fixtureSpawns(60_000);
+const fixtures: { directory: string }[] = [];
+
+function repository() {
+  const scratch = join(tmpdir(), '.temp');
+  mkdirSync(scratch, { recursive: true });
+  const directory = mkdtempSync(join(scratch, 'brief-queue-'));
+  const git = (...args: string[]) => {
+    const result = spawnSync('git', args, { cwd: directory, encoding: 'utf8' });
+    if (result.status !== 0) throw new Error(result.stderr);
+    return result.stdout.trim();
+  };
+  git('init', '-qb', 'main'); git('config', 'user.email', 'queue@example.invalid'); git('config', 'user.name', 'Queue fixture');
+  writeFileSync(join(directory, '.gitignore'), '.temp/\n');
+  writeFileSync(join(directory, 'claimed.ts'), 'export {};\n');
+  git('add', '.'); git('commit', '-qm', 'Fixture');
+  const local = join(directory, '.temp');
+  const state = join(local, 'goal-orchestration');
+  const bin = join(local, 'bin');
+  mkdirSync(bin, { recursive: true }); mkdirSync(state, { recursive: true });
+  // The handover fixture's recording launcher: no model calls, only native argv and tree evidence.
+  writeFileSync(join(bin, 'codex'), `#!${process.execPath}\nimport { writeFileSync } from 'node:fs';
+    const args = process.argv.slice(2);
+    writeFileSync(args[args.indexOf('-o') + 1], 'RESULT: partial\\nNEXT: fixture step\\n');
+    console.log(JSON.stringify({ type: 'thread.started', thread_id: 'recording-session' }));
+    writeFileSync('.temp/record.json', JSON.stringify({ args, prompt: args.at(-1) }));\n`);
+  writeFileSync(join(bin, 'corepack'), '#!/bin/sh\nexit 0\n');
+  chmodSync(join(bin, 'codex'), 0o755); chmodSync(join(bin, 'corepack'), 0o755);
+  const meminfo = join(local, 'meminfo');
+  writeFileSync(meminfo, 'MemAvailable: 67108864 kB\n');
+  const env = { ...process.env, GOAL_ID: 'program', PATH: `${bin}:${process.env.PATH}`, GOAL_MEMORY_FLOOR_GIB: '12',
+    GOAL_MAX_WORKERS: '25', GOAL_MEMINFO_FILE: meminfo, GOAL_USAGE_FILE: join(local, 'usage.json'),
+    GOAL_CODEX_HOME: join(local, 'codex'), GOAL_CODEX_1_HOME: join(local, 'codex-1') };
+  const ledgerPath = join(state, 'ledger.json');
+  const save = (ledger: QueueLedger) => writeFileSync(ledgerPath, JSON.stringify(ledger));
+  const ledger = (): QueueLedger => JSON.parse(readFileSync(ledgerPath, 'utf8')) as QueueLedger;
+  save({ tasks: {}, goals: { program: { manager: 'recording-manager', startedAt: new Date().toISOString() },
+    api: { manager: 'api-manager', startedAt: new Date().toISOString() } } });
+  const run = (...args: string[]) => spawnSync(process.execPath, [join(import.meta.dir, 'goalctl.ts'), ...args],
+    { cwd: directory, encoding: 'utf8', env });
+  const brief = (id = 'G-002', extra: string[] = [], goal = 'program') => {
+    const folder = join(directory, 'docs/goals', goal, 'tasks');
+    mkdirSync(folder, { recursive: true });
+    const path = join(folder, `${id}.md`);
+    writeFileSync(path, ['---', `id: ${id}`, 'title: Held work', 'kind: tooling', 'engine: sol', 'effort: high',
+      'paths: [claimed.ts]', ...extra, '---', '', '## Outcome', '', 'Deliver the held work.', '', '## Mechanisms', '', 'none', ''].join('\n'));
+    return path;
+  };
+  const holder = (state: Task['state'] = 'stopped', paths = ['other.ts']): Task => ({
+    id: 'G-001', title: 'Holder', effort: 'high', kind: 'tooling', cases: [], paths, shared: [], depends: [], migrations: [],
+    worktree: directory, branch: 'main', base: git('rev-parse', 'HEAD'), brief: '', goal: 'program', state, attempts: [],
+  });
+  const current = { directory, local, state, meminfo, env, git, run, brief, holder, ledger, save };
+  fixtures.push(current);
+  return current;
+}
+
+afterEach(() => {
+  for (const f of fixtures.splice(0)) rmSync(f.directory, { recursive: true, force: true });
+});
+
+function ok(result: ReturnType<ReturnType<typeof repository>['run']>): string {
+  expect(result.status, result.stderr).toBe(0);
+  return result.stdout;
+}
+
+test('a free brief starts immediately through dispatch and its recording launcher', async () => {
+  const f = repository();
+  expect(ok(f.run('queue', f.brief()))).toContain('G-002 started');
+  const task = f.ledger().tasks['G-002']!;
+  expect(task.state).toBe('running');
+  expect(f.ledger().queue?.['G-002']).toBeUndefined();
+  const record = join(task.worktree, '.temp/record.json');
+  for (let n = 0; !existsSync(record) && n < 100; n++) await Bun.sleep(10);
+  expect(JSON.parse(readFileSync(record, 'utf8')).prompt).toContain('Deliver the held work.');
+});
+
+test('an open dependency waits until the settling pass after verification', () => {
+  const f = repository(); const ledger = f.ledger(); ledger.tasks['G-001'] = f.holder(); f.save(ledger);
+  expect(ok(f.run('queue', f.brief('G-002', ['depends: [G-001]'])))).toContain('which is stopped');
+  ok(f.run('settle')); expect(f.ledger().tasks['G-002']).toBeUndefined();
+  const verified = f.ledger(); verified.tasks['G-001']!.state = 'verified'; f.save(verified);
+  ok(f.run('settle')); expect(f.ledger().tasks['G-002']!.state).toBe('running');
+});
+
+test('a path claim waits until its holder closes', () => {
+  const f = repository(); const ledger = f.ledger(); ledger.tasks['G-001'] = f.holder('stopped', ['claimed.ts']); f.save(ledger);
+  expect(ok(f.run('queue', f.brief()))).toContain('overlaps G-001');
+  const closed = f.ledger(); closed.tasks['G-001']!.state = 'verified'; f.save(closed);
+  ok(f.run('settle')); expect(f.ledger().tasks['G-002']).toBeDefined();
+});
+
+test('an out-of-claim path waits until the branch lands', () => {
+  const f = repository();
+  f.git('checkout', '-qb', 'goal/holder'); writeFileSync(join(f.directory, 'claimed.ts'), 'export const changed = true;\n');
+  f.git('commit', '-qam', 'Change path outside claim'); f.git('checkout', '-q', 'main');
+  const ledger = f.ledger(); const task = f.holder(); task.branch = 'goal/holder'; ledger.tasks[task.id] = task; f.save(ledger);
+  expect(ok(f.run('queue', f.brief()))).toContain('changed by G-001');
+  f.git('merge', '--ff-only', 'goal/holder');
+  const landed = f.ledger(); landed.tasks['G-001']!.state = 'merged'; f.save(landed);
+  ok(f.run('settle')); expect(f.ledger().tasks['G-002']).toBeDefined();
+});
+
+test('a cancelled dependency stays queued and the listing names cancellation and time', () => {
+  const f = repository(); const ledger = f.ledger(); ledger.tasks['G-001'] = f.holder(); f.save(ledger);
+  ok(f.run('queue', f.brief('G-002', ['depends: [G-001]'])));
+  const cancelled = f.ledger(); cancelled.tasks['G-001']!.state = 'cancelled'; f.save(cancelled);
+  ok(f.run('settle'));
+  const listing = ok(f.run('queue'));
+  expect(listing).toContain('which is cancelled'); expect(listing).toContain(f.ledger().queue!['G-002']!.queuedAt);
+  expect(f.ledger().tasks['G-002']).toBeUndefined();
+  expect(ok(f.run('queue', '--drop', 'G-002'))).toContain('dropped');
+  expect(ok(f.run('queue'))).toBe('No queued briefs\n');
+});
+
+test('a memory gate retains the brief and the next pass starts it', () => {
+  const f = repository(); writeFileSync(f.meminfo, 'MemAvailable: 1024 kB\n');
+  expect(ok(f.run('queue', f.brief()))).toContain('Memory floor reached');
+  ok(f.run('settle')); expect(f.ledger().tasks['G-002']).toBeUndefined();
+  writeFileSync(f.meminfo, 'MemAvailable: 67108864 kB\n');
+  ok(f.run('settle')); expect(f.ledger().tasks['G-002']).toBeDefined();
+});
+
+test('a cancelled path holder remains a wait even after its claim is released', () => {
+  const f = repository(); const ledger = f.ledger(); ledger.tasks['G-001'] = f.holder('stopped', ['claimed.ts']); f.save(ledger);
+  ok(f.run('queue', f.brief()));
+  const cancelled = f.ledger(); cancelled.tasks['G-001']!.state = 'cancelled'; f.save(cancelled);
+  ok(f.run('settle'));
+  expect(f.ledger().tasks['G-002']).toBeUndefined();
+  expect(ok(f.run('queue'))).toContain('waited for G-001, which is cancelled');
+});
+
+test('permanent validation and method errors are refused even while a path is held', () => {
+  const f = repository(); const ledger = f.ledger(); ledger.tasks['G-001'] = f.holder('stopped', ['claimed.ts']); f.save(ledger);
+  for (const [extra, message] of [[['effort: imaginary'], 'effort must be'], [['kind: implementation'], 'needs at least one row'],
+    [['depends: [G-999]'], 'Unknown dependency']] as const) {
+    const result = f.run('queue', f.brief('G-002', [...extra]));
+    expect(result.status).toBe(1); expect(result.stderr).toContain(message);
+    expect(f.ledger().queue?.['G-002']).toBeUndefined();
+  }
+  const path = f.brief(); writeFileSync(path, readFileSync(path, 'utf8').replace('## Mechanisms', '## Missing'));
+  const result = f.run('queue', path); expect(result.status).toBe(1); expect(result.stderr).toContain('## Mechanisms');
+});
+
+test('a manager can queue and drop only its own Goal while the program may queue any', () => {
+  const f = repository(); f.env.GOAL_ID = 'api';
+  expect(f.run('queue', f.brief()).status).toBe(1);
+  writeFileSync(f.meminfo, 'MemAvailable: 1024 kB\n');
+  f.env.GOAL_ID = 'program'; ok(f.run('queue', f.brief()));
+  f.env.GOAL_ID = 'api'; expect(f.run('queue', '--drop', 'G-002').status).toBe(1);
+  f.env.GOAL_ID = 'program'; ok(f.run('queue', f.brief('G-003', ['paths: [api.ts]'], 'api')));
+  writeFileSync(f.meminfo, 'MemAvailable: 67108864 kB\n');
+  f.env.GOAL_ID = 'api'; ok(f.run('settle'));
+  expect(f.ledger().tasks['G-002']!.goal).toBe('program'); expect(f.ledger().tasks['G-003']!.goal).toBe('api');
+});
+
+test('a permanent refusal after enqueue leaves the queue and is recorded for its manager', () => {
+  const f = repository(); writeFileSync(f.meminfo, 'MemAvailable: 1024 kB\n'); const path = f.brief(); ok(f.run('queue', path));
+  writeFileSync(path, readFileSync(path, 'utf8').replace('effort: high', 'effort: invalid'));
+  ok(f.run('settle'));
+  expect(f.ledger().queue?.['G-002']).toBeUndefined();
+  expect(f.ledger().queueRefusals!['G-002']!.reason).toContain('effort must be');
+  const mail = new GoalMailStore({ stateDir: f.state, goals: ['program', 'api'] });
+  try { expect(mail.pending('program')[0]!.body).toContain('G-002 queue refused'); }
+  finally { mail.close(); }
+});
+
+test('ready briefs start oldest first and inactive Goals remain queued', () => {
+  const f = repository(); writeFileSync(f.meminfo, 'MemAvailable: 1024 kB\n');
+  ok(f.run('queue', f.brief('G-003', ['paths: [first.ts]'])));
+  ok(f.run('queue', f.brief('G-002', ['paths: [second.ts]'])));
+  ok(f.run('queue', f.brief('G-004', ['paths: [api.ts]'], 'api')));
+  const ledger = f.ledger(); ledger.goals!.api!.closedAt = new Date().toISOString(); f.save(ledger);
+  writeFileSync(f.meminfo, 'MemAvailable: 67108864 kB\n');
+  const output = ok(f.run('settle'));
+  expect(output.indexOf('G-003 started')).toBeLessThan(output.indexOf('G-002 started'));
+  expect(f.ledger().queue!['G-004']!.waits).toEqual(['Goal api is not active']);
+  expect(ok(f.run('queue'))).toContain('Goal api is not active');
+});
+
+test('concurrent settling passes dispatch a queued brief once', async () => {
+  const f = repository(); writeFileSync(f.meminfo, 'MemAvailable: 1024 kB\n'); ok(f.run('queue', f.brief()));
+  writeFileSync(f.meminfo, 'MemAvailable: 67108864 kB\n');
+  const run = async () => {
+    const child = Bun.spawn([process.execPath, join(import.meta.dir, 'goalctl.ts'), 'settle'],
+      { cwd: f.directory, env: f.env, stdout: 'pipe', stderr: 'pipe' });
+    const [code, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
+    expect(code, stderr).toBe(0);
+    return stdout;
+  };
+  const outputs = await Promise.all([run(), run()]);
+  expect(outputs.join('').match(/G-002 started/g)).toHaveLength(1);
+  expect(f.ledger().tasks['G-002']!.attempts).toHaveLength(1);
+  expect(f.ledger().queue?.['G-002']).toBeUndefined();
+});
+
+test('a restarted pass recovers a dead launch owner and an already published task', () => {
+  const f = repository(); writeFileSync(f.meminfo, 'MemAvailable: 1024 kB\n'); ok(f.run('queue', f.brief()));
+  const ledger = f.ledger(); const entry = ledger.queue!['G-002']!; entry.owner = { pid: 2147483647 }; f.save(ledger);
+  writeFileSync(f.meminfo, 'MemAvailable: 67108864 kB\n'); ok(f.run('settle'));
+  expect(f.ledger().tasks['G-002']).toBeDefined();
+  const published = f.ledger(); published.queue = { 'G-002': entry }; f.save(published);
+  ok(f.run('settle'));
+  expect(f.ledger().queue?.['G-002']).toBeUndefined(); expect(f.ledger().queueRefusals?.['G-002']).toBeUndefined();
+});

@@ -10,6 +10,7 @@ import { CAPACITY_WAIT_MS, engineOf, programOf, type Task } from './types.ts';
 import { processAlive, processIdentity } from '../qa/process/identity.ts';
 import { directoryLeaseHeld } from '../qa/process/lease.ts';
 import { classifyLandingRefusal } from './refusal.ts';
+import { pumpQueue } from './queue.ts';
 
 type Settlement = NonNullable<Task['settlement']>;
 type SpawnSettlement = (task: Task, token: string) => Settlement['owner'];
@@ -193,6 +194,7 @@ export async function settlePass(options: { spawn?: SpawnSettlement } = {}): Pro
   for (const task of Object.values(ledger.tasks)) {
     if (task.goal && goals.includes(task.goal)) await claim(task.id, true, options.spawn ?? spawnSettlement);
   }
+  await pumpQueue();
 }
 
 if (import.meta.main) {
