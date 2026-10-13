@@ -93,7 +93,7 @@ export const RepublishedOwner: Story = {
     await expect(navigation.getAllByRole('link').map(link => link.textContent)).toEqual([
       realmMessages.home, ...answer.navigation.map(mount => mount.name.value),
     ]);
-    expect(answer.navigation).toHaveLength(2);
+    await expect(answer.navigation).toHaveLength(2);
     for (const text of prose(answer.home?.document)) await expect(canvas.getByText(text)).toBeVisible();
     await expect(canvasElement.querySelector('[data-zone-site-home-surface]')).toHaveAttribute(
       'data-zone-site-home-surface', answer.presentation.tokens.pageSurface);
