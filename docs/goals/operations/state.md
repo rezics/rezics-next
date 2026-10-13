@@ -1,16 +1,19 @@
 # State
 
 The checkpoint for [this Goal](GOAL.md), recording
-`mail:9ff97a63-187a-47c2-9f7d-a0a63aeef016` and `task:G-2205:1` under
-`checkpoint:9827ef35-8a81-4855-ae76-209d74cf9905`, carrying forward the
-previous checkpoint's decisions. The listed mail delivery is acknowledged.
+`task:G-2248:1`, `mail:ac913b39-fba8-4233-9cb2-d4e7ef25ca38`,
+`mail:d1d60776-b542-4e07-b4ba-2074ca5e0cec`, `task:G-2205:2`,
+`mail:c4ca5d84-4d5d-43d0-88b3-d79453c95160` and
+`mail:ac7e07a4-2e3c-4ee4-972a-5ac0bd33b564` under
+`checkpoint:f9388543-98b7-48a7-a00e-ebbcd6507c22`, carrying forward the
+previous checkpoint's decisions. All four listed mail deliveries are acknowledged.
 
 | Field | State |
 | --- | --- |
 | Manager | Enrolled with the coordinator on 2026-10-13 15:34 UTC |
 | Proved on physical fixtures | Nothing yet |
-| Fixture | The small physical fixture `fx-small-a3a906c1c1b7`, built at `main` 1e05bf2d4 |
-| Measures (`task goal -- status`) | Last recorded reading: first-attempt share 100% (2/2); no landed-task median yet; 2.3M input / 10.2k output tokens; tokens per proved row unavailable; no recorded refusals. This checkpoint's refresh encountered the ledger lock and was interrupted without waiting |
+| Fixture | G-2205 prepares the current small generation once through existing tools, then retains its backup; qualification is pending. Program observed `fx-small-180553eb933a` as current at 18:55 UTC; this is provenance, not a fixed id. The superseded `fx-small-a3a906c1c1b7` stays until the new backup qualifies |
+| Measures (`task goal -- status`) | Refreshed reading: first-attempt share 80% (4/5); attempts per landed task median 1, max 1 (G-2248); 16.5M input / 60.4k output tokens; tokens per proved row unavailable; no recorded refusals. No below-half dispatch stop is triggered |
 
 ## Work in progress
 
@@ -18,32 +21,32 @@ previous checkpoint's decisions. The listed mail delivery is acknowledged.
 | --- | --- |
 | G-2202, release payload and image (D026) | Running, first attempt. Capture the missing-import failure, then prove packaged Main and actual local release-image startup with image identity and a healthy answer. An API failure after startup is a partial handoff |
 | G-2203, disposable Fuseki support (D016, D075, D109) | Program reports the support step accepted on main at `2502fc2597a7` (three files), task closed verified and claims released. Selected image, killed-container restart and bounded redacted readiness logs are landed support; physical checks remain red. Program already mailed API the revision |
-| G-2205, campaign fixture evidence (D108) | Dispatched at 17:44 UTC; first attempt decided blocked. No commits, physical preparation or QA; OPS10/D108 and the exact restore-evidence mismatch remain unproved. Do not resume until API supplies its actual accepted Access main revision. Then capture on the retained small fixture and fix only fixture consumption; full erasure proof also needs the separate accepted composition revision |
-| G-2248, copied PostgreSQL startup | Ready after G-2203; starts when the host's memory floor admits it. Capture the copied fixture's startup refusal before cleanup, repair only fixture support and preserve backup/copy isolation, original assertions and the ten-minute preparation budget. The cause remains unknown |
+| G-2205, campaign fixture evidence (D108) | Attempt 2 captured a correct compatibility refusal before copy/readiness: changed used model inputs and inserted Content migration `194_payload_reference_index.sql` supersede the backup. No D108 consumer defect or qualification is proved. Program's ruling supersedes the support-owner prerequisite; brief committed at `ba6eb1fa4`, worker resumed as attempt 3 to build the current small generation once and capture authentic evidence. Build and each restore have separate 600-second ceilings |
+| G-2248, copied PostgreSQL startup | Partial support accepted and `land --step` succeeded at `01c3c623b1a0efc53ef0e95a0c7cfc4b5a22fd6b`. The primary's command-line `max_locks_per_transaction=256` was absent from backup configuration; the copy defaulted to 64. Capturing and applying the primary value repairs copied startup, with retained redacted diagnostics. QA reaches restore admission after 179.703 s preparation, then fails on retained-coverage journal epoch after 111 assertions. Keep open; no further worker work until API's accepted prerequisite and G-2269's accepted setup correction |
+| G-2269, original source-erasure newer-head setup | Operations is the sole setup editing owner; brief committed at `52ba9b3fb` and queued until API's focused real-PostgreSQL regression is on accepted main. API confirmed ownership and will supply accepted revision, capture identities and journal epochs. Preserve the actual newer-head held restore scenario and every final outcome assertion; G-2248's fixture is read-only |
 | G-2249, retained Content and crash-fence qualification | API owns two separate probes with current assertions intact. The qualification brief proves neither contract. G-2203's support baseline is now accepted and Program has sent API the revision; operations need not relay it. No probe result or accepted API revision is recorded here |
-| Access recovery classification | API owns the sole review and landing through `5bb07365f` in G-2214, including owner operations. G-2205's handled decision records Program's dated Design-note reading in G-2214. No accepted landing revision is recorded |
-| Erasure composition | API wrote G-2223 for the fourth `mediaObjects` constructor argument and real-composition Media regression from archived G-2062 Outcome item 4. Admission is held for its own dated Program reading, requested in mail:de0e769e-932f-468a-a62e-ca9f180d9cfc; no live composition claim, worker or accepted revision follows |
+| Access recovery classification | API retains sole review and landing ownership in G-2214. G-2205's attempt-2 evidence records accepted Access revision `e2a24d6427c6237683a8c203f241c5467e0d51f3` present at capture `cd490077773a4c1bae92a34535f1bbfecef74e8f`; no independent physical restore is proved |
+| Erasure composition | API owns G-2223's fourth `mediaObjects` argument and real-composition Media regression. G-2205's same evidence records accepted composition revision `4aacb759395d48d9c7a80a08ba802cd68d1e4bf4` present at capture; no full physical erasure proof follows |
 
 **Next action.** Decide G-2202 on its handoff. G-2203 is already closed verified;
-do not land or close it again, or duplicate Program's revision mail to API.
-G-2248 starts through its existing admission when the host's memory floor allows.
-G-2205 remains blocked without new worker work until API supplies the actual
-accepted Access main revision; then resume its fixture-evidence capture.
-D016's executed command module refuses
-incomplete retained Content source facts; crash-fence state after committed-
-generation auditing is a separate API qualification question. Original physical
-reruns require the relevant accepted revisions, not the qualification brief.
-Independent physical restore and scheduling start only from API's
-actual accepted Access main revision. Full erasure proofs also require API's
-separate accepted composition revision. API retains both notifications;
-operations creates no competing adoption or review. G-2205 remains fixture-only;
-its G-2203 dependency is satisfied, but its Access prerequisite is not. API has
-already requested G-2223's Program reading; operations
-needs no additional ruling. This checkpoint grants no new worker work or proof
-and changes no brief. The blocked handoff changes no scope or acceptance
-criterion and requests no new Program ruling.
-The last recorded first-attempt share does not trigger the below-half dispatch
-stop; no refreshed reading is claimed.
+do not land or close it again. Decide G-2205's resumed handoff on authentic
+current-generation evidence, build and restore seconds, fixture identity and
+evidence path. A build over 600 seconds is a partial setup failure, not a longer
+budget. Before pruning, its worker reports to Program the supported count of
+small or medium backups superseded by inserted migrations since 2026-10-06,
+or the retained manifests' limits. No hand rebuilding, larger corpus, data repair
+or compatibility weakening is authorized.
+
+G-2248's successful support landing is acknowledged; do not repeat it or close
+the still-unproved task. API's G-2266 owns the retained journal epoch prerequisite
+and remains read-only on the original test and fixture. G-2269 starts only after
+the accepted focused regression and qualified setup findings; after its setup
+correction is accepted, resume G-2248 for the original physical drill. No stale
+coverage admission, journal mutation, false resealing, retries or weakened
+assertions are authorized. A fixture prerequisite is handed off separately.
+D016's retained Content and crash-fence questions remain API's separate probes.
+This checkpoint changes only state, grants no new work or proof and requests no
+additional Program ruling.
 
 ## Carried work
 
@@ -54,9 +57,9 @@ or is dropped.
 
 | Work | Where it stands | What is left |
 | --- | --- | --- |
-| Access recovery classification (`g-2025`) | 390 tables classed; last review predates two reported fix rounds | API's G-2214 reviews and lands; wait for its accepted revision |
+| Access recovery classification (`g-2025`) | 390 tables classed; G-2205 records accepted Access revision `e2a24d6427c6` at capture | API retains ownership; physical restore remains unproved |
 | Erasure reconcile and operator step (`g-1793`) | Blocked on the row above; no commits | Start after it |
-| Erasure proofs on live storage, backup and replay (`g-1794` to `g-1797`) | Test files written before the erasure core was on `main`; last runs red, not re-run | Rebase and run once each; they also wait for the erasure service's composition hunk in the [api](../api/state.md) Goal |
+| Erasure proofs on live storage, backup and replay (`g-1794` to `g-1797`) | Test files written before the erasure core was on `main`; last runs red, not re-run. G-2205 records the accepted composition revision at capture | Rebase and run once each against accepted prerequisites; current fixture qualification remains pending |
 | Independent physical restore (`g-1776`) | Both drills stop before child restore on "base Access row changed", the class the first row fixes | Rebase and run on the small fixture after the first row lands |
 | Drill scheduling (`g-1775`) and the restore drill chain | One commit on a branch; three further steps were briefed and never started | Register the drills and run them serially |
 | Physical erasure of a deleted person | The tombstone owner is on `main`; two native gaps are named expected failures (the SHA-256 form of an operation id, author-prefix entries on surviving Works); the candidate Java is on tag `g1980-java-image-d-candidate` | The native purge and its proof, inside the 30-day retention window |
