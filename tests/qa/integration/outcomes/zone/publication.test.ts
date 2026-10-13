@@ -193,6 +193,9 @@ async function sitePageReads(f: Awaited<ReturnType<typeof site>>, person: Person
     await response.body?.cancel();
     await answer(sample('site-session-agent', 'GET', '/v1/me/session-agent'));
     await answer(sample('site-reader-preferences', 'GET', viewer('/v1/me/person-preferences')));
+    await answer(sample('site-acting-contexts', 'GET', '/v1/me/acting-contexts?task=work.create'));
+    await answer(sample('site-session-agents', 'GET', '/v1/me/agents?languages=en'));
+    await answer(sample('site-agent-profile', 'GET', viewer(`/v1/agents/${short(person.actingSubject)}`)));
   }
 }
 
