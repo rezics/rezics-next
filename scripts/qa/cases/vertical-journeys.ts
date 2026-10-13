@@ -4,8 +4,8 @@ export type VerticalJourney = { kind: LaunchCoverage['kind'] } & (NamedProof | {
 
 /** One existing signed-in main path per vertical. Keep gaps explicit rather than running a whole file. */
 export const verticalJourneys: readonly VerticalJourney[] = [
-  { kind: 'books', file: 'apps/web/tests/work-page.e2e.ts',
-    test: 'a signed-in reader shelves and rates a Work, sees their rating in Mine and continues from saved progress' },
+  { kind: 'books', file: 'apps/web/tests/library-loans.e2e.ts',
+    test: 'a reader owns a copy, lends it overdue, extends it and returns it' },
   { kind: 'recipes', file: 'apps/web/tests/recipe-authoring.e2e.ts',
     test: 'a cook writes a recipe with sections and linked steps, edits it from two tabs, publishes it and reads it back' },
   { kind: 'visual-novels', file: 'apps/web/tests/partless-progress.e2e.ts',

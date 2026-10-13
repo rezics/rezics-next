@@ -1131,7 +1131,8 @@ try {
           fresh: async () => {
             startedProjects.push(projectRunId);
             const up = await startRunStack(['stack:up', '--profile', 'qa', '--run-id', projectRunId,
-              '--accounts-app'], 180_000, { ...process.env, REZICS_QA_MEMORY_KIND: 'browser' });
+              '--accounts-app'], 180_000, { ...process.env, REZICS_QA_MEMORY_KIND: 'browser',
+              REZICS_FUSEKI_ASSEMBLER: exclusiveWorkScopeAssembler });
             if (!up.ok) {
               writeFileSync(join(logs, 'e2e-stack.log'), up.output);
               throw new Error(`e2e stack startup failed: ${up.output}`);
