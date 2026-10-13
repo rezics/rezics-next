@@ -87,6 +87,14 @@ function fixture(
       }
       if (query.includes('?eventStage')) {
         proofReads++;
+        // SPARQL forbids BIND from introducing a variable already used in
+        // the preceding graph pattern. A permissive row fixture hid the
+        // owner query's invalid rebinding even while real Fuseki refused it.
+        const pattern = query.slice(query.indexOf('WHERE') + 'WHERE'.length);
+        for (const binding of pattern.matchAll(/\bBIND\s*\([\s\S]*?\bAS\s+(\?\w+)\s*\)/g)) {
+          if (new RegExp(`\\${binding[1]}\\b`).test(pattern.slice(0, binding.index)))
+            return new Response('BIND variable is already in scope', { status: 400 });
+        }
         return Response.json(selected(query, proof));
       }
       throw new Error(`Unexpected graph query: ${query}`);
@@ -144,41 +152,64 @@ for (const kind of ['projection', 'cancelled'] as const) {
   });
 }
 
-for (const [label, receiptOverrides] of [
-  ['missing stage identity', { stageId: undefined }],
-  ['foreign receipt epoch', { epoch: 'foreign' }],
-  ['foreign receipt sequence', { sequence: '901' }],
-  ['missing Access admission', { admissionId: undefined }],
-] as const) {
-  test(`relay still refuses a projection receipt with ${label}`, async () => {
-    const f = fixture('projection', receiptOverrides);
-    try {
-      await expect(readMainOutboxEnvelope(f.graph, batch, eventId)).rejects.toThrow();
-      expect(f.proofReads()).toBe(0);
-    } finally {
-      await f.server.stop(true);
-    }
-  });
-}
+for (const kind of ['projection', 'cancelled'] as const)
+  for (const [label, receiptOverrides] of [
+    ['missing stage identity', { stageId: undefined }],
+    ['foreign receipt epoch', { epoch: 'foreign' }],
+    ['foreign receipt sequence', { sequence: '901' }],
+  ] as const) {
+    test(`relay still refuses a ${kind} receipt with ${label}`, async () => {
+      const f = fixture(kind, receiptOverrides);
+      try {
+        await expect(readMainOutboxEnvelope(f.graph, batch, eventId)).rejects.toThrow();
+        expect(f.proofReads()).toBe(0);
+      } finally {
+        await f.server.stop(true);
+      }
+    });
+  }
 
-for (const [label, proofOverrides] of [
-  ['stage identity', { eventStage: 'foreign-stage' }],
-  ['structure', { eventStructure: 'urn:foreign:structure' }],
-  ['generation', { eventGeneration: 'urn:foreign:generation' }],
-  ['projection batch', { eventBatch: '4' }],
-] as const) {
-  test(`relay still refuses projection event/receipt ${label} mismatches`, async () => {
-    const f = fixture('projection', {}, proofOverrides);
-    try {
-      await expect(readMainOutboxEnvelope(f.graph, batch, eventId)).rejects.toThrow(
-        'Structure stage event differs from its graph proof',
-      );
-      expect(f.proofReads()).toBe(1);
-    } finally {
-      await f.server.stop(true);
-    }
-  });
-}
+for (const kind of ['projection', 'cancelled'] as const)
+  for (const [label, proofOverrides] of [
+    ['action', { eventAction: 'foreign.action' }],
+    ['stage identity', { eventStage: 'foreign-stage' }],
+    ['structure', { eventStructure: 'urn:foreign:structure' }],
+    ['generation', { eventGeneration: 'urn:foreign:generation' }],
+  ] as const) {
+    test(`relay still refuses ${kind} event/receipt ${label} mismatches`, async () => {
+      const f = fixture(kind, {}, proofOverrides);
+      try {
+        await expect(readMainOutboxEnvelope(f.graph, batch, eventId)).rejects.toThrow(
+          'Structure stage event differs from its graph proof',
+        );
+        expect(f.proofReads()).toBe(1);
+      } finally {
+        await f.server.stop(true);
+      }
+    });
+  }
+
+test('relay still refuses a projection receipt without Access admission', async () => {
+  const f = fixture('projection', { admissionId: undefined });
+  try {
+    await expect(readMainOutboxEnvelope(f.graph, batch, eventId)).rejects.toThrow();
+    expect(f.proofReads()).toBe(0);
+  } finally {
+    await f.server.stop(true);
+  }
+});
+
+test('relay still refuses a projection event/receipt batch mismatch', async () => {
+  const f = fixture('projection', {}, { eventBatch: '4' });
+  try {
+    await expect(readMainOutboxEnvelope(f.graph, batch, eventId)).rejects.toThrow(
+      'Structure stage event differs from its graph proof',
+    );
+    expect(f.proofReads()).toBe(1);
+  } finally {
+    await f.server.stop(true);
+  }
+});
 
 test('relay refuses Access admission fields attached to a system stage cancellation', async () => {
   const f = fixture('cancelled', { admissionId });
