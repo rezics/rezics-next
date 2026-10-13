@@ -870,6 +870,7 @@ test('native container work hangs until its batch deadline', async () => {
         const env = regressionBatchEnvironment({ REZICS_E2E_GREP: '.*', REZICS_E2E_PROJECTS: 'all' }, 1, 1, undefined, undefined, batch.tests);
         expect(env.REZICS_E2E_GREP).toBe(filter.source);
         expect(env.REZICS_E2E_PROJECTS).toBe('desktop-chrome');
+        expect(env.REZICS_E2E_PLAYWRIGHT_BUDGET_MS).toBe(String(batch.tests!.length * 300_000));
         expect(batch.tests!.every(title => filter.test(`desktop-chrome file ${title}`))).toBe(true);
         expect(filter.test('an unselected journey')).toBe(false);
       }

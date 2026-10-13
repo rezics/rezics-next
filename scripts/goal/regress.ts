@@ -780,7 +780,10 @@ export function regressionBatchCommand(batch: Batch, report: string, junitXmlPat
 export function regressionBatchEnvironment(env: NodeJS.ProcessEnv, shards: number, slotLimit: number, artifactRoot?: string, ownerBudgetMs?: number,
   tests?: readonly string[]): NodeJS.ProcessEnv {
   return { ...env, REZICS_QA_SHARDS: String(shards), GOAL_QA_SLOTS: String(slotLimit),
-    ...(tests ? { REZICS_E2E_GREP: verticalJourneyFilter(tests), REZICS_E2E_PROJECTS: 'desktop-chrome' } : {}),
+    ...(tests ? { REZICS_E2E_GREP: verticalJourneyFilter(tests), REZICS_E2E_PROJECTS: 'desktop-chrome',
+      // Several verticals share a file and its seed; the ordinary file allowance cannot cover all their journeys.
+      REZICS_E2E_PLAYWRIGHT_BUDGET_MS: String(Math.max(Number(env.REZICS_E2E_PLAYWRIGHT_BUDGET_MS ?? 300_000),
+        Math.min(1_800_000, tests.length * 300_000))) } : {}),
     ...(ownerBudgetMs === undefined ? {} : { REZICS_QA_OWNER_BUDGET_MS: String(ownerBudgetMs) }),
     ...(artifactRoot ? { REZICS_QA_ARTIFACT_ROOT: artifactRoot } : {}) };
 }
