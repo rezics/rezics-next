@@ -15,7 +15,11 @@ import { Notice } from '../discover/notice.tsx';
 import { EmptyState } from '../shell/empty-state.tsx';
 import Link from '../shell/localized-link.tsx';
 import { PageContainer } from '../shell/page.tsx';
+import type { ExportApi } from '../library-backup/export-api.ts';
+import type { ExportStore } from '../library-backup/export-store.ts';
 import type { LibraryApi } from './api.ts';
+import type { ImportApi } from './import-api.ts';
+import type { ImportShelf } from './import-store.ts';
 import type { CopiesApi } from './loans/api.ts';
 import { BringIntoRow } from './loans/bring-into-row.tsx';
 import { CopiesApiProvider } from './loans/provider.tsx';
@@ -330,6 +334,11 @@ export interface LibraryPageProps {
   avatarQuery?: string;
   /** Stories supply these; pages write to Main. */
   api?: LibraryApi;
+  /** Recorded stories pass the page's import and export adapters; the page builds them when omitted. */
+  importApi?: ImportApi;
+  importShelf?: ImportShelf;
+  exportApi?: ExportApi;
+  exportStore?: ExportStore;
   /** Stories record copies and loans here; the page uses Main. */
   copiesApi?: CopiesApi;
   /** When set, the shelf column is this loans view and Loans is the current destination. */
@@ -345,7 +354,7 @@ export interface LibraryPageProps {
  * shelf sortable, as a list or a grid, with several Works moved at once.
  */
 export function LibraryPage({ state, overview, view, reading, authors, goal, stats, now, avatarQuery, api,
-  copiesApi, loansView, readerActions, locale,
+  importApi, importShelf, exportApi, exportStore, copiesApi, loansView, readerActions, locale,
   messages }: LibraryPageProps) {
   const t = materializeData(messages, { locale });
   if (!overview.ok) return <LibraryUnavailable failure={overview.failure} locale={locale} messages={messages} />;
@@ -371,8 +380,9 @@ export function LibraryPage({ state, overview, view, reading, authors, goal, sta
       {loansView ? null : <>
         {goal ? <ReadingGoal agent={data.agent} initial={goal} locale={locale} messages={messages} /> : null}
         {stats ? <ReadingStats stats={stats} locale={locale} messages={messages} /> : null}
-        <LibraryImport agent={data.agent} context={data.ratingContext} locale={locale} messages={messages} />
-        <LibraryExport agent={data.agent} locale={locale} messages={messages} />
+        <LibraryImport agent={data.agent} context={data.ratingContext} locale={locale} messages={messages}
+          api={importApi} shelf={importShelf} />
+        <LibraryExport agent={data.agent} locale={locale} messages={messages} api={exportApi} store={exportStore} />
       </>}
       {!loansView && firstUse ? <>
         <FirstUse locale={locale} messages={messages} />

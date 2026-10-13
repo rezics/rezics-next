@@ -3,10 +3,9 @@ import { materializeData } from 'native-i18n';
 import { redirect } from 'next/navigation';
 import { signInPath } from '../../../features/auth/paths.ts';
 import { readSession } from '../../../features/auth/session.ts';
+import { loadBooksLibrary } from '../../../features/library/books-library-recorded-page.ts';
 import { LibraryPage } from '../../../features/library/library-page.tsx';
-import { libraryReader, readCurrentlyReading, readFollowedAuthors, readOverview, readShelfView,
-  readReadingYear, readYearlyGoal }
-  from '../../../features/library/read.ts';
+import { libraryReader } from '../../../features/library/read.ts';
 import { libraryHref, parseLibraryState } from '../../../features/library/state.ts';
 import { localizedPath } from '../../../i18n/locale.ts';
 import { getMessages, requestLocale } from '../../../i18n/server.ts';
@@ -32,10 +31,7 @@ export default async function LibraryRoute({ searchParams }: Props) {
   if (session.agent.status !== 'selected') redirect(`${localizedPath('/identity', locale)}?next=${encodeURIComponent(here)}`);
   const first = state.shelf.kind === 'all' && state.cursor === null;
   const year = new Date().getUTCFullYear();
-  const [reader, overview, view, reading, authors, goal, stats, messages] = await Promise.all([
-    libraryReader(), readOverview(),
-    readShelfView(state, locale), first ? readCurrentlyReading(locale) : [], first ? readFollowedAuthors(locale) : null,
-    readYearlyGoal(year), readReadingYear(year), getMessages('library', locale)]);
-  return <LibraryPage state={state} overview={overview} view={view} reading={reading} authors={authors} now={Date.now()}
-    goal={goal} stats={stats} avatarQuery={reader?.avatarQuery} locale={locale} messages={messages} />;
+  const [reader, messages] = await Promise.all([libraryReader(), getMessages('library', locale)]);
+  const loaded = await loadBooksLibrary(reader, { state, locale, year, first });
+  return <LibraryPage state={state} {...loaded} now={Date.now()} locale={locale} messages={messages} />;
 }
