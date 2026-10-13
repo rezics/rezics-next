@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 import { signInPath } from '../../../../features/auth/paths.ts';
 import { readSession } from '../../../../features/auth/session.ts';
 import { LibraryPage } from '../../../../features/library/library-page.tsx';
-import { LoansView } from '../../../../features/library/loans/loans-view.tsx';
+import { LoansRecordedRegion } from '../../../../features/library/loans/books-loans-recorded-page.tsx';
 import { readLoans } from '../../../../features/library/loans/read.ts';
 import { libraryReader, readOverview, type ShelfView } from '../../../../features/library/read.ts';
 import { parseLibraryState } from '../../../../features/library/state.ts';
@@ -42,6 +42,5 @@ export default async function LibraryLoansRoute({ searchParams }: Props) {
   const now = Date.now();
   return <LibraryPage state={parseLibraryState({})} overview={overview} view={emptyShelf} reading={[]} now={now}
     avatarQuery={reader?.avatarQuery} locale={locale} messages={messages}
-    loansView={<LoansView items={loans.ok ? loans.data.items : []} nextCursor={loans.ok ? loans.data.nextCursor : null}
-      failure={loans.ok ? null : 'unavailable'} cursor={cursor} locale={locale} messages={messages} />} />;
+    loansView={<LoansRecordedRegion read={loans} cursor={cursor} locale={locale} messages={messages} />} />;
 }

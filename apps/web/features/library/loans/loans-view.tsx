@@ -22,9 +22,10 @@ import type { LoanListItem, LoanRecord } from './types.ts';
  * Loans beside the shelves: overdue first, then what is still due, each with
  * Return and Extend. Names typed by the reader are shown as stored.
  */
-export function LoansView({ items, nextCursor, failure, cursor, locale, messages }: {
-  items: readonly LoanListItem[]; nextCursor: string | null; failure: string | null; cursor: string | null;
-  locale: UiLocale; messages: LibraryMessages;
+export function LoansView({ items, nextCursor, failure, problem = null, cursor, locale, messages }: {
+  items: readonly LoanListItem[]; nextCursor: string | null; failure: string | null;
+  /** The refusal sentence a loans read carried. Absent for a failure that named none. */
+  problem?: string | null; cursor: string | null; locale: UiLocale; messages: LibraryMessages;
 }) {
   const t = materializeData(messages, { locale });
   const router = useRouter();
@@ -56,7 +57,8 @@ export function LoansView({ items, nextCursor, failure, cursor, locale, messages
       <p className="text-pretty text-muted-foreground text-sm">{t.loansPrivate}</p>
     </header>
     {note ? <p role="status" className="rounded-xl bg-muted px-4 py-2.5 text-sm">{note}</p> : null}
-    {failure ? <Notice icon={TriangleAlertIcon} tone="destructive" headingLevel={3} title={t.loansUnavailable}>
+    {failure ? <Notice icon={TriangleAlertIcon} tone="destructive" headingLevel={3} title={t.loansUnavailable}
+      description={problem ?? undefined}>
       <Link href="/library/loans" className={buttonVariants({ size: 'sm', variant: 'outline' })}>{t.retry}</Link>
     </Notice> : !overdue.length && !due.length ? <EmptyState icon={HandshakeIcon} title={t.loansEmpty}
       description={t.loansEmptyBody} /> : <div className="grid gap-8">
