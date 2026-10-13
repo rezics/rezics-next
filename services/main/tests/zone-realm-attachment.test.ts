@@ -7,6 +7,7 @@ import { AdmissionDenied, AdmissionExpired } from '../src/modules/access/admissi
 import { AccountAssertionDenied, AccountAssertionUnavailable } from '../src/modules/account/verify-assertion.ts';
 import { fromPlainText } from '@rezics/document';
 import type { ContentCore } from '../../content/src/core.ts';
+import type { PreservationFence } from '../src/modules/public-report/preservation.ts';
 import { baselineTarget } from '../src/modules/access/baseline.ts';
 import { RV, prepareComponent, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { ZONE_CONFIG_FORMAT, ZONE_LIMITS, ZONE_PROFILE, InvalidZoneConfiguration } from '../src/modules/zone/config-format.ts';
@@ -131,8 +132,8 @@ function world(directory: string, fixture: Fixture = {}) {
     },
   };
   const access = {
-    async withPreservationFence(_resource: string, _admission: string, run: () => Promise<unknown>) {
-      return { held: false, value: await run() };
+    async withPreservationFence<T>(resource: string, _admission: string, run: (fence: PreservationFence) => Promise<T>) {
+      return { held: false as const, value: await run({ resource } as PreservationFence) };
     },
     async register(input: { action: string; scope: string; requestDigest: string }) {
       state.admission = { ...input, id: id(20).slice(-36), authorityEpoch: '1' };
