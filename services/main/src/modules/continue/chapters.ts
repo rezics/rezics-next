@@ -4,6 +4,7 @@ import { CompositionCorrupt, CompositionUnavailable } from '../structure/graph.t
 import { nextChapter } from '../structure/reading-order.ts';
 import type { OccurrenceRecord } from '../structure/format.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable } from '../structure/tree.ts';
+import { isCatalogTarget } from '../structure/profiles.ts';
 import { GRAPHS, iri, lit } from '../work/activate.ts';
 import { firstChapterHeading } from '../work-contents/read.ts';
 import { unerased, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
@@ -48,7 +49,7 @@ async function nextRecord(session: WorkReadSession, structure: string, progress?
 }
 
 export async function continueChapters(session: WorkReadSession, principal: VerifiedPrincipal,
-  works: readonly string[]): Promise<{ chapters: ReadonlyMap<string, Chapter>;
+  works: readonly string[], mode: 'preview' | 'resume' = 'preview'): Promise<{ chapters: ReadonlyMap<string, Chapter>;
     progress: ReadonlyMap<string, WorkProgress>; structures: ReadonlyMap<string, string> }> {
   const status = session.deps.libraryStatus;
   if (!status || !works.length) return { chapters: new Map(), progress: new Map(), structures: new Map() };
@@ -103,8 +104,12 @@ export async function continueChapters(session: WorkReadSession, principal: Veri
       }
       throw error;
     }
-    if (next?.record.target) selected.push({ work, structure: entry.structure, language: language.toLowerCase(),
-      record: next.record, pageCount: next.pageCount, ordinal: next.ordinal });
+    // Catalog chapters are navigable placements, not separately published Content.
+    // The ranked preview keeps its published-content eligibility requirement.
+    if (next?.record.target && (mode === 'resume' || !isCatalogTarget('book-composition', next.record.target))) {
+      selected.push({ work, structure: entry.structure, language: language.toLowerCase(),
+        record: next.record, pageCount: next.pageCount, ordinal: next.ordinal });
+    }
   }));
   if (!selected.length) return { chapters: new Map(), progress, structures };
   const shortStructures = [...new Set(selected.filter(item => item.pageCount <= CONTINUE_COST.exactCountPlacements)
@@ -118,9 +123,10 @@ export async function continueChapters(session: WorkReadSession, principal: Veri
     }
   } LIMIT ${shortStructures.length + 1}`, shortStructures.length) : [];
   const grouped = new Set(groups.flatMap(row => row.structure ? [row.structure.value] : []));
-  const pairs = [...new Set(selected.map(item => `${item.record.target}\0${item.language}`))]
+  const pairs = [...new Set(selected.filter(item => !isCatalogTarget('book-composition', item.record.target!))
+    .map(item => `${item.record.target}\0${item.language}`))]
     .map(pair => pair.split('\0') as [string, string]);
-  const publications = await session.query(`SELECT ?target ?language ?revision ?variant WHERE {
+  const publications = pairs.length ? await session.query(`SELECT ?target ?language ?revision ?variant WHERE {
     VALUES (?target ?language) { ${pairs.map(([target, language]) => `(${iri(target)} ${lit(language)})`).join(' ')} }
     GRAPH ${iri(GRAPHS.current)} {
       ?target a ?targetKind . VALUES ?targetKind { schema:CreativeWork rv:Post }
@@ -136,7 +142,7 @@ export async function continueChapters(session: WorkReadSession, principal: Veri
     }
     FILTER(LCASE(STR(?publishedLanguage)) = ?language)
     ${unerased('?target')}
-  } LIMIT ${pairs.length * 2 + 1}`, pairs.length * 2);
+  } LIMIT ${pairs.length * 2 + 1}`, pairs.length * 2) : [];
   const byTarget = new Map<string, { revision: string; variant: string }[]>();
   for (const row of publications) {
     if (!row.target || !row.language || !row.revision || !row.variant) {
@@ -178,8 +184,9 @@ export async function continueChapters(session: WorkReadSession, principal: Veri
   for (const item of selected) {
     const records = byTarget.get(`${item.record.target}\0${item.language}`) ?? [];
     const publication = records[0];
-    if (!publication || item.record.selection?.mode === 'fixed-revision'
-      && item.record.selection.revision !== publication.revision) continue;
+    if (!isCatalogTarget('book-composition', item.record.target!) && (!publication
+      || item.record.selection?.mode === 'fixed-revision'
+        && item.record.selection.revision !== publication.revision)) continue;
     const label = chapterLabel(item.record, item.language);
     const title = titles.get(item.work) ?? label?.value ?? null;
     const exact = item.pageCount <= CONTINUE_COST.exactCountPlacements && !grouped.has(item.structure);

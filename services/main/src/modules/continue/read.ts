@@ -70,8 +70,8 @@ export async function readContinue(session: WorkReadSession, principal: Verified
 }
 
 /** A direct Work read never consults the ranked Continue preview, follows or
- * Home exclusions. It shares Continue's exact chapter-selection and progress
- * logic, so an old or unshelved Work can still resume. */
+ * Home exclusions. It shares Continue's chapter order and progress logic, and
+ * also resumes the Book profile's catalog chapters without a Content publication. */
 export async function readWorkResume(session: WorkReadSession, principal: VerifiedPrincipal,
   agent: string, work: string) {
   if (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(work)) {
@@ -87,7 +87,7 @@ export async function readWorkResume(session: WorkReadSession, principal: Verifi
     || !await session.deps.access.canReadWork(principal, agent, work)) {
     throw new WorkReadMissing('Work is unavailable');
   }
-  const { chapters, progress, structures } = await continueChapters(session, principal, [work]);
+  const { chapters, progress, structures } = await continueChapters(session, principal, [work], 'resume');
   const next = chapters.get(work), saved = progress.get(work);
   // Fence the same principal's latest progress without re-reading the chapters.
   // A save racing this request must not produce an already-read resume link.
