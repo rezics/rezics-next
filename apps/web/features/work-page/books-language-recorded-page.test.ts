@@ -45,6 +45,11 @@ function client(persona: AnswerPersona, selections: readonly RecordedSelection[]
   return mainApiWithToken(undefined, { fetcher: replay.fetcher });
 }
 
+/** A typed read compared with the unchanged recorded answer. */
+function same(actual: unknown, recorded: unknown): void {
+  expect(actual).toEqual(recorded);
+}
+
 function textOf(value: unknown): { language: string; body: string; work: string } {
   if (!value || typeof value !== 'object') throw new Error('Recorded selection is empty');
   const text = value as { language?: unknown; body?: unknown; work?: unknown };
@@ -144,11 +149,11 @@ test('a visitor reads the recorded Swedish text while the presentation language 
       .metadata.get({ query: { language: presentation! } }),
   ]);
   expect(selection.error).toBeNull();
-  expect(selection.data).toEqual(text.answer);
+  same(selection.data, text.answer);
   expect(creditPage.error).toBeNull();
-  expect(creditPage.data).toEqual(credits.answer);
+  same(creditPage.data, credits.answer);
   expect(details.error).toBeNull();
-  expect(details.data).toEqual(metadata.answer);
+  same(details.data, metadata.answer);
 
   const reading = await fetchPublishedBooksLanguage(main, {
     workId: recordedId(metadata.path),
@@ -162,7 +167,7 @@ test('a visitor reads the recorded Swedish text while the presentation language 
   expect(reading.language).not.toBe(presentation);
   expect(reading.body).toBe(recordedText.body);
   expect(reading.workId).toBe(recordedText.work);
-  expect(reading.text).toEqual(text.answer);
+  same(reading.text, text.answer);
   expect(reading.title).toEqual(titleOf(metadata.answer));
   expect(reading.credit).toEqual(creditOf(credits.answer));
   expect(reading.header).toBeNull();
@@ -210,7 +215,7 @@ test('a member reads the text in the language the recorded header selected', asy
     .works({ id: recordedId(header.path) })
     .get({ query: { actingSubject: actingSubject! } });
   expect(reply.error).toBeNull();
-  expect(reply.data).toEqual(header.answer);
+  same(reply.data, header.answer);
   const reading = await fetchMemberBooksLanguage(main, {
     workId: recordedId(header.path),
     actingSubject: actingSubject!,
@@ -225,9 +230,9 @@ test('a member reads the text in the language the recorded header selected', asy
   expect(reading.language).toBe(recordedText.language);
   expect(reading.language).not.toBe(presentation);
   expect(reading.body).toBe(recordedText.body);
-  expect(reading.text).toEqual(text.answer);
+  same(reading.text, text.answer);
   expect(reading.title).toEqual(recordedHeader.title);
-  expect(reading.header).toEqual(header.answer);
+  same(reading.header, header.answer);
   expect(reading.credit).toEqual(creditOf(credits.answer));
 });
 
@@ -242,8 +247,8 @@ test('a missing selected language is the recorded refusal', async () => {
     query: { language: language! },
   });
   expect(reply.data).toBeNull();
-  expect(reply.error?.status).toBe(refused.status);
-  expect(reply.error?.value).toEqual(refused.answer);
+  expect(reply.error?.status as unknown).toBe(refused.status);
+  same(reply.error?.value, refused.answer);
   const reading = await fetchBooksLanguageSelection(main, recordedId(refused.path), language!);
   expect(reading).toEqual({
     kind: 'refused',
@@ -264,7 +269,7 @@ test('a private Work the visitor cannot read refuses with the same problem as a 
     .works({ id: recordedId(hidden.path) })
     .metadata.get({ query: { language: language! } });
   expect(reply.data).toBeNull();
-  expect(reply.error?.value).toEqual(hidden.answer);
+  same(reply.error?.value, hidden.answer);
   const reading = await fetchBooksLanguageMetadata(main, recordedId(hidden.path), language!);
   const again = await fetchBooksLanguageMetadata(
     client('visitor', [{ label: 'missing-metadata', state: 'error' }]),
@@ -287,7 +292,7 @@ test('the owner of a private Work with no recorded text gets an empty record, no
     query: { language: language!, actingSubject: actingSubject! },
   });
   expect(reply.error).toBeNull();
-  expect(reply.data).toEqual(empty.answer);
+  same(reply.data, empty.answer);
   const reading: BooksLanguageReading = await fetchBooksLanguageMetadata(
     main,
     recordedId(empty.path),
@@ -297,6 +302,7 @@ test('the owner of a private Work with no recorded text gets an empty record, no
   const body = empty.answer as { work?: unknown; originalTitle?: unknown; localized?: unknown };
   expect(body.originalTitle).toBeNull();
   expect(body.localized).toEqual([]);
+  if (typeof body.work !== 'string') throw new Error('Recorded empty metadata has no work');
   expect(reading).toEqual({ kind: 'empty', workId: body.work });
 });
 
@@ -308,7 +314,7 @@ test('an unselected private text is a refusal, not an empty record', async () =>
     mainVersion: recordedId(refused.path),
   }).selection.get({ query: {} });
   expect(reply.data).toBeNull();
-  expect(reply.error?.value).toEqual(refused.answer);
+  same(reply.error?.value, refused.answer);
   const reading = await fetchBooksLanguageSelection(main, recordedId(refused.path));
   expect(reading).toEqual({
     kind: 'refused',
