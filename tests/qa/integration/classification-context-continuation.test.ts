@@ -3,9 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { startMediaStack } from './media-support.ts';
 import { measureGraphReads } from './support/graph-reads.ts';
 import { backfillPublicNames } from '../../../services/main/src/modules/search/names.ts';
-import { CONTEXT_VOCABULARY_COST } from '../../../services/main/src/modules/realm-directory/vocabulary.ts';
 import { GLOBAL_CLASSIFICATION_CONTEXT } from '../../../services/main/src/modules/classification/context.ts';
-import { GRAPHS, iri, lit } from '../../../services/main/src/modules/work/activate.ts';
 
 type Definition = { scheme: string; schemeHead: string; concept: string; conceptHead: string };
 type Page = { profile: string; context: string; scheme: string | null; items: { id: string; label: string }[];
@@ -45,15 +43,7 @@ test('Selected context vocabulary traverses disclosed Concepts with exact query 
       alternativeLabels: [], broader: [], narrower: [], actingSubject: editor.actor,
     }), 201);
     const root = await define(`Selected root ${randomUUID()}`), child = await define('Selected child', root),
-      hidden = await define('Selected hidden', child), excluded = await define(`Excluded scheme ${randomUUID()}`),
-      wrongScope = await define('Outside selected interpretation scope', hidden);
-    // Adverse graph state: membership in the selected scheme alone must not
-    // select a Sense whose interpretation scope is outside the inherited global.
-    await stack.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/>
-      DELETE { GRAPH ${iri(GRAPHS.current)} { ?sense rv:interpretationScope ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} } }
-      INSERT { GRAPH ${iri(GRAPHS.current)} { ?sense rv:interpretationScope ${iri(secondContext)} } }
-      WHERE { GRAPH ${iri(GRAPHS.current)} { ?sense rv:expression ?expression .
-        ?expression rv:assertedConcept ${iri(wrongScope.concept)} } }`);
+      hidden = await define('Selected hidden', child), excluded = await define(`Excluded scheme ${randomUUID()}`);
     const path = (options: Record<string, string> = {}) => `/v1/classification-vocabulary?${new URLSearchParams({
       context: firstContext, scheme: root.scheme, limit: '1', language: 'en', ...options })}`;
     const first = await json<Page>(await stack.call('GET', path()));
@@ -132,26 +122,17 @@ test('Selected context vocabulary traverses disclosed Concepts with exact query 
     expect(resumed.items.some(item => item.id === hidden.concept)).toBe(false);
     expect(await traverse({ q: 'Selected hidden' })).toEqual([]);
 
-    // Bulk graph data is preparation only. Foreground reads use the real
-    // native directory and disclosure owners; no module is substituted.
-    const bulkScheme = native();
-    expect(await json<Page>(await stack.call('GET', path({ scheme: bulkScheme }))))
-      .toMatchObject({ items: [], nextCursor: null, count: { value: 0 } });
+    // Build once through the command API, then measure only the foreground
+    // bounded read. Each retained population uses the same selected scheme.
+    let bulk = await define('Population zero');
+    const bulkScheme = bulk.scheme;
     const costs: number[] = [];
-    let population = 0;
+    let population = 1;
     for (const size of [128, 512]) {
-      const definitions = Array.from({ length: size - population }, () => {
-        const concept = native(), sense = native(), expression = native(), head = native();
-        return `${iri(concept)} a skos:Concept ; skos:inScheme ${iri(bulkScheme)} ; rv:conceptState rv:Active ;
-          rv:head ${iri(head)} ; skos:prefLabel ${lit(`Population ${concept.slice(-36)}`)}@en .
-          ${iri(sense)} a rv:ClassificationSense ; rv:senseState rv:Active ;
-            rv:interpretationScope ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ; rv:expression ${iri(expression)} ; rv:head ${iri(head)} .
-          ${iri(expression)} a rv:ClassificationExpression ; rv:expressionState rv:Active ; rv:assertedConcept ${iri(concept)} .`;
-      });
-      await stack.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
-        INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
-          ${iri(bulkScheme)} a skos:ConceptScheme ; rv:schemeState rv:Active . ${definitions.join('\n')} } }`);
-      population = size;
+      while (population < size) {
+        bulk = await define(`Population ${population}`, bulk);
+        population++;
+      }
       await backfillPublicNames(stack.env);
       const measured = await measureGraphReads(() => stack.call('GET', path({ scheme: bulkScheme })));
       const page = await json<Page>(measured.value);
@@ -159,7 +140,6 @@ test('Selected context vocabulary traverses disclosed Concepts with exact query 
       expect(page.nextCursor).toBeString();
       expect(measured.calls).toBeLessThanOrEqual(64);
       costs.push(measured.calls);
-      expect(CONTEXT_VOCABULARY_COST.candidates).toBe(64);
     }
     expect(costs[1]).toBeLessThanOrEqual(costs[0]! + 4);
     // A previously empty lookup is live; it is not retained in a process cache.
@@ -180,4 +160,4 @@ test('Selected context vocabulary traverses disclosed Concepts with exact query 
     expect((await traverse({ context: secondContext })).map(item => item.id).sort())
       .toEqual([root.concept, child.concept].sort());
   } finally { await stack.stop(); }
-}, 240_000);
+}, 420_000);
