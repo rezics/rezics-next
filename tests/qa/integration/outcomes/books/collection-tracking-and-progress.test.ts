@@ -148,10 +148,15 @@ async function deniedTracking(name: PersonaName) {
   await privateReply(await person.main('PUT', statusPath(), { ...own(), expectedVersion: 1, status: 'want-to-read' }), expected);
   const response = await person.main('PUT', progressPath(), { ...own(), expectedVersion: 0, completed: true, position: null });
   const raw = await response.text(), after = await ownerLibrary();
-  expect({ status: response.status, ...(response.status === expected ? {} : { raw }),
+  const observed = { status: response.status, ...(response.status === expected ? {} : { raw }),
     ownerReaderStateUnchanged: JSON.stringify(before.readerState) === JSON.stringify(after.readerState),
-    ownerShelfUnchanged: JSON.stringify(before.shelf) === JSON.stringify(after.shelf) })
-    .toEqual({ status: expected, ownerReaderStateUnchanged: true, ownerShelfUnchanged: true });
+    ownerShelfUnchanged: JSON.stringify(before.shelf) === JSON.stringify(after.shelf) };
+  if (response.status !== expected || !observed.ownerShelfUnchanged) {
+    console.info('Outcome answer', JSON.stringify({ row: tracking.rowId, persona: name,
+      request: { method: 'PUT', path: progressPath(), actingSubject: subject(), expectedVersion: 0, completed: true, position: null },
+      ...observed, shelfBefore: before.shelf, shelfAfter: after.shelf }));
+  }
+  expect(observed).toEqual({ status: expected, ownerReaderStateUnchanged: true, ownerShelfUnchanged: true });
 }
 async function deniedDevices(name: PersonaName) {
   const person = people[name], expected = name === 'visitor' ? 401 : 403;
@@ -159,6 +164,10 @@ async function deniedDevices(name: PersonaName) {
   const completed = await person.main('GET', `/v1/compositions/${short(chapters.structure)}/progress?${query()}`);
   const replies = [{ status: occurrence.status, raw: await occurrence.text() },
     { status: completed.status, raw: await completed.text() }];
+  if (replies.some(reply => reply.status !== expected)) {
+    console.info('Outcome answer', JSON.stringify({ row: devices.rowId, persona: name,
+      requests: [`${progressPath()}?${query()}`, `/v1/compositions/${short(chapters.structure)}/progress?${query()}`], replies }));
+  }
   expect(replies.map(reply => ({ status: reply.status,
     ...(reply.status === expected ? {} : { raw: reply.raw }) }))).toEqual([{ status: expected }, { status: expected }]);
   for (const reply of replies) expect(reply.raw).not.toContain('private owner bookmark');
@@ -215,6 +224,8 @@ outcomeTest(tracking, 'owner', async () => {
   expect(saved.version).toBe(2);
   expect(await json(ownerCall('PUT', statusPath(), body, key))).toMatchObject({ ...saved, replayed: true });
   await json(ownerCall('PUT', statusPath(), body), 409);
+  expect(await json(ownerCall('GET', readerPath())))
+    .toMatchObject({ status: { status: 'reading', version: 2, startedOn: date } });
   const current = await json<Progress>(ownerCall('GET', `${progressPath()}?${query()}`));
   await json(ownerCall('PUT', progressPath(), { ...own(), expectedVersion: current.version, completed: true, position: null }));
   const stats = await ownerCall('GET', `/v1/me/reading-stats?${query()}&year=${new Date().getUTCFullYear()}`);
