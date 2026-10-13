@@ -305,11 +305,11 @@ export async function closureOriginal(author: PersonaSession, title: string) {
   const work = await closureCommand<{ work: string; mainVersion: string; workRevision: string }>(author,
     'POST', '/v1/works', { profile: 'metadata-only-v1', title, language: 'en',
       authoring: 'own-work', actingSubject: author.actingSubject }, 201);
-  await closureCommand(author, 'POST', `/v1/works/${short(work.work)}/agent-credits`, {
-    profile: 'native-agent-credit-v1', credit: `https://rezics.com/id/${randomUUID()}`,
-    agent: author.actingSubject, role: 'author', expectedWorkHead: work.workRevision,
-    actingSubject: author.actingSubject,
-  }, 201);
+  // Own-work creation supplies the native author credit atomically. Verify it
+  // through the author's public API session before publishing the original.
+  const credits = await closureCommand<{ items: { agent: string; role: string }[] }>(author,
+    'GET', `/v1/works/${short(work.work)}/agent-credits?${acting(author)}`);
+  expect(credits.items).toContainEqual(expect.objectContaining({ agent: author.actingSubject, role: 'author' }));
   const draft = await closureCommand<{ contribution: string; draftRevision: string }>(author,
     'POST', '/v1/contributions', { profile: 'text-contribution-v1', work: work.work, language: 'en',
       body: `Original fixture by its credited author Person: ${title}.`, actingSubject: author.actingSubject }, 201);
