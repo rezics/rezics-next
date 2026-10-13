@@ -1,4 +1,4 @@
-import { proved, rowOutcomes } from '../../outcome-cells.ts';
+import { pending, proved, rowOutcomes } from '../../outcome-cells.ts';
 
 const file = 'tests/qa/integration/outcomes/books/library-import.test.ts';
 export default rowOutcomes(
@@ -7,8 +7,8 @@ export default rowOutcomes(
     visitor: proved('signed-out requests cannot access private import operations', file),
     stranger: proved('another Person cannot access private import operations', file),
     member: proved('Realm membership adds no access to another Person imports', file),
-    owner: proved(
-      'identified Book imports retain private records and replay without duplicate effects',
+    owner: pending(
+      'identified Book imports retain private records, replay commands and reimport own shelves without copies',
       file,
     ),
     moderator: proved('a joined Realm moderator cannot access another Person imports', file),

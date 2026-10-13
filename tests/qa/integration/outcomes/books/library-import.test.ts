@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import libraryImport from '../../../../../scripts/qa/cases/outcomes/books/library-import.ts';
 import libraryExport from '../../../../../scripts/qa/cases/outcomes/books/library-export.ts';
 import interruptedExport from '../../../../../scripts/qa/cases/outcomes/books/resume-an-interrupted-export-interrupted-exports.ts';
@@ -91,12 +92,16 @@ function row(kind: CanonicalRow['kind'], sourceId: string): CanonicalRow {
     raw: {},
   };
 }
-function create(rows: CanonicalRow[], key = randomUUID()) {
-  return people.owner.main(
+function create(
+  rows: CanonicalRow[],
+  key = randomUUID(),
+  person: PersonaSession = people.owner,
+) {
+  return person.main(
     'POST',
     '/v1/me/library-imports',
     {
-      ...own(),
+      ...own(person),
       format: 'rezics',
       file: JSON.stringify({ profile: 'rezics-library-export-v1', rows }),
     },
@@ -167,24 +172,28 @@ async function collect(first = read(), person: PersonaSession = people.owner) {
   }
   return rows;
 }
+async function applyOriginals(id: string, person: PersonaSession = people.owner) {
+  const reviewed = await review(id, person);
+  expect(reviewed.map((item) => item.source)).toEqual(originals);
+  await json(
+    person.main('PUT', `/v1/me/library-imports/${id}/rows/0`, {
+      ...own(person),
+      expectedVersion: reviewed[0]!.version,
+      choice: 'apply',
+      work: book,
+      conflictChoice: 'replace',
+    }),
+  );
+  const key = randomUUID();
+  expect(await apply(id, key, person)).toMatchObject({
+    completed: originals.length,
+    total: originals.length,
+  });
+  return key;
+}
 function ensureApplied() {
   return (applied ??= (async () => {
-    const reviewed = await review(upload);
-    expect(reviewed.map((item) => item.source)).toEqual(originals);
-    await json(
-      people.owner.main('PUT', `${root()}/rows/0`, {
-        ...own(),
-        expectedVersion: reviewed[0]!.version,
-        choice: 'apply',
-        work: book,
-        conflictChoice: 'replace',
-      }),
-    );
-    const key = randomUUID();
-    expect(await apply(upload, key)).toMatchObject({
-      completed: originals.length,
-      total: originals.length,
-    });
+    const key = await applyOriginals(upload);
     // Replay the accepted command after completion; its receipt cannot apply another session.
     await json(
       people.owner.main(
@@ -451,6 +460,97 @@ function preserved(rows: CanonicalRow[]) {
   ).toBe(true);
 }
 
+function shelfState(rows: CanonicalRow[]) {
+  return {
+    shelves: rows
+      .filter((item) => item.kind === 'shelf')
+      .sort((a, b) => a.sourceId.localeCompare(b.sourceId)),
+    memberships: rows
+      .filter((item) => item.kind === 'entry' && typeof item.raw.shelfId === 'string')
+      .sort((a, b) => a.sourceId.localeCompare(b.sourceId)),
+  };
+}
+
+async function samePersonReimport() {
+  const requests: {
+    method: string;
+    path: string;
+    body: unknown;
+    key: string | undefined;
+    status: number;
+    answer: unknown;
+  }[] = [];
+  // This Person owns a separate library: a failed reimport cannot contaminate
+  // the export recipient or the interrupted-export fixture, in any test order.
+  const session = people.member;
+  const person: PersonaSession = {
+    ...session,
+    main: async (method, path, body, key) => {
+      const commandKey = key ?? (method === 'GET' ? undefined : randomUUID());
+      const response = await session.main(method, path, body, commandKey);
+      requests.push({
+        method, path, body, key: commandKey, status: response.status,
+        answer: await response.clone().json(),
+      });
+      return response;
+    },
+  };
+  let before: CanonicalRow[] = [],
+    after: CanonicalRow[] = [];
+  const evidence = `.temp/goal/library-reimport-${Bun.env.REZICS_QA_RUN_ID}.json`;
+  try {
+    expect(await collect(read(undefined, undefined, 20, person), person)).toEqual([]);
+    const initial = await json<{ id: string }>(create(originals, randomUUID(), person), 201);
+    await applyOriginals(initial.id, person);
+    const exported = await read(undefined, undefined, 20, person);
+    before = await collect(Promise.resolve(exported), person);
+    preserved(before);
+    const originalShelves = shelfState(before);
+    expect(originalShelves.shelves).toHaveLength(2);
+    expect(originalShelves.memberships).toHaveLength(1);
+    for (const shelf of originalShelves.shelves) {
+      expect(shelf.raw.shelfId).toBe(shelf.sourceId);
+      expect(shelf.raw.disclosure).toBe('private');
+    }
+    expect(originalShelves.shelves.map((shelf) => shelf.sourceId)).toContain(
+      originalShelves.memberships[0]!.raw.shelfId,
+    );
+    // New intake and apply keys exercise reimport, rather than receipt replay.
+    const reimport = await json<{ id: string; total: number }>(
+      person.main(
+        'POST',
+        '/v1/me/library-imports',
+        {
+          ...own(person),
+          format: 'rezics',
+          file: JSON.stringify({
+            profile: exported.profile, rows: before, snapshot: exported.snapshot,
+          }),
+        },
+        randomUUID(),
+      ),
+      201,
+    );
+    expect(reimport.id).not.toBe(initial.id);
+    expect(reimport.total).toBe(before.length);
+    expect((await review(reimport.id, person)).map((item) => item.source)).toEqual(before);
+    expect(await apply(reimport.id, randomUUID(), person)).toMatchObject({
+      completed: before.length, total: before.length,
+    });
+    after = await collect(read(undefined, undefined, 20, person), person);
+    await noActiveLendingEffects(person);
+    expect(shelfState(after)).toEqual(originalShelves);
+    preserved(after);
+  } finally {
+    mkdirSync('.temp/goal', { recursive: true });
+    writeFileSync(evidence, JSON.stringify({
+      actingSubject: person.actingSubject,
+      requests, before, after, beforeShelves: shelfState(before), afterShelves: shelfState(after),
+    }, null, 2));
+    console.log(`Same-Person reimport requests, answers and identities: ${evidence}`);
+  }
+}
+
 outcomeTest(libraryImport, 'visitor', () => deniedImports('visitor'));
 outcomeTest(libraryImport, 'stranger', () => deniedImports('stranger'));
 outcomeTest(libraryImport, 'member', () => deniedImports('member'));
@@ -477,6 +577,7 @@ outcomeTest(libraryImport, 'owner', async () => {
     404,
     'library_import_missing',
   );
+  await samePersonReimport();
 });
 outcomeTest(libraryExport, 'visitor', () => deniedExport('visitor'));
 outcomeTest(libraryExport, 'stranger', () => deniedExport('stranger'));
