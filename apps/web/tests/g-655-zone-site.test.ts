@@ -1,7 +1,8 @@
 import { uuidToSid } from '@rezics/model/address';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { zoneWork } from '../features/realm/adapt.ts';
-import { loadModules } from '../features/realm/modules.ts';
+import { loadModules, shelfWorks } from '../features/realm/modules.ts';
+import { pageRequest } from '../features/entity-page/request-fixture.ts';
 import { isType } from '../features/zones/zone-home.tsx';
 import { realmWorkHref, siteHref } from '../features/realm/route.ts';
 import { messages as zoneMessages } from '../features/zones/messages.ts';
@@ -130,7 +131,7 @@ describe('mounted Collection shelves on Zone homes', () => {
     mounts: new Map([[collection, 'catalogue']]),
   };
   const load = async () => {
-    const shelf = (await loadModules(presentation, context))[0]!;
+    const shelf = (await pageRequest(() => loadModules(presentation, context)))[0]!;
     if (!isType(shelf, 'shelf')) throw new Error('Expected a shelf');
     return shelf;
   };
@@ -145,8 +146,14 @@ describe('mounted Collection shelves on Zone homes', () => {
     ]);
   });
 
+  test('keeps the catalogue continuation exactly as the API returns it', async () => {
+    const works = await pageRequest(() => shelfWorks({ kind: 'collection', collection }, context));
+    expect(works.ok).toBe(true);
+    expect(works.nextCursor).toBe(indexPage.nextCursor);
+  });
+
   test('collection and feed tabs both load, each keeping its source links', async () => {
-    const modules = await loadModules(
+    const modules = await pageRequest(() => loadModules(
       {
         ...presentation,
         modules: [
@@ -160,7 +167,7 @@ describe('mounted Collection shelves on Zone homes', () => {
         ],
       },
       context,
-    );
+    ));
     const shelf = modules[0]!;
     if (!isType(shelf, 'shelf') || shelf.state.state !== 'ready')
       throw new Error('Tabbed shelf did not load');
@@ -179,7 +186,7 @@ describe('mounted Collection shelves on Zone homes', () => {
     indexRead = { ...indexPage, collection: iri(workId(99)) };
     expect((await load()).state.state).toBe('failed');
     expect(
-      (await loadModules(presentation, { ...context, mounts: new Map() }))[0]!.state.state,
+      (await pageRequest(() => loadModules(presentation, { ...context, mounts: new Map() })))[0]!.state.state,
     ).toBe('failed');
   });
 });
@@ -222,7 +229,7 @@ describe('a Zone is a site a reader never has to leave', () => {
   const context = { locale: 'en' as const, ref, realm, mounts: new Map([[collection, 'picks']]) };
 
   test('every module card and row whose Work is in the population links inside /z/{ref}/', async () => {
-    const placed = await loadModules(presentation, context);
+    const placed = await pageRequest(() => loadModules(presentation, context));
     const ready = placed.filter((item) => item.state.state === 'ready');
     // A guard that finds no card would pass for the wrong reason.
     expect(ready.map((item) => item.module.type).sort()).toEqual([
@@ -242,7 +249,7 @@ describe('a Zone is a site a reader never has to leave', () => {
   });
 
   test('a card from a mounted Collection opens under its mount, the rest under /w', async () => {
-    const lists = (await loadModules(presentation, context)).find(
+    const lists = (await pageRequest(() => loadModules(presentation, context))).find(
       (item) => item.module.type === 'editorial-list',
     )!;
     if (lists.state.state !== 'ready') throw new Error('The editors’ list did not load');
@@ -254,7 +261,7 @@ describe('a Zone is a site a reader never has to leave', () => {
       `/z/${ref}/picks/${uuidToSid(workId(8))}`,
       `/z/${ref}/picks/${uuidToSid(workId(9))}`,
     ]);
-    const shelf = (await loadModules(presentation, context)).find(
+    const shelf = (await pageRequest(() => loadModules(presentation, context))).find(
       (item) => item.module.type === 'shelf',
     )!;
     expect(hrefs(shelf.state.state === 'ready' ? shelf.state.data : null)).toContain(
