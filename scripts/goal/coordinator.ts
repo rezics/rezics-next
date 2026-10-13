@@ -36,6 +36,14 @@ function procEnv(pid: number, procRoot: string): string[] | undefined {
 function procParent(pid: number, procRoot: string): number | undefined {
   return processParent(pid, procRoot);
 }
+function turnProcesses(token: string): ProcessIdentity[] {
+  return readdirSync('/proc').filter(name=>/^\d+$/.test(name)).flatMap(name=>{
+    const pid = Number(name);
+    if (!envHas(procEnv(pid,'/proc'),'GOAL_TURN_TOKEN',token)) return [];
+    const identity = processIdentity(pid);
+    return identity ? [identity] : [];
+  });
+}
 function envHas(env: string[] | undefined, key: string, value?: string): boolean {
   if (!env) return false;
   const prefix = `${key}=`;
@@ -178,6 +186,9 @@ interface Attempt {
   token: string; goal: string; generation: string; phase: 'intent' | 'claimed' | 'done';
   descriptor: string; prompt: string; wrapper: string | null; child: string | null;
   code: number | null; created_at: number;
+  event_key: string | null; started_at: number | null; ended_at: number | null;
+  ending: 'exit' | 'cut' | 'crash' | null;
+  input_tokens: number | null; cached_tokens: number | null; output_tokens: number | null;
 }
 interface WakeRow { goal: string; due_at: number; failures: number; error: string | null; token: string | null }
 export interface CoordinatorOptions {
@@ -260,7 +271,51 @@ function openStore(stateDir: string): Database {
       phase TEXT NOT NULL, descriptor TEXT NOT NULL, prompt TEXT NOT NULL, wrapper TEXT, child TEXT,
       code INTEGER, created_at INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS pump_owner(singleton INTEGER PRIMARY KEY CHECK(singleton=1), identity TEXT NOT NULL);`);
+  const columns = new Set((db.query('PRAGMA table_info(attempts)').all() as {name:string}[]).map(column=>column.name));
+  for (const [name,type] of Object.entries({event_key:'TEXT',started_at:'INTEGER',ended_at:'INTEGER',ending:'TEXT',
+    input_tokens:'INTEGER',cached_tokens:'INTEGER',output_tokens:'INTEGER'})) {
+    if (!columns.has(name)) db.exec(`ALTER TABLE attempts ADD COLUMN ${name} ${type}`);
+  }
+  db.exec(`CREATE TABLE IF NOT EXISTS turn_commands(id INTEGER PRIMARY KEY, token TEXT NOT NULL,
+    command TEXT NOT NULL, created_at INTEGER NOT NULL)`);
   return db;
+}
+
+/** The CLI entry calls this once; worker commands without a turn token have no recording side effect. */
+export function recordTurnCommand(argv: string[]): void {
+  const token = process.env.GOAL_TURN_TOKEN;
+  const directory = process.env.GOAL_TURN_STATE_DIR;
+  if (!token || !directory || !argv[0]) return;
+  const db = openStore(directory);
+  try {
+    if (!db.query('SELECT token FROM attempts WHERE token=?').get(token)) throw new Error('Unknown manager turn token');
+    const command = argv[0] === 'mail' ? argv.slice(0,2).join(' ') : argv[0];
+    db.query('INSERT INTO turn_commands(token,command,created_at) VALUES(?,?,?)').run(token,command,Date.now());
+  } finally { db.close(); }
+}
+
+export function turnUsage(output: string): {input: number | null; cached: number | null; output: number | null} {
+  let input: number | null = null, cached: number | null = null, generated: number | null = null;
+  const count = (value: unknown): number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0;
+  for (const line of output.split('\n')) {
+    let record: {type?:string;usage?:Record<string,unknown>};
+    try { record = JSON.parse(line) as typeof record; } catch { continue; }
+    if (!record.usage || !['turn.completed','result'].includes(record.type ?? '')) continue;
+    const usage = record.usage;
+    if (typeof usage.input_tokens !== 'number' || typeof usage.output_tokens !== 'number') continue;
+    const read = count(record.type === 'result' ? usage.cache_read_input_tokens : usage.cached_input_tokens);
+    input = (input ?? 0) + count(usage.input_tokens)
+      + (record.type === 'result' ? read + count(usage.cache_creation_input_tokens) : 0);
+    cached = (cached ?? 0) + read;
+    generated = (generated ?? 0) + count(usage.output_tokens);
+  }
+  return {input,cached,output:generated};
+}
+function finishTurn(db: Database, stateDir: string, token: string, ending: NonNullable<Attempt['ending']>, code: number, now: number): void {
+  const file = join(stateDir,'manager-runs',token,'output.jsonl');
+  const usage = turnUsage(existsSync(file) ? readFileSync(file,'utf8') : '');
+  db.query(`UPDATE attempts SET phase='done',code=?,ended_at=?,ending=?,input_tokens=?,cached_tokens=?,output_tokens=?
+    WHERE token=? AND phase!='done'`).run(code,now,ending,usage.input,usage.cached,usage.output,token);
 }
 export class GoalCoordinator {
   readonly db: Database;
@@ -334,6 +389,18 @@ export class GoalCoordinator {
     wakes:this.db.query('SELECT * FROM wakes ORDER BY goal').all() as WakeRow[],
     attempts:this.db.query('SELECT * FROM attempts ORDER BY created_at').all() as Attempt[]};
   }
+  turns(filters: {goal?: string; since?: number} = {}): {turns:(Attempt & {commands:string[]})[]; summary:{turns:number;medianInputTokens:number|null;ackOnlyTurns:number}} {
+    const turns = (this.db.query(`SELECT * FROM attempts WHERE (? IS NULL OR goal=?)
+      AND (? IS NULL OR COALESCE(started_at,created_at)>=?) ORDER BY created_at,rowid`)
+      .all(filters.goal ?? null,filters.goal ?? null,filters.since ?? null,filters.since ?? null) as Attempt[])
+      .map(turn=>({...turn,commands:(this.db.query('SELECT command FROM turn_commands WHERE token=? ORDER BY id')
+        .all(turn.token) as {command:string}[]).map(row=>row.command)}));
+    const inputs = turns.map(turn=>turn.input_tokens).filter((value): value is number=>value !== null).sort((a,b)=>a-b);
+    const middle = Math.floor(inputs.length/2);
+    return {turns,summary:{turns:turns.length,medianInputTokens:inputs.length
+      ? inputs.length%2 ? inputs[middle]! : (inputs[middle-1]!+inputs[middle]!)/2 : null,
+    ackOnlyTurns:turns.filter(turn=>turn.commands.length > 0 && turn.commands.every(command=>command === 'mail ack')).length}};
+  }
   unenroll(goal: string): void {
     const wake = this.db.query('SELECT * FROM wakes WHERE goal=?').get(goal) as WakeRow | null;
     if (wake?.token) throw new Error('Cannot unenroll with an unresolved attempt; reconcile it first');
@@ -398,8 +465,10 @@ export class GoalCoordinator {
             const wrapper = attempt.wrapper ? JSON.parse(attempt.wrapper) as ProcessIdentity : undefined;
             const child = attempt.child ? JSON.parse(attempt.child) as ProcessIdentity : undefined;
             if ((wrapper && sameProcess(wrapper)) || (child && sameProcess(child)) || this.launcher.live(attempt.token,descriptor)) continue;
-            // A claimed wrapper may have spawned before dying; no evidence is permission to resume again.
-            throw new Error(`Uncertain attempt ${attempt.token}: launcher disappeared without completion; reconcile manually`);
+            // A child can outlive a wrapper that died between spawn and registration.
+            if (turnProcesses(attempt.token).length) continue;
+            finishTurn(this.db,this.options.stateDir,attempt.token,'crash',127,this.now());
+            continue;
           }
           if (this.launcher.live(attempt.token,descriptor)) continue;
           if (this.now() < wake.due_at) continue;
@@ -426,8 +495,8 @@ export class GoalCoordinator {
       const prompt = MANAGER_ROLE_CARD.replaceAll('<goal>',goal) + `\n\nEvent: ${batch[0]!.event_key}\n${batch[0]!.body}`;
       const turn = freshTurnDescriptor(descriptor);
       this.db.transaction(() => {
-        this.db.query('INSERT INTO attempts(token,goal,generation,phase,descriptor,prompt,created_at) VALUES(?,?,?,?,?,?,?)')
-          .run(token,goal,descriptor.generation,'intent',JSON.stringify(turn),prompt,this.now());
+        this.db.query('INSERT INTO attempts(token,goal,generation,phase,descriptor,prompt,created_at,event_key) VALUES(?,?,?,?,?,?,?,?)')
+          .run(token,goal,descriptor.generation,'intent',JSON.stringify(turn),prompt,this.now(),batch[0]!.event_key);
         for (const event of batch) this.db.query('UPDATE events SET token=? WHERE goal=? AND event_key=?').run(token,goal,event.event_key);
         this.db.query('UPDATE wakes SET token=? WHERE goal=?').run(token,goal);
       }).immediate();
@@ -460,8 +529,8 @@ export async function runAttempt(stateDir: string, token: string): Promise<void>
   db.transaction(() => {
     const row = db.query('SELECT * FROM attempts WHERE token=?').get(token) as Attempt|null;
     if (!row || row.phase !== 'intent') return;
-    db.query("UPDATE attempts SET phase='claimed',wrapper=? WHERE token=? AND phase='intent'")
-      .run(JSON.stringify(processIdentity(process.pid)),token);
+    db.query("UPDATE attempts SET phase='claimed',wrapper=?,started_at=? WHERE token=? AND phase='intent'")
+      .run(JSON.stringify(processIdentity(process.pid)),Date.now(),token);
     attempt = row;
   }).immediate();
   if (!attempt) { db.close(); return; }
@@ -475,14 +544,15 @@ export async function runAttempt(stateDir: string, token: string): Promise<void>
   try {
     const owner = nativeOwner(descriptor.home,descriptor.session,descriptor.previousOwner,'/proc',descriptor.engine);
     if (owner) throw new Error(owner);
-    const child = spawn(descriptor.program,args,{cwd:descriptor.cwd,env:descriptor.env,stdio:['ignore',stdout,stderr]});
+    const child = spawn(descriptor.program,args,{cwd:descriptor.cwd,
+      env:{...descriptor.env,GOAL_TURN_TOKEN:token,GOAL_TURN_STATE_DIR:stateDir},stdio:['ignore',stdout,stderr]});
     if (!child.pid) throw new Error('Native resume failed to spawn');
     db.query('UPDATE attempts SET child=? WHERE token=?').run(JSON.stringify(processIdentity(child.pid)),token);
     const code = await new Promise<number>(resolveCode => { child.on('error',()=>resolveCode(127)); child.on('exit',code=>resolveCode(code ?? 128)); });
-    db.query("UPDATE attempts SET phase='done',code=? WHERE token=?").run(code,token);
+    finishTurn(db,stateDir,token,'exit',code,Date.now());
   } catch (error) {
     writeSync(stderr, `${String(error)}\n`);
-    db.query("UPDATE attempts SET phase='done',code=127 WHERE token=?").run(token);
+    finishTurn(db,stateDir,token,'crash',127,Date.now());
   } finally { closeSync(stdout); closeSync(stderr); db.close(); }
 }
 function sessionRecordMatches(line: string, session: string, cwd: string): boolean {

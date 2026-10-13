@@ -3,7 +3,7 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { GoalCoordinator, TmuxLauncher, WAKE_LAST_MESSAGE, WAKE_PROMPT, claudeNativeSession, claudeProjectKey,
-  claudeWakeArgs, freshTurnDescriptor, MANAGER_ROLE_CARD, managerStartMessage, nativeOwner, nativeSession, processIdentity, runAttempt, sameProcess, tmuxServer,
+  claudeWakeArgs, freshTurnDescriptor, MANAGER_ROLE_CARD, managerStartMessage, nativeOwner, nativeSession, processIdentity, runAttempt, sameProcess, tmuxServer, turnUsage,
   type CoordinatorOptions, type IndependentLauncher, type LaunchDescriptor, type WakeEvent } from './coordinator.ts';
 import { GoalMailStore } from './mail.ts';
 import { coordinatorStartDescriptor, coordinatorStartOptions, managerEvents } from './goalctl.ts';
@@ -78,6 +78,63 @@ async function waitFor(predicate: () => boolean, timeout = 5_000): Promise<void>
 }
 
 describe('durable Goal wake coordinator', () => {
+  test('turn records survive restart during execution and record real CLI commands and reported usage', async () => {
+    const f = fixture();
+    const mail = new GoalMailStore({stateDir:f.stateDir,goals:['program'],sender:'program'});
+    try {
+      const message = mail.send('program','Request','recorded');
+      writeFileSync(join(f.stateDir,'ledger.json'),JSON.stringify({tasks:{},goals:{program:{manager:'manager'}}}));
+      const script = join(f.dir,'manager.ts');
+      const gate = join(f.dir,'release');
+      writeFileSync(script, `import { existsSync } from 'node:fs';
+        import { spawnSync } from 'node:child_process';
+        while (!existsSync(${JSON.stringify(gate)})) await Bun.sleep(10);
+        const ack = spawnSync(process.execPath, [${JSON.stringify(join(import.meta.dir,'goalctl.ts'))}, 'mail','ack',${JSON.stringify(message.id)}],
+          {env:{...process.env,GOAL_MAIL_STATE_DIR:process.env.GOAL_TURN_STATE_DIR},encoding:'utf8'});
+        if (ack.status !== 0) throw new Error(ack.stderr);
+        console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:120,cached_input_tokens:80,output_tokens:7}}));`);
+      const first = f.open({events:goal=>managerEvents(f.stateDir,goal,mail)});
+      first.enroll(f.descriptor); first.step();
+      const token = first.status().attempts[0]!.token;
+      const pending = runAttempt(f.stateDir,token);
+      await waitFor(()=>Boolean(first.status().attempts[0]!.child));
+      expect(first.turns().turns[0]).toMatchObject({event_key:message.id,ending:null,ended_at:null});
+      first.close();
+      const restarted = f.open({events:goal=>managerEvents(f.stateDir,goal,mail)});
+      restarted.step();
+      expect(f.launcher.launches).toEqual([token]);
+      writeFileSync(gate,'go'); await pending; restarted.step();
+      const report = restarted.turns();
+      expect(report.turns[0],readFileSync(join(f.stateDir,'manager-runs',token,'stderr.log'),'utf8')).toMatchObject({goal:'program',event_key:message.id,ending:'exit',code:0,
+        input_tokens:120,cached_tokens:80,output_tokens:7,commands:['mail ack']});
+      expect(report.turns[0]!.ended_at!).toBeGreaterThanOrEqual(report.turns[0]!.started_at!);
+      expect(report.summary).toEqual({turns:1,medianInputTokens:120,ackOnlyTurns:1});
+      const cli = spawnSync(process.execPath,[join(import.meta.dir,'goalctl.ts'),'coordinator','turns','--goal','program','--since','1970-01-01T00:00:00Z'],
+        {env:{...process.env,GOAL_MAIL_STATE_DIR:f.stateDir},encoding:'utf8'});
+      expect(cli.status,cli.stderr).toBe(0);
+      const lines = cli.stdout.trim().split('\n').map(line=>JSON.parse(line));
+      expect(lines[0]).toMatchObject({event:message.id,input:120,commands:['mail ack'],ending:'exit'});
+      expect(lines[1]).toEqual(report.summary);
+      expect(restarted.turns({goal:'kernel'}).summary.turns).toBe(0);
+      expect(restarted.turns({since:Date.now()+1000}).summary.turns).toBe(0);
+    } finally { mail.close(); f.cleanup(); }
+  });
+  test('usage sums engine reports while absent usage remains unknown', () => {
+    expect(turnUsage('noise\n{}')).toEqual({input:null,cached:null,output:null});
+    expect(turnUsage(JSON.stringify({type:'result',usage:{input_tokens:20,cache_read_input_tokens:70,cache_creation_input_tokens:10,output_tokens:3}})))
+      .toEqual({input:100,cached:70,output:3});
+    expect(turnUsage([1,2].map(()=>JSON.stringify({type:'turn.completed',usage:{input_tokens:50,cached_input_tokens:10,output_tokens:5}})).join('\n')))
+      .toEqual({input:100,cached:20,output:10});
+    const f = fixture();
+    try {
+      const coordinator = f.open(); coordinator.enroll(f.descriptor); coordinator.step();
+      coordinator.db.query('UPDATE attempts SET input_tokens=10').run();
+      f.setEvents([{key:'next',body:'Next'}]);
+      coordinator.db.query("UPDATE attempts SET phase='done',code=0").run(); coordinator.step(); coordinator.step();
+      coordinator.db.query('UPDATE attempts SET input_tokens=20 WHERE event_key=?').run('next');
+      expect(coordinator.turns().summary).toEqual({turns:2,medianInputTokens:15,ackOnlyTurns:0});
+    } finally { f.cleanup(); }
+  });
   test('fresh Codex and Claude argv preserve the role settings without resuming', () => {
     const f = fixture();
     try {
@@ -432,7 +489,7 @@ describe('durable Goal wake coordinator', () => {
     }
   });
 
-  test('a vanished claimed attempt with a stale PID refuses automatic replay', () => {
+  test('a vanished claimed attempt with a stale PID records a crash before retrying', () => {
     const f = fixture();
     try {
       const coordinator = f.open(); coordinator.enroll(f.descriptor); coordinator.step();
@@ -441,8 +498,7 @@ describe('durable Goal wake coordinator', () => {
         .run(JSON.stringify({ ...processIdentity(process.pid), start: 'reused-pid' }), token);
       f.launcher.running.clear(); coordinator.step();
       expect(f.launcher.launches).toEqual([token]);
-      expect(coordinator.status().wakes[0]!.error).toContain('reconcile manually');
-      expect(coordinator.status().attempts[0]!.phase).toBe('claimed');
+      expect(coordinator.status().attempts[0]).toMatchObject({phase:'done',ending:'crash',ended_at:1_000_000});
       expect(() => coordinator.unenroll('program')).toThrow('unresolved attempt');
     } finally { f.cleanup(); }
   });
@@ -712,7 +768,7 @@ describe('durable Goal wake coordinator', () => {
       coordinator.enroll({ ...f.descriptor, previousOwner: processIdentity(process.pid)! });
       coordinator.step();
       await runAttempt(f.stateDir, coordinator.status().attempts[0]!.token);
-      expect(coordinator.status().attempts[0]).toMatchObject({ phase: 'done', code: 127 });
+      expect(coordinator.status().attempts[0]).toMatchObject({ phase: 'done', code: 127, ending:'crash' });
       expect(f.calls()).toEqual([]);
       expect(readFileSync(join(f.stateDir, 'manager-runs', coordinator.status().attempts[0]!.token, 'stderr.log'), 'utf8'))
         .toContain(`waiting for previous owner ${process.pid}`);

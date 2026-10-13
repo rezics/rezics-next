@@ -150,6 +150,17 @@ export async function coordinatorCommand(args: string[]): Promise<void> {
     }});
   try {
     const [action, ...rest] = args;
+    if (action === 'turns') {
+      const flags = namedOptions(rest,['--goal','--since']);
+      const since = flags['--since'] === undefined ? undefined : Date.parse(flags['--since']);
+      if (since !== undefined && (!Number.isFinite(since) || !/(?:Z|[+]00:00)$/.test(flags['--since']!))) throw new Error('--since needs a UTC timestamp');
+      const report = coordinator.turns({goal:flags['--goal'],since});
+      for (const turn of report.turns) console.log(JSON.stringify({token:turn.token,goal:turn.goal,event:turn.event_key,
+        start:turn.started_at === null ? null : new Date(turn.started_at).toISOString(),
+        end:turn.ended_at === null ? null : new Date(turn.ended_at).toISOString(),ending:turn.ending,code:turn.code,
+        input:turn.input_tokens,cached:turn.cached_tokens,output:turn.output_tokens,commands:turn.commands}));
+      console.log(JSON.stringify(report.summary)); return;
+    }
     if (action === 'start') {
       const options = coordinatorStartOptions(rest);
       // Registration uses goal start's existing ledger and area owner checks.

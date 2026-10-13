@@ -55,6 +55,7 @@ function loadGoalCommand(fileName: string) {
 }
 
 async function main(argv: string[]): Promise<number> {
+  (await import('./coordinator.ts')).recordTurnCommand(argv);
   const [command, ...rest] = argv;
   const flags = new Set(rest.filter(arg => arg.startsWith('--')));
   const positional = rest.filter(arg => !arg.startsWith('--'));
