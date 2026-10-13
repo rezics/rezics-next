@@ -27,6 +27,7 @@ positions are in the archived end-of-run tables
 
 ## Recovery and delivery
 
+- G-2175 Anime search availability lead: population-33 `GET /v1/search/catalogue?q=Lanternanime34afb7bcbec648a0bd9faeb84485b0bf&realm=https%3A%2F%2Frezics.com%2Fid%2F01a135d0-cb23-77b6-8e10-99efdab59e5d&limit=5` returned 503 search_index_unavailable in QA 20261013t150959-2296cb; final QA 20261013t152444-5ef4e4 returned all 65 Works. G-2220 classifies whether it shares the Realm browse 503 cause and folds it into that task only if so; otherwise retain this distinct exact-request lead without a separate speculative repair. Program decision mail:28522889-e0fd-4971-8622-81501e9ba367; full answers remain in `.temp/goal-api/G-2175/`.
 - Seven findings on restored-backlog delivery: a missing custody object, a weaker completion policy at Zone startup, startup healing clearing a deferral, a cold poll walking acknowledged history, the no-consumer fallback's scope, a missing metric assertion, the startup Fuseki budget.
 - The content projection replays for three to four minutes after every restart.
 - The rate limiter refuses for some seconds after a restart.
