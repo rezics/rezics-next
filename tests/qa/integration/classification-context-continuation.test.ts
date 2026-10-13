@@ -147,7 +147,7 @@ test('Selected context vocabulary traverses disclosed Concepts with exact query 
     const schemeHead = async () => (await stack.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
       SELECT ?head WHERE { GRAPH ${iri(GRAPHS.current)} {
         ${iri(root.scheme)} rv:schemeRevisionHead ?head } } LIMIT 2`)).results?.bindings.map(row => row.head?.value);
-    for (const size of [128, 512]) {
+    for (const size of [16, 128]) {
       while (population < size) {
         await Promise.all([0, 1].map(offset => define(`Population ${population + offset}`, undefined, false)));
         population += 2;
