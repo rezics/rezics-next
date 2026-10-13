@@ -1877,13 +1877,13 @@ export function operatorAttempt(fixture: Fixture, copy: Copy, key: string) {
 }
 
 export async function failOuterOutcome(copy: Copy, key: string) {
-  // Model a temporarily unavailable write with PostgreSQL lock_not_available.
+  // Model a lost commit answer with PostgreSQL transaction_resolution_unknown.
   await copy.faultRetained([
     {
       sql: `CREATE FUNCTION relay.g1351_fail_outer_outcome() RETURNS trigger LANGUAGE plpgsql AS $$
         BEGIN
           IF NEW.state = 'reconciled' AND NEW.operation_id = 'owner:reconcile:${key}' THEN
-            RAISE EXCEPTION 'fault: outer restore outcome write' USING ERRCODE = '55P03';
+            RAISE EXCEPTION 'fault: outer restore outcome write' USING ERRCODE = '08007';
           END IF;
           RETURN NEW;
         END $$`,
