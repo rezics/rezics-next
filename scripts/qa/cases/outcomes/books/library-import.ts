@@ -1,4 +1,4 @@
-import { proved, rowOutcomes } from '../../outcomes.ts';
+import { proved, rowOutcomes } from '../../outcome-cells.ts';
 
 const file = 'tests/qa/integration/outcomes/books/library-import.test.ts';
 export default rowOutcomes('books/library-import', {

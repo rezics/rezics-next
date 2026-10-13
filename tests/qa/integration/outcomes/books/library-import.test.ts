@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect } from 'bun:test';
+import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import libraryImport from '../../../../../scripts/qa/cases/outcomes/books/library-import.ts';
 import libraryExport from '../../../../../scripts/qa/cases/outcomes/books/library-export.ts';
@@ -14,11 +14,12 @@ type CanonicalRow = {
   review: { text: string; language: string; spoiler: boolean } | null; shelves: string[];
   readCount: number | null; progress: unknown; raw: Record<string, unknown>;
   session: { target: string; state: string; startedOn: string | null; finishedOn: string | null;
-    selections: { target: string; language?: string; format?: string }[]; locators: unknown[] } | null;
+    selections: { target: string; language?: string | null; format?: string | null }[]; locators: unknown[] } | null;
 };
 
 type Page = { profile: string; rows: CanonicalRow[]; snapshot: string; nextCursor: string | null };
 type Review = { rows: { index: number; version: number; source: CanonicalRow }[]; nextCursor: number | null };
+setDefaultTimeout(60_000);
 let people: PersonaSessions, book: string, upload: string, originals: CanonicalRow[];
 let applied: Promise<void> | undefined;
 let continuation: Promise<Page> | undefined;
@@ -114,12 +115,31 @@ beforeAll(async () => {
     review: { text: 'Original private review', language: 'en', spoiler: true }, shelves: ['Private portable shelf'],
     raw: { sessionProjection: null, privateJournal: 'Private journal' } };
   const attempt = { ...row('session', 'original-attempt'), session: { target: book, state: 'planned' as const,
-    startedOn: null, finishedOn: null, selections: [{ target: book }], locators: [] } };
+    startedOn: null, finishedOn: null, selections: [{ target: book, language: null, format: null }], locators: [] } };
   const emptyShelf = { ...row('shelf', 'original-empty-shelf'), shelves: ['Empty private shelf'],
     raw: { disclosure: 'private' } };
+  // Portable copies and loans are private archival evidence, never commands to lend.
+  const copyId = `https://rezics.com/id/${randomUUID()}`;
+  const release = `https://rezics.com/id/${randomUUID()}`;
+  const loanId = `https://rezics.com/id/${randomUUID()}`;
+  const archivalCopy = { ...row('retained', `copy:${copyId}`), target: release, raw: {
+    libraryCopy: { id: copyId, work: book, release, format: 'paperback',
+      acquiredFrom: { kind: 'name', name: 'Original fixture owner' }, acquiredAt: '2026-01-01T00:00:00.000Z',
+      ownedFrom: '2026-01-01T00:00:00.000Z', ownedThrough: null, removed: false, version: 1 },
+    jsonLd: { '@context': 'https://schema.org', '@type': 'OwnershipInfo',
+      typeOfGood: { '@id': copyId, '@type': 'Product', isBasedOn: { '@id': release } } },
+  } };
+  const archivalLoan = { ...row('retained', `loan:${loanId}`), target: release, raw: {
+    libraryLoan: { id: loanId, copy: copyId, direction: 'lent',
+      counterparty: { kind: 'name', name: 'Original fictional reader' }, startedAt: '2026-01-02T00:00:00.000Z',
+      dueAt: '2026-02-02T00:00:00.000Z', returnedAt: null, version: 1 },
+    jsonLd: { '@context': 'https://schema.org', '@type': 'LendAction', '@id': loanId,
+      agent: { '@id': people.owner.actingSubject }, object: { '@id': copyId },
+      borrower: { name: 'Original fictional reader' }, actionStatus: 'ActiveActionStatus' },
+  } };
   originals = [statement, attempt, emptyShelf, ...Array.from({ length: 25 }, (_, index) => ({
     ...row('retained', `original-private-${index}`), raw: { note: `Private journal ${index}`, credit: 'Original fixture owner' },
-  }))];
+  })), archivalCopy, archivalLoan];
   upload = (await json<{ id: string }>(create(originals), 201)).id;
 }, 120_000);
 afterAll(async () => { await people?.close(); });
@@ -150,8 +170,15 @@ async function deniedExport(name: Exclude<PersonaName, 'owner'>, resume = false)
     await refused(person.main('GET', `/v1/me/library-export?${q}`), 400, 'invalid_work_read');
   }
 }
+async function noActiveLendingEffects() {
+  expect(await json(people.owner.main('GET', `/v1/works/${book.slice(-36)}/copies?${query()}`)))
+    .toMatchObject({ items: [], nextCursor: null, complete: true });
+  expect(await json(people.owner.main('GET', `/v1/me/library-loans?${query()}`)))
+    .toMatchObject({ items: [], nextCursor: null, complete: true });
+}
 function preserved(rows: CanonicalRow[]) {
-  expect(rows.filter(item => item.kind === 'retained' && item.sourceId.startsWith('original-private-'))
+  expect(rows.filter(item => item.kind === 'retained' &&
+    (item.sourceId.startsWith('original-private-') || item.raw.libraryCopy || item.raw.libraryLoan))
     .sort((a, b) => a.sourceId.localeCompare(b.sourceId))).toEqual(originals.slice(3)
     .sort((a, b) => a.sourceId.localeCompare(b.sourceId)));
   expect(rows.find(item => item.review)?.review).toEqual(originals[0]!.review);
@@ -170,6 +197,7 @@ outcomeTest(libraryImport, 'moderator', () => deniedImports('moderator'));
 outcomeTest(libraryImport, 'operator', () => deniedImports('operator'));
 outcomeTest(libraryImport, 'owner', async () => {
   await ensureApplied(); preserved(await collect());
+  await noActiveLendingEffects();
   await refused(people.owner.main('POST', `${root()}/rows/0/adoptions`, { ...own(), workId: 'OL1W' }), 400, 'invalid_library_file');
   const disposable = (await json<{ id: string }>(create([originals[3]!]), 201)).id;
   await json(people.owner.main('DELETE', `/v1/me/library-imports/${disposable}?${query()}`));
@@ -190,6 +218,7 @@ outcomeTest(libraryExport, 'owner', async () => {
   }), 201);
   await review(restored.id); await apply(restored.id);
   preserved(await collect());
+  await noActiveLendingEffects();
   const cache = await people.owner.main('GET', `/v1/me/library-export?${query()}`);
   expect(cache.status).toBe(200); expect(cache.headers.get('cache-control')).toBe('private, no-store');
 });
