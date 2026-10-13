@@ -67,9 +67,10 @@ async function attemptLog(attempt: Attempt, root: string): Promise<AttemptLog> {
   return log;
 }
 function refusalKind(text: string): keyof Refusals {
-  if (/outcome.*(?:fail|skip|weaken|edit)|(?:fail|skip|weaken|edit).*outcome/i.test(text)) return 'outcomeTest';
-  if (/blocking review findings/i.test(text) && /(?:failing test|test.*fails?)/i.test(text)) return 'failingTestFinding';
-  if (/(?:gate|typecheck|guards).*?(?:fail|refus|inconclusive)|(?:fail|refus).*?(?:gate|typecheck|guards)/i.test(text)) return 'gate';
+  const header = text.split('\n')[0]!;
+  if (/blocking review findings/i.test(header)) return /(?:failing test|test.*fails?)/i.test(text) ? 'failingTestFinding' : 'other';
+  if (/outcome.*(?:fail|skip|weaken|edit)|(?:fail|skip|weaken|edit).*outcome/i.test(header)) return 'outcomeTest';
+  if (/introduced (?:type errors|unit failures)|(?:gate|type ?check|guards).*?(?:fail|refus|inconclusive)|(?:fail|refus).*?(?:gate|type ?check|guards)/i.test(header)) return 'gate';
   return 'other';
 }
 function refusals(task: Task, root: string): { counts: Refusals; times: number[] } {

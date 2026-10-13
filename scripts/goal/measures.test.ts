@@ -118,12 +118,15 @@ describe('Goal method measures', () => {
     const f = fixture();
     try {
       const t = f.task('row', 'conflict'); f.attempt(t);
-      for (const [n, text] of ['Outcome test was edited', 'Unit gate failed', 'blocking review findings:\n test fails on the branch', 'scope changed during review'].entries()) {
+      for (const [n, text] of ['Outcome test was edited', 'introduced unit failures; not merging:',
+        'blocking review findings:\n outcome test fails on the branch', 'scope changed during review'].entries()) {
         f.write(`runs/row/review-${n}-fixture/stop.txt`, text);
       }
-      t.refusal = 'Unit gate failed';
+      t.refusal = 'introduced unit failures; not merging:';
       expect((await f.report()).api!.landingsRefused).toEqual({ outcomeTest: 1, gate: 1, failingTestFinding: 1, other: 1 });
-      t.refusal = 'Typecheck failed';
+      t.refusal = 'introduced type errors; not merging:';
+      expect((await f.report()).api!.landingsRefused.gate).toBe(2);
+      t.refusal = 'type check inconclusive; not merging:';
       expect((await f.report()).api!.landingsRefused.gate).toBe(2);
     } finally { f.cleanup(); }
   });
