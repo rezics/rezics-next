@@ -11,6 +11,18 @@ import {
 
 type Work = { work: string; mainVersion: string };
 type Composition = { structure: string; revision: string; occurrences: string[] };
+type ContentsItem = {
+  occurrence: string; parent: string; role: 'chapter' | 'group';
+  label: { value: string; language: string } | null;
+  division: 'volume' | 'part' | 'extras' | null; number: number | null;
+  childCount: number | null; target: string | null; selectedRevision: string | null;
+  progress: unknown; availability: 'available' | 'unavailable';
+};
+type Contents = {
+  items: ContentsItem[]; nextCursor: string | null;
+  count: { value: number; kind: string; total: null };
+  sourcePosition: { dataEpoch: string; sequence: string };
+};
 type Page = {
   items: { occurrence: string; labels: { value: string; language: string }[] }[];
   nextCursor: string | null;
@@ -23,6 +35,7 @@ let sessions: PersonaSessions;
 let published: Work;
 let privateWork: Work;
 let contribution: string;
+let preparedComposition: Composition;
 const recording = new OutcomeRecorder(inventory);
 const occurrences: string[] = [];
 const short = (id: string) => id.slice(-36);
@@ -36,6 +49,10 @@ const query = (person: PersonaSession, fields: Record<string, string> = {}) =>
 async function answer<T>(request: Promise<Response>, status = 200): Promise<T> {
   const response = await request;
   const raw = await response.text();
+  if (response.status !== status) console.info('Outcome answer', JSON.stringify({
+    url: response.url, expectedStatus: status, status: response.status,
+    answer: raw, headers: Object.fromEntries(response.headers.entries()),
+  }));
   expect(response.status, `${response.status}: ${raw}`).toBe(status);
   return JSON.parse(raw) as T;
 }
@@ -130,6 +147,8 @@ beforeAll(async () => {
     );
     occurrences.push(...composition.occurrences);
   }
+  preparedComposition = composition;
+  expect(occurrences).toHaveLength(1000);
   expect(performance.now() - started).toBeLessThan(600_000);
 }, 600_000);
 afterAll(async () => {
@@ -240,23 +259,71 @@ async function supportingReads(person: PersonaSession, sample: ReturnType<typeof
   const viewer = (path: string) => `${path}${path.includes('?') ? '&' : '?'}${actor}`;
   const chooser = await answer<Page>(sample('chapter-chooser', 'GET',
     `/v1/reading-positions/${id}?${query(person, { limit: '50' })}`));
-  if (chooser.nextCursor)
-    await answer(sample('chapter-chooser-continuation', 'GET',
-      `/v1/reading-positions/${id}?${query(person, { limit: '50', cursor: chooser.nextCursor })}`));
+  expect(chooser.items.map(item => item.occurrence)).toEqual(occurrences.slice(0, 50));
+  expect(chooser.complete).toBe(false);
+  expect(chooser.nextCursor).not.toBeNull();
+  const chooserContinuation = await answer<Page>(sample('chapter-chooser-continuation', 'GET',
+    `/v1/reading-positions/${id}?${query(person, { limit: '50', cursor: chooser.nextCursor! })}`));
+  expect(chooserContinuation.items.map(item => item.occurrence)).toEqual(occurrences.slice(50, 100));
   const empty = await answer<Page>(sample('chapter-search-no-match', 'GET',
     `/v1/reading-positions/${id}?${query(person, { q: 'unmatched seed path', limit: '50' })}`));
   expect(empty.items).toEqual([]);
-  const contentsResponse = await sample('contents', 'GET', viewer(`/v1/works/${id}/contents`));
-  // The page renders the owner's refusal as well as its successful Contents answer.
-  type Contents = { items: { occurrence: string; role: string }[]; nextCursor: string | null };
-  let contents: Contents | null = null;
-  if (contentsResponse.status === 503) await answer(Promise.resolve(contentsResponse), 503);
-  else contents = await answer<Contents>(Promise.resolve(contentsResponse));
-  if (contents?.nextCursor)
-    await answer(sample('contents-continuation', 'GET', viewer(`/v1/works/${id}/contents?${new URLSearchParams({ cursor: contents.nextCursor })}`)));
-  const group = contents?.items.find(item => item.role === 'group');
-  if (group)
-    await answer(sample('contents-group', 'GET', viewer(`/v1/works/${id}/contents?${new URLSearchParams({ parent: group.occurrence })}`)));
+  expect(empty).toMatchObject({ complete: true, nextCursor: null,
+    count: { value: 0, kind: 'exact-page', total: null }, search: { status: 'current' } });
+  const contentsPages = async (parent?: string) => {
+    const items: ContentsItem[] = [];
+    const cursors = new Set<string>();
+    let cursor: string | null = null;
+    let pages = 0;
+    do {
+      expect(++pages).toBeLessThanOrEqual(51);
+      const fields = new URLSearchParams({
+        ...(parent ? { parent } : {}), ...(cursor ? { cursor } : {}),
+      });
+      const label = parent ? `contents-group-${short(parent)}` : 'contents';
+      const page = await answer<Contents>(sample(
+        pages === 1 ? label : `${label}-continuation-${pages}`, 'GET',
+        viewer(`/v1/works/${id}/contents${fields.size ? `?${fields}` : ''}`),
+      ));
+      expect(page).toMatchObject({
+        profile: 'work-contents-v1', work: published.work, version: published.mainVersion,
+        composition: preparedComposition.structure, compositionRevision: preparedComposition.revision,
+        language: 'en',
+      });
+      expect(page.items.length).toBeLessThanOrEqual(20);
+      expect(page.count).toEqual({ value: page.items.length, kind: 'exact-page', total: null });
+      expect(page.sourcePosition.dataEpoch).toBeString();
+      expect(page.sourcePosition.sequence).toMatch(/^\d+$/);
+      for (const item of page.items)
+        expect(item.parent).toBe(parent ?? preparedComposition.structure);
+      // A legitimately empty parent is a successful terminal page, never an outage.
+      if (page.items.length === 0) expect(page.nextCursor).toBeNull();
+      if (page.nextCursor !== null) {
+        expect(page.nextCursor.length).toBeGreaterThan(0);
+        expect(cursors.has(page.nextCursor)).toBe(false);
+        cursors.add(page.nextCursor);
+      }
+      items.push(...page.items);
+      cursor = page.nextCursor;
+    } while (cursor !== null);
+    return items;
+  };
+  const contents = await contentsPages();
+  for (const group of contents.filter(item => item.role === 'group')) {
+    expect(group.childCount).toBeNumber();
+    expect(group.childCount).toBeGreaterThanOrEqual(0);
+    const children = await contentsPages(group.occurrence);
+    expect(children).toHaveLength(group.childCount!);
+  }
+  // These independently prepared flat chapters have headings, but no selected chapter bodies.
+  expect(contents).toEqual(occurrences.map((occurrence, index) => ({
+    occurrence, parent: preparedComposition.structure, role: 'chapter',
+    label: index === 999 ? { value: '重逢', language: 'zh-Hans' }
+      : index === 998 ? { value: '再会', language: 'ja' }
+        : { value: `Chapter ${index + 1}`, language: 'en' },
+    number: index + 1, division: null, childCount: null, target: null,
+    selectedRevision: null, progress: null, availability: 'unavailable',
+  })));
   // The Contents route and its surrounding Work frame each consume these owner answers.
   await answer(sample('work-header', 'GET', viewer(`/v1/works/${id}`)));
   const projection = await answer<{ sections: { id: string; href: string }[] }>(
@@ -268,7 +335,7 @@ async function supportingReads(person: PersonaSession, sample: ReturnType<typeof
     profile: 'template-query-v1', query: 'https://rezics.com/query/work-credits', revision: 1,
     parameters: { roots: [published.work] }, presentation: { actingSubject: person.actingSubject },
   }));
-  if (!contents || !contents.items.length)
+  if (!contents.length)
     await answer(sample('one-text-versions', 'POST', '/v1/query', {
       profile: 'template-query-v1', query: 'https://rezics.com/query/work-versions', revision: 1,
       parameters: { roots: [published.work], kind: 'text-variant' },

@@ -1,4 +1,4 @@
-import { proved, rowOutcomes } from '../../outcome-cells.ts';
+import { pending, proved, rowOutcomes } from '../../outcome-cells.ts';
 
 export default rowOutcomes(
   'books/navigate-a-thousand-chapter-inventory-thousand-chapters',
@@ -9,8 +9,8 @@ export default rowOutcomes(
     stranger: proved(
       'finds distant numbered and CJK chapters and traverses all 1000 disclosed entries with credit and bound cursors',
     ),
-    member: proved(
-      'finds distant numbered and CJK chapters and traverses all 1000 disclosed entries with credit and bound cursors',
+    member: pending(
+      'reads published contents, finds distant numbered and CJK chapters and traverses all 1000 disclosed entries with credit and bound cursors',
     ),
     owner: proved(
       'traverses the complete credited chapter inventory and retains its explicit private Work authority',
