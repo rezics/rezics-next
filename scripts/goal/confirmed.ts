@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { parseJUnit } from '../qa/acceptance.ts';
+import { parseJUnit, type TestResult } from '../qa/acceptance.ts';
 import { outcomeTitle, personas, type Persona, type RowOutcomes } from '../qa/cases/outcome-cells.ts';
 import type { Manifest } from './regress.ts';
 
@@ -45,8 +45,8 @@ export function recordConfirmation(stateDir: string, directory: string, manifest
     const title = outcomeTitle(declaration, persona);
     const batch = manifest.batches.find(batch => batch.files.includes(file));
     const attempt = batch?.attempts.at(-1);
-    const results = [];
-    if (batch && attempt && attempt.classification !== 'infrastructure') {
+    const results: TestResult[] = [];
+    if (batch && attempt) {
       for (const path of new Set(attempt.artifactPaths)) {
         const xml = join(path, `${batch.tier.replaceAll('/', '-')}.xml`);
         if (existsSync(xml)) results.push(...parseJUnit(readFileSync(xml, 'utf8'), 'integration', { root: manifest.checkout })
@@ -54,7 +54,8 @@ export function recordConfirmation(stateDir: string, directory: string, manifest
       }
     }
     const status = results.some(test => test.failed) ? 'failed'
-      : results.some(test => test.skipped) ? 'skipped' : results.length ? 'passed' : 'missing';
+      : results.some(test => test.skipped) ? 'skipped'
+        : results.length && attempt?.classification !== 'infrastructure' ? 'passed' : 'missing';
     outcomes.push({ rowId: declaration.rowId, persona, file, test: title, status, expectedFailure: cell.state === 'pending' });
   }
   const record: ConfirmationRecord = { version: 1, runId: manifest.runId, atCommit: manifest.atCommit,

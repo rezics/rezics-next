@@ -266,6 +266,7 @@ export function regressionTiming(directory: string): RegressionTiming {
     return starts.length && finishes.length ? Math.max(...finishes) - Math.min(...starts) : undefined;
   };
   for (const tier of tiers) {
+    const recordedTier = tier === 'jena:check' ? 'owner' : tier === 'accounts:storybook' ? 'e2e' : tier;
     const batches = manifest.batches.filter(batch => batch.tier === tier);
     if (!batches.length) continue;
     const attempts = batches.flatMap(batch => batch.attempts);
@@ -283,14 +284,14 @@ export function regressionTiming(directory: string): RegressionTiming {
       if (existsSync(acceptancePath)) {
         const acceptance = json<{ tests?: TestResult[]; tiers?: { name: string;
           shards?: { startupMs?: number; bootstrapMs?: number }[] }[] }>(acceptancePath);
-        tests = acceptance.tests?.filter(test => test.tier === tier) ?? [];
-        for (const shard of acceptance.tiers?.filter(entry => entry.name === tier).flatMap(entry => entry.shards ?? []) ?? []) {
+        tests = acceptance.tests?.filter(test => test.tier === recordedTier) ?? [];
+        for (const shard of acceptance.tiers?.filter(entry => entry.name === recordedTier).flatMap(entry => entry.shards ?? []) ?? []) {
           record.startupMs += shard.startupMs ?? 0;
           record.bootstrapMs += shard.bootstrapMs ?? 0;
         }
       } else {
         const xml = [join(path, `${tier.replaceAll('/', '-')}.xml`), join(path, 'batch.xml')].find(existsSync);
-        if (xml) tests = parseJUnit(readFileSync(xml, 'utf8'), tier === 'jena:check' ? 'owner' : tier, { root: manifest.checkout });
+        if (xml) tests = parseJUnit(readFileSync(xml, 'utf8'), recordedTier, { root: manifest.checkout });
       }
       for (const test of tests) if (test.durationMs !== undefined) {
         fileTimes.set(test.file, (fileTimes.get(test.file) ?? 0) + test.durationMs);

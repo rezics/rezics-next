@@ -107,7 +107,7 @@ describe('pinned main-wide regression', () => {
         const execution = await r.runner(...args);
         const path = join(args[2], 'results'); mkdirSync(path, { recursive: true });
         writeFileSync(join(path, 'integration.xml'), `<testsuite>${rows.filter(row =>
-          args[1].files.includes(row.cells.visitor!.state === 'proved' ? row.cells.visitor.file! : '')).map(row =>
+          args[1].files.includes(row.cells.visitor?.state === 'proved' ? row.cells.visitor.file! : '')).map(row =>
           `<testcase name="${outcomeTitle(row, 'visitor')}" file="tests/qa/integration/outcomes/${row.rowId}.test.ts">${row.rowId.endsWith('/fail') ? '<failure message="outcome failed"/>' : ''}</testcase>`).join('')}</testsuite>`);
         return { ...execution, artifactPaths: [...execution.artifactPaths, path] };
       } });

@@ -14,7 +14,7 @@ import { readdir } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { provideGoalctl, runRegression, parseRegressArgs, regressionTimingReport, appendInbox, inboxEntries } from './regress.ts';
 import { declaredTestTimeout, planUnitGateShards } from './unit-gate.ts';
-import { heavyQaStatus, withSlot, withRecovery } from './qa-slots.ts';
+import { heavyQaStatus, qaSlotCount, withSlot, withRecovery } from './qa-slots.ts';
 import { usageReport } from './usage.ts';
 import { goalMeasures } from './measures.ts';
 
@@ -125,6 +125,7 @@ async function main(argv: string[]): Promise<number> {
       }
       provideGoalctl({ declaredTestTimeout, planUnitGateShards, heavyQaStatus });
       const manifest = await runRegression({ ...options, repo: process.cwd(), stateDir: regressionState,
+        slots: qaSlotCount(join(stateDir, 'qa-slots')),
         route: entry => regressionState === stateDir ? withLedger(() => appendInbox(stateDir, entry))
           : Promise.resolve(appendInbox(regressionState, entry)) });
       console.log(`Regression ${manifest.runId}: ${manifest.status} at ${manifest.atCommit}`);
