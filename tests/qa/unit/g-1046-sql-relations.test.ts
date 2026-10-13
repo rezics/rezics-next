@@ -284,7 +284,9 @@ test('G1046: every SQL relation in services, scripts and tests exists at the mig
     );
   });
   expect(missing.map((ref) => `${ref.file}:${ref.line}: ${ref.relation}`)).toEqual([]);
-}, 30_000);
+  // An inventory of the repository, not a timing proof: the limit only ends a hang. On the loaded host it took
+  // 31 to 47 s, and a limit written here is not lengthened by the unit gate's retry of a timed-out file.
+}, 180_000);
 
 test('G1046: the guard catches the actual name_registry query on the parent of the feed fix', () => {
   // Exact source captured with git show 6a5793b7d^:services/main/src/modules/feed/frame.ts.
