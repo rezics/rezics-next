@@ -149,12 +149,47 @@ async function exchangeRecipe(name: PersonaName) {
 // Exchange controls live inside RecipeEditPage and share its initial reads.
 async function exchangeReads(name: PersonaName) {
   const person = sessions[name], sample = recording.session(name, person), id = short(source.work);
-  await answer(sample('editor-authority', 'GET', `/v1/resources/${id}/page${query(person)}`));
+  await frameReads(name);
+  if (person.actingSubject) await answer(sample('editor-authority', 'GET', `/v1/resources/${id}/page${query(person)}`));
   await answer(sample('editor-work-header', 'GET', `/v1/works/${id}${query(person)}`));
   if (name !== 'owner') return;
   await answer(sample('editor-resource-summary', 'GET', `/v1/resources/${id}${query(person)}`));
   await answer(sample('editor-metadata-empty', 'GET', `/v1/works/${id}/metadata${query(person)}`));
+  await answer(sample('editor-recipe', 'GET', `/v1/recipes/works/${id}${query(person)}`));
   await answer(sample('editor-notes-empty', 'GET', `/v1/me/contributions${query(person)}&limit=20`));
+}
+
+// RootLayout and LocaleLayout share these reads for an English visit by Work UUID.
+async function frameReads(name: PersonaName) {
+  const person = sessions[name], sample = recording.session(name, person);
+  const publicSample = recording.session(name, sessions.visitor);
+  const discard = async (request: Promise<Response>) => { await (await request).body?.cancel(); };
+  await discard(sample('frame-platform-access', 'GET', '/v1/me/platform-access'));
+  await discard(publicSample('frame-types', 'GET', '/v1/types'));
+  const zones = await publicSample('frame-official-zones', 'GET', '/v1/zones?official=true&limit=6');
+  if (zones.ok) {
+    const page = await zones.json() as { items: { realm: string }[] };
+    for (const [index, zone] of page.items.slice(0, 6).entries())
+      await discard(publicSample(`frame-official-realm-${index + 1}`, 'GET', `/v1/realms/${short(zone.realm)}`));
+  } else await zones.body?.cancel();
+  if (!person.actingSubject) return;
+  for (const [label, path] of [
+    ['frame-acting-contexts', '/v1/me/acting-contexts?task=work.create'],
+    ['frame-agent-choices', '/v1/me/agents?languages=en'],
+    ['frame-session-agent', '/v1/me/session-agent'],
+    ['frame-agent-profile', `/v1/agents/${short(person.actingSubject)}${query(person)}`],
+    ['frame-person-preferences', `/v1/me/person-preferences${query(person)}`],
+    ['frame-managed-realms', `/v1/me/managed-realms${query(person)}`],
+  ] as const) await discard(sample(label, 'GET', path));
+  // Relationship requests use URLSearchParams, whose spaces and escaping differ from encodeURIComponent.
+  for (const [label, extra] of [
+    ['frame-pinned-communities', { order: 'pinned', include: 'newSince' }],
+    ['frame-space-communities', { kind: 'space', order: 'recent', include: 'newSince' }],
+    ['frame-follow-inventory', {}],
+  ] as const) {
+    const params = new URLSearchParams({ actingSubject: person.actingSubject, limit: '20', ...extra });
+    await discard(sample(label, 'GET', `/v1/me/follows?${params}`));
+  }
 }
 
 outcomeTest(exchange, 'visitor', () => exchangeRecipe('visitor'), recording);
