@@ -42,9 +42,11 @@ export type MembershipActions =
     refresh: () => Promise<Membership | null>;
   };
 
-/** Joins and follows through the BFF as the session's Agent. Each press is its own idempotent command. */
-export function mainMembershipActions(realm: string, actingSubject: string): Extract<MembershipActions, { kind: 'ready' }> {
-  const api = mainRelationships(actingSubject);
+/** Joins and follows through the BFF as the session's Agent. Each press is its own idempotent command.
+ * A recorded page passes the replaying fetch; production omits it and uses the browser session. */
+export function mainMembershipActions(realm: string, actingSubject: string, transport: { fetch?: typeof fetch; origin?: string } = {}):
+  Extract<MembershipActions, { kind: 'ready' }> {
+  const api = mainRelationships(actingSubject, transport);
   return {
     kind: 'ready',
     async join(policy, listed, key) {
@@ -71,10 +73,12 @@ export function RealmMembership(props: Parameters<typeof RealmMembershipState>[0
 }
 
 function RealmMembershipState({ realm, realmName, initial, signedIn, actingSubject, signInHref, rulesHref,
-  actions, locale, messages, className, relationshipApi }: {
+  actions, locale, messages, className, relationshipApi, transport }: {
   realm: string; realmName: string; initial: Membership | null; signedIn: boolean; actingSubject?: string | null;
   signInHref: string; rulesHref: string; actions?: MembershipActions; locale: UiLocale; messages: RealmMessages; className?: string;
   relationshipApi?: RelationshipsApi;
+  /** Replaying fetch for a recorded page. Production leaves this unset. */
+  transport?: { fetch?: typeof fetch; origin?: string };
 }) {
   const router = useRouter();
   const copy = relationshipMessages[locale];
@@ -83,17 +87,17 @@ function RealmMembershipState({ realm, realmName, initial, signedIn, actingSubje
   const pendingJoin = useRef<{ policy: JoinPolicy; listed: boolean; key: string } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [adapter] = useState(() => actions ?? (!signedIn ? { kind: 'signed-out' as const, signInHref }
-    : actingSubject ? mainMembershipActions(realm, actingSubject) : { kind: 'unavailable' as const }));
+    : actingSubject ? mainMembershipActions(realm, actingSubject, transport) : { kind: 'unavailable' as const }));
   const follow = { following: state.following, revision: state.followRevision, level: state.level ?? null,
     source: state.source ?? null, pinPosition: state.pinPosition ?? null };
   const api = useMemo(() => {
     if (relationshipApi) return relationshipApi;
-    const base = mainRelationships(actingSubject ?? '');
+    const base = mainRelationships(actingSubject ?? '', transport);
     return actions?.kind === 'ready' ? storyFollowApi(base, { send: actions.follow, refresh: async () => {
       const fresh = await actions.refresh();
       return fresh && fresh.following !== null ? { following: fresh.following, revision: fresh.followRevision } : null;
     } }, { ...follow, level: state.level ?? 'highlights' }) : base;
-  }, [actions, actingSubject, realm, relationshipApi]);
+  }, [actions, actingSubject, realm, relationshipApi, transport]);
   const offer = offerOf(state);
   return <div className={cn('flex flex-wrap items-center justify-end gap-2', className)}>
     <RelationshipControl target={realm} kind="realm" realm={realm} name={realmName} locale={locale}
