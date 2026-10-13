@@ -3,6 +3,7 @@ import * as observability from '@rezics/observability/log';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { GRAPHS, iri, lit } from '../../../services/main/src/modules/work/activate.ts';
+import { MediaStore } from '../../../services/main/src/modules/media/store.ts';
 import { StructureProgressStore, StaleStructureProgress } from '../../../services/main/src/modules/progress/store.ts';
 import { prepareLibraryShelves, readShelfMetadata, SHELF_METADATA_COST } from '../../../services/main/src/modules/library/backfill.ts';
 import { ReaderLibraryStatusStore, STATUS_SHELF_COST, type ReadingStatus, type ShelfOrder, type ShelfSort }
@@ -123,7 +124,9 @@ test('G-824: 1,000 Works traverse each status in every SQL sort/direction withou
       expect(readyOwned.items.every(item => item.card?.id === item.work)).toBe(true);
       const publicPath = `/v1/agents/${agent.slice(-36)}/shelves`;
       const faults = spyOn(observability, 'logWorkerFault');
-      const avatars = spyOn(home.deps.media.store, 'avatarRows');
+      // The read can select the composition's Media owner, so observe every
+      // real store instance without replacing its validation or hydration.
+      const avatars = spyOn(MediaStore.prototype, 'avatarRows');
       let publicResponse: Response;
       try {
         publicResponse = await home.call('GET', publicPath);
