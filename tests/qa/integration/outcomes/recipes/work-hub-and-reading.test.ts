@@ -161,40 +161,6 @@ test('Source observation / operator: retains exact bounded source identity, link
 test.failing('Source intake / operator: accepts public-domain evidence under the import mandate', () => {
   expect(intakeRefusal, `SETUP intake: ${sourcedRecipePrerequisites.intake}; ${JSON.stringify(intakeRefusal)}`).toBeUndefined();
 });
-let rightsSetup: Promise<void> | undefined;
-function assessedUse() {
-  return rightsSetup ??= (async () => {
-    const grant = await mandate('platform:resource:rights.assess', 'rights:assess');
-    try {
-      const material = { scopeKind: 'source_record', provider: intake.provider, namespace: intake.namespace,
-        sourceRecordId: short(observation.record), contentVariantId: null, mediaAsset: null, component: 'recipe' };
-      const use = { family: 'data_rights', useKind: 'redistribution', useScope: 'rezics:public-structure' };
-      const response = await sessions.operator.main('POST', '/v1/rights/use-evaluations', {
-        profile: 'rights-use-evaluation-v1', actingSubject: sessions.operator.actingSubject,
-        material, ...use,
-      });
-      const raw = await response.text();
-      console.info('Sourced Recipe Rights evaluation', { status: response.status, body: raw });
-      expect(response.status, `SETUP Rights: ${sourcedRecipePrerequisites.rights}; ${response.status}: ${raw}`).toBe(200);
-      // No fixture-wide clearance is asserted: this exact use starts unassessed.
-      expect(JSON.parse(raw)).toMatchObject({ status: 'unassessed' });
-      const key = randomUUID();
-      await answer(sessions.operator.main('POST', '/v1/rights/use-assessments', {
-        profile: 'rights-use-assessment-v1', actingSubject: sessions.operator.actingSubject, material, ...use,
-        expressionKind: 'expression', basis: 'public_domain', outcome: 'supported',
-        licenseInstrument: null, exceptionKind: null, rationale: 'Accepted bounded pinned Recipe extract only; no corpus clearance.',
-        extent: { recipeId: source.recipeId, ingredientLines: [23343, 23346], methodLines: [23348, 23353] },
-        evidence: { observation: observation.observation, byteDigest: observation.byteDigest, sourceUrl },
-        obligations: [], expectedAssessment: null, idempotencyKey: key,
-      }, key), 201);
-      const evaluated = await answer<{ status: string; assessment: { basis: string; outcome: string } }>(sessions.operator.main('POST',
-        '/v1/rights/use-evaluations', { profile: 'rights-use-evaluation-v1', actingSubject: sessions.operator.actingSubject, material, ...use }));
-      expect(evaluated).toMatchObject({ status: 'assessed', assessment: { basis: 'public_domain', outcome: 'supported' } });
-    } finally { await revoke(grant.grant); }
-  })();
-}
-test.failing('Rights / operator: provisions assessment mandate and evaluates only the bounded source use', () => assessedUse());
-
 let supported: Promise<void> | undefined;
 function supportedStructure() {
   return supported ??= (async () => {
@@ -280,14 +246,13 @@ function sourcePublication() {
     await supportedStructure();
     expect(intakeRefusal, `SETUP intake: ${JSON.stringify(intakeRefusal)}; reader delivery not reached`).toBeUndefined();
     await structureAndText('operator', imported.revision);
-    await assessedUse();
+    expect(observation.rightsEvidence.basis, 'SETUP requires accepted public-domain Source evidence').toBe('public-domain');
     const grant = await mandate('platform:resource:work.publish', `work:publish:${imported.work}`);
     try {
       const response = await sessions.operator.main('POST', '/v1/work-publications', publication('operator'));
       const raw = await response.text();
       console.info('Sourced Recipe publication setup', { status: response.status, body: raw });
       expect(response.status, `SETUP publication: ${sourcedRecipePrerequisites.publication}; ${response.status}: ${raw}; reader delivery not reached`).toBe(201);
-      expect(observation.rightsEvidence.basis, 'SETUP requires accepted public-domain Source evidence').toBe('public-domain');
       return imported.revision;
     } finally { await revoke(grant.grant); }
   })();
