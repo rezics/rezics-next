@@ -169,7 +169,7 @@ async function prepareSurface() {
   const params = new URLSearchParams({ q: phrase, realm: sessions.realm, limit: '1' });
   const page = await answer<CataloguePage>(sessions.visitor.main('GET', `/v1/search/catalogue?${params}`));
   expect(page.results).toHaveLength(1);
-  expect(page.count).toEqual({ value: publications.length, precision: 'exact' });
+  expect(page.count).toEqual({ value: 1, precision: 'lower-bound' });
   expect(page.next).not.toBeNull();
   continuation = page.next!;
   await independent(sessions.visitor);
@@ -217,9 +217,11 @@ async function delivered(name: PersonaName) {
   do {
     page = await answer<CataloguePage>(person.main('GET', `/v1/search/catalogue?${global}`));
     seen.push(...page.results.map(result => result.work));
-    expect(page.count).toEqual({ value: publications.length, precision: 'exact' });
+    expect(page.count).toEqual({ value: seen.length, precision: page.next ? 'lower-bound' : 'exact' });
     if (page.next) global.set('cursor', page.next);
   } while (page.next);
+  expect(page.count).toEqual({ value: publications.length, precision: 'exact' });
+  expect(page.next).toBeNull();
   expect(seen.sort()).toEqual(publications.map(publication => publication.work).sort());
   const typeahead = await answer<unknown>(
     person.main('GET', `/v1/search/typeahead?prefix=${encodeURIComponent(phrase)}`),
