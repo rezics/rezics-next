@@ -165,15 +165,20 @@ test('a signed-in Zone Work page looks up its attached Realm discussion through 
       expectedHead: a.site.navigationRevision, target: collection, routeSegment: 'guide', disclosure: 'public', actingSubject: actor,
     });
     const variantId = `urn:rezics:variant:${randomUUID()}`;
+    await command('PUT', `zones/${local(a.site.zone)}/configuration`, {
+      expectedHead: (await readZoneConfiguration(runtime.environment, a.site.zone)).revision,
+      prepareHomeDocument: true, actingSubject: actor,
+    });
+    const homeDocument = (await readZoneConfiguration(runtime.environment, a.site.zone)).homeDocument!;
     const draft = await post<{ revisionId: string; byteDigest: string; sourcePosition: { dataEpoch: string } }>('content-drafts', {
-      profile: 'content-text-v1', resourceId: a.site.zone, variantId, expectedHead: null,
+      profile: 'content-text-v1', resourceId: homeDocument, variantId, expectedHead: null,
       document: fromPlainText('Harbor annex home', 'blocks'),
       language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr', actingSubject: actor,
     });
     await post(`zones/${local(a.site.zone)}/site-publications`, {
       expectedHead: (await readZoneConfiguration(runtime.environment, a.site.zone)).revision,
       routesRevision: mounted.revision, navigationRevision: mounted.revision, actingSubject: actor,
-      pages: [{ page: a.site.zone, variantId, revisionId: draft.revisionId, byteDigest: draft.byteDigest,
+      pages: [{ page: homeDocument, variantId, revisionId: draft.revisionId, byteDigest: draft.byteDigest,
         contentEpoch: draft.sourcePosition.dataEpoch }],
     });
     // The browser selects two directly controlled Persons of the same Account.

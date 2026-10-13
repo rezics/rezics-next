@@ -61,8 +61,12 @@ export async function publicNavigationFixture() {
         capabilities: ['zone'], visibility: 'public', actingSubject: actor }), 201);
     await grant(`zone:edit:${created.zone}`, 'zone.edit');
     const path = `/v1/zones/${shortId(created.zone)}`;
-    const configuration = async () => f.json<{ revision: string; configuration: { navigation: string } }>(
+    const configuration = async () => f.json<{ revision: string; configuration: { navigation: string; homeDocument?: string } }>(
       await call('GET', `${path}/configuration?actingSubject=${encodeURIComponent(actor)}`), 200);
+    await f.json(await call('PUT', `${path}/configuration`, {
+      expectedHead: (await configuration()).revision, prepareHomeDocument: true, actingSubject: actor,
+    }), 200);
+    const homeDocument = (await configuration()).configuration.homeDocument!;
     const navigation = (await configuration()).configuration.navigation;
     const collection = nativeId();
     await grant(`collection:edit:${collection}`, 'collection.edit');
@@ -111,11 +115,11 @@ export async function publicNavigationFixture() {
     const save = async (previous?: PageSelection): Promise<PageSelection> => {
       const variantId = previous?.variantId ?? `urn:rezics:variant:${randomUUID()}`;
       const draft = await f.json<Draft>(await call('POST', '/v1/content-drafts', {
-        profile: 'content-text-v1', resourceId: created.zone, variantId,
+        profile: 'content-text-v1', resourceId: homeDocument, variantId,
         expectedHead: previous?.revisionId ?? null, document: fromPlainText(previous ? 'Later private home draft' : 'Published home', 'blocks'),
         language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr', actingSubject: actor,
       }), 201);
-      return { page: created.zone, variantId, revisionId: draft.revisionId,
+      return { page: homeDocument, variantId, revisionId: draft.revisionId,
         byteDigest: draft.byteDigest, contentEpoch: draft.sourcePosition.dataEpoch };
     };
     const publish = async (navigationRevision: string, page: PageSelection) => f.json<{ revision: string }>(

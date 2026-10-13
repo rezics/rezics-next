@@ -62,6 +62,7 @@ const row = (values: Record<string, string>) => Object.fromEntries(Object.entrie
  * transport are simulated so every write and unexpected read fails the test. */
 async function savedSite(mountCount = 1, foreignMount = false) {
   const zone = id(), actor = id(), space = id(), navigation = id(), revision = id(), navRevision = id();
+  const homeDocument = id(), homeRevision = id();
   const publishedRevision = id(), publishedNav = id(), publishedContent = randomUUID();
   const admissionId = randomUUID(), receipt = compositionReceiptIri(admissionId, 'zone.edit');
   const variantId = `urn:rezics:variant:${randomUUID()}`, contentRevision = randomUUID();
@@ -74,7 +75,7 @@ async function savedSite(mountCount = 1, foreignMount = false) {
   const presentation = { ...DEFAULT_ZONE_PRESENTATION, modules: [], slides: [],
     tokens: { ...DEFAULT_ZONE_PRESENTATION.tokens, density: 'compact' as const, pageSurface: 'cards' as const },
     navigation: [{ label: 'Saved menu', href: '/saved' }] };
-  const configuration = { format: ZONE_CONFIG_FORMAT, zone, space, navigation, state: 'active' as const,
+  const configuration = { format: ZONE_CONFIG_FORMAT, zone, space, navigation, homeDocument, state: 'active' as const,
     disclosure: 'public' as const, presentation, budget: { timeMs: 2000, rows: 1000 }, queryBlocks: [], model: ZONE_PROFILE };
   const manifest = `urn:rezics:sha256:${await prepareWorkComponent(objects, zone,
     { configuration, name: 'Draft site', language: 'en' }, ZONE_PROFILE)}`;
@@ -106,7 +107,7 @@ async function savedSite(mountCount = 1, foreignMount = false) {
   ] } });
   const body = { document }, serializedJson = JSON.stringify(body);
   const exact: ExactReadResult = { status: 'available', revisionId: contentRevision, body, serializedJson,
-    reference: { owner: 'content', resourceId: zone, variantId, revisionId: contentRevision,
+    reference: { owner: 'content', resourceId: homeDocument, variantId, revisionId: contentRevision,
       format: 'rezics-content-json-v1', model: 'content-shape-v1', byteDigest: createHash('sha256').update(serializedJson).digest('hex'),
       byteLength: Buffer.byteLength(serializedJson), direction: 'ltr', language: { kind: 'tag', tag: 'en', originalTag: 'en' },
       sourceRevision: null, predecessor: null, provenance: {} } };
@@ -130,15 +131,16 @@ async function savedSite(mountCount = 1, foreignMount = false) {
       state.configReads++;
       return { results: { bindings: [row({ space, navigation,
         head: state.moved === 'configuration' && state.bodyReads ? id() : revision,
-        manifest, state: RV + 'Active', spaceDisclosure: RV + 'Public', presentation: ZONE_PRESENTATION_PROFILE,
+        manifest, homeDocument, homeRevision, state: RV + 'Active', spaceDisclosure: RV + 'Public', presentation: ZONE_PRESENTATION_PROFILE,
         publication: publishedRevision })] } };
     }
     if (query.includes('SELECT ?receipt')) return { results: { bindings: [row({ receipt })] } };
     if (query.includes('SELECT ?zone ?revision ?routesRevision')) return { results: { bindings: [row({
       zone, revision: publishedRevision, routesRevision: publishedNav, navigationRevision: publishedNav,
       themeRevision: publishedRevision, count: '1', admissionId, digest: 'a'.repeat(64), authorityEpoch: '1',
-      scope: `zone:edit:${zone}`, dataEpoch: 'epoch', sequence: '1', page: zone, variant: variantId,
-      binding: zonePublishedPageBinding(publishedRevision, zone, publishedContent),
+      scope: `zone:edit:${zone}`, dataEpoch: 'epoch', sequence: '1', page: homeDocument, variant: variantId,
+      homeDocument, homeRevision, byteDigest: exact.reference.byteDigest,
+      binding: zonePublishedPageBinding(publishedRevision, homeDocument, publishedContent),
       contentRevision: `urn:rezics:content:revision:${publishedContent}`, language: 'en',
     })] } };
     if (query.includes('SELECT ?admission ?receipt ?digest')) return { results: { bindings: [row({
@@ -185,7 +187,7 @@ async function savedSite(mountCount = 1, foreignMount = false) {
   configureFixtureDisclosureAncestry(work.environment, () => undefined);
   configureDisclosure(work.environment, fixtureDisclosureReader(async targets => targets.map(() => 'visible')));
   const app = zoneRoutes(fuseki, work);
-  return { work, state, zone, variantId, contentRevision, navRevision, records, document, publishedContent,
+  return { work, state, zone, homeDocument, variantId, contentRevision, navRevision, records, document, publishedContent,
     read: (input: { anonymous?: boolean; after?: string } = {}) => app.handle(new Request(
       `http://main.local/v1/zones/${zone.slice(-36)}/showcase-editor?actingSubject=${encodeURIComponent(actor)}`
         + (input.after ? `&after=${encodeURIComponent(input.after)}` : ''),
@@ -195,8 +197,8 @@ async function savedSite(mountCount = 1, foreignMount = false) {
 test('saved site preview resolves the page, local campaign, structural tokens and current navigation without publishing', async () => {
   const f = await savedSite();
   const before = await readZonePublication(f.work.environment, f.zone);
-  expect(await isZonePublishedPageRevision(f.work.environment, f.zone, f.zone, f.publishedContent)).toBe(true);
-  expect(await isZonePublishedPageRevision(f.work.environment, f.zone, f.zone, f.contentRevision)).toBe(false);
+  expect(await isZonePublishedPageRevision(f.work.environment, f.zone, f.homeDocument, f.publishedContent)).toBe(true);
+  expect(await isZonePublishedPageRevision(f.work.environment, f.zone, f.homeDocument, f.contentRevision)).toBe(false);
   const response = await f.read();
   expect(response.status).toBe(200);
   expect(response.headers.get('cache-control')).toBe('no-store');
@@ -210,8 +212,8 @@ test('saved site preview resolves the page, local campaign, structural tokens an
   expect(result.preview.renderTokens).toMatchObject({ density: 'compact', pageSurface: 'cards' });
   expect(result.preview.navigation).toMatchObject({ revision: f.navRevision, mounts: f.records, next: null });
   expect(await readZonePublication(f.work.environment, f.zone)).toEqual(before);
-  expect(await isZonePublishedPageRevision(f.work.environment, f.zone, f.zone, f.contentRevision)).toBe(false);
-  expect(await isZonePublishedPageRevision(f.work.environment, f.zone, f.zone, f.publishedContent)).toBe(true);
+  expect(await isZonePublishedPageRevision(f.work.environment, f.zone, f.homeDocument, f.contentRevision)).toBe(false);
+  expect(await isZonePublishedPageRevision(f.work.environment, f.zone, f.homeDocument, f.publishedContent)).toBe(true);
 });
 
 test('anonymous and revoked viewers cannot read saved draft bytes', async () => {

@@ -159,13 +159,18 @@ test('campaign bytes follow the exact published local Showcase instead of config
     return body;
   };
   const variantId = `urn:rezics:variant:${randomUUID()}`;
+  await json(await f.moderator.send('PUT', `${f.path}/configuration`, {
+    expectedHead: (await readZoneConfiguration(f.env, f.zone)).revision,
+    prepareHomeDocument: true, actingSubject: f.moderator.actor,
+  }));
+  const homeDocument = (await readZoneConfiguration(f.env, f.zone)).homeDocument!;
   const save = async (body: DocumentSnapshot, expectedHead: string | null,
     targetVariantId = variantId, language = 'en') => {
     const saved = await json<{ revisionId: string; byteDigest: string; sourcePosition: { dataEpoch: string } }>(
-      await f.moderator.send('POST', '/v1/content-drafts', { profile: 'content-text-v1', resourceId: f.zone,
+      await f.moderator.send('POST', '/v1/content-drafts', { profile: 'content-text-v1', resourceId: homeDocument,
         variantId: targetVariantId, expectedHead, document: body, language: { kind: 'tag', tag: language, originalTag: language },
         direction: 'ltr', actingSubject: f.moderator.actor }), 201);
-    return { page: f.zone, variantId: targetVariantId, revisionId: saved.revisionId,
+    return { page: homeDocument, variantId: targetVariantId, revisionId: saved.revisionId,
       byteDigest: saved.byteDigest, contentEpoch: saved.sourcePosition.dataEpoch };
   };
   const publish = async (page: Awaited<ReturnType<typeof save>> | Array<Awaited<ReturnType<typeof save>>>) => json(await f.moderator.send('POST',

@@ -148,14 +148,19 @@ for (const mountCount of [16, 1000]) test(`published Zone routes seek one retain
         position: 'last', target: collection,
         qualifier: { type: 'zone-mount', zone, routeSegment: segment, disclosure, key } });
     const variantId = `urn:rezics:variant:${randomUUID()}`;
+    await f.json(await call('PUT', `/v1/zones/${shortId(zone)}/configuration`, {
+      expectedHead: (await readZoneConfiguration(f.env, zone)).revision,
+      prepareHomeDocument: true, actingSubject: f.actor,
+    }), 200);
+    const homeDocument = (await readZoneConfiguration(f.env, zone)).homeDocument!;
     const saved = await f.json<{ revisionId: string; byteDigest: string; sourcePosition: { dataEpoch: string } }>(
-      await call('POST', '/v1/content-drafts', { profile: 'content-text-v1', resourceId: zone,
+      await call('POST', '/v1/content-drafts', { profile: 'content-text-v1', resourceId: homeDocument,
         variantId, expectedHead: null, document: fromPlainText('Published keyed route home', 'blocks'),
         language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr', actingSubject: f.actor }), 201);
     const sitePublication = async () => ({
       routesRevision: head, navigationRevision: head,
       expectedHead: (await readZoneConfiguration(f.env, zone)).revision, actingSubject: f.actor,
-      pages: [{ page: zone, variantId, revisionId: saved.revisionId,
+      pages: [{ page: homeDocument, variantId, revisionId: saved.revisionId,
         byteDigest: saved.byteDigest, contentEpoch: saved.sourcePosition.dataEpoch }],
     });
     const publishAt = async (idempotencyKey: string, body: Awaited<ReturnType<typeof sitePublication>>,

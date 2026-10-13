@@ -143,15 +143,16 @@ test('campaign art across slides fits one 64-Use rendition batch', () => {
 function publishedHomeFixture() {
   const directory = mkdtempSync('.temp/zone-campaign-home-');
   const zone = one, realm = id(randomUUID()), revision = id(randomUUID());
+  const homeDocument = id(randomUUID()), homeRevision = id(randomUUID());
   const presentation = { ...DEFAULT_ZONE_PRESENTATION,
     slides: [{ id: 'configuration', href: '/configuration', art: { landscape: { use: two } } }] };
-  const config = { ...JSON.parse(configuration(presentation).toString()), defaultRealm: realm };
+  const config = { ...JSON.parse(configuration(presentation).toString()), defaultRealm: realm, homeDocument };
   const manifest = `urn:rezics:sha256:${prepareComponent(directory, zone,
     { configuration: config, name: 'Selected home', language: 'en' }, ZONE_PROFILE)}`;
   const admissionId = randomUUID(), receipt = compositionReceiptIri(admissionId, 'zone.edit');
-  const pages = ['en', 'ja'].map(language => ({ page: zone,
+  const pages = ['en', 'ja'].map(language => ({ page: homeDocument,
     variantId: `urn:rezics:variant:${randomUUID()}`, revisionId: randomUUID(), language }));
-  const draft = { page: zone, variantId: `urn:rezics:variant:${randomUUID()}`,
+  const draft = { page: homeDocument, variantId: `urn:rezics:variant:${randomUUID()}`,
     revisionId: randomUUID(), language: 'ja' };
   const document = parseDocument({ version: documentVersion, profile: 'blocks', doc: { type: 'doc',
     content: [{ type: 'extensionBlock', attrs: { id: 'curated',
@@ -176,22 +177,29 @@ function publishedHomeFixture() {
         space: two, navigation: three, head: revision, manifest, state: `${RV}Active`,
         disclosure: `${RV}Public`, spaceDisclosure: `${RV}Public`, realm,
         presentation: ZONE_PRESENTATION_PROFILE, publication: revision,
+        homeDocument, homeRevision,
       })] } };
       if (query.includes('SELECT ?receipt')) return { results: { bindings: [{ receipt: term(receipt) }] } };
       if (query.includes('SELECT ?zone ?revision ?routesRevision')) return { results: { bindings:
         pages.map(page => row({ zone, revision, routesRevision: revision, navigationRevision: revision,
           themeRevision: revision, count: String(pages.length), admissionId, digest: 'a'.repeat(64),
           authorityEpoch: 'authority', scope: `zone:edit:${zone}`, dataEpoch: 'epoch', sequence: '1',
-          binding: zonePublishedPageBinding(revision, zone, page.revisionId), page: zone,
+          homeDocument, homeRevision, byteDigest,
+          binding: zonePublishedPageBinding(revision, homeDocument, page.revisionId), page: homeDocument,
           variant: page.variantId, contentRevision: `urn:rezics:content:revision:${page.revisionId}`,
           language: page.language })) } };
       if (query.includes('SELECT ?manifest')) return { results: { bindings: [{ manifest: term(manifest) }] } };
+      if (query.includes('?zoneDisclosure ?listing')) return { results: { bindings: [row({
+        target: zone, kind: 'space', space: two, disclosure: `${RV}Public`,
+        zoneDisclosure: `${RV}Public`, listing: 'listed',
+      })] } };
       if (query.includes('SELECT ?target')) return { results: { bindings: mutable.erased
         ? [{ target: term(`urn:rezics:content:revision:${reads.at(-1)![0]}`) }] : [] } };
       if (query.includes('rv:admittedScope') && query.includes('ASK')) {
         membershipQueries.push(query);
         return { boolean: mutable.membership };
       }
+      if (query.includes('ASK') && query.includes('rv:ErasedRevision')) return { boolean: mutable.erased };
       if (query.includes('ASK')) return { boolean: true };
       throw new Error(`Unexpected home owner query: ${query}`);
     } } } as unknown as WorkActivationEnvironment;
@@ -201,7 +209,7 @@ function publishedHomeFixture() {
     const page = [...pages, draft].find(candidate => candidate.revisionId === ids[0])!;
     if (mutable.contentStatus !== 'available') return [{ revisionId: page.revisionId, status: 'erased' }];
     return [{ status: 'available', revisionId: page.revisionId, body, serializedJson,
-      reference: { owner: 'content', resourceId: mutable.returnedResource || zone,
+      reference: { owner: 'content', resourceId: mutable.returnedResource || homeDocument,
         variantId: mutable.returnedVariant || page.variantId, revisionId: page.revisionId,
         format: 'rezics-content-json-v1', model: 'content-shape-v1', byteDigest,
         byteLength: Buffer.byteLength(serializedJson), direction: 'ltr',
@@ -224,7 +232,7 @@ test('published home selects one exact language revision and preserves Content-l
     const state = await readZonePublication(f.work.environment, f.zone);
     const home = await readZonePublishedHomeContent(f.work, state, ['ja']);
     expect(f.reads).toEqual([[f.pages[1]!.revisionId]]);
-    expect(home!.page).toEqual(f.pages[1]!);
+    expect(home!.page).toEqual({ ...f.pages[1]!, byteDigest: hash(f.serializedJson) });
     expect(home!.reference.variantId).toBe(f.pages[1]!.variantId);
     expect(zoneDocumentShowcase(home!.document)!.payload['rv:slides'])
       .toEqual([{ id: 'content', href: '/content', art: { landscape: { use: three } } }]);
@@ -242,7 +250,7 @@ test('explicit published home variant selects the exact revision despite a diffe
     const state = await readZonePublication(f.work.environment, f.zone);
     const selected = f.pages[1]!;
     const home = await readZonePublishedHomeContent(f.work, state, ['en'], selected.variantId);
-    expect(home!.page).toEqual(selected);
+    expect(home!.page).toEqual({ ...selected, byteDigest: hash(f.serializedJson) });
     expect(home!.reference.variantId).toBe(selected.variantId);
     expect(f.reads).toEqual([[selected.revisionId]]);
     expect(JSON.stringify({ document: home!.document })).toBe(f.serializedJson);
@@ -308,10 +316,15 @@ test('campaign exact Content selection keeps the renderer language preference th
     const reader = { ...bindZoneCampaignReader({}, new Request('https://main.test/media', {
       headers: { 'x-rezics-display-languages': 'ja,en', 'accept-language': 'en' },
     })) };
-    f.mutable.contentStatus = 'erased';
+    const readExact = f.work.content!.readExactBatch.bind(f.work.content);
+    f.work.content!.readExactBatch = async (...args) => {
+      const result = await readExact(...args);
+      f.mutable.membership = false;
+      return result;
+    };
     expect(await currentZoneCampaignUses(f.work.environment, f.zone, reader, f.realm)).toEqual(new Set());
     expect(f.reads).toEqual([[f.pages[1]!.revisionId]]);
-    expect(f.membershipQueries).toHaveLength(1);
+    expect(f.membershipQueries).toHaveLength(2);
   } finally { f.close(); }
 });
 
@@ -323,10 +336,15 @@ test('campaign URL variant survives reader composition and overrides browser Eng
       `https://main.test/media?zone=${encodeURIComponent(f.zone)}&zoneVariant=${encodeURIComponent(f.pages[1]!.variantId)}`, {
         headers: { 'accept-language': 'en' },
       })) };
-    f.mutable.contentStatus = 'erased';
+    const readExact = f.work.content!.readExactBatch.bind(f.work.content);
+    f.work.content!.readExactBatch = async (...args) => {
+      const result = await readExact(...args);
+      f.mutable.membership = false;
+      return result;
+    };
     expect(await currentZoneCampaignUses(f.work.environment, f.zone, reader, f.realm)).toEqual(new Set());
     expect(f.reads).toEqual([[f.pages[1]!.revisionId]]);
-    expect(f.membershipQueries).toHaveLength(1);
+    expect(f.membershipQueries).toHaveLength(2);
   } finally { f.close(); }
 });
 
@@ -364,7 +382,11 @@ for (const failure of ['wrong-variant', 'wrong-resource', 'content-erased', 'gra
           return result;
         };
       }
-      await expect(readZonePublishedHomeContent(f.work, state)).rejects.toBeInstanceOf(ZoneUnavailable);
+      if (failure === 'content-erased' || failure === 'graph-erased') {
+        expect(await readZonePublishedHomeContent(f.work, state)).toBeNull();
+      } else {
+        await expect(readZonePublishedHomeContent(f.work, state)).rejects.toBeInstanceOf(ZoneUnavailable);
+      }
       expect(f.reads).toHaveLength(1);
       expect(f.reads[0]).toHaveLength(1);
     } finally { f.close(); }

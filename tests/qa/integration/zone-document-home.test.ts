@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { AsyncResource } from 'node:async_hooks';
 import { createHash, randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { Pool } from 'pg';
@@ -59,6 +60,7 @@ async function fixture(initialDocument = fromPlainText('Published home', 'blocks
   const f = await authorCreditFixture(Bun.env as Record<string, string>,
     resolve('.temp', `zone-document-home-${randomUUID()}`),
     [fixtureScopes, ...additionalScopes].join(' '));
+  const revocationContext = new AsyncResource('zone-editor-revocation');
   try {
     const accountPool = new Pool({ connectionString: Bun.env.ACCOUNT_DATABASE_URL });
     try {
@@ -117,7 +119,7 @@ async function fixture(initialDocument = fromPlainText('Published home', 'blocks
     let revokeBeforeSwitch = false;
     let lateZoneGrant: string | null = null;
     let siteSpace: string | null = null;
-    const revokeEditor = async () => {
+    const revokeEditor = () => revocationContext.runInAsyncScope(async () => {
       // Stewardship can change while the Agent retains its final controller.
       // Removing that controller would test controller continuity instead.
       const replacement = nativeId();
@@ -129,13 +131,13 @@ async function fixture(initialDocument = fromPlainText('Published home', 'blocks
         INSERT { GRAPH ${iri(GRAPHS.current)} { ${iri(siteSpace!)} rv:owner ${iri(replacement)} } }
         WHERE { GRAPH ${iri(GRAPHS.current)} { ${iri(siteSpace!)} rv:owner ${iri(f.actor)} } }`);
       await f.accessPool.query('UPDATE access.permission_grant SET active = false WHERE id = $1', [lateZoneGrant]);
-    };
+    });
     const access = new Proxy(f.access, { get(target, property) {
       if (property === 'withOwnerAuthority') return async (...args: Parameters<typeof target.withOwnerAuthority>) => {
         if (revokeBeforeSwitch && args[0].action === 'zone.edit') {
           revokeBeforeSwitch = false;
-          // The Content pin's authority transaction has ended. Revoke before
-          // the final switch acquires its own authority fence, avoiding a lock race.
+          // Revoke as another actor, outside the publication's preserved
+          // Access checkout, before the final Zone authority fence.
           await revokeEditor();
         }
         return target.withOwnerAuthority(...args);
@@ -160,9 +162,14 @@ async function fixture(initialDocument = fromPlainText('Published home', 'blocks
     lateZoneGrant = zoneGrant;
     siteSpace = created.space;
     const path = `/v1/zones/${shortId(created.zone)}`;
+    await f.json(await call('PUT', `${path}/configuration`, {
+      expectedHead: (await readZoneConfiguration(f.env, created.zone)).revision,
+      prepareHomeDocument: true, actingSubject: f.actor,
+    }), 200);
+    const homeDocument = (await readZoneConfiguration(f.env, created.zone)).homeDocument!;
     const save = async (document = fromPlainText('Published home', 'blocks'),
       expectedHead: string | null = null, variantId = `urn:rezics:variant:${randomUUID()}`,
-      resourceId = created.zone, language = 'en'): Promise<SelectedPage> => {
+      resourceId = homeDocument, language = 'en'): Promise<SelectedPage> => {
       const saved = await f.json<SavedDraft>(await call('POST', '/v1/content-drafts', {
         profile: 'content-text-v1', resourceId, variantId, expectedHead, document,
         language: { kind: 'tag', tag: language, originalTag: language }, direction: 'ltr', actingSubject: f.actor,
@@ -186,7 +193,7 @@ async function fixture(initialDocument = fromPlainText('Published home', 'blocks
     // Earlier fixtures' raw stewardship writes invalidate native completion.
     // Restore it during controlled preparation before this fixture's requests.
     expect((await normalizeStoredMembership(f.env)).complete).toBe(true);
-    return { ...f, ...created, zoneGrant, controlId, path, selection, initialDocument, publish, save, call, home, exact, content, initialContentPosition,
+    return { ...f, close: async () => { revocationContext.emitDestroy(); await f.close(); }, ...created, homeDocument, zoneGrant, controlId, path, selection, initialDocument, publish, save, call, home, exact, content, initialContentPosition,
       revokeBeforeSwitch: () => { revokeBeforeSwitch = true; },
       revokeEditor,
       switchRevocationConsumed: () => !revokeBeforeSwitch,
@@ -195,7 +202,7 @@ async function fixture(initialDocument = fromPlainText('Published home', 'blocks
       failSecondRejection: () => { failRejectionAt = 2; },
       loseDraftResponse: () => { loseDraftResponse = true; },
       failSecondPreparation: () => { failPreparationAt = 2; } };
-  } catch (error) { await f.close(); throw error; }
+  } catch (error) { revocationContext.emitDestroy(); await f.close(); throw error; }
 }
 
 async function reconcileSiteEvents(f: Awaited<ReturnType<typeof fixture>>, terminalType: string) {
@@ -345,7 +352,7 @@ test('anonymous home language preferences select only exact variants in the publ
   try {
     const english = f.selection.pages[0]!;
     const frenchDocument = fromPlainText('Accueil publié', 'blocks');
-    const french = await f.save(frenchDocument, null, `urn:rezics:variant:${randomUUID()}`, f.zone, 'fr');
+    const french = await f.save(frenchDocument, null, `urn:rezics:variant:${randomUUID()}`, f.homeDocument, 'fr');
     const receipt = await f.json<ZoneSitePublicationReceipt>(await f.publish([english, french]), 201);
     expect(receipt.pages).toEqual(expect.arrayContaining([
       expect.objectContaining({ revisionId: english.revisionId, language: 'en' }),
@@ -356,7 +363,7 @@ test('anonymous home language preferences select only exact variants in the publ
     expect((await f.home(preferred)).page).toMatchObject({ reference: { revisionId: french.revisionId },
       document: frenchDocument });
     const preview = await f.save(fromPlainText('Brouillon privé', 'blocks'), french.revisionId,
-      french.variantId, f.zone, 'fr');
+      french.variantId, f.homeDocument, 'fr');
     expect((await f.exact(preview.revisionId)).status).toBe(404);
     expect((await f.home(preferred)).page?.reference.revisionId).toBe(french.revisionId);
     const presentation = await f.json<{ home?: Home['page'] }>(await f.call('GET', `${f.path}/presentation`,
@@ -379,21 +386,21 @@ test('Content Showcase save replays exact bytes, rejects stale heads and publish
         definition: 'https://rezics.com/definition/showcase-block-v1', version: '99',
         payload: { opaque: ['留存', null] }, fallback: 'Future highlights' } },
     );
-    const body = { profile: 'content-text-v1', resourceId: f.zone, variantId: original.variantId,
+    const body = { profile: 'content-text-v1', resourceId: f.homeDocument, variantId: original.variantId,
       expectedHead: original.revisionId, document,
       language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr', actingSubject: f.actor };
     const zoneHead = (await readZoneConfiguration(f.env, f.zone)).revision;
     const key = randomUUID();
     f.loseDraftResponse();
     expect((await f.call('POST', '/v1/content-drafts', body, key)).status).toBe(503);
-    const committed = await f.content.readDraftHead(f.zone, original.variantId);
+    const committed = await f.content.readDraftHead(f.homeDocument, original.variantId);
     expect(committed?.revisionId).not.toBe(original.revisionId);
     const committedPosition = await f.content.ownerPosition();
     const saved = await f.json<SavedDraft>(await f.call('POST', '/v1/content-drafts', body, key), 200);
     expect(saved).toMatchObject({ revisionId: committed?.revisionId, predecessor: original.revisionId, replayed: true });
     expect(await f.content.ownerPosition()).toEqual(committedPosition);
     expect((await readZoneConfiguration(f.env, f.zone)).revision).toBe(zoneHead);
-    const page: SelectedPage = { page: f.zone, variantId: original.variantId, revisionId: saved.revisionId,
+    const page: SelectedPage = { page: f.homeDocument, variantId: original.variantId, revisionId: saved.revisionId,
       byteDigest: saved.byteDigest, contentEpoch: saved.sourcePosition.dataEpoch };
     const editor = async () => f.json<{ revision: string; configuration: { presentation: ZonePresentation };
       draft: { variantId: string; revisionId: string | null; document: DocumentSnapshot | null; byteDigest: string | null;
@@ -420,7 +427,7 @@ test('Content Showcase save replays exact bytes, rejects stale heads and publish
     const stale = await f.json<{ code: string; currentHead: string }>(
       await f.call('POST', '/v1/content-drafts', changedRetry), 409);
     expect(stale).toMatchObject({ code: 'stale_head', currentHead: page.revisionId });
-    expect((await f.content.readDraftHead(f.zone, original.variantId))?.revisionId).toBe(page.revisionId);
+    expect((await f.content.readDraftHead(f.homeDocument, original.variantId))?.revisionId).toBe(page.revisionId);
 
     const conflicting: ZonePresentation = { ...DEFAULT_ZONE_PRESENTATION,
       tokens: { ...DEFAULT_ZONE_PRESENTATION.tokens, titleEffect: 'glow' },
@@ -434,7 +441,7 @@ test('Content Showcase save replays exact bytes, rejects stale heads and publish
     const publishedEditor = await editor();
     expect(publishedEditor.revision).toBe(receipt.revision);
     expect(publishedEditor.configuration.presentation).toEqual(conflicting);
-    expect(publishedEditor.publishedPage).toMatchObject({ page: f.zone, variantId: page.variantId, revisionId: page.revisionId });
+    expect(publishedEditor.publishedPage).toMatchObject({ page: f.homeDocument, variantId: page.variantId, revisionId: page.revisionId });
     const home = await f.home();
     expect(home.page).toMatchObject({ reference: { revisionId: page.revisionId }, document });
     expect(home.page?.blocks).toEqual(expect.arrayContaining([
@@ -499,13 +506,18 @@ test('site publication rejects nonexistent, unrelated, wrongly selected and stal
       profile: 'space-zone-v1', name: 'Another independent site', capabilities: ['zone'], actingSubject: f.actor,
     }), 201);
     await f.grant(`zone:edit:${other.zone}`, 'zone.edit');
+    await f.json(await f.call('PUT', `/v1/zones/${shortId(other.zone)}/configuration`, {
+      expectedHead: (await readZoneConfiguration(f.env, other.zone)).revision,
+      prepareHomeDocument: true, actingSubject: f.actor,
+    }), 200);
+    const otherHome = (await readZoneConfiguration(f.env, other.zone)).homeDocument!;
     const foreign = await f.save(fromPlainText('Foreign page', 'blocks'), null,
-      `urn:rezics:variant:${randomUUID()}`, other.zone);
+      `urn:rezics:variant:${randomUUID()}`, otherHome);
     const page = f.selection.pages[0]!;
     const initial = (await readZoneConfiguration(f.env, f.zone)).revision;
     for (const selected of [
       { ...page, revisionId: randomUUID() },
-      { ...foreign, page: f.zone },
+      { ...foreign, page: f.homeDocument },
       foreign,
       { ...page, variantId: `urn:rezics:variant:${randomUUID()}` },
       { ...page, byteDigest: '0'.repeat(64) },
@@ -516,7 +528,7 @@ test('site publication rejects nonexistent, unrelated, wrongly selected and stal
       expect((await readZoneConfiguration(f.env, f.zone)).revision).toBe(initial);
       expect((await f.home()).page).toBeUndefined();
     }
-    expect(await isZonePublishedPageRevision(f.env, f.zone, f.zone, page.revisionId)).toBe(false);
+    expect(await isZonePublishedPageRevision(f.env, f.zone, f.homeDocument, page.revisionId)).toBe(false);
   } finally { await f.close(); }
 }, 120_000);
 
@@ -535,9 +547,9 @@ test('revocation after the Content pin prevents the final site bundle switch', a
     const settledPosition = await f.content.ownerPosition();
     expect((await f.publish(f.selection.pages, key, before.revision)).status).toBe(403);
     expect(await f.content.ownerPosition()).toEqual(settledPosition);
-    await checkContentErasureTargets(f.pool, f.zone, [page.revisionId]);
+    await checkContentErasureTargets(f.pool, f.homeDocument, [page.revisionId]);
     const erasure = { preservationAccess: f.accessPool, erasureId: randomUUID(), erasureEpoch: '1',
-      resourceId: f.zone, revisionIds: [page.revisionId] };
+      resourceId: f.homeDocument, revisionIds: [page.revisionId] };
     expect(await applyContentErasure(f.pool, erasure)).toEqual({ applied: 1 });
     expect(await applyContentErasure(f.pool, erasure)).toEqual({ applied: 0 });
     const exact = (await f.content.readExactBatch([page.revisionId], async ids => new Set(ids)))[0];
@@ -545,7 +557,7 @@ test('revocation after the Content pin prevents the final site bundle switch', a
     const after = await readZoneConfiguration(f.env, f.zone);
     expect(after.revision).toBe(before.revision);
     expect(after.publicationRevision).toBe(before.publicationRevision);
-    expect(await isZonePublishedPageRevision(f.env, f.zone, f.zone, page.revisionId)).toBe(false);
+    expect(await isZonePublishedPageRevision(f.env, f.zone, f.homeDocument, page.revisionId)).toBe(false);
     expect((await f.home()).page).toBeUndefined();
     const receipts = await f.env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> SELECT ?receipt WHERE {
       GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:sitePublicationRevision ?publication ;
@@ -568,10 +580,10 @@ test('an interrupted rejection retains the cancelled receipt and replay releases
       'SELECT operation_id, status, pin_active FROM content.publication_preparation WHERE revision_id = $1', [page.revisionId]);
     expect(pending.rows).toHaveLength(1);
     expect(pending.rows[0]).toMatchObject({ status: 'pending', pin_active: true });
-    await expect(checkContentErasureTargets(f.pool, f.zone, [page.revisionId], true))
+    await expect(checkContentErasureTargets(f.pool, f.homeDocument, [page.revisionId], true))
       .rejects.toBeInstanceOf(ContentErasureGraphRequired);
     await expect(applyContentErasure(f.pool, { preservationAccess: f.accessPool,
-      erasureId: randomUUID(), erasureEpoch: '1', resourceId: f.zone, revisionIds: [page.revisionId] }))
+      erasureId: randomUUID(), erasureEpoch: '1', resourceId: f.homeDocument, revisionIds: [page.revisionId] }))
       .rejects.toBeInstanceOf(ContentErasureGraphRequired);
     expect((await f.publish(f.selection.pages, key, before.revision)).status).toBe(403);
     expect(await f.content.readPublicationPreparation(pending.rows[0]!.operation_id))
@@ -579,9 +591,9 @@ test('an interrupted rejection retains the cancelled receipt and replay releases
     const settled = await f.content.ownerPosition();
     expect((await f.publish(f.selection.pages, key, before.revision)).status).toBe(403);
     expect(await f.content.ownerPosition()).toEqual(settled);
-    await checkContentErasureTargets(f.pool, f.zone, [page.revisionId]);
+    await checkContentErasureTargets(f.pool, f.homeDocument, [page.revisionId]);
     expect(await applyContentErasure(f.pool, { preservationAccess: f.accessPool,
-      erasureId: randomUUID(), erasureEpoch: '1', resourceId: f.zone, revisionIds: [page.revisionId] }))
+      erasureId: randomUUID(), erasureEpoch: '1', resourceId: f.homeDocument, revisionIds: [page.revisionId] }))
       .toEqual({ applied: 1 });
     expect((await readZoneConfiguration(f.env, f.zone)).revision).toBe(before.revision);
     expect((await f.home()).page).toBeUndefined();
@@ -594,7 +606,7 @@ test('cancellation replay skips erased rejected bytes and releases the remaining
     const before = await readZoneConfiguration(f.env, f.zone);
     const first = f.selection.pages[0]!;
     const second = await f.save(fromPlainText('Second variant', 'blocks'), null,
-      `urn:rezics:variant:${randomUUID()}`, f.zone, 'fr');
+      `urn:rezics:variant:${randomUUID()}`, f.homeDocument, 'fr');
     const pages = [first, second];
     const key = randomUUID();
     f.revokeBeforeSwitch();
@@ -607,19 +619,19 @@ test('cancellation replay skips erased rejected bytes and releases the remaining
       { revision_id: first.revisionId, status: 'rejected', pin_active: false },
       { revision_id: second.revisionId, status: 'pending', pin_active: true },
     ]));
-    await expect(checkContentErasureTargets(f.pool, f.zone, [second.revisionId], true))
+    await expect(checkContentErasureTargets(f.pool, f.homeDocument, [second.revisionId], true))
       .rejects.toBeInstanceOf(ContentErasureGraphRequired);
     const events = await f.content.readOutbox(f.initialContentPosition.dataEpoch, f.initialContentPosition.sequence, 100);
     const rejection = events.find(event => event.revisionId === first.revisionId && event.eventType === 'content.publication.rejected');
     if (!rejection) throw new Error('First page rejection event is missing');
     const proof = await f.content.readProjectionPublication(rejection);
     expect(await applyContentErasure(f.pool, { preservationAccess: f.accessPool,
-      erasureId: randomUUID(), erasureEpoch: '1', resourceId: f.zone, revisionIds: [first.revisionId] }))
+      erasureId: randomUUID(), erasureEpoch: '1', resourceId: f.homeDocument, revisionIds: [first.revisionId] }))
       .toEqual({ applied: 1 });
     expect((await f.content.readExactBatch([first.revisionId], async ids => new Set(ids)))[0]?.status).toBe('erased');
     expect(await f.content.readPublicationPreparation(proof.preparationId)).toMatchObject({
       status: 'rejected', pinActive: false,
-      reference: { resourceId: f.zone, variantId: first.variantId, revisionId: first.revisionId, byteDigest: first.byteDigest },
+      reference: { resourceId: f.homeDocument, variantId: first.variantId, revisionId: first.revisionId, byteDigest: first.byteDigest },
     });
     await expect(f.content.settlePublication(rejection.operationId, proof.preparationId,
       { ...proof.graph, receipt: `${proof.graph.receipt}:altered` }, proof.preparationPosition.dataEpoch))
@@ -632,9 +644,9 @@ test('cancellation replay skips erased rejected bytes and releases the remaining
       FROM content.outbox WHERE revision_id = ANY($1::uuid[]) AND event_type = 'content.publication.rejected'
       GROUP BY revision_id`, [[first.revisionId, second.revisionId]]);
     expect(rejected.rows).toEqual(expect.arrayContaining(pages.map(page => ({ revision_id: page.revisionId, count: '1' }))));
-    await checkContentErasureTargets(f.pool, f.zone, [second.revisionId]);
+    await checkContentErasureTargets(f.pool, f.homeDocument, [second.revisionId]);
     expect(await applyContentErasure(f.pool, { preservationAccess: f.accessPool,
-      erasureId: randomUUID(), erasureEpoch: '1', resourceId: f.zone, revisionIds: [second.revisionId] }))
+      erasureId: randomUUID(), erasureEpoch: '1', resourceId: f.homeDocument, revisionIds: [second.revisionId] }))
       .toEqual({ applied: 1 });
     const settled = await f.content.ownerPosition();
     expect((await f.publish(pages, key, before.revision)).status).toBe(403);
@@ -650,7 +662,7 @@ test('failure pinning the second page rejects the first pin without publishing a
     const before = await readZoneConfiguration(f.env, f.zone);
     const first = f.selection.pages[0]!;
     const second = await f.save(fromPlainText('Second variant', 'blocks'), null,
-      `urn:rezics:variant:${randomUUID()}`, f.zone, 'fr');
+      `urn:rezics:variant:${randomUUID()}`, f.homeDocument, 'fr');
     const pages = [first, second];
     const key = randomUUID();
     f.failSecondPreparation();
@@ -662,7 +674,7 @@ test('failure pinning the second page rejects the first pin without publishing a
     expect((await f.publish(pages, key, before.revision)).status).toBe(403);
     expect((await readZoneConfiguration(f.env, f.zone)).revision).toBe(before.revision);
     expect((await f.home()).page).toBeUndefined();
-    await checkContentErasureTargets(f.pool, f.zone, [first.revisionId, second.revisionId]);
+    await checkContentErasureTargets(f.pool, f.homeDocument, [first.revisionId, second.revisionId]);
   } finally { await f.close(); }
 }, 120_000);
 
@@ -988,7 +1000,7 @@ test('Navigation and theme publish together with home Content; drafts, stale cut
     expect((await f.call('POST', changesPath, move(furtherNavigation.revision, second.occurrences[0]!),
       randomUUID(), f.account.tokenB)).status).toBe(403);
     expect((await f.call('POST', '/v1/content-drafts', {
-      profile: 'content-text-v1', resourceId: f.zone, variantId: page.variantId,
+      profile: 'content-text-v1', resourceId: f.homeDocument, variantId: page.variantId,
       expectedHead: furtherPage.revisionId, document: fromPlainText('Unauthorized home', 'blocks'),
       language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr', actingSubject: f.actor,
     }, randomUUID(), f.account.tokenB)).status).toBe(403);

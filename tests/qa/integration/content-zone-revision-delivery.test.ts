@@ -69,8 +69,13 @@ async function fixture() {
       '/v1/spaces', { profile: 'space-zone-v1', name: 'Exact document site',
         capabilities: ['zone'], actingSubject: actor }), 201);
     const variantId = `urn:rezics:variant:${randomUUID()}`;
+    await json(await call('PUT', `/v1/zones/${created.zone.slice(-36)}/configuration`, {
+      expectedHead: (await readZoneConfiguration(stack.env, created.zone)).revision,
+      prepareHomeDocument: true, actingSubject: actor,
+    }));
+    const homeDocument = (await readZoneConfiguration(stack.env, created.zone)).homeDocument!;
     const draft = async (document: DocumentSnapshot, expectedHead: string | null) => json<Draft>(await call('POST',
-      '/v1/content-drafts', { profile: 'content-text-v1', resourceId: created.zone, variantId,
+      '/v1/content-drafts', { profile: 'content-text-v1', resourceId: homeDocument, variantId,
         language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr',
         expectedHead, document, actingSubject: actor }), 201);
     const firstDocument = structuredClone(fromPlainText('Selected exact site document', 'blocks'));
@@ -80,7 +85,7 @@ async function fixture() {
     const first = await draft(firstDocument, null);
     const publishRequest = async (saved: Draft) => call('POST',
       `/v1/zones/${created.zone.slice(-36)}/site-publications`, {
-        pages: [{ page: created.zone, variantId, revisionId: saved.revisionId,
+        pages: [{ page: homeDocument, variantId, revisionId: saved.revisionId,
           byteDigest: saved.byteDigest, contentEpoch: saved.sourcePosition.dataEpoch }],
         routesRevision: created.navigationRevision, navigationRevision: created.navigationRevision,
         expectedHead: (await readZoneConfiguration(stack.env, created.zone)).revision, actingSubject: actor,
@@ -97,7 +102,7 @@ async function fixture() {
       })]);
       return { pending, reached, release: barrier.release };
     };
-    return { ...stack, ...created, actor, otherActor, editorPrincipalId: member.principalId,
+    return { ...stack, ...created, homeDocument, actor, otherActor, editorPrincipalId: member.principalId,
       firstDocument, first, draft, publish, publishRequest, read, pauseRead };
   } catch (error) { await stack.stop(); throw error; }
 }
@@ -107,7 +112,7 @@ describe('exact Zone delivery refuses actual bundle, controller and owner withdr
   const f = await fixture();
   try {
     const privateExact = await json<Exact>(await f.read(f.first, true));
-    expect(privateExact.reference).toMatchObject({ resourceId: f.zone,
+    expect(privateExact.reference).toMatchObject({ resourceId: f.homeDocument,
       revisionId: f.first.revisionId, byteDigest: f.first.byteDigest });
     expect(privateExact.body.document).toEqual(f.firstDocument);
     expect((await f.read(f.first)).status).toBe(404);
@@ -115,7 +120,7 @@ describe('exact Zone delivery refuses actual bundle, controller and owner withdr
     const healthy = f.pauseRead(f.first);
     try { await healthy.reached; } finally { healthy.release(); await healthy.pending; }
     expect(await json<Exact>(await healthy.pending)).toEqual(privateExact);
-    expect(await isZonePublishedPageRevision(f.env, f.zone, f.zone, f.first.revisionId)).toBe(true);
+    expect(await isZonePublishedPageRevision(f.env, f.zone, f.homeDocument, f.first.revisionId)).toBe(true);
     // A site pin requires the current draft head, so the replacement is saved after the first publication.
     const later = await f.draft(fromPlainText('Unpublished replacement document', 'blocks'), f.first.revisionId);
 
@@ -123,7 +128,7 @@ describe('exact Zone delivery refuses actual bundle, controller and owner withdr
     try {
       await bundle.reached;
       await f.publish(later);
-      expect(await isZonePublishedPageRevision(f.env, f.zone, f.zone, f.first.revisionId)).toBe(false);
+      expect(await isZonePublishedPageRevision(f.env, f.zone, f.homeDocument, f.first.revisionId)).toBe(false);
     } finally { bundle.release(); await bundle.pending; }
     const withdrawn = await bundle.pending;
     expect(withdrawn.status).toBe(404);
@@ -181,8 +186,8 @@ describe('exact Zone delivery refuses actual bundle, controller and owner withdr
     const stalePublication = await f.publishRequest(f.first);
     expect(stalePublication.status).toBe(409);
     await stalePublication.text();
-    expect(await isZonePublishedPageRevision(f.env, f.zone, f.zone, later.revisionId)).toBe(true);
-    expect(await isZonePublishedPageRevision(f.env, f.zone, f.zone, f.first.revisionId)).toBe(false);
+    expect(await isZonePublishedPageRevision(f.env, f.zone, f.homeDocument, later.revisionId)).toBe(true);
+    expect(await isZonePublishedPageRevision(f.env, f.zone, f.homeDocument, f.first.revisionId)).toBe(false);
 
     const restored = await f.draft(f.firstDocument, later.revisionId);
     expect(restored.revisionId).not.toBe(f.first.revisionId);
@@ -190,12 +195,12 @@ describe('exact Zone delivery refuses actual bundle, controller and owner withdr
     expect(restored.byteDigest).toBe(f.first.byteDigest);
     await f.publish(restored);
     const restoredExact = await json<Exact>(await f.read(restored, true));
-    expect(restoredExact.reference).toMatchObject({ resourceId: f.zone,
+    expect(restoredExact.reference).toMatchObject({ resourceId: f.homeDocument,
       revisionId: restored.revisionId, byteDigest: f.first.byteDigest });
     expect(restoredExact.body.document).toEqual(f.firstDocument);
-    expect(await isZonePublishedPageRevision(f.env, f.zone, f.zone, restored.revisionId)).toBe(true);
-    expect(await isZonePublishedPageRevision(f.env, f.zone, f.zone, later.revisionId)).toBe(false);
-    expect(await isZonePublishedPageRevision(f.env, f.zone, f.zone, f.first.revisionId)).toBe(false);
+    expect(await isZonePublishedPageRevision(f.env, f.zone, f.homeDocument, restored.revisionId)).toBe(true);
+    expect(await isZonePublishedPageRevision(f.env, f.zone, f.homeDocument, later.revisionId)).toBe(false);
+    expect(await isZonePublishedPageRevision(f.env, f.zone, f.homeDocument, f.first.revisionId)).toBe(false);
     expect(await json<Exact>(await f.read(restored))).toEqual(restoredExact);
     expect((await f.read(f.first)).status).toBe(404);
     expect(await json<Exact>(await f.read(f.first, true))).toEqual(privateExact);

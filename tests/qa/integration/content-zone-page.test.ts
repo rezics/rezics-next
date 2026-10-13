@@ -180,11 +180,16 @@ async function fixture() {
         controlId,
       ],
     );
+    await json(await call('PUT', `/v1/zones/${shortId(created.zone)}/configuration`, {
+      expectedHead: (await readZoneConfiguration(f.env, created.zone)).revision,
+      prepareHomeDocument: true, actingSubject: f.actor,
+    }), 200);
+    const homeDocument = (await readZoneConfiguration(f.env, created.zone)).homeDocument!;
     const variantId = `urn:rezics:variant:${randomUUID()}`;
     const draftBody = (
       document: DocumentSnapshot,
       expectedHead: string | null,
-      resourceId = created.zone,
+      resourceId = homeDocument,
       variant = variantId,
       language = 'en',
     ) => ({
@@ -200,7 +205,7 @@ async function fixture() {
     const save = async (
       document: DocumentSnapshot,
       expectedHead: string | null,
-      resourceId = created.zone,
+      resourceId = homeDocument,
       variant = variantId,
       language = 'en',
       key = randomUUID(),
@@ -238,7 +243,7 @@ async function fixture() {
       );
       return json<ZoneSitePublicationReceipt>(
         await call('POST', `/v1/zones/${shortId(created.zone)}/site-publications`, {
-          pages: [{ page: created.zone, variantId: saved.variantId, revisionId: saved.revisionId,
+          pages: [{ page: homeDocument, variantId: saved.variantId, revisionId: saved.revisionId,
             byteDigest: saved.byteDigest, contentEpoch: saved.sourcePosition.dataEpoch }],
           routesRevision: created.navigationRevision,
           navigationRevision: created.navigationRevision,
@@ -251,6 +256,7 @@ async function fixture() {
     return {
       ...f,
       ...created,
+      homeDocument,
       content,
       call,
       json,
@@ -301,7 +307,7 @@ test('Zone Blocks documents retain opaque payloads, draft CAS and language varia
     const translated = await f.save(
       pageDocument('歡迎'),
       null,
-      f.zone,
+      f.homeDocument,
       `urn:rezics:variant:${randomUUID()}`,
       'zh-Hant',
     );
@@ -311,7 +317,7 @@ test('Zone Blocks documents retain opaque payloads, draft CAS and language varia
       200,
     );
     expect(draft.reference).toMatchObject({
-      resourceId: f.zone,
+      resourceId: f.homeDocument,
       variantId: f.variantId,
       revisionId: revised.revisionId,
       byteDigest: revised.byteDigest,
@@ -337,7 +343,7 @@ test('Zone Blocks documents retain opaque payloads, draft CAS and language varia
     expect(sitePin).toMatchObject({
       status: 'pending',
       pinActive: true,
-      reference: { resourceId: f.zone, revisionId: revised.revisionId },
+      reference: { resourceId: f.homeDocument, revisionId: revised.revisionId },
     });
     const publicationInput = f.publicationBody(revised);
     const publicationKey = randomUUID();
@@ -382,10 +388,10 @@ test('Zone Blocks documents retain opaque payloads, draft CAS and language varia
     );
     const site = await f.publishSite(revised);
     expect(site.pages.map(({ page, variantId, revisionId }) => ({ page, variantId, revisionId }))).toEqual([
-      { page: f.zone, variantId: f.variantId, revisionId: revised.revisionId },
+      { page: f.homeDocument, variantId: f.variantId, revisionId: revised.revisionId },
     ]);
     expect(
-      await isZonePublishedPageRevision(f.environment, f.zone, f.zone, revised.revisionId),
+      await isZonePublishedPageRevision(f.environment, f.zone, f.homeDocument, revised.revisionId),
     ).toBe(true);
     const settled = await settleZonePageContentPublication(
       f.environment,
@@ -462,7 +468,7 @@ test('Zone Content refuses non-editor saves and publication, and rechecks revoke
     expect(
       (await f.call('POST', '/v1/content-drafts', body, randomUUID(), f.account.tokenB)).status,
     ).toBe(403);
-    expect(await f.content.readDraftHead(f.zone, f.variantId)).toBeNull();
+    expect(await f.content.readDraftHead(f.homeDocument, f.variantId)).toBeNull();
     const saved = await f.save(pageDocument('Editor draft'), null);
     expect(
       (
@@ -502,7 +508,7 @@ test('Zone Content refuses non-editor saves and publication, and rechecks revoke
     ).toBe(403);
     expect(f.deniedClaim()).not.toBeNull();
     expect(await f.content.readDraftReceipt(`content-draft:${f.deniedClaim()}`)).toBeNull();
-    expect((await f.content.readDraftHead(f.zone, f.variantId))?.revisionId).toBe(saved.revisionId);
+    expect((await f.content.readDraftHead(f.homeDocument, f.variantId))?.revisionId).toBe(saved.revisionId);
   } finally {
     await f.close();
   }

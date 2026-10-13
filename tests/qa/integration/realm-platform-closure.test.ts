@@ -359,8 +359,13 @@ beforeAll(async () => {
         disclosure: 'public', actingSubject: builder.actor }));
     site.navigationRevision = mount.revision;
     const variantId = `urn:rezics:variant:${randomUUID()}`;
+    await json(await call('PUT', `/v1/zones/${short(site.zone)}/configuration`, builder, {
+      expectedHead: (await readZoneConfiguration(stack.env, site.zone)).revision,
+      prepareHomeDocument: true, actingSubject: builder.actor,
+    }));
+    const homeDocument = (await readZoneConfiguration(stack.env, site.zone)).homeDocument!;
     const draftResponse = await call('POST', '/v1/content-drafts', builder,
-      { profile: 'content-text-v1', resourceId: site.zone, variantId,
+      { profile: 'content-text-v1', resourceId: homeDocument, variantId,
         expectedHead: null, document: fromPlainText('Independent Zone home document', 'blocks'),
         language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr', actingSubject: builder.actor });
     site.homeDraftStatus = draftResponse.status;
@@ -373,7 +378,7 @@ beforeAll(async () => {
     await json(await call('POST', `/v1/zones/${short(site.zone)}/site-publications`, builder,
       { routesRevision: site.navigationRevision, navigationRevision: site.navigationRevision,
         expectedHead: (await readZoneConfiguration(stack.env, site.zone)).revision, actingSubject: builder.actor,
-        pages: [{ page: site.zone, variantId, revisionId: draft.revisionId, byteDigest: draft.byteDigest,
+        pages: [{ page: homeDocument, variantId, revisionId: draft.revisionId, byteDigest: draft.byteDigest,
           contentEpoch: draft.sourcePosition.dataEpoch }] }), 201);
   }
   for (const action of ['governance.moderate', 'governance.rights.decide', 'governance.safety.evidence', 'governance.rule.publish']) {

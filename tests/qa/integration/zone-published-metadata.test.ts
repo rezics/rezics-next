@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { AsyncResource } from 'node:async_hooks';
 import { createHash, randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { Pool } from 'pg';
@@ -30,6 +31,7 @@ async function fixture(documentSite = false) {
   const f = await authorCreditFixture(Bun.env as Record<string, string>,
     resolve('.temp', `zone-published-metadata-${randomUUID()}`),
     'openid work:create work:edit work:read space:create zone:edit owner:operate');
+  const revocationContext = new AsyncResource('zone-editor-revocation');
   try {
     const accountPool = new Pool({ connectionString: Bun.env.ACCOUNT_DATABASE_URL });
     try {
@@ -58,7 +60,7 @@ async function fixture(documentSite = false) {
     let siteSpace: string;
     let zoneGrant: string;
     let zoneResourceGrant: string | null = null;
-    const revokeEditor = async () => {
+    const revokeEditor = () => revocationContext.runInAsyncScope(async () => {
       const replacement = nativeId();
       const profile = { kind: 'person' as const, displayName: 'Replacement site owner' };
       await createAgentGraph(f.env, { id: randomUUID(), agent: replacement,
@@ -70,7 +72,7 @@ async function fixture(documentSite = false) {
       await f.accessPool.query('UPDATE access.permission_grant SET active = false WHERE id = $1', [zoneGrant]);
       if (zoneResourceGrant) await f.accessPool.query(`UPDATE access.principal_permission_grant
         SET active = false, generation = generation + 1 WHERE id = $1`, [zoneResourceGrant]);
-    };
+    });
     const access = new Proxy(f.access, { get(target, property) {
       if (property === 'withOwnerAuthority') return async (...args: Parameters<typeof target.withOwnerAuthority>) => {
         if (revokeBeforeSwitch && args[0].action === 'zone.edit') {
@@ -124,13 +126,15 @@ async function fixture(documentSite = false) {
       await f.grant(`zone:official:${zone}`, 'zone.official');
       await configure({ official: {}, defaultRealm: space.realm });
     }
+    await configure({ prepareHomeDocument: true });
+    const homeDocument = (await readZoneConfiguration(f.env, zone)).homeDocument!;
     const variantId = `urn:rezics:variant:${randomUUID()}`;
     const save = async (text = 'Published home', expectedHead: string | null = null): Promise<Page> => {
       const saved = await f.json<{ revisionId: string; byteDigest: string; sourcePosition: { dataEpoch: string } }>(
-        await call('POST', '/v1/content-drafts', { profile: 'content-text-v1', resourceId: zone, variantId,
+        await call('POST', '/v1/content-drafts', { profile: 'content-text-v1', resourceId: homeDocument, variantId,
           expectedHead, document: fromPlainText(text, 'blocks'),
           language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr', actingSubject: f.actor }), 201);
-      return { page: zone, variantId, revisionId: saved.revisionId,
+      return { page: homeDocument, variantId, revisionId: saved.revisionId,
         byteDigest: saved.byteDigest, contentEpoch: saved.sourcePosition.dataEpoch };
     };
     const pages = [await save()];
@@ -150,10 +154,10 @@ async function fixture(documentSite = false) {
       return { resource, summary: batch.summaries[0]!, official: listing.items.find(item => item.zone === zone),
         presentation: await presentation(), home: await home() };
     };
-    return { ...f, zone, path, pages, content, configure, save, publish, call, publicMetadata, presentation, home,
+    return { ...f, close: async () => { revocationContext.emitDestroy(); await f.close(); }, zone, path, pages, content, configure, save, publish, call, publicMetadata, presentation, home,
       revokeBeforeSwitch: () => { revokeBeforeSwitch = true; },
       switchRevocationConsumed: () => !revokeBeforeSwitch };
-  } catch (error) { await f.close(); throw error; }
+  } catch (error) { revocationContext.emitDestroy(); await f.close(); throw error; }
 }
 
 type Fixture = Awaited<ReturnType<typeof fixture>>;

@@ -140,16 +140,21 @@ if (process.env.REZICS_ZONE_BUDGET_PROFILE_CHILD === '1') {
       disclosure: 'public', actingSubject: actor,
     }));
     const variantId = `urn:rezics:variant:${randomUUID()}`;
+    await json(await send('PUT', `/v1/zones/${site.zone.slice(-36)}/configuration`, {
+      expectedHead: (await readZoneConfiguration(stack.env, site.zone)).revision,
+      prepareHomeDocument: true, actingSubject: actor,
+    }));
+    const homeDocument = (await readZoneConfiguration(stack.env, site.zone)).homeDocument!;
     const draft = await json<{ revisionId: string; byteDigest: string; sourcePosition: { dataEpoch: string } }>(
       await send('POST', '/v1/content-drafts', {
-        profile: 'content-text-v1', resourceId: site.zone, variantId, expectedHead: null,
+        profile: 'content-text-v1', resourceId: homeDocument, variantId, expectedHead: null,
         document: fromPlainText('Harbor annex home', 'blocks'),
         language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr', actingSubject: actor,
       }), 201);
     await json(await send('POST', `/v1/zones/${site.zone.slice(-36)}/site-publications`, {
       expectedHead: (await readZoneConfiguration(stack.env, site.zone)).revision,
       routesRevision: mounts.revision, navigationRevision: mounts.revision, actingSubject: actor,
-      pages: [{ page: site.zone, variantId, revisionId: draft.revisionId, byteDigest: draft.byteDigest,
+      pages: [{ page: homeDocument, variantId, revisionId: draft.revisionId, byteDigest: draft.byteDigest,
         contentEpoch: draft.sourcePosition.dataEpoch }],
     }), 201);
     const about = new RealmAboutThreadStore(stack.contentPool);

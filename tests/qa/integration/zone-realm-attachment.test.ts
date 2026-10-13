@@ -48,12 +48,16 @@ async function arrange(home: Home) {
       undefined, home.author.token))).configuration.defaultRealm;
   /** Publish the Zone's home page; public readers see a Zone only through its published cut. */
   const publisher = async (site: { zone: string; navigationRevision: string }) => {
+    await json(await call('PUT', `/v1/zones/${short(site.zone)}/configuration`, {
+      expectedHead: await head(site.zone), prepareHomeDocument: true, actingSubject: steward,
+    }, home.author.token));
+    const homeDocument = (await readZoneConfiguration(stack.env, site.zone)).homeDocument!;
     const variantId = `urn:rezics:variant:${randomUUID()}`;
     const saved = await json<{ revisionId: string; byteDigest: string; sourcePosition: { dataEpoch: string } }>(
-      await call('POST', '/v1/content-drafts', { profile: 'content-text-v1', resourceId: site.zone, variantId,
+      await call('POST', '/v1/content-drafts', { profile: 'content-text-v1', resourceId: homeDocument, variantId,
         expectedHead: null, document: fromPlainText('Home', 'blocks'), language: { kind: 'tag', tag: 'en', originalTag: 'en' },
         direction: 'ltr', actingSubject: steward }, home.author.token), 201);
-    const pages = [{ page: site.zone, variantId, revisionId: saved.revisionId, byteDigest: saved.byteDigest,
+    const pages = [{ page: homeDocument, variantId, revisionId: saved.revisionId, byteDigest: saved.byteDigest,
       contentEpoch: saved.sourcePosition.dataEpoch }];
     const body = async () => ({ routesRevision: site.navigationRevision,
       navigationRevision: site.navigationRevision, pages, expectedHead: await head(site.zone),

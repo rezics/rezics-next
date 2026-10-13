@@ -73,16 +73,17 @@ export async function arrange(home: HomeStack) {
   const head = async () => (await readZoneConfiguration(home.stack.env, site.zone)).revision;
   const configure = async (patch: object) => home.json<{ revision: string }>(await home.call('PUT',
     `${sitePath}/configuration`, { expectedHead: await head(), actingSubject: author, ...patch }, home.author.token));
-  await configure({ defaultRealm: realm.realm });
+  await configure({ defaultRealm: realm.realm, prepareHomeDocument: true });
+  const homeDocument = (await readZoneConfiguration(home.stack.env, site.zone)).homeDocument!;
   const variantId = `urn:rezics:variant:${randomUUID()}`;
   const draft = await home.json<{ revisionId: string; byteDigest: string; sourcePosition: { dataEpoch: string } }>(
-    await home.call('POST', '/v1/content-drafts', { profile: 'content-text-v1', resourceId: site.zone,
+    await home.call('POST', '/v1/content-drafts', { profile: 'content-text-v1', resourceId: homeDocument,
       variantId, expectedHead: null, document: fromPlainText('Discussion site home', 'blocks'),
       language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr', actingSubject: author }, home.author.token), 201);
   let navigationRevision = site.navigationRevision;
   const publish = async () => home.json(await home.call('POST', `${sitePath}/site-publications`, {
     routesRevision: navigationRevision, navigationRevision, expectedHead: await head(), actingSubject: author,
-    pages: [{ page: site.zone, variantId, revisionId: draft.revisionId, byteDigest: draft.byteDigest,
+    pages: [{ page: homeDocument, variantId, revisionId: draft.revisionId, byteDigest: draft.byteDigest,
       contentEpoch: draft.sourcePosition.dataEpoch }],
   }, home.author.token), 201);
   const targetRevision = async (about: string) => {
