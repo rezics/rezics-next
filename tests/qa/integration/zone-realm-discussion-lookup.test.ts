@@ -165,7 +165,7 @@ test('a signed-in Zone Work page looks up its attached Realm discussion through 
       operations: [{ op: 'insert', parent: curated.structure, position: 'last', role: 'member', target: work.work,
         selection: { mode: 'follow-context' } }],
     });
-    const mounted = await post<{ revision: string }>(`zones/${local(a.site.zone)}/mounts`, {
+    const mounted = await post<{ revision: string; occurrences: string[] }>(`zones/${local(a.site.zone)}/mounts`, {
       expectedHead: a.site.navigationRevision, target: collection, routeSegment: 'guide', disclosure: 'public', actingSubject: actor,
     });
     const variantId = `urn:rezics:variant:${randomUUID()}`;
@@ -257,31 +257,35 @@ test('a signed-in Zone Work page looks up its attached Realm discussion through 
     expect(unrelatedSequenceChanges).toBeGreaterThanOrEqual(2);
     moveUnrelatedSequence = false;
 
-    // A real attachment withdrawal invalidates the previously observed posting
-    // basis even though the Work and its independent Realm lookup stay readable.
+    // Removing a draft mount does not move the public selection. Publishing
+    // that local navigation cut must refuse the old page and discussion basis.
     const ready = reads[0];
     if (!ready || ready.kind !== 'ready') throw new Error('Initial discussion basis is unavailable');
-    const effects = async () => (await contentPool.query(`SELECT
-      (SELECT count(*)::int FROM content.realm_about_post_operation WHERE realm=$1 AND about=$2) AS operations,
-      (SELECT count(*)::int FROM content.reply WHERE root_target=$2) AS replies`, [realm.realm, work.work])).rows[0];
-    const beforeWithdrawal = await effects();
-    await post(`zones/${local(site.zone)}/realm-attachment-withdrawals`, { realm: realm.realm, actingSubject: actor });
+    expect(mounted.occurrences).toHaveLength(1);
+    const removed = await command<{ revision: string }>('DELETE',
+      `zones/${local(site.zone)}/mounts/${local(mounted.occurrences[0]!)}`, {
+        expectedHead: mounted.revision, actingSubject: actor,
+      });
+    const routeRequest = `/v1/zones/${local(site.zone)}/routes?${new URLSearchParams({ path: routePath, actingSubject: actor })}`;
+    const retained = await call('GET', routeRequest);
+    expect(retained.status).toBe(200);
+    expect(await retained.json()).toMatchObject({ revision: ready.basis.routeRevision, realm: realm.realm });
+    const moved = await post<{ revision: string }>(`zones/${local(site.zone)}/site-publications`, {
+      expectedHead: (await readZoneConfiguration(runtime.environment, site.zone)).revision,
+      routesRevision: removed.revision, navigationRevision: removed.revision, actingSubject: actor,
+      pages: [{ page: homeDocument, variantId, revisionId: draft.revisionId,
+        byteDigest: draft.byteDigest, contentEpoch: draft.sourcePosition.dataEpoch }],
+    });
+    expect(moved.revision).not.toBe(ready.basis.routeRevision);
+    const refused = await call('GET', routeRequest);
+    expect(refused.status).toBe(404);
     expect(await readAboutDiscussion(main, {
       zone: site.zone, path: routePath, signedIn: true, personal: true, actingSubject: actor,
-    })).toEqual({ kind: 'none' });
-    const refused = await call('POST', `/v1/realms/${local(realm.realm)}/about-posts`, {
-      profile: 'realm-about-post-v1', zone: ready.basis.zone, path: ready.basis.path,
-      routeRevision: ready.basis.routeRevision, about: ready.basis.about,
-      targetRevision: ready.basis.targetRevision, actingSubject: actor,
-      language: 'en', direction: 'ltr', body: 'Refuse this ended attachment',
-    });
-    expect(refused.status).toBe(503);
-    expect(await refused.json()).toMatchObject({ code: 'work_read_unavailable' });
-    expect(await effects()).toEqual(beforeWithdrawal);
+    })).toEqual({ kind: 'unavailable' });
     const independent = await call('GET', path);
     expect(independent.status).toBe(200);
     expect(await independent.json()).toEqual({ realm: realm.realm, about: work.work, thread: null });
-    // Resource exhaustion remains distinct from attachment movement. Exercise
+    // Resource exhaustion remains distinct from local publication movement. Exercise
     // the exact lookup under an enclosing budget with
     // eight calls left; the closing Disclosure head probe is the ninth read.
     constrainLookup = true;

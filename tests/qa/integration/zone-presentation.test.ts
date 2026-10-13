@@ -1,5 +1,6 @@
 import { afterAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
+import { appendFileSync } from 'node:fs';
 import sharp from 'sharp';
 import { fromPlainText, type DocumentSnapshot } from '@rezics/document';
 import { S3ImmutableObjects, type ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
@@ -19,6 +20,10 @@ let started: Promise<MediaStack> | undefined;
 const stack = () => started ??= startMediaStack('zone-presentation', { library: true });
 afterAll(async () => { if (started) await (await started).stop(); });
 const ref = () => `https://rezics.com/id/${randomUUID()}`;
+function campaignEvidence(test: string, answer: unknown) {
+  appendFileSync(`.temp/zone-campaign-evidence-${Bun.env.REZICS_QA_RUN_ID}.jsonl`,
+    `${JSON.stringify({ test, at: new Date().toISOString(), answer })}\n`);
+}
 async function json<T>(response: Response, expected = 200): Promise<T> {
   const body = await response.text();
   expect(response.status, body).toBe(expected);
@@ -63,7 +68,10 @@ async function fixture(label: string) {
 }
 
 test('campaign bytes follow the exact published local Showcase instead of config or newer drafts', async () => {
+  const preparationStarted = performance.now();
+  campaignEvidence('exact campaign', { phase: 'preparation-started' });
   const f = await fixture('published-campaign');
+  campaignEvidence('exact campaign', { phase: 'fixture-ready', zone: f.zone, realm: f.realm });
   // Realm Zones use the existing administrator Content bridge, with a live
   // controller and the same resource proof used by the metadata integration.
   await f.moderator.grant(`agent:${f.moderator.actor}`, 'agent.control');
@@ -80,6 +88,7 @@ test('campaign bytes follow the exact published local Showcase instead of config
     `urn:rezics:access-receipt:${createHash('sha256').update(resourceGrant).digest('hex')}`]);
 
   const campaign = async (red: number, legacy = false) => {
+    campaignEvidence('exact campaign', { phase: 'asset-preparation', red, legacy });
     const source = await f.moderator.upload(await sharp({ create: { width: 32, height: 32, channels: 4,
       background: { r: red, g: 40, b: 60, alpha: 0.5 } } }).png().toBuffer());
     let use: string;
@@ -109,11 +118,19 @@ test('campaign bytes follow the exact published local Showcase instead of config
   const configArt = await campaign(10, true);
   const firstArt = await campaign(20);
   const nextArt = await campaign(30);
+  campaignEvidence('exact campaign', { phase: 'assets-ready', preparationMs: performance.now() - preparationStarted,
+    config: configArt.use, first: firstArt.use, next: nextArt.use });
   const configSlide: ZonePresentation['slides'][number] = { id: 'config', href: '/config', art: configArt.art };
   const firstSlide: ZonePresentation['slides'][number] = { id: 'first', href: '/first', art: firstArt.art };
   const nextSlide: ZonePresentation['slides'][number] = { id: 'next', href: '/next', art: nextArt.art };
-  const publicRead = (path: string, headers: Record<string, string> = {}) =>
-    f.main.handle(new Request(`http://main.local${path}`, { headers }));
+  const publicRead = async (path: string, headers: Record<string, string> = {}) => {
+    const request = { method: 'GET', path, headers, persona: 'anonymous reader' };
+    campaignEvidence('exact campaign', { phase: 'request', request });
+    const response = await f.main.handle(new Request(`http://main.local${path}`, { headers }));
+    campaignEvidence('exact campaign', { phase: 'answer', request, status: response.status,
+      body: response.headers.get('content-type')?.includes('json') ? await response.clone().json() : null });
+    return response;
+  };
   const browserHeaders = { 'accept-language': 'en' };
   const withVariant = (path: string, variant: string) => {
     const url = new URL(path, 'http://main.local');
@@ -301,16 +318,19 @@ test('v2 campaign writes request only new art, replay once, and read srcset for 
   for (let i = 0; i < 4; i++) await worker.tick();
   let itemReads = 0;
   let candidateReads = 0;
+  const itemBatches: string[][] = [], candidateBatches: string[][] = [];
   const itemBatch = f.store.itemDeliveryBatch.bind(f.store);
   const candidateBatch = f.store.renditions.candidatesBatch.bind(f.store.renditions);
-  f.store.itemDeliveryBatch = async uses => { itemReads++; expect(uses).toHaveLength(2); return itemBatch(uses); };
-  f.store.renditions.candidatesBatch = async uses => { candidateReads++; expect(uses).toHaveLength(2); return candidateBatch(uses); };
+  f.store.itemDeliveryBatch = async uses => { itemReads++; itemBatches.push([...uses]); expect(uses).toHaveLength(2); return itemBatch(uses); };
+  f.store.renditions.candidatesBatch = async uses => { candidateReads++; candidateBatches.push([...uses]); expect(uses).toHaveLength(2); return candidateBatch(uses); };
   try {
     const response = await f.read();
     expect(response.headers.get('etag')).not.toBe(pendingEtag);
     const body = await json<{ presentation: ZonePresentation; slideMedia: { art: {
       landscape: { srcset: { url: string; width: number; type: string }[] }; portrait: unknown;
       cutout: unknown; logos: unknown[] } }[] }>(response);
+    campaignEvidence('campaign batch cost', { request: { method: 'GET', path: `${f.path}/presentation`, persona: 'anonymous reader' },
+      status: response.status, body, itemReads, candidateReads, itemBatches, candidateBatches });
     expect(body.presentation.slides[0]).toMatchObject({ work: work.work, title: 'Changed copy', titles: { ja: '注目' } });
     expect(body.slideMedia[0]!.art.landscape.srcset.map(candidate => candidate.type)).toEqual(['image/avif', 'image/webp']);
     expect(body.slideMedia[0]!.art.logos).toMatchObject([{ language: 'zxx', tone: 'light', anchor: 'center-middle' }]);
