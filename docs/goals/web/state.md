@@ -1,16 +1,20 @@
 # State
 
-Checkpoint f54f7729-9c57-453a-bd81-0b62a6183c61, consolidating the handled
-start, G-2091:3, G-2201:1, G-2219:1 and three mail events named in the event.
+Checkpoint 51dd6a67-6af3-45e3-930b-f18c1a2a646b, consolidating the handled
+task:G-2219:2 and mail:6d5b70e8-43ad-491d-bc80-552a2cc25c11 decisions in
+`tasks/G-2219.md`, and carrying forward the preceding checkpoint.
 The program restarted this Goal on 2026-10-13; the earlier wrap-up prohibition
 on dispatch and resume is withdrawn. This checkpoint grants no duplicate
 worker attempt and decides no pending mail event.
 
 ## Scope and measures
 
-Reading from `task goal -- status` at this checkpoint:
+`task goal -- status` refreshed the scope and persona counts below, then
+encountered a ledger lock. It was interrupted without waiting. Other measures
+are carried from checkpoint f54f7729-9c57-453a-bd81-0b62a6183c61; they are
+not a fresh reading of attempts, tokens, refusals or allowance.
 
-| Measure | Checkpoint |
+| Measure | Latest available reading |
 | --- | --- |
 | Program API scope | 42 of 67 rows proved |
 | Persona cells | 290 proved, 112 pending, 0 not applicable, 0 missing |
@@ -21,9 +25,10 @@ Reading from `task goal -- status` at this checkpoint:
 | Recorded refusals | 0 outcome, 0 gate, 0 failing-test finding, 1 other |
 | Accounts | codex 11%, codex-1 21% of their weekly windows |
 
-The API scope is the program's progress, not 42 web surface proofs. The attempt
-share and median do not meet the method's stop thresholds; continue settled
-work. G-2091's third attempt only repaired its handoff token, and G-2219's
+The API scope is the program's progress, not 42 web surface proofs. The carried
+attempt share and median did not meet the method's stop thresholds; this
+checkpoint authorizes no new dispatch from stale measures. G-2091's third
+attempt only repaired its handoff token, and G-2219's
 resumed attempt found missing host input without implementation; neither
 establishes a new product outcome. Keep these distinctions when comparing
 the tool's counts with the earlier manager count in this file's history.
@@ -34,7 +39,7 @@ the tool's counts with the earlier manager count in this file's history.
 | --- | --- |
 | G-2091 | Attempt 3 exited partial. The bounded structural guard, retained keys and Manage/Zone/proposal/Recipe fixes are accepted subject to gates. Both Recipe files belong to the reclaimed claim; the standalone result token resolves the handoff refusal. Status still reports exited, so do not count the accepted three commits as landed. Complete `land G-2091 --step`; keep the task open for deferred debt. No further worker work is authorized without a reproducible pending/completion or retained-key failure. |
 | G-2199 | Running, attempt 1; D030 module mocks must retain real exports and routes. Decide its handoff when delivered. |
-| G-2219 | D129 split from G-2201. Program approved one optional host-supplied Try destination, with no SDK gate, evaluator or operation identifier. Attempt 1's reading was accepted; the mail turn already resumed attempt 2, so the older handoff required no second resume. Attempt 2 exited blocked without edits because synchronous card construction lacks viewer-access input. The adapter-versus-threading question was mailed with the brief's path under `web-g2219-host-decision-input`. Handle the host-ruling delivery in its own event; no implementation is accepted here. |
+| G-2219 | D129 split from G-2201. Attempt 2's blocked finding was accepted without implementation. The program resolved its missing host input: use an asynchronous Hub card adapter in `zone-home.tsx`, following `CatalogueSlotCard`, with request-cached `readPlatformAccess()` and the shell's existing decision function for `getV1HubWorksById`. Pass optional `tryHref` only when open and preserve `OperationGate` behavior when no answer is available. Keep `cardRenderer` synchronous, its callers unchanged, and the SDK free of gates, evaluators and operation identifiers. The handled mail already resumed implementation under the existing claim. Decide the subsequent handoff in its own event; no duplicate resume, accepted implementation, landing or close is authorized by this checkpoint. |
 
 G-2091's Library/rating/Studio and unresolved-alias inventory is deferred,
 not proof of product faults. G-2093 is closed: its landed structural filter
@@ -89,7 +94,8 @@ inferred from their handoffs.
 
 ## Next action and acknowledgements
 
-Handle the accepted G-2091 landing and the regression/SDK handoffs; release
+Handle the accepted G-2091 landing and the regression handoffs; decide G-2219's
+subsequent implementation handoff separately. Release
 surfaces through the program's file admission. Brief continuation, identity
 and filter pieces only with evidence of the fault. Correct refused briefs in
 their decision turn and keep API gaps with their outcome owner.
@@ -99,6 +105,11 @@ The three supplied mail deliveries, 571b93a0-e936-483a-9c5d-3355d04c63f9,
 1dd26204-3839-4d64-bc16-bfc7f61970f6, are already acknowledged in durable
 mail. Their queue, additive SDK and main-file rulings are consolidated above.
 Pending deliveries and later handoffs retain their own decision events.
+
+The supplied mail 6d5b70e8-43ad-491d-bc80-552a2cc25c11 is already acknowledged
+in durable mail at 2026-10-13 16:28:50 UTC. Its asynchronous host-adapter ruling
+and the preceding blocked handoff are consolidated here; no reply or further
+program ruling is needed for these handled events.
 
 Keep structural guards bounded, with benign-edit and correct-consumer passing
 fixtures and class-violation failing fixtures. Settle owner paths before a
