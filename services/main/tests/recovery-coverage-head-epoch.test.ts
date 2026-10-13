@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Pool } from 'pg';
@@ -25,6 +26,7 @@ let access: Pool, account: Pool, content: Pool, sourceRelay: Pool, retainedRelay
 let fuseki: FusekiClient, consumer: string, generation: string;
 let qa: ReturnType<typeof qaStack>;
 const hmacKey = 'd3'.repeat(32);
+const volume = `rezics-coverage-epoch-${randomUUID()}`;
 
 beforeAll(async () => {
   const started = Date.now(), runId = Bun.env.REZICS_QA_RUN_ID;
@@ -36,7 +38,7 @@ beforeAll(async () => {
   content = pool(databases.urls.content); sourceRelay = pool(databases.urls.relay);
   await migrateContent(content);
   graph = await standaloneFuseki(qa.dockerEnv, {
-    name: `rezics-coverage-epoch-${randomUUID()}`, image: pinnedImage(),
+    name: volume, volume, image: pinnedImage(),
     secrets: fusekiSecrets(qa.composeEnv),
   });
   fuseki = new FusekiClient(graph.url, qa.composeEnv.FUSEKI_MAINTENANCE_TOKEN, qa.composeEnv.FUSEKI_COMMAND_TOKEN);
@@ -51,6 +53,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await Promise.allSettled([access?.end(), account?.end(), content?.end(), sourceRelay?.end(), retainedRelay?.end()]);
   graph?.remove();
+  if (qa) spawnSync('docker', ['volume', 'rm', '-f', volume], { env: qa.dockerEnv, timeout: 60_000 });
   await databases?.close();
 }, 60_000);
 
