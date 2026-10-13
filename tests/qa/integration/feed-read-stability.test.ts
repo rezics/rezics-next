@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test';
+import * as observability from '@rezics/observability/log';
 import { randomUUID } from 'node:crypto';
 import type { FeedItem } from '../../../services/main/src/modules/feed/contract.ts';
 import { READ_BASIS_RETENTION_MS } from '../../../services/main/src/modules/read-basis/retention.ts';
@@ -131,13 +132,29 @@ test('Home and Realm continuations expire at their first-page deadline even afte
 test('a changed Home or Realm population still requires a documented cursor restart', async () => {
   const paths = sorts.flatMap(sort => [`/v1/feed?sort=${sort}&limit=1`, `${realmPath}?sort=${sort}&limit=1`]);
   const pages = new Map<string, Page | Threads>();
-  for (const path of paths) pages.set(path, await home.json<Page | Threads>(await home.call('GET', path)));
+  for (const path of paths) {
+    const first = await home.json<Page | Threads>(await home.call('GET', path));
+    expect(first.items.length, path).toBeGreaterThan(0);
+    expect(first.nextCursor, path).toBeTruthy();
+    pages.set(path, first);
+  }
   await seed.post('A new member of the retained population');
   await home.project();
-  for (const path of paths) {
-    const restart = await home.json<{ code: string }>(await home.call('GET',
-      continueAt(path, pages.get(path)!.nextCursor!)), 409);
-    expect(restart.code).toBe('read_basis_changed');
+  const continuations: { path: string; response: Response }[] = [];
+  const faults = spyOn(observability, 'logWorkerFault');
+  try {
+    for (const path of paths) {
+      faults.mockClear();
+      const continuation = continueAt(path, pages.get(path)!.nextCursor!);
+      const response = await home.call('GET', continuation);
+      console.info('Feed changed-population qualification:', { request: { method: 'GET', path: continuation },
+        first: pages.get(path), status: response.status, body: await response.clone().json(), faults: faults.mock.calls });
+      continuations.push({ path, response });
+    }
+  } finally { faults.mockRestore(); }
+  for (const { path, response } of continuations) {
+    const restart = await home.json<{ code: string }>(response, 409);
+    expect(restart.code, path).toBe('read_basis_changed');
   }
 }, SETUP_MS);
 

@@ -57,15 +57,16 @@ test('refresh alone converts populated catalogue decisions, resumes fenced failu
       policy: CLASSIFICATION_DIRECT_DECISION_PROFILE},CLASSIFICATION_DIRECT_DECISION_PROFILE);
     // Retained data predates migration 1499. No operator conversion or fence
     // command is called; refresh's real owner-preparation pipeline owns both.
-    await f.accessPool.query('DROP TABLE access.statement_seek,access.statement_seek_coverage');
+    await f.accessPool.query('DROP TABLE access.statement_seek,access.statement_seek_coverage,access.statement_publication_seek_coverage');
     // QA installs owner DDL directly. Reconstruct the pre-upgrade Access
     // tracker so refresh exercises the same locked migration runner as dev.
+    // Recreating seek also requires its later publication columns and coverage.
     await f.accessPool.query(`CREATE TABLE IF NOT EXISTS public.rezics_local_migration
       (name text PRIMARY KEY,applied_at timestamptz NOT NULL DEFAULT now())`);
     await f.accessPool.query(`INSERT INTO public.rezics_local_migration(name)
       SELECT unnest($1::text[]) ON CONFLICT DO NOTHING`,
-    [migrationRecords(repositoryRoot,'access').filter(value => value.version !== 1499).map(value => value.name)]);
-    await f.accessPool.query("DELETE FROM public.rezics_local_migration WHERE name LIKE '%1499%'");
+    [migrationRecords(repositoryRoot,'access').filter(value => ![1499,1776].includes(value.version)).map(value => value.name)]);
+    await f.accessPool.query("DELETE FROM public.rezics_local_migration WHERE name LIKE '%1499%' OR name LIKE '%1776%'");
     const missing = `urn:rezics:sha256:${'0'.repeat(64)}`;
     await f.env.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA {
       GRAPH ${iri(GRAPHS.current)} { ${iri(application)} a rv:ClassificationApplication ;

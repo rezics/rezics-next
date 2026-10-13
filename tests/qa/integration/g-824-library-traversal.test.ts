@@ -1,4 +1,5 @@
 import { expect, spyOn, test } from 'bun:test';
+import * as observability from '@rezics/observability/log';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { GRAPHS, iri, lit } from '../../../services/main/src/modules/work/activate.ts';
@@ -114,6 +115,7 @@ test('G-824: 1,000 Works traverse each status in every SQL sort/direction withou
         expect(nodes(plan).some(node => ['Sort', 'Seq Scan'].includes(node['Node Type']))).toBe(false);
         expect(Math.max(...nodes(plan).map(node => node['Actual Rows']))).toBeLessThanOrEqual(20);
       }
+      let ownedTraversals = 0;
       for (const status of statuses) for (const sort of sorts.filter(sort => sort !== 'finished' || status === 'read')) {
         for (const order of ['asc', 'desc'] as ShelfOrder[]) {
           const expected = (await home.stack.contentPool.query<{ work: string }>(`SELECT work
@@ -138,12 +140,21 @@ test('G-824: 1,000 Works traverse each status in every SQL sort/direction withou
           expect(new Set(actual).size).toBe(actual.length);
           expect(actual).toEqual(expected);
           expect(actual.length).toBe(counts.find(row => row.status === status)!.count);
+          ownedTraversals++;
         }
       }
       await home.json(await home.call('PUT', `/v1/agents/${agent.slice(-36)}/library-visibility`,
         { visibility: 'public', expectedVersion: 0 }, home.reader.token));
-      const publicCounts = await home.json<{ statusShelves: { status: string; count: number; countKind: string; nextCursor: string | null }[] }>(
-        await home.call('GET', `/v1/agents/${agent.slice(-36)}/shelves`));
+      const publicPath = `/v1/agents/${agent.slice(-36)}/shelves`;
+      const faults = spyOn(observability, 'logWorkerFault');
+      let publicResponse: Response;
+      try {
+        publicResponse = await home.call('GET', publicPath);
+        console.info('G824 public shelves qualification:', { ownedTraversals, works: works.length,
+          request: { method: 'GET', path: publicPath, persona: 'anonymous shelf reader' },
+          status: publicResponse.status, body: await publicResponse.clone().json(), faults: faults.mock.calls });
+      } finally { faults.mockRestore(); }
+      const publicCounts = await home.json<{ statusShelves: { status: string; count: number; countKind: string; nextCursor: string | null }[] }>(publicResponse);
       expect(publicCounts.statusShelves.reduce((sum, shelf) => sum + shelf.count, 0)).toBe(60);
       expect(publicCounts.statusShelves.every(shelf => shelf.countKind === 'lower-bound' && shelf.nextCursor)).toBe(true);
       const publicPage = await home.json<Page & { statusCount: number }>(await home.call('GET',

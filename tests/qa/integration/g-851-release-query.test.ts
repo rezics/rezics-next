@@ -316,6 +316,7 @@ test('G851: global and Zone inventories filter before pagination and traverse be
       }
       return boundedQuery(sparql, maxBytes);
     };
+    const traversalCosts: { scope: string; page: number; graphCalls: number }[] = [];
     for (const scope of [{ kind: 'all' }, { kind: 'realm', realm }]) {
       const seen: string[] = [];
       let pages = 0, maxRequestMs = 0, maxGraphCalls = 0;
@@ -332,7 +333,8 @@ test('G851: global and Zone inventories filter before pagination and traverse be
         maxGraphCalls = Math.max(maxGraphCalls, stack.fuseki.queries - before);
         expect(Value.Check(releaseWorksPage, page)).toBe(true);
         expect(page.items.length).toBeLessThanOrEqual(20);
-        expect(stack.fuseki.queries - before).toBeLessThanOrEqual(RELEASE_QUERY_COST.graphCalls);
+        // Finish the independent traversal proof before reporting a cost failure.
+        traversalCosts.push({ scope: scope.kind, page: pages, graphCalls: stack.fuseki.queries - before });
         expect(Date.now() - started).toBeLessThan(RELEASE_QUERY_COST.deadlineMs);
         expect(page.count).toMatchObject({ kind: 'exact-page', total: null });
         if (position) expect(page.sourcePosition).toEqual(position);
@@ -344,7 +346,8 @@ test('G851: global and Zone inventories filter before pagination and traverse be
       expect(seen).toEqual(fixture.matching);
       expect(new Set(seen).size).toBe(550);
       console.info('G851 traversal:', JSON.stringify({ scope: scope.kind, works: seen.length,
-        pages, maxRequestMs, maxGraphCalls }));
+        pages, maxRequestMs, maxGraphCalls, request: { ...base, scope,
+          context: scope.kind === 'realm' ? { realm } : 'global', filter }, position }));
     }
     expect(checkedWindows).toBeGreaterThan(50);
     stack.fuseki.query = boundedQuery;
@@ -425,5 +428,7 @@ test('G851: global and Zone inventories filter before pagination and traverse be
     } while (continuation);
     expect(emptyPages).toBeGreaterThanOrEqual(2);
     expect(sparseSeen).toEqual(expected);
+    for (const request of traversalCosts)
+      expect(request.graphCalls, JSON.stringify(request)).toBeLessThanOrEqual(RELEASE_QUERY_COST.graphCalls);
   } finally { await stack.stop(); }
 }, 240_000);
