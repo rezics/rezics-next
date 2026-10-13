@@ -25,6 +25,7 @@ import { land, type LandScope } from './land.ts';
 import { mechanisms } from '../static/mechanisms.ts';
 import { printScopeProgress } from '../qa/cases/outcomes.ts';
 import { GoalMailStore } from './mail.ts';
+import { goalMeasures } from './measures.ts';
 import { GoalCoordinator, claudeConfigHome, claudeNativeSession, claudeWakeArgs, nativeSession, processIdentity, tmuxServer,
   WAKE_LAST_MESSAGE, WAKE_PROMPT, type LaunchDescriptor, type WakeEvent } from './coordinator.ts';
 
@@ -5360,6 +5361,7 @@ async function status(): Promise<void> {
   console.log(`gate lanes: ${gateLaneStatus()}`);
   for (const waiting of gateLaneWaiters()) console.log(waiting);
   const active = activeGoals(ledger);
+  await goalMeasures(ledger, { root, print: line => console.log(line) });
   for (const slug of active) {
     const own = tasks.filter(task => task.goal === slug);
     console.log(`Goal ${slug}: manager ${managerOf(ledger, slug)}; ${own.filter(running).length} live, `
@@ -6277,7 +6279,7 @@ async function main(argv: string[]): Promise<number> {
       return 0;
     }
     case 'usage':
-      console.log(JSON.stringify(await usageReport(), null, 2));
+      console.log(JSON.stringify({ ...await usageReport(), measures: await goalMeasures(readLedger(), { root }) }, null, 2));
       return 0;
     case 'test': {
       const at = rest.indexOf('--result-file');
