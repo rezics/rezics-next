@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { runUnitSide, runOwnerShard, rememberSlowTests, writeUnitEvidence, timeoutOnlyTestFiles, UNIT_JUNIT_MARKER, preMergeSurfaceGate,
+import { runUnitSide, runOwnerShard, rememberSlowTests, writeUnitEvidence, timeoutOnlyTestFiles, UNIT_JUNIT_MARKER, preMergeSurfaceGate, completedUnitShard,
   type SlowTestRecord, type UnitRunEvidence } from './unit-gate.ts';
 import { parseBrief } from './briefs.ts';
 import { mergeUnitFiles, unitFilesFromPlan } from './unit-gate.ts';
@@ -185,6 +185,19 @@ test('a file with both a timeout and an assertion never qualifies for a timeout 
 <testcase file="mixed.test.ts" name="broken"><failure type="AssertionError" message="expected 2"/></testcase>
 </testsuite></testsuites>`;
   expect(timeoutOnlyTestFiles(xml, ['mixed.test.ts'])).toEqual([]);
+});
+
+test('completed shard attribution keeps the unit gate’s exit status and failure identities', () => {
+  const file = 'guard.test.ts';
+  const output = `${UNIT_JUNIT_MARKER}\n<testsuites><testsuite>
+<testcase file="${file}" name="slow" time="5"><failure type="TimeoutError" message="test timed out"/></testcase>
+<testcase file="${file}" name="broken"><failure type="AssertionError" message="expected 2"/></testcase>
+</testsuite></testsuites>`;
+  expect(completedUnitShard('.', [file], 0, output, 10)).toMatchObject({ failing: [], timedOut: [], failures: [], runnerErrors: [], exitCode: 0 });
+  expect(completedUnitShard('.', [file], 1, output, 10)).toMatchObject({ failing: [file], timedOut: [file],
+    failures: [{ file, test: 'slow' }, { file, test: 'broken' }], runnerErrors: [], exitCode: 1 });
+  expect(completedUnitShard('.', [file], 1, 'error: runner crashed', 10)).toMatchObject({ failing: [],
+    runnerErrors: [{ files: ['runner'], diagnostic: 'error: runner crashed' }] });
 });
 
 test('a passing file printing another run’s timeout, failure and report passes without any retry', async () => {

@@ -6,11 +6,15 @@ import ts from 'typescript-6';
 import { type Brief } from './types.ts';
 import { type CheckGroup, type CheckRunner, runCheckCommand, checkFailureLines } from './check.ts';
 import { affectedSelection } from './merge.ts';
-import { mergeUnitFiles, unitFilesFromPlan } from './unit-gate.ts';
+import {
+  mergeUnitFiles, unitFilesFromPlan, completedUnitShard, timeoutOnlyTestFiles, retryTimedOutFiles,
+  introducedUnitFailures, prepareUnitBaseline, removeUnitBaseline, reportCases, slowTestLine,
+  ownerArtifactFiles, unitArtifactReport, timeoutRetryArg, unitGateBudgetMs, type UnitShardRunner,
+} from './unit-gate.ts';
 import { repositoryGuardSelectionLine } from '../qa/repository-guards.ts';
 import { withGateLane, withSlot, type SlotRunOptions, type GateLaneOptions } from './qa-slots.ts';
 import { type loadOutcomes, personas, type RowOutcomes } from '../qa/cases/outcomes.ts';
-import { isQaE2ePath, isQaFaultPath, isQaIntegrationPath, isQaLoadPath, isQaModelPath } from '../qa/acceptance.ts';
+import { isQaE2ePath, isQaFaultPath, isQaIntegrationPath, isQaLoadPath, isQaModelPath, isQaOwnerPath } from '../qa/acceptance.ts';
 
 const unitFile = /\.(?:test|spec)\.[cm]?[jt]sx?$/;
 const storyFile = /\.stories\.tsx$/;
@@ -126,6 +130,11 @@ export async function selectSurface(cwd: string, brief: Brief, changed: readonly
 
 export type SurfacePart = 'contract' | 'types' | 'lint' | 'ast' | 'tests' | 'guards' | 'stories';
 export interface SurfaceTiming { name: SurfacePart; code: number; seconds: number; waitSeconds: number }
+export interface SurfaceExcusedTest {
+  part: 'tests' | 'guards'; file: string; test: string;
+  reason: 'timeout-retry' | 'fails-on-main'; revision: string;
+  originalSeconds?: number; retrySeconds?: number;
+}
 export interface SurfaceRunOptions {
   runner?: CheckRunner;
   print?: (line: string) => void;
@@ -139,7 +148,7 @@ export interface SurfaceRunOptions {
   evidenceDirectory?: string;
 }
 
-/** One ordered path. A failed part is final, including a failed story; no retry or baseline allowance. */
+/** Tests and guards retry timeout-only files alone and excuse main's failures in untouched files; every other part is final. */
 export async function runSurfaceGate(cwd: string, selection: SurfaceSelection, options: SurfaceRunOptions = {}) {
   const root = options.evidenceDirectory ?? join(cwd, '.temp/goal/surface-gate');
   mkdirSync(root, { recursive: true });
@@ -147,6 +156,7 @@ export async function runSurfaceGate(cwd: string, selection: SurfaceSelection, o
   const log = join(directory, 'output.log');
   const evidence = join(directory, 'evidence.json');
   const checks: SurfaceTiming[] = [];
+  const excused: SurfaceExcusedTest[] = [];
   const print = options.print ?? console.log;
   const now = options.now ?? Date.now;
   const run = options.runner ?? runCheckCommand;
@@ -154,6 +164,93 @@ export async function runSurfaceGate(cwd: string, selection: SurfaceSelection, o
   if (only.includes('guards')) print(repositoryGuardSelectionLine(selection.changed, cwd));
   let env = process.env;
   writeFileSync(log, `${JSON.stringify(selection)}\n`);
+  async function unitPart(name: 'tests' | 'guards', files: string[]): Promise<{ code: number; output: string }> {
+    let output = '';
+    let invocation = 0;
+    const notes: string[] = [];
+    const note = (line: string) => { print(line); notes.push(line); };
+    const runShard: UnitShardRunner = async (root, selected, _deadline, retryOptions) => {
+      const label = `${name}-${invocation++}`;
+      const artifacts = join(directory, `${label}-artifacts`);
+      mkdirSync(artifacts, { recursive: true });
+      const report = join(artifacts, 'unit.xml');
+      const direct = name === 'guards' || selected.every(file => !isQaOwnerPath(file));
+      const started = now();
+      const command = name === 'guards' ? ['task', 'goal:unit-files', '--'] : ['bun', 'scripts/qa/test.ts'];
+      const result = await run([...command, ...selected,
+        ...retryOptions?.testTimeoutMultiplier ? [timeoutRetryArg(direct ? 'unit' : 'owner')] : [],
+        ...direct ? ['--reporter=junit', `--reporter-outfile=${report}`] : []], root, join(directory, `${label}.log`),
+      { ...env, REZICS_QA_ARTIFACT_ROOT: artifacts });
+      const diagnostics = ownerArtifactFiles(artifacts, ['**/*.log']).map(path => readFileSync(path, 'utf8')).join('\n');
+      result.output += `\n${diagnostics}\n${unitArtifactReport(root, ownerArtifactFiles(artifacts, ['**/*.xml']))}`;
+      output += `\n${root}: ${selected.join(', ')}\n${result.output}\n`;
+      return completedUnitShard(root, selected, result.code, result.output, now() - started);
+    };
+    const branch = await runShard(cwd, files, now() + unitGateBudgetMs());
+    if (!branch.failing.length || branch.runnerErrors.length) return { code: branch.exitCode ?? 1, output };
+    const timeouts = timeoutOnlyTestFiles(branch.output, branch.failing, cwd);
+    const revision = spawnSync('git', ['rev-parse', 'HEAD'], { cwd, encoding: 'utf8' }).stdout.trim();
+    const recovered = new Map<string, number>();
+    const retry = await retryTimedOutFiles(cwd, timeouts, 'affected', runShard, undefined, {
+      historyDirectory: join(directory, 'timeout-history'),
+      timeoutRetryPassed: test => {
+        recovered.set(`${test.file}\0${test.test}`, test.seconds);
+        const original = reportCases(branch.output, cwd)?.find(item => item.file === test.file && item.name === test.test);
+        const originalSeconds = original?.durationMs === undefined ? undefined : original.durationMs / 1000;
+        note(`${slowTestLine(test)}; first attempt ${originalSeconds?.toFixed(3) ?? 'unknown'}s, retry ${test.seconds.toFixed(3)}s`);
+      },
+    }, branch.output);
+    for (const file of retry.passing) {
+      for (const failure of branch.failures.filter(item => item.file === file)) {
+        const first = reportCases(branch.output, cwd)?.find(item => item.file === file && item.name === failure.test);
+        excused.push({ part: name, file, test: failure.test, reason: 'timeout-retry', revision,
+          ...(first?.durationMs === undefined ? {} : { originalSeconds: first.durationMs / 1000 }),
+          retrySeconds: recovered.get(`${file}\0${failure.test}`) });
+      }
+    }
+    if (retry.runnerErrors.length) return { code: 1, output: `${output}\n${notes.join('\n')}` };
+    const failing = branch.failing.filter(file => !retry.passing.includes(file));
+    const failures = failing.flatMap(file => (retry.failing.includes(file) ? retry.failures : branch.failures)
+      .filter(item => item.file === file));
+    const errors = failing.flatMap(file => (retry.failing.includes(file) ? retry.fileErrors : branch.fileErrors)
+      .filter(item => item.file === file));
+    const changed = new Set(selection.changed);
+    const candidates = failing.filter(file => !changed.has(file));
+    const blocking = new Set(failing.filter(file => changed.has(file)));
+    if (candidates.length) {
+      const baseline = mkdtempSync(join(cwd, '.temp/unit-gate-'));
+      try {
+        await prepareUnitBaseline(cwd, baseline, selection.main, options.runner ? async root => {
+          const installed = await run(['task', 'install'], root, join(directory, `${name}-main-install.log`), env);
+          output += installed.output;
+          if (installed.code) throw new Error(`Unit baseline dependency install failed: ${installed.output}`);
+        } : undefined);
+        const existing = candidates.filter(file => existsSync(join(baseline, file)));
+        for (const file of candidates.filter(file => !existing.includes(file))) blocking.add(file);
+        if (existing.length) {
+          const main = await runShard(baseline, existing, now() + unitGateBudgetMs());
+          if (main.runnerErrors.length) for (const file of existing) blocking.add(file);
+          else {
+            const introduced = introducedUnitFailures(existing, failures, main.failures, errors, main.fileErrors);
+            for (const file of existing) {
+              const ownFailures = failures.filter(item => item.file === file);
+              const ownErrors = errors.filter(item => item.file === file);
+              if (introduced.some(item => item.file === file) || (!ownFailures.length && !ownErrors.length)) blocking.add(file);
+              for (const failure of ownFailures.filter(item => main.failures.some(base => base.file === file && base.test === item.test))) {
+                excused.push({ part: name, file, test: failure.test, reason: 'fails-on-main', revision: selection.main });
+                note(`Failure on main: ${file} > ${failure.test} (${selection.main}); reported, not blocking`);
+              }
+              if (!introduced.some(item => item.file === file) && ownErrors.length) {
+                note(`Failure on main: ${file} > file error (${selection.main}); reported, not blocking`);
+                excused.push({ part: name, file, test: '[file error]', reason: 'fails-on-main', revision: selection.main });
+              }
+            }
+          }
+        }
+      } finally { removeUnitBaseline(cwd, baseline); }
+    }
+    return { code: blocking.size ? 1 : 0, output: `${output}\n${notes.join('\n')}` };
+  }
   async function part(name: SurfacePart, commands: string[][], waitSeconds = 0): Promise<boolean> {
     const start = now();
     let code = 0;
@@ -162,6 +259,10 @@ export async function runSurfaceGate(cwd: string, selection: SurfaceSelection, o
       if (name === 'contract' && options.generate) {
         output = await options.generate() ?? '';
         code = output ? 1 : 0;
+      } else if ((name === 'tests' || name === 'guards') && commands.length) {
+        const result = await unitPart(name, name === 'tests' ? selection.units : selection.guards);
+        code = result.code;
+        output = result.output;
       } else for (const command of commands) {
         const result = await run(command, cwd, join(directory, `${name}-${commands.indexOf(command)}.log`), env);
         output += result.output;
@@ -180,7 +281,7 @@ export async function runSurfaceGate(cwd: string, selection: SurfaceSelection, o
   const directories = [...new Set(existing.filter(file => /\.[cm]?[jt]sx?$/.test(file)).map(dirname))].sort();
   const finish = () => {
     const code = checks.some(check => check.code !== 0) ? 1 : 0;
-    writeFileSync(evidence, `${JSON.stringify({ code, selection, checks, log }, null, 2)}\n`);
+    writeFileSync(evidence, `${JSON.stringify({ code, selection, checks, excused, log }, null, 2)}\n`);
     print(`Surface gate evidence: ${evidence}`);
     print(`Full output: ${log}`);
     return { code, log, evidence, checks };

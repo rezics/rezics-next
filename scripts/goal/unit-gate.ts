@@ -584,7 +584,7 @@ function consoleAfterReport(output: string): string {
 
 /** Testcases in the gate's appended report. Undefined when that report is absent.
  * A leading `./` is the same file the console header names without it. */
-function reportCases(output: string, root?: string): TestResult[] | undefined {
+export function reportCases(output: string, root?: string): TestResult[] | undefined {
   const xml = junitXml(output);
   if (xml === undefined) return undefined;
   return parseJUnit(xml, 'unit', root === undefined ? undefined : { root }).map(test => ({
@@ -737,6 +737,24 @@ export interface UnitShardResult {
 
 export interface TimeoutRetryOptions { testTimeoutMultiplier?: number }
 export type UnitShardRunner = (cwd: string, files: readonly string[], deadline: number, options?: TimeoutRetryOptions) => Promise<UnitShardResult>;
+
+/** Attribute a completed runner's own report; an exit-zero transcript cannot create failures. */
+export function completedUnitShard(cwd: string, files: readonly string[], code: number, output: string, ms: number,
+  runnerDiagnostic = outputTail(output) || `Unit runner exited with status ${code}`): UnitShardResult {
+  if (code === 0) return { done: true, exitCode: 0, failing: [], timedOut: [], failures: [], fileErrors: [], runnerErrors: [],
+    files: [...files], output, ms };
+  const timedOut = timedOutTestFiles(output, files, cwd);
+  const failures = unitFailureDetails(output, files, cwd);
+  const namedFailing = failingTestFiles(output, files, cwd);
+  const covered = junitReportedFiles(output, files, cwd);
+  const fileErrors = unitFileErrorDetails(output, files, cwd, [...namedFailing, ...failures.map(failure => failure.file)])
+    .filter(error => !covered.has(error.file));
+  const failing = [...new Set([...namedFailing, ...timedOut,
+    ...failures.map(failure => failure.file), ...fileErrors.map(error => error.file)])];
+  const runnerErrors = !failing.length
+    ? [{ files: ['runner'], diagnostic: runnerDiagnostic }] : [];
+  return { done: true, exitCode: code, failing, timedOut, failures, fileErrors, runnerErrors, files: [...files], output, ms };
+}
 
 export const TIMEOUT_RETRY_MULTIPLIER = 6;
 export function timeoutRetryArg(tier: TierTestTimeout): string {
@@ -1420,7 +1438,7 @@ export function introducedUnitFailureFiles(branchFiles: readonly string[], branc
 interface ShardInvocation { args: string[]; label: string; env: NodeJS.ProcessEnv; progressFile?: string; artifactDirectory?: string }
 
 /** Paths supplied to this runner own its reports; a test printing another artifact URL grants no attribution. */
-function ownerArtifactFiles(directory: string | undefined, patterns: readonly string[]): string[] {
+export function ownerArtifactFiles(directory: string | undefined, patterns: readonly string[]): string[] {
   if (!directory || !existsSync(directory)) return [];
   return patterns.flatMap(pattern => [...new Bun.Glob(pattern).scanSync({ cwd: directory })].map(file => join(directory, file)));
 }
@@ -1439,6 +1457,13 @@ function relativizeJunitFiles(xml: string, cwd: string): string {
     const file = decodeXml(value);
     return isAbsolute(file) ? `file="${relative(cwd, file)}"` : match;
   });
+}
+
+export function unitArtifactReport(cwd: string, files: readonly string[]): string {
+  if (!files.length) return '';
+  const xml = files.map(path => relativizeJunitFiles(readFileSync(path, 'utf8'), cwd)
+    .replace(/<\?xml[^>]*\?>|<\/?testsuites\b[^>]*>/g, '')).join('\n');
+  return `${UNIT_JUNIT_MARKER}\n<testsuites>${xml}</testsuites>`;
 }
 
 /** A test may print a gate transcript on stdout. Indenting it stops a column-0 header or `(fail)` line
@@ -1553,9 +1578,7 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
     const text = output();
     const reportFiles = junitFile && existsSync(junitFile) ? [junitFile]
       : ownerArtifactFiles(invocation?.artifactDirectory, ['owner.xml', '*/owner.xml']);
-    const xml = reportFiles.map(path => relativizeJunitFiles(readFileSync(path, 'utf8'), cwd)
-      .replace(/<\?xml[^>]*\?>|<\/?testsuites\b[^>]*>/g, '')).join('\n');
-    const reported = reportFiles.length ? `${text}\n${UNIT_JUNIT_MARKER}\n<testsuites>${xml}</testsuites>` : text;
+    const reported = reportFiles.length ? `${text}\n${unitArtifactReport(cwd, reportFiles)}` : text;
     // An exit-zero process passed. A transcript it printed must not trigger classification or a retry.
     if (outcome.code === 0) {
       rememberUnitDurations(durationsFromOutput(reported, files, new Set()));
@@ -1569,22 +1592,10 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
       rememberUnitDurations(durationsFromOutput(text, files, new Set(timedOut)));
       return { ...unfinished(text, timedOut), budgetExpired: true };
     }
-    const timedOut = timedOutTestFiles(reported, files, cwd);
-    const failures = unitFailureDetails(reported, files, cwd);
-    const namedFailing = outcome.code === 0 ? [] : failingTestFiles(reported, files, cwd);
-    const covered = junitReportedFiles(reported, files, cwd);
-    const fileErrors = unitFileErrorDetails(reported, files, cwd, [...namedFailing, ...failures.map(failure => failure.file)])
-      .filter(error => !covered.has(error.file));
-    const failing = [...new Set([...namedFailing, ...timedOut,
-      ...failures.map(failure => failure.file), ...fileErrors.map(error => error.file)])];
-    // A non-zero exit with no case and no file error is the runner, not every file in the shard.
-    const runnerErrors = outcome.code !== 0 && !failing.length
-      ? [{ files: ['runner'], diagnostic: outputTail(text) || `task ${label} exited with status ${outcome.code}` }]
-      : [];
-    rememberUnitDurations(durationsFromOutput(reported, files, new Set(timedOut)));
-    return { done: true, exitCode: outcome.code, failing, timedOut, failures, fileErrors,
-      runnerErrors, files: [...files], output: reported,
-      ms: Date.now() - startedAt };
+    const result = completedUnitShard(cwd, files, outcome.code, reported, Date.now() - startedAt,
+      outputTail(text) || `task ${label} exited with status ${outcome.code}`);
+    rememberUnitDurations(durationsFromOutput(reported, files, new Set(result.timedOut)));
+    return result;
   } catch {
     // A shard that cannot be reaped is unfinished, not a merge-blocking failure.
     try { await stopGateShard(child); } catch { /* already unfinished */ }
@@ -1649,7 +1660,7 @@ function mergeShardResults(parts: readonly UnitShardResult[]): UnitShardResult {
   };
 }
 
-interface UnitGateResult {
+export interface UnitGateResult {
   done: boolean; failing: string[]; timedOut: string[]; failures: UnitFailureDetail[];
   fileErrors: UnitFileErrorDetail[]; runnerErrors: UnitRunnerError[]; unfinished: string[]; output: string;
   /** First pass, then one pass per continuation of files a budget never reached. */
@@ -1750,6 +1761,7 @@ export interface UnitGateOptions extends TimeoutRetryOptions {
   now?: () => number;
   durations?: ReadonlyMap<string, number>;
   historyDirectory?: string;
+  timeoutRetryPassed?: (test: SlowTestRecord) => void;
 }
 
 /** One schedule of the files still without a verdict. A wide plan is many shards; only `shards` run at once. */
@@ -1931,7 +1943,7 @@ interface TimeoutRetryResult {
   failures: UnitFailureDetail[]; fileErrors: UnitFileErrorDetail[]; runnerErrors: UnitRunnerError[];
 }
 
-async function retryTimedOutFiles(cwd: string, files: readonly string[], side: 'affected' | 'main',
+export async function retryTimedOutFiles(cwd: string, files: readonly string[], side: 'affected' | 'main',
   runShard?: UnitShardRunner, onRun?: (result: UnitGateResult) => void, options: UnitGateOptions = {}, before: string | readonly string[] = ''): Promise<TimeoutRetryResult> {
   const result: TimeoutRetryResult = { failing: [], passing: [], unfinished: [], inconclusive: [], failures: [], fileErrors: [], runnerErrors: [] };
   for (const file of [...new Set(files)].sort()) {
@@ -1942,7 +1954,10 @@ async function retryTimedOutFiles(cwd: string, files: readonly string[], side: '
       const slowTests = recoveredSlowTests(before, retry.output, file, cwd);
       if (retry.passes[0]) retry.passes[0].slowTests = slowTests;
       await rememberSlowTests(slowTests, options.historyDirectory);
-      for (const test of slowTests) console.log(slowTestLine(test));
+      for (const test of slowTests) {
+        if (options.timeoutRetryPassed) options.timeoutRetryPassed(test);
+        else console.log(slowTestLine(test));
+      }
     }
     // Keep the case before the timeout classification discards the transcript.
     onRun?.(retry);
@@ -2281,6 +2296,22 @@ export function gateTreeRefusal(worktree: string, mainRoot: string): string | un
   return postgresSocketRefusal(physicalPath(worktree)) ?? postgresSocketRefusal(physicalPath(baseline));
 }
 
+/** Install the pinned tree with its own workspace links, independent of local edits on main. */
+export async function prepareUnitBaseline(root: string, directory: string, revision: string,
+  install?: (directory: string) => Promise<void>): Promise<void> {
+  addGateWorktree(root, directory, revision);
+  if (install) await install(directory);
+  else {
+    const result = spawnSync('task', ['install'], { cwd: directory, encoding: 'utf8', timeout: 120_000 });
+    if (result.status !== 0) throw new Error(`Unit baseline dependency install failed:\n${result.stdout}\n${result.stderr}`);
+  }
+}
+
+export function removeUnitBaseline(root: string, directory: string): void {
+  git(root, ['worktree', 'remove', '--force', directory]);
+  rmSync(directory, { recursive: true, force: true });
+}
+
 /** A branch failure is inherited when current main already fails the same case, or the same file-level error's first line.
  * Selection uses the candidate's own changes plus files from the stream's earlier merges. */
 export async function preMergeUnitGate(worktree: string, mainRoot: string, currentMain: string,
@@ -2343,10 +2374,7 @@ export async function preMergeUnitGate(worktree: string, mainRoot: string, curre
           return deep;
         }
         directory = created;
-        addGateWorktree(mainRoot, directory, currentMain);
-        // Own workspace links keep the baseline on HEAD even when main has local source edits.
-        const install = spawnSync('task', ['install'], { cwd: directory, encoding: 'utf8', timeout: 120_000 });
-        if (install.status !== 0) throw new Error(`Unit baseline dependency install failed:\n${install.stdout}\n${install.stderr}`);
+        await prepareUnitBaseline(mainRoot, directory, currentMain);
         const main = await runUnitGate(directory, existing, undefined, runShard);
         if (main.done) main.timedOut = timeoutOnlyTestFiles(main.output, main.timedOut, directory, main.timedOut);
         notePasses(evidence, 'main', main.passes, pass => pass.kind, directory);
@@ -2415,8 +2443,7 @@ export async function preMergeUnitGate(worktree: string, mainRoot: string, curre
       }
     } finally {
       if (directory) {
-        git(mainRoot, ['worktree', 'remove', '--force', directory]);
-        rmSync(directory, { recursive: true, force: true });
+        removeUnitBaseline(mainRoot, directory);
       }
     }
     return refusing.length

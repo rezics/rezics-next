@@ -4,8 +4,8 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { join } from 'node:path';
 import { parseBrief } from './briefs.ts';
 import { workerCheck, type CheckRunner } from './check.ts';
-import { preMergeSurfaceGate } from './unit-gate.ts';
-import { selectSurface, runSurfaceGate } from './surface-gate.ts';
+import { preMergeSurfaceGate, UNIT_JUNIT_MARKER } from './unit-gate.ts';
+import { selectSurface, runSurfaceGate, type SurfaceSelection, type SurfaceExcusedTest } from './surface-gate.ts';
 
 const roots: string[] = [];
 const previousPlan = process.env.GOAL_TEST_PLAN;
@@ -149,7 +149,10 @@ test('units, guards and only named stories run in order in one QA slot, with per
   expect(selected.refusals).toEqual([]);
   const environments: string[] = [];
   const result = await runSurfaceGate(f.cwd, selected.selection!, { ...f, runner: async (command, cwd, log, env) => {
-    if (command[1] === 'scripts/qa/test.ts') environments.push(JSON.stringify(env));
+    if (['scripts/qa/test.ts', 'goal:unit-files'].includes(command[1]!)) {
+      const { REZICS_QA_ARTIFACT_ROOT: _artifacts, ...slotEnv } = env ?? {};
+      environments.push(JSON.stringify(slotEnv));
+    }
     return f.runner(command, cwd, log, env);
   } });
   expect(result.code).toBe(0);
@@ -176,11 +179,175 @@ test.each(['contract', 'types', 'lint', 'ast', 'tests', 'guards', 'stories'])('a
   expect(check.code).toBe(1); expect(check.checks.at(-1)?.name).toBe(failed);
   const checkCommands = [...f.commands]; f.commands.length = 0;
   expect(await preMergeSurfaceGate(f.cwd, 'main', f.brief, f.changed, new Set(), { ...f, runner })).toContain('surface gate failed');
-  expect(f.commands).toEqual(checkCommands);
+  const stableCommands = (commands: string[][]) => commands.map(command => command.filter(arg => !arg.startsWith('--reporter-outfile=')));
+  expect(stableCommands(f.commands)).toEqual(stableCommands(checkCommands));
   expect(f.commands.filter(commands[failed]!)).toHaveLength(1);
 });
 
 test('a non-surface brief never enters selection', async () => {
   const f = fixture();
   expect(await selectSurface(f.cwd, { ...f.brief, kind: 'implementation', rows: [], tests: [] }, f.changed)).toBeUndefined();
+});
+
+function gateFixture(part: 'tests' | 'guards' = 'tests') {
+  const f = fixture();
+  const file = part === 'tests' ? 'apps/web/features/zones/catalogue.test.ts' : 'scripts/static/web-continuations.test.ts';
+  const story = 'apps/web/features/zones/catalogue.stories.tsx';
+  const selection: SurfaceSelection = { main: f.git('rev-parse', 'main'), rows: [f.row],
+    units: part === 'tests' ? [file] : [], guards: part === 'guards' ? [file] : [],
+    stories: [story], changed: f.changed, proofs: [] };
+  const lines: string[] = [];
+  const attempts: { cwd: string; command: readonly string[] }[] = [];
+  const run = async (decide: (root: string, command: readonly string[], env?: NodeJS.ProcessEnv) => { code: number; output: string }) => {
+    const runner: CheckRunner = async (command, root, _log, env) => {
+      attempts.push({ cwd: root, command });
+      return ['scripts/qa/test.ts', 'goal:unit-files'].includes(command[1]!) ? decide(root, command, env) : { code: 0, output: '' };
+    };
+    const result = await runSurfaceGate(f.cwd, selection, { ...f, runner, only: ['tests', 'guards'], print: line => lines.push(line) });
+    const evidence = JSON.parse(readFileSync(result.evidence, 'utf8')) as { excused: SurfaceExcusedTest[] };
+    return { ...result, excused: evidence.excused };
+  };
+  return { ...f, file, story, selection, attempts, lines, run };
+}
+
+function report(file: string, state: 'pass' | 'timeout' | 'assertion', name = 'busy surface guard', seconds = 5) {
+  return { code: state === 'pass' ? 0 : 1,
+    output: `${UNIT_JUNIT_MARKER}\n<testsuites><testsuite><testcase file="${file}" name="${name}" time="${seconds}">${
+      state === 'pass' ? '' : `<failure type="${state === 'timeout' ? 'TimeoutError' : 'AssertionError'}" message="${state === 'timeout' ? 'test timed out after 5000ms' : 'expected 2'}"/>`
+    }</testcase></testsuite></testsuites>` };
+}
+
+test.each(['tests', 'guards'] as const)('%s timeout reruns only its file with the longer limit and records both durations', async part => {
+  const f = gateFixture(part);
+  const sibling = 'apps/web/features/zones/other.test.ts';
+  f.write(sibling, 'export {};');
+  f.selection[part === 'tests' ? 'units' : 'guards'].push(sibling);
+  const result = await f.run((_root, command) => {
+    if (!command.includes(f.file)) return { code: 0, output: '' };
+    return report(f.file, command.includes('--timeout=30000') ? 'pass' : 'timeout', undefined,
+      command.includes('--timeout=30000') ? 5.2 : 5.001);
+  });
+  expect(result.code).toBe(0);
+  const attempts = f.attempts.filter(attempt => attempt.command.includes(f.file));
+  expect(attempts).toHaveLength(2);
+  expect(attempts[0]!.command).toContain(sibling);
+  expect(attempts[1]!.command).not.toContain(sibling);
+  expect(attempts[1]!.command).toContain('--timeout=30000');
+  expect(f.attempts.every(attempt => attempt.cwd === f.cwd)).toBe(true);
+  expect(result.excused).toEqual([{ part, file: f.file, test: 'busy surface guard', reason: 'timeout-retry',
+    revision: f.git('rev-parse', 'HEAD'), originalSeconds: 5.001, retrySeconds: 5.2 }]);
+  expect(f.lines.join('\n')).toContain(`Timeout retry passed: ${f.file} > busy surface guard (5.200s); first attempt 5.001s, retry 5.200s`);
+});
+
+test('a timeout that fails alone blocks when the same test passes on main', async () => {
+  const f = gateFixture();
+  const result = await f.run((root, command) => {
+    if (!command.includes(f.file)) return { code: 0, output: '' };
+    return report(f.file, root !== f.cwd ? 'pass' : command.includes('--timeout=30000') ? 'assertion' : 'timeout');
+  });
+  expect(result.code).toBe(1);
+  expect(result.checks.at(-1)?.name).toBe('tests');
+  expect(result.excused).toEqual([]);
+  expect(f.attempts.filter(attempt => attempt.command.includes(f.file))).toHaveLength(3);
+});
+
+test.each(['tests', 'guards'] as const)('%s failure also on pinned main is reported without charging the surface', async part => {
+  const f = gateFixture(part);
+  // A moving main ref must not change the gate's baseline.
+  f.write('apps/web/features/zones/catalogue.ts', 'export const count = 2;');
+  f.git('add', '.'); f.git('commit', '-qm', 'Advance main'); f.git('branch', '-f', 'main', 'HEAD');
+  const result = await f.run((root, command) => {
+    if (!command.includes(f.file)) return { code: 0, output: '' };
+    if (root !== f.cwd) {
+      expect(readFileSync(join(root, 'apps/web/features/zones/catalogue.ts'), 'utf8')).toBe('export const count = 1;');
+      expect(spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).stdout.trim()).toBe(f.selection.main);
+    }
+    return report(f.file, 'assertion');
+  });
+  expect(result.code).toBe(0);
+  expect(result.excused).toEqual([{ part, file: f.file, test: 'busy surface guard', reason: 'fails-on-main', revision: f.selection.main }]);
+  expect(f.lines.join('\n')).toContain(`Failure on main: ${f.file} > busy surface guard (${f.selection.main})`);
+  expect(f.attempts.filter(attempt => attempt.command.includes(f.file))).toHaveLength(2);
+  expect(f.git('worktree', 'list', '--porcelain')).not.toContain('unit-gate-');
+});
+
+test('a branch-only failing test blocks even beside another test that fails on main in the same file', async () => {
+  const f = gateFixture();
+  const result = await f.run((root, command) => {
+    if (!command.includes(f.file)) return { code: 0, output: '' };
+    const inherited = report(f.file, 'assertion', 'existing failure');
+    if (root !== f.cwd) return inherited;
+    return { code: 1, output: inherited.output.replace('</testsuite>',
+      `<testcase file="${f.file}" name="introduced failure"><failure type="AssertionError" message="expected 2"/></testcase></testsuite>`) };
+  });
+  expect(result.code).toBe(1);
+  expect(result.excused.map(item => item.test)).toEqual(['existing failure']);
+  expect(f.attempts.filter(attempt => attempt.command.includes(f.file))).toHaveLength(2);
+});
+
+test.each(['tests', 'guards'] as const)('%s file touched by the change cannot excuse main’s failure', async part => {
+  const f = gateFixture(part);
+  f.selection.changed.push(f.file);
+  const result = await f.run((_root, command) => command.includes(f.file) ? report(f.file, 'assertion') : { code: 0, output: '' });
+  expect(result.code).toBe(1);
+  expect(result.excused).toEqual([]);
+  expect(f.attempts.filter(attempt => attempt.command.includes(f.file))).toHaveLength(1);
+  expect(f.attempts.every(attempt => attempt.cwd === f.cwd)).toBe(true);
+});
+
+test('a timed-out story is final without retry or a main baseline', async () => {
+  const f = gateFixture();
+  const result = await f.run((_root, command) => command.includes(f.story)
+    ? report(f.story, 'timeout') : { code: 0, output: '' });
+  expect(result.code).toBe(1);
+  expect(result.checks.at(-1)?.name).toBe('stories');
+  expect(result.excused).toEqual([]);
+  expect(f.attempts.filter(attempt => attempt.command.includes(f.story))).toHaveLength(1);
+  expect(f.attempts.every(attempt => attempt.cwd === f.cwd)).toBe(true);
+});
+
+test('an owner consumer’s own artifact supplies timeout attribution even when its console only links the report', async () => {
+  const f = gateFixture();
+  const file = 'scripts/qa/consumer.test.ts';
+  f.selection.units = [file];
+  const result = await f.run((_root, command, env) => {
+    if (!command.includes(file)) return { code: 0, output: '' };
+    expect(command.some(arg => arg.startsWith('--reporter='))).toBe(false);
+    const retried = command.includes('--timeout=180000');
+    const artifact = join(env!.REZICS_QA_ARTIFACT_ROOT!, 'run');
+    mkdirSync(artifact, { recursive: true });
+    const state = report(file, retried ? 'pass' : 'timeout', undefined, retried ? 30.2 : 30);
+    writeFileSync(join(artifact, 'owner.xml'), state.output.slice(UNIT_JUNIT_MARKER.length));
+    return { code: state.code, output: `QA artifacts: ${artifact}` };
+  });
+  expect(result.code).toBe(0);
+  expect(result.excused).toEqual([{ part: 'tests', file, test: 'busy surface guard', reason: 'timeout-retry',
+    revision: f.git('rev-parse', 'HEAD'), originalSeconds: 30, retrySeconds: 30.2 }]);
+  expect(f.attempts.filter(attempt => attempt.command.includes(file))).toHaveLength(2);
+});
+
+test('mixed assertion and timeout failures do not qualify for retry, and main passing blocks them', async () => {
+  const f = gateFixture();
+  const result = await f.run((root, command) => {
+    if (!command.includes(f.file)) return { code: 0, output: '' };
+    if (root !== f.cwd) return report(f.file, 'pass');
+    const timed = report(f.file, 'timeout');
+    return { code: 1, output: timed.output.replace('</testsuite>',
+      `<testcase file="${f.file}" name="assertion"><failure type="AssertionError" message="expected 2"/></testcase></testsuite>`) };
+  });
+  expect(result.code).toBe(1);
+  expect(result.excused).toEqual([]);
+  expect(f.attempts.every(attempt => !attempt.command.some(arg => arg.startsWith('--timeout=')))).toBe(true);
+  expect(f.attempts.filter(attempt => attempt.command.includes(f.file))).toHaveLength(2);
+});
+
+test('a file absent from pinned main cannot gain a baseline allowance', async () => {
+  const f = gateFixture();
+  const file = 'apps/web/features/zones/new.test.ts';
+  f.write(file, 'export {};');
+  f.selection.units = [file];
+  const result = await f.run((_root, command) => command.includes(file) ? report(file, 'assertion') : { code: 0, output: '' });
+  expect(result.code).toBe(1);
+  expect(result.excused).toEqual([]);
+  expect(f.attempts.filter(attempt => attempt.command.includes(file))).toHaveLength(1);
 });
