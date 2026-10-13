@@ -1,12 +1,13 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { appendFileSync, chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import { processRunning } from '../../tests/qa/support/process-liveness.ts';
 import { describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { inputSelectedNativeTests, testArgs, unitHarnessFiles } from '../qa/acceptance.ts';
 import { ownerTierBudgetMs } from '../qa/owner-tier-budget.ts';
-import { tierTestTimeoutArg } from '../qa/core.ts';
+import { testLogEnvironment, tierTestTimeoutArg } from '../qa/core.ts';
+import { personas, type RowOutcomes } from '../qa/cases/outcomes.ts';
 import { formatPlan, nativeUnionTest, planAffected, type AffectedPlan } from '../qa/affected.ts';
 import { repositoryGuards } from '../qa/repository-guards.ts';
 import { TmuxLauncher, processIdentity, tmuxServer, type LaunchDescriptor } from './coordinator.ts';
@@ -16,7 +17,7 @@ import { acquireHeavy, acquireSharedLifecycle, archiveFiles, areaConflicts, bala
   addGateWorktree, branchOnlyRefusal, classifyBranchOnlyFailures, codexHoursUntil100, coordinatorEnrollmentOptions, failingTestFiles, gateTreeRefusal, infrastructureStep, introducedUnitFailureFiles, introducedUnitFailures, landClaimScope, loadCodexResetStatus, markHeavyCommandStarted, memoryFloorRefusal, REGENERATION_COMMIT_SUBJECT,
   planUnitGateShards, qaWaitStatusLines, sharedLifecycleEnvironment, sharedLifecycleStatus, sharedLifecycleWaiters, runOwnerShard, runUnitGate as measuredUnitGate, runUnitSide as measuredUnitSide, shardTimeoutFiles, streamSelectionFiles, streamUnitBaseline, timedOutTestFiles, transferSharedLifecycleOwnership, UNIT_GATE_FILE_CAP, UNIT_JUNIT_MARKER, unitFailureDetails, unitFileErrorDetails, unitFileEvidence, unitGateRefusal, writeUnitEvidence, withRecovery, withSlot,
   dependencyInstallIsStale, missingPinnedImage, gateLaneStatus, gateLaneWaiters, qaSlotCount, withGateLane,
-  resumeDecisionError, mailCommand, mechanismSectionErrors, type AccountUsage, type Ledger, type Task, type UnitFailureDetail, type UnitRunEvidence, type UnitShardResult, treeMentions, usageLevel, validateBrief,
+  dispatchMethodErrors, resumeDecisionError, mailCommand, mechanismSectionErrors, type AccountUsage, type Ledger, type Task, type UnitFailureDetail, type UnitRunEvidence, type UnitShardResult, treeMentions, usageLevel, validateBrief,
   workerSessionEnvironment } from './goalctl.ts';
 import { fastForwardMain, introducedTypecheckDiagnostics, typecheckDiagnostics, typecheckGate, typecheckWorkspaces, TYPECHECK_WORKSPACES, unclassifiedTypecheckLines,
   type FastForwardGates, type MainSync, type PreparedMerge, type TypecheckRun } from './goalctl.ts';
@@ -83,6 +84,36 @@ depends: [G-038]
 Body.
 `;
 
+function writeFixtureOutcomeOwner(root: string): void {
+  const file = join(root, 'scripts/qa/cases/outcomes.ts');
+  mkdirSync(dirname(file), { recursive: true });
+  // Load the real owner at the fixture's root, where its relative helper paths belong.
+  const source = readFileSync(join(import.meta.dir, '../qa/cases/outcomes.ts'), 'utf8')
+    .replace("from 'typescript-6'", `from ${JSON.stringify(Bun.resolveSync('typescript-6', import.meta.dir))}`)
+    .replace("from './launch-coverage.ts'", `from ${JSON.stringify(join(import.meta.dir, '../qa/cases/launch-coverage.ts'))}`);
+  writeFileSync(file, source);
+}
+
+/** Authored declarations and real test registrations, loaded by the outcomes owner. */
+function writeFixtureOutcomes(root: string, id: string, cells: RowOutcomes['cells']): void {
+  const declaration = join(root, 'scripts/qa/cases/outcomes', `${id}.ts`);
+  mkdirSync(dirname(declaration), { recursive: true });
+  writeFileSync(declaration, `export default ${JSON.stringify({ rowId: id, cells })};\n`);
+  const tests = new Map<string, string[]>();
+  for (const persona of personas) {
+    const cell = cells[persona];
+    if (!cell || cell.state === 'notApplicable') continue;
+    const file = join(root, cell.file ?? `tests/qa/integration/outcomes/${id}.test.ts`);
+    const lines = tests.get(file) ?? [];
+    lines.push(`test${cell.state === 'pending' ? '.failing' : ''}(${JSON.stringify(`${id} / ${persona}: ${cell.test}`)}, () => {});`);
+    tests.set(file, lines);
+  }
+  for (const [file, lines] of tests) {
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, `import { test } from 'bun:test';\n${lines.join('\n')}\n`);
+  }
+}
+
 function held(overrides: Partial<Task>): Task {
   return { id: 'G-039', title: 'held', effort: 'medium', cases: [], paths: [], migrations: [], shared: [],
     depends: [], brief: '', worktree: '', branch: '', base: '', state: 'running', attempts: [], ...overrides };
@@ -124,6 +155,32 @@ describe('goalctl briefs', () => {
       { ...attempt, continuedFor: 'transport' }, attempts[1]!], '')).toBeUndefined();
     expect(resumeDecisionError([...attempts, { ...attempt, startedAt: '2026-10-14T10:00:00Z' }],
       '## Decision\n2026-10-13T10:00:01Z: split')).toBeDefined();
+  });
+
+  test('landed steps and transport or capacity continuations consume no fix rounds', () => {
+    const attempt = { n: 1, effort: 'high', pid: 0, session: '', output: '', startedAt: '2026-10-13T10:00:00Z' };
+    const steps: Task['attempts'] = [{ ...attempt, round: 'initial' },
+      { ...attempt, n: 2, round: 'step' }, { ...attempt, n: 3, round: 'step' }];
+    expect(resumeDecisionError(steps, '')).toBeUndefined();
+    steps.push({ ...attempt, n: 4, round: 'fix' }, { ...attempt, n: 5, round: 'continuation', continuedFor: 'capacity' });
+    expect(resumeDecisionError(steps, '')).toBeUndefined();
+    steps.push({ ...attempt, n: 6, round: 'fix' }, { ...attempt, n: 7, round: 'continuation', continuedFor: 'transport' });
+    expect(resumeDecisionError(steps, '')).toContain('two fix rounds exhausted');
+  });
+
+  test('mechanisms require a design note read by program, with an actual UTC date', async () => {
+    const mechanism = { ...parseBrief(brief), kind: 'mechanism' as const };
+    for (const markdown of ['', '## Design note\n', '## Design note\nRead by program: 2026-10-13\n',
+      '## Design note\nProtect every reader.\n', '## Design note\nProtect every reader.\nRead by owner: 2026-10-13\n',
+      '## Design note\nProtect every reader.\nRead by program: someday\n',
+      '## Design note\nProtect every reader.\nRead by program: 2026-02-30\n',
+      '## Design note\nProtect every reader.\n## Checks\nRead by program: 2026-10-13\n']) {
+      expect((await dispatchMethodErrors(mechanism, markdown)).join()).toContain('non-empty ## Design note');
+    }
+    expect(await dispatchMethodErrors(mechanism, '## Design note\nProtect every reader and writer.\nRead by program: 2026-10-13\n')).toEqual([]);
+    for (const kind of ['outcome', 'implementation', 'surface', 'tooling'] as const) {
+      expect(await dispatchMethodErrors({ ...parseBrief(brief), kind }, '')).toEqual([]);
+    }
   });
 
   test('rejects efforts the engine does not accept, absolute or .temp paths and malformed ranges', () => {
@@ -2578,6 +2635,7 @@ describe('goalctl shared lifecycle and launch gates', () => {
     writeFileSync(join(dir, '.temp/bin/task'), `#!/usr/bin/env bun
 import { spawn } from 'node:child_process';
 import { appendFileSync, readFileSync } from 'node:fs';
+import { testLogEnvironment } from ${JSON.stringify(join(import.meta.dir, '../qa/core.ts'))};
 const args = process.argv.slice(2);
 if (args[0] === 'install') process.exit(0);
 if (args.includes('--list')) {
@@ -2594,7 +2652,7 @@ if (process.env.GOAL_TEST_RUNNER_FAILURE) {
 }
 // Capture the child gate and forward it on this task's own pipes. The parent gate already
 // collects those pipes. Inheriting would print the child's transcript into whatever is running this task.
-const child = spawn('bun', ['test', ...args.slice(2)], { stdio: ['ignore', 'pipe', 'pipe'] });
+const child = spawn('bun', ['test', ...args.slice(2)], { stdio: ['ignore', 'pipe', 'pipe'], env: testLogEnvironment(process.env) });
 child.stdout.pipe(process.stdout);
 child.stderr.pipe(process.stderr);
 child.on('close', code => process.exit(code ?? 1));
@@ -2808,6 +2866,7 @@ child.on('close', code => process.exit(code ?? 1));
       expect(ended.state).toBe('exited');
       expect(ended.attempts).toHaveLength(2);
       expect(ended.attempts[1]!.continuedFor).toBe('transport');
+      expect(ended.attempts[1]!.round).toBe('continuation');
       expect(spawnSync('git', ['-C', task.worktree, 'status', '--porcelain'], { encoding: 'utf8' }).stdout)
         .toContain(dirty);
     } finally { r.cleanup(); }
@@ -2874,6 +2933,7 @@ child.on('close', code => process.exit(code ?? 1));
       expect(task.state).toBe('exited');
       expect(task.attempts).toHaveLength(2);
       expect(task.attempts[1]!.continuedFor).toBe('capacity');
+      expect(task.attempts[1]!.round).toBe('continuation');
       expect(task.attempts[1]!.session).toBe('thread-capacity-1');
     } finally { r.cleanup(); }
   }, 60_000);
@@ -4173,6 +4233,61 @@ process.exit(0);
     } finally { r.cleanup(); }
   });
 
+  test('implementation dispatch requires a complete declaration and pending persona for every referenced row', () => {
+    const r = repo();
+    const row = 'books/work-hub-and-edition-choice';
+    try {
+      writeFixtureOutcomeOwner(r.dir);
+      const brief = r.brief('G-001');
+      const text = readFileSync(brief, 'utf8').replace('kind: tooling', `kind: implementation\nrows: [${row}]`);
+      writeFileSync(brief, text);
+      let result = r.run(['dispatch', brief, '--dry-run']);
+      expect(result.status).toBe(1); expect(result.stderr).toContain('outcome declaration is missing');
+      writeFixtureOutcomes(r.dir, row, { visitor: { state: 'pending', test: 'gets the public view' } });
+      result = r.run(['dispatch', brief, '--dry-run']);
+      expect(result.status).toBe(1); expect(result.stderr).toContain('missing persona cells: stranger, member, owner, moderator, operator');
+      const cells = Object.fromEntries(personas.map(persona => [persona, { state: 'proved', test: `${persona} gets their view` }])) as RowOutcomes['cells'];
+      writeFixtureOutcomes(r.dir, row, cells);
+      result = r.run(['dispatch', brief, '--dry-run']);
+      expect(result.status).toBe(1); expect(result.stderr).toContain('needs at least one pending persona cell');
+      cells.visitor = { state: 'pending', test: 'gets the public view' };
+      cells.operator = { state: 'notApplicable', reason: 'No platform action in this row' };
+      writeFixtureOutcomes(r.dir, row, cells);
+      // Helper registrations must resolve against the main checkout's owner, even when goalctl is elsewhere.
+      const outcomeTest = join(r.dir, 'tests/qa/integration/outcomes', `${row}.test.ts`);
+      const declaration = join(r.dir, 'scripts/qa/cases/outcomes', `${row}.ts`);
+      const helper = join(r.dir, 'tests/qa/support/outcome-test.ts');
+      const registrations = personas.filter(persona => cells[persona]?.state !== 'notApplicable')
+        .map(persona => `outcomeTest(declaration, ${JSON.stringify(persona)}, () => {});`);
+      writeFileSync(outcomeTest, `import declaration from ${JSON.stringify(relative(dirname(outcomeTest), declaration))};\n`
+        + `import { outcomeTest } from ${JSON.stringify(relative(dirname(outcomeTest), helper))};\n${registrations.join('\n')}\n`);
+      result = r.run(['dispatch', brief, '--dry-run']);
+      expect(result.stderr).toBe(''); expect(result.status).toBe(0);
+      writeFileSync(brief, text.replace(`rows: [${row}]`, `rows: [${row}, books/unknown-row]`));
+      result = r.run(['dispatch', brief, '--dry-run']);
+      expect(result.status).toBe(1); expect(result.stderr).toContain('books/unknown-row: outcome declaration is missing');
+      writeFileSync(brief, text);
+      rmSync(join(r.dir, 'tests/qa/integration/outcomes', `${row}.test.ts`));
+      result = r.run(['dispatch', brief, '--dry-run']);
+      expect(result.status).toBe(1); expect(result.stderr).toContain('Missing outcome test file');
+      expect(r.ledger().tasks['G-001']).toBeUndefined();
+    } finally { r.cleanup(); }
+  });
+
+  test('mechanism dispatch dry-run enforces program review before launching', () => {
+    const r = repo();
+    try {
+      const brief = r.brief('G-001');
+      const text = readFileSync(brief, 'utf8').replace('kind: tooling', 'kind: mechanism');
+      writeFileSync(brief, text);
+      const refused = r.run(['dispatch', brief, '--dry-run']);
+      expect(refused.status).toBe(1); expect(refused.stderr).toContain('Read by program: YYYY-MM-DD');
+      expect(r.ledger().tasks['G-001']).toBeUndefined();
+      writeFileSync(brief, text + '\n## Design note\n\nBound every reader and writer through the existing owner.\nRead by program: 2026-10-13\n');
+      expect(r.run(['dispatch', brief, '--dry-run']).status).toBe(0);
+    } finally { r.cleanup(); }
+  });
+
   test('dispatch dry-run and reclaim refuse a brief without kind', async () => {
     const r = repo();
     try {
@@ -4312,12 +4427,62 @@ process.exit(0);
     } finally { r.cleanup(); }
   });
 
+  test('a three-step task retains its two fixes, and records why each attempt starts', async () => {
+    const r = repo();
+    const id = 'G-001';
+    try {
+      await r.start(id); await r.stopFixture(id);
+      expect(r.ledger().tasks[id]!.attempts[0]!.round).toBe('initial');
+      for (let step = 0; step < 2; step++) {
+        const ledger = r.ledger(); const task = ledger.tasks[id]!;
+        task.state = 'merged';
+        writeFileSync(task.attempts.at(-1)!.output, JSON.stringify({ result: 'RESULT: partial\nNEXT: next step' }));
+        r.save(ledger);
+        expect(r.run(['resume', id, '-m', 'next step']).status).toBe(0);
+        await waitUntil(() => JSON.parse(readFileSync(join(r.dir, '.temp/ready', id), 'utf8')).worker !== r.workers.get(id)!.worker);
+        r.workers.set(id, JSON.parse(readFileSync(join(r.dir, '.temp/ready', id), 'utf8')));
+        await r.stopFixture(id);
+        expect(r.ledger().tasks[id]!.attempts.at(-1)!.round).toBe('step');
+      }
+      for (let fix = 0; fix < 2; fix++) {
+        expect(r.run(['resume', id, '-m', 'fix the failing test']).status).toBe(0);
+        await waitUntil(() => JSON.parse(readFileSync(join(r.dir, '.temp/ready', id), 'utf8')).worker !== r.workers.get(id)!.worker);
+        r.workers.set(id, JSON.parse(readFileSync(join(r.dir, '.temp/ready', id), 'utf8')));
+        await r.stopFixture(id);
+        expect(r.ledger().tasks[id]!.attempts.at(-1)!.round).toBe('fix');
+      }
+      const refused = r.run(['resume', id, '-m', 'third fix', '--fresh', '--force-usage']);
+      expect(refused.status).toBe(1); expect(refused.stderr).toContain('two fix rounds exhausted');
+      expect(r.ledger().tasks[id]!.attempts).toHaveLength(5);
+      // Landing that partial fix authorizes the next step even though no further fix is authorized.
+      const ledger = r.ledger(); const task = ledger.tasks[id]!;
+      task.state = 'merged';
+      writeFileSync(task.attempts.at(-1)!.output, JSON.stringify({ result: 'RESULT: partial' }));
+      r.save(ledger);
+      expect(r.run(['resume', id, '-m', 'next landed step']).status).toBe(0);
+      expect(r.ledger().tasks[id]!.attempts.at(-1)!.round).toBe('step');
+    } finally { r.cleanup(); }
+  });
+
+  test.each([['exited', 'done'], ['exited', 'partial'], ['merged', 'done']] as const)(
+    'a %s task with a %s handoff resumes as a fix', async (state, result) => {
+    const r = repo();
+    try {
+      await r.start('G-001'); await r.stopFixture('G-001');
+      const ledger = r.ledger(); const task = ledger.tasks['G-001']!;
+      task.state = state; r.save(ledger);
+      writeFileSync(task.attempts.at(-1)!.output, JSON.stringify({ result: `RESULT: ${result}` }));
+      expect(r.run(['resume', task.id, '-m', 'continue']).status).toBe(0);
+      expect(r.ledger().tasks[task.id]!.attempts.at(-1)!.round).toBe('fix');
+    } finally { r.cleanup(); }
+  });
+
   test('resume refuses a third fix round even with fresh engine and usage flags', async () => {
     const r = repo();
     try {
       await r.start('G-001'); await r.stopFixture('G-001');
       const ledger = r.ledger(); const task = ledger.tasks['G-001']!;
-      task.attempts.push({ ...task.attempts[0]!, n: 2 }, { ...task.attempts[0]!, n: 3 });
+      task.attempts.push({ ...task.attempts[0]!, n: 2, round: 'fix' }, { ...task.attempts[0]!, n: 3, round: 'fix' });
       r.save(ledger);
       for (const flags of [[], ['--fresh', '--engine', 'codex', '--force-usage']]) {
         const result = r.run(['resume', task.id, '-m', 'try again', ...flags]);
@@ -5746,7 +5911,7 @@ describe('heavy QA lock', () => {
         }, 15_000);
       `);
       const result = spawnSync('bun', ['test', script], { cwd: process.cwd(), encoding: 'utf8',
-        maxBuffer: 8 * 1024 * 1024, env: { ...process.env, GOAL_QA_HEAVY_RUN: '1', GOAL_QA_SLOTS: '3',
+        maxBuffer: 8 * 1024 * 1024, env: { ...testLogEnvironment(process.env), GOAL_QA_HEAVY_RUN: '1', GOAL_QA_SLOTS: '3',
           GOAL_QA_SLOT_DIRECTORY: slots, QA_CLI_STARTUP_MARKER: marker,
           REZICS_QA_HOST_MEMORY_GIB: '0.001', REZICS_QA_HOST_RESERVE_GIB: '0' } });
       if (result.status !== 0) throw new Error(`nested QA CLI test exited ${result.status}:\n${result.stdout}\n${result.stderr}`);

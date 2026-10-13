@@ -21,7 +21,7 @@ import { parseAffectedArgs, testCommands } from '../qa/test.ts';
 import { appendInbox, inboxEntries, parseRegressArgs, provideGoalctl, runRegression, type MergeEvent } from './regress.ts';
 import { physicalPath, postgresSocketRefusal } from './postgres-socket.ts';
 import { COMPOSITION_ROOTS } from './composition-roots.ts';
-import { land, type LandScope } from './land.ts';
+import { handoffResult, land, type LandScope } from './land.ts';
 import { mechanisms } from '../static/mechanisms.ts';
 import { printScopeProgress } from '../qa/cases/outcomes.ts';
 import { GoalMailStore } from './mail.ts';
@@ -47,6 +47,8 @@ export interface Brief {
 export interface Attempt {
   n: number; effort: string; engine?: Engine; pid: number; session: string; output: string; lastMessage?: string;
   startedAt: string; endedAt?: string;
+  /** A landed partial handoff advances a step; only fixes consume the task's two rounds. */
+  round?: 'initial' | 'step' | 'fix' | 'continuation';
   /** Wait started this attempt because the previous session lost its connection. */
   continuedFor?: 'transport' | 'capacity';
 }
@@ -1325,7 +1327,7 @@ export function workerSessionEnvironment(parent: NodeJS.ProcessEnv): NodeJS.Proc
 }
 
 function launch(task: Task, effort: string, session: string, prompt: string, resume: boolean,
-  manager: string, engine: Engine = engineOf(task)): Attempt {
+  manager: string, engine: Engine = engineOf(task), round: NonNullable<Attempt['round']> = task.attempts.length ? 'fix' : 'initial'): Attempt {
   const n = task.attempts.length + 1;
   const runDir = join(stateDir, 'runs', task.id);
   mkdirSync(runDir, { recursive: true });
@@ -1341,7 +1343,7 @@ function launch(task: Task, effort: string, session: string, prompt: string, res
   });
   child.unref();
   if (!child.pid) throw new Error(`Could not start ${program}`);
-  return { n, effort, engine, pid: child.pid, session, output, lastMessage, startedAt: new Date().toISOString() };
+  return { n, effort, engine, round, pid: child.pid, session, output, lastMessage, startedAt: new Date().toISOString() };
 }
 
 function changedFiles(task: Task): { committed: string[]; dirty: string[]; ahead: number } {
@@ -1457,12 +1459,45 @@ function transportContinuationPrompt(dirty: readonly string[]): string {
     : 'The previous session lost its connection. The worktree is clean; continue the brief from its commits.';
 }
 
+/** Declarations and their test registrations belong to the outcomes loader, not to orchestration. */
+export async function dispatchMethodErrors(brief: Brief, markdown: string, outcomeRoot = root): Promise<string[]> {
+  if (brief.kind === 'implementation' && brief.rows?.length) {
+    const owner = await import(pathToFileURL(join(outcomeRoot, 'scripts/qa/cases/outcomes.ts')).href);
+    const { loadOutcomes, personas } = owner as typeof import('../qa/cases/outcomes.ts');
+    const outcomes = await loadOutcomes({ root: outcomeRoot });
+    const errors: string[] = [];
+    for (const id of brief.rows) {
+      const declaration = outcomes.get(id);
+      if (!declaration) { errors.push(`implementation row ${id}: outcome declaration is missing`); continue; }
+      const missing = personas.filter(persona => !declaration.cells[persona]);
+      if (missing.length) errors.push(`implementation row ${id}: missing persona cells: ${missing.join(', ')}`);
+      if (!personas.some(persona => declaration.cells[persona]?.state === 'pending')) {
+        errors.push(`implementation row ${id}: needs at least one pending persona cell`);
+      }
+    }
+    return errors;
+  }
+  if (brief.kind === 'mechanism') {
+    const section = /^## Design note[ \t]*\r?\n([\s\S]*?)(?=^## (?!#)|$(?![\s\S]))/m.exec(markdown)?.[1] ?? '';
+    const readBy = /^(?:-\s+)?Read by program:[ \t]*(\d{4}-\d{2}-\d{2})[ \t]*\r?$/m.exec(section);
+    const date = readBy?.[1];
+    const timestamp = date ? Date.parse(`${date}T00:00:00Z`) : NaN;
+    const dated = Number.isFinite(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === date;
+    if (!dated || !section.replace(readBy?.[0] ?? '', '').trim()) {
+      return ['mechanism brief needs a non-empty ## Design note with Read by program: YYYY-MM-DD'];
+    }
+  }
+  return [];
+}
+
 async function dispatch(briefPath: string, flags: Set<string>): Promise<void> {
   const absolute = resolve(briefPath);
   const text = readFileSync(absolute, 'utf8');
   const brief = parseBrief(text);
   const errors = [...validateBrief(brief), ...mechanismSectionErrors(text)];
   if (errors.length) throw new Error(`Invalid brief ${briefPath}:\n  ${errors.join('\n  ')}`);
+  const methodErrors = await dispatchMethodErrors(brief, text);
+  if (methodErrors.length) throw new Error(`Invalid brief ${briefPath}:\n  ${methodErrors.join('\n  ')}`);
   await withLedger(ledger => {
     if (ledger.tasks[brief.id]) throw new Error(`${brief.id} already exists (${ledger.tasks[brief.id]!.state}); use resume`);
     const goal = briefGoal(ledger, absolute);
@@ -1559,7 +1594,7 @@ export async function waitFor(id: string, options: { pollMs?: number; settleMs?:
           launchGates(Object.values(ledger.tasks), engine, false);
           const next = launch(current, last.effort, last.session,
             'The service refused your last request for capacity; nothing else changed. Continue where you stopped.',
-            true, managerOf(ledger, current.goal), engine);
+            true, managerOf(ledger, current.goal), engine, 'continuation');
           next.continuedFor = 'capacity';
           current.attempts.push(next);
           current.engine = engine;
@@ -1579,7 +1614,7 @@ export async function waitFor(id: string, options: { pollMs?: number; settleMs?:
           const manager = managerOf(ledger, current.goal);
           const session = isClaudeCode(engine) ? randomUUID() : '';
           const prompt = `${workerPrompt(current, manager, engine, effort)}\n\n${transportContinuationPrompt(changedFiles(current).dirty)}`;
-          const next = launch(current, effort, session, prompt, false, manager, engine);
+          const next = launch(current, effort, session, prompt, false, manager, engine, 'continuation');
           next.continuedFor = 'transport';
           current.attempts.push(next);
           current.engine = engine;
@@ -1706,9 +1741,11 @@ async function landTask(id: string, step = false): Promise<void> {
   }
 }
 
-/** Transport/capacity continuations consume no fix round; a new decision must follow the last start. */
+/** Old ledgers lack round labels: their first attempt is initial, and later manual attempts are fixes. */
 export function resumeDecisionError(attempts: readonly Attempt[], markdown: string): string | undefined {
-  if (attempts.filter(attempt => !attempt.continuedFor).length < 3) return undefined;
+  const fixes = attempts.filter((attempt, index) => !attempt.continuedFor
+    && (attempt.round === 'fix' || (attempt.round === undefined && index > 0))).length;
+  if (fixes < 2) return undefined;
   const section = /^## Decision[ \t]*\r?\n([\s\S]*?)(?=^## (?!#)|$(?![\s\S]))/m.exec(markdown)?.[1] ?? '';
   const lastStart = Date.parse(attempts.at(-1)?.startedAt ?? '');
   const dates = [...section.matchAll(/\b\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?Z|[ \t]+\d{2}:\d{2}(?::\d{2})?[ \t]+UTC|(?=[ \t]+UTC))/g)];
@@ -1739,7 +1776,8 @@ async function resumeTask(id: string, args: string[]): Promise<void> {
     if (running(task)) throw new Error(`${task.id} is still running; stop it first or message it`);
     if (['verified', 'cancelled'].includes(task.state)) throw new Error(`${task.id} is closed`);
     const previous = lastAttempt(task);
-    const refusal = resumeDecisionError(task.attempts, readFileSync(briefPathOf(task) ?? '', 'utf8'));
+    const round = task.state === 'merged' && handoffResult(readResult(previous).text) === 'partial' ? 'step' : 'fix';
+    const refusal = round === 'fix' ? resumeDecisionError(task.attempts, readFileSync(briefPathOf(task) ?? '', 'utf8')) : undefined;
     if (refusal) throw new Error(`${task.id}: ${refusal}`);
     const nextEngine = engine ?? engineOf(previous);
     const nextEffort = effort ?? previous.effort;
@@ -1757,12 +1795,12 @@ async function resumeTask(id: string, args: string[]): Promise<void> {
     const session = continuing ? previousSession : isClaudeCode(nextEngine) ? randomUUID() : '';
     const prompt = continuing ? message
       : `${workerPrompt(task, manager, nextEngine, nextEffort)}\n\nManager note:\n${message}`;
-    task.attempts.push(launch(task, nextEffort, session, prompt, continuing, manager, nextEngine));
+    task.attempts.push(launch(task, nextEffort, session, prompt, continuing, manager, nextEngine, round));
     task.engine = nextEngine;
     task.state = 'running';
     clearRefusal(task);
     console.log(`${task.id} attempt ${task.attempts.length}: ${modelOf(nextEngine)}/${nextEffort}`
-      + ` ${continuing ? 'resumed' : 'fresh session'}, pid ${lastAttempt(task).pid}`);
+      + ` ${continuing ? 'resumed' : 'fresh session'}, ${round === 'step' ? 'next step' : 'fix round'}, pid ${lastAttempt(task).pid}`);
   });
 }
 

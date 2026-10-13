@@ -75,6 +75,7 @@ process.exit(Number(process.env.REVIEW_EXIT ?? 0));
 `);
   write('.temp/bin/task', `#!/usr/bin/env bun
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { testLogEnvironment } from ${JSON.stringify(join(import.meta.dir, '../qa/core.ts'))};
 const args = process.argv.slice(2);
 if (args.includes('--result-file')) {
   const resultFile = args[args.indexOf('--result-file') + 1]!;
@@ -98,7 +99,7 @@ if (args.includes('--list')) {
 if (process.env.GOAL_TEST_LOG) appendFileSync(process.env.GOAL_TEST_LOG, JSON.stringify({ cwd: process.cwd(), args }) + '\\n');
 const phase = 'gate';
 ${drift}
-const child = Bun.spawn(['bun', 'test', ...args.slice(2)], { stdout: 'inherit', stderr: 'inherit' });
+const child = Bun.spawn(['bun', 'test', ...args.slice(2)], { stdout: 'inherit', stderr: 'inherit', env: testLogEnvironment(process.env) });
 process.exit(await child.exited);
 `);
   // The last try of a refused review pass runs on the other account: the same stand-in, never the real CLI.
@@ -595,7 +596,7 @@ echo '{"findings":[]}' > "$out"
       const plan = join(r.dir, '.temp/unit-plan');
       const log = join(r.dir, '.temp/unit-log');
       writeFileSync(plan, `  unit: ${file}\n`);
-      const result = r.run('land', { GOAL_TEST_PLAN: plan, GOAL_TEST_LOG: log, GOAL_UNIT_GATE_SHARDS: '1' });
+      const result = r.run('land', { CLAUDECODE: '1', GOAL_TEST_PLAN: plan, GOAL_TEST_LOG: log, GOAL_UNIT_GATE_SHARDS: '1' });
       expect(result.status).toBe(1);
       expect(result.stderr).toContain('introduced unit failures');
       expect(result.stdout).toContain(`${file} timed out on main; rerunning alone`);
