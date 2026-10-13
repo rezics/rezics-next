@@ -351,14 +351,14 @@ export function landingAttempt(task: Task, read: (attempt: Attempt) => { text: s
   return task.attempts[at] ?? lastAttempt(task);
 }
 
-/** Review and merge refuse a task whose landing attempt, handoff or brief is no longer the one the landing read. */
-export function landingMoved(current: Task, snapshot: { attempt: number; handoff: string; brief: string },
+/** Review and merge refuse a task that a worker or a manager touched since the landing read it. The attempt is
+ * chosen once, before the landing rebases: its rebase moves the branch, so the choice cannot be made again. */
+export function landingMoved(current: Task, snapshot: { attempt: number; attempts: number; handoff: string; brief: string },
   read: (attempt: Attempt) => { text: string; error: boolean } = readResult,
-  unchanged: (task: Task, attempt: Attempt) => boolean = blockedAttemptUnchanged,
   briefOf: (task: Task) => string = task => readFileSync(briefPathOf(task) ?? '', 'utf8')): boolean {
-  const attempt = landingAttempt(current, read, unchanged);
-  return current.state !== 'exited' || attempt.n !== snapshot.attempt || read(attempt).text !== snapshot.handoff
-    || briefOf(current) !== snapshot.brief;
+  const attempt = current.attempts.find(item => item.n === snapshot.attempt);
+  return current.state !== 'exited' || current.attempts.length !== snapshot.attempts || !attempt
+    || read(attempt).text !== snapshot.handoff || briefOf(current) !== snapshot.brief;
 }
 
 export async function landTask(id: string, step = false, gateLane: GateLaneOptions = {}): Promise<void> {
@@ -393,7 +393,7 @@ export async function landTask(id: string, step = false, gateLane: GateLaneOptio
         throw new Error(`${task.id}: land stopped: worktree is not on the task branch`);
       }
       if (retry) { task.state = 'exited'; clearRefusal(task); }
-      return { task, attempt: attempt.n, handoff: result.text, brief: readFileSync(brief, 'utf8'),
+      return { task, attempt: attempt.n, attempts: task.attempts.length, handoff: result.text, brief: readFileSync(brief, 'utf8'),
         head, base: git(root, ['merge-base', 'main', task.branch]) };
     });
     await land({ id: snapshot.task.id, worktree: snapshot.task.worktree, runDir, step,

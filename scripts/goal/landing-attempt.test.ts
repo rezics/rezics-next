@@ -27,12 +27,13 @@ test('a blocked attempt that changed the branch, and every other last handoff, i
   expect(landingAttempt(only.task, only.read, () => true).n).toBe(1);
 });
 
-test('review and merge keep reading the attempt that made the branch after blocked inquiries follow it', () => {
+test('review and merge hold the attempt the landing chose, whatever its rebase did to the branch', () => {
   const { task, read } = attempts('partial', 'blocked', 'blocked');
   const landing = { ...task, state: 'exited' } as Task, brief = () => 'brief';
-  const snapshot = { attempt: 1, handoff: read(task.attempts[0]!).text, brief: 'brief' };
-  expect(landingMoved(landing, snapshot, read, unchangedFrom(2), brief)).toBe(false);
-  expect(landingMoved(landing, snapshot, read, () => false, brief)).toBe(true);
-  expect(landingMoved(landing, snapshot, read, unchangedFrom(2), () => 'edited')).toBe(true);
-  expect(landingMoved({ ...landing, state: 'running' } as Task, snapshot, read, unchangedFrom(2), brief)).toBe(true);
+  const snapshot = { attempt: 1, attempts: 3, handoff: read(task.attempts[0]!).text, brief: 'brief' };
+  expect(landingMoved(landing, snapshot, read, brief)).toBe(false);
+  expect(landingMoved({ ...landing, attempts: [...task.attempts, { n: 4 } as Attempt] } as Task, snapshot, read, brief)).toBe(true);
+  expect(landingMoved(landing, { ...snapshot, handoff: 'another' }, read, brief)).toBe(true);
+  expect(landingMoved(landing, snapshot, read, () => 'edited')).toBe(true);
+  expect(landingMoved({ ...landing, state: 'running' } as Task, snapshot, read, brief)).toBe(true);
 });
