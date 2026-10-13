@@ -73,6 +73,9 @@ test('the manager role card sends program readings and rulings immediately with 
 
 test('the manager role card requires decisions to be carried out and each brief committed before the turn ends', () => {
   expect(MANAGER_ROLE_CARD).toContain('before the turn ends');
+  // A turn beside a landing must not void it: the landing compares the brief it reviewed.
+  expect(MANAGER_ROLE_CARD).toContain('Never edit the brief of a task that is landing');
+  expect(MANAGER_ROLE_CARD).toContain("a landing's progress goes in no brief");
   for (const command of ['resume <id> -m', 'land <id> --step', 'close', 'dispatch', 'queue', 'git commit --only <path>'])
     expect(MANAGER_ROLE_CARD).toContain(command);
 });
