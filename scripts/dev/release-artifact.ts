@@ -5,7 +5,7 @@ import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSy
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { compareMigrationPaths } from '../lib/migration-order.ts';
 import { migrateOwners } from '../ops/migrate.ts';
-import { copyReleaseTree } from '../ops/release-payload.ts';
+import { copyReleasePayload } from '../ops/release-payload.ts';
 import { parseOptions, type StackOptions } from './config.ts';
 import { installRelease } from './install.ts';
 import { assertReleasePins, releaseDigest, releaseManifest } from './release-manifest.ts';
@@ -94,9 +94,7 @@ export function buildReleaseArtifact(): string {
         copyInput(stage, join(directory, name));
       }
     }
-    for (const directory of ['services', 'packages', 'generated', 'node_modules']) {
-      copyReleaseTree(join(root, directory), join(stage, directory));
-    }
+    copyReleasePayload(root, stage);
     mkdirSync(join(stage, 'bin'), { recursive: true });
     copyFileSync(process.execPath, join(stage, 'bin/bun'));
     chmodSync(join(stage, 'bin/bun'), 0o755);
