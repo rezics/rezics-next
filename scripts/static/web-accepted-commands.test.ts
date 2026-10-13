@@ -21,6 +21,8 @@ test('202 declarations, new consumers, aliases and edited completion behavior re
     const reviewed = commandInventory(root, api, directory);
     expect(reviewed[0]!.operations).toEqual(['PUT /v1/works/{work} [202]']);
     expect(unreviewedCommands(reviewed, reviewed)).toEqual([]);
+    writeFileSync(file, "// Describe the unchanged request.\nconst record = main.v1.works({ work });\nexport const save = () => record.put(body);\n");
+    expect(unreviewedCommands(commandInventory(root, api, directory), reviewed)).toEqual([]);
     const synchronous: CommandOpenApi = { paths: { '/v1/works/{work}': { put: { responses: { '200': {} } } } } };
     expect(commandInventory(root, synchronous, directory)).toEqual([]);
     expect(unreviewedCommands(reviewed, commandInventory(root, synchronous, directory))).toHaveLength(1);
