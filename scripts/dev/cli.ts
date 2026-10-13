@@ -17,6 +17,7 @@ import { devResetPlan, devResetTarget } from './reset.ts';
 import { ensureBackend, activeBackend, storageBackend, readPendingRefresh } from './refresh.ts';
 import { expectedRefreshEnvironment, prepareRefreshStorage, refreshSharedStack } from './refresh-stack.ts';
 import { allocatePortSet } from '../lib/ports.ts';
+import { leaseQaPorts, qaPortDiagnostic, qaPortOwner } from './qa-ports.ts';
 import { devStackStopArgs, rememberDevStack, stopDevSession } from './stack-session.ts';
 import { forgetQaStack, rememberQaStack, qaStartupServices, QA_STACK_TIER } from '../qa/stack-ownership.ts';
 import { assertOwnerMigrationsComplete, migrateFixtureOwners, migrateOwnerData } from '../fixture/migrate.ts';
@@ -230,10 +231,21 @@ async function stackConfig(options: StackOptions): Promise<{ composeEnv: Record<
   const dir = stackDirectory(root, options);
   const portNames = Object.keys(devPorts());
   const saved = existsSync(join(dir, 'compose.env')) ? readEnv(join(dir, 'compose.env')) : undefined;
+  if (saved) {
+    assertSavedStackStorage(options, saved);
+    assertSavedStackRawUpdate(options, saved);
+  }
   // A worktree backend also serves the Accounts app on a port of its own.
   const needed = options.profile === 'qa' ? [...saved ? [] : portNames,
     ...hostsAccountsApp(options) && !saved?.ACCOUNTS_PORT ? ['ACCOUNTS_PORT'] : []] : [];
-  const ports = options.profile === 'dev' ? devPorts() : await allocatePortSet(needed);
+  const leased = options.profile === 'qa' && !options.persistent;
+  const ports = options.profile === 'dev' ? devPorts() : leased
+    ? await leaseQaPorts(dir, [...portNames,
+      ...hostsAccountsApp(options) || saved?.ACCOUNTS_PORT ? ['ACCOUNTS_PORT'] : []],
+    { owner: qaPortOwner(process.env) }) : await allocatePortSet(needed);
+  if (leased && saved && Object.entries(ports).some(([name, port]) => saved[name] !== String(port))) {
+    replacePrivate(join(dir, 'compose.env'), { ...saved, ...ports });
+  }
   const composeEnv = ensureSecrets(root, options, ports);
   // apps.env is derived from compose.env; regenerate it when an older layout
   // lacks variables that newer services require.
@@ -249,6 +261,10 @@ async function stackConfig(options: StackOptions): Promise<{ composeEnv: Record<
 
 function printEndpoints(options: StackOptions, env: Record<string, string>, dir: string): void {
   console.log(`${projectName(options)} ready`);
+  if (options.profile === 'qa' && !options.persistent) {
+    console.log(`  Leased ports: ${Object.entries(env).filter(([name]) => name.endsWith('_PORT'))
+      .map(([name, port]) => `${name}=${port}`).join(' ')}`);
+  }
   console.log(`  Main:    http://127.0.0.1:${env.MAIN_PORT}/health/ready (after task dev)`);
   console.log(`  Account: http://127.0.0.1:${env.ACCOUNT_PORT}/health/ready (after task dev)`);
   if (env.ACCOUNTS_PORT) console.log(`  Accounts app: http://127.0.0.1:${env.ACCOUNTS_PORT}/ (after task dev)`);
@@ -290,7 +306,8 @@ async function stackUp(options: StackOptions): Promise<{ apps: Record<string, st
     throw new Error(`QA raw-update Compose topology is missing: ${qaRawUpdateComposeFile}`);
   }
   const env = runtimeEnv();
-  const freshQa = options.profile === 'qa' && !existsSync(join(stackDirectory(root, options), 'compose.env'));
+  const freshPersistentQa = options.profile === 'qa' && options.persistent
+    && !existsSync(join(stackDirectory(root, options), 'compose.env'));
   for (let attempt = 0; ; attempt++) {
     const config = await stackConfig(options);
     try {
@@ -300,14 +317,21 @@ async function stackUp(options: StackOptions): Promise<{ apps: Record<string, st
       printEndpoints(options, config.composeEnv, config.dir);
       return config;
     } catch (error) {
-      if (!freshQa || attempt > 0 || !/port is already allocated|address already in use/i.test(String(error))) {
-        throw error;
+      const conflict = /port is already allocated|address already in use/i.test(String(error));
+      if (freshPersistentQa && attempt === 0 && conflict) {
+        // Persistent profiles retain their existing ephemeral allocation and
+        // one fresh-project retry. Disposable stacks use durable leases instead.
+        compose(options, ['down', '--volumes', '--remove-orphans'], env);
+        rmSync(config.dir, { recursive: true, force: true });
+        continue;
       }
-      // A concurrent QA project can take a released ephemeral port before
-      // Compose binds it. This project has no data yet: remove its partial
-      // containers and configuration, then allocate a new set of ports once.
-      compose(options, ['down', '--volumes', '--remove-orphans'], env);
-      rmSync(config.dir, { recursive: true, force: true });
+      if (options.profile === 'qa' && !options.persistent && conflict) {
+        const diagnostics = Object.entries(config.composeEnv).filter(([name, port]) => name.endsWith('_PORT')
+          && new RegExp(`[: ]${port}(?:[^0-9]|$)`).test(String(error)))
+          .map(([name, port]) => qaPortDiagnostic(Number(port), name));
+        if (diagnostics.length) throw new Error(diagnostics.join('\n'), { cause: error });
+      }
+      throw error;
     }
   }
 }
