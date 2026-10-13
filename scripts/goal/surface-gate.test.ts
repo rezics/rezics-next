@@ -90,6 +90,20 @@ test('a branch cannot prove its own row; absent, pending and missing-persona mai
   }
 });
 
+test('declaration helpers and their transitive dependencies are read from pinned main', async () => {
+  const f = fixture();
+  const declaration = `scripts/qa/cases/outcomes/${f.row}.ts`;
+  f.write('packages/fixture/proof.ts', "export const proofName = 'reads catalogue';");
+  f.write('services/main/src/modules/access/fixture-authority.ts', "export { proofName } from '../../../../../packages/fixture/proof.ts';");
+  f.write(declaration, "import { proofName } from '../../../../../services/main/src/modules/access/fixture-authority.ts';\n" +
+    readFileSync(join(f.cwd, declaration), 'utf8').replaceAll("proved('reads catalogue')", 'proved(proofName)'));
+  f.git('add', '.'); f.git('commit', '-qm', 'Declare with fixture helper'); f.git('branch', '-f', 'main', 'HEAD');
+  f.write('packages/fixture/proof.ts', "export const proofName = 'unproved branch claim';");
+  const selected = await selectSurface(f.cwd, f.brief, f.changed);
+  expect(selected?.refusals).toEqual([]);
+  expect(selected?.selection?.main).toBe(f.git('rev-parse', 'main'));
+});
+
 test('bad rows, missing tests, foreign paths and browser journeys are refused', async () => {
   const f = fixture();
   f.write('tests/qa/e2e/catalogue.test.ts', 'export {};');

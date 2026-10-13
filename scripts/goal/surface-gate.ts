@@ -1,7 +1,8 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { dirname, isAbsolute, join, posix, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import ts from 'typescript-6';
 import { type Brief } from './types.ts';
 import { type CheckGroup, type CheckRunner, runCheckCommand, checkFailureLines } from './check.ts';
 import { affectedSelection } from './merge.ts';
@@ -22,13 +23,39 @@ async function mainOutcomes(cwd: string, main: string): Promise<Map<string, RowO
   mkdirSync(parent, { recursive: true });
   const snapshot = mkdtempSync(join(parent, 'main-'));
   try {
-    const listed = spawnSync('git', ['ls-tree', '-r', '--name-only', '-z', main, '--', 'scripts/qa/cases', 'tests/qa'], { cwd, encoding: 'utf8' });
+    const listed = spawnSync('git', ['ls-tree', '-r', '--name-only', '-z', main], { cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
     if (listed.status !== 0) throw new Error(listed.stderr.trim());
-    for (const file of listed.stdout.split('\0').filter(Boolean)) {
+    const tracked = new Set(listed.stdout.split('\0').filter(Boolean));
+    const copied = new Map<string, string>();
+    const copy = (file: string) => {
+      if (copied.has(file)) return;
       const shown = spawnSync('git', ['show', `${main}:${file}`], { cwd, maxBuffer: 16 * 1024 * 1024 });
       if (shown.status !== 0) throw new Error(shown.stderr.toString().trim());
       mkdirSync(dirname(join(snapshot, file)), { recursive: true });
       writeFileSync(join(snapshot, file), shown.stdout);
+      copied.set(file, shown.stdout.toString());
+    };
+    for (const file of tracked) {
+      if (file.startsWith('scripts/qa/cases/') || file.startsWith('tests/qa/') || /\.(?:test|spec)\.[cm]?[jt]sx?$/.test(file)) copy(file);
+    }
+    // Declarations may export fixture helpers. Their relative dependencies must also
+    // come from main; test bodies are inspected by the owner and are never imported.
+    const queue = [...copied.keys()].filter(file => file.startsWith('scripts/qa/cases/') && file.endsWith('.ts'));
+    const visited = new Set<string>();
+    while (queue.length) {
+      const file = queue.shift()!;
+      if (visited.has(file)) continue;
+      visited.add(file);
+      if (!/\.[cm]?[jt]sx?$/.test(file)) continue;
+      for (const imported of ts.preProcessFile(copied.get(file)!, true, true).importedFiles) {
+        if (!imported.fileName.startsWith('.')) continue;
+        const base = posix.normalize(posix.join(posix.dirname(file), imported.fileName));
+        const dependency = [base, ...['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.json', '/index.ts', '/index.tsx', '/index.js'].map(extension => base + extension)]
+          .find(candidate => tracked.has(candidate));
+        if (!dependency) throw new Error(`Missing main declaration dependency: ${file} -> ${imported.fileName}`);
+        copy(dependency);
+        queue.push(dependency);
+      }
     }
     symlinkSync(resolve(import.meta.dir, '../../node_modules'), join(snapshot, 'node_modules'), 'dir');
     const owner = await import(pathToFileURL(join(snapshot, 'scripts/qa/cases/outcomes.ts')).href) as { loadOutcomes: typeof loadOutcomes };
