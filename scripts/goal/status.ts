@@ -10,6 +10,7 @@ import { join } from 'node:path';
 import { existsSync, readdirSync } from 'node:fs';
 import { validGoalSlug } from './briefs.ts';
 import { MAX_TRANSPORT_CONTINUATIONS, engineOf } from './types.ts';
+import { settlementReason } from './settle.ts';
 
 export async function status(): Promise<void> {
   await printScopeProgress();
@@ -67,6 +68,7 @@ export async function status(): Promise<void> {
       + `${elapsed(attempt.startedAt)} [${task.cases.join(' ')}] ${task.title}`
       + (running(task) && continuations > 0 ? `; continued by itself ${continuations}` : '')
       + (repeated ? '\n  stopped after repeated transport errors' : '')
+      + (settlementReason(task) ? `\n  ${settlementReason(task)}` : '')
       + (task.state === 'conflict' && task.refusal ? `\n  ${task.refusal}` : ''));
   }
   const closed = tasks.length - tasks.filter(t => !['verified', 'cancelled'].includes(t.state)).length;

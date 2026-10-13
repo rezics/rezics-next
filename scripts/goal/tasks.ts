@@ -1,4 +1,4 @@
-import { type Brief, DEFAULT_ENGINE, HOLDING, type Task, isClaudeCode, modelOf, programOf, engineOf, CAPACITY_WAIT_MS, MAX_CAPACITY_CONTINUATIONS, MAX_TRANSPORT_CONTINUATIONS, type Attempt, type Engine, effortsOf } from './types.ts';
+import { type Brief, DEFAULT_ENGINE, HOLDING, type Task, isClaudeCode, modelOf, programOf, engineOf, MAX_CAPACITY_CONTINUATIONS, MAX_TRANSPORT_CONTINUATIONS, type Attempt, type Engine, effortsOf } from './types.ts';
 import { root, withLedger, briefGoal, unlandedChangeConflicts, areasOf, activeGoals, stateDir, git, managerOf, readLedger, pidAlive, claimingTasks, assertOwner, acquireDir, briefPathOf, landScope, archiveClosedBriefs, treeMentions, archiveDirOf, archiveFiles, removeFromTree, ARCHIVE_BRANCH } from './ledger.ts';
 import { pathToFileURL } from 'node:url';
 import { join, resolve, basename, relative, dirname } from 'node:path';
@@ -118,90 +118,100 @@ export async function dispatch(briefPath: string, flags: Set<string>): Promise<v
   });
 }
 
+/** The worker exit decision is shared by wait and the coordinator's settlement pass. */
+export async function finishAttempt(id: string, attemptNumber: number) {
+  const watching = lastAttempt(taskOf(readLedger(), id));
+  const result = readResult(watching);
+  const refusedTurn = capacityRefusal(watching);
+  return await withLedger(ledger => {
+    const current = taskOf(ledger, id);
+    const last = lastAttempt(current);
+    if (last.n !== attemptNumber) return { kind: 'replaced' as const, task: current };
+    last.endedAt ??= new Date().toISOString();
+    if (result.session && !last.session) last.session = result.session;
+    // Status may already have marked a dead pid exited. A stop or a close still stands.
+    const open = current.state === 'running' || current.state === 'exited';
+    const drop = transportDrop(last);
+    let refused: string | undefined;
+    if (refusedTurn && open && last.session && transportContinuations(current, 'capacity') < MAX_CAPACITY_CONTINUATIONS) {
+      const engine = engineOf(last);
+      try {
+        launchGates(Object.values(ledger.tasks), engine, false);
+        const next = launch(current, last.effort, last.session,
+          'The service refused your last request for capacity; nothing else changed. Continue where you stopped.',
+          true, managerOf(ledger, current.goal), engine, 'continuation');
+        next.continuedFor = 'capacity';
+        current.attempts.push(next);
+        current.engine = engine;
+        current.state = 'running';
+        clearRefusal(current);
+        return { kind: 'continued' as const, task: current, next };
+      } catch (error) {
+        refused = error instanceof Error ? error.message : String(error);
+      }
+    }
+    if (drop && open && transportContinuations(current) < MAX_TRANSPORT_CONTINUATIONS) {
+      const engine = engineOf(last);
+      const effort = last.effort;
+      // A refused gate or a failed start must still record this attempt as ended.
+      try {
+        launchGates(Object.values(ledger.tasks), engine, false);
+        const manager = managerOf(ledger, current.goal);
+        const session = isClaudeCode(engine) ? randomUUID() : '';
+        const prompt = `${workerPrompt(current, manager, engine, effort)}\n\n${transportContinuationPrompt(changedFiles(current).dirty)}`;
+        const next = launch(current, effort, session, prompt, false, manager, engine, 'continuation');
+        next.continuedFor = 'transport';
+        current.attempts.push(next);
+        current.engine = engine;
+        current.state = 'running';
+        clearRefusal(current);
+        return { kind: 'continued' as const, task: current, next };
+      } catch (error) {
+        refused = error instanceof Error ? error.message : String(error);
+      }
+    }
+    const repeated = drop && open && transportContinuations(current) >= MAX_TRANSPORT_CONTINUATIONS;
+    if (current.state === 'running') { current.state = 'exited'; clearRefusal(current); }
+    return { kind: 'ended' as const, task: current, repeated, refused };
+  });
+}
+
+function reportAttempt(task: Task, watching: Attempt, continued: boolean): void {
+  const result = readResult(watching);
+  console.log(`${task.id} attempt ${watching.n} ended after ${elapsed(watching.startedAt)}`
+    + `${result.error ? ' WITH ERROR' : ''}${result.cost !== undefined ? `; cost $${result.cost.toFixed(2)}` : ''}`
+    + `${result.tokens ? `; ${modelOf(engineOf(watching))} tokens ${result.tokens}` : ''}`);
+  if (continued) return;
+  console.log(describe(task));
+  if (transportDrop(watching) && transportContinuations(task) >= MAX_TRANSPORT_CONTINUATIONS) console.log(`${task.id} stopped after repeated transport errors`);
+  console.log(`--- handoff ---\n${result.text.length > 8000 ? `${result.text.slice(0, 8000)}\n[truncated]` : result.text}`);
+}
+
 export async function waitFor(id: string, options: { pollMs?: number; settleMs?: number; capacityWaitMs?: number } = {}): Promise<void> {
-  // A killed waiter must never record the worker as ended (an expired monitor once marked live workers exited).
+  // A killed waiter must never record the worker as ended.
   for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const) process.on(signal, () => process.exit(143));
+  const { settleTask } = await import('./settle.ts');
   let watching = lastAttempt(taskOf(readLedger(), id));
   for (;;) {
     const alive = () => pidAlive(watching.pid, programOf(engineOf(watching)));
     while (alive() || (await Bun.sleep(options.settleMs ?? 3000), alive())) await Bun.sleep(options.pollMs ?? 5000);
-    const result = readResult(watching);
-    const refusedTurn = capacityRefusal(watching);
-    if (refusedTurn) {
-      const pause = options.capacityWaitMs ?? CAPACITY_WAIT_MS;
-      // Said before the pause: a manager that sees only the exit resumes by hand and races this.
-      console.log(`${id} attempt ${watching.n} was refused for capacity; resuming the same session in ${Math.round(pause / 1000)} s`);
-      await Bun.sleep(pause);
+    await settleTask(id, { capacityWaitMs: options.capacityWaitMs });
+    let task = taskOf(readLedger(), id);
+    while (lastAttempt(task).n === watching.n && task.settlement?.attempt === watching.n && !task.settlement.settledAt) {
+      await Bun.sleep(options.pollMs ?? 5000);
+      await settleTask(id, { capacityWaitMs: options.capacityWaitMs });
+      task = taskOf(readLedger(), id);
     }
-    const outcome = await withLedger(ledger => {
-      const current = taskOf(ledger, id);
-      const last = lastAttempt(current);
-      if (last.n !== watching.n) return { kind: 'replaced' as const, task: current };
-      last.endedAt ??= new Date().toISOString();
-      if (result.session && !last.session) last.session = result.session;
-      // Status may already have marked a dead pid exited. A stop or a close still stands.
-      const open = current.state === 'running' || current.state === 'exited';
-      const drop = transportDrop(last);
-      let refused: string | undefined;
-      if (refusedTurn && open && last.session && transportContinuations(current, 'capacity') < MAX_CAPACITY_CONTINUATIONS) {
-        const engine = engineOf(last);
-        try {
-          launchGates(Object.values(ledger.tasks), engine, false);
-          const next = launch(current, last.effort, last.session,
-            'The service refused your last request for capacity; nothing else changed. Continue where you stopped.',
-            true, managerOf(ledger, current.goal), engine, 'continuation');
-          next.continuedFor = 'capacity';
-          current.attempts.push(next);
-          current.engine = engine;
-          current.state = 'running';
-          clearRefusal(current);
-          return { kind: 'continued' as const, task: current, next };
-        } catch (error) {
-          refused = error instanceof Error ? error.message : String(error);
-        }
-      }
-      if (drop && open && transportContinuations(current) < MAX_TRANSPORT_CONTINUATIONS) {
-        const engine = engineOf(last);
-        const effort = last.effort;
-        // A refused gate or a failed start must still record this attempt as ended.
-        try {
-          launchGates(Object.values(ledger.tasks), engine, false);
-          const manager = managerOf(ledger, current.goal);
-          const session = isClaudeCode(engine) ? randomUUID() : '';
-          const prompt = `${workerPrompt(current, manager, engine, effort)}\n\n${transportContinuationPrompt(changedFiles(current).dirty)}`;
-          const next = launch(current, effort, session, prompt, false, manager, engine, 'continuation');
-          next.continuedFor = 'transport';
-          current.attempts.push(next);
-          current.engine = engine;
-          current.state = 'running';
-          clearRefusal(current);
-          return { kind: 'continued' as const, task: current, next };
-        } catch (error) {
-          refused = error instanceof Error ? error.message : String(error);
-        }
-      }
-      const repeated = drop && open && transportContinuations(current) >= MAX_TRANSPORT_CONTINUATIONS;
-      if (current.state === 'running') { current.state = 'exited'; clearRefusal(current); }
-      return { kind: 'ended' as const, task: current, repeated, refused };
-    });
-    const task = outcome.task;
-    console.log(`${task.id} attempt ${watching.n} ended after ${elapsed(watching.startedAt)}`
-      + `${result.error ? ' WITH ERROR' : ''}${result.cost !== undefined ? `; cost $${result.cost.toFixed(2)}` : ''}`
-      + `${result.tokens ? `; ${modelOf(engineOf(watching))} tokens ${result.tokens}` : ''}`);
-    if (outcome.kind === 'continued') {
-      console.log(outcome.next.continuedFor === 'capacity'
-        ? `${task.id} resumed by itself after a capacity refusal; same ${modelOf(engineOf(outcome.next))} session, pid ${outcome.next.pid}`
-        : `${task.id} continued by itself after a transport error; fresh ${modelOf(engineOf(outcome.next))}/`
-          + `${outcome.next.effort} session, pid ${outcome.next.pid}`);
-      watching = outcome.next;
+    const next = lastAttempt(task);
+    reportAttempt(task, watching, next.n !== watching.n && !!next.continuedFor);
+    if (next.n !== watching.n) {
+      if (next.continuedFor) console.log(next.continuedFor === 'capacity'
+        ? `${task.id} resumed by itself after a capacity refusal; same ${modelOf(engineOf(next))} session, pid ${next.pid}`
+        : `${task.id} continued by itself after a transport error; fresh ${modelOf(engineOf(next))}/${next.effort} session, pid ${next.pid}`);
+      watching = next;
       continue;
     }
-    console.log(describe(task));
-    if (outcome.kind === 'ended' && outcome.repeated) console.log(`${task.id} stopped after repeated transport errors`);
-    if (outcome.kind === 'ended' && outcome.refused) console.log(`${task.id} not continued after a ${refusedTurn ? 'capacity refusal' : 'transport error'}: ${outcome.refused}`);
-    console.log(`--- handoff ---\n${result.text.length > 8000 ? `${result.text.slice(0, 8000)}\n[truncated]` : result.text}`);
-    // A session that ended on an error has handed nothing off; landing it would only report a dirty worktree.
-    if (outcome.kind === 'ended' && task.land === 'auto' && lastAttempt(task).n === watching.n && !result.error) await landTask(task.id);
+    if (task.settlement?.reason) console.log(task.settlement.reason);
     return;
   }
 }
@@ -500,12 +510,21 @@ export async function closeTasks(ids: string[], outcome: string): Promise<void> 
   }
 }
 
+/** A clean final step can verify work already on main, while retaining its original claims. */
+export function canVerifyReadOnly(task: Task): boolean {
+  if (task.state !== 'exited') return false;
+  const changes = changedFiles(task);
+  const head = git(root, ['rev-parse', '--verify', task.branch], true);
+  return !changes.ahead && !changes.dirty.length
+    && (!task.paths.length || !!task.mergedCommit) && !!head
+    && git(root, ['merge-base', 'main', head], true) === head;
+}
+
 async function closeTask(id: string, outcome: 'verified' | 'cancelled'): Promise<void> {
   await withLedger(ledger => {
     const task = taskOf(ledger, id);
     if (running(task)) throw new Error(`${task.id} is still running; stop it first`);
-    // A read-only task (no path claims, nothing committed) is verified by its accepted handoff.
-    const readOnly = !task.paths.length && task.state === 'exited' && !changedFiles(task).ahead;
+    const readOnly = canVerifyReadOnly(task);
     if (outcome === 'verified' && task.state !== 'merged' && !readOnly) {
       throw new Error(`${task.id} is ${task.state}, not merged`);
     }
@@ -520,7 +539,7 @@ async function closeTask(id: string, outcome: 'verified' | 'cancelled'): Promise
       preserveWorktreeArtifacts(task.worktree, join(stateDir, 'runs', task.id));
       git(root, ['worktree', 'remove', '--force', task.worktree]);
     }
-    if (task.state === 'merged' && !sharers.length) git(root, ['branch', '-d', task.branch], true);
+    if ((task.state === 'merged' || (outcome === 'verified' && readOnly && task.mergedCommit)) && !sharers.length) git(root, ['branch', '-d', task.branch], true);
     task.state = outcome;
     clearRefusal(task);
     task.closedAt = new Date().toISOString();

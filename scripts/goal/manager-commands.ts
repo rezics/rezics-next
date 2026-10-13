@@ -67,10 +67,11 @@ export function managerEvents(directory: string, goal: string, mail: GoalMailSto
       body:`Mail ${message.id} is overdue and remains unacknowledged. This is its one deadline wake.\n${body(message)}`});
   }
   for (const task of Object.values(eventLedger(directory).tasks)) {
-    if (task.goal !== goal || ['verified', 'cancelled', 'merged'].includes(task.state) || !task.attempts.length) continue;
+    if (task.goal !== goal || ['verified', 'cancelled'].includes(task.state) || !task.attempts.length) continue;
     const attempt = lastAttempt(task);
     if (task.state === 'running' && running(task)) continue;
-    events.push({key:`task:${task.id}:${attempt.n}`,body:`${task.id}: ${task.state}; attempt ${attempt.n} exited. Output: ${attempt.output}`});
+    if (task.settlement?.attempt !== attempt.n || !task.settlement.settledAt) continue;
+    events.push({key:`task:${task.id}:${attempt.n}`,body:task.settlement.reason ?? `${task.id}: attempt ${attempt.n} settled`});
   }
   return events;
 }
@@ -229,6 +230,7 @@ export async function coordinatorCommand(args: string[]): Promise<void> {
     process.on('SIGTERM',stop); process.on('SIGINT',stop);
     try {
       do {
+        if (directory === stateDir) await (await import('./settle.ts')).settlePass();
         const mail = new GoalMailStore({stateDir:directory,goals:Object.keys(eventLedger(directory).goals ?? {})});
         try { mail.notifyOverdue(); } finally { mail.close(); }
         coordinator.step();

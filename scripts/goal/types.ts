@@ -40,6 +40,12 @@ export interface Task extends Omit<Brief, 'worktree'> {
   loans?: string[];
   /** First line of the message that put the task in `conflict`. Absent in every other state. */
   refusal?: string;
+  /** One durable settlement claim for the latest worker attempt. */
+  settlement?: {
+    attempt: number; token: string;
+    owner: { pid: number; start?: string; boot?: string };
+    settledAt?: string; reason?: string;
+  };
 }
 /** One running Goal. Its intent and areas live in `docs/goals/<slug>/GOAL.md`; the ledger keeps only runtime state. */
 export interface GoalRecord { manager: string; startedAt: string; closedAt?: string; archive?: string }
