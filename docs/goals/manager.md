@@ -186,7 +186,12 @@ opinion, such as
    supermanager's.
 6. **Checkpoint.** Keep `state.md` short and current: rows proved, rows in
    work, the measures, the next action. After compaction or a restart, rebuild
-   from `goalctl status`, `state.md` and `git log`.
+   from `goalctl status`, `state.md` and `git log`. Commit only your own paths
+   (`git commit --only <paths>`), and never amend or rebase a commit on `main`:
+   landings rebase onto it at any moment, and on 2026-10-13 a commit amended
+   seconds after it was made went into a task's branch. A correction is a new
+   commit. Name a brief in `state.md` by its ID, without a link: the brief
+   leaves the tree when its task closes.
 7. **Close.** When the outcome holds, fold what the Goal decided into its
    owners, remove its row from the root `GOAL.md` and run `goal close <goal>`
    ([convergence](README.md#convergence)).
