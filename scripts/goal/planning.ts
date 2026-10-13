@@ -25,6 +25,9 @@ function declarationValues(file: string, text: string): RowOutcomes {
   function value(node: ts.Expression): unknown {
     if (ts.isStringLiteralLike(node)) return node.text;
     if (ts.isIdentifier(node) && values.has(node.text)) return values.get(node.text);
+    // A declaration is valid TypeScript that the loader runs; notes are also built from constants.
+    if (ts.isTemplateExpression(node)) return node.head.text + node.templateSpans.map(span => `${String(value(span.expression))}${span.literal.text}`).join('');
+    if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) return `${String(value(node.left))}${String(value(node.right))}`;
     if (ts.isParenthesizedExpression(node) || ts.isAsExpression(node) || ts.isSatisfiesExpression(node)) return value(node.expression);
     if (ts.isObjectLiteralExpression(node)) {
       const object: Record<string, unknown> = {};
