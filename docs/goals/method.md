@@ -85,11 +85,15 @@ says" is.
 2. **Implementation.** Makes those tests pass. It does not edit them; a needed
    change goes back to the manager and into the brief first. Done means the
    row's outcome tests, the unit gate and the repository guards pass.
-3. **Surface.** The web consumes the operation through the generated client and
-   shows each state (loading, empty, error, pending, populated) as a story fed
-   by responses recorded from the outcome tests. Its gate is types, unit tests
-   and stories. One browser journey per vertical runs in the program's nightly
-   regression, not one per row.
+3. **Surface.** The web consumes the operation through the typed client and
+   shows each state the operation's contract can answer as a story fed by
+   answers recorded from the row's outcome tests: loading and populated always;
+   empty, error and pending where the contract admits them (pending is a `202`
+   and nothing else, so a read that answers only `200` or a problem has no
+   pending story). A state is never made by editing a recorded answer; a
+   missing one is first proved by the outcome test. Its gate is types, unit
+   tests and stories. One browser journey per vertical runs in the program's
+   nightly regression, not one per row.
 
 A row is proved when its outcome tests pass on the shared stack. The surface
 follows a proved row and never leads it.
