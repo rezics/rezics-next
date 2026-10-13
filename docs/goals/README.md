@@ -22,9 +22,9 @@ run by a manager from the main checkout with `GOAL_ID` set to its Goal:
 | --- | --- |
 | `task goal -- goal start <goal> --manager <session>` | Registers a Goal whose `GOAL.md` exists, refusing areas that overlap another running Goal's; after a manager restart it records the new session name. |
 | `task goal -- new [--goal <goal>] <title>` | Reserves the next task ID for the Goal and writes the brief skeleton at `docs/goals/<goal>/tasks/G-NNN.md`, so two managers never take the same number. |
-| `task goal -- dispatch docs/goals/<goal>/tasks/G-NNN.md [--dry-run] [--force-usage]` | Requires `kind` and `## Mechanisms`. Every implementation row needs a complete outcome declaration with a pending persona; a mechanism needs a non-empty `## Design note` with `Read by program: YYYY-MM-DD`. Checks claims, dependencies and launch capacity before starting; `--dry-run` only checks. |
+| `task goal -- dispatch docs/goals/<goal>/tasks/G-NNN.md [--dry-run] [--force-usage]` | Requires `kind` and `## Mechanisms`. Implementations must name at least one row, each with a complete outcome declaration and a pending persona; a mechanism needs a non-empty `## Design note` with `Read by program: YYYY-MM-DD`. Checks claims, dependencies and launch capacity before starting; `--dry-run` only checks. |
 | `task goal -- wait G-NNN` | Run in the background. Blocks until the worker exits, then prints branch, cleanliness, scope check, token use and the handoff. A brief with `land: auto` also runs `land`, delivering a verified task or a stop reason; other briefs keep the handoff-only behaviour. |
-| `task goal -- resume G-NNN -m <text> [--effort e] [--engine e] [--fresh] [--force-usage]` | Records a next step after a merged partial handoff; otherwise records a fix. Only fixes count toward the cap. After two, a further fix requires a UTC-dated `## Decision` after the last start, naming a cut, split or design note. Transport/capacity retries consume no round; no flag bypasses the cap. Launch gates still apply. |
+| `task goal -- resume G-NNN -m <text> [--effort e] [--engine e] [--fresh] [--force-usage]` | Records a next step after a partial handoff whose work is merged or clean with no commits ahead of main; otherwise a fix. Only fixes count toward the cap. After two, a further fix requires a UTC-dated `## Decision` after the last start, naming a cut, split or design note. Transport/capacity retries consume no round; no flag bypasses the cap. Launch gates still apply. |
 | `task goal -- reclaim G-NNN <brief>` | Replaces an open, exited task's claims from an updated brief after the dispatch conflict checks. |
 | `task goal -- stop G-NNN` | Terminates the worker's process group and its task-marked detached children. Preserves other live sharers and shared resources; after the last live worker stops, also sweeps worktree processes and removes its stack. Claims and worktree remain. |
 | `task goal -- scope G-NNN` / `task goal -- owner <path>` | Lists commits ahead, dirty files and files outside the claim / which open task claims a path. |
@@ -62,7 +62,7 @@ short. The frontmatter is machine-checked:
 id: G-101
 title: Accounts admin user search
 kind: surface                        # outcome | implementation | surface | mechanism | tooling
-rows: [account/user-search]           # optional outcome row references
+rows: [account/user-search]           # required for implementation; optional otherwise
 engine: claude                        # claude | sonnet | haiku | codex | codex-1 | luna | grok | cursor
 effort: xhigh
 cases: []                             # acceptance IDs such as IAM02, when the task has them
