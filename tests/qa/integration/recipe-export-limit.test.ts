@@ -84,6 +84,9 @@ test('RECIPE_EXPORT_LIMIT: exact revisions export at 4,096 occurrences and deny 
             substituteFor: [], parseStatus: 'parsed' } }] }, `recipe-export-over-limit-${randomUUID()}`), 200);
     expect(added.occurrences).toHaveLength(1);
 
+    // The large retained fixture may outlive an OAuth access token. Renew through
+    // the real Account owner before checking export rights and refusals.
+    f.account.tokenA = await f.account.tokenFor(f.account.a);
     const recipePath = `/v1/recipes/${shortId(created.structure)}/exports/schema-org`;
     const exact = await f.json<{ revision: string; recipe: { recipeIngredient: unknown[] };
       cost: { occurrences: number } }>(await f.call('GET', `${recipePath}?actingSubject=${encodeURIComponent(f.actor)}`
@@ -92,10 +95,12 @@ test('RECIPE_EXPORT_LIMIT: exact revisions export at 4,096 occurrences and deny 
     expect(exact.recipe.recipeIngredient).toEqual([{ '@type': 'PropertyValue',
       text: 'water', parseStatus: 'parsed', inLanguage: 'en' }]);
 
+    f.account.tokenA = await f.account.tokenFor(f.account.a);
     const overLimit = await f.json<{ code: string; status: number }>(await f.call('GET',
       `${recipePath}?actingSubject=${encodeURIComponent(f.actor)}`), 413);
     expect(overLimit).toMatchObject({ code: 'recipe_export_too_large', status: 413 });
 
+    f.account.tokenB = await f.account.tokenFor(f.account.b);
     const denied = await f.call('GET', `${recipePath}?actingSubject=${encodeURIComponent(f.actor)}`,
       undefined, randomUUID(), f.account.tokenB);
     const absent = await f.call('GET', `/v1/recipes/${randomUUID()}/exports/schema-org`

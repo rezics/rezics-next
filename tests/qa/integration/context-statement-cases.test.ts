@@ -117,7 +117,9 @@ test('refresh alone converts populated catalogue decisions, resumes fenced failu
     let stopped = false;
     const actions: RefreshActions = {
       buildImage: async () => {},rehearseMigrations: async () => {},
-      stopWriters: async () => {stopped = true;events.push('stop-writers');},
+      stopWriters: async () => {if (!stopped) events.push('stop-writers');stopped = true;},
+      beforeMutation: async () => {expect(stopped).toBe(true);},
+      switchBackend: async () => {},restartPrevious: async () => {stopped = false;},
       prepareStorage: async () => {
         expect(stopped).toBe(true);events.push('prepare-storage');
         await migrateTracked(apps.ACCESS_DATABASE_URL!,repositoryRoot,migrationDirectories.access);

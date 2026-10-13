@@ -115,6 +115,23 @@ test('G-824: 1,000 Works traverse each status in every SQL sort/direction withou
         expect(nodes(plan).some(node => ['Sort', 'Seq Scan'].includes(node['Node Type']))).toBe(false);
         expect(Math.max(...nodes(plan).map(node => node['Actual Rows']))).toBeLessThanOrEqual(20);
       }
+      await home.json(await home.call('PUT', `/v1/agents/${agent.slice(-36)}/library-visibility`,
+        { visibility: 'public', expectedVersion: 0 }, home.reader.token));
+      const readyOwned = await home.json<Page>(await home.call('GET',
+        signed('/v1/me/shelves/status/want-to-read/works?limit=20'), undefined, home.reader.token));
+      expect(readyOwned.items).toHaveLength(20);
+      expect(readyOwned.items.every(item => item.card?.id === item.work)).toBe(true);
+      const publicPath = `/v1/agents/${agent.slice(-36)}/shelves`;
+      const faults = spyOn(observability, 'logWorkerFault');
+      let publicResponse: Response;
+      try {
+        publicResponse = await home.call('GET', publicPath);
+        console.info('G824 public shelves qualification:', { readyOwnedItems: readyOwned.items.length, works: works.length,
+          request: { method: 'GET', path: publicPath, persona: 'anonymous shelf reader' },
+          status: publicResponse.status, body: await publicResponse.clone().json(), faults: faults.mock.calls.map(([worker, error]) => ({ worker,
+            type: error instanceof Error ? error.constructor.name : typeof error,
+            message: error instanceof Error ? error.message : String(error) })) });
+      } finally { faults.mockRestore(); }
       let ownedTraversals = 0;
       for (const status of statuses) for (const sort of sorts.filter(sort => sort !== 'finished' || status === 'read')) {
         for (const order of ['asc', 'desc'] as ShelfOrder[]) {
@@ -143,17 +160,7 @@ test('G-824: 1,000 Works traverse each status in every SQL sort/direction withou
           ownedTraversals++;
         }
       }
-      await home.json(await home.call('PUT', `/v1/agents/${agent.slice(-36)}/library-visibility`,
-        { visibility: 'public', expectedVersion: 0 }, home.reader.token));
-      const publicPath = `/v1/agents/${agent.slice(-36)}/shelves`;
-      const faults = spyOn(observability, 'logWorkerFault');
-      let publicResponse: Response;
-      try {
-        publicResponse = await home.call('GET', publicPath);
-        console.info('G824 public shelves qualification:', { ownedTraversals, works: works.length,
-          request: { method: 'GET', path: publicPath, persona: 'anonymous shelf reader' },
-          status: publicResponse.status, body: await publicResponse.clone().json(), faults: faults.mock.calls });
-      } finally { faults.mockRestore(); }
+      console.info('G824 completed owned traversals:', ownedTraversals);
       const publicCounts = await home.json<{ statusShelves: { status: string; count: number; countKind: string; nextCursor: string | null }[] }>(publicResponse);
       expect(publicCounts.statusShelves.reduce((sum, shelf) => sum + shelf.count, 0)).toBe(60);
       expect(publicCounts.statusShelves.every(shelf => shelf.countKind === 'lower-bound' && shelf.nextCursor)).toBe(true);

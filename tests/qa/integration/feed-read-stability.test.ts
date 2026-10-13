@@ -147,8 +147,16 @@ test('a changed Home or Realm population still requires a documented cursor rest
       faults.mockClear();
       const continuation = continueAt(path, pages.get(path)!.nextCursor!);
       const response = await home.call('GET', continuation);
-      console.info('Feed changed-population qualification:', { request: { method: 'GET', path: continuation },
-        first: pages.get(path), status: response.status, body: await response.clone().json(), faults: faults.mock.calls });
+      const causes = faults.mock.calls.map(([worker, error]) => {
+        const chain: { type: string; message: string }[] = [];
+        for (let cause = error; cause instanceof Error && chain.length < 8; cause = cause.cause)
+          chain.push({ type: cause.constructor.name, message: cause.message });
+        return { worker, chain };
+      });
+      const first = pages.get(path)!;
+      console.info('Feed changed-population qualification:', JSON.stringify({ request: { method: 'GET', path: continuation },
+        first: { items: first.items.length, sourcePosition: first.sourcePosition },
+        status: response.status, body: await response.clone().json(), causes }));
       continuations.push({ path, response });
     }
   } finally { faults.mockRestore(); }
