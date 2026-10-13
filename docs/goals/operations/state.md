@@ -1,14 +1,26 @@
 # State
 
-The checkpoint for [this Goal](GOAL.md). Not started; written on 2026-10-12 from
-the trust-ops manager's end-of-run table, archived at
+The checkpoint for [this Goal](GOAL.md). Started by the program on 2026-10-13 15:34 UTC
+with the work that does not wait for the erasure contract; the carried table below
+was written on 2026-10-12 from the trust-ops manager's end-of-run table, archived at
 `archive/goals:program-2026-10-06/study-2026-10-12/`.
 
-| Field | State (2026-10-12) |
+| Field | State |
 | --- | --- |
-| Manager | None. The program starts one when the erasure and recovery contracts are stable |
+| Manager | Enrolled with the coordinator on 2026-10-13 15:34 UTC |
 | Proved on physical fixtures | Nothing yet |
 | Fixture | The small physical fixture `fx-small-a3a906c1c1b7`, built at `main` 1e05bf2d4 |
+
+**Direction from the program.** Start with what is independent of the erasure
+service: (1) the release payload and image start Main (D026, the Release image
+row); (2) the fault-recovery drills get the Fuseki they ask for (D016, D075,
+D109) and the campaign fixture's evidence (D108); (3) the Access recovery
+classification (`g-2025`) is reviewed and landed, since it gates the restore
+drills, then the independent physical restore (`g-1776`) and the drill schedule
+(`g-1775`). The erasure rows wait for the api Goal's composition hunk; ask the
+api manager by mail when it lands. One brief for each cause, the drill written
+first; heavy drills are bounded by the QA slots, so brief freely. A brief that
+the tool refuses is corrected in the same turn.
 
 ## Carried work
 

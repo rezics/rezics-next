@@ -38,7 +38,7 @@ what decides whether the delivery Goals are efficient: the scope, the
 | --- | --- | --- |
 | [api](../api/GOAL.md) | Every row of the first public scope is proved through the API, for each persona | Resumes when tasks N1 to N4 below are on `main` |
 | [web](../web/GOAL.md) | Every proved row has its surface | When the first vertical's rows are proved |
-| [operations](../operations/GOAL.md) | Erasure and restore are proved on physical fixtures; deployment is prepared | When the api Goal no longer changes the erasure and recovery contracts |
+| [operations](../operations/GOAL.md) | Erasure and restore are proved on physical fixtures; deployment is prepared | Restore, drills and the release image at once, since they do not read the erasure contract (changed on 2026-10-13: waiting for the whole Goal left workers idle); erasure when the api Goal no longer changes the erasure and recovery contracts |
 
 The product direction is settled and is not this Goal's subject: the
 [target architecture](../../architecture/target-architecture.md), the

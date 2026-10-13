@@ -11,10 +11,10 @@ areas:
 
 # Operations
 
-Status: written on 2026-10-12 and not started. The [program](../program/GOAL.md)
-starts this Goal's manager when the [api](../api/GOAL.md) Goal no longer changes
-the erasure and recovery contracts; [state.md](state.md) lists the work carried
-over.
+Status: started by the [program](../program/GOAL.md) on 2026-10-13 15:34 UTC with the
+restore, drill and release work that does not depend on the erasure contract. The
+erasure proofs start when the [api](../api/GOAL.md) Goal no longer changes the
+erasure and recovery contracts; [state.md](state.md) lists the work carried over.
 
 ## Outcome
 

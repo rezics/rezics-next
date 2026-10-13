@@ -1,11 +1,35 @@
 # State
 
-Wrap-up checkpoint, 2026-10-13. Manager `web` is enrolled with the coordinator.
-Program mail `program-wrapup-web-20261013` replaces all earlier run directions:
-dispatch nothing, resume nothing, leave a refused landing unchanged. A running
-worker finishes only its current attempt; its handoff gets one merge attempt.
-All web attempts have finished; 0 live workers, 2 open tasks. Await the new plan.
-Program stops the coordinator after this checkpoint; no watcher is armed.
+Running again since 2026-10-13 15:34 UTC, started by the program. The wrap-up direction
+of the morning (dispatch nothing) is withdrawn. The table and lists below are the
+wrap-up checkpoint and are corrected by the manager's first checkpoint.
+
+**Direction from the program.** Books is proved on `main` (13 of 13 rows; 37 of
+67 in all: `task goal -- scope`), so surfaces start. Keep both Codex accounts
+busy with work that can land; a brief that the tool refuses is corrected in the
+same turn.
+
+1. Three tasks written by the program are running: G-2199 (module mocks, D030),
+   G-2200 (shelf preview, D060) and G-2201 (service name in copy, D080; official
+   Zone import, D129). Their handoffs are yours.
+2. G-2091: its refused merge named two files outside its claim. Decide from the
+   diff whether they belong to the task; if they do, add them to the brief, run
+   `reclaim G-2091 <brief>` and land it.
+3. Surfaces. The path is: a row's answer record
+   (`tests/qa/fixtures/outcomes/<vertical>/<row>.json`, written by the row's
+   outcome test), the replaying fetch (`apps/web/features/stories/recorded-fetch.ts`,
+   program task G-2160, running), stories fed by the record through the web's own
+   typed reader, and the surface gate (`task goal -- check` on a `kind: surface`
+   brief). The program's G-2169 is the first surface, for the Books catalogue row;
+   its brief is the model for yours. Program tasks G-2189 to G-2198 are recording
+   the other 36 proved rows now. Write one surface brief for each page that shows
+   proved rows, Books first, then Recipes, Visual novels, Games, Realm and Zone;
+   name the rows, the page's route and its readers. Dispatch each as soon as
+   G-2160 and the row's record are on `main`; a brief does not wait for G-2169.
+4. Brief, in pieces that land alone, the twelve continuation remainders, the
+   eighteen identity debts and the 81 `owner-audit` expressions, each with the
+   evidence that makes it a fault; a gap in the API goes to the api Goal by mail
+   and gets no workaround.
 
 ## Scope and measures
 
