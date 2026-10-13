@@ -215,7 +215,7 @@ test('Source-backed Structure / operator: binds every exact line; preserves rati
     `/v1/works/${short(imported.work)}/credits?${acting(sessions.operator)}`));
   expect(credits.items.some(item => item.role === 'author' && item.agent === sessions.operator.actingSubject)).toBe(false);
 });
-test.failing('Source-backed Structure / operator: preserves nested section parents as well as empty groups', async () => {
+test('Source-backed Structure / operator: preserves nested section parents as well as empty groups', async () => {
   await supportedStructure();
   await structureAndText('operator', imported.revision);
 });
