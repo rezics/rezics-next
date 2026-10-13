@@ -9,6 +9,7 @@ import { zoneAdoption } from '../../../services/main/src/modules/zone-modules/ad
 import { ZoneBrowseProjection } from '../../../services/main/src/modules/zone-browse/store.ts';
 import { WorkReadUnavailable, publicWork } from '../../../services/main/src/modules/work/read-session.ts';
 import { startMediaStack } from './media-support.ts';
+import { callerEvidence } from './realm-browse-caller-evidence.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 const book = 'https://schema.org/Book';
@@ -17,6 +18,7 @@ type Page = { items: { id: string }[]; nextCursor: string | null;
   matches: { value: number; kind: string }; facets: Record<string, { value: string; count: number }[]> };
 
 test('G828: HTTP traverses 1,000 adopted Works in every sort and Condition; public counts, relay, backfill and serial recovery', async () => {
+  const evidence = callerEvidence('projection-backfill');
   const stack = await startMediaStack('g-828-zone-browse');
   const relay = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL! });
   try {
@@ -64,8 +66,11 @@ test('G828: HTTP traverses 1,000 adopted Works in every sort and Condition; publ
       FROM jsonb_array_elements($2::jsonb)`, [generation, JSON.stringify(works)]);
     const projection = new ZoneBrowseProjection(stack.accessPool, relay, stack.env);
     await expect(projection.batch(realm, 'newest', null)).rejects.toBeInstanceOf(WorkReadUnavailable);
-    await projection.backfill();
-    await projection.backfill();
+    const backfillInput = { operation: 'ZoneBrowseProjection.backfill', arguments: [],
+      realm, phrase, concept, lineage: stack.env.lineage, inventory: works, hidden: [...hidden] };
+    evidence.mark('fixture.prepared', backfillInput);
+    await evidence.phase('projection.backfill.first', backfillInput, () => projection.backfill());
+    await evidence.phase('projection.backfill.second', backfillInput, () => projection.backfill());
     expect((await stack.accessPool.query('SELECT count(*)::int AS n FROM access.zone_browse_entry WHERE realm = $1',
       [realm])).rows[0].n).toBe(1000);
     const tags = { active: async () => ({ stale: false }),
@@ -80,8 +85,9 @@ test('G828: HTTP traverses 1,000 adopted Works in every sort and Condition; publ
     const app = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access, zoneBrowse: projection,
       serialStats, discovery: tags as never, account: { verify: async () => { throw new Error('Public browse requested authority'); } } });
     const path = `/v1/realms/${realm.slice(-36)}/modules/browse`;
+    const handle = (request: Request) => evidence.read(request, () => app.handle(request));
     const read = async (params: URLSearchParams): Promise<Page> => {
-      const response = await app.handle(new Request(`http://main.local${path}?${params}`));
+      const response = await handle(new Request(`http://main.local${path}?${params}`));
       if (response.status !== 200) throw new Error(`Browse ${response.status}: ${await response.text()}`);
       return response.json() as Promise<Page>;
     };
@@ -109,7 +115,7 @@ test('G828: HTTP traverses 1,000 adopted Works in every sort and Condition; publ
     const adopted: string[] = [];
     let adoptionCursor: string | null = null;
     for (let pageIndex = 0; pageIndex < 2; pageIndex++) {
-      const response = await app.handle(new Request(`http://main.local/v1/realms/${realm.slice(-36)}/modules/new-adoptions`
+      const response = await handle(new Request(`http://main.local/v1/realms/${realm.slice(-36)}/modules/new-adoptions`
         + (adoptionCursor ? `?cursor=${encodeURIComponent(adoptionCursor)}` : '')));
       if (response.status !== 200) throw new Error(`New adoptions ${response.status}: ${await response.text()}`);
       const page = await response.json() as Page;
@@ -119,7 +125,7 @@ test('G828: HTTP traverses 1,000 adopted Works in every sort and Condition; publ
     }
     expect(adopted.sort()).toEqual(works.slice(-40).map(row => row.work).sort());
     // Home lists localize titles with fallback; they do not filter adoptions by text language.
-    const localized = await app.handle(new Request(`http://main.local/v1/realms/${realm.slice(-36)}/modules/new-adoptions?language=ja`));
+    const localized = await handle(new Request(`http://main.local/v1/realms/${realm.slice(-36)}/modules/new-adoptions?language=ja`));
     expect(localized.status).toBe(200);
     expect((await localized.json() as Page).items).toHaveLength(20);
 
@@ -206,5 +212,5 @@ test('G828: HTTP traverses 1,000 adopted Works in every sort and Condition; publ
       VALUES ($1,1003,$2,$3,80), ($1,1004,$4,$3,80)`, [stack.env.lineage.dataEpoch, id(), stack.env.lineage.routingEpoch, id()]);
     expect(await projection.catchUp()).toBe(160);
     expect(projection.current({ dataEpoch: stack.env.lineage.dataEpoch, sequence: '1004' })).toBe(true);
-  } finally { await relay.end(); await stack.stop(); }
+  } finally { evidence.mark('case.finished'); await relay.end(); await stack.stop(); }
 }, 600_000);

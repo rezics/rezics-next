@@ -24,6 +24,7 @@ import { selectMainDefault, mainSelectionDigest }
 import { selectRealmLocal, realmSelectionDigest }
   from '../../../services/main/src/modules/work/select-realm.ts';
 import { ZoneBrowseProjection } from '../../../services/main/src/modules/zone-browse/store.ts';
+import { callerEvidence } from './realm-browse-caller-evidence.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const book = 'https://schema.org/Book';
@@ -33,6 +34,7 @@ test('QUERY01: Query type/language and Realm Context match admitted phrase reads
     || !Bun.env.MAIN_ROUTING_EPOCH || !Bun.env.ACCESS_DATABASE_URL || !Bun.env.CONTENT_DATABASE_URL) {
     throw new Error('Run through the isolated QA integration tier');
   }
+  const evidence = callerEvidence('phrase-query');
   const state = join(root, '.temp', `query-read-${randomUUID()}`);
   mkdirSync(state, { recursive: true, mode: 0o700 });
   const fuseki = new FusekiClient(Bun.env.FUSEKI_URL);
@@ -55,7 +57,8 @@ test('QUERY01: Query type/language and Realm Context match admitted phrase reads
       expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
       state: 'claimed', dispatchEligible: true, replayed: false };
   };
-  const send = (path: string, body: unknown) => app.handle(new Request(`http://main.local${path}`, {
+  const handle = (request: Request) => evidence.read(request, () => app.handle(request));
+  const send = (path: string, body: unknown) => handle(new Request(`http://main.local${path}`, {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
   }));
   try {
@@ -84,6 +87,7 @@ test('QUERY01: Query type/language and Realm Context match admitted phrase reads
     const selected = await selectMainDefault(env, admission(`publication:select:${created.mainVersion}`,
       'publication.select', mainSelectionDigest(selectedInput)), selectedInput);
     expect(selected.outcome).toBe('succeeded');
+    evidence.mark('fixture.prepared', { phrase: token, work: created.work, mainVersion: created.mainVersion });
 
     const legacyBody = { profile: 'public-main-phrase-page-v1', phrase: token, language: 'en',
       includeTypes: [book], pageSize: 20 };
@@ -123,7 +127,8 @@ test('QUERY01: Query type/language and Realm Context match admitted phrase reads
     expect((await realmQuery.json() as { result: { results: unknown[] } }).result.results)
       .toEqual((await realmLegacy.json() as { results: unknown[] }).results);
 
-    await zoneBrowse.backfill();
+    await evidence.phase('projection.backfill', { operation: 'ZoneBrowseProjection.backfill',
+      arguments: [], realm: space.realm, lineage: env.lineage }, () => zoneBrowse.backfill());
     const zoneQuery = await send('/v1/query', { context: { realm: space.realm },
       scope: { kind: 'realm', realm: space.realm }, sort: 'newest', page: { size: 20 },
       filter: { all: [{ facet: 'type', any: [book] }] } });
@@ -136,7 +141,7 @@ test('QUERY01: Query type/language and Realm Context match admitted phrase reads
     expect(zoneResult.result.items.map(item => item.id)).toContain(created.work);
     const zoneUrl = new URL(`/v1/realms/${space.realm.split('/').at(-1)}/modules/browse`, 'http://main.local');
     zoneUrl.searchParams.append('type', book);
-    const zoneLegacy = await app.handle(new Request(zoneUrl));
+    const zoneLegacy = await handle(new Request(zoneUrl));
     expect(zoneLegacy.status).toBe(200);
     expect(zoneResult.result.items.map(item => item.id)).toEqual(
       (await zoneLegacy.json() as { items: Array<{ id: string }> }).items.map(item => item.id));
@@ -156,9 +161,9 @@ test('QUERY01: Query type/language and Realm Context match admitted phrase reads
       const input = { context: { kind: 'global' as const }, work: created.work,
         mainVersion: created.mainVersion, sense, expectedDecisionHead: null,
         outcome: 'accepted' as const, actingSubject: actor };
-      const decision = await setClassificationDecision(env,
+      const decision = await evidence.phase('classification.decision', input, () => setClassificationDecision(env,
         admission(classificationDecisionScope(input.context), 'classification.decision.set',
-          classificationDecisionDigest(input)), input);
+          classificationDecisionDigest(input)), input));
       expect(decision.outcome).toBe('succeeded');
     };
     await accept(included.definitions!.sense);
@@ -212,6 +217,7 @@ test('QUERY01: Query type/language and Realm Context match admitted phrase reads
     expect(refused.status).toBe(422);
     expect(await refused.json()).toMatchObject({ status: 422, code: 'unsupported_query_shape' });
   } finally {
+    evidence.mark('case.finished');
     await relayPool.end();
     await accessPool.end();
     await contentPool.end();
