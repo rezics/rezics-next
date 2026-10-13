@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import hub from '../../../../../scripts/qa/cases/outcomes/books/work-hub-and-edition-choice.ts';
 import ambiguous from '../../../../../scripts/qa/cases/outcomes/books/choose-among-ambiguous-editions-of-one-work-ambiguous-editions.ts';
@@ -45,7 +45,8 @@ async function privateAnswer<T>(request: () => Promise<Response>): Promise<T> {
 }
 
 // Setup exceptions stay in beforeAll: a failed fixture is never an expected product failure.
-beforeAll(async () => {
+async function publishBook() {
+  releases.length = 0;
   sessions = await personaSessions('public');
   const owner = sessions.owner;
   const actor = owner.actingSubject;
@@ -111,10 +112,7 @@ beforeAll(async () => {
     );
     releases.push({ id, revision: result.revision, platform, title: { value: title } });
   }
-}, 180_000);
-afterAll(async () => {
-  await sessions?.close();
-});
+}
 
 // Operator calls use ordinary reader/public routes, with separate own-Person control.
 async function editions(name: PersonaName, mode: 'hub' | 'ambiguous' | 'formats') {
@@ -215,21 +213,35 @@ async function editions(name: PersonaName, mode: 'hub' | 'ambiguous' | 'formats'
   expect(await privateAnswer(() => person.main('GET', ownPath))).toEqual(current);
 }
 
-outcomeTest(hub, 'visitor', () => editions('visitor', 'hub'));
-outcomeTest(hub, 'stranger', () => editions('stranger', 'hub'));
-outcomeTest(hub, 'member', () => editions('member', 'hub'));
-outcomeTest(hub, 'owner', () => editions('owner', 'hub'));
-outcomeTest(hub, 'moderator', () => editions('moderator', 'hub'));
-outcomeTest(hub, 'operator', () => editions('operator', 'hub'));
-outcomeTest(ambiguous, 'visitor', () => editions('visitor', 'ambiguous'));
-outcomeTest(ambiguous, 'stranger', () => editions('stranger', 'ambiguous'));
-outcomeTest(ambiguous, 'member', () => editions('member', 'ambiguous'));
-outcomeTest(ambiguous, 'owner', () => editions('owner', 'ambiguous'));
-outcomeTest(ambiguous, 'moderator', () => editions('moderator', 'ambiguous'));
-outcomeTest(ambiguous, 'operator', () => editions('operator', 'ambiguous'));
-outcomeTest(formats, 'visitor', () => editions('visitor', 'formats'));
-outcomeTest(formats, 'stranger', () => editions('stranger', 'formats'));
-outcomeTest(formats, 'member', () => editions('member', 'formats'));
-outcomeTest(formats, 'owner', () => editions('owner', 'formats'));
-outcomeTest(formats, 'moderator', () => editions('moderator', 'formats'));
-outcomeTest(formats, 'operator', () => editions('operator', 'formats'));
+// Each row proves one shared Book across six readers, starting with fresh credentials.
+// Sharing credentials across all rows can cross Account's five-minute bearer lifetime.
+describe(hub.rowId, () => {
+  beforeAll(publishBook, 180_000);
+  afterAll(async () => { await sessions?.close(); });
+  outcomeTest(hub, 'visitor', () => editions('visitor', 'hub'));
+  outcomeTest(hub, 'stranger', () => editions('stranger', 'hub'));
+  outcomeTest(hub, 'member', () => editions('member', 'hub'));
+  outcomeTest(hub, 'owner', () => editions('owner', 'hub'));
+  outcomeTest(hub, 'moderator', () => editions('moderator', 'hub'));
+  outcomeTest(hub, 'operator', () => editions('operator', 'hub'));
+});
+describe(ambiguous.rowId, () => {
+  beforeAll(publishBook, 180_000);
+  afterAll(async () => { await sessions?.close(); });
+  outcomeTest(ambiguous, 'visitor', () => editions('visitor', 'ambiguous'));
+  outcomeTest(ambiguous, 'stranger', () => editions('stranger', 'ambiguous'));
+  outcomeTest(ambiguous, 'member', () => editions('member', 'ambiguous'));
+  outcomeTest(ambiguous, 'owner', () => editions('owner', 'ambiguous'));
+  outcomeTest(ambiguous, 'moderator', () => editions('moderator', 'ambiguous'));
+  outcomeTest(ambiguous, 'operator', () => editions('operator', 'ambiguous'));
+});
+describe(formats.rowId, () => {
+  beforeAll(publishBook, 180_000);
+  afterAll(async () => { await sessions?.close(); });
+  outcomeTest(formats, 'visitor', () => editions('visitor', 'formats'));
+  outcomeTest(formats, 'stranger', () => editions('stranger', 'formats'));
+  outcomeTest(formats, 'member', () => editions('member', 'formats'));
+  outcomeTest(formats, 'owner', () => editions('owner', 'formats'));
+  outcomeTest(formats, 'moderator', () => editions('moderator', 'formats'));
+  outcomeTest(formats, 'operator', () => editions('operator', 'formats'));
+});
