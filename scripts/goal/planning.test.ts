@@ -93,22 +93,26 @@ test('planning waits for a concurrent coordinator transaction instead of termina
   }
 });
 
-test('only an open implementation task naming a row covers it', () => {
+test('an open implementation or outcome task naming a row covers it', () => {
   const f = fixture();
   try {
     f.declaration('failure'); f.commit();
-    for (const state of ['running', 'exited', 'conflict', 'merged', 'stopped'] as const) {
-      f.ledger.tasks.cover = f.task('cover', { kind: 'implementation', rows: ['program/failure'], state });
-      expect(f.events()).toEqual([]);
-    }
-    for (const state of ['verified', 'cancelled'] as const) {
-      f.ledger.tasks.cover = f.task('cover', { kind: 'implementation', rows: ['program/failure'], state });
+    for (const kind of ['implementation', 'outcome'] as const) {
+      for (const state of ['running', 'exited', 'conflict', 'merged', 'stopped'] as const) {
+        f.ledger.tasks.cover = f.task('cover', { kind, rows: ['program/failure'], state });
+        expect(f.events()).toEqual([]);
+      }
+      for (const state of ['verified', 'cancelled'] as const) {
+        f.ledger.tasks.cover = f.task('cover', { kind, rows: ['program/failure'], state });
+        expect(f.events()).toHaveLength(1);
+      }
+      f.ledger.tasks.cover = f.task('cover', { kind, rows: ['program/another'], state: 'running' });
       expect(f.events()).toHaveLength(1);
     }
-    f.ledger.tasks.cover = f.task('cover', { kind: 'outcome', rows: ['program/failure'], state: 'running' });
-    expect(f.events()).toHaveLength(1);
-    f.ledger.tasks.cover = f.task('cover', { kind: 'implementation', rows: ['program/another'], state: 'running' });
-    expect(f.events()).toHaveLength(1);
+    for (const kind of ['tooling', 'mechanism', 'surface'] as const) {
+      f.ledger.tasks.cover = f.task('cover', { kind, rows: ['program/failure'], state: 'running' });
+      expect(f.events()).toHaveLength(1);
+    }
   } finally { f.close(); }
 });
 

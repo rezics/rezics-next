@@ -118,7 +118,8 @@ export function uncoveredPlanningRows(directory: string, ledger: Ledger, repo = 
   });
   const tasks = Object.values(ledger.tasks);
   const main = git(repo, ['rev-parse', 'main'], true);
-  const covered = new Set(tasks.filter(task => task.kind === 'implementation' && HOLDING.includes(task.state)).flatMap(task => task.rows ?? []));
+  const covered = new Set(tasks.filter(task => (task.kind === 'implementation' || task.kind === 'outcome')
+    && HOLDING.includes(task.state)).flatMap(task => task.rows ?? []));
   const result = new Map<string, PlanningRow[]>(goals.sort().map(goal => [goal, []]));
   for (const { file, declaration } of mainDeclarations(repo, main)) {
     const cells = personas.flatMap(persona => {
