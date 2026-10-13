@@ -714,6 +714,8 @@ export interface UnitShardResult {
   runnerErrors: UnitRunnerError[]; files: string[]; output: string; ms: number;
   /** The shard stopped at the wall-clock budget, so files it never reached have no verdict yet. */
   budgetExpired?: boolean;
+  /** A completed process has already attributed its own report. Its diagnostic text is not another result. */
+  exitCode?: number;
 }
 
 export interface TimeoutRetryOptions { testTimeoutMultiplier?: number }
@@ -786,10 +788,8 @@ function unitFileFromHeader(output: string, files: readonly string[], cwd: strin
   return files.length === 1 ? files[0] : undefined;
 }
 
-/** Bun prints its test timeout as a failed test, so it needs a retry before it can decide a side.
- * A JUnit `TimeoutError` names the file even when a printed header owns the console timeout line.
- * A console timeout before the report counts only for a file that report names; a line under a
- * header the report does not name was printed by another file. */
+/** A reported file takes timeouts only from its own JUnit cases. Console text is a fallback
+ * for an omitted file or an unfinished run, never an override of a passing report. */
 export function timedOutTestFiles(output: string, candidates: readonly string[], root?: string): string[] {
   const known = new Set(candidates);
   const found = new Set<string>();
@@ -808,8 +808,9 @@ export function timedOutTestFiles(output: string, candidates: readonly string[],
   const block = gateJunitBlock(output);
   if (!block) scan(beforeUnitSummary(output), undefined);
   else {
-    scan(dropRunSummary(stripJunitBlocks(block.before)), junitReportedFiles(output, candidates, root));
-    scan(dropRunSummary(stripJunitBlocks(block.after)), undefined);
+    const covered = junitReportedFiles(output, candidates, root);
+    const omitted = new Set(candidates.filter(file => !covered.has(file)));
+    scan(dropRunSummary(stripJunitBlocks(block.after)), omitted);
   }
   for (const file of junitTimeoutFiles(output, candidates, root)) found.add(file);
   return [...found].sort();
@@ -1399,7 +1400,13 @@ export function introducedUnitFailureFiles(branchFiles: readonly string[], branc
   return introducedUnitFailures(branchFiles, branch, main, branchErrors, mainErrors).map(item => item.file);
 }
 
-interface ShardInvocation { args: string[]; label: string; env: NodeJS.ProcessEnv; progressFile?: string }
+interface ShardInvocation { args: string[]; label: string; env: NodeJS.ProcessEnv; progressFile?: string; artifactDirectory?: string }
+
+/** Paths supplied to this runner own its reports; a test printing another artifact URL grants no attribution. */
+function ownerArtifactFiles(directory: string | undefined, patterns: readonly string[]): string[] {
+  if (!directory || !existsSync(directory)) return [];
+  return patterns.flatMap(pattern => [...new Bun.Glob(pattern).scanSync({ cwd: directory })].map(file => join(directory, file)));
+}
 
 /** The QA CLI prints this when its own budget stops the tier. An ordinary test failure does not. */
 function harnessBudgetExpired(output: string): boolean {
@@ -1489,19 +1496,17 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
     const stdoutText = stdout.join('');
     const stderrText = stderr.join('');
     // Bun writes its report on stderr. A test's stdout can print another file's header and `(fail)` line.
-    // Indenting stdout keeps that transcript from being read as this shard's console result. The owner
-    // tier's transcript is the result, so it stays at column 0.
-    const streamed = invocation ? `${stdoutText}\n${stderrText}` : `${indentPrintedStdout(stdoutText)}\n${stderrText}`;
+    // Both tiers can print a nested run. Reports and progress are read from this invocation's own paths.
+    const streamed = `${indentPrintedStdout(stdoutText)}\n${stderrText}`;
     const parts = [streamed];
     // Written as each file starts, so an outer kill still names the file that was running.
     if (invocation?.progressFile && existsSync(invocation.progressFile))
       parts.push(readFileSync(invocation.progressFile, 'utf8'));
     const text = parts.join('\n');
-    // The owner tier keeps bun's transcript in its artifact log. Failure comparison needs that transcript.
-    const artifacts = /QA artifacts: (\S+)/.exec(text);
-    if (!artifacts || /\.(?:test|spec)\.[cm]?[jt]sx?:$/m.test(text)) return text;
-    const log = join(artifacts[1]!, 'logs/owner.log');
-    return existsSync(log) ? `${text}\n${readFileSync(log, 'utf8')}` : text;
+    // Owner progress already contains streamed case diagnostics. Otherwise its own log supplies them.
+    if (/\.(?:test|spec)\.[cm]?[jt]sx?:$/m.test(text)) return text;
+    return [text, ...ownerArtifactFiles(invocation?.artifactDirectory, ['*/logs/owner.log'])
+      .map(log => readFileSync(log, 'utf8'))].join('\n');
   };
   const closed = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(resolve => {
     child.once('error', error => {
@@ -1529,11 +1534,20 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
       return { ...unfinished(text, timedOut), ...outcome === 'timeout' ? { budgetExpired: true } : {} };
     }
     const text = output();
-    const reported = junitFile && existsSync(junitFile)
-      ? `${text}\n${UNIT_JUNIT_MARKER}\n${relativizeJunitFiles(readFileSync(junitFile, 'utf8'), cwd)}` : text;
+    const reportFiles = junitFile && existsSync(junitFile) ? [junitFile]
+      : ownerArtifactFiles(invocation?.artifactDirectory, ['owner.xml', '*/owner.xml']);
+    const xml = reportFiles.map(path => relativizeJunitFiles(readFileSync(path, 'utf8'), cwd)
+      .replace(/<\?xml[^>]*\?>|<\/?testsuites\b[^>]*>/g, '')).join('\n');
+    const reported = reportFiles.length ? `${text}\n${UNIT_JUNIT_MARKER}\n<testsuites>${xml}</testsuites>` : text;
+    // An exit-zero process passed. A transcript it printed must not trigger classification or a retry.
+    if (outcome.code === 0) {
+      rememberUnitDurations(durationsFromOutput(reported, files, new Set()));
+      return { done: true, exitCode: 0, failing: [], timedOut: [], failures: [], fileErrors: [], runnerErrors: [],
+        files: [...files], output: reportFiles.length ? reported : indentPrintedStdout(text), ms: Date.now() - startedAt };
+    }
     // The CLI stopped at its own budget and exited. That is an unfinished shard:
     // the file that was running is retried alone, and files with no header run again.
-    if (harnessBudgetExpired(text)) {
+    if (invocation && harnessBudgetExpired(stderr.join(''))) {
       const timedOut = shardTimeoutFiles(text, files, cwd);
       rememberUnitDurations(durationsFromOutput(text, files, new Set(timedOut)));
       return { ...unfinished(text, timedOut), budgetExpired: true };
@@ -1541,7 +1555,9 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
     const timedOut = timedOutTestFiles(reported, files, cwd);
     const failures = unitFailureDetails(reported, files, cwd);
     const namedFailing = outcome.code === 0 ? [] : failingTestFiles(reported, files, cwd);
-    const fileErrors = unitFileErrorDetails(reported, files, cwd, [...namedFailing, ...failures.map(failure => failure.file)]);
+    const covered = junitReportedFiles(reported, files, cwd);
+    const fileErrors = unitFileErrorDetails(reported, files, cwd, [...namedFailing, ...failures.map(failure => failure.file)])
+      .filter(error => !covered.has(error.file));
     const failing = [...new Set([...namedFailing, ...timedOut,
       ...failures.map(failure => failure.file), ...fileErrors.map(error => error.file)])];
     // A non-zero exit with no case and no file error is the runner, not every file in the shard.
@@ -1549,7 +1565,7 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
       ? [{ files: ['runner'], diagnostic: outputTail(text) || `task ${label} exited with status ${outcome.code}` }]
       : [];
     rememberUnitDurations(durationsFromOutput(reported, files, new Set(timedOut)));
-    return { done: true, failing, timedOut, failures, fileErrors,
+    return { done: true, exitCode: outcome.code, failing, timedOut, failures, fileErrors,
       runnerErrors, files: [...files], output: reported,
       ms: Date.now() - startedAt };
   } catch {
@@ -1573,10 +1589,13 @@ export function runOwnerShard(cwd: string, files: readonly string[], deadline: n
   const env: NodeJS.ProcessEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !['AGENT', 'CLAUDECODE', 'REPL_ID'].includes(key)));
   env.REZICS_QA_OWNER_BUDGET_MS = String(budgetMs);
   env.REZICS_QA_PROGRESS_FILE = progressFile;
+  const artifactDirectory = join(cwd, '.temp', 'owner-shard-artifacts', randomUUID());
+  mkdirSync(artifactDirectory, { recursive: true });
+  env.REZICS_QA_ARTIFACT_ROOT = artifactDirectory;
   return runUnitShard(cwd, files, deadline, options, {
     args: ['test', '--', ...tierBunTestArgs('owner', [...files,
       ...options.testTimeoutMultiplier ? [`--timeout=${tierTestTimeoutMs.owner * options.testTimeoutMultiplier}`] : [],
-    ]).slice(1)], label: 'test', env, progressFile,
+    ]).slice(1)], label: 'test', env, progressFile, artifactDirectory,
   });
 }
 
@@ -1592,6 +1611,11 @@ function gateShardRunner(owner: ReadonlySet<string>): UnitShardRunner {
 }
 
 function mergeShardResults(parts: readonly UnitShardResult[]): UnitShardResult {
+  const reports = parts.flatMap(part => {
+    const xml = junitXml(part.output);
+    return xml ? [xml.replace(/<\?xml[^>]*\?>|<\/?testsuites\b[^>]*>/g, '')] : [];
+  });
+  const output = parts.map(part => part.output).join('\n');
   return {
     done: parts.every(part => part.done),
     failing: [...new Set(parts.flatMap(part => part.failing))].sort(),
@@ -1600,8 +1624,10 @@ function mergeShardResults(parts: readonly UnitShardResult[]): UnitShardResult {
     fileErrors: parts.flatMap(part => part.fileErrors),
     runnerErrors: parts.flatMap(part => part.runnerErrors),
     files: [...new Set(parts.flatMap(part => part.files))].sort(),
-    output: parts.map(part => part.output).join('\n'),
+    output: reports.length ? `${output}\n${UNIT_JUNIT_MARKER}\n<testsuites>${reports.join('\n')}</testsuites>` : output,
     ms: Math.max(...parts.map(part => part.ms)),
+    ...(parts.every(part => part.exitCode !== undefined)
+      ? { exitCode: parts.find(part => part.exitCode !== 0)?.exitCode ?? 0 } : {}),
     ...(parts.some(part => part.budgetExpired) ? { budgetExpired: true } : {}),
   };
 }
@@ -1817,7 +1843,7 @@ function fileDeclaredTimeout(cwd: string, file: string): DeclaredTestTimeout {
  * `(fail)` lines after the report. A done shard that reported no file is read again, so a timeout in
  * the gate's report is that file's result and not an unattributed runner failure. */
 function attributeShard(result: UnitShardResult): UnitShardResult {
-  if (!result.done) return result;
+  if (!result.done || result.exitCode !== undefined) return result;
   const parsed = junitFailureDetails(result.output, result.files);
   if (!parsed) return result;
   const covered = junitReportedFiles(result.output, result.files);
@@ -1830,7 +1856,7 @@ function attributeShard(result: UnitShardResult): UnitShardResult {
     return true;
   });
   const failures = [...parsed, ...retained];
-  const timedOut = [...new Set([...result.timedOut, ...timedOutTestFiles(result.output, result.files)])].sort();
+  const timedOut = [...new Set([...result.timedOut.filter(file => !covered.has(file)), ...timedOutTestFiles(result.output, result.files)])].sort();
   const unhandled = [...consoleFailureKinds(result.output, result.files).unhandled].filter(file => !covered.has(file));
   const fileErrors = unitFileErrorDetails(result.output, result.files, undefined, [
     ...failures.map(item => item.file), ...timedOut, ...unhandled,

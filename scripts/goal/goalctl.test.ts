@@ -1483,7 +1483,7 @@ describe('goalctl runtime policy', () => {
       `${file}:`, '(fail) slow case', 'this test timed out after 5000ms',
       UNIT_JUNIT_MARKER, junit,
     ].join('\n');
-    expect(timedOutTestFiles(timedOut, [file])).toEqual([file]);
+    expect(timedOutTestFiles(timedOut, [file])).toEqual([]);
     const load = [
       `${omitted}:`, '# Unhandled error between tests', 'error: Cannot find module \'./missing.ts\'',
       UNIT_JUNIT_MARKER, junit,

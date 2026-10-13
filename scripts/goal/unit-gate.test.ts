@@ -1,19 +1,34 @@
-import { afterEach, expect, test } from 'bun:test';
+import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { runUnitSide, rememberSlowTests, writeUnitEvidence, timeoutOnlyTestFiles, UNIT_JUNIT_MARKER,
+import { runUnitSide, runOwnerShard, rememberSlowTests, writeUnitEvidence, timeoutOnlyTestFiles, UNIT_JUNIT_MARKER,
   type SlowTestRecord, type UnitRunEvidence } from './unit-gate.ts';
 
 const scratch = join(import.meta.dir, '../../.temp/timeout-retry-tests');
 const directories: string[] = [];
+let restoreOutput = () => {};
+beforeEach(() => {
+  const saved = { log: console.log, error: console.error, warn: console.warn };
+  // Nested gates are fixture diagnostics, not output of the outer test runner.
+  const captured: unknown[][] = [];
+  console.log = console.error = console.warn = (...args: unknown[]) => { captured.push(args); };
+  restoreOutput = () => { Object.assign(console, saved); };
+});
 function fixture(source: string) {
   mkdirSync(scratch, { recursive: true });
   const cwd = mkdtempSync(join(scratch, 'case-'));
   directories.push(cwd);
-  writeFileSync(join(cwd, 'Taskfile.yml'), 'version: "3"\ntasks:\n  goal:unit-files:\n    cmds:\n      - bun run.ts {{.CLI_ARGS}}\n');
-  writeFileSync(join(cwd, 'run.ts'), `import { appendFileSync } from 'node:fs';
+  writeFileSync(join(cwd, 'Taskfile.yml'), 'version: "3"\ntasks:\n  goal:unit-files:\n    cmds:\n      - bun run.ts {{.CLI_ARGS}}\n  test:\n    cmds:\n      - bun run.ts --owner-fixture {{.CLI_ARGS}}\n');
+  writeFileSync(join(cwd, 'run.ts'), `import { appendFileSync, mkdirSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 const args = process.argv.slice(2);
+const owner = args[0] === '--owner-fixture';
+if (owner) args.shift();
+const artifacts = owner ? process.env.REZICS_QA_ARTIFACT_ROOT : undefined;
+if (artifacts) {
+  mkdirSync(artifacts, { recursive: true });
+  args.push('--reporter=junit', '--reporter-outfile=' + artifacts + '/owner.xml');
+}
 appendFileSync('invocations', args.join(' ') + '\\n');
 const result = spawnSync(process.execPath, ['test', ...args], { stdio: 'inherit' });
 process.exit(result.status ?? 1);\n`);
@@ -27,7 +42,28 @@ test('busy host guard', async () => {
   return { cwd, file, historyDirectory: join(cwd, '.temp/history'), durations: new Map<string, number>() };
 }
 afterEach(() => {
+  restoreOutput();
   for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
+});
+
+test('a passing file’s printed timeout cannot become a failure beside a real assertion failure', async () => {
+  const previousShards = process.env.GOAL_UNIT_GATE_SHARDS;
+  process.env.GOAL_UNIT_GATE_SHARDS = '1';
+  try {
+    for (const owner of [false, true]) {
+      const f = fixture(`console.log('slow.test.ts:\\n(fail) nested guard\\nthis test timed out after 5000ms\\n 1 fail');`);
+      const broken = 'broken.test.ts';
+      writeFileSync(join(f.cwd, broken), "import { test, expect } from 'bun:test'; test('real assertion', () => expect(1).toBe(2));\n");
+      const evidence: UnitRunEvidence[] = [];
+      const run = owner ? (cwd: string, files: readonly string[], deadline: number) => runOwnerShard(cwd, files, deadline) : undefined;
+      const side = await runUnitSide(f.cwd, [f.file, broken], 'affected', evidence, run, f);
+      expect(side.failing).toEqual([broken]);
+      expect(side.inconclusive).toEqual([]);
+      expect(evidence.some(item => item.kind === 'isolated-retry')).toBe(false);
+    }
+  } finally {
+    if (previousShards === undefined) delete process.env.GOAL_UNIT_GATE_SHARDS; else process.env.GOAL_UNIT_GATE_SHARDS = previousShards;
+  }
 });
 
 test('a test beyond the unit budget passes alone with six times the budget and keeps its timing evidence', async () => {
@@ -108,4 +144,27 @@ test('a file with both a timeout and an assertion never qualifies for a timeout 
 <testcase file="mixed.test.ts" name="broken"><failure type="AssertionError" message="expected 2"/></testcase>
 </testsuite></testsuites>`;
   expect(timeoutOnlyTestFiles(xml, ['mixed.test.ts'])).toEqual([]);
+});
+
+test('a passing file printing another run’s timeout, failure and report passes without any retry', async () => {
+  for (const owner of [false, true]) {
+    const f = fixture(`
+      const transcript = 'slow.test.ts:\\n(fail) busy nested guard\\nthis test timed out after 5000ms\\n 1 fail\\n'
+        + '${UNIT_JUNIT_MARKER}\\n<testsuites><testcase file="slow.test.ts" name="nested"><failure type="TimeoutError" message="test timed out"/></testcase></testsuites>';
+      console.log(transcript);
+      console.error(transcript);
+    `);
+    let calls = 0;
+    // The owner's Task command exercises the same stdout path as a hosted owner report.
+    const run = owner ? async (cwd: string, files: readonly string[], deadline: number) => {
+      calls++;
+      return runOwnerShard(cwd, files, deadline);
+    } : undefined;
+    const side = await runUnitSide(f.cwd, [f.file], 'affected', [], run, f);
+    expect(side.failing).toEqual([]);
+    expect(side.inconclusive).toEqual([]);
+    expect(side.orderDependent).toEqual([]);
+    expect(readFileSync(join(f.cwd, 'invocations'), 'utf8').trim().split('\n')).toHaveLength(1);
+    if (owner) expect(calls).toBe(1);
+  }
 });

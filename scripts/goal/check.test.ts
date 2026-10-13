@@ -331,6 +331,16 @@ test('an assertion is never retried and guards still finish inside the slot', as
   expect(existsSync(join(f.slotOptions.slotDirectory, '0'))).toBe(false);
 });
 
+test('a worker’s passing test and guard can print nested failures and timeouts without any retry', async () => {
+  const body = "console.log('tests/qa/unit/slow.test.ts:\\n(fail) nested guard\\nthis test timed out after 5000ms\\n 1 fail');";
+  const f = sleepFixture(body, body);
+  const result = await workerCheck({ ...f, only: ['tests', 'guards'] });
+  expect(result.code).toBe(0);
+  expect(f.calls).toHaveLength(2);
+  expect(f.calls.some(command => command.includes('--timeout=30000'))).toBe(false);
+  expect(f.lines.some(line => line.startsWith('Timeout retry passed:'))).toBe(false);
+});
+
 test('a timeout beside a passing file retries only the timed out file and the check passes', async () => {
   const f = sleepFixture('await Bun.sleep(5_100);');
   const other = 'tests/qa/unit/fast.test.ts';
