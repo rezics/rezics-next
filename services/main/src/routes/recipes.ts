@@ -11,7 +11,7 @@ import { CompositionCorrupt, CompositionUnavailable, NATIVE_ID, readCompositionH
 import { readCompositionPage, readStructureMeasures, selectWorkCompositionRevision } from '../modules/structure/read.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable }
   from '../modules/structure/tree.ts';
-import { RecipeMeasure, STRUCTURE_LIMITS, OccurrenceRecord }
+import { ingredientTextParts, RecipeMeasure, STRUCTURE_LIMITS, OccurrenceRecord }
   from '../modules/structure/format.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import { AdmissionDenied, type VerifiedPrincipal } from '../modules/access/admission.ts';
@@ -111,7 +111,12 @@ const recipeExportResponse = t.Object({
     '@context': t.Literal('https://schema.org'),
     '@type': t.Literal('Recipe'),
     recipeIngredient: t.Array(t.Union([t.String(), t.Object({
-      '@type': t.Literal('PropertyValue'), name: t.String(), value: t.String(),
+      '@type': t.Literal('PropertyValue'), text: t.String({ maxLength: 1000 }),
+      name: t.Optional(t.String({ maxLength: 1000 })), value: t.Optional(t.String()),
+      maxValue: t.Optional(t.String()),
+      amountLexical: t.Optional(t.String({ minLength: 1, maxLength: 100 })),
+      textParts: t.Optional(ingredientTextParts), optional: t.Optional(t.Literal(true)),
+      parseStatus: t.Union([t.Literal('parsed'), t.Literal('partial'), t.Literal('unparsed')]),
       unitCode: t.Optional(t.String()), unitText: t.Optional(t.String()), inLanguage: t.String(),
     }, { additionalProperties: false })]), { maxItems: RECIPE_EXPORT_OCCURRENCE_LIMIT }),
     recipeInstructions: t.Array(recipeExportInstruction(), { maxItems: RECIPE_EXPORT_OCCURRENCE_LIMIT }),
@@ -121,6 +126,14 @@ const recipeExportResponse = t.Object({
     residual: t.Nullable(t.String()) }, { additionalProperties: false }),
   { maxItems: RECIPE_EXPORT_OCCURRENCE_LIMIT }),
   sourceObservations: t.Array(t.String(), { maxItems: RECIPE_EXPORT_OCCURRENCE_LIMIT }),
+  importability: t.Union([
+    t.Object({ status: t.Literal('importable') }, { additionalProperties: false }),
+    t.Object({ status: t.Literal('not-importable'), code: t.Literal('recipe_not_importable'),
+      limit: t.Union([t.Literal('occurrences'), t.Literal('bytes'), t.Literal('depth'), t.Literal('section-depth')]),
+      measured: t.Integer({ minimum: 0 }), allowed: t.Integer({ minimum: 0 }) }, { additionalProperties: false }),
+    t.Object({ status: t.Literal('not-importable'), code: t.Literal('recipe_unit_not_registered'),
+      unit: t.String() }, { additionalProperties: false }),
+  ]),
   sourcePosition: t.Object({ datasetId: t.Literal('product'), dataEpoch: t.String(), sequence: t.String() },
     { additionalProperties: false }),
   cost: t.Object({ pages: t.Integer(), pagesRead: t.Integer(), occurrences: t.Integer() },

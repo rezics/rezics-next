@@ -8,13 +8,7 @@ export interface AnswerContractDebt {
 }
 
 /** API owns repairs. Each exception names one member, never a subtree or a row. */
-export const answerContractDebts: readonly AnswerContractDebt[] = [
-  { operationId: 'getV1RecipesByIdExportsSchema-org', status: 200, path: '/answer/importability', date: '2026-10-14' },
-  ...[0, 1].flatMap(index => ['', '/name', '/text', '/amountLexical', '/parseStatus'].map(member => ({
-    operationId: 'getV1RecipesByIdExportsSchema-org', status: 200,
-    path: `/answer/recipe/recipeIngredient/${index}${member}`, date: '2026-10-14',
-  }))),
-];
+export const answerContractDebts: readonly AnswerContractDebt[] = [];
 
 /** Exchange has no checked-in record. Retain its observed response as a debt witness
  * so the fresh-contract guard can retire these entries when the contract is repaired. */
