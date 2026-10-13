@@ -59742,7 +59742,7 @@
                                       5,
                                       10
                                     ],
-                                    "type": "string"
+                                    "type": "number"
                                   },
                                   "min": {
                                     "const": 1,
@@ -68749,7 +68749,7 @@
                                     5,
                                     10
                                   ],
-                                  "type": "string"
+                                  "type": "number"
                                 },
                                 "min": {
                                   "const": 1,
@@ -69103,7 +69103,7 @@
                                           5,
                                           10
                                         ],
-                                        "type": "string"
+                                        "type": "number"
                                       },
                                       "min": {
                                         "const": 1,
@@ -71126,7 +71126,7 @@
                                       5,
                                       10
                                     ],
-                                    "type": "string"
+                                    "type": "number"
                                   },
                                   "min": {
                                     "const": 1,
@@ -125761,7 +125761,7 @@
                                       5,
                                       10
                                     ],
-                                    "type": "string"
+                                    "type": "number"
                                   },
                                   "min": {
                                     "const": 1,
@@ -168321,7 +168321,7 @@
                                                     5,
                                                     10
                                                   ],
-                                                  "type": "string"
+                                                  "type": "number"
                                                 },
                                                 "min": {
                                                   "const": 1,
@@ -199642,7 +199642,7 @@
                                       5,
                                       10
                                     ],
-                                    "type": "string"
+                                    "type": "number"
                                   },
                                   "spoiler": {
                                     "type": "boolean"
@@ -200765,7 +200765,7 @@
                               0,
                               1
                             ],
-                            "type": "string"
+                            "type": "number"
                           },
                           "voteRevision": {
                             "~elyTyp": 7,
@@ -201584,7 +201584,7 @@
                       0,
                       1
                     ],
-                    "type": "string"
+                    "type": "number"
                   }
                 },
                 "required": [
@@ -201623,7 +201623,7 @@
                       0,
                       1
                     ],
-                    "type": "string"
+                    "type": "number"
                   }
                 },
                 "required": [
@@ -201662,7 +201662,7 @@
                       0,
                       1
                     ],
-                    "type": "string"
+                    "type": "number"
                   }
                 },
                 "required": [
@@ -201707,7 +201707,7 @@
                         0,
                         1
                       ],
-                      "type": "string"
+                      "type": "number"
                     }
                   },
                   "required": [
@@ -451592,7 +451592,7 @@
                                           5,
                                           10
                                         ],
-                                        "type": "string"
+                                        "type": "number"
                                       },
                                       "min": {
                                         "const": 1,
@@ -453764,7 +453764,7 @@
                                           5,
                                           10
                                         ],
-                                        "type": "string"
+                                        "type": "number"
                                       },
                                       "min": {
                                         "const": 1,
@@ -455945,7 +455945,7 @@
                                           5,
                                           10
                                         ],
-                                        "type": "string"
+                                        "type": "number"
                                       },
                                       "min": {
                                         "const": 1,
@@ -458277,7 +458277,7 @@
                                           5,
                                           10
                                         ],
-                                        "type": "string"
+                                        "type": "number"
                                       },
                                       "min": {
                                         "const": 1,
@@ -460620,7 +460620,7 @@
                                           5,
                                           10
                                         ],
-                                        "type": "string"
+                                        "type": "number"
                                       },
                                       "min": {
                                         "const": 1,
@@ -468343,7 +468343,7 @@
                                           5,
                                           10
                                         ],
-                                        "type": "string"
+                                        "type": "number"
                                       },
                                       "min": {
                                         "const": 1,
@@ -469326,7 +469326,7 @@
                                           5,
                                           10
                                         ],
-                                        "type": "string"
+                                        "type": "number"
                                       },
                                       "min": {
                                         "const": 1,
@@ -470321,7 +470321,7 @@
                                           5,
                                           10
                                         ],
-                                        "type": "string"
+                                        "type": "number"
                                       },
                                       "min": {
                                         "const": 1,
@@ -471464,7 +471464,7 @@
                                           5,
                                           10
                                         ],
-                                        "type": "string"
+                                        "type": "number"
                                       },
                                       "min": {
                                         "const": 1,
@@ -472617,7 +472617,7 @@
                                           5,
                                           10
                                         ],
-                                        "type": "string"
+                                        "type": "number"
                                       },
                                       "min": {
                                         "const": 1,
@@ -477870,7 +477870,7 @@
                                                   5,
                                                   10
                                                 ],
-                                                "type": "string"
+                                                "type": "number"
                                               },
                                               "min": {
                                                 "const": 1,
@@ -478853,7 +478853,7 @@
                                                   5,
                                                   10
                                                 ],
-                                                "type": "string"
+                                                "type": "number"
                                               },
                                               "min": {
                                                 "const": 1,
@@ -479848,7 +479848,7 @@
                                                   5,
                                                   10
                                                 ],
-                                                "type": "string"
+                                                "type": "number"
                                               },
                                               "min": {
                                                 "const": 1,
@@ -480991,7 +480991,7 @@
                                                   5,
                                                   10
                                                 ],
-                                                "type": "string"
+                                                "type": "number"
                                               },
                                               "min": {
                                                 "const": 1,
@@ -482144,7 +482144,7 @@
                                                   5,
                                                   10
                                                 ],
-                                                "type": "string"
+                                                "type": "number"
                                               },
                                               "min": {
                                                 "const": 1,
@@ -485394,7 +485394,7 @@
                                               5,
                                               10
                                             ],
-                                            "type": "string"
+                                            "type": "number"
                                           },
                                           "min": {
                                             "const": 1,
@@ -486410,7 +486410,7 @@
                                               5,
                                               10
                                             ],
-                                            "type": "string"
+                                            "type": "number"
                                           },
                                           "min": {
                                             "const": 1,
@@ -487635,7 +487635,7 @@
                                                   5,
                                                   10
                                                 ],
-                                                "type": "string"
+                                                "type": "number"
                                               },
                                               "min": {
                                                 "const": 1,
@@ -493688,7 +493688,7 @@
                                   5,
                                   10
                                 ],
-                                "type": "string"
+                                "type": "number"
                               },
                               "min": {
                                 "const": 1,
@@ -508469,7 +508469,7 @@
                         22,
                         25
                       ],
-                      "type": "string"
+                      "type": "number"
                     },
                     "lineWidth": {
                       "enum": [
@@ -509011,7 +509011,7 @@
                       22,
                       25
                     ],
-                    "type": "string"
+                    "type": "number"
                   },
                   "lineWidth": {
                     "enum": [
@@ -509088,7 +509088,7 @@
                       22,
                       25
                     ],
-                    "type": "string"
+                    "type": "number"
                   },
                   "lineWidth": {
                     "enum": [
@@ -509165,7 +509165,7 @@
                       22,
                       25
                     ],
-                    "type": "string"
+                    "type": "number"
                   },
                   "lineWidth": {
                     "enum": [
@@ -509239,7 +509239,7 @@
                         22,
                         25
                       ],
-                      "type": "string"
+                      "type": "number"
                     },
                     "lineWidth": {
                       "enum": [
@@ -570678,7 +570678,7 @@
                                   0,
                                   1
                                 ],
-                                "type": "string"
+                                "type": "number"
                               }
                             },
                             "required": [
@@ -571750,7 +571750,7 @@
                                   0,
                                   1
                                 ],
-                                "type": "string"
+                                "type": "number"
                               }
                             },
                             "required": [
@@ -571979,7 +571979,7 @@
                                   0,
                                   1
                                 ],
-                                "type": "string"
+                                "type": "number"
                               }
                             },
                             "required": [
@@ -642685,7 +642685,7 @@
                                       5,
                                       10
                                     ],
-                                    "type": "string"
+                                    "type": "number"
                                   },
                                   "min": {
                                     "const": 1,
@@ -738322,7 +738322,7 @@
                                       5,
                                       10
                                     ],
-                                    "type": "string"
+                                    "type": "number"
                                   },
                                   "min": {
                                     "const": 1,
@@ -744602,7 +744602,7 @@
                                       5,
                                       10
                                     ],
-                                    "type": "string"
+                                    "type": "number"
                                   },
                                   "min": {
                                     "const": 1,
