@@ -227,6 +227,19 @@ test('native capture still refuses an altered authority row', async () => {
     .rejects.toThrow('base Access row changed: access.permission_grant');
 });
 
+for (const name of ['account_deletion_classification_frontier',
+  'governance_preservation_delivery_head', 'live_principal_controller']) {
+  test(`native capture keeps current deletion and preservation cuts exact: ${name}`, async () => {
+    const before = { id: 'base', payload: 'retained' };
+    expect(ACCESS_RECOVERY_CLASSIFICATION[`access.${name}`]?.class).toBe('authority');
+    for (const after of [{ ...before, payload: 'changed' }, undefined]) {
+      await expect(exportAccessErasureRecoveryAttachment(comparisonClient(name, before),
+        comparisonClient(name, after, true, before), async () => {}))
+        .rejects.toThrow(after ? `base Access row changed: access.${name}` : `base Access row was removed: access.${name}`);
+    }
+  });
+}
+
 
 test('native capture accepts every mutable building input checkpoint and protects closed input evidence', async () => {
   const before = { id: 'base', generation_id: 'generation', source: 'main-graph', data_epoch: 'old-cut',

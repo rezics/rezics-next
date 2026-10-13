@@ -39,6 +39,10 @@ interface AccessRecoveryRule {
  * Keep this inventory explicit: admitting a new table requires a recovery decision.
  */
 export const ACCESS_RECOVERY_CLASSIFICATION: Readonly<Record<string, AccessRecoveryRule>> = {
+  'access.account_deletion_classification_frontier': { class: 'authority',
+    writer: 'services/main/src/modules/access/account-deletion-agents.ts; services/main/migrations/access/2042_account_deletion_classification_frontier.sql',
+    writerKind: 'account deletion command and controller-change trigger',
+    reason: 'Pending reclassification is part of the retained account deletion cut and must stay exact with its progress rows.' },
   'access.account_deletion_orphan_agent': { class: 'authority',
     writer: 'services/main/src/modules/access/account-deletion-agents.ts', writerKind: 'authority command or durable replay evidence' },
   'access.account_deletion_progress': { class: 'authority',
@@ -368,6 +372,10 @@ export const ACCESS_RECOVERY_CLASSIFICATION: Readonly<Record<string, AccessRecov
     writer: 'services/main/src/modules/public-report/preservation.ts', writerKind: 'authority command or durable replay evidence' },
   'access.governance_evidence': { class: 'authority',
     writer: 'services/main/src/modules/governance/store.ts; services/main/src/modules/public-report/store.ts', writerKind: 'authority command or durable replay evidence' },
+  'access.governance_preservation_delivery_head': { class: 'authority',
+    writer: 'services/main/migrations/access/2040_preservation_delivery_version.sql',
+    writerKind: 'preservation hold transaction trigger',
+    reason: 'Delivery compares this retained version to refuse a hold that changed between authority checks.' },
   'access.governance_preservation_hold': { class: 'authority',
     writer: 'services/main/src/modules/public-report/store.ts; services/main/src/modules/safety-queue/store.ts', writerKind: 'authority command or durable replay evidence' },
   'access.governance_process_step': { class: 'authority',
@@ -440,6 +448,10 @@ export const ACCESS_RECOVERY_CLASSIFICATION: Readonly<Record<string, AccessRecov
     writer: 'services/main/src/modules/library/follows.ts', writerKind: 'scheduler or progress worker',
     reason: 'The owner advances scheduling, counters or replay/build progress independently of durable authority.',
   },
+  'access.live_principal_controller': { class: 'authority',
+    writer: 'services/main/migrations/access/2042_account_deletion_classification_frontier.sql; services/main/migrations/access/2061_principal_controller_subject_budget.sql',
+    writerKind: 'controller mandate trigger and principal deactivation command',
+    reason: 'Account deletion uses this live controller cut to decide whether a Person keeps a controller; retain exact authority comparison.' },
   'access.main_agent_preference': { class: 'authority',
     writer: 'services/main/src/modules/access/session-agent.ts; services/main/migrations/access/310_session_agent.sql', writerKind: 'authority command or durable replay evidence' },
   'access.main_agent_preference_receipt': { class: 'authority',
