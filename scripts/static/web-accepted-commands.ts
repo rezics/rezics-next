@@ -1,29 +1,16 @@
-import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { relative, resolve } from 'node:path';
+import ts from 'typescript-6';
+import { commandSource, completesAdmission, resetCommandSources } from './web-accepted-commands-flow.ts';
 
 export interface CommandOpenApi {
   paths: Record<string, Record<string, { responses?: Record<string, unknown> }>>;
 }
 export interface CommandInventory {
   path: string;
-  digest: string;
+  completions: string[];
   operations: string[];
-  review?: string;
+  reason?: string;
 }
-interface Match {
-  file: string;
-  metaVariables: { single: Record<string, { text: string }> };
-}
-
-function matches(root: string, directory: string, pattern: string): Match[] {
-  const run = Bun.spawnSync({ cmd: [join(root, 'node_modules/.bin/ast-grep'), 'run',
-    '--pattern', pattern, '--json=compact', directory], cwd: root, stdout: 'pipe', stderr: 'pipe' });
-  if (run.exitCode !== 0 && run.exitCode !== 1) throw new Error(Buffer.from(run.stderr).toString());
-  return (JSON.parse(Buffer.from(run.stdout).toString() || '[]') as Match[])
-    .map(match => ({ ...match, file: relative(root, resolve(root, match.file)) }));
-}
-
 /** Ignore argument values, retaining the dynamic Eden route segment they select. */
 function routeOf(expression: string, aliases: Map<string, string>, seen = new Set<string>()): string | null {
   const tokens: string[] = expression.match(/'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|[\w$-]+|[^\s]/g) ?? [];
@@ -57,52 +44,112 @@ function routeOf(expression: string, aliases: Map<string, string>, seen = new Se
   return `/${segments.join('/')}`;
 }
 
-/**
- * Inventory production 202 consumers, including unresolved write aliases. A changed
- * adapter must be reviewed again: a keyword such as "pending" cannot exempt it.
- * Responses come from the generated API, never a second route declaration.
- */
+/** Local names in separate callbacks are distinct aliases, even when their spelling is the same. */
+function routeAliases(call: ts.CallExpression): Map<string, string> {
+  const aliases = new Map<string, string>();
+  let scope: ts.Node | undefined = call.parent;
+  while (scope) {
+    if (ts.isBlock(scope) || ts.isSourceFile(scope)) {
+      const visit = (node: ts.Node) => {
+        if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer && !aliases.has(node.name.text))
+          aliases.set(node.name.text, node.initializer.getText());
+        if (ts.isFunctionLike(node) || ts.isBlock(node)) return;
+        ts.forEachChild(node, visit);
+      };
+      ts.forEachChild(scope, visit);
+    }
+    scope = scope.parent;
+  }
+  return aliases;
+}
+
+interface Schema {
+  const?: unknown; enum?: unknown[]; type?: string | string[];
+  properties?: Record<string, Schema>; required?: string[]; anyOf?: Schema[]; oneOf?: Schema[];
+}
+function bodyOf(schema: Schema, partial: boolean): unknown {
+  if ('const' in schema) return schema.const;
+  if (schema.enum) return schema.enum.find(value => value === (partial ? 'partial' : 'accepted'))
+    ?? schema.enum.find(value => typeof value === 'string' && value.includes('pending')) ?? schema.enum[0];
+  const variants = schema.anyOf ?? schema.oneOf;
+  if (variants) return bodyOf(variants[0]!, partial);
+  if (schema.properties) return Object.fromEntries((schema.required ?? Object.keys(schema.properties))
+    .map(key => [key, bodyOf(schema.properties![key] ?? {}, partial)]));
+  if (schema.type === 'null') return null;
+  if (schema.type === 'boolean') return false;
+  if (schema.type === 'number' || schema.type === 'integer') return 1;
+  if (schema.type === 'array') return [];
+  return 'declared-value';
+}
+/** The declaration supplies discriminants: accepted/partial receipt bodies are also still pending. */
+function admittedBodies(response: unknown): unknown[] | null {
+  const schema = (response as { content?: { 'application/json'?: { schema?: Schema } } } | undefined)
+    ?.content?.['application/json']?.schema;
+  if (!schema) return null;
+  const variants = schema.anyOf ?? schema.oneOf ?? [schema];
+  return variants.flatMap(variant => [bodyOf(variant, false), bodyOf(variant, true)]);
+}
+
+/** Declared 202 calls are checked independently; unrelated edits need no admission review. */
 export function commandInventory(root: string, api: CommandOpenApi,
   directory = 'apps/web'): CommandInventory[] {
   const production = (path: string) => !/\.(?:test|stories)\./.test(path) && !/(?:^|[-/])fixtures\.tsx?$/.test(path)
     && !path.includes('/tests/');
-  const aliases = new Map<string, Map<string, string>>();
-  for (const match of matches(root, directory, 'const $ALIAS = $VALUE')) {
-    const variables = match.metaVariables.single;
-    if (!production(match.file) || !variables.ALIAS || !variables.VALUE) continue;
-    const names = aliases.get(match.file) ?? new Map<string, string>();
-    // Ambiguous local names remain unresolved, and still require review below.
-    const name = variables.ALIAS.text;
-    names.set(name, names.has(name) ? '' : variables.VALUE.text);
-    aliases.set(match.file, names);
+  resetCommandSources();
+  const files = new Bun.Glob('**/*.{ts,tsx}').scanSync({ cwd: resolve(root, directory), absolute: true });
+  const inventory: CommandInventory[] = [];
+  for (const file of files) {
+    const path = relative(root, file);
+    if (!production(path)) continue;
+    const source = commandSource(file);
+    const calls: ts.CallExpression[] = [];
+    const visit = (node: ts.Node) => {
+      if (ts.isCallExpression(node)) calls.push(node);
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+    const operations: string[] = [];
+    const completions: string[] = [];
+    for (const call of calls) {
+      const aliases = routeAliases(call);
+      let callee = call.expression.getText(source);
+      const seen = new Set<string>();
+      while (/^[\w$]+$/.test(callee) && aliases.has(callee) && !seen.has(callee)) {
+        seen.add(callee);
+        callee = aliases.get(callee)!;
+      }
+      const method = callee.match(/(?:\.(post|put|patch|delete)|\[['"](post|put|patch|delete)['"]\])$/);
+      if (!method) continue;
+      const verb = method[1] ?? method[2]!;
+      const route = routeOf(callee.slice(0, method.index), aliases);
+      const declared = route ? Object.keys(api.paths).find(path => path.replace(/\{[^}]+\}/g, '*') === route) : null;
+      const response = declared ? api.paths[declared]?.[verb]?.responses : undefined;
+      if (declared && !response?.['202']) continue;
+      if (!declared && (callee.includes('.objectStore(')
+        || verb === 'delete' && !/main|api|client|imports|http|v1/i.test(callee))) continue;
+      const operation = declared ? `${verb.toUpperCase()} ${declared} [202]`
+        : `UNRESOLVED ${verb.toUpperCase()} ${callee}`;
+      operations.push(operation);
+      const fallback = { operationId: 'pending-command', status: 'reconciling', result: null,
+        retry: { allowed: true, afterMs: 1 } };
+      if (!declared) continue; // Keep unresolved aliases visible; their response declaration is not known.
+      const bodies = admittedBodies(response?.['202']) ?? [fallback];
+      if (bodies.some(data => completesAdmission(call, { data, error: null, status: 202, response: { status: 202 } }))) completions.push(operation);
+    }
+    if (operations.length) inventory.push({ path, operations: operations.sort(), completions: completions.sort() });
   }
-  const operations = new Map<string, string[]>();
-  for (const match of matches(root, directory, '$CALLEE($$$)')) {
-    if (!production(match.file)) continue;
-    const callee = match.metaVariables.single.CALLEE?.text ?? '';
-    const method = callee.match(/(?:\.(post|put|patch|delete)|\[['"](post|put|patch|delete)['"]\])$/);
-    if (!method) continue;
-    const verb = method[1] ?? method[2]!;
-    const route = routeOf(callee.slice(0, method.index), aliases.get(match.file) ?? new Map());
-    const declared = route ? Object.keys(api.paths).find(path => path.replace(/\{[^}]+\}/g, '*') === route) : null;
-    const response = declared ? api.paths[declared]?.[verb]?.responses : undefined;
-    if (declared && !response?.['202']) continue;
-    // Set/Map/Headers deletion and IndexedDB writes are not HTTP adapters.
-    // An unresolved HTTP-looking alias stays in the inventory for owner review.
-    if (!declared && (callee.includes('.objectStore(')
-      || verb === 'delete' && !/main|api|client|imports|http|v1/i.test(callee))) continue;
-    const operation = declared ? `${verb.toUpperCase()} ${declared}${response?.['202'] ? ' [202]' : ''}`
-      : `UNRESOLVED ${verb.toUpperCase()} ${callee}`;
-    const list = operations.get(match.file) ?? [];
-    list.push(operation);
-    operations.set(match.file, list);
-  }
-  return [...operations].map(([path, calls]) => ({ path: relative(root, join(root, path)),
-    digest: createHash('sha256').update(readFileSync(join(root, path))).digest('hex'),
-    operations: calls.sort() })).sort((a, b) => a.path.localeCompare(b.path));
+  return inventory.sort((a, b) => a.path.localeCompare(b.path));
 }
 
-export function unreviewedCommands(actual: CommandInventory[], reviewed: CommandInventory[]): CommandInventory[] {
-  return actual.filter(item => !reviewed.some(prior => prior.path === item.path && prior.digest === item.digest
-    && JSON.stringify(prior.operations) === JSON.stringify(item.operations)));
+/** Exceptions identify existing completion debt by exact operation and count, never by whole-file identity. */
+export function unreviewedCommands(actual: CommandInventory[], debt: CommandInventory[]): CommandInventory[] {
+  return actual.flatMap(item => {
+    const remaining = [...item.completions];
+    const prior = debt.find(entry => entry.path === item.path);
+    for (const operation of prior?.completions ?? []) {
+      const index = remaining.indexOf(operation);
+      if (index >= 0) remaining.splice(index, 1);
+    }
+    return remaining.length ? [{ ...item, completions: remaining }] : [];
+  });
 }
