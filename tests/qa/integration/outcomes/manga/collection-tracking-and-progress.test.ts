@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import outcome from '../../../../../scripts/qa/cases/outcomes/manga/collection-tracking-and-progress.ts';
 import { classificationContextBody, classifiedStatementBody } from '../../../../../scripts/dev/seed/classified-statement.ts';
-import { grantFixtureAuthority } from '../../../../../services/main/src/modules/access/fixture-authority.ts';
+import { grantMangaFixtureAuthority } from '../../../../../scripts/qa/cases/outcomes/manga/work-hub-and-edition-choice.ts';
 import { outcomeTest } from '../../../support/outcome-test.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
@@ -22,19 +22,7 @@ async function answer<T>(request: Promise<Response>, status = 200): Promise<T> {
   expect(response.status, `${response.status}: ${raw}`).toBe(status);
   return JSON.parse(raw) as T;
 }
-async function grant(person: PersonaSession, scope: string, action: string) {
-  const principal = await access.query<{ id: string }>('SELECT id FROM access.principal WHERE account_subject = $1', [person.accountId]);
-  expect(principal.rows).toHaveLength(1);
-  const client = await access.connect();
-  try {
-    await client.query('BEGIN');
-    await grantFixtureAuthority(client, { scope, requireDispatch: true,
-      representations: [{ principalId: principal.rows[0]!.id, actor: person.actingSubject!, action, lifetime: '8 hours' }],
-      grant: { actor: person.actingSubject!, action, lifetime: '8 hours' } });
-    await client.query('COMMIT');
-  } catch (error) { await client.query('ROLLBACK'); throw error; }
-  finally { client.release(); }
-}
+const grant = (person: PersonaSession, scope: string, action: string) => grantMangaFixtureAuthority(access, person, scope, action);
 async function create(title: string, type: string): Promise<Work> {
   const owner = sessions.owner, actor = owner.actingSubject;
   const work = await answer<Work>(owner.main('POST', '/v1/works', {
