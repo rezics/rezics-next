@@ -1,10 +1,124 @@
 import { GRAPHS, iri } from '../work/activate.ts';
 import { selectDisplayName } from '../display-language/select.ts';
-import { WorkReadInvalid, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
-import { DisclosureUnavailable, hasDisclosure } from '../disclosure/read.ts';
+import { decodeReadCursor, encodeReadCursor, WorkReadInvalid, WorkReadUnavailable,
+  type WorkReadSession } from '../work/read-session.ts';
+import { DisclosureUnavailable, hasDisclosure, type DisclosureTarget } from '../disclosure/read.ts';
+import { GLOBAL_CLASSIFICATION_CONTEXT, CLASSIFICATION_ISOLATE_POLICY,
+  CLASSIFICATION_INHERIT_POLICY } from '../classification/context.ts';
+import { publicNamePage, type DirectoryAfter } from '../search/labels.ts';
+import { namePolicyPrincipal } from '../disclosure/viewer.ts';
 
 /** One bounded scan of active shared vocabulary labels and their definition heads. */
 export const SHARED_VOCABULARY_COST = { concepts: 256, labels: 2048, page: 20 } as const;
+export const CONTEXT_VOCABULARY_COST = { candidates: 64, labels: 512, page: 20 } as const;
+
+/** The native name directory seeks dictionary keys. Exact graph joins below
+ * consume only that bounded window, including when every candidate is hidden. */
+export async function readContextVocabulary(session: WorkReadSession,
+  input: { context: string; scheme?: string; q?: string; limit?: number; cursor?: string }) {
+  const limit = input.limit ?? CONTEXT_VOCABULARY_COST.page;
+  const search = input.q?.normalize('NFKC').trim().toLocaleLowerCase() ?? '';
+  if (input.q !== undefined && !search) throw new WorkReadInvalid('Topic search is empty');
+  const principal = namePolicyPrincipal(session.viewer);
+  const binding = ['context-vocabulary-v1', input.context, input.scheme ?? null, input.q ?? null,
+    limit, session.options.language ?? null, session.displayLanguages,
+    principal ? [principal.issuer, principal.subject] : null, session.viewer];
+  const cursor = decodeReadCursor(input.cursor, binding, session.position);
+  let after: DirectoryAfter | undefined;
+  if (cursor) {
+    try {
+      after = JSON.parse(cursor.order) as DirectoryAfter;
+      if (!after || typeof after.id !== 'string' || after.score !== '0'
+        || !/^\d+$/.test(after.commit)) throw new Error('cursor');
+    } catch { throw new WorkReadInvalid('Vocabulary cursor is invalid'); }
+  }
+  const contexts = await session.query(`SELECT ?scope ?head ?realm WHERE {
+    GRAPH ${iri(GRAPHS.current)} {
+      ${iri(input.context)} a rv:ClassificationContext ; rv:contextState rv:Active ; rv:head ?head .
+      ${input.context === GLOBAL_CLASSIFICATION_CONTEXT
+        ? `${iri(input.context)} rv:contextRole rv:GlobalClassification ;
+          rv:inheritancePolicy ${iri(CLASSIFICATION_ISOLATE_POLICY)} .
+          BIND(${iri(input.context)} AS ?scope)`
+        : `${iri(input.context)} rv:contextRole rv:RealmClassification ; rv:realm ?realm ;
+          rv:inheritancePolicy ${iri(CLASSIFICATION_INHERIT_POLICY)} ;
+          rv:fallbackContext ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} .
+          ?realm a rv:Realm ; rv:realmState rv:Active ; rv:classificationContext ${iri(input.context)} ; rv:space ?space .
+          ?space a rv:Space ; rv:realmCapability ?realm ; rv:disclosure rv:Public .
+          ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} a rv:ClassificationContext ; rv:contextState rv:Active ;
+            rv:contextRole rv:GlobalClassification ; rv:inheritancePolicy ${iri(CLASSIFICATION_ISOLATE_POLICY)} .
+          BIND(${iri(GLOBAL_CLASSIFICATION_CONTEXT)} AS ?scope)`}
+    }
+  } LIMIT 2`, 2);
+  if (contexts.length > 1) throw new WorkReadUnavailable('Classification context is ambiguous');
+  const context = contexts[0];
+  const empty = () => ({ profile: 'shared-vocabulary-v1' as const, context: input.context,
+    scheme: input.scheme ?? null, items: [] as { id: string; label: string }[], hasMore: false,
+    nextCursor: null as string | null, sourcePosition: session.position,
+    count: { value: 0, kind: 'exact-page' as const, total: null } });
+  if (!context) return empty();
+  if (!context.scope?.value || !context.head?.value) throw new WorkReadUnavailable('Classification context is incomplete');
+  const contextTargets: DisclosureTarget[] = [{ owner: 'graph', resource: input.context,
+    revision: context.head.value, component: 'record' }];
+  if (context.realm?.value) {
+    const realm = await session.realm(context.realm.value);
+    if (!realm.realmRevision) throw new WorkReadUnavailable('Context Realm revision is unavailable');
+    contextTargets.push({ owner: 'graph', resource: context.realm.value,
+      revision: realm.realmRevision, component: 'record' });
+  }
+  const contextDecisions = await session.disclosure(contextTargets, 'search');
+  if (contextDecisions.length !== contextTargets.length)
+    throw new WorkReadUnavailable('Context disclosure is incomplete');
+  if (contextDecisions.some(decision => decision !== 'visible')) return empty();
+  const page = await publicNamePage(session, 'concept', 'identity', CONTEXT_VOCABULARY_COST.candidates, after);
+  const candidates = page.rows.filter(row => row.available);
+  const rows = candidates.length ? await session.query(`SELECT ?concept ?head ?label WHERE {
+    ${candidates.map(row => `{ GRAPH ${iri(GRAPHS.current)} {
+      BIND(${iri(row.id)} AS ?concept)
+      ${iri(row.id)} a skos:Concept ; skos:inScheme ${input.scheme ? iri(input.scheme) : '?scheme'} ;
+        skos:prefLabel ?label ; rv:conceptState rv:Active .
+      ${input.scheme ? iri(input.scheme) : '?scheme'} a skos:ConceptScheme ; rv:schemeState rv:Active .
+      FILTER NOT EXISTS { ${iri(row.id)} rv:conceptState rv:Retired }
+      FILTER NOT EXISTS { ${input.scheme ? iri(input.scheme) : '?scheme'} rv:schemeState rv:Retired }
+      FILTER NOT EXISTS { ${iri(row.id)} rv:conceptRealm ?owner }
+      FILTER NOT EXISTS { ${iri(row.id)} rv:protectionHead ?protection }
+      FILTER EXISTS { ?selectedSense a rv:ClassificationSense ; rv:senseState rv:Active ;
+        rv:interpretationScope ${iri(context.scope!.value)} ; rv:expression ?selectedExpression .
+        ?selectedExpression a rv:ClassificationExpression ; rv:expressionState rv:Active ; rv:assertedConcept ${iri(row.id)} }
+      ${sharedConceptHeadPattern(iri(row.id))}
+    } }`).join(' UNION ')}
+  } LIMIT ${CONTEXT_VOCABULARY_COST.labels + 1}`, CONTEXT_VOCABULARY_COST.labels + 1) : [];
+  if (rows.length > CONTEXT_VOCABULARY_COST.labels) throw new WorkReadUnavailable('Vocabulary labels exceed their read budget');
+  const concepts = new Map<string, { revision: string; labels: Map<string, string> }>();
+  for (const row of rows) {
+    const id = row.concept?.value, revision = row.head?.value, label = row.label?.value,
+      language = row.label?.['xml:lang']?.toLowerCase();
+    if (!id || !revision || !label || !language) throw new WorkReadUnavailable('Vocabulary label is malformed');
+    const prior = concepts.get(id);
+    if (prior && prior.revision !== revision) throw new WorkReadUnavailable('Vocabulary revision is inconsistent');
+    if (!prior) concepts.set(id, { revision, labels: new Map([[language, label]]) });
+    else prior.labels.set(language, label);
+  }
+  const basis = [...concepts].map(([id, value]) => ({ id, revision: value.revision }));
+  const opening = await visibleSharedConcepts(session, basis);
+  const final = await visibleSharedConcepts(session, basis);
+  const items: { id: string; label: string }[] = [];
+  let consumed = 0;
+  for (const row of page.rows) {
+    consumed++;
+    after = row.after;
+    const concept = concepts.get(row.id);
+    if (concept && opening.has(row.id) && final.has(row.id)) {
+      const label = selectDisplayName(concept.labels, session.displayLanguages)?.value;
+      if (label && (!search || [...concept.labels.values()].some(value => value.normalize('NFKC')
+        .toLocaleLowerCase().includes(search)))) items.push({ id: row.id, label });
+    }
+    if (items.length === limit) break;
+  }
+  const hasMore = consumed < page.rows.length || page.more;
+  return { ...empty(), items, hasMore, nextCursor: hasMore && after
+    ? encodeReadCursor(binding, session.position, '', JSON.stringify(after)) : null,
+  count: { value: items.length, kind: 'exact-page' as const, total: null } };
+}
 
 /** v1 propositions keep the definition revision on their Sense. Prefer a
  * Concept's own head so a historical Sense cannot override a newer definition. */

@@ -5,9 +5,10 @@ import { realmDirectoryPage, REALM_DIRECTORY_COST } from '../modules/realm-direc
 import { RealmDirectoryWarming } from '../modules/realm-directory/index.ts';
 import { realmDirectoryLifecycle } from '../modules/realm-directory/worker.ts';
 import { readRealmDirectory } from '../modules/realm-directory/read.ts';
-import { readSharedVocabulary, SHARED_VOCABULARY_COST } from '../modules/realm-directory/vocabulary.ts';
-import { pageQuery, readLanguage } from '../modules/work/read-contract.ts';
-import { WorkReadInvalid, WorkReadLimit, WorkReadMoved, WorkReadUnavailable, workRead }
+import { readContextVocabulary, readSharedVocabulary, SHARED_VOCABULARY_COST } from '../modules/realm-directory/vocabulary.ts';
+import { GLOBAL_CLASSIFICATION_CONTEXT } from '../modules/classification/context.ts';
+import { pageQuery, readId, readLanguage, readPosition } from '../modules/work/read-contract.ts';
+import { publicWorkRead, WorkReadInvalid, WorkReadLimit, WorkReadMoved, WorkReadUnavailable, workRead }
   from '../modules/work/read-session.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
@@ -51,14 +52,24 @@ export const openApiOperations = { '/v1/realms': { get: { exposure: 'public', ra
 export function realmDirectoryRoutes(work: MainWorkDependencies) {
   return new Elysia().use(realmDirectoryLifecycle(work)).get('/v1/classification-vocabulary', {
     detail: { deprecated: true, description: 'Deprecated. Use /v1/discovery/concepts for searchable, cursor-paged topics.' },
-    query: t.Object({ language: t.Optional(readLanguage),
+    query: t.Object({ language: t.Optional(readLanguage), limit: pageQuery.limit, cursor: pageQuery.cursor,
+      context: t.Optional(t.Union([readId, t.Literal(GLOBAL_CLASSIFICATION_CONTEXT)])), scheme: t.Optional(readId),
       q: t.Optional(t.String({ minLength: 1, maxLength: 80 })) }, { additionalProperties: false }),
     response: { 200: t.Object({ profile: t.Literal('shared-vocabulary-v1'),
       items: t.Array(t.Object({ id: t.String(), label: t.String() }),
-        { maxItems: SHARED_VOCABULARY_COST.page }), hasMore: t.Boolean() }), ...errors },
+        { maxItems: SHARED_VOCABULARY_COST.page }), hasMore: t.Boolean(),
+      context: t.Optional(t.String()), scheme: t.Optional(t.Nullable(readId)),
+      nextCursor: t.Optional(t.Nullable(t.String())), sourcePosition: t.Optional(readPosition),
+      count: t.Optional(t.Object({ value: t.Integer({ minimum: 0 }), kind: t.Literal('exact-page'), total: t.Null() })) }), ...errors },
   }, async ({ request, query: options }) => {
-    try { return Response.json(await workRead(work, publicRequest(request), options,
-      session => readSharedVocabulary(session, options.q)), { headers }); }
+    try {
+      if (options.context) return Response.json(await publicWorkRead(work, request, options,
+        session => readContextVocabulary(session, { ...options, context: options.context! })), { headers });
+      if (options.limit !== undefined || options.cursor !== undefined || options.scheme !== undefined)
+        throw new WorkReadInvalid('Context is required for vocabulary pagination');
+      return Response.json(await workRead(work, publicRequest(request), options,
+        session => readSharedVocabulary(session, options.q)), { headers });
+    }
     catch (error) { return directoryError(error); }
   }).get('/v1/realms', { query,
     detail: { deprecated: true, description: 'Deprecated. Use the resource-list-v1 profile of /v1/query with the type Facet for communities.' },
