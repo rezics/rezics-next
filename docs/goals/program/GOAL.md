@@ -137,19 +137,23 @@ lands, a manager applies its rule by hand and says so.
   like any Goal's.
 - **A session's cost is its calls times its average context.** Every call sends
   the whole context again, and a session that compacts at a limit carries about
-  half that limit on average. On 2026-10-13 the supermanager never compacted,
-  grew by about 2,400 tokens a call from 45,000 and averaged 267,000 over 149
-  calls; a limit of 500,000 would have changed nothing, 300,000 would have cost
-  a third less and 200,000 half, with two compactions in three and a half
-  hours. So, in this order: fewer calls (the tool does what needs no judgment),
-  a small start (a role card and the state, not a history), and a compaction
-  limit as the backstop.
+  half that limit on average. The usage report shows it for sessions that ran
+  for days: four managers at about 500,000 tokens a call over some 3,000 calls
+  each, which is the midpoint of the default limit near a million. The
+  supermanager of that run made about 940 calls a day, 430 million cached
+  tokens a day. A limit of 500,000 alone brings that to about 260 million;
+  leaving the mechanical calls to the tool alone, to about 120 million; both, to
+  about 65 million; and a limit of 200,000 on top of both would save 35 million
+  more for three times as many compactions. So a limit goes against the number
+  of calls: low for a session that loops on events, high for one that is called
+  seldom and holds a conversation. The run of 2026-10-13 was too short to show
+  any of this: its supermanager never reached a limit.
 
   | Who | Session | Compaction |
   | --- | --- | --- |
-  | Supermanager | One resident session; `state.md` written at each checkpoint | 200,000 (`claude --autocompact 200000`) |
+  | Supermanager | One resident session; `state.md` written at each checkpoint | 500,000 (`claude --autocompact 500000`), to be looked at again when each turn is measured |
   | A Goal's manager | A fresh turn for an event, several side by side. Compaction alone would not let two turns run at once, let mail in between turns, or spare a session woken after an hour from sending its history uncached | Not reached; while managers are still resumed, 150,000 |
-  | Worker, researcher | One session for an attempt. A fix round resumes it when it is under 200,000 tokens and was active within the hour, and starts fresh from the brief, the findings and the changed files otherwise | 400,000 for Sol and 200,000 for Luna, a backstop: a compaction in the middle of a task loses what was read. The control is the brief and a budget of calls for an attempt |
+  | Worker, researcher | One session for an attempt. The report's long tasks carried about 100,000 tokens a call and one made 3,182 calls, so their cost is their calls. A fix round resumes it when it is under 200,000 tokens and was active within the hour, and starts fresh from the brief, the findings and the changed files otherwise | 400,000 for Sol and 200,000 for Luna, a backstop: a compaction in the middle of a task loses what was read. The control is the brief and a budget of calls for an attempt |
 - **termspaces is the agents' terminal, and `goalctl` maintains it.** `goalctl`
   registers a window when a turn or a worker starts and removes it when it
   ends: windows named `goal-…` in the session `rezics-agents`, and no other
@@ -269,7 +273,7 @@ The maintainer starts the supermanager in termspaces, window `super-manager` of 
 session `rezics-agents` (`termspaces attach rezics-agents`):
 
 ```sh
-GOAL_ID=program claude --model <model> --effort xhigh --autocompact 200000 --dangerously-skip-permissions
+GOAL_ID=program claude --model <model> --effort xhigh --autocompact 500000 --dangerously-skip-permissions
 ```
 
 and sends: `You are the REZICS supermanager. Read
@@ -278,8 +282,8 @@ docs/goals/manager.md, register with task goal -- goal start program --manager
 supermanager, and run the Goal from its next tasks.`
 
 Until N3 is on `main` the supermanager runs the program's tooling tasks itself,
-with one background wait for each task; that is when the compaction limit
-matters most.
+with one background wait for each task, so it is called more often in those
+days than it will be later.
 
 ## Completion
 
