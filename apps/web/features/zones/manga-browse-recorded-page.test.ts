@@ -63,7 +63,7 @@ test('recorded browse keeps titles, credit, lower-bound count, sorts and the opa
     expect(result.data.items.map(item => item.id)).toEqual(answer.items.map(item => item.id));
     expect(result.data.items[0]?.title?.lang).toBe(answer.items[0]?.title.language);
     const credit = answer.items[0]?.primaryCredits.find(item => item.displayName)?.displayName;
-    expect(credit).toBeTruthy();
+    if (!credit) throw new Error(`${persona} browse card has no credit`);
     expect(result.data.items[0]?.author?.value).toBe(credit);
     expect(result.data.results).toBe(resultText(answer.matches));
     expect(answer.matches.kind).toBe('lower-bound');
@@ -74,7 +74,11 @@ test('recorded browse keeps titles, credit, lower-bound count, sorts and the opa
     expect(next.searchParams.get('type')).toBeNull();
     expect(next.searchParams.get('q')).toBeNull();
     expect(result.data.first).toBeNull();
-    const concepts = answer.facets.concept.map(item => [item.name?.value, item.count]);
+    const concepts = answer.facets.concept.map(item => {
+      const name = item.name?.value;
+      if (!name) throw new Error(`${persona} concept facet has no recorded name`);
+      return [name, item.count];
+    });
     expect(result.data.groups.find(group => group.facet === 'concept')?.values.map(item => [item.label.value, item.count]))
       .toEqual(concepts);
   }
@@ -143,7 +147,7 @@ test('the recorded unsupported query refusal stays a failure rather than an empt
     expect(sample.status).toBe(400);
     expect(sample.answer).toMatchObject({ code: 'unsupported_query_shape', title: 'Relevance needs text' });
     expect(page).toEqual({ ok: false, failure: 'invalid' });
-    expect(result).toBe(page);
+    expect(result).toBe(page as typeof result);
   }
 });
 
@@ -199,9 +203,11 @@ test('the owner’s recorded realm header and zone presentation stay readable', 
   const recordedPresentation = presentationSample.answer as {
     name: string; official: string | null; address: { prefix: string; key: string; suffixSource: string };
   };
+  const direction = recordedHeader.name.direction;
+  if (direction !== 'ltr' && direction !== 'rtl') throw new Error(`Recorded realm name direction is ${direction}`);
   expect(header.data?.name.value).toBe(recordedHeader.name.value);
   expect(header.data?.name.language).toBe(recordedHeader.name.language);
-  expect(header.data?.name.direction).toBe(recordedHeader.name.direction);
+  expect(header.data?.name.direction).toBe(direction);
   expect(presentation.data?.name).toBe(recordedPresentation.name);
   expect(presentation.data?.official).toBe(recordedPresentation.official);
   expect(presentation.data?.address).toEqual(recordedPresentation.address);
