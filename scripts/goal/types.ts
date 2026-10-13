@@ -25,8 +25,8 @@ export interface Attempt {
   startedAt: string; endedAt?: string;
   /** A partial handoff advances a landed or clean read-only step; only fixes consume the two rounds. */
   round?: 'initial' | 'step' | 'fix' | 'continuation';
-  /** Wait started this attempt because the previous session lost its connection. */
-  continuedFor?: 'transport' | 'capacity';
+  /** Why settlement continued an ended worker attempt without a manager resume. */
+  continuedFor?: 'transport' | 'capacity' | 'handoff';
 }
 export interface Task extends Omit<Brief, 'worktree'> {
   brief: string; worktree: string; branch: string; base: string; state: State; attempts: Attempt[];

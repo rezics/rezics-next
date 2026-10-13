@@ -6,6 +6,7 @@ import { currentUsage, codexAccounts, describeAccount } from './usage.ts';
 import { spawn } from 'node:child_process';
 import { type ChangedFile, isGeneratedOutput, outOfScope } from './briefs.ts';
 import { handoverPrompt, prepareHandover, type WorkerHandover } from './handover.ts';
+import { handoffResult } from './land.ts';
 
 // Workers run in bypass permission mode, as the manager does, and accept no inbound session
 // messages; the manager changes a worker's instructions only by stopping or resuming it.
@@ -283,6 +284,31 @@ export function transportContinuations(task: Task, reason: NonNullable<Attempt['
     count++;
   }
   return count;
+}
+
+/** A handoff resets the allowance; capacity or transport retries cannot grant another one. */
+export function handoffContinuations(task: Task): number {
+  let count = 0;
+  for (const attempt of [...task.attempts].reverse()) {
+    if (hasHandoff(readResult(attempt).text)) break;
+    if (attempt.continuedFor === 'handoff') count++;
+  }
+  return count;
+}
+
+/** Malformed RESULT lines still belong to the manager, rather than an automatic continuation. */
+export function hasHandoff(text: string): boolean {
+  return handoffResult(text) !== undefined || /^RESULT:/m.test(text);
+}
+
+/** Progress text can survive a failed Codex turn; only a completed turn authorizes this continuation. */
+export function cleanSessionEnd(attempt: Attempt): boolean {
+  if (readResult(attempt).error) return false;
+  if (!isCodex(engineOf(attempt))) return true;
+  try {
+    const last = readFileSync(attempt.output, 'utf8').trimEnd().split(/\r?\n/).at(-1) ?? '';
+    return (JSON.parse(last) as { type?: string }).type === 'turn.completed';
+  } catch { return false; }
 }
 
 /** The last event of a Codex attempt is a turn the service refused for capacity. */

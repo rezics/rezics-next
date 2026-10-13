@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { join, resolve, basename, relative, dirname } from 'node:path';
 import { readFileSync, existsSync, mkdirSync, writeFileSync, copyFileSync, readdirSync, readlinkSync, renameSync } from 'node:fs';
 import { parseBrief, validateBrief, mechanismSectionErrors, claimConflicts, areaConflicts, validGoalSlug, goalFile, GOALS_DIR, HISTORY_EXEMPT, nextTaskId, goalBriefFile } from './briefs.ts';
-import { launchGates, briefFile, launch, workerPrompt, lastAttempt, taskOf, readResult, capacityRefusal, transportDrop, transportContinuations, transportContinuationPrompt, changedFiles, elapsed, describe, running } from './launch.ts';
+import { launchGates, briefFile, launch, workerPrompt, lastAttempt, taskOf, readResult, capacityRefusal, transportDrop, transportContinuations, transportContinuationPrompt, handoffContinuations, hasHandoff, cleanSessionEnd, changedFiles, elapsed, describe, running } from './launch.ts';
 import { postgresSocketRefusal, physicalPath } from './postgres-socket.ts';
 import { describeAccount } from './usage.ts';
 import { spawnSync } from 'node:child_process';
@@ -174,6 +174,25 @@ export async function finishAttempt(id: string, attemptNumber: number) {
         refused = error instanceof Error ? error.message : String(error);
       }
     }
+    if (open && !refusedTurn && !drop && !hasHandoff(result.text) && cleanSessionEnd(last)
+      && last.session && handoffContinuations(current) === 0) {
+      const engine = engineOf(last);
+      try {
+        launchGates(Object.values(ledger.tasks), engine, false);
+        const next = launch(current, last.effort, last.session,
+          'The turn ended before the handoff; nothing else changed. A command you started may have ended meanwhile. '
+          + 'Continue your work and finish with the handoff. If a command is still running, wait with one call using yield_time_ms: 300000.',
+          true, managerOf(ledger, current.goal), engine, 'continuation');
+        next.continuedFor = 'handoff';
+        current.attempts.push(next);
+        current.engine = engine;
+        current.state = 'running';
+        clearRefusal(current);
+        return { kind: 'continued' as const, task: current, next };
+      } catch (error) {
+        refused = error instanceof Error ? error.message : String(error);
+      }
+    }
     const repeated = drop && open && transportContinuations(current) >= MAX_TRANSPORT_CONTINUATIONS;
     if (current.state === 'running') { current.state = 'exited'; clearRefusal(current); }
     return { kind: 'ended' as const, task: current, repeated, refused };
@@ -213,6 +232,8 @@ export async function waitFor(id: string, options: { pollMs?: number; settleMs?:
     if (next.n !== watching.n) {
       if (next.continuedFor) console.log(next.continuedFor === 'capacity'
         ? `${task.id} resumed by itself after a capacity refusal; same ${modelOf(engineOf(next))} session, pid ${next.pid}`
+        : next.continuedFor === 'handoff'
+          ? `${task.id} continued by itself after a turn ended before the handoff; same ${modelOf(engineOf(next))} session, pid ${next.pid}`
         : `${task.id} continued by itself after a transport error; fresh ${modelOf(engineOf(next))}/${next.effort} session, pid ${next.pid}`);
       watching = next;
       continue;

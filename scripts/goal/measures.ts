@@ -5,7 +5,7 @@ import { createInterface } from 'node:readline';
 import type { Attempt, Ledger, Task } from './goalctl.ts';
 import { handoffResult } from './land.ts';
 
-type AttemptCounts = { first: number; stepResume: number; fixRound: number; capacityRetry: number; transportRetry: number };
+type AttemptCounts = { first: number; stepResume: number; fixRound: number; capacityRetry: number; transportRetry: number; handoffRetry: number };
 type Refusals = { outcomeTest: number; gate: number; failingTestFinding: number; other: number };
 type Tokens = { input: number; output: number };
 export interface GoalMeasures {
@@ -26,7 +26,7 @@ interface LogEvent {
 interface MeasureOptions {
   root?: string; nowMs?: number; codexHomes?: string[]; print?: (line: string) => void;
 }
-const counts = (): AttemptCounts => ({ first: 0, stepResume: 0, fixRound: 0, capacityRetry: 0, transportRetry: 0 });
+const counts = (): AttemptCounts => ({ first: 0, stepResume: 0, fixRound: 0, capacityRetry: 0, transportRetry: 0, handoffRetry: 0 });
 const zero = (): Tokens => ({ input: 0, output: 0 });
 const share = (c: AttemptCounts): Share => ({ first: c.first, attempts: c.first + c.fixRound,
   share: c.first + c.fixRound ? c.first / (c.first + c.fixRound) : null });
@@ -139,7 +139,7 @@ export async function goalMeasures(ledger: Ledger, options: MeasureOptions = {})
         const refusedBeforeResume = index > 0 && refused.times.some(at => at >= Date.parse(task.attempts[index - 1]!.startedAt)
           && at <= Date.parse(attempt.startedAt));
         const kind: keyof AttemptCounts = attempt.continuedFor === 'capacity' ? 'capacityRetry'
-          : attempt.continuedFor === 'transport' ? 'transportRetry' : index === 0 ? 'first'
+          : attempt.continuedFor === 'transport' ? 'transportRetry' : attempt.continuedFor === 'handoff' ? 'handoffRetry' : index === 0 ? 'first'
           : !refusedBeforeResume && priorResult === 'partial' ? 'stepResume' : 'fixRound';
         // Old runs may have lost their handoff files: treat unknown resumes conservatively, visibly.
         if (kind === 'fixRound' && !priorResult && !refusedBeforeResume) measure.attempts.inferredFixRounds++;
@@ -186,7 +186,7 @@ export function measureLines(goal: string, m: GoalMeasures): string[] {
   const line = `measures ${goal}: first-attempt ${percent(m.firstAttemptShare.run)} (today ${percent(m.firstAttemptShare.today)}, ${m.firstAttemptShare.today.first} of ${m.firstAttemptShare.today.attempts}); `
     + `attempts/landed median ${m.attemptsPerLanded.median ?? 'n/a'}, max ${largest ? `${largest.attempts} (${largest.task})` : 'n/a'}; `
     + `tokens ${compact(m.tokens.input)} in, ${compact(m.tokens.output)} out${m.tokens.missingSessions ? ` (${m.tokens.missingSessions} sessions unavailable)` : ''}; tokens/proved row n/a; `
-    + `attempts ${a.first} first, ${a.stepResume} step, ${a.fixRound} fix, ${a.capacityRetry} capacity, ${a.transportRetry} transport; `
+    + `attempts ${a.first} first, ${a.stepResume} step, ${a.fixRound} fix, ${a.capacityRetry} capacity, ${a.transportRetry} transport, ${a.handoffRetry} handoff; `
     + (m.attempts.inferredFixRounds ? `${m.attempts.inferredFixRounds} fixes inferred from unavailable handoffs; ` : '')
     + `refused ${r.outcomeTest} outcome, ${r.gate} gate, ${r.failingTestFinding} failing-test finding, ${r.other} other (retained reports)`;
   return [line, ...m.stop ? [`STOP ${goal}: first-attempt share today ${percent(m.firstAttemptShare.today)} (${m.firstAttemptShare.today.first} of ${m.firstAttemptShare.today.attempts}); stop dispatching and find out why`] : []];

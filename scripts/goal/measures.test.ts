@@ -47,7 +47,7 @@ describe('Goal method measures', () => {
       f.attempt(f.task('open', 'running'));
       f.attempt(f.task('cancelled', 'cancelled'));
       const m = (await f.report()).api!;
-      expect(m.attempts.run).toEqual({ first: 4, stepResume: 1, fixRound: 1, capacityRetry: 1, transportRetry: 1 });
+      expect(m.attempts.run).toEqual({ first: 4, stepResume: 1, fixRound: 1, capacityRetry: 1, transportRetry: 1, handoffRetry: 0 });
       expect(m.firstAttemptShare.run).toEqual({ first: 4, attempts: 5, share: 0.8 });
       expect(m.firstAttemptShare.today).toEqual({ first: 3, attempts: 4, share: 0.75 });
       expect(m.attemptsPerLanded).toEqual({ tasks: { row: 5, other: 1 }, median: 3, largest: { task: 'row', attempts: 5 } });
