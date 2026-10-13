@@ -1,8 +1,14 @@
 import type { Metadata } from 'next';
+import { coverKindOf } from '../../../../../../features/catalogue/work.ts';
 import { workPageMetadata, workTitle } from '../../../../../../features/seo/work.ts';
-import { loadWork, resolveWork } from '../../../../../../features/work-page/read.ts';
-import { parseContentsQuery } from '../../../../../../features/work-page/route.ts';
-import { WorkContents } from '../../../../../../features/work-page/work-views.tsx';
+import {
+  BooksContentsRecordedPage, booksContentsInventoryLimit, booksContentsInventoryQuery, contentsReadsInventory,
+  mapBooksContentsRecordedPage,
+} from '../../../../../../features/work-page/books-contents-recorded-page.tsx';
+import { readContentsGroup } from '../../../../../../features/work-page/contents-actions.ts';
+import { ContentsRegion } from '../../../../../../features/work-page/contents.tsx';
+import { loadWork, oneTextLanguage, readContents, reader, resolveWork } from '../../../../../../features/work-page/read.ts';
+import { idOf, iriOf, parseContentsQuery } from '../../../../../../features/work-page/route.ts';
 import { getMessages, getTranslation, requestLocale } from '../../../../../../i18n/server.ts';
 
 type Params = { params: Promise<{ ref: string }> };
@@ -16,9 +22,39 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
 }
 
 export default async function WorkContentsPage({ params, searchParams }: Props) {
-  const [{ ref }, query, locale] = await Promise.all([params, searchParams, requestLocale()]);
+  const [{ ref }, search, locale] = await Promise.all([params, searchParams, requestLocale()]);
   const [work, messages] = await Promise.all([loadWork(ref, locale), getMessages('workPage', locale)]);
   if (!work.ok) return null;
-  return <WorkContents workRef={ref} id={work.id} work={work.header} query={parseContentsQuery(query)} locale={locale}
-    messages={messages} />;
+  const query = parseContentsQuery(search);
+  // loadWork already read this header through readWorkHeader, which is cached for the request.
+  const contents = query ? await readContents(work.id, query) : { ok: false as const, failure: 'invalid' as const };
+  // Contents did not answer. The chapter inventory is paged at the proved size, and each cursor stays opaque.
+  if (query && contentsReadsInventory(contents, query)) {
+    const { main, actingSubject } = await reader();
+    const language = query.language ?? work.header.selectedLanguage ?? undefined;
+    const read = () => main.v1['reading-positions']({ work: work.id }).get({
+      query: booksContentsInventoryQuery({
+        language, cursor: query.cursor, actingSubject, limit: booksContentsInventoryLimit,
+      }),
+    });
+    let answer = await read();
+    if (answer.error?.status === 409 && !query.cursor) answer = await read();
+    return <BooksContentsRecordedPage locale={locale} messages={messages} view={mapBooksContentsRecordedPage(answer, {
+      workRef: ref, workIri: iriOf(work.id), language, cursor: query.cursor, locale, title: work.header.title,
+    })} />;
+  }
+  const none = contents.ok ? !contents.data.items.length && !query?.parent && !query?.cursor
+    : contents.failure === 'missing';
+  const textLanguage = none ? await oneTextLanguage(work.id, locale, work.header.selectedLanguage) : null;
+  const oneText = textLanguage
+    ? { title: work.header.title, language: textLanguage, book: coverKindOf(work.header.types) === 'book' } : null;
+  const groups = contents.ok && query && !query.parent ? contents.data.items.filter(item => item.role === 'group') : [];
+  const open = groups.find(item => idOf(item.occurrence) === query?.open)
+    ?? groups.find(item => item.division !== 'extras' && item.childCount) ?? groups[0];
+  const openPage = open && query ? await readContents(work.id, {
+    parent: idOf(open.occurrence) ?? undefined, language: query.language,
+  }) : null;
+  return <ContentsRegion contents={contents} workRef={ref} id={work.id} query={query ?? {}} oneText={oneText}
+    opened={open && openPage?.ok ? { occurrence: open.occurrence, page: openPage.data } : null}
+    groupAction={readContentsGroup} locale={locale} messages={messages} />;
 }
