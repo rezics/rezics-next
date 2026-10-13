@@ -110,6 +110,13 @@ async function supportingReads(sample: ReturnType<typeof recording.session>) {
   await answer(sample('zone-presentation', 'GET', viewer(`${zoneRoot}/presentation`)));
   await answer(sample('browse-route-fallback', 'GET', viewer(`${zoneRoot}/routes?path=browse`)), 404);
   await answer(sample('facet-labels', 'GET', '/v1/facets'));
+  await answer(sample('type-labels', 'GET', '/v1/types'));
+  const access = await answer<{ groups: string[]; operations: string[] }>(
+    sample('platform-access', 'GET', '/v1/me/platform-access'));
+  // The frame reads the viewer's ban only when Main opens that operation.
+  if (access.groups.includes('realm-appeals') || access.operations.includes('getV1RealmsByRealmMember-ban')) {
+    await answer(sample('member-ban-empty', 'GET', viewer(`${realmRoot}/member-ban`)), 404);
+  }
   await answer(sample('joining-context', 'GET', viewer(`${realmRoot}/joining`)));
   await answer(sample('follow-context', 'GET', viewer(`/v1/follows/${short(sessions.realm)}?kind=realm`)));
   for (let offset = 0; offset < inventory.matching.length; offset += 20) {
