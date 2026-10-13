@@ -27,7 +27,11 @@ export function episodeProgressWhere(read: Standing, t: Copy): string {
  * after each write the standing is read again, so a second device that loads the page sees the same.
  * Main currently exposes no episode coverage counts, so this panel makes no coverage claim.
  */
-export function EpisodeProgress({ work, api, t, className }: { work: string; api: EpisodeApi; t: Copy; className?: string }) {
+export function EpisodeProgress({ work, api, t, className, region }: {
+  work: string; api: EpisodeApi; t: Copy; className?: string;
+  /** Names this panel when more than one is on the page. One panel keeps its episode heading as the name. */
+  region?: string;
+}) {
   const headingId = useId();
   const jumpId = useId();
   const [standing, setStanding] = useState<Awaited<ReturnType<typeof standingOf>> | null>(null);
@@ -64,14 +68,15 @@ export function EpisodeProgress({ work, api, t, className }: { work: string; api
     return () => { if (current()) ++scope.request; };
   }, [api, work, reload]);
 
-  if (!standing) return <section aria-labelledby={headingId} data-episode-progress data-pending
+  const named = region ? { 'aria-label': region } : { 'aria-labelledby': headingId };
+  if (!standing) return <section {...named} data-episode-progress data-pending
     className={className ?? 'grid gap-4 rounded-2xl border border-border/60 p-4 sm:p-5'}>
     <h2 id={headingId} className="font-semibold text-xl tracking-tight">{t.episodes}</h2>
     <p role="status" className="text-muted-foreground text-sm">{t.unknown}</p>
   </section>;
   if (!standing.ok) {
     return standing.failure === 'missing' || standing.failure === 'sign-in' ? null
-      : <section aria-labelledby={headingId} className={className}>
+      : <section {...named} className={className}>
         <h2 id={headingId} className="sr-only">{t.episodes}</h2>
         <Alert variant="destructive" role="alert"><AlertDescription>{t.trackedUnavailable}</AlertDescription></Alert></section>;
   }
@@ -139,7 +144,7 @@ export function EpisodeProgress({ work, api, t, className }: { work: string; api
   }
 
   const mark = selected && typeof selected.mark === 'object' ? selected.mark : null;
-  return <section aria-labelledby={headingId} data-episode-progress
+  return <section {...named} data-episode-progress
     className={className ?? 'grid gap-4 rounded-2xl border border-border/60 p-4 sm:p-5'}>
     <h2 id={headingId} className="font-semibold text-xl tracking-tight">{t.episodes}</h2>
 
