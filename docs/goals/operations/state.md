@@ -1,16 +1,17 @@
 # State
 
-The checkpoint for [this Goal](GOAL.md), recording
-`mail:6d57eece-dac0-4e09-99a7-31b7a5e95a48` under
-`checkpoint:1dda2f87-977c-4b24-a000-ec15262f4882`, carrying forward the
-previous checkpoint's decisions. The listed mail delivery is acknowledged.
+The checkpoint for [this Goal](GOAL.md), recording `task:G-2287:1`,
+`mail:014c1ea7-cfd6-4e2a-b182-4af83283e2c3`, `task:G-2287:2` and
+`mail:b3c0deee-84a4-4d25-bfef-f82466a15cb8` under
+`checkpoint:f9b36d61-c62f-4266-8f2c-30d2b214671c`, carrying forward the
+previous checkpoint's decisions. Both listed mail deliveries are acknowledged.
 
 | Field | State |
 | --- | --- |
 | Manager | Enrolled with the coordinator on 2026-10-13 15:34 UTC |
 | Proved on physical fixtures | D108 restore consumption qualifies in two post-fix restores; no physical erasure row or OPS10 pass is proved |
 | Fixture | Current small `fx-small-180553eb933a` built once in 154.817 active seconds; post-fix restores qualify in 37.620 and 65.559 active seconds. Both it and superseded `fx-small-a3a906c1c1b7` remain retained; no pruning or repeat build is authorized |
-| Measures (`task goal -- status`) | Refreshed operations reading: first-attempt share 83% (5/6); attempts per landed task median 1, max 3 (G-2205); 23.5M input / 85.3k output tokens; tokens per proved row unavailable; no recorded refusals. No below-half dispatch stop is triggered |
+| Measures (`task goal -- status`) | Refreshed operations reading: first-attempt share 75% (6/8); attempts per landed task median 1, max 3 (G-2248); 42.7M input / 168.7k output tokens; tokens per proved row unavailable; no recorded refusals. No below-half dispatch stop is triggered |
 
 ## Work in progress
 
@@ -19,10 +20,10 @@ previous checkpoint's decisions. The listed mail delivery is acknowledged.
 | G-2202, release payload and image (D026) | Running, first attempt. Capture the missing-import failure, then prove packaged Main and actual local release-image startup with image identity and a healthy answer. An API failure after startup is a partial handoff |
 | G-2203, disposable Fuseki support (D016, D075, D109) | Program reports the support step accepted on main at `2502fc2597a7` (three files), task closed verified and claims released. Selected image, killed-container restart and bounded redacted readiness logs are landed support; physical checks remain red. Program already mailed API the revision |
 | G-2205, campaign fixture evidence (D108) | Attempt 3 consumer fix `ff6c24d890d58d1cb29234d6b8b7425fc6adaaf3` accepted as partial support; `land --step` succeeded, on main as `ef88de57e`. It admits only the authenticated initial model-bootstrap sequence advance and accounts for `align-model`. Static gates and 18 supporting tests pass; both post-fix restores qualify. Physical campaign remains red at candidate startup: `Content source field missing or ambiguous: field`. Keep open pending API's accepted G-2249 qualification and exact verdict; no worker resume now. Evidence: `.temp/worktrees/g-2205/.temp/goal/d108-evidence-inventory.json` |
-| G-2248, copied PostgreSQL startup | Partial support accepted and `land --step` succeeded at `01c3c623b1a0efc53ef0e95a0c7cfc4b5a22fd6b`. The primary's command-line `max_locks_per_transaction=256` was absent from backup configuration; the copy defaulted to 64. Capturing and applying the primary value repairs copied startup, with retained redacted diagnostics. QA reaches restore admission after 179.703 s preparation, then fails on retained-coverage journal epoch after 111 assertions. Keep open; no further worker work until API's accepted prerequisite and G-2269's accepted setup correction |
+| G-2248, copied PostgreSQL startup and shared lost-outcome helper | Startup support landed at `01c3c623b1a0efc53ef0e95a0c7cfc4b5a22fd6b`: capture and apply the primary's `max_locks_per_transaction=256` instead of the copy's default 64. QA reaches restore admission after 179.703 s preparation, then fails on retained-coverage journal epoch after 111 assertions. Resumed as sole fixture editor for completion's lost outer-outcome injection: use connection-class `08007`, accepted by `owner-failure.ts:36`, preserving every assertion, epoch fence and budget; qualify the committed tree with completion through admission. Earlier `55P03` qualification cannot qualify this fault model. Keep original physical rerun pending G-2269's accepted setup correction and the accepted API prerequisite; helper support proves no physical row |
 | G-2269, original source-erasure newer-head setup | Already running at the epoch-prerequisite decision; sole editor of the original comment-source-erasure test. API's G-2266 qualification is accepted on main at `67988f2bf2c5896142a817efd3d2e1de66fc037f`: real PostgreSQL, 41 assertions, 58.252 seconds active preparation, full check passed; service unchanged. Matching epochs publish; transactional historical supersession rolls back; stale NULL-to-1 and 1-to-2 captures refuse unchanged. No setup acceptance or physical pass is recorded by these events |
-| G-2287, sibling newer-head setups | Brief committed at `1280f5d98`; the queue at about 19:50 UTC was cut off during preparation and stayed in `starting`. Program reports it started at 21:26 UTC on 2026-10-13; no restart or worker action is needed. Correct completion/production siblings' historical stale-capture setup after the accepted G-2266 qualification through authenticated coverage and existing `copy.faultRetained`; preserve the actual newer-head restore refusal, journal, epoch fence, all final outcomes and budgets. No shared mechanism or service repair is authorized |
-| G-2249, retained Content and crash-fence qualification | API's existing retained-source qualification is running; G-2205's candidate refusal and matching log hash are carried into its retained-source and missing/ambiguous-source probes. The exception alone classifies neither a fixture nor a native defect. No completed qualification or accepted API revision is supplied; API will notify operations with revision, verdict, QA identities and evidence. Crash-fence remains a separate probe |
+| G-2287, sibling newer-head setups | Handoff pending; no landing accepted. Correction `a18cdbb03`, rebased to `cfb0f308b553bbd68b7ac23431cfa95a668c221d`, follows the historical fault contract; production observed newer-head refusal and head/authority restoration, but the incomplete run was source-unstable. Bounded diagnosis found completion's shared `XX000` fault mismatch (assigned to G-2248) and production's 360-second active ceiling, with last controls starting at 354.018 s. After Program removed external host pressure at 22:25 UTC, resumed for exactly one unchanged production-file measurement on the committed correction, with source frozen. Timing and qualification handoff remain to be decided; completion awaits accepted helper support |
+| G-2249, retained Content and crash-fence qualification | API's isolated title-only crash qualification landed at `fe7e0002fd0a0cda0e15b029ae641036efa85d9e`: source-stable QA `20261013t215346-33fc0f`, 22 assertions, 121764 ms. Dead-process search returns generation-unavailable (503); successful exclusive committed-generation audit clears uncertainty before public readiness, while failed auditing preserves the fence despite a durable receipt. This proves neither interrupted-body recovery nor physical erasure. One retained Content continuation is released under Program's two-backup split; no accepted retained reconstruction or missing/ambiguous-source verdict binds G-2205's candidate facts yet. D016 and campaign prerequisites remain unresolved |
 | Access recovery classification | API retains sole review and landing ownership in G-2214. G-2205's attempt-2 evidence records accepted Access revision `e2a24d6427c6237683a8c203f241c5467e0d51f3` present at capture `cd490077773a4c1bae92a34535f1bbfecef74e8f`; no independent physical restore is proved |
 | Erasure composition | API owns G-2223's fourth `mediaObjects` argument and real-composition Media regression. G-2205's same evidence records accepted composition revision `4aacb759395d48d9c7a80a08ba802cd68d1e4bf4` present at capture; no full physical erasure proof follows |
 
@@ -49,10 +50,23 @@ drill only after G-2269's correction is accepted, consuming the accepted API
 revision above. No stale publication admission, journal mutation, resealing,
 retries or weakened assertions are authorized. Selected history and
 borrowed-custody failures remain outside these claims and waive no gate.
-D016's retained Content and crash-fence questions remain API's separate probes.
+D016's retained Content prerequisite remains API's separate probe; the landed
+title-only crash verdict above does not resolve it or the original physical
+crash assertions.
 Program reports preparation recovery is automatic from tool revision
 `d22063edd`; report "is being prepared" lasting over five minutes to Program
-as a fault. G-2287's recovered start changes no brief or acceptance condition.
+as a fault. G-2287's support correction is not accepted for landing, and its
+source-unstable QA proves no complete outcome. Review G-2248's connection-class
+lost-outcome correction and completion proof separately. Review G-2287's one
+unchanged production measurement with its committed revision, source stability,
+QA identity, total active seconds and per-phase timing; its interrupted 21:44
+command is not counted. Report the measured active time, QA identity and verdict
+to Program in one line. A complete source-stable pass with room under 360 seconds
+requalifies production as written; another near-ceiling result is partial, with
+host-pressure evidence and no repeat run. Program reserves any harness brief
+until this measurement exists; no case split or additional task is assigned
+before that reading. Preserve all assertions, journal/epoch fences, retained
+backups and budgets; no service or classifier repair is authorized.
 This checkpoint changes only state, grants no new work or proof and requests no
 additional Program ruling.
 
