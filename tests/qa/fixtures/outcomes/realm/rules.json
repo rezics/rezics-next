@@ -1,0 +1,3069 @@
+{
+  "version": 1,
+  "row": "realm/rules",
+  "personas": {
+    "visitor": [
+      {
+        "label": "public-rules-zh",
+        "operationId": "getV1RealmsByRealm",
+        "method": "GET",
+        "path": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0?language=zh-CN",
+        "status": 200,
+        "answer": {
+          "profile": "realm-read-v1",
+          "id": "https://rezics.com/id/01a13686-6fd6-732c-8664-0a171a88a1f0",
+          "space": "https://rezics.com/id/01a13686-6f06-7699-8cd8-3f6cfc7a2c20",
+          "revision": "https://rezics.com/id/01a13686-6fd6-732e-bf10-b79bc15942d8",
+          "visibility": "public",
+          "reviewMode": "mandatory",
+          "policyRevision": "urn:rezics:receipt:708e050fdec7f740487f93ba37d2fc85b5325f183a01ac04ba2b4840af66d835",
+          "history": "everything",
+          "name": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "icon": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "realm",
+            "key": "12dc5a72aa18858ed6ccce16f4d87682"
+          },
+          "originalName": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "profileRevision": null,
+          "profileContract": null,
+          "listing": "listed",
+          "admission": "open",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "description": null,
+          "banner": null,
+          "rules": [
+            {
+              "id": "read-with-care",
+              "title": {
+                "value": "认真阅读",
+                "language": "zh-Hans",
+                "direction": "ltr",
+                "basis": "same-script"
+              },
+              "body": {
+                "value": "讨论角色之前，请先阅读故事。",
+                "language": "zh-Hans",
+                "direction": "ltr",
+                "basis": "same-script"
+              },
+              "governanceRule": null
+            }
+          ],
+          "membership": {
+            "count": {
+              "kind": "unknown",
+              "value": null
+            },
+            "publicMembers": null
+          },
+          "moderators": {
+            "kind": "unknown",
+            "items": []
+          },
+          "sourcePosition": {
+            "dataEpoch": "2886c81f-7cfa-4d40-860e-3167665b939d",
+            "sequence": "70"
+          },
+          "links": {
+            "works": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/works",
+            "decisions": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/decisions"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "private-rules-zh",
+        "operationId": "getV1RealmsByRealm",
+        "method": "GET",
+        "path": "/v1/realms/01a13686-9846-75bd-be59-f749cc13f98f?language=zh-CN",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "public-rules-en",
+        "operationId": "getV1RealmsByRealm",
+        "method": "GET",
+        "path": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0?language=en",
+        "status": 200,
+        "answer": {
+          "profile": "realm-read-v1",
+          "id": "https://rezics.com/id/01a13686-6fd6-732c-8664-0a171a88a1f0",
+          "space": "https://rezics.com/id/01a13686-6f06-7699-8cd8-3f6cfc7a2c20",
+          "revision": "https://rezics.com/id/01a13686-6fd6-732e-bf10-b79bc15942d8",
+          "visibility": "public",
+          "reviewMode": "mandatory",
+          "policyRevision": "urn:rezics:receipt:708e050fdec7f740487f93ba37d2fc85b5325f183a01ac04ba2b4840af66d835",
+          "history": "everything",
+          "name": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "requested"
+          },
+          "icon": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "realm",
+            "key": "12dc5a72aa18858ed6ccce16f4d87682"
+          },
+          "originalName": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "requested"
+          },
+          "profileRevision": null,
+          "profileContract": null,
+          "listing": "listed",
+          "admission": "open",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "description": null,
+          "banner": null,
+          "rules": [
+            {
+              "id": "read-with-care",
+              "title": {
+                "value": "Read with care",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "requested"
+              },
+              "body": {
+                "value": "Read the story before discussing its characters.",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "requested"
+              },
+              "governanceRule": null
+            }
+          ],
+          "membership": {
+            "count": {
+              "kind": "unknown",
+              "value": null
+            },
+            "publicMembers": null
+          },
+          "moderators": {
+            "kind": "unknown",
+            "items": []
+          },
+          "sourcePosition": {
+            "dataEpoch": "2886c81f-7cfa-4d40-860e-3167665b939d",
+            "sequence": "70"
+          },
+          "links": {
+            "works": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/works",
+            "decisions": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/decisions"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "public-rules-fr",
+        "operationId": "getV1RealmsByRealm",
+        "method": "GET",
+        "path": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0?language=fr",
+        "status": 200,
+        "answer": {
+          "profile": "realm-read-v1",
+          "id": "https://rezics.com/id/01a13686-6fd6-732c-8664-0a171a88a1f0",
+          "space": "https://rezics.com/id/01a13686-6f06-7699-8cd8-3f6cfc7a2c20",
+          "revision": "https://rezics.com/id/01a13686-6fd6-732e-bf10-b79bc15942d8",
+          "visibility": "public",
+          "reviewMode": "mandatory",
+          "policyRevision": "urn:rezics:receipt:708e050fdec7f740487f93ba37d2fc85b5325f183a01ac04ba2b4840af66d835",
+          "history": "everything",
+          "name": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "icon": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "realm",
+            "key": "12dc5a72aa18858ed6ccce16f4d87682"
+          },
+          "originalName": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "profileRevision": null,
+          "profileContract": null,
+          "listing": "listed",
+          "admission": "open",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "description": null,
+          "banner": null,
+          "rules": [
+            {
+              "id": "read-with-care",
+              "title": {
+                "value": "Read with care",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "fallback"
+              },
+              "body": {
+                "value": "Read the story before discussing its characters.",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "fallback"
+              },
+              "governanceRule": null
+            }
+          ],
+          "membership": {
+            "count": {
+              "kind": "unknown",
+              "value": null
+            },
+            "publicMembers": null
+          },
+          "moderators": {
+            "kind": "unknown",
+            "items": []
+          },
+          "sourcePosition": {
+            "dataEpoch": "2886c81f-7cfa-4d40-860e-3167665b939d",
+            "sequence": "70"
+          },
+          "links": {
+            "works": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/works",
+            "decisions": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/decisions"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "private-request-landing",
+        "operationId": "getV1RealmsByRealmJoin-page",
+        "method": "GET",
+        "path": "/v1/realms/01a13686-9846-75bd-be59-f749cc13f98f/join-page?language=zh-CN",
+        "status": 200,
+        "answer": {
+          "profile": "realm-join-page-v1",
+          "id": "https://rezics.com/id/01a13686-9846-75bd-be59-f749cc13f98f",
+          "space": "https://rezics.com/id/01a13686-9704-71ef-8243-b77c13fbc269",
+          "name": {
+            "value": "Outcome private Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "description": null,
+          "rules": [
+            {
+              "id": "read-with-care",
+              "title": {
+                "value": "认真阅读",
+                "language": "zh-Hans",
+                "direction": "ltr",
+                "basis": "same-script"
+              },
+              "body": {
+                "value": "讨论角色之前，请先阅读故事。",
+                "language": "zh-Hans",
+                "direction": "ltr",
+                "basis": "same-script"
+              }
+            }
+          ],
+          "action": {
+            "kind": "request",
+            "href": "/v1/realms/01a13686-9846-75bd-be59-f749cc13f98f/join-requests",
+            "method": "POST",
+            "basis": "/v1/realms/01a13686-9846-75bd-be59-f749cc13f98f/join-requests/basis"
+          },
+          "listing": "listed",
+          "discovery": {
+            "indexable": false,
+            "robots": "noindex",
+            "referrerPolicy": null
+          },
+          "sourcePosition": {
+            "dataEpoch": "2886c81f-7cfa-4d40-860e-3167665b939d",
+            "sequence": "70"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "rule-settings-denied",
+        "operationId": "getV1RealmsByRealmSettings",
+        "method": "GET",
+        "path": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/settings?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Faccc0f06-6dbd-4d76-9a91-5c13e38260ad",
+        "status": 401,
+        "answer": {
+          "type": "https://rezics.com/problems/account_assertion_denied",
+          "title": "Account assertion is invalid or inactive",
+          "status": 401,
+          "code": "account_assertion_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      }
+    ],
+    "stranger": [
+      {
+        "label": "public-rules-zh",
+        "operationId": "getV1RealmsByRealm",
+        "method": "GET",
+        "path": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0?language=zh-CN&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fbe80ab87-5cc3-4d61-afdb-83576b12957c",
+        "status": 200,
+        "answer": {
+          "profile": "realm-read-v1",
+          "id": "https://rezics.com/id/01a13686-6fd6-732c-8664-0a171a88a1f0",
+          "space": "https://rezics.com/id/01a13686-6f06-7699-8cd8-3f6cfc7a2c20",
+          "revision": "https://rezics.com/id/01a13686-6fd6-732e-bf10-b79bc15942d8",
+          "visibility": "public",
+          "reviewMode": "mandatory",
+          "policyRevision": "urn:rezics:receipt:708e050fdec7f740487f93ba37d2fc85b5325f183a01ac04ba2b4840af66d835",
+          "history": "everything",
+          "name": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "icon": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "realm",
+            "key": "12dc5a72aa18858ed6ccce16f4d87682"
+          },
+          "originalName": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "profileRevision": null,
+          "profileContract": null,
+          "listing": "listed",
+          "admission": "open",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "description": null,
+          "banner": null,
+          "rules": [
+            {
+              "id": "read-with-care",
+              "title": {
+                "value": "认真阅读",
+                "language": "zh-Hans",
+                "direction": "ltr",
+                "basis": "same-script"
+              },
+              "body": {
+                "value": "讨论角色之前，请先阅读故事。",
+                "language": "zh-Hans",
+                "direction": "ltr",
+                "basis": "same-script"
+              },
+              "governanceRule": null
+            }
+          ],
+          "membership": {
+            "count": {
+              "kind": "unknown",
+              "value": null
+            },
+            "publicMembers": null
+          },
+          "moderators": {
+            "kind": "unknown",
+            "items": []
+          },
+          "sourcePosition": {
+            "dataEpoch": "2886c81f-7cfa-4d40-860e-3167665b939d",
+            "sequence": "70"
+          },
+          "links": {
+            "works": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/works",
+            "decisions": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/decisions"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "private-rules-zh",
+        "operationId": "getV1RealmsByRealm",
+        "method": "GET",
+        "path": "/v1/realms/01a13686-9846-75bd-be59-f749cc13f98f?language=zh-CN&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F3dde3e8d-0ba3-4dfa-8554-4963a423d304",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "public-rules-en",
+        "operationId": "getV1RealmsByRealm",
+        "method": "GET",
+        "path": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fbe80ab87-5cc3-4d61-afdb-83576b12957c",
+        "status": 200,
+        "answer": {
+          "profile": "realm-read-v1",
+          "id": "https://rezics.com/id/01a13686-6fd6-732c-8664-0a171a88a1f0",
+          "space": "https://rezics.com/id/01a13686-6f06-7699-8cd8-3f6cfc7a2c20",
+          "revision": "https://rezics.com/id/01a13686-6fd6-732e-bf10-b79bc15942d8",
+          "visibility": "public",
+          "reviewMode": "mandatory",
+          "policyRevision": "urn:rezics:receipt:708e050fdec7f740487f93ba37d2fc85b5325f183a01ac04ba2b4840af66d835",
+          "history": "everything",
+          "name": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "requested"
+          },
+          "icon": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "realm",
+            "key": "12dc5a72aa18858ed6ccce16f4d87682"
+          },
+          "originalName": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "requested"
+          },
+          "profileRevision": null,
+          "profileContract": null,
+          "listing": "listed",
+          "admission": "open",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "description": null,
+          "banner": null,
+          "rules": [
+            {
+              "id": "read-with-care",
+              "title": {
+                "value": "Read with care",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "requested"
+              },
+              "body": {
+                "value": "Read the story before discussing its characters.",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "requested"
+              },
+              "governanceRule": null
+            }
+          ],
+          "membership": {
+            "count": {
+              "kind": "unknown",
+              "value": null
+            },
+            "publicMembers": null
+          },
+          "moderators": {
+            "kind": "unknown",
+            "items": []
+          },
+          "sourcePosition": {
+            "dataEpoch": "2886c81f-7cfa-4d40-860e-3167665b939d",
+            "sequence": "70"
+          },
+          "links": {
+            "works": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/works",
+            "decisions": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/decisions"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "public-rules-fr",
+        "operationId": "getV1RealmsByRealm",
+        "method": "GET",
+        "path": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0?language=fr&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fbe80ab87-5cc3-4d61-afdb-83576b12957c",
+        "status": 200,
+        "answer": {
+          "profile": "realm-read-v1",
+          "id": "https://rezics.com/id/01a13686-6fd6-732c-8664-0a171a88a1f0",
+          "space": "https://rezics.com/id/01a13686-6f06-7699-8cd8-3f6cfc7a2c20",
+          "revision": "https://rezics.com/id/01a13686-6fd6-732e-bf10-b79bc15942d8",
+          "visibility": "public",
+          "reviewMode": "mandatory",
+          "policyRevision": "urn:rezics:receipt:708e050fdec7f740487f93ba37d2fc85b5325f183a01ac04ba2b4840af66d835",
+          "history": "everything",
+          "name": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "icon": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "realm",
+            "key": "12dc5a72aa18858ed6ccce16f4d87682"
+          },
+          "originalName": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "profileRevision": null,
+          "profileContract": null,
+          "listing": "listed",
+          "admission": "open",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "description": null,
+          "banner": null,
+          "rules": [
+            {
+              "id": "read-with-care",
+              "title": {
+                "value": "Read with care",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "fallback"
+              },
+              "body": {
+                "value": "Read the story before discussing its characters.",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "fallback"
+              },
+              "governanceRule": null
+            }
+          ],
+          "membership": {
+            "count": {
+              "kind": "unknown",
+              "value": null
+            },
+            "publicMembers": null
+          },
+          "moderators": {
+            "kind": "unknown",
+            "items": []
+          },
+          "sourcePosition": {
+            "dataEpoch": "2886c81f-7cfa-4d40-860e-3167665b939d",
+            "sequence": "70"
+          },
+          "links": {
+            "works": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/works",
+            "decisions": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/decisions"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "private-request-landing",
+        "operationId": "getV1RealmsByRealmJoin-page",
+        "method": "GET",
+        "path": "/v1/realms/01a13686-9846-75bd-be59-f749cc13f98f/join-page?language=zh-CN&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F3dde3e8d-0ba3-4dfa-8554-4963a423d304",
+        "status": 200,
+        "answer": {
+          "profile": "realm-join-page-v1",
+          "id": "https://rezics.com/id/01a13686-9846-75bd-be59-f749cc13f98f",
+          "space": "https://rezics.com/id/01a13686-9704-71ef-8243-b77c13fbc269",
+          "name": {
+            "value": "Outcome private Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "description": null,
+          "rules": [
+            {
+              "id": "read-with-care",
+              "title": {
+                "value": "认真阅读",
+                "language": "zh-Hans",
+                "direction": "ltr",
+                "basis": "same-script"
+              },
+              "body": {
+                "value": "讨论角色之前，请先阅读故事。",
+                "language": "zh-Hans",
+                "direction": "ltr",
+                "basis": "same-script"
+              }
+            }
+          ],
+          "action": {
+            "kind": "request",
+            "href": "/v1/realms/01a13686-9846-75bd-be59-f749cc13f98f/join-requests",
+            "method": "POST",
+            "basis": "/v1/realms/01a13686-9846-75bd-be59-f749cc13f98f/join-requests/basis"
+          },
+          "listing": "listed",
+          "discovery": {
+            "indexable": false,
+            "robots": "noindex",
+            "referrerPolicy": null
+          },
+          "sourcePosition": {
+            "dataEpoch": "2886c81f-7cfa-4d40-860e-3167665b939d",
+            "sequence": "70"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "rule-settings-denied",
+        "operationId": "getV1RealmsByRealmSettings",
+        "method": "GET",
+        "path": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/settings?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fbe80ab87-5cc3-4d61-afdb-83576b12957c",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_management_denied",
+          "title": "Realm permission is missing",
+          "status": 403,
+          "code": "realm_management_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "submission-after-reading-rules",
+        "operationId": "postV1RealmsByRealmSubmissions",
+        "method": "POST",
+        "path": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/submissions",
+        "body": {
+          "actingSubject": "https://rezics.com/id/be80ab87-5cc3-4d61-afdb-83576b12957c",
+          "kind": "contribution",
+          "work": "https://rezics.com/id/01a13686-f85a-777f-82b4-e448e6e03ae2",
+          "mainVersion": "https://rezics.com/id/01a13686-f85a-7780-bba5-a04c5a26fa4c",
+          "contribution": "https://rezics.com/id/01a13686-fc4b-74c6-a18d-8e3cedec8dff",
+          "publicationDecision": "https://rezics.com/id/01a13687-030b-702b-9270-b9f17007669a",
+          "selectedDraft": "https://rezics.com/id/01a13686-fc4b-74c7-af20-ccad44a92d34",
+          "correctionOf": null
+        },
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/authority_denied",
+          "title": "Authority is not admitted",
+          "status": 403,
+          "code": "authority_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      }
+    ],
+    "member": [
+      {
+        "label": "public-rules-zh",
+        "operationId": "getV1RealmsByRealm",
+        "method": "GET",
+        "path": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0?language=zh-CN&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F29887029-0091-4645-a08e-3e02dbdb9eaa",
+        "status": 200,
+        "answer": {
+          "profile": "realm-read-v1",
+          "id": "https://rezics.com/id/01a13686-6fd6-732c-8664-0a171a88a1f0",
+          "space": "https://rezics.com/id/01a13686-6f06-7699-8cd8-3f6cfc7a2c20",
+          "revision": "https://rezics.com/id/01a13686-6fd6-732e-bf10-b79bc15942d8",
+          "visibility": "public",
+          "reviewMode": "mandatory",
+          "policyRevision": "urn:rezics:receipt:708e050fdec7f740487f93ba37d2fc85b5325f183a01ac04ba2b4840af66d835",
+          "history": "everything",
+          "name": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "icon": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "realm",
+            "key": "12dc5a72aa18858ed6ccce16f4d87682"
+          },
+          "originalName": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "profileRevision": null,
+          "profileContract": null,
+          "listing": "listed",
+          "admission": "open",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "description": null,
+          "banner": null,
+          "rules": [
+            {
+              "id": "read-with-care",
+              "title": {
+                "value": "认真阅读",
+                "language": "zh-Hans",
+                "direction": "ltr",
+                "basis": "same-script"
+              },
+              "body": {
+                "value": "讨论角色之前，请先阅读故事。",
+                "language": "zh-Hans",
+                "direction": "ltr",
+                "basis": "same-script"
+              },
+              "governanceRule": null
+            }
+          ],
+          "membership": {
+            "count": {
+              "kind": "unknown",
+              "value": null
+            },
+            "publicMembers": null
+          },
+          "moderators": {
+            "kind": "unknown",
+            "items": []
+          },
+          "sourcePosition": {
+            "dataEpoch": "2886c81f-7cfa-4d40-860e-3167665b939d",
+            "sequence": "73"
+          },
+          "links": {
+            "works": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/works",
+            "decisions": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/decisions"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "private-rules-zh",
+        "operationId": "getV1RealmsByRealm",
+        "method": "GET",
+        "path": "/v1/realms/01a13686-9846-75bd-be59-f749cc13f98f?language=zh-CN&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe8b9418b-7eb7-4c21-8852-f31f51dab44d",
+        "status": 200,
+        "answer": {
+          "profile": "realm-read-v1",
+          "id": "https://rezics.com/id/01a13686-9846-75bd-be59-f749cc13f98f",
+          "space": "https://rezics.com/id/01a13686-9704-71ef-8243-b77c13fbc269",
+          "revision": "https://rezics.com/id/01a13686-9846-75bf-87eb-42fd8363eaf9",
+          "visibility": "private",
+          "reviewMode": "mandatory",
+          "policyRevision": "urn:rezics:receipt:238d324a6b017e24d513d2d473056fb0bb7efd3ac27919590d8d606fcfc49890",
+          "history": "from-admission",
+          "name": {
+            "value": "Outcome private Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "icon": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "realm",
+            "key": "d9f15b482362fdd5f7cec24b16e9e6b7"
+          },
+          "originalName": {
+            "value": "Outcome private Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "profileRevision": null,
+          "profileContract": null,
+          "listing": "listed",
+          "admission": "request",
+          "discovery": {
+            "indexable": false,
+            "robots": "noindex",
+            "referrerPolicy": null
+          },
+          "description": null,
+          "banner": null,
+          "rules": [
+            {
+              "id": "read-with-care",
+              "title": {
+                "value": "认真阅读",
+                "language": "zh-Hans",
+                "direction": "ltr",
+                "basis": "same-script"
+              },
+              "body": {
+                "value": "讨论角色之前，请先阅读故事。",
+                "language": "zh-Hans",
+                "direction": "ltr",
+                "basis": "same-script"
+              },
+              "governanceRule": null
+            }
+          ],
+          "membership": {
+            "count": {
+              "kind": "unknown",
+              "value": null
+            },
+            "publicMembers": null
+          },
+          "moderators": {
+            "kind": "unknown",
+            "items": []
+          },
+          "sourcePosition": {
+            "dataEpoch": "2886c81f-7cfa-4d40-860e-3167665b939d",
+            "sequence": "73"
+          },
+          "links": {
+            "works": "/v1/realms/01a13686-9846-75bd-be59-f749cc13f98f/works",
+            "decisions": "/v1/realms/01a13686-9846-75bd-be59-f749cc13f98f/decisions"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "public-rules-en",
+        "operationId": "getV1RealmsByRealm",
+        "method": "GET",
+        "path": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F29887029-0091-4645-a08e-3e02dbdb9eaa",
+        "status": 200,
+        "answer": {
+          "profile": "realm-read-v1",
+          "id": "https://rezics.com/id/01a13686-6fd6-732c-8664-0a171a88a1f0",
+          "space": "https://rezics.com/id/01a13686-6f06-7699-8cd8-3f6cfc7a2c20",
+          "revision": "https://rezics.com/id/01a13686-6fd6-732e-bf10-b79bc15942d8",
+          "visibility": "public",
+          "reviewMode": "mandatory",
+          "policyRevision": "urn:rezics:receipt:708e050fdec7f740487f93ba37d2fc85b5325f183a01ac04ba2b4840af66d835",
+          "history": "everything",
+          "name": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "requested"
+          },
+          "icon": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "realm",
+            "key": "12dc5a72aa18858ed6ccce16f4d87682"
+          },
+          "originalName": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "requested"
+          },
+          "profileRevision": null,
+          "profileContract": null,
+          "listing": "listed",
+          "admission": "open",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "description": null,
+          "banner": null,
+          "rules": [
+            {
+              "id": "read-with-care",
+              "title": {
+                "value": "Read with care",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "requested"
+              },
+              "body": {
+                "value": "Read the story before discussing its characters.",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "requested"
+              },
+              "governanceRule": null
+            }
+          ],
+          "membership": {
+            "count": {
+              "kind": "unknown",
+              "value": null
+            },
+            "publicMembers": null
+          },
+          "moderators": {
+            "kind": "unknown",
+            "items": []
+          },
+          "sourcePosition": {
+            "dataEpoch": "2886c81f-7cfa-4d40-860e-3167665b939d",
+            "sequence": "73"
+          },
+          "links": {
+            "works": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/works",
+            "decisions": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/decisions"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "public-rules-fr",
+        "operationId": "getV1RealmsByRealm",
+        "method": "GET",
+        "path": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0?language=fr&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F29887029-0091-4645-a08e-3e02dbdb9eaa",
+        "status": 200,
+        "answer": {
+          "profile": "realm-read-v1",
+          "id": "https://rezics.com/id/01a13686-6fd6-732c-8664-0a171a88a1f0",
+          "space": "https://rezics.com/id/01a13686-6f06-7699-8cd8-3f6cfc7a2c20",
+          "revision": "https://rezics.com/id/01a13686-6fd6-732e-bf10-b79bc15942d8",
+          "visibility": "public",
+          "reviewMode": "mandatory",
+          "policyRevision": "urn:rezics:receipt:708e050fdec7f740487f93ba37d2fc85b5325f183a01ac04ba2b4840af66d835",
+          "history": "everything",
+          "name": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "icon": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "realm",
+            "key": "12dc5a72aa18858ed6ccce16f4d87682"
+          },
+          "originalName": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "profileRevision": null,
+          "profileContract": null,
+          "listing": "listed",
+          "admission": "open",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "description": null,
+          "banner": null,
+          "rules": [
+            {
+              "id": "read-with-care",
+              "title": {
+                "value": "Read with care",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "fallback"
+              },
+              "body": {
+                "value": "Read the story before discussing its characters.",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "fallback"
+              },
+              "governanceRule": null
+            }
+          ],
+          "membership": {
+            "count": {
+              "kind": "unknown",
+              "value": null
+            },
+            "publicMembers": null
+          },
+          "moderators": {
+            "kind": "unknown",
+            "items": []
+          },
+          "sourcePosition": {
+            "dataEpoch": "2886c81f-7cfa-4d40-860e-3167665b939d",
+            "sequence": "73"
+          },
+          "links": {
+            "works": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/works",
+            "decisions": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/decisions"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "private-request-landing",
+        "operationId": "getV1RealmsByRealmJoin-page",
+        "method": "GET",
+        "path": "/v1/realms/01a13686-9846-75bd-be59-f749cc13f98f/join-page?language=zh-CN&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe8b9418b-7eb7-4c21-8852-f31f51dab44d",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "rule-settings-denied",
+        "operationId": "getV1RealmsByRealmSettings",
+        "method": "GET",
+        "path": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/settings?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F29887029-0091-4645-a08e-3e02dbdb9eaa",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_management_denied",
+          "title": "Realm permission is missing",
+          "status": 403,
+          "code": "realm_management_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "submission-after-reading-rules",
+        "operationId": "postV1RealmsByRealmSubmissions",
+        "method": "POST",
+        "path": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/submissions",
+        "body": {
+          "actingSubject": "https://rezics.com/id/29887029-0091-4645-a08e-3e02dbdb9eaa",
+          "kind": "contribution",
+          "work": "https://rezics.com/id/01a13687-1d18-704e-863c-cffcf1717fc5",
+          "mainVersion": "https://rezics.com/id/01a13687-1d18-704f-97d0-cc8281a0e1a5",
+          "contribution": "https://rezics.com/id/01a13687-26dd-7292-8f4f-e0a9644b6eda",
+          "publicationDecision": "https://rezics.com/id/01a13687-2ccd-7387-8454-ff979e60758e",
+          "selectedDraft": "https://rezics.com/id/01a13687-26dd-7293-b6c9-f9ad11780400",
+          "correctionOf": null
+        },
+        "status": 201,
+        "answer": {
+          "submission": {
+            "id": "8642361c-5e16-4eeb-a567-1d5f0cfdcf20",
+            "realm": "https://rezics.com/id/01a13686-6fd6-732c-8664-0a171a88a1f0",
+            "kind": "contribution",
+            "work": "https://rezics.com/id/01a13687-1d18-704e-863c-cffcf1717fc5",
+            "mainVersion": "https://rezics.com/id/01a13687-1d18-704f-97d0-cc8281a0e1a5",
+            "target": null,
+            "contribution": "https://rezics.com/id/01a13687-26dd-7292-8f4f-e0a9644b6eda",
+            "publicationDecision": "https://rezics.com/id/01a13687-2ccd-7387-8454-ff979e60758e",
+            "selectedDraft": "https://rezics.com/id/01a13687-26dd-7293-b6c9-f9ad11780400",
+            "correctionOf": null,
+            "submittingAgent": "https://rezics.com/id/29887029-0091-4645-a08e-3e02dbdb9eaa",
+            "state": "pending",
+            "revision": "dfd4f0e9-0d48-4305-8637-3a612128506c",
+            "generation": "0",
+            "reviewer": null,
+            "publicReason": null,
+            "selection": null,
+            "adoptionReceipt": null,
+            "openedAt": "2026-10-13T18:29:52.883Z",
+            "updatedAt": "2026-10-13T18:29:52.883Z"
+          },
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      }
+    ],
+    "owner": [
+      {
+        "label": "public-rules-zh",
+        "operationId": "getV1RealmsByRealm",
+        "method": "GET",
+        "path": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0?language=zh-CN&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Faccc0f06-6dbd-4d76-9a91-5c13e38260ad",
+        "status": 200,
+        "answer": {
+          "profile": "realm-read-v1",
+          "id": "https://rezics.com/id/01a13686-6fd6-732c-8664-0a171a88a1f0",
+          "space": "https://rezics.com/id/01a13686-6f06-7699-8cd8-3f6cfc7a2c20",
+          "revision": "https://rezics.com/id/01a13686-6fd6-732e-bf10-b79bc15942d8",
+          "visibility": "public",
+          "reviewMode": "mandatory",
+          "policyRevision": "urn:rezics:receipt:708e050fdec7f740487f93ba37d2fc85b5325f183a01ac04ba2b4840af66d835",
+          "history": "everything",
+          "name": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "icon": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "realm",
+            "key": "12dc5a72aa18858ed6ccce16f4d87682"
+          },
+          "originalName": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "profileRevision": null,
+          "profileContract": null,
+          "listing": "listed",
+          "admission": "open",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "description": null,
+          "banner": null,
+          "rules": [
+            {
+              "id": "read-with-care",
+              "title": {
+                "value": "认真阅读",
+                "language": "zh-Hans",
+                "direction": "ltr",
+                "basis": "same-script"
+              },
+              "body": {
+                "value": "讨论角色之前，请先阅读故事。",
+                "language": "zh-Hans",
+                "direction": "ltr",
+                "basis": "same-script"
+              },
+              "governanceRule": null
+            }
+          ],
+          "membership": {
+            "count": {
+              "kind": "unknown",
+              "value": null
+            },
+            "publicMembers": null
+          },
+          "moderators": {
+            "kind": "unknown",
+            "items": []
+          },
+          "sourcePosition": {
+            "dataEpoch": "2886c81f-7cfa-4d40-860e-3167665b939d",
+            "sequence": "77"
+          },
+          "links": {
+            "works": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/works",
+            "decisions": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/decisions"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "private-rules-zh",
+        "operationId": "getV1RealmsByRealm",
+        "method": "GET",
+        "path": "/v1/realms/01a13686-9846-75bd-be59-f749cc13f98f?language=zh-CN&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa399c42b-3551-4326-bef4-426a3e4c0203",
+        "status": 200,
+        "answer": {
+          "profile": "realm-read-v1",
+          "id": "https://rezics.com/id/01a13686-9846-75bd-be59-f749cc13f98f",
+          "space": "https://rezics.com/id/01a13686-9704-71ef-8243-b77c13fbc269",
+          "revision": "https://rezics.com/id/01a13686-9846-75bf-87eb-42fd8363eaf9",
+          "visibility": "private",
+          "reviewMode": "mandatory",
+          "policyRevision": "urn:rezics:receipt:238d324a6b017e24d513d2d473056fb0bb7efd3ac27919590d8d606fcfc49890",
+          "history": "from-admission",
+          "name": {
+            "value": "Outcome private Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "icon": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "realm",
+            "key": "d9f15b482362fdd5f7cec24b16e9e6b7"
+          },
+          "originalName": {
+            "value": "Outcome private Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "profileRevision": null,
+          "profileContract": null,
+          "listing": "listed",
+          "admission": "request",
+          "discovery": {
+            "indexable": false,
+            "robots": "noindex",
+            "referrerPolicy": null
+          },
+          "description": null,
+          "banner": null,
+          "rules": [
+            {
+              "id": "read-with-care",
+              "title": {
+                "value": "认真阅读",
+                "language": "zh-Hans",
+                "direction": "ltr",
+                "basis": "same-script"
+              },
+              "body": {
+                "value": "讨论角色之前，请先阅读故事。",
+                "language": "zh-Hans",
+                "direction": "ltr",
+                "basis": "same-script"
+              },
+              "governanceRule": null
+            }
+          ],
+          "membership": {
+            "count": {
+              "kind": "unknown",
+              "value": null
+            },
+            "publicMembers": null
+          },
+          "moderators": {
+            "kind": "unknown",
+            "items": []
+          },
+          "sourcePosition": {
+            "dataEpoch": "2886c81f-7cfa-4d40-860e-3167665b939d",
+            "sequence": "77"
+          },
+          "links": {
+            "works": "/v1/realms/01a13686-9846-75bd-be59-f749cc13f98f/works",
+            "decisions": "/v1/realms/01a13686-9846-75bd-be59-f749cc13f98f/decisions"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "public-rules-en",
+        "operationId": "getV1RealmsByRealm",
+        "method": "GET",
+        "path": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Faccc0f06-6dbd-4d76-9a91-5c13e38260ad",
+        "status": 200,
+        "answer": {
+          "profile": "realm-read-v1",
+          "id": "https://rezics.com/id/01a13686-6fd6-732c-8664-0a171a88a1f0",
+          "space": "https://rezics.com/id/01a13686-6f06-7699-8cd8-3f6cfc7a2c20",
+          "revision": "https://rezics.com/id/01a13686-6fd6-732e-bf10-b79bc15942d8",
+          "visibility": "public",
+          "reviewMode": "mandatory",
+          "policyRevision": "urn:rezics:receipt:708e050fdec7f740487f93ba37d2fc85b5325f183a01ac04ba2b4840af66d835",
+          "history": "everything",
+          "name": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "requested"
+          },
+          "icon": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "realm",
+            "key": "12dc5a72aa18858ed6ccce16f4d87682"
+          },
+          "originalName": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "requested"
+          },
+          "profileRevision": null,
+          "profileContract": null,
+          "listing": "listed",
+          "admission": "open",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "description": null,
+          "banner": null,
+          "rules": [
+            {
+              "id": "read-with-care",
+              "title": {
+                "value": "Read with care",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "requested"
+              },
+              "body": {
+                "value": "Read the story before discussing its characters.",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "requested"
+              },
+              "governanceRule": null
+            }
+          ],
+          "membership": {
+            "count": {
+              "kind": "unknown",
+              "value": null
+            },
+            "publicMembers": null
+          },
+          "moderators": {
+            "kind": "unknown",
+            "items": []
+          },
+          "sourcePosition": {
+            "dataEpoch": "2886c81f-7cfa-4d40-860e-3167665b939d",
+            "sequence": "77"
+          },
+          "links": {
+            "works": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/works",
+            "decisions": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/decisions"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "public-rules-fr",
+        "operationId": "getV1RealmsByRealm",
+        "method": "GET",
+        "path": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0?language=fr&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Faccc0f06-6dbd-4d76-9a91-5c13e38260ad",
+        "status": 200,
+        "answer": {
+          "profile": "realm-read-v1",
+          "id": "https://rezics.com/id/01a13686-6fd6-732c-8664-0a171a88a1f0",
+          "space": "https://rezics.com/id/01a13686-6f06-7699-8cd8-3f6cfc7a2c20",
+          "revision": "https://rezics.com/id/01a13686-6fd6-732e-bf10-b79bc15942d8",
+          "visibility": "public",
+          "reviewMode": "mandatory",
+          "policyRevision": "urn:rezics:receipt:708e050fdec7f740487f93ba37d2fc85b5325f183a01ac04ba2b4840af66d835",
+          "history": "everything",
+          "name": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "icon": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "realm",
+            "key": "12dc5a72aa18858ed6ccce16f4d87682"
+          },
+          "originalName": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "profileRevision": null,
+          "profileContract": null,
+          "listing": "listed",
+          "admission": "open",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "description": null,
+          "banner": null,
+          "rules": [
+            {
+              "id": "read-with-care",
+              "title": {
+                "value": "Read with care",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "fallback"
+              },
+              "body": {
+                "value": "Read the story before discussing its characters.",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "fallback"
+              },
+              "governanceRule": null
+            }
+          ],
+          "membership": {
+            "count": {
+              "kind": "unknown",
+              "value": null
+            },
+            "publicMembers": null
+          },
+          "moderators": {
+            "kind": "unknown",
+            "items": []
+          },
+          "sourcePosition": {
+            "dataEpoch": "2886c81f-7cfa-4d40-860e-3167665b939d",
+            "sequence": "77"
+          },
+          "links": {
+            "works": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/works",
+            "decisions": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/decisions"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "private-request-landing",
+        "operationId": "getV1RealmsByRealmJoin-page",
+        "method": "GET",
+        "path": "/v1/realms/01a13686-9846-75bd-be59-f749cc13f98f/join-page?language=zh-CN&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa399c42b-3551-4326-bef4-426a3e4c0203",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "session-agent",
+        "operationId": "getV1MeSession-agent",
+        "method": "GET",
+        "path": "/v1/me/session-agent",
+        "status": 200,
+        "answer": {
+          "profile": "session-agent-v1",
+          "sessionAgent": {
+            "actingSubject": "https://rezics.com/id/accc0f06-6dbd-4d76-9a91-5c13e38260ad",
+            "revision": "30f50cda-a74e-4e8b-a530-21a0f67ceb5c",
+            "eligible": true
+          },
+          "mainAgent": {
+            "actingSubject": null,
+            "revision": null,
+            "eligible": false
+          },
+          "initialActingSubject": null
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "agent-choices",
+        "operationId": "getV1MeAgents",
+        "method": "GET",
+        "path": "/v1/me/agents?languages=en",
+        "status": 200,
+        "answer": {
+          "profile": "agent-discovery-v1",
+          "complete": true,
+          "items": [
+            {
+              "actingSubject": "https://rezics.com/id/accc0f06-6dbd-4d76-9a91-5c13e38260ad",
+              "kind": "person",
+              "handle": null,
+              "displayName": {
+                "value": "Outcome owner",
+                "language": "und",
+                "direction": "ltr"
+              }
+            }
+          ]
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "acting-contexts",
+        "operationId": "getV1MeActing-contexts",
+        "method": "GET",
+        "path": "/v1/me/acting-contexts?task=work.create",
+        "status": 200,
+        "answer": {
+          "profile": "work-create-acting-contexts-v1",
+          "task": "work.create",
+          "scope": "work:create:root",
+          "authorityEpoch": "0",
+          "contexts": [
+            {
+              "actingSubject": "https://rezics.com/id/accc0f06-6dbd-4d76-9a91-5c13e38260ad",
+              "displayName": "Outcome owner",
+              "handle": null,
+              "kind": "person"
+            }
+          ],
+          "directContexts": [],
+          "preferredActingSubject": null,
+          "savedPreference": null,
+          "preferenceRevision": null,
+          "complete": true
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "acting-agent-profile",
+        "operationId": "getV1AgentsById",
+        "method": "GET",
+        "path": "/v1/agents/accc0f06-6dbd-4d76-9a91-5c13e38260ad?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Faccc0f06-6dbd-4d76-9a91-5c13e38260ad",
+        "status": 200,
+        "answer": {
+          "profile": "agent-read-v1",
+          "id": "https://rezics.com/id/accc0f06-6dbd-4d76-9a91-5c13e38260ad",
+          "displayName": "Outcome owner",
+          "kind": "person",
+          "revision": "https://rezics.com/id/4ecd62b6-b09b-42a4-a624-3aa944460c3a-agent-revision",
+          "bio": null,
+          "displayNameInfo": null,
+          "originalDisplayName": "Outcome owner",
+          "localizedNames": null,
+          "avatarSelection": null,
+          "avatarUrl": null,
+          "handle": null,
+          "address": {
+            "prefix": "/a/",
+            "key": "NLb6qCohsLbTer93pPA8Te",
+            "suffixSource": ""
+          },
+          "disclosure": "public",
+          "listing": "listed",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "sourcePosition": {
+            "dataEpoch": "2886c81f-7cfa-4d40-860e-3167665b939d",
+            "sequence": "77"
+          },
+          "library": {
+            "visibility": "private",
+            "statusShelvesVisible": true
+          },
+          "links": {
+            "profile": "/a/NLb6qCohsLbTer93pPA8Te",
+            "works": "/v1/agents/accc0f06-6dbd-4d76-9a91-5c13e38260ad/works",
+            "collections": "/v1/agents/accc0f06-6dbd-4d76-9a91-5c13e38260ad/collections",
+            "statusShelves": "/v1/me/shelves?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Faccc0f06-6dbd-4d76-9a91-5c13e38260ad"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json"
+        }
+      },
+      {
+        "label": "rule-settings",
+        "operationId": "getV1RealmsByRealmSettings",
+        "method": "GET",
+        "path": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/settings?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Faccc0f06-6dbd-4d76-9a91-5c13e38260ad",
+        "status": 200,
+        "answer": {
+          "generation": "6",
+          "settings": {
+            "visibility": "public",
+            "reviewRequired": true,
+            "reviewMode": "mandatory",
+            "whoMaySubmit": "members",
+            "selfJoin": true,
+            "rules": [
+              {
+                "id": "read-with-care",
+                "body": {
+                  "labels": {
+                    "en": "Read the story before discussing its characters.",
+                    "zh-Hans": "讨论角色之前，请先阅读故事。"
+                  },
+                  "original": "en"
+                },
+                "title": {
+                  "labels": {
+                    "en": "Read with care",
+                    "zh-Hans": "认真阅读"
+                  },
+                  "original": "en"
+                },
+                "governanceRule": null
+              }
+            ]
+          },
+          "ruleBasis": {
+            "ref": "urn:rezics:realm-rules:01a13686-6fd6-732c-8664-0a171a88a1f0",
+            "revision": "2",
+            "digest": "b4d1b8eefcb622f94bb7a6b9db129e2853ad2bcefa0802f21db40acce1dd4abc"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "space-settings",
+        "operationId": "getV1SpacesBySpaceSettings",
+        "method": "GET",
+        "path": "/v1/spaces/01a13686-6f06-7699-8cd8-3f6cfc7a2c20/settings?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Faccc0f06-6dbd-4d76-9a91-5c13e38260ad",
+        "status": 200,
+        "answer": {
+          "space": "https://rezics.com/id/01a13686-6f06-7699-8cd8-3f6cfc7a2c20",
+          "realm": "https://rezics.com/id/01a13686-6fd6-732c-8664-0a171a88a1f0",
+          "generation": "6",
+          "settings": {
+            "visibility": "public",
+            "listing": "listed",
+            "history": "everything",
+            "admission": "open"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "legacy-space-settings-denied",
+        "operationId": "getV1SpacesBySpaceSettings",
+        "method": "GET",
+        "path": "/v1/spaces/01a13686-6fd6-732c-8664-0a171a88a1f0/settings?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Faccc0f06-6dbd-4d76-9a91-5c13e38260ad",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_management_denied",
+          "title": "Space management is unavailable",
+          "status": 403,
+          "code": "realm_management_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "reading-preferences",
+        "operationId": "getV1MePerson-preferences",
+        "method": "GET",
+        "path": "/v1/me/person-preferences?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Faccc0f06-6dbd-4d76-9a91-5c13e38260ad",
+        "status": 200,
+        "answer": {
+          "profile": "person-preferences-v1",
+          "profileVisibility": "public",
+          "followPolicy": "everyone",
+          "hideReadingActivity": false,
+          "contentLanguages": [],
+          "spoilerPolicy": "hide-unread",
+          "version": 0,
+          "blockedPeople": []
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "realm-address",
+        "operationId": "getV1AddressesResolve",
+        "method": "GET",
+        "path": "/v1/addresses/resolve?scope=space&key=01a13686-6fd6-732c-8664-0a171a88a1f0",
+        "status": 200,
+        "answer": {
+          "profile": "address-resolution-v1",
+          "scope": "space",
+          "key": "01a13686-6fd6-732c-8664-0a171a88a1f0",
+          "status": "resolved",
+          "holder": "https://rezics.com/id/01a13686-6f06-7699-8cd8-3f6cfc7a2c20",
+          "state": "current",
+          "canonical": {
+            "prefix": "/r/",
+            "key": "outcome-cbaedc85-3cf",
+            "suffixSource": "Outcome public Realm"
+          },
+          "capabilities": {
+            "realm": "https://rezics.com/id/01a13686-6fd6-732c-8664-0a171a88a1f0"
+          }
+        },
+        "headers": {
+          "cache-control": "public, max-age=30, must-revalidate",
+          "content-type": "application/json",
+          "etag": "\"address-identity-8e2db2a71a0d63a93b3005f920b1da34dbce7363fa9ff6aeb694ee9e518763c4\""
+        }
+      },
+      {
+        "label": "joining-policy",
+        "operationId": "getV1RealmsByRealmJoining",
+        "method": "GET",
+        "path": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/joining?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Faccc0f06-6dbd-4d76-9a91-5c13e38260ad",
+        "status": 200,
+        "answer": {
+          "realm": "https://rezics.com/id/01a13686-6fd6-732c-8664-0a171a88a1f0",
+          "policyRevision": "1",
+          "termsRevision": "realm-membership-v1",
+          "open": true,
+          "selfJoin": true,
+          "membershipGeneration": "0",
+          "state": "absent"
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "realm-follow",
+        "operationId": "getV1FollowsById",
+        "method": "GET",
+        "path": "/v1/follows/01a13686-6fd6-732c-8664-0a171a88a1f0?kind=realm&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Faccc0f06-6dbd-4d76-9a91-5c13e38260ad",
+        "status": 200,
+        "answer": {
+          "profile": "follow-state-v1",
+          "target": {
+            "id": "https://rezics.com/id/01a13686-6f06-7699-8cd8-3f6cfc7a2c20",
+            "kind": "space",
+            "name": {
+              "value": "Outcome public Realm",
+              "language": "en",
+              "direction": "ltr",
+              "basis": "fallback"
+            },
+            "icon": {
+              "kind": "fallback",
+              "policy": "avatar-fallback-v1",
+              "resourceType": "realm",
+              "key": "12dc5a72aa18858ed6ccce16f4d87682"
+            },
+            "realm": "https://rezics.com/id/01a13686-6fd6-732c-8664-0a171a88a1f0",
+            "href": "/r/01a13686-6fd6-732c-8664-0a171a88a1f0"
+          },
+          "following": false,
+          "revision": null,
+          "level": null,
+          "source": null,
+          "pinPosition": null,
+          "followers": {
+            "value": 2,
+            "kind": "exact"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "appeal-access",
+        "operationId": "getV1MePlatform-access",
+        "method": "GET",
+        "path": "/v1/me/platform-access",
+        "status": 200,
+        "answer": {
+          "groups": [],
+          "operations": [],
+          "generation": "f63d99cc8ba7444b2bc346fc34c54e86bd6e97207141b5e1f28e38da9bbfb367"
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "own-ban-absent",
+        "operationId": "getV1RealmsByRealmMember-ban",
+        "method": "GET",
+        "path": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/member-ban?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Faccc0f06-6dbd-4d76-9a91-5c13e38260ad",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/appeal_unavailable",
+          "title": "Appeal is unavailable",
+          "status": 404,
+          "code": "appeal_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "management-site",
+        "operationId": "getV1RealmsByRealmZone",
+        "method": "GET",
+        "path": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/zone?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Faccc0f06-6dbd-4d76-9a91-5c13e38260ad",
+        "status": 503,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_read_unavailable",
+          "title": "Realm read is unavailable",
+          "status": 503,
+          "code": "realm_read_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "site-editor-access",
+        "operationId": "getV1ZonesByIdShowcase-editor",
+        "method": "GET",
+        "path": "/v1/zones/80745e00-940b-8671-a4a7-19dfe8bf9ef5/showcase-editor?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Faccc0f06-6dbd-4d76-9a91-5c13e38260ad",
+        "status": 200,
+        "answer": {
+          "zone": "https://rezics.com/id/80745e00-940b-8671-a4a7-19dfe8bf9ef5",
+          "revision": "https://rezics.com/id/01a13686-7e27-718e-90b1-9e9169e05aad",
+          "configuration": {
+            "format": "rezics-zone-config-v1",
+            "zone": "https://rezics.com/id/80745e00-940b-8671-a4a7-19dfe8bf9ef5",
+            "space": "https://rezics.com/id/01a13686-7a94-73ca-a4f3-68c47211680e",
+            "navigation": "https://rezics.com/id/0ea05863-656d-824d-a259-342ef7234362",
+            "state": "active",
+            "disclosure": "public",
+            "budget": {
+              "timeMs": 2000,
+              "rows": 1000
+            },
+            "queryBlocks": [],
+            "model": "https://rezics.com/definition/zone-capability-v1",
+            "defaultRealm": "https://rezics.com/id/01a13686-6fd6-732c-8664-0a171a88a1f0"
+          },
+          "name": "Outcome Realm site",
+          "language": "en",
+          "direction": "ltr",
+          "slideMedia": [],
+          "preview": {
+            "page": null,
+            "presentation": {
+              "profile": "zone-presentation-v2",
+              "preset": "clean",
+              "tokens": {
+                "colorScheme": "system",
+                "accent": "#2563eb",
+                "density": "comfortable",
+                "cardRadius": "md",
+                "headingFontScale": "md",
+                "surfaceTint": "none",
+                "fontPairing": "sans",
+                "pageSurface": "flat",
+                "coverStyle": "portrait",
+                "titleEffect": "plain"
+              },
+              "navigation": [],
+              "slides": [],
+              "modules": []
+            },
+            "moduleData": [],
+            "slideMedia": [],
+            "renderTokens": {
+              "colorScheme": "system",
+              "accent": "#2563eb",
+              "density": "comfortable",
+              "cardRadius": "md",
+              "headingFontScale": "md",
+              "surfaceTint": "none",
+              "fontPairing": "sans",
+              "pageSurface": "flat",
+              "coverStyle": "portrait",
+              "titleEffect": "plain",
+              "textOnAccent": "#ffffff"
+            },
+            "publicationStatus": "private",
+            "navigation": {
+              "navigation": "https://rezics.com/id/0ea05863-656d-824d-a259-342ef7234362",
+              "revision": "https://rezics.com/id/10dbc28f-a9f0-87d0-98b8-fd353a7dc31b",
+              "mounts": [],
+              "next": null,
+              "sourcePosition": {
+                "datasetId": "product",
+                "dataEpoch": "2886c81f-7cfa-4d40-860e-3167665b939d",
+                "sequence": "52"
+              }
+            }
+          },
+          "draft": {
+            "variantId": "urn:rezics:variant:42930a92-f039-8281-9549-44375db0e46c",
+            "revisionId": null,
+            "language": {
+              "kind": "tag",
+              "tag": "en",
+              "originalTag": "en"
+            },
+            "direction": "ltr",
+            "document": null,
+            "byteDigest": null,
+            "editable": true,
+            "sourcePosition": {
+              "owner": "content",
+              "dataEpoch": "51f08306-4f01-466d-a3ee-9ccabb28a66f",
+              "sequence": "0"
+            }
+          },
+          "publishedPage": null,
+          "cost": {
+            "graphReads": 1,
+            "objectReads": 2,
+            "maxSlides": 6,
+            "maxCampaignUses": 128,
+            "maxCampaignMediaReads": 4,
+            "authorityProbes": 2,
+            "maxModuleGraphReads": 128,
+            "maxResolvedBlocks": 8,
+            "maxResolvedCollections": 4,
+            "maxNavigation": 50,
+            "maxNavigationGraphReads": 2048,
+            "maxNavigationGraphBytes": 8388608,
+            "maxResponseBytes": 4194304
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json"
+        }
+      },
+      {
+        "label": "rules-empty",
+        "operationId": "getV1RealmsByRealm",
+        "method": "GET",
+        "path": "/v1/realms/01a13686-b73c-7287-a1dd-04c67b0b6026?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F842385fa-7403-459e-8ac3-0af7f16580d5",
+        "status": 200,
+        "answer": {
+          "profile": "realm-read-v1",
+          "id": "https://rezics.com/id/01a13686-b73c-7287-a1dd-04c67b0b6026",
+          "space": "https://rezics.com/id/01a13686-b686-730d-952f-686a52416169",
+          "revision": "https://rezics.com/id/01a13686-b73c-7289-80f5-eaddd2025cb6",
+          "visibility": "public",
+          "reviewMode": "open",
+          "policyRevision": "urn:rezics:receipt:e8eecc148b3b62639b8af551f83eeeaf4feba16b271a7af4059d2e90f6ba4949",
+          "history": "everything",
+          "name": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "icon": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "realm",
+            "key": "3e25b00ba43c499e0534c156f6013bb2"
+          },
+          "originalName": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "profileRevision": null,
+          "profileContract": null,
+          "listing": "listed",
+          "admission": "open",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "description": null,
+          "banner": null,
+          "rules": [],
+          "membership": {
+            "count": {
+              "kind": "unknown",
+              "value": null
+            },
+            "publicMembers": null
+          },
+          "moderators": {
+            "kind": "unknown",
+            "items": []
+          },
+          "sourcePosition": {
+            "dataEpoch": "2886c81f-7cfa-4d40-860e-3167665b939d",
+            "sequence": "77"
+          },
+          "links": {
+            "works": "/v1/realms/01a13686-b73c-7287-a1dd-04c67b0b6026/works",
+            "decisions": "/v1/realms/01a13686-b73c-7287-a1dd-04c67b0b6026/decisions"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "rule-settings-empty",
+        "operationId": "getV1RealmsByRealmSettings",
+        "method": "GET",
+        "path": "/v1/realms/01a13686-b73c-7287-a1dd-04c67b0b6026/settings?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F842385fa-7403-459e-8ac3-0af7f16580d5",
+        "status": 200,
+        "answer": {
+          "generation": "5",
+          "settings": {
+            "visibility": "public",
+            "reviewRequired": false,
+            "reviewMode": "open",
+            "whoMaySubmit": "members",
+            "selfJoin": true,
+            "rules": []
+          },
+          "ruleBasis": {
+            "ref": "urn:rezics:realm-rules:01a13686-b73c-7287-a1dd-04c67b0b6026",
+            "revision": "1",
+            "digest": "25a74bc65c3d2ff2a89f62e63b2a72ff041502497a2d7344cfd2ecdb86772ffd"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "rules-published",
+        "operationId": "putV1RealmsByRealmSettings",
+        "method": "PUT",
+        "path": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/settings",
+        "body": {
+          "actingSubject": "https://rezics.com/id/accc0f06-6dbd-4d76-9a91-5c13e38260ad",
+          "expectedGeneration": "6",
+          "expectedRulesRevision": "2",
+          "reason": "Publish the original fixture community rules",
+          "settings": {
+            "visibility": "public",
+            "reviewRequired": true,
+            "reviewMode": "mandatory",
+            "whoMaySubmit": "members",
+            "selfJoin": true,
+            "rules": [
+              {
+                "id": "read-with-care",
+                "title": {
+                  "original": "en",
+                  "labels": {
+                    "en": "Read with care",
+                    "zh-Hans": "认真阅读"
+                  }
+                },
+                "body": {
+                  "original": "en",
+                  "labels": {
+                    "en": "Discuss the story with care.",
+                    "zh-Hans": "认真讨论故事。"
+                  }
+                },
+                "governanceRule": null
+              }
+            ]
+          }
+        },
+        "status": 201,
+        "answer": {
+          "receiptId": "5db07a11-a863-41b0-8487-8c7c37fcf62a",
+          "generation": "7",
+          "replayed": false,
+          "settings": {
+            "visibility": "public",
+            "reviewRequired": true,
+            "reviewMode": "mandatory",
+            "whoMaySubmit": "members",
+            "selfJoin": true,
+            "rules": [
+              {
+                "id": "read-with-care",
+                "title": {
+                  "original": "en",
+                  "labels": {
+                    "en": "Read with care",
+                    "zh-Hans": "认真阅读"
+                  }
+                },
+                "body": {
+                  "original": "en",
+                  "labels": {
+                    "en": "Discuss the story with care.",
+                    "zh-Hans": "认真讨论故事。"
+                  }
+                },
+                "governanceRule": null
+              }
+            ]
+          },
+          "ruleBasis": {
+            "ref": "urn:rezics:realm-rules:01a13686-6fd6-732c-8664-0a171a88a1f0",
+            "revision": "3",
+            "digest": "cce06ef36bb29fd2952772804cbdef77cda47d5f91b324cf5a761b803b2c5672"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "rule-intent-conflict",
+        "operationId": "putV1RealmsByRealmSettings",
+        "method": "PUT",
+        "path": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/settings",
+        "body": {
+          "actingSubject": "https://rezics.com/id/accc0f06-6dbd-4d76-9a91-5c13e38260ad",
+          "expectedGeneration": "6",
+          "expectedRulesRevision": "2",
+          "reason": "Different publishing intent",
+          "settings": {
+            "visibility": "public",
+            "reviewRequired": true,
+            "reviewMode": "mandatory",
+            "whoMaySubmit": "members",
+            "selfJoin": true,
+            "rules": [
+              {
+                "id": "read-with-care",
+                "title": {
+                  "original": "en",
+                  "labels": {
+                    "en": "Read with care",
+                    "zh-Hans": "认真阅读"
+                  }
+                },
+                "body": {
+                  "original": "en",
+                  "labels": {
+                    "en": "Discuss the story with care.",
+                    "zh-Hans": "认真讨论故事。"
+                  }
+                },
+                "governanceRule": null
+              }
+            ]
+          }
+        },
+        "status": 409,
+        "answer": {
+          "type": "https://rezics.com/problems/idempotency_conflict",
+          "title": "Key binds another intent",
+          "status": 409,
+          "code": "idempotency_conflict"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      }
+    ],
+    "moderator": [
+      {
+        "label": "public-rules-zh",
+        "operationId": "getV1RealmsByRealm",
+        "method": "GET",
+        "path": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0?language=zh-CN&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F98254530-8984-4db2-b708-009bd201efc7",
+        "status": 200,
+        "answer": {
+          "profile": "realm-read-v1",
+          "id": "https://rezics.com/id/01a13686-6fd6-732c-8664-0a171a88a1f0",
+          "space": "https://rezics.com/id/01a13686-6f06-7699-8cd8-3f6cfc7a2c20",
+          "revision": "https://rezics.com/id/01a13686-6fd6-732e-bf10-b79bc15942d8",
+          "visibility": "public",
+          "reviewMode": "mandatory",
+          "policyRevision": "urn:rezics:receipt:87fd6192ab7cfda4be08a0ae7f5ae827fa2cf1f7a613037f9b4fe85f8957804a",
+          "history": "everything",
+          "name": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "icon": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "realm",
+            "key": "12dc5a72aa18858ed6ccce16f4d87682"
+          },
+          "originalName": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "profileRevision": null,
+          "profileContract": null,
+          "listing": "listed",
+          "admission": "open",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "description": null,
+          "banner": null,
+          "rules": [
+            {
+              "id": "read-with-care",
+              "title": {
+                "value": "认真阅读",
+                "language": "zh-Hans",
+                "direction": "ltr",
+                "basis": "same-script"
+              },
+              "body": {
+                "value": "讨论角色之前，请先阅读故事。",
+                "language": "zh-Hans",
+                "direction": "ltr",
+                "basis": "same-script"
+              },
+              "governanceRule": null
+            }
+          ],
+          "membership": {
+            "count": {
+              "kind": "unknown",
+              "value": null
+            },
+            "publicMembers": null
+          },
+          "moderators": {
+            "kind": "unknown",
+            "items": []
+          },
+          "sourcePosition": {
+            "dataEpoch": "2886c81f-7cfa-4d40-860e-3167665b939d",
+            "sequence": "86"
+          },
+          "links": {
+            "works": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/works",
+            "decisions": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/decisions"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "private-rules-zh",
+        "operationId": "getV1RealmsByRealm",
+        "method": "GET",
+        "path": "/v1/realms/01a13686-9846-75bd-be59-f749cc13f98f?language=zh-CN&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F1c59c71c-7777-4277-875c-8dfd58d208b1",
+        "status": 200,
+        "answer": {
+          "profile": "realm-read-v1",
+          "id": "https://rezics.com/id/01a13686-9846-75bd-be59-f749cc13f98f",
+          "space": "https://rezics.com/id/01a13686-9704-71ef-8243-b77c13fbc269",
+          "revision": "https://rezics.com/id/01a13686-9846-75bf-87eb-42fd8363eaf9",
+          "visibility": "private",
+          "reviewMode": "mandatory",
+          "policyRevision": "urn:rezics:receipt:238d324a6b017e24d513d2d473056fb0bb7efd3ac27919590d8d606fcfc49890",
+          "history": "from-admission",
+          "name": {
+            "value": "Outcome private Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "icon": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "realm",
+            "key": "d9f15b482362fdd5f7cec24b16e9e6b7"
+          },
+          "originalName": {
+            "value": "Outcome private Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "profileRevision": null,
+          "profileContract": null,
+          "listing": "listed",
+          "admission": "request",
+          "discovery": {
+            "indexable": false,
+            "robots": "noindex",
+            "referrerPolicy": null
+          },
+          "description": null,
+          "banner": null,
+          "rules": [
+            {
+              "id": "read-with-care",
+              "title": {
+                "value": "认真阅读",
+                "language": "zh-Hans",
+                "direction": "ltr",
+                "basis": "same-script"
+              },
+              "body": {
+                "value": "讨论角色之前，请先阅读故事。",
+                "language": "zh-Hans",
+                "direction": "ltr",
+                "basis": "same-script"
+              },
+              "governanceRule": null
+            }
+          ],
+          "membership": {
+            "count": {
+              "kind": "unknown",
+              "value": null
+            },
+            "publicMembers": null
+          },
+          "moderators": {
+            "kind": "unknown",
+            "items": []
+          },
+          "sourcePosition": {
+            "dataEpoch": "2886c81f-7cfa-4d40-860e-3167665b939d",
+            "sequence": "86"
+          },
+          "links": {
+            "works": "/v1/realms/01a13686-9846-75bd-be59-f749cc13f98f/works",
+            "decisions": "/v1/realms/01a13686-9846-75bd-be59-f749cc13f98f/decisions"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "public-rules-en",
+        "operationId": "getV1RealmsByRealm",
+        "method": "GET",
+        "path": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F98254530-8984-4db2-b708-009bd201efc7",
+        "status": 200,
+        "answer": {
+          "profile": "realm-read-v1",
+          "id": "https://rezics.com/id/01a13686-6fd6-732c-8664-0a171a88a1f0",
+          "space": "https://rezics.com/id/01a13686-6f06-7699-8cd8-3f6cfc7a2c20",
+          "revision": "https://rezics.com/id/01a13686-6fd6-732e-bf10-b79bc15942d8",
+          "visibility": "public",
+          "reviewMode": "mandatory",
+          "policyRevision": "urn:rezics:receipt:87fd6192ab7cfda4be08a0ae7f5ae827fa2cf1f7a613037f9b4fe85f8957804a",
+          "history": "everything",
+          "name": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "requested"
+          },
+          "icon": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "realm",
+            "key": "12dc5a72aa18858ed6ccce16f4d87682"
+          },
+          "originalName": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "requested"
+          },
+          "profileRevision": null,
+          "profileContract": null,
+          "listing": "listed",
+          "admission": "open",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "description": null,
+          "banner": null,
+          "rules": [
+            {
+              "id": "read-with-care",
+              "title": {
+                "value": "Read with care",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "requested"
+              },
+              "body": {
+                "value": "Read the story before discussing its characters.",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "requested"
+              },
+              "governanceRule": null
+            }
+          ],
+          "membership": {
+            "count": {
+              "kind": "unknown",
+              "value": null
+            },
+            "publicMembers": null
+          },
+          "moderators": {
+            "kind": "unknown",
+            "items": []
+          },
+          "sourcePosition": {
+            "dataEpoch": "2886c81f-7cfa-4d40-860e-3167665b939d",
+            "sequence": "86"
+          },
+          "links": {
+            "works": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/works",
+            "decisions": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/decisions"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "public-rules-fr",
+        "operationId": "getV1RealmsByRealm",
+        "method": "GET",
+        "path": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0?language=fr&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F98254530-8984-4db2-b708-009bd201efc7",
+        "status": 200,
+        "answer": {
+          "profile": "realm-read-v1",
+          "id": "https://rezics.com/id/01a13686-6fd6-732c-8664-0a171a88a1f0",
+          "space": "https://rezics.com/id/01a13686-6f06-7699-8cd8-3f6cfc7a2c20",
+          "revision": "https://rezics.com/id/01a13686-6fd6-732e-bf10-b79bc15942d8",
+          "visibility": "public",
+          "reviewMode": "mandatory",
+          "policyRevision": "urn:rezics:receipt:87fd6192ab7cfda4be08a0ae7f5ae827fa2cf1f7a613037f9b4fe85f8957804a",
+          "history": "everything",
+          "name": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "icon": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "realm",
+            "key": "12dc5a72aa18858ed6ccce16f4d87682"
+          },
+          "originalName": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "profileRevision": null,
+          "profileContract": null,
+          "listing": "listed",
+          "admission": "open",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "description": null,
+          "banner": null,
+          "rules": [
+            {
+              "id": "read-with-care",
+              "title": {
+                "value": "Read with care",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "fallback"
+              },
+              "body": {
+                "value": "Read the story before discussing its characters.",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "fallback"
+              },
+              "governanceRule": null
+            }
+          ],
+          "membership": {
+            "count": {
+              "kind": "unknown",
+              "value": null
+            },
+            "publicMembers": null
+          },
+          "moderators": {
+            "kind": "unknown",
+            "items": []
+          },
+          "sourcePosition": {
+            "dataEpoch": "2886c81f-7cfa-4d40-860e-3167665b939d",
+            "sequence": "86"
+          },
+          "links": {
+            "works": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/works",
+            "decisions": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/decisions"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "private-request-landing",
+        "operationId": "getV1RealmsByRealmJoin-page",
+        "method": "GET",
+        "path": "/v1/realms/01a13686-9846-75bd-be59-f749cc13f98f/join-page?language=zh-CN&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F1c59c71c-7777-4277-875c-8dfd58d208b1",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "rule-settings-denied",
+        "operationId": "getV1RealmsByRealmSettings",
+        "method": "GET",
+        "path": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/settings?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F98254530-8984-4db2-b708-009bd201efc7",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_management_denied",
+          "title": "Realm permission is missing",
+          "status": 403,
+          "code": "realm_management_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "submission-after-reading-rules",
+        "operationId": "postV1RealmsByRealmSubmissions",
+        "method": "POST",
+        "path": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/submissions",
+        "body": {
+          "actingSubject": "https://rezics.com/id/98254530-8984-4db2-b708-009bd201efc7",
+          "kind": "contribution",
+          "work": "https://rezics.com/id/01a13687-d8de-7648-bdce-effa5986c4ee",
+          "mainVersion": "https://rezics.com/id/01a13687-d8de-7649-93f9-3a56c77a41ee",
+          "contribution": "https://rezics.com/id/01a13687-e8c5-71b0-8eb2-1a23db1509cf",
+          "publicationDecision": "https://rezics.com/id/01a13687-efe2-77eb-8275-9264f7fcee00",
+          "selectedDraft": "https://rezics.com/id/01a13687-e8c5-71b1-9175-40d99d52b32e",
+          "correctionOf": null
+        },
+        "status": 201,
+        "answer": {
+          "submission": {
+            "id": "49beaad5-58e4-464c-a00c-f245a6a158ce",
+            "realm": "https://rezics.com/id/01a13686-6fd6-732c-8664-0a171a88a1f0",
+            "kind": "contribution",
+            "work": "https://rezics.com/id/01a13687-d8de-7648-bdce-effa5986c4ee",
+            "mainVersion": "https://rezics.com/id/01a13687-d8de-7649-93f9-3a56c77a41ee",
+            "target": null,
+            "contribution": "https://rezics.com/id/01a13687-e8c5-71b0-8eb2-1a23db1509cf",
+            "publicationDecision": "https://rezics.com/id/01a13687-efe2-77eb-8275-9264f7fcee00",
+            "selectedDraft": "https://rezics.com/id/01a13687-e8c5-71b1-9175-40d99d52b32e",
+            "correctionOf": null,
+            "submittingAgent": "https://rezics.com/id/98254530-8984-4db2-b708-009bd201efc7",
+            "state": "pending",
+            "revision": "80dc5e78-8124-4ecc-889a-9f62dfa7ab8a",
+            "generation": "0",
+            "reviewer": null,
+            "publicReason": null,
+            "selection": null,
+            "adoptionReceipt": null,
+            "openedAt": "2026-10-13T18:30:42.124Z",
+            "updatedAt": "2026-10-13T18:30:42.124Z"
+          },
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      }
+    ],
+    "operator": [
+      {
+        "label": "public-rules-zh",
+        "operationId": "getV1RealmsByRealm",
+        "method": "GET",
+        "path": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0?language=zh-CN&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F5cbc34a5-38b3-4586-a40b-1417c1379f7e",
+        "status": 200,
+        "answer": {
+          "profile": "realm-read-v1",
+          "id": "https://rezics.com/id/01a13686-6fd6-732c-8664-0a171a88a1f0",
+          "space": "https://rezics.com/id/01a13686-6f06-7699-8cd8-3f6cfc7a2c20",
+          "revision": "https://rezics.com/id/01a13686-6fd6-732e-bf10-b79bc15942d8",
+          "visibility": "public",
+          "reviewMode": "mandatory",
+          "policyRevision": "urn:rezics:receipt:87fd6192ab7cfda4be08a0ae7f5ae827fa2cf1f7a613037f9b4fe85f8957804a",
+          "history": "everything",
+          "name": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "icon": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "realm",
+            "key": "12dc5a72aa18858ed6ccce16f4d87682"
+          },
+          "originalName": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "profileRevision": null,
+          "profileContract": null,
+          "listing": "listed",
+          "admission": "open",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "description": null,
+          "banner": null,
+          "rules": [
+            {
+              "id": "read-with-care",
+              "title": {
+                "value": "认真阅读",
+                "language": "zh-Hans",
+                "direction": "ltr",
+                "basis": "same-script"
+              },
+              "body": {
+                "value": "讨论角色之前，请先阅读故事。",
+                "language": "zh-Hans",
+                "direction": "ltr",
+                "basis": "same-script"
+              },
+              "governanceRule": null
+            }
+          ],
+          "membership": {
+            "count": {
+              "kind": "unknown",
+              "value": null
+            },
+            "publicMembers": null
+          },
+          "moderators": {
+            "kind": "unknown",
+            "items": []
+          },
+          "sourcePosition": {
+            "dataEpoch": "2886c81f-7cfa-4d40-860e-3167665b939d",
+            "sequence": "90"
+          },
+          "links": {
+            "works": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/works",
+            "decisions": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/decisions"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "private-rules-zh",
+        "operationId": "getV1RealmsByRealm",
+        "method": "GET",
+        "path": "/v1/realms/01a13686-9846-75bd-be59-f749cc13f98f?language=zh-CN&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F5cbc34a5-38b3-4586-a40b-1417c1379f7e",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "public-rules-en",
+        "operationId": "getV1RealmsByRealm",
+        "method": "GET",
+        "path": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F5cbc34a5-38b3-4586-a40b-1417c1379f7e",
+        "status": 200,
+        "answer": {
+          "profile": "realm-read-v1",
+          "id": "https://rezics.com/id/01a13686-6fd6-732c-8664-0a171a88a1f0",
+          "space": "https://rezics.com/id/01a13686-6f06-7699-8cd8-3f6cfc7a2c20",
+          "revision": "https://rezics.com/id/01a13686-6fd6-732e-bf10-b79bc15942d8",
+          "visibility": "public",
+          "reviewMode": "mandatory",
+          "policyRevision": "urn:rezics:receipt:87fd6192ab7cfda4be08a0ae7f5ae827fa2cf1f7a613037f9b4fe85f8957804a",
+          "history": "everything",
+          "name": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "requested"
+          },
+          "icon": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "realm",
+            "key": "12dc5a72aa18858ed6ccce16f4d87682"
+          },
+          "originalName": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "requested"
+          },
+          "profileRevision": null,
+          "profileContract": null,
+          "listing": "listed",
+          "admission": "open",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "description": null,
+          "banner": null,
+          "rules": [
+            {
+              "id": "read-with-care",
+              "title": {
+                "value": "Read with care",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "requested"
+              },
+              "body": {
+                "value": "Read the story before discussing its characters.",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "requested"
+              },
+              "governanceRule": null
+            }
+          ],
+          "membership": {
+            "count": {
+              "kind": "unknown",
+              "value": null
+            },
+            "publicMembers": null
+          },
+          "moderators": {
+            "kind": "unknown",
+            "items": []
+          },
+          "sourcePosition": {
+            "dataEpoch": "2886c81f-7cfa-4d40-860e-3167665b939d",
+            "sequence": "90"
+          },
+          "links": {
+            "works": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/works",
+            "decisions": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/decisions"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "public-rules-fr",
+        "operationId": "getV1RealmsByRealm",
+        "method": "GET",
+        "path": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0?language=fr&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F5cbc34a5-38b3-4586-a40b-1417c1379f7e",
+        "status": 200,
+        "answer": {
+          "profile": "realm-read-v1",
+          "id": "https://rezics.com/id/01a13686-6fd6-732c-8664-0a171a88a1f0",
+          "space": "https://rezics.com/id/01a13686-6f06-7699-8cd8-3f6cfc7a2c20",
+          "revision": "https://rezics.com/id/01a13686-6fd6-732e-bf10-b79bc15942d8",
+          "visibility": "public",
+          "reviewMode": "mandatory",
+          "policyRevision": "urn:rezics:receipt:87fd6192ab7cfda4be08a0ae7f5ae827fa2cf1f7a613037f9b4fe85f8957804a",
+          "history": "everything",
+          "name": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "icon": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "realm",
+            "key": "12dc5a72aa18858ed6ccce16f4d87682"
+          },
+          "originalName": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "profileRevision": null,
+          "profileContract": null,
+          "listing": "listed",
+          "admission": "open",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "description": null,
+          "banner": null,
+          "rules": [
+            {
+              "id": "read-with-care",
+              "title": {
+                "value": "Read with care",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "fallback"
+              },
+              "body": {
+                "value": "Read the story before discussing its characters.",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "fallback"
+              },
+              "governanceRule": null
+            }
+          ],
+          "membership": {
+            "count": {
+              "kind": "unknown",
+              "value": null
+            },
+            "publicMembers": null
+          },
+          "moderators": {
+            "kind": "unknown",
+            "items": []
+          },
+          "sourcePosition": {
+            "dataEpoch": "2886c81f-7cfa-4d40-860e-3167665b939d",
+            "sequence": "90"
+          },
+          "links": {
+            "works": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/works",
+            "decisions": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/decisions"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "private-request-landing",
+        "operationId": "getV1RealmsByRealmJoin-page",
+        "method": "GET",
+        "path": "/v1/realms/01a13686-9846-75bd-be59-f749cc13f98f/join-page?language=zh-CN&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F5cbc34a5-38b3-4586-a40b-1417c1379f7e",
+        "status": 200,
+        "answer": {
+          "profile": "realm-join-page-v1",
+          "id": "https://rezics.com/id/01a13686-9846-75bd-be59-f749cc13f98f",
+          "space": "https://rezics.com/id/01a13686-9704-71ef-8243-b77c13fbc269",
+          "name": {
+            "value": "Outcome private Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "description": null,
+          "rules": [
+            {
+              "id": "read-with-care",
+              "title": {
+                "value": "认真阅读",
+                "language": "zh-Hans",
+                "direction": "ltr",
+                "basis": "same-script"
+              },
+              "body": {
+                "value": "讨论角色之前，请先阅读故事。",
+                "language": "zh-Hans",
+                "direction": "ltr",
+                "basis": "same-script"
+              }
+            }
+          ],
+          "action": {
+            "kind": "request",
+            "href": "/v1/realms/01a13686-9846-75bd-be59-f749cc13f98f/join-requests",
+            "method": "POST",
+            "basis": "/v1/realms/01a13686-9846-75bd-be59-f749cc13f98f/join-requests/basis"
+          },
+          "listing": "listed",
+          "discovery": {
+            "indexable": false,
+            "robots": "noindex",
+            "referrerPolicy": null
+          },
+          "sourcePosition": {
+            "dataEpoch": "2886c81f-7cfa-4d40-860e-3167665b939d",
+            "sequence": "90"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "rule-settings-denied",
+        "operationId": "getV1RealmsByRealmSettings",
+        "method": "GET",
+        "path": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/settings?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F5cbc34a5-38b3-4586-a40b-1417c1379f7e",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_management_denied",
+          "title": "Realm permission is missing",
+          "status": 403,
+          "code": "realm_management_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "submission-after-reading-rules",
+        "operationId": "postV1RealmsByRealmSubmissions",
+        "method": "POST",
+        "path": "/v1/realms/01a13686-6fd6-732c-8664-0a171a88a1f0/submissions",
+        "body": {
+          "actingSubject": "https://rezics.com/id/5cbc34a5-38b3-4586-a40b-1417c1379f7e",
+          "kind": "contribution",
+          "work": "https://rezics.com/id/01a13688-1e88-72da-afca-90a975ea4714",
+          "mainVersion": "https://rezics.com/id/01a13688-1e88-72db-8aeb-6cef67f64b8f",
+          "contribution": "https://rezics.com/id/01a13688-286d-74a0-8cfe-ce864130471f",
+          "publicationDecision": "https://rezics.com/id/01a13688-2dcb-75c3-b5d1-65e305a7017a",
+          "selectedDraft": "https://rezics.com/id/01a13688-286d-74a1-94d6-f7a29b445e0d",
+          "correctionOf": null
+        },
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/authority_denied",
+          "title": "Authority is not admitted",
+          "status": 403,
+          "code": "authority_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      }
+    ]
+  }
+}

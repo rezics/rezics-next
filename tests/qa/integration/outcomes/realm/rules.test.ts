@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import rules from '../../../../../scripts/qa/cases/outcomes/realm/rules.ts';
-import { outcomeTest } from '../../../support/outcome-test.ts';
+import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import {
   personaSessions,
   type PersonaName,
@@ -11,6 +11,8 @@ import {
 
 setDefaultTimeout(90_000);
 let publicRealm: PersonaSessions, privateRealm: PersonaSessions;
+let emptyRealm: PersonaSessions;
+const recording = new OutcomeRecorder(rules);
 const rootOf = (fixture: PersonaSessions) => `/v1/realms/${fixture.realm.slice(-36)}`;
 const acting = (person: PersonaSession) =>
   `actingSubject=${encodeURIComponent(person.actingSubject ?? publicRealm.owner.actingSubject!)}`;
@@ -107,6 +109,8 @@ async function candidate(person: PersonaSession) {
 beforeAll(async () => {
   publicRealm = await personaSessions('public');
   privateRealm = await personaSessions('private');
+  emptyRealm = await personaSessions('public');
+  await recording.prepare();
   for (const fixture of [publicRealm, privateRealm]) {
     const current = await basis(fixture);
     await answer(
@@ -143,15 +147,17 @@ beforeAll(async () => {
   );
 }, 180_000);
 afterAll(async () => {
-  await publicRealm?.close();
+  try { await recording.publish(); }
+  finally { await publicRealm?.close(); }
 });
 
 async function readRules(name: PersonaName) {
   for (const fixture of [publicRealm, privateRealm]) {
     const person = fixture[name],
       allowed = fixture === publicRealm || ['member', 'owner', 'moderator'].includes(name);
+    const sample = recording.session(name, person);
     const path = `${rootOf(fixture)}?language=zh-CN${name === 'visitor' ? '' : `&${acting(person)}`}`;
-    const response = await answer(person.main('GET', path), allowed ? 200 : 404);
+    const response = await answer(sample(`${fixture === publicRealm ? 'public' : 'private'}-rules-zh`, 'GET', path), allowed ? 200 : 404);
     if (allowed)
       expect(response).toMatchObject({
         id: fixture.realm,
@@ -168,8 +174,8 @@ async function readRules(name: PersonaName) {
   for (const language of ['en', 'fr']) {
     expect(
       await answer(
-        publicRealm[name].main(
-          'GET',
+        recording.session(name, publicRealm[name])(
+          `public-rules-${language}`, 'GET',
           `${rootOf(publicRealm)}?language=${language}${name === 'visitor' ? '' : `&${acting(publicRealm[name])}`}`,
         ),
       ),
@@ -178,8 +184,8 @@ async function readRules(name: PersonaName) {
   const joined = ['member', 'owner', 'moderator'].includes(name);
   // Joined readers use the full member route; the separate landing is for outsiders.
   const landing = await answer(
-    privateRealm[name].main(
-      'GET',
+    recording.session(name, privateRealm[name])(
+      'private-request-landing', 'GET',
       `${rootOf(privateRealm)}/join-page?language=zh-CN${name === 'visitor' ? '' : `&${acting(privateRealm[name])}`}`,
     ),
     joined ? 404 : 200,
@@ -196,7 +202,7 @@ async function readRules(name: PersonaName) {
 async function cannotManage(name: Exclude<PersonaName, 'owner'>) {
   const person = publicRealm[name],
     status = name === 'visitor' ? 401 : 403;
-  await answer(person.main('GET', `${rootOf(publicRealm)}/settings?${acting(person)}`), status);
+  await answer(recording.session(name, person)('rule-settings-denied', 'GET', `${rootOf(publicRealm)}/settings?${acting(person)}`), status);
   await answer(
     person.main('PUT', `${rootOf(publicRealm)}/settings`, command(await basis(), person)),
     status,
@@ -205,7 +211,7 @@ async function cannotManage(name: Exclude<PersonaName, 'owner'>) {
 outcomeTest(rules, 'visitor', async () => {
   await readRules('visitor');
   await cannotManage('visitor');
-});
+}, recording);
 async function participate(name: 'stranger' | 'member' | 'moderator' | 'operator') {
   await readRules(name);
   await cannotManage(name);
@@ -213,7 +219,7 @@ async function participate(name: 'stranger' | 'member' | 'moderator' | 'operator
     input = await candidate(person);
   const allowed = ['member', 'moderator'].includes(name);
   const response = await answer(
-    person.main('POST', `${rootOf(publicRealm)}/submissions`, input),
+    recording.session(name, person)('submission-after-reading-rules', 'POST', `${rootOf(publicRealm)}/submissions`, input),
     allowed ? 201 : 403,
   );
   if (allowed)
@@ -221,8 +227,8 @@ async function participate(name: 'stranger' | 'member' | 'moderator' | 'operator
       submission: { state: 'pending', submittingAgent: person.actingSubject, work: input.work },
     });
 }
-outcomeTest(rules, 'stranger', () => participate('stranger'));
-outcomeTest(rules, 'member', () => participate('member'));
+outcomeTest(rules, 'stranger', () => participate('stranger'), recording);
+outcomeTest(rules, 'member', () => participate('member'), recording);
 
 outcomeTest(rules, 'owner', async () => {
   await readRules('owner');
@@ -230,6 +236,28 @@ outcomeTest(rules, 'owner', async () => {
     path = `${rootOf(publicRealm)}/settings`,
     roleId = randomUUID(),
     moderator = publicRealm.moderator;
+  const sample = recording.session('owner', owner);
+  for (const [label, path] of [
+    ['session-agent', '/v1/me/session-agent'],
+    ['agent-choices', '/v1/me/agents?languages=en'],
+    ['acting-contexts', '/v1/me/acting-contexts?task=work.create'],
+    ['acting-agent-profile', `/v1/agents/${owner.actingSubject!.slice(-36)}?${acting(owner)}`],
+  ] as const) await (await sample(label, 'GET', path)).body?.cancel();
+  await answer(sample('rule-settings', 'GET', `${path}?${acting(owner)}`));
+  await answer(sample('space-settings', 'GET', `/v1/spaces/${publicRealm.space.slice(-36)}/settings?${acting(owner)}`));
+  await (await sample('legacy-space-settings-denied', 'GET', `/v1/spaces/${publicRealm.realm.slice(-36)}/settings?${acting(owner)}`)).body?.cancel();
+  await answer(sample('reading-preferences', 'GET', `/v1/me/person-preferences?${acting(owner)}`));
+  await answer(recording.session('owner', publicRealm.visitor)('realm-address', 'GET', `/v1/addresses/resolve?scope=space&key=${publicRealm.realm.slice(-36)}`));
+  await answer(sample('joining-policy', 'GET', `${rootOf(publicRealm)}/joining?${acting(owner)}`));
+  await answer(sample('realm-follow', 'GET', `/v1/follows/${publicRealm.realm.slice(-36)}?kind=realm&${acting(owner)}`));
+  await answer(sample('appeal-access', 'GET', '/v1/me/platform-access'));
+  await answer(sample('own-ban-absent', 'GET', `${rootOf(publicRealm)}/member-ban?${acting(owner)}`), 404);
+  // The frame can render without a site link; retain the API's refusal too.
+  await (await sample('management-site', 'GET', `${rootOf(publicRealm)}/zone?${acting(owner)}`)).body?.cancel();
+  await (await sample('site-editor-access', 'GET', `/v1/zones/${publicRealm.zone.slice(-36)}/showcase-editor?${acting(owner)}`)).body?.cancel();
+  const emptySample = recording.session('owner', emptyRealm.owner);
+  await answer(emptySample('rules-empty', 'GET', `${rootOf(emptyRealm)}?${acting(emptyRealm.owner)}`));
+  await answer(emptySample('rule-settings-empty', 'GET', `${rootOf(emptyRealm)}/settings?${acting(emptyRealm.owner)}`));
   async function role(change: object) {
     const roles = await answer<{ generation: string }>(
       owner.main('GET', `${rootOf(publicRealm)}/roles?${acting(owner)}`),
@@ -267,7 +295,7 @@ outcomeTest(rules, 'owner', async () => {
       ],
     });
     const receipt = await answer<Basis & { receiptId: string }>(
-      owner.main('PUT', path, input, key),
+      sample('rules-published', 'PUT', path, input, key),
       201,
     );
     expect(receipt.settings).toEqual(input.settings);
@@ -278,7 +306,7 @@ outcomeTest(rules, 'owner', async () => {
       replayed: true,
     });
     await answer(
-      owner.main('PUT', path, { ...input, reason: 'Different publishing intent' }, key),
+      sample('rule-intent-conflict', 'PUT', path, { ...input, reason: 'Different publishing intent' }, key),
       409,
     );
     await answer(owner.main('PUT', path, input), 409);
@@ -404,7 +432,7 @@ outcomeTest(rules, 'owner', async () => {
       201,
     );
   }
-});
+}, recording);
 outcomeTest(rules, 'moderator', async () => {
   await participate('moderator');
   await answer(
@@ -413,7 +441,7 @@ outcomeTest(rules, 'moderator', async () => {
       `${rootOf(publicRealm)}/moderation?${acting(publicRealm.moderator)}`,
     ),
   );
-});
+}, recording);
 outcomeTest(rules, 'operator', async () => {
   expect(await answer(publicRealm.operator.main('GET', '/v1/me/platform-access'))).toMatchObject({
     groups: ['platform-admin'],
@@ -427,4 +455,4 @@ outcomeTest(rules, 'operator', async () => {
     ),
     403,
   );
-});
+}, recording);

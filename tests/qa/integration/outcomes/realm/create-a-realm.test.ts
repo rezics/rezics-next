@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import creation from '../../../../../scripts/qa/cases/outcomes/realm/create-a-realm.ts';
-import { outcomeTest } from '../../../support/outcome-test.ts';
+import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import {
   personaSessions,
   type PersonaName,
@@ -14,6 +14,7 @@ let sessions: PersonaSessions;
 let founder: { person: PersonaSession; realm: string };
 let handleOwner: { person: PersonaSession; realm: string };
 let quotaPerson: PersonaSession;
+const recording = new OutcomeRecorder(creation);
 type CreatedRealm = { space: string; realm: string; owner: string; replayed: boolean };
 const root = (id: string) => `/v1/realms/${id.slice(-36)}`;
 const acting = (person: PersonaSession) =>
@@ -57,6 +58,7 @@ async function establishedOwner() {
 }
 beforeAll(async () => {
   sessions = await personaSessions('private');
+  await recording.prepare();
   // Each fixture's stranger is a fresh account with no Spaces. Ownership is
   // established through HTTP before it is used as an owner in either scenario.
   founder = await establishedOwner();
@@ -68,10 +70,12 @@ beforeAll(async () => {
   expect(new Set(principals).size).toBe(4);
 }, 180_000);
 afterAll(async () => {
-  await sessions?.close();
+  try { await recording.publish(); }
+  finally { await sessions?.close(); }
 });
 
 outcomeTest(creation, 'visitor', async () => {
+  const sample = recording.session('visitor', sessions.visitor);
   const input = command(sessions.owner, 'public');
   const created = await answer<{ space: string; realm: string }>(
     sessions.owner.main('POST', '/v1/spaces', input),
@@ -79,32 +83,45 @@ outcomeTest(creation, 'visitor', async () => {
   );
   expect(
     await answer(
-      sessions.visitor.main('GET', `/v1/addresses/resolve?scope=space&key=${input.handle}`),
+      sample('public-created-address', 'GET', `/v1/addresses/resolve?scope=space&key=${input.handle}`),
     ),
   ).toMatchObject({ holder: created.space, capabilities: { realm: created.realm } });
-  await answer(sessions.visitor.main('POST', '/v1/spaces', command(sessions.visitor)), 401);
-  const hidden = await answer(sessions.visitor.main('GET', root(sessions.realm)), 404);
+  await answer(sample('creation-sign-in-required', 'POST', '/v1/spaces', command(sessions.visitor)), 401);
+  const hidden = await answer(sample('private-realm-hidden', 'GET', root(sessions.realm)), 404);
   expect(JSON.stringify(hidden)).not.toContain(sessions.realm);
-});
+}, recording);
 
 async function found(name: Exclude<PersonaName, 'visitor'>,
   person = sessions[name], existingRealm = sessions.realm) {
+  const sample = recording.session(name, person);
+  if (name === 'stranger') {
+    for (const [label, path] of [
+      ['session-agent', '/v1/me/session-agent'],
+      ['agent-choices', '/v1/me/agents?languages=en'],
+      ['acting-contexts', '/v1/me/acting-contexts?task=work.create'],
+      ['acting-agent-profile', `/v1/agents/${person.actingSubject!.slice(-36)}?${acting(person)}`],
+    ] as const) await (await sample(label, 'GET', path)).body?.cancel();
+    await answer(sample('managed-realms-empty', 'GET', `/v1/me/managed-realms?${acting(person)}`));
+    await answer(sample('reading-preferences', 'GET', `/v1/me/person-preferences?${acting(person)}`));
+    await answer(sample('topic-choices', 'GET', '/v1/discovery/concepts?limit=20&q='));
+    await answer(sample('topic-search-empty', 'GET', `/v1/discovery/concepts?limit=20&q=nomatch${randomUUID().replaceAll('-', '')}`));
+  }
   const input = command(person),
     key = randomUUID();
   const created = await answer<CreatedRealm>(
-    person.main('POST', '/v1/spaces', input, key),
+    sample('creation-receipt', 'POST', '/v1/spaces', input, key),
     201,
   );
   expect(created.owner).toBe(person.actingSubject);
   expect(created.replayed).toBe(false);
-  expect(await answer(person.main('POST', '/v1/spaces', input, key))).toMatchObject({
+  expect(await answer(sample('creation-replayed', 'POST', '/v1/spaces', input, key))).toMatchObject({
     space: created.space,
     realm: created.realm,
     owner: person.actingSubject,
     replayed: true,
   });
   await answer(
-    person.main('POST', '/v1/spaces', { ...input, name: 'Changed creation intent' }, key),
+    sample('creation-intent-conflict', 'POST', '/v1/spaces', { ...input, name: 'Changed creation intent' }, key),
     409,
   );
   await answer(person.main('POST', '/v1/spaces', input), 409);
@@ -131,12 +148,14 @@ async function found(name: Exclude<PersonaName, 'visitor'>,
     ),
   ).toMatchObject({ receiptId: enrolled.receiptId, replayed: true });
   const settings = await answer<{ settings: unknown }>(
-    person.main('GET', `${root(created.realm)}/settings?${acting(person)}`),
+    sample('initial-realm-settings', 'GET', `${root(created.realm)}/settings?${acting(person)}`),
   );
   expect(settings.settings).toEqual(input.initialSettings);
   expect(
-    await answer(person.main('GET', `${root(created.realm)}?${acting(person)}`)),
+    await answer(sample('created-realm-header', 'GET', `${root(created.realm)}?${acting(person)}`)),
   ).toMatchObject({ id: created.realm });
+  await answer(sample('founder-address', 'GET', `/v1/addresses/resolve?scope=space&key=${input.handle}&${acting(person)}`));
+  await answer(sample('founder-managed-realms', 'GET', `/v1/me/managed-realms?${acting(person)}`));
   await answer(sessions.visitor.main('GET', root(created.realm)), 404);
   await answer(
     sessions.operator.main('GET', `${root(created.realm)}?${acting(sessions.operator)}`),
@@ -184,6 +203,7 @@ async function concurrentHandle() {
 }
 async function exhaustedAccountRecovers() {
   const person = quotaPerson, first = command(person), key = randomUUID();
+  const sample = recording.session('owner', person);
   const receipt = await answer<CreatedRealm>(person.main('POST', '/v1/spaces', first, key), 201);
   const zone = await answer<{ space: string; owner: string }>(person.main('POST', '/v1/spaces', {
     profile: 'space-zone-v1', name: 'Original fixture reading site', language: 'en',
@@ -192,17 +212,17 @@ async function exhaustedAccountRecovers() {
   const third = await answer<CreatedRealm>(person.main('POST', '/v1/spaces', command(person)), 201);
   expect(new Set([receipt.space, zone.space, third.space]).size).toBe(3);
   for (const created of [receipt, zone, third]) expect(created.owner).toBe(person.actingSubject);
-  expect(await answer(person.main('POST', '/v1/spaces', command(person)), 403))
+  expect(await answer(sample('creation-quota-denied', 'POST', '/v1/spaces', command(person)), 403))
     .toMatchObject({ status: 403, code: 'authority_denied' });
   expect(await answer(person.main('POST', '/v1/spaces', first, key)))
     .toEqual({ ...receipt, replayed: true });
 }
-outcomeTest(creation, 'stranger', () => found('stranger'));
-outcomeTest(creation, 'member', () => found('member'));
+outcomeTest(creation, 'stranger', () => found('stranger'), recording);
+outcomeTest(creation, 'member', () => found('member'), recording);
 outcomeTest(creation, 'owner', async () => {
   await found('owner', founder.person, founder.realm);
   await concurrentHandle();
   await exhaustedAccountRecovers();
-});
-outcomeTest(creation, 'moderator', () => found('moderator'));
-outcomeTest(creation, 'operator', () => found('operator'));
+}, recording);
+outcomeTest(creation, 'moderator', () => found('moderator'), recording);
+outcomeTest(creation, 'operator', () => found('operator'), recording);

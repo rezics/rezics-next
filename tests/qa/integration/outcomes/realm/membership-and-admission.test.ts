@@ -1,15 +1,17 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import admission from '../../../../../scripts/qa/cases/outcomes/realm/membership-and-admission.ts';
-import { outcomeTest } from '../../../support/outcome-test.ts';
+import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import {
   personaSessions,
+  type PersonaName,
   type PersonaSession,
   type PersonaSessions,
 } from '../../../support/personas.ts';
 
 setDefaultTimeout(60_000);
 let sessions: PersonaSessions;
+const recording = new OutcomeRecorder(admission);
 const rootOf = (id: string) => `/v1/realms/${id.slice(-36)}`;
 const acting = (person: PersonaSession) =>
   `actingSubject=${encodeURIComponent(person.actingSubject ?? sessions.owner.actingSubject!)}`;
@@ -55,9 +57,11 @@ async function requestMode(space: string) {
     201,
   );
 }
-async function submit(person: PersonaSession, root = rootOf(sessions.realm), key = randomUUID()) {
+async function submit(person: PersonaSession, root = rootOf(sessions.realm), key = randomUUID(),
+  sample?: ReturnType<OutcomeRecorder['session']>) {
   const basis = await answer<Basis>(
-    person.main('GET', `${root}/join-requests/basis?${acting(person)}`),
+    sample ? sample('join-request-basis', 'GET', `${root}/join-requests/basis?${acting(person)}`)
+      : person.main('GET', `${root}/join-requests/basis?${acting(person)}`),
   );
   const input = {
     actingSubject: person.actingSubject,
@@ -67,27 +71,31 @@ async function submit(person: PersonaSession, root = rootOf(sessions.realm), key
     reason: 'Read and discuss the original fixture stories',
   };
   const receipt = await answer<RequestReceipt>(
-    person.main('POST', `${root}/join-requests`, input, key),
+    sample ? sample('join-request-submitted', 'POST', `${root}/join-requests`, input, key)
+      : person.main('POST', `${root}/join-requests`, input, key),
     201,
   );
   return { input, receipt, key };
 }
 beforeAll(async () => {
   sessions = await personaSessions('private');
+  await recording.prepare();
   await requestMode(sessions.space);
 }, 180_000);
 afterAll(async () => {
-  await sessions?.close();
+  try { await recording.publish(); }
+  finally { await sessions?.close(); }
 });
 
 outcomeTest(admission, 'visitor', async () => {
   const root = rootOf(sessions.realm),
     person = sessions.visitor;
-  expect(await answer(person.main('GET', `${root}/join-page`))).toMatchObject({
+  const sample = recording.session('visitor', person);
+  expect(await answer(sample('request-landing', 'GET', `${root}/join-page`))).toMatchObject({
     profile: 'realm-join-page-v1',
   });
-  await answer(person.main('GET', root), 404);
-  await answer(person.main('GET', `${root}/join-requests/basis?${acting(person)}`), 401);
+  await answer(sample('private-realm-hidden', 'GET', root), 404);
+  await answer(sample('join-basis-sign-in-required', 'GET', `${root}/join-requests/basis?${acting(person)}`), 401);
   await answer(person.main('GET', `${root}/join-requests?${acting(person)}`), 401);
   await answer(
     person.main('POST', `${root}/join-requests`, {
@@ -99,14 +107,17 @@ outcomeTest(admission, 'visitor', async () => {
     }),
     401,
   );
-});
+}, recording);
 
 outcomeTest(admission, 'stranger', async () => {
   const person = sessions.stranger,
     root = rootOf(sessions.realm),
     path = `${root}/join-requests`;
+  const sample = recording.session('stranger', person);
+  await answer(recording.session('stranger', sessions.visitor)('request-landing', 'GET', `${root}/join-page`));
+  await (await sample('own-requests-before-request', 'GET', `${path}/mine?${acting(person)}&limit=50`)).body?.cancel();
   await answer(person.main('GET', `${root}?${acting(person)}`), 404);
-  const first = await submit(person);
+  const first = await submit(person, root, randomUUID(), sample);
   expect(await answer(person.main('POST', path, first.input, first.key))).toMatchObject({
     requestId: first.receipt.requestId,
     state: 'pending',
@@ -117,8 +128,8 @@ outcomeTest(admission, 'stranger', async () => {
     409,
   );
   await answer(person.main('POST', path, first.input), 409);
-  await answer(person.main('GET', `${path}?${acting(person)}`), 403);
-  const mine = await answer<RequestPage>(person.main('GET', `${path}/mine?${acting(person)}`));
+  await answer(sample('request-inbox-denied', 'GET', `${path}?${acting(person)}`), 403);
+  const mine = await answer<RequestPage>(sample('own-request-pending', 'GET', `${path}/mine?${acting(person)}`));
   expect(mine.items).toMatchObject([
     {
       id: first.receipt.requestId,
@@ -151,20 +162,25 @@ outcomeTest(admission, 'stranger', async () => {
   ).toMatchObject({ state: 'withdrawn', replayed: true });
   await answer(person.main('POST', `${path}/${first.receipt.requestId}/withdraw`, input), 409);
   expect(
-    (await answer<RequestPage>(person.main('GET', `${path}/mine?${acting(person)}`))).items[0],
+    (await answer<RequestPage>(sample('own-request-withdrawn', 'GET', `${path}/mine?${acting(person)}`))).items[0],
   ).toMatchObject({ state: 'withdrawn', reason: first.input.reason });
   await answer(person.main('GET', `${root}?${acting(person)}`), 404);
-});
+}, recording);
 
-async function joined(person: PersonaSession) {
+async function joined(name: PersonaName) {
+  const person = sessions[name], sample = recording.session(name, person);
   const root = rootOf(sessions.realm);
-  expect(await answer(person.main('GET', `${root}?${acting(person)}`))).toMatchObject({
+  expect(await answer(sample('joined-realm-header', 'GET', `${root}?${acting(person)}`))).toMatchObject({
     id: sessions.realm,
   });
   expect(
-    await answer<Basis>(person.main('GET', `${root}/join-requests/basis?${acting(person)}`)),
+    await answer<Basis>(sample('joined-request-basis', 'GET', `${root}/join-requests/basis?${acting(person)}`)),
   ).toMatchObject({ state: 'joined' });
-  await answer(person.main('GET', `${root}/join-requests?${acting(person)}`), 403);
+  await answer(sample('request-inbox-denied', 'GET', `${root}/join-requests?${acting(person)}`), 403);
+  await answer(sample('joining-policy', 'GET', `${root}/joining?${acting(person)}`));
+  await answer(sample('realm-follow', 'GET', `/v1/follows/${sessions.realm.slice(-36)}?kind=realm&${acting(person)}`));
+  await answer(sample('appeal-access', 'GET', '/v1/me/platform-access'));
+  await answer(sample('own-ban-absent', 'GET', `${root}/member-ban?${acting(person)}`), 404);
   await answer(
     person.main('POST', `${root}/join-requests/${randomUUID()}/decisions`, {
       actingSubject: person.actingSubject,
@@ -184,10 +200,17 @@ async function joined(person: PersonaSession) {
     403,
   );
 }
-outcomeTest(admission, 'member', () => joined(sessions.member));
+outcomeTest(admission, 'member', () => joined('member'), recording);
 
 outcomeTest(admission, 'owner', async () => {
   const owner = sessions.owner;
+  const sample = recording.session('owner', owner);
+  for (const [label, path] of [
+    ['session-agent', '/v1/me/session-agent'],
+    ['agent-choices', '/v1/me/agents?languages=en'],
+    ['acting-contexts', '/v1/me/acting-contexts?task=work.create'],
+    ['acting-agent-profile', `/v1/agents/${owner.actingSubject!.slice(-36)}?${acting(owner)}`],
+  ] as const) await (await sample(label, 'GET', path)).body?.cancel();
   // A separate affected Realm keeps these requesters strangers in the six-persona fixture.
   const created = await answer<{ space: string; realm: string }>(
     owner.main('POST', '/v1/spaces', {
@@ -210,14 +233,22 @@ outcomeTest(admission, 'owner', async () => {
     path = `${root}/join-requests`;
   await answer(owner.main('POST', `${root}/management`, { actingSubject: owner.actingSubject }));
   await requestMode(created.space);
+  await answer(sample('management-realm-header', 'GET', `${root}?${acting(owner)}&language=en`));
+  await answer(sample('request-address-space-missing', 'GET', `/v1/spaces/${created.realm.slice(-36)}`), 404);
+  await answer(sample('management-site-absent', 'GET', `${root}/zone?${acting(owner)}`), 404);
+  await answer(sample('request-inbox-empty', 'GET', `${path}?${acting(owner)}&limit=50&q=`));
   const first = await submit(sessions.stranger, root),
     second = await submit(sessions.operator, root);
+  await answer(sample('request-inbox', 'GET', `${path}?${acting(owner)}&limit=50&q=`));
+  await answer(sample('request-inbox-search-empty', 'GET', `${path}?${acting(owner)}&limit=50&q=nomatch${randomUUID().replaceAll('-', '')}`));
+  for (const name of ['stranger', 'operator'] as const)
+    await answer(sample(`requester-name-${name}`, 'GET', `/v1/agents/${sessions[name].actingSubject!.slice(-36)}?${acting(owner)}`));
   const ids: string[] = [];
   let cursor: string | null = null;
   do {
     const page: RequestPage = await answer(
-      owner.main(
-        'GET',
+      sample(
+        `request-inbox-page-${ids.length}`, 'GET',
         `${path}?${acting(owner)}&limit=1${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
       ),
     );
@@ -229,7 +260,7 @@ outcomeTest(admission, 'owner', async () => {
   const settingsPath = `/v1/spaces/${created.space.slice(-36)}/settings`;
   const decide = async (id: string, decision: 'accepted' | 'declined') => {
     const basis = await answer<{ generation: string }>(
-      owner.main('GET', `${settingsPath}?${acting(owner)}`),
+      sample(`decision-settings-${decision}`, 'GET', `${settingsPath}?${acting(owner)}`),
     );
     const input = {
       actingSubject: owner.actingSubject,
@@ -270,32 +301,33 @@ outcomeTest(admission, 'owner', async () => {
       )
     ).items[0],
   ).toMatchObject({ state: 'accepted' });
-  expect((await answer<RequestPage>(owner.main('GET', `${path}?${acting(owner)}`))).items).toEqual(
+  expect((await answer<RequestPage>(sample('request-inbox-after-decisions', 'GET', `${path}?${acting(owner)}`))).items).toEqual(
     [],
   );
   expect(await answer(owner.main('GET', `${settingsPath}?${acting(owner)}`))).toMatchObject({
     settings: { history: 'from-admission' },
   });
-});
+}, recording);
 
 outcomeTest(admission, 'moderator', async () => {
-  await joined(sessions.moderator);
+  await joined('moderator');
   await answer(
     sessions.moderator.main(
       'GET',
       `${rootOf(sessions.realm)}/moderation?${acting(sessions.moderator)}`,
     ),
   );
-});
+}, recording);
 outcomeTest(admission, 'operator', async () => {
   const person = sessions.operator,
     root = rootOf(sessions.realm);
-  expect(await answer(person.main('GET', '/v1/me/platform-access'))).toMatchObject({
+  const sample = recording.session('operator', person);
+  expect(await answer(sample('platform-access', 'GET', '/v1/me/platform-access'))).toMatchObject({
     groups: ['platform-admin'],
   });
-  await answer(person.main('GET', `${root}?${acting(person)}`), 404);
-  await answer(person.main('GET', `${root}/join-requests?${acting(person)}`), 403);
-  const request = await submit(person);
+  await answer(sample('private-realm-hidden', 'GET', `${root}?${acting(person)}`), 404);
+  await answer(sample('request-inbox-denied', 'GET', `${root}/join-requests?${acting(person)}`), 403);
+  const request = await submit(person, root, randomUUID(), sample);
   await answer(
     person.main('POST', `${root}/join-requests/${request.receipt.requestId}/decisions`, {
       actingSubject: person.actingSubject,
@@ -315,4 +347,4 @@ outcomeTest(admission, 'operator', async () => {
     201,
   );
   await answer(person.main('GET', `${root}?${acting(person)}`), 404);
-});
+}, recording);

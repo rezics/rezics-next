@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import moderation from '../../../../../scripts/qa/cases/outcomes/realm/moderation-and-appeal.ts';
-import { outcomeTest } from '../../../support/outcome-test.ts';
+import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { personaNames, personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
 type Members = { generation: string; items: { member: string; membershipGeneration: string; banned: boolean }[] };
@@ -12,6 +12,7 @@ type Reading = { realm: string; receiptId: string; appeal: {
 type Fixture = { sessions: PersonaSessions; receiptId: string; path: string; root: string };
 setDefaultTimeout(60_000);
 const fixtures = {} as Record<PersonaName, Fixture>;
+const recording = new OutcomeRecorder(moderation);
 const short = (value: string) => value.slice(-36);
 const acting = (person: PersonaSession) => new URLSearchParams(person.actingSubject ? { actingSubject: person.actingSubject } : {});
 async function answer<T>(request: Promise<Response>, status = 200): Promise<T> {
@@ -29,6 +30,7 @@ async function ban(sessions: PersonaSessions, person: PersonaSession) {
     reason: 'Synthetic sanction for the appeal outcome proof', action: 'ban', consent: null, durationSeconds: null }), 201);
 }
 beforeAll(async () => {
+  await recording.prepare();
   for (const name of personaNames) {
     const sessions = await personaSessions('private'), root = `/v1/realms/${short(sessions.realm)}`;
     const { receiptId } = await ban(sessions, sessions.member);
@@ -39,7 +41,10 @@ beforeAll(async () => {
     await answer(sessions.member.main('GET', `${root}/member-ban?${acting(sessions.member)}`));
   }
 }, 180_000);
-afterAll(async () => { await fixtures.visitor?.sessions.close(); });
+afterAll(async () => {
+  try { await recording.publish(); }
+  finally { await fixtures.visitor?.sessions.close(); }
+});
 
 function protectedIdentity(body: unknown, sessions: PersonaSessions) {
   const keys: string[] = [];
@@ -57,8 +62,10 @@ function protectedIdentity(body: unknown, sessions: PersonaSessions) {
     expect(text.includes(sessions[name].accountId!)).toBe(false);
   }
 }
-async function read(fixture: Fixture, person = fixture.sessions.member) {
-  const reading = await answer<Reading>(person.main('GET', fixture.path));
+async function read(fixture: Fixture, person = fixture.sessions.member,
+  sample?: ReturnType<OutcomeRecorder['session']>, label = 'appeal-reading') {
+  const reading = await answer<Reading>(sample ? sample(label, 'GET', fixture.path)
+    : person.main('GET', fixture.path));
   protectedIdentity(reading, fixture.sessions);
   return reading;
 }
@@ -85,15 +92,16 @@ async function cannotImpersonate(fixture: Fixture, person: PersonaSession, statu
   await answer(person.main('POST', fixture.path, { statement: 'Staff cannot write the appellant statement.' }), status);
   expect(await read(fixture)).toEqual(before);
 }
-async function restored(fixture: Fixture, caseId: string) {
-  const reading = await read(fixture);
+async function restored(fixture: Fixture, caseId: string, sample?: ReturnType<OutcomeRecorder['session']>) {
+  const reading = await read(fixture, fixture.sessions.member, sample, 'appeal-restored');
   expect(reading.appeal).toMatchObject({ state: 'decided', caseId, outcome: 'reversed',
     rationale: 'The original fixture sanction was reviewed.' });
   expect(reading.appeal.liftedAt).toEqual(expect.any(String));
   expect(reading.appeal.liftReceiptId).toMatch(/^[0-9a-f-]{36}$/);
   // Lifting the active ban retains the appellant's authorized receipt history.
-  const history = await answer<Reading>(fixture.sessions.member.main('GET',
-    `${fixture.root}/member-ban?${acting(fixture.sessions.member)}`));
+  const path = `${fixture.root}/member-ban?${acting(fixture.sessions.member)}`;
+  const history = await answer<Reading>(sample ? sample('own-ban-restored', 'GET', path)
+    : fixture.sessions.member.main('GET', path));
   expect(history.appeal).toMatchObject({ state: 'decided', caseId, outcome: 'reversed',
     liftReceiptId: reading.appeal.liftReceiptId });
   protectedIdentity(history, fixture.sessions);
@@ -103,16 +111,18 @@ async function restored(fixture: Fixture, caseId: string) {
 
 outcomeTest(moderation, 'visitor', async () => {
   const fixture = fixtures.visitor, person = fixture.sessions.visitor;
+  const sample = recording.session('visitor', person);
   for (const path of [fixture.path, `${fixture.root}/member-ban?${acting(fixture.sessions.member)}`])
-    await answer(person.main('GET', path), 401);
+    await answer(sample(path === fixture.path ? 'appeal-sign-in-required' : 'ban-sign-in-required', 'GET', path), 401);
   await cannotImpersonate(fixture, person, 401);
   await answer(person.main('GET', fixture.root), 404);
   expect((await read(fixture)).appeal).toEqual({ state: 'none' });
-});
+}, recording);
 outcomeTest(moderation, 'stranger', async () => {
   const fixture = fixtures.stranger, person = fixture.sessions.stranger;
-  await answer(person.main('GET', fixture.path), 404);
-  await answer(person.main('GET', `${fixture.root}/member-ban?${acting(fixture.sessions.member)}`), 404);
+  const sample = recording.session('stranger', person);
+  await answer(sample('another-members-appeal-hidden', 'GET', fixture.path), 404);
+  await answer(sample('another-members-ban-hidden', 'GET', `${fixture.root}/member-ban?${acting(fixture.sessions.member)}`), 404);
   await cannotImpersonate(fixture, person);
   const { caseId } = await open(fixture), before = await read(fixture);
   await decide(person, decision(person, caseId, 'restore'), 403);
@@ -122,29 +132,47 @@ outcomeTest(moderation, 'stranger', async () => {
   const own = await ban(fixture.sessions, person), path = `${fixture.root}/member-receipts/${own.receiptId}/appeal`;
   await answer(person.main('GET', `${fixture.root}?${acting(person)}`), 404);
   await answer(person.main('POST', path, { statement: 'My own unjoined-subject sanction is appealed.' }), 201);
-  const reading = await answer<Reading>(person.main('GET', path));
+  const reading = await answer<Reading>(sample('unjoined-appellant-open', 'GET', path));
   expect(reading.appeal.state).toBe('open'); protectedIdentity(reading, fixture.sessions);
-});
+}, recording);
 outcomeTest(moderation, 'member', async () => {
   const fixture = fixtures.member, person = fixture.sessions.member;
-  expect((await read(fixture)).appeal).toEqual({ state: 'none' });
+  const sample = recording.session('member', person);
+  await answer(sample('appeal-access', 'GET', '/v1/me/platform-access'));
+  await answer(sample('own-ban', 'GET', `${fixture.root}/member-ban?${acting(person)}`));
+  await answer(sample('realm-header-banned', 'GET', `${fixture.root}?${acting(person)}`), 404);
+  expect((await read(fixture, person, sample, 'appeal-none')).appeal).toEqual({ state: 'none' });
   const key = randomUUID(), input = { statement: 'My original statement contests this sanction.' };
-  const opened = await answer<{ caseId: string }>(person.main('POST', fixture.path, input, key), 201);
+  const opened = await answer<{ caseId: string }>(sample('appeal-opened', 'POST', fixture.path, input, key), 201);
   expect(await answer(person.main('POST', fixture.path, input, key))).toMatchObject({ caseId: opened.caseId, replayed: true });
-  expect(await answer(person.main('POST', fixture.path, { statement: 'Changed intent.' }, key), 409)).toMatchObject({ code: 'idempotency_conflict' });
+  expect(await answer(sample('appeal-intent-conflict', 'POST', fixture.path, { statement: 'Changed intent.' }, key), 409)).toMatchObject({ code: 'idempotency_conflict' });
   expect(await answer(person.main('POST', fixture.path, input), 409)).toMatchObject({ code: 'appeal_already_open' });
-  const before = await read(fixture);
+  const before = await read(fixture, person, sample, 'appeal-open');
   await decide(person, decision(person, opened.caseId, 'restore'), 403);
   expect(await read(fixture)).toEqual(before);
   await decide(fixture.sessions.owner, decision(fixture.sessions.owner, opened.caseId, 'restore'), 200);
-  await restored(fixture, opened.caseId);
-});
+  await restored(fixture, opened.caseId, sample);
+}, recording);
 outcomeTest(moderation, 'owner', async () => {
   const fixture = fixtures.owner, person = fixture.sessions.owner;
+  const sample = recording.session('owner', person);
+  for (const [label, path] of [
+    ['session-agent', '/v1/me/session-agent'],
+    ['agent-choices', '/v1/me/agents?languages=en'],
+    ['acting-contexts', '/v1/me/acting-contexts?task=work.create'],
+    ['acting-agent-profile', `/v1/agents/${person.actingSubject!.slice(-36)}?${acting(person)}`],
+  ] as const) await (await sample(label, 'GET', path)).body?.cancel();
+  await answer(sample('management-realm-header', 'GET', `${fixture.root}?${acting(person)}&language=en`));
+  await answer(sample('moderation-queue-empty', 'GET', `${fixture.root}/moderation?${acting(person)}&state=open`));
+  // The frame can render without a site link; retain the API's refusal too.
+  await (await sample('management-site', 'GET', `${fixture.root}/zone?${acting(person)}`)).body?.cancel();
+  await (await sample('site-editor-access', 'GET', `/v1/zones/${fixture.sessions.zone.slice(-36)}/showcase-editor?${acting(person)}`)).body?.cancel();
   await cannotImpersonate(fixture, person);
   await answer(person.main('GET', `${fixture.root}/member-ban?${acting(fixture.sessions.member)}`), 404);
   const { caseId } = await open(fixture), before = await read(fixture);
-  expect((await read(fixture, person)).appeal.caseId).toBe(caseId);
+  expect((await read(fixture, person, sample, 'manager-appeal-open')).appeal.caseId).toBe(caseId);
+  await answer(sample('moderation-queue-appeal', 'GET', `${fixture.root}/moderation?${acting(person)}&state=open`));
+  await (await sample('appeal-decision-basis', 'GET', `${fixture.root}/moderation/${caseId}?${acting(person)}`)).body?.cancel();
   const stale = { ...decision(person, caseId, 'restore'), expectedGeneration: '9' };
   await decide(person, stale, 409); expect(await read(fixture)).toEqual(before);
   const command = decision(person, caseId, 'restore');
@@ -152,31 +180,34 @@ outcomeTest(moderation, 'owner', async () => {
   expect(await decide(person, command, 200)).toMatchObject({ replayed: true });
   await decide(person, { ...command, rationale: 'Changed intent under the same key.' }, 409);
   await restored(fixture, caseId);
-});
+}, recording);
 outcomeTest(moderation, 'moderator', async () => {
   const fixture = fixtures.moderator, person = fixture.sessions.moderator;
-  await answer(person.main('GET', `${fixture.root}?${acting(person)}`));
+  const sample = recording.session('moderator', person);
+  await answer(sample('moderator-realm-header', 'GET', `${fixture.root}?${acting(person)}`));
   await cannotImpersonate(fixture, person);
   const { caseId } = await open(fixture), before = await read(fixture);
-  expect((await read(fixture, person)).appeal.caseId).toBe(caseId);
+  expect((await read(fixture, person, sample, 'moderator-appeal-open')).appeal.caseId).toBe(caseId);
   await answer(person.main('GET', fixtures.owner.path), 404);
   await decide(person, decision(person, caseId, 'restore'), 403);
   expect(await read(fixture)).toEqual(before);
   await decide(person, decision(person, caseId, 'dismiss', randomUUID(), 'private'), 200);
-  expect((await read(fixture)).appeal).toMatchObject({ state: 'decided', outcome: 'dismiss', rationale: null });
+  expect((await read(fixture, fixture.sessions.member,
+    recording.session('moderator', fixture.sessions.member), 'appeal-dismissed-private')).appeal).toMatchObject({ state: 'decided', outcome: 'dismiss', rationale: null });
   const banReading = await answer<Reading>(fixture.sessions.member.main('GET', `${fixture.root}/member-ban?${acting(fixture.sessions.member)}`));
   expect(banReading.appeal).toMatchObject({ state: 'decided', outcome: 'dismiss', rationale: null });
   protectedIdentity(banReading, fixture.sessions);
-});
+}, recording);
 outcomeTest(moderation, 'operator', async () => {
   const fixture = fixtures.operator, person = fixture.sessions.operator;
-  expect(await answer<{ groups: string[] }>(person.main('GET', '/v1/me/platform-access'))).toMatchObject({ groups: expect.arrayContaining(['platform-admin']) });
+  const sample = recording.session('operator', person);
+  expect(await answer<{ groups: string[] }>(sample('platform-access', 'GET', '/v1/me/platform-access'))).toMatchObject({ groups: expect.arrayContaining(['platform-admin']) });
   await answer(person.main('GET', `${fixture.root}?${acting(person)}`), 404);
-  await answer(person.main('GET', fixture.path), 404);
+  await answer(sample('appeal-hidden', 'GET', fixture.path), 404);
   await answer(person.main('GET', `${fixture.root}/member-ban?${acting(fixture.sessions.member)}`), 404);
   await cannotImpersonate(fixture, person);
   const { caseId } = await open(fixture), before = await read(fixture);
   await decide(person, decision(person, caseId, 'restore'), 403);
   await decide(person, decision(person, caseId, 'dismiss'), 403);
   expect(await read(fixture)).toEqual(before);
-});
+}, recording);

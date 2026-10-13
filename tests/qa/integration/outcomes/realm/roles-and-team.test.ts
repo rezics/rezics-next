@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import team from '../../../../../scripts/qa/cases/outcomes/realm/roles-and-team.ts';
-import { outcomeTest } from '../../../support/outcome-test.ts';
+import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import {
   personaSessions,
   type PersonaName,
@@ -11,6 +11,7 @@ import {
 
 setDefaultTimeout(120_000);
 let sessions: PersonaSessions;
+const recording = new OutcomeRecorder(team);
 const root = () => `/v1/realms/${sessions.realm.slice(-36)}`;
 const acting = (person: PersonaSession) =>
   `actingSubject=${encodeURIComponent(person.actingSubject ?? sessions.owner.actingSubject!)}`;
@@ -69,16 +70,19 @@ async function change(change: Change) {
 }
 beforeAll(async () => {
   sessions = await personaSessions('private');
+  await recording.prepare();
 }, 180_000);
 afterAll(async () => {
-  await sessions?.close();
+  try { await recording.publish(); }
+  finally { await sessions?.close(); }
 });
 
 async function refused(name: PersonaName) {
   const person = sessions[name],
     status = name === 'visitor' ? 401 : 403;
+  const sample = recording.session(name, person);
   for (const path of ['roles', 'members'])
-    await answer(person.main('GET', `${root()}/${path}?${acting(person)}`), status);
+    await answer(sample(`${path}-denied`, 'GET', `${root()}/${path}?${acting(person)}`), status);
   const command = {
     actingSubject: person.actingSubject ?? sessions.owner.actingSubject,
     expectedGeneration: '0',
@@ -90,24 +94,41 @@ async function refused(name: PersonaName) {
       permissions: ['realm.roles.manage'],
     },
   };
-  await answer(person.main('POST', `${root()}/role-impact`, command), status);
+  await answer(sample('role-impact-denied', 'POST', `${root()}/role-impact`, command), status);
   await answer(
     person.main('POST', `${root()}/role-changes`, { ...command, impactDigest: '0'.repeat(64) }),
     status,
   );
   await answer(
-    person.main('GET', name === 'visitor' ? root() : `${root()}?${acting(person)}`),
+    sample('realm-header', 'GET', name === 'visitor' ? root() : `${root()}?${acting(person)}`),
     ['member', 'moderator'].includes(name) ? 200 : 404,
   );
 }
-outcomeTest(team, 'visitor', () => refused('visitor'));
-outcomeTest(team, 'stranger', () => refused('stranger'));
-outcomeTest(team, 'member', () => refused('member'));
+outcomeTest(team, 'visitor', () => refused('visitor'), recording);
+outcomeTest(team, 'stranger', () => refused('stranger'), recording);
+outcomeTest(team, 'member', () => refused('member'), recording);
 
 outcomeTest(team, 'owner', async () => {
   const owner = sessions.owner,
     stranger = sessions.stranger,
     moderator = sessions.moderator;
+  const sample = recording.session('owner', owner);
+  for (const [label, path] of [
+    ['session-agent', '/v1/me/session-agent'],
+    ['agent-choices', '/v1/me/agents?languages=en'],
+    ['acting-contexts', '/v1/me/acting-contexts?task=work.create'],
+    ['acting-agent-profile', `/v1/agents/${owner.actingSubject!.slice(-36)}?${acting(owner)}`],
+  ] as const) await (await sample(label, 'GET', path)).body?.cancel();
+  await answer(sample('management-realm-header', 'GET', `${root()}?${acting(owner)}&language=en`));
+  await answer(sample('roles-initial', 'GET', `${root()}/roles?${acting(owner)}`));
+  await answer(sample('member-roster', 'GET', `${root()}/members?${acting(owner)}`));
+  await answer(sample('member-search-empty', 'GET', `${root()}/members?${acting(owner)}&search=nomatch${randomUUID().replaceAll('-', '')}`));
+  await answer(sample('outgoing-invitations-empty', 'GET', `${root()}/invitations?${acting(owner)}`));
+  // The frame can render without a site link; retain the API's refusal too.
+  await (await sample('management-site', 'GET', `${root()}/zone?${acting(owner)}`)).body?.cancel();
+  await (await sample('site-editor-access', 'GET', `/v1/zones/${sessions.zone.slice(-36)}/showcase-editor?${acting(owner)}`)).body?.cancel();
+  for (const name of ['owner', 'moderator'] as const)
+    await answer(recording.session('owner', sessions.visitor)(`holder-name-${name}`, 'GET', `/v1/agents/${sessions[name].actingSubject!.slice(-36)}`));
   const roleId = randomUUID();
   const created = await change({
     kind: 'role',
@@ -116,22 +137,25 @@ outcomeTest(team, 'owner', async () => {
     permissions: ['realm.roles.manage'],
   });
   expect(created.impact.changes).toEqual([]);
+  await answer(sample('roles-unassigned', 'GET', `${root()}/roles?${acting(owner)}`));
   const intent = await preview(assignment(roleId, stranger.actingSubject!)),
     key = randomUUID();
   expect(intent.impact.changes).toEqual([
     { member: stranger.actingSubject, gained: ['realm.roles.manage'], lost: [] },
   ]);
   const receipt = await answer<Receipt>(
-    owner.main('POST', `${root()}/role-changes`, intent.command, key),
+    sample('role-assignment-receipt', 'POST', `${root()}/role-changes`, intent.command, key),
     201,
   );
   expect(receipt.impact).toEqual(intent.impact);
+  await answer(sample('roles-assigned', 'GET', `${root()}/roles?${acting(owner)}`));
+  await answer(recording.session('owner', sessions.visitor)('holder-name-stranger', 'GET', `/v1/agents/${stranger.actingSubject!.slice(-36)}`));
   expect(
     await answer(owner.main('POST', `${root()}/role-changes`, intent.command, key)),
   ).toMatchObject({ receiptId: receipt.receiptId, replayed: true });
   await answer(
-    owner.main(
-      'POST',
+    sample(
+      'role-intent-conflict', 'POST',
       `${root()}/role-changes`,
       { ...intent.command, reason: 'Different intent' },
       key,
@@ -208,7 +232,7 @@ outcomeTest(team, 'owner', async () => {
   const full = await answer<Roles>(owner.main('GET', `${root()}/roles?${acting(owner)}`));
   expect(full.roles.length).toBe(full.cap);
   await answer(
-    owner.main('POST', `${root()}/role-impact`, {
+    sample('role-budget-refused', 'POST', `${root()}/role-impact`, {
       actingSubject: owner.actingSubject,
       expectedGeneration: full.generation,
       reason: 'Check the declared role budget',
@@ -219,17 +243,17 @@ outcomeTest(team, 'owner', async () => {
   expect(
     (await answer<Roles>(owner.main('GET', `${root()}/roles?${acting(owner)}`))).generation,
   ).toBe(full.generation);
-});
+}, recording);
 outcomeTest(team, 'moderator', async () => {
   await refused('moderator');
   await answer(
     sessions.moderator.main('GET', `${root()}/moderation?${acting(sessions.moderator)}`),
   );
-});
+}, recording);
 outcomeTest(team, 'operator', async () => {
-  expect(await answer(sessions.operator.main('GET', '/v1/me/platform-access'))).toMatchObject({
+  expect(await answer(recording.session('operator', sessions.operator)('platform-access', 'GET', '/v1/me/platform-access'))).toMatchObject({
     groups: ['platform-admin'],
   });
   await refused('operator');
   await answer(sessions.operator.main('GET', `${root()}/roles?${acting(sessions.owner)}`), 403);
-});
+}, recording);
