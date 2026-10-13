@@ -576366,6 +576366,83 @@
                       ],
                       "type": "object"
                     },
+                    "importability": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "status": {
+                              "const": "importable",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "status"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "allowed": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "code": {
+                              "const": "recipe_not_importable",
+                              "type": "string"
+                            },
+                            "limit": {
+                              "enum": [
+                                "occurrences",
+                                "bytes",
+                                "depth",
+                                "section-depth"
+                              ],
+                              "type": "string"
+                            },
+                            "measured": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "status": {
+                              "const": "not-importable",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "code",
+                            "limit",
+                            "measured",
+                            "allowed"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "code": {
+                              "const": "recipe_unit_not_registered",
+                              "type": "string"
+                            },
+                            "status": {
+                              "const": "not-importable",
+                              "type": "string"
+                            },
+                            "unit": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "code",
+                            "unit"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    },
                     "profile": {
                       "const": "recipe-schema-org-export-v1",
                       "type": "string"
@@ -576394,11 +576471,106 @@
                                     "const": "PropertyValue",
                                     "type": "string"
                                   },
+                                  "amountLexical": {
+                                    "maxLength": 100,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
                                   "inLanguage": {
                                     "type": "string"
                                   },
-                                  "name": {
+                                  "maxValue": {
                                     "type": "string"
+                                  },
+                                  "name": {
+                                    "maxLength": 1000,
+                                    "type": "string"
+                                  },
+                                  "optional": {
+                                    "const": true,
+                                    "type": "boolean"
+                                  },
+                                  "parseStatus": {
+                                    "enum": [
+                                      "parsed",
+                                      "partial",
+                                      "unparsed"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "text": {
+                                    "maxLength": 1000,
+                                    "type": "string"
+                                  },
+                                  "textParts": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "amount": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "end": {
+                                            "maximum": 1000,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          },
+                                          "start": {
+                                            "maximum": 1000,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": [
+                                          "start",
+                                          "end"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "name": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "end": {
+                                            "maximum": 1000,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          },
+                                          "start": {
+                                            "maximum": 1000,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": [
+                                          "start",
+                                          "end"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "unit": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "end": {
+                                            "maximum": 1000,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          },
+                                          "start": {
+                                            "maximum": 1000,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": [
+                                          "start",
+                                          "end"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    },
+                                    "required": [
+                                      "amount",
+                                      "name"
+                                    ],
+                                    "type": "object"
                                   },
                                   "unitCode": {
                                     "type": "string"
@@ -576412,8 +576584,8 @@
                                 },
                                 "required": [
                                   "@type",
-                                  "name",
-                                  "value",
+                                  "text",
+                                  "parseStatus",
                                   "inLanguage"
                                 ],
                                 "type": "object"
@@ -577442,6 +577614,7 @@
                     "recipe",
                     "residuals",
                     "sourceObservations",
+                    "importability",
                     "sourcePosition",
                     "cost"
                   ],
