@@ -1,14 +1,12 @@
 import type { Metadata } from 'next';
-import { coverKindOf } from '../../../../../../features/catalogue/work.ts';
 import { workPageMetadata, workTitle } from '../../../../../../features/seo/work.ts';
 import {
   BooksContentsRecordedPage, booksContentsInventoryLimit, booksContentsInventoryQuery, contentsReadsInventory,
   mapBooksContentsRecordedPage,
 } from '../../../../../../features/work-page/books-contents-recorded-page.tsx';
-import { readContentsGroup } from '../../../../../../features/work-page/contents-actions.ts';
-import { ContentsRegion } from '../../../../../../features/work-page/contents.tsx';
-import { loadWork, oneTextLanguage, readContents, reader, resolveWork } from '../../../../../../features/work-page/read.ts';
-import { idOf, iriOf, parseContentsQuery } from '../../../../../../features/work-page/route.ts';
+import { loadWork, readContents, reader, resolveWork } from '../../../../../../features/work-page/read.ts';
+import { iriOf, parseContentsQuery } from '../../../../../../features/work-page/route.ts';
+import { WorkContents } from '../../../../../../features/work-page/work-views.tsx';
 import { getMessages, getTranslation, requestLocale } from '../../../../../../i18n/server.ts';
 
 type Params = { params: Promise<{ ref: string }> };
@@ -43,18 +41,7 @@ export default async function WorkContentsPage({ params, searchParams }: Props) 
       workRef: ref, workIri: iriOf(work.id), language, cursor: query.cursor, locale, title: work.header.title,
     })} />;
   }
-  const none = contents.ok ? !contents.data.items.length && !query?.parent && !query?.cursor
-    : contents.failure === 'missing';
-  const textLanguage = none ? await oneTextLanguage(work.id, locale, work.header.selectedLanguage) : null;
-  const oneText = textLanguage
-    ? { title: work.header.title, language: textLanguage, book: coverKindOf(work.header.types) === 'book' } : null;
-  const groups = contents.ok && query && !query.parent ? contents.data.items.filter(item => item.role === 'group') : [];
-  const open = groups.find(item => idOf(item.occurrence) === query?.open)
-    ?? groups.find(item => item.division !== 'extras' && item.childCount) ?? groups[0];
-  const openPage = open && query ? await readContents(work.id, {
-    parent: idOf(open.occurrence) ?? undefined, language: query.language,
-  }) : null;
-  return <ContentsRegion contents={contents} workRef={ref} id={work.id} query={query ?? {}} oneText={oneText}
-    opened={open && openPage?.ok ? { occurrence: open.occurrence, page: openPage.data } : null}
-    groupAction={readContentsGroup} locale={locale} messages={messages} />;
+  // Group selection on a capped contents page stays in WorkContents. This route reads once
+  // only to choose the chapter inventory when that contents answer cannot stand for the work.
+  return <WorkContents workRef={ref} id={work.id} work={work.header} query={query} locale={locale} messages={messages} />;
 }
