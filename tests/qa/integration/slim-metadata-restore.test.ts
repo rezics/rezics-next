@@ -1062,6 +1062,20 @@ test('OPS12: post-erasure Content pins capture and restore exact historical owne
     await content.settlePublication(`erased-pin-second-settle:${randomUUID()}`, secondPreparation,
       { outcome: 'active', revisionId, receipt: publication.receipt,
         dataEpoch: publication.graphDataEpoch!, sequence: publication.graphSequence! });
+    // A real successful preparation for another revision cannot bind this pin.
+    const otherDraft = await content.saveDraft({ operationId: `erased-pin-other-draft:${randomUUID()}`,
+      variant: { id: `urn:rezics:variant:${randomUUID()}`, resourceId: created.work!,
+        language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr' },
+      expectedHead: null, model: 'content-shape-v1', sourceRevision: null, provenance: {},
+      serializedJson: JSON.stringify({ body: 'Independent retained revision' }) });
+    if (!otherDraft.revisionId) throw new Error('Independent draft has no revision');
+    const otherExact = (await content.readExactBatch([otherDraft.revisionId], async ids => new Set(ids)))[0];
+    if (otherExact?.status !== 'available') throw new Error('Independent revision bytes are unavailable');
+    const otherPreparation = `erased-pin-other-prepare:${randomUUID()}`;
+    const otherPrepared = await content.preparePublication(otherPreparation, otherDraft.revisionId,
+      otherExact.reference.byteDigest);
+    expect(otherPrepared.status).toBe('pending');
+    expect(otherPrepared.reference.revisionId).toBe(otherDraft.revisionId);
     const consumer = `erased-pin-recovery:${randomUUID()}`;
     await initializeRelayCheckpoint(relayPool, consumer, env.lineage.dataEpoch);
     while (await relayMainOutboxOnce(fuseki, relayPool, consumer)) { /* retain all actual native batches */ }
@@ -1192,9 +1206,9 @@ test('OPS12: post-erasure Content pins capture and restore exact historical owne
           UPDATE relay.erasure SET kind='account' WHERE id='${entry.erasureId}'`, values: [] },
       { name: 'journal not suppressed', owner: 'relay', sql: `ALTER TABLE relay.erasure DISABLE TRIGGER erasure_guard;
           UPDATE relay.erasure SET suppression_status='pending',suppressed_at=NULL,stage='requested' WHERE id='${entry.erasureId}'`, values: [] },
-      { name: 'missing full journal target', owner: 'relay', sql: `ALTER TABLE relay.erasure_target DISABLE TRIGGER erasure_target_immutable;
+      { name: 'missing full journal target', owner: 'relay', sql: `ALTER TABLE relay.erasure_target DISABLE TRIGGER erasure_target_completion_guard;
           DELETE FROM relay.erasure_target WHERE erasure_id='${entry.erasureId}'`, values: [] },
-      { name: 'foreign full journal target', owner: 'relay', sql: `ALTER TABLE relay.erasure_target DISABLE TRIGGER erasure_target_immutable;
+      { name: 'foreign full journal target', owner: 'relay', sql: `ALTER TABLE relay.erasure_target DISABLE TRIGGER erasure_target_completion_guard;
           UPDATE relay.erasure_target SET target_ref='${randomUUID()}' WHERE erasure_id='${entry.erasureId}'`, values: [] },
       { name: 'extra full journal target', owner: 'relay', sql: `INSERT INTO relay.erasure_target
           (erasure_id,ordinal,owner,target_kind,target_ref) VALUES ('${entry.erasureId}',2,'content','content_revision','${randomUUID()}')`, values: [] },
@@ -1207,6 +1221,7 @@ test('OPS12: post-erasure Content pins capture and restore exact historical owne
       { name: 'wrong retained native receipt', owner: 'relay', sql: `UPDATE relay.delivered_event SET envelope=jsonb_set(envelope,
           '{data,receipt,id}','"urn:rezics:receipt:wrong"'::jsonb) WHERE event_id=$1`, values: [erasureEventId] },
     ];
+    const corruptionRefusals: string[] = [];
     for (const corruption of corruptions) await borrowed(async context => {
       const client = corruption.owner === 'content' ? context.contentClient : context.relayClient;
       await client.query('SAVEPOINT original_pin');
@@ -1216,6 +1231,7 @@ test('OPS12: post-erasure Content pins capture and restore exact historical owne
           .rejects.toBeInstanceOf(ContentRecoveryConflict);
       } finally { await client.query('ROLLBACK TO SAVEPOINT original_pin'); }
       expect(await captureContentRecoveryCoverage(contentPool!, references, context)).toEqual(signedCut.content);
+      corruptionRefusals.push(corruption.name);
     });
     await borrowed(async context => {
       const nativePin = pins.find(pin => pin.graph === GRAPHS.outbox && pin.byteDigest === null);
@@ -1223,18 +1239,76 @@ test('OPS12: post-erasure Content pins capture and restore exact historical owne
       const position = (await context.contentClient.query<{ epoch: string; sequence: string }>(
         'SELECT data_epoch::text AS epoch, sequence::text FROM content.receipt WHERE operation_id=$1',
         [input.preparationId])).rows[0]!;
+      const preparationRows = (await context.contentClient.query(`SELECT p.operation_id,p.revision_id,
+        p.status,p.pin_active,r.action,r.outcome,r.data_epoch::text,r.sequence::text,
+        o.id::text AS outbox_id,o.revision_id AS outbox_revision_id,o.event_type
+        FROM content.publication_preparation p JOIN content.receipt r USING (operation_id)
+        JOIN content.outbox o ON o.operation_id=r.operation_id
+          AND o.data_epoch=r.data_epoch AND o.sequence=r.sequence
+        WHERE p.operation_id=ANY($1::text[]) ORDER BY p.operation_id`,
+      [[input.preparationId, secondPreparation, otherPreparation]])).rows;
+      expect(preparationRows).toHaveLength(3);
+      for (const operationId of [input.preparationId, secondPreparation, otherPreparation]) {
+        expect(preparationRows.find(row => row.operation_id === operationId)).toEqual({
+          operation_id: operationId, revision_id: operationId === otherPreparation ? otherDraft.revisionId : revisionId,
+          status: operationId === otherPreparation ? 'pending' : 'active', pin_active: true,
+          action: 'publication.prepare', outcome: 'succeeded', data_epoch: position.epoch,
+          sequence: expect.stringMatching(/^[1-9][0-9]*$/), outbox_id: expect.any(String),
+          outbox_revision_id: operationId === otherPreparation ? otherDraft.revisionId : revisionId,
+          event_type: 'content.publication.prepared',
+        });
+      }
+      expect(otherDraft.revisionId).not.toBe(revisionId);
+      const events = (await context.contentClient.query(`SELECT id::text,operation_id,
+        data_epoch::text,sequence::text,revision_id,event_type FROM content.outbox ORDER BY sequence`)).rows;
+      const owner = (await context.contentClient.query<{ epoch: string; sequence: string }>(
+        'SELECT data_epoch::text AS epoch,sequence::text FROM content.owner_control')).rows;
+      expect(owner).toEqual([{ epoch: position.epoch, sequence: signedCut.content.sequence }]);
+      const absentSequence = (BigInt(owner[0]!.sequence) + 1n).toString();
+      expect((await context.contentClient.query(`SELECT id::text,operation_id,revision_id FROM content.outbox
+        WHERE data_epoch=$1 AND sequence=$2`, [position.epoch, absentSequence])).rows).toEqual([]);
+      const successfulPin = preparationRows.find(row => row.operation_id === secondPreparation)!;
+      const historicalPin = { ...nativePin!, preparationId: secondPreparation,
+        ownerEpoch: successfulPin.data_epoch, ownerSequence: successfulPin.sequence };
+      const positive = await captureContentRecoveryCoverage(contentPool!, references.map(ref =>
+        ref === nativePin ? historicalPin : ref), context);
+      expect(positive.graphReferencesCount).toBe(signedCut.content.graphReferencesCount);
+      expect(positive.graphReferencesDigest).not.toBe(signedCut.content.graphReferencesDigest);
+      expect({ ...positive, graphReferencesDigest: signedCut.content.graphReferencesDigest }).toEqual(signedCut.content);
+      expect(await captureContentRecoveryCoverage(contentPool!, references, context)).toEqual(signedCut.content);
       const conflictingPins = [
-        { field:'preparationId', pin:{ ...nativePin!, preparationId:secondPreparation } },
+        { field:'preparationId', pin:{ ...nativePin!, preparationId:otherPreparation } },
         { field:'ownerEpoch', pin:{ ...nativePin!, ownerEpoch:randomUUID(), ownerSequence:position.sequence } },
         { field:'ownerSequence', pin:{ ...nativePin!, ownerEpoch:position.epoch,
-          ownerSequence:(BigInt(position.sequence)+1n).toString() } },
+          ownerSequence:absentSequence } },
       ];
+      const withoutPin = await captureContentRecoveryCoverage(contentPool!,
+        references.filter(ref => ref !== nativePin), context);
+      expect(BigInt(signedCut.content.graphReferencesCount) - BigInt(withoutPin.graphReferencesCount)).toBe(1n);
+      expect(withoutPin.graphReferencesDigest).not.toBe(signedCut.content.graphReferencesDigest);
+      // Observe every refusal independently; an accepted conflict must not hide
+      // either of the other controls or the exact baseline recapture.
+      const outcomes: { field: string; pin: typeof nativePin; accepted: boolean; evidence: unknown }[] = [];
       for (const conflict of conflictingPins) {
-        await expect(captureContentRecoveryCoverage(contentPool!, references.map(ref =>
-          ref.subject === nativePin!.subject && ref.graph === nativePin!.graph ? conflict.pin : ref), context))
-          .rejects.toThrow(`retained graph Content pin ${conflict.field} conflicts`);
+        try {
+          const evidence = await captureContentRecoveryCoverage(contentPool!, references.map(ref =>
+            ref === nativePin ? conflict.pin : ref), context);
+          outcomes.push({ ...conflict, accepted: true, evidence });
+        } catch (evidence) { outcomes.push({ ...conflict, accepted: false, evidence }); }
         expect(await captureContentRecoveryCoverage(contentPool!, references, context)).toEqual(signedCut.content);
       }
+      const cutEvidence = (cut: typeof signedCut.content) => ({ version: cut.version,
+        dataEpoch: cut.dataEpoch, sequence: cut.sequence, catalogDigest: cut.catalogDigest,
+        graphReferencesCount: cut.graphReferencesCount, graphReferencesDigest: cut.graphReferencesDigest });
+      console.info('Content conflicting pin qualification:', JSON.stringify({ nativePin, position,
+        preparationRows, events, owner, absentSequence, historicalPin, originalProof,
+        corruptionRefusals, captured: cutEvidence(signedCut.content), positive: cutEvidence(positive),
+        withoutPin: cutEvidence(withoutPin), baselineRecaptures: outcomes.length,
+        outcomes: outcomes.map(outcome => ({ ...outcome, evidence: outcome.accepted
+          ? cutEvidence(outcome.evidence as typeof signedCut.content)
+          : outcome.evidence instanceof Error
+            ? { type: outcome.evidence.constructor.name, message: outcome.evidence.message }
+            : String(outcome.evidence) })) }));
       await expect(captureContentRecoveryCoverage(contentPool!, pins.map(pin => ({ ...pin, byteDigest: null })), context))
         .rejects.toBeInstanceOf(ContentRecoveryConflict);
       await expect(captureContentRecoveryCoverage(contentPool!, pins.map(pin => ({ ...pin, byteDigest: '0'.repeat(64) })), context))
@@ -1243,6 +1317,11 @@ test('OPS12: post-erasure Content pins capture and restore exact historical owne
         .rejects.toBeInstanceOf(ContentRecoveryConflict);
       await expect(captureContentRecoveryCoverage(contentPool!, references, { contentClient: context.contentClient } as never))
         .rejects.toBeInstanceOf(ContentRecoveryConflict);
+      expect(await captureContentRecoveryCoverage(contentPool!, references, context)).toEqual(signedCut.content);
+      for (const outcome of outcomes) {
+        const captured = outcome.accepted ? Promise.resolve(outcome.evidence) : Promise.reject(outcome.evidence);
+        await expect(captured).rejects.toThrow(`retained graph Content pin ${outcome.field} conflicts`);
+      }
     });
     expect(await facts(fuseki)).toEqual(sourceFacts);
     expect((await relayPool.query('SELECT envelope FROM relay.delivered_event WHERE event_id=$1', [erasureEventId])).rows).toEqual(sourceEvent);
