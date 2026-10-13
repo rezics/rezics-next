@@ -89,6 +89,22 @@ export const repositoryGuards = [
     reason: 'Every public OpenAPI list operation must meet the list convention without new debt.',
   },
   {
+    file: 'scripts/static/web-continuations.test.ts',
+    reason: 'Web list consumers preserve continuations and offer a route beyond capped results.',
+  },
+  {
+    file: 'scripts/static/web-accepted-commands.test.ts',
+    reason: 'Web command consumers distinguish accepted pending operations from completed effects.',
+  },
+  {
+    file: 'scripts/static/web-acting-identity.test.ts',
+    reason: 'Identity-required web reads carry the selected acting identity.',
+  },
+  {
+    file: 'scripts/static/web-page-filtering.test.ts',
+    reason: 'Web consumers do not define result eligibility by filtering only a capped API page.',
+  },
+  {
     file: 'tests/qa/unit/test-registry.test.ts',
     reason: 'Every tracked Bun test must belong to a QA tier or a reasoned exclusion.',
   },

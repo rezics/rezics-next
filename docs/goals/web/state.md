@@ -27,11 +27,11 @@ tier. At most eight live web workers. Briefs are at most forty lines.
 | G-2093 | Capped-page filtering; brief ready, dispatch after G-2090 closes because zones claims overlap |
 | G-2094 | Landed at `775d67f79132` on attempt 1; canonical suffix expectations in both tests/story; 16 story cases, web types and all 31 merge unit/guard files pass; e2e execution stays with nightly regression |
 
-G-2090, G-2091 and G-2092 are running on first attempts; G-2094 is landed. Program's mail
-`program-web-guards-registry` directs this manager to append all four inventory
-guard entries in one own-only commit after Program mails G-2071's landing and
-release of `scripts/qa/repository-guards.ts`. Workers do not edit that file;
-their own guard tests run in their unit gates meanwhile. No reply is required.
+G-2090, G-2091 and G-2092 are running on first attempts; G-2094 is landed and
+closed. Program's mail `program-web-guards-released` confirmed G-2071 landed
+and released `scripts/qa/repository-guards.ts`. This manager appended all four
+inventory guard entries there; existing absent-file filtering allows each guard
+to join the gate when its task lands. Workers do not edit that registry.
 An API gap goes to Program as one operation/persona line, never a client workaround.
 
 Until G-2072 enforces the method, the manager enforces it in every brief: merge
