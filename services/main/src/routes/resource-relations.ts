@@ -154,7 +154,10 @@ export function resourceRelationRoutes(fuseki: FusekiClient, work: MainWorkDepen
               return 'granted' in disclosure && disclosure.granted.has(definition);
             }, summarize,
             visibleRecords: visibility,
-            readingPosition: JSON.stringify([principal, actor, await boundary.binding()]),
+            // Token expiry and scope-list size are transport details; keep the effective reader and disclosure bound.
+            readingPosition: JSON.stringify([principal ? [principal.issuer, principal.subject,
+              principal.emailVerified ?? false, principal.contentEvidence ?? null] : null,
+              actor, await boundary.binding()]),
           }));
           const evidence = await readWikiClaimEvidence(boundary.session,result.items
             .filter(item => item.kind === 'occurrence').map(item => item.relation),'relation',boundary);

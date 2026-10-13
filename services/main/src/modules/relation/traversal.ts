@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readAuthorCredit } from '../work/author-credit.ts';
 import {
   readExactDefinition,
@@ -101,8 +102,7 @@ interface Cursor {
   epoch: string;
   sequence: string;
   after: string;
-  readingPosition?: string;
-  frames?: readonly Coordinate[];
+  binding: string;
   score?: number;
 }
 
@@ -353,6 +353,9 @@ async function readResourceRelationsAtPosition(
   }
   const snapshot = session?.fencesSelectedUnits
     ? { epoch: session.position.dataEpoch, sequence: session.position.sequence } : await position(env);
+  // Bind the complete effective query without making the returned cursor grow with reader or frame metadata.
+  const binding = createHash('sha256').update(JSON.stringify([input.resource, input.limit,
+    input.languages, input.frames, input.readingPosition])).digest('hex');
   let cursor: Cursor | undefined;
   if (input.after) {
     try {
@@ -360,8 +363,7 @@ async function readResourceRelationsAtPosition(
       if (
         !cursor ||
         cursor.resource !== input.resource ||
-        cursor.readingPosition !== input.readingPosition ||
-        JSON.stringify(cursor.frames) !== JSON.stringify(input.frames) ||
+        cursor.binding !== binding ||
         input.frames && (!Number.isInteger(cursor.score) || cursor.score! < 0 || cursor.score! > 136) ||
         typeof cursor.after !== 'string' ||
         !/^(occurrence|derivation|collection|author-credit):https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(
@@ -556,8 +558,8 @@ async function readResourceRelationsAtPosition(
             resource: input.resource,
             ...snapshot,
             after: selected.at(-1)!.candidate.key,
-            readingPosition: input.readingPosition,
-            ...(input.frames ? { frames: input.frames, score: selected[selected.length - 1]!.candidate.score } : {}),
+            binding,
+            ...(input.frames ? { score: selected[selected.length - 1]!.candidate.score } : {}),
           }),
         ).toString('base64url')
       : null,
