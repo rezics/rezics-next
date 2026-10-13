@@ -33,21 +33,31 @@ export const realmPermission = t.Union([t.Literal('governance.moderate'), t.Lite
 export const generation = t.String({ pattern: '^(0|[1-9][0-9]{0,17})$' });
 export const reason = t.String({ minLength: 1, maxLength: 2000 });
 export const commandFields = { actingSubject: readId, expectedGeneration: generation, reason };
+export const realmConceptScope = t.Object({ kind: t.Literal('concept'), id: readId }, { additionalProperties: false });
+export type RealmConceptScope = Static<typeof realmConceptScope>;
+// Omission retains an existing role's jurisdiction; explicit null makes it Realm-wide.
+const roleTargetScope = t.Optional(t.Nullable(realmConceptScope));
 export const roleChange = t.Union([
   t.Object({ kind: t.Literal('role'), roleId: readUuid, name: t.String({ minLength: 1, maxLength: 80 }),
-    permissions: t.Array(realmPermission, { maxItems: REALM_ADMIN_COST.permissions, uniqueItems: true }) },
+    permissions: t.Array(realmPermission, { maxItems: REALM_ADMIN_COST.permissions, uniqueItems: true }),
+    targetScope: roleTargetScope },
   { additionalProperties: false }),
   t.Object({ kind: t.Literal('assignment'), roleId: readUuid, member: readId, assigned: t.Boolean(),
-    validUntil: t.String({ format: 'date-time' }) }, { additionalProperties: false }),
+    validUntil: t.String({ format: 'date-time' }), targetScope: roleTargetScope }, { additionalProperties: false }),
 ]);
 export type RoleChange = Static<typeof roleChange>;
 export const roleCommand = t.Object({ ...commandFields, change: roleChange }, { additionalProperties: false });
 export type RoleCommand = Static<typeof roleCommand>;
 export const impact = t.Object({ digest: t.String(), exact: t.Literal(true), affectedCount: t.Integer(),
+  targetScope: roleTargetScope, previousTargetScope: roleTargetScope,
   generation, changes: t.Array(t.Object({ member: readId,
-    gained: t.Array(realmPermission), lost: t.Array(realmPermission) }), { maxItems: REALM_ADMIN_COST.assignments }) });
+    gained: t.Array(realmPermission), lost: t.Array(realmPermission),
+    jurisdictions: t.Optional(t.Array(t.Object({ targetScope: t.Nullable(realmConceptScope),
+      gained: t.Array(realmPermission), lost: t.Array(realmPermission) }), { maxItems: 2 })) }),
+  { maxItems: REALM_ADMIN_COST.assignments }) });
 export type RoleImpact = Static<typeof impact>;
 export const roleView = t.Object({ id: readUuid, name: t.String(), permissions: t.Array(realmPermission),
+  targetScope: roleTargetScope,
   // Null means this caller cannot read members, not that the role is unused.
   // Each holder is someone the members read lists for this role. `banned` is that row's flag.
   holders: t.Nullable(t.Array(t.Object({ member: readId, banned: t.Boolean() }), { maxItems: REALM_ROLE_HOLDER_PREVIEW })),
@@ -71,7 +81,7 @@ export const memberPage = t.Object({ generation, items: t.Array(t.Object({ membe
   joinedAt: t.Nullable(t.String()), membershipGeneration: generation,
   banned: t.Boolean(), bannedUntil: t.Nullable(t.String()),
   state: t.Union([t.Literal('joined'), t.Literal('left'), t.Literal('not_joined')]),
-  roles: t.Array(t.Object({ id: readUuid, name: t.String(), validUntil: t.String() })) })),
+  roles: t.Array(t.Object({ id: readUuid, name: t.String(), validUntil: t.String(), targetScope: roleTargetScope })) })),
   nextCursor: t.Nullable(readId) });
 export const memberCommand = t.Object({ ...commandFields, member: readId,
   expectedMembershipGeneration: generation,

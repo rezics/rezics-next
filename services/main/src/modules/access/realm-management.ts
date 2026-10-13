@@ -23,29 +23,30 @@ import { deliverZoneSpacePolicy, policyHead, readZoneSpaceDisclosure, type ZoneS
 import { zoneSpaceCreatorAllowed } from '../space/create-authority.ts';
 import { platformAdministratorProof, platformAdministratorTargetAllowed } from './platform-administrator.ts';
 import { representedGrantProof } from './represented-work-proof.ts';
+import { realmActionScope } from './realm-management-authority.ts';
 import { maintainerControllerProof } from '../work/maintainer-proof.ts';
 import { DATASET, GRAPHS, iri, lit, RV, type WorkActivationEnvironment } from '../work/activate.ts';
 
 export const realmAdminScope = (realm: string) => `governance:realm:${realm}`;
-export const realmPermissionScope = (realm: string, action: string) => action === 'review.decide'
-  ? `review:decide:${realm}` : action === 'publication.adopt' ? `publication:adopt:${realm}` : realmAdminScope(realm);
+export const realmPermissionScope = realmActionScope;
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const digest = (value: unknown): string => createHash('sha256').update(JSON.stringify(value, (_key, item) =>
   item && typeof item === 'object' && !Array.isArray(item)
     ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : item)).digest('hex');
-interface Role { id: string; name: string; permissions: RealmPermission[] }
+interface Role { id: string; name: string; permissions: RealmPermission[]; target_concept: string | null }
 interface Assignment { member: string; valid_until: Date }
 interface Grant { id: string; recipient_subject: string; action: RealmPermission;
-  generation: string; valid_until: Date; role_id: string | null }
+  generation: string; valid_until: Date; role_id: string | null; scope_id: string }
 interface Receipt { receiptId: string; generation: string; replayed: boolean }
 interface MemberRosterRow { member: string; state: 'joined' | 'left' | 'not_joined';
   membership_generation: string; banned: boolean; banned_until: Date | null; joined_at: Date | null;
-  roles: { id: string; name: string; validUntil: string }[] }
-interface RolePreviewRow { id: string; name: string; permissions: RealmPermission[];
+  roles: { id: string; name: string; validUntil: string; targetScope?: { kind: 'concept'; id: string } | null }[] }
+interface RolePreviewRow extends Role {
   holders: unknown; more_holders: boolean }
 interface RoleHolderPreview { member: string; banned: boolean }
 
 const roleUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const conceptScope = (id: string | null) => id === null ? null : { kind: 'concept' as const, id };
 
 /** The members read's ban flag. Role pages and the preview use this expression, so a ban cannot disagree. */
 const banIsCurrent = (ban: string) =>
@@ -65,7 +66,8 @@ function memberRosterSql(seek: string, limit = '$4'): string {
   (SELECT h.changed_at FROM access.membership_history h WHERE h.membership_id = m.id
     AND h.state = 'joined' ORDER BY h.generation DESC LIMIT 1) AS joined_at,
   COALESCE((SELECT jsonb_agg(jsonb_build_object('id', r.id, 'name', r.name,
-    'validUntil', a.valid_until) ORDER BY r.id) FROM access.realm_admin_assignment a
+    'validUntil', a.valid_until, 'targetScope', CASE WHEN r.target_concept IS NULL THEN NULL
+      ELSE jsonb_build_object('kind','concept','id',r.target_concept) END) ORDER BY r.id) FROM access.realm_admin_assignment a
     JOIN access.realm_admin_role r ON r.realm = a.realm AND r.id = a.role_id
     WHERE a.realm = $1 AND a.member = team.member AND a.valid_until > clock_timestamp()), '[]') AS roles
   FROM (${seek}) team
@@ -109,10 +111,10 @@ export const REALM_ROLE_HOLDER_MATCH_PAGE_SQL = memberRosterSql(roleHolderSeek(t
  * probe, so the assignment reads are capped by the role page times that probe.
  * The people are the role filter's people, and `banned` is the roster's flag.
  */
-export const REALM_ROLE_HOLDER_PREVIEW_SQL = `SELECT r.id, r.name, r.permissions,
+export const REALM_ROLE_HOLDER_PREVIEW_SQL = `SELECT r.id, r.name, r.permissions, r.target_concept,
   COALESCE(h.holders, '[]'::jsonb) AS holders, COALESCE(h.more_holders, false) AS more_holders
   FROM (
-    SELECT id, name, permissions FROM access.realm_admin_role
+    SELECT id, name, permissions, target_concept FROM access.realm_admin_role
     WHERE realm = $1 ORDER BY id LIMIT $2) r
   LEFT JOIN LATERAL (
     SELECT COALESCE(jsonb_agg(jsonb_build_object('member', page.member, 'banned', page.banned) ORDER BY page.ord)
@@ -503,18 +505,19 @@ export class AccessRealmManagement {
       // the role is unused. The holder query does not run otherwise.
       const seeHolders = await this.allowed(client, principal, realm, actor, 'realm.members.manage');
       if (!seeHolders) {
-        const rows = (await client.query<{ id: string; name: string; permissions: RealmPermission[] }>(
-          `SELECT id, name, permissions FROM access.realm_admin_role
+        const rows = (await client.query<Role>(
+          `SELECT id, name, permissions, target_concept FROM access.realm_admin_role
            WHERE realm = $1 ORDER BY id LIMIT $2`, [realm, REALM_ROLE_READ_LIMIT + 1])).rows;
         if (rows.length > REALM_ROLE_READ_LIMIT) throw new RealmAdminLimit('Realm role budget exceeded');
         return { generation, cap: REALM_ROLE_CAP, roles: rows.map(row => ({ id: row.id, name: row.name,
-          permissions: row.permissions, holders: null, moreHolders: null })) };
+          permissions: row.permissions, targetScope: conceptScope(row.target_concept), holders: null, moreHolders: null })) };
       }
       const rows = (await client.query<RolePreviewRow>(REALM_ROLE_HOLDER_PREVIEW_SQL,
         [realm, REALM_ROLE_READ_LIMIT + 1, REALM_ROLE_HOLDER_PREVIEW, REALM_ROLE_HOLDER_PROBE])).rows;
       if (rows.length > REALM_ROLE_READ_LIMIT) throw new RealmAdminLimit('Realm role budget exceeded');
       return { generation, cap: REALM_ROLE_CAP, roles: rows.map(row => ({ id: row.id, name: row.name,
-        permissions: row.permissions, holders: holderPreviews(row.holders), moreHolders: row.more_holders === true })) };
+        permissions: row.permissions, targetScope: conceptScope(row.target_concept),
+        holders: holderPreviews(row.holders), moreHolders: row.more_holders === true })) };
     });
   }
 
@@ -551,7 +554,7 @@ export class AccessRealmManagement {
   private async plan(client: PoolClient, realm: string, input: RoleCommand, ceiling: Date) {
     const change = input.change;
     if (change.kind === 'role' && !change.name.trim()) throw new RealmAdminInvalid('Role name must not be empty');
-    const role = (await client.query<Role>(`SELECT id, name, permissions FROM access.realm_admin_role
+    const role = (await client.query<Role>(`SELECT id, name, permissions, target_concept FROM access.realm_admin_role
       WHERE realm = $1 AND id = $2`, [realm, change.roleId])).rows[0];
     if (!role && change.kind === 'assignment') throw new RealmAdminInvalid('Role is unavailable');
     if (!role) {
@@ -560,6 +563,15 @@ export class AccessRealmManagement {
       if (count.rows.length >= REALM_ADMIN_COST.roles) throw new RealmAdminLimit('Realm role budget exceeded');
     }
     const permissions = change.kind === 'role' ? change.permissions : role!.permissions;
+    const previousConcept = role?.target_concept ?? null;
+    const targetConcept = change.kind === 'role' && change.targetScope !== undefined
+      ? change.targetScope?.id ?? null : previousConcept;
+    if (change.kind === 'assignment' && change.targetScope !== undefined
+      && (change.targetScope?.id ?? null) !== targetConcept) {
+      throw new RealmAdminInvalid('Assignment jurisdiction must match its role');
+    }
+    const concepts = [...new Set([previousConcept, targetConcept])];
+    const scopes = concepts.flatMap(concept => realmPermissions.map(action => realmPermissionScope(realm, action, concept)));
     const ownedGrants = await client.query<{ member: string }>(`SELECT member FROM access.realm_admin_role_grant
       WHERE realm = $1 AND role_id = $2 LIMIT $3`,
     [realm, change.roleId, REALM_ADMIN_COST.assignments * REALM_ADMIN_COST.permissions + 1]);
@@ -601,17 +613,15 @@ export class AccessRealmManagement {
       if (ban.rowCount) throw new RealmAdminDenied('Role member is banned');
     }
     const grants = (await client.query<Grant>(`SELECT g.id, g.recipient_subject, g.action,
-      g.generation::text, g.valid_until, link.role_id FROM access.permission_grant g
+      g.generation::text, g.valid_until, g.scope_id, link.role_id FROM access.permission_grant g
       JOIN access.authority_subject a ON a.id = g.recipient_subject AND a.active
       LEFT JOIN access.realm_admin_role_grant link ON link.grant_id = g.id
-      WHERE g.recipient_subject = ANY($1::text[]) AND g.scope_id = CASE g.action
-        WHEN 'review.decide' THEN 'review:decide:' || $2
-        WHEN 'publication.adopt' THEN 'publication:adopt:' || $2 ELSE 'governance:realm:' || $2 END
+      WHERE g.recipient_subject = ANY($1::text[]) AND g.scope_id = ANY($2::text[])
         AND g.action = ANY($3::text[]) AND g.active AND g.valid_until > clock_timestamp()
         AND (g.membership_id IS NULL OR EXISTS (SELECT 1 FROM access.membership m
           WHERE m.id = g.membership_id AND m.state = 'joined' AND m.generation = g.membership_generation))
       ORDER BY g.id LIMIT $4 FOR SHARE OF g`,
-    [members, realm, realmPermissions, REALM_ADMIN_COST.grantRows + 1])).rows;
+    [members, scopes, realmPermissions, REALM_ADMIN_COST.grantRows + 1])).rows;
     if (grants.length > REALM_ADMIN_COST.grantRows) throw new RealmAdminLimit('Grant impact exceeds its exact preview budget');
     const byMember = new Map<string, Grant[]>();
     for (const grant of grants) {
@@ -622,16 +632,25 @@ export class AccessRealmManagement {
     const changes: RoleImpact['changes'] = [];
     for (const member of members) {
       const current = byMember.get(member) ?? [];
-      const before = new Set(current.map(g => g.action));
-      const after = new Set(current.filter(g => g.role_id !== change.roleId).map(g => g.action));
-      if (change.kind === 'role' || change.assigned) for (const permission of permissions) after.add(permission);
-      const gained = realmPermissions.filter(p => !before.has(p) && after.has(p));
-      const lost = realmPermissions.filter(p => before.has(p) && !after.has(p));
-      if (gained.length || lost.length) changes.push({ member, gained, lost });
+      const jurisdictions = concepts.flatMap(concept => {
+        const scoped = current.filter(g => g.scope_id === realmPermissionScope(realm, g.action, concept));
+        const before = new Set(scoped.map(g => g.action));
+        const after = new Set(scoped.filter(g => g.role_id !== change.roleId).map(g => g.action));
+        if (concept === targetConcept && (change.kind === 'role' || change.assigned)) {
+          for (const permission of permissions) after.add(permission);
+        }
+        const gained = realmPermissions.filter(p => !before.has(p) && after.has(p));
+        const lost = realmPermissions.filter(p => before.has(p) && !after.has(p));
+        return gained.length || lost.length ? [{ targetScope: conceptScope(concept), gained, lost }] : [];
+      });
+      const gained = realmPermissions.filter(p => jurisdictions.some(j => j.gained.includes(p)));
+      const lost = realmPermissions.filter(p => jurisdictions.some(j => j.lost.includes(p)));
+      if (jurisdictions.length) changes.push({ member, gained, lost, jurisdictions });
     }
     const impact: RoleImpact = { digest: digest({ realm, input, role, assignments, grants, changes }),
-      generation: input.expectedGeneration, exact: true, affectedCount: changes.length, changes };
-    return { role, permissions, assignments, impact };
+      generation: input.expectedGeneration, exact: true, affectedCount: changes.length, changes,
+      targetScope: conceptScope(targetConcept), previousTargetScope: conceptScope(previousConcept) };
+    return { role, permissions, assignments, impact, targetConcept };
   }
 
   preview(principal: VerifiedPrincipal, realm: string, input: RoleCommand) {
@@ -651,9 +670,10 @@ export class AccessRealmManagement {
         const plan = await this.plan(client, realm, input, ceiling);
         if (plan.impact.digest !== impactDigest) throw new RealmAdminStale('Role impact changed; preview again');
         const change = input.change;
-        if (change.kind === 'role') await client.query(`INSERT INTO access.realm_admin_role (realm,id,name,permissions)
-          VALUES ($1,$2,$3,$4) ON CONFLICT (realm,id) DO UPDATE SET name = EXCLUDED.name, permissions = EXCLUDED.permissions`,
-        [realm, change.roleId, change.name.trim(), plan.permissions]);
+        if (change.kind === 'role') await client.query(`INSERT INTO access.realm_admin_role (realm,id,name,permissions,target_concept)
+          VALUES ($1,$2,$3,$4,$5) ON CONFLICT (realm,id) DO UPDATE SET name = EXCLUDED.name,
+            permissions = EXCLUDED.permissions, target_concept = EXCLUDED.target_concept`,
+        [realm, change.roleId, change.name.trim(), plan.permissions, plan.targetConcept]);
         // Revoke only grants owned by this bundle. Independent grants survive.
         await client.query(`UPDATE access.permission_grant g SET active = false
           FROM access.realm_admin_role_grant l WHERE l.grant_id = g.id AND l.realm = $1
@@ -668,7 +688,7 @@ export class AccessRealmManagement {
         [realm, change.roleId, change.member, change.assigned ? change.validUntil : new Date(0)]);
         if (change.kind === 'role' || change.assigned) {
           await client.query(`INSERT INTO access.scope_gate (id) SELECT unnest($1::text[]) ON CONFLICT DO NOTHING`,
-            [[`review:decide:${realm}`, `publication:adopt:${realm}`]]);
+            [plan.permissions.map(action => realmPermissionScope(realm, action, plan.targetConcept))]);
           // One bounded set insert rather than one query per member/permission.
           await client.query(`WITH recipients AS (SELECT * FROM unnest($4::text[], $5::timestamptz[])
             AS r(member, valid_until)), inserted AS (
@@ -677,12 +697,13 @@ export class AccessRealmManagement {
               CROSS JOIN unnest($3::text[],$6::text[]) AS p(scope,action) RETURNING id,recipient_subject)
             INSERT INTO access.realm_admin_role_grant (realm,role_id,member,grant_id)
             SELECT $1,$8,recipient_subject,id FROM inserted`,
-          [realm, input.actingSubject, plan.permissions.map(action => realmPermissionScope(realm, action)), plan.assignments.map(a => a.member),
+          [realm, input.actingSubject, plan.permissions.map(action => realmPermissionScope(realm, action, plan.targetConcept)), plan.assignments.map(a => a.member),
             plan.assignments.map(a => a.valid_until), plan.permissions, principalId, change.roleId]);
         }
         return { receiptId, generation, replayed: false, impact: plan.impact,
           auditDetail: { kind: change.kind,
-            role: { id: change.roleId, name: change.kind === 'role' ? change.name.trim() : plan.role!.name },
+            role: { id: change.roleId, name: change.kind === 'role' ? change.name.trim() : plan.role!.name,
+              targetScope: conceptScope(plan.targetConcept) },
             member: change.kind === 'assignment' ? change.member : null,
             assigned: change.kind === 'assignment' ? change.assigned : null,
             validUntil: change.kind === 'assignment' && change.assigned ? change.validUntil : null,

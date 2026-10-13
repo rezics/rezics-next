@@ -1,11 +1,31 @@
 import type { Pool, PoolClient } from 'pg';
 import { withAccessClient } from './topology-control.ts';
 import type { VerifiedPrincipal } from './admission.ts';
+import { representedGrantProof } from './represented-work-proof.ts';
 import { RealmAdminConflict, RealmAdminDenied, RealmAdminInvalid, RealmAdminLimit,
   RealmAdminStale, RealmAdminUnavailable } from '../realm-admin/contract.ts';
 
 export const realmIdPattern = /^https:\/\/rezics\.com\/id\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 export const realmKeyPattern = /^[A-Za-z0-9:_./-]{1,128}$/;
+export const realmActionScope = (realm: string, action: string, concept: string | null = null) => {
+  const scope = action === 'review.decide' ? `review:decide:${realm}`
+    : action === 'publication.adopt' ? `publication:adopt:${realm}` : `governance:realm:${realm}`;
+  return concept === null ? scope : `${scope}:concept:${concept}`;
+};
+
+/** Call inside the decision transaction, retaining locks through its effect.
+ * Exact Concept grants and existing Realm-wide action grants are the only
+ * witnesses. Classification relations and platform status never enter this proof. */
+export async function realmConceptGrantProof(client: PoolClient, principal: VerifiedPrincipal,
+  realm: string, actor: string, concept: string, action: string) {
+  if (![realm, actor, concept].every(value => realmIdPattern.test(value))) {
+    throw new RealmAdminInvalid('Invalid Realm Concept jurisdiction');
+  }
+  if (!(await client.query(`SELECT 1 FROM access.scope_gate WHERE id = $1
+    AND open AND dispatch_open FOR SHARE`, [`governance:realm:${realm}`])).rowCount) return null;
+  return await representedGrantProof(client, principal, actor, realmActionScope(realm, action, concept), action, { lock: true })
+    ?? await representedGrantProof(client, principal, actor, realmActionScope(realm, action), action, { lock: true });
+}
 export interface RealmActor { id: string; epoch: string; representation: string;
   representationGeneration: string; subjectGeneration: string; validUntil: Date }
 export interface RealmManager extends RealmActor { grant: string; grantGeneration: string }
