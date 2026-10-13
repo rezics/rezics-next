@@ -291,10 +291,7 @@ async function navigate(name: PersonaName) {
   expect(new Set(seen).size).toBe(1000);
   // Work composition uses label search. A bare numeric seek is a separately
   // refused contract and is unnecessary to find the numbered distant episode.
-  for (const [q, number] of [
-    ['重逢', 1000],
-    ['Episode 1000', 1000],
-  ] as const) {
+  for (const [q, number] of [['Episode 1000 重逢', 1000]] as const) {
     const matches: Page['items'] = [];
     let searchCursor: string | null = null;
     let searchPages = 0;
@@ -313,6 +310,7 @@ async function navigate(name: PersonaName) {
     } while (searchCursor);
     expect(matches, `Completed GET ${path}?q=${q}: ${JSON.stringify(matches)}`).toHaveLength(1);
     expect(matches[0]?.occurrence).toBe(occurrences[number - 1]);
+    expect(matches[0]?.labels).toContainEqual({ value: q, language: 'en' });
     await credit(person, episodes[(number - 1) % episodes.length]!);
   }
   const first = await read({ limit: '2' });
