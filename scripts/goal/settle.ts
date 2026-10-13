@@ -11,6 +11,7 @@ import { processAlive, processIdentity } from '../qa/process/identity.ts';
 import { directoryLeaseHeld } from '../qa/process/lease.ts';
 import { classifyLandingRefusal } from './refusal.ts';
 import { pumpQueue } from './queue.ts';
+import { scheduleConfirmation, type ScheduleConfirmationOptions } from './confirm.ts';
 
 type Settlement = NonNullable<Task['settlement']>;
 type SpawnSettlement = (task: Task, token: string) => Settlement['owner'];
@@ -188,13 +189,14 @@ export async function settleTask(id: string, options: { capacityWaitMs?: number 
 }
 
 /** One quick pass over every active Goal, including Goals without enrolled managers. */
-export async function settlePass(options: { spawn?: SpawnSettlement } = {}): Promise<void> {
+export async function settlePass(options: { spawn?: SpawnSettlement; confirmation?: ScheduleConfirmationOptions } = {}): Promise<void> {
   const ledger = readLedger();
   const goals = activeGoals(ledger);
   for (const task of Object.values(ledger.tasks)) {
     if (task.goal && goals.includes(task.goal)) await claim(task.id, true, options.spawn ?? spawnSettlement);
   }
   await pumpQueue();
+  scheduleConfirmation(options.confirmation ?? { repo: root, stateDir });
 }
 
 if (import.meta.main) {

@@ -1,8 +1,8 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test } from 'bun:test';
-import { notApplicable, outcomeTitle, personas, proved, rowOutcomes, type RowOutcomes } from '../qa/cases/outcome-cells.ts';
-import { confirmedScopeReport, latestConfirmation, recordConfirmation, type ConfirmationRecord } from './confirmed.ts';
+import { notApplicable, outcomeTitle, pending, personas, proved, rowOutcomes, type RowOutcomes } from '../qa/cases/outcome-cells.ts';
+import { cellReading, confirmationCounts, confirmedScopeReport, latestConfirmation, recordConfirmation, type ConfirmationRecord } from './confirmed.ts';
 import type { Manifest } from './regress.ts';
 
 export function declaredOutcome(rowId: string): RowOutcomes {
@@ -27,12 +27,42 @@ test('scope names a declared proof that failed before vertical figures, and incl
   }
   record.outcomes[0]!.status = 'passed'; record.outcomes[0]!.expectedFailure = true;
   expect(confirmedScopeReport(rows, ['books/pass'], record)).toContain('last run confirmed 0');
+  record.outcomes[0]!.status = 'failed';
+  expect(cellReading(record.outcomes[0]!)).toBe('not run');
 });
 
 test('scope without a run retains declared figures', () => {
   const row = declaredOutcome('books/pass');
   expect(confirmedScopeReport([row], ['books/pass', 'books/undeclared'])).toBe(
-    'No regression confirmation run yet; showing declared figures.\nbooks: declared proved 1/2; last run confirmed 0; saw fail 0\n  declared proved: books/pass');
+    'No confirmation run yet; showing declared figures.\nbooks: declared proved 1/2; last run confirmed 0; saw fail 0\n  declared proved: books/pass');
+});
+
+test('cell evidence has five readings, with pending timeouts and preparation failures left unconfirmed', () => {
+  mkdirSync('.temp', { recursive: true });
+  const directory = mkdtempSync('.temp/readings-');
+  try {
+    const cases = [
+      ['pass', proved('gets the outcome'), ''],
+      ['fail', proved('gets the outcome'), '<failure message="assertion failed"/>'],
+      ['still', pending('gets the outcome'), ''],
+      ['now', pending('gets the outcome'), '<failure message="test marked with .failing() did not throw"/>'],
+      ['skip', proved('gets the outcome'), '<skipped/>'],
+      ['timeout', pending('gets the outcome'), '<failure type="TimeoutError" message="test timed out"/>'],
+      ['preparation', pending('gets the outcome'), '<failure type="JourneyPreparationError" message="fixture refused"/>'],
+    ] as const;
+    const rows = cases.map(([id, cell]) => rowOutcomes(`books/${id}`, { visitor: cell }));
+    const manifest = { runId: 'readings', atCommit: 'main', startedAt: new Date().toISOString(), checkout: directory,
+      batches: [{ tier: 'integration', files: rows.map(row => row.cells.visitor!.state === 'notApplicable' ? '' : row.cells.visitor!.file!),
+        attempts: [{ artifactPaths: [directory] }] }] } as Manifest;
+    writeFileSync(join(directory, 'integration.xml'), `<testsuite>${rows.map((row, index) =>
+      `<testcase name="${outcomeTitle(row, 'visitor')}" file="tests/qa/integration/outcomes/${row.rowId}.test.ts">${cases[index]![2]}</testcase>`).join('')}</testsuite>`);
+    const record = recordConfirmation(directory, join(directory, 'run'), manifest, rows);
+    expect(record.outcomes.map(cellReading)).toEqual(['passed', 'failed', 'pending and still failing', 'pending and now passing', 'not run', 'not run', 'not run']);
+    expect(confirmationCounts(record)).toEqual({ passed: 1, failed: 1, 'pending and still failing': 1, 'pending and now passing': 1, 'not run': 3 });
+    const report = confirmedScopeReport(rows, rows.map(row => row.rowId), record);
+    expect(report).toContain('books/fail / visitor: failed (tests/qa/integration/outcomes/books/fail.test.ts)');
+    expect(report).toContain('books/now / visitor: pending and now passing (tests/qa/integration/outcomes/books/now.test.ts)');
+  } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
 test('missing and infrastructure evidence cannot confirm cells, and an older run cannot replace the latest', () => {

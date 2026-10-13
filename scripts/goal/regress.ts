@@ -217,6 +217,21 @@ export function checkoutNameLength(checkoutRoot: string): number {
   return length;
 }
 
+/** Both outcome confirmation and regression execute a detached, immutable Main snapshot. */
+export function createPinnedCheckout(repo: string, root: string, runId: string, key: string, commit: string): string {
+  root = diskDirectory(root, 'checkout root');
+  const length = checkoutNameLength(root);
+  const space = 16n ** BigInt(length);
+  const seed = BigInt(`0x${createHash('sha256').update(`${runId}:${key}`).digest('hex')}`);
+  for (let offset = 0n; offset < space; offset++) {
+    const candidate = join(root, ((seed + offset) % space).toString(16).padStart(length, '0'));
+    if (existsSync(candidate)) continue;
+    git(repo, ['worktree', 'add', '--force', '--detach', candidate, commit]);
+    return candidate;
+  }
+  throw new Error('No short pinned worktree path is free; remove completed checkouts');
+}
+
 export function parseRegressArgs(args: string[]): Pick<RegressionOptions, 'at' | 'resume' | 'only' | 'integrationBatches' | 'nightly'> & { timing?: string } {
   const options: ReturnType<typeof parseRegressArgs> = {};
   for (let index = 0; index < args.length; index++) {
@@ -820,7 +835,7 @@ async function command(checkout: string, args: string[], logPath: string, timeou
   }
 }
 
-async function prepareCheckout(checkout: string, logs: string) {
+export async function prepareCheckout(checkout: string, logs: string) {
   const taskfile = ['Taskfile.yml', 'Taskfile.yaml'].map(file => join(checkout, file)).find(file => existsSync(file));
   // Task searches ancestors by default; an unsupported old snapshot must not run another checkout's tasks.
   if (!taskfile) return { ok: false, artifactPaths: [], reason: 'Pinned checkout has no Taskfile' };
@@ -1197,7 +1212,6 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
     treeMapPath = join(directory, 'checkouts.json');
     const checkoutMapPath = treeMapPath;
     const treeMap = existsSync(checkoutMapPath) ? json<Record<string, string>>(checkoutMapPath) : {};
-    const nameLength = checkoutNameLength(worktrees);
     const prepared = new Map<string, Manifest['preflight']>();
     const preparedCheckouts = new Map<string, Manifest['preflight']>();
     const checkoutAt = async (commit: string, probe?: string, install = true) => {
@@ -1221,17 +1235,8 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
         }
       }
       if (!checkout) {
-        const space = 16n ** BigInt(nameLength);
-        const seed = BigInt(`0x${createHash('sha256').update(`${runId}:${key}`).digest('hex')}`);
-        for (let offset = 0n; offset < space; offset++) {
-          const candidate = join(worktrees, ((seed + offset) % space).toString(16).padStart(nameLength, '0'));
-          if (existsSync(candidate)) continue;
-          diskDirectory(worktrees, 'checkout root');
-          git(repo, ['worktree', 'add', '--force', '--detach', candidate, commit]);
-          checkout = candidate; treeMap[key] = checkout; atomic(checkoutMapPath, treeMap);
-          break;
-        }
-        if (!checkout) throw new Error('No short regression worktree path is free; remove completed regression checkouts');
+        checkout = createPinnedCheckout(repo, worktrees, runId, key, commit);
+        treeMap[key] = checkout; atomic(checkoutMapPath, treeMap);
       }
       if (!existsSync(checkout)) {
         diskDirectory(dirname(checkout), 'checkout root');

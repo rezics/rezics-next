@@ -7,9 +7,54 @@ import { GoalMailStore } from './mail.ts';
 import { GoalCoordinator, type IndependentLauncher, processIdentity, WAKE_PROMPT, WAKE_LAST_MESSAGE } from './coordinator.ts';
 import { managerEvents } from './manager-commands.ts';
 import { classifyLandingRefusal } from './refusal.ts';
+import { scheduleConfirmation } from './confirm.ts';
+import { readDirectoryLease, releaseDirectoryLease } from '../qa/process/lease.ts';
 
 const scratch = join(import.meta.dir, '../../.temp/settlement-tests');
 const fixtures: { directory: string; task: Task; ledger: () => Ledger }[] = [];
+
+test('pump confirmation requires a newer non-document commit, the interval, and no live run; zero disables it', () => {
+  const f = fixture();
+  const now = Date.parse('2026-10-13T12:00:00Z');
+  let starts = 0;
+  const options = { repo: f.directory, stateDir: f.state, now, spawn: () => { starts++; return process.pid; } };
+  const confirmed = { version: 1, runId: 'baseline', atCommit: f.task.base,
+    startedAt: new Date(now - 91 * 60_000).toISOString(), recordedAt: new Date(now - 90 * 60_000).toISOString(), outcomes: [] };
+  writeFileSync(join(f.state, 'confirmed.json'), JSON.stringify(confirmed));
+  const git = (...args: string[]) => {
+    const result = spawnSync('git', args, { cwd: f.directory, encoding: 'utf8' });
+    expect(result.status, result.stderr).toBe(0);
+    return result.stdout.trim();
+  };
+  expect(scheduleConfirmation(options)).toBe(false);
+  mkdirSync(join(f.directory, 'docs'));
+  writeFileSync(join(f.directory, 'docs/readme.md'), 'Documentation\n');
+  git('add', 'docs'); git('commit', '-qm', 'Documentation only');
+  expect(scheduleConfirmation(options)).toBe(false);
+  writeFileSync(join(f.directory, 'code.ts'), 'export const value = 1;\n');
+  git('add', 'code.ts'); git('commit', '-qm', 'Code');
+  writeFileSync(join(f.state, 'confirm-last-start'), new Date(now - 89 * 60_000).toISOString());
+  expect(scheduleConfirmation(options)).toBe(false);
+  writeFileSync(join(f.state, 'confirm-last-start'), new Date(now - 91 * 60_000).toISOString());
+  writeFileSync(join(f.state, 'confirm-interval-minutes'), '0\n');
+  expect(scheduleConfirmation(options)).toBe(false);
+  writeFileSync(join(f.state, 'confirm-interval-minutes'), '120\n');
+  expect(scheduleConfirmation(options)).toBe(false);
+  writeFileSync(join(f.state, 'confirm-interval-minutes'), '30\n');
+  expect(scheduleConfirmation(options)).toBe(true);
+  expect(starts).toBe(1);
+  expect(scheduleConfirmation({ ...options, now: now + 120 * 60_000 })).toBe(false);
+  const lock = join(f.state, 'confirm.lock');
+  releaseDirectoryLease(lock, readDirectoryLease(lock)!.token!, process.pid);
+  mkdirSync(lock);
+  writeFileSync(join(lock, 'identity.json'), JSON.stringify({ pid: 2147483647, token: 'dead' }));
+  // A dead run does not defeat the interval or block a later eligible pass.
+  expect(scheduleConfirmation({ ...options, now: now + 31 * 60_000 })).toBe(true);
+  expect(starts).toBe(2);
+  releaseDirectoryLease(lock, readDirectoryLease(lock)!.token!, process.pid);
+  writeFileSync(join(f.state, 'confirmed.json'), JSON.stringify({ ...confirmed, atCommit: git('rev-parse', 'main') }));
+  expect(scheduleConfirmation({ ...options, now: now + 120 * 60_000 })).toBe(false);
+});
 
 function fixture(result = 'done', kind: Task['kind'] = 'tooling') {
   mkdirSync(scratch, { recursive: true });
@@ -44,6 +89,8 @@ function fixture(result = 'done', kind: Task['kind'] = 'tooling') {
     attempts: [{ n: 1, engine: 'claude', effort: 'high', pid: 2147483647, session: 'fixture', output,
       startedAt: new Date().toISOString() }] };
   const ledgerPath = join(state, 'ledger.json');
+  // Settlement fixtures exercise landing; scheduled confirmation has its own fixture below.
+  writeFileSync(join(state, 'confirm-interval-minutes'), '0\n');
   const save = (ledger: Ledger) => writeFileSync(ledgerPath, JSON.stringify(ledger));
   save({ tasks: { [task.id]: task }, goals: { program: { manager: 'fixture-manager', startedAt: new Date().toISOString() } } });
   const bin = join(directory, '.temp/bin');

@@ -15,6 +15,7 @@ import * as goalctl from './goalctl.ts';
 import { tryAcquireDirectoryLease } from '../qa/process/lease.ts';
 import { reapScopeLabel } from '../qa/container-reaper.ts';
 import { confirmedScopeReport, latestConfirmation } from './confirmed.ts';
+import { runConfirmation } from './confirm.ts';
 import { notApplicable, outcomeTitle, personas, proved, rowOutcomes } from '../qa/cases/outcome-cells.ts';
 import { appendInbox, checkoutNameLength, classify, regressionFailureCause, executionOutcomes, inboxEntries, isRamBackedFileSystem, parseRegressArgs, provideGoalctl, regressionLaneLimit,
   pruneRegressionCheckouts, regressionBatchArtifactPaths, regressionBatchCommand, regressionCheckoutRoot, regressionDiagnosisBudgetMs,
@@ -90,6 +91,17 @@ describe('pinned main-wide regression', () => {
   afterEach(() => {
     if (inheritedOwnerBudget === undefined) delete process.env.REZICS_QA_OWNER_BUDGET_MS;
     else process.env.REZICS_QA_OWNER_BUDGET_MS = inheritedOwnerBudget;
+  });
+  test('bounded confirmation uses the same manifest format without becoming a whole regression baseline', async () => {
+    const r = repo();
+    try {
+      const confirmation = await runConfirmation({ repo: r.dir, stateDir: r.options.stateDir!, checkoutRoot: r.options.checkoutRoot,
+        runId: 'bounded', slots: 1, prepare: r.options.prepare, outcomeRegistry: async () => [] });
+      expect(confirmation.version).toBe(1);
+      expect(existsSync(join(r.options.stateDir!, 'confirm/bounded/manifest.json'))).toBe(true);
+      const regression = await r.run({ runId: 'whole-after-bounded' });
+      expect(regression.baselineRunId).toBeUndefined();
+    } finally { r.cleanup(); }
   });
   test('a pinned run records both outcome files for scope without using diagnosis reruns', async () => {
     const r = repo();
@@ -471,7 +483,10 @@ test('native container work hangs until its batch deadline', async () => {
     r.write(file, "import { test } from 'bun:test';\ntest('admitted proof passes', () => {});\n");
     r.commit();
     const savedProfile = process.env.REZICS_STACK_PROFILE;
+    const savedSlot = process.env.GOAL_IN_SLOT;
     process.env.REZICS_STACK_PROFILE = 'dev';
+    // The check's outer lease does not own this temporary repository's fixture slot.
+    process.env.GOAL_IN_SLOT = '0';
     let pending: Promise<Execution> | undefined;
     try {
       // Run in the fixture root so its actual slot wrapper sees the held fixture lease.
@@ -498,6 +513,8 @@ test('native container work hangs until its batch deadline', async () => {
       await pending;
       if (savedProfile === undefined) delete process.env.REZICS_STACK_PROFILE;
       else process.env.REZICS_STACK_PROFILE = savedProfile;
+      if (savedSlot === undefined) delete process.env.GOAL_IN_SLOT;
+      else process.env.GOAL_IN_SLOT = savedSlot;
       r.cleanup();
     }
   }, 30_000);
