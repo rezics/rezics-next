@@ -1,17 +1,16 @@
 # State
 
-The checkpoint for [this Goal](GOAL.md), recording decisions for
-`start:961009ed-8838-4fb1-af46-04f649cb4562`,
-`mail:e5a72312-a305-476b-b480-a6709559c8dc` and
-`mail:40fb4148-0a07-41a7-b296-d94df3ce4daa` under
-`checkpoint:ac46ef98-145e-4db4-b270-4fa7ba3e4884`.
+The checkpoint for [this Goal](GOAL.md), recording the G-2205 decision for
+`mail:2aa9de5c-29ca-4311-bf1a-306f7113ad17` under
+`checkpoint:6741f284-d93e-45de-8fbc-3c95da6a55e7`, carrying forward the
+previous checkpoint's decisions.
 
 | Field | State |
 | --- | --- |
 | Manager | Enrolled with the coordinator on 2026-10-13 15:34 UTC |
 | Proved on physical fixtures | Nothing yet |
 | Fixture | The small physical fixture `fx-small-a3a906c1c1b7`, built at `main` 1e05bf2d4 |
-| Measures (`task goal -- status`) | First-attempt share 100% (2/2); no landed-task median yet; 2.3M input / 10.2k output tokens; tokens per proved row unavailable; no recorded refusals |
+| Measures (`task goal -- status`) | Last recorded reading: first-attempt share 100% (2/2); no landed-task median yet; 2.3M input / 10.2k output tokens; tokens per proved row unavailable; no recorded refusals. This checkpoint's refresh encountered the ledger lock and was interrupted without waiting |
 
 ## Work in progress
 
@@ -20,16 +19,18 @@ The checkpoint for [this Goal](GOAL.md), recording decisions for
 | G-2202, release payload and image (D026) | Running, first attempt. Capture the missing-import failure, then prove packaged Main and actual local release-image startup with image identity and a healthy answer. An API failure after startup is a partial handoff |
 | G-2203, disposable Fuseki support (D016, D075, D109) | Running, first attempt. Capture container logs and failing startup/restart, then prove readiness and explicit restart with the selected content-addressed image; keep erasure assertions intact |
 | G-2205, campaign fixture evidence (D108) | Queued behind G-2203. Capture the actual readiness/compatibility mismatch on the retained small fixture and fix only fixture consumption. Missing producer evidence or API composition is a partial handoff |
-| Access recovery classification | API owns the sole review and landing through `5bb07365f` in G-2214, including owner operations. The handled status mail reports admission refused pending Program's dated Design-note reading; API already requested that reading. No accepted landing revision is recorded |
-| Erasure composition | API owns the composition area; the handled owner queries found no live file claimant. API was sent the archived G-2062 Outcome item 4 source and real-composition Media case: the production constructor must receive `mediaObjects`. This was never implemented in the archived run; no accepted revision is recorded |
+| Access recovery classification | API owns the sole review and landing through `5bb07365f` in G-2214, including owner operations. G-2205's handled decision records Program's dated Design-note reading in G-2214. No accepted landing revision is recorded |
+| Erasure composition | API wrote G-2223 for the fourth `mediaObjects` constructor argument and real-composition Media regression from archived G-2062 Outcome item 4. Admission is held for its own dated Program reading, requested in mail:de0e769e-932f-468a-a62e-ca9f180d9cfc; no live composition claim, worker or accepted revision follows |
 
 **Next action.** Decide G-2202 and G-2203 on their handoffs; G-2205 follows
 G-2203. Independent physical restore and scheduling start only from API's
 actual accepted Access main revision. Full erasure proofs also require API's
 separate accepted composition revision. API retains both notifications;
-operations creates no competing adoption or review. This checkpoint grants no
-new worker work or proof. The measured first-attempt share does not trigger
-the below-half dispatch stop.
+operations creates no competing adoption or review. G-2205 remains fixture-only
+behind G-2203. API has already requested G-2223's Program reading; operations
+needs no additional ruling. This checkpoint grants no new worker work or proof.
+The last recorded first-attempt share does not trigger the below-half dispatch
+stop; no refreshed reading is claimed.
 
 ## Carried work
 
