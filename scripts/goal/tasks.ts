@@ -351,6 +351,16 @@ export function landingAttempt(task: Task, read: (attempt: Attempt) => { text: s
   return task.attempts[at] ?? lastAttempt(task);
 }
 
+/** Review and merge refuse a task whose landing attempt, handoff or brief is no longer the one the landing read. */
+export function landingMoved(current: Task, snapshot: { attempt: number; handoff: string; brief: string },
+  read: (attempt: Attempt) => { text: string; error: boolean } = readResult,
+  unchanged: (task: Task, attempt: Attempt) => boolean = blockedAttemptUnchanged,
+  briefOf: (task: Task) => string = task => readFileSync(briefPathOf(task) ?? '', 'utf8')): boolean {
+  const attempt = landingAttempt(current, read, unchanged);
+  return current.state !== 'exited' || attempt.n !== snapshot.attempt || read(attempt).text !== snapshot.handoff
+    || briefOf(current) !== snapshot.brief;
+}
+
 export async function landTask(id: string, step = false, gateLane: GateLaneOptions = {}): Promise<void> {
   const initial = taskOf(readLedger(), id);
   assertOwner(initial);
@@ -392,19 +402,15 @@ export async function landTask(id: string, step = false, gateLane: GateLaneOptio
       scope: () => landScope(id),
       checkpoint: () => {
         const current = taskOf(readLedger(), id);
-        if (current.state !== 'exited' || landingAttempt(current).n !== snapshot.attempt
-          || readResult(landingAttempt(current)).text !== snapshot.handoff
-          || readFileSync(briefPathOf(current) ?? '', 'utf8') !== snapshot.brief) throw new Error(`${id}: task or brief changed during review`);
+        if (landingMoved(current, snapshot)) throw new Error(`${id}: task or brief changed during review`);
       },
       checkTargets: files => {
         const claimed = claimingTasks(readLedger(), files, new Set([id]));
         if (claimed.length) throw new Error(`review test paths claimed by another task: ${claimed.map(item => item.id).join(', ')}`);
       },
       merge: (permittedFiles, head) => mergeTask(id, new Set(), head, current => {
-        if (current.state !== 'exited' || lastAttempt(current).n !== snapshot.attempt
-          || current.branch !== snapshot.task.branch || current.worktree !== snapshot.task.worktree
-          || readResult(lastAttempt(current)).text !== snapshot.handoff
-          || readFileSync(briefPathOf(current) ?? '', 'utf8') !== snapshot.brief) {
+        if (landingMoved(current, snapshot)
+          || current.branch !== snapshot.task.branch || current.worktree !== snapshot.task.worktree) {
           throw new Error(`${current.id}: task or brief changed during review; review again`);
         }
       }, permittedFiles, false, gateLane), close: () => closeTasks([id], 'verified') });
