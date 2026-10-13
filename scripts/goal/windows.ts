@@ -40,13 +40,16 @@ export const workerWindowName = (task: Pick<Task,'id'|'goal'>): string => `goal-
 export interface WindowTurn {token: string; goal: string; n: number; phase: string; event_key: string | null;
   created_at: number; ended_at: number | null; code: number | null; ending: string | null; descriptor: string}
 export const turnWindowName = (turn: Pick<WindowTurn,'goal'|'n'>): string => `goal-${turn.goal}-turn-${turn.n}`;
+/** One pass: counting the earlier turns for each row read the whole store per turn, which took seconds
+ * once a thousand turns had run and held every writer of the store for that long. */
+export const WINDOW_TURNS_SQL = `SELECT token,goal,phase,event_key,created_at,ended_at,code,ending,descriptor,
+  ROW_NUMBER() OVER (PARTITION BY goal ORDER BY rowid) AS n FROM attempts ORDER BY rowid`;
 export function windowTurns(directory: string): WindowTurn[] {
   const file = join(directory,'coordinator.sqlite');
   if (!existsSync(file)) return [];
   const db = retryEventDatabase(new Database(file,{readonly:true}));
   try {
-    return db.query(`SELECT a.*, (SELECT COUNT(*) FROM attempts b WHERE b.goal=a.goal AND b.rowid<=a.rowid) AS n
-      FROM attempts a ORDER BY a.rowid`).all() as WindowTurn[];
+    return db.query(WINDOW_TURNS_SQL).all() as WindowTurn[];
   } finally { db.close(); }
 }
 export interface GoalWindow {id: string; name: string; attempt: string; turn: string; dead: boolean}

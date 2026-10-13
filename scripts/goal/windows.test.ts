@@ -3,7 +3,7 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { appendFileSync, chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { GoalCoordinator, TmuxLauncher, processIdentity, WAKE_PROMPT, WAKE_LAST_MESSAGE, type LaunchDescriptor } from './coordinator.ts';
-import { followWorker, followTurn, goalWindows, reconcileWindows, StepStream, termspacesSession, turnWindowName, windowTurns, workerWindowName } from './windows.ts';
+import { followWorker, followTurn, goalWindows, reconcileWindows, StepStream, termspacesSession, turnWindowName, WINDOW_TURNS_SQL, windowTurns, workerWindowName } from './windows.ts';
 import type { Ledger, Task } from './types.ts';
 
 function fixture() {
@@ -137,6 +137,19 @@ describe('Goal windows are a ledger view', () => {
       writeFileSync(join(f.directory,'bin','termspaces'),`#!/bin/sh\nprintf 'apply\\n' >> '${f.applyLog}'\ntmux -S '${f.socket}' new-session -d -s 'test-agents' -n maintainer 'sleep 300'\n`);
       expect(reconcileWindows(f.directory,f.ledger).made).toEqual([workerWindowName(task)]);
       expect(readFileSync(f.applyLog,'utf8')).toBe('apply\napply\n');
+    } finally { f.cleanup(); }
+  });
+  test('listing turns numbers each Goal in order in one pass over the store', () => {
+    const f = fixture();
+    try {
+      const insert = f.coordinator.db.query(`INSERT INTO attempts(token,goal,generation,phase,descriptor,prompt,created_at,event_key)
+        VALUES(?,?,?,'done',?,?,?,?)`);
+      for (let i = 0; i < 6; i++) insert.run(`turn-${i}`,i % 2 ? 'api' : 'program','role',JSON.stringify(f.descriptor),'Decide',i,'exit:worker');
+      expect(windowTurns(f.directory).map(turn=>`${turn.goal}:${turn.n}`))
+        .toEqual(['program:1','api:1','program:2','api:2','program:3','api:3']);
+      // A count per row reads the whole store for each turn it lists, and holds every writer for that long.
+      const plan = f.coordinator.db.query(`EXPLAIN QUERY PLAN ${WINDOW_TURNS_SQL}`).all() as {detail:string}[];
+      expect(plan.map(step=>step.detail).join('\n')).not.toContain('CORRELATED');
     } finally { f.cleanup(); }
   });
   test('an intent reserves its window name without launching or changing the turn', () => {
