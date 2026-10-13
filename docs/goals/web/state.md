@@ -1,14 +1,44 @@
 # State
 
-The checkpoint for [this Goal](GOAL.md). Not started; written on 2026-10-12 from
-the launch manager's end-of-run table, archived at
+The checkpoint for [this Goal](GOAL.md). Running since 2026-10-13 under manager
+`web`, enrolled with the coordinator. The carried work below comes from the
+launch manager's 2026-10-12 table, archived at
 `archive/goals:program-2026-10-06/study-2026-10-12/`.
 
-| Field | State (2026-10-12) |
+| Field | State (2026-10-13) |
 | --- | --- |
-| Manager | None. The program starts one when the first vertical's rows are proved |
-| Rows | 67 in scope; 44 have a browser proof, 23 have none. The Gutenberg recipes row was proved through the importing author's view only |
-| Shared stack | The web hot-reloads from the main checkout; the backend is the revision of the last refresh (the program's state file names it) |
+| Manager | web; no watcher, polling or held task wait; coordinator wakes on mail/task exits |
+| Rows | 0 of 67 proved through persona API outcomes; old browser proofs do not prove rows under today's method |
+| Shared stack | Cold-started today, serving main; Account 3002, Main 3001, web 3000 and Storybook 6006 healthy (`task urls`) |
+| Measures | First attempts only, no fix rounds or landed web tasks yet; first-attempt share 100%, attempts per landed task n/a; automated measures pending Program G-2088 |
+
+## Authorized work now
+
+Only the four client-contract classes and stale canonical-href expectations are
+authorized before rows are proved. Every task is `kind: tooling`, Sol on
+`codex`/`codex-1`, high effort (medium for href expectations), default service
+tier. At most eight live web workers. Briefs are at most forty lines.
+
+| Task | Claim and next action |
+| --- | --- |
+| G-2090 | Continuations and capped lists; home/library/zones and its guard |
+| G-2091 | Accepted commands stay pending; manage/command adapter and its guard |
+| G-2092 | Identity-required reads; realm/client adapters and its guard |
+| G-2093 | Capped-page filtering; brief ready, dispatch after G-2090 closes because zones claims overlap |
+| G-2094 | Two relation browser tests and entity-page story expect canonical suffixes; no e2e execution |
+
+G-2090, G-2091, G-2092 and G-2094 are dispatched first. Program was mailed
+`web-contract-guards-registration-20261013` to register the four inventory guard
+tests: G-2071 owns `scripts/qa/repository-guards.ts`; web workers do not edit it.
+An API gap goes to Program as one operation/persona line, never a client workaround.
+
+Until G-2072 enforces the method, the manager enforces it in every brief: merge
+with `task goal -- merge`, no model diff review or task browser journey, targeted
+types/unit tests/guards and changed stories. Two fix rounds maximum, fresh
+resumes; then write cut/split/design note in the brief. On an exited task's wake,
+read its immediate `wait` handoff, merge on gates, close verified and record
+attempts. Under-half first-attempt share stops dispatch and gets a cause mail.
+Nothing else in the carried list starts before Program mails a proved row.
 
 ## Carried work
 
