@@ -651509,6 +651509,7 @@
                             "basis": {
                               "enum": [
                                 "unknown",
+                                "public-domain",
                                 "facts",
                                 "original",
                                 "license",
@@ -651716,6 +651717,7 @@
                             "basis": {
                               "enum": [
                                 "unknown",
+                                "public-domain",
                                 "facts",
                                 "original",
                                 "license",
@@ -656854,6 +656856,7 @@
                             "basis": {
                               "enum": [
                                 "unknown",
+                                "public-domain",
                                 "facts",
                                 "original",
                                 "license",
@@ -657016,6 +657019,7 @@
                             "basis": {
                               "enum": [
                                 "unknown",
+                                "public-domain",
                                 "facts",
                                 "original",
                                 "license",
@@ -669761,6 +669765,7 @@
                       "basis": {
                         "enum": [
                           "unknown",
+                          "public-domain",
                           "facts",
                           "original",
                           "license",
@@ -669879,6 +669884,7 @@
                       "basis": {
                         "enum": [
                           "unknown",
+                          "public-domain",
                           "facts",
                           "original",
                           "license",
@@ -669997,6 +670003,7 @@
                       "basis": {
                         "enum": [
                           "unknown",
+                          "public-domain",
                           "facts",
                           "original",
                           "license",
@@ -670184,6 +670191,7 @@
                             "basis": {
                               "enum": [
                                 "unknown",
+                                "public-domain",
                                 "facts",
                                 "original",
                                 "license",
@@ -670391,6 +670399,7 @@
                             "basis": {
                               "enum": [
                                 "unknown",
+                                "public-domain",
                                 "facts",
                                 "original",
                                 "license",
@@ -672954,6 +672963,7 @@
                         "basis": {
                           "enum": [
                             "unknown",
+                            "public-domain",
                             "facts",
                             "original",
                             "license",
@@ -678980,6 +678990,7 @@
                         "basis": {
                           "enum": [
                             "unknown",
+                            "public-domain",
                             "facts",
                             "original",
                             "license",
@@ -685022,6 +685033,7 @@
                                     "basis": {
                                       "enum": [
                                         "unknown",
+                                        "public-domain",
                                         "facts",
                                         "original",
                                         "license",
@@ -685270,6 +685282,7 @@
                                         "basis": {
                                           "enum": [
                                             "unknown",
+                                            "public-domain",
                                             "facts",
                                             "original",
                                             "license",
@@ -686871,6 +686884,7 @@
                                         "basis": {
                                           "enum": [
                                             "unknown",
+                                            "public-domain",
                                             "facts",
                                             "original",
                                             "license",
@@ -687119,6 +687133,7 @@
                                             "basis": {
                                               "enum": [
                                                 "unknown",
+                                                "public-domain",
                                                 "facts",
                                                 "original",
                                                 "license",
@@ -688087,6 +688102,7 @@
                                         "basis": {
                                           "enum": [
                                             "unknown",
+                                            "public-domain",
                                             "facts",
                                             "original",
                                             "license",
@@ -688335,6 +688351,7 @@
                                             "basis": {
                                               "enum": [
                                                 "unknown",
+                                                "public-domain",
                                                 "facts",
                                                 "original",
                                                 "license",
@@ -780212,6 +780229,7 @@
                         "basis": {
                           "enum": [
                             "unknown",
+                            "public-domain",
                             "facts",
                             "original",
                             "license",
@@ -813637,6 +813655,7 @@
                                       "basis": {
                                         "enum": [
                                           "unknown",
+                                          "public-domain",
                                           "facts",
                                           "original",
                                           "license",
@@ -813885,6 +813904,7 @@
                                           "basis": {
                                             "enum": [
                                               "unknown",
+                                              "public-domain",
                                               "facts",
                                               "original",
                                               "license",
@@ -814840,6 +814860,7 @@
                             "basis": {
                               "enum": [
                                 "unknown",
+                                "public-domain",
                                 "facts",
                                 "original",
                                 "license",
@@ -815027,6 +815048,7 @@
                             "basis": {
                               "enum": [
                                 "unknown",
+                                "public-domain",
                                 "facts",
                                 "original",
                                 "license",
@@ -815858,6 +815880,7 @@
                                 "basis": {
                                   "enum": [
                                     "unknown",
+                                    "public-domain",
                                     "facts",
                                     "original",
                                     "license",
@@ -816106,6 +816129,7 @@
                                     "basis": {
                                       "enum": [
                                         "unknown",
+                                        "public-domain",
                                         "facts",
                                         "original",
                                         "license",
