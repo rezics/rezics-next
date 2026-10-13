@@ -1,8 +1,12 @@
 import { afterEach, expect, spyOn, test } from 'bun:test';
 import { grantPlatformResource, type PlatformGrantSession } from '../fixtures/platform-grant.ts';
+import { LocalOAuthSession } from '../../../scripts/lib/oauth-client.ts';
 
 const session: PlatformGrantSession = {
-  mainOrigin: 'https://main.example', token: 'administrator-token',
+  mainOrigin: 'https://main.example',
+  session: new LocalOAuthSession({ account: 'https://account.example', clientId: 'client',
+    redirectUri: 'https://main.example/callback', scope: 'openid access:grant' },
+  { access_token: 'administrator-token', scope: 'openid access:grant' }, Number.POSITIVE_INFINITY),
   actingSubject: 'https://rezics.com/id/00000000-0000-4000-8000-000000000001',
   principalId: '00000000-0000-4000-8000-000000000002',
 };

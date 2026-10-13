@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import { signIn } from '../../../scripts/lib/oauth-client.ts';
+import { signIn, type LocalOAuthSession } from '../../../scripts/lib/oauth-client.ts';
 import { readFileSync } from 'node:fs';
 
 const groupId = /^[a-z][a-z0-9-]{0,63}$/;
@@ -15,7 +15,7 @@ export function platformUsePermission(group: string): string {
 
 export interface PlatformGrantSession {
   mainOrigin: string;
-  token: string;
+  session: LocalOAuthSession;
   actingSubject: string;
   principalId: string;
 }
@@ -65,17 +65,17 @@ async function authorityEpoch(session: PlatformGrantSession): Promise<string> {
   const url = new URL('/v1/access/grants', session.mainOrigin);
   url.searchParams.set('issuerSubject', session.actingSubject);
   url.searchParams.set('profile', 'platform-grants-v1');
-  const response = await fetch(url, { headers: { authorization: `Bearer ${session.token}` } });
+  const response = await fetch(url, { headers: { authorization: `Bearer ${await session.session.current()}` } });
   const body = await grantBody(response) as { authorityEpoch?: string };
   if (!body.authorityEpoch) throw new Error('Platform grant page has no authority epoch');
   return body.authorityEpoch;
 }
 
-function grantChange(session: PlatformGrantSession, body: Record<string, unknown>): Promise<Response> {
+async function grantChange(session: PlatformGrantSession, body: Record<string, unknown>): Promise<Response> {
   return fetch(new URL('/v1/access/grant-changes', session.mainOrigin), {
     method: 'POST',
     headers: {
-      authorization: `Bearer ${session.token}`,
+      authorization: `Bearer ${await session.session.current()}`,
       'content-type': 'application/json',
       'idempotency-key': randomUUID(),
     },
@@ -159,8 +159,8 @@ export async function revokePlatformUse(session: PlatformGrantSession,
   if (result.grant?.id !== grant.grantId) throw new Error('Platform revoke response did not confirm the grant');
 }
 
-/** Sign in the recorded local member and take an access token for the public
- * grant API. The same token can carry follow:read when the caller asks for it. */
+/** Sign in the recorded local member for the public grant API, renewing its
+ * bearer for each request. The caller can also ask for follow:read. */
 export async function platformAdministratorSession(env: NodeJS.ProcessEnv = process.env,
   scope = 'openid access:grant'): Promise<PlatformGrantSession> {
   const publicPath = env.REZICS_WEB_AUTH_PUBLIC_PATH;
@@ -191,17 +191,17 @@ export async function platformAdministratorSession(env: NodeJS.ProcessEnv = proc
     throw new Error(`Platform administrator sign-in failed with HTTP ${signedIn.status}: ${detail.slice(0, 300)}`);
   }
   await signedIn.body?.cancel();
-  let token: string;
+  let session: LocalOAuthSession;
   try {
-    token = (await signIn({
+    session = await signIn({
       account: accountBase, clientId: published.clientId, redirectUri, scope, resource,
       authorizeEndpoint: published.authorizationEndpoint, tokenEndpoint: published.tokenEndpoint,
-    }, cookie)).accessToken;
+    }, cookie);
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     throw new Error(`Platform administrator token exchange failed: ${detail.slice(0, 300)}`);
   }
-  return { mainOrigin, token, actingSubject: saved.actingSubject, principalId: saved.principalId };
+  return { mainOrigin, session, actingSubject: saved.actingSubject, principalId: saved.principalId };
 }
 
 /** Issuer recorded for in-process grants. It is an agent the proof can join. */

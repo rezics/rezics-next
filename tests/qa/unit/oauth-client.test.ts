@@ -55,7 +55,7 @@ test('a trusted client and a consent-bearing client sign in and refresh an expir
     const { client, calls } = issuer(consent);
     const session = await signIn(client, 'session=local', { now: () => 1_000 });
     expect(session.scope).toBe(granted);
-    expect(await session.current(1_000)).toBe(`${client.clientId}-access`);
+    expect(await session.current(1_000, 0)).toBe(`${client.clientId}-access`);
     expect(calls.some(call => call.startsWith('POST /api/account/consent'))).toBe(consent);
     expect(await session.current(31_000)).toBe(`${client.clientId}-renewed`);
     expect(session.scope).toBe(granted);
@@ -68,6 +68,33 @@ test('refresh refuses a token whose scopes differ from the grant', async () => {
   const { client } = issuer(false, true);
   const session = await signIn(client, 'session=local', { now: () => 0 });
   await expect(session.current(60_000)).rejects.toThrow('Refresh changed the granted scopes');
+});
+
+test('slow exchanges count token life from the request and renew within the default margin', async () => {
+  const { client, calls } = issuer(false, false, 300);
+  let now = 0;
+  const send = client.fetch!;
+  client.fetch = async (input, init) => {
+    const response = await send(input, init);
+    if (new URL(String(input)).pathname === '/api/auth/oauth2/token') now += 10_000;
+    return response;
+  };
+  const session = await signIn(client, 'session=local', { now: () => now });
+  expect(now).toBe(10_000);
+  now = 269_000;
+  expect(await session.current()).toBe(`${client.clientId}-access`);
+  expect(calls.filter(call => call === 'POST /api/auth/oauth2/token')).toHaveLength(1);
+  now = 280_000;
+  expect(await Promise.all([session.current(), session.current()]))
+    .toEqual([`${client.clientId}-renewed`, `${client.clientId}-renewed`]);
+  expect(now).toBe(290_000);
+  expect(calls.filter(call => call === 'POST /api/auth/oauth2/token')).toHaveLength(2);
+  // The renewal's ten-second response delay must not extend its lifetime either.
+  now = 549_000;
+  expect(await session.current()).toBe(`${client.clientId}-renewed`);
+  now = 560_000;
+  expect(await session.current()).toBe(`${client.clientId}-renewed-2`);
+  expect(calls.filter(call => call === 'POST /api/auth/oauth2/token')).toHaveLength(3);
 });
 
 test('a request validity window refreshes before expiry and shares one rotating grant across concurrent callers', async () => {
