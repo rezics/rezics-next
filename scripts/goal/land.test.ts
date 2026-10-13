@@ -388,7 +388,14 @@ echo '{"findings":[]}' > "$out"
       await land({ ...options, step: true });
       expect(calls).toEqual(['merge']);
       await expect(land(options)).rejects.toThrow('expected done');
-      await expect(land({ ...options, step: true, handoff: 'RESULT: blocked\n' })).rejects.toThrow('expected done or partial');
+      const blockedDir = mkdtempSync(join(tmpdir(), 'goal-land-step-'));
+      try {
+        await land({ ...options, runDir: blockedDir, step: true,
+          handoff: 'RESULT: blocked\nBLOCKERS: a read outside the claim answers 503\n' });
+        expect(calls).toEqual(['merge', 'merge']);
+      } finally { rmSync(blockedDir, { recursive: true, force: true }); }
+      await expect(land({ ...options, handoff: 'RESULT: blocked\n' })).rejects.toThrow('expected done');
+      await expect(land({ ...options, step: true, handoff: 'RESULT: failed\n' })).rejects.toThrow('expected done, partial or blocked');
       const prompt = reviewPrompt({ worktree: '/w', base: 'a', head: 'b', brief: 'brief', handoff: 'RESULT: partial', directory: '/d', step: true });
       expect(prompt).toContain('do not report what the brief still lacks');
       expect(reviewPrompt({ worktree: '/w', base: 'a', head: 'b', brief: 'brief', handoff: 'RESULT: done', directory: '/d' }))

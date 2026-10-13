@@ -427,8 +427,10 @@ function priorReview(runDir: string, directory?: string): { findings: ReviewFind
 /** Keep landing on the shared merge path; merge receives only the revalidated owner-change list. */
 export async function land(options: LandOptions): Promise<void> {
   const result = handoffResult(options.handoff);
-  if (result !== 'done' && !(options.step && result === 'partial')) {
-    throw new Error(`${options.id}: land stopped: handoff RESULT is ${result ?? 'missing or ambiguous'}, expected done${options.step ? ' or partial' : ''}`);
+  // A step is the manager's acceptance of what the branch holds. A worker stopped by a fault outside its
+  // claim says `blocked` and may still leave a slice worth landing; the gates and the review judge it as any step.
+  if (result !== 'done' && !(options.step && (result === 'partial' || result === 'blocked'))) {
+    throw new Error(`${options.id}: land stopped: handoff RESULT is ${result ?? 'missing or ambiguous'}, expected done${options.step ? ', partial or blocked' : ''}`);
   }
   const accepted = landingState(options.runDir).accepted;
   const previous = accepted && (accepted.head !== options.head || accepted.brief !== options.brief)
