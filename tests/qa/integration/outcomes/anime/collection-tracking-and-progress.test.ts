@@ -2,7 +2,8 @@ import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { grantLaunchRecipeAuthority } from '../../../../../scripts/load/launch-corpus.ts';
-import { outcomeTest } from '../../../support/outcome-test.ts';
+import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
+import { settledWrite } from '../../../support/settled-write.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
 setDefaultTimeout(90_000);
@@ -10,6 +11,7 @@ let sessions: PersonaSessions;
 const requests = new WeakMap<Response, { method: string; path: string; body: unknown; key?: string }>();
 const failures: { request: unknown; status: number; answer: string }[] = [];
 const preparation = { durationMs: 0 };
+let preparing = true;
 const short = (id: string) => id.slice(-36);
 const acting = (person: PersonaSession) => `actingSubject=${encodeURIComponent(person.actingSubject!)}`;
 type Work = { work: string; mainVersion: string };
@@ -55,8 +57,13 @@ async function publish(title: string): Promise<Work> {
   }), 201);
   return work;
 }
-afterAll(async () => { await sessions?.close(); });
+afterAll(async () => {
+  try { await recording.publish(); }
+  finally { await sessions?.close(); }
+});
 import row from '../../../../../scripts/qa/cases/outcomes/anime/collection-tracking-and-progress.ts';
+const recording = new OutcomeRecorder(row);
+type Sample = ReturnType<OutcomeRecorder['session']>;
 
 type Progress = { completed: boolean; version: number; position: string | null; replayed?: boolean };
 let show: Work, structure: string;
@@ -65,12 +72,17 @@ beforeAll(async () => {
   const started = Date.now();
   try {
   sessions = await personaSessions();
+  await recording.prepare();
   for (const name of ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const) {
     const person = sessions[name], main = person.main;
     person.main = async (method, path, body, key, options) => {
       key ??= method === 'GET' ? undefined : randomUUID();
-      const response = await main(method, path, body, key, options);
+      const response = !preparing || method === 'GET' ? await main(method, path, body, key, options)
+        : await settledWrite(main, method, path, body, key);
       requests.set(response, { method, path, body, key });
+      if (!preparing && response.status >= 500) {
+        await answer(Promise.resolve(response));
+      }
       return response;
     };
   }
@@ -101,35 +113,37 @@ beforeAll(async () => {
   occurrences.push(...changed.occurrences);
   expect(occurrences).toHaveLength(3);
   } finally {
+    preparing = false;
     preparation.durationMs = Date.now() - started;
     await Bun.write(`.temp/anime-collection-tracking-and-progress-preparation-${Bun.env.REZICS_QA_RUN_ID}.json`,
       JSON.stringify(preparation, null, 2));
   }
 }, 180_000);
 const progressPath = (index = 0) => `/v1/compositions/${short(structure)}/occurrences/${short(occurrences[index]!)}/progress`;
-const write = (person: PersonaSession, completed: boolean, expectedVersion: number, key = randomUUID(), index = 0) =>
-  person.main('PUT', progressPath(index), { actingSubject: person.actingSubject, completed, expectedVersion, position: null }, key);
-async function publicOpening(person: PersonaSession) {
+const write = (person: PersonaSession, sample: Sample, completed: boolean, expectedVersion: number, key = randomUUID(), index = 0) =>
+  sample('episode-completed', 'PUT', progressPath(index), { actingSubject: person.actingSubject, completed, expectedVersion, position: null }, key);
+async function publicOpening(person: PersonaSession, sample: Sample) {
   const query = person.actingSubject ? `&${acting(person)}` : '';
   const opening = await answer<{ items: { occurrence: string; target: string }[]; nextCursor: string | null }>(
-    person.main('GET', `/v1/reading-positions/${short(show.work)}?position=start&limit=1${query}`));
+    sample('episode-opening', 'GET', `/v1/reading-positions/${short(show.work)}?position=start&limit=1${query}`));
   expect(opening.items).toMatchObject([{ occurrence: occurrences[0], target: targets[0] }]);
   expect(opening.nextCursor).not.toBeNull();
 }
-async function isolated(person: PersonaSession, affected: PersonaSession) {
+async function isolated(name: PersonaName, person: PersonaSession, affected: PersonaSession, sample: Sample) {
+  const affectedSample = recording.session(name, affected);
   const path = `/v1/works/${short(show.work)}`;
-  expect(await answer(person.main('GET', `${path}/reader-state?${acting(affected)}`), 403))
+  expect(await answer(sample('foreign-reader-state-refused', 'GET', `${path}/reader-state?${acting(affected)}`), 403))
     .toMatchObject({ code: 'reader_library_denied' });
-  await answer(person.main('PUT', `${path}/reader-status`, {
+  await answer(sample('foreign-reader-status-refused', 'PUT', `${path}/reader-status`, {
     actingSubject: affected.actingSubject, expectedVersion: 0, status: 'reading',
   }), 403);
-  expect(await answer(person.main('GET', `${progressPath(2)}?${acting(person)}`)))
+  expect(await answer(sample('own-unstarted-episode', 'GET', `${progressPath(2)}?${acting(person)}`)))
     .toMatchObject({ completed: false, version: 0, position: null });
   const foreignPath = `${progressPath(2)}?${acting(affected)}`;
-  const foreign = await person.main('GET', foreignPath);
-  const before = await answer(affected.main('GET', `${progressPath(2)}?${acting(affected)}`));
+  const foreign = await sample('foreign-episode-progress-refused', 'GET', foreignPath);
+  const before = await answer(affectedSample('foreign-episode-before', 'GET', `${progressPath(2)}?${acting(affected)}`));
   const body = { actingSubject: affected.actingSubject, completed: true, expectedVersion: 0, position: null };
-  const response = await person.main('PUT', progressPath(2), body);
+  const response = await sample('foreign-episode-completion-refused', 'PUT', progressPath(2), body);
     const persona = (['stranger', 'member', 'owner', 'moderator', 'operator'] as const)
       .find(name => sessions[name] === person)!;
     await Bun.write(`.temp/anime-collection-tracking-and-progress-${Bun.env.REZICS_QA_RUN_ID}-${persona}.json`,
@@ -137,7 +151,7 @@ async function isolated(person: PersonaSession, affected: PersonaSession) {
         status: foreign.status, answer: await foreign.clone().text() },
         put: { request: requests.get(response),
           status: response.status, answer: await response.clone().text() } }, null, 2));
-  const after = await answer(affected.main('GET', `${progressPath(2)}?${acting(affected)}`));
+  const after = await answer(affectedSample('foreign-episode-after', 'GET', `${progressPath(2)}?${acting(affected)}`));
   // The caller's Account progress must not project a last-read timestamp onto an uncontrolled Person.
   expect(after).toEqual(before);
   await answer(Promise.resolve(response), 403);
@@ -147,33 +161,87 @@ async function isolated(person: PersonaSession, affected: PersonaSession) {
 
 async function journey(name: PersonaName) {
   const person = sessions[name];
-  await publicOpening(person);
+  const sample = recording.session(name, person);
+  await publicOpening(person, sample);
   const path = `/v1/works/${short(show.work)}`;
   if (name === 'visitor') {
-    expect(await answer(person.main('GET', `${path}/reader-state`))).toMatchObject({
+    expect(await answer(sample('anonymous-reader-state', 'GET', `${path}/reader-state`))).toMatchObject({
       status: { status: null, version: 0 }, progress: null });
-    await answer(person.main('PUT', `${path}/reader-status`, {
+    await answer(sample('reader-status-sign-in', 'PUT', `${path}/reader-status`, {
       actingSubject: sessions.member.actingSubject, expectedVersion: 0, status: 'reading' }), 401);
-    await answer(person.main('GET', `${progressPath()}?${acting(sessions.member)}`), 401);
-    await answer(person.main('PUT', progressPath(), {
+    await answer(sample('episode-progress-sign-in', 'GET', `${progressPath()}?${acting(sessions.member)}`), 401);
+    await answer(sample('episode-completion-sign-in', 'PUT', progressPath(), {
       actingSubject: sessions.member.actingSubject, completed: true, expectedVersion: 0, position: null }), 401);
-    await answer(person.main('GET', `/v1/me/shelves?${acting(sessions.member)}`), 401);
+    await answer(sample('shelves-sign-in', 'GET', `/v1/me/shelves?${acting(sessions.member)}`), 401);
     return;
   }
   const statusBody = { actingSubject: person.actingSubject, expectedVersion: 0, status: 'reading' };
-  expect(await answer(person.main('PUT', `${path}/reader-status`, statusBody)))
+  expect(await answer(sample('start-watching', 'PUT', `${path}/reader-status`, statusBody)))
     .toMatchObject({ work: show.work, status: 'reading', version: 1 });
   const shelf = await answer<{ items: { work: string }[]; nextCursor: string | null }>(
-    person.main('GET', `/v1/me/shelves/status/reading/works?${acting(person)}&sort=added&order=desc&limit=1`));
+    sample('watching-shelf', 'GET', `/v1/me/shelves/status/reading/works?${acting(person)}&sort=added&order=desc&limit=1`));
   expect(shelf.items).toMatchObject([{ work: show.work, status: 'reading', version: 1 }]);
   expect(shelf.nextCursor).toBeNull();
-  expect(await answer<Progress>(write(person, true, 0))).toMatchObject({ completed: true, version: 1 });
+  expect(await answer<Progress>(write(person, sample, true, 0))).toMatchObject({ completed: true, version: 1 });
   const completed = await answer<{ items: { occurrence: string }[] }>(
-    person.main('GET', `/v1/compositions/${short(structure)}/progress?${acting(person)}&limit=1`));
+    sample('completed-episodes', 'GET', `/v1/compositions/${short(structure)}/progress?${acting(person)}&limit=1`));
   expect(completed.items.map(item => item.occurrence)).toEqual([occurrences[0]!]);
-  expect(await answer(person.main('GET', `/v1/reading-positions/${short(show.work)}?${acting(person)}&position=mine&limit=1`)))
+  expect(await answer(sample('resume-watching', 'GET', `/v1/reading-positions/${short(show.work)}?${acting(person)}&position=mine&limit=1`)))
     .toMatchObject({ resolved: occurrences[0], scope: 'resume' });
-  await isolated(person, name === 'owner' ? sessions.member : sessions.owner);
+  await isolated(name, person, name === 'owner' ? sessions.member : sessions.owner, sample);
+  await libraryVisit(name, person, sample);
+}
+
+/** One English `/library?shelf=reading&view=grid` visit, using the server's exact reads. */
+async function libraryVisit(name: PersonaName, person: PersonaSession, sample: Sample) {
+  // LibraryRoute redirects an anonymous visitor before it reads the library.
+  if (name === 'visitor') return;
+  await answer(sample('library-session-acting-contexts', 'GET', '/v1/me/acting-contexts?task=work.create'));
+  await answer(sample('library-session-agents', 'GET', '/v1/me/agents?languages=en'));
+  await answer(sample('library-session-agent', 'GET', '/v1/me/session-agent'));
+  const query = (fields: Record<string, string> = {}) => new URLSearchParams({
+    actingSubject: person.actingSubject!, ...fields,
+  });
+  await answer(sample('library-session-agent-profile', 'GET',
+    `/v1/agents/${short(person.actingSubject!)}?${query()}`));
+  let cursor: string | null = null;
+  for (let page = 0; page < 5; page++) {
+    const shelves = await answer<{ nextCursor: string | null }>(sample(
+      page ? `library-custom-shelves-page-${page + 1}` : 'library-custom-shelves', 'GET',
+      `/v1/me/shelves?${query({ limit: '20', ...(cursor ? { cursor } : {}) })}`));
+    cursor = shelves.nextCursor;
+    if (!cursor) break;
+  }
+  await answer(sample('library-visibility', 'GET',
+    `/v1/agents/${short(person.actingSubject!)}/library-visibility`));
+  // readOverview deliberately reads the global question without the session bearer.
+  await answer(recording.session(name, sessions.visitor)('library-rating-context', 'GET',
+    '/v1/rating-contexts?scope=global&limit=1'));
+  const year = String(new Date().getUTCFullYear());
+  await answer(sample('library-yearly-goal', 'GET', `/v1/me/reading-goal?${query({ year })}`));
+  await answer(sample('library-reading-year', 'GET', `/v1/me/reading-stats?${query({ year })}`));
+  let nextCursor: string | null = null;
+  for (let page = 0; ; page++) {
+    const shelf = await answer<{ items: { work: string; card: unknown }[]; nextCursor: string | null }>(sample(
+      page ? `library-watching-shelf-page-${page + 1}` : 'library-watching-shelf', 'GET',
+      `/v1/me/shelves/status/reading/works?${query({ sort: 'added', order: 'desc', limit: '20',
+        ...(nextCursor ? { cursor: nextCursor } : {}) })}`));
+    const works = shelf.items.filter(item => item.card).map(item => item.work);
+    if (works.length) {
+      await answer(sample(page ? `library-work-states-page-${page + 1}` : 'library-work-states', 'GET',
+        `/v1/me/work-states?${new URLSearchParams({ works: works.join(','), actingSubject: person.actingSubject! })}`));
+    }
+    for (const [index, work] of works.entries()) {
+      const label = `${page ? `library-page-${page + 1}` : 'library'}-work-${index + 1}`;
+      const resume = await answer<{ unreadCount?: { kind: string } }>(sample(`${label}-continue`, 'GET',
+        `/v1/me/continue/${short(work)}?${query()}`));
+      if (resume.unreadCount?.kind === 'exact') {
+        await answer(sample(`${label}-header`, 'GET', `/v1/works/${short(work)}?${query()}`));
+      }
+    }
+    nextCursor = shelf.nextCursor;
+    if (!nextCursor) break;
+  }
 }
 
 const qualification: { persona: string; passed: boolean; error?: string }[] = [];
@@ -189,10 +257,10 @@ async function qualify(name: PersonaName) {
       JSON.stringify({ preparation, qualification, failures }, null, 2));
   }
 }
-outcomeTest(row, 'visitor', () => qualify('visitor'));
-outcomeTest(row, 'stranger', () => qualify('stranger'));
-outcomeTest(row, 'member', () => qualify('member'));
-outcomeTest(row, 'owner', () => qualify('owner'));
-outcomeTest(row, 'moderator', () => qualify('moderator'));
-outcomeTest(row, 'operator', () => qualify('operator'));
+outcomeTest(row, 'visitor', () => qualify('visitor'), recording);
+outcomeTest(row, 'stranger', () => qualify('stranger'), recording);
+outcomeTest(row, 'member', () => qualify('member'), recording);
+outcomeTest(row, 'owner', () => qualify('owner'), recording);
+outcomeTest(row, 'moderator', () => qualify('moderator'), recording);
+outcomeTest(row, 'operator', () => qualify('operator'), recording);
 
