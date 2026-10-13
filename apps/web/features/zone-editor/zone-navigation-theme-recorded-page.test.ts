@@ -9,8 +9,9 @@ import { messages as zoneMessages } from '../zones/messages.ts';
 import { defaultPresentation } from '../zones/presentation.ts';
 import { zoneHomeDocument } from './home-document.tsx';
 import { publicationWire, type PublicationChoice } from './model.ts';
-import { NAV_PAGE_SIZE } from './navigation.ts';
+import { NAV_PAGE_SIZE, pageNameOf } from './navigation.ts';
 import {
+  loadNavigationEditor,
   loadPublishedFrame,
   loadRecordedRoute,
   loadThemeEditor,
@@ -37,9 +38,14 @@ function sample(persona: AnswerPersona, label: string) {
 function open(persona: AnswerPersona, selections: readonly RecordedSelection[]) {
   const replay = recordedFetch(record, persona, selections, { pathPrefix: BFF_PREFIX });
   let unmatched: unknown;
+  const calls: string[] = [];
   const fetcher: typeof fetch = Object.assign(async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    const url = input instanceof Request ? new URL(input.url) : new URL(String(input), 'https://recorded.invalid');
+    const method = init?.method ?? (input instanceof Request ? input.method : 'GET');
     try {
-      return await replay.fetcher(input, init);
+      const response = await replay.fetcher(input, init);
+      calls.push(`${method} ${url.pathname}${url.search} ${response.status}`);
+      return response;
     } catch (error) {
       unmatched = error;
       throw error;
@@ -49,6 +55,7 @@ function open(persona: AnswerPersona, selections: readonly RecordedSelection[]) 
   return {
     main: browserMainApi('https://recorded.invalid', { anonymous: true, fetcher }),
     unmatched: () => unmatched,
+    calls,
   };
 }
 
@@ -185,6 +192,55 @@ test('a stale theme save keeps the recorded refusal and the refused presentation
   expect(editor?.choice).toEqual({ density: 'comfortable', pageSurface: 'flat' });
 });
 
+test('an owner navigation read keeps the recorded mounts and the collection name', async () => {
+  const item = sample('owner', 'draft-navigation-editor');
+  const names = sample('owner', 'mount-target-collection-name');
+  const work = sample('owner', 'mount-target-work');
+  const draft = sample('owner', 'showcase-editor');
+  const session = open('owner', [
+    { label: item.label, state: 'populated' },
+    { label: 'draft-navigation', state: 'populated' },
+    { label: draft.label, state: 'populated' },
+    { label: names.label, state: 'populated' },
+    { label: work.label, state: 'error' },
+  ]);
+  const zoneId = zoneIdFromRecordedPath(item.path);
+  const acting = recordedActingSubject(item.path);
+  const loaded = await loadNavigationEditor(session.main, zoneId, acting);
+  if (loaded.kind !== 'editor') throw new Error(String(session.unmatched() ?? loaded.failure));
+  const answer = navigationAnswer(item.answer);
+  const collectionName = collectionLabel(names.answer);
+  expect(answer.mounts.length).toBeGreaterThan(0);
+  expect(work.status).toBe(404);
+  expect(work.answer).toMatchObject({ code: 'work_unavailable', title: 'Resource is unavailable' });
+  expect(pageNameOf(work.answer)).toBe('Resource is unavailable');
+  expect(loaded.navigation.links.map(link => link.name)).toEqual(answer.mounts.map(() => collectionName));
+  expect(loaded.navigation.links.map(link => link.segment)).toEqual(answer.mounts.map(mount => mount.qualifier.routeSegment));
+  expect(loaded.navigation.links.map(link => link.occurrence)).toEqual(answer.mounts.map(mount => mount.occurrence));
+  expect(loaded.navigation.links.map(link => link.target)).toEqual(answer.mounts.map(mount => mount.target));
+  expect(loaded.navigation.head).toBe(answer.revision);
+  expect(loaded.navigation.navigation).toBe(answer.navigation);
+  expect(loaded.navigation.complete).toBe(answer.next === null);
+  expect(loaded.navigation.after).toBeNull();
+  expect(loaded.navigation.notice).toEqual({ kind: 'idle' });
+  expect(loaded.home.zoneHead).toBe(answer.ownerRevision);
+  expect(loaded.home.navigationRevision).toBe(answer.revision);
+  expect(loaded.home.basis).toEqual(draftBasis(draft.answer));
+  const again = await loaded.client.readNavigation(zoneId, acting);
+  if (!again.ok) throw new Error(String(session.unmatched() ?? again.failure));
+  expect(again.data.links).toEqual(loaded.navigation.links);
+  expect(again.data.head).toBe(loaded.navigation.head);
+  expect(again.data.navigation).toBe(loaded.navigation.navigation);
+  expect(again.data.complete).toBe(true);
+  expect(again.data.after).toBeNull();
+  expect(again.data.zoneHead).toBe(answer.ownerRevision);
+  const workPath = new URL(work.path, 'https://recorded.invalid').pathname;
+  const namePath = new URL(names.path, 'https://recorded.invalid').pathname;
+  const reads = answer.mounts.length * 2;
+  expect(session.calls.filter(call => call.includes(workPath) && call.endsWith(' 404'))).toHaveLength(reads);
+  expect(session.calls.filter(call => call.includes(namePath) && call.endsWith(' 200'))).toHaveLength(reads);
+});
+
 test('the navigation reader asks for a page the recorded draft does not', async () => {
   const item = sample('owner', 'draft-navigation');
   const session = open('owner', [{ label: item.label, state: 'populated' }]);
@@ -222,6 +278,71 @@ test('publishing names the zone as the page, which the recorded home document do
   expect(wire.routesRevision).toBe(body.routesRevision);
   expect(wire.pages[0]).toEqual({ ...body.pages[0], page: zoneIri });
 });
+
+function navigationAnswer(answer: unknown): {
+  revision: string;
+  navigation: string;
+  ownerRevision: string;
+  next: string | null;
+  mounts: { occurrence: string; target: string; qualifier: { routeSegment: string } }[];
+} {
+  if (!answer || typeof answer !== 'object') throw new Error('Recorded navigation has no answer');
+  const row = answer as Record<string, unknown>;
+  const mounts = Array.isArray(row.mounts) ? row.mounts : null;
+  if (typeof row.revision !== 'string' || typeof row.navigation !== 'string' || typeof row.ownerRevision !== 'string'
+    || (row.next !== null && typeof row.next !== 'string') || !mounts) {
+    throw new Error('Recorded navigation is missing its mounts');
+  }
+  return {
+    revision: row.revision,
+    navigation: row.navigation,
+    ownerRevision: row.ownerRevision,
+    next: row.next,
+    mounts: mounts.map(mount => {
+      if (!mount || typeof mount !== 'object') throw new Error('Recorded navigation mount is missing');
+      const item = mount as Record<string, unknown>;
+      const qualifier = item.qualifier;
+      if (typeof item.occurrence !== 'string' || typeof item.target !== 'string' || !qualifier
+        || typeof qualifier !== 'object' || typeof (qualifier as { routeSegment?: unknown }).routeSegment !== 'string') {
+        throw new Error('Recorded navigation mount is missing its path');
+      }
+      return {
+        occurrence: item.occurrence,
+        target: item.target,
+        qualifier: { routeSegment: (qualifier as { routeSegment: string }).routeSegment },
+      };
+    }),
+  };
+}
+
+function collectionLabel(answer: unknown): string {
+  if (!answer || typeof answer !== 'object' || !('name' in answer)) throw new Error('Recorded collection has no name');
+  const name = answer.name;
+  if (!name || typeof name !== 'object' || !('original' in name) || !('labels' in name)) {
+    throw new Error('Recorded collection has no name');
+  }
+  const original = name.original;
+  const labels = name.labels;
+  if (typeof original !== 'string' || !labels || typeof labels !== 'object') {
+    throw new Error('Recorded collection has no name');
+  }
+  const label = (labels as Record<string, unknown>)[original];
+  if (typeof label !== 'string') throw new Error('Recorded collection has no name');
+  return label;
+}
+
+function draftBasis(answer: unknown): { revisionId: string; byteDigest: string; contentEpoch: string } {
+  if (!answer || typeof answer !== 'object' || !('draft' in answer) || !answer.draft || typeof answer.draft !== 'object') {
+    throw new Error('Recorded showcase has no draft');
+  }
+  const draft = answer.draft as Record<string, unknown>;
+  const position = draft.sourcePosition;
+  const epoch = position && typeof position === 'object' && 'dataEpoch' in position ? position.dataEpoch : null;
+  if (typeof draft.revisionId !== 'string' || typeof draft.byteDigest !== 'string' || typeof epoch !== 'string') {
+    throw new Error('Recorded showcase draft is missing its basis');
+  }
+  return { revisionId: draft.revisionId, byteDigest: draft.byteDigest, contentEpoch: epoch };
+}
 
 function publishBody(body: unknown): {
   expectedHead: string;

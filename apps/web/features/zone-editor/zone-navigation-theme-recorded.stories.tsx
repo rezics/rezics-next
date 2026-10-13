@@ -10,7 +10,7 @@ import type { ZonePresentationRead } from '../realm/types.ts';
 import { messages as shellMessages } from '../shell/messages.ts';
 import { messages as zoneMessages } from '../zones/messages.ts';
 import { messages as editorMessages } from './messages.ts';
-import { zoneThemePath } from './routes.ts';
+import { zoneNavigationPath, zoneThemePath } from './routes.ts';
 import { RecordedNavigationTheme } from './zone-navigation-theme-recorded-page.tsx';
 import { zoneIdFromRecordedPath } from './zone-navigation-theme-recorded-page.ts';
 
@@ -212,3 +212,59 @@ export const RouteRefusedVisitor: Story = {
   },
 };
 export const RouteRefusedVisitorPhone: Story = { ...RouteRefusedVisitor, globals: phone };
+
+const navigationOwnerArgs = {
+  persona: 'owner' as const,
+  navigation: 'draft-navigation-editor',
+  navigationState: 'populated' as const,
+  navigationDraft: 'showcase-editor',
+  navigationHeads: 'draft-navigation',
+  mountNames: 'mount-target-collection-name',
+  mountWork: 'mount-target-work',
+};
+
+export const NavigationOwner: Story = {
+  args: navigationOwnerArgs,
+  parameters: {
+    route: {
+      pathname: localizedPath(zoneNavigationPath(zoneIdFromRecordedPath(sample('owner', 'draft-navigation-editor').path)), locale),
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const zone = sample('owner', 'draft-navigation-editor').answer as {
+      name: string;
+      mounts: { qualifier: { routeSegment: string } }[];
+    };
+    const named = sample('owner', 'mount-target-collection-name').answer as { name: { labels: { und: string } } };
+    const pageName = named.name.labels.und;
+    const acting = new URL(sample('owner', 'draft-navigation-editor').path, 'https://recorded.invalid')
+      .searchParams.get('actingSubject');
+    await expect(await canvas.findByRole('heading', { level: 1, name: zone.name })).toBeVisible();
+    await expect(canvas.getByRole('heading', { name: copy.navTitle })).toBeVisible();
+    const links = within(canvas.getByRole('list', { name: copy.linksLabel }));
+    await expect(links.getAllByText(pageName)).toHaveLength(zone.mounts.length);
+    await expect(links.getAllByRole('textbox').map(input => (input as HTMLInputElement).value)).toEqual(
+      zone.mounts.map(mount => mount.qualifier.routeSegment));
+    await expect(canvas.queryByRole('button', { name: copy.navContinue })).toBeNull();
+    await expect(canvas.getByRole('button', { name: copy.save })).toBeDisabled();
+    await expect(canvas.queryByText('Resource is unavailable')).toBeNull();
+    if (acting) await expect(canvas.getAllByText(acting).length).toBeGreaterThan(0);
+  },
+};
+export const NavigationOwnerPhone: Story = { ...NavigationOwner, globals: phone };
+
+export const NavigationLoadingOwner: Story = {
+  args: { persona: 'owner', navigation: 'draft-navigation-editor', navigationState: 'loading' },
+  parameters: NavigationOwner.parameters,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const zone = sample('owner', 'draft-navigation-editor').answer as { name: string };
+    const status = await canvas.findByRole('status');
+    await expect(status).toHaveTextContent(shellMessages.loading);
+    await expect(status).toHaveAttribute('aria-busy', 'true');
+    await expect(canvas.queryByRole('heading', { name: zone.name })).toBeNull();
+    await expect(canvas.queryByRole('list', { name: copy.linksLabel })).toBeNull();
+  },
+};
+export const NavigationLoadingOwnerPhone: Story = { ...NavigationLoadingOwner, globals: phone };

@@ -14,12 +14,15 @@ import { zoneTheme, type ZoneTheme } from '../zones/theme.ts';
 import { placedModule } from '../zones/presentation.ts';
 import type { PlacedModule } from '../zones/zone-home.tsx';
 import {
+  browserZoneAuthoring,
   browserZoneNavigation,
   browserZoneTheme,
+  loadZoneNavigation,
   type NavigationSnapshot,
+  type ZoneNavigationClient,
   type ZoneThemeWrite,
 } from './api.ts';
-import type { EditorState } from './model.ts';
+import type { EditorState, LoadedDraft } from './model.ts';
 import type { NavigationState } from './navigation.ts';
 import {
   initialThemeState,
@@ -153,6 +156,46 @@ export function navigationEditorState(snapshot: NavigationSnapshot, home: Editor
 
 export function loadZoneNavigationRead(main: WebClient, zoneId: string, actingSubject: string) {
   return browserZoneNavigation(main).readNavigation(zoneId, actingSubject);
+}
+
+/** The authorized home draft, before the navigation read replaces its two heads. */
+function homeFromAuthorizedDraft(draft: LoadedDraft): EditorState {
+  return {
+    value: draft.value,
+    savedValue: draft.basis ? draft.value : null,
+    expectedHead: draft.expectedHead,
+    basis: draft.basis,
+    zoneHead: draft.zoneHead,
+    navigationRevision: draft.navigationRevision,
+    publishedRevisionId: draft.publishedRevisionId,
+    variantId: draft.variantId,
+    language: draft.language,
+    direction: draft.direction,
+    ...(draft.embeds ? { embeds: draft.embeds } : {}),
+    notice: { kind: 'idle' },
+  };
+}
+
+/**
+ * Navigation editor for one Zone. The browser authoring adapter reads the home
+ * draft; `loadZoneNavigation` reads the paged mounts and their page names. Both
+ * use the caller’s client, and the manage route’s mapping folds the snapshot.
+ */
+export async function loadNavigationEditor(main: WebClient, zoneId: string, actingSubject: string): Promise<
+  | { kind: 'editor'; navigation: NavigationState; home: EditorState; client: ZoneNavigationClient }
+  | { kind: 'failure'; failure: string }
+> {
+  const [draft, navigation] = await Promise.all([
+    browserZoneAuthoring(main).readDraft(zoneId, actingSubject),
+    loadZoneNavigation(main, zoneId, actingSubject),
+  ]);
+  if (!navigation.ok) return { kind: 'failure', failure: navigation.failure };
+  if (!draft.ok) return { kind: 'failure', failure: draft.failure };
+  return {
+    kind: 'editor',
+    ...navigationEditorState(navigation.data, homeFromAuthorizedDraft(draft.data)),
+    client: browserZoneNavigation(main),
+  };
 }
 
 export function loadCompletePresentation(main: WebClient, zoneId: string, actingSubject?: string) {

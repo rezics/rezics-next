@@ -4,7 +4,8 @@ import { ResolvedMediaImages } from '@rezics/ui/media-image';
 import type { ZoneMember } from '@rezics/zone-sdk';
 import { useEffect, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
-import { spaceHref } from '../address/path.ts';
+import type { CanonicalAddress } from '@rezics/model/address';
+import { addressKey, spaceHref } from '../address/path.ts';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import type { ReadFailure } from '../manage/types.ts';
@@ -18,17 +19,20 @@ import { messages as zoneMessagesCatalog } from '../zones/messages.ts';
 import { ZonePageMissing } from '../zones/page-missing.tsx';
 import { MemberList, ZoneDocumentHome } from '../zones/site-pages.tsx';
 import { ZoneFrame, ZoneMasthead } from '../zones/zone-frame.tsx';
+import { loadZoneNavigation } from './api.ts';
 import { ZoneEditorDraftProvider } from './draft-provider.tsx';
 import { ZoneEditorFrame } from './frame.tsx';
 import { zoneHomeDocument } from './home-document.tsx';
 import { messages as editorMessages } from './messages.ts';
+import { ZoneNavigationEditor } from './navigation-editor.tsx';
 import { messages as manageMessages } from '../manage/messages.ts';
 import { ZoneAuthoringFailure } from './states.tsx';
 import { ZoneThemeEditor } from './theme-editor.tsx';
 import type { ThemeEditorStart } from './theme.ts';
-import { zoneThemePath } from './routes.ts';
+import { zoneNavigationPath, zonePreviewPath, zoneThemePath } from './routes.ts';
 import {
   loadCompletePresentation,
+  loadNavigationEditor,
   loadPublishedFrame,
   loadRecordedRoute,
   loadThemeEditor,
@@ -58,23 +62,37 @@ export interface RecordedNavigationThemeProps {
   configurationState?: 'populated' | 'error';
   /** Stale configuration write. The body is the recorded request body. */
   save?: string;
+  /** Authorized navigation inventory. Loading holds that Zone read unanswered. */
+  navigation?: string;
+  navigationState?: 'populated' | 'loading';
+  /** Showcase read that carries the home draft beside the navigation. */
+  navigationDraft?: string;
+  /** Zone read without a page size. The authoring adapter uses it for the two heads. */
+  navigationHeads?: string;
+  /** Collection name read for each mount target. */
+  mountNames?: string;
+  /** Work read for a mount target. A recorded refusal stays a refusal. */
+  mountWork?: string;
 }
 
 type Screen =
   | { kind: 'frame'; frame: RecordedPublishedFrame; index: ZoneMember[] | null }
   | { kind: 'missing'; href: string }
   | { kind: 'theme'; zoneId: string; acting: string; name: string; start: ThemeEditorStart }
+  | { kind: 'navigation'; zoneId: string; zoneIri: string; acting: string; name: string;
+      navigation: Awaited<ReturnType<typeof loadNavigationEditor>> & { kind: 'editor' } }
   | { kind: 'denied'; failure: ReadFailure };
 
 /** Stories and the mapping unit render a recorded navigation or theme answer through the production readers. */
 export function RecordedNavigationTheme({ record, persona, locale = 'en', presentation, presentationState = 'populated',
-  route, routeState = 'empty', configuration, configurationState = 'populated', save }: RecordedNavigationThemeProps) {
+  route, routeState = 'empty', configuration, configurationState = 'populated', save, navigation,
+  navigationState = 'populated', navigationDraft, navigationHeads, mountNames, mountWork }: RecordedNavigationThemeProps) {
   const [screen, setScreen] = useState<Screen | null>(null);
   const [error, setError] = useState<Error | null>(null);
   useEffect(() => {
     let active = true;
     const selections = recordedSelections({ presentation, presentationState, route, routeState, configuration,
-      configurationState, save });
+      configurationState, save, navigation, navigationState, navigationDraft, navigationHeads, mountNames, mountWork });
     const replay = recordedFetch(record, persona, selections, { pathPrefix: BFF_PREFIX });
     const main = browserMainApi('https://recorded.invalid', { anonymous: true, fetcher: replay.fetcher });
     const zoneMessages = zoneMessagesFor(locale);
@@ -94,6 +112,23 @@ export function RecordedNavigationTheme({ record, persona, locale = 'en', presen
         if (named && !named.ok) throw new Error(`Recorded presentation read failed: ${named.failure}`);
         const name = named?.ok ? named.data.name ?? named.data.address.suffixSource : write.actingSubject;
         return { kind: 'theme', zoneId, acting: write.actingSubject, name, start: { kind: 'ready', state } };
+      }
+      if (navigation) {
+        const sample = recordedSample(record, persona, navigation);
+        const zoneId = zoneIdFromRecordedPath(sample.path);
+        const acting = recordedActingSubject(sample.path);
+        if (navigationState === 'loading') {
+          const held = await loadZoneNavigation(main, zoneId, acting);
+          throw new Error(held.ok
+            ? 'Recorded navigation read resolved while it was held'
+            : `Recorded navigation read failed: ${held.failure}`);
+        }
+        const loaded = await loadNavigationEditor(main, zoneId, acting);
+        if (loaded.kind !== 'editor') throw new Error(`Recorded navigation read failed: ${loaded.failure}`);
+        const name = recordedName(sample.answer);
+        const zoneIri = recordedZoneIri(sample.answer);
+        if (!name) throw new Error('Recorded navigation has no zone name');
+        return { kind: 'navigation', zoneId, zoneIri, acting, name, navigation: loaded };
       }
       if (configuration) {
         const sample = recordedSample(record, persona, configuration);
@@ -137,7 +172,7 @@ export function RecordedNavigationTheme({ record, persona, locale = 'en', presen
     });
     return () => { active = false; replay.dispose(); };
   }, [record, persona, locale, presentation, presentationState, route, routeState, configuration,
-    configurationState, save]);
+    configurationState, save, navigation, navigationState, navigationDraft, navigationHeads, mountNames, mountWork]);
   if (error) throw error;
   if (!screen) return <p role="status" aria-busy="true">{shellMessages.loading}</p>;
   if (screen.kind === 'missing') {
@@ -146,6 +181,22 @@ export function RecordedNavigationTheme({ record, persona, locale = 'en', presen
       href={screen.href} />;
   }
   if (screen.kind === 'denied') return <ZoneAuthoringFailure failure={screen.failure} copy={editorMessages[locale]} />;
+  if (screen.kind === 'navigation') {
+    const copy = editorMessages[locale];
+    const address = ownerSiteAddress(record);
+    const edited = screen.navigation;
+    return <ZoneEditorDraftProvider zoneId={screen.zoneId} actingSubject={screen.acting}>
+      <ZoneEditorFrame name={screen.name} editorPath={zoneNavigationPath(screen.zoneId)}
+        agent={{ iri: screen.acting, label: screen.acting, handle: null, kind: 'person', path: 'direct-principal' }}
+        locale={locale} manageMessages={manageMessages} sectionsLabel={copy.sectionsLabel} sectionHome={copy.sectionHome}
+        sectionNavigation={copy.sectionNavigation} sectionRealm={copy.sectionRealm} sectionTheme={copy.sectionTheme}>
+        <ZoneNavigationEditor zoneId={screen.zoneId} zoneIri={screen.zoneIri} actingSubject={screen.acting}
+          locale={locale} copy={copy} initial={edited.navigation} home={edited.home}
+          previewHref={zonePreviewPath(addressKey(address))} siteHref={spaceHref(address, 'site')}
+          signInHref="/auth/start" api={edited.client} />
+      </ZoneEditorFrame>
+    </ZoneEditorDraftProvider>;
+  }
   if (screen.kind === 'theme') {
     const copy = editorMessages[locale];
     return <ZoneEditorDraftProvider zoneId={screen.zoneId} actingSubject={screen.acting}>
@@ -179,13 +230,20 @@ function PublishedFrame({ frame, index, locale }: { frame: RecordedPublishedFram
 }
 
 function recordedSelections({ presentation, presentationState, route, routeState, configuration, configurationState,
-  save }: Pick<RecordedNavigationThemeProps, 'presentation' | 'presentationState' | 'route' | 'routeState'
-  | 'configuration' | 'configurationState' | 'save'>): RecordedSelection[] {
+  save, navigation, navigationState, navigationDraft, navigationHeads, mountNames, mountWork }: Pick<
+  RecordedNavigationThemeProps, 'presentation' | 'presentationState' | 'route' | 'routeState'
+  | 'configuration' | 'configurationState' | 'save' | 'navigation' | 'navigationState' | 'navigationDraft'
+  | 'navigationHeads' | 'mountNames' | 'mountWork'>): RecordedSelection[] {
   const selections: RecordedSelection[] = [];
   if (presentation) selections.push({ label: presentation, state: presentationState ?? 'populated' });
   if (route) selections.push({ label: route, state: routeState ?? 'empty' });
   if (configuration) selections.push({ label: configuration, state: configurationState ?? 'populated' });
   if (save) selections.push({ label: save, state: 'error' satisfies RecordedState });
+  if (navigation) selections.push({ label: navigation, state: navigationState ?? 'populated' });
+  if (navigationDraft) selections.push({ label: navigationDraft, state: 'populated' });
+  if (navigationHeads) selections.push({ label: navigationHeads, state: 'populated' });
+  if (mountNames) selections.push({ label: mountNames, state: 'populated' });
+  if (mountWork) selections.push({ label: mountWork, state: 'error' satisfies RecordedState });
   return selections;
 }
 
@@ -197,6 +255,20 @@ function recordedSample(record: AnswerRecord, persona: AnswerPersona, label: str
 
 function recordedName(answer: unknown): string | null {
   return answer && typeof answer === 'object' && 'name' in answer && typeof answer.name === 'string' ? answer.name : null;
+}
+
+function recordedZoneIri(answer: unknown): string {
+  if (answer && typeof answer === 'object' && 'zone' in answer && typeof answer.zone === 'string') return answer.zone;
+  throw new Error('Recorded navigation has no zone');
+}
+
+function ownerSiteAddress(record: AnswerRecord): CanonicalAddress {
+  const answer = recordedSample(record, 'owner', 'republished-presentation').answer;
+  if (!answer || typeof answer !== 'object' || !('address' in answer) || !answer.address
+    || typeof answer.address !== 'object') {
+    throw new Error('Recorded site has no address');
+  }
+  return answer.address as CanonicalAddress;
 }
 
 function editorFailure(failure: string): ReadFailure {
