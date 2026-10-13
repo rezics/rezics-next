@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from 'bun:test';
 import type { AnswerRecord, AnswerSample } from '../../../../scripts/api/answer-record.ts';
 import books from '../../../../tests/qa/fixtures/outcomes/books/catalogue-browse-and-search-in-its-zone.json';
+import hub from '../../../../tests/qa/fixtures/outcomes/books/work-hub-and-edition-choice.json';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import { mainApiWithToken } from '../api/main.ts';
 import { recordedFetch, type RecordedSelection } from './recorded-fetch.ts';
@@ -11,6 +12,19 @@ const empty = bookRecord.personas.visitor.find(sample => sample.label === 'searc
 const problem = bookRecord.personas.visitor.find(sample => sample.label === 'unsupported-query-shape')!;
 const disposals: (() => void)[] = [];
 afterEach(() => { for (const dispose of disposals.splice(0)) dispose(); });
+
+test('a recorded public header with a bare question mark has the same empty query as the typed client', async () => {
+  const record = hub as AnswerRecord;
+  const sample = record.personas.visitor.find(value => value.label === 'work-header')!;
+  const { fetcher, dispose } = recordedFetch(record, 'visitor', [{ label: sample.label, state: 'populated' }],
+    { pathPrefix: BFF_PREFIX });
+  disposals.push(dispose);
+  const main = browserMainApi('https://recorded.invalid', { anonymous: true, fetcher });
+  const id = new URL(sample.path, 'https://recorded.invalid').pathname.split('/').at(-1)!;
+  const answer = await main.v1.works({ id }).get({ query: { actingSubject: undefined } });
+  expect(answer.error).toBeNull();
+  expect(answer.data).toEqual(sample.answer);
+});
 function replay(record: AnswerRecord, selections: RecordedSelection[], pathPrefix = '') {
   const result = recordedFetch(record, 'visitor', selections, { pathPrefix });
   disposals.push(result.dispose);

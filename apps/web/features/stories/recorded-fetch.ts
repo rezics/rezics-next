@@ -21,6 +21,7 @@ function requestKey(path: string): string {
   const at = path.indexOf('?');
   if (at < 0) return path;
   const pairs = [...new URLSearchParams(path.slice(at + 1))];
+  if (!pairs.length) return path.slice(0, at);
   pairs.sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
   return `${path.slice(0, at)}?${new URLSearchParams(pairs)}`;
 }

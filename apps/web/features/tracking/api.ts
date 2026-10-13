@@ -169,8 +169,14 @@ export function mainTrackingApi(actingSubject: string, main: () => MainClient = 
       }
     },
     definition: key => settle(() => main().v1.lexicon.definitions({ key }).get({ query: { actingSubject } })),
-    preference: work => settle(() => main().v1.me['edition-preferences']({ work: uuidOf(work) }).get({
-      query: { actingSubject } })),
+    async preference(work) {
+      // A successful null is the reader's empty choice; keep transport failures distinct.
+      const read = await settle(async () => {
+        const answer = await main().v1.me['edition-preferences']({ work: uuidOf(work) }).get({ query: { actingSubject } });
+        return { ...answer, data: { preference: answer.data } };
+      });
+      return read.ok ? { ok: true, data: read.data.preference } : read;
+    },
     async setPreference(work, expectedVersion, choice) {
       try {
         const { data, error } = await main().v1.me['edition-preferences']({ work: uuidOf(work) }).put({
