@@ -60,7 +60,9 @@ for (const record of records) {
     const main = transport(record, 'visitor', [{ label: refused.label, state: 'error' }]);
     const url = new URL(refused.path, 'https://recorded.invalid');
     const reads = booksEditionReads({ main, actingSubject: url.searchParams.get('actingSubject')! });
-    expect(await reads.readEditionPreference(url.pathname.split('/').at(-1)!)).toEqual({ ok: false, failure: 'sign-in' });
+    expect<unknown>(await reads.readEditionPreference(url.pathname.split('/').at(-1)!)).toEqual({
+      ok: false, failure: 'sign-in', status: refused.status, problem: refused.answer,
+    });
   });
   test(`${record.row}: the production reader consumes the recorded offered editions`, async () => {
     const persona = 'member';
@@ -97,7 +99,7 @@ for (const record of records) {
   });
 
   test(`${record.row}: a recorded save and compare-and-set conflict retain the exact edition`, async () => {
-    for (const label of ['save-preference-ebook', 'save-preference-stale']) {
+    for (const label of [record === records[0] ? 'save-preference-paperback' : 'save-preference-ebook', 'save-preference-stale']) {
       const { answer, actingSubject, expectedVersion, choice, work } = command(record, 'member', label);
       const main = transport(record, 'member', [{ label, state: answer.status === 200 ? 'populated' : 'error' }]);
       const result = await mainTrackingApi(actingSubject, () => main).setPreference(work, expectedVersion, choice);
@@ -120,7 +122,7 @@ for (const record of records) {
 
 test('the Work hub progress summary retains the recorded saved edition and continuations', async () => {
   const record = records[0]!;
-  const own = sample(record, 'member', 'own-preference-ebook');
+  const own = sample(record, 'member', 'own-preference-paperback');
   const progress = sample(record, 'member', 'own-progress-summary');
   const actingSubject = new URL(own.path, 'https://recorded.invalid').searchParams.get('actingSubject')!;
   const work = (sample(record, 'member', 'work-header').answer as { id: string }).id;

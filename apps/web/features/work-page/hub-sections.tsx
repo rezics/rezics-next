@@ -12,8 +12,6 @@ import { copyOf as entityCopy } from '../entity-page/messages.ts';
 import { DiscussionSection, StatementsSection } from '../entity-page/sections.tsx';
 import Link from '../shell/localized-link.tsx';
 import { SeriesProgressPanel } from '../tracking/series-progress-panel.tsx';
-import { releaseChoiceName } from '../tracking/display.ts';
-import { copyOf as trackingCopy } from '../tracking/messages.ts';
 import { copyOf as levelsCopy } from '../work-levels/messages.ts';
 import { readParts, readRealizations, readReleases as readReleasePage } from '../work-levels/read.ts';
 import { ConnectionsPreview, PartsPreview } from '../work-levels/previews-server.tsx';
@@ -28,6 +26,7 @@ import { iriOf, workHref, type WorkAt, workRefOf } from './route.ts';
 import type { WorkHeader as Header } from './types.ts';
 import { YourEdition } from './your-edition.tsx';
 import { BooksEditionPage } from './books-edition-page.tsx';
+import { readBooksEditionStatus } from './books-edition-page.read.ts';
 
 // The server halves of the hub sections compose other owners' previews, controls and widgets.
 // Each reads on its own under the caller's Suspense, so one failing leaves the rest of the page.
@@ -56,15 +55,8 @@ export async function PrimaryAction({ workRef, id, work, locale, messages }: Com
  * release is named by its own title; a chosen realization, which has none, by its language.
  */
 export async function Status({ id, locale, messages }: Common & { id: string }) {
-  const preference = await readEditionPreference(id);
-  const [progress, releases] = await Promise.all([readProgressSummary(id, progressLanguage(preference, locale)),
-    readReleases(id)]);
-  const chosen = preference.ok ? preference.data?.edition : null;
-  const release = chosen?.kind === 'release' && releases.ok ? releases.data.items.find(item => item.id === chosen.resource)
-    : undefined;
-  return <IdentityStatus progress={progress} preference={preference}
-    editionName={release ? releaseChoiceName(release, locale, trackingCopy(locale)) : null}
-    locale={locale} messages={messages} />;
+  const status = await readBooksEditionStatus({ readEditionPreference, readProgressSummary, readReleases }, id, locale);
+  return <IdentityStatus {...status} locale={locale} messages={messages} />;
 }
 
 /** "About" on expansion: every accepted fact with its sources, and the way to propose a correction. */

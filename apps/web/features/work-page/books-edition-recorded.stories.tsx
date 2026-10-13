@@ -1,4 +1,4 @@
-import { type ComponentProps, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
@@ -15,13 +15,12 @@ import { releaseChoiceName } from '../tracking/display.ts';
 import { copyOf } from '../tracking/messages.ts';
 import { EDITION_SAVED } from '../tracking/series-progress-panel.tsx';
 import type { EditionPreference, Release } from '../tracking/types.ts';
-import { booksEditionReads, type BooksReleasePage } from './books-edition-page.read.ts';
+import { booksEditionReads, readBooksEditionPage, readBooksEditionStatus, type BooksReleasePage } from './books-edition-page.read.ts';
 import { BooksEditionPage } from './books-edition-page.tsx';
-import { EditionsSection } from './editions.tsx';
 import { messages } from './messages.ts';
 import { IdentityStatus } from './primary-action.tsx';
 import { editionsHref, releaseHref } from '../work-levels/route.ts';
-import type { Loaded, WorkHeader } from './types.ts';
+import type { WorkHeader } from './types.ts';
 
 type Row = 'hub' | 'ambiguous' | 'formats';
 const records: Record<Row, AnswerRecord> = { hub: hub as AnswerRecord, ambiguous: ambiguous as AnswerRecord,
@@ -31,10 +30,9 @@ const sample = (row: Row, persona: AnswerPersona, label: string) => {
   if (!found) throw new Error(`Missing Books answer: ${row}/${persona}/${label}`);
   return found;
 };
-interface Props { row: Row; persona: 'visitor' | 'member'; state: 'populated' | 'loading' | 'empty' | 'stale';
+interface Props { row: Row; persona: 'visitor' | 'member'; state: 'populated' | 'loading' | 'stale';
   saved: boolean; locale: UiLocale }
-interface View { header: WorkHeader; releases: Loaded<BooksReleasePage>; actions?: ReaderActions;
-  preference: Loaded<EditionPreference | null> | null; progress: ComponentProps<typeof IdentityStatus>['progress'] }
+type View = Awaited<ReturnType<typeof readBooksEditionPage>> & { actions?: ReaderActions };
 
 /** The frame reads through the same seam as read.ts; the chooser uses the real reader store and tracking API. */
 function RecordedBooksEdition({ row, persona, state, saved, locale }: Props) {
@@ -43,28 +41,27 @@ function RecordedBooksEdition({ row, persona, state, saved, locale }: Props) {
   useEffect(() => {
     setView(null);
     setFault(null);
-    const empty = state === 'empty';
-    const headerLabel = empty ? 'work-without-editions' : 'work-header';
+    const headerLabel = 'work-header';
     const headerSample = sample(row, persona, headerLabel);
     const actingSubject = new URL(headerSample.path, 'https://recorded.invalid').searchParams.get('actingSubject') ?? undefined;
     const id = new URL(headerSample.path, 'https://recorded.invalid').pathname.split('/').at(-1)!;
-    const releaseLabel = empty ? 'release-choices-empty' : row === 'hub' && persona === 'member'
-      ? 'availability-releases' : 'release-choices';
-    const preferenceLabel = saved ? row === 'ambiguous' ? 'own-preference-audiobook' : 'own-preference-ebook'
+    const releaseLabel = row === 'hub' ? 'availability-releases' : 'release-choices';
+    const preferenceLabel = saved ? row === 'ambiguous' ? 'own-preference-audiobook'
+      : row === 'hub' ? 'own-preference-paperback' : 'own-preference-ebook'
       : 'own-preference-before';
     const selections: RecordedSelection[] = [
       { label: headerLabel, state: state === 'loading' ? 'loading' : 'populated' },
-      { label: releaseLabel, state: empty ? 'empty' : 'populated' },
+      { label: releaseLabel, state: 'populated' },
     ];
-    if (persona === 'member' && !empty) selections.push(
+    if (persona === 'member') selections.push(
       { label: 'realization-choices', state: 'populated' },
       { label: preferenceLabel, state: saved ? 'populated' : 'empty' },
-      { label: row === 'hub' ? 'release-detail-ebook' : 'selected-release-ebook', state: 'populated' },
-      { label: state === 'stale' ? 'save-preference-stale' : 'save-preference-ebook',
+      { label: row === 'hub' ? 'release-detail-paperback' : 'selected-release-ebook', state: 'populated' },
+      { label: state === 'stale' ? 'save-preference-stale'
+        : row === 'hub' ? 'save-preference-paperback' : 'save-preference-ebook',
         state: state === 'stale' ? 'error' : 'populated' },
     );
-    if (row === 'hub' && persona === 'member' && !empty)
-      selections.push({ label: 'own-progress-summary', state: 'populated' });
+    if (persona === 'member') selections.push({ label: 'progress-in-language', state: 'populated' });
     if (row === 'ambiguous' && saved) selections.push({ label: 'selected-release-audiobook', state: 'populated' });
     const replay = recordedFetch(records[row], persona, selections, { pathPrefix: BFF_PREFIX });
     let mounted = true;
@@ -78,41 +75,33 @@ function RecordedBooksEdition({ row, persona, state, saved, locale }: Props) {
     const main = browserMainApi(window.location.origin, { anonymous: persona === 'visitor', fetcher });
     const reads = booksEditionReads({ main, actingSubject });
     const actions = actingSubject ? createReaderStore({ actingSubject, main: () => main }) : undefined;
-    void Promise.all([reads.readWorkHeader(id), reads.readReleases(id),
-      !empty && actingSubject ? reads.readEditionPreference(id) : Promise.resolve(null),
-      saved && row === 'hub' ? reads.readProgressSummary(id) : Promise.resolve(null),
-    ]).then(([header, releases, preference, progress]) => {
+    void readBooksEditionPage(reads, id, locale).then(page => {
       if (!mounted) return;
-      if (!header.ok) { setFault(`Work header: ${header.failure}`); return; }
-      setView({ header: header.data, releases, actions, preference, progress });
+      if (!page.header.ok) { setFault(`Work header: ${page.header.failure}`); return; }
+      setView({ ...page, actions });
     });
     const refresh = (event: Event) => {
       const detail = (event as CustomEvent<{ work: string; preference: EditionPreference | null }>).detail;
       if (detail.work.slice(-36) !== id || !actions?.tracking) return;
-      const progress = row === 'hub' ? actions.tracking.series(detail.work) : Promise.resolve(null);
-      void progress.then(answer => {
-        if (mounted) setView(current => current ? { ...current,
-          preference: { ok: true, data: detail.preference }, progress: answer } : current);
+      void readBooksEditionStatus({ ...reads,
+        readProgressSummary: (resource, language) => actions.tracking!.series(resource, language),
+      }, id, locale, { ok: true, data: detail.preference }).then(status => {
+        if (mounted) setView(current => current ? { ...current, status } : current);
       });
     };
     window.addEventListener(EDITION_SAVED, refresh);
     return () => { mounted = false; window.removeEventListener(EDITION_SAVED, refresh); replay.dispose(); };
-  }, [row, persona, state, saved]);
+  }, [row, persona, state, saved, locale]);
   const t = messages[locale];
   if (fault) return <pre role="alert" className="whitespace-pre-wrap break-words p-6">{fault}</pre>;
   if (!view) return <p role="status" aria-busy="true" className="p-6">{t.loading}</p>;
-  const chosen = view.preference?.ok ? view.preference.data?.edition : null;
-  const release = chosen && view.releases.ok ? view.releases.data.items.find(item => item.id === chosen.resource) : null;
+  if (!view.header.ok) return null;
   return <ReaderActionsProvider signedIn={persona === 'member'} signInHref="/auth/start" actions={view.actions}>
     <main className="mx-auto grid min-w-0 grid-cols-1 max-w-3xl gap-6 px-4 py-6" lang={locale}>
-      <h1 className="break-words font-semibold text-2xl" lang={view.header.title.language}>{view.header.title.value}</h1>
-      <IdentityStatus preference={view.preference} progress={view.progress}
-        editionName={release ? releaseChoiceName(release, locale, copyOf(locale)) : null} locale={locale} messages={t} />
-      {state === 'empty'
-        ? <EditionsSection items={view.releases.ok ? view.releases.data.items : null}
-          failure={view.releases.ok ? null : view.releases.failure} locale={locale} messages={t} />
-        : <BooksEditionPage work={view.header.id} releases={view.releases} signInHref="/auth/start"
-          editionsHref={editionsHref(view.header.id.slice(-36))} locale={locale} messages={t} />}
+      <h1 className="break-words font-semibold text-2xl" lang={view.header.data.title.language}>{view.header.data.title.value}</h1>
+      <IdentityStatus {...view.status} locale={locale} messages={t} />
+      <BooksEditionPage work={view.header.data.id} releases={view.releases} signInHref="/auth/start"
+        editionsHref={editionsHref(view.header.data.id.slice(-36))} locale={locale} messages={t} />
     </main>
   </ReaderActionsProvider>;
 }
@@ -128,7 +117,7 @@ async function compare(canvasElement: HTMLElement, args: Props) {
   const canvas = within(canvasElement);
   const header = sample(args.row, args.persona, 'work-header').answer as WorkHeader;
   await expect(canvas.findByRole('heading', { level: 1, name: header.title.value })).resolves.toBeVisible();
-  const label = args.row === 'hub' && args.persona === 'member' ? 'availability-releases' : 'release-choices';
+  const label = args.row === 'hub' ? 'availability-releases' : 'release-choices';
   const releases = sample(args.row, args.persona, label).answer as BooksReleasePage;
   for (const release of releases.items) {
     const link = canvas.getAllByRole('link', { name: release.title.value })
@@ -142,7 +131,7 @@ async function compare(canvasElement: HTMLElement, args: Props) {
   await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
 }
 
-async function chooseEbook(canvasElement: HTMLElement, args: Props) {
+async function chooseRecordedEdition(canvasElement: HTMLElement, args: Props) {
   await compare(canvasElement, args);
   const canvas = within(canvasElement);
   const t = copyOf(args.locale);
@@ -151,7 +140,7 @@ async function chooseEbook(canvasElement: HTMLElement, args: Props) {
   const options = canvas.getAllByRole('option');
   await expect(new Set(options.map(option => option.textContent)).size).toBe(options.length);
   const label = args.row === 'hub' ? 'availability-releases' : 'release-choices';
-  const release = (sample(args.row, 'member', label).answer as BooksReleasePage).items.find(item => item.platform === 'ebook')!;
+  const release = (sample(args.row, 'member', label).answer as BooksReleasePage).items.find(item => item.platform === (args.row === 'hub' ? 'paperback' : 'ebook'))!;
   await chooseOption(canvas, releaseChoiceName(release as Release, args.locale, t));
   await userEvent.click(canvas.getByRole('button', { name: t.savePreference }));
 }
@@ -166,7 +155,7 @@ export const VisitorMixedFormats: Story = { ...Visitor, args: { row: 'formats', 
 export const VisitorMixedFormatsPhone: Story = { ...VisitorMixedFormats, globals: { viewport: { value: 'phone' } } };
 
 export const SameTitleSave: Story = { args: { row: 'ambiguous', saved: true }, async play({ canvasElement, args }) {
-  await chooseEbook(canvasElement, args);
+  await chooseRecordedEdition(canvasElement, args);
   await expect(within(canvasElement).findByRole('status')).resolves.toHaveTextContent(copyOf(args.locale).preferenceSaved);
   await expect(within(canvasElement).getByRole('combobox', { name: copyOf(args.locale).edition }))
     .toHaveTextContent(copyOf(args.locale).formatEbook);
@@ -184,14 +173,24 @@ export const SavedHubProgress: Story = { args: { saved: true }, async play({ can
   const t = copyOf(args.locale);
   const status = within(canvasElement).getByRole('list', { name: messages[args.locale].yourEdition });
   await expect(status).toHaveTextContent(t.notStarted);
-  await expect(status).toHaveTextContent(t.formatEbook);
-  await expect(within(canvasElement).findByRole('combobox', { name: t.edition })).resolves.toHaveTextContent(t.formatEbook);
+  const preference = sample('hub', 'member', 'own-preference-paperback').answer as EditionPreference;
+  const releases = sample('hub', 'member', 'availability-releases').answer as BooksReleasePage;
+  const release = releases.items.find(item => item.id === preference.edition?.resource)!;
+  const name = releaseChoiceName(release as Release, args.locale, t);
+  await expect(status).toHaveTextContent(name);
+  await expect(within(canvasElement).findByRole('combobox', { name: t.edition })).resolves.toHaveTextContent(name);
   await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
 } };
 export const HubSaveProgress: Story = { async play({ canvasElement, args }) {
-  await chooseEbook(canvasElement, args);
+  await chooseRecordedEdition(canvasElement, args);
+  const preference = sample('hub', 'member', 'save-preference-paperback').answer as EditionPreference;
+  const releases = sample('hub', 'member', 'availability-releases').answer as BooksReleasePage;
+  const release = releases.items.find(item => item.id === preference.edition?.resource)!;
+  await expect(within(canvasElement).findByRole('status')).resolves.toHaveTextContent(copyOf('en').preferenceSaved);
   await waitFor(() => expect(within(canvasElement).getByRole('list', { name: messages.en.yourEdition }))
     .toHaveTextContent(copyOf('en').notStarted));
+  await waitFor(() => expect(within(canvasElement).getByRole('list', { name: messages.en.yourEdition }))
+    .toHaveTextContent(releaseChoiceName(release as Release, args.locale, copyOf(args.locale))));
 } };
 export const SavedHubChinesePhone: Story = { ...SavedHubProgress, args: { saved: true, locale: 'zh-Hans' },
   globals: { locale: 'zh-Hans', viewport: { value: 'phone' } } };
@@ -199,14 +198,8 @@ export const SavedHubChinesePhone: Story = { ...SavedHubProgress, args: { saved:
 export const Loading: Story = { args: { state: 'loading' }, async play({ canvasElement }) {
   await expect(within(canvasElement).getByRole('status')).toHaveTextContent(messages.en.loading);
 } };
-export const EmptyInventory: Story = { args: { state: 'empty' }, async play({ canvasElement }) {
-  const header = sample('hub', 'member', 'work-without-editions').answer as WorkHeader;
-  await expect(within(canvasElement).findByRole('heading', { level: 1, name: header.title.value })).resolves.toBeVisible();
-  await expect(within(canvasElement).getByText('No release of this Work is on record yet.')).toBeVisible();
-  await expect(within(canvasElement).queryByRole('combobox')).not.toBeInTheDocument();
-} };
 export const StaleRefusal: Story = { args: { state: 'stale' }, async play({ canvasElement, args }) {
-  await chooseEbook(canvasElement, args);
+  await chooseRecordedEdition(canvasElement, args);
   await expect(within(canvasElement).findByRole('alert')).resolves.toHaveTextContent(copyOf('en').preferenceStale);
   await expect(within(canvasElement).queryByText(copyOf('en').preferenceSaved)).not.toBeInTheDocument();
 } };
