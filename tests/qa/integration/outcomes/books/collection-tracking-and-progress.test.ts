@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect } from 'bun:test';
+import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -7,14 +7,15 @@ import devices from '../../../../../scripts/qa/cases/outcomes/books/continue-pro
 import loans from '../../../../../scripts/qa/cases/outcomes/books/loans.ts';
 import expired from '../../../../../scripts/qa/cases/outcomes/books/return-an-expired-loan-expired-loans.ts';
 import { signIn } from '../../../../../scripts/lib/oauth-client.ts';
-import { outcomeTest } from '../../../support/outcome-test.ts';
+import { outcomeResponse, outcomeTest } from '../../../support/outcome-test.ts';
 import { personaSessions, type PersonaName, type PersonaSessions } from '../../../support/personas.ts';
 
 type Work = { work: string; mainVersion: string; workRevision: string };
 type Structure = { structure: string; revision: string; occurrences: string[] };
 type RecordState = { id: string; version: number; state: string; returnedAt: string | null; replayed: boolean };
 type Progress = { version: number; completed: boolean; position: string | null };
-let people: PersonaSessions, book: Work, series: Work, chapters: Structure;
+setDefaultTimeout(60_000);
+let people: PersonaSessions, book: Work, series: Work, chapters: Structure, seriesParts: Structure;
 let release: string, privateCopy: RecordState, privateLoan: RecordState;
 let secondDevice: PersonaSessions['owner']['main'];
 const short = (value: string) => value.slice(-36);
@@ -36,6 +37,7 @@ async function privateReply(response: Response, expected: number) {
   expect({ status: response.status, ...(response.status === expected ? {} : { raw }) }).toEqual({ status: expected });
   expect(raw).not.toContain('private owner bookmark');
   expect(raw).not.toContain(privateLoan.id);
+  expect(raw).not.toContain('Private fixture borrower');
 }
 async function createBook(title: string): Promise<Work> {
   const work = await json<Work>(ownerCall('POST', '/v1/works', {
@@ -61,11 +63,6 @@ async function compose(work: Work, profile: string, operations: (root: string) =
   const changed = await json<Structure>(ownerCall('POST', `/v1/compositions/${short(base.structure)}/changes`, {
     ...own(), profile, expectedHead: base.revision, operations: operations(base.structure),
   }));
-  await json(ownerCall('POST', '/v1/work-publications', {
-    profile: 'work-structure-publication-v1', operation: 'publish', ...own(), work: work.work,
-    expectedWorkHead: work.workRevision, expectedMainVersion: work.mainVersion, structure: base.structure,
-    expectedStructureHead: changed.revision, expectedPublicationHead: null, disclosure: 'public', rightsBasis: 'original-contribution',
-  }), 201);
   return { ...changed, structure: base.structure };
 }
 const makeCopy = () => json<RecordState>(ownerCall('POST', '/v1/me/library-copies', {
@@ -93,18 +90,23 @@ beforeAll(async () => {
       ? people.owner.account('GET', String(url)) : fetch(url, init),
   }, '');
   const sessionKey = randomUUID();
-  secondDevice = async (method, path, body, key) => fetch(new URL(path, config.mainBaseUrl), {
-    method, headers: { authorization: `Bearer ${await device.current()}`, 'x-session-key': sessionKey,
-      'idempotency-key': key ?? randomUUID(), ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
-    redirect: 'manual', signal: AbortSignal.timeout(30_000), ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  });
+  secondDevice = async (method, path, body, key) => {
+    const token = await device.current();
+    const request = (signal: AbortSignal) => fetch(new URL(path, config.mainBaseUrl), {
+      method, headers: { authorization: `Bearer ${token}`, 'x-session-key': sessionKey,
+        'idempotency-key': key ?? randomUUID(), ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
+      redirect: 'manual', signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]),
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    return method === 'GET' ? outcomeResponse(request) : request(AbortSignal.timeout(30_000));
+  };
   book = await createBook('Original outcome volume');
   series = await createBook('Original outcome series');
   chapters = await compose(book, 'book-composition', root => [1, 2].map(number => ({
     op: 'insert', parent: root, position: 'last', role: 'chapter', target: 'https://schema.org/DigitalDocument',
     label: { value: `Chapter ${number}`, language: 'en' },
   })));
-  await compose(series, 'work-composition', root => [{
+  seriesParts = await compose(series, 'work-composition', root => [{
     op: 'insert', parent: root, position: 'last', role: 'part', target: book.work, displayLabel: '1', inclusion: 'required',
   }]);
   release = `https://rezics.com/id/${randomUUID()}`;
@@ -115,30 +117,51 @@ beforeAll(async () => {
     publicationYear: null, isbn13: null, originalUrl: null, fixedRelease: null, coverage: null, evidence: null,
   }));
   await json(ownerCall('PUT', statusPath(), { ...own(), expectedVersion: 0, status: 'reading' }));
+  await json(ownerCall('PUT', `/v1/works/${short(series.work)}/reader-status`, { ...own(), expectedVersion: 0, status: 'reading' }));
   await json(ownerCall('PUT', progressPath(), { ...own(), expectedVersion: 0, completed: false, position: 'private owner bookmark' }));
   privateCopy = await makeCopy();
   privateLoan = await json<RecordState>(ownerCall('POST', '/v1/me/library-loans', openBody(privateCopy.id)), 201);
 }, 120_000);
 afterAll(async () => { await people?.close(); });
 
+async function ownerLibrary() {
+  const state = await json<Record<string, unknown>>(ownerCall('GET', readerPath()));
+  const shelf = await json<{ items: { work: string }[] }>(ownerCall('GET',
+    `/v1/me/shelves/status/reading/works?${query()}&sort=last-read&order=desc`));
+  const { sourcePosition: _position, ...readerState } = state;
+  return { readerState, shelf: shelf.items.map(item => item.work) };
+}
 async function deniedTracking(name: PersonaName) {
   // Operator requests use ordinary member routes; these rows have no platform operation.
   const person = people[name], expected = name === 'visitor' ? 401 : 403;
-  const before = await json(ownerCall('GET', readerPath()));
+  // Establish a different most-recent Work before each attempted foreign write.
+  // Reader-state alone cannot reveal a changed last-read shelf ordering.
+  const anchor = `/v1/compositions/${short(seriesParts.structure)}/occurrences/${short(seriesParts.occurrences[0]!)}/progress`;
+  const current = await json<Progress>(ownerCall('GET', `${anchor}?${query()}`));
+  await json(ownerCall('PUT', anchor, { ...own(), expectedVersion: current.version, completed: false, position: null }));
+  const before = await ownerLibrary();
+  expect(before.shelf).toEqual([series.work, book.work]);
   if (name === 'visitor') {
     const empty = await json<{ status: { status: null }; progress: null }>(person.main('GET', readerPath()));
     expect(empty).toMatchObject({ status: { status: null }, progress: null });
   } else await privateReply(await person.main('GET', readerPath()), expected);
   await privateReply(await person.main('PUT', statusPath(), { ...own(), expectedVersion: 1, status: 'want-to-read' }), expected);
   const response = await person.main('PUT', progressPath(), { ...own(), expectedVersion: 0, completed: true, position: null });
-  const raw = await response.text(), after = await json(ownerCall('GET', readerPath()));
-  expect({ status: response.status, ...(response.status === expected ? {} : { raw }), ownerLibraryUnchanged: JSON.stringify(before) === JSON.stringify(after) })
-    .toEqual({ status: expected, ownerLibraryUnchanged: true });
+  const raw = await response.text(), after = await ownerLibrary();
+  expect({ status: response.status, ...(response.status === expected ? {} : { raw }),
+    ownerReaderStateUnchanged: JSON.stringify(before.readerState) === JSON.stringify(after.readerState),
+    ownerShelfUnchanged: JSON.stringify(before.shelf) === JSON.stringify(after.shelf) })
+    .toEqual({ status: expected, ownerReaderStateUnchanged: true, ownerShelfUnchanged: true });
 }
 async function deniedDevices(name: PersonaName) {
   const person = people[name], expected = name === 'visitor' ? 401 : 403;
-  await privateReply(await person.main('GET', `${progressPath()}?${query()}`), expected);
-  await privateReply(await person.main('GET', `/v1/compositions/${short(chapters.structure)}/progress?${query()}`), expected);
+  const occurrence = await person.main('GET', `${progressPath()}?${query()}`);
+  const completed = await person.main('GET', `/v1/compositions/${short(chapters.structure)}/progress?${query()}`);
+  const replies = [{ status: occurrence.status, raw: await occurrence.text() },
+    { status: completed.status, raw: await completed.text() }];
+  expect(replies.map(reply => ({ status: reply.status,
+    ...(reply.status === expected ? {} : { raw: reply.raw }) }))).toEqual([{ status: expected }, { status: expected }]);
+  for (const reply of replies) expect(reply.raw).not.toContain('private owner bookmark');
 }
 async function deniedLoans(name: PersonaName) {
   const person = people[name], expected = name === 'visitor' ? 401 : 403;
@@ -153,10 +176,32 @@ async function deniedLoans(name: PersonaName) {
 async function deniedExpired(name: PersonaName) {
   const expected = name === 'visitor' ? 401 : 403;
   await privateReply(await people[name].main('GET', loanPage('overdue')), expected);
+  await privateReply(await people[name].main('GET', loanPage('returned')), expected);
   await privateReply(await people[name].main('POST', `/v1/me/library-loans/${short(privateLoan.id)}/return`, { ...own(), expectedVersion: 1 }), expected);
   const page = await json<{ items: RecordState[] }>(ownerCall('GET', loanPage('overdue')));
   expect(page.items.find(loan => loan.id === privateLoan.id)).toMatchObject({ state: 'overdue', version: 1, returnedAt: null });
 }
+
+outcomeTest(expired, 'visitor', () => deniedExpired('visitor'));
+outcomeTest(expired, 'stranger', () => deniedExpired('stranger'));
+outcomeTest(expired, 'member', () => deniedExpired('member'));
+outcomeTest(expired, 'moderator', () => deniedExpired('moderator'));
+outcomeTest(expired, 'operator', () => deniedExpired('operator'));
+outcomeTest(expired, 'owner', async () => {
+  const copy = await makeCopy(), loan = await json<RecordState>(ownerCall('POST', '/v1/me/library-loans', openBody(copy.id)), 201);
+  const before = await json<{ items: RecordState[] }>(ownerCall('GET', loanPage('overdue')));
+  expect(before.items.find(item => item.id === loan.id)).toMatchObject({ state: 'overdue', returnedAt: null });
+  await json(ownerCall('DELETE', `/v1/me/library-copies/${short(copy.id)}`, { ...own(), expectedVersion: 1 }), 409);
+  const path = `/v1/me/library-loans/${short(loan.id)}/return`, key = randomUUID(), body = { ...own(), expectedVersion: 1 };
+  const returned = await json<RecordState>(ownerCall('POST', path, body, key));
+  expect(returned).toMatchObject({ state: 'returned', version: 2 });
+  expect(returned.returnedAt).toBeTruthy();
+  expect(await json(ownerCall('POST', path, body, key))).toEqual({ ...returned, replayed: true });
+  await json(ownerCall('POST', path, body), 409);
+  expect((await json<{ items: RecordState[] }>(ownerCall('GET', loanPage('overdue')))).items.some(item => item.id === loan.id)).toBe(false);
+  expect((await json<{ items: RecordState[] }>(ownerCall('GET', loanPage('returned')))).items.find(item => item.id === loan.id)).toMatchObject({ state: 'returned', version: 2 });
+  expect(await json(ownerCall('DELETE', `/v1/me/library-copies/${short(copy.id)}`, { ...own(), expectedVersion: 1 }))).toMatchObject({ removed: true });
+});
 
 outcomeTest(tracking, 'visitor', () => deniedTracking('visitor'));
 outcomeTest(tracking, 'stranger', () => deniedTracking('stranger'));
@@ -164,7 +209,8 @@ outcomeTest(tracking, 'member', () => deniedTracking('member'));
 outcomeTest(tracking, 'moderator', () => deniedTracking('moderator'));
 outcomeTest(tracking, 'operator', () => deniedTracking('operator'));
 outcomeTest(tracking, 'owner', async () => {
-  const key = randomUUID(), body = { ...own(), expectedVersion: 1, status: 'read', finishedOn: new Date().toISOString().slice(0, 10) };
+  const date = new Date().toISOString().slice(0, 10);
+  const key = randomUUID(), body = { ...own(), expectedVersion: 1, status: 'reading', startedOn: date };
   const saved = await json<{ version: number }>(ownerCall('PUT', statusPath(), body, key));
   expect(saved.version).toBe(2);
   expect(await json(ownerCall('PUT', statusPath(), body, key))).toMatchObject({ ...saved, replayed: true });
@@ -173,9 +219,12 @@ outcomeTest(tracking, 'owner', async () => {
   await json(ownerCall('PUT', progressPath(), { ...own(), expectedVersion: current.version, completed: true, position: null }));
   const stats = await ownerCall('GET', `/v1/me/reading-stats?${query()}&year=${new Date().getUTCFullYear()}`);
   expect(stats.headers.get('cache-control')).toBe('private, no-store');
-  expect(await json(Promise.resolve(stats))).toMatchObject({ books: 1, chapters: 1 });
+  expect(await json(Promise.resolve(stats))).toMatchObject({ books: 0, chapters: 1 });
   expect(await json(ownerCall('GET', `/v1/me/continue/${short(book.work)}?${query()}`)))
     .toMatchObject({ nextUnread: { occurrence: chapters.occurrences[1] } });
+  await json(ownerCall('PUT', statusPath(), { ...own(), expectedVersion: 2, status: 'read', finishedOn: date }));
+  expect(await json(ownerCall('GET', `/v1/me/reading-stats?${query()}&year=${new Date().getUTCFullYear()}`)))
+    .toMatchObject({ books: 1, chapters: 2 });
 });
 outcomeTest(devices, 'visitor', () => deniedDevices('visitor'));
 outcomeTest(devices, 'stranger', () => deniedDevices('stranger'));
@@ -209,24 +258,4 @@ outcomeTest(loans, 'owner', async () => {
   expect(await json(ownerCall('POST', `${root}/return`, { ...own(), expectedVersion: 2 }))).toMatchObject({ state: 'returned', version: 3 });
   expect(await json(ownerCall('GET', `/v1/works/${short(book.work)}/copies?${query()}`)))
     .toMatchObject({ items: expect.arrayContaining([expect.objectContaining({ id: copy.id, release })]) });
-});
-outcomeTest(expired, 'visitor', () => deniedExpired('visitor'));
-outcomeTest(expired, 'stranger', () => deniedExpired('stranger'));
-outcomeTest(expired, 'member', () => deniedExpired('member'));
-outcomeTest(expired, 'moderator', () => deniedExpired('moderator'));
-outcomeTest(expired, 'operator', () => deniedExpired('operator'));
-outcomeTest(expired, 'owner', async () => {
-  const copy = await makeCopy(), loan = await json<RecordState>(ownerCall('POST', '/v1/me/library-loans', openBody(copy.id)), 201);
-  const before = await json<{ items: RecordState[] }>(ownerCall('GET', loanPage('overdue')));
-  expect(before.items.find(item => item.id === loan.id)).toMatchObject({ state: 'overdue', returnedAt: null });
-  await json(ownerCall('DELETE', `/v1/me/library-copies/${short(copy.id)}`, { ...own(), expectedVersion: 1 }), 409);
-  const path = `/v1/me/library-loans/${short(loan.id)}/return`, key = randomUUID(), body = { ...own(), expectedVersion: 1 };
-  const returned = await json<RecordState>(ownerCall('POST', path, body, key));
-  expect(returned).toMatchObject({ state: 'returned', version: 2 });
-  expect(returned.returnedAt).toBeTruthy();
-  expect(await json(ownerCall('POST', path, body, key))).toEqual({ ...returned, replayed: true });
-  await json(ownerCall('POST', path, body), 409);
-  expect((await json<{ items: RecordState[] }>(ownerCall('GET', loanPage('overdue')))).items.some(item => item.id === loan.id)).toBe(false);
-  expect((await json<{ items: RecordState[] }>(ownerCall('GET', loanPage('returned')))).items.find(item => item.id === loan.id)).toMatchObject({ state: 'returned', version: 2 });
-  expect(await json(ownerCall('DELETE', `/v1/me/library-copies/${short(copy.id)}`, { ...own(), expectedVersion: 1 }))).toMatchObject({ removed: true });
 });
