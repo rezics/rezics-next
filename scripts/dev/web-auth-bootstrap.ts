@@ -23,15 +23,15 @@ const runIdPattern = /^[a-z0-9][a-z0-9-]{0,30}$/;
 const scope = MAIN_SITE_SCOPE;
 const webGrantTypes = ['authorization_code', 'refresh_token'];
 
-export function webClientRegistration(redirectUris: string[]) {
+export function webClientRegistration(redirectUris: string[], requestedScope = scope) {
   return { client_name: 'REZICS', application_type: 'native' as const,
     redirect_uris: redirectUris, token_endpoint_auth_method: 'none' as const,
-    grant_types: webGrantTypes, scope, skip_consent: true, require_pkce: true };
+    grant_types: webGrantTypes, scope: requestedScope, skip_consent: true, require_pkce: true };
 }
 
 export interface WebAuthOptions { runId: string; redirectUris: string[]; profile?: 'dev' | 'qa';
   /** An integration fixture owns its directory and already-authorized operator. */
-  fixture?: { name: string; operator: OperatorCredentials } }
+  fixture?: { name: string; operator: OperatorCredentials; extraScopes?: readonly string[] } }
 
 function authFixtureDirectory(stackDir: string, name = 'web-auth') {
   if (!/^[a-z0-9][a-z0-9-]{0,80}$/.test(name)) throw new Error('Invalid web auth fixture name');
@@ -235,6 +235,9 @@ export async function bootstrapWebAuth(options: WebAuthOptions): Promise<WebAuth
     '--run-id', options.runId, ...options.redirectUris.flatMap(uri => ['--redirect-uri', uri])]);
   const profile = options.profile ?? 'qa';
   if (options.fixture && profile !== 'qa') throw new Error('Named auth fixtures require a QA stack');
+  // Named QA clients can exercise installed pipeline APIs without changing the
+  // site's client or granting the person any corresponding platform authority.
+  const requestedScope = [...new Set([...MAIN_SITE_SCOPES, ...(options.fixture?.extraScopes ?? [])])].join(' ');
   const stackDir = stackDirectory(root, profile === 'dev' ? { profile } : { profile, runId });
   const appsPath = join(stackDir, 'apps.env');
   const composePath = join(stackDir, 'compose.env');
@@ -307,7 +310,7 @@ export async function bootstrapWebAuth(options: WebAuthOptions): Promise<WebAuth
         client_credentials_scopes: ['work:create'] } });
     if (!mainClient.client_secret) throw new Error('Account did not issue a Main client secret');
     const webClient = await auth.api.adminCreateOAuthClient({ headers,
-      body: webClientRegistration(redirectUris) });
+      body: webClientRegistration(redirectUris, requestedScope) });
     await accountPool.query('INSERT INTO rezics_oauth_first_party_client (client_id) VALUES ($1) ON CONFLICT DO NOTHING',
       [webClient.client_id]);
     const member = await signUp(app, apps.ACCOUNT_BASE_URL!, 'member');
@@ -345,7 +348,7 @@ export async function bootstrapWebAuth(options: WebAuthOptions): Promise<WebAuth
       issuer: discovery.issuer, authorizationEndpoint: discovery.authorization_endpoint,
       tokenEndpoint: discovery.token_endpoint, resource: apps.ACCOUNT_MAIN_RESOURCE,
       clientId: webClient.client_id, applicationType: 'native', redirectUris,
-      scope, grantTypes: webGrantTypes, actingSubject: actor,
+      scope: requestedScope, grantTypes: webGrantTypes, actingSubject: actor,
       mainBaseUrl: `http://127.0.0.1:${apps.MAIN_PORT}`,
     }, null, 2) + '\n', { mode: 0o600 });
     writeFileSync(privateConfigPath, JSON.stringify({

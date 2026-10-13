@@ -26,7 +26,7 @@ export async function joiningAuthFixture(runId: string) {
     await pool.query("INSERT INTO rezics_account_operator(user_id,role) VALUES($1,'owner')", [id]);
     const name = `g-1005-auth-${randomUUID()}`;
     const fixture = await bootstrapWebAuth({ runId, redirectUris: ['http://localhost:3000/auth/callback'],
-      fixture: { name, operator: { id, email, password } } });
+      fixture: { name, operator: { id, email, password }, extraScopes: ['source:intake', 'source:adopt'] } });
     return { ...fixture, name, operatorId: id };
   } finally { await pool.end(); }
 }
