@@ -1,9 +1,9 @@
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { confirmationStatus, runConfirmation } from '../confirm.ts';
 import { stateDir } from '../ledger.ts';
 import { provideGoalctl } from '../regress.ts';
 import { declaredTestTimeout, planUnitGateShards } from '../unit-gate.ts';
-import { heavyQaStatus } from '../qa-slots.ts';
+import { heavyQaStatus, qaSlotCount } from '../qa-slots.ts';
 
 export const usage = 'Usage: goalctl confirm [--status]';
 
@@ -14,6 +14,8 @@ export default async function confirm(args: string[]): Promise<number> {
   // Owner deadlines must not import the entry module while it awaits this command.
   provideGoalctl({ declaredTestTimeout, planUnitGateShards, heavyQaStatus });
   const manifest = await runConfirmation({ repo: process.cwd(), stateDir: directory,
+    // Moving reports to a worktree does not move the host's admission configuration.
+    slots: qaSlotCount(join(stateDir, 'qa-slots')),
     checkoutRoot: process.env.GOAL_REGRESS_CHECKOUT_ROOT });
   console.log(confirmationStatus(directory));
   console.log(`Wall time: ${Date.parse(manifest.finishedAt!) - Date.parse(manifest.startedAt)}ms`);
