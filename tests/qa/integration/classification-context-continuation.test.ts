@@ -53,7 +53,8 @@ test('Selected context vocabulary traverses disclosed Concepts with exact query 
         const pending = await response.json() as { retry?: { allowed?: boolean; afterMs?: number } };
         expect(pending.retry?.allowed).toBe(true);
         expect(Number.isSafeInteger(pending.retry?.afterMs)).toBe(true);
-        expect(pending.retry!.afterMs!).toBeWithin(0, 1000);
+        expect(pending.retry!.afterMs!).toBeGreaterThanOrEqual(0);
+        expect(pending.retry!.afterMs!).toBeLessThanOrEqual(1000);
         // The same intent/key settles the admitted operation; no retry creates
         // another Concept or discards a cancellation.
         await delay(pending.retry!.afterMs!, undefined, { signal: preparation });
