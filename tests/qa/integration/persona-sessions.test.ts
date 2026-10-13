@@ -27,8 +27,9 @@ for (const name of personaNames)
         : '';
       const response = await person.main('GET', `/v1/realms/${fixture.realm.slice(-36)}${actor}`);
       const body = (await response.json()) as { id?: string };
-      // Moderation and platform mandates do not grant private Realm membership.
-      const allowed = fixture.visibility === 'public' || ['member', 'owner'].includes(name);
+      // The moderator is a joined member with a role; the operator has no Realm relation.
+      const allowed =
+        fixture.visibility === 'public' || ['member', 'owner', 'moderator'].includes(name);
       expect({
         status: response.status,
         ...(response.status === (allowed ? 200 : 404) ? {} : { body }),
@@ -46,16 +47,18 @@ test('sessions distinguish membership, moderation and platform authority', async
       `/v1/realms/${fixture.realm.slice(-36)}/moderation?actingSubject=${encodeURIComponent(moderator.actingSubject!)}`,
     );
     expect(response.status).toBe(200);
-    const membership = await fixture.member.main(
-      'GET',
-      `/v1/me/memberships?actingSubject=${encodeURIComponent(fixture.member.actingSubject!)}`,
-    );
-    expect(membership.status).toBe(200);
-    expect(
-      ((await membership.json()) as { items: { realm: string }[] }).items.some(
-        (item) => item.realm === fixture.realm,
-      ),
-    ).toBe(true);
+    for (const person of [fixture.member, moderator]) {
+      const membership = await person.main(
+        'GET',
+        `/v1/me/memberships?actingSubject=${encodeURIComponent(person.actingSubject!)}`,
+      );
+      expect(membership.status).toBe(200);
+      expect(
+        ((await membership.json()) as { items: { realm: string }[] }).items.some(
+          (item) => item.realm === fixture.realm,
+        ),
+      ).toBe(true);
+    }
   }
   const platform = await privateRealm.operator.main('GET', '/v1/me/platform-access');
   expect(platform.status).toBe(200);

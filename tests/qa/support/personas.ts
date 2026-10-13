@@ -281,7 +281,7 @@ let active: Promise<Awaited<ReturnType<typeof applications>>> | undefined;
 
 /** One call builds six HTTP sessions and a Realm with an attached Zone.
  * The first call includes OAuth/application setup; subsequent calls share those listeners.
- * Measured integration cost: about 7 seconds for the first call and 3 seconds thereafter.
+ * Measured integration cost: about 7 seconds for the first call and 5 seconds thereafter.
  * elapsedSeconds reports the measured cost; close once after the file's proofs finish. */
 export async function personaSessions(
   visibility: 'public' | 'private' = 'public',
@@ -314,41 +314,43 @@ export async function personaSessions(
     );
     const root = `/v1/realms/${created.realm.slice(-36)}`;
     await json(owner.main('POST', `${root}/management`, { actingSubject: owner.actingSubject }));
-    if (visibility === 'public') {
-      const policy = await json<{
-        membershipGeneration: string;
-        policyRevision: string;
-        termsRevision: string;
-      }>(
-        member.main(
-          'GET',
-          `${root}/joining?actingSubject=${encodeURIComponent(member.actingSubject!)}`,
-        ),
-      );
-      await json(
-        member.main('POST', `${root}/join`, {
-          actingSubject: member.actingSubject,
-          expectedMembershipGeneration: policy.membershipGeneration,
-          expectedPolicyRevision: policy.policyRevision,
-          termsRevision: policy.termsRevision,
-          listed: false,
-        }),
-      );
-    } else {
-      const invitation = await json<{ invitation: { id: string } }>(
-        owner.main('POST', `${root}/invitations`, {
-          actingSubject: owner.actingSubject,
-          member: member.actingSubject,
-          expiresInSeconds: 3600,
-        }),
-      );
-      await json(
-        member.main('POST', `${root}/invitations/${invitation.invitation.id}/response`, {
-          actingSubject: member.actingSubject,
-          action: 'accept',
-          listed: false,
-        }),
-      );
+    for (const person of [member, moderator]) {
+      if (visibility === 'public') {
+        const policy = await json<{
+          membershipGeneration: string;
+          policyRevision: string;
+          termsRevision: string;
+        }>(
+          person.main(
+            'GET',
+            `${root}/joining?actingSubject=${encodeURIComponent(person.actingSubject!)}`,
+          ),
+        );
+        await json(
+          person.main('POST', `${root}/join`, {
+            actingSubject: person.actingSubject,
+            expectedMembershipGeneration: policy.membershipGeneration,
+            expectedPolicyRevision: policy.policyRevision,
+            termsRevision: policy.termsRevision,
+            listed: false,
+          }),
+        );
+      } else {
+        const invitation = await json<{ invitation: { id: string } }>(
+          owner.main('POST', `${root}/invitations`, {
+            actingSubject: owner.actingSubject,
+            member: person.actingSubject,
+            expiresInSeconds: 3600,
+          }),
+        );
+        await json(
+          person.main('POST', `${root}/invitations/${invitation.invitation.id}/response`, {
+            actingSubject: person.actingSubject,
+            action: 'accept',
+            listed: false,
+          }),
+        );
+      }
     }
     const rolesPath = `${root}/roles?actingSubject=${encodeURIComponent(owner.actingSubject!)}`;
     const changeRole = async (change: object) => {
