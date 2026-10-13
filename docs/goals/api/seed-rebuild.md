@@ -1,11 +1,105 @@
 # Retained population checkpoint rebuild
 
 The 2026-10-13 rebuild remains blocked before a fresh retained checkpoint.
-Fix round 1 repairs the helper's home-document selection, but canonical
-manifest storage is refused before the helper runs. This preparation gates
-growth checks only; it gates no API outcome row.
+The final fix round accepts fixture-authorized canonical manifest storage and
+preserves the Zone helper repair. The builder now reaches backup, where the
+backup writer refuses the canonical directory. This preparation gates growth
+checks only; it gates no API outcome row.
 
-## Fix round 1: canonical storage refusal
+## Fix round 2: backup writer boundary refusal (final)
+
+Source commit: `cf6291ff94fb056072d0d6a88f1181ecbcf98c0e`. Both QA runs
+reported source stable. The manifest directory guard now derives its retained
+store from the existing `fixtureRoot` authority, accepting that configured
+`work-profiles` store across worktrees. Its unit proof rejects unrelated paths,
+traversal escapes and sibling-prefix paths for checkout, `/tmp` and retained
+storage, and verifies that a fixture override replaces the shared authority.
+The existing population, compatibility, restore and timing assertions and the
+Zone configuration helper are unchanged.
+
+Both commands ran separately, build first, with
+`REZICS_FIXTURE_ROOT=/home/edge/projects/rezics/rezics-next/.temp/fixture` and
+`REZICS_QA_ARTIFACT_ROOT="$PWD/.temp/qa"`, where `$PWD` is this worktree:
+
+| Operation | Command | QA run / project | Result |
+| --- | --- | --- | --- |
+| Build | `bun scripts/goal/goalctl.ts test tests/qa/fault-recovery/work-profile-seed-build.test.ts` | `20261013t052525-0c67d2` / `20261013t052525-0c67d2-f1` | Failed at the backup writer after population verification |
+| Restore | `bun scripts/goal/goalctl.ts test tests/qa/integration/work-profile-seed-checkpoints.test.ts` | `20261013t052721-342c59` / `20261013t052721-342c59-1` | Refused old retained compatibility before restore |
+
+Build fails at `scripts/load/catalogue-backup.ts:37` with
+`Catalogue backups must stay in this checkout .temp`. The call chain is
+`prepareWorkProfileCorpus` → `createCorpusBackupDriver.backup` →
+`retainStoppedOwnerBackup` → `privateDirectory`. That guard accepts only
+checkout-local `.temp` destinations; the configured destination is under
+`/home/edge/projects/rezics/rezics-next/.temp/work-profiles/seed-checkpoints/20261013t052525-0c67d2-f1/backups/`.
+The manifest guard and Zone home publication no longer refuse this run.
+Population verification completes before this backup call, but no cut is
+retained and no completed stage timing is emitted. The new run directory
+contains only an empty `manifests/` directory; no manifest or backup file was
+produced, and the existing `retained.json` still names its older source run.
+
+| Cut | Build result | Startup / build / backup / total stage timings |
+| --- | --- | --- |
+| 4 Works (`small`) | Failed at backup directory validation | Not emitted; test body failed after 47.871406 s |
+| 16 Works (`medium`) | Not reached | Not measured |
+| 64 Works (`large`) | Not reached | Not measured |
+
+The build shard took 48.100753461 s. These are failure durations, not completed
+startup-inclusive stage timings; the three 600-second cut budgets remain
+unproved.
+
+Restore reads canonical `retained.json`, source run
+`20261012t075323-befbaf-f1`. Its actual manifest files still exist, relative to
+`/home/edge/projects/rezics/rezics-next/.temp/work-profiles/seed-checkpoints/`:
+
+- `20261012t075323-befbaf-f1/manifests/work-profile-b4c931e2c592dfc0.json` (4 Works).
+- `20261012t075323-befbaf-f1/manifests/work-profile-a5c8fd99b1e0dae0.json` (16 Works).
+- `20261012t075323-befbaf-f1/manifests/work-profile-d03a2add833ca7e7.json` (64 Works).
+
+Each retains digest
+`2267b93e67353a81bda9db726207ed775a2f3c71be0d955267f1dc78c982613c`;
+current compatibility is
+`8408eeb6f7a9e456f1b59bceb751198d8aa1befb7e7b95d96bb3d6a16316a4f4`.
+The existing `compatibleLoadStorage` returns false for every cut. Differences
+remain in the generated model manifest, Compose and Content, Access and Relay
+migrations. The full comparison and manifest existence checks are in
+`.temp/goal/seed-compatibility-fix-2.json`. Restore fails at
+`scripts/load/work-profile-corpus.ts:397` with
+`Corpus storage/model compatibility changed`; no compatibility refusal was
+bypassed. Its test body took 5.458436 s and its shard 5.703778002 s. Restore
+evidence is `[]`: no copy, isolated write or completed restore timing was
+proved.
+
+Evidence relative to this worktree:
+
+- `.temp/goal/seed-build-fix-2.log` and `.temp/goal/seed-restore-fix-2.log`.
+- `.temp/qa/20261013t052525-0c67d2/summary.md`,
+  `shards/fault-recovery-f1.xml` and `logs/fault-recovery-f1.log` within that run.
+- `.temp/qa/20261013t052721-342c59/summary.md`,
+  `shards/integration-1.xml` and `logs/integration-1.log` within that run.
+- `.temp/work-profile-seed-restores-20261013t052721-342c59-1.json`.
+
+Scoped unit command:
+`bun scripts/goal/goalctl.ts test tests/qa/unit/g-1024-corpus.test.ts -t 'corpus|retained population|preparation'`.
+It passed six tests with 157 assertions, including the manifest boundary,
+population cuts, build reuse, compatibility, isolated restore and preparation
+deadline proofs. Four other tests were filtered out; the unrelated plan-path
+test creates files in the home directory, outside this worker's write scope.
+`task scripts:typecheck`, type-aware oxlint on both changed files and
+`task ast-grep -- scan scripts/load/work-profile-corpus.ts tests/qa/unit/g-1024-corpus.test.ts`
+passed. The affected plan is `.temp/goal/seed-affected-fix-2.log`; its remaining
+unit, owner and integration files belong to the manager's regression run.
+`task docs:check` and the single `task guards` run passed; their logs are
+`.temp/goal/seed-docs-check-fix-2.log` and `.temp/goal/seed-guards-fix-2.log`.
+
+Next: manager decision after the final fix round. The remaining refusal belongs
+to the canonical backup destination boundary in `catalogue-backup.ts`, outside
+this claim. Either assign that owner a repair under the existing fixture-root
+authority or run the committed changes from main after landing. Then build
+alone and restore alone with canonical retained storage. No additional repair
+round, product change, policy weakening, temporary copy or whole tier was run.
+
+## Fix round 1: canonical storage refusal (historical)
 
 Source commit: `8ba330d0c0b3388017b43274c63fa9644b9a1fd9`. Both QA runs
 reported source stable. The helper now prepares the Zone home document through
