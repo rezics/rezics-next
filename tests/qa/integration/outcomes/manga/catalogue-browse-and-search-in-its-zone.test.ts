@@ -130,6 +130,7 @@ beforeAll(async () => {
   }
   // Catalogue filters consume a Realm Discovery generation. Build it through
   // its separately mandated platform API after all fixture publication writes.
+  await answer(sessions.visitor.main('GET', `${root}/modules/browse?limit=3`));
   const operator = sessions.operator;
   await grant(operator, 'recommendation:manage', 'recommendation.generation.manage');
   let generation = await answer<{ generation: string; checkpoint: string; complete: boolean }>(operator.main('POST', '/v1/discovery/generation-builds', {
