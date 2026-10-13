@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { setTimeout as delay } from 'node:timers/promises';
 import { startMediaStack } from './media-support.ts';
 import { measureGraphReads } from './support/graph-reads.ts';
 import { GLOBAL_CLASSIFICATION_CONTEXT } from '../../../services/main/src/modules/classification/context.ts';
@@ -37,11 +38,27 @@ test('Selected context vocabulary traverses disclosed Concepts with exact query 
     expect(await json<Page>(await stack.call('GET', `/v1/classification-vocabulary?${new URLSearchParams({
       context: firstContext, limit: '1' })}`)))
       .toMatchObject({ items: [], nextCursor: null, count: { value: 0 }, hasMore: false });
-    const define = async (value: string, prior?: Definition, bilingual = true) => json<Definition>(await editor.send('POST', '/v1/classification-vocabulary', {
-      profile: 'classification-proposition-v2', scheme: prior ? { id: prior.scheme, expectedHead: prior.schemeHead } : null,
-      labels: [{ language: 'en', value }, ...(bilingual ? [{ language: 'zh-Hans', value: `分类 ${value}` }] : [])],
-      alternativeLabels: [], broader: [], narrower: [], actingSubject: editor.actor,
-    }), 201);
+    const preparation = AbortSignal.timeout(390_000);
+    const define = async (value: string, prior?: Definition, bilingual = true): Promise<Definition> => {
+      const body = { profile: 'classification-proposition-v2',
+        scheme: prior ? { id: prior.scheme, expectedHead: prior.schemeHead } : null,
+        labels: [{ language: 'en', value }, ...(bilingual ? [{ language: 'zh-Hans', value: `分类 ${value}` }] : [])],
+        alternativeLabels: [], broader: [], narrower: [], actingSubject: editor.actor };
+      const key = randomUUID();
+      for (let attempt = 0; ; attempt++) {
+        preparation.throwIfAborted();
+        const response = await editor.send('POST', '/v1/classification-vocabulary', body, key);
+        if (response.status !== 202 || attempt === 3)
+          return json<Definition>(response, attempt > 0 && response.status === 200 ? 200 : 201);
+        const pending = await response.json() as { retry?: { allowed?: boolean; afterMs?: number } };
+        expect(pending.retry?.allowed).toBe(true);
+        expect(Number.isSafeInteger(pending.retry?.afterMs)).toBe(true);
+        expect(pending.retry!.afterMs!).toBeWithin(0, 1000);
+        // The same intent/key settles the admitted operation; no retry creates
+        // another Concept or discards a cancellation.
+        await delay(pending.retry!.afterMs!, undefined, { signal: preparation });
+      }
+    };
     const root = await define(`Selected root ${randomUUID()}`), child = await define('Selected child', root),
       hidden = await define('Selected hidden', child), excluded = await define(`Excluded scheme ${randomUUID()}`);
     const path = (options: Record<string, string> = {}) => `/v1/classification-vocabulary?${new URLSearchParams({
@@ -131,8 +148,8 @@ test('Selected context vocabulary traverses disclosed Concepts with exact query 
         ${iri(root.scheme)} rv:schemeRevisionHead ?head } } LIMIT 2`)).results?.bindings.map(row => row.head?.value);
     for (const size of [128, 512]) {
       while (population < size) {
-        await Promise.all([0, 1, 2, 3].map(offset => define(`Population ${population + offset}`, undefined, false)));
-        population += 4;
+        await Promise.all([0, 1].map(offset => define(`Population ${population + offset}`, undefined, false)));
+        population += 2;
       }
       expect(await schemeHead(), 'The prepared scheme head matches the last command receipt').toEqual([hidden.schemeHead]);
       const contextPath = `/v1/classification-vocabulary?${new URLSearchParams({ context: firstContext, language: 'en', limit: '1' })}`;
