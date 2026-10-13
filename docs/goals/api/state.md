@@ -24,7 +24,7 @@ G-2077 proves import, export and interrupted export through HTTP, including rest
 | G-2076 / G-2077 | Verified and archived; leave both closed. Their initial refusal decisions are preserved by commits `c9c71d941` / `d818ba0bd`; archive removals `cf22444b9` / `798198d76` are authoritative |
 | G-2133 | Progress authority implementation landed (`895f84888`), foreign-Person denial proofs landed (`d70dbfaba`), and closed brief archived (`912680676`) during this checkpoint. Its decision remains in `9599d92d8:docs/goals/api/tasks/G-2133.md`; leave it closed |
 | [G-2134](tasks/G-2134.md) | Held continuation repair brief; dispatch belongs to G-2133's landing event because the declarations overlap |
-| [G-2135](tasks/G-2135.md) | Dispatched outcome follow-up for same-Person reimport; no product code before the failure is qualified |
+| G-2135 (landed, brief archived) | Dispatched outcome follow-up for same-Person reimport; no product code before the failure is qualified |
 | [G-2138](tasks/G-2138.md) | Dispatched single outcome prerequisite for ten Realm closure rows / 59 pending cells. Complete the public closure journey and all six-persona delivery assertions before a separate implementation worker repairs product code |
 | [G-2139](tasks/G-2139.md) | Dispatched independent Realm creation implementation: existing owner founding another Realm receives 403 instead of 201. Preserve unchanged six-persona tests, private settings, replay, enrolment and concurrent handle winner; one authority review |
 | Other outcome work | Other landings account for the newer scope snapshot; their decisions and pending causes belong to separate events. Full task states were unavailable because of the ledger lock |
