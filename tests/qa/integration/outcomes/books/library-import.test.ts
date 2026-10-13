@@ -661,9 +661,10 @@ outcomeTest(libraryExport, 'owner', async () => {
   ));
   expect(remaining.profile).toBe('rezics-library-export-v1');
   expect(remaining.snapshot).toBe(first.snapshot);
-  expect(remaining.rows).toEqual(before.slice(first.rows.length));
-  expect(remaining.nextCursor).toBeNull();
-  const assembled = [...first.rows, ...remaining.rows];
+  expect(remaining.rows).toEqual(before.slice(first.rows.length, first.rows.length + remaining.rows.length));
+  const tail = recordedPerson(exportRecording, 'owner', people.owner, 'production-export-remaining-');
+  const assembled = [...first.rows, ...await collect(Promise.resolve(remaining), tail)];
+  expect(assembled).toEqual(before);
   expect(new Set(assembled.map(item => item.sourceId)).size).toBe(assembled.length);
   preserved(assembled);
   const sourceSnapshot = (await read(undefined, undefined, 20, person)).snapshot;
