@@ -5,6 +5,7 @@ import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, 
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import { processIdentity, processParent, sameProcess, type ProcessIdentity } from '../qa/process/identity.ts';
+import { GoalMailStore } from './mail.ts';
 
 export { processIdentity, sameProcess, type ProcessIdentity };
 
@@ -39,7 +40,8 @@ function procParent(pid: number, procRoot: string): number | undefined {
 function turnProcesses(token: string): ProcessIdentity[] {
   return readdirSync('/proc').filter(name=>/^\d+$/.test(name)).flatMap(name=>{
     const pid = Number(name);
-    if (!envHas(procEnv(pid,'/proc'),'GOAL_TURN_TOKEN',token)) return [];
+    const env = procEnv(pid,'/proc');
+    if (!envHas(env,'GOAL_TURN_TOKEN',token) || envHas(env,'GOAL_TASK_ID')) return [];
     const identity = processIdentity(pid);
     return identity ? [identity] : [];
   });
@@ -183,7 +185,7 @@ export function claudeConfigHome(): string {
 }
 export interface WakeEvent { key: string; body: string; dueAt?: number }
 interface Attempt {
-  token: string; goal: string; generation: string; phase: 'intent' | 'claimed' | 'done';
+  token: string; goal: string; generation: string; phase: 'intent' | 'claimed' | 'cutting' | 'done';
   descriptor: string; prompt: string; wrapper: string | null; child: string | null;
   code: number | null; created_at: number;
   event_key: string | null; started_at: number | null; ended_at: number | null;
@@ -191,7 +193,7 @@ interface Attempt {
   input_tokens: number | null; cached_tokens: number | null; output_tokens: number | null;
 }
 interface WakeRow { goal: string; due_at: number; failures: number; error: string | null; token: string | null }
-interface EventRow extends WakeRow {event_key: string; body: string; handled: number}
+interface EventRow extends WakeRow {event_key: string; body: string; handled: number; cuts:number}
 export function eventTasks(event: Pick<WakeEvent,'key'|'body'>): string[] {
   return [...new Set(`${event.key}\n${event.body}`.match(/\b[A-Z][A-Z0-9]*-\d+\b/g) ?? [])];
 }
@@ -206,11 +208,29 @@ export interface CoordinatorOptions {
   afterIntent?: (token: string) => void;
   afterLaunch?: (token: string) => void;
   maxTurns?: number;
+  turnMinutes?: number;
+  notifyCut?: (goal: string, key: string) => void;
 }
 export interface IndependentLauncher {
   verify(descriptor: LaunchDescriptor): void;
   live(token: string, descriptor: LaunchDescriptor): boolean;
   launch(token: string, descriptor: LaunchDescriptor): void;
+  stop?(token: string, descriptor: LaunchDescriptor, child: ProcessIdentity | undefined): void;
+}
+/** Manager tools share this group; dispatched workers have their own detached groups. */
+export function stopTurnProcesses(token: string, child?: ProcessIdentity): void {
+  const candidates = child && sameProcess(child) ? [child] : turnProcesses(token);
+  for (const identity of candidates) {
+    if (!sameProcess(identity) || identity.pid === process.pid) continue;
+    let group: number;
+    try {
+      const stat = readFileSync(join('/proc',String(identity.pid),'stat'),'utf8');
+      group = Number(stat.slice(stat.lastIndexOf(')')+2).split(' ')[2]);
+    } catch { continue; }
+    if (group !== identity.pid && group !== child?.pid) continue;
+    try { process.kill(-group,'SIGKILL'); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; }
+  }
 }
 function tmux(socket: string, args: string[]): string {
   const result = spawnSync('tmux', ['-S', socket, ...args], { encoding: 'utf8' });
@@ -262,6 +282,11 @@ export class TmuxLauncher implements IndependentLauncher {
       '-c', descriptor.cwd, command], {encoding:'utf8'});
     if (result.status !== 0 && !this.live(token, descriptor)) throw new Error(`tmux launch failed: ${result.stderr.trim()}`);
   }
+  stop(token: string, descriptor: LaunchDescriptor, child?: ProcessIdentity): void {
+    stopTurnProcesses(token,child);
+    this.verify(descriptor);
+    if (this.live(token,descriptor)) tmux(descriptor.socket,['kill-session','-t',`goal-wake-${token}`]);
+  }
 }
 function openStore(stateDir: string): Database {
   mkdirSync(stateDir, { recursive: true });
@@ -283,9 +308,10 @@ function openStore(stateDir: string): Database {
   }
   db.exec(`CREATE TABLE IF NOT EXISTS turn_commands(id INTEGER PRIMARY KEY, token TEXT NOT NULL,
     command TEXT NOT NULL, created_at INTEGER NOT NULL);
-    CREATE TABLE IF NOT EXISTS admissions(goal TEXT PRIMARY KEY,due_at INTEGER NOT NULL,failures INTEGER NOT NULL,error TEXT)`);
+    CREATE TABLE IF NOT EXISTS admissions(goal TEXT PRIMARY KEY,due_at INTEGER NOT NULL,failures INTEGER NOT NULL,error TEXT);
+    CREATE TABLE IF NOT EXISTS cut_notices(goal TEXT NOT NULL,event_key TEXT NOT NULL,sent INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(goal,event_key))`);
   const eventColumns = new Set((db.query('PRAGMA table_info(events)').all() as {name:string}[]).map(column=>column.name));
-  for (const [name,type] of Object.entries({failures:'INTEGER NOT NULL DEFAULT 0',error:'TEXT'})) {
+  for (const [name,type] of Object.entries({failures:'INTEGER NOT NULL DEFAULT 0',error:'TEXT',cuts:'INTEGER NOT NULL DEFAULT 0'})) {
     if (!eventColumns.has(name)) db.exec(`ALTER TABLE events ADD COLUMN ${name} ${type}`);
   }
   return db;
@@ -325,19 +351,23 @@ function finishTurn(db: Database, stateDir: string, token: string, ending: NonNu
   const file = join(stateDir,'manager-runs',token,'output.jsonl');
   const usage = turnUsage(existsSync(file) ? readFileSync(file,'utf8') : '');
   db.query(`UPDATE attempts SET phase='done',code=?,ended_at=?,ending=?,input_tokens=?,cached_tokens=?,output_tokens=?
-    WHERE token=? AND phase!='done'`).run(code,now,ending,usage.input,usage.cached,usage.output,token);
+    WHERE token=? AND phase!='done' AND (ending IS NULL OR ending=?)`).run(code,now,ending,usage.input,usage.cached,usage.output,token,ending);
 }
 export class GoalCoordinator {
   readonly db: Database;
   private readonly launcher: IndependentLauncher;
   private readonly now: () => number;
   private readonly maxTurns: number;
+  private readonly turnMs: number;
   constructor(private readonly options: CoordinatorOptions) {
     this.db = openStore(options.stateDir);
     this.launcher = options.launcher ?? new TmuxLauncher(options.stateDir);
     this.now = options.now ?? Date.now;
     this.maxTurns = options.maxTurns ?? Number(process.env.GOAL_MANAGER_TURNS ?? 6);
     if (!Number.isSafeInteger(this.maxTurns) || this.maxTurns < 1) throw new Error('GOAL_MANAGER_TURNS must be a positive integer');
+    const minutes = options.turnMinutes ?? Number(process.env.GOAL_TURN_MINUTES ?? 10);
+    if (!Number.isFinite(minutes) || minutes <= 0) throw new Error('GOAL_TURN_MINUTES must be positive');
+    this.turnMs = minutes*60_000;
   }
   private sessionOwner(descriptor: LaunchDescriptor): string | undefined {
     if (this.options.owner) return this.options.owner(descriptor.home, descriptor.session, descriptor.previousOwner);
@@ -441,7 +471,27 @@ export class GoalCoordinator {
     this.db.query('INSERT OR REPLACE INTO wakes VALUES(?,?,?,?,?)')
       .run(goal,admission?.due_at ?? event.due_at,admission?.failures ?? event.failures,admission?.error ?? event.error,event.token);
   }
+  private cut(attempt: Attempt, descriptor: LaunchDescriptor): void {
+    this.db.query("UPDATE attempts SET phase='cutting',ending='cut' WHERE token=? AND phase!='done'").run(attempt.token);
+    const child = attempt.child ? JSON.parse(attempt.child) as ProcessIdentity : undefined;
+    if (this.launcher.stop) this.launcher.stop(attempt.token,descriptor,child);
+    else stopTurnProcesses(attempt.token,child);
+    finishTurn(this.db,this.options.stateDir,attempt.token,'cut',137,this.now());
+  }
+  private sendCutNotices(): void {
+    const notices = this.db.query('SELECT goal,event_key FROM cut_notices WHERE sent=0').all() as {goal:string;event_key:string}[];
+    for (const notice of notices) {
+      if (this.options.notifyCut) this.options.notifyCut(notice.goal,notice.event_key);
+      else {
+        const mail = new GoalMailStore({stateDir:this.options.stateDir,goals:['program',...new Set([notice.goal,...this.managers().map(role=>role.goal)])],sender:notice.goal});
+        try { mail.send('program',`Manager event ${notice.event_key} of Goal ${notice.goal} was cut twice and stopped. Inspect its turn records.`,
+          `manager-turn-cut:${notice.goal}:${notice.event_key}`); } finally { mail.close(); }
+      }
+      this.db.query('UPDATE cut_notices SET sent=1 WHERE goal=? AND event_key=?').run(notice.goal,notice.event_key);
+    }
+  }
   step(): void {
+    this.sendCutNotices();
     for (const descriptor of this.managers()) {
       const goal = descriptor.goal;
       const incoming = this.options.events(goal);
@@ -462,6 +512,17 @@ export class GoalCoordinator {
       for (const event of assigned) {
         const attempt = this.db.query('SELECT * FROM attempts WHERE token=?').get(event.token!) as Attempt;
         if (attempt.phase === 'done') {
+          if (attempt.ending === 'cut') {
+            this.db.transaction(()=>{
+              const cuts = event.cuts+1;
+              this.db.query('UPDATE events SET token=NULL,cuts=?,handled=?,body=? WHERE goal=? AND event_key=?')
+                .run(cuts,cuts >= 2 ? 1 : 0,cuts === 1 ? `${event.body}\n\nIts first turn was cut at the manager turn bound; decide this retry within the bound.` : event.body,goal,event.event_key);
+              if (cuts >= 2) this.db.query('INSERT OR IGNORE INTO cut_notices(goal,event_key) VALUES(?,?)').run(goal,event.event_key);
+              else this.deferEvent(event,'First manager turn was cut; retrying once');
+            }).immediate();
+            reconciled = true;
+            continue;
+          }
           // Acknowledgements, rather than starting a process, determine durable mail delivery.
           const remaining = new Set(incoming.map(event => event.key));
           const handled = !event.event_key.startsWith('mail:') ? attempt.code === 0
@@ -474,6 +535,10 @@ export class GoalCoordinator {
           continue;
         }
         try {
+          if (attempt.phase === 'cutting' || this.now()-(attempt.started_at ?? attempt.created_at) >= this.turnMs) {
+            this.cut(attempt,descriptor);
+            continue;
+          }
           this.launcher.verify(descriptor);
           if (attempt.phase === 'claimed') {
             const wrapper = attempt.wrapper ? JSON.parse(attempt.wrapper) as ProcessIdentity : undefined;
@@ -538,6 +603,7 @@ export class GoalCoordinator {
       }
       this.refreshWake(goal);
     }
+    this.sendCutNotices();
   }
   acquire(): void {
     const identity = processIdentity(process.pid)!;
@@ -573,10 +639,16 @@ export async function runAttempt(stateDir: string, token: string): Promise<void>
   try {
     const owner = nativeOwner(descriptor.home,descriptor.session,descriptor.previousOwner,'/proc',descriptor.engine);
     if (owner) throw new Error(owner);
-    const child = spawn(descriptor.program,args,{cwd:descriptor.cwd,
-      env:{...descriptor.env,GOAL_TURN_TOKEN:token,GOAL_TURN_STATE_DIR:stateDir},stdio:['ignore',stdout,stderr]});
-    if (!child.pid) throw new Error('Native resume failed to spawn');
-    db.query('UPDATE attempts SET child=? WHERE token=?').run(JSON.stringify(processIdentity(child.pid)),token);
+    const child = db.transaction(()=>{
+      const current = db.query('SELECT phase FROM attempts WHERE token=?').get(token) as {phase:string};
+      if (current.phase !== 'claimed') return undefined;
+      const spawned = spawn(descriptor.program,args,{cwd:descriptor.cwd,detached:true,
+        env:{...descriptor.env,GOAL_TURN_TOKEN:token,GOAL_TURN_STATE_DIR:stateDir},stdio:['ignore',stdout,stderr]});
+      if (!spawned.pid) throw new Error('Native turn failed to spawn');
+      db.query('UPDATE attempts SET child=? WHERE token=?').run(JSON.stringify(processIdentity(spawned.pid)),token);
+      return spawned;
+    }).immediate();
+    if (!child) return;
     const code = await new Promise<number>(resolveCode => { child.on('error',()=>resolveCode(127)); child.on('exit',code=>resolveCode(code ?? 128)); });
     finishTurn(db,stateDir,token,'exit',code,Date.now());
   } catch (error) {

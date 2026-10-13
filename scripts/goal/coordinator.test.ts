@@ -78,6 +78,85 @@ async function waitFor(predicate: () => boolean, timeout = 5_000): Promise<void>
 }
 
 describe('durable Goal wake coordinator', () => {
+  test('a restart completes a durable cut intent without launching the old turn again', () => {
+    const f = fixture();
+    try {
+      const first = f.open({turnMinutes:1}); first.enroll(f.descriptor); first.step();
+      const token = first.status().attempts[0]!.token;
+      first.db.query("UPDATE attempts SET phase='cutting',ending='cut' WHERE token=?").run(token);
+      first.close(); const restarted = f.open({turnMinutes:1}); restarted.step(); restarted.step();
+      expect(restarted.status().attempts[0]).toMatchObject({phase:'done',ending:'cut'});
+      expect(f.launcher.launches).toEqual([token]);
+      f.setNow(1_005_000); restarted.step();
+      expect(restarted.status().attempts[1]!.prompt).toContain('first turn was cut');
+    } finally { f.cleanup(); }
+  });
+  test('the default bound retries an event once, stops it on a second cut and mails program durably', () => {
+    const f = fixture();
+    const mail = new GoalMailStore({stateDir:f.stateDir,goals:['program','kernel']});
+    try {
+      f.setEvents([{key:'task:G-80:1',body:'Slow decision'}]);
+      const first = f.open({maxTurns:2}); first.enroll(f.otherDescriptor); first.step();
+      const token = first.status().attempts[0]!.token;
+      f.setNow(1_500_000);
+      f.setEvents([{key:'task:G-80:1',body:'Slow decision'},{key:'task:G-81:1',body:'Independent decision'}]);
+      first.step();
+      const independent = first.status().attempts[1]!.token;
+      f.setNow(1_599_999); first.step();
+      expect(first.status().attempts[0]!.phase).toBe('intent');
+      first.close();
+      const restarted = f.open({maxTurns:2}); f.setNow(1_600_000); restarted.step();
+      expect(restarted.status().attempts[0]).toMatchObject({token,phase:'done',ending:'cut',code:137,ended_at:1_600_000});
+      expect(restarted.status().attempts[1]).toMatchObject({token:independent,phase:'intent'});
+      restarted.step(); f.setNow(1_605_000); restarted.step();
+      const retry = restarted.status().attempts[2]!;
+      expect(retry.event_key).toBe('task:G-80:1');
+      expect(retry.prompt).toContain('first turn was cut');
+      // The independent event completes before the retry reaches its bound.
+      restarted.db.query("UPDATE attempts SET phase='done',code=0 WHERE token=?").run(independent);
+      restarted.step(); f.setNow(2_205_000); restarted.step(); restarted.step();
+      expect(restarted.status().attempts[2]).toMatchObject({ending:'cut'});
+      expect(restarted.db.query('SELECT handled,cuts FROM events WHERE event_key=?').get('task:G-80:1')).toEqual({handled:1,cuts:2});
+      expect(mail.pending('program')).toHaveLength(1);
+      expect(mail.pending('program')[0]!.body).toContain('task:G-80:1');
+      expect(mail.pending('program')[0]!.sender).toBe('kernel');
+      restarted.close(); const again = f.open({maxTurns:2}); again.step();
+      expect(again.status().attempts).toHaveLength(3);
+      expect(mail.pending('program')).toHaveLength(1);
+    } finally { mail.close(); f.cleanup(); }
+  });
+  test('a cut kills the real manager process group while its detached worker survives', async () => {
+    const f = fixture();
+    let worker: ReturnType<typeof processIdentity>;
+    let pending: Promise<void> | undefined;
+    try {
+      const marker = join(f.dir,'descendants.json');
+      writeFileSync(join(f.dir,'manager.ts'),`import {spawn} from 'node:child_process';
+        import {writeFileSync} from 'node:fs';
+        const tools = spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});
+        const worker = spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{detached:true,stdio:'ignore',env:{...process.env,GOAL_TASK_ID:'G-99'}});
+        worker.unref();
+        writeFileSync(${JSON.stringify(marker)},JSON.stringify({tools:tools.pid,worker:worker.pid}));
+        await Bun.sleep(60000);`);
+      const first = f.open(); first.enroll(f.descriptor); first.step();
+      const token = first.status().attempts[0]!.token;
+      pending = runAttempt(f.stateDir,token);
+      await waitFor(()=>existsSync(marker));
+      const descendants = JSON.parse(readFileSync(marker,'utf8')) as {tools:number;worker:number};
+      worker = processIdentity(descendants.worker);
+      expect(worker).toBeDefined();
+      first.db.query('UPDATE attempts SET started_at=? WHERE token=?').run(1_000_000,token);
+      first.close(); const restarted = f.open(); f.setNow(1_600_000); restarted.step();
+      await pending;
+      await waitFor(()=>!processIdentity(descendants.tools));
+      expect(restarted.status().attempts[0]).toMatchObject({ending:'cut',code:137});
+      expect(sameProcess(worker!)).toBe(true);
+    } finally {
+      if (worker && sameProcess(worker)) process.kill(-worker.pid,'SIGKILL');
+      if (pending) await pending;
+      f.cleanup();
+    }
+  });
   test('six fresh event turns run side by side by default and retain the cap after restart', async () => {
     const f = fixture();
     try {
@@ -517,7 +596,7 @@ describe('durable Goal wake coordinator', () => {
       expect(first.status().attempts[0]!.phase).toBe('intent');
       first.close();
       const restarted = f.open();
-      f.setNow(2_000_000);
+      f.setNow(1_030_000);
       restarted.step(); restarted.step();
       expect(f.launcher.launches).toEqual([token]);
       await Promise.all([runAttempt(f.stateDir, token), runAttempt(f.stateDir, token)]);
