@@ -8,7 +8,7 @@ export async function settledWrite(
   method: string,
   path: string,
   body?: unknown,
-  key = randomUUID(),
+  key: string = randomUUID(),
   options: RaceOptions = {},
 ): Promise<Response> {
   const send = () => main(method, path, body, key);
