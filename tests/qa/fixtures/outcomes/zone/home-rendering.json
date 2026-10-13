@@ -1,0 +1,4711 @@
+{
+  "version": 1,
+  "row": "zone/home-rendering",
+  "personas": {
+    "visitor": [
+      {
+        "label": "space-address",
+        "operationId": "getV1AddressesResolve",
+        "method": "GET",
+        "path": "/v1/addresses/resolve?scope=space&key=01a135e5-c037-712e-bc6a-eca5af54e3fd",
+        "status": 200,
+        "answer": {
+          "profile": "address-resolution-v1",
+          "scope": "space",
+          "key": "01a135e5-c037-712e-bc6a-eca5af54e3fd",
+          "status": "resolved",
+          "holder": "https://rezics.com/id/01a135e5-c037-712e-bc6a-eca5af54e3fd",
+          "state": "current",
+          "canonical": {
+            "prefix": "/z/",
+            "key": "1CfzUmz8PuXg14g8JEgCje",
+            "suffixSource": "Published site"
+          },
+          "capabilities": {
+            "zone": "https://rezics.com/id/47f3dc3b-6446-8262-8f25-56d81fb27145"
+          }
+        },
+        "headers": {
+          "cache-control": "public, max-age=30, must-revalidate",
+          "content-type": "application/json",
+          "etag": "\"address-identity-3bf9c55eabc248025d07dbdbe2accbd5b8886ebb6159bc55ae8118a8c855943b\""
+        }
+      },
+      {
+        "label": "empty-home-presentation",
+        "operationId": "getV1ZonesByIdPresentation",
+        "method": "GET",
+        "path": "/v1/zones/974ea63e-9b6e-8987-b311-1239673aec3f/presentation",
+        "status": 200,
+        "answer": {
+          "profile": "zone-presentation-response-v2",
+          "zone": "https://rezics.com/id/974ea63e-9b6e-8987-b311-1239673aec3f",
+          "realm": null,
+          "listing": "listed",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "address": {
+            "prefix": "/z/",
+            "key": "1CfzUmvV86osz5XgyKydfh",
+            "suffixSource": "Outcome Realm site"
+          },
+          "name": "Outcome Realm site",
+          "language": "en",
+          "direction": "ltr",
+          "official": null,
+          "revision": "https://rezics.com/id/33068a31-98c4-8295-9d77-5e2b5d087825",
+          "presentation": {
+            "profile": "zone-presentation-v2",
+            "preset": "clean",
+            "tokens": {
+              "colorScheme": "system",
+              "accent": "#2563eb",
+              "density": "comfortable",
+              "cardRadius": "md",
+              "headingFontScale": "md",
+              "surfaceTint": "none",
+              "fontPairing": "sans",
+              "pageSurface": "flat",
+              "coverStyle": "portrait",
+              "titleEffect": "plain"
+            },
+            "navigation": [],
+            "slides": [],
+            "modules": []
+          },
+          "navigation": [],
+          "navigationRevision": null,
+          "navigationNext": null,
+          "navigationComplete": true,
+          "moduleData": [],
+          "slideMedia": [],
+          "renderTokens": {
+            "colorScheme": "system",
+            "accent": "#2563eb",
+            "density": "comfortable",
+            "cardRadius": "md",
+            "headingFontScale": "md",
+            "surfaceTint": "none",
+            "fontPairing": "sans",
+            "pageSurface": "flat",
+            "coverStyle": "portrait",
+            "titleEffect": "plain",
+            "textOnAccent": "#ffffff"
+          },
+          "execution": {
+            "state": "fallback",
+            "reason": "none_approved"
+          },
+          "cost": {
+            "graphReads": 3,
+            "objectReads": 4,
+            "officialPageSize": 50,
+            "maxModules": 24,
+            "maxSlides": 6,
+            "maxCampaignUses": 64,
+            "maxCampaignMediaReads": 2,
+            "maxResolvedBlocks": 4,
+            "maxResolvedCollections": 2,
+            "maxCollectionPlacements": 8,
+            "maxModuleGraphReads": 64,
+            "maxNavigation": 50,
+            "maxNavigationGraphReads": 2048
+          }
+        },
+        "headers": {
+          "cache-control": "public, no-cache",
+          "content-type": "application/json;charset=utf-8",
+          "etag": "\"bbb109c4a8fe7f967c77a69b5bcedff8e0ea71f55320596f4ed049a063d7dd32\""
+        }
+      },
+      {
+        "label": "published-presentation",
+        "operationId": "getV1ZonesByIdPresentation",
+        "method": "GET",
+        "path": "/v1/zones/47f3dc3b-6446-8262-8f25-56d81fb27145/presentation",
+        "status": 200,
+        "answer": {
+          "profile": "zone-presentation-response-v2",
+          "zone": "https://rezics.com/id/47f3dc3b-6446-8262-8f25-56d81fb27145",
+          "realm": "https://rezics.com/id/01a135e5-b8dd-778f-8ae2-36ad5759cf5a",
+          "listing": "listed",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "address": {
+            "prefix": "/z/",
+            "key": "1CfzUmz8PuXg14g8JEgCje",
+            "suffixSource": "Published site"
+          },
+          "name": "Published site",
+          "language": "en",
+          "direction": "ltr",
+          "official": null,
+          "revision": "https://rezics.com/id/01a135e5-cdf3-7492-b6cf-08dd14c9eb19",
+          "presentation": {
+            "profile": "zone-presentation-v2",
+            "preset": "clean",
+            "tokens": {
+              "colorScheme": "system",
+              "accent": "#2563eb",
+              "density": "comfortable",
+              "cardRadius": "md",
+              "headingFontScale": "md",
+              "surfaceTint": "none",
+              "fontPairing": "sans",
+              "pageSurface": "flat",
+              "coverStyle": "portrait",
+              "titleEffect": "plain"
+            },
+            "navigation": [],
+            "modules": [],
+            "slides": [
+              {
+                "id": "published-slide",
+                "title": "Published highlight",
+                "href": "/published-link"
+              }
+            ]
+          },
+          "navigation": [
+            {
+              "occurrence": "https://rezics.com/id/ed7f0286-f52b-824e-a2b5-b11ca02f15d1",
+              "segment": "published-link",
+              "target": "https://rezics.com/id/337f628b-945d-4f26-9a35-8dfd8f62b30a",
+              "kind": "index",
+              "name": {
+                "value": "Site references",
+                "language": "und",
+                "direction": "ltr",
+                "basis": "fallback"
+              }
+            }
+          ],
+          "navigationRevision": "https://rezics.com/id/5dee09d7-1fd3-862f-a7ba-7b2a9abd56a2",
+          "navigationNext": null,
+          "navigationComplete": true,
+          "moduleData": [],
+          "slideMedia": [
+            {
+              "id": "published-slide",
+              "art": {
+                "landscape": null,
+                "portrait": null,
+                "cutout": null,
+                "logos": []
+              }
+            }
+          ],
+          "home": {
+            "document": {
+              "doc": {
+                "content": [
+                  {
+                    "attrs": {
+                      "dir": null,
+                      "id": "ce15695c-2f95-4d1a-8eef-d8587102a768",
+                      "lang": null,
+                      "textAlign": null
+                    },
+                    "content": [
+                      {
+                        "text": "Published owner text",
+                        "type": "text"
+                      }
+                    ],
+                    "type": "paragraph"
+                  },
+                  {
+                    "attrs": {
+                      "definition": "https://rezics.com/definition/showcase-block-v1",
+                      "dir": null,
+                      "fallback": "Highlights",
+                      "id": "showcase",
+                      "lang": null,
+                      "payload": {},
+                      "version": "1"
+                    },
+                    "type": "extensionBlock"
+                  },
+                  {
+                    "attrs": {
+                      "definition": "https://example.org/future-map",
+                      "dir": null,
+                      "fallback": "Place map",
+                      "id": "unknown-map",
+                      "lang": null,
+                      "payload": {
+                        "future": [
+                          null,
+                          {
+                            "preserved": true
+                          }
+                        ],
+                        "unicode": "雨夜書店"
+                      },
+                      "version": "9"
+                    },
+                    "type": "extensionBlock"
+                  }
+                ],
+                "type": "doc"
+              },
+              "profile": "blocks",
+              "version": "rezics-document-v1"
+            },
+            "definitions": [
+              {
+                "definition": "https://rezics.com/definition/showcase-block-v1",
+                "version": "1",
+                "payloadSchema": {
+                  "type": "object",
+                  "properties": {
+                    "rv:module": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                        "maxLength": 64
+                      },
+                      "minItems": 1,
+                      "maxItems": 1,
+                      "uniqueItems": true
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            ],
+            "blocks": [
+              {
+                "id": "showcase",
+                "definition": "https://rezics.com/definition/showcase-block-v1",
+                "version": "1",
+                "fallback": "Highlights",
+                "status": "resolved",
+                "kind": "showcase",
+                "showcase": "$default"
+              },
+              {
+                "id": "unknown-map",
+                "definition": "https://example.org/future-map",
+                "version": "9",
+                "fallback": "Place map",
+                "status": "placeholder",
+                "reason": "unknown_definition"
+              }
+            ],
+            "showcases": [
+              {
+                "id": "$default",
+                "module": null,
+                "sources": []
+              }
+            ],
+            "showcaseData": {
+              "slides": [
+                {
+                  "id": "published-slide",
+                  "title": "Published highlight",
+                  "href": "/published-link"
+                }
+              ],
+              "slideMedia": [
+                {
+                  "id": "published-slide",
+                  "art": {
+                    "landscape": null,
+                    "portrait": null,
+                    "cutout": null,
+                    "logos": []
+                  }
+                }
+              ]
+            },
+            "cost": {
+              "nodesVisited": 5,
+              "extensions": 2,
+              "showcases": 1,
+              "responseBytes": 1753,
+              "graphReads": 0,
+              "definitionExecutions": 0
+            },
+            "reference": {
+              "owner": "content",
+              "resourceId": "https://rezics.com/id/01a135e5-c36c-763b-97b0-3f7cc9ae1f52",
+              "variantId": "urn:rezics:variant:99ddcc17-badc-4c8f-8345-d6be3790c5b3",
+              "revisionId": "9de246a9-7182-4d51-8a37-aa4834b1b4c5",
+              "format": "rezics-content-json-v1",
+              "model": "content-shape-v1",
+              "byteDigest": "0fe892b36c36961147398d746ac14023a3c5820371c3fe3ac07d4a3cee096708",
+              "byteLength": 745,
+              "language": {
+                "kind": "tag",
+                "tag": "en",
+                "originalTag": "en"
+              },
+              "direction": "ltr",
+              "sourceRevision": null,
+              "predecessor": null,
+              "provenance": {
+                "kind": "admitted-original-contribution-v1",
+                "scope": "content:draft:https://rezics.com/id/01a135e5-c36c-763b-97b0-3f7cc9ae1f52",
+                "author": "https://rezics.com/id/553277f9-0e48-4ed4-9f0a-c49c993cb517",
+                "admissionId": "01a135e5-cc5a-75ba-b869-87911ec3e203",
+                "rightsBasis": "original-contribution",
+                "expectedHead": null,
+                "requestDigest": "7bab44f077fa0501c03996e990c9e05e946cef509d3b7e57d7b94a423c8db7ee",
+                "authorityEpoch": "0"
+              }
+            }
+          },
+          "renderTokens": {
+            "colorScheme": "system",
+            "accent": "#2563eb",
+            "density": "comfortable",
+            "cardRadius": "md",
+            "headingFontScale": "md",
+            "surfaceTint": "none",
+            "fontPairing": "sans",
+            "pageSurface": "flat",
+            "coverStyle": "portrait",
+            "titleEffect": "plain",
+            "textOnAccent": "#ffffff"
+          },
+          "execution": {
+            "state": "fallback",
+            "reason": "none_approved"
+          },
+          "cost": {
+            "graphReads": 4,
+            "objectReads": 4,
+            "officialPageSize": 50,
+            "maxModules": 24,
+            "maxSlides": 6,
+            "maxCampaignUses": 64,
+            "maxCampaignMediaReads": 2,
+            "maxResolvedBlocks": 4,
+            "maxResolvedCollections": 2,
+            "maxCollectionPlacements": 8,
+            "maxModuleGraphReads": 64,
+            "maxNavigation": 50,
+            "maxNavigationGraphReads": 2048
+          }
+        },
+        "headers": {
+          "cache-control": "public, no-cache",
+          "content-type": "application/json;charset=utf-8",
+          "etag": "\"a2eadee64f0535b65c22405ff2146aea74c3137b2a4c732d9f4443b7e30ba3aa\""
+        }
+      },
+      {
+        "label": "published-index-empty",
+        "operationId": "getV1ZonesByIdRoutes",
+        "method": "GET",
+        "path": "/v1/zones/47f3dc3b-6446-8262-8f25-56d81fb27145/routes?path=%2Fpublished-link",
+        "status": 200,
+        "answer": {
+          "profile": "zone-route-v1",
+          "zone": "https://rezics.com/id/47f3dc3b-6446-8262-8f25-56d81fb27145",
+          "path": "/published-link",
+          "name": "Published site",
+          "language": "en",
+          "direction": "ltr",
+          "listing": "listed",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "realm": "https://rezics.com/id/01a135e5-b8dd-778f-8ae2-36ad5759cf5a",
+          "revision": "https://rezics.com/id/01a135e5-cdf3-7492-b6cf-08dd14c9eb19",
+          "sourcePosition": {
+            "dataEpoch": "ee33b570-90f7-4685-af6d-6d4e789c934d",
+            "sequence": "87"
+          },
+          "cost": {
+            "pageSize": 24,
+            "maxNavigation": 50,
+            "immutableRangeRows": 101,
+            "membershipQueries": 1,
+            "mountRows": 2,
+            "typeRowsPerResource": 8,
+            "typeQueriesPerPage": 1,
+            "summaryBatch": 50,
+            "maxGraphReads": 2048,
+            "maxGraphBytes": 8388608,
+            "deadlineMs": 10000
+          },
+          "kind": "index",
+          "mount": {
+            "occurrence": "https://rezics.com/id/ed7f0286-f52b-824e-a2b5-b11ca02f15d1",
+            "target": "https://rezics.com/id/337f628b-945d-4f26-9a35-8dfd8f62b30a",
+            "segment": "published-link",
+            "key": "id"
+          },
+          "collection": "https://rezics.com/id/337f628b-945d-4f26-9a35-8dfd8f62b30a",
+          "items": [],
+          "nextCursor": null
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "unpublished-route-refused",
+        "operationId": "getV1ZonesByIdRoutes",
+        "method": "GET",
+        "path": "/v1/zones/47f3dc3b-6446-8262-8f25-56d81fb27145/routes?path=%2Fdraft-link",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/route_missing",
+          "title": "Zone route is unavailable",
+          "status": 404,
+          "code": "route_missing"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "published-home-route",
+        "operationId": "getV1ZonesByIdRoutes",
+        "method": "GET",
+        "path": "/v1/zones/47f3dc3b-6446-8262-8f25-56d81fb27145/routes?path=%2F",
+        "status": 200,
+        "answer": {
+          "profile": "zone-route-v1",
+          "zone": "https://rezics.com/id/47f3dc3b-6446-8262-8f25-56d81fb27145",
+          "path": "/",
+          "name": "Published site",
+          "language": "en",
+          "direction": "ltr",
+          "listing": "listed",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "realm": "https://rezics.com/id/01a135e5-b8dd-778f-8ae2-36ad5759cf5a",
+          "revision": "https://rezics.com/id/01a135e5-cdf3-7492-b6cf-08dd14c9eb19",
+          "sourcePosition": {
+            "dataEpoch": "ee33b570-90f7-4685-af6d-6d4e789c934d",
+            "sequence": "87"
+          },
+          "cost": {
+            "pageSize": 24,
+            "maxNavigation": 50,
+            "immutableRangeRows": 101,
+            "membershipQueries": 1,
+            "mountRows": 2,
+            "typeRowsPerResource": 8,
+            "typeQueriesPerPage": 1,
+            "summaryBatch": 50,
+            "maxGraphReads": 2048,
+            "maxGraphBytes": 8388608,
+            "deadlineMs": 10000
+          },
+          "kind": "home",
+          "page": {
+            "document": {
+              "doc": {
+                "content": [
+                  {
+                    "attrs": {
+                      "dir": null,
+                      "id": "ce15695c-2f95-4d1a-8eef-d8587102a768",
+                      "lang": null,
+                      "textAlign": null
+                    },
+                    "content": [
+                      {
+                        "text": "Published owner text",
+                        "type": "text"
+                      }
+                    ],
+                    "type": "paragraph"
+                  },
+                  {
+                    "attrs": {
+                      "definition": "https://rezics.com/definition/showcase-block-v1",
+                      "dir": null,
+                      "fallback": "Highlights",
+                      "id": "showcase",
+                      "lang": null,
+                      "payload": {},
+                      "version": "1"
+                    },
+                    "type": "extensionBlock"
+                  },
+                  {
+                    "attrs": {
+                      "definition": "https://example.org/future-map",
+                      "dir": null,
+                      "fallback": "Place map",
+                      "id": "unknown-map",
+                      "lang": null,
+                      "payload": {
+                        "future": [
+                          null,
+                          {
+                            "preserved": true
+                          }
+                        ],
+                        "unicode": "雨夜書店"
+                      },
+                      "version": "9"
+                    },
+                    "type": "extensionBlock"
+                  }
+                ],
+                "type": "doc"
+              },
+              "profile": "blocks",
+              "version": "rezics-document-v1"
+            },
+            "definitions": [
+              {
+                "definition": "https://rezics.com/definition/showcase-block-v1",
+                "version": "1",
+                "payloadSchema": {
+                  "type": "object",
+                  "properties": {
+                    "rv:module": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                        "maxLength": 64
+                      },
+                      "minItems": 1,
+                      "maxItems": 1,
+                      "uniqueItems": true
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            ],
+            "blocks": [
+              {
+                "id": "showcase",
+                "definition": "https://rezics.com/definition/showcase-block-v1",
+                "version": "1",
+                "fallback": "Highlights",
+                "status": "resolved",
+                "kind": "showcase",
+                "showcase": "$default"
+              },
+              {
+                "id": "unknown-map",
+                "definition": "https://example.org/future-map",
+                "version": "9",
+                "fallback": "Place map",
+                "status": "placeholder",
+                "reason": "unknown_definition"
+              }
+            ],
+            "showcases": [
+              {
+                "id": "$default",
+                "module": null,
+                "sources": []
+              }
+            ],
+            "showcaseData": {
+              "slides": [
+                {
+                  "id": "published-slide",
+                  "title": "Published highlight",
+                  "href": "/published-link"
+                }
+              ],
+              "slideMedia": [
+                {
+                  "id": "published-slide",
+                  "art": {
+                    "landscape": null,
+                    "portrait": null,
+                    "cutout": null,
+                    "logos": []
+                  }
+                }
+              ]
+            },
+            "cost": {
+              "nodesVisited": 5,
+              "extensions": 2,
+              "showcases": 1,
+              "responseBytes": 1753,
+              "graphReads": 0,
+              "definitionExecutions": 0
+            },
+            "reference": {
+              "owner": "content",
+              "resourceId": "https://rezics.com/id/01a135e5-c36c-763b-97b0-3f7cc9ae1f52",
+              "variantId": "urn:rezics:variant:99ddcc17-badc-4c8f-8345-d6be3790c5b3",
+              "revisionId": "9de246a9-7182-4d51-8a37-aa4834b1b4c5",
+              "format": "rezics-content-json-v1",
+              "model": "content-shape-v1",
+              "byteDigest": "0fe892b36c36961147398d746ac14023a3c5820371c3fe3ac07d4a3cee096708",
+              "byteLength": 745,
+              "language": {
+                "kind": "tag",
+                "tag": "en",
+                "originalTag": "en"
+              },
+              "direction": "ltr",
+              "sourceRevision": null,
+              "predecessor": null,
+              "provenance": {
+                "kind": "admitted-original-contribution-v1",
+                "scope": "content:draft:https://rezics.com/id/01a135e5-c36c-763b-97b0-3f7cc9ae1f52",
+                "author": "https://rezics.com/id/553277f9-0e48-4ed4-9f0a-c49c993cb517",
+                "admissionId": "01a135e5-cc5a-75ba-b869-87911ec3e203",
+                "rightsBasis": "original-contribution",
+                "expectedHead": null,
+                "requestDigest": "7bab44f077fa0501c03996e990c9e05e946cef509d3b7e57d7b94a423c8db7ee",
+                "authorityEpoch": "0"
+              }
+            }
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "published-content-revision",
+        "operationId": "getV1Content-revisionsByRevision",
+        "method": "GET",
+        "path": "/v1/content-revisions/9de246a9-7182-4d51-8a37-aa4834b1b4c5",
+        "status": 200,
+        "answer": {
+          "reference": {
+            "owner": "content",
+            "resourceId": "https://rezics.com/id/01a135e5-c36c-763b-97b0-3f7cc9ae1f52",
+            "variantId": "urn:rezics:variant:99ddcc17-badc-4c8f-8345-d6be3790c5b3",
+            "revisionId": "9de246a9-7182-4d51-8a37-aa4834b1b4c5",
+            "format": "rezics-content-json-v1",
+            "model": "content-shape-v1",
+            "byteDigest": "0fe892b36c36961147398d746ac14023a3c5820371c3fe3ac07d4a3cee096708",
+            "byteLength": 745,
+            "language": {
+              "kind": "tag",
+              "tag": "en",
+              "originalTag": "en"
+            },
+            "direction": "ltr",
+            "sourceRevision": null,
+            "predecessor": null,
+            "provenance": {
+              "kind": "admitted-original-contribution-v1",
+              "scope": "content:draft:https://rezics.com/id/01a135e5-c36c-763b-97b0-3f7cc9ae1f52",
+              "author": "https://rezics.com/id/553277f9-0e48-4ed4-9f0a-c49c993cb517",
+              "admissionId": "01a135e5-cc5a-75ba-b869-87911ec3e203",
+              "rightsBasis": "original-contribution",
+              "expectedHead": null,
+              "requestDigest": "7bab44f077fa0501c03996e990c9e05e946cef509d3b7e57d7b94a423c8db7ee",
+              "authorityEpoch": "0"
+            }
+          },
+          "serializedJson": "{\"body\":\"Published owner text\\nHighlights\\nPlace map\",\"document\":{\"doc\":{\"content\":[{\"attrs\":{\"dir\":null,\"id\":\"ce15695c-2f95-4d1a-8eef-d8587102a768\",\"lang\":null,\"textAlign\":null},\"content\":[{\"text\":\"Published owner text\",\"type\":\"text\"}],\"type\":\"paragraph\"},{\"attrs\":{\"definition\":\"https://rezics.com/definition/showcase-block-v1\",\"dir\":null,\"fallback\":\"Highlights\",\"id\":\"showcase\",\"lang\":null,\"payload\":{},\"version\":\"1\"},\"type\":\"extensionBlock\"},{\"attrs\":{\"definition\":\"https://example.org/future-map\",\"dir\":null,\"fallback\":\"Place map\",\"id\":\"unknown-map\",\"lang\":null,\"payload\":{\"future\":[null,{\"preserved\":true}],\"unicode\":\"雨夜書店\"},\"version\":\"9\"},\"type\":\"extensionBlock\"}],\"type\":\"doc\"},\"profile\":\"blocks\",\"version\":\"rezics-document-v1\"}}",
+          "body": {
+            "body": "Published owner text\nHighlights\nPlace map",
+            "document": {
+              "doc": {
+                "content": [
+                  {
+                    "attrs": {
+                      "dir": null,
+                      "id": "ce15695c-2f95-4d1a-8eef-d8587102a768",
+                      "lang": null,
+                      "textAlign": null
+                    },
+                    "content": [
+                      {
+                        "text": "Published owner text",
+                        "type": "text"
+                      }
+                    ],
+                    "type": "paragraph"
+                  },
+                  {
+                    "attrs": {
+                      "definition": "https://rezics.com/definition/showcase-block-v1",
+                      "dir": null,
+                      "fallback": "Highlights",
+                      "id": "showcase",
+                      "lang": null,
+                      "payload": {},
+                      "version": "1"
+                    },
+                    "type": "extensionBlock"
+                  },
+                  {
+                    "attrs": {
+                      "definition": "https://example.org/future-map",
+                      "dir": null,
+                      "fallback": "Place map",
+                      "id": "unknown-map",
+                      "lang": null,
+                      "payload": {
+                        "future": [
+                          null,
+                          {
+                            "preserved": true
+                          }
+                        ],
+                        "unicode": "雨夜書店"
+                      },
+                      "version": "9"
+                    },
+                    "type": "extensionBlock"
+                  }
+                ],
+                "type": "doc"
+              },
+              "profile": "blocks",
+              "version": "rezics-document-v1"
+            }
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "draft-content-revision",
+        "operationId": "getV1Content-revisionsByRevision",
+        "method": "GET",
+        "path": "/v1/content-revisions/28d37517-ed5c-4c14-a520-957954d268a2",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/revision_unavailable",
+          "title": "Revision is unavailable",
+          "status": 404,
+          "code": "revision_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      }
+    ],
+    "stranger": [
+      {
+        "label": "published-presentation",
+        "operationId": "getV1ZonesByIdPresentation",
+        "method": "GET",
+        "path": "/v1/zones/47f3dc3b-6446-8262-8f25-56d81fb27145/presentation",
+        "status": 200,
+        "answer": {
+          "profile": "zone-presentation-response-v2",
+          "zone": "https://rezics.com/id/47f3dc3b-6446-8262-8f25-56d81fb27145",
+          "realm": "https://rezics.com/id/01a135e5-b8dd-778f-8ae2-36ad5759cf5a",
+          "listing": "listed",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "address": {
+            "prefix": "/z/",
+            "key": "1CfzUmz8PuXg14g8JEgCje",
+            "suffixSource": "Published site"
+          },
+          "name": "Published site",
+          "language": "en",
+          "direction": "ltr",
+          "official": null,
+          "revision": "https://rezics.com/id/01a135e5-cdf3-7492-b6cf-08dd14c9eb19",
+          "presentation": {
+            "profile": "zone-presentation-v2",
+            "preset": "clean",
+            "tokens": {
+              "colorScheme": "system",
+              "accent": "#2563eb",
+              "density": "comfortable",
+              "cardRadius": "md",
+              "headingFontScale": "md",
+              "surfaceTint": "none",
+              "fontPairing": "sans",
+              "pageSurface": "flat",
+              "coverStyle": "portrait",
+              "titleEffect": "plain"
+            },
+            "navigation": [],
+            "modules": [],
+            "slides": [
+              {
+                "id": "published-slide",
+                "title": "Published highlight",
+                "href": "/published-link"
+              }
+            ]
+          },
+          "navigation": [
+            {
+              "occurrence": "https://rezics.com/id/ed7f0286-f52b-824e-a2b5-b11ca02f15d1",
+              "segment": "published-link",
+              "target": "https://rezics.com/id/337f628b-945d-4f26-9a35-8dfd8f62b30a",
+              "kind": "index",
+              "name": {
+                "value": "Site references",
+                "language": "und",
+                "direction": "ltr",
+                "basis": "fallback"
+              }
+            }
+          ],
+          "navigationRevision": "https://rezics.com/id/5dee09d7-1fd3-862f-a7ba-7b2a9abd56a2",
+          "navigationNext": null,
+          "navigationComplete": true,
+          "moduleData": [],
+          "slideMedia": [
+            {
+              "id": "published-slide",
+              "art": {
+                "landscape": null,
+                "portrait": null,
+                "cutout": null,
+                "logos": []
+              }
+            }
+          ],
+          "home": {
+            "document": {
+              "doc": {
+                "content": [
+                  {
+                    "attrs": {
+                      "dir": null,
+                      "id": "ce15695c-2f95-4d1a-8eef-d8587102a768",
+                      "lang": null,
+                      "textAlign": null
+                    },
+                    "content": [
+                      {
+                        "text": "Published owner text",
+                        "type": "text"
+                      }
+                    ],
+                    "type": "paragraph"
+                  },
+                  {
+                    "attrs": {
+                      "definition": "https://rezics.com/definition/showcase-block-v1",
+                      "dir": null,
+                      "fallback": "Highlights",
+                      "id": "showcase",
+                      "lang": null,
+                      "payload": {},
+                      "version": "1"
+                    },
+                    "type": "extensionBlock"
+                  },
+                  {
+                    "attrs": {
+                      "definition": "https://example.org/future-map",
+                      "dir": null,
+                      "fallback": "Place map",
+                      "id": "unknown-map",
+                      "lang": null,
+                      "payload": {
+                        "future": [
+                          null,
+                          {
+                            "preserved": true
+                          }
+                        ],
+                        "unicode": "雨夜書店"
+                      },
+                      "version": "9"
+                    },
+                    "type": "extensionBlock"
+                  }
+                ],
+                "type": "doc"
+              },
+              "profile": "blocks",
+              "version": "rezics-document-v1"
+            },
+            "definitions": [
+              {
+                "definition": "https://rezics.com/definition/showcase-block-v1",
+                "version": "1",
+                "payloadSchema": {
+                  "type": "object",
+                  "properties": {
+                    "rv:module": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                        "maxLength": 64
+                      },
+                      "minItems": 1,
+                      "maxItems": 1,
+                      "uniqueItems": true
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            ],
+            "blocks": [
+              {
+                "id": "showcase",
+                "definition": "https://rezics.com/definition/showcase-block-v1",
+                "version": "1",
+                "fallback": "Highlights",
+                "status": "resolved",
+                "kind": "showcase",
+                "showcase": "$default"
+              },
+              {
+                "id": "unknown-map",
+                "definition": "https://example.org/future-map",
+                "version": "9",
+                "fallback": "Place map",
+                "status": "placeholder",
+                "reason": "unknown_definition"
+              }
+            ],
+            "showcases": [
+              {
+                "id": "$default",
+                "module": null,
+                "sources": []
+              }
+            ],
+            "showcaseData": {
+              "slides": [
+                {
+                  "id": "published-slide",
+                  "title": "Published highlight",
+                  "href": "/published-link"
+                }
+              ],
+              "slideMedia": [
+                {
+                  "id": "published-slide",
+                  "art": {
+                    "landscape": null,
+                    "portrait": null,
+                    "cutout": null,
+                    "logos": []
+                  }
+                }
+              ]
+            },
+            "cost": {
+              "nodesVisited": 5,
+              "extensions": 2,
+              "showcases": 1,
+              "responseBytes": 1753,
+              "graphReads": 0,
+              "definitionExecutions": 0
+            },
+            "reference": {
+              "owner": "content",
+              "resourceId": "https://rezics.com/id/01a135e5-c36c-763b-97b0-3f7cc9ae1f52",
+              "variantId": "urn:rezics:variant:99ddcc17-badc-4c8f-8345-d6be3790c5b3",
+              "revisionId": "9de246a9-7182-4d51-8a37-aa4834b1b4c5",
+              "format": "rezics-content-json-v1",
+              "model": "content-shape-v1",
+              "byteDigest": "0fe892b36c36961147398d746ac14023a3c5820371c3fe3ac07d4a3cee096708",
+              "byteLength": 745,
+              "language": {
+                "kind": "tag",
+                "tag": "en",
+                "originalTag": "en"
+              },
+              "direction": "ltr",
+              "sourceRevision": null,
+              "predecessor": null,
+              "provenance": {
+                "kind": "admitted-original-contribution-v1",
+                "scope": "content:draft:https://rezics.com/id/01a135e5-c36c-763b-97b0-3f7cc9ae1f52",
+                "author": "https://rezics.com/id/553277f9-0e48-4ed4-9f0a-c49c993cb517",
+                "admissionId": "01a135e5-cc5a-75ba-b869-87911ec3e203",
+                "rightsBasis": "original-contribution",
+                "expectedHead": null,
+                "requestDigest": "7bab44f077fa0501c03996e990c9e05e946cef509d3b7e57d7b94a423c8db7ee",
+                "authorityEpoch": "0"
+              }
+            }
+          },
+          "renderTokens": {
+            "colorScheme": "system",
+            "accent": "#2563eb",
+            "density": "comfortable",
+            "cardRadius": "md",
+            "headingFontScale": "md",
+            "surfaceTint": "none",
+            "fontPairing": "sans",
+            "pageSurface": "flat",
+            "coverStyle": "portrait",
+            "titleEffect": "plain",
+            "textOnAccent": "#ffffff"
+          },
+          "execution": {
+            "state": "fallback",
+            "reason": "none_approved"
+          },
+          "cost": {
+            "graphReads": 4,
+            "objectReads": 4,
+            "officialPageSize": 50,
+            "maxModules": 24,
+            "maxSlides": 6,
+            "maxCampaignUses": 64,
+            "maxCampaignMediaReads": 2,
+            "maxResolvedBlocks": 4,
+            "maxResolvedCollections": 2,
+            "maxCollectionPlacements": 8,
+            "maxModuleGraphReads": 64,
+            "maxNavigation": 50,
+            "maxNavigationGraphReads": 2048
+          }
+        },
+        "headers": {
+          "cache-control": "public, no-cache",
+          "content-type": "application/json;charset=utf-8",
+          "etag": "\"a2eadee64f0535b65c22405ff2146aea74c3137b2a4c732d9f4443b7e30ba3aa\""
+        }
+      },
+      {
+        "label": "published-index-empty",
+        "operationId": "getV1ZonesByIdRoutes",
+        "method": "GET",
+        "path": "/v1/zones/47f3dc3b-6446-8262-8f25-56d81fb27145/routes?path=%2Fpublished-link",
+        "status": 200,
+        "answer": {
+          "profile": "zone-route-v1",
+          "zone": "https://rezics.com/id/47f3dc3b-6446-8262-8f25-56d81fb27145",
+          "path": "/published-link",
+          "name": "Published site",
+          "language": "en",
+          "direction": "ltr",
+          "listing": "listed",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "realm": "https://rezics.com/id/01a135e5-b8dd-778f-8ae2-36ad5759cf5a",
+          "revision": "https://rezics.com/id/01a135e5-cdf3-7492-b6cf-08dd14c9eb19",
+          "sourcePosition": {
+            "dataEpoch": "ee33b570-90f7-4685-af6d-6d4e789c934d",
+            "sequence": "87"
+          },
+          "cost": {
+            "pageSize": 24,
+            "maxNavigation": 50,
+            "immutableRangeRows": 101,
+            "membershipQueries": 1,
+            "mountRows": 2,
+            "typeRowsPerResource": 8,
+            "typeQueriesPerPage": 1,
+            "summaryBatch": 50,
+            "maxGraphReads": 2048,
+            "maxGraphBytes": 8388608,
+            "deadlineMs": 10000
+          },
+          "kind": "index",
+          "mount": {
+            "occurrence": "https://rezics.com/id/ed7f0286-f52b-824e-a2b5-b11ca02f15d1",
+            "target": "https://rezics.com/id/337f628b-945d-4f26-9a35-8dfd8f62b30a",
+            "segment": "published-link",
+            "key": "id"
+          },
+          "collection": "https://rezics.com/id/337f628b-945d-4f26-9a35-8dfd8f62b30a",
+          "items": [],
+          "nextCursor": null
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "unpublished-route-refused",
+        "operationId": "getV1ZonesByIdRoutes",
+        "method": "GET",
+        "path": "/v1/zones/47f3dc3b-6446-8262-8f25-56d81fb27145/routes?path=%2Fdraft-link",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/route_missing",
+          "title": "Zone route is unavailable",
+          "status": 404,
+          "code": "route_missing"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "published-home-route",
+        "operationId": "getV1ZonesByIdRoutes",
+        "method": "GET",
+        "path": "/v1/zones/47f3dc3b-6446-8262-8f25-56d81fb27145/routes?path=%2F",
+        "status": 200,
+        "answer": {
+          "profile": "zone-route-v1",
+          "zone": "https://rezics.com/id/47f3dc3b-6446-8262-8f25-56d81fb27145",
+          "path": "/",
+          "name": "Published site",
+          "language": "en",
+          "direction": "ltr",
+          "listing": "listed",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "realm": "https://rezics.com/id/01a135e5-b8dd-778f-8ae2-36ad5759cf5a",
+          "revision": "https://rezics.com/id/01a135e5-cdf3-7492-b6cf-08dd14c9eb19",
+          "sourcePosition": {
+            "dataEpoch": "ee33b570-90f7-4685-af6d-6d4e789c934d",
+            "sequence": "87"
+          },
+          "cost": {
+            "pageSize": 24,
+            "maxNavigation": 50,
+            "immutableRangeRows": 101,
+            "membershipQueries": 1,
+            "mountRows": 2,
+            "typeRowsPerResource": 8,
+            "typeQueriesPerPage": 1,
+            "summaryBatch": 50,
+            "maxGraphReads": 2048,
+            "maxGraphBytes": 8388608,
+            "deadlineMs": 10000
+          },
+          "kind": "home",
+          "page": {
+            "document": {
+              "doc": {
+                "content": [
+                  {
+                    "attrs": {
+                      "dir": null,
+                      "id": "ce15695c-2f95-4d1a-8eef-d8587102a768",
+                      "lang": null,
+                      "textAlign": null
+                    },
+                    "content": [
+                      {
+                        "text": "Published owner text",
+                        "type": "text"
+                      }
+                    ],
+                    "type": "paragraph"
+                  },
+                  {
+                    "attrs": {
+                      "definition": "https://rezics.com/definition/showcase-block-v1",
+                      "dir": null,
+                      "fallback": "Highlights",
+                      "id": "showcase",
+                      "lang": null,
+                      "payload": {},
+                      "version": "1"
+                    },
+                    "type": "extensionBlock"
+                  },
+                  {
+                    "attrs": {
+                      "definition": "https://example.org/future-map",
+                      "dir": null,
+                      "fallback": "Place map",
+                      "id": "unknown-map",
+                      "lang": null,
+                      "payload": {
+                        "future": [
+                          null,
+                          {
+                            "preserved": true
+                          }
+                        ],
+                        "unicode": "雨夜書店"
+                      },
+                      "version": "9"
+                    },
+                    "type": "extensionBlock"
+                  }
+                ],
+                "type": "doc"
+              },
+              "profile": "blocks",
+              "version": "rezics-document-v1"
+            },
+            "definitions": [
+              {
+                "definition": "https://rezics.com/definition/showcase-block-v1",
+                "version": "1",
+                "payloadSchema": {
+                  "type": "object",
+                  "properties": {
+                    "rv:module": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                        "maxLength": 64
+                      },
+                      "minItems": 1,
+                      "maxItems": 1,
+                      "uniqueItems": true
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            ],
+            "blocks": [
+              {
+                "id": "showcase",
+                "definition": "https://rezics.com/definition/showcase-block-v1",
+                "version": "1",
+                "fallback": "Highlights",
+                "status": "resolved",
+                "kind": "showcase",
+                "showcase": "$default"
+              },
+              {
+                "id": "unknown-map",
+                "definition": "https://example.org/future-map",
+                "version": "9",
+                "fallback": "Place map",
+                "status": "placeholder",
+                "reason": "unknown_definition"
+              }
+            ],
+            "showcases": [
+              {
+                "id": "$default",
+                "module": null,
+                "sources": []
+              }
+            ],
+            "showcaseData": {
+              "slides": [
+                {
+                  "id": "published-slide",
+                  "title": "Published highlight",
+                  "href": "/published-link"
+                }
+              ],
+              "slideMedia": [
+                {
+                  "id": "published-slide",
+                  "art": {
+                    "landscape": null,
+                    "portrait": null,
+                    "cutout": null,
+                    "logos": []
+                  }
+                }
+              ]
+            },
+            "cost": {
+              "nodesVisited": 5,
+              "extensions": 2,
+              "showcases": 1,
+              "responseBytes": 1753,
+              "graphReads": 0,
+              "definitionExecutions": 0
+            },
+            "reference": {
+              "owner": "content",
+              "resourceId": "https://rezics.com/id/01a135e5-c36c-763b-97b0-3f7cc9ae1f52",
+              "variantId": "urn:rezics:variant:99ddcc17-badc-4c8f-8345-d6be3790c5b3",
+              "revisionId": "9de246a9-7182-4d51-8a37-aa4834b1b4c5",
+              "format": "rezics-content-json-v1",
+              "model": "content-shape-v1",
+              "byteDigest": "0fe892b36c36961147398d746ac14023a3c5820371c3fe3ac07d4a3cee096708",
+              "byteLength": 745,
+              "language": {
+                "kind": "tag",
+                "tag": "en",
+                "originalTag": "en"
+              },
+              "direction": "ltr",
+              "sourceRevision": null,
+              "predecessor": null,
+              "provenance": {
+                "kind": "admitted-original-contribution-v1",
+                "scope": "content:draft:https://rezics.com/id/01a135e5-c36c-763b-97b0-3f7cc9ae1f52",
+                "author": "https://rezics.com/id/553277f9-0e48-4ed4-9f0a-c49c993cb517",
+                "admissionId": "01a135e5-cc5a-75ba-b869-87911ec3e203",
+                "rightsBasis": "original-contribution",
+                "expectedHead": null,
+                "requestDigest": "7bab44f077fa0501c03996e990c9e05e946cef509d3b7e57d7b94a423c8db7ee",
+                "authorityEpoch": "0"
+              }
+            }
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "published-content-revision",
+        "operationId": "getV1Content-revisionsByRevision",
+        "method": "GET",
+        "path": "/v1/content-revisions/9de246a9-7182-4d51-8a37-aa4834b1b4c5?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F3da6df42-2d1a-4853-b838-44e548557589",
+        "status": 200,
+        "answer": {
+          "reference": {
+            "owner": "content",
+            "resourceId": "https://rezics.com/id/01a135e5-c36c-763b-97b0-3f7cc9ae1f52",
+            "variantId": "urn:rezics:variant:99ddcc17-badc-4c8f-8345-d6be3790c5b3",
+            "revisionId": "9de246a9-7182-4d51-8a37-aa4834b1b4c5",
+            "format": "rezics-content-json-v1",
+            "model": "content-shape-v1",
+            "byteDigest": "0fe892b36c36961147398d746ac14023a3c5820371c3fe3ac07d4a3cee096708",
+            "byteLength": 745,
+            "language": {
+              "kind": "tag",
+              "tag": "en",
+              "originalTag": "en"
+            },
+            "direction": "ltr",
+            "sourceRevision": null,
+            "predecessor": null,
+            "provenance": {
+              "kind": "admitted-original-contribution-v1",
+              "scope": "content:draft:https://rezics.com/id/01a135e5-c36c-763b-97b0-3f7cc9ae1f52",
+              "author": "https://rezics.com/id/553277f9-0e48-4ed4-9f0a-c49c993cb517",
+              "admissionId": "01a135e5-cc5a-75ba-b869-87911ec3e203",
+              "rightsBasis": "original-contribution",
+              "expectedHead": null,
+              "requestDigest": "7bab44f077fa0501c03996e990c9e05e946cef509d3b7e57d7b94a423c8db7ee",
+              "authorityEpoch": "0"
+            }
+          },
+          "serializedJson": "{\"body\":\"Published owner text\\nHighlights\\nPlace map\",\"document\":{\"doc\":{\"content\":[{\"attrs\":{\"dir\":null,\"id\":\"ce15695c-2f95-4d1a-8eef-d8587102a768\",\"lang\":null,\"textAlign\":null},\"content\":[{\"text\":\"Published owner text\",\"type\":\"text\"}],\"type\":\"paragraph\"},{\"attrs\":{\"definition\":\"https://rezics.com/definition/showcase-block-v1\",\"dir\":null,\"fallback\":\"Highlights\",\"id\":\"showcase\",\"lang\":null,\"payload\":{},\"version\":\"1\"},\"type\":\"extensionBlock\"},{\"attrs\":{\"definition\":\"https://example.org/future-map\",\"dir\":null,\"fallback\":\"Place map\",\"id\":\"unknown-map\",\"lang\":null,\"payload\":{\"future\":[null,{\"preserved\":true}],\"unicode\":\"雨夜書店\"},\"version\":\"9\"},\"type\":\"extensionBlock\"}],\"type\":\"doc\"},\"profile\":\"blocks\",\"version\":\"rezics-document-v1\"}}",
+          "body": {
+            "body": "Published owner text\nHighlights\nPlace map",
+            "document": {
+              "doc": {
+                "content": [
+                  {
+                    "attrs": {
+                      "dir": null,
+                      "id": "ce15695c-2f95-4d1a-8eef-d8587102a768",
+                      "lang": null,
+                      "textAlign": null
+                    },
+                    "content": [
+                      {
+                        "text": "Published owner text",
+                        "type": "text"
+                      }
+                    ],
+                    "type": "paragraph"
+                  },
+                  {
+                    "attrs": {
+                      "definition": "https://rezics.com/definition/showcase-block-v1",
+                      "dir": null,
+                      "fallback": "Highlights",
+                      "id": "showcase",
+                      "lang": null,
+                      "payload": {},
+                      "version": "1"
+                    },
+                    "type": "extensionBlock"
+                  },
+                  {
+                    "attrs": {
+                      "definition": "https://example.org/future-map",
+                      "dir": null,
+                      "fallback": "Place map",
+                      "id": "unknown-map",
+                      "lang": null,
+                      "payload": {
+                        "future": [
+                          null,
+                          {
+                            "preserved": true
+                          }
+                        ],
+                        "unicode": "雨夜書店"
+                      },
+                      "version": "9"
+                    },
+                    "type": "extensionBlock"
+                  }
+                ],
+                "type": "doc"
+              },
+              "profile": "blocks",
+              "version": "rezics-document-v1"
+            }
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "draft-content-revision",
+        "operationId": "getV1Content-revisionsByRevision",
+        "method": "GET",
+        "path": "/v1/content-revisions/28d37517-ed5c-4c14-a520-957954d268a2?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F3da6df42-2d1a-4853-b838-44e548557589",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/revision_unavailable",
+          "title": "Revision is unavailable",
+          "status": 404,
+          "code": "revision_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "showcase-editor",
+        "operationId": "getV1ZonesByIdShowcase-editor",
+        "method": "GET",
+        "path": "/v1/zones/47f3dc3b-6446-8262-8f25-56d81fb27145/showcase-editor?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F3da6df42-2d1a-4853-b838-44e548557589",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/zone_unavailable",
+          "title": "Zone is unavailable",
+          "status": 404,
+          "code": "zone_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "draft-configuration-refused",
+        "operationId": "getV1ZonesByIdConfiguration",
+        "method": "GET",
+        "path": "/v1/zones/47f3dc3b-6446-8262-8f25-56d81fb27145/configuration?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F3da6df42-2d1a-4853-b838-44e548557589",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/zone_unavailable",
+          "title": "Zone is unavailable",
+          "status": 404,
+          "code": "zone_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      }
+    ],
+    "member": [
+      {
+        "label": "published-presentation",
+        "operationId": "getV1ZonesByIdPresentation",
+        "method": "GET",
+        "path": "/v1/zones/47f3dc3b-6446-8262-8f25-56d81fb27145/presentation",
+        "status": 200,
+        "answer": {
+          "profile": "zone-presentation-response-v2",
+          "zone": "https://rezics.com/id/47f3dc3b-6446-8262-8f25-56d81fb27145",
+          "realm": "https://rezics.com/id/01a135e5-b8dd-778f-8ae2-36ad5759cf5a",
+          "listing": "listed",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "address": {
+            "prefix": "/z/",
+            "key": "1CfzUmz8PuXg14g8JEgCje",
+            "suffixSource": "Published site"
+          },
+          "name": "Published site",
+          "language": "en",
+          "direction": "ltr",
+          "official": null,
+          "revision": "https://rezics.com/id/01a135e5-cdf3-7492-b6cf-08dd14c9eb19",
+          "presentation": {
+            "profile": "zone-presentation-v2",
+            "preset": "clean",
+            "tokens": {
+              "colorScheme": "system",
+              "accent": "#2563eb",
+              "density": "comfortable",
+              "cardRadius": "md",
+              "headingFontScale": "md",
+              "surfaceTint": "none",
+              "fontPairing": "sans",
+              "pageSurface": "flat",
+              "coverStyle": "portrait",
+              "titleEffect": "plain"
+            },
+            "navigation": [],
+            "modules": [],
+            "slides": [
+              {
+                "id": "published-slide",
+                "title": "Published highlight",
+                "href": "/published-link"
+              }
+            ]
+          },
+          "navigation": [
+            {
+              "occurrence": "https://rezics.com/id/ed7f0286-f52b-824e-a2b5-b11ca02f15d1",
+              "segment": "published-link",
+              "target": "https://rezics.com/id/337f628b-945d-4f26-9a35-8dfd8f62b30a",
+              "kind": "index",
+              "name": {
+                "value": "Site references",
+                "language": "und",
+                "direction": "ltr",
+                "basis": "fallback"
+              }
+            }
+          ],
+          "navigationRevision": "https://rezics.com/id/5dee09d7-1fd3-862f-a7ba-7b2a9abd56a2",
+          "navigationNext": null,
+          "navigationComplete": true,
+          "moduleData": [],
+          "slideMedia": [
+            {
+              "id": "published-slide",
+              "art": {
+                "landscape": null,
+                "portrait": null,
+                "cutout": null,
+                "logos": []
+              }
+            }
+          ],
+          "home": {
+            "document": {
+              "doc": {
+                "content": [
+                  {
+                    "attrs": {
+                      "dir": null,
+                      "id": "ce15695c-2f95-4d1a-8eef-d8587102a768",
+                      "lang": null,
+                      "textAlign": null
+                    },
+                    "content": [
+                      {
+                        "text": "Published owner text",
+                        "type": "text"
+                      }
+                    ],
+                    "type": "paragraph"
+                  },
+                  {
+                    "attrs": {
+                      "definition": "https://rezics.com/definition/showcase-block-v1",
+                      "dir": null,
+                      "fallback": "Highlights",
+                      "id": "showcase",
+                      "lang": null,
+                      "payload": {},
+                      "version": "1"
+                    },
+                    "type": "extensionBlock"
+                  },
+                  {
+                    "attrs": {
+                      "definition": "https://example.org/future-map",
+                      "dir": null,
+                      "fallback": "Place map",
+                      "id": "unknown-map",
+                      "lang": null,
+                      "payload": {
+                        "future": [
+                          null,
+                          {
+                            "preserved": true
+                          }
+                        ],
+                        "unicode": "雨夜書店"
+                      },
+                      "version": "9"
+                    },
+                    "type": "extensionBlock"
+                  }
+                ],
+                "type": "doc"
+              },
+              "profile": "blocks",
+              "version": "rezics-document-v1"
+            },
+            "definitions": [
+              {
+                "definition": "https://rezics.com/definition/showcase-block-v1",
+                "version": "1",
+                "payloadSchema": {
+                  "type": "object",
+                  "properties": {
+                    "rv:module": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                        "maxLength": 64
+                      },
+                      "minItems": 1,
+                      "maxItems": 1,
+                      "uniqueItems": true
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            ],
+            "blocks": [
+              {
+                "id": "showcase",
+                "definition": "https://rezics.com/definition/showcase-block-v1",
+                "version": "1",
+                "fallback": "Highlights",
+                "status": "resolved",
+                "kind": "showcase",
+                "showcase": "$default"
+              },
+              {
+                "id": "unknown-map",
+                "definition": "https://example.org/future-map",
+                "version": "9",
+                "fallback": "Place map",
+                "status": "placeholder",
+                "reason": "unknown_definition"
+              }
+            ],
+            "showcases": [
+              {
+                "id": "$default",
+                "module": null,
+                "sources": []
+              }
+            ],
+            "showcaseData": {
+              "slides": [
+                {
+                  "id": "published-slide",
+                  "title": "Published highlight",
+                  "href": "/published-link"
+                }
+              ],
+              "slideMedia": [
+                {
+                  "id": "published-slide",
+                  "art": {
+                    "landscape": null,
+                    "portrait": null,
+                    "cutout": null,
+                    "logos": []
+                  }
+                }
+              ]
+            },
+            "cost": {
+              "nodesVisited": 5,
+              "extensions": 2,
+              "showcases": 1,
+              "responseBytes": 1753,
+              "graphReads": 0,
+              "definitionExecutions": 0
+            },
+            "reference": {
+              "owner": "content",
+              "resourceId": "https://rezics.com/id/01a135e5-c36c-763b-97b0-3f7cc9ae1f52",
+              "variantId": "urn:rezics:variant:99ddcc17-badc-4c8f-8345-d6be3790c5b3",
+              "revisionId": "9de246a9-7182-4d51-8a37-aa4834b1b4c5",
+              "format": "rezics-content-json-v1",
+              "model": "content-shape-v1",
+              "byteDigest": "0fe892b36c36961147398d746ac14023a3c5820371c3fe3ac07d4a3cee096708",
+              "byteLength": 745,
+              "language": {
+                "kind": "tag",
+                "tag": "en",
+                "originalTag": "en"
+              },
+              "direction": "ltr",
+              "sourceRevision": null,
+              "predecessor": null,
+              "provenance": {
+                "kind": "admitted-original-contribution-v1",
+                "scope": "content:draft:https://rezics.com/id/01a135e5-c36c-763b-97b0-3f7cc9ae1f52",
+                "author": "https://rezics.com/id/553277f9-0e48-4ed4-9f0a-c49c993cb517",
+                "admissionId": "01a135e5-cc5a-75ba-b869-87911ec3e203",
+                "rightsBasis": "original-contribution",
+                "expectedHead": null,
+                "requestDigest": "7bab44f077fa0501c03996e990c9e05e946cef509d3b7e57d7b94a423c8db7ee",
+                "authorityEpoch": "0"
+              }
+            }
+          },
+          "renderTokens": {
+            "colorScheme": "system",
+            "accent": "#2563eb",
+            "density": "comfortable",
+            "cardRadius": "md",
+            "headingFontScale": "md",
+            "surfaceTint": "none",
+            "fontPairing": "sans",
+            "pageSurface": "flat",
+            "coverStyle": "portrait",
+            "titleEffect": "plain",
+            "textOnAccent": "#ffffff"
+          },
+          "execution": {
+            "state": "fallback",
+            "reason": "none_approved"
+          },
+          "cost": {
+            "graphReads": 4,
+            "objectReads": 4,
+            "officialPageSize": 50,
+            "maxModules": 24,
+            "maxSlides": 6,
+            "maxCampaignUses": 64,
+            "maxCampaignMediaReads": 2,
+            "maxResolvedBlocks": 4,
+            "maxResolvedCollections": 2,
+            "maxCollectionPlacements": 8,
+            "maxModuleGraphReads": 64,
+            "maxNavigation": 50,
+            "maxNavigationGraphReads": 2048
+          }
+        },
+        "headers": {
+          "cache-control": "public, no-cache",
+          "content-type": "application/json;charset=utf-8",
+          "etag": "\"a2eadee64f0535b65c22405ff2146aea74c3137b2a4c732d9f4443b7e30ba3aa\""
+        }
+      },
+      {
+        "label": "published-index-empty",
+        "operationId": "getV1ZonesByIdRoutes",
+        "method": "GET",
+        "path": "/v1/zones/47f3dc3b-6446-8262-8f25-56d81fb27145/routes?path=%2Fpublished-link",
+        "status": 200,
+        "answer": {
+          "profile": "zone-route-v1",
+          "zone": "https://rezics.com/id/47f3dc3b-6446-8262-8f25-56d81fb27145",
+          "path": "/published-link",
+          "name": "Published site",
+          "language": "en",
+          "direction": "ltr",
+          "listing": "listed",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "realm": "https://rezics.com/id/01a135e5-b8dd-778f-8ae2-36ad5759cf5a",
+          "revision": "https://rezics.com/id/01a135e5-cdf3-7492-b6cf-08dd14c9eb19",
+          "sourcePosition": {
+            "dataEpoch": "ee33b570-90f7-4685-af6d-6d4e789c934d",
+            "sequence": "87"
+          },
+          "cost": {
+            "pageSize": 24,
+            "maxNavigation": 50,
+            "immutableRangeRows": 101,
+            "membershipQueries": 1,
+            "mountRows": 2,
+            "typeRowsPerResource": 8,
+            "typeQueriesPerPage": 1,
+            "summaryBatch": 50,
+            "maxGraphReads": 2048,
+            "maxGraphBytes": 8388608,
+            "deadlineMs": 10000
+          },
+          "kind": "index",
+          "mount": {
+            "occurrence": "https://rezics.com/id/ed7f0286-f52b-824e-a2b5-b11ca02f15d1",
+            "target": "https://rezics.com/id/337f628b-945d-4f26-9a35-8dfd8f62b30a",
+            "segment": "published-link",
+            "key": "id"
+          },
+          "collection": "https://rezics.com/id/337f628b-945d-4f26-9a35-8dfd8f62b30a",
+          "items": [],
+          "nextCursor": null
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "unpublished-route-refused",
+        "operationId": "getV1ZonesByIdRoutes",
+        "method": "GET",
+        "path": "/v1/zones/47f3dc3b-6446-8262-8f25-56d81fb27145/routes?path=%2Fdraft-link",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/route_missing",
+          "title": "Zone route is unavailable",
+          "status": 404,
+          "code": "route_missing"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "published-home-route",
+        "operationId": "getV1ZonesByIdRoutes",
+        "method": "GET",
+        "path": "/v1/zones/47f3dc3b-6446-8262-8f25-56d81fb27145/routes?path=%2F",
+        "status": 200,
+        "answer": {
+          "profile": "zone-route-v1",
+          "zone": "https://rezics.com/id/47f3dc3b-6446-8262-8f25-56d81fb27145",
+          "path": "/",
+          "name": "Published site",
+          "language": "en",
+          "direction": "ltr",
+          "listing": "listed",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "realm": "https://rezics.com/id/01a135e5-b8dd-778f-8ae2-36ad5759cf5a",
+          "revision": "https://rezics.com/id/01a135e5-cdf3-7492-b6cf-08dd14c9eb19",
+          "sourcePosition": {
+            "dataEpoch": "ee33b570-90f7-4685-af6d-6d4e789c934d",
+            "sequence": "87"
+          },
+          "cost": {
+            "pageSize": 24,
+            "maxNavigation": 50,
+            "immutableRangeRows": 101,
+            "membershipQueries": 1,
+            "mountRows": 2,
+            "typeRowsPerResource": 8,
+            "typeQueriesPerPage": 1,
+            "summaryBatch": 50,
+            "maxGraphReads": 2048,
+            "maxGraphBytes": 8388608,
+            "deadlineMs": 10000
+          },
+          "kind": "home",
+          "page": {
+            "document": {
+              "doc": {
+                "content": [
+                  {
+                    "attrs": {
+                      "dir": null,
+                      "id": "ce15695c-2f95-4d1a-8eef-d8587102a768",
+                      "lang": null,
+                      "textAlign": null
+                    },
+                    "content": [
+                      {
+                        "text": "Published owner text",
+                        "type": "text"
+                      }
+                    ],
+                    "type": "paragraph"
+                  },
+                  {
+                    "attrs": {
+                      "definition": "https://rezics.com/definition/showcase-block-v1",
+                      "dir": null,
+                      "fallback": "Highlights",
+                      "id": "showcase",
+                      "lang": null,
+                      "payload": {},
+                      "version": "1"
+                    },
+                    "type": "extensionBlock"
+                  },
+                  {
+                    "attrs": {
+                      "definition": "https://example.org/future-map",
+                      "dir": null,
+                      "fallback": "Place map",
+                      "id": "unknown-map",
+                      "lang": null,
+                      "payload": {
+                        "future": [
+                          null,
+                          {
+                            "preserved": true
+                          }
+                        ],
+                        "unicode": "雨夜書店"
+                      },
+                      "version": "9"
+                    },
+                    "type": "extensionBlock"
+                  }
+                ],
+                "type": "doc"
+              },
+              "profile": "blocks",
+              "version": "rezics-document-v1"
+            },
+            "definitions": [
+              {
+                "definition": "https://rezics.com/definition/showcase-block-v1",
+                "version": "1",
+                "payloadSchema": {
+                  "type": "object",
+                  "properties": {
+                    "rv:module": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                        "maxLength": 64
+                      },
+                      "minItems": 1,
+                      "maxItems": 1,
+                      "uniqueItems": true
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            ],
+            "blocks": [
+              {
+                "id": "showcase",
+                "definition": "https://rezics.com/definition/showcase-block-v1",
+                "version": "1",
+                "fallback": "Highlights",
+                "status": "resolved",
+                "kind": "showcase",
+                "showcase": "$default"
+              },
+              {
+                "id": "unknown-map",
+                "definition": "https://example.org/future-map",
+                "version": "9",
+                "fallback": "Place map",
+                "status": "placeholder",
+                "reason": "unknown_definition"
+              }
+            ],
+            "showcases": [
+              {
+                "id": "$default",
+                "module": null,
+                "sources": []
+              }
+            ],
+            "showcaseData": {
+              "slides": [
+                {
+                  "id": "published-slide",
+                  "title": "Published highlight",
+                  "href": "/published-link"
+                }
+              ],
+              "slideMedia": [
+                {
+                  "id": "published-slide",
+                  "art": {
+                    "landscape": null,
+                    "portrait": null,
+                    "cutout": null,
+                    "logos": []
+                  }
+                }
+              ]
+            },
+            "cost": {
+              "nodesVisited": 5,
+              "extensions": 2,
+              "showcases": 1,
+              "responseBytes": 1753,
+              "graphReads": 0,
+              "definitionExecutions": 0
+            },
+            "reference": {
+              "owner": "content",
+              "resourceId": "https://rezics.com/id/01a135e5-c36c-763b-97b0-3f7cc9ae1f52",
+              "variantId": "urn:rezics:variant:99ddcc17-badc-4c8f-8345-d6be3790c5b3",
+              "revisionId": "9de246a9-7182-4d51-8a37-aa4834b1b4c5",
+              "format": "rezics-content-json-v1",
+              "model": "content-shape-v1",
+              "byteDigest": "0fe892b36c36961147398d746ac14023a3c5820371c3fe3ac07d4a3cee096708",
+              "byteLength": 745,
+              "language": {
+                "kind": "tag",
+                "tag": "en",
+                "originalTag": "en"
+              },
+              "direction": "ltr",
+              "sourceRevision": null,
+              "predecessor": null,
+              "provenance": {
+                "kind": "admitted-original-contribution-v1",
+                "scope": "content:draft:https://rezics.com/id/01a135e5-c36c-763b-97b0-3f7cc9ae1f52",
+                "author": "https://rezics.com/id/553277f9-0e48-4ed4-9f0a-c49c993cb517",
+                "admissionId": "01a135e5-cc5a-75ba-b869-87911ec3e203",
+                "rightsBasis": "original-contribution",
+                "expectedHead": null,
+                "requestDigest": "7bab44f077fa0501c03996e990c9e05e946cef509d3b7e57d7b94a423c8db7ee",
+                "authorityEpoch": "0"
+              }
+            }
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "published-content-revision",
+        "operationId": "getV1Content-revisionsByRevision",
+        "method": "GET",
+        "path": "/v1/content-revisions/9de246a9-7182-4d51-8a37-aa4834b1b4c5?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fec57e14b-4f76-4edf-a1ad-bcf2903730a6",
+        "status": 200,
+        "answer": {
+          "reference": {
+            "owner": "content",
+            "resourceId": "https://rezics.com/id/01a135e5-c36c-763b-97b0-3f7cc9ae1f52",
+            "variantId": "urn:rezics:variant:99ddcc17-badc-4c8f-8345-d6be3790c5b3",
+            "revisionId": "9de246a9-7182-4d51-8a37-aa4834b1b4c5",
+            "format": "rezics-content-json-v1",
+            "model": "content-shape-v1",
+            "byteDigest": "0fe892b36c36961147398d746ac14023a3c5820371c3fe3ac07d4a3cee096708",
+            "byteLength": 745,
+            "language": {
+              "kind": "tag",
+              "tag": "en",
+              "originalTag": "en"
+            },
+            "direction": "ltr",
+            "sourceRevision": null,
+            "predecessor": null,
+            "provenance": {
+              "kind": "admitted-original-contribution-v1",
+              "scope": "content:draft:https://rezics.com/id/01a135e5-c36c-763b-97b0-3f7cc9ae1f52",
+              "author": "https://rezics.com/id/553277f9-0e48-4ed4-9f0a-c49c993cb517",
+              "admissionId": "01a135e5-cc5a-75ba-b869-87911ec3e203",
+              "rightsBasis": "original-contribution",
+              "expectedHead": null,
+              "requestDigest": "7bab44f077fa0501c03996e990c9e05e946cef509d3b7e57d7b94a423c8db7ee",
+              "authorityEpoch": "0"
+            }
+          },
+          "serializedJson": "{\"body\":\"Published owner text\\nHighlights\\nPlace map\",\"document\":{\"doc\":{\"content\":[{\"attrs\":{\"dir\":null,\"id\":\"ce15695c-2f95-4d1a-8eef-d8587102a768\",\"lang\":null,\"textAlign\":null},\"content\":[{\"text\":\"Published owner text\",\"type\":\"text\"}],\"type\":\"paragraph\"},{\"attrs\":{\"definition\":\"https://rezics.com/definition/showcase-block-v1\",\"dir\":null,\"fallback\":\"Highlights\",\"id\":\"showcase\",\"lang\":null,\"payload\":{},\"version\":\"1\"},\"type\":\"extensionBlock\"},{\"attrs\":{\"definition\":\"https://example.org/future-map\",\"dir\":null,\"fallback\":\"Place map\",\"id\":\"unknown-map\",\"lang\":null,\"payload\":{\"future\":[null,{\"preserved\":true}],\"unicode\":\"雨夜書店\"},\"version\":\"9\"},\"type\":\"extensionBlock\"}],\"type\":\"doc\"},\"profile\":\"blocks\",\"version\":\"rezics-document-v1\"}}",
+          "body": {
+            "body": "Published owner text\nHighlights\nPlace map",
+            "document": {
+              "doc": {
+                "content": [
+                  {
+                    "attrs": {
+                      "dir": null,
+                      "id": "ce15695c-2f95-4d1a-8eef-d8587102a768",
+                      "lang": null,
+                      "textAlign": null
+                    },
+                    "content": [
+                      {
+                        "text": "Published owner text",
+                        "type": "text"
+                      }
+                    ],
+                    "type": "paragraph"
+                  },
+                  {
+                    "attrs": {
+                      "definition": "https://rezics.com/definition/showcase-block-v1",
+                      "dir": null,
+                      "fallback": "Highlights",
+                      "id": "showcase",
+                      "lang": null,
+                      "payload": {},
+                      "version": "1"
+                    },
+                    "type": "extensionBlock"
+                  },
+                  {
+                    "attrs": {
+                      "definition": "https://example.org/future-map",
+                      "dir": null,
+                      "fallback": "Place map",
+                      "id": "unknown-map",
+                      "lang": null,
+                      "payload": {
+                        "future": [
+                          null,
+                          {
+                            "preserved": true
+                          }
+                        ],
+                        "unicode": "雨夜書店"
+                      },
+                      "version": "9"
+                    },
+                    "type": "extensionBlock"
+                  }
+                ],
+                "type": "doc"
+              },
+              "profile": "blocks",
+              "version": "rezics-document-v1"
+            }
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "draft-content-revision",
+        "operationId": "getV1Content-revisionsByRevision",
+        "method": "GET",
+        "path": "/v1/content-revisions/28d37517-ed5c-4c14-a520-957954d268a2?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fec57e14b-4f76-4edf-a1ad-bcf2903730a6",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/revision_unavailable",
+          "title": "Revision is unavailable",
+          "status": 404,
+          "code": "revision_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "showcase-editor",
+        "operationId": "getV1ZonesByIdShowcase-editor",
+        "method": "GET",
+        "path": "/v1/zones/47f3dc3b-6446-8262-8f25-56d81fb27145/showcase-editor?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fec57e14b-4f76-4edf-a1ad-bcf2903730a6",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/zone_unavailable",
+          "title": "Zone is unavailable",
+          "status": 404,
+          "code": "zone_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "draft-configuration-refused",
+        "operationId": "getV1ZonesByIdConfiguration",
+        "method": "GET",
+        "path": "/v1/zones/47f3dc3b-6446-8262-8f25-56d81fb27145/configuration?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fec57e14b-4f76-4edf-a1ad-bcf2903730a6",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/zone_unavailable",
+          "title": "Zone is unavailable",
+          "status": 404,
+          "code": "zone_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      }
+    ],
+    "owner": [
+      {
+        "label": "published-presentation",
+        "operationId": "getV1ZonesByIdPresentation",
+        "method": "GET",
+        "path": "/v1/zones/47f3dc3b-6446-8262-8f25-56d81fb27145/presentation",
+        "status": 200,
+        "answer": {
+          "profile": "zone-presentation-response-v2",
+          "zone": "https://rezics.com/id/47f3dc3b-6446-8262-8f25-56d81fb27145",
+          "realm": "https://rezics.com/id/01a135e5-b8dd-778f-8ae2-36ad5759cf5a",
+          "listing": "listed",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "address": {
+            "prefix": "/z/",
+            "key": "1CfzUmz8PuXg14g8JEgCje",
+            "suffixSource": "Published site"
+          },
+          "name": "Published site",
+          "language": "en",
+          "direction": "ltr",
+          "official": null,
+          "revision": "https://rezics.com/id/01a135e5-cdf3-7492-b6cf-08dd14c9eb19",
+          "presentation": {
+            "profile": "zone-presentation-v2",
+            "preset": "clean",
+            "tokens": {
+              "colorScheme": "system",
+              "accent": "#2563eb",
+              "density": "comfortable",
+              "cardRadius": "md",
+              "headingFontScale": "md",
+              "surfaceTint": "none",
+              "fontPairing": "sans",
+              "pageSurface": "flat",
+              "coverStyle": "portrait",
+              "titleEffect": "plain"
+            },
+            "navigation": [],
+            "modules": [],
+            "slides": [
+              {
+                "id": "published-slide",
+                "title": "Published highlight",
+                "href": "/published-link"
+              }
+            ]
+          },
+          "navigation": [
+            {
+              "occurrence": "https://rezics.com/id/ed7f0286-f52b-824e-a2b5-b11ca02f15d1",
+              "segment": "published-link",
+              "target": "https://rezics.com/id/337f628b-945d-4f26-9a35-8dfd8f62b30a",
+              "kind": "index",
+              "name": {
+                "value": "Site references",
+                "language": "und",
+                "direction": "ltr",
+                "basis": "fallback"
+              }
+            }
+          ],
+          "navigationRevision": "https://rezics.com/id/5dee09d7-1fd3-862f-a7ba-7b2a9abd56a2",
+          "navigationNext": null,
+          "navigationComplete": true,
+          "moduleData": [],
+          "slideMedia": [
+            {
+              "id": "published-slide",
+              "art": {
+                "landscape": null,
+                "portrait": null,
+                "cutout": null,
+                "logos": []
+              }
+            }
+          ],
+          "home": {
+            "document": {
+              "doc": {
+                "content": [
+                  {
+                    "attrs": {
+                      "dir": null,
+                      "id": "ce15695c-2f95-4d1a-8eef-d8587102a768",
+                      "lang": null,
+                      "textAlign": null
+                    },
+                    "content": [
+                      {
+                        "text": "Published owner text",
+                        "type": "text"
+                      }
+                    ],
+                    "type": "paragraph"
+                  },
+                  {
+                    "attrs": {
+                      "definition": "https://rezics.com/definition/showcase-block-v1",
+                      "dir": null,
+                      "fallback": "Highlights",
+                      "id": "showcase",
+                      "lang": null,
+                      "payload": {},
+                      "version": "1"
+                    },
+                    "type": "extensionBlock"
+                  },
+                  {
+                    "attrs": {
+                      "definition": "https://example.org/future-map",
+                      "dir": null,
+                      "fallback": "Place map",
+                      "id": "unknown-map",
+                      "lang": null,
+                      "payload": {
+                        "future": [
+                          null,
+                          {
+                            "preserved": true
+                          }
+                        ],
+                        "unicode": "雨夜書店"
+                      },
+                      "version": "9"
+                    },
+                    "type": "extensionBlock"
+                  }
+                ],
+                "type": "doc"
+              },
+              "profile": "blocks",
+              "version": "rezics-document-v1"
+            },
+            "definitions": [
+              {
+                "definition": "https://rezics.com/definition/showcase-block-v1",
+                "version": "1",
+                "payloadSchema": {
+                  "type": "object",
+                  "properties": {
+                    "rv:module": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                        "maxLength": 64
+                      },
+                      "minItems": 1,
+                      "maxItems": 1,
+                      "uniqueItems": true
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            ],
+            "blocks": [
+              {
+                "id": "showcase",
+                "definition": "https://rezics.com/definition/showcase-block-v1",
+                "version": "1",
+                "fallback": "Highlights",
+                "status": "resolved",
+                "kind": "showcase",
+                "showcase": "$default"
+              },
+              {
+                "id": "unknown-map",
+                "definition": "https://example.org/future-map",
+                "version": "9",
+                "fallback": "Place map",
+                "status": "placeholder",
+                "reason": "unknown_definition"
+              }
+            ],
+            "showcases": [
+              {
+                "id": "$default",
+                "module": null,
+                "sources": []
+              }
+            ],
+            "showcaseData": {
+              "slides": [
+                {
+                  "id": "published-slide",
+                  "title": "Published highlight",
+                  "href": "/published-link"
+                }
+              ],
+              "slideMedia": [
+                {
+                  "id": "published-slide",
+                  "art": {
+                    "landscape": null,
+                    "portrait": null,
+                    "cutout": null,
+                    "logos": []
+                  }
+                }
+              ]
+            },
+            "cost": {
+              "nodesVisited": 5,
+              "extensions": 2,
+              "showcases": 1,
+              "responseBytes": 1753,
+              "graphReads": 0,
+              "definitionExecutions": 0
+            },
+            "reference": {
+              "owner": "content",
+              "resourceId": "https://rezics.com/id/01a135e5-c36c-763b-97b0-3f7cc9ae1f52",
+              "variantId": "urn:rezics:variant:99ddcc17-badc-4c8f-8345-d6be3790c5b3",
+              "revisionId": "9de246a9-7182-4d51-8a37-aa4834b1b4c5",
+              "format": "rezics-content-json-v1",
+              "model": "content-shape-v1",
+              "byteDigest": "0fe892b36c36961147398d746ac14023a3c5820371c3fe3ac07d4a3cee096708",
+              "byteLength": 745,
+              "language": {
+                "kind": "tag",
+                "tag": "en",
+                "originalTag": "en"
+              },
+              "direction": "ltr",
+              "sourceRevision": null,
+              "predecessor": null,
+              "provenance": {
+                "kind": "admitted-original-contribution-v1",
+                "scope": "content:draft:https://rezics.com/id/01a135e5-c36c-763b-97b0-3f7cc9ae1f52",
+                "author": "https://rezics.com/id/553277f9-0e48-4ed4-9f0a-c49c993cb517",
+                "admissionId": "01a135e5-cc5a-75ba-b869-87911ec3e203",
+                "rightsBasis": "original-contribution",
+                "expectedHead": null,
+                "requestDigest": "7bab44f077fa0501c03996e990c9e05e946cef509d3b7e57d7b94a423c8db7ee",
+                "authorityEpoch": "0"
+              }
+            }
+          },
+          "renderTokens": {
+            "colorScheme": "system",
+            "accent": "#2563eb",
+            "density": "comfortable",
+            "cardRadius": "md",
+            "headingFontScale": "md",
+            "surfaceTint": "none",
+            "fontPairing": "sans",
+            "pageSurface": "flat",
+            "coverStyle": "portrait",
+            "titleEffect": "plain",
+            "textOnAccent": "#ffffff"
+          },
+          "execution": {
+            "state": "fallback",
+            "reason": "none_approved"
+          },
+          "cost": {
+            "graphReads": 4,
+            "objectReads": 4,
+            "officialPageSize": 50,
+            "maxModules": 24,
+            "maxSlides": 6,
+            "maxCampaignUses": 64,
+            "maxCampaignMediaReads": 2,
+            "maxResolvedBlocks": 4,
+            "maxResolvedCollections": 2,
+            "maxCollectionPlacements": 8,
+            "maxModuleGraphReads": 64,
+            "maxNavigation": 50,
+            "maxNavigationGraphReads": 2048
+          }
+        },
+        "headers": {
+          "cache-control": "public, no-cache",
+          "content-type": "application/json;charset=utf-8",
+          "etag": "\"a2eadee64f0535b65c22405ff2146aea74c3137b2a4c732d9f4443b7e30ba3aa\""
+        }
+      },
+      {
+        "label": "published-index-empty",
+        "operationId": "getV1ZonesByIdRoutes",
+        "method": "GET",
+        "path": "/v1/zones/47f3dc3b-6446-8262-8f25-56d81fb27145/routes?path=%2Fpublished-link",
+        "status": 200,
+        "answer": {
+          "profile": "zone-route-v1",
+          "zone": "https://rezics.com/id/47f3dc3b-6446-8262-8f25-56d81fb27145",
+          "path": "/published-link",
+          "name": "Published site",
+          "language": "en",
+          "direction": "ltr",
+          "listing": "listed",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "realm": "https://rezics.com/id/01a135e5-b8dd-778f-8ae2-36ad5759cf5a",
+          "revision": "https://rezics.com/id/01a135e5-cdf3-7492-b6cf-08dd14c9eb19",
+          "sourcePosition": {
+            "dataEpoch": "ee33b570-90f7-4685-af6d-6d4e789c934d",
+            "sequence": "87"
+          },
+          "cost": {
+            "pageSize": 24,
+            "maxNavigation": 50,
+            "immutableRangeRows": 101,
+            "membershipQueries": 1,
+            "mountRows": 2,
+            "typeRowsPerResource": 8,
+            "typeQueriesPerPage": 1,
+            "summaryBatch": 50,
+            "maxGraphReads": 2048,
+            "maxGraphBytes": 8388608,
+            "deadlineMs": 10000
+          },
+          "kind": "index",
+          "mount": {
+            "occurrence": "https://rezics.com/id/ed7f0286-f52b-824e-a2b5-b11ca02f15d1",
+            "target": "https://rezics.com/id/337f628b-945d-4f26-9a35-8dfd8f62b30a",
+            "segment": "published-link",
+            "key": "id"
+          },
+          "collection": "https://rezics.com/id/337f628b-945d-4f26-9a35-8dfd8f62b30a",
+          "items": [],
+          "nextCursor": null
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "unpublished-route-refused",
+        "operationId": "getV1ZonesByIdRoutes",
+        "method": "GET",
+        "path": "/v1/zones/47f3dc3b-6446-8262-8f25-56d81fb27145/routes?path=%2Fdraft-link",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/route_missing",
+          "title": "Zone route is unavailable",
+          "status": 404,
+          "code": "route_missing"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "published-home-route",
+        "operationId": "getV1ZonesByIdRoutes",
+        "method": "GET",
+        "path": "/v1/zones/47f3dc3b-6446-8262-8f25-56d81fb27145/routes?path=%2F",
+        "status": 200,
+        "answer": {
+          "profile": "zone-route-v1",
+          "zone": "https://rezics.com/id/47f3dc3b-6446-8262-8f25-56d81fb27145",
+          "path": "/",
+          "name": "Published site",
+          "language": "en",
+          "direction": "ltr",
+          "listing": "listed",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "realm": "https://rezics.com/id/01a135e5-b8dd-778f-8ae2-36ad5759cf5a",
+          "revision": "https://rezics.com/id/01a135e5-cdf3-7492-b6cf-08dd14c9eb19",
+          "sourcePosition": {
+            "dataEpoch": "ee33b570-90f7-4685-af6d-6d4e789c934d",
+            "sequence": "87"
+          },
+          "cost": {
+            "pageSize": 24,
+            "maxNavigation": 50,
+            "immutableRangeRows": 101,
+            "membershipQueries": 1,
+            "mountRows": 2,
+            "typeRowsPerResource": 8,
+            "typeQueriesPerPage": 1,
+            "summaryBatch": 50,
+            "maxGraphReads": 2048,
+            "maxGraphBytes": 8388608,
+            "deadlineMs": 10000
+          },
+          "kind": "home",
+          "page": {
+            "document": {
+              "doc": {
+                "content": [
+                  {
+                    "attrs": {
+                      "dir": null,
+                      "id": "ce15695c-2f95-4d1a-8eef-d8587102a768",
+                      "lang": null,
+                      "textAlign": null
+                    },
+                    "content": [
+                      {
+                        "text": "Published owner text",
+                        "type": "text"
+                      }
+                    ],
+                    "type": "paragraph"
+                  },
+                  {
+                    "attrs": {
+                      "definition": "https://rezics.com/definition/showcase-block-v1",
+                      "dir": null,
+                      "fallback": "Highlights",
+                      "id": "showcase",
+                      "lang": null,
+                      "payload": {},
+                      "version": "1"
+                    },
+                    "type": "extensionBlock"
+                  },
+                  {
+                    "attrs": {
+                      "definition": "https://example.org/future-map",
+                      "dir": null,
+                      "fallback": "Place map",
+                      "id": "unknown-map",
+                      "lang": null,
+                      "payload": {
+                        "future": [
+                          null,
+                          {
+                            "preserved": true
+                          }
+                        ],
+                        "unicode": "雨夜書店"
+                      },
+                      "version": "9"
+                    },
+                    "type": "extensionBlock"
+                  }
+                ],
+                "type": "doc"
+              },
+              "profile": "blocks",
+              "version": "rezics-document-v1"
+            },
+            "definitions": [
+              {
+                "definition": "https://rezics.com/definition/showcase-block-v1",
+                "version": "1",
+                "payloadSchema": {
+                  "type": "object",
+                  "properties": {
+                    "rv:module": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                        "maxLength": 64
+                      },
+                      "minItems": 1,
+                      "maxItems": 1,
+                      "uniqueItems": true
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            ],
+            "blocks": [
+              {
+                "id": "showcase",
+                "definition": "https://rezics.com/definition/showcase-block-v1",
+                "version": "1",
+                "fallback": "Highlights",
+                "status": "resolved",
+                "kind": "showcase",
+                "showcase": "$default"
+              },
+              {
+                "id": "unknown-map",
+                "definition": "https://example.org/future-map",
+                "version": "9",
+                "fallback": "Place map",
+                "status": "placeholder",
+                "reason": "unknown_definition"
+              }
+            ],
+            "showcases": [
+              {
+                "id": "$default",
+                "module": null,
+                "sources": []
+              }
+            ],
+            "showcaseData": {
+              "slides": [
+                {
+                  "id": "published-slide",
+                  "title": "Published highlight",
+                  "href": "/published-link"
+                }
+              ],
+              "slideMedia": [
+                {
+                  "id": "published-slide",
+                  "art": {
+                    "landscape": null,
+                    "portrait": null,
+                    "cutout": null,
+                    "logos": []
+                  }
+                }
+              ]
+            },
+            "cost": {
+              "nodesVisited": 5,
+              "extensions": 2,
+              "showcases": 1,
+              "responseBytes": 1753,
+              "graphReads": 0,
+              "definitionExecutions": 0
+            },
+            "reference": {
+              "owner": "content",
+              "resourceId": "https://rezics.com/id/01a135e5-c36c-763b-97b0-3f7cc9ae1f52",
+              "variantId": "urn:rezics:variant:99ddcc17-badc-4c8f-8345-d6be3790c5b3",
+              "revisionId": "9de246a9-7182-4d51-8a37-aa4834b1b4c5",
+              "format": "rezics-content-json-v1",
+              "model": "content-shape-v1",
+              "byteDigest": "0fe892b36c36961147398d746ac14023a3c5820371c3fe3ac07d4a3cee096708",
+              "byteLength": 745,
+              "language": {
+                "kind": "tag",
+                "tag": "en",
+                "originalTag": "en"
+              },
+              "direction": "ltr",
+              "sourceRevision": null,
+              "predecessor": null,
+              "provenance": {
+                "kind": "admitted-original-contribution-v1",
+                "scope": "content:draft:https://rezics.com/id/01a135e5-c36c-763b-97b0-3f7cc9ae1f52",
+                "author": "https://rezics.com/id/553277f9-0e48-4ed4-9f0a-c49c993cb517",
+                "admissionId": "01a135e5-cc5a-75ba-b869-87911ec3e203",
+                "rightsBasis": "original-contribution",
+                "expectedHead": null,
+                "requestDigest": "7bab44f077fa0501c03996e990c9e05e946cef509d3b7e57d7b94a423c8db7ee",
+                "authorityEpoch": "0"
+              }
+            }
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "published-content-revision",
+        "operationId": "getV1Content-revisionsByRevision",
+        "method": "GET",
+        "path": "/v1/content-revisions/9de246a9-7182-4d51-8a37-aa4834b1b4c5?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F553277f9-0e48-4ed4-9f0a-c49c993cb517",
+        "status": 200,
+        "answer": {
+          "reference": {
+            "owner": "content",
+            "resourceId": "https://rezics.com/id/01a135e5-c36c-763b-97b0-3f7cc9ae1f52",
+            "variantId": "urn:rezics:variant:99ddcc17-badc-4c8f-8345-d6be3790c5b3",
+            "revisionId": "9de246a9-7182-4d51-8a37-aa4834b1b4c5",
+            "format": "rezics-content-json-v1",
+            "model": "content-shape-v1",
+            "byteDigest": "0fe892b36c36961147398d746ac14023a3c5820371c3fe3ac07d4a3cee096708",
+            "byteLength": 745,
+            "language": {
+              "kind": "tag",
+              "tag": "en",
+              "originalTag": "en"
+            },
+            "direction": "ltr",
+            "sourceRevision": null,
+            "predecessor": null,
+            "provenance": {
+              "kind": "admitted-original-contribution-v1",
+              "scope": "content:draft:https://rezics.com/id/01a135e5-c36c-763b-97b0-3f7cc9ae1f52",
+              "author": "https://rezics.com/id/553277f9-0e48-4ed4-9f0a-c49c993cb517",
+              "admissionId": "01a135e5-cc5a-75ba-b869-87911ec3e203",
+              "rightsBasis": "original-contribution",
+              "expectedHead": null,
+              "requestDigest": "7bab44f077fa0501c03996e990c9e05e946cef509d3b7e57d7b94a423c8db7ee",
+              "authorityEpoch": "0"
+            }
+          },
+          "serializedJson": "{\"body\":\"Published owner text\\nHighlights\\nPlace map\",\"document\":{\"doc\":{\"content\":[{\"attrs\":{\"dir\":null,\"id\":\"ce15695c-2f95-4d1a-8eef-d8587102a768\",\"lang\":null,\"textAlign\":null},\"content\":[{\"text\":\"Published owner text\",\"type\":\"text\"}],\"type\":\"paragraph\"},{\"attrs\":{\"definition\":\"https://rezics.com/definition/showcase-block-v1\",\"dir\":null,\"fallback\":\"Highlights\",\"id\":\"showcase\",\"lang\":null,\"payload\":{},\"version\":\"1\"},\"type\":\"extensionBlock\"},{\"attrs\":{\"definition\":\"https://example.org/future-map\",\"dir\":null,\"fallback\":\"Place map\",\"id\":\"unknown-map\",\"lang\":null,\"payload\":{\"future\":[null,{\"preserved\":true}],\"unicode\":\"雨夜書店\"},\"version\":\"9\"},\"type\":\"extensionBlock\"}],\"type\":\"doc\"},\"profile\":\"blocks\",\"version\":\"rezics-document-v1\"}}",
+          "body": {
+            "body": "Published owner text\nHighlights\nPlace map",
+            "document": {
+              "doc": {
+                "content": [
+                  {
+                    "attrs": {
+                      "dir": null,
+                      "id": "ce15695c-2f95-4d1a-8eef-d8587102a768",
+                      "lang": null,
+                      "textAlign": null
+                    },
+                    "content": [
+                      {
+                        "text": "Published owner text",
+                        "type": "text"
+                      }
+                    ],
+                    "type": "paragraph"
+                  },
+                  {
+                    "attrs": {
+                      "definition": "https://rezics.com/definition/showcase-block-v1",
+                      "dir": null,
+                      "fallback": "Highlights",
+                      "id": "showcase",
+                      "lang": null,
+                      "payload": {},
+                      "version": "1"
+                    },
+                    "type": "extensionBlock"
+                  },
+                  {
+                    "attrs": {
+                      "definition": "https://example.org/future-map",
+                      "dir": null,
+                      "fallback": "Place map",
+                      "id": "unknown-map",
+                      "lang": null,
+                      "payload": {
+                        "future": [
+                          null,
+                          {
+                            "preserved": true
+                          }
+                        ],
+                        "unicode": "雨夜書店"
+                      },
+                      "version": "9"
+                    },
+                    "type": "extensionBlock"
+                  }
+                ],
+                "type": "doc"
+              },
+              "profile": "blocks",
+              "version": "rezics-document-v1"
+            }
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "draft-content-revision",
+        "operationId": "getV1Content-revisionsByRevision",
+        "method": "GET",
+        "path": "/v1/content-revisions/28d37517-ed5c-4c14-a520-957954d268a2?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F553277f9-0e48-4ed4-9f0a-c49c993cb517",
+        "status": 200,
+        "answer": {
+          "reference": {
+            "owner": "content",
+            "resourceId": "https://rezics.com/id/01a135e5-c36c-763b-97b0-3f7cc9ae1f52",
+            "variantId": "urn:rezics:variant:99ddcc17-badc-4c8f-8345-d6be3790c5b3",
+            "revisionId": "28d37517-ed5c-4c14-a520-957954d268a2",
+            "format": "rezics-content-json-v1",
+            "model": "content-shape-v1",
+            "byteDigest": "c81a51eb7985e20407c526618ddb0ee33970ee89a02128a05b956f10a4040971",
+            "byteLength": 318,
+            "language": {
+              "kind": "tag",
+              "tag": "en",
+              "originalTag": "en"
+            },
+            "direction": "ltr",
+            "sourceRevision": null,
+            "predecessor": "9de246a9-7182-4d51-8a37-aa4834b1b4c5",
+            "provenance": {
+              "kind": "admitted-original-contribution-v1",
+              "scope": "content:draft:https://rezics.com/id/01a135e5-c36c-763b-97b0-3f7cc9ae1f52",
+              "author": "https://rezics.com/id/553277f9-0e48-4ed4-9f0a-c49c993cb517",
+              "admissionId": "01a135e5-cf66-7287-9bb5-b122ff8f54f9",
+              "rightsBasis": "original-contribution",
+              "expectedHead": "9de246a9-7182-4d51-8a37-aa4834b1b4c5",
+              "requestDigest": "298dca4c072125a479a58fc23837c54c380ff9c3e85c12a5ad021e18d08b1b66",
+              "authorityEpoch": "0"
+            }
+          },
+          "serializedJson": "{\"body\":\"Private subsequent owner text\",\"document\":{\"doc\":{\"content\":[{\"attrs\":{\"dir\":null,\"id\":\"a5b4cc47-748c-4c26-a123-1aa87ccadcca\",\"lang\":null,\"textAlign\":null},\"content\":[{\"text\":\"Private subsequent owner text\",\"type\":\"text\"}],\"type\":\"paragraph\"}],\"type\":\"doc\"},\"profile\":\"blocks\",\"version\":\"rezics-document-v1\"}}",
+          "body": {
+            "body": "Private subsequent owner text",
+            "document": {
+              "doc": {
+                "content": [
+                  {
+                    "attrs": {
+                      "dir": null,
+                      "id": "a5b4cc47-748c-4c26-a123-1aa87ccadcca",
+                      "lang": null,
+                      "textAlign": null
+                    },
+                    "content": [
+                      {
+                        "text": "Private subsequent owner text",
+                        "type": "text"
+                      }
+                    ],
+                    "type": "paragraph"
+                  }
+                ],
+                "type": "doc"
+              },
+              "profile": "blocks",
+              "version": "rezics-document-v1"
+            }
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "showcase-editor",
+        "operationId": "getV1ZonesByIdShowcase-editor",
+        "method": "GET",
+        "path": "/v1/zones/47f3dc3b-6446-8262-8f25-56d81fb27145/showcase-editor?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F553277f9-0e48-4ed4-9f0a-c49c993cb517",
+        "status": 200,
+        "answer": {
+          "zone": "https://rezics.com/id/47f3dc3b-6446-8262-8f25-56d81fb27145",
+          "revision": "https://rezics.com/id/01a135e5-d373-75a3-a753-61f0abb01f40",
+          "configuration": {
+            "format": "rezics-zone-config-v1",
+            "zone": "https://rezics.com/id/47f3dc3b-6446-8262-8f25-56d81fb27145",
+            "space": "https://rezics.com/id/01a135e5-c037-712e-bc6a-eca5af54e3fd",
+            "navigation": "https://rezics.com/id/1c141c1a-8cd2-8320-8879-bc352a026519",
+            "state": "active",
+            "disclosure": "public",
+            "budget": {
+              "timeMs": 2000,
+              "rows": 1000
+            },
+            "queryBlocks": [],
+            "model": "https://rezics.com/definition/zone-capability-v1",
+            "homeDocument": "https://rezics.com/id/01a135e5-c36c-763b-97b0-3f7cc9ae1f52",
+            "defaultRealm": "https://rezics.com/id/01a135e5-b8dd-778f-8ae2-36ad5759cf5a",
+            "presentation": {
+              "profile": "zone-presentation-v2",
+              "preset": "clean",
+              "tokens": {
+                "colorScheme": "system",
+                "accent": "#2563eb",
+                "density": "compact",
+                "cardRadius": "md",
+                "headingFontScale": "md",
+                "surfaceTint": "none",
+                "fontPairing": "sans",
+                "pageSurface": "cards",
+                "coverStyle": "portrait",
+                "titleEffect": "plain"
+              },
+              "navigation": [],
+              "modules": [],
+              "slides": [
+                {
+                  "id": "draft-slide",
+                  "title": "Private draft highlight",
+                  "href": "/draft-link"
+                }
+              ]
+            }
+          },
+          "name": "Published site",
+          "language": "en",
+          "direction": "ltr",
+          "slideMedia": [
+            {
+              "id": "draft-slide",
+              "art": {
+                "landscape": null,
+                "portrait": null,
+                "cutout": null,
+                "logos": []
+              }
+            }
+          ],
+          "preview": {
+            "page": {
+              "document": {
+                "doc": {
+                  "content": [
+                    {
+                      "attrs": {
+                        "dir": null,
+                        "id": "a5b4cc47-748c-4c26-a123-1aa87ccadcca",
+                        "lang": null,
+                        "textAlign": null
+                      },
+                      "content": [
+                        {
+                          "text": "Private subsequent owner text",
+                          "type": "text"
+                        }
+                      ],
+                      "type": "paragraph"
+                    }
+                  ],
+                  "type": "doc"
+                },
+                "profile": "blocks",
+                "version": "rezics-document-v1"
+              },
+              "definitions": [
+                {
+                  "definition": "https://rezics.com/definition/showcase-block-v1",
+                  "version": "1",
+                  "payloadSchema": {
+                    "type": "object",
+                    "properties": {
+                      "rv:module": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                          "maxLength": 64
+                        },
+                        "minItems": 1,
+                        "maxItems": 1,
+                        "uniqueItems": true
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                }
+              ],
+              "blocks": [],
+              "showcases": [],
+              "showcaseData": {
+                "slides": [
+                  {
+                    "id": "draft-slide",
+                    "title": "Private draft highlight",
+                    "href": "/draft-link"
+                  }
+                ],
+                "slideMedia": [
+                  {
+                    "id": "draft-slide",
+                    "art": {
+                      "landscape": null,
+                      "portrait": null,
+                      "cutout": null,
+                      "logos": []
+                    }
+                  }
+                ]
+              },
+              "cost": {
+                "nodesVisited": 3,
+                "extensions": 0,
+                "showcases": 0,
+                "responseBytes": 952,
+                "graphReads": 0,
+                "definitionExecutions": 0
+              }
+            },
+            "presentation": {
+              "profile": "zone-presentation-v2",
+              "preset": "clean",
+              "tokens": {
+                "colorScheme": "system",
+                "accent": "#2563eb",
+                "density": "compact",
+                "cardRadius": "md",
+                "headingFontScale": "md",
+                "surfaceTint": "none",
+                "fontPairing": "sans",
+                "pageSurface": "cards",
+                "coverStyle": "portrait",
+                "titleEffect": "plain"
+              },
+              "navigation": [],
+              "modules": [],
+              "slides": [
+                {
+                  "id": "draft-slide",
+                  "title": "Private draft highlight",
+                  "href": "/draft-link"
+                }
+              ]
+            },
+            "moduleData": [],
+            "slideMedia": [
+              {
+                "id": "draft-slide",
+                "art": {
+                  "landscape": null,
+                  "portrait": null,
+                  "cutout": null,
+                  "logos": []
+                }
+              }
+            ],
+            "renderTokens": {
+              "colorScheme": "system",
+              "accent": "#2563eb",
+              "density": "compact",
+              "cardRadius": "md",
+              "headingFontScale": "md",
+              "surfaceTint": "none",
+              "fontPairing": "sans",
+              "pageSurface": "cards",
+              "coverStyle": "portrait",
+              "titleEffect": "plain",
+              "textOnAccent": "#ffffff"
+            },
+            "publicationStatus": "behind",
+            "navigation": {
+              "navigation": "https://rezics.com/id/1c141c1a-8cd2-8320-8879-bc352a026519",
+              "revision": "https://rezics.com/id/d4a053d6-781e-83d8-b56d-a5c8f5664f8a",
+              "mounts": [
+                {
+                  "occurrence": "https://rezics.com/id/ed7f0286-f52b-824e-a2b5-b11ca02f15d1",
+                  "state": "active",
+                  "parent": "https://rezics.com/id/1c141c1a-8cd2-8320-8879-bc352a026519",
+                  "segmentKey": "i",
+                  "orderKey": "i",
+                  "role": "mount",
+                  "target": "https://rezics.com/id/337f628b-945d-4f26-9a35-8dfd8f62b30a",
+                  "qualifier": {
+                    "type": "zone-mount",
+                    "zone": "https://rezics.com/id/47f3dc3b-6446-8262-8f25-56d81fb27145",
+                    "routeSegment": "published-link",
+                    "key": "id",
+                    "disclosure": "public"
+                  },
+                  "labels": [],
+                  "introducedBy": "https://rezics.com/id/5dee09d7-1fd3-862f-a7ba-7b2a9abd56a2"
+                },
+                {
+                  "occurrence": "https://rezics.com/id/3c116865-441d-86cd-8c5b-53757ee7cf80",
+                  "state": "active",
+                  "parent": "https://rezics.com/id/1c141c1a-8cd2-8320-8879-bc352a026519",
+                  "segmentKey": "i",
+                  "orderKey": "r",
+                  "role": "mount",
+                  "target": "https://rezics.com/id/337f628b-945d-4f26-9a35-8dfd8f62b30a",
+                  "qualifier": {
+                    "type": "zone-mount",
+                    "zone": "https://rezics.com/id/47f3dc3b-6446-8262-8f25-56d81fb27145",
+                    "routeSegment": "draft-link",
+                    "key": "id",
+                    "disclosure": "public"
+                  },
+                  "labels": [],
+                  "introducedBy": "https://rezics.com/id/d4a053d6-781e-83d8-b56d-a5c8f5664f8a"
+                }
+              ],
+              "next": null,
+              "sourcePosition": {
+                "datasetId": "product",
+                "dataEpoch": "ee33b570-90f7-4685-af6d-6d4e789c934d",
+                "sequence": "86"
+              }
+            }
+          },
+          "draft": {
+            "variantId": "urn:rezics:variant:99ddcc17-badc-4c8f-8345-d6be3790c5b3",
+            "revisionId": "28d37517-ed5c-4c14-a520-957954d268a2",
+            "language": {
+              "kind": "tag",
+              "tag": "en",
+              "originalTag": "en"
+            },
+            "direction": "ltr",
+            "document": {
+              "doc": {
+                "content": [
+                  {
+                    "attrs": {
+                      "dir": null,
+                      "id": "a5b4cc47-748c-4c26-a123-1aa87ccadcca",
+                      "lang": null,
+                      "textAlign": null
+                    },
+                    "content": [
+                      {
+                        "text": "Private subsequent owner text",
+                        "type": "text"
+                      }
+                    ],
+                    "type": "paragraph"
+                  }
+                ],
+                "type": "doc"
+              },
+              "profile": "blocks",
+              "version": "rezics-document-v1"
+            },
+            "byteDigest": "c81a51eb7985e20407c526618ddb0ee33970ee89a02128a05b956f10a4040971",
+            "editable": true,
+            "sourcePosition": {
+              "owner": "content",
+              "dataEpoch": "9f894f2d-f916-4e85-bf24-67df91fcba0c",
+              "sequence": "54"
+            }
+          },
+          "publishedPage": {
+            "page": "https://rezics.com/id/01a135e5-c36c-763b-97b0-3f7cc9ae1f52",
+            "variantId": "urn:rezics:variant:99ddcc17-badc-4c8f-8345-d6be3790c5b3",
+            "byteDigest": "0fe892b36c36961147398d746ac14023a3c5820371c3fe3ac07d4a3cee096708",
+            "revisionId": "9de246a9-7182-4d51-8a37-aa4834b1b4c5",
+            "language": "en"
+          },
+          "cost": {
+            "graphReads": 1,
+            "objectReads": 2,
+            "maxSlides": 6,
+            "maxCampaignUses": 128,
+            "maxCampaignMediaReads": 4,
+            "authorityProbes": 2,
+            "maxModuleGraphReads": 128,
+            "maxResolvedBlocks": 8,
+            "maxResolvedCollections": 4,
+            "maxNavigation": 50,
+            "maxNavigationGraphReads": 2048,
+            "maxNavigationGraphBytes": 8388608,
+            "maxResponseBytes": 4194304
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json"
+        }
+      }
+    ],
+    "moderator": [
+      {
+        "label": "published-presentation",
+        "operationId": "getV1ZonesByIdPresentation",
+        "method": "GET",
+        "path": "/v1/zones/47f3dc3b-6446-8262-8f25-56d81fb27145/presentation",
+        "status": 200,
+        "answer": {
+          "profile": "zone-presentation-response-v2",
+          "zone": "https://rezics.com/id/47f3dc3b-6446-8262-8f25-56d81fb27145",
+          "realm": "https://rezics.com/id/01a135e5-b8dd-778f-8ae2-36ad5759cf5a",
+          "listing": "listed",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "address": {
+            "prefix": "/z/",
+            "key": "1CfzUmz8PuXg14g8JEgCje",
+            "suffixSource": "Published site"
+          },
+          "name": "Published site",
+          "language": "en",
+          "direction": "ltr",
+          "official": null,
+          "revision": "https://rezics.com/id/01a135e5-cdf3-7492-b6cf-08dd14c9eb19",
+          "presentation": {
+            "profile": "zone-presentation-v2",
+            "preset": "clean",
+            "tokens": {
+              "colorScheme": "system",
+              "accent": "#2563eb",
+              "density": "comfortable",
+              "cardRadius": "md",
+              "headingFontScale": "md",
+              "surfaceTint": "none",
+              "fontPairing": "sans",
+              "pageSurface": "flat",
+              "coverStyle": "portrait",
+              "titleEffect": "plain"
+            },
+            "navigation": [],
+            "modules": [],
+            "slides": [
+              {
+                "id": "published-slide",
+                "title": "Published highlight",
+                "href": "/published-link"
+              }
+            ]
+          },
+          "navigation": [
+            {
+              "occurrence": "https://rezics.com/id/ed7f0286-f52b-824e-a2b5-b11ca02f15d1",
+              "segment": "published-link",
+              "target": "https://rezics.com/id/337f628b-945d-4f26-9a35-8dfd8f62b30a",
+              "kind": "index",
+              "name": {
+                "value": "Site references",
+                "language": "und",
+                "direction": "ltr",
+                "basis": "fallback"
+              }
+            }
+          ],
+          "navigationRevision": "https://rezics.com/id/5dee09d7-1fd3-862f-a7ba-7b2a9abd56a2",
+          "navigationNext": null,
+          "navigationComplete": true,
+          "moduleData": [],
+          "slideMedia": [
+            {
+              "id": "published-slide",
+              "art": {
+                "landscape": null,
+                "portrait": null,
+                "cutout": null,
+                "logos": []
+              }
+            }
+          ],
+          "home": {
+            "document": {
+              "doc": {
+                "content": [
+                  {
+                    "attrs": {
+                      "dir": null,
+                      "id": "ce15695c-2f95-4d1a-8eef-d8587102a768",
+                      "lang": null,
+                      "textAlign": null
+                    },
+                    "content": [
+                      {
+                        "text": "Published owner text",
+                        "type": "text"
+                      }
+                    ],
+                    "type": "paragraph"
+                  },
+                  {
+                    "attrs": {
+                      "definition": "https://rezics.com/definition/showcase-block-v1",
+                      "dir": null,
+                      "fallback": "Highlights",
+                      "id": "showcase",
+                      "lang": null,
+                      "payload": {},
+                      "version": "1"
+                    },
+                    "type": "extensionBlock"
+                  },
+                  {
+                    "attrs": {
+                      "definition": "https://example.org/future-map",
+                      "dir": null,
+                      "fallback": "Place map",
+                      "id": "unknown-map",
+                      "lang": null,
+                      "payload": {
+                        "future": [
+                          null,
+                          {
+                            "preserved": true
+                          }
+                        ],
+                        "unicode": "雨夜書店"
+                      },
+                      "version": "9"
+                    },
+                    "type": "extensionBlock"
+                  }
+                ],
+                "type": "doc"
+              },
+              "profile": "blocks",
+              "version": "rezics-document-v1"
+            },
+            "definitions": [
+              {
+                "definition": "https://rezics.com/definition/showcase-block-v1",
+                "version": "1",
+                "payloadSchema": {
+                  "type": "object",
+                  "properties": {
+                    "rv:module": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                        "maxLength": 64
+                      },
+                      "minItems": 1,
+                      "maxItems": 1,
+                      "uniqueItems": true
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            ],
+            "blocks": [
+              {
+                "id": "showcase",
+                "definition": "https://rezics.com/definition/showcase-block-v1",
+                "version": "1",
+                "fallback": "Highlights",
+                "status": "resolved",
+                "kind": "showcase",
+                "showcase": "$default"
+              },
+              {
+                "id": "unknown-map",
+                "definition": "https://example.org/future-map",
+                "version": "9",
+                "fallback": "Place map",
+                "status": "placeholder",
+                "reason": "unknown_definition"
+              }
+            ],
+            "showcases": [
+              {
+                "id": "$default",
+                "module": null,
+                "sources": []
+              }
+            ],
+            "showcaseData": {
+              "slides": [
+                {
+                  "id": "published-slide",
+                  "title": "Published highlight",
+                  "href": "/published-link"
+                }
+              ],
+              "slideMedia": [
+                {
+                  "id": "published-slide",
+                  "art": {
+                    "landscape": null,
+                    "portrait": null,
+                    "cutout": null,
+                    "logos": []
+                  }
+                }
+              ]
+            },
+            "cost": {
+              "nodesVisited": 5,
+              "extensions": 2,
+              "showcases": 1,
+              "responseBytes": 1753,
+              "graphReads": 0,
+              "definitionExecutions": 0
+            },
+            "reference": {
+              "owner": "content",
+              "resourceId": "https://rezics.com/id/01a135e5-c36c-763b-97b0-3f7cc9ae1f52",
+              "variantId": "urn:rezics:variant:99ddcc17-badc-4c8f-8345-d6be3790c5b3",
+              "revisionId": "9de246a9-7182-4d51-8a37-aa4834b1b4c5",
+              "format": "rezics-content-json-v1",
+              "model": "content-shape-v1",
+              "byteDigest": "0fe892b36c36961147398d746ac14023a3c5820371c3fe3ac07d4a3cee096708",
+              "byteLength": 745,
+              "language": {
+                "kind": "tag",
+                "tag": "en",
+                "originalTag": "en"
+              },
+              "direction": "ltr",
+              "sourceRevision": null,
+              "predecessor": null,
+              "provenance": {
+                "kind": "admitted-original-contribution-v1",
+                "scope": "content:draft:https://rezics.com/id/01a135e5-c36c-763b-97b0-3f7cc9ae1f52",
+                "author": "https://rezics.com/id/553277f9-0e48-4ed4-9f0a-c49c993cb517",
+                "admissionId": "01a135e5-cc5a-75ba-b869-87911ec3e203",
+                "rightsBasis": "original-contribution",
+                "expectedHead": null,
+                "requestDigest": "7bab44f077fa0501c03996e990c9e05e946cef509d3b7e57d7b94a423c8db7ee",
+                "authorityEpoch": "0"
+              }
+            }
+          },
+          "renderTokens": {
+            "colorScheme": "system",
+            "accent": "#2563eb",
+            "density": "comfortable",
+            "cardRadius": "md",
+            "headingFontScale": "md",
+            "surfaceTint": "none",
+            "fontPairing": "sans",
+            "pageSurface": "flat",
+            "coverStyle": "portrait",
+            "titleEffect": "plain",
+            "textOnAccent": "#ffffff"
+          },
+          "execution": {
+            "state": "fallback",
+            "reason": "none_approved"
+          },
+          "cost": {
+            "graphReads": 4,
+            "objectReads": 4,
+            "officialPageSize": 50,
+            "maxModules": 24,
+            "maxSlides": 6,
+            "maxCampaignUses": 64,
+            "maxCampaignMediaReads": 2,
+            "maxResolvedBlocks": 4,
+            "maxResolvedCollections": 2,
+            "maxCollectionPlacements": 8,
+            "maxModuleGraphReads": 64,
+            "maxNavigation": 50,
+            "maxNavigationGraphReads": 2048
+          }
+        },
+        "headers": {
+          "cache-control": "public, no-cache",
+          "content-type": "application/json;charset=utf-8",
+          "etag": "\"a2eadee64f0535b65c22405ff2146aea74c3137b2a4c732d9f4443b7e30ba3aa\""
+        }
+      },
+      {
+        "label": "published-index-empty",
+        "operationId": "getV1ZonesByIdRoutes",
+        "method": "GET",
+        "path": "/v1/zones/47f3dc3b-6446-8262-8f25-56d81fb27145/routes?path=%2Fpublished-link",
+        "status": 200,
+        "answer": {
+          "profile": "zone-route-v1",
+          "zone": "https://rezics.com/id/47f3dc3b-6446-8262-8f25-56d81fb27145",
+          "path": "/published-link",
+          "name": "Published site",
+          "language": "en",
+          "direction": "ltr",
+          "listing": "listed",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "realm": "https://rezics.com/id/01a135e5-b8dd-778f-8ae2-36ad5759cf5a",
+          "revision": "https://rezics.com/id/01a135e5-cdf3-7492-b6cf-08dd14c9eb19",
+          "sourcePosition": {
+            "dataEpoch": "ee33b570-90f7-4685-af6d-6d4e789c934d",
+            "sequence": "87"
+          },
+          "cost": {
+            "pageSize": 24,
+            "maxNavigation": 50,
+            "immutableRangeRows": 101,
+            "membershipQueries": 1,
+            "mountRows": 2,
+            "typeRowsPerResource": 8,
+            "typeQueriesPerPage": 1,
+            "summaryBatch": 50,
+            "maxGraphReads": 2048,
+            "maxGraphBytes": 8388608,
+            "deadlineMs": 10000
+          },
+          "kind": "index",
+          "mount": {
+            "occurrence": "https://rezics.com/id/ed7f0286-f52b-824e-a2b5-b11ca02f15d1",
+            "target": "https://rezics.com/id/337f628b-945d-4f26-9a35-8dfd8f62b30a",
+            "segment": "published-link",
+            "key": "id"
+          },
+          "collection": "https://rezics.com/id/337f628b-945d-4f26-9a35-8dfd8f62b30a",
+          "items": [],
+          "nextCursor": null
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "unpublished-route-refused",
+        "operationId": "getV1ZonesByIdRoutes",
+        "method": "GET",
+        "path": "/v1/zones/47f3dc3b-6446-8262-8f25-56d81fb27145/routes?path=%2Fdraft-link",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/route_missing",
+          "title": "Zone route is unavailable",
+          "status": 404,
+          "code": "route_missing"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "published-home-route",
+        "operationId": "getV1ZonesByIdRoutes",
+        "method": "GET",
+        "path": "/v1/zones/47f3dc3b-6446-8262-8f25-56d81fb27145/routes?path=%2F",
+        "status": 200,
+        "answer": {
+          "profile": "zone-route-v1",
+          "zone": "https://rezics.com/id/47f3dc3b-6446-8262-8f25-56d81fb27145",
+          "path": "/",
+          "name": "Published site",
+          "language": "en",
+          "direction": "ltr",
+          "listing": "listed",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "realm": "https://rezics.com/id/01a135e5-b8dd-778f-8ae2-36ad5759cf5a",
+          "revision": "https://rezics.com/id/01a135e5-cdf3-7492-b6cf-08dd14c9eb19",
+          "sourcePosition": {
+            "dataEpoch": "ee33b570-90f7-4685-af6d-6d4e789c934d",
+            "sequence": "87"
+          },
+          "cost": {
+            "pageSize": 24,
+            "maxNavigation": 50,
+            "immutableRangeRows": 101,
+            "membershipQueries": 1,
+            "mountRows": 2,
+            "typeRowsPerResource": 8,
+            "typeQueriesPerPage": 1,
+            "summaryBatch": 50,
+            "maxGraphReads": 2048,
+            "maxGraphBytes": 8388608,
+            "deadlineMs": 10000
+          },
+          "kind": "home",
+          "page": {
+            "document": {
+              "doc": {
+                "content": [
+                  {
+                    "attrs": {
+                      "dir": null,
+                      "id": "ce15695c-2f95-4d1a-8eef-d8587102a768",
+                      "lang": null,
+                      "textAlign": null
+                    },
+                    "content": [
+                      {
+                        "text": "Published owner text",
+                        "type": "text"
+                      }
+                    ],
+                    "type": "paragraph"
+                  },
+                  {
+                    "attrs": {
+                      "definition": "https://rezics.com/definition/showcase-block-v1",
+                      "dir": null,
+                      "fallback": "Highlights",
+                      "id": "showcase",
+                      "lang": null,
+                      "payload": {},
+                      "version": "1"
+                    },
+                    "type": "extensionBlock"
+                  },
+                  {
+                    "attrs": {
+                      "definition": "https://example.org/future-map",
+                      "dir": null,
+                      "fallback": "Place map",
+                      "id": "unknown-map",
+                      "lang": null,
+                      "payload": {
+                        "future": [
+                          null,
+                          {
+                            "preserved": true
+                          }
+                        ],
+                        "unicode": "雨夜書店"
+                      },
+                      "version": "9"
+                    },
+                    "type": "extensionBlock"
+                  }
+                ],
+                "type": "doc"
+              },
+              "profile": "blocks",
+              "version": "rezics-document-v1"
+            },
+            "definitions": [
+              {
+                "definition": "https://rezics.com/definition/showcase-block-v1",
+                "version": "1",
+                "payloadSchema": {
+                  "type": "object",
+                  "properties": {
+                    "rv:module": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                        "maxLength": 64
+                      },
+                      "minItems": 1,
+                      "maxItems": 1,
+                      "uniqueItems": true
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            ],
+            "blocks": [
+              {
+                "id": "showcase",
+                "definition": "https://rezics.com/definition/showcase-block-v1",
+                "version": "1",
+                "fallback": "Highlights",
+                "status": "resolved",
+                "kind": "showcase",
+                "showcase": "$default"
+              },
+              {
+                "id": "unknown-map",
+                "definition": "https://example.org/future-map",
+                "version": "9",
+                "fallback": "Place map",
+                "status": "placeholder",
+                "reason": "unknown_definition"
+              }
+            ],
+            "showcases": [
+              {
+                "id": "$default",
+                "module": null,
+                "sources": []
+              }
+            ],
+            "showcaseData": {
+              "slides": [
+                {
+                  "id": "published-slide",
+                  "title": "Published highlight",
+                  "href": "/published-link"
+                }
+              ],
+              "slideMedia": [
+                {
+                  "id": "published-slide",
+                  "art": {
+                    "landscape": null,
+                    "portrait": null,
+                    "cutout": null,
+                    "logos": []
+                  }
+                }
+              ]
+            },
+            "cost": {
+              "nodesVisited": 5,
+              "extensions": 2,
+              "showcases": 1,
+              "responseBytes": 1753,
+              "graphReads": 0,
+              "definitionExecutions": 0
+            },
+            "reference": {
+              "owner": "content",
+              "resourceId": "https://rezics.com/id/01a135e5-c36c-763b-97b0-3f7cc9ae1f52",
+              "variantId": "urn:rezics:variant:99ddcc17-badc-4c8f-8345-d6be3790c5b3",
+              "revisionId": "9de246a9-7182-4d51-8a37-aa4834b1b4c5",
+              "format": "rezics-content-json-v1",
+              "model": "content-shape-v1",
+              "byteDigest": "0fe892b36c36961147398d746ac14023a3c5820371c3fe3ac07d4a3cee096708",
+              "byteLength": 745,
+              "language": {
+                "kind": "tag",
+                "tag": "en",
+                "originalTag": "en"
+              },
+              "direction": "ltr",
+              "sourceRevision": null,
+              "predecessor": null,
+              "provenance": {
+                "kind": "admitted-original-contribution-v1",
+                "scope": "content:draft:https://rezics.com/id/01a135e5-c36c-763b-97b0-3f7cc9ae1f52",
+                "author": "https://rezics.com/id/553277f9-0e48-4ed4-9f0a-c49c993cb517",
+                "admissionId": "01a135e5-cc5a-75ba-b869-87911ec3e203",
+                "rightsBasis": "original-contribution",
+                "expectedHead": null,
+                "requestDigest": "7bab44f077fa0501c03996e990c9e05e946cef509d3b7e57d7b94a423c8db7ee",
+                "authorityEpoch": "0"
+              }
+            }
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "published-content-revision",
+        "operationId": "getV1Content-revisionsByRevision",
+        "method": "GET",
+        "path": "/v1/content-revisions/9de246a9-7182-4d51-8a37-aa4834b1b4c5?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fae644bb3-dbc5-4fb3-9c77-ee5459921779",
+        "status": 200,
+        "answer": {
+          "reference": {
+            "owner": "content",
+            "resourceId": "https://rezics.com/id/01a135e5-c36c-763b-97b0-3f7cc9ae1f52",
+            "variantId": "urn:rezics:variant:99ddcc17-badc-4c8f-8345-d6be3790c5b3",
+            "revisionId": "9de246a9-7182-4d51-8a37-aa4834b1b4c5",
+            "format": "rezics-content-json-v1",
+            "model": "content-shape-v1",
+            "byteDigest": "0fe892b36c36961147398d746ac14023a3c5820371c3fe3ac07d4a3cee096708",
+            "byteLength": 745,
+            "language": {
+              "kind": "tag",
+              "tag": "en",
+              "originalTag": "en"
+            },
+            "direction": "ltr",
+            "sourceRevision": null,
+            "predecessor": null,
+            "provenance": {
+              "kind": "admitted-original-contribution-v1",
+              "scope": "content:draft:https://rezics.com/id/01a135e5-c36c-763b-97b0-3f7cc9ae1f52",
+              "author": "https://rezics.com/id/553277f9-0e48-4ed4-9f0a-c49c993cb517",
+              "admissionId": "01a135e5-cc5a-75ba-b869-87911ec3e203",
+              "rightsBasis": "original-contribution",
+              "expectedHead": null,
+              "requestDigest": "7bab44f077fa0501c03996e990c9e05e946cef509d3b7e57d7b94a423c8db7ee",
+              "authorityEpoch": "0"
+            }
+          },
+          "serializedJson": "{\"body\":\"Published owner text\\nHighlights\\nPlace map\",\"document\":{\"doc\":{\"content\":[{\"attrs\":{\"dir\":null,\"id\":\"ce15695c-2f95-4d1a-8eef-d8587102a768\",\"lang\":null,\"textAlign\":null},\"content\":[{\"text\":\"Published owner text\",\"type\":\"text\"}],\"type\":\"paragraph\"},{\"attrs\":{\"definition\":\"https://rezics.com/definition/showcase-block-v1\",\"dir\":null,\"fallback\":\"Highlights\",\"id\":\"showcase\",\"lang\":null,\"payload\":{},\"version\":\"1\"},\"type\":\"extensionBlock\"},{\"attrs\":{\"definition\":\"https://example.org/future-map\",\"dir\":null,\"fallback\":\"Place map\",\"id\":\"unknown-map\",\"lang\":null,\"payload\":{\"future\":[null,{\"preserved\":true}],\"unicode\":\"雨夜書店\"},\"version\":\"9\"},\"type\":\"extensionBlock\"}],\"type\":\"doc\"},\"profile\":\"blocks\",\"version\":\"rezics-document-v1\"}}",
+          "body": {
+            "body": "Published owner text\nHighlights\nPlace map",
+            "document": {
+              "doc": {
+                "content": [
+                  {
+                    "attrs": {
+                      "dir": null,
+                      "id": "ce15695c-2f95-4d1a-8eef-d8587102a768",
+                      "lang": null,
+                      "textAlign": null
+                    },
+                    "content": [
+                      {
+                        "text": "Published owner text",
+                        "type": "text"
+                      }
+                    ],
+                    "type": "paragraph"
+                  },
+                  {
+                    "attrs": {
+                      "definition": "https://rezics.com/definition/showcase-block-v1",
+                      "dir": null,
+                      "fallback": "Highlights",
+                      "id": "showcase",
+                      "lang": null,
+                      "payload": {},
+                      "version": "1"
+                    },
+                    "type": "extensionBlock"
+                  },
+                  {
+                    "attrs": {
+                      "definition": "https://example.org/future-map",
+                      "dir": null,
+                      "fallback": "Place map",
+                      "id": "unknown-map",
+                      "lang": null,
+                      "payload": {
+                        "future": [
+                          null,
+                          {
+                            "preserved": true
+                          }
+                        ],
+                        "unicode": "雨夜書店"
+                      },
+                      "version": "9"
+                    },
+                    "type": "extensionBlock"
+                  }
+                ],
+                "type": "doc"
+              },
+              "profile": "blocks",
+              "version": "rezics-document-v1"
+            }
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "draft-content-revision",
+        "operationId": "getV1Content-revisionsByRevision",
+        "method": "GET",
+        "path": "/v1/content-revisions/28d37517-ed5c-4c14-a520-957954d268a2?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fae644bb3-dbc5-4fb3-9c77-ee5459921779",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/revision_unavailable",
+          "title": "Revision is unavailable",
+          "status": 404,
+          "code": "revision_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "showcase-editor",
+        "operationId": "getV1ZonesByIdShowcase-editor",
+        "method": "GET",
+        "path": "/v1/zones/47f3dc3b-6446-8262-8f25-56d81fb27145/showcase-editor?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fae644bb3-dbc5-4fb3-9c77-ee5459921779",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/zone_unavailable",
+          "title": "Zone is unavailable",
+          "status": 404,
+          "code": "zone_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "draft-configuration-refused",
+        "operationId": "getV1ZonesByIdConfiguration",
+        "method": "GET",
+        "path": "/v1/zones/47f3dc3b-6446-8262-8f25-56d81fb27145/configuration?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fae644bb3-dbc5-4fb3-9c77-ee5459921779",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/zone_unavailable",
+          "title": "Zone is unavailable",
+          "status": 404,
+          "code": "zone_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      }
+    ],
+    "operator": [
+      {
+        "label": "published-presentation",
+        "operationId": "getV1ZonesByIdPresentation",
+        "method": "GET",
+        "path": "/v1/zones/47f3dc3b-6446-8262-8f25-56d81fb27145/presentation",
+        "status": 200,
+        "answer": {
+          "profile": "zone-presentation-response-v2",
+          "zone": "https://rezics.com/id/47f3dc3b-6446-8262-8f25-56d81fb27145",
+          "realm": "https://rezics.com/id/01a135e5-b8dd-778f-8ae2-36ad5759cf5a",
+          "listing": "listed",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "address": {
+            "prefix": "/z/",
+            "key": "1CfzUmz8PuXg14g8JEgCje",
+            "suffixSource": "Published site"
+          },
+          "name": "Published site",
+          "language": "en",
+          "direction": "ltr",
+          "official": null,
+          "revision": "https://rezics.com/id/01a135e5-cdf3-7492-b6cf-08dd14c9eb19",
+          "presentation": {
+            "profile": "zone-presentation-v2",
+            "preset": "clean",
+            "tokens": {
+              "colorScheme": "system",
+              "accent": "#2563eb",
+              "density": "comfortable",
+              "cardRadius": "md",
+              "headingFontScale": "md",
+              "surfaceTint": "none",
+              "fontPairing": "sans",
+              "pageSurface": "flat",
+              "coverStyle": "portrait",
+              "titleEffect": "plain"
+            },
+            "navigation": [],
+            "modules": [],
+            "slides": [
+              {
+                "id": "published-slide",
+                "title": "Published highlight",
+                "href": "/published-link"
+              }
+            ]
+          },
+          "navigation": [
+            {
+              "occurrence": "https://rezics.com/id/ed7f0286-f52b-824e-a2b5-b11ca02f15d1",
+              "segment": "published-link",
+              "target": "https://rezics.com/id/337f628b-945d-4f26-9a35-8dfd8f62b30a",
+              "kind": "index",
+              "name": {
+                "value": "Site references",
+                "language": "und",
+                "direction": "ltr",
+                "basis": "fallback"
+              }
+            }
+          ],
+          "navigationRevision": "https://rezics.com/id/5dee09d7-1fd3-862f-a7ba-7b2a9abd56a2",
+          "navigationNext": null,
+          "navigationComplete": true,
+          "moduleData": [],
+          "slideMedia": [
+            {
+              "id": "published-slide",
+              "art": {
+                "landscape": null,
+                "portrait": null,
+                "cutout": null,
+                "logos": []
+              }
+            }
+          ],
+          "home": {
+            "document": {
+              "doc": {
+                "content": [
+                  {
+                    "attrs": {
+                      "dir": null,
+                      "id": "ce15695c-2f95-4d1a-8eef-d8587102a768",
+                      "lang": null,
+                      "textAlign": null
+                    },
+                    "content": [
+                      {
+                        "text": "Published owner text",
+                        "type": "text"
+                      }
+                    ],
+                    "type": "paragraph"
+                  },
+                  {
+                    "attrs": {
+                      "definition": "https://rezics.com/definition/showcase-block-v1",
+                      "dir": null,
+                      "fallback": "Highlights",
+                      "id": "showcase",
+                      "lang": null,
+                      "payload": {},
+                      "version": "1"
+                    },
+                    "type": "extensionBlock"
+                  },
+                  {
+                    "attrs": {
+                      "definition": "https://example.org/future-map",
+                      "dir": null,
+                      "fallback": "Place map",
+                      "id": "unknown-map",
+                      "lang": null,
+                      "payload": {
+                        "future": [
+                          null,
+                          {
+                            "preserved": true
+                          }
+                        ],
+                        "unicode": "雨夜書店"
+                      },
+                      "version": "9"
+                    },
+                    "type": "extensionBlock"
+                  }
+                ],
+                "type": "doc"
+              },
+              "profile": "blocks",
+              "version": "rezics-document-v1"
+            },
+            "definitions": [
+              {
+                "definition": "https://rezics.com/definition/showcase-block-v1",
+                "version": "1",
+                "payloadSchema": {
+                  "type": "object",
+                  "properties": {
+                    "rv:module": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                        "maxLength": 64
+                      },
+                      "minItems": 1,
+                      "maxItems": 1,
+                      "uniqueItems": true
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            ],
+            "blocks": [
+              {
+                "id": "showcase",
+                "definition": "https://rezics.com/definition/showcase-block-v1",
+                "version": "1",
+                "fallback": "Highlights",
+                "status": "resolved",
+                "kind": "showcase",
+                "showcase": "$default"
+              },
+              {
+                "id": "unknown-map",
+                "definition": "https://example.org/future-map",
+                "version": "9",
+                "fallback": "Place map",
+                "status": "placeholder",
+                "reason": "unknown_definition"
+              }
+            ],
+            "showcases": [
+              {
+                "id": "$default",
+                "module": null,
+                "sources": []
+              }
+            ],
+            "showcaseData": {
+              "slides": [
+                {
+                  "id": "published-slide",
+                  "title": "Published highlight",
+                  "href": "/published-link"
+                }
+              ],
+              "slideMedia": [
+                {
+                  "id": "published-slide",
+                  "art": {
+                    "landscape": null,
+                    "portrait": null,
+                    "cutout": null,
+                    "logos": []
+                  }
+                }
+              ]
+            },
+            "cost": {
+              "nodesVisited": 5,
+              "extensions": 2,
+              "showcases": 1,
+              "responseBytes": 1753,
+              "graphReads": 0,
+              "definitionExecutions": 0
+            },
+            "reference": {
+              "owner": "content",
+              "resourceId": "https://rezics.com/id/01a135e5-c36c-763b-97b0-3f7cc9ae1f52",
+              "variantId": "urn:rezics:variant:99ddcc17-badc-4c8f-8345-d6be3790c5b3",
+              "revisionId": "9de246a9-7182-4d51-8a37-aa4834b1b4c5",
+              "format": "rezics-content-json-v1",
+              "model": "content-shape-v1",
+              "byteDigest": "0fe892b36c36961147398d746ac14023a3c5820371c3fe3ac07d4a3cee096708",
+              "byteLength": 745,
+              "language": {
+                "kind": "tag",
+                "tag": "en",
+                "originalTag": "en"
+              },
+              "direction": "ltr",
+              "sourceRevision": null,
+              "predecessor": null,
+              "provenance": {
+                "kind": "admitted-original-contribution-v1",
+                "scope": "content:draft:https://rezics.com/id/01a135e5-c36c-763b-97b0-3f7cc9ae1f52",
+                "author": "https://rezics.com/id/553277f9-0e48-4ed4-9f0a-c49c993cb517",
+                "admissionId": "01a135e5-cc5a-75ba-b869-87911ec3e203",
+                "rightsBasis": "original-contribution",
+                "expectedHead": null,
+                "requestDigest": "7bab44f077fa0501c03996e990c9e05e946cef509d3b7e57d7b94a423c8db7ee",
+                "authorityEpoch": "0"
+              }
+            }
+          },
+          "renderTokens": {
+            "colorScheme": "system",
+            "accent": "#2563eb",
+            "density": "comfortable",
+            "cardRadius": "md",
+            "headingFontScale": "md",
+            "surfaceTint": "none",
+            "fontPairing": "sans",
+            "pageSurface": "flat",
+            "coverStyle": "portrait",
+            "titleEffect": "plain",
+            "textOnAccent": "#ffffff"
+          },
+          "execution": {
+            "state": "fallback",
+            "reason": "none_approved"
+          },
+          "cost": {
+            "graphReads": 4,
+            "objectReads": 4,
+            "officialPageSize": 50,
+            "maxModules": 24,
+            "maxSlides": 6,
+            "maxCampaignUses": 64,
+            "maxCampaignMediaReads": 2,
+            "maxResolvedBlocks": 4,
+            "maxResolvedCollections": 2,
+            "maxCollectionPlacements": 8,
+            "maxModuleGraphReads": 64,
+            "maxNavigation": 50,
+            "maxNavigationGraphReads": 2048
+          }
+        },
+        "headers": {
+          "cache-control": "public, no-cache",
+          "content-type": "application/json;charset=utf-8",
+          "etag": "\"a2eadee64f0535b65c22405ff2146aea74c3137b2a4c732d9f4443b7e30ba3aa\""
+        }
+      },
+      {
+        "label": "published-index-empty",
+        "operationId": "getV1ZonesByIdRoutes",
+        "method": "GET",
+        "path": "/v1/zones/47f3dc3b-6446-8262-8f25-56d81fb27145/routes?path=%2Fpublished-link",
+        "status": 200,
+        "answer": {
+          "profile": "zone-route-v1",
+          "zone": "https://rezics.com/id/47f3dc3b-6446-8262-8f25-56d81fb27145",
+          "path": "/published-link",
+          "name": "Published site",
+          "language": "en",
+          "direction": "ltr",
+          "listing": "listed",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "realm": "https://rezics.com/id/01a135e5-b8dd-778f-8ae2-36ad5759cf5a",
+          "revision": "https://rezics.com/id/01a135e5-cdf3-7492-b6cf-08dd14c9eb19",
+          "sourcePosition": {
+            "dataEpoch": "ee33b570-90f7-4685-af6d-6d4e789c934d",
+            "sequence": "87"
+          },
+          "cost": {
+            "pageSize": 24,
+            "maxNavigation": 50,
+            "immutableRangeRows": 101,
+            "membershipQueries": 1,
+            "mountRows": 2,
+            "typeRowsPerResource": 8,
+            "typeQueriesPerPage": 1,
+            "summaryBatch": 50,
+            "maxGraphReads": 2048,
+            "maxGraphBytes": 8388608,
+            "deadlineMs": 10000
+          },
+          "kind": "index",
+          "mount": {
+            "occurrence": "https://rezics.com/id/ed7f0286-f52b-824e-a2b5-b11ca02f15d1",
+            "target": "https://rezics.com/id/337f628b-945d-4f26-9a35-8dfd8f62b30a",
+            "segment": "published-link",
+            "key": "id"
+          },
+          "collection": "https://rezics.com/id/337f628b-945d-4f26-9a35-8dfd8f62b30a",
+          "items": [],
+          "nextCursor": null
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "unpublished-route-refused",
+        "operationId": "getV1ZonesByIdRoutes",
+        "method": "GET",
+        "path": "/v1/zones/47f3dc3b-6446-8262-8f25-56d81fb27145/routes?path=%2Fdraft-link",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/route_missing",
+          "title": "Zone route is unavailable",
+          "status": 404,
+          "code": "route_missing"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "published-home-route",
+        "operationId": "getV1ZonesByIdRoutes",
+        "method": "GET",
+        "path": "/v1/zones/47f3dc3b-6446-8262-8f25-56d81fb27145/routes?path=%2F",
+        "status": 200,
+        "answer": {
+          "profile": "zone-route-v1",
+          "zone": "https://rezics.com/id/47f3dc3b-6446-8262-8f25-56d81fb27145",
+          "path": "/",
+          "name": "Published site",
+          "language": "en",
+          "direction": "ltr",
+          "listing": "listed",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "realm": "https://rezics.com/id/01a135e5-b8dd-778f-8ae2-36ad5759cf5a",
+          "revision": "https://rezics.com/id/01a135e5-cdf3-7492-b6cf-08dd14c9eb19",
+          "sourcePosition": {
+            "dataEpoch": "ee33b570-90f7-4685-af6d-6d4e789c934d",
+            "sequence": "87"
+          },
+          "cost": {
+            "pageSize": 24,
+            "maxNavigation": 50,
+            "immutableRangeRows": 101,
+            "membershipQueries": 1,
+            "mountRows": 2,
+            "typeRowsPerResource": 8,
+            "typeQueriesPerPage": 1,
+            "summaryBatch": 50,
+            "maxGraphReads": 2048,
+            "maxGraphBytes": 8388608,
+            "deadlineMs": 10000
+          },
+          "kind": "home",
+          "page": {
+            "document": {
+              "doc": {
+                "content": [
+                  {
+                    "attrs": {
+                      "dir": null,
+                      "id": "ce15695c-2f95-4d1a-8eef-d8587102a768",
+                      "lang": null,
+                      "textAlign": null
+                    },
+                    "content": [
+                      {
+                        "text": "Published owner text",
+                        "type": "text"
+                      }
+                    ],
+                    "type": "paragraph"
+                  },
+                  {
+                    "attrs": {
+                      "definition": "https://rezics.com/definition/showcase-block-v1",
+                      "dir": null,
+                      "fallback": "Highlights",
+                      "id": "showcase",
+                      "lang": null,
+                      "payload": {},
+                      "version": "1"
+                    },
+                    "type": "extensionBlock"
+                  },
+                  {
+                    "attrs": {
+                      "definition": "https://example.org/future-map",
+                      "dir": null,
+                      "fallback": "Place map",
+                      "id": "unknown-map",
+                      "lang": null,
+                      "payload": {
+                        "future": [
+                          null,
+                          {
+                            "preserved": true
+                          }
+                        ],
+                        "unicode": "雨夜書店"
+                      },
+                      "version": "9"
+                    },
+                    "type": "extensionBlock"
+                  }
+                ],
+                "type": "doc"
+              },
+              "profile": "blocks",
+              "version": "rezics-document-v1"
+            },
+            "definitions": [
+              {
+                "definition": "https://rezics.com/definition/showcase-block-v1",
+                "version": "1",
+                "payloadSchema": {
+                  "type": "object",
+                  "properties": {
+                    "rv:module": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                        "maxLength": 64
+                      },
+                      "minItems": 1,
+                      "maxItems": 1,
+                      "uniqueItems": true
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            ],
+            "blocks": [
+              {
+                "id": "showcase",
+                "definition": "https://rezics.com/definition/showcase-block-v1",
+                "version": "1",
+                "fallback": "Highlights",
+                "status": "resolved",
+                "kind": "showcase",
+                "showcase": "$default"
+              },
+              {
+                "id": "unknown-map",
+                "definition": "https://example.org/future-map",
+                "version": "9",
+                "fallback": "Place map",
+                "status": "placeholder",
+                "reason": "unknown_definition"
+              }
+            ],
+            "showcases": [
+              {
+                "id": "$default",
+                "module": null,
+                "sources": []
+              }
+            ],
+            "showcaseData": {
+              "slides": [
+                {
+                  "id": "published-slide",
+                  "title": "Published highlight",
+                  "href": "/published-link"
+                }
+              ],
+              "slideMedia": [
+                {
+                  "id": "published-slide",
+                  "art": {
+                    "landscape": null,
+                    "portrait": null,
+                    "cutout": null,
+                    "logos": []
+                  }
+                }
+              ]
+            },
+            "cost": {
+              "nodesVisited": 5,
+              "extensions": 2,
+              "showcases": 1,
+              "responseBytes": 1753,
+              "graphReads": 0,
+              "definitionExecutions": 0
+            },
+            "reference": {
+              "owner": "content",
+              "resourceId": "https://rezics.com/id/01a135e5-c36c-763b-97b0-3f7cc9ae1f52",
+              "variantId": "urn:rezics:variant:99ddcc17-badc-4c8f-8345-d6be3790c5b3",
+              "revisionId": "9de246a9-7182-4d51-8a37-aa4834b1b4c5",
+              "format": "rezics-content-json-v1",
+              "model": "content-shape-v1",
+              "byteDigest": "0fe892b36c36961147398d746ac14023a3c5820371c3fe3ac07d4a3cee096708",
+              "byteLength": 745,
+              "language": {
+                "kind": "tag",
+                "tag": "en",
+                "originalTag": "en"
+              },
+              "direction": "ltr",
+              "sourceRevision": null,
+              "predecessor": null,
+              "provenance": {
+                "kind": "admitted-original-contribution-v1",
+                "scope": "content:draft:https://rezics.com/id/01a135e5-c36c-763b-97b0-3f7cc9ae1f52",
+                "author": "https://rezics.com/id/553277f9-0e48-4ed4-9f0a-c49c993cb517",
+                "admissionId": "01a135e5-cc5a-75ba-b869-87911ec3e203",
+                "rightsBasis": "original-contribution",
+                "expectedHead": null,
+                "requestDigest": "7bab44f077fa0501c03996e990c9e05e946cef509d3b7e57d7b94a423c8db7ee",
+                "authorityEpoch": "0"
+              }
+            }
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "published-content-revision",
+        "operationId": "getV1Content-revisionsByRevision",
+        "method": "GET",
+        "path": "/v1/content-revisions/9de246a9-7182-4d51-8a37-aa4834b1b4c5?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb0c3ecce-6116-4397-9507-b4db9742e6ec",
+        "status": 200,
+        "answer": {
+          "reference": {
+            "owner": "content",
+            "resourceId": "https://rezics.com/id/01a135e5-c36c-763b-97b0-3f7cc9ae1f52",
+            "variantId": "urn:rezics:variant:99ddcc17-badc-4c8f-8345-d6be3790c5b3",
+            "revisionId": "9de246a9-7182-4d51-8a37-aa4834b1b4c5",
+            "format": "rezics-content-json-v1",
+            "model": "content-shape-v1",
+            "byteDigest": "0fe892b36c36961147398d746ac14023a3c5820371c3fe3ac07d4a3cee096708",
+            "byteLength": 745,
+            "language": {
+              "kind": "tag",
+              "tag": "en",
+              "originalTag": "en"
+            },
+            "direction": "ltr",
+            "sourceRevision": null,
+            "predecessor": null,
+            "provenance": {
+              "kind": "admitted-original-contribution-v1",
+              "scope": "content:draft:https://rezics.com/id/01a135e5-c36c-763b-97b0-3f7cc9ae1f52",
+              "author": "https://rezics.com/id/553277f9-0e48-4ed4-9f0a-c49c993cb517",
+              "admissionId": "01a135e5-cc5a-75ba-b869-87911ec3e203",
+              "rightsBasis": "original-contribution",
+              "expectedHead": null,
+              "requestDigest": "7bab44f077fa0501c03996e990c9e05e946cef509d3b7e57d7b94a423c8db7ee",
+              "authorityEpoch": "0"
+            }
+          },
+          "serializedJson": "{\"body\":\"Published owner text\\nHighlights\\nPlace map\",\"document\":{\"doc\":{\"content\":[{\"attrs\":{\"dir\":null,\"id\":\"ce15695c-2f95-4d1a-8eef-d8587102a768\",\"lang\":null,\"textAlign\":null},\"content\":[{\"text\":\"Published owner text\",\"type\":\"text\"}],\"type\":\"paragraph\"},{\"attrs\":{\"definition\":\"https://rezics.com/definition/showcase-block-v1\",\"dir\":null,\"fallback\":\"Highlights\",\"id\":\"showcase\",\"lang\":null,\"payload\":{},\"version\":\"1\"},\"type\":\"extensionBlock\"},{\"attrs\":{\"definition\":\"https://example.org/future-map\",\"dir\":null,\"fallback\":\"Place map\",\"id\":\"unknown-map\",\"lang\":null,\"payload\":{\"future\":[null,{\"preserved\":true}],\"unicode\":\"雨夜書店\"},\"version\":\"9\"},\"type\":\"extensionBlock\"}],\"type\":\"doc\"},\"profile\":\"blocks\",\"version\":\"rezics-document-v1\"}}",
+          "body": {
+            "body": "Published owner text\nHighlights\nPlace map",
+            "document": {
+              "doc": {
+                "content": [
+                  {
+                    "attrs": {
+                      "dir": null,
+                      "id": "ce15695c-2f95-4d1a-8eef-d8587102a768",
+                      "lang": null,
+                      "textAlign": null
+                    },
+                    "content": [
+                      {
+                        "text": "Published owner text",
+                        "type": "text"
+                      }
+                    ],
+                    "type": "paragraph"
+                  },
+                  {
+                    "attrs": {
+                      "definition": "https://rezics.com/definition/showcase-block-v1",
+                      "dir": null,
+                      "fallback": "Highlights",
+                      "id": "showcase",
+                      "lang": null,
+                      "payload": {},
+                      "version": "1"
+                    },
+                    "type": "extensionBlock"
+                  },
+                  {
+                    "attrs": {
+                      "definition": "https://example.org/future-map",
+                      "dir": null,
+                      "fallback": "Place map",
+                      "id": "unknown-map",
+                      "lang": null,
+                      "payload": {
+                        "future": [
+                          null,
+                          {
+                            "preserved": true
+                          }
+                        ],
+                        "unicode": "雨夜書店"
+                      },
+                      "version": "9"
+                    },
+                    "type": "extensionBlock"
+                  }
+                ],
+                "type": "doc"
+              },
+              "profile": "blocks",
+              "version": "rezics-document-v1"
+            }
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "draft-content-revision",
+        "operationId": "getV1Content-revisionsByRevision",
+        "method": "GET",
+        "path": "/v1/content-revisions/28d37517-ed5c-4c14-a520-957954d268a2?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb0c3ecce-6116-4397-9507-b4db9742e6ec",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/revision_unavailable",
+          "title": "Revision is unavailable",
+          "status": 404,
+          "code": "revision_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "showcase-editor",
+        "operationId": "getV1ZonesByIdShowcase-editor",
+        "method": "GET",
+        "path": "/v1/zones/47f3dc3b-6446-8262-8f25-56d81fb27145/showcase-editor?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb0c3ecce-6116-4397-9507-b4db9742e6ec",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/zone_unavailable",
+          "title": "Zone is unavailable",
+          "status": 404,
+          "code": "zone_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "draft-configuration-refused",
+        "operationId": "getV1ZonesByIdConfiguration",
+        "method": "GET",
+        "path": "/v1/zones/47f3dc3b-6446-8262-8f25-56d81fb27145/configuration?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb0c3ecce-6116-4397-9507-b4db9742e6ec",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/zone_unavailable",
+          "title": "Zone is unavailable",
+          "status": 404,
+          "code": "zone_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      }
+    ]
+  }
+}

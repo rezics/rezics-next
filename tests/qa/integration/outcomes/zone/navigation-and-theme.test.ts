@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { fromPlainText, type DocumentSnapshot } from '@rezics/document';
 import row from '../../../../../scripts/qa/cases/outcomes/zone/navigation-and-theme.ts';
-import { outcomeTest } from '../../../support/outcome-test.ts';
+import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
 type ZonePresentation = { tokens: Record<string, string>;
@@ -17,6 +17,7 @@ type Receipt = { receipt: string; revision: string; homeDocument: string; homeRe
   pages: Array<Pick<Page, 'page' | 'variantId' | 'revisionId'>>; replayed: boolean };
 setDefaultTimeout(60_000);
 let sessions: PersonaSessions;
+const recording = new OutcomeRecorder(row);
 const short = (id: string) => id.slice(-36);
 const query = (person: PersonaSession) => person.actingSubject
   ? `?actingSubject=${encodeURIComponent(person.actingSubject)}` : '';
@@ -27,15 +28,21 @@ async function answer<T>(request: Promise<Response>, status = 200): Promise<T> {
   expect(response.status, `${response.status}: ${raw}`).toBe(status);
   return JSON.parse(raw) as T;
 }
-beforeAll(async () => { sessions = await personaSessions('public'); }, 180_000);
-afterAll(async () => { await sessions?.close(); });
+beforeAll(async () => {
+  await recording.prepare();
+  sessions = await personaSessions('public');
+}, 180_000);
+afterAll(async () => {
+  try { await recording.publish(); }
+  finally { await sessions?.close(); }
+});
 
 let fixture: Promise<Awaited<ReturnType<typeof prepareSite>>> | undefined;
 const site = () => fixture ??= prepareSite();
 
 async function prepareSite() {
   const owner = sessions.owner;
-  const created = await answer<{ zone: string; zoneRevision: string; navigationRevision: string }>(
+  const created = await answer<{ space: string; zone: string; zoneRevision: string; navigationRevision: string }>(
     owner.main('POST', '/v1/spaces', { profile: 'space-zone-v1', name: 'Published site',
       language: 'en', visibility: 'public', capabilities: ['zone'], actingSubject: owner.actingSubject }), 201);
   const path = `/v1/zones/${short(created.zone)}`;
@@ -102,20 +109,24 @@ async function prepareSite() {
   const configured = await answer<{ revision: string }>(owner.main('PUT', `${path}/configuration`, {
     expectedHead: receipt.revision, presentation: draftPresentation, actingSubject: owner.actingSubject,
   }));
-  return { path, homeDocument, page, draft, publishedDocument, draftDocument, draftBody, publishBody, body, key, receipt,
+  return { space: created.space, path, homeDocument, page, draft, publishedDocument, draftDocument, draftBody, publishBody, body, key, receipt,
     collection, mounted, draftNavigation, publishedPresentation, draftPresentation, configured, unknownPayload };
 }
 
-async function publicBundle(f: Awaited<ReturnType<typeof site>>, person: PersonaSession) {
-  const delivered = await answer<Presentation>(person.main('GET', `${f.path}/presentation`));
+async function publicBundle(f: Awaited<ReturnType<typeof site>>, person: PersonaSession,
+  sample?: ReturnType<typeof recording.session>) {
+  const delivered = await answer<Presentation>(sample ? sample('published-presentation', 'GET', `${f.path}/presentation`)
+    : person.main('GET', `${f.path}/presentation`));
   expect(delivered.presentation).toEqual(f.publishedPresentation);
   expect(delivered.renderTokens).toMatchObject(f.publishedPresentation.tokens);
   expect(delivered.navigation.map(item => item.segment)).toEqual(['published-link']);
   expect(delivered.home).toMatchObject({ document: f.publishedDocument, reference: {
     revisionId: f.page.revisionId, provenance: { rightsBasis: 'original-contribution', author: sessions.owner.actingSubject },
   } });
-  await answer(person.main('GET', `${f.path}/routes?path=%2Fpublished-link`));
-  await answer(person.main('GET', `${f.path}/routes?path=%2Fdraft-link`), 404);
+  await answer(sample ? sample('published-index-empty', 'GET', `${f.path}/routes?path=%2Fpublished-link`)
+    : person.main('GET', `${f.path}/routes?path=%2Fpublished-link`));
+  await answer(sample ? sample('unpublished-route-refused', 'GET', `${f.path}/routes?path=%2Fdraft-link`)
+    : person.main('GET', `${f.path}/routes?path=%2Fdraft-link`), 404);
   return delivered;
 }
 
@@ -135,10 +146,12 @@ async function privateNavigation(f: Awaited<ReturnType<typeof site>>, person: Pe
 async function view(name: PersonaName) {
   const f = await site();
   const person = sessions[name];
-  const before = await publicBundle(f, person);
+  const sample = recording.session(name, person);
+  if (name === 'visitor') await supportingReads(sample, f);
+  const before = await publicBundle(f, person, sample);
   if (name !== 'visitor') {
-    await answer(person.main('GET', `${f.path}/configuration${query(person)}`), 404);
-    await answer(person.main('GET', `${f.path}/showcase-editor${query(person)}`), 404);
+    await answer(sample('draft-configuration-refused', 'GET', `${f.path}/configuration${query(person)}`), 404);
+    await answer(sample('showcase-editor', 'GET', `${f.path}/showcase-editor${query(person)}`), 404);
     await answer(person.main('PUT', `${f.path}/configuration`, { expectedHead: f.configured.revision,
       presentation: f.publishedPresentation, actingSubject: person.actingSubject }), 403);
     await answer(person.main('POST', `${f.path}/mounts`, { expectedHead: f.draftNavigation.revision,
@@ -152,23 +165,25 @@ async function view(name: PersonaName) {
   await privateNavigation(f, person);
 }
 
-outcomeTest(row, 'visitor', () => view('visitor'));
-outcomeTest(row, 'stranger', () => view('stranger'));
-outcomeTest(row, 'member', () => view('member'));
-outcomeTest(row, 'moderator', () => view('moderator'));
-outcomeTest(row, 'operator', () => view('operator'));
+outcomeTest(row, 'visitor', () => view('visitor'), recording);
+outcomeTest(row, 'stranger', () => view('stranger'), recording);
+outcomeTest(row, 'member', () => view('member'), recording);
+outcomeTest(row, 'moderator', () => view('moderator'), recording);
+outcomeTest(row, 'operator', () => view('operator'), recording);
 outcomeTest(row, 'owner', async () => {
   const f = await site();
   const owner = sessions.owner;
-  const before = await publicBundle(f, sessions.visitor);
+  const sample = recording.session('owner', owner);
+  await answer(sample('showcase-editor', 'GET', `${f.path}/showcase-editor${query(owner)}`));
+  const before = await publicBundle(f, sessions.visitor, recording.session('owner', sessions.visitor));
   const configuration = await answer<{ revision: string; configuration: { presentation: ZonePresentation } }>(
-    owner.main('GET', `${f.path}/configuration${query(owner)}`));
+    sample('draft-configuration', 'GET', `${f.path}/configuration${query(owner)}`));
   expect(configuration.configuration.presentation).toEqual(f.draftPresentation);
   const navigation = await answer<{ revision: string; mounts: Array<{ occurrence: string }> }>(
-    owner.main('GET', `${f.path}${query(owner)}`));
+    sample('draft-navigation', 'GET', `${f.path}${query(owner)}`));
   expect(navigation.revision).toBe(f.draftNavigation.revision);
   expect(navigation.mounts.map(item => item.occurrence)).toContain(f.draftNavigation.occurrences[0]!);
-  const stale = await answer<{ code: string }>(owner.main('PUT', `${f.path}/configuration`, {
+  const stale = await answer<{ code: string }>(sample('stale-configuration-refused', 'PUT', `${f.path}/configuration`, {
     expectedHead: f.receipt.revision, presentation: f.publishedPresentation, actingSubject: owner.actingSubject,
   }), 409);
   expect(stale.code).toBe('stale_zone_head');
@@ -178,14 +193,20 @@ outcomeTest(row, 'owner', async () => {
       .toBe('stale_zone_head');
   }
   expect(await publicBundle(f, sessions.visitor)).toEqual(before);
-  const next = await answer<Receipt>(owner.main('POST', `${f.path}/site-publications`,
+  const next = await answer<Receipt>(sample('publish-site-bundle', 'POST', `${f.path}/site-publications`,
     f.publishBody(f.draft, f.configured.revision, f.draftNavigation.revision)), 201);
   expect(next).toMatchObject({ routesRevision: f.draftNavigation.revision,
     navigationRevision: f.draftNavigation.revision, themeRevision: f.configured.revision });
-  const delivered = await answer<Presentation>(sessions.visitor.main('GET', `${f.path}/presentation`));
+  const delivered = await answer<Presentation>(recording.session('owner', sessions.visitor)('republished-presentation', 'GET', `${f.path}/presentation`));
   expect(delivered.presentation).toEqual(f.draftPresentation);
   expect(delivered.navigation.map(item => item.segment)).toEqual(['published-link', 'draft-link']);
   expect(delivered.home?.reference.revisionId).toBe(f.draft.revisionId);
   await answer(sessions.visitor.main('GET', `${f.path}/routes?path=%2Fdraft-link`));
-});
+}, recording);
 
+async function supportingReads(sample: ReturnType<typeof recording.session>, f: Awaited<ReturnType<typeof site>>) {
+  await answer(sample('space-address', 'GET', `/v1/addresses/resolve?${new URLSearchParams({
+    scope: 'space', key: short(f.space),
+  })}`));
+  await answer(sample('empty-home-presentation', 'GET', `/v1/zones/${short(sessions.zone)}/presentation`));
+}
