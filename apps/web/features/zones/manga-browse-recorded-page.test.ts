@@ -1,8 +1,10 @@
 import { afterEach, expect, test } from 'bun:test';
 import { materializeData } from 'native-i18n';
+import type { CanonicalAddress } from '@rezics/model/address';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import manga from '../../../../tests/qa/fixtures/outcomes/manga/catalogue-browse-and-search-in-its-zone.json';
 import { uiLocales } from '../../i18n/define.ts';
+import { spaceHref } from '../address/path.ts';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import { buildBrowsePage } from '../realm/browse-page.ts';
 import { readBrowseAnswer, readFacetAnswer } from '../realm/browse-page-read.ts';
@@ -20,6 +22,12 @@ const recordedRealmName = () => {
   const answer = recordedSample(record, 'owner', 'realm-context').answer as { name: { value: string } };
   return answer.name.value;
 };
+
+const browseBase = spaceHref(
+  (recordedSample(record, 'owner', 'zone-presentation').answer as { address: CanonicalAddress }).address,
+  'site',
+  ['browse'],
+);
 
 function resultText(matches: ZoneBrowsePage['matches']) {
   const t = materializeData(messages, { locale: 'en' });
@@ -45,7 +53,7 @@ async function pageFrom(persona: AnswerPersona, label: string) {
       : Promise.resolve({ ok: false, failure: 'unavailable' } satisfies Loaded<FacetList>),
   ]);
   const result = buildBrowsePage({
-    page, facets, base: '/z/recorded/browse', zoneName: recordedRealmName(), state: request.state,
+    page, facets, base: browseBase, zoneName: recordedRealmName(), state: request.state,
     context: { realm: request.realm, ref: request.realm, locale: 'en' }, locale: 'en', messages,
   });
   return { result, page, facets, sample, request };
@@ -171,7 +179,7 @@ test('the owner’s recorded facet labels are the headings in every interface lo
       readFacetAnswer(main),
     ]);
     const built = buildBrowsePage({
-      page, facets: labels, base: '/z/recorded/browse', zoneName: recordedRealmName(), state: request.state,
+      page, facets: labels, base: browseBase, zoneName: recordedRealmName(), state: request.state,
       context: { realm: request.realm, ref: request.realm, locale }, locale, messages,
     });
     expect(labels.ok).toBe(true);
