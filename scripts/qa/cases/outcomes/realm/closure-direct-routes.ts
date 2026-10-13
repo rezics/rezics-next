@@ -1,14 +1,14 @@
-import { pending, rowOutcomes } from '../../outcome-cells.ts';
+import { proved, rowOutcomes } from '../../outcome-cells.ts';
 
 export default rowOutcomes(
   'realm/closure-direct-routes',
   {
-    visitor: pending('conceals closed home, teaser, adoptions, decisions and Zone entry while live controls remain readable'),
-    stranger: pending('conceals closed home, teaser, adoptions, decisions and Zone entry while live controls remain readable'),
-    member: pending('conceals closed home, teaser, adoptions, decisions and Zone entry while live controls remain readable'),
-    owner: pending('conceals closed home, teaser, adoptions, decisions and Zone entry while live controls remain readable'),
-    moderator: pending('conceals closed home, teaser, adoptions, decisions and Zone entry while live controls remain readable'),
-    operator: pending('conceals closed home, teaser, adoptions, decisions and Zone entry while live controls remain readable'),
+    visitor: proved('conceals closed home, teaser, adoptions, decisions and Zone entry while live controls remain readable'),
+    stranger: proved('conceals closed home, teaser, adoptions, decisions and Zone entry while live controls remain readable'),
+    member: proved('conceals closed home, teaser, adoptions, decisions and Zone entry while live controls remain readable'),
+    owner: proved('conceals closed home, teaser, adoptions, decisions and Zone entry while live controls remain readable'),
+    moderator: proved('conceals closed home, teaser, adoptions, decisions and Zone entry while live controls remain readable'),
+    operator: proved('conceals closed home, teaser, adoptions, decisions and Zone entry while live controls remain readable'),
   },
   {
     rights: {
