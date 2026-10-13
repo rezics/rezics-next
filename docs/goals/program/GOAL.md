@@ -175,18 +175,21 @@ He may not be watching the supermanager and may not answer soon (2026-10-13).
    can be undone, the default it will take and when. Work that does not depend
    on the answer continues.
 
-The channel (task N9) is a resident service without a model:
-`goal-telegram.service` long-polls the Bot API through grammY as the bot and in
-the chat the maintainer named. `goalctl` sends through it (`ask`, `tell`) from
-templates that carry a Goal, a task, a question and numbers, never code, file
-contents, personal data or a secret. It hears only that chat and the
-maintainer's paired account. A tapped option or a reply becomes urgent mail to
-the supermanager; `/status`, `/pause`, `/resume` and `/questions` are answered
-by the tool itself, with no agent running; nothing destructive and no shell is
-reachable from Telegram. Unprompted it sends a start, a pause, a Goal's `STOP`,
-a fault the scheduled run found in a confirmed row, an exhausted allowance and
-a host that stopped answering. The token and the chat stay in
-`../.secrets/`, read by that service alone.
+Telegram is a notice board, not a conversation (maintainer, 2026-10-13):
+nothing listens there, and there is no pairing and no button. `goalctl` sends
+(`ask`, `tell`) as the bot and in the group the maintainer named, with one
+HTTPS call and no library; a send that fails stays in an outbox and the
+coordinator sends it again. A question's message begins with its decision code
+in code style, such as `D-12`, which he copies and answers to the resident
+supermanager in its terminal. The body gives the question, the options by
+letter, the one recommended and, when the matter can be undone, the default and
+its time. The supermanager records his answer under that code
+(`task goal -- decide D-12 a`), and a fresh session finds the open questions
+with `task goal -- decisions`. Messages come from templates that carry a Goal,
+a task, a question and numbers, never source code, file contents, personal
+data or a secret. Unprompted it sends a start, a pause, a Goal's `STOP`, a
+fault the scheduled run found in a confirmed row, an exhausted allowance and a
+host that stopped answering. The token stays in `../.secrets/bots.json`.
 
 ## Duties
 
@@ -234,7 +237,7 @@ measures in `status`; `coordinator start` and mail with a sender and a deadline;
 | N5 | One command answers what a persona gets from an operation on a pooled QA stack and can record the response for a story; a generated index gives each operation's route file, owner and tests |
 | N6 | The surface gate (types, unit tests, the changed stories fed by recorded responses); the measures read each attempt's recorded round; a cancelled task names its reason and what replaces it; an attempt has a budget of model calls; a mechanism brief's note is marked read by its Goal's manager |
 | N7 | Main's scheduled run is the judge: `status` prints the rows the last run on `main` confirmed beside the rows declared; a bounded audit tries each newly proved row as its personas and reports only with a failing test; a fault reopens the cell for its owner, who can acknowledge it and cannot clear it |
-| N9 | The maintainer is asked and answers on Telegram: `task goal -- ask` and `tell` go through a resident service (grammY, long polling, no model); his tap or reply reaches the supermanager as urgent mail; `/status` and `/pause` work with no agent running; only his paired account in the named chat is heard; its tests run against a fake Bot API |
+| N9 | The maintainer is told on Telegram and answers in the supermanager's terminal: `task goal -- ask` records a question under a decision code and sends it with that code first, in code style, then the options, the one recommended and any default with its time; `tell` sends a notice; `decide` records his answer and `decisions` lists the open ones; a failed send is retried from an outbox. No listener, no button, no library; its tests run against a fake Bot API |
 | N8 | Tests are admitted by the tool: whole tiers, browser runs and `regress` start only from the program's schedule, one at a time and when no worker is live; each Goal has a share of the QA slots; `goalctl` refuses the rest. The full run's three and a half hours are measured by batch and cut |
 
 N1, N2 and N9 start together; they share no file. N3 follows N2, N4 follows N3, N5 and N8 run beside N3,
