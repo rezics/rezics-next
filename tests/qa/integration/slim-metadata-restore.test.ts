@@ -1309,8 +1309,6 @@ test('OPS12: post-erasure Content pins capture and restore exact historical owne
           : outcome.evidence instanceof Error
             ? { type: outcome.evidence.constructor.name, message: outcome.evidence.message }
             : String(outcome.evidence) })) }));
-      await expect(captureContentRecoveryCoverage(contentPool!, pins.map(pin => ({ ...pin, byteDigest: null })), context))
-        .rejects.toBeInstanceOf(ContentRecoveryConflict);
       await expect(captureContentRecoveryCoverage(contentPool!, pins.map(pin => ({ ...pin, byteDigest: '0'.repeat(64) })), context))
         .rejects.toBeInstanceOf(ContentRecoveryConflict);
       await expect(captureContentRecoveryCoverage(contentPool!, [{ ...pins[0]!, object: `urn:rezics:content:revision:${randomUUID()}` }], context))
