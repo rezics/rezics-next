@@ -46,3 +46,4 @@ positions are in the archived end-of-run tables
 - Merging a Work whose title is under title control is refused; whether it should be is the maintainer's question.
 - An owner closing or privatising their own Realm (only platform closure is in scope).
 - The Italian Gutenberg recipes record no amounts, because the importer reads only a leading amount.
+- Occurrence progress is Account-principal-keyed while library status is Person-keyed; shared-Person progress across different principals is outside the current same-reader two-device outcome.

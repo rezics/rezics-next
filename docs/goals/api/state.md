@@ -9,10 +9,11 @@ below comes from the kernel and trust-ops end-of-run tables, archived at
 | Manager | `api`, registered and coordinator-enrolled; end a turn when nothing is ready |
 | Rows proved | 0/67 under the six-persona method; 50 legacy API proofs, 17 without one |
 | Rows in work | All 67 covered once by 18 two-to-four-row outcome briefs: G-2075–G-2078 and G-2095–G-2108. Step one is read-only persona matrices, not declaration/test writing |
-| Dispatch | G-2075–G-2077 and the three mechanism analyses started at the checkpoint; the remaining admitted matrix batch runs serially via `.temp/api/dispatch-wide.sh`, pid recorded in `.temp/api/wide-dispatch.pid`. It stops on refusal and mails API; completion also mails API. No watcher or worker wait is armed |
-| Mechanism analyses | G-2109 disclosure ancestry; G-2110 typeahead (costly Fuseki query log first); G-2111 public-domain/source/credit import under decision 55. No file changes; manager copies handoff notes into briefs and mails their paths for Program to read before code |
-| Tooling in work | G-2074 exited blocked, first handoff: checkpoint:site-publication:4:4 returns 400 invalid_zone_configuration because the builder does not configure its Zone home document. No backup or restore proof. Program asked to assign the exact helper from its QA area before a fresh fix round; gates no row |
-| Measures | Checkpoint snapshot: 7 tasks with 7 first attempts (100%); dispatch batch adds only first attempts. No landed API task or proved row, so landed-task attempts and tokens per proved row are undefined. Rebuild attempt: 1,444,430 input (1,393,280 cached), 5,822 output tokens |
+| Dispatch | All 18 outcome analyses and three mechanism analyses dispatched; the bounded serial batch completed and its completion mail is acknowledged. No watcher or worker wait remains open |
+| Matrices reviewed | G-2075, G-2076 and G-2077: all persona cells read and intended outcomes accepted with corrections in their briefs. Legacy leads use in-process Main/substituted Account behavior and prove no public-HTTP cell. Other matrix handoffs remain for subsequent task-exit turns |
+| Mechanism analyses | G-2109 disclosure ancestry; G-2110 typeahead; G-2111 public-domain/source/credit import. Clean partial handoffs read and condensed into the briefs, each under 40 lines. Paths mailed to Program (api-three-design-notes-20261013); actual Program read remains pending, code held |
+| Tooling in work | G-2074 first handoff blocked: checkpoint:site-publication:4:4 returns 400 invalid_zone_configuration because the builder does not configure its Zone home document. No backup or restore proof. Exact Program-owned helper reclaimed with --allow-area; fresh fix round 1 running as attempt 2, preserving assertions and canonical shared retained storage. Gates no row |
+| Measures | 22 first attempts / 23 total (95.7%); G-2074 has 2 attempts, all others 1. No landed API task or proved row, so landed-task attempts and tokens per proved row are undefined. Rebuild first attempt: 1,444,430 input (1,393,280 cached), 5,822 output tokens |
 | Shared stack | `task urls`: Main 3001, Account 3002, all six resources healthy; Program's main d2a2e3166 loan integration probe passed in 11.9 s |
 | Retained set | Static reading: compatibility refusal affects growth consumers and retained-checkpoint restore verification, not integration startup. `scripts/qa/cli.ts` starts and bootstraps fresh stacks; only the specific growth files read `seed-checkpoints.ts` |
 | Not verified | No main-wide integration or fault/recovery qualification claimed; ordinary outcome tests can run independently of the retained set |
@@ -21,12 +22,22 @@ below comes from the kernel and trust-ops end-of-run tables, archived at
 | Width | At most 22 API live workers, 34 globally; full batch plus rebuild is 22 tasks, split 11 per Codex account, Sol/high/default service tier. No Claude, top-up or credits |
 | Landing and cap | Tooling/outcome tasks use `merge`, no review; enforce two fresh fix rounds until G-2072 does. Stop dispatch below half first-attempt share; no task with an unsettled dependency or decision |
 
-Outcome briefs are at most 36 lines and claim only future row declarations and
+Outcome briefs are at most 37 lines and claim only future row declarations and
 API tests. Step one changes no file and returns current answer, intended answer,
 operation and real proving test (or none) for all six personas. Route inference
 and mocked tests are labelled, never promoted to public-API proof. Publishing
-rows include rights and credit. Both Program mails received this turn were acted
-on; `program-api-wide-matrix` confirms the books count is 13 and is acknowledged.
+rows include rights and credit. Program confirms 13 books rows. G-2071's
+moderator must join the Realm as well as hold its role; this correction is in
+every outcome brief. `program-api-wide-matrix` was acted on and acknowledged;
+`program-api-seed-area-and-landings` was acted on and acknowledged, with the pilot
+still held. Export means currently retained eligible records; a dropped-page
+resume uses an unchanged live basis, while stale/expired basis yields a typed
+restart. Copy/loan import preserves archival records without recreating active
+lending effects. Tests use identified Books and original fixture content/credit.
+The typeahead note found a correlated 583 ms identity read and its replay;
+inclusive 18 reads is unproved (23 calls observed), and internal plan cost remains
+open. Historical 614 ms query text was not logged. This is evidence, not a latency
+distribution or a settled implementation design.
 
 ## Carried work
 
