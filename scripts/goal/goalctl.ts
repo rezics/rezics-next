@@ -10,6 +10,8 @@ import { HOLDING, ENGINES } from './types.ts';
 import { status } from './status.ts';
 import { eventStateDirectory, mailCommand, eventLedger, coordinatorCommand } from './manager-commands.ts';
 import { resolve, join } from 'node:path';
+import { readdir } from 'node:fs/promises';
+import { pathToFileURL } from 'node:url';
 import { provideGoalctl, runRegression, parseRegressArgs, appendInbox, inboxEntries } from './regress.ts';
 import { declaredTestTimeout, planUnitGateShards } from './unit-gate.ts';
 import { heavyQaStatus, withSlot, withRecovery } from './qa-slots.ts';
@@ -30,6 +32,27 @@ export { reapStaleQaStacks, heavyQaStatus, heavyQaWaiters, sharedLifecycleStatus
 export { mailCommand, managerEvents, coordinatorEnrollmentOptions, coordinatorStartOptions, coordinatorStartDescriptor } from './manager-commands.ts';
 
 export { typecheckWorkspaces, TYPECHECK_WORKSPACES };
+
+const GOAL_COMMANDS_DIRECTORY = join(import.meta.dir, 'commands');
+const GOAL_COMMAND_NAME = /^[a-z]+(?:-[a-z]+)*$/u;
+
+async function goalCommandFiles(): Promise<string[]> {
+  try {
+    return (await readdir(GOAL_COMMANDS_DIRECTORY, { withFileTypes: true }))
+      .filter(entry => entry.isFile() && /^[a-z]+(?:-[a-z]+)*\.ts$/u.test(entry.name))
+      .map(entry => entry.name)
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
+function loadGoalCommand(fileName: string) {
+  return import(pathToFileURL(join(GOAL_COMMANDS_DIRECTORY, fileName)).href) as Promise<{
+    usage: string;
+    default(args: string[]): number | Promise<number>;
+  }>;
+}
 
 async function main(argv: string[]): Promise<number> {
   const [command, ...rest] = argv;
@@ -131,7 +154,12 @@ async function main(argv: string[]): Promise<number> {
       const command = heavy ? rest.slice(1) : rest;
       return withSlot(command[0] === '--' ? command.slice(1) : command, heavy);
     }
-    default:
+    default: {
+      const commandFiles = await goalCommandFiles();
+      if (typeof command === 'string' && GOAL_COMMAND_NAME.test(command) && commandFiles.includes(`${command}.ts`)) {
+        const commandModule = await loadGoalCommand(`${command}.ts`);
+        return commandModule.default(rest);
+      }
       console.error('Usage: goalctl goal start <slug> --manager <session> [--adopt] [--allow-area] | goal close <slug> [--dry-run]'
         + ' | new [--goal <slug>] <title> | dispatch <brief.md> [--dry-run] [--force-usage] [--allow-area]'
         + ' | wait <id> | owner <path> | reclaim <id> <brief> [--allow-area] | resume <id> (-m <text> | --file <path>) [--effort e]'
@@ -143,7 +171,12 @@ async function main(argv: string[]): Promise<number> {
         + ' | mail send <goal> --file <path> --key <key> [--deadline <minutes>] | mail inbox [goal] | mail ack <id> [--goal <goal>]'
         + ' | coordinator [start <goal> --engine <codex|codex-1|claude> --effort <effort> [--model <id>]|enroll <goal> --session <UUID> --engine <engine> --effort <effort> --cwd <dir> --previous-owner-pid <pid> [--model <id>] [--tmux-socket <path>]|status|unenroll <goal>]'
         + ' | inbox [--ack <n>] | test [--heavy] <task test args> | slot [--heavy|--recovery] -- <command>');
+      for (const fileName of commandFiles) {
+        const commandModule = await loadGoalCommand(fileName);
+        console.error(commandModule.usage);
+      }
       return 2;
+    }
   }
 }
 
