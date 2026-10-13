@@ -166,7 +166,7 @@ function publishHome() {
 // Components already loaded by another test can retain Next's real hooks.
 // Supply their real contexts rather than depend on replacing that module again.
 function renderPage(node: ReactNode) {
-  const router = { back() {}, forward() {}, refresh() {}, push() {}, replace() {}, prefetch() {} };
+  const router = { bfcacheId: 'discussion-page', back() {}, forward() {}, refresh() {}, push() {}, replace() {}, prefetch() {} };
   return renderToStaticMarkup(
     <AppRouterContext.Provider value={router}>
       <PathnameContext.Provider value={siteHref('en', zone, [])}>
