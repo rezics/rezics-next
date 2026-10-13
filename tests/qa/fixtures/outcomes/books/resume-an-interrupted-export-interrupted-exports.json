@@ -1,0 +1,3865 @@
+{
+  "version": 1,
+  "row": "books/resume-an-interrupted-export-interrupted-exports",
+  "personas": {
+    "visitor": [
+      {
+        "label": "get-library-export-0",
+        "operationId": "getV1MeLibrary-export",
+        "method": "GET",
+        "path": "/v1/me/library-export?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd2289492-0dbf-407d-b46a-5b60e2f37454&cursor=O-0f6EbZN6irlUtd8VSTFXuapEjj_E6bw7KbPtgHbWSD6cz8dePHoTwKClC0saNNL4pxy58qFnulyLuUBIUkUXvQHdHQoCc3sanL6kc_9SJtuADKJDWZ1DdzKxmC4ybHj5fiVHHSRTYKHUqrih2fGbfY8aNH83ZUJYNeb0xu1UaPCZi0liKln74103PRp69LD6Jmqlg9OzwQ2px4WUCzjewxd3BM9b4SEye1c_MbC8sd4Be-f7KyhZmR7lwh-uOHz5baEERP3tLz-kwOg6sMbHS9U2M08bNFraeee5elVKJxH7ZkIolEZHrClpHjmlJCubwaxZbDSbFeE20Vmjuy699NH1uuiSvxwumqpNJl7kMX4BH3CQhWxeYgBnlCa7A_7-EzGSgfnA9ZwDsU8F1rpOjPAay6jVRpj7WcIku-&snapshot=XMfALx3DVb7Vdp2Ovmp7DVgT8pMPJ49L3UnBKFtSgpOcp6QDbJj4ekocDwSwg_yB52psf8NGkbxfLDBrMH1u0gGNBTJttmrza8-E7WK1ldmhmzt4T6JjqrUEN89H6KR85hR9qvDUxz-ZdS33_B32XovzdJLQkAD48LH6_Al4t47pk7EQ77tszD5ePZAssfAgSNzM-nSBStuDYarJEqfEHKP5dYSO572mBPPUj5AG0sUv7AbqsFbkIk_IY-JOjjIOiTy_pZcOgrVtzVQV8Ih4FwN21vmOdXu71JHd8q_WwKcR5W54rZQqCMOgMUu-4JL21mwW65r4HuLDluwk_rxFK8x9FzTl-Gc5nup-exzfhUv20rUMvXfwPTx0GyR8E9FbKWaBE8S0Bo2AYlM0sBG0OI92qYnk-AtIH0jEwdhp",
+        "status": 401,
+        "answer": {
+          "type": "https://rezics.com/problems/account_assertion_denied",
+          "title": "Account assertion is invalid or inactive",
+          "status": 401,
+          "code": "account_assertion_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      }
+    ],
+    "stranger": [
+      {
+        "label": "get-library-export-0",
+        "operationId": "getV1MeLibrary-export",
+        "method": "GET",
+        "path": "/v1/me/library-export?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd2289492-0dbf-407d-b46a-5b60e2f37454&cursor=O-0f6EbZN6irlUtd8VSTFXuapEjj_E6bw7KbPtgHbWSD6cz8dePHoTwKClC0saNNL4pxy58qFnulyLuUBIUkUXvQHdHQoCc3sanL6kc_9SJtuADKJDWZ1DdzKxmC4ybHj5fiVHHSRTYKHUqrih2fGbfY8aNH83ZUJYNeb0xu1UaPCZi0liKln74103PRp69LD6Jmqlg9OzwQ2px4WUCzjewxd3BM9b4SEye1c_MbC8sd4Be-f7KyhZmR7lwh-uOHz5baEERP3tLz-kwOg6sMbHS9U2M08bNFraeee5elVKJxH7ZkIolEZHrClpHjmlJCubwaxZbDSbFeE20Vmjuy699NH1uuiSvxwumqpNJl7kMX4BH3CQhWxeYgBnlCa7A_7-EzGSgfnA9ZwDsU8F1rpOjPAay6jVRpj7WcIku-&snapshot=XMfALx3DVb7Vdp2Ovmp7DVgT8pMPJ49L3UnBKFtSgpOcp6QDbJj4ekocDwSwg_yB52psf8NGkbxfLDBrMH1u0gGNBTJttmrza8-E7WK1ldmhmzt4T6JjqrUEN89H6KR85hR9qvDUxz-ZdS33_B32XovzdJLQkAD48LH6_Al4t47pk7EQ77tszD5ePZAssfAgSNzM-nSBStuDYarJEqfEHKP5dYSO572mBPPUj5AG0sUv7AbqsFbkIk_IY-JOjjIOiTy_pZcOgrVtzVQV8Ih4FwN21vmOdXu71JHd8q_WwKcR5W54rZQqCMOgMUu-4JL21mwW65r4HuLDluwk_rxFK8x9FzTl-Gc5nup-exzfhUv20rUMvXfwPTx0GyR8E9FbKWaBE8S0Bo2AYlM0sBG0OI92qYnk-AtIH0jEwdhp",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/library_export_denied",
+          "title": "Your library export is private to your own Person",
+          "status": 403,
+          "code": "library_export_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "get-library-export-1",
+        "operationId": "getV1MeLibrary-export",
+        "method": "GET",
+        "path": "/v1/me/library-export?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7718ac0e-fd2b-4568-8412-68a4e9cd4306&cursor=O-0f6EbZN6irlUtd8VSTFXuapEjj_E6bw7KbPtgHbWSD6cz8dePHoTwKClC0saNNL4pxy58qFnulyLuUBIUkUXvQHdHQoCc3sanL6kc_9SJtuADKJDWZ1DdzKxmC4ybHj5fiVHHSRTYKHUqrih2fGbfY8aNH83ZUJYNeb0xu1UaPCZi0liKln74103PRp69LD6Jmqlg9OzwQ2px4WUCzjewxd3BM9b4SEye1c_MbC8sd4Be-f7KyhZmR7lwh-uOHz5baEERP3tLz-kwOg6sMbHS9U2M08bNFraeee5elVKJxH7ZkIolEZHrClpHjmlJCubwaxZbDSbFeE20Vmjuy699NH1uuiSvxwumqpNJl7kMX4BH3CQhWxeYgBnlCa7A_7-EzGSgfnA9ZwDsU8F1rpOjPAay6jVRpj7WcIku-&snapshot=XMfALx3DVb7Vdp2Ovmp7DVgT8pMPJ49L3UnBKFtSgpOcp6QDbJj4ekocDwSwg_yB52psf8NGkbxfLDBrMH1u0gGNBTJttmrza8-E7WK1ldmhmzt4T6JjqrUEN89H6KR85hR9qvDUxz-ZdS33_B32XovzdJLQkAD48LH6_Al4t47pk7EQ77tszD5ePZAssfAgSNzM-nSBStuDYarJEqfEHKP5dYSO572mBPPUj5AG0sUv7AbqsFbkIk_IY-JOjjIOiTy_pZcOgrVtzVQV8Ih4FwN21vmOdXu71JHd8q_WwKcR5W54rZQqCMOgMUu-4JL21mwW65r4HuLDluwk_rxFK8x9FzTl-Gc5nup-exzfhUv20rUMvXfwPTx0GyR8E9FbKWaBE8S0Bo2AYlM0sBG0OI92qYnk-AtIH0jEwdhp",
+        "status": 400,
+        "answer": {
+          "type": "https://rezics.com/problems/invalid_work_read",
+          "title": "Cursor is invalid or expired",
+          "status": 400,
+          "code": "invalid_work_read"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      }
+    ],
+    "member": [
+      {
+        "label": "get-library-export-0",
+        "operationId": "getV1MeLibrary-export",
+        "method": "GET",
+        "path": "/v1/me/library-export?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd2289492-0dbf-407d-b46a-5b60e2f37454&cursor=O-0f6EbZN6irlUtd8VSTFXuapEjj_E6bw7KbPtgHbWSD6cz8dePHoTwKClC0saNNL4pxy58qFnulyLuUBIUkUXvQHdHQoCc3sanL6kc_9SJtuADKJDWZ1DdzKxmC4ybHj5fiVHHSRTYKHUqrih2fGbfY8aNH83ZUJYNeb0xu1UaPCZi0liKln74103PRp69LD6Jmqlg9OzwQ2px4WUCzjewxd3BM9b4SEye1c_MbC8sd4Be-f7KyhZmR7lwh-uOHz5baEERP3tLz-kwOg6sMbHS9U2M08bNFraeee5elVKJxH7ZkIolEZHrClpHjmlJCubwaxZbDSbFeE20Vmjuy699NH1uuiSvxwumqpNJl7kMX4BH3CQhWxeYgBnlCa7A_7-EzGSgfnA9ZwDsU8F1rpOjPAay6jVRpj7WcIku-&snapshot=XMfALx3DVb7Vdp2Ovmp7DVgT8pMPJ49L3UnBKFtSgpOcp6QDbJj4ekocDwSwg_yB52psf8NGkbxfLDBrMH1u0gGNBTJttmrza8-E7WK1ldmhmzt4T6JjqrUEN89H6KR85hR9qvDUxz-ZdS33_B32XovzdJLQkAD48LH6_Al4t47pk7EQ77tszD5ePZAssfAgSNzM-nSBStuDYarJEqfEHKP5dYSO572mBPPUj5AG0sUv7AbqsFbkIk_IY-JOjjIOiTy_pZcOgrVtzVQV8Ih4FwN21vmOdXu71JHd8q_WwKcR5W54rZQqCMOgMUu-4JL21mwW65r4HuLDluwk_rxFK8x9FzTl-Gc5nup-exzfhUv20rUMvXfwPTx0GyR8E9FbKWaBE8S0Bo2AYlM0sBG0OI92qYnk-AtIH0jEwdhp",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/library_export_denied",
+          "title": "Your library export is private to your own Person",
+          "status": 403,
+          "code": "library_export_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "get-library-export-1",
+        "operationId": "getV1MeLibrary-export",
+        "method": "GET",
+        "path": "/v1/me/library-export?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fde4a60f7-abcf-42b5-b2ac-7fa9a35f1689&cursor=O-0f6EbZN6irlUtd8VSTFXuapEjj_E6bw7KbPtgHbWSD6cz8dePHoTwKClC0saNNL4pxy58qFnulyLuUBIUkUXvQHdHQoCc3sanL6kc_9SJtuADKJDWZ1DdzKxmC4ybHj5fiVHHSRTYKHUqrih2fGbfY8aNH83ZUJYNeb0xu1UaPCZi0liKln74103PRp69LD6Jmqlg9OzwQ2px4WUCzjewxd3BM9b4SEye1c_MbC8sd4Be-f7KyhZmR7lwh-uOHz5baEERP3tLz-kwOg6sMbHS9U2M08bNFraeee5elVKJxH7ZkIolEZHrClpHjmlJCubwaxZbDSbFeE20Vmjuy699NH1uuiSvxwumqpNJl7kMX4BH3CQhWxeYgBnlCa7A_7-EzGSgfnA9ZwDsU8F1rpOjPAay6jVRpj7WcIku-&snapshot=XMfALx3DVb7Vdp2Ovmp7DVgT8pMPJ49L3UnBKFtSgpOcp6QDbJj4ekocDwSwg_yB52psf8NGkbxfLDBrMH1u0gGNBTJttmrza8-E7WK1ldmhmzt4T6JjqrUEN89H6KR85hR9qvDUxz-ZdS33_B32XovzdJLQkAD48LH6_Al4t47pk7EQ77tszD5ePZAssfAgSNzM-nSBStuDYarJEqfEHKP5dYSO572mBPPUj5AG0sUv7AbqsFbkIk_IY-JOjjIOiTy_pZcOgrVtzVQV8Ih4FwN21vmOdXu71JHd8q_WwKcR5W54rZQqCMOgMUu-4JL21mwW65r4HuLDluwk_rxFK8x9FzTl-Gc5nup-exzfhUv20rUMvXfwPTx0GyR8E9FbKWaBE8S0Bo2AYlM0sBG0OI92qYnk-AtIH0jEwdhp",
+        "status": 400,
+        "answer": {
+          "type": "https://rezics.com/problems/invalid_work_read",
+          "title": "Cursor is invalid or expired",
+          "status": 400,
+          "code": "invalid_work_read"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      }
+    ],
+    "owner": [
+      {
+        "label": "export-first-page",
+        "operationId": "getV1MeLibrary-export",
+        "method": "GET",
+        "path": "/v1/me/library-export?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd2289492-0dbf-407d-b46a-5b60e2f37454&limit=2&snapshot=XMfALx3DVb7Vdp2Ovmp7DVgT8pMPJ49L3UnBKFtSgpOcp6QDbJj4ekocDwSwg_yB52psf8NGkbxfLDBrMH1u0gGNBTJttmrza8-E7WK1ldmhmzt4T6JjqrUEN89H6KR85hR9qvDUxz-ZdS33_B32XovzdJLQkAD48LH6_Al4t47pk7EQ77tszD5ePZAssfAgSNzM-nSBStuDYarJEqfEHKP5dYSO572mBPPUj5AG0sUv7AbqsFbkIk_IY-JOjjIOiTy_pZcOgrVtzVQV8Ih4FwN21vmOdXu71JHd8q_WwKcR5W54rZQqCMOgMUu-4JL21mwW65r4HuLDluwk_rxFK8x9FzTl-Gc5nup-exzfhUv20rUMvXfwPTx0GyR8E9FbKWaBE8S0Bo2AYlM0sBG0OI92qYnk-AtIH0jEwdhp",
+        "status": 200,
+        "answer": {
+          "profile": "rezics-library-export-v1",
+          "rows": [
+            {
+              "kind": "session",
+              "sourceId": "https://rezics.com/id/f596aec4-533d-4ad6-8b6c-0a1700e06497",
+              "title": "",
+              "creators": [],
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "target": null,
+              "identifiers": [],
+              "status": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "score": null,
+              "review": null,
+              "shelves": [],
+              "readCount": null,
+              "progress": null,
+              "session": {
+                "target": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+                "state": "planned",
+                "startedOn": null,
+                "finishedOn": null,
+                "selections": [
+                  {
+                    "target": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+                    "language": null,
+                    "format": null
+                  }
+                ],
+                "locators": []
+              },
+              "raw": {
+                "nativeSession": {
+                  "id": "https://rezics.com/id/f596aec4-533d-4ad6-8b6c-0a1700e06497",
+                  "state": "planned",
+                  "target": {
+                    "base": "work",
+                    "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+                    "types": [
+                      "https://schema.org/Book",
+                      "https://schema.org/CreativeWork"
+                    ],
+                    "resource": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+                    "revision": "https://rezics.com/id/01a135de-b5af-70c4-8dd9-24e371d19b7a",
+                    "disclosure": "public"
+                  },
+                  "version": 1,
+                  "locators": [],
+                  "changedAt": "2026-10-13T15:26:05.723Z",
+                  "createdAt": "2026-10-13T15:26:05.723Z",
+                  "startedOn": null,
+                  "finishedOn": null,
+                  "selections": [
+                    {
+                      "format": null,
+                      "target": {
+                        "base": "work",
+                        "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+                        "types": [
+                          "https://schema.org/Book",
+                          "https://schema.org/CreativeWork"
+                        ],
+                        "resource": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+                        "revision": "https://rezics.com/id/01a135de-b5af-70c4-8dd9-24e371d19b7a",
+                        "disclosure": "public"
+                      },
+                      "language": null,
+                      "progress": "structure"
+                    }
+                  ],
+                  "completedAt": null
+                }
+              }
+            },
+            {
+              "kind": "entry",
+              "sourceId": "status:https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "title": "",
+              "creators": [],
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "target": null,
+              "identifiers": [],
+              "status": "want-to-read",
+              "startedOn": null,
+              "finishedOn": null,
+              "score": null,
+              "review": null,
+              "shelves": [],
+              "readCount": null,
+              "progress": null,
+              "session": null,
+              "raw": {
+                "sessionProjection": "https://rezics.com/id/f596aec4-533d-4ad6-8b6c-0a1700e06497"
+              }
+            }
+          ],
+          "snapshot": "XMfALx3DVb7Vdp2Ovmp7DVgT8pMPJ49L3UnBKFtSgpOcp6QDbJj4ekocDwSwg_yB52psf8NGkbxfLDBrMH1u0gGNBTJttmrza8-E7WK1ldmhmzt4T6JjqrUEN89H6KR85hR9qvDUxz-ZdS33_B32XovzdJLQkAD48LH6_Al4t47pk7EQ77tszD5ePZAssfAgSNzM-nSBStuDYarJEqfEHKP5dYSO572mBPPUj5AG0sUv7AbqsFbkIk_IY-JOjjIOiTy_pZcOgrVtzVQV8Ih4FwN21vmOdXu71JHd8q_WwKcR5W54rZQqCMOgMUu-4JL21mwW65r4HuLDluwk_rxFK8x9FzTl-Gc5nup-exzfhUv20rUMvXfwPTx0GyR8E9FbKWaBE8S0Bo2AYlM0sBG0OI92qYnk-AtIH0jEwdhp",
+          "nextCursor": "SnhMEv1Sbbq1aOLaaxk5sa1C0zscNYw1t6HsYMq9DRG4Y7qEYZdBfmIemK9pElLZcZ7RMpsp5QFnqqjkk_hrsapIDjsJu2rJ7huxHS9jE1q0_pxZnTzG19c-Qu3bQum31yNIBzod1MKyiOUcU7NhG4f9JvtsZVBBi5UFtI40fE2_rf4b2QVbr2HYoZJWzPFmHUJdYNDNV8Eypb8dwTqRNwFhApX2OOApWcTkKMQ1L2bhSowMqGIEoeGfGVLwMw9vuLk54s-6K2z_6enRcQbUedAMi1fS6pxlQdXTk_XkUNK_9FvA99ShlPkDIz1xycZn693PxVZUA3GSl8LqWNvkJ-cueiE7pcD3WaKiQD-cBv96529-KOop9N-rniySYQIVyr7Arm6e7jm9FwthwMQjz7U2wrVPkEc5kZCcgoU-"
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "export-empty",
+        "operationId": "getV1MeLibrary-export",
+        "method": "GET",
+        "path": "/v1/me/library-export?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Febb68bb6-a3ce-4a15-91a6-158c0511353f",
+        "status": 200,
+        "answer": {
+          "profile": "rezics-library-export-v1",
+          "rows": [],
+          "snapshot": "eYjr1VjW8iFmI_2NDFteA1JSGTCDWapgXCT24ezUPBPnNfS7404YIz5CngSU2dfAjhr2u52LO4_8S9h-SbeVucMfyY1RkjMQEPV5lch-4FLx6y70FTG-_4KqybQNUUj8ZicMOL7rAN5QTIJh6-2i70phaTUwpdOgrnVAs_8b6hx8RcusqPRL4auyt0umB0h7jZPTJNBZMHbOLv4i5iSEQJZ-hezwPY6BjR86rAgmVEVDXlPNjLVW9PN5aQDffHQGq3lsWaGMwLBKpBGsJyWXZ3J4bzo7wc74rzZeaQ7S_4LQDp0eQJ3A3HTc09yGdXvW3yDOxgTSJU_cle0COiFsdBZgPkVTl_nBU-D-FQsRZzogUUTjIJo-cAwKZd4gav7oQyPXwx-XIR4NosfAiad5BZK8wH-f6qwB_vfeoQ6k",
+          "nextCursor": null
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "get-library-export-0",
+        "operationId": "getV1MeLibrary-export",
+        "method": "GET",
+        "path": "/v1/me/library-export?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd2289492-0dbf-407d-b46a-5b60e2f37454&limit=20&cursor=O-0f6EbZN6irlUtd8VSTFXuapEjj_E6bw7KbPtgHbWSD6cz8dePHoTwKClC0saNNL4pxy58qFnulyLuUBIUkUXvQHdHQoCc3sanL6kc_9SJtuADKJDWZ1DdzKxmC4ybHj5fiVHHSRTYKHUqrih2fGbfY8aNH83ZUJYNeb0xu1UaPCZi0liKln74103PRp69LD6Jmqlg9OzwQ2px4WUCzjewxd3BM9b4SEye1c_MbC8sd4Be-f7KyhZmR7lwh-uOHz5baEERP3tLz-kwOg6sMbHS9U2M08bNFraeee5elVKJxH7ZkIolEZHrClpHjmlJCubwaxZbDSbFeE20Vmjuy699NH1uuiSvxwumqpNJl7kMX4BH3CQhWxeYgBnlCa7A_7-EzGSgfnA9ZwDsU8F1rpOjPAay6jVRpj7WcIku-&snapshot=XMfALx3DVb7Vdp2Ovmp7DVgT8pMPJ49L3UnBKFtSgpOcp6QDbJj4ekocDwSwg_yB52psf8NGkbxfLDBrMH1u0gGNBTJttmrza8-E7WK1ldmhmzt4T6JjqrUEN89H6KR85hR9qvDUxz-ZdS33_B32XovzdJLQkAD48LH6_Al4t47pk7EQ77tszD5ePZAssfAgSNzM-nSBStuDYarJEqfEHKP5dYSO572mBPPUj5AG0sUv7AbqsFbkIk_IY-JOjjIOiTy_pZcOgrVtzVQV8Ih4FwN21vmOdXu71JHd8q_WwKcR5W54rZQqCMOgMUu-4JL21mwW65r4HuLDluwk_rxFK8x9FzTl-Gc5nup-exzfhUv20rUMvXfwPTx0GyR8E9FbKWaBE8S0Bo2AYlM0sBG0OI92qYnk-AtIH0jEwdhp",
+        "status": 200,
+        "answer": {
+          "profile": "rezics-library-export-v1",
+          "rows": [
+            {
+              "kind": "entry",
+              "sourceId": "review:https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "title": "",
+              "creators": [],
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "target": null,
+              "identifiers": [],
+              "status": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "score": null,
+              "review": {
+                "text": "Original private review",
+                "language": "en",
+                "spoiler": true
+              },
+              "shelves": [],
+              "readCount": null,
+              "progress": null,
+              "session": null,
+              "raw": {}
+            },
+            {
+              "raw": {
+                "jsonLd": {
+                  "@id": "https://rezics.com/id/cdfdf8a6-2ce1-4247-91dc-e0e2c8fa7288",
+                  "@type": "LendAction",
+                  "agent": {
+                    "@id": "https://rezics.com/id/d2289492-0dbf-407d-b46a-5b60e2f37454"
+                  },
+                  "object": {
+                    "@id": "https://rezics.com/id/249242fb-6fcb-4834-ada3-69b9d8543e72"
+                  },
+                  "@context": "https://schema.org",
+                  "borrower": {
+                    "name": "Original fictional reader"
+                  },
+                  "actionStatus": "ActiveActionStatus"
+                },
+                "libraryLoan": {
+                  "id": "https://rezics.com/id/cdfdf8a6-2ce1-4247-91dc-e0e2c8fa7288",
+                  "copy": "https://rezics.com/id/249242fb-6fcb-4834-ada3-69b9d8543e72",
+                  "dueAt": "2026-02-02T00:00:00.000Z",
+                  "version": 1,
+                  "direction": "lent",
+                  "startedAt": "2026-01-02T00:00:00.000Z",
+                  "returnedAt": null,
+                  "counterparty": {
+                    "kind": "name",
+                    "name": "Original fictional reader"
+                  }
+                }
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": "https://rezics.com/id/9cecde59-8377-44f0-8b4a-198f3502dc6d",
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "loan:https://rezics.com/id/cdfdf8a6-2ce1-4247-91dc-e0e2c8fa7288",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 10",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-10",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 24",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-24",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 2",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-2",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 22",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-22",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 9",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-9",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 4",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-4",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 1",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-1",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 23",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-23",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 11",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-11",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 13",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-13",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 15",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-15",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 7",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-7",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 3",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-3",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 17",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-17",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 16",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-16",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 12",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-12",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 14",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-14",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 5",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-5",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            }
+          ],
+          "snapshot": "XMfALx3DVb7Vdp2Ovmp7DVgT8pMPJ49L3UnBKFtSgpOcp6QDbJj4ekocDwSwg_yB52psf8NGkbxfLDBrMH1u0gGNBTJttmrza8-E7WK1ldmhmzt4T6JjqrUEN89H6KR85hR9qvDUxz-ZdS33_B32XovzdJLQkAD48LH6_Al4t47pk7EQ77tszD5ePZAssfAgSNzM-nSBStuDYarJEqfEHKP5dYSO572mBPPUj5AG0sUv7AbqsFbkIk_IY-JOjjIOiTy_pZcOgrVtzVQV8Ih4FwN21vmOdXu71JHd8q_WwKcR5W54rZQqCMOgMUu-4JL21mwW65r4HuLDluwk_rxFK8x9FzTl-Gc5nup-exzfhUv20rUMvXfwPTx0GyR8E9FbKWaBE8S0Bo2AYlM0sBG0OI92qYnk-AtIH0jEwdhp",
+          "nextCursor": "ycWULyoffBe-hnX4Vt62PKUTr5gNwqpHfxrIffRf9Wez70x2ntxB3gbqW7Fso-Z_RamM7w8BE0OEKc7h_cokwsvXca7MIitKkVtP2gOrayuR5izsUntgi5plZ7yZGIgPfTZqe_1YcnHXtTkzWeD022CKqjjSAYXj9b53I0zOCOmHWsnfX6h-qXdqlIefuj8qx2oZy0I26Dyekun3WDpqo6yI5vbBy3MC16TLX66S7bQZv2Tho5v2nsmEPWAqFsfrZ1zG3bchxtAUokVW6VBoP0pp9REAW-nnI7F0ageNxAxHR8UT53xR4rhL1mW_pYjEDwE_xppsryDGVRiCO0P8Wk_oxSvzPHy3CgljfQ5Acj_9GG5B-wY42HayPyrncOKT8RnKHZiZpu7dNdSBMk-LBo1qoYZ9M_FjHfjRDF7JYLfXNCP055qbRUD3SpB24KQoci6aHk0nOh3lsM-qz380hUc68Xi8azmYAE9LDuig7EAiu_N8zUAr7wDMH3lDiA"
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "get-library-export-1",
+        "operationId": "getV1MeLibrary-export",
+        "method": "GET",
+        "path": "/v1/me/library-export?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd2289492-0dbf-407d-b46a-5b60e2f37454&limit=20&cursor=O-0f6EbZN6irlUtd8VSTFXuapEjj_E6bw7KbPtgHbWSD6cz8dePHoTwKClC0saNNL4pxy58qFnulyLuUBIUkUXvQHdHQoCc3sanL6kc_9SJtuADKJDWZ1DdzKxmC4ybHj5fiVHHSRTYKHUqrih2fGbfY8aNH83ZUJYNeb0xu1UaPCZi0liKln74103PRp69LD6Jmqlg9OzwQ2px4WUCzjewxd3BM9b4SEye1c_MbC8sd4Be-f7KyhZmR7lwh-uOHz5baEERP3tLz-kwOg6sMbHS9U2M08bNFraeee5elVKJxH7ZkIolEZHrClpHjmlJCubwaxZbDSbFeE20Vmjuy699NH1uuiSvxwumqpNJl7kMX4BH3CQhWxeYgBnlCa7A_7-EzGSgfnA9ZwDsU8F1rpOjPAay6jVRpj7WcIku-&snapshot=XMfALx3DVb7Vdp2Ovmp7DVgT8pMPJ49L3UnBKFtSgpOcp6QDbJj4ekocDwSwg_yB52psf8NGkbxfLDBrMH1u0gGNBTJttmrza8-E7WK1ldmhmzt4T6JjqrUEN89H6KR85hR9qvDUxz-ZdS33_B32XovzdJLQkAD48LH6_Al4t47pk7EQ77tszD5ePZAssfAgSNzM-nSBStuDYarJEqfEHKP5dYSO572mBPPUj5AG0sUv7AbqsFbkIk_IY-JOjjIOiTy_pZcOgrVtzVQV8Ih4FwN21vmOdXu71JHd8q_WwKcR5W54rZQqCMOgMUu-4JL21mwW65r4HuLDluwk_rxFK8x9FzTl-Gc5nup-exzfhUv20rUMvXfwPTx0GyR8E9FbKWaBE8S0Bo2AYlM0sBG0OI92qYnk-AtIH0jEwdhp",
+        "status": 200,
+        "answer": {
+          "profile": "rezics-library-export-v1",
+          "rows": [
+            {
+              "kind": "entry",
+              "sourceId": "review:https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "title": "",
+              "creators": [],
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "target": null,
+              "identifiers": [],
+              "status": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "score": null,
+              "review": {
+                "text": "Original private review",
+                "language": "en",
+                "spoiler": true
+              },
+              "shelves": [],
+              "readCount": null,
+              "progress": null,
+              "session": null,
+              "raw": {}
+            },
+            {
+              "raw": {
+                "jsonLd": {
+                  "@id": "https://rezics.com/id/cdfdf8a6-2ce1-4247-91dc-e0e2c8fa7288",
+                  "@type": "LendAction",
+                  "agent": {
+                    "@id": "https://rezics.com/id/d2289492-0dbf-407d-b46a-5b60e2f37454"
+                  },
+                  "object": {
+                    "@id": "https://rezics.com/id/249242fb-6fcb-4834-ada3-69b9d8543e72"
+                  },
+                  "@context": "https://schema.org",
+                  "borrower": {
+                    "name": "Original fictional reader"
+                  },
+                  "actionStatus": "ActiveActionStatus"
+                },
+                "libraryLoan": {
+                  "id": "https://rezics.com/id/cdfdf8a6-2ce1-4247-91dc-e0e2c8fa7288",
+                  "copy": "https://rezics.com/id/249242fb-6fcb-4834-ada3-69b9d8543e72",
+                  "dueAt": "2026-02-02T00:00:00.000Z",
+                  "version": 1,
+                  "direction": "lent",
+                  "startedAt": "2026-01-02T00:00:00.000Z",
+                  "returnedAt": null,
+                  "counterparty": {
+                    "kind": "name",
+                    "name": "Original fictional reader"
+                  }
+                }
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": "https://rezics.com/id/9cecde59-8377-44f0-8b4a-198f3502dc6d",
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "loan:https://rezics.com/id/cdfdf8a6-2ce1-4247-91dc-e0e2c8fa7288",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 10",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-10",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 24",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-24",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 2",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-2",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 22",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-22",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 9",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-9",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 4",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-4",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 1",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-1",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 23",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-23",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 11",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-11",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 13",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-13",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 15",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-15",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 7",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-7",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 3",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-3",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 17",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-17",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 16",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-16",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 12",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-12",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 14",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-14",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 5",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-5",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            }
+          ],
+          "snapshot": "XMfALx3DVb7Vdp2Ovmp7DVgT8pMPJ49L3UnBKFtSgpOcp6QDbJj4ekocDwSwg_yB52psf8NGkbxfLDBrMH1u0gGNBTJttmrza8-E7WK1ldmhmzt4T6JjqrUEN89H6KR85hR9qvDUxz-ZdS33_B32XovzdJLQkAD48LH6_Al4t47pk7EQ77tszD5ePZAssfAgSNzM-nSBStuDYarJEqfEHKP5dYSO572mBPPUj5AG0sUv7AbqsFbkIk_IY-JOjjIOiTy_pZcOgrVtzVQV8Ih4FwN21vmOdXu71JHd8q_WwKcR5W54rZQqCMOgMUu-4JL21mwW65r4HuLDluwk_rxFK8x9FzTl-Gc5nup-exzfhUv20rUMvXfwPTx0GyR8E9FbKWaBE8S0Bo2AYlM0sBG0OI92qYnk-AtIH0jEwdhp",
+          "nextCursor": "_8dXtITbReS8NN3OrNhQOTmwAyKGF8pKhdqrcX0pr-njbj_vOtDUPhGrtLWrUZiXeH8Y_1C7O-moif0_GvwNugAKkDgh5e0s_4jd22jbfdFykomacIx4LbildlBZRGlY8KAFK-IR2h4v1O2C6oUPTIQ9IYwSiF-0EBi1embMM3jmjIYUtK73cTPbFo2TOOq0LT3SGeP6E1AMPRqQKYM1H2z0c49qcIhBGB4RooxjQ2XiQV7VooA8TmdoeYr5KCkjqoKbIpuqqp9rYqL9zD871tMCQ5SWooYObRO1bfsmJKvJPxGBqQwjZcODX_vDUlQ1jJj6Rq9Mue4OSx3Kw-_7vbgYmrRUho5IFXZWs_heNKul7yMi5v2kbamDk_SIEtxe5sfZeIFDOBeL3MX0sRSM-H_Hb9mHhz3G3XiYvdQESoB0QQx998mJfK964yuY_NrdyxGJq_0kT41mqwScES7I_RrQ7i00hIeU8zkoxLjQ1-bj8hVMtmzNK-rgmDkxuw"
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "get-library-export-2",
+        "operationId": "getV1MeLibrary-export",
+        "method": "GET",
+        "path": "/v1/me/library-export?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd2289492-0dbf-407d-b46a-5b60e2f37454&limit=20&cursor=_8dXtITbReS8NN3OrNhQOTmwAyKGF8pKhdqrcX0pr-njbj_vOtDUPhGrtLWrUZiXeH8Y_1C7O-moif0_GvwNugAKkDgh5e0s_4jd22jbfdFykomacIx4LbildlBZRGlY8KAFK-IR2h4v1O2C6oUPTIQ9IYwSiF-0EBi1embMM3jmjIYUtK73cTPbFo2TOOq0LT3SGeP6E1AMPRqQKYM1H2z0c49qcIhBGB4RooxjQ2XiQV7VooA8TmdoeYr5KCkjqoKbIpuqqp9rYqL9zD871tMCQ5SWooYObRO1bfsmJKvJPxGBqQwjZcODX_vDUlQ1jJj6Rq9Mue4OSx3Kw-_7vbgYmrRUho5IFXZWs_heNKul7yMi5v2kbamDk_SIEtxe5sfZeIFDOBeL3MX0sRSM-H_Hb9mHhz3G3XiYvdQESoB0QQx998mJfK964yuY_NrdyxGJq_0kT41mqwScES7I_RrQ7i00hIeU8zkoxLjQ1-bj8hVMtmzNK-rgmDkxuw&snapshot=XMfALx3DVb7Vdp2Ovmp7DVgT8pMPJ49L3UnBKFtSgpOcp6QDbJj4ekocDwSwg_yB52psf8NGkbxfLDBrMH1u0gGNBTJttmrza8-E7WK1ldmhmzt4T6JjqrUEN89H6KR85hR9qvDUxz-ZdS33_B32XovzdJLQkAD48LH6_Al4t47pk7EQ77tszD5ePZAssfAgSNzM-nSBStuDYarJEqfEHKP5dYSO572mBPPUj5AG0sUv7AbqsFbkIk_IY-JOjjIOiTy_pZcOgrVtzVQV8Ih4FwN21vmOdXu71JHd8q_WwKcR5W54rZQqCMOgMUu-4JL21mwW65r4HuLDluwk_rxFK8x9FzTl-Gc5nup-exzfhUv20rUMvXfwPTx0GyR8E9FbKWaBE8S0Bo2AYlM0sBG0OI92qYnk-AtIH0jEwdhp",
+        "status": 200,
+        "answer": {
+          "profile": "rezics-library-export-v1",
+          "rows": [
+            {
+              "raw": {
+                "note": "Private journal 21",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-21",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 18",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-18",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "kind": "retained",
+              "sourceId": "extras:a6ba2d3426b69d751d77577deee1d673232f915b185c4ea3d4afa31cedcff883",
+              "title": "Owned original Book",
+              "creators": [],
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "target": null,
+              "identifiers": [],
+              "status": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "score": null,
+              "review": null,
+              "shelves": [],
+              "readCount": null,
+              "progress": null,
+              "session": null,
+              "raw": {
+                "sourceId": "original-statement",
+                "fields": {
+                  "privateJournal": "Private journal"
+                }
+              }
+            },
+            {
+              "raw": {
+                "note": "Private journal 0",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-0",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "jsonLd": {
+                  "@type": "OwnershipInfo",
+                  "@context": "https://schema.org",
+                  "typeOfGood": {
+                    "@id": "https://rezics.com/id/249242fb-6fcb-4834-ada3-69b9d8543e72",
+                    "@type": "Product",
+                    "isBasedOn": {
+                      "@id": "https://rezics.com/id/9cecde59-8377-44f0-8b4a-198f3502dc6d"
+                    }
+                  }
+                },
+                "libraryCopy": {
+                  "id": "https://rezics.com/id/249242fb-6fcb-4834-ada3-69b9d8543e72",
+                  "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+                  "format": "paperback",
+                  "release": "https://rezics.com/id/9cecde59-8377-44f0-8b4a-198f3502dc6d",
+                  "removed": false,
+                  "version": 1,
+                  "ownedFrom": "2026-01-01T00:00:00.000Z",
+                  "acquiredAt": "2026-01-01T00:00:00.000Z",
+                  "acquiredFrom": {
+                    "kind": "name",
+                    "name": "Original fixture owner"
+                  },
+                  "ownedThrough": null
+                }
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": "https://rezics.com/id/9cecde59-8377-44f0-8b4a-198f3502dc6d",
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "copy:https://rezics.com/id/249242fb-6fcb-4834-ada3-69b9d8543e72",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 20",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-20",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 6",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-6",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 8",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-8",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 19",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-19",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "kind": "shelf",
+              "sourceId": "https://rezics.com/id/375604ec-12a5-9b79-e8e4-100321ce0078",
+              "title": "Private portable shelf",
+              "creators": [],
+              "work": null,
+              "target": null,
+              "identifiers": [],
+              "status": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "score": null,
+              "review": null,
+              "shelves": [
+                "Private portable shelf"
+              ],
+              "readCount": null,
+              "progress": null,
+              "session": null,
+              "raw": {
+                "shelfId": "https://rezics.com/id/375604ec-12a5-9b79-e8e4-100321ce0078",
+                "disclosure": "private"
+              }
+            },
+            {
+              "kind": "shelf",
+              "sourceId": "https://rezics.com/id/c8248779-f8ec-64e0-69a5-fd4086a90872",
+              "title": "Empty private shelf",
+              "creators": [],
+              "work": null,
+              "target": null,
+              "identifiers": [],
+              "status": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "score": null,
+              "review": null,
+              "shelves": [
+                "Empty private shelf"
+              ],
+              "readCount": null,
+              "progress": null,
+              "session": null,
+              "raw": {
+                "shelfId": "https://rezics.com/id/c8248779-f8ec-64e0-69a5-fd4086a90872",
+                "disclosure": "private"
+              }
+            },
+            {
+              "kind": "entry",
+              "sourceId": "urn:rezics:placement:aece2550c7c7051ef341b3c27b1aafdcfc9cdc3c12fc4591b28b55ad3aaa0039",
+              "title": "Private portable shelf",
+              "creators": [],
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "target": null,
+              "identifiers": [],
+              "status": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "score": null,
+              "review": null,
+              "shelves": [
+                "Private portable shelf"
+              ],
+              "readCount": null,
+              "progress": null,
+              "session": null,
+              "raw": {
+                "shelfId": "https://rezics.com/id/375604ec-12a5-9b79-e8e4-100321ce0078",
+                "disclosure": "private"
+              }
+            }
+          ],
+          "snapshot": "XMfALx3DVb7Vdp2Ovmp7DVgT8pMPJ49L3UnBKFtSgpOcp6QDbJj4ekocDwSwg_yB52psf8NGkbxfLDBrMH1u0gGNBTJttmrza8-E7WK1ldmhmzt4T6JjqrUEN89H6KR85hR9qvDUxz-ZdS33_B32XovzdJLQkAD48LH6_Al4t47pk7EQ77tszD5ePZAssfAgSNzM-nSBStuDYarJEqfEHKP5dYSO572mBPPUj5AG0sUv7AbqsFbkIk_IY-JOjjIOiTy_pZcOgrVtzVQV8Ih4FwN21vmOdXu71JHd8q_WwKcR5W54rZQqCMOgMUu-4JL21mwW65r4HuLDluwk_rxFK8x9FzTl-Gc5nup-exzfhUv20rUMvXfwPTx0GyR8E9FbKWaBE8S0Bo2AYlM0sBG0OI92qYnk-AtIH0jEwdhp",
+          "nextCursor": null
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "get-library-export-3",
+        "operationId": "getV1MeLibrary-export",
+        "method": "GET",
+        "path": "/v1/me/library-export?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd2289492-0dbf-407d-b46a-5b60e2f37454&limit=20",
+        "status": 200,
+        "answer": {
+          "profile": "rezics-library-export-v1",
+          "rows": [
+            {
+              "kind": "session",
+              "sourceId": "https://rezics.com/id/f596aec4-533d-4ad6-8b6c-0a1700e06497",
+              "title": "",
+              "creators": [],
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "target": null,
+              "identifiers": [],
+              "status": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "score": null,
+              "review": null,
+              "shelves": [],
+              "readCount": null,
+              "progress": null,
+              "session": {
+                "target": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+                "state": "planned",
+                "startedOn": null,
+                "finishedOn": null,
+                "selections": [
+                  {
+                    "target": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+                    "language": null,
+                    "format": null
+                  }
+                ],
+                "locators": []
+              },
+              "raw": {
+                "nativeSession": {
+                  "id": "https://rezics.com/id/f596aec4-533d-4ad6-8b6c-0a1700e06497",
+                  "state": "planned",
+                  "target": {
+                    "base": "work",
+                    "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+                    "types": [
+                      "https://schema.org/Book",
+                      "https://schema.org/CreativeWork"
+                    ],
+                    "resource": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+                    "revision": "https://rezics.com/id/01a135de-b5af-70c4-8dd9-24e371d19b7a",
+                    "disclosure": "public"
+                  },
+                  "version": 1,
+                  "locators": [],
+                  "changedAt": "2026-10-13T15:26:05.723Z",
+                  "createdAt": "2026-10-13T15:26:05.723Z",
+                  "startedOn": null,
+                  "finishedOn": null,
+                  "selections": [
+                    {
+                      "format": null,
+                      "target": {
+                        "base": "work",
+                        "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+                        "types": [
+                          "https://schema.org/Book",
+                          "https://schema.org/CreativeWork"
+                        ],
+                        "resource": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+                        "revision": "https://rezics.com/id/01a135de-b5af-70c4-8dd9-24e371d19b7a",
+                        "disclosure": "public"
+                      },
+                      "language": null,
+                      "progress": "structure"
+                    }
+                  ],
+                  "completedAt": null
+                }
+              }
+            },
+            {
+              "kind": "entry",
+              "sourceId": "status:https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "title": "",
+              "creators": [],
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "target": null,
+              "identifiers": [],
+              "status": "want-to-read",
+              "startedOn": null,
+              "finishedOn": null,
+              "score": null,
+              "review": null,
+              "shelves": [],
+              "readCount": null,
+              "progress": null,
+              "session": null,
+              "raw": {
+                "sessionProjection": "https://rezics.com/id/f596aec4-533d-4ad6-8b6c-0a1700e06497"
+              }
+            },
+            {
+              "kind": "entry",
+              "sourceId": "review:https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "title": "",
+              "creators": [],
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "target": null,
+              "identifiers": [],
+              "status": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "score": null,
+              "review": {
+                "text": "Original private review",
+                "language": "en",
+                "spoiler": true
+              },
+              "shelves": [],
+              "readCount": null,
+              "progress": null,
+              "session": null,
+              "raw": {}
+            },
+            {
+              "raw": {
+                "jsonLd": {
+                  "@id": "https://rezics.com/id/cdfdf8a6-2ce1-4247-91dc-e0e2c8fa7288",
+                  "@type": "LendAction",
+                  "agent": {
+                    "@id": "https://rezics.com/id/d2289492-0dbf-407d-b46a-5b60e2f37454"
+                  },
+                  "object": {
+                    "@id": "https://rezics.com/id/249242fb-6fcb-4834-ada3-69b9d8543e72"
+                  },
+                  "@context": "https://schema.org",
+                  "borrower": {
+                    "name": "Original fictional reader"
+                  },
+                  "actionStatus": "ActiveActionStatus"
+                },
+                "libraryLoan": {
+                  "id": "https://rezics.com/id/cdfdf8a6-2ce1-4247-91dc-e0e2c8fa7288",
+                  "copy": "https://rezics.com/id/249242fb-6fcb-4834-ada3-69b9d8543e72",
+                  "dueAt": "2026-02-02T00:00:00.000Z",
+                  "version": 1,
+                  "direction": "lent",
+                  "startedAt": "2026-01-02T00:00:00.000Z",
+                  "returnedAt": null,
+                  "counterparty": {
+                    "kind": "name",
+                    "name": "Original fictional reader"
+                  }
+                }
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": "https://rezics.com/id/9cecde59-8377-44f0-8b4a-198f3502dc6d",
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "loan:https://rezics.com/id/cdfdf8a6-2ce1-4247-91dc-e0e2c8fa7288",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 10",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-10",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 24",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-24",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 2",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-2",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 22",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-22",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 9",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-9",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 4",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-4",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 1",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-1",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 23",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-23",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 11",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-11",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 13",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-13",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 15",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-15",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 7",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-7",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 3",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-3",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 17",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-17",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 16",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-16",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 12",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-12",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            }
+          ],
+          "snapshot": "omLCVNueDe6jaByGF-Z0vfmcsFot0-1fHo9qvgfB2OLw_bHChix6Lob67BR6p6KNDnniKCRsuRGi_LvMyVr3ySSimilelM5xHzW9_X4o8Mx2wbjFONtVoynk0cyb016TXIm7pUSYargIk6rFKULDiwVDwt_-XxXogZDj70r1-aLMcMXAGy6fsIpJJvgq2SCBCjg3YA3Mlkm0yFqp-QsdErOz2C95FBZc9yABjk1LzVO9iIyCtSXYb61d0fzGTupriyZnPHhocDhfY_6h6gKxmcKK0ADvfMxDntF7H_6Cm79O_FZMzWDOS3AA6at_ipHseguNTHhO-b-oBaMnT9_V3lJEwxFUNYyFE2ZpFiTOWM1Ak_7MIUZBY5oH7rlAkLO60g0NJ4dp_40BnnnD1-tbPaEqHYVZxLnn6elKuZnC",
+          "nextCursor": "hnpXCTUL9-h44egX1SujaoiIevALsqrhrxljGn_JlfgifSvzdveg4nkXdB1gXFO7wJabOEjLHfBYuD5xJM8nNd6p9qWTLPd8U9W1d1o6n_YLjnri12hdT1PZcG622d4Jtgf0jLRU6iwVWdCwy0aVvlj1sqznxrRHZL-CnfNaviQjzXRk66u040uuW-rmDqlNQ35HW6hqB3VqRRh-6BiZ-qGFW53TB_sr2rVVmkHOA8KYX5wQnGTUajXOA2XqdLwMVjvRH4ZDuxxdcl9o8Sirp66v2Pc9sbLqhvP547HXdf1vwSzHo0YEWlwhcKZ4Ix1FwyoqxmQ88u0y5m9FCCbFjB96cG60-NotOQqmSM2eJ_SeG6qV48obsTLCMus8NkjxTytls0eNgiBdw5jfXYw7HmzsaZcmF9oTdVOu5xlBxvsKQg8_fSmjuhOiZmw5or89mMN2k0POs7PoRBaB1iaaxyJ1xIixyaOD299tqllXSKAsjkvu2I52uRcCj7Z9Tw"
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "get-library-export-4",
+        "operationId": "getV1MeLibrary-export",
+        "method": "GET",
+        "path": "/v1/me/library-export?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd2289492-0dbf-407d-b46a-5b60e2f37454&limit=20&cursor=hnpXCTUL9-h44egX1SujaoiIevALsqrhrxljGn_JlfgifSvzdveg4nkXdB1gXFO7wJabOEjLHfBYuD5xJM8nNd6p9qWTLPd8U9W1d1o6n_YLjnri12hdT1PZcG622d4Jtgf0jLRU6iwVWdCwy0aVvlj1sqznxrRHZL-CnfNaviQjzXRk66u040uuW-rmDqlNQ35HW6hqB3VqRRh-6BiZ-qGFW53TB_sr2rVVmkHOA8KYX5wQnGTUajXOA2XqdLwMVjvRH4ZDuxxdcl9o8Sirp66v2Pc9sbLqhvP547HXdf1vwSzHo0YEWlwhcKZ4Ix1FwyoqxmQ88u0y5m9FCCbFjB96cG60-NotOQqmSM2eJ_SeG6qV48obsTLCMus8NkjxTytls0eNgiBdw5jfXYw7HmzsaZcmF9oTdVOu5xlBxvsKQg8_fSmjuhOiZmw5or89mMN2k0POs7PoRBaB1iaaxyJ1xIixyaOD299tqllXSKAsjkvu2I52uRcCj7Z9Tw&snapshot=omLCVNueDe6jaByGF-Z0vfmcsFot0-1fHo9qvgfB2OLw_bHChix6Lob67BR6p6KNDnniKCRsuRGi_LvMyVr3ySSimilelM5xHzW9_X4o8Mx2wbjFONtVoynk0cyb016TXIm7pUSYargIk6rFKULDiwVDwt_-XxXogZDj70r1-aLMcMXAGy6fsIpJJvgq2SCBCjg3YA3Mlkm0yFqp-QsdErOz2C95FBZc9yABjk1LzVO9iIyCtSXYb61d0fzGTupriyZnPHhocDhfY_6h6gKxmcKK0ADvfMxDntF7H_6Cm79O_FZMzWDOS3AA6at_ipHseguNTHhO-b-oBaMnT9_V3lJEwxFUNYyFE2ZpFiTOWM1Ak_7MIUZBY5oH7rlAkLO60g0NJ4dp_40BnnnD1-tbPaEqHYVZxLnn6elKuZnC",
+        "status": 200,
+        "answer": {
+          "profile": "rezics-library-export-v1",
+          "rows": [
+            {
+              "raw": {
+                "note": "Private journal 14",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-14",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 5",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-5",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 21",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-21",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 18",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-18",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "kind": "retained",
+              "sourceId": "extras:a6ba2d3426b69d751d77577deee1d673232f915b185c4ea3d4afa31cedcff883",
+              "title": "Owned original Book",
+              "creators": [],
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "target": null,
+              "identifiers": [],
+              "status": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "score": null,
+              "review": null,
+              "shelves": [],
+              "readCount": null,
+              "progress": null,
+              "session": null,
+              "raw": {
+                "sourceId": "original-statement",
+                "fields": {
+                  "privateJournal": "Private journal"
+                }
+              }
+            },
+            {
+              "raw": {
+                "note": "Private journal 0",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-0",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "jsonLd": {
+                  "@type": "OwnershipInfo",
+                  "@context": "https://schema.org",
+                  "typeOfGood": {
+                    "@id": "https://rezics.com/id/249242fb-6fcb-4834-ada3-69b9d8543e72",
+                    "@type": "Product",
+                    "isBasedOn": {
+                      "@id": "https://rezics.com/id/9cecde59-8377-44f0-8b4a-198f3502dc6d"
+                    }
+                  }
+                },
+                "libraryCopy": {
+                  "id": "https://rezics.com/id/249242fb-6fcb-4834-ada3-69b9d8543e72",
+                  "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+                  "format": "paperback",
+                  "release": "https://rezics.com/id/9cecde59-8377-44f0-8b4a-198f3502dc6d",
+                  "removed": false,
+                  "version": 1,
+                  "ownedFrom": "2026-01-01T00:00:00.000Z",
+                  "acquiredAt": "2026-01-01T00:00:00.000Z",
+                  "acquiredFrom": {
+                    "kind": "name",
+                    "name": "Original fixture owner"
+                  },
+                  "ownedThrough": null
+                }
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": "https://rezics.com/id/9cecde59-8377-44f0-8b4a-198f3502dc6d",
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "copy:https://rezics.com/id/249242fb-6fcb-4834-ada3-69b9d8543e72",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 20",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-20",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 6",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-6",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 8",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-8",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 19",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-19",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "kind": "shelf",
+              "sourceId": "https://rezics.com/id/375604ec-12a5-9b79-e8e4-100321ce0078",
+              "title": "Private portable shelf",
+              "creators": [],
+              "work": null,
+              "target": null,
+              "identifiers": [],
+              "status": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "score": null,
+              "review": null,
+              "shelves": [
+                "Private portable shelf"
+              ],
+              "readCount": null,
+              "progress": null,
+              "session": null,
+              "raw": {
+                "shelfId": "https://rezics.com/id/375604ec-12a5-9b79-e8e4-100321ce0078",
+                "disclosure": "private"
+              }
+            },
+            {
+              "kind": "shelf",
+              "sourceId": "https://rezics.com/id/c8248779-f8ec-64e0-69a5-fd4086a90872",
+              "title": "Empty private shelf",
+              "creators": [],
+              "work": null,
+              "target": null,
+              "identifiers": [],
+              "status": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "score": null,
+              "review": null,
+              "shelves": [
+                "Empty private shelf"
+              ],
+              "readCount": null,
+              "progress": null,
+              "session": null,
+              "raw": {
+                "shelfId": "https://rezics.com/id/c8248779-f8ec-64e0-69a5-fd4086a90872",
+                "disclosure": "private"
+              }
+            },
+            {
+              "kind": "entry",
+              "sourceId": "urn:rezics:placement:aece2550c7c7051ef341b3c27b1aafdcfc9cdc3c12fc4591b28b55ad3aaa0039",
+              "title": "Private portable shelf",
+              "creators": [],
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "target": null,
+              "identifiers": [],
+              "status": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "score": null,
+              "review": null,
+              "shelves": [
+                "Private portable shelf"
+              ],
+              "readCount": null,
+              "progress": null,
+              "session": null,
+              "raw": {
+                "shelfId": "https://rezics.com/id/375604ec-12a5-9b79-e8e4-100321ce0078",
+                "disclosure": "private"
+              }
+            }
+          ],
+          "snapshot": "omLCVNueDe6jaByGF-Z0vfmcsFot0-1fHo9qvgfB2OLw_bHChix6Lob67BR6p6KNDnniKCRsuRGi_LvMyVr3ySSimilelM5xHzW9_X4o8Mx2wbjFONtVoynk0cyb016TXIm7pUSYargIk6rFKULDiwVDwt_-XxXogZDj70r1-aLMcMXAGy6fsIpJJvgq2SCBCjg3YA3Mlkm0yFqp-QsdErOz2C95FBZc9yABjk1LzVO9iIyCtSXYb61d0fzGTupriyZnPHhocDhfY_6h6gKxmcKK0ADvfMxDntF7H_6Cm79O_FZMzWDOS3AA6at_ipHseguNTHhO-b-oBaMnT9_V3lJEwxFUNYyFE2ZpFiTOWM1Ak_7MIUZBY5oH7rlAkLO60g0NJ4dp_40BnnnD1-tbPaEqHYVZxLnn6elKuZnC",
+          "nextCursor": null
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "get-library-export-5",
+        "operationId": "getV1MeLibrary-export",
+        "method": "GET",
+        "path": "/v1/me/library-export?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd2289492-0dbf-407d-b46a-5b60e2f37454&cursor=O-0f6EbZN6irlUtd8VSTFXuapEjj_E6bw7KbPtgHbWSD6cz8dePHoTwKClC0saNNL4pxy58qFnulyLuUBIUkUXvQHdHQoCc3sanL6kc_9SJtuADKJDWZ1DdzKxmC4ybHj5fiVHHSRTYKHUqrih2fGbfY8aNH83ZUJYNeb0xu1UaPCZi0liKln74103PRp69LD6Jmqlg9OzwQ2px4WUCzjewxd3BM9b4SEye1c_MbC8sd4Be-f7KyhZmR7lwh-uOHz5baEERP3tLz-kwOg6sMbHS9U2M08bNFraeee5elVKJxH7ZkIolEZHrClpHjmlJCubwaxZbDSbFeE20Vmjuy699NH1uuiSvxwumqpNJl7kMX4BH3CQhWxeYgBnlCa7A_7-EzGSgfnA9ZwDsU8F1rpOjPAay6jVRpj7WcIku-",
+        "status": 409,
+        "answer": {
+          "type": "https://rezics.com/problems/read_basis_changed",
+          "title": "Restart the read from its first page",
+          "status": 409,
+          "code": "read_basis_changed"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "put-import-reviews-0",
+        "operationId": "putV1MeImport-reviewsById",
+        "method": "PUT",
+        "path": "/v1/me/import-reviews/01a135de-b5af-70c2-8923-4a996eb50230",
+        "body": {
+          "actingSubject": "https://rezics.com/id/d2289492-0dbf-407d-b46a-5b60e2f37454",
+          "text": "Later original private review",
+          "language": "en",
+          "spoiler": true,
+          "expectedVersion": 1
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+          "text": "Later original private review",
+          "language": "en",
+          "spoiler": true,
+          "version": 2,
+          "changedAt": "2026-10-13 15:26:48.38369+00",
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "get-library-export-6",
+        "operationId": "getV1MeLibrary-export",
+        "method": "GET",
+        "path": "/v1/me/library-export?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd2289492-0dbf-407d-b46a-5b60e2f37454&cursor=O-0f6EbZN6irlUtd8VSTFXuapEjj_E6bw7KbPtgHbWSD6cz8dePHoTwKClC0saNNL4pxy58qFnulyLuUBIUkUXvQHdHQoCc3sanL6kc_9SJtuADKJDWZ1DdzKxmC4ybHj5fiVHHSRTYKHUqrih2fGbfY8aNH83ZUJYNeb0xu1UaPCZi0liKln74103PRp69LD6Jmqlg9OzwQ2px4WUCzjewxd3BM9b4SEye1c_MbC8sd4Be-f7KyhZmR7lwh-uOHz5baEERP3tLz-kwOg6sMbHS9U2M08bNFraeee5elVKJxH7ZkIolEZHrClpHjmlJCubwaxZbDSbFeE20Vmjuy699NH1uuiSvxwumqpNJl7kMX4BH3CQhWxeYgBnlCa7A_7-EzGSgfnA9ZwDsU8F1rpOjPAay6jVRpj7WcIku-&snapshot=XMfALx3DVb7Vdp2Ovmp7DVgT8pMPJ49L3UnBKFtSgpOcp6QDbJj4ekocDwSwg_yB52psf8NGkbxfLDBrMH1u0gGNBTJttmrza8-E7WK1ldmhmzt4T6JjqrUEN89H6KR85hR9qvDUxz-ZdS33_B32XovzdJLQkAD48LH6_Al4t47pk7EQ77tszD5ePZAssfAgSNzM-nSBStuDYarJEqfEHKP5dYSO572mBPPUj5AG0sUv7AbqsFbkIk_IY-JOjjIOiTy_pZcOgrVtzVQV8Ih4FwN21vmOdXu71JHd8q_WwKcR5W54rZQqCMOgMUu-4JL21mwW65r4HuLDluwk_rxFK8x9FzTl-Gc5nup-exzfhUv20rUMvXfwPTx0GyR8E9FbKWaBE8S0Bo2AYlM0sBG0OI92qYnk-AtIH0jEwdhp",
+        "status": 409,
+        "answer": {
+          "type": "https://rezics.com/problems/read_basis_changed",
+          "title": "Restart the read from its first page",
+          "status": 409,
+          "code": "read_basis_changed"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "get-library-export-7",
+        "operationId": "getV1MeLibrary-export",
+        "method": "GET",
+        "path": "/v1/me/library-export?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd2289492-0dbf-407d-b46a-5b60e2f37454&limit=20",
+        "status": 200,
+        "answer": {
+          "profile": "rezics-library-export-v1",
+          "rows": [
+            {
+              "kind": "session",
+              "sourceId": "https://rezics.com/id/f596aec4-533d-4ad6-8b6c-0a1700e06497",
+              "title": "",
+              "creators": [],
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "target": null,
+              "identifiers": [],
+              "status": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "score": null,
+              "review": null,
+              "shelves": [],
+              "readCount": null,
+              "progress": null,
+              "session": {
+                "target": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+                "state": "planned",
+                "startedOn": null,
+                "finishedOn": null,
+                "selections": [
+                  {
+                    "target": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+                    "language": null,
+                    "format": null
+                  }
+                ],
+                "locators": []
+              },
+              "raw": {
+                "nativeSession": {
+                  "id": "https://rezics.com/id/f596aec4-533d-4ad6-8b6c-0a1700e06497",
+                  "state": "planned",
+                  "target": {
+                    "base": "work",
+                    "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+                    "types": [
+                      "https://schema.org/Book",
+                      "https://schema.org/CreativeWork"
+                    ],
+                    "resource": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+                    "revision": "https://rezics.com/id/01a135de-b5af-70c4-8dd9-24e371d19b7a",
+                    "disclosure": "public"
+                  },
+                  "version": 1,
+                  "locators": [],
+                  "changedAt": "2026-10-13T15:26:05.723Z",
+                  "createdAt": "2026-10-13T15:26:05.723Z",
+                  "startedOn": null,
+                  "finishedOn": null,
+                  "selections": [
+                    {
+                      "format": null,
+                      "target": {
+                        "base": "work",
+                        "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+                        "types": [
+                          "https://schema.org/Book",
+                          "https://schema.org/CreativeWork"
+                        ],
+                        "resource": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+                        "revision": "https://rezics.com/id/01a135de-b5af-70c4-8dd9-24e371d19b7a",
+                        "disclosure": "public"
+                      },
+                      "language": null,
+                      "progress": "structure"
+                    }
+                  ],
+                  "completedAt": null
+                }
+              }
+            },
+            {
+              "kind": "entry",
+              "sourceId": "status:https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "title": "",
+              "creators": [],
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "target": null,
+              "identifiers": [],
+              "status": "want-to-read",
+              "startedOn": null,
+              "finishedOn": null,
+              "score": null,
+              "review": null,
+              "shelves": [],
+              "readCount": null,
+              "progress": null,
+              "session": null,
+              "raw": {
+                "sessionProjection": "https://rezics.com/id/f596aec4-533d-4ad6-8b6c-0a1700e06497"
+              }
+            },
+            {
+              "kind": "entry",
+              "sourceId": "review:https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "title": "",
+              "creators": [],
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "target": null,
+              "identifiers": [],
+              "status": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "score": null,
+              "review": {
+                "text": "Later original private review",
+                "language": "en",
+                "spoiler": true
+              },
+              "shelves": [],
+              "readCount": null,
+              "progress": null,
+              "session": null,
+              "raw": {}
+            },
+            {
+              "raw": {
+                "jsonLd": {
+                  "@id": "https://rezics.com/id/cdfdf8a6-2ce1-4247-91dc-e0e2c8fa7288",
+                  "@type": "LendAction",
+                  "agent": {
+                    "@id": "https://rezics.com/id/d2289492-0dbf-407d-b46a-5b60e2f37454"
+                  },
+                  "object": {
+                    "@id": "https://rezics.com/id/249242fb-6fcb-4834-ada3-69b9d8543e72"
+                  },
+                  "@context": "https://schema.org",
+                  "borrower": {
+                    "name": "Original fictional reader"
+                  },
+                  "actionStatus": "ActiveActionStatus"
+                },
+                "libraryLoan": {
+                  "id": "https://rezics.com/id/cdfdf8a6-2ce1-4247-91dc-e0e2c8fa7288",
+                  "copy": "https://rezics.com/id/249242fb-6fcb-4834-ada3-69b9d8543e72",
+                  "dueAt": "2026-02-02T00:00:00.000Z",
+                  "version": 1,
+                  "direction": "lent",
+                  "startedAt": "2026-01-02T00:00:00.000Z",
+                  "returnedAt": null,
+                  "counterparty": {
+                    "kind": "name",
+                    "name": "Original fictional reader"
+                  }
+                }
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": "https://rezics.com/id/9cecde59-8377-44f0-8b4a-198f3502dc6d",
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "loan:https://rezics.com/id/cdfdf8a6-2ce1-4247-91dc-e0e2c8fa7288",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 10",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-10",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 24",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-24",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 2",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-2",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 22",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-22",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 9",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-9",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 4",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-4",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 1",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-1",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 23",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-23",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 11",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-11",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 13",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-13",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 15",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-15",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 7",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-7",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 3",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-3",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 17",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-17",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 16",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-16",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 12",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-12",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            }
+          ],
+          "snapshot": "aIXwVbP_NzeG_r5x9FST_-xBgai5DTFjbU-7S8_cgI0e2MPDZwUiuLm2ptys2pxjsXArcNrbSPLYYGkIkkgZjGqdIgwKNoVcddUP4Umxhn9FhyqDdM2n6aQCQlKLO8iFSI3ebp93a_JP4icaKqgsYFkUxx6-UFx1GgAyNTw48p-nhFAS1t3KZ24_3IxFI_lWlwV_u_gEuP_TGaSejGYHjSN3sVukVgwVw1CAP8I3g9ribpJlg5NJU7DDlDa7CwMeWRdK2kisMnWRvKczl55Go6dU_PM0BEA6Q20CYlVMxV_d593n6vqNEKSW3_CBN8y6OoBqHXUkqQ17vTKpvBqm7BpAN99LgZY6Xq-LEhkfU8_30mXCtutdrPL8WG2GzaIlblvYWvNBcbUeG7Y33vDgfN39naaVIFPS3CuyBtYB",
+          "nextCursor": "3qQyii20q43tbyT8CR9mhtbaaTYQo4guKhscgrbNZh8bnYbPL5yPTye1iEllr1ktBwetMol4_b7MBVANbuExnDQCsn501EMgLEBAl0mnFBIjTQoHlSwoK-r16YP_06gygEI1PtaUelV8_8c4QEyq1VCEbtEcAciXbyO-Vbi_55qXV-CBYaXb557ICbiwC59NHC4IzYSNpXsk4VeSeNQDdZSNLbrvFZ_zfHHxfRUZ4lxxwswJA_X-ZWCauWelflhepslUVoYTPxyt1OvdDbHUkbhREZb2HeXOmOtTrEbey5-OzyTEcsqdmkrPo-Ot2TsF2sGXzeoNTi10EfQRDBsnfX8Y2pAClt-ev1qqn2gzdA0BiuZEeMC14y8mQ0ZaEQ80KvDT4KjgDjn-N_dTuXLlKoEPw0X-GihcJORvaTpjJQonnkUbe0liOIQU7OhXl4TeKu4r7QyJe6L-INFQAJ8XQFsMObrPWKR0QI6hviW9CmKoJf67-8swi6KkEM4WFQ"
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "get-library-export-8",
+        "operationId": "getV1MeLibrary-export",
+        "method": "GET",
+        "path": "/v1/me/library-export?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd2289492-0dbf-407d-b46a-5b60e2f37454&limit=20&cursor=3qQyii20q43tbyT8CR9mhtbaaTYQo4guKhscgrbNZh8bnYbPL5yPTye1iEllr1ktBwetMol4_b7MBVANbuExnDQCsn501EMgLEBAl0mnFBIjTQoHlSwoK-r16YP_06gygEI1PtaUelV8_8c4QEyq1VCEbtEcAciXbyO-Vbi_55qXV-CBYaXb557ICbiwC59NHC4IzYSNpXsk4VeSeNQDdZSNLbrvFZ_zfHHxfRUZ4lxxwswJA_X-ZWCauWelflhepslUVoYTPxyt1OvdDbHUkbhREZb2HeXOmOtTrEbey5-OzyTEcsqdmkrPo-Ot2TsF2sGXzeoNTi10EfQRDBsnfX8Y2pAClt-ev1qqn2gzdA0BiuZEeMC14y8mQ0ZaEQ80KvDT4KjgDjn-N_dTuXLlKoEPw0X-GihcJORvaTpjJQonnkUbe0liOIQU7OhXl4TeKu4r7QyJe6L-INFQAJ8XQFsMObrPWKR0QI6hviW9CmKoJf67-8swi6KkEM4WFQ&snapshot=aIXwVbP_NzeG_r5x9FST_-xBgai5DTFjbU-7S8_cgI0e2MPDZwUiuLm2ptys2pxjsXArcNrbSPLYYGkIkkgZjGqdIgwKNoVcddUP4Umxhn9FhyqDdM2n6aQCQlKLO8iFSI3ebp93a_JP4icaKqgsYFkUxx6-UFx1GgAyNTw48p-nhFAS1t3KZ24_3IxFI_lWlwV_u_gEuP_TGaSejGYHjSN3sVukVgwVw1CAP8I3g9ribpJlg5NJU7DDlDa7CwMeWRdK2kisMnWRvKczl55Go6dU_PM0BEA6Q20CYlVMxV_d593n6vqNEKSW3_CBN8y6OoBqHXUkqQ17vTKpvBqm7BpAN99LgZY6Xq-LEhkfU8_30mXCtutdrPL8WG2GzaIlblvYWvNBcbUeG7Y33vDgfN39naaVIFPS3CuyBtYB",
+        "status": 200,
+        "answer": {
+          "profile": "rezics-library-export-v1",
+          "rows": [
+            {
+              "raw": {
+                "note": "Private journal 14",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-14",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 5",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-5",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 21",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-21",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 18",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-18",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "kind": "retained",
+              "sourceId": "extras:a6ba2d3426b69d751d77577deee1d673232f915b185c4ea3d4afa31cedcff883",
+              "title": "Owned original Book",
+              "creators": [],
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "target": null,
+              "identifiers": [],
+              "status": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "score": null,
+              "review": null,
+              "shelves": [],
+              "readCount": null,
+              "progress": null,
+              "session": null,
+              "raw": {
+                "sourceId": "original-statement",
+                "fields": {
+                  "privateJournal": "Private journal"
+                }
+              }
+            },
+            {
+              "raw": {
+                "note": "Private journal 0",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-0",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "jsonLd": {
+                  "@type": "OwnershipInfo",
+                  "@context": "https://schema.org",
+                  "typeOfGood": {
+                    "@id": "https://rezics.com/id/249242fb-6fcb-4834-ada3-69b9d8543e72",
+                    "@type": "Product",
+                    "isBasedOn": {
+                      "@id": "https://rezics.com/id/9cecde59-8377-44f0-8b4a-198f3502dc6d"
+                    }
+                  }
+                },
+                "libraryCopy": {
+                  "id": "https://rezics.com/id/249242fb-6fcb-4834-ada3-69b9d8543e72",
+                  "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+                  "format": "paperback",
+                  "release": "https://rezics.com/id/9cecde59-8377-44f0-8b4a-198f3502dc6d",
+                  "removed": false,
+                  "version": 1,
+                  "ownedFrom": "2026-01-01T00:00:00.000Z",
+                  "acquiredAt": "2026-01-01T00:00:00.000Z",
+                  "acquiredFrom": {
+                    "kind": "name",
+                    "name": "Original fixture owner"
+                  },
+                  "ownedThrough": null
+                }
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": "https://rezics.com/id/9cecde59-8377-44f0-8b4a-198f3502dc6d",
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "copy:https://rezics.com/id/249242fb-6fcb-4834-ada3-69b9d8543e72",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 20",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-20",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 6",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-6",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 8",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-8",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "raw": {
+                "note": "Private journal 19",
+                "credit": "Original fixture owner"
+              },
+              "kind": "retained",
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "score": null,
+              "title": "Owned original Book",
+              "review": null,
+              "status": null,
+              "target": null,
+              "session": null,
+              "shelves": [],
+              "creators": [
+                "Original fixture owner"
+              ],
+              "progress": null,
+              "sourceId": "original-private-19",
+              "readCount": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "identifiers": []
+            },
+            {
+              "kind": "shelf",
+              "sourceId": "https://rezics.com/id/375604ec-12a5-9b79-e8e4-100321ce0078",
+              "title": "Private portable shelf",
+              "creators": [],
+              "work": null,
+              "target": null,
+              "identifiers": [],
+              "status": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "score": null,
+              "review": null,
+              "shelves": [
+                "Private portable shelf"
+              ],
+              "readCount": null,
+              "progress": null,
+              "session": null,
+              "raw": {
+                "shelfId": "https://rezics.com/id/375604ec-12a5-9b79-e8e4-100321ce0078",
+                "disclosure": "private"
+              }
+            },
+            {
+              "kind": "shelf",
+              "sourceId": "https://rezics.com/id/c8248779-f8ec-64e0-69a5-fd4086a90872",
+              "title": "Empty private shelf",
+              "creators": [],
+              "work": null,
+              "target": null,
+              "identifiers": [],
+              "status": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "score": null,
+              "review": null,
+              "shelves": [
+                "Empty private shelf"
+              ],
+              "readCount": null,
+              "progress": null,
+              "session": null,
+              "raw": {
+                "shelfId": "https://rezics.com/id/c8248779-f8ec-64e0-69a5-fd4086a90872",
+                "disclosure": "private"
+              }
+            },
+            {
+              "kind": "entry",
+              "sourceId": "urn:rezics:placement:aece2550c7c7051ef341b3c27b1aafdcfc9cdc3c12fc4591b28b55ad3aaa0039",
+              "title": "Private portable shelf",
+              "creators": [],
+              "work": "https://rezics.com/id/01a135de-b5af-70c2-8923-4a996eb50230",
+              "target": null,
+              "identifiers": [],
+              "status": null,
+              "startedOn": null,
+              "finishedOn": null,
+              "score": null,
+              "review": null,
+              "shelves": [
+                "Private portable shelf"
+              ],
+              "readCount": null,
+              "progress": null,
+              "session": null,
+              "raw": {
+                "shelfId": "https://rezics.com/id/375604ec-12a5-9b79-e8e4-100321ce0078",
+                "disclosure": "private"
+              }
+            }
+          ],
+          "snapshot": "aIXwVbP_NzeG_r5x9FST_-xBgai5DTFjbU-7S8_cgI0e2MPDZwUiuLm2ptys2pxjsXArcNrbSPLYYGkIkkgZjGqdIgwKNoVcddUP4Umxhn9FhyqDdM2n6aQCQlKLO8iFSI3ebp93a_JP4icaKqgsYFkUxx6-UFx1GgAyNTw48p-nhFAS1t3KZ24_3IxFI_lWlwV_u_gEuP_TGaSejGYHjSN3sVukVgwVw1CAP8I3g9ribpJlg5NJU7DDlDa7CwMeWRdK2kisMnWRvKczl55Go6dU_PM0BEA6Q20CYlVMxV_d593n6vqNEKSW3_CBN8y6OoBqHXUkqQ17vTKpvBqm7BpAN99LgZY6Xq-LEhkfU8_30mXCtutdrPL8WG2GzaIlblvYWvNBcbUeG7Y33vDgfN39naaVIFPS3CuyBtYB",
+          "nextCursor": null
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "shelf-overview",
+        "operationId": "getV1MeShelves",
+        "method": "GET",
+        "path": "/v1/me/shelves?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd2289492-0dbf-407d-b46a-5b60e2f37454&limit=20",
+        "status": 200,
+        "answer": {
+          "profile": "reader-shelves-v1",
+          "statusShelves": [
+            {
+              "status": "want-to-read",
+              "count": 1,
+              "changedAt": "2026-10-13 15:26:05.749568+00"
+            },
+            {
+              "status": "reading",
+              "count": 0,
+              "changedAt": null
+            },
+            {
+              "status": "read",
+              "count": 0,
+              "changedAt": null
+            }
+          ],
+          "items": [
+            {
+              "id": "https://rezics.com/id/c8248779-f8ec-64e0-69a5-fd4086a90872",
+              "revision": "https://rezics.com/id/01a135de-f29e-7375-a502-f944fb2dbc1e",
+              "name": "Empty private shelf",
+              "kind": "static",
+              "disclosure": "private",
+              "structure": "https://rezics.com/id/45367c03-7b55-865e-a696-be08d97aeb4d",
+              "changedSequence": "19"
+            },
+            {
+              "id": "https://rezics.com/id/375604ec-12a5-9b79-e8e4-100321ce0078",
+              "revision": "https://rezics.com/id/01a135de-e825-72e0-961f-43408f0f0509",
+              "name": "Private portable shelf",
+              "kind": "static",
+              "disclosure": "private",
+              "structure": "https://rezics.com/id/ba078e57-1ff1-8b93-963e-dafcea8e42a6",
+              "changedSequence": "17"
+            }
+          ],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "12230613-eb97-4fdf-95f9-d8fea80b9c6d",
+            "sequence": "29"
+          },
+          "count": {
+            "value": 2,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "library-visibility",
+        "operationId": "getV1AgentsByIdLibrary-visibility",
+        "method": "GET",
+        "path": "/v1/agents/d2289492-0dbf-407d-b46a-5b60e2f37454/library-visibility",
+        "status": 200,
+        "answer": {
+          "visibility": "private",
+          "version": 0,
+          "changedAt": null
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json"
+        }
+      },
+      {
+        "label": "rating-context",
+        "operationId": "getV1Rating-contexts",
+        "method": "GET",
+        "path": "/v1/rating-contexts?scope=global&limit=1",
+        "status": 200,
+        "answer": {
+          "profile": "standing-rating-contexts-v1",
+          "scope": {
+            "kind": "global",
+            "realm": null
+          },
+          "items": [],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "12230613-eb97-4fdf-95f9-d8fea80b9c6d",
+            "sequence": "29"
+          },
+          "count": {
+            "value": 0,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "reading-goal",
+        "operationId": "getV1MeReading-goal",
+        "method": "GET",
+        "path": "/v1/me/reading-goal?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd2289492-0dbf-407d-b46a-5b60e2f37454&year=2026",
+        "status": 200,
+        "answer": {
+          "year": 2026,
+          "target": null,
+          "completed": 0,
+          "version": 0,
+          "changedAt": null
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "reading-stats",
+        "operationId": "getV1MeReading-stats",
+        "method": "GET",
+        "path": "/v1/me/reading-stats?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd2289492-0dbf-407d-b46a-5b60e2f37454&year=2026",
+        "status": 200,
+        "answer": {
+          "year": 2026,
+          "books": 0,
+          "chapters": 0,
+          "months": [
+            {
+              "month": 1,
+              "books": 0,
+              "chapters": 0
+            },
+            {
+              "month": 2,
+              "books": 0,
+              "chapters": 0
+            },
+            {
+              "month": 3,
+              "books": 0,
+              "chapters": 0
+            },
+            {
+              "month": 4,
+              "books": 0,
+              "chapters": 0
+            },
+            {
+              "month": 5,
+              "books": 0,
+              "chapters": 0
+            },
+            {
+              "month": 6,
+              "books": 0,
+              "chapters": 0
+            },
+            {
+              "month": 7,
+              "books": 0,
+              "chapters": 0
+            },
+            {
+              "month": 8,
+              "books": 0,
+              "chapters": 0
+            },
+            {
+              "month": 9,
+              "books": 0,
+              "chapters": 0
+            },
+            {
+              "month": 10,
+              "books": 0,
+              "chapters": 0
+            },
+            {
+              "month": 11,
+              "books": 0,
+              "chapters": 0
+            },
+            {
+              "month": 12,
+              "books": 0,
+              "chapters": 0
+            }
+          ],
+          "detailsAvailability": "complete",
+          "averageRating": null,
+          "ratedBooks": 0,
+          "knownChapters": 0,
+          "booksWithChapters": 0,
+          "topConcepts": [],
+          "titleLanguages": []
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "followed-authors",
+        "operationId": "getV1MeFollowsAuthors",
+        "method": "GET",
+        "path": "/v1/me/follows/authors?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd2289492-0dbf-407d-b46a-5b60e2f37454",
+        "status": 200,
+        "answer": {
+          "profile": "followed-authors-v1",
+          "items": [],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "12230613-eb97-4fdf-95f9-d8fea80b9c6d",
+            "sequence": "29"
+          },
+          "count": {
+            "value": 0,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      }
+    ],
+    "moderator": [
+      {
+        "label": "get-library-export-0",
+        "operationId": "getV1MeLibrary-export",
+        "method": "GET",
+        "path": "/v1/me/library-export?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd2289492-0dbf-407d-b46a-5b60e2f37454&cursor=O-0f6EbZN6irlUtd8VSTFXuapEjj_E6bw7KbPtgHbWSD6cz8dePHoTwKClC0saNNL4pxy58qFnulyLuUBIUkUXvQHdHQoCc3sanL6kc_9SJtuADKJDWZ1DdzKxmC4ybHj5fiVHHSRTYKHUqrih2fGbfY8aNH83ZUJYNeb0xu1UaPCZi0liKln74103PRp69LD6Jmqlg9OzwQ2px4WUCzjewxd3BM9b4SEye1c_MbC8sd4Be-f7KyhZmR7lwh-uOHz5baEERP3tLz-kwOg6sMbHS9U2M08bNFraeee5elVKJxH7ZkIolEZHrClpHjmlJCubwaxZbDSbFeE20Vmjuy699NH1uuiSvxwumqpNJl7kMX4BH3CQhWxeYgBnlCa7A_7-EzGSgfnA9ZwDsU8F1rpOjPAay6jVRpj7WcIku-&snapshot=XMfALx3DVb7Vdp2Ovmp7DVgT8pMPJ49L3UnBKFtSgpOcp6QDbJj4ekocDwSwg_yB52psf8NGkbxfLDBrMH1u0gGNBTJttmrza8-E7WK1ldmhmzt4T6JjqrUEN89H6KR85hR9qvDUxz-ZdS33_B32XovzdJLQkAD48LH6_Al4t47pk7EQ77tszD5ePZAssfAgSNzM-nSBStuDYarJEqfEHKP5dYSO572mBPPUj5AG0sUv7AbqsFbkIk_IY-JOjjIOiTy_pZcOgrVtzVQV8Ih4FwN21vmOdXu71JHd8q_WwKcR5W54rZQqCMOgMUu-4JL21mwW65r4HuLDluwk_rxFK8x9FzTl-Gc5nup-exzfhUv20rUMvXfwPTx0GyR8E9FbKWaBE8S0Bo2AYlM0sBG0OI92qYnk-AtIH0jEwdhp",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/library_export_denied",
+          "title": "Your library export is private to your own Person",
+          "status": 403,
+          "code": "library_export_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "get-library-export-1",
+        "operationId": "getV1MeLibrary-export",
+        "method": "GET",
+        "path": "/v1/me/library-export?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Febb68bb6-a3ce-4a15-91a6-158c0511353f&cursor=O-0f6EbZN6irlUtd8VSTFXuapEjj_E6bw7KbPtgHbWSD6cz8dePHoTwKClC0saNNL4pxy58qFnulyLuUBIUkUXvQHdHQoCc3sanL6kc_9SJtuADKJDWZ1DdzKxmC4ybHj5fiVHHSRTYKHUqrih2fGbfY8aNH83ZUJYNeb0xu1UaPCZi0liKln74103PRp69LD6Jmqlg9OzwQ2px4WUCzjewxd3BM9b4SEye1c_MbC8sd4Be-f7KyhZmR7lwh-uOHz5baEERP3tLz-kwOg6sMbHS9U2M08bNFraeee5elVKJxH7ZkIolEZHrClpHjmlJCubwaxZbDSbFeE20Vmjuy699NH1uuiSvxwumqpNJl7kMX4BH3CQhWxeYgBnlCa7A_7-EzGSgfnA9ZwDsU8F1rpOjPAay6jVRpj7WcIku-&snapshot=XMfALx3DVb7Vdp2Ovmp7DVgT8pMPJ49L3UnBKFtSgpOcp6QDbJj4ekocDwSwg_yB52psf8NGkbxfLDBrMH1u0gGNBTJttmrza8-E7WK1ldmhmzt4T6JjqrUEN89H6KR85hR9qvDUxz-ZdS33_B32XovzdJLQkAD48LH6_Al4t47pk7EQ77tszD5ePZAssfAgSNzM-nSBStuDYarJEqfEHKP5dYSO572mBPPUj5AG0sUv7AbqsFbkIk_IY-JOjjIOiTy_pZcOgrVtzVQV8Ih4FwN21vmOdXu71JHd8q_WwKcR5W54rZQqCMOgMUu-4JL21mwW65r4HuLDluwk_rxFK8x9FzTl-Gc5nup-exzfhUv20rUMvXfwPTx0GyR8E9FbKWaBE8S0Bo2AYlM0sBG0OI92qYnk-AtIH0jEwdhp",
+        "status": 400,
+        "answer": {
+          "type": "https://rezics.com/problems/invalid_work_read",
+          "title": "Cursor is invalid or expired",
+          "status": 400,
+          "code": "invalid_work_read"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      }
+    ],
+    "operator": [
+      {
+        "label": "get-library-export-0",
+        "operationId": "getV1MeLibrary-export",
+        "method": "GET",
+        "path": "/v1/me/library-export?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd2289492-0dbf-407d-b46a-5b60e2f37454&cursor=O-0f6EbZN6irlUtd8VSTFXuapEjj_E6bw7KbPtgHbWSD6cz8dePHoTwKClC0saNNL4pxy58qFnulyLuUBIUkUXvQHdHQoCc3sanL6kc_9SJtuADKJDWZ1DdzKxmC4ybHj5fiVHHSRTYKHUqrih2fGbfY8aNH83ZUJYNeb0xu1UaPCZi0liKln74103PRp69LD6Jmqlg9OzwQ2px4WUCzjewxd3BM9b4SEye1c_MbC8sd4Be-f7KyhZmR7lwh-uOHz5baEERP3tLz-kwOg6sMbHS9U2M08bNFraeee5elVKJxH7ZkIolEZHrClpHjmlJCubwaxZbDSbFeE20Vmjuy699NH1uuiSvxwumqpNJl7kMX4BH3CQhWxeYgBnlCa7A_7-EzGSgfnA9ZwDsU8F1rpOjPAay6jVRpj7WcIku-&snapshot=XMfALx3DVb7Vdp2Ovmp7DVgT8pMPJ49L3UnBKFtSgpOcp6QDbJj4ekocDwSwg_yB52psf8NGkbxfLDBrMH1u0gGNBTJttmrza8-E7WK1ldmhmzt4T6JjqrUEN89H6KR85hR9qvDUxz-ZdS33_B32XovzdJLQkAD48LH6_Al4t47pk7EQ77tszD5ePZAssfAgSNzM-nSBStuDYarJEqfEHKP5dYSO572mBPPUj5AG0sUv7AbqsFbkIk_IY-JOjjIOiTy_pZcOgrVtzVQV8Ih4FwN21vmOdXu71JHd8q_WwKcR5W54rZQqCMOgMUu-4JL21mwW65r4HuLDluwk_rxFK8x9FzTl-Gc5nup-exzfhUv20rUMvXfwPTx0GyR8E9FbKWaBE8S0Bo2AYlM0sBG0OI92qYnk-AtIH0jEwdhp",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/library_export_denied",
+          "title": "Your library export is private to your own Person",
+          "status": 403,
+          "code": "library_export_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "get-library-export-1",
+        "operationId": "getV1MeLibrary-export",
+        "method": "GET",
+        "path": "/v1/me/library-export?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fc2951769-c7a9-44d2-b115-35dfb0701254&cursor=O-0f6EbZN6irlUtd8VSTFXuapEjj_E6bw7KbPtgHbWSD6cz8dePHoTwKClC0saNNL4pxy58qFnulyLuUBIUkUXvQHdHQoCc3sanL6kc_9SJtuADKJDWZ1DdzKxmC4ybHj5fiVHHSRTYKHUqrih2fGbfY8aNH83ZUJYNeb0xu1UaPCZi0liKln74103PRp69LD6Jmqlg9OzwQ2px4WUCzjewxd3BM9b4SEye1c_MbC8sd4Be-f7KyhZmR7lwh-uOHz5baEERP3tLz-kwOg6sMbHS9U2M08bNFraeee5elVKJxH7ZkIolEZHrClpHjmlJCubwaxZbDSbFeE20Vmjuy699NH1uuiSvxwumqpNJl7kMX4BH3CQhWxeYgBnlCa7A_7-EzGSgfnA9ZwDsU8F1rpOjPAay6jVRpj7WcIku-&snapshot=XMfALx3DVb7Vdp2Ovmp7DVgT8pMPJ49L3UnBKFtSgpOcp6QDbJj4ekocDwSwg_yB52psf8NGkbxfLDBrMH1u0gGNBTJttmrza8-E7WK1ldmhmzt4T6JjqrUEN89H6KR85hR9qvDUxz-ZdS33_B32XovzdJLQkAD48LH6_Al4t47pk7EQ77tszD5ePZAssfAgSNzM-nSBStuDYarJEqfEHKP5dYSO572mBPPUj5AG0sUv7AbqsFbkIk_IY-JOjjIOiTy_pZcOgrVtzVQV8Ih4FwN21vmOdXu71JHd8q_WwKcR5W54rZQqCMOgMUu-4JL21mwW65r4HuLDluwk_rxFK8x9FzTl-Gc5nup-exzfhUv20rUMvXfwPTx0GyR8E9FbKWaBE8S0Bo2AYlM0sBG0OI92qYnk-AtIH0jEwdhp",
+        "status": 400,
+        "answer": {
+          "type": "https://rezics.com/problems/invalid_work_read",
+          "title": "Cursor is invalid or expired",
+          "status": 400,
+          "code": "invalid_work_read"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      }
+    ]
+  }
+}

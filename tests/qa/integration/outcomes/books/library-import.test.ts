@@ -4,7 +4,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import libraryImport from '../../../../../scripts/qa/cases/outcomes/books/library-import.ts';
 import libraryExport from '../../../../../scripts/qa/cases/outcomes/books/library-export.ts';
 import interruptedExport from '../../../../../scripts/qa/cases/outcomes/books/resume-an-interrupted-export-interrupted-exports.ts';
-import { outcomeTest } from '../../../support/outcome-test.ts';
+import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import {
   personaSessions,
   type PersonaName,
@@ -50,6 +50,24 @@ setDefaultTimeout(120_000);
 let people: PersonaSessions, book: string, upload: string, originals: CanonicalRow[];
 let applied: Promise<void> | undefined;
 let continuation: Promise<Page> | undefined;
+const importRecording = new OutcomeRecorder(libraryImport);
+const exportRecording = new OutcomeRecorder(libraryExport);
+const interruptedRecording = new OutcomeRecorder(interruptedExport);
+
+function recordedPerson(recording: OutcomeRecorder, name: PersonaName,
+  person = people[name], prefix = ''): PersonaSession {
+  const sample = recording.session(name, person);
+  const counts = new Map<string, number>();
+  return { ...person, main: (method, path, body, key) => {
+    // Route names and ordinal pages stay addressable when fixture IDs change.
+    const route = path.split('?')[0]!.replace(/^\/v1\/(?:me\/)?/, '')
+      .split('/').filter(part => !/^[0-9a-f-]{36}$/.test(part)).join('-');
+    const label = `${prefix}${method.toLowerCase()}-${route}`;
+    const index = counts.get(label) ?? 0;
+    counts.set(label, index + 1);
+    return sample(`${label}-${index}`, method, path, body, key);
+  } };
+}
 const own = (person: PersonaSession = people.owner) => ({ actingSubject: person.actingSubject! });
 const query = (person: PersonaSession = people.owner) =>
   new URLSearchParams(own(person)).toString();
@@ -192,12 +210,12 @@ async function applyOriginals(id: string, person: PersonaSession = people.owner)
   });
   return key;
 }
-function ensureApplied() {
+function ensureApplied(person: PersonaSession = people.owner) {
   return (applied ??= (async () => {
-    const key = await applyOriginals(upload);
+    const key = await applyOriginals(upload, person);
     // Replay the accepted command after completion; its receipt cannot apply another session.
     await json(
-      people.owner.main(
+      person.main(
         'POST',
         `${root()}/apply`,
         { ...own(), context: null, language: 'en' },
@@ -217,6 +235,7 @@ function tokens() {
 
 beforeAll(async () => {
   people = await personaSessions('private');
+  await Promise.all([importRecording.prepare(), exportRecording.prepare(), interruptedRecording.prepare()]);
   const created = await json<{ work: string; mainVersion: string }>(
     people.owner.main('POST', '/v1/works', {
       profile: 'metadata-only-v1',
@@ -366,11 +385,15 @@ beforeAll(async () => {
   upload = (await json<{ id: string }>(create(originals), 201)).id;
 }, 120_000);
 afterAll(async () => {
-  await people?.close();
+  try {
+    await importRecording.publish();
+    await exportRecording.publish();
+    await interruptedRecording.publish();
+  } finally { await people?.close(); }
 });
 
 async function deniedImports(name: Exclude<PersonaName, 'owner'>) {
-  const person = people[name],
+  const person = recordedPerson(importRecording, name),
     status = name === 'visitor' ? 401 : 403;
   const code = name === 'visitor' ? 'account_assertion_denied' : 'library_import_denied';
   // These are ordinary member routes. No row-relevant platform import operation exists.
@@ -395,7 +418,7 @@ async function deniedImports(name: Exclude<PersonaName, 'owner'>) {
     await refused(person.main(method, path, body, randomUUID()), status, code);
 }
 async function deniedExport(name: Exclude<PersonaName, 'owner'>, resume = false) {
-  const person = people[name],
+  const person = recordedPerson(resume ? interruptedRecording : exportRecording, name),
     page = resume ? await tokens() : undefined;
   const q = new URLSearchParams({
     ...own(),
@@ -483,7 +506,7 @@ async function samePersonReimport() {
   }[] = [];
   // This Person owns a separate library: a failed reimport cannot contaminate
   // the export recipient or the interrupted-export fixture, in any test order.
-  const session = people.member;
+  const session = recordedPerson(importRecording, 'owner', people.member, 'same-person-reimport-');
   const person: PersonaSession = {
     ...session,
     main: async (method, path, body, key) => {
@@ -552,24 +575,47 @@ async function samePersonReimport() {
   }
 }
 
-outcomeTest(libraryImport, 'visitor', () => deniedImports('visitor'));
-outcomeTest(libraryImport, 'stranger', () => deniedImports('stranger'));
-outcomeTest(libraryImport, 'member', () => deniedImports('member'));
-outcomeTest(libraryImport, 'moderator', () => deniedImports('moderator'));
-outcomeTest(libraryImport, 'operator', () => deniedImports('operator'));
+async function supportingReads(recording: OutcomeRecorder) {
+  const sample = recording.session('owner', people.owner);
+  const year = new Date().getUTCFullYear();
+  const paths = [
+    ['shelf-overview', `/v1/me/shelves?${query()}&limit=20`],
+    ['library-visibility', `/v1/agents/${people.owner.actingSubject!.slice(-36)}/library-visibility`],
+    ['rating-context', '/v1/rating-contexts?scope=global&limit=1'],
+    ['reading-goal', `/v1/me/reading-goal?${query()}&year=${year}`],
+    ['reading-stats', `/v1/me/reading-stats?${query()}&year=${year}`],
+    ['followed-authors', `/v1/me/follows/authors?${query()}`],
+  ] as const;
+  for (const [label, path] of paths) await json(sample(label, 'GET', path));
+}
+
+outcomeTest(libraryImport, 'visitor', () => deniedImports('visitor'), importRecording);
+outcomeTest(libraryImport, 'stranger', () => deniedImports('stranger'), importRecording);
+outcomeTest(libraryImport, 'member', () => deniedImports('member'), importRecording);
+outcomeTest(libraryImport, 'moderator', () => deniedImports('moderator'), importRecording);
+outcomeTest(libraryImport, 'operator', () => deniedImports('operator'), importRecording);
 outcomeTest(libraryImport, 'owner', async () => {
-  await ensureApplied();
-  preserved(await collect());
-  await noActiveLendingEffects();
+  const person = recordedPerson(importRecording, 'owner');
+  const sample = importRecording.session('owner', people.owner);
+  await json(sample('csv-inspection', 'POST', '/v1/me/library-imports', {
+    ...own(), format: 'generic-csv', file: 'Title,Status\nOwned original Book,want-to-read\n',
+  }, randomUUID()));
+  await json(sample('csv-no-data-refused', 'POST', '/v1/me/library-imports', {
+    ...own(), format: 'generic-csv', file: 'Title,Status\n',
+  }, randomUUID()), 400);
+  await json(sample('import-review-empty', 'GET', `${root()}/rows?${query()}&cursor=4999`, undefined, randomUUID()));
+  await ensureApplied(person);
+  preserved(await collect(read(undefined, undefined, 20, person), person));
+  await noActiveLendingEffects(person);
   await refused(
-    people.owner.main('POST', `${root()}/rows/0/adoptions`, { ...own(), workId: 'OL1W' }),
+    person.main('POST', `${root()}/rows/0/adoptions`, { ...own(), workId: 'OL1W' }),
     400,
     'invalid_library_file',
   );
-  const disposable = (await json<{ id: string }>(create([originals[3]!]), 201)).id;
-  await json(people.owner.main('DELETE', `/v1/me/library-imports/${disposable}?${query()}`));
+  const disposable = (await json<{ id: string }>(create([originals[3]!], randomUUID(), person), 201)).id;
+  await json(person.main('DELETE', `/v1/me/library-imports/${disposable}?${query()}`));
   await refused(
-    people.owner.main(
+    person.main(
       'GET',
       `/v1/me/library-imports/${disposable}/rows?${query()}`,
       undefined,
@@ -579,19 +625,21 @@ outcomeTest(libraryImport, 'owner', async () => {
     'library_import_missing',
   );
   await samePersonReimport();
-});
-outcomeTest(libraryExport, 'visitor', () => deniedExport('visitor'));
-outcomeTest(libraryExport, 'stranger', () => deniedExport('stranger'));
-outcomeTest(libraryExport, 'member', () => deniedExport('member'));
-outcomeTest(libraryExport, 'moderator', () => deniedExport('moderator'));
-outcomeTest(libraryExport, 'operator', () => deniedExport('operator'));
+  await supportingReads(importRecording);
+}, importRecording);
+outcomeTest(libraryExport, 'visitor', () => deniedExport('visitor'), exportRecording);
+outcomeTest(libraryExport, 'stranger', () => deniedExport('stranger'), exportRecording);
+outcomeTest(libraryExport, 'member', () => deniedExport('member'), exportRecording);
+outcomeTest(libraryExport, 'moderator', () => deniedExport('moderator'), exportRecording);
+outcomeTest(libraryExport, 'operator', () => deniedExport('operator'), exportRecording);
 outcomeTest(libraryExport, 'owner', async () => {
-  await ensureApplied();
-  const before = await collect();
+  const person = recordedPerson(exportRecording, 'owner');
+  await ensureApplied(person);
+  const before = await collect(read(undefined, undefined, 20, person), person);
   preserved(before);
-  const sourceSnapshot = (await read()).snapshot;
+  const sourceSnapshot = (await read(undefined, undefined, 20, person)).snapshot;
   // Portability restores into an empty library under that destination Person's own authority.
-  const destination = people.stranger;
+  const destination = recordedPerson(exportRecording, 'owner', people.stranger, 'destination-');
   expect(await collect(read(undefined, undefined, 20, destination), destination)).toEqual([]);
   const restored = await json<{ id: string }>(
     destination.main('POST', '/v1/me/library-imports', {
@@ -609,35 +657,41 @@ outcomeTest(libraryExport, 'owner', async () => {
   await apply(restored.id, randomUUID(), destination);
   preserved(await collect(read(undefined, undefined, 20, destination), destination));
   await noActiveLendingEffects(destination);
-  expect(await collect()).toEqual(before);
-  const cache = await people.owner.main('GET', `/v1/me/library-export?${query()}`);
+  expect(await collect(read(undefined, undefined, 20, person), person)).toEqual(before);
+  const cache = await person.main('GET', `/v1/me/library-export?${query()}`);
   expect(cache.status).toBe(200);
   expect(cache.headers.get('cache-control')).toBe('private, no-store');
-});
-outcomeTest(interruptedExport, 'visitor', () => deniedExport('visitor', true));
-outcomeTest(interruptedExport, 'stranger', () => deniedExport('stranger', true));
-outcomeTest(interruptedExport, 'member', () => deniedExport('member', true));
-outcomeTest(interruptedExport, 'moderator', () => deniedExport('moderator', true));
-outcomeTest(interruptedExport, 'operator', () => deniedExport('operator', true));
+  await supportingReads(exportRecording);
+}, exportRecording);
+outcomeTest(interruptedExport, 'visitor', () => deniedExport('visitor', true), interruptedRecording);
+outcomeTest(interruptedExport, 'stranger', () => deniedExport('stranger', true), interruptedRecording);
+outcomeTest(interruptedExport, 'member', () => deniedExport('member', true), interruptedRecording);
+outcomeTest(interruptedExport, 'moderator', () => deniedExport('moderator', true), interruptedRecording);
+outcomeTest(interruptedExport, 'operator', () => deniedExport('operator', true), interruptedRecording);
 outcomeTest(interruptedExport, 'owner', async () => {
-  await ensureApplied();
+  const person = recordedPerson(interruptedRecording, 'owner');
+  const sample = interruptedRecording.session('owner', people.owner);
+  await ensureApplied(person);
   const first = await tokens();
+  await json(sample('export-first-page', 'GET', `/v1/me/library-export?${query()}&limit=2&snapshot=${first.snapshot}`));
+  await json(interruptedRecording.session('owner', people.moderator)('export-empty', 'GET',
+    `/v1/me/library-export?${query(people.moderator)}`));
   // Discard a delivered page without acknowledging its nextCursor, then retry the prior cursor.
-  const dropped = await read(first.nextCursor, first.snapshot);
-  const repeated = await read(first.nextCursor, first.snapshot);
+  const dropped = await read(first.nextCursor, first.snapshot, 20, person);
+  const repeated = await read(first.nextCursor, first.snapshot, 20, person);
   expect(repeated.rows).toEqual(dropped.rows);
   expect(repeated.snapshot).toBe(first.snapshot);
-  const assembled = [...first.rows, ...(await collect(Promise.resolve(repeated)))];
-  expect(assembled).toEqual(await collect());
+  const assembled = [...first.rows, ...(await collect(Promise.resolve(repeated), person))];
+  expect(assembled).toEqual(await collect(read(undefined, undefined, 20, person), person));
   preserved(assembled);
   expect(new Set(assembled.map((item) => item.sourceId)).size).toBe(assembled.length);
   await refused(
-    people.owner.main('GET', `/v1/me/library-export?${query()}&cursor=${first.nextCursor}`),
+    person.main('GET', `/v1/me/library-export?${query()}&cursor=${first.nextCursor}`),
     409,
     'read_basis_changed',
   );
   await json(
-    people.owner.main('PUT', `/v1/me/import-reviews/${book.slice(-36)}`, {
+    person.main('PUT', `/v1/me/import-reviews/${book.slice(-36)}`, {
       ...own(),
       text: 'Later original private review',
       language: 'en',
@@ -646,14 +700,15 @@ outcomeTest(interruptedExport, 'owner', async () => {
     }),
   );
   await refused(
-    people.owner.main(
+    person.main(
       'GET',
       `/v1/me/library-export?${query()}&cursor=${first.nextCursor}&snapshot=${first.snapshot}`,
     ),
     409,
     'read_basis_changed',
   );
-  expect((await collect()).find((item) => item.review)?.review?.text).toBe(
+  expect((await collect(read(undefined, undefined, 20, person), person)).find((item) => item.review)?.review?.text).toBe(
     'Later original private review',
   );
-});
+  await supportingReads(interruptedRecording);
+}, interruptedRecording);
