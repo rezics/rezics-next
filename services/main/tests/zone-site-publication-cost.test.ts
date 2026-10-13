@@ -173,7 +173,7 @@ test('request settlement and relay recovery read one retained row per exact pin,
     const publications = f.pages.map((page, index): ProjectionPublication => ({
       preparationId: `content-site-pin:${f.expected.admissionId}:${page.revisionId}`,
       preparationPosition: position(String(index + 1)), status: 'active',
-      reference: { resourceId: page.page, variantId: page.variantId, revisionId: page.revisionId,
+      reference: { owner: 'content', resourceId: page.page, variantId: page.variantId, revisionId: page.revisionId,
         format: 'rezics-content-json-v1', model: 'content-shape-v1', byteDigest: page.byteDigest, byteLength: 12,
         language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr', sourceRevision: null,
         predecessor: null, provenance: {} },
@@ -229,6 +229,22 @@ test('request settlement and relay recovery read one retained row per exact pin,
       expect((await relayContentProjectionOnce(env, content, cursor, 'public-search'))?.disposition).toBe('ignored');
       expect(finished).toBe(count); expect(rows).toBe(count);
     }
+    // Losing the cursor acknowledgement repeats just the exact pin proof.
+    // The ordinary scan and recovery share the same retained authority checks.
+    rows = 0;
+    let scanned = 0, loseAcknowledgement = true;
+    Object.assign(content, { readOutbox: async () => events.slice(scanned) });
+    const scanning = { retries: async () => [], readScan: async () => position(String(scanned)),
+      hasPendingTarget: async () => false,
+      acknowledge: async (_consumer: string, _checkpoint: unknown, next: { sequence: string }) => {
+        if (loseAcknowledgement) { loseAcknowledgement = false; throw new Error('acknowledgement lost'); }
+        scanned = Number(next.sequence);
+      },
+    } as unknown as ContentProjectionCursor;
+    await expect(relayContentProjectionOnce(env, content, scanning, 'public-search')).rejects.toThrow('acknowledgement lost');
+    while (scanned < count) expect((await relayContentProjectionOnce(env, content, scanning, 'public-search'))?.disposition).toBe('ignored');
+    expect(rows).toBe(count + 1);
+    Object.assign(content, { readOutbox: async () => [] });
     // A later invocation must recheck authority, rather than reuse success.
     custodyOpen = false;
     let refused = 0;
@@ -245,3 +261,12 @@ test('request settlement and relay recovery read one retained row per exact pin,
     expect(settlements).toBe(2 * count);
   }
 }, 300_000);
+
+
+test('a selected pin still refuses a wrong retained count, digest and erased home', async () => {
+  const f = fixture(8), page = f.pages[0]!, pin = { resourceId: page.page, ...page };
+  expect((await nativeProjection({ ...f, data: f.data.replaceAll('rv:publishedPageCount 8', 'rv:publishedPageCount 7') }, false, pin)).receipt).toBeNull();
+  expect((await nativeProjection(f, false, { ...pin, byteDigest: '0'.repeat(64) })).receipt).toBeNull();
+  const erased = fixture(8, true);
+  expect((await nativeProjection(erased, false, { resourceId: erased.expected.homeDocument, ...erased.pages[0]! })).receipt).toBeNull();
+}, 180_000);
