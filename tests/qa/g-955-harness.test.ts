@@ -662,9 +662,12 @@ test('G-955: shard claims respect goalctl default capacity instead of inventing 
   try {
     const slots = await acquireQaSlots(directory, 8, {});
     expect(slots.count).toBe(3);
-    expect(readdirSync(directory).sort()).toEqual(['0', '1', '2']);
+    // Waiting tickets live in `waiters` beside the leases: count the leases, and no ticket may outlive its claim.
+    const leases = () => readdirSync(directory).filter(name => name !== 'waiters').sort();
+    expect(leases()).toEqual(['0', '1', '2']);
     slots.release();
-    expect(readdirSync(directory)).toEqual([]);
+    expect(leases()).toEqual([]);
+    expect(existsSync(join(directory, 'waiters')) ? readdirSync(join(directory, 'waiters')) : []).toEqual([]);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
