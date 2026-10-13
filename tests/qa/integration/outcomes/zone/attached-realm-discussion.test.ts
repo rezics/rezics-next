@@ -475,9 +475,7 @@ async function supportingReads(sample: ReturnType<typeof recording.session>, per
   await ban.body?.cancel();
   await answer(sample('showcase-editor-refused', 'GET', viewer(`/v1/zones/${short(page.zone)}/showcase-editor`)), 404);
   // The component uses the default thread order; the concurrency proof above uses new explicitly.
-  // Numeric vote values in this answer fail the generated OpenAPI string schema.
-  // Keep the real read and proof; its answer cannot be published until that contract is fixed.
-  await answer(person.main('GET', viewer(`/v1/realms/${short(page.realm)}/threads/${
+  await answer(sample('canonical-discussion-thread', 'GET', viewer(`/v1/realms/${short(page.realm)}/threads/${
     short(canonical.thread!.reply)}`)));
   const work = await answer<{ mainVersion: string; selectedLanguage: string | null }>(
     sample('mounted-work-header', 'GET', viewer(`/v1/works/${short(page.about)}`)));
