@@ -335,6 +335,118 @@ function pump(f: ReturnType<typeof repository>) {
     { cwd: f.directory, encoding: 'utf8', env: f.env });
 }
 
+async function endedWorker(f: ReturnType<typeof repository>) {
+  ok(f.run('dispatch', f.brief()));
+  const task = f.ledger().tasks['G-002']!;
+  const record = join(task.worktree, '.temp/record.json');
+  for (let n = 0; !existsSync(record) && n < 100; n++) await Bun.sleep(10);
+  expect(existsSync(record)).toBe(true);
+  const ledger = f.ledger();
+  const current = ledger.tasks[task.id]!;
+  current.state = 'exited';
+  current.attempts[0]!.pid = 0;
+  current.attempts[0]!.session = 'recording-session';
+  current.attempts[0]!.endedAt = new Date().toISOString();
+  f.save(ledger);
+  rmSync(record);
+  return current;
+}
+
+test.each(['memory', 'cap', 'account'])('a resume waits for %s admission and preserves its message and options', async gate => {
+  const f = repository(); const task = await endedWorker(f);
+  const usage = join(f.env.GOAL_CODEX_1_HOME, 'sessions/usage.jsonl');
+  if (gate === 'memory') writeFileSync(f.meminfo, 'MemAvailable: 1024 kB\n');
+  if (gate === 'cap') f.env.GOAL_MAX_WORKERS = '0';
+  if (gate === 'account') {
+    mkdirSync(join(f.env.GOAL_CODEX_1_HOME, 'sessions'), { recursive: true });
+    writeFileSync(usage, JSON.stringify({ timestamp: new Date().toISOString(), payload: { rate_limits: {
+      primary: { used_percent: 100, window_minutes: 300, resets_at: Date.now() / 1000 + 3600 },
+    } } }));
+  }
+  const note = join(f.local, 'resume-note'); writeFileSync(note, 'Continue with the retained note.');
+  const output = ok(f.run('resume', task.id, '--file', note, '--engine', 'codex-1', '--effort', 'medium', '--fresh'));
+  expect(output).toContain('resume waiting:');
+  expect(f.ledger().tasks[task.id]!.waitingResume).toMatchObject({ message: 'Continue with the retained note.',
+    engine: 'codex-1', effort: 'medium', fresh: true, forceUsage: false });
+  expect(f.ledger().tasks[task.id]!.attempts).toHaveLength(1);
+  rmSync(note);
+  const status = ok(f.run('status'));
+  expect(status).toContain('G-002 waiting'); expect(status).toContain('waiting 1;');
+  expect(status).toContain(f.ledger().tasks[task.id]!.waitingResume!.reason);
+  expect(pump(f).status).toBe(0); expect(f.ledger().tasks[task.id]!.attempts).toHaveLength(1);
+  ok(f.run('settle')); expect(f.ledger().tasks[task.id]!.settlement).toBeUndefined();
+  writeFileSync(f.meminfo, 'MemAvailable: 67108864 kB\n'); f.env.GOAL_MAX_WORKERS = '25';
+  if (gate === 'account') rmSync(usage);
+  expect(pump(f).status).toBe(0);
+  const resumed = f.ledger().tasks[task.id]!;
+  expect(resumed.waitingResume).toBeUndefined(); expect(resumed.attempts).toHaveLength(2);
+  expect(resumed.attempts[1]!.effort).toBe('medium');
+  const record = join(task.worktree, '.temp/record.json');
+  for (let n = 0; !existsSync(record) && n < 100; n++) await Bun.sleep(10);
+  const observed = JSON.parse(readFileSync(record, 'utf8')) as { prompt: string; args: string[] };
+  expect(observed.prompt).toContain('Continue with the retained note.'); expect(observed.args).not.toContain('resume');
+});
+
+test('a second resume replaces the waiting message and starts before a queued brief', async () => {
+  const f = repository(); const task = await endedWorker(f);
+  writeFileSync(f.meminfo, 'MemAvailable: 1024 kB\n');
+  ok(f.run('resume', task.id, '-m', 'Old note.', '--fresh'));
+  const previous = f.ledger().tasks[task.id]!.waitingResume!.token;
+  ok(f.run('queue', f.brief('G-003', ['paths: [new.ts]'])));
+  ok(f.run('resume', task.id, '-m', 'Replacement note.', '--effort', 'low'));
+  expect(f.ledger().tasks[task.id]!.waitingResume!.token).not.toBe(previous);
+  writeFileSync(f.meminfo, 'MemAvailable: 67108864 kB\n');
+  const output = pump(f); expect(output.status, output.stderr).toBe(0);
+  expect(output.stdout.indexOf('G-002 attempt 2')).toBeLessThan(output.stdout.indexOf('G-003 started'));
+  const record = join(task.worktree, '.temp/record.json');
+  for (let n = 0; !existsSync(record) && n < 100; n++) await Bun.sleep(10);
+  const observed = JSON.parse(readFileSync(record, 'utf8')) as { prompt: string; args: string[] };
+  expect(observed.prompt).toContain('Replacement note.'); expect(observed.prompt).not.toContain('Old note.');
+  expect(observed.args).toContain('resume'); expect(f.ledger().tasks[task.id]!.attempts[1]!.effort).toBe('low');
+});
+
+test.each(['stop', 'close'])('%s removes a waiting resume', async action => {
+  const f = repository(); const task = await endedWorker(f);
+  writeFileSync(f.meminfo, 'MemAvailable: 1024 kB\n'); ok(f.run('resume', task.id, '-m', 'Continue.'));
+  ok(f.run(action, task.id, ...action === 'close' ? ['cancelled'] : []));
+  expect(f.ledger().tasks[task.id]!.waitingResume).toBeUndefined();
+  writeFileSync(f.meminfo, 'MemAvailable: 67108864 kB\n'); expect(pump(f).status).toBe(0);
+  expect(f.ledger().tasks[task.id]!.attempts).toHaveLength(1);
+});
+
+test('other resume refusals fail without being kept', async () => {
+  const f = repository(); const task = await endedWorker(f);
+  writeFileSync(f.meminfo, 'MemAvailable: 1024 kB\n');
+  const result = f.run('resume', task.id, '-m', 'Continue.', '--effort', 'imaginary');
+  expect(result.status).toBe(1); expect(result.stderr).toContain('effort must be');
+  expect(f.ledger().tasks[task.id]!.waitingResume).toBeUndefined();
+  writeFileSync(f.meminfo, 'MemAvailable: 67108864 kB\n');
+  writeFileSync(f.env.GOAL_USAGE_FILE, JSON.stringify({ at: Date.now() / 1000, rate_limits: {
+    five_hour: { used_percentage: 100, resets_at: Date.now() / 1000 + 3600 },
+  } }));
+  const usage = f.run('resume', task.id, '-m', 'Continue.', '--engine', 'claude', '--effort', 'high');
+  expect(usage.status).toBe(1); expect(usage.stderr).toContain('Claude usage is critical');
+  expect(f.ledger().tasks[task.id]!.waitingResume).toBeUndefined();
+});
+
+test('concurrent passes start a waiting resume once', async () => {
+  const f = repository(); const task = await endedWorker(f);
+  writeFileSync(f.meminfo, 'MemAvailable: 1024 kB\n');
+  ok(f.run('resume', task.id, '-m', 'Continue once.', '--force-usage'));
+  expect(f.ledger().tasks[task.id]!.waitingResume!.forceUsage).toBe(true);
+  writeFileSync(f.meminfo, 'MemAvailable: 67108864 kB\n');
+  const run = async () => {
+    const child = Bun.spawn([process.execPath, '-e', `import { pumpQueue } from ${JSON.stringify(join(import.meta.dir, 'queue.ts'))}; await pumpQueue();`],
+      { cwd: f.directory, env: f.env, stdout: 'pipe', stderr: 'pipe' });
+    const [code, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
+    expect(code, stderr).toBe(0); expect(stderr).toBe(''); return stdout;
+  };
+  const outputs = await Promise.all([run(), run()]);
+  expect(outputs.join('').match(/G-002 attempt 2/g)).toHaveLength(1);
+  expect(f.ledger().tasks[task.id]!.attempts).toHaveLength(2);
+  expect(f.ledger().tasks[task.id]!.waitingResume).toBeUndefined();
+});
+
 test('a pass waiting on running dependencies performs no git work or outcome loads', () => {
   const f = repository(); const git = recordingGit(f);
   const loads = join(f.local, 'outcome-loads');

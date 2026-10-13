@@ -37,6 +37,7 @@ export async function status(): Promise<void> {
   }
   console.log(`program elapsed ${ledger.startedAt ? elapsed(ledger.startedAt) : 'not started'}; `
     + `live ${live.length}/${process.env.GOAL_MAX_WORKERS ?? 25}; `
+    + `waiting ${tasks.filter(task => task.waitingResume).length}; `
     + `Claude 5h ${usage.used ?? '?'}% ${usage.level}`
     + (usage.projected !== undefined ? `, projected ${usage.projected}% at reset in ${usage.resetInMinutes}m` : '')
     + (usage.ageSeconds !== undefined ? ` (${usage.ageSeconds}s old)` : ''));
@@ -76,12 +77,13 @@ export async function status(): Promise<void> {
     const attempt = lastAttempt(task);
     const continuations = transportContinuations(task);
     const repeated = task.state === 'exited' && transportDrop(attempt) && continuations >= MAX_TRANSPORT_CONTINUATIONS;
-    console.log(`${task.id} ${task.state.padEnd(8)} ${task.goal ?? '-'} ${engineOf(attempt)}/${attempt.effort} #${attempt.n} `
+    console.log(`${task.id} ${(task.waitingResume ? 'waiting' : task.state).padEnd(8)} ${task.goal ?? '-'} ${engineOf(attempt)}/${attempt.effort} #${attempt.n} `
       + `${elapsed(attempt.startedAt)} [${task.cases.join(' ')}] ${task.title}`
       + (running(task) ? `; window ${workerWindowName(task)}` : '')
       + (running(task) && continuations > 0 ? `; continued by itself ${continuations}` : '')
       + (repeated ? '\n  stopped after repeated transport errors' : '')
-      + (settlementReason(task) ? `\n  ${settlementReason(task)}` : '')
+      + (task.waitingResume ? `\n  resume waiting: ${task.waitingResume.reason}`
+        : settlementReason(task) ? `\n  ${settlementReason(task)}` : '')
       + (task.state === 'conflict' && task.refusal ? `\n  ${task.refusal}` : ''));
   }
   const closed = tasks.length - tasks.filter(t => !['verified', 'cancelled'].includes(t.state)).length;

@@ -35,6 +35,11 @@ export interface Task extends Omit<Brief, 'worktree'> {
   /** Set when the task works in a shared worktree. */
   worktreeName?: string;
   mergedCommit?: string; closedAt?: string;
+  /** A manager's resume retained until the existing queue pass can admit it. */
+  waitingResume?: {
+    token: string; queuedAt: string; reason: string; message: string;
+    effort?: string; engine?: Engine; fresh: boolean; forceUsage: boolean;
+  };
   /** The Goal that owns the task. Tasks dispatched before several Goals ran at once have none. */
   goal?: string;
   /** Merge refuses files and lines that name tasks (`historyIntroductions`). Unset on tasks dispatched before

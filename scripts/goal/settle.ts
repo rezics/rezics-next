@@ -94,7 +94,7 @@ export function spawnSettlement(task: Task, token: string,
 async function claim(id: string, detached: boolean, start: SpawnSettlement): Promise<Settlement | undefined> {
   return withLedger(ledger => {
     const task = taskOf(ledger, id);
-    if (!task.attempts.length || ['verified', 'cancelled'].includes(task.state)) return;
+    if (!task.attempts.length || task.waitingResume || ['verified', 'cancelled'].includes(task.state)) return;
     const attempt = lastAttempt(task);
     if (pidAlive(attempt.pid, programOf(engineOf(attempt)))) return;
     const previous = task.settlement;

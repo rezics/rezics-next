@@ -86,7 +86,7 @@ function assertDispatchable(ledger: Ledger, brief: Brief, goal: string | undefin
     && HOLDING.includes(task.state) && task.goal !== goal)) throw new Error(`${worktree} has open tasks belonging to another Goal; use a different shared worktree`);
 }
 
-function gateRefusal(reason: string): boolean {
+export function gateRefusal(reason: string): boolean {
   // Dispatch owns gate decisions; only its temporary refusals are retried.
   return /^(?:Concurrency limit reached:|Memory floor reached:|Claude usage is (?:restricted|critical)\b)/.test(reason)
     || /; use another engine or pass --force-usage$/.test(reason);
@@ -285,6 +285,18 @@ export async function dropQueue(id: string): Promise<void> {
 
 export async function pumpQueue(): Promise<void> {
   const ledger = readLedger() as QueueLedger;
+  // Resumes retain their task and claim; give them admission before new briefs.
+  for (const task of Object.values(ledger.tasks).filter(task => task.waitingResume)
+    .sort((a, b) => a.waitingResume!.queuedAt.localeCompare(b.waitingResume!.queuedAt))) {
+    if (task.goal && !activeGoals(ledger).includes(task.goal)) continue;
+    const source = `import { resumeTask } from ${JSON.stringify(pathToFileURL(join(import.meta.dir, 'tasks.ts')).href)}; try { await resumeTask(${JSON.stringify(task.id)}, [], ${JSON.stringify(task.waitingResume!.token)}); } catch (error) { console.error(error.message); process.exit(1); }`;
+    const child = Bun.spawn([process.execPath, '-e', source], {
+      cwd: root, env: { ...process.env, GOAL_ID: task.goal ?? '' }, stdout: 'pipe', stderr: 'pipe',
+    });
+    const [code, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
+    if (stdout) process.stdout.write(stdout);
+    if (code !== 0) console.error(`${task.id} waiting resume failed: ${stderr.trim()}`);
+  }
   const entries = Object.values(ledger.queue ?? {}).sort((a, b) => a.queuedAt.localeCompare(b.queuedAt));
   const changes = passChanges();
   for (const entry of entries) await startQueued(entry.id, false, changes);

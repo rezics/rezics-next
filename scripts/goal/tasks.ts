@@ -16,6 +16,7 @@ import { COMPOSITION_ROOTS } from './composition-roots.ts';
 import { dispatchEngine, prepareHandover, stageHandover, handoverPrompt, strayFiles } from './handover.ts';
 import { blockedAttemptUnchanged, recordResumeHead, updateResumeWorktree } from './resume.ts';
 import type { GateLaneOptions } from './qa-slots.ts';
+import { gateRefusal } from './queue.ts';
 
 /** Declarations and their test registrations belong to the outcomes loader, not to orchestration. */
 export async function dispatchMethodErrors(brief: Brief, markdown: string, outcomeRoot = root,
@@ -189,6 +190,7 @@ export async function finishAttempt(id: string, attemptNumber: number) {
     const current = taskOf(ledger, id);
     const last = lastAttempt(current);
     if (last.n !== attemptNumber) return { kind: 'replaced' as const, task: current };
+    if (current.waitingResume) return { kind: 'replaced' as const, task: current };
     last.endedAt ??= new Date().toISOString();
     if (result.session && !last.session) last.session = result.session;
     // Status may already have marked a dead pid exited. A stop or a close still stands.
@@ -442,7 +444,7 @@ export function resumeDecisionError(attempts: readonly Attempt[], markdown: stri
     : 'two fix rounds exhausted; brief needs a ## Decision dated UTC after the last attempt started, naming a cut, split or design note';
 }
 
-export async function resumeTask(id: string, args: string[]): Promise<void> {
+export async function resumeTask(id: string, args: string[], waitingToken?: string): Promise<void> {
   let message = '';
   let effort: string | undefined;
   let engine: Engine | undefined;
@@ -457,9 +459,14 @@ export async function resumeTask(id: string, args: string[]): Promise<void> {
     else if (args[i] === '--force-usage') forceUsage = true;
     else throw new Error(`Unsupported resume option: ${args[i]}`);
   }
-  if (!message.trim()) throw new Error('resume needs -m <message> or --file <path>');
+  if (!waitingToken && !message.trim()) throw new Error('resume needs -m <message> or --file <path>');
   await withLedger(async ledger => {
     const task = taskOf(ledger, id);
+    if (waitingToken) {
+      const pending = task.waitingResume;
+      if (!pending || pending.token !== waitingToken) return;
+      ({ message, effort, engine, fresh, forceUsage } = pending);
+    }
     assertOwner(task);
     assertPrepared(task);
     if (running(task)) throw new Error(`${task.id} is still running; stop it first or message it`);
@@ -483,7 +490,16 @@ export async function resumeTask(id: string, args: string[]): Promise<void> {
     if (!effortsOf(nextEngine).includes(nextEffort)) {
       throw new Error(`${nextEngine} effort must be one of ${effortsOf(nextEngine).join(', ')}`);
     }
-    admitWorkers(Object.values(ledger.tasks), nextEngine, forceUsage);
+    try { admitWorkers(Object.values(ledger.tasks), nextEngine, forceUsage); }
+    catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      if (!gateRefusal(reason) || reason.startsWith('Claude usage is ')) throw error;
+      task.waitingResume = { token: waitingToken ?? randomUUID(),
+        queuedAt: waitingToken ? task.waitingResume!.queuedAt : new Date().toISOString(),
+        reason, message, effort, engine, fresh, forceUsage };
+      console.log(`${task.id} resume waiting: ${reason}`);
+      return;
+    }
     const manager = managerOf(ledger, task.goal);
     // A session continues only on its own engine: switching back resumes that engine's latest session,
     // and an engine without one starts fresh on the same worktree.
@@ -507,6 +523,7 @@ export async function resumeTask(id: string, args: string[]): Promise<void> {
     task.attempts.push(launch(task, nextEffort, session, prompt, continuing, manager, nextEngine, round));
     task.engine = nextEngine;
     task.state = 'running';
+    delete task.waitingResume;
     clearRefusal(task);
     console.log(`${task.id} attempt ${task.attempts.length}: ${modelOf(nextEngine)}/${nextEffort}`
       + ` ${continuing ? 'resumed' : 'fresh session'}, ${round === 'step' ? 'next step' : 'fix round'}, pid ${lastAttempt(task).pid}`);
@@ -571,6 +588,7 @@ export async function stopTask(id: string): Promise<void> {
     const task = taskOf(ledger, id);
     assertOwner(task);
     assertPrepared(task);
+    delete task.waitingResume;
     const attempt = lastAttempt(task);
     const program = programOf(engineOf(attempt));
     const signalGroup = (signal: NodeJS.Signals) => {
@@ -684,6 +702,7 @@ async function closeTask(id: string, outcome: 'verified' | 'cancelled'): Promise
     }
     if ((task.state === 'merged' || (outcome === 'verified' && readOnly && task.mergedCommit)) && !sharers.length) git(root, ['branch', '-d', task.branch], true);
     task.state = outcome;
+    delete task.waitingResume;
     clearRefusal(task);
     task.closedAt = new Date().toISOString();
     console.log(`${task.id} ${outcome}; claims released${outcome === 'cancelled' ? `, branch ${task.branch} kept` : ''}`);
