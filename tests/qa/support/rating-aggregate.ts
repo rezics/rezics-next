@@ -153,13 +153,11 @@ export async function exerciseRatingAggregates(f: Fixture) {
   expect((await aggregate(EXPERIENCE_CONTEXT_DEFAULT_PROFILE)).status).toBe(503);
   await env.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA { GRAPH ${iri(GRAPHS.revisions)} {
     ${iri(changed.policyRevision)} rv:manifest ${iri(policyManifest)} . } }`);
-  await env.fuseki.update(`PREFIX rv: <${RV}> WITH ${iri(GRAPHS.current)}
-    DELETE { ${iri(context)} rv:ratingPolicyHead ${iri(changed.policyRevision)} }
-    INSERT { ${iri(context)} rv:ratingPolicyHead ${iri(created.contextRevision)} } WHERE {}`);
+  await env.fuseki.update(`PREFIX rv: <${RV}> DELETE { GRAPH ${iri(GRAPHS.current)} { ${iri(context)} rv:ratingPolicyHead ${iri(changed.policyRevision)} } }
+    INSERT { GRAPH ${iri(GRAPHS.current)} { ${iri(context)} rv:ratingPolicyHead ${iri(created.contextRevision)} } } WHERE {}`);
   expect((await aggregate(EXPERIENCE_CONTEXT_DEFAULT_PROFILE)).status).toBe(503);
-  await env.fuseki.update(`PREFIX rv: <${RV}> WITH ${iri(GRAPHS.current)}
-    DELETE { ${iri(context)} rv:ratingPolicyHead ${iri(created.contextRevision)} }
-    INSERT { ${iri(context)} rv:ratingPolicyHead ${iri(changed.policyRevision)} } WHERE {}`);
+  await env.fuseki.update(`PREFIX rv: <${RV}> DELETE { GRAPH ${iri(GRAPHS.current)} { ${iri(context)} rv:ratingPolicyHead ${iri(created.contextRevision)} } }
+    INSERT { GRAPH ${iri(GRAPHS.current)} { ${iri(context)} rv:ratingPolicyHead ${iri(changed.policyRevision)} } } WHERE {}`);
   const policyRace = (['latest-per-rater-mean', 'pooled-observation-mean'] as const).map(policy => {
     const key = randomUUID();
     const body = policyBody(changed.policyRevision, policy);
@@ -275,13 +273,11 @@ export async function exerciseRatingAggregates(f: Fixture) {
   await graph.update(`PREFIX rv: <${RV}> DELETE DATA { GRAPH ${iri(GRAPHS.current)} { ${remove} } }`);
   expect((await aggregate(EXPERIENCE_AGGREGATE_PROFILES[0])).status).toBe(503);
   await graph.update(`PREFIX rv: <${RV}> INSERT DATA { GRAPH ${iri(GRAPHS.current)} { ${remove} } }`);
-  await graph.update(`PREFIX rv: <${RV}> WITH ${iri(GRAPHS.current)}
-    DELETE { ${iri(tied.observation)} rv:observationHead ${iri(head)} }
-    INSERT { ${iri(tied.observation)} rv:observationHead ${iri(tied.observationRevision)} } WHERE {}`);
+  await graph.update(`PREFIX rv: <${RV}> DELETE { GRAPH ${iri(GRAPHS.current)} { ${iri(tied.observation)} rv:observationHead ${iri(head)} } }
+    INSERT { GRAPH ${iri(GRAPHS.current)} { ${iri(tied.observation)} rv:observationHead ${iri(tied.observationRevision)} } } WHERE {}`);
   expect((await aggregate(EXPERIENCE_AGGREGATE_PROFILES[0])).status).toBe(503);
-  await graph.update(`PREFIX rv: <${RV}> WITH ${iri(GRAPHS.current)}
-    DELETE { ${iri(tied.observation)} rv:observationHead ${iri(tied.observationRevision)} }
-    INSERT { ${iri(tied.observation)} rv:observationHead ${iri(head)} } WHERE {}`);
+  await graph.update(`PREFIX rv: <${RV}> DELETE { GRAPH ${iri(GRAPHS.current)} { ${iri(tied.observation)} rv:observationHead ${iri(tied.observationRevision)} } }
+    INSERT { GRAPH ${iri(GRAPHS.current)} { ${iri(tied.observation)} rv:observationHead ${iri(head)} } } WHERE {}`);
   const manifest = (await graph.query(`PREFIX rv: <${RV}> SELECT ?m WHERE {
     GRAPH ${iri(GRAPHS.revisions)} { ${iri(head)} rv:manifest ?m } }`)).results!.bindings![0]!.m!.value;
   const file = join(env.objectDirectory, manifest.slice(-64));
