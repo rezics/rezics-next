@@ -74,6 +74,10 @@ function realmOf(persona: AnswerPersona, label: string): string {
   return decodeURIComponent(id);
 }
 
+function rulesPath(persona: AnswerPersona, label: string): string {
+  return realmHref('en', realmOf(persona, label), 'rules');
+}
+
 function joinRealm(label: string): string {
   const id = (sampleOf('visitor', label).answer as { id?: unknown }).id;
   if (typeof id !== 'string') throw new Error(`Recorded visitor/${label} has no id`);
@@ -188,17 +192,17 @@ async function refusedPlay({ canvasElement, globals }: { canvasElement: HTMLElem
 }
 
 const populatedVisitor = {
-  parameters: { route: { pathname: `/en/r/${realmOf('visitor', 'public-rules-en')}/rules` } },
+  parameters: { route: { pathname: rulesPath('visitor', 'public-rules-en') } },
   play: publishedPlay,
 } satisfies Story;
 const emptyOwner = {
   args: { persona: 'owner' as const, selections: empty },
-  parameters: { route: { pathname: `/en/r/${realmOf('owner', 'rules-empty')}/rules` } },
+  parameters: { route: { pathname: rulesPath('owner', 'rules-empty') } },
   play: emptyPlay,
 } satisfies Story;
 const landingVisitor = {
   args: { selections: landing },
-  parameters: { route: { pathname: `/en/r/${realmOf('visitor', 'private-request-landing')}/rules` } },
+  parameters: { route: { pathname: rulesPath('visitor', 'private-request-landing') } },
   play: landingPlay,
 } satisfies Story;
 const refusalVisitor = {
@@ -208,7 +212,7 @@ const refusalVisitor = {
 } satisfies Story;
 const loadingVisitor = {
   args: { selections: loading },
-  parameters: { route: { pathname: `/en/r/${realmOf('visitor', 'public-rules-en')}/rules` } },
+  parameters: { route: { pathname: rulesPath('visitor', 'public-rules-en') } },
   play: loadingPlay,
 } satisfies Story;
 const managerOwner = {
