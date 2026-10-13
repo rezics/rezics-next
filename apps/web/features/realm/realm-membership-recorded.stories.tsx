@@ -10,6 +10,7 @@ import { messages as shellMessages } from '../shell/messages.ts';
 import type { RecordedSelection } from '../stories/recorded-fetch.ts';
 import { RecordedMembershipPage } from './realm-membership-recorded-page.tsx';
 import { recordedSample, type MembershipSurface } from './realm-membership-recorded-page.ts';
+import { realmHref } from './route.ts';
 
 const record = membershipRecord as AnswerRecord;
 const access = accessMessages.en;
@@ -71,7 +72,7 @@ const meta = {
   title: 'Realm/Recorded membership',
   component: Recorded,
   args: { persona: 'visitor', selections: visitorLanding, surface: 'landing' },
-  parameters: { controls: { disable: true }, route: { pathname: '/en/r/recorded' } },
+  parameters: { controls: { disable: true }, route: { pathname: realmHref('en', 'recorded') } },
   globals: { viewport: { value: 'desktop' } },
 } satisfies Meta<typeof Recorded>;
 export default meta;
