@@ -118,8 +118,9 @@ test('live exact authority overrides the wildcard; expiry and revocation restore
     await grants.platform.revoke(await context(), wrong.grant.id, wrong.grant.generation, receipt());
 
     for (const invalidation of ['expire', 'revoke'] as const) {
+      const validUntil = new Date(Date.now() + (invalidation === 'expire' ? 5000 : 3_600_000));
       const exact = await grants.platform.create(await context(), randomUUID(), action,
-        { principalId }, new Date(Date.now() + 3_600_000), receipt(), scope);
+        { principalId }, validUntil, receipt(), scope);
       expect(findPlatformPermission(await readPlatformPermissions(client, principalId), action, scope)?.id)
         .toBe(exact.grant.id);
       expect(await allowed()).toBe(true);
@@ -127,9 +128,8 @@ test('live exact authority overrides the wildcard; expiry and revocation restore
       expect(saved).not.toBeNull();
       expect(await platformAdministratorProofCurrent(client, saved!, principalId, actor)).toBe(true);
       if (invalidation === 'expire') {
-        // Move the persisted deadline, exercising the SQL clock fence without a timed wait.
-        await pool.query("UPDATE access.principal_permission_grant SET valid_until = clock_timestamp() - interval '1 second' WHERE id = $1",
-          [exact.grant.id]);
+        // Issued episodes are immutable; exercise the real SQL clock fence.
+        await Bun.sleep(Math.max(0, validUntil.getTime() - Date.now() + 50));
       } else {
         await grants.platform.revoke(await context(), exact.grant.id, exact.grant.generation, receipt());
       }
@@ -142,4 +142,4 @@ test('live exact authority overrides the wildcard; expiry and revocation restore
   } finally {
     client.release();
   }
-});
+}, 20_000);
