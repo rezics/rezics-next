@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { parseBrief } from './briefs.ts';
 import { checkChangedFiles, checkFailureLines, parseCheckArgs, runCheckCommand, workerCheck, type CheckRunner } from './check.ts';
 import { tierBunTestArgs } from '../qa/core.ts';
+import { withSlot } from './qa-slots.ts';
 import { type SlowTestRecord } from './unit-gate.ts';
 
 const scratch = join(import.meta.dir, '../../.temp/worker-check-tests');
@@ -329,18 +330,29 @@ test('busy ${path === file ? 'test' : 'guard'}', async () => {
   }
   const calls: string[][] = [];
   const runner: CheckRunner = async (command, cwd, log, env) => {
-    expect(env!.GOAL_IN_SLOT).toBe('1');
-    expect(existsSync(join(f.slotOptions.slotDirectory, '0'))).toBe(true);
-    calls.push([...command]);
+    expect(env!.GOAL_IN_SLOT).toBe('0');
+    expect(env!.GOAL_QA_SLOT_DIRECTORY).toBe(f.slotOptions.slotDirectory);
     // This fixture has its own checkout's Task command, so it executes real Bun tests without the repository's hosted stack.
     const invocation = command[1] === 'scripts/qa/test.ts'
       ? ['task', 'goal:unit-files', '--', ...tierBunTestArgs('unit', command.slice(2)).slice(1)] : command;
-    return runCheckCommand(invocation, cwd, log, env);
+    // The worker wrapper defers admission to the harness. This local runner
+    // owns the same lease around its child instead of competing for live slots.
+    let result: Awaited<ReturnType<CheckRunner>> | undefined;
+    await withSlot(['fixture-proof'], false, undefined, { ...f.slotOptions, env,
+      runCommand: async (_command, admitted) => {
+        expect(admitted.GOAL_IN_SLOT).toBe('1');
+        expect(existsSync(join(f.slotOptions.slotDirectory, '0'))).toBe(true);
+        calls.push([...command]);
+        result = await runCheckCommand(invocation, cwd, log, admitted);
+        return result.code;
+      },
+    });
+    return result!;
   };
   return { ...f, tests: [file], file, guard, runner, calls };
 }
 
-test('tests and guards recover with the longer retry inside one slot, tests first, released after guards', async () => {
+test('tests and guards recover with the longer retry under runner admission, tests first, leases released', async () => {
   const f = sleepFixture('await Bun.sleep(5_100);', 'await Bun.sleep(5_100);');
   const result = await workerCheck({ ...f, only: ['tests', 'guards'] });
   expect(result.code).toBe(0);
