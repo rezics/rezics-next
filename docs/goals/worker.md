@@ -86,6 +86,11 @@ Run `task guards` once before you hand off `done`: on 2026-10-11 two thirds of
 the landings that a gate stopped failed one of these rules, after a review had
 already been spent on them.
 
+The gate may run from an agent session, where `CLAUDECODE=1` makes `bun test`
+print only failures and the summary. A test that runs `bun test` in a child
+asserts its exit status or a JUnit report, never the printed test names; check
+such a file once with `CLAUDECODE=1` set.
+
 Tests are what this host runs short of, not workers. Name every file a step
 needs in one `task goal -- test` call: one call starts one stack, and a stack
 costs about half a minute and a turn in a host-wide queue before any test runs.
