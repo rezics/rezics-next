@@ -1,8 +1,10 @@
+import { uuidToSid } from '@rezics/model/address';
+import { cataloguePlan } from '../../../tests/fixtures/catalogue/load.ts';
 import type { UiLocale } from '../i18n/define.ts';
-import { resourceHref } from '../features/address/path.ts';
+import { addressPath, parseAddressSegment, resourceHref } from '../features/address/path.ts';
 import { localizedPath } from '../i18n/locale.ts';
 import { expect, type Page } from '@playwright/test';
-import { acrossViews, linked, seeded, test, uuid, type Seeded } from './g-841-fixture.ts';
+import { acrossViews, seeded, test, uuid, type Seeded } from './g-841-fixture.ts';
 
 // Query 4 of the catalogue acceptance fixtures, read through the web UI as the stack's web member. The page is
 // compared with what Main answered for the same fixture (`answers`, recorded by `g-841-catalogue.ts`), so a
@@ -16,9 +18,21 @@ test.beforeAll(() => {
 });
 
 const work = (key: string) => data.manifest.works[key]!.work;
+const canonicalWork = (key: string) => resourceHref('/w/', {
+  prefix: '/w/', key: uuidToSid(uuid(work(key))),
+  suffixSource: cataloguePlan().works.find(item => item.id === key)!.title,
+});
 const connections = (locale: UiLocale, key: string) =>
   localizedPath(`${resourceHref('/w/', uuid(work(key)))}/connections`, locale);
-const rowLinks = (page: Page) => linked(page.locator('[data-relation-row] a'));
+const rowLinks = async (page: Page) => {
+  const hrefs = await page.locator('[data-relation-row] a').evaluateAll(elements =>
+    elements.map(element => element.getAttribute('href') ?? ''));
+  return hrefs.map(href => {
+    const address = addressPath(href);
+    const segment = address?.lookup.scope === 'work' ? parseAddressSegment(address.lookup.key) : null;
+    return segment && segment.kind !== 'alias' ? segment.id : '';
+  });
+};
 /** The Works a Work's relations name in Main's answer: the rows the page must carry, in either direction. */
 const counterparts = (key: string, role?: string) => [
   ...new Set(
@@ -53,7 +67,7 @@ test('query 4: Progressive shows Reboot; Alternative GGO shows SpinOff with Sigs
     page.locator('[data-relation-row]').filter({ hasText: 'Reboot of' }).getByRole('link').first(),
   ).toHaveAttribute(
     'href',
-    new RegExp(localizedPath(`${resourceHref('/w/', uuid(work('sao.bunko')))}$`, 'en')),
+    localizedPath(canonicalWork('sao.bunko'), 'en'),
   );
 
   const sigsawa = data.answers.credits['sao.aggo']!.find(
@@ -83,7 +97,7 @@ test('query 4: Progressive shows Reboot; Alternative GGO shows SpinOff with Sigs
       .first(),
   ).toHaveAttribute(
     'href',
-    new RegExp(localizedPath(`${resourceHref('/w/', uuid(work('sao.bunko')))}$`, 'en')),
+    localizedPath(canonicalWork('sao.bunko'), 'en'),
   );
   // The bunko Work sees both from its side: what reboots it and what spins off from it.
   await page.goto(connections('en', 'sao.bunko'));

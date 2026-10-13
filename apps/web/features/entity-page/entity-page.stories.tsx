@@ -1,3 +1,4 @@
+import type { CanonicalAddress } from '@rezics/model/address';
 import { direction } from '@rezics/main/language';
 import { localizedPath } from '../../i18n/locale.ts';
 import { addressPath, resourceHref } from '../address/path.ts';
@@ -55,8 +56,10 @@ export const Statements: Story = {
     await expect(canvas.getByText('Character')).toBeVisible();
     // A right-to-left value keeps its own direction inside the left-to-right page.
     await expect(canvas.getByText('الشبح الأسود')).toHaveAttribute('dir', 'auto');
+    const guild = statementNames.get('https://rezics.com/id/c1e3a5f7-9b2d-4f6e-8c0a-2d4f6b8e0a1c')!;
+    if (guild.status !== 'available') throw new Error('The guild fixture must have a canonical address');
     await expect(canvas.getByRole('link', { name: 'Aincrad guild' })).toHaveAttribute('href',
-      localizedPath(resourceHref('/e/', 'c1e3a5f7-9b2d-4f6e-8c0a-2d4f6b8e0a1c'), 'en'));
+      localizedPath(resourceHref('/e/', guild.address as CanonicalAddress), 'en'));
     await expect(canvas.getByText('Unknown value')).toBeVisible();
     // The name the heading already shows is not repeated, a predicate without a label is gathered under "Other facts", and
     // no group draws an empty heading.
