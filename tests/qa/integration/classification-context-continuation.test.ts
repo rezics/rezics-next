@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { startMediaStack } from './media-support.ts';
 import { measureGraphReads } from './support/graph-reads.ts';
 import { GLOBAL_CLASSIFICATION_CONTEXT } from '../../../services/main/src/modules/classification/context.ts';
+import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 
 type Definition = { scheme: string; schemeHead: string; concept: string; conceptHead: string };
 type Page = { profile: string; context: string; scheme: string | null; items: { id: string; label: string }[];
@@ -127,11 +128,15 @@ test('Selected context vocabulary traverses disclosed Concepts with exact query 
     const bulkScheme = bulk.scheme;
     const costs: number[] = [];
     let population = 1;
+    const schemeHead = async () => (await stack.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+      SELECT ?head WHERE { GRAPH ${iri(GRAPHS.current)} {
+        ${iri(bulkScheme)} rv:schemeRevisionHead ?head } } LIMIT 2`)).results?.bindings.map(row => row.head?.value);
     for (const size of [128, 512]) {
       while (population < size) {
         bulk = await define(`Population ${population}`, bulk);
         population++;
       }
+      expect(await schemeHead(), 'The prepared scheme head matches the last command receipt').toEqual([bulk.schemeHead]);
       const measured = await measureGraphReads(() => stack.call('GET', path({ scheme: bulkScheme })));
       const page = await json<Page>(measured.value);
       expect(page.items).toHaveLength(1);
@@ -139,6 +144,7 @@ test('Selected context vocabulary traverses disclosed Concepts with exact query 
       expect(measured.calls).toBeLessThanOrEqual(64);
       costs.push(measured.calls);
       console.log(`Context vocabulary cost: ${JSON.stringify({ population: size, graphReads: measured.calls })}`);
+      expect(await schemeHead(), 'A vocabulary read preserves the prepared scheme head').toEqual([bulk.schemeHead]);
     }
     expect(costs[1]).toBeLessThanOrEqual(costs[0]! + 4);
     // A previously empty lookup is live; it is not retained in a process cache.
