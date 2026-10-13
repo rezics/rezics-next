@@ -13,6 +13,7 @@ import { composeMain } from '../../../services/main/src/composition.ts';
 import { mainLifecycle } from '../../../services/main/src/lifecycle.ts';
 import { mainConfig } from '../../../services/main/src/config.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
+import { boundedPool } from '../../../services/main/src/infrastructure/pg-pool.ts';
 import { AccessPlatformAdministrators } from '../../../services/main/src/modules/access/platform-administrator.ts';
 import { joiningAuthFixture } from './joining-auth.ts';
 import { outcomeResponse } from './outcome-test.ts';
@@ -209,11 +210,28 @@ async function applications(options: PersonaOptions) {
   const accountBase = Bun.env.ACCOUNT_BASE_URL!;
   const mainBase = `http://127.0.0.1:${Bun.env.MAIN_PORT}`;
   const compose = readEnv(resolve('.temp/stack', `rezics-qa-${runId}`, 'compose.env'));
-  const accountPool = new Pool({ connectionString: Bun.env.ACCOUNT_DATABASE_URL });
-  const accessPool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
-  const contentPool = new Pool({ connectionString: Bun.env.CONTENT_DATABASE_URL });
-  const relayPool = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL });
-  const pools = [accountPool, accessPool, contentPool, relayPool];
+  const config = mainConfig({ ...process.env, ...runtime, PLATFORM_FIRST_ADMIN_ACCOUNT: undefined,
+    ...(options.notificationProvider ? {
+      MAIN_NOTIFICATION_PROVIDER_URL: options.notificationProvider.url,
+      MAIN_NOTIFICATION_PROVIDER_TOKEN: options.notificationProvider.token,
+      MAIN_NOTIFICATION_CALLBACK_SECRET: options.notificationProvider.callbackSecret,
+    } : {}),
+  });
+  const accountPool = boundedPool({ connectionString: Bun.env.ACCOUNT_DATABASE_URL });
+  const accessPool = boundedPool({ connectionString: config.ACCESS_DATABASE_URL });
+  const contentPool = boundedPool({ connectionString: config.CONTENT_DATABASE_URL });
+  const relayUrl = config.MAIN_RELAY_DATABASE_URL;
+  const relayPool = relayUrl ? boundedPool({ connectionString: relayUrl, max: 2,
+    options: '-c default_transaction_read_only=on' }) : undefined;
+  const erasureRelayUrl = relayUrl ?? config.ACCOUNT_RELAY_DATABASE_URL;
+  const erasureRelayPool = erasureRelayUrl ? boundedPool({ connectionString: erasureRelayUrl, max: 2 }) : undefined;
+  const ownerRelayUrl = config.OWNER_RELAY_DATABASE_URL ?? relayUrl;
+  const ownerRelayPool = ownerRelayUrl ? boundedPool({ connectionString: ownerRelayUrl, max: 4 }) : undefined;
+  const recommendationRelayUrl = config.ACCOUNT_RELAY_DATABASE_URL ?? relayUrl;
+  const recommendationRelayPool = recommendationRelayUrl ? boundedPool({ connectionString: recommendationRelayUrl,
+    max: 2, options: '-c default_transaction_read_only=on' }) : undefined;
+  const pools = [accountPool, accessPool, contentPool, relayPool, erasureRelayPool,
+    ownerRelayPool, recommendationRelayPool];
   const email = accountEmailQueue(
     accountPool,
     Bun.env.ACCOUNT_SECRET!,
@@ -250,7 +268,7 @@ async function applications(options: PersonaOptions) {
         await account?.stop(true);
       }
     } finally {
-      await Promise.all(pools.map((pool) => pool.end()));
+      await Promise.all(pools.map((pool) => pool?.end()));
       rmSync(authDirectory, { recursive: true, force: true });
     }
   };
@@ -267,7 +285,9 @@ async function applications(options: PersonaOptions) {
       }),
       accountPool,
     ).listen({ hostname: '127.0.0.1', port: Number(Bun.env.ACCOUNT_PORT) });
-    await migrateContent(contentPool);
+    // Content DDL has production's separate preparation lane, outside request bounds.
+    const migrationPool = new Pool({ connectionString: config.CONTENT_DATABASE_URL, max: 1 });
+    try { await migrateContent(migrationPool); } finally { await migrationPool.end(); }
     const relayEnvironment = { ...process.env, ...runtime };
     const relayStarted = performance.now();
     const initialization = Bun.spawn([process.execPath, 'services/main/src/relay-init.ts'], {
@@ -277,13 +297,7 @@ async function applications(options: PersonaOptions) {
     if (initialized !== 0) throw new Error(`Main relay initialization exited with ${initialized}`);
     console.log(`Persona Main relay initialization: ${((performance.now() - relayStarted) / 1000).toFixed(2)}s`);
     const composed = await composeMain({
-      config: mainConfig({ ...process.env, ...runtime, PLATFORM_FIRST_ADMIN_ACCOUNT: undefined,
-        ...(options.notificationProvider ? {
-          MAIN_NOTIFICATION_PROVIDER_URL: options.notificationProvider.url,
-          MAIN_NOTIFICATION_PROVIDER_TOKEN: options.notificationProvider.token,
-          MAIN_NOTIFICATION_CALLBACK_SECRET: options.notificationProvider.callbackSecret,
-        } : {}),
-      }),
+      config,
       fuseki: new FusekiClient(
         options.graphEndpoint ?? Bun.env.FUSEKI_URL!,
         Bun.env.FUSEKI_MAINTENANCE_TOKEN,
@@ -292,9 +306,9 @@ async function applications(options: PersonaOptions) {
       accessPool,
       contentPool,
       relayPool,
-      erasureRelayPool: relayPool,
-      ownerRelayPool: relayPool,
-      recommendationRelayPool: relayPool,
+      erasureRelayPool,
+      ownerRelayPool,
+      recommendationRelayPool,
     });
     main = composed.app;
     lifecycle = mainLifecycle(composed, () => {
