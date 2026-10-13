@@ -495,6 +495,7 @@ export function TextReader({
   actingSubject,
   locale,
   messages,
+  identity,
 }: {
   workRef: string;
   work: WorkHeader;
@@ -504,6 +505,8 @@ export function TextReader({
   actingSubject: string | null;
   locale: UiLocale;
   messages: WorkPageMessages;
+  /** Recorded language and credit, when this text is read outside the chapter list. */
+  identity?: ReactNode;
 }) {
   const t = materializeData(messages, { locale });
   return (
@@ -522,10 +525,11 @@ export function TextReader({
           <h1
             lang={work.title.language}
             dir={work.title.direction}
-            className="text-balance font-semibold font-work-title text-2xl/tight sm:text-3xl/tight"
+            className="text-balance break-words font-semibold font-work-title text-2xl/tight sm:text-3xl/tight"
           >
             {work.title.value}
           </h1>
+          {identity}
         </header>
         <ReaderText
           ratingTarget={work.id}

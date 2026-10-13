@@ -2,9 +2,10 @@ import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { workPageMetadata, workTitle } from '../../../../../features/seo/work.ts';
-import { TextNotFound, TextReader, TextUnavailable } from '../../../../../features/work-page/reader.tsx';
+import { BooksLanguageRecordedView } from '../../../../../features/work-page/books-language-recorded-page.tsx';
+import { booksLanguageReading, readBooksLanguageCredits } from '../../../../../features/work-page/books-language-recorded-page.ts';
 import { parseReaderSettings, READER_COOKIE } from '../../../../../features/work-page/reader-settings.ts';
-import { loadWork, readingAgent, readText, resolveWork } from '../../../../../features/work-page/read.ts';
+import { loadWork, reader, readingAgent, readText, resolveWork } from '../../../../../features/work-page/read.ts';
 import { parseReaderLanguage, parseWorkRef } from '../../../../../features/work-page/route.ts';
 import { WorkUnavailable } from '../../../../../features/work-page/work-states.tsx';
 import { getMessages, getTranslation, requestLocale } from '../../../../../i18n/server.ts';
@@ -34,9 +35,13 @@ export default async function TextPage({ params, searchParams }: Props) {
   // The reader's own language when Main has a text in it; otherwise the text Main selects.
   const text = language === null ? null
     : await readText(work.header.mainVersion, language ?? work.header.selectedLanguage ?? undefined);
-  if (!text || (!text.ok && text.failure === 'missing')) return <TextNotFound workRef={ref} messages={messages} />;
-  if (!text.ok) return <TextUnavailable workRef={ref} messages={messages} />;
-  return <TextReader workRef={ref} work={work.header} text={text.data} language={language ?? undefined}
-    settings={parseReaderSettings(jar.get(READER_COOKIE)?.value && decodeURIComponent(jar.get(READER_COOKIE)!.value))}
-    actingSubject={agent.actingSubject} locale={locale} messages={messages} />;
+  const settings = parseReaderSettings(jar.get(READER_COOKIE)?.value && decodeURIComponent(jar.get(READER_COOKIE)!.value));
+  // Credits name the author. Their presentation language is the UI locale; the article keeps the text's language.
+  const { main } = await reader();
+  const credits = text?.ok ? await readBooksLanguageCredits(main, work.header.id, locale, agent.actingSubject ?? undefined)
+    .catch(() => ({ ok: false as const, failure: 'unavailable' as const })) : null;
+  return <BooksLanguageRecordedView
+    reading={booksLanguageReading({ text: text ?? { ok: false, failure: 'missing' }, credits, header: work.header })}
+    workRef={ref} settings={settings} actingSubject={agent.actingSubject} locale={locale} messages={messages}
+    linkLanguage={language ?? undefined} />;
 }
