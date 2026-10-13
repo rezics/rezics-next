@@ -1,6 +1,7 @@
 import { afterAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { appendFileSync } from 'node:fs';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import sharp from 'sharp';
 import { fromPlainText, type DocumentSnapshot } from '@rezics/document';
 import { S3ImmutableObjects, type ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
@@ -318,13 +319,22 @@ test('v2 campaign writes request only new art, replay once, and read srcset for 
   for (let i = 0; i < 4; i++) await worker.tick();
   let itemReads = 0;
   let candidateReads = 0;
+  const measuredRead = new AsyncLocalStorage<boolean>();
   const itemBatches: string[][] = [], candidateBatches: string[][] = [];
   const itemBatch = f.store.itemDeliveryBatch.bind(f.store);
   const candidateBatch = f.store.renditions.candidatesBatch.bind(f.store.renditions);
-  f.store.itemDeliveryBatch = async uses => { itemReads++; itemBatches.push([...uses]); expect(uses).toHaveLength(2); return itemBatch(uses); };
-  f.store.renditions.candidatesBatch = async uses => { candidateReads++; candidateBatches.push([...uses]); expect(uses).toHaveLength(2); return candidateBatch(uses); };
+  // A timed-out sibling may still be finishing its request on this shared store.
+  // Attribute only this anonymous presentation read, including its closing cuts.
+  f.store.itemDeliveryBatch = async uses => {
+    if (measuredRead.getStore()) { itemReads++; itemBatches.push([...uses]); expect(uses).toHaveLength(2); }
+    return itemBatch(uses);
+  };
+  f.store.renditions.candidatesBatch = async uses => {
+    if (measuredRead.getStore()) { candidateReads++; candidateBatches.push([...uses]); expect(uses).toHaveLength(2); }
+    return candidateBatch(uses);
+  };
   try {
-    const response = await f.read();
+    const response = await measuredRead.run(true, () => f.read());
     expect(response.headers.get('etag')).not.toBe(pendingEtag);
     const body = await json<{ presentation: ZonePresentation; slideMedia: { art: {
       landscape: { srcset: { url: string; width: number; type: string }[] }; portrait: unknown;

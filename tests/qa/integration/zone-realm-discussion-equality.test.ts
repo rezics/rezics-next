@@ -87,6 +87,14 @@ test('hidden and absent openers give ordinary own-post responses with equal owne
     const text = 'My own contribution.', hiddenKey = randomUUID(), absentKey = randomUUID();
     const hidden = await observe(() => a.post(hiddenPage, a.reader, text, home.reader.token, hiddenKey));
     const absent = await observe(() => a.post(absentPage, a.reader, text, home.reader.token, absentKey));
+    await Bun.write(`.temp/zone-discussion-equality-${Bun.env.REZICS_QA_RUN_ID}.json`, JSON.stringify({
+      runId: Bun.env.REZICS_QA_RUN_ID, persona: 'Person contributor viewing a hidden or absent opener',
+      hidden: { request: { method: 'POST', path: `/v1/realms/${local(a.realm.realm)}/about-posts`,
+        idempotencyKey: hiddenKey, body: a.input(hiddenPage, a.reader, text) }, answer: hidden },
+      absent: { request: { method: 'POST', path: `/v1/realms/${local(a.realm.realm)}/about-posts`,
+        idempotencyKey: absentKey, body: a.input(absentPage, a.reader, text) }, answer: absent },
+      withheld: { reply: opener.reply, revisionId: opener.revisionId },
+    }, null, 2));
     for (const observed of [hidden, absent]) {
       expect(observed.status, observed.text).toBe(201);
       expect(Object.keys(observed.body).sort()).toEqual(ownResultKeys);
