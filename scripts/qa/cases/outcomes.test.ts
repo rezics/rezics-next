@@ -1,8 +1,9 @@
 import { afterEach, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { launchCoverage } from './launch-coverage.ts';
+import { scanRawSparqlIntegrationFiles } from '../isolated-integration-files.ts';
 import {
   loadOutcomes,
   notApplicable,
@@ -17,6 +18,7 @@ import {
 
 const root = resolve(import.meta.dir, '../../..');
 const moduleFile = join(import.meta.dir, 'outcomes.ts');
+const cellsModuleFile = join(import.meta.dir, 'outcome-cells.ts');
 const helperFile = join(root, 'tests/qa/support/outcome-test.ts');
 const directories: string[] = [];
 afterEach(() => {
@@ -44,7 +46,7 @@ function fixture() {
   const declare = (id: string, cells: string, file = `${id}.ts`, rights = '{}') =>
     write(
       `scripts/qa/cases/outcomes/${file}`,
-      `import { rowOutcomes, proved, pending, notApplicable } from ${JSON.stringify(moduleFile)};
+      `import { rowOutcomes, proved, pending, notApplicable } from ${JSON.stringify(cellsModuleFile)};
 export default rowOutcomes(${JSON.stringify(id)}, ${cells}, ${rights});`,
     );
   return { directory, declarationsDirectory, registry, options, write, declare };
@@ -225,4 +227,25 @@ test('the outcomes module loads in status without importing bun:test', () => {
     },
   );
   expect(result.status, result.stderr).toBe(0);
+});
+
+test('declarations and outcomeTest reach only loader-free cells during integration planning', () => {
+  const data = fixture();
+  data.write('scripts/qa/cases/outcome-cells.ts', readFileSync(cellsModuleFile, 'utf8'));
+  data.write('tests/qa/support/outcome-test.ts', readFileSync(helperFile, 'utf8'));
+  data.write(
+    'scripts/qa/cases/outcomes/books/read-a-book.ts',
+    `import { proved, rowOutcomes } from '../../outcome-cells.ts';
+export default rowOutcomes('books/read-a-book', { visitor: proved('visitor reads') });`,
+  );
+  const file = 'tests/qa/integration/outcomes/books/read-a-book.test.ts';
+  data.write(
+    file,
+    `import row from '../../../../../scripts/qa/cases/outcomes/books/read-a-book.ts';
+import { outcomeTest } from '../../../support/outcome-test.ts';
+outcomeTest(row, 'visitor', async () => {});`,
+  );
+  const scan = scanRawSparqlIntegrationFiles(data.directory);
+  expect(scan.roots).toEqual([file]);
+  expect([...scan.files]).toEqual([]);
 });

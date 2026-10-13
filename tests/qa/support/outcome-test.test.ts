@@ -4,10 +4,10 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { loadOutcomes } from '../../../scripts/qa/cases/outcomes.ts';
 import { outcomeTest } from './outcome-test.ts';
-import { notApplicable, rowOutcomes } from '../../../scripts/qa/cases/outcomes.ts';
+import { notApplicable, rowOutcomes } from '../../../scripts/qa/cases/outcome-cells.ts';
 
 const root = resolve(import.meta.dir, '../../..');
-const declarationsModule = join(root, 'scripts/qa/cases/outcomes.ts');
+const declarationsModule = join(root, 'scripts/qa/cases/outcome-cells.ts');
 const helperModule = join(import.meta.dir, 'outcome-test.ts');
 const directories: string[] = [];
 afterEach(() => {

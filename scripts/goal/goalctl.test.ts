@@ -92,6 +92,10 @@ function writeFixtureOutcomeOwner(root: string): void {
     .replace("from 'typescript-6'", `from ${JSON.stringify(Bun.resolveSync('typescript-6', import.meta.dir))}`)
     .replace("from './launch-coverage.ts'", `from ${JSON.stringify(join(import.meta.dir, '../qa/cases/launch-coverage.ts'))}`);
   writeFileSync(file, source);
+  writeFileSync(
+    join(dirname(file), 'outcome-cells.ts'),
+    readFileSync(join(import.meta.dir, '../qa/cases/outcome-cells.ts'), 'utf8'),
+  );
 }
 
 /** Authored declarations and real test registrations, loaded by the outcomes owner. */

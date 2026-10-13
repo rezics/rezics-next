@@ -3,7 +3,7 @@ import {
   outcomeTitle,
   type Persona,
   type RowOutcomes,
-} from '../../../scripts/qa/cases/outcomes.ts';
+} from '../../../scripts/qa/cases/outcome-cells.ts';
 
 export function outcomeTest(
   declaration: RowOutcomes,
