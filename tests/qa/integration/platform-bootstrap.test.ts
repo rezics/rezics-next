@@ -98,24 +98,24 @@ test('a fresh QA stack opens a closed group only through the platform grant help
     expect(session.principalId).toBe(saved.principalId);
     const filters = new URL('/v1/me/saved-filters', session.mainOrigin);
     filters.searchParams.set('actingSubject', saved.actingSubject);
-    const headers = { authorization: `Bearer ${session.token}` };
-    const closed = await fetch(filters, { headers });
+    const headers = async () => ({ authorization: `Bearer ${await session.session.current()}` });
+    const closed = await fetch(filters, { headers: await headers() });
     expect(closed.status).toBe(403);
     expect(await closed.json()).toMatchObject({ code: 'platform_closed' });
-    const before = await fetch(new URL('/v1/me/platform-access', session.mainOrigin), { headers });
+    const before = await fetch(new URL('/v1/me/platform-access', session.mainOrigin), { headers: await headers() });
     expect(before.status).toBe(200);
     expect((await before.json() as { groups: string[] }).groups).not.toContain('saved-views');
 
     const issued = await grantPlatformUse(session, session.principalId, 'saved-views');
     expect(issued.permission).toBe('platform:use:saved-views');
-    const opened = await fetch(filters, { headers });
+    const opened = await fetch(filters, { headers: await headers() });
     expect(opened.status).toBe(200);
     expect(await opened.json()).toMatchObject({ profile: 'saved-filters-v1' });
-    const during = await fetch(new URL('/v1/me/platform-access', session.mainOrigin), { headers });
+    const during = await fetch(new URL('/v1/me/platform-access', session.mainOrigin), { headers: await headers() });
     expect((await during.json() as { groups: string[] }).groups).toContain('saved-views');
 
     await revokePlatformUse(session, issued);
-    const refused = await fetch(filters, { headers });
+    const refused = await fetch(filters, { headers: await headers() });
     expect(refused.status).toBe(403);
     expect(await refused.json()).toMatchObject({ code: 'platform_closed' });
   } finally {
