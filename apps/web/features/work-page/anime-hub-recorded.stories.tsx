@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
+import type { AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import hub from '../../../../tests/qa/fixtures/outcomes/anime/work-hub-and-edition-choice.json';
 import type { UiLocale } from '../../i18n/define.ts';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
@@ -137,10 +137,10 @@ async function showHub(canvasElement: HTMLElement, args: Args) {
       await userEvent.click(await canvas.findByRole('combobox', { name: tracking.edition }));
       for (const release of releases.items) {
         const name = releaseChoiceName(release, args.locale, tracking);
-        await waitFor(() => {
+        await waitFor(async () => {
           const options = canvas.getAllByRole('option', { name, hidden: true }).filter(item => !item.closest('select'));
-          expect(options).toHaveLength(1);
-          expect(options[0]).toBeVisible();
+          await expect(options).toHaveLength(1);
+          await expect(options[0]).toBeVisible();
         });
       }
       await userEvent.keyboard('{Escape}');
