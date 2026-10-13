@@ -62,7 +62,7 @@ async function populatedPlay({ canvasElement }: { canvasElement: HTMLElement }) 
     const byline = element.closest('p.truncate');
     return byline instanceof HTMLElement ? [byline] : [];
   }))];
-  expect(bylines).toHaveLength(credited.length);
+  await expect(bylines).toHaveLength(credited.length);
   await expect(bylines[0]).toBeVisible();
   await expect(canvas.getByRole('status')).toHaveTextContent(resultText('browse-newest'));
   const sorts = within(canvas.getByRole('navigation', { name: messages.sortLabel }));
