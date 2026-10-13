@@ -9,7 +9,8 @@ import { prepareWorkComponent, RV } from '../src/modules/work/activate.ts';
 import { ZONE_CONFIG_FORMAT, ZONE_PROFILE } from '../src/modules/zone/config-format.ts';
 import { DEFAULT_ZONE_PRESENTATION, ZONE_PRESENTATION_PROFILE } from '../src/modules/zone/presentation-format.ts';
 import { STRUCTURE_MANIFEST_FORMAT, STRUCTURE_PAGE_FORMAT, STRUCTURE_PROFILE,
-  type StructureManifest } from '../src/modules/structure/format.ts';
+  type OccurrenceRecord, type StructureManifest } from '../src/modules/structure/format.ts';
+import { orderTreeKey } from '../src/modules/structure/graph.ts';
 import { orderTree, recordTree } from '../src/modules/structure/change.ts';
 import { newCost } from '../src/modules/structure/tree.ts';
 import { configureDisclosure } from '../src/modules/disclosure/read.ts';
@@ -21,7 +22,7 @@ const id = () => `https://rezics.com/id/${randomUUID()}`;
 const row = (values: Record<string, string>) => Object.fromEntries(Object.entries(values)
   .map(([key, value]) => [key, { type: 'literal' as const, value }]));
 
-async function savedHome(moveDuringRead = false) {
+async function savedHome(moveDuringRead = false, mounts = false, targetMoves = false) {
   const zone = id(), homeDocument = id(), actor = id(), space = id(), navigation = id();
   const revision = id(), navRevision = id(), generation = id();
   const variantId = `urn:rezics:variant:${randomUUID()}`, contentRevision = randomUUID();
@@ -44,10 +45,22 @@ async function savedHome(moveDuringRead = false) {
   const manifest = `urn:rezics:sha256:${await prepareWorkComponent(objects, zone,
     { configuration, name: 'Saved home', language: 'en' }, ZONE_PROFILE)}`;
   const cost = newCost();
+  const publicTarget = id(), privateTarget = id(), targetBatches: string[][] = [];
+  const records: OccurrenceRecord[] = mounts ? [publicTarget, privateTarget].map((target, index) => ({
+    occurrence: id(), state: 'active', role: 'mount', parent: navigation,
+    segmentKey: 'a', orderKey: String(index), labels: [], introducedBy: navRevision, target,
+    qualifier: { type: 'zone-mount', zone, routeSegment: `mount-${index}`, key: 'id', disclosure: 'public' },
+  })) : [];
   const navManifest: StructureManifest = { format: STRUCTURE_MANIFEST_FORMAT, structure: navigation,
     structureOf: zone, profile: 'zone-navigation', generation, pageFormat: STRUCTURE_PAGE_FORMAT,
-    records: await recordTree(objects).empty(cost), order: await orderTree(objects).empty(cost),
-    placementCount: 0, measures: [], model: STRUCTURE_PROFILE, shape: STRUCTURE_PROFILE };
+    records: await recordTree(objects).apply(await recordTree(objects).empty(cost),
+      new Map(records.map(record => [record.occurrence, record])), cost),
+    order: await orderTree(objects).apply(await orderTree(objects).empty(cost), new Map(records.map(record => {
+      const entry = { occurrence: record.occurrence, parent: record.parent,
+        segmentKey: record.segmentKey!, orderKey: record.orderKey! };
+      return [orderTreeKey(entry), entry];
+    })), cost),
+    placementCount: records.length, measures: [], model: STRUCTURE_PROFILE, shape: STRUCTURE_PROFILE };
   const navDigest = `urn:rezics:sha256:${await objects.put(new TextEncoder().encode(JSON.stringify(navManifest)))}`;
   const document = fromPlainText('Private saved home draft', 'blocks');
   const body = { document }, serializedJson = JSON.stringify(body);
@@ -72,11 +85,11 @@ async function savedHome(moveDuringRead = false) {
       spaceDisclosure: RV + 'Public', presentation: ZONE_PRESENTATION_PROFILE,
     })] } };
     if (query.includes('SELECT ?component ?profile')) return { results: { bindings: [row({
-      component: zone, profile: RV + 'ZoneNavigation', head: navRevision, generation, count: '0', manifest: navDigest,
+      component: zone, profile: RV + 'ZoneNavigation', head: navRevision, generation, count: String(records.length), manifest: navDigest,
     })] } };
     if (query.includes('SELECT ?owner')) return { results: { bindings: [row({ owner: zone })] } };
     if (query.includes('SELECT ?manifest ?predecessor') || query.includes('SELECT ?manifest ?count')) return { results: { bindings: [row({
-      manifest: navDigest, count: '0', epoch: 'epoch', sequence: '1',
+      manifest: navDigest, count: String(records.length), epoch: 'epoch', sequence: '1',
     })] } };
     if (query.includes('SELECT ?manifest')) return { results: { bindings: [row({ manifest })] } };
     if (query.includes('SELECT ?target') && query.includes('rv:ErasedRevision')) return { results: { bindings: [] } };
@@ -93,6 +106,11 @@ async function savedHome(moveDuringRead = false) {
         operation({ query: async (sql: string) => ({ rows: [],
           rowCount: sql.includes('SELECT a.id FROM access.admission a') ? 1 : 0 }) } as unknown as PoolClient),
       canReadSemanticResource: async () => true,
+      canReadZoneNavigationTargets: async (_principal: unknown, _workPrincipal: unknown,
+        _actor: string, targets: readonly string[]) => {
+        targetBatches.push([...targets]);
+        return new Set(targetMoves && targetBatches.length > 1 ? [] : targets.filter(target => target === publicTarget));
+      },
     }, contentAuthoring: {
       listVariantHeads: async (resource: string) => {
         variantReads.push(resource);
@@ -110,6 +128,7 @@ async function savedHome(moveDuringRead = false) {
   configureDisclosure(work.environment, fixtureDisclosureReader(async targets => targets.map(() => 'visible')));
   const app = zoneRoutes(fuseki, work);
   return { zone, homeDocument, variantId, contentRevision, document, headReads, variantReads, unexpectedQueries,
+    publicTarget, privateTarget, targetBatches,
     read: () => app.handle(new Request(
       `http://main.local/v1/zones/${zone.slice(-36)}/showcase-editor?actingSubject=${encodeURIComponent(actor)}`,
       { headers: { authorization: 'Bearer owner' } })) };
@@ -136,4 +155,20 @@ test('a distinct home draft moving during hydration still refuses a mixed editor
   expect(response.status).toBe(409);
   expect(await response.json()).toMatchObject({ code: 'zone_route_stale', title: 'Content draft changed' });
   expect(f.headReads).toEqual(Array.from({ length: 2 }, () => ({ resource: f.homeDocument, variant: f.variantId })));
+});
+
+test('editor navigation and its final fence use independent current target disclosure', async () => {
+  const f = await savedHome(false, true);
+  const response = await f.read(), result = await response.json();
+  expect(response.status, JSON.stringify(result)).toBe(200);
+  expect(result.preview.navigation.mounts.map((mount: { target: string }) => mount.target)).toEqual([f.publicTarget]);
+  expect(f.targetBatches).toEqual([[f.publicTarget, f.privateTarget], [f.publicTarget]]);
+});
+
+test('editor refuses a target whose disclosure moves after the navigation filter', async () => {
+  const f = await savedHome(false, true, true);
+  const response = await f.read();
+  expect(response.status).toBe(409);
+  expect(await response.json()).toMatchObject({ code: 'zone_route_stale', title: 'Zone draft navigation target changed' });
+  expect(f.targetBatches).toEqual([[f.publicTarget, f.privateTarget], [f.publicTarget]]);
 });

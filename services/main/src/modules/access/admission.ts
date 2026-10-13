@@ -715,19 +715,40 @@ export class AccessAdmissionRegistry {
     return readAdmission(this.pool, undefined, async held => {
       await requireRecoveryOpen(held);
       const rows = (await graph.query(`PREFIX schema: <https://schema.org/>
-        SELECT ?resource WHERE { VALUES ?resource { ${unique.map(iri).join(' ')} }
-          GRAPH ${iri(GRAPHS.current)} { ?resource a schema:CreativeWork } }
+        PREFIX rv: <https://rezics.com/vocab/>
+        SELECT ?resource ?publicCollection WHERE { VALUES ?resource { ${unique.map(iri).join(' ')} }
+          { GRAPH ${iri(GRAPHS.current)} { ?resource a schema:CreativeWork } }
+          UNION {
+            GRAPH ${iri(GRAPHS.current)} { ?resource a rv:Collection ;
+              rv:collectionState rv:Active ; rv:disclosure rv:Public ; rv:structure ?structure .
+              ?structure a rv:Structure ; rv:structureOf ?resource ;
+                rv:structureProfile rv:CollectionMembership ; rv:structureHead ?head . }
+            FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?resource rv:protectionHead ?protection } }
+            FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:ErasedRevision } }
+            BIND(true AS ?publicCollection)
+          } }
         LIMIT ${unique.length + 1}`, 32_768)).results?.bindings ?? [];
-      const works = new Set(rows.map(row => row.resource?.value));
-      if (rows.length !== works.size || rows.length > unique.length
-        || [...works].some(resource => !resource || !unique.includes(resource))) {
+      const typed = new Set(rows.map(row => row.resource?.value));
+      if (rows.length !== typed.size || rows.length > unique.length
+        || [...typed].some(resource => !resource || !unique.includes(resource))
+        || rows.some(row => row.publicCollection && row.publicCollection.value !== 'true')) {
         throw new AdmissionUnavailable('Zone navigation target types are ambiguous');
       }
+      const works = new Set(rows.filter(row => !row.publicCollection).map(row => row.resource!.value));
+      // Collection delivery uses its own current disclosure, not a SemanticRevision
+      // or the Zone editor's mandate. Keep the independent semantic gate and policy.
+      const publicCollections = new Set((await held.query<{ resource: string }>(`SELECT wanted.resource
+        FROM unnest($1::text[]) AS wanted(resource)
+        WHERE NOT EXISTS (SELECT 1 FROM access.scope_gate
+          WHERE id = 'semantic:read:' || wanted.resource AND NOT open)
+          AND NOT EXISTS (SELECT 1 FROM access.policy
+            WHERE scope_id = 'semantic:read:' || wanted.resource AND ended_at IS NULL)`,
+      [rows.filter(row => row.publicCollection).map(row => row.resource!.value)])).rows.map(row => row.resource));
       const semantics = await this.canReadSemanticResources(principal, actingSubject,
-        unique.filter(resource => !works.has(resource)), undefined, graph, held);
+        unique.filter(resource => !works.has(resource) && !publicCollections.has(resource)), undefined, graph, held);
       const readableWorks = workPrincipal ? await this.canReadWorks(workPrincipal, actingSubject,
         unique.filter(resource => works.has(resource)), held) : new Set<string>();
-      return new Set([...semantics, ...readableWorks]);
+      return new Set([...publicCollections, ...semantics, ...readableWorks]);
     });
   }
 

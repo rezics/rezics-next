@@ -14,7 +14,7 @@ import { resolveZoneRoute, readZonePresentation, zoneRouteViewer, ZoneRouteMissi
 import { WorkReadInvalid, WorkReadMoved, WorkReadUnavailable, WorkReadLimit, encodeReadCursor, decodeReadCursor }
   from '../modules/work/read-session.ts';
 import { readName, workCard, readPosition } from '../modules/work/read-contract.ts';
-import { canReadStructureTarget, canReadStructureTargets, structureProfileFor } from '../modules/structure/profiles.ts';
+import { canReadStructureTargets, structureProfileFor } from '../modules/structure/profiles.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable } from '../modules/structure/tree.ts';
 import { createAdmittedOwner } from '../modules/zone/owner-create.ts';
 import { ZoneName, readZoneName } from '../modules/zone/read-name.ts';
@@ -506,12 +506,12 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
             if (current.revision !== state.revision) throw new WorkReadMoved('Zone draft configuration changed');
             const currentNavigation = await readCompositionHeader(work.environment, preview.navigation.navigation);
             if (currentNavigation?.head !== preview.navigation.revision) throw new WorkReadMoved('Zone draft navigation changed');
-            for (const target of new Set(preview.navigation.mounts.map(item => item.target!))) {
-              if (!await canReadStructureTarget(structureProfileFor('zone-navigation'), {
-                environment: work.environment, access: work.access, principal, actingSubject: query.actingSubject, target })) {
-                throw new WorkReadMoved('Zone draft navigation target changed');
-              }
-            }
+            const targets = [...new Set(preview.navigation.mounts.map(item => item.target!))];
+            const readable = work.access.canReadZoneNavigationTargets
+              ? await work.access.canReadZoneNavigationTargets(principal, principal, query.actingSubject, targets)
+              : await canReadStructureTargets(structureProfileFor('zone-navigation'), {
+                environment: work.environment, access: work.access, principal, actingSubject: query.actingSubject }, targets);
+            if (targets.some(target => !readable.has(target))) throw new WorkReadMoved('Zone draft navigation target changed');
             const response = { zone, revision: state.revision, configuration: state.configuration,
               name: state.name, language: state.language, direction: state.direction,
               slideMedia: preview.slideMedia, preview,

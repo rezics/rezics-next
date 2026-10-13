@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
-import type { PoolClient } from 'pg';
+import type { Pool, PoolClient } from 'pg';
+import { AccessAdmissionRegistry, AdmissionUnavailable } from '../src/modules/access/admission.ts';
 import type { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import {
   baselineProofCurrent,
@@ -25,6 +26,65 @@ const actor = 'https://rezics.com/id/00000000-0000-4000-8000-000000000012';
 const principalId = '00000000-0000-4000-8000-000000000013';
 const receipt = `urn:rezics:receipt:${'ab'.repeat(32)}`;
 const digest = 'cd'.repeat(32);
+
+function navigationDisclosure() {
+  const publicCollection = page, privateCollection = zone, work = actor;
+  const state = { recovery: true, closed: false, policy: false, public: true, ambiguous: false };
+  const queries: string[] = [], semanticBatches: string[][] = [];
+  const client = { release() {}, query: async (sql: string, values: unknown[] = []) => {
+    if (sql.includes('access.recovery_fence')) return { rows: [{ open: state.recovery }] };
+    if (sql.includes('SELECT wanted.resource')) return { rows: state.closed || state.policy ? []
+      : (values[0] as string[]).map(resource => ({ resource })) };
+    return { rows: [] };
+  } } as unknown as PoolClient;
+  const access = new AccessAdmissionRegistry({ connect: async () => client } as unknown as Pool);
+  access.configureBaseline({ query: async query => {
+    queries.push(query);
+    const uri = (value: string) => ({ type: 'uri' as const, value });
+    const collection = { resource: uri(publicCollection), publicCollection: { type: 'literal' as const, value: 'true' } };
+    return { results: { bindings: [{ resource: uri(work) }, ...(state.public ? [collection] : []),
+      ...(state.ambiguous ? [collection] : [])] } };
+  } });
+  access.canReadSemanticResources = async (_principal, _actor, resources) => {
+    semanticBatches.push([...resources]);
+    return new Set();
+  };
+  access.canReadWorks = async (_principal, _actor, works) => new Set(works);
+  const principal = { issuer: 'https://account.test', subject: 'operator' };
+  const read = (workScope = true) => access.canReadZoneNavigationTargets(principal,
+    workScope ? principal : null, actor, [publicCollection, privateCollection, work, publicCollection]);
+  return { read, state, queries, semanticBatches, publicCollection, privateCollection, work };
+}
+
+test('Zone target pages consume public Collection disclosure without granting private target reads', async () => {
+  const f = navigationDisclosure();
+  expect(await f.read()).toEqual(new Set([f.publicCollection, f.work]));
+  expect(f.semanticBatches).toEqual([[f.privateCollection]]);
+  expect(f.queries).toHaveLength(1);
+  expect(f.queries[0]).toContain('rv:collectionState rv:Active ; rv:disclosure rv:Public');
+  expect(f.queries[0]).toContain('rv:structureOf ?resource');
+  expect(f.queries[0]).toContain('rv:protectionHead');
+  expect(f.queries[0]).toContain('rv:ErasedRevision');
+  expect(f.queries[0]).toContain('LIMIT 4');
+  expect(await f.read(false)).toEqual(new Set([f.publicCollection]));
+  f.state.public = false;
+  expect(await f.read(false)).toEqual(new Set());
+});
+
+test('public Collection navigation retains independent scope, policy, recovery and ambiguity refusals', async () => {
+  const f = navigationDisclosure();
+  f.state.closed = true;
+  expect(await f.read()).toEqual(new Set([f.work]));
+  f.state.closed = false;
+  f.state.policy = true;
+  expect(await f.read()).toEqual(new Set([f.work]));
+  f.state.policy = false;
+  f.state.ambiguous = true;
+  await expect(f.read()).rejects.toBeInstanceOf(AdmissionUnavailable);
+  f.state.ambiguous = false;
+  f.state.recovery = false;
+  await expect(f.read()).rejects.toBeInstanceOf(AdmissionUnavailable);
+});
 
 const controller = {
   policy_generation: '1',
