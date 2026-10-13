@@ -6,6 +6,7 @@ import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import { processIdentity, processParent, sameProcess, type ProcessIdentity } from '../qa/process/identity.ts';
 import { GoalMailStore } from './mail.ts';
+import { retryEventDatabase } from './event-store.ts';
 import { ensureTermspacesSession, termspacesSession, missingTermspacesReason, termspacesTarget, goalWindows, newGoalWindow, turnWindowName, windowTurns, windowTmux, followTurn } from './windows.ts';
 
 export { processIdentity, sameProcess, type ProcessIdentity };
@@ -211,6 +212,7 @@ export interface CoordinatorOptions {
   maxTurns?: number;
   turnMinutes?: number;
   notifyCut?: (goal: string, key: string) => void;
+  storeWaitMs?: number;
 }
 export interface IndependentLauncher {
   verify(descriptor: LaunchDescriptor): void;
@@ -251,9 +253,8 @@ export class TmuxLauncher implements IndependentLauncher {
     let own = processIdentity(process.pid)!;
     const file = join(this.stateDir,'coordinator.sqlite');
     if (existsSync(file)) {
-      const db = new Database(file,{readonly:true});
+      const db = retryEventDatabase(new Database(file,{readonly:true}));
       try {
-        db.exec('PRAGMA busy_timeout=5000');
         const row = db.query('SELECT identity FROM pump_owner WHERE singleton=1').get() as {identity:string}|null;
         if (row) {
           const pump = JSON.parse(row.identity) as ProcessIdentity;
@@ -290,10 +291,11 @@ export class TmuxLauncher implements IndependentLauncher {
     // Reconciliation removes the view after the cut's durable record is written.
   }
 }
-function openStore(stateDir: string): Database {
+
+function openStore(stateDir: string, waitMs = 5000): Database {
   mkdirSync(stateDir, { recursive: true });
-  const db = new Database(join(stateDir, 'coordinator.sqlite'), {create:true, strict:true});
-  db.exec(`PRAGMA busy_timeout=5000; PRAGMA synchronous=FULL;
+  const db = retryEventDatabase(new Database(join(stateDir, 'coordinator.sqlite'), {create:true, strict:true}), waitMs);
+  for (const sql of `PRAGMA synchronous=FULL;
     CREATE TABLE IF NOT EXISTS managers(goal TEXT PRIMARY KEY, descriptor TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS wakes(goal TEXT PRIMARY KEY, due_at INTEGER NOT NULL, failures INTEGER NOT NULL DEFAULT 0,
       error TEXT, token TEXT);
@@ -302,21 +304,21 @@ function openStore(stateDir: string): Database {
     CREATE TABLE IF NOT EXISTS attempts(token TEXT PRIMARY KEY, goal TEXT NOT NULL, generation TEXT NOT NULL,
       phase TEXT NOT NULL, descriptor TEXT NOT NULL, prompt TEXT NOT NULL, wrapper TEXT, child TEXT,
       code INTEGER, created_at INTEGER NOT NULL);
-    CREATE TABLE IF NOT EXISTS pump_owner(singleton INTEGER PRIMARY KEY CHECK(singleton=1), identity TEXT NOT NULL);`);
+    CREATE TABLE IF NOT EXISTS pump_owner(singleton INTEGER PRIMARY KEY CHECK(singleton=1), identity TEXT NOT NULL);`.split(';').filter(sql => sql.trim())) db.exec(sql);
   db.transaction(()=>{
     const columns = new Set((db.query('PRAGMA table_info(attempts)').all() as {name:string}[]).map(column=>column.name));
     for (const [name,type] of Object.entries({event_key:'TEXT',started_at:'INTEGER',ended_at:'INTEGER',ending:'TEXT',
       input_tokens:'INTEGER',cached_tokens:'INTEGER',output_tokens:'INTEGER'})) {
       if (!columns.has(name)) db.exec(`ALTER TABLE attempts ADD COLUMN ${name} ${type}`);
     }
-    db.exec(`CREATE TABLE IF NOT EXISTS turn_commands(id INTEGER PRIMARY KEY, token TEXT NOT NULL,
+    for (const sql of `CREATE TABLE IF NOT EXISTS turn_commands(id INTEGER PRIMARY KEY, token TEXT NOT NULL,
     command TEXT NOT NULL, created_at INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS admissions(goal TEXT PRIMARY KEY,due_at INTEGER NOT NULL,failures INTEGER NOT NULL,error TEXT);
     CREATE TABLE IF NOT EXISTS cut_notices(goal TEXT NOT NULL,event_key TEXT NOT NULL,sent INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(goal,event_key));
     CREATE TABLE IF NOT EXISTS handled_events(sequence INTEGER PRIMARY KEY,goal TEXT NOT NULL,event_key TEXT NOT NULL,
       handled_at INTEGER NOT NULL,UNIQUE(goal,event_key));
     CREATE TABLE IF NOT EXISTS checkpoints(goal TEXT PRIMARY KEY,covered_through INTEGER NOT NULL DEFAULT 0,
-      queued_key TEXT,through_sequence INTEGER)`);
+      queued_key TEXT,through_sequence INTEGER)`.split(';').filter(sql => sql.trim())) db.exec(sql);
     const eventColumns = new Set((db.query('PRAGMA table_info(events)').all() as {name:string}[]).map(column=>column.name));
     for (const [name,type] of Object.entries({failures:'INTEGER NOT NULL DEFAULT 0',error:'TEXT',cuts:'INTEGER NOT NULL DEFAULT 0'})) {
       if (!eventColumns.has(name)) db.exec(`ALTER TABLE events ADD COLUMN ${name} ${type}`);
@@ -368,7 +370,7 @@ export class GoalCoordinator {
   private readonly maxTurns: number;
   private readonly turnMs: number;
   constructor(private readonly options: CoordinatorOptions) {
-    this.db = openStore(options.stateDir);
+    this.db = openStore(options.stateDir, options.storeWaitMs);
     this.launcher = options.launcher ?? new TmuxLauncher(options.stateDir);
     this.now = options.now ?? Date.now;
     this.maxTurns = options.maxTurns ?? Number(process.env.GOAL_MANAGER_TURNS ?? 6);

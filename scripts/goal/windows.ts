@@ -4,6 +4,7 @@ import { closeSync, existsSync, openSync, readFileSync, readSync, statSync } fro
 import { join } from 'node:path';
 import { running, readResult } from './launch.ts';
 import { engineOf, isCodex, type Ledger, type Task } from './types.ts';
+import { retryEventDatabase } from './event-store.ts';
 
 export function termspacesTarget(): {socket: string; session: string} {
   return {socket:process.env.GOAL_TERMSPACES_SOCKET ?? `/tmp/tmux-${process.getuid?.()}/termspaces`,
@@ -42,9 +43,8 @@ export const turnWindowName = (turn: Pick<WindowTurn,'goal'|'n'>): string => `go
 export function windowTurns(directory: string): WindowTurn[] {
   const file = join(directory,'coordinator.sqlite');
   if (!existsSync(file)) return [];
-  const db = new Database(file,{readonly:true});
+  const db = retryEventDatabase(new Database(file,{readonly:true}));
   try {
-    db.exec('PRAGMA busy_timeout=5000');
     return db.query(`SELECT a.*, (SELECT COUNT(*) FROM attempts b WHERE b.goal=a.goal AND b.rowid<=a.rowid) AS n
       FROM attempts a ORDER BY a.rowid`).all() as WindowTurn[];
   } finally { db.close(); }

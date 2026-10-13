@@ -9,6 +9,7 @@ import { goalAreas, goalFile, pathsOverlap } from './briefs.ts';
 import { HOLDING, type Ledger, type Task } from './types.ts';
 import { personas, pending, proved, notApplicable, rowOutcomes, type Persona, type RowOutcomes } from '../qa/cases/outcome-cells.ts';
 import type { WakeEvent } from './coordinator.ts';
+import { retryEventDatabase } from './event-store.ts';
 
 const declarationsPath = 'scripts/qa/cases/outcomes';
 const declarationsCache = new Map<string, { tree: string; rows: { file: string; declaration: RowOutcomes }[] }>();
@@ -148,10 +149,8 @@ export function planningBody(goal: string, rows: readonly PlanningRow[]): string
 export function planningEvent(directory: string, goal: string, ledger: Ledger, repo = root): WakeEvent | undefined {
   const file = join(directory, 'coordinator.sqlite');
   if (!existsSync(file)) return;
-  const db = new Database(file, { readonly: true });
+  const db = retryEventDatabase(new Database(file, { readonly: true }));
   try {
-    // Enrollment and turn completion can briefly hold the event store's write lock.
-    db.exec('PRAGMA busy_timeout = 5000;');
     if (!db.query('SELECT goal FROM managers WHERE goal=?').get(goal)) return;
     if (db.query("SELECT event_key FROM events WHERE goal=? AND event_key LIKE 'planning:%' AND handled=0 LIMIT 1").get(goal)) return;
     const previous = db.query("SELECT rowid,event_key,handled FROM events WHERE goal=? AND event_key LIKE 'planning:%' ORDER BY rowid DESC LIMIT 1")

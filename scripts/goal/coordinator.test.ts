@@ -66,6 +66,86 @@ test('the next pass loads landed tool code while a landing from the previous pas
   }
 });
 
+test('a second event writer waits for the first and a permanent lock ends with the statement named', async () => {
+  const f = fixture();
+  let writer: ReturnType<typeof Bun.spawn> | undefined;
+  try {
+    const first = f.open();
+    const second = f.open({storeWaitMs:1000});
+    const bounded = f.open({storeWaitMs:75});
+    const ready = join(f.dir, 'writer-ready');
+    const sql = 'INSERT INTO events(goal,event_key,body,due_at) VALUES(?,?,?,?)';
+    const pending = second.db.query(sql);
+    const timed = bounded.db.query(sql);
+    const source = `import { Database } from 'bun:sqlite'; import { writeFileSync } from 'node:fs';
+      const db = new Database(${JSON.stringify(join(f.stateDir, 'coordinator.sqlite'))});
+      db.exec('BEGIN EXCLUSIVE');
+      db.query(${JSON.stringify(sql)}).run('program','first','first writer',0);
+      writeFileSync(${JSON.stringify(ready)}, 'locked');
+      await Bun.sleep(500); db.exec('COMMIT'); db.close();`;
+    writer = Bun.spawn([process.execPath, '-e', source], {stdout:'ignore',stderr:'pipe'});
+    await waitFor(() => existsSync(ready));
+    const start = performance.now();
+    expect(() => timed.run('program','bounded','must fail',0)).toThrow(`Event store statement ${JSON.stringify(sql)} failed after waiting 75 ms`);
+    expect(performance.now() - start).toBeGreaterThanOrEqual(70);
+    expect(performance.now() - start).toBeLessThan(300);
+    pending.run('program','second','second writer',0);
+    expect(await writer.exited, await new Response(writer.stderr).text()).toBe(0);
+    expect(first.db.query('SELECT event_key FROM events ORDER BY event_key').all()).toEqual([{event_key:'first'},{event_key:'second'}]);
+    expect(() => second.db.query('SELECT missing FROM events').all()).toThrow('SELECT missing FROM events');
+  } finally {
+    writer?.kill(); if (writer) await writer.exited;
+    f.cleanup();
+  }
+});
+
+test('a stale event transaction rolls back and rereads before retrying its write', () => {
+  const f = fixture();
+  try {
+    const coordinator = f.open({storeWaitMs:500});
+    coordinator.db.exec('PRAGMA journal_mode=WAL');
+    coordinator.db.exec('CREATE TABLE counter(value INTEGER)');
+    coordinator.db.exec('INSERT INTO counter VALUES(0)');
+    let tries = 0;
+    coordinator.db.transaction(() => {
+      const row = coordinator.db.query('SELECT value FROM counter').get() as {value:number};
+      if (tries++ === 0) {
+        const result = spawnSync(process.execPath, ['-e', `import { Database } from 'bun:sqlite';
+          const db = new Database(${JSON.stringify(join(f.stateDir,'coordinator.sqlite'))});
+          db.exec('UPDATE counter SET value=value+1'); db.close();`], {encoding:'utf8'});
+        expect(result.status, result.stderr).toBe(0);
+      }
+      coordinator.db.query('UPDATE counter SET value=?').run(row.value+1);
+    })();
+    expect(tries).toBe(2);
+    expect(coordinator.db.query('SELECT value FROM counter').get()).toEqual({value:2});
+  } finally { f.cleanup(); }
+});
+
+test('a reader blocking transaction commit produces a bounded COMMIT error and no partial event', async () => {
+  const f = fixture();
+  let reader: ReturnType<typeof Bun.spawn> | undefined;
+  try {
+    const coordinator = f.open({storeWaitMs:75});
+    const ready = join(f.dir, 'reader-ready');
+    const source = `import { Database } from 'bun:sqlite'; import { writeFileSync } from 'node:fs';
+      const db = new Database(${JSON.stringify(join(f.stateDir, 'coordinator.sqlite'))});
+      db.exec('BEGIN'); db.query('SELECT * FROM events').all();
+      writeFileSync(${JSON.stringify(ready)}, 'locked');
+      await Bun.sleep(500); db.exec('COMMIT'); db.close();`;
+    reader = Bun.spawn([process.execPath, '-e', source], {stdout:'ignore',stderr:'pipe'});
+    await waitFor(() => existsSync(ready));
+    expect(() => coordinator.db.transaction(() => {
+      coordinator.db.query('INSERT INTO events(goal,event_key,body,due_at) VALUES(?,?,?,?)').run('program','event','body',0);
+    }).immediate()).toThrow('Event store statement "COMMIT" failed after waiting 75 ms');
+    expect(await reader.exited, await new Response(reader.stderr).text()).toBe(0);
+    expect(coordinator.db.query('SELECT * FROM events').all()).toEqual([]);
+  } finally {
+    reader?.kill(); if (reader) await reader.exited;
+    f.cleanup();
+  }
+});
+
 function fixture() {
   const root = join(import.meta.dir, '../../.temp/coordinator-tests');
   mkdirSync(root, { recursive: true });
