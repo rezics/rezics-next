@@ -126,9 +126,11 @@ export function admissionCommand(input: readonly string[]): string[] {
 export async function withTestAdmission(command: string[], heavy = false, resultFile?: string, options: SlotRunOptions = {}): Promise<number> {
   const selector = basename(command[0] ?? '') === 'bun'
     && resolve(command[1] ?? '') === resolve(import.meta.dir, '../qa/test.ts');
-  const affected = selector ? (await import('../qa/test.ts')).parseAffectedArgs(command.slice(2)) : undefined;
+  const args = command.slice(2).filter(arg => arg !== '--beside-workers');
+  const affected = selector ? (await import('../qa/test.ts')).parseAffectedArgs(args) : undefined;
   // Listing starts neither tests nor a stack, so it must never enter admission.
   if (affected?.list) {
+    command = [...command.slice(0, 2), ...args];
     const now = options.now ?? Date.now;
     const queuedAt = now();
     let startedAt: number | undefined;

@@ -205,7 +205,8 @@ async function occupyAdmission(directory: string): Promise<() => void> {
   return () => { for (const lease of held) lease.release(); releaseHeavy(); };
 }
 
-for (const args of [['--affected', '--list'], ['--affected', 'HEAD', '--list'], ['--affected=HEAD', '--list'], ['--list', '--affected']]) {
+for (const args of [['--affected', '--list'], ['--affected', 'HEAD', '--list'], ['--affected=HEAD', '--list'],
+  ['--list', '--affected'], ['--affected', '--list', '--beside-workers']]) {
   test(`list-only plan ${args.join(' ')} bypasses full admission without a waiter`, async () => {
     const directory = fixture();
     const release = await occupyAdmission(directory);
@@ -219,7 +220,7 @@ for (const args of [['--affected', '--list'], ['--affected', 'HEAD', '--list'], 
         reap: () => { throw new Error('A list-only plan prepared a test run'); },
         runCommand: async (selected, childEnv, start) => {
           ran = true;
-          expect(selected).toEqual(command);
+          expect(selected).toEqual(command.filter(arg => arg !== '--beside-workers'));
           expect(childEnv).toEqual(env);
           expect(slotHolderLines(directory, 8)).toHaveLength(8);
           expect(existsSync(join(directory, 'waiters'))).toBe(false);
