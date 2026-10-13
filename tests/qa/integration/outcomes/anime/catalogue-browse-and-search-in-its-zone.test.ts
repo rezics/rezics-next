@@ -63,6 +63,7 @@ const phrase = `Lanternanime${randomUUID().replaceAll('-', '')}`;
 const credentials = new Map<PersonaSession, Headers>();
 const formatAnswers: { persona: string; request: string; status: number; answer: string }[] = [];
 let preparationPopulation = 12;
+let preparationDurationMs: number | undefined;
 const preparationAnswers: { population: number; request: { method: string; path: string; body: unknown; key?: string }; status: number; answer: string }[] = [];
 beforeAll(async () => {
   const started = Date.now();
@@ -77,7 +78,7 @@ beforeAll(async () => {
         preparationAnswers.push({ population: preparationPopulation, request: { method, path, body, key }, status: response.status,
           answer: await response.clone().text() });
         await Bun.write(`.temp/anime-catalogue-preparation-${Bun.env.REZICS_QA_RUN_ID}.json`,
-          JSON.stringify({ durationMs: Date.now() - started, preparationAnswers }, null, 2));
+          JSON.stringify({ durationMs: preparationDurationMs ?? Date.now() - started, preparationAnswers }, null, 2));
       }
       return response;
     };
@@ -188,8 +189,9 @@ beforeAll(async () => {
     title: `${phrase} unpublished original animation`, language: 'en', semanticTypes: ['https://schema.org/TVSeries'],
     authoring: 'own-work', actingSubject: actor }), 201);
   } finally {
+    preparationDurationMs = Date.now() - started;
     await Bun.write(`.temp/anime-catalogue-preparation-${Bun.env.REZICS_QA_RUN_ID}.json`,
-      JSON.stringify({ durationMs: Date.now() - started, preparationAnswers }, null, 2));
+      JSON.stringify({ durationMs: preparationDurationMs, preparationAnswers }, null, 2));
   }
 }, 360_000);
 

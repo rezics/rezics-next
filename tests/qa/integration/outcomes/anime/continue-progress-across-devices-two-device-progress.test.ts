@@ -141,8 +141,8 @@ async function isolated(person: PersonaSession, affected: PersonaSession) {
   // The caller's Account progress must not project a last-read timestamp onto an uncontrolled Person.
   expect(after).toEqual(before);
   await answer(Promise.resolve(response), 403);
-  // Retain the old expectation until the live uncontrolled-Person answer is qualified.
-  expect(await answer(Promise.resolve(foreign))).toMatchObject({ completed: false, version: 0 });
+  // Reading progress requires control of the presented Person, even for an empty Account row.
+  expect(await answer(Promise.resolve(foreign), 403)).toMatchObject({ code: 'authority_denied' });
 }
 
 import { readFileSync } from 'node:fs';
