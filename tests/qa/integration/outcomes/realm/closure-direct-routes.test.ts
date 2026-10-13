@@ -2,6 +2,7 @@ import { outcomeTest } from '../../../support/outcome-test.ts';
 import { closeRealm, closureCell } from './closure-fixture.ts';
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { appendFileSync, mkdirSync } from 'node:fs';
 import { fromPlainText } from '@rezics/document';
 import declaration from '../../../../../scripts/qa/cases/outcomes/realm/closure-direct-routes.ts';
 import {
@@ -23,6 +24,60 @@ const short = (id: string) => id.slice(-36);
 const acting = (person: PersonaSession) =>
   person.actingSubject ? `actingSubject=${encodeURIComponent(person.actingSubject)}` : '';
 const root = (sessions: PersonaSessions) => `/v1/realms/${short(sessions.realm)}`;
+
+/** Observe the real setup transport, including attempts that never answer.
+ * Account credentials and verification query strings are not retained. */
+function recordSetupRequests() {
+  const original = globalThis.fetch;
+  const runId = Bun.env.REZICS_QA_RUN_ID ?? randomUUID();
+  mkdirSync('.temp/goal', { recursive: true });
+  const file = `.temp/goal/${runId}-direct-route-setup.jsonl`;
+  const mainOrigin = `http://127.0.0.1:${Bun.env.MAIN_PORT}`;
+  const accountOrigin = `http://127.0.0.1:${Bun.env.ACCOUNT_PORT}`;
+  const record = (value: object) => {
+    const raw = JSON.stringify(value);
+    appendFileSync(file, `${raw}\n`);
+    console.log('Realm direct-route setup timing', raw);
+  };
+  let ordinal = 0;
+  const setupStarted = performance.now();
+  record({ event: 'setup-start', at: new Date().toISOString(), runId, file });
+  globalThis.fetch = Object.assign(async (...args: Parameters<typeof fetch>) => {
+    const [input, init] = args;
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    const main = url.origin === mainOrigin;
+    if (!main && url.origin !== accountOrigin && !url.pathname.startsWith('/api/v1/')) {
+      return original(...args);
+    }
+    const id = ++ordinal;
+    const startedAt = new Date().toISOString();
+    const started = performance.now();
+    const method = init?.method ?? (input instanceof Request ? input.method : 'GET');
+    const path = main ? url.pathname + url.search : url.pathname;
+    const request = { id, method, origin: url.origin, path, startedAt,
+      ...(main ? { key: new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined))
+        .get('idempotency-key') } : {}),
+      ...(main && typeof init?.body === 'string' ? { body: init.body } : {}) };
+    record({ event: 'request-start', ...request });
+    try {
+      const response = await original(...args);
+      const body = main && response.headers.get('content-type')?.includes('json')
+        ? await response.clone().text() : null;
+      record({ event: 'request-end', ...request, endedAt: new Date().toISOString(),
+        durationMs: performance.now() - started, status: response.status, answer: body });
+      return response;
+    } catch (error) {
+      record({ event: 'request-end', ...request, endedAt: new Date().toISOString(),
+        durationMs: performance.now() - started, status: null, error: String(error) });
+      throw error;
+    }
+  }, { preconnect: original.preconnect });
+  return () => {
+    globalThis.fetch = original;
+    record({ event: 'setup-end', at: new Date().toISOString(), durationMs: performance.now() - setupStarted });
+  };
+}
+
 type Answer = { status: number; body: string };
 async function observe(person: PersonaSession, path: string): Promise<Answer> {
   const response = await person.main('GET', path);
@@ -143,42 +198,50 @@ async function publishSite(sessions: PersonaSessions) {
 // Setup uses public commands. A product refusal remains an explicit pending
 // prerequisite; OAuth/application failures escape beforeAll as infrastructure errors.
 beforeAll(async () => {
-  closed = await personaSessions('public');
-  live = await personaSessions('public');
-  privateRealm = await personaSessions('private');
+  const finishRecording = recordSetupRequests();
   try {
-    adopted = await publish(closed, true);
-    liveAdoption = await publish(live, true);
-    for (const fixture of [closed, live]) {
-      // personaSessions creates a Zone Space and attaches it through the
-      // public configuration API. Its owner is the Realm's owner Person.
-      const config = await command<{ configuration: { defaultRealm: string } }>(fixture.owner, 'GET',
-        `/v1/zones/${short(fixture.zone)}/configuration?${acting(fixture.owner)}`);
-      expect(config.configuration.defaultRealm).toBe(fixture.realm);
-      await publishSite(fixture);
-    }
-    const owner = privateRealm.owner;
-    const settings = await command<{ generation: string }>(owner, 'GET',
-      `/v1/spaces/${short(privateRealm.space)}/settings?${acting(owner)}`);
-    await command(owner, 'PUT', `/v1/spaces/${short(privateRealm.space)}/settings`, {
-      actingSubject: owner.actingSubject, expectedGeneration: settings.generation,
-      settings: { visibility: 'private', listing: 'listed', admission: 'request', history: 'everything' },
-      reason: 'Retain a private request-admission teaser control',
-    }, 201);
-    for (const name of ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const) {
-      for (const path of paths(closed, adopted.decision!, closed[name]))
-        before.set(`${name}:${path}`, await observe(closed[name], path));
-      const teaser = `${root(privateRealm)}/join-page?${acting(privateRealm[name])}`;
-      before.set(`${name}:${teaser}`, await observe(privateRealm[name], teaser));
-    }
-  } catch (error) { setupFailure = String(error); }
-  // Closure commands are independent of adoption/teaser setup.
-  closureFailure = await closeRealm(closed);
-  privateClosureFailure = await closeRealm(privateRealm);
-  if (setupFailure) console.log(`Direct-read prerequisite: ${setupFailure}`);
-  if (closureFailure) console.log(`Direct-read closure prerequisite: ${closureFailure}`);
-  if (privateClosureFailure) console.log(`Private teaser closure prerequisite: ${privateClosureFailure}`);
-}, 180_000);
+    [closed, live, privateRealm] = await Promise.all([
+      personaSessions('public'), personaSessions('public'), personaSessions('private'),
+    ]);
+    try {
+      const prepareControl = async (fixture: PersonaSessions) => {
+        // personaSessions creates a Zone Space and attaches it through the
+        // public configuration API. Its owner is the Realm's owner Person.
+        const config = await command<{ configuration: { defaultRealm: string } }>(fixture.owner, 'GET',
+          `/v1/zones/${short(fixture.zone)}/configuration?${acting(fixture.owner)}`);
+        expect(config.configuration.defaultRealm).toBe(fixture.realm);
+        const [publication] = await Promise.all([publish(fixture, true), publishSite(fixture)]);
+        return publication;
+      };
+      const privateSettings = (async () => {
+        const owner = privateRealm.owner;
+        const settings = await command<{ generation: string }>(owner, 'GET',
+          `/v1/spaces/${short(privateRealm.space)}/settings?${acting(owner)}`);
+        await command(owner, 'PUT', `/v1/spaces/${short(privateRealm.space)}/settings`, {
+          actingSubject: owner.actingSubject, expectedGeneration: settings.generation,
+          settings: { visibility: 'private', listing: 'listed', admission: 'request', history: 'everything' },
+          reason: 'Retain a private request-admission teaser control',
+        }, 201);
+      })();
+      [adopted, liveAdoption] = await Promise.all([
+        prepareControl(closed), prepareControl(live), privateSettings,
+      ]);
+      for (const name of ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const) {
+        for (const path of paths(closed, adopted.decision!, closed[name]))
+          before.set(`${name}:${path}`, await observe(closed[name], path));
+        const teaser = `${root(privateRealm)}/join-page?${acting(privateRealm[name])}`;
+        before.set(`${name}:${teaser}`, await observe(privateRealm[name], teaser));
+      }
+    } catch (error) { setupFailure = String(error); }
+    // Both closures share the operator's grant epoch; keep that chain ordered.
+    // Closure commands are independent of adoption/teaser setup.
+    closureFailure = await closeRealm(closed);
+    privateClosureFailure = await closeRealm(privateRealm);
+    if (setupFailure) console.log(`Direct-read prerequisite: ${setupFailure}`);
+    if (closureFailure) console.log(`Direct-read closure prerequisite: ${closureFailure}`);
+    if (privateClosureFailure) console.log(`Private teaser closure prerequisite: ${privateClosureFailure}`);
+  } finally { finishRecording(); }
+}, 300_000);
 afterAll(async () => { await closed?.close(); });
 
 function paths(sessions: PersonaSessions, decision: string, person: PersonaSession) {
