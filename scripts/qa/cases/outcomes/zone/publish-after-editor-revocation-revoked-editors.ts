@@ -6,7 +6,7 @@ export default rowOutcomes('zone/publish-after-editor-revocation-revoked-editors
   member: proved('a revoked controller remains a Realm member but cannot preview or publish; restoration recovers bytes and the saved editor'),
   owner: pending('revoked owner control retains recoverable saved bytes; post-pin competing switch setup needs a public API observation'),
   moderator: proved('a revoked controller retains joined Realm moderation but loses preview and publication until restoration reopens the saved editor'),
-  operator: pending('requires live resource and named Agent control; independent authority preserves saved bytes and original credit'),
+  operator: proved('requires live resource and named Agent control; independent authority preserves saved bytes and original credit'),
 }, {
   rights: {
     basis: 'original-contribution',
