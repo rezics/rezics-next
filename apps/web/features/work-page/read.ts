@@ -243,8 +243,8 @@ export const readAdoptions = cache(async (id: string, _locale: UiLocale): Promis
 });
 
 export const readRealm = cache(async (realm: string, _locale: UiLocale): Promise<Loaded<RealmHeader>> => {
-  const { main } = await reader();
-  return settle(() => main.v1.realms({ realm }).get({ query: {} }));
+  const { main, actingSubject } = await reader();
+  return settle(() => main.v1.realms({ realm }).get({ query: { actingSubject } }));
 });
 
 /** Mine needs a signed-in person acting as an Agent; say which step is missing before asking Main. */

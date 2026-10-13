@@ -1,5 +1,6 @@
 import { afterEach, expect, spyOn, test } from 'bun:test';
 import { pageRequest } from '../features/entity-page/request-fixture.ts';
+import { readRealm as readWorkRealm } from '../features/work-page/read.ts';
 import {
   readLatestChapters, readNewAdoptions, readPresentation, readRankings, readRealmDecision,
   readRealmDecisions, readRealmWorks, readRecentDecisions, readRecentlyCompleted, readRising,
@@ -53,6 +54,7 @@ function mainDouble(initial: Reader) {
 }
 
 const memberReads = [
+  { path: `/v1/realms/${realm}`, read: () => readWorkRealm(realm, 'en') },
   { path: `/v1/realms/${realm}/works`, read: (cursor?: string) => readRealmWorks(realm, 'en', cursor) },
   { path: `/v1/realms/${realm}/decisions`, read: (cursor?: string) => readRealmDecisions(realm, cursor) },
   { path: `/v1/realms/${realm}/decisions/${decision}`, read: () => readRealmDecision(realm, decision) },
@@ -102,12 +104,13 @@ test('first-page retry and continuation preserve the reader and exact continuati
   expect(main.calls).toHaveLength(2);
   const results = await pageRequest(() => Promise.all(memberReads.map(({ read }) => read('next-page'))), { signedIn: true });
   expect(results.every(result => result.ok)).toBe(true);
-  expect(main.calls[2]!.url.searchParams.get('cursor')).toBe('next-page');
+  expect(main.calls[2]!.url.searchParams.has('cursor')).toBe(false);
   expect(main.calls[3]!.url.searchParams.get('cursor')).toBe('next-page');
-  expect(main.calls[4]!.url.searchParams.has('cursor')).toBe(false);
-  expect(main.calls[5]!.url.searchParams.get('after')).toBe('next-page');
-  expect(main.calls[6]!.url.searchParams.get('cursor')).toBe('next-page');
-  expect(main.calls[6]!.url.searchParams.get('path')).toBe('books');
+  expect(main.calls[4]!.url.searchParams.get('cursor')).toBe('next-page');
+  expect(main.calls[5]!.url.searchParams.has('cursor')).toBe(false);
+  expect(main.calls[6]!.url.searchParams.get('after')).toBe('next-page');
+  expect(main.calls[7]!.url.searchParams.get('cursor')).toBe('next-page');
+  expect(main.calls[7]!.url.searchParams.get('path')).toBe('books');
   expect(main.calls.every(call => call.authorization === 'Bearer reader-token'
     && call.url.searchParams.get('actingSubject') === member)).toBe(true);
 });
