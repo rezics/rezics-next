@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from 'bun:test';
+import { afterAll, afterEach, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Database } from 'bun:sqlite';
@@ -16,7 +16,8 @@ import { GiB, measuredAdmissionMessage, memoryBytes, parseMemoryReading, qaMemor
 
 const root = resolve(import.meta.dir, '../../..');
 const need = qaMemoryNeed(root, 'other', 'ordinary', {});
-const qaEnv = { REZICS_STACK_PROFILE: 'qa' };
+const loadFixture = join(root, '.temp', `qa-loadavg-${process.pid}`);
+const qaEnv = { REZICS_STACK_PROFILE: 'qa', REZICS_QA_LOADAVG_FILE: loadFixture };
 const plenty: MemoryReading = { vmTotal: 24 * GiB, vmUsed: 5 * GiB, hostAvailable: 20 * GiB };
 
 test('memory admission budgets Compose caps, resource classes and overridden thresholds', () => {
@@ -46,6 +47,8 @@ test('admission inherits the run deadline without capping it to the fallback dur
 
 const scratch = join(root, '.temp');
 mkdirSync(scratch, { recursive: true });
+writeFileSync(loadFixture, '0.00 0.00 0.00 1/1 1\n');
+afterAll(() => rmSync(loadFixture, { force: true }));
 
 const readingDirectories: string[] = [];
 afterEach(() => {
@@ -67,7 +70,7 @@ test(`a restore reports five minutes of admission separately and qualifies ${act
   let now = 0;
   const budget = new FixtureWorkBudget(600_000, () => now);
   try {
-    await startRestoredFixture(budget, { REZICS_STACK_PROFILE: 'qa', REZICS_QA_MEMORY_DEADLINE: '1000000' },
+    await startRestoredFixture(budget, { ...qaEnv, REZICS_QA_MEMORY_DEADLINE: '1000000' },
       timeout => { expect(timeout).toBe(180_000); now += 120_000; }, {
         lockFile: join(dir, 'mutex.sqlite'), now: () => now, pollMs: 60_000,
         sleep: async ms => { now += ms; }, announce: () => {},
@@ -134,7 +137,7 @@ test('saved dev restores bypass all admission entry points even with Goal metada
     mkdirSync(join(dir, 'infra', 'dev'), { recursive: true });
     writeFileSync(join(dir, 'infra', 'dev', 'compose.qa.yaml'), readFileSync(join(root, 'infra', 'dev', 'compose.qa.yaml')));
     let now = 0, reads = 0, started = false;
-    await expect(withQaStackStartup(dir, { REZICS_STACK_PROFILE: 'qa', REZICS_FUSEKI_MEMORY_LIMIT: '2g' }, 10,
+    await expect(withQaStackStartup(dir, { ...qaEnv, REZICS_FUSEKI_MEMORY_LIMIT: '2g' }, 10,
       () => { started = true; }, { lockFile, now: () => now, pollMs: 10,
         sleep: async ms => { now += ms; }, announce: () => {},
         read: async () => { reads++; return { ...plenty, vmUsed: plenty.vmTotal }; },
@@ -218,7 +221,7 @@ for (const fails of [false, true]) {
       import { appendFileSync } from 'node:fs';
       await waitForMemory(${JSON.stringify(need)}, {
         env: ${JSON.stringify(qaEnv)}, lockFile: ${JSON.stringify(join(dir, 'state.sqlite'))},
-        deadline: Date.now() + 5000, readingMaxAgeMs: 3000,
+        deadline: 5000, now: () => 1000, readingMaxAgeMs: 3000,
         read: async () => {
           appendFileSync(${JSON.stringify(join(dir, 'readings'))}, 'reading\\n');
           await Bun.sleep(100);
@@ -244,7 +247,7 @@ for (const fails of [false, true]) {
       await wave(10);
       expect(readFileSync(join(dir, 'readings'), 'utf8').trim().split('\n')).toHaveLength(1);
       const db = new Database(join(dir, 'state.sqlite'));
-      try { db.query('UPDATE memory_readings SET finished_at = ?').run(Date.now() - 3000); }
+      try { db.query('UPDATE memory_readings SET finished_at = ?').run(1000 - 3000); }
       finally { db.close(true); }
       await wave(2);
       expect(readFileSync(join(dir, 'readings'), 'utf8').trim().split('\n')).toHaveLength(2);
@@ -489,7 +492,7 @@ test('each source and restore target startup receives a fresh reading and its in
   const dir = mkdtempSync(join(scratch, 'qa-memory-children-'));
   let now = 0, used = 0, reads = 0;
   const starts: string[] = [];
-  const env = { REZICS_STACK_PROFILE: 'qa', REZICS_QA_MEMORY_DEADLINE: '25' };
+  const env = { ...qaEnv, REZICS_QA_MEMORY_DEADLINE: '25' };
   const options = { lockFile: join(dir, 'mutex.sqlite'), readingMaxAgeMs: 0, now: () => now, pollMs: 10,
     announce: () => {}, sleep: async (ms: number) => { now += ms; }, read: async () => {
       reads++; return { vmTotal: 12 * GiB, vmUsed: used, hostAvailable: 20 * GiB };
@@ -748,4 +751,97 @@ test('a startup requests a new acknowledgement when a sibling overwrites its slo
     expect(sequences).toHaveLength(2);
     expect(sequences[1]).toBeGreaterThan(sequences[0]!);
   } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+function loadScenario() {
+  const directory = mkdtempSync(join(scratch, 'qa-load-admission-'));
+  readingDirectories.push(directory);
+  const loadFile = join(directory, 'loadavg');
+  writeFileSync(loadFile, '85.0 90.0 95.0 1/1 1\n');
+  const waiters = join(directory, 'qa-slots', 'waiters');
+  const lines: string[] = [];
+  let clock = 0;
+  const options: StartupMemoryOptions = {
+    env: { ...qaEnv, GOAL_QA_SLOT_DIRECTORY: join(directory, 'qa-slots'), GOAL_QA_WAIT_DIR: waiters,
+      GOAL_QA_COMMAND: 'integration run', REZICS_QA_LOADAVG_FILE: loadFile },
+    lockFile: join(directory, 'state.sqlite'), processors: 64, deadline: 100_000,
+    now: () => clock, pollMs: 1000, readingMaxAgeMs: 1,
+    read: async () => plenty, announce: message => { lines.push(message); },
+    sleep: async ms => { clock += ms; },
+  };
+  return { directory, loadFile, waiters, lines, options, now: () => clock,
+    advance: (ms: number) => { clock += ms; } };
+}
+
+test('a stack waits above the processor load limit, publishes its command and admits below it', async () => {
+  const scenario = loadScenario();
+  await withMemoryStartupImpl(need, { ...scenario.options, sleep: async ms => {
+    const files = readdirSync(scenario.waiters);
+    expect(files).toHaveLength(1);
+    expect(files[0]).toStartWith('load-');
+    expect(JSON.parse(readFileSync(join(scenario.waiters, files[0]!), 'utf8'))).toMatchObject({
+      command: 'integration run', waitingFor: 'load',
+    });
+    scenario.advance(ms);
+    writeFileSync(scenario.loadFile, '63.0 90.0 95.0 1/1 1\n');
+  } }, () => { expect(scenario.now()).toBe(1000); });
+  expect(readdirSync(scenario.waiters)).toEqual([]);
+  expect(scenario.lines.at(-1)).toContain('63.00 / 64 processors');
+  expect(scenario.lines.at(-1)).toContain('waited 1.0 seconds for load');
+});
+
+test('load waiters retain arrival order and start at least twenty seconds apart even at startup concurrency three', async () => {
+  const scenario = loadScenario();
+  writeFileSync(join(scenario.directory, 'qa-startup-concurrency'), '3');
+  const starts: { id: number; at: number }[] = [];
+  await Promise.all([0, 1, 2].map(id => withMemoryStartupImpl(need, {
+    ...scenario.options, sleep: async ms => {
+      scenario.advance(ms);
+      if (scenario.now() >= 3000) writeFileSync(scenario.loadFile, '32.0 0 0 1/1 1\n');
+    },
+  }, () => { starts.push({ id, at: scenario.now() }); })));
+  expect(starts.map(start => start.id)).toEqual([0, 1, 2]);
+  expect(starts[1]!.at - starts[0]!.at).toBeGreaterThanOrEqual(20_000);
+  expect(starts[2]!.at - starts[1]!.at).toBeGreaterThanOrEqual(20_000);
+});
+
+test('a load waiter starts at the memory deadline and logs it, while a memory shortage still refuses startup', async () => {
+  const scenario = loadScenario();
+  const options = { ...scenario.options, deadline: 2500 };
+  await withMemoryStartupImpl(need, options, () => { expect(scenario.now()).toBe(2500); });
+  expect(scenario.lines.at(-1)).toContain('waited 2.5 seconds for load; load deadline reached, starting');
+  await expect(withMemoryStartupImpl(need, { ...options, deadline: 5000,
+    read: async () => ({ ...plenty, hostAvailable: 0 }) }, () => { throw new Error('must not start'); }))
+    .rejects.toThrow('Memory admission deadline reached');
+});
+
+test('unit admission and a startup with no stack never inspect load', async () => {
+  const scenario = loadScenario();
+  const hostNeed = { ...need, vm: 0, vmReserve: 0 };
+  const options = { ...scenario.options, readLoad: () => { throw new Error('unit inspected load'); } };
+  await waitForMemoryImpl(hostNeed, options);
+  await withMemoryStartupImpl(hostNeed, options, () => { expect(scenario.now()).toBe(0); });
+});
+
+for (const limit of [undefined, '1.5', '0.5']) {
+  test(`load limit ${limit ?? 'absent'} is read beside the slots with a default of one`, async () => {
+    const scenario = loadScenario();
+    if (limit !== undefined) writeFileSync(join(scenario.directory, 'qa-load-limit'), limit);
+    await withMemoryStartupImpl(need, { ...scenario.options, sleep: async ms => {
+      scenario.advance(ms);
+      writeFileSync(scenario.loadFile, '0.0 0 0 1/1 1\n');
+    } }, () => {});
+    expect(scenario.now()).toBe(limit === '1.5' ? 0 : 1000);
+    expect(scenario.lines.at(-1)).toContain(`limit ${limit ?? '1'}`);
+  });
+}
+
+test('load deadline admission rechecks memory instead of starting from a stale available reading', async () => {
+  const scenario = loadScenario();
+  let started = false;
+  await expect(withMemoryStartupImpl(need, { ...scenario.options, deadline: 2500,
+    read: async () => scenario.now() < 2500 ? plenty : { ...plenty, hostAvailable: 0 },
+  }, () => { started = true; })).rejects.toThrow('Memory admission deadline reached');
+  expect(started).toBe(false);
+  expect(readdirSync(scenario.waiters)).toEqual([]);
 });

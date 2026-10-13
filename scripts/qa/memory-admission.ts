@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node
 import { randomUUID } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
+import { cpus } from 'node:os';
 import { Database } from 'bun:sqlite';
 import { preserveReapEnvironment } from './container-reaper.ts';
 import { processStartTime } from './process/identity.ts';
@@ -82,9 +83,10 @@ function readHostMemory(): MemoryReading {
 }
 
 const execute = promisify(execFile);
+const memoryMeasurementTimeoutMs = 14_000;
 export async function readMemory(remainingMs: number, env: NodeJS.ProcessEnv = process.env): Promise<MemoryReading> {
   // Twenty host readings peaked at 6.731 s; allow twice that, rounded up.
-  const timeout = Math.max(1, Math.min(14_000, remainingMs));
+  const timeout = Math.max(1, Math.min(memoryMeasurementTimeoutMs, remainingMs));
   const [info, stats] = await Promise.all([
     execute('docker', ['info', '--format', '{{.MemTotal}}'], { timeout, env: preserveReapEnvironment(env) }),
     execute('docker', ['stats', '--no-stream', '--format', '{{json .}}'],
@@ -110,6 +112,8 @@ export interface MemoryWaitOptions {
   /** Bound the sharing window; a completed startup always invalidates it sooner. */
   readingMaxAgeMs?: number;
   startTime?: (pid: number) => string | undefined;
+  readLoad?: () => number;
+  processors?: number;
 }
 
 let admissionSequence = 0;
@@ -129,7 +133,7 @@ function admissionAccounting(options: MemoryWaitOptions, now: () => number): () 
   };
 }
 
-function memoryWaitStatus(env: NodeJS.ProcessEnv, now: () => number): (message?: string) => void {
+function memoryWaitStatus(env: NodeJS.ProcessEnv, now: () => number, kind = 'memory'): (message?: string) => void {
   const directory = env.GOAL_QA_WAIT_DIR;
   if (!directory) return () => {};
   let path: string | undefined;
@@ -142,13 +146,13 @@ function memoryWaitStatus(env: NodeJS.ProcessEnv, now: () => number): (message?:
       return;
     }
     mkdirSync(directory, { recursive: true });
-    path ??= join(directory, `memory-${process.pid}-${randomUUID()}.json`);
+    path ??= join(directory, `${kind}-${process.pid}-${randomUUID()}.json`);
     since ??= new Date(now()).toISOString();
     const temporary = `${path}.${randomUUID()}.tmp`;
     writeFileSync(temporary, JSON.stringify({ pid: process.pid, goal: env.GOAL_ID,
       command: env.GOAL_QA_COMMAND ?? process.argv.slice(1).join(' '),
       waitingFor: message.startsWith('Waiting for a QA lifetime lease;')
-        ? env.GOAL_QA_HEAVY_RUN === '1' ? 'heavy' : 'slot' : 'memory', message, since }));
+        ? env.GOAL_QA_HEAVY_RUN === '1' ? 'heavy' : 'slot' : kind, message, since }));
     renameSync(temporary, path);
   };
 }
@@ -218,9 +222,13 @@ function waitForStartupSlot(options: StartupMemoryOptions): { ready: () => boole
   } };
 }
 
-async function startupConcurrency(options: StartupMemoryOptions): Promise<number> {
-  const directory = (options.env ?? process.env).GOAL_QA_SLOT_DIRECTORY
+async function startupDirectory(options: StartupMemoryOptions): Promise<string | undefined> {
+  return (options.env ?? process.env).GOAL_QA_SLOT_DIRECTORY
     ?? (await import('./core.ts')).goalSlotDirectory(options.root ?? resolve(import.meta.dir, '../..'));
+}
+
+async function startupConcurrency(options: StartupMemoryOptions): Promise<number> {
+  const directory = await startupDirectory(options);
   if (!directory) return 1;
   try {
     const value = readFileSync(join(dirname(directory), 'qa-startup-concurrency'), 'utf8').trim();
@@ -229,7 +237,23 @@ async function startupConcurrency(options: StartupMemoryOptions): Promise<number
   } catch { return 1; }
 }
 
-interface StartupWaiter extends StartupPromise { seq: number; vm_reserve: number; host_reserve: number }
+async function loadLimit(options: StartupMemoryOptions): Promise<number> {
+  const directory = await startupDirectory(options);
+  if (!directory) return 1;
+  try {
+    const stored = readFileSync(join(dirname(directory), 'qa-load-limit'), 'utf8').trim();
+    const value = Number(stored);
+    return stored && Number.isFinite(value) && value >= 0 ? value : 1;
+  } catch { return 1; }
+}
+
+function hostLoad(env: NodeJS.ProcessEnv): number {
+  const value = Number(readFileSync(env.REZICS_QA_LOADAVG_FILE ?? '/proc/loadavg', 'utf8').trim().split(/\s+/)[0]);
+  if (!Number.isFinite(value) || value < 0) throw new Error('Cannot read host one-minute load');
+  return value;
+}
+
+interface StartupWaiter extends StartupPromise { seq: number; vm_reserve: number; host_reserve: number; load_wait: number }
 interface StartupPromise { id: string; pid: number; start_time: string; vm: number; host: number; admitted_at: number }
 function sqliteBusy(error: unknown): boolean {
   return ['SQLITE_BUSY', 'SQLITE_LOCKED'].includes((error as { code?: string }).code ?? '');
@@ -331,6 +355,11 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
   if (pollMs <= 0) { mutex.close(); throw new Error('REZICS_QA_MEMORY_POLL_MS must be positive'); }
   const reportWait = admissionAccounting(options, now);
   const publishWait = memoryWaitStatus(options.env ?? process.env, now);
+  const publishLoadWait = memoryWaitStatus(options.env ?? process.env, now, 'load');
+  const loadEnabled = need.vm > 0;
+  const processors = options.processors ?? cpus().length;
+  if (!Number.isSafeInteger(processors) || processors < 1) { mutex.close(); throw new Error('Invalid QA processor count'); }
+  const readLoad = options.readLoad ?? (() => hostLoad(options.env ?? process.env));
   const slotReady = waitForStartupSlot(options);
   const read = options.read ?? (need.vm + need.vmReserve > 0 ? readMemory : async () => readHostMemory());
   const promiseId = randomUUID();
@@ -340,6 +369,8 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
   const identity = startTime(process.pid);
   if (!identity) { mutex.close(); throw new Error('Cannot read QA startup process start time'); }
   let held = false, promised = false, registered = false;
+  let loadWaitStarted: number | undefined;
+  let loadLeaseReady = false;
   let message = `Waiting for another QA startup; ${admissionMessage(need)}`;
   try {
     mutex.exec('PRAGMA busy_timeout=0');
@@ -347,7 +378,9 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
       let readingFits = false;
       let retryReading = false;
       const concurrency = await startupConcurrency(options);
-      if (now() >= options.deadline)
+      const limit = loadEnabled ? await loadLimit(options) : 1;
+      const loadExpired = loadWaitStarted !== undefined && now() >= options.deadline;
+      if (now() >= options.deadline && !loadExpired)
         throw new Error(`Memory admission deadline reached${message.startsWith('Waiting for another')
           ? ' waiting for another QA startup' : ''}; ${message}; no work started`);
       try {
@@ -362,6 +395,10 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
           pid INTEGER NOT NULL, start_time TEXT NOT NULL, vm REAL NOT NULL, host REAL NOT NULL,
           vm_reserve REAL NOT NULL, host_reserve REAL NOT NULL, admitted_at REAL NOT NULL
         )`);
+        // Extend the existing admission queue rather than introduce another scheduler.
+        if (!mutex.query<{ name: string }, []>('PRAGMA table_info(startup_waiters)').all().some(column => column.name === 'load_wait'))
+          mutex.exec('ALTER TABLE startup_waiters ADD COLUMN load_wait INTEGER NOT NULL DEFAULT 0');
+        mutex.exec('CREATE TABLE IF NOT EXISTS startup_load (id INTEGER PRIMARY KEY, admitted_at REAL NOT NULL)');
         if (!registered) {
           mutex.query(`INSERT INTO startup_waiters
             (id, pid, start_time, vm, host, vm_reserve, host_reserve, admitted_at, arrival_seq) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
@@ -376,7 +413,11 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
         let readingGeneration = -1;
         let measured = admissionMessage(need);
         try {
-          const shared = await sharedMemoryReading(mutex, need.vm + need.vmReserve > 0, options, read);
+          // Expiring load does not authorize memory: allow one final bounded
+          // measurement with the same cache and promise accounting as every startup.
+          const measurementOptions = loadExpired
+            ? { ...options, deadline: now() + memoryMeasurementTimeoutMs } : options;
+          const shared = await sharedMemoryReading(mutex, need.vm + need.vmReserve > 0, measurementOptions, read);
           reading = shared.reading;
           readingGeneration = shared.generation;
           if (shared.error) measured += `; measurement failed: ${shared.error}`;
@@ -413,6 +454,18 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
         }
         const vmFree = reading ? reading.vmTotal - reading.vmUsed - live.reduce((sum, p) => sum + p.vm, 0) : -1;
         const hostFree = reading ? reading.hostAvailable - live.reduce((sum, p) => sum + p.host, 0) : -1;
+        const load = loadEnabled ? readLoad() : 0;
+        const normalizedLoad = load / processors;
+        const lastLoadAdmission = mutex.query<{ admitted_at: number }, []>('SELECT admitted_at FROM startup_load WHERE id = 1').get();
+        const loadQueue = waiters.filter(waiter => waiter.load_wait === 1);
+        const loadBlocked = loadEnabled && (normalizedLoad > limit
+          || (loadQueue.length > 0 && loadQueue[0]?.id !== promiseId)
+          || (lastLoadAdmission !== null && now() - lastLoadAdmission.admitted_at < 20_000));
+        if (loadBlocked) {
+          loadWaitStarted ??= now();
+          mutex.query('UPDATE startup_waiters SET load_wait = 1 WHERE id = ?').run(promiseId);
+        }
+        const loadMessage = `QA load: ${load.toFixed(2)} / ${processors} processors = ${normalizedLoad.toFixed(2)}, limit ${limit}`;
         const first = waiters.find(waiter => vmFree >= waiter.vm + waiter.vm_reserve
           && hostFree >= waiter.host + waiter.host_reserve);
         readingFits = activeStartups < concurrency && first?.id === promiseId;
@@ -421,17 +474,24 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
           message = `Waiting for another QA startup; ${measured}`;
         } else if (first?.id !== promiseId) {
           message += first ? `; older fitting startup pid ${first.pid} arrived ${new Date(first.admitted_at).toISOString()}` : '';
-        } else if (now() < options.deadline && slotReady.ready() && now() < options.deadline) {
-          mutex.query('INSERT INTO startup_promises (id, pid, start_time, vm, host, admitted_at) VALUES (?, ?, ?, ?, ?, ?)')
-            .run(promiseId, process.pid, identity, need.vm, need.host, now());
-          mutex.query('DELETE FROM startup_waiters WHERE id = ?').run(promiseId);
-          mutex.exec('COMMIT');
-          held = false;
-          promised = true;
-          publishWait();
-          announce(`Admitted; ${measured}`);
-          reportWait();
-          break;
+        } else if ((loadExpired && loadLeaseReady) || (now() < options.deadline && slotReady.ready() && now() < options.deadline)) {
+          loadLeaseReady = true;
+          if (loadBlocked && !loadExpired) {
+            message = `Waiting for host load; ${loadMessage}`;
+          } else {
+            if (loadWaitStarted !== undefined) mutex.query('INSERT OR REPLACE INTO startup_load (id, admitted_at) VALUES (1, ?)').run(now());
+            mutex.query('INSERT INTO startup_promises (id, pid, start_time, vm, host, admitted_at) VALUES (?, ?, ?, ?, ?, ?)')
+              .run(promiseId, process.pid, identity, need.vm, need.host, now());
+            mutex.query('DELETE FROM startup_waiters WHERE id = ?').run(promiseId);
+            mutex.exec('COMMIT');
+            held = false;
+            promised = true;
+            publishWait();
+            publishLoadWait();
+            announce(`Admitted; ${measured}${loadEnabled ? `; ${loadMessage}; waited ${((now() - (loadWaitStarted ?? now())) / 1000).toFixed(1)} seconds for load${loadExpired ? '; load deadline reached, starting' : ''}` : ''}`);
+            reportWait();
+            break;
+          }
         } else {
           message = `Waiting for a QA lifetime lease; ${measured}`;
         }
@@ -446,15 +506,17 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
       }
       // A previously granted lifetime lease must be returned if a fresh reading
       // or an older fitting request prevents startup. No promise is held yet.
-      if (!readingFits) slotReady.cancel();
+      if (!readingFits) { slotReady.cancel(); loadLeaseReady = false; }
+      if (loadExpired) throw new Error(`Memory admission deadline reached; ${message}; no work started`);
       if (retryReading) continue;
-      publishWait(message);
+      if (message.startsWith('Waiting for host load;')) { publishWait(); publishLoadWait(message); }
+      else { publishLoadWait(); publishWait(message); }
       announce(message);
       await sleep(Math.min(pollMs, Math.max(0, options.deadline - now())));
     }
     return await start();
   } finally {
-    try { if (!promised) slotReady.cancel(); publishWait(); reportWait(); }
+    try { if (!promised) slotReady.cancel(); publishWait(); publishLoadWait(); reportWait(); }
     finally {
       try {
         if (registered) for (;;) {
