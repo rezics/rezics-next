@@ -1,5 +1,4 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { fromPlainText, type DocumentSnapshot } from '@rezics/document';
 import independent from '../../../../../scripts/qa/cases/outcomes/zone/a-zone-without-a-realm.ts';
 import { outcomeTest } from '../../../support/outcome-test.ts';
