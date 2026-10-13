@@ -6,7 +6,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import { addressKey, spaceHref } from '../address/path.ts';
-import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
+import { BFF_PREFIX } from '../api/browser.ts';
 import { zoneContentText } from '../language/untagged.ts';
 import { zoneText } from '../realm/adapt.ts';
 import { messages as realmMessages, type RealmMessages } from '../realm/messages.ts';
@@ -155,8 +155,7 @@ export function ZoneSiteRecordedPage({ record, persona, selections, locale }: {
   useEffect(() => {
     let mounted = true;
     const replay = recordedFetch(record, persona, selections, { pathPrefix: BFF_PREFIX });
-    const main = browserMainApi('https://recorded.invalid', { anonymous: true, fetcher: replay.fetcher });
-    void readZoneSiteRecorded(main, record, persona, selections).then(result => {
+    void readZoneSiteRecorded(replay.fetcher, record, persona, selections).then(result => {
       if (mounted) setLoad(result);
     }).catch((error: unknown) => {
       if (!mounted || (error instanceof DOMException && error.name === 'AbortError')) return;

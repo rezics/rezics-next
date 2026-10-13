@@ -2,7 +2,7 @@ import { afterEach, expect, test } from 'bun:test';
 import { documentText } from '@rezics/document';
 import type { AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import sitePages from '../../../../tests/qa/fixtures/outcomes/zone/site-pages.json';
-import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
+import { BFF_PREFIX } from '../api/browser.ts';
 import type { RecordedSelection } from '../stories/recorded-fetch.ts';
 import { recordedFetch } from '../stories/recorded-fetch.ts';
 import { zoneHomeDocument } from '../zone-editor/home-document.tsx';
@@ -21,8 +21,7 @@ function visitor(label: string) {
 async function replay(selections: readonly RecordedSelection[]) {
   const transport = recordedFetch(record, 'visitor', selections, { pathPrefix: BFF_PREFIX });
   disposals.push(transport.dispose);
-  const main = browserMainApi('https://recorded.invalid', { anonymous: true, fetcher: transport.fetcher });
-  const loaded = await readZoneSiteRecorded(main, record, 'visitor', selections);
+  const loaded = await readZoneSiteRecorded(transport.fetcher, record, 'visitor', selections);
   if (loaded.mapped.kind === 'discrepancy') throw new Error(loaded.mapped.detail);
   return loaded;
 }

@@ -1,6 +1,6 @@
 import { documentText } from '@rezics/document';
 import type { AnswerPersona, AnswerRecord, AnswerSample } from '../../../../scripts/api/answer-record.ts';
-import type { browserMainApi } from '../api/browser.ts';
+import { browserMainApi } from '../api/browser.ts';
 import { failedRead, isOfflineError } from '../feed/types.ts';
 import type { RecordedSelection } from '../stories/recorded-fetch.ts';
 import { zoneHomeDocument } from '../zone-editor/home-document.tsx';
@@ -9,14 +9,16 @@ import { failureOf, type Loaded, type ReadFailure, type ZonePresentationRead, ty
 /**
  * The published Zone home, an empty publication, and a missing path, taken from
  * Main's presentation, route and content revision. The site route and the
- * recorded stories both call these functions, so the page cannot show a document
+ * recorded page call the same mapping, so the page cannot show a document
  * the answers did not carry.
  */
 
 /** Site family for the address builder. The literal stays a prefix field, not a link. */
 export const zoneSitePrefix = { prefix: '/z/' as const }.prefix;
 
-export type ZoneSiteClient = ReturnType<typeof browserMainApi>;
+/** Public recorded reader. No eligible Agent, so the client stays anonymous and sends no acting Subject. */
+const recordedOrigin = 'https://recorded.invalid';
+type ZoneSiteClient = ReturnType<typeof browserMainApi>;
 type RevisionCall = ReturnType<ReturnType<ZoneSiteClient['v1']['content-revisions']>['get']>;
 export type ZoneSiteRevision = NonNullable<Awaited<RevisionCall>['data']>;
 type AddressCall = ReturnType<ZoneSiteClient['v1']['addresses']['resolve']['get']>;
@@ -104,19 +106,23 @@ async function settle<T>(call: () => Promise<TreatyAnswer<T>>): Promise<ZoneSite
   }
 }
 
-export function readZoneSitePresentation(main: ZoneSiteClient, zone: string) {
+export function readZoneSitePresentation(fetcher: typeof fetch, zone: string) {
+  const main = browserMainApi(recordedOrigin, { anonymous: true, fetcher });
   return settle(() => main.v1.zones({ id: zone }).presentation.get());
 }
 
-export function readZoneSiteRouteAnswer(main: ZoneSiteClient, zone: string, path: string) {
+export function readZoneSiteRouteAnswer(fetcher: typeof fetch, zone: string, path: string) {
+  const main = browserMainApi(recordedOrigin, { anonymous: true, fetcher });
   return settle(() => main.v1.zones({ id: zone }).routes.get({ query: { path } }));
 }
 
-export function readZoneSiteRevision(main: ZoneSiteClient, revision: string) {
+export function readZoneSiteRevision(fetcher: typeof fetch, revision: string) {
+  const main = browserMainApi(recordedOrigin, { anonymous: true, fetcher });
   return settle(() => main.v1['content-revisions']({ revision }).get());
 }
 
-export function readZoneSiteAddress(main: ZoneSiteClient, scope: string, key: string) {
+export function readZoneSiteAddress(fetcher: typeof fetch, scope: string, key: string) {
+  const main = browserMainApi(recordedOrigin, { anonymous: true, fetcher });
   return settle(() => main.v1.addresses.resolve.get({ query: { scope, key } }));
 }
 
@@ -252,7 +258,7 @@ export interface ZoneSiteRecordedLoad {
 
 /** Replay the selected samples through the typed client and the shared mapping. */
 export async function readZoneSiteRecorded(
-  main: ZoneSiteClient,
+  fetcher: typeof fetch,
   record: AnswerRecord,
   persona: AnswerPersona,
   selections: readonly RecordedSelection[],
@@ -270,10 +276,10 @@ export async function readZoneSiteRecorded(
     address: ZoneSiteRead<ZoneSiteAddress> | null;
   } = { presentation: null, route: null, revision: null, address: null };
   await Promise.all(plans.map(async plan => {
-    if (plan.kind === 'presentation') reads.presentation = await readZoneSitePresentation(main, plan.zone);
-    else if (plan.kind === 'route') reads.route = await readZoneSiteRouteAnswer(main, plan.zone, plan.path);
-    else if (plan.kind === 'revision') reads.revision = await readZoneSiteRevision(main, plan.revision);
-    else reads.address = await readZoneSiteAddress(main, plan.scope, plan.key);
+    if (plan.kind === 'presentation') reads.presentation = await readZoneSitePresentation(fetcher, plan.zone);
+    else if (plan.kind === 'route') reads.route = await readZoneSiteRouteAnswer(fetcher, plan.zone, plan.path);
+    else if (plan.kind === 'revision') reads.revision = await readZoneSiteRevision(fetcher, plan.revision);
+    else reads.address = await readZoneSiteAddress(fetcher, plan.scope, plan.key);
   }));
   const mapped = mapZoneSiteRecordedPage(reads);
   const address = reads.address;
