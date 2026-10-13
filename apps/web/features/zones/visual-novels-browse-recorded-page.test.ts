@@ -100,7 +100,8 @@ test('the recorded unsupported query refusal stays a failure rather than an empt
   expect(sample.status).toBe(400);
   expect(sample.answer).toMatchObject({ code: 'unsupported_query_shape', title: 'Relevance needs text' });
   expect(loaded.page).toEqual({ ok: false, failure: 'invalid' });
-  expect(loaded.result).toBe(loaded.page);
+  expect(loaded.result).toEqual({ ok: false, failure: 'invalid' });
+  expect(Object.is(loaded.result, loaded.page)).toBe(true);
 });
 
 test('the recorded member empty search stays an empty page with an exact zero count', async () => {

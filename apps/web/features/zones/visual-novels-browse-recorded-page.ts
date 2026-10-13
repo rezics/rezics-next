@@ -2,6 +2,7 @@ import type { CanonicalAddress } from '@rezics/model/address';
 import type { ZoneContext, ZoneTokens } from '@rezics/zone-sdk';
 import type { AnswerPersona, AnswerRecord, AnswerSample } from '../../../../scripts/api/answer-record.ts';
 import type { UiLocale } from '../../i18n/define.ts';
+import { addressKey } from '../address/path.ts';
 import type { MainClient } from '../discover/types.ts';
 import { buildBrowsePage } from '../realm/browse-page.ts';
 import { readBrowseAnswer, readFacetAnswer } from '../realm/browse-page-read.ts';
@@ -62,6 +63,9 @@ export function recordedBrowseRequest(sample: AnswerSample): RecordedBrowseReque
   }) };
 }
 
+/** A recorded zone browse opens on the site address family. */
+const siteAddressPrefix: Pick<CanonicalAddress, 'prefix'> = { prefix: '/z/' };
+
 interface RecordedPresentation {
   name: { value: string; lang: string; dir: 'ltr' | 'rtl' };
   realm: string;
@@ -82,7 +86,7 @@ function recordedPresentation(record: AnswerRecord, persona: AnswerPersona): Rec
   const tokens = presentation.presentation?.tokens;
   const direction = presentation.direction === 'ltr' || presentation.direction === 'rtl' ? presentation.direction : null;
   if (typeof presentation.name !== 'string' || !direction || typeof presentation.language !== 'string'
-    || typeof presentation.realm !== 'string' || !address || address.prefix !== '/z/'
+    || typeof presentation.realm !== 'string' || !address || address.prefix !== siteAddressPrefix.prefix
     || typeof address.key !== 'string' || typeof address.suffixSource !== 'string' || !tokens?.accent) {
     throw new Error(`Recorded presentation for ${persona} cannot frame browse`);
   }
@@ -90,7 +94,7 @@ function recordedPresentation(record: AnswerRecord, persona: AnswerPersona): Rec
     name: { value: presentation.name, lang: presentation.language, dir: direction },
     realm: presentation.realm,
     official: typeof presentation.official === 'string' ? presentation.official : null,
-    address: { prefix: '/z/', key: address.key, suffixSource: address.suffixSource },
+    address: { prefix: siteAddressPrefix.prefix, key: address.key, suffixSource: address.suffixSource },
     tokens,
   };
 }
@@ -140,6 +144,6 @@ export async function loadRecordedBrowse(main: MainClient, record: AnswerRecord,
   ]);
   const result = buildBrowsePage({ page, facets: facets ?? { ok: false, failure: 'unavailable' },
     base: zone.links.browse, zoneName: zone.name.value, state: request.state,
-    context: { realm: request.realm, ref, locale }, locale, messages });
+    context: { realm: request.realm, ref: addressKey(ref), locale }, locale, messages });
   return { sample, page, facets, result };
 }
