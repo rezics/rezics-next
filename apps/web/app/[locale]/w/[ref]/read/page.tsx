@@ -42,11 +42,8 @@ export default async function TextPage({ params, searchParams }: Props) {
   const text = language === null ? null
     : await readRecordedText(work.header.mainVersion, language ?? work.header.selectedLanguage ?? undefined);
   const settings = parseReaderSettings(jar.get(READER_COOKIE)?.value && decodeURIComponent(jar.get(READER_COOKIE)!.value));
-  // Credits name the author. Their presentation language is the UI locale; the article keeps the text's language.
-  const credits = text?.ok
-    ? await booksLanguageReads(host).readCredits(work.header.id, locale) : null;
   return <BooksLanguageRecordedView
-    reading={booksLanguageReading({ text: text ?? { ok: false, failure: 'missing' }, credits, header: work.header })}
+    reading={booksLanguageReading({ text: text ?? { ok: false, failure: 'missing' }, header: work.header })}
     workRef={ref} settings={settings} actingSubject={host.actingSubject ?? null} locale={locale} messages={messages}
     linkLanguage={language ?? undefined} />;
 }

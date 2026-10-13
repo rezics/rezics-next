@@ -1,24 +1,16 @@
 import type { MainClient } from '../discover/types.ts';
 import { failureOf } from './failure.ts';
 import { idOf } from './route.ts';
-import type { CreditPage, ReadFailure, WorkHeader, WorkText } from './types.ts';
+import type { ReadFailure, WorkHeader, WorkText } from './types.ts';
 
 // The text's recorded language is the language the reader sees. The UI locale
-// only chooses the credit presentation; it never replaces the text.
+// names that language; it never replaces the text.
 
 export type RecordedProblem = { type?: string; title: string; code: string; status: number };
 
 export type Answered<T> =
   | { ok: true; data: T }
   | { ok: false; failure: ReadFailure; problem?: RecordedProblem };
-
-export type BooksLanguageCredit = {
-  id: string;
-  role: string;
-  agent: string;
-  displayName: string | null;
-  handle: string | null;
-};
 
 export type BooksLanguageTitle = {
   value: string;
@@ -35,7 +27,6 @@ export type BooksLanguageReading =
       language: string;
       body: string;
       text: WorkText;
-      credit: BooksLanguageCredit | null;
       header: WorkHeader | null;
     }
   | { kind: 'refused'; failure: ReadFailure; problem: RecordedProblem }
@@ -81,21 +72,6 @@ async function settleCall<T>(call: () => Promise<CallResult<T>>): Promise<Answer
   }
 }
 
-function recordedAuthor(page: CreditPage): BooksLanguageCredit | null {
-  for (const item of page.items) {
-    if (item.role === 'author' && item.participantKind === 'agent' && item.agent) {
-      return {
-        id: item.id,
-        role: item.role,
-        agent: item.agent,
-        displayName: item.displayName,
-        handle: item.handle,
-      };
-    }
-  }
-  return null;
-}
-
 function readingTitle(header: WorkHeader | null | undefined): BooksLanguageTitle | null {
   if (!header?.title.value) return null;
   return {
@@ -114,12 +90,11 @@ function failed(answer: Answered<unknown>): BooksLanguageReading {
 }
 
 /**
- * What the reader shows from the Work header, its selected text and its credits.
+ * What the reader shows from the Work header and its selected text.
  * A 200 text is never an empty page. A problem on the text read is the refusal.
  */
 export function booksLanguageReading(input: {
   text?: Answered<WorkText> | null;
-  credits?: Answered<CreditPage> | null;
   header?: WorkHeader | null;
 }): BooksLanguageReading {
   const text = input.text ?? null;
@@ -133,7 +108,6 @@ export function booksLanguageReading(input: {
       language: text.data.language,
       body: text.data.body,
       text: text.data,
-      credit: input.credits?.ok ? recordedAuthor(input.credits.data) : null,
       header: input.header ?? null,
     };
   }
@@ -144,7 +118,9 @@ export function booksLanguageReading(input: {
 /**
  * The text page's Main reads, given a client. Production passes the
  * request-cached host from `reader()`; a story passes the replaying client.
- * Queries match `readWorkHeader`, `readText` and the credits GET the page shows.
+ * The header query matches `readWorkHeader`. The selection query carries only
+ * `language`, omitted when the header selects none. `read.ts` still builds
+ * its own header client until that file can take this one.
  */
 export function booksLanguageReads(host: { main: MainClient; actingSubject?: string }) {
   const { main, actingSubject } = host;
@@ -158,12 +134,6 @@ export function booksLanguageReads(host: { main: MainClient; actingSubject?: str
       return settleCall(() =>
         main.v1['main-versions']({ mainVersion: id }).selection.get({ query: { language } }),
       );
-    },
-    readCredits(work: string, language: string): Promise<Answered<CreditPage>> {
-      const id = idOf(work);
-      if (!id) return Promise.resolve({ ok: false, failure: 'missing' });
-      const query = actingSubject ? { language, actingSubject } : { language };
-      return settleCall(() => main.v1.works({ id }).credits.get({ query }));
     },
   };
 }

@@ -74,12 +74,19 @@ function Choice({ pressed, onClick, children }: { pressed: boolean; onClick: () 
  * the server; the settings apply as CSS variables and persist in a cookie, so
  * the next page renders with them.
  */
-export function ReaderSurface({ initial, actingSubject, labels, toolbar, children }: {
+export function ReaderSurface({ initial, actingSubject, labels, toolbar, children, fetcher }: {
   initial: ReaderSettings; actingSubject: string | null; labels: SettingsLabels;
   toolbar: ReactNode; children: ReactNode;
+  /** A story's replaying fetch. Production uses the browser's own Main client. */
+  fetcher?: typeof fetch;
 }) {
   const [settings, setSettings] = useState(() => completeReaderSettings(initial));
   const [syncFailed, setSyncFailed] = useState(false);
+  const [sync, setSync] = useState<'device' | 'pending' | 'account' | 'failed'>(
+    actingSubject ? 'pending' : 'device',
+  );
+  const main = () => fetcher ? browserMainApi(window.location.origin, { fetcher }) : browserMainApi();
+  const failSync = () => { setSyncFailed(true); setSync('failed'); };
   const latest = useRef(completeReaderSettings(initial));
   const version = useRef<number | null>(null);
   const edited = useRef(false);
@@ -109,21 +116,22 @@ export function ReaderSurface({ initial, actingSubject, labels, toolbar, childre
     let active = true;
     ready.current = (async () => {
       try {
-        const response = await browserMainApi().v1.reader.settings.get({ query: { actingSubject } });
-        if (!active || !response.data) { if (active) setSyncFailed(true); return; }
+        const response = await main().v1.reader.settings.get({ query: { actingSubject } });
+        if (!active || !response.data) { if (active) failSync(); return; }
         version.current = response.data.version;
         if (response.data.version > 0) persist({ ...fromRemote(response.data), ...pending.current });
         else if (!edited.current && JSON.stringify(latest.current)
           !== JSON.stringify(completeReaderSettings({ size: 1, width: 'medium', face: 'serif' }))) {
-          const seeded = await browserMainApi().v1.reader.settings.put(payload(latest.current, 0),
+          const seeded = await main().v1.reader.settings.put(payload(latest.current, 0),
             { headers: { 'idempotency-key': crypto.randomUUID() } });
           if (seeded.data) version.current = seeded.data.version;
-          else setSyncFailed(true);
+          else { failSync(); return; }
         }
-      } catch { if (active) setSyncFailed(true); }
+        if (active) setSync('account');
+      } catch { if (active) failSync(); }
     })();
     return () => { active = false; };
-  }, [actingSubject]);
+  }, [actingSubject, fetcher]);
   useEffect(() => {
     const root = document.documentElement;
     const previous = { light: root.classList.contains('light'), dark: root.classList.contains('dark') };
@@ -145,11 +153,11 @@ export function ReaderSurface({ initial, actingSubject, labels, toolbar, childre
     if (!actingSubject) return;
     queue.current = queue.current.then(async () => {
       await ready.current;
-      const api = browserMainApi().v1.reader.settings;
+      const api = main().v1.reader.settings;
       if (version.current === null) {
         const fresh = await api.get({ query: { actingSubject } });
         if (fresh.data) version.current = fresh.data.version;
-        else { setSyncFailed(true); return; }
+        else { failSync(); return; }
       }
       let response = await api.put(payload(latest.current, version.current),
         { headers: { 'idempotency-key': crypto.randomUUID() } });
@@ -161,13 +169,13 @@ export function ReaderSurface({ initial, actingSubject, labels, toolbar, childre
             { headers: { 'idempotency-key': crypto.randomUUID() } });
         }
       }
-      if (response.data) { version.current = response.data.version; setSyncFailed(false); }
-      else setSyncFailed(true);
-    }).catch(() => setSyncFailed(true));
+      if (response.data) { version.current = response.data.version; setSyncFailed(false); setSync('account'); }
+      else failSync();
+    }).catch(() => failSync());
   };
   const style = { '--reader-size': `${textSizes[settings.size]}px`,
     '--reader-width': `${lineWidths[settings.width]}rem` } as CSSProperties;
-  return <div style={style} data-face={settings.face} data-indent={settings.indent}
+  return <div style={style} data-reader-settings={sync} data-face={settings.face} data-indent={settings.indent}
     data-cjk-spacing={settings.cjkSpacing} data-cjk-punctuation={settings.cjkPunctuation}
     className="group/reader grid gap-6">
     <div className="flex flex-wrap items-center justify-between gap-2">

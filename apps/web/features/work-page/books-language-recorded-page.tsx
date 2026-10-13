@@ -1,9 +1,7 @@
 import { FileQuestionIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
-import { authorHref } from '../author/route.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
-import Link from '../shell/localized-link.tsx';
 import { languageName, paragraphs } from './format.ts';
 import type { WorkPageMessages } from './messages.ts';
 import {
@@ -14,17 +12,15 @@ import {
   TextUnavailable,
 } from './reader.tsx';
 import type { ReaderSettings } from './reader-settings.ts';
-import type { BooksLanguageCredit, BooksLanguageReading } from './books-language-recorded-page.ts';
+import type { BooksLanguageReading } from './books-language-recorded-page.ts';
 
-/** The recorded content language and the credited author. A missing name stays the agent. */
+/** The recorded content language, named in the UI locale and kept as its own tag. */
 function BooksLanguageIdentity({
   language,
-  credit,
   locale,
   messages,
 }: {
   language: string;
-  credit: BooksLanguageCredit | null;
   locale: UiLocale;
   messages: WorkPageMessages;
 }) {
@@ -36,17 +32,6 @@ function BooksLanguageIdentity({
         <span className="font-mono">{language}</span>
         {name === language ? null : <span lang={locale}> {name}</span>}
       </p>
-      {credit ? (
-        <p className="break-all">
-          <span className="text-muted-foreground">{messages.author}</span>{' '}
-          <Link
-            href={authorHref({ kind: 'agent', handle: credit.handle, agent: credit.agent })}
-            className="break-all font-mono text-xs text-primary underline underline-offset-4"
-          >
-            {credit.displayName ?? credit.agent}
-          </Link>
-        </p>
-      ) : null}
     </div>
   );
 }
@@ -57,18 +42,13 @@ function identityFor(
   messages: WorkPageMessages,
 ): ReactNode {
   return (
-    <BooksLanguageIdentity
-      language={reading.language}
-      credit={reading.credit}
-      locale={locale}
-      messages={messages}
-    />
+    <BooksLanguageIdentity language={reading.language} locale={locale} messages={messages} />
   );
 }
 
 /**
- * The recorded text, its language and its credit. Loading and a recorded
- * refusal are the other states this route can show.
+ * The recorded text and its language. Loading and a recorded text refusal
+ * are the other states this route draws. A missing Work is the route's not-found page.
  */
 export function BooksLanguageRecordedView({
   reading,
@@ -78,6 +58,7 @@ export function BooksLanguageRecordedView({
   locale,
   messages,
   linkLanguage,
+  fetcher,
 }: {
   reading: BooksLanguageReading | { kind: 'loading' };
   workRef: string;
@@ -87,6 +68,8 @@ export function BooksLanguageRecordedView({
   messages: WorkPageMessages;
   /** Contents link language from the page address. The article keeps the text's own language. */
   linkLanguage?: string;
+  /** A story's replaying fetch. Production uses the browser's own Main client. */
+  fetcher?: typeof fetch;
 }) {
   if (reading.kind === 'loading') {
     return (
@@ -123,6 +106,7 @@ export function BooksLanguageRecordedView({
         locale={locale}
         messages={messages}
         identity={identity}
+        fetcher={fetcher}
       />
     );
   }

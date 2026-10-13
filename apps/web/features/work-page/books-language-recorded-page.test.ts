@@ -10,6 +10,8 @@ import {
 } from './books-language-recorded-page.ts';
 
 const record = books as AnswerRecord;
+const personas = ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const;
+const refusedPrivate = ['visitor', 'stranger', 'member', 'moderator', 'operator'] as const;
 const disposals: (() => void)[] = [];
 afterEach(() => {
   for (const dispose of disposals.splice(0)) dispose();
@@ -58,71 +60,75 @@ function problemOf(value: unknown): RecordedProblem {
   return { type: problem.type, title: problem.title, code: problem.code, status: problem.status };
 }
 
-test('a member reads the recorded Swedish text while the UI language is English', async () => {
-  const header = sample('member', 'work-header');
-  const text = sample('member', 'selected-swedish-text');
-  const credits = sample('member', 'credits-en');
+test('each persona reads the language its published header selects', async () => {
+  for (const persona of personas) {
+    const header = sample(persona, 'reading-page-header');
+    const text = sample(persona, 'reading-page-selection');
+    const actingSubject = queryOf(header.path).get('actingSubject');
+    const selections: RecordedSelection[] = [
+      { label: 'reading-page-header', state: 'populated' },
+      { label: 'reading-page-selection', state: 'populated' },
+    ];
+    if (persona !== 'visitor') selections.push({ label: 'reader-settings', state: 'populated' });
+    const main = client(persona, selections);
+    const reads = booksLanguageReads({ main, ...(actingSubject ? { actingSubject } : {}) });
+    const work = await reads.readWorkHeader(recordedId(header.path));
+    expect(work.ok).toBe(true);
+    if (!work.ok) return;
+    same(work.data, header.answer);
+    expect(work.data.selectedLanguage).toBe(queryOf(text.path).get('language'));
+    const selection = await reads.readText(work.data.mainVersion, work.data.selectedLanguage ?? undefined);
+    expect(selection.ok).toBe(true);
+    if (!selection.ok) return;
+    same(selection.data, text.answer);
+    const reading = booksLanguageReading({ text: selection, header: work.data });
+    expect(reading.kind).toBe('reading');
+    if (reading.kind !== 'reading') return;
+    expect(reading.language).toBe(selection.data.language);
+    expect(reading.language).not.toBe('en');
+    expect(reading.language).not.toBe('zh-Hant');
+    expect(reading.body).toBe(selection.data.body);
+    expect(reading.title).toEqual(work.data.title);
+    expect(reading.header).toEqual(work.data);
+    if (!actingSubject) continue;
+    const settings = sample(persona, 'reader-settings');
+    expect(queryOf(settings.path).get('actingSubject')).toBe(actingSubject);
+    const response = await main.v1.reader.settings.get({ query: { actingSubject } });
+    expect(response.error).toBeNull();
+    same(response.data, settings.answer);
+  }
+});
+
+test('a refused private header keeps its problem and the owner missing text keeps its problem', async () => {
+  for (const persona of refusedPrivate) {
+    const header = sample(persona, 'private-reading-page-header');
+    expect(header.status).toBe(404);
+    const actingSubject = queryOf(header.path).get('actingSubject');
+    const main = client(persona, [{ label: 'private-reading-page-header', state: 'error' }]);
+    const reads = booksLanguageReads({ main, ...(actingSubject ? { actingSubject } : {}) });
+    const work = await reads.readWorkHeader(recordedId(header.path));
+    expect(work.ok).toBe(false);
+    if (work.ok) return;
+    expect(work.failure).toBe('missing');
+    expect(work.problem).toEqual(problemOf(header.answer));
+  }
+
+  const header = sample('owner', 'private-reading-page-header');
+  const refused = sample('owner', 'private-reading-page-selection');
   const actingSubject = queryOf(header.path).get('actingSubject');
-  const presentation = queryOf(credits.path).get('language');
   expect(actingSubject).toBeString();
-  expect(presentation).toBe('en');
-  const main = client('member', [
-    { label: 'work-header', state: 'populated' },
-    { label: 'selected-swedish-text', state: 'populated' },
-    { label: 'credits-en', state: 'populated' },
+  expect(queryOf(refused.path).has('language')).toBe(false);
+  const main = client('owner', [
+    { label: 'private-reading-page-header', state: 'populated' },
+    { label: 'private-reading-page-selection', state: 'error' },
   ]);
   const reads = booksLanguageReads({ main, actingSubject: actingSubject! });
   const work = await reads.readWorkHeader(recordedId(header.path));
   expect(work.ok).toBe(true);
   if (!work.ok) return;
   same(work.data, header.answer);
-  expect(work.data.selectedLanguage).toBe(queryOf(text.path).get('language'));
+  expect(work.data.selectedLanguage).toBeNull();
   const selection = await reads.readText(work.data.mainVersion, work.data.selectedLanguage ?? undefined);
-  expect(selection.ok).toBe(true);
-  if (!selection.ok) return;
-  same(selection.data, text.answer);
-  const creditPage = await reads.readCredits(work.data.id, presentation!);
-  expect(creditPage.ok).toBe(true);
-  if (!creditPage.ok) return;
-  same(creditPage.data, credits.answer);
-
-  const reading = booksLanguageReading({ text: selection, credits: creditPage, header: work.data });
-  expect(reading.kind).toBe('reading');
-  if (reading.kind !== 'reading') return;
-  expect(reading.language).toBe(selection.data.language);
-  expect(reading.language).not.toBe(presentation);
-  expect(reading.body).toBe(selection.data.body);
-  expect(reading.title).toEqual(work.data.title);
-  expect(reading.header).toEqual(work.data);
-  const author = creditPage.data.items.find(
-    (item) => item.role === 'author' && item.participantKind === 'agent' && item.agent,
-  );
-  if (!author?.agent) throw new Error('Recorded credits have no author');
-  expect(reading.credit).toEqual({
-    id: author.id,
-    role: author.role,
-    agent: author.agent,
-    displayName: author.displayName,
-    handle: author.handle,
-  });
-});
-
-test('a missing selected language keeps the recorded refusal', async () => {
-  const header = sample('member', 'work-header');
-  const refused = sample('member', 'missing-selected-language');
-  const actingSubject = queryOf(header.path).get('actingSubject');
-  const language = queryOf(refused.path).get('language');
-  expect(actingSubject).toBeString();
-  expect(language).toBeString();
-  const main = client('member', [
-    { label: 'work-header', state: 'populated' },
-    { label: 'missing-selected-language', state: 'error' },
-  ]);
-  const reads = booksLanguageReads({ main, actingSubject: actingSubject! });
-  const work = await reads.readWorkHeader(recordedId(header.path));
-  expect(work.ok).toBe(true);
-  if (!work.ok) return;
-  const selection = await reads.readText(work.data.mainVersion, language!);
   expect(selection.ok).toBe(false);
   if (selection.ok) return;
   expect(selection.failure).toBe('missing');

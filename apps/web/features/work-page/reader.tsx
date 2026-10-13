@@ -218,6 +218,7 @@ function ReaderPage({
   t,
   children,
   after,
+  fetcher,
 }: {
   settings: ReaderSettings;
   actingSubject: string | null;
@@ -226,6 +227,8 @@ function ReaderPage({
   children: ReactNode;
   /** Outside the reading column: chapter keys. */
   after?: ReactNode;
+  /** A story's replaying fetch. Production uses the browser's own Main client. */
+  fetcher?: typeof fetch;
 }) {
   // A plain reading ground in place of the gridded page canvas; CJK text spaces itself from Latin and digits.
   return (
@@ -236,6 +239,7 @@ function ReaderPage({
           actingSubject={actingSubject}
           toolbar={toolbar}
           labels={settingsLabels(t)}
+          fetcher={fetcher}
         >
           {children}
         </ReaderSurface>
@@ -496,6 +500,7 @@ export function TextReader({
   locale,
   messages,
   identity,
+  fetcher,
 }: {
   workRef: string;
   work: WorkHeader;
@@ -505,8 +510,10 @@ export function TextReader({
   actingSubject: string | null;
   locale: UiLocale;
   messages: WorkPageMessages;
-  /** Recorded language and credit, when this text is read outside the chapter list. */
+  /** Recorded language, when this text is read outside the chapter list. */
   identity?: ReactNode;
+  /** A story's replaying fetch. Production uses the browser's own Main client. */
+  fetcher?: typeof fetch;
 }) {
   const t = materializeData(messages, { locale });
   return (
@@ -514,6 +521,7 @@ export function TextReader({
       settings={settings}
       actingSubject={actingSubject}
       t={t}
+      fetcher={fetcher}
       toolbar={<ReaderToolbar workRef={workRef} work={work} language={language} t={t} />}
     >
       <article
