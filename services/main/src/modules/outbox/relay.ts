@@ -1060,7 +1060,7 @@ async function readMainOutboxGraphEnvelope(fuseki: FusekiClient, batch: MainOutb
     ?sourceAddress ?sourceRevision ?newAddress ?newRevision ?oldSlug
     ?eventRedirectWork ?redirectWork ?eventSourceConversion
     ?sourceRecord ?sourceObservation ?sourceConversion ?sourceByteDigest
-    ?sourceMappingRevision ?authorCredit ?creditRevision ?sourceIntent ?retirementReason WHERE {
+    ?sourceMappingRevision ?authorCredit ?creditRevision ?sourceIntent ?retirementReason ?stageId WHERE {
     GRAPH ${iri(GRAPHS.outbox)} {
       ${iri(eventId)} a ?kind ; rv:ordinal ?ordinal ; rv:receipt ?receipt .
       OPTIONAL { ${iri(eventId)} rv:action ?action }
@@ -1091,6 +1091,7 @@ async function readMainOutboxGraphEnvelope(fuseki: FusekiClient, batch: MainOutb
       OPTIONAL { ?receipt rv:admissionId ?admissionId }
       OPTIONAL { ?receipt rv:authorityEpoch ?authorityEpoch }
       OPTIONAL { ?receipt rv:admittedScope ?scope }
+      OPTIONAL { ?receipt rv:stageId ?stageId }
       OPTIONAL { ?receipt rv:operation ?operation }
       OPTIONAL { ?receipt rv:target ?target }
       OPTIONAL { ?receipt rv:mainVersion ?main }
