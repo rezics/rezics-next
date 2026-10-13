@@ -51033,7 +51033,10 @@
                         },
                         "referrerPolicy": {
                           "~elyTyp": 7,
-                          "const": "no-referrer",
+                          "enum": [
+                            "no-referrer",
+                            null
+                          ],
                           "nullable": true,
                           "type": [
                             "string",
@@ -52415,7 +52418,10 @@
                         },
                         "referrerPolicy": {
                           "~elyTyp": 7,
-                          "const": "no-referrer",
+                          "enum": [
+                            "no-referrer",
+                            null
+                          ],
                           "nullable": true,
                           "type": [
                             "string",
@@ -57668,7 +57674,10 @@
                         },
                         "referrerPolicy": {
                           "~elyTyp": 7,
-                          "const": "no-referrer",
+                          "enum": [
+                            "no-referrer",
+                            null
+                          ],
                           "nullable": true,
                           "type": [
                             "string",
@@ -58495,7 +58504,10 @@
                         },
                         "referrerPolicy": {
                           "~elyTyp": 7,
-                          "const": "no-referrer",
+                          "enum": [
+                            "no-referrer",
+                            null
+                          ],
                           "nullable": true,
                           "type": [
                             "string",
@@ -59486,7 +59498,10 @@
                         },
                         "referrerPolicy": {
                           "~elyTyp": 7,
-                          "const": "no-referrer",
+                          "enum": [
+                            "no-referrer",
+                            null
+                          ],
                           "nullable": true,
                           "type": [
                             "string",
@@ -59546,7 +59561,8 @@
                               "completed",
                               "hiatus",
                               "upcoming",
-                              "cancelled"
+                              "cancelled",
+                              null
                             ],
                             "nullable": true,
                             "type": [
@@ -68906,7 +68922,8 @@
                                   "completed",
                                   "hiatus",
                                   "upcoming",
-                                  "cancelled"
+                                  "cancelled",
+                                  null
                                 ],
                                 "nullable": true,
                                 "type": [
@@ -69891,7 +69908,8 @@
                       "enum": [
                         "all",
                         "highlights",
-                        "off"
+                        "off",
+                        null
                       ],
                       "nullable": true,
                       "type": [
@@ -69927,7 +69945,8 @@
                       "enum": [
                         "explicit",
                         "join",
-                        "library"
+                        "library",
+                        null
                       ],
                       "nullable": true,
                       "type": [
@@ -70926,7 +70945,8 @@
                               "completed",
                               "hiatus",
                               "upcoming",
-                              "cancelled"
+                              "cancelled",
+                              null
                             ],
                             "nullable": true,
                             "type": [
@@ -74058,7 +74078,8 @@
                             "enum": [
                               "volume",
                               "part",
-                              "extras"
+                              "extras",
+                              null
                             ],
                             "nullable": true,
                             "type": [
@@ -76641,7 +76662,8 @@
                       "supported",
                       "contradicted",
                       "material-conflict",
-                      "insufficient"
+                      "insufficient",
+                      null
                     ],
                     "nullable": true,
                     "type": [
@@ -76786,7 +76808,8 @@
                       "supported",
                       "contradicted",
                       "material-conflict",
-                      "insufficient"
+                      "insufficient",
+                      null
                     ],
                     "nullable": true,
                     "type": [
@@ -76931,7 +76954,8 @@
                       "supported",
                       "contradicted",
                       "material-conflict",
-                      "insufficient"
+                      "insufficient",
+                      null
                     ],
                     "nullable": true,
                     "type": [
@@ -109508,7 +109532,8 @@
                       "~elyTyp": 7,
                       "enum": [
                         "source-key",
-                        "explicit"
+                        "explicit",
+                        null
                       ],
                       "nullable": true,
                       "type": [
@@ -109706,7 +109731,8 @@
                       "~elyTyp": 7,
                       "enum": [
                         "source-key",
-                        "explicit"
+                        "explicit",
+                        null
                       ],
                       "nullable": true,
                       "type": [
@@ -114806,7 +114832,8 @@
                       "~elyTyp": 7,
                       "enum": [
                         "source-key",
-                        "explicit"
+                        "explicit",
+                        null
                       ],
                       "nullable": true,
                       "type": [
@@ -115004,7 +115031,8 @@
                       "~elyTyp": 7,
                       "enum": [
                         "source-key",
-                        "explicit"
+                        "explicit",
+                        null
                       ],
                       "nullable": true,
                       "type": [
@@ -115934,7 +115962,8 @@
                       "~elyTyp": 7,
                       "enum": [
                         "source-key",
-                        "explicit"
+                        "explicit",
+                        null
                       ],
                       "nullable": true,
                       "type": [
@@ -116132,7 +116161,8 @@
                       "~elyTyp": 7,
                       "enum": [
                         "source-key",
-                        "explicit"
+                        "explicit",
+                        null
                       ],
                       "nullable": true,
                       "type": [
@@ -117019,7 +117049,8 @@
                       "~elyTyp": 7,
                       "enum": [
                         "source-key",
-                        "explicit"
+                        "explicit",
+                        null
                       ],
                       "nullable": true,
                       "type": [
@@ -117217,7 +117248,8 @@
                       "~elyTyp": 7,
                       "enum": [
                         "source-key",
-                        "explicit"
+                        "explicit",
+                        null
                       ],
                       "nullable": true,
                       "type": [
@@ -118147,7 +118179,8 @@
                       "~elyTyp": 7,
                       "enum": [
                         "source-key",
-                        "explicit"
+                        "explicit",
+                        null
                       ],
                       "nullable": true,
                       "type": [
@@ -118345,7 +118378,8 @@
                       "~elyTyp": 7,
                       "enum": [
                         "source-key",
-                        "explicit"
+                        "explicit",
+                        null
                       ],
                       "nullable": true,
                       "type": [
@@ -119323,7 +119357,8 @@
                       "~elyTyp": 7,
                       "enum": [
                         "source-key",
-                        "explicit"
+                        "explicit",
+                        null
                       ],
                       "nullable": true,
                       "type": [
@@ -119521,7 +119556,8 @@
                       "~elyTyp": 7,
                       "enum": [
                         "source-key",
-                        "explicit"
+                        "explicit",
+                        null
                       ],
                       "nullable": true,
                       "type": [
@@ -120517,7 +120553,8 @@
                       "~elyTyp": 7,
                       "enum": [
                         "source-key",
-                        "explicit"
+                        "explicit",
+                        null
                       ],
                       "nullable": true,
                       "type": [
@@ -120715,7 +120752,8 @@
                       "~elyTyp": 7,
                       "enum": [
                         "source-key",
-                        "explicit"
+                        "explicit",
+                        null
                       ],
                       "nullable": true,
                       "type": [
@@ -121672,7 +121710,8 @@
                       "~elyTyp": 7,
                       "enum": [
                         "source-key",
-                        "explicit"
+                        "explicit",
+                        null
                       ],
                       "nullable": true,
                       "type": [
@@ -121870,7 +121909,8 @@
                       "~elyTyp": 7,
                       "enum": [
                         "source-key",
-                        "explicit"
+                        "explicit",
+                        null
                       ],
                       "nullable": true,
                       "type": [
@@ -125116,7 +125156,8 @@
                               "completed",
                               "hiatus",
                               "upcoming",
-                              "cancelled"
+                              "cancelled",
+                              null
                             ],
                             "nullable": true,
                             "type": [
@@ -205860,7 +205901,8 @@
                       "enum": [
                         "all",
                         "highlights",
-                        "off"
+                        "off",
+                        null
                       ],
                       "nullable": true,
                       "type": [
@@ -205896,7 +205938,8 @@
                       "enum": [
                         "explicit",
                         "join",
-                        "library"
+                        "library",
+                        null
                       ],
                       "nullable": true,
                       "type": [
@@ -216148,7 +216191,10 @@
                         },
                         "referrerPolicy": {
                           "~elyTyp": 7,
-                          "const": "no-referrer",
+                          "enum": [
+                            "no-referrer",
+                            null
+                          ],
                           "nullable": true,
                           "type": [
                             "string",
@@ -221017,7 +221063,8 @@
                                       "~elyTyp": 7,
                                       "enum": [
                                         "ltr",
-                                        "rtl"
+                                        "rtl",
+                                        null
                                       ],
                                       "nullable": true,
                                       "type": [
@@ -221206,7 +221253,8 @@
                                       "~elyTyp": 7,
                                       "enum": [
                                         "draft",
-                                        "reviewed"
+                                        "reviewed",
+                                        null
                                       ],
                                       "nullable": true,
                                       "type": [
@@ -221319,7 +221367,8 @@
                             "~elyTyp": 7,
                             "enum": [
                               "derivation",
-                              "relation"
+                              "relation",
+                              null
                             ],
                             "nullable": true,
                             "type": [
@@ -222026,7 +222075,8 @@
                                 "~elyTyp": 7,
                                 "enum": [
                                   "ltr",
-                                  "rtl"
+                                  "rtl",
+                                  null
                                 ],
                                 "nullable": true,
                                 "type": [
@@ -222215,7 +222265,8 @@
                                 "~elyTyp": 7,
                                 "enum": [
                                   "draft",
-                                  "reviewed"
+                                  "reviewed",
+                                  null
                                 ],
                                 "nullable": true,
                                 "type": [
@@ -222315,7 +222366,8 @@
                       "~elyTyp": 7,
                       "enum": [
                         "derivation",
-                        "relation"
+                        "relation",
+                        null
                       ],
                       "nullable": true,
                       "type": [
@@ -223004,7 +223056,8 @@
                                         "~elyTyp": 7,
                                         "enum": [
                                           "ltr",
-                                          "rtl"
+                                          "rtl",
+                                          null
                                         ],
                                         "nullable": true,
                                         "type": [
@@ -223193,7 +223246,8 @@
                                         "~elyTyp": 7,
                                         "enum": [
                                           "draft",
-                                          "reviewed"
+                                          "reviewed",
+                                          null
                                         ],
                                         "nullable": true,
                                         "type": [
@@ -232709,7 +232763,8 @@
                               "person",
                               "pen-name",
                               "organization",
-                              "service"
+                              "service",
+                              null
                             ],
                             "nullable": true,
                             "type": [
@@ -232761,7 +232816,8 @@
                               "person",
                               "pen-name",
                               "organization",
-                              "service"
+                              "service",
+                              null
                             ],
                             "nullable": true,
                             "type": [
@@ -233823,7 +233879,8 @@
                               "person",
                               "pen-name",
                               "organization",
-                              "service"
+                              "service",
+                              null
                             ],
                             "nullable": true,
                             "type": [
@@ -236400,7 +236457,8 @@
                               "empty",
                               "draft",
                               "published",
-                              "changed"
+                              "changed",
+                              null
                             ],
                             "nullable": true,
                             "type": [
@@ -236498,7 +236556,8 @@
                                 "enum": [
                                   "volume",
                                   "part",
-                                  "extras"
+                                  "extras",
+                                  null
                                 ],
                                 "nullable": true,
                                 "type": [
@@ -244476,7 +244535,10 @@
                         },
                         "referrerPolicy": {
                           "~elyTyp": 7,
-                          "const": "no-referrer",
+                          "enum": [
+                            "no-referrer",
+                            null
+                          ],
                           "nullable": true,
                           "type": [
                             "string",
@@ -250809,7 +250871,8 @@
                       "enum": [
                         "all",
                         "highlights",
-                        "off"
+                        "off",
+                        null
                       ],
                       "nullable": true,
                       "type": [
@@ -250845,7 +250908,8 @@
                       "enum": [
                         "explicit",
                         "join",
-                        "library"
+                        "library",
+                        null
                       ],
                       "nullable": true,
                       "type": [
@@ -260708,7 +260772,8 @@
                               "reading",
                               "read",
                               "paused",
-                              "dnf"
+                              "dnf",
+                              null
                             ],
                             "nullable": true,
                             "type": [
@@ -261230,7 +261295,8 @@
                               "reading",
                               "read",
                               "paused",
-                              "dnf"
+                              "dnf",
+                              null
                             ],
                             "nullable": true,
                             "type": [
@@ -261318,7 +261384,8 @@
                               "reading",
                               "read",
                               "paused",
-                              "dnf"
+                              "dnf",
+                              null
                             ],
                             "nullable": true,
                             "type": [
@@ -261406,7 +261473,8 @@
                               "reading",
                               "read",
                               "paused",
-                              "dnf"
+                              "dnf",
+                              null
                             ],
                             "nullable": true,
                             "type": [
@@ -261494,7 +261562,8 @@
                               "reading",
                               "read",
                               "paused",
-                              "dnf"
+                              "dnf",
+                              null
                             ],
                             "nullable": true,
                             "type": [
@@ -262948,7 +263017,8 @@
                         "lease-expired",
                         "owner-refused",
                         "apply-failed",
-                        "worker-stopped"
+                        "worker-stopped",
+                        null
                       ],
                       "nullable": true,
                       "type": [
@@ -263656,7 +263726,8 @@
                         "lease-expired",
                         "owner-refused",
                         "apply-failed",
-                        "worker-stopped"
+                        "worker-stopped",
+                        null
                       ],
                       "nullable": true,
                       "type": [
@@ -263716,7 +263787,8 @@
                         "lease-expired",
                         "owner-refused",
                         "apply-failed",
-                        "worker-stopped"
+                        "worker-stopped",
+                        null
                       ],
                       "nullable": true,
                       "type": [
@@ -264833,7 +264905,8 @@
                                   "reading",
                                   "read",
                                   "paused",
-                                  "dnf"
+                                  "dnf",
+                                  null
                                 ],
                                 "nullable": true,
                                 "type": [
@@ -274679,7 +274752,8 @@
                             "enum": [
                               "all",
                               "highlights",
-                              "off"
+                              "off",
+                              null
                             ],
                             "nullable": true,
                             "type": [
@@ -274749,7 +274823,8 @@
                             "enum": [
                               "explicit",
                               "join",
-                              "library"
+                              "library",
+                              null
                             ],
                             "nullable": true,
                             "type": [
@@ -279869,7 +279944,8 @@
                                 "~elyTyp": 7,
                                 "enum": [
                                   "ban",
-                                  "unban"
+                                  "unban",
+                                  null
                                 ],
                                 "nullable": true,
                                 "type": [
@@ -279929,7 +280005,8 @@
                                 "~elyTyp": 7,
                                 "enum": [
                                   "given",
-                                  "taken"
+                                  "taken",
+                                  null
                                 ],
                                 "nullable": true,
                                 "type": [
@@ -280069,7 +280146,8 @@
                               "author",
                               "reviewer",
                               "steward",
-                              "manual"
+                              "manual",
+                              null
                             ],
                             "nullable": true,
                             "type": [
@@ -287479,7 +287557,8 @@
                             "finished",
                             "reading",
                             "dropped",
-                            "not-started"
+                            "not-started",
+                            null
                           ],
                           "nullable": true,
                           "type": [
@@ -289494,7 +289573,10 @@
                         },
                         "referrerPolicy": {
                           "~elyTyp": 7,
-                          "const": "no-referrer",
+                          "enum": [
+                            "no-referrer",
+                            null
+                          ],
                           "nullable": true,
                           "type": [
                             "string",
@@ -325368,7 +325450,8 @@
                           "enum": [
                             "release",
                             "beta",
-                            "alpha"
+                            "alpha",
+                            null
                           ],
                           "nullable": true,
                           "type": [
@@ -325406,7 +325489,8 @@
                                 "~elyTyp": 7,
                                 "enum": [
                                   "client",
-                                  "server"
+                                  "server",
+                                  null
                                 ],
                                 "nullable": true,
                                 "type": [
@@ -326050,7 +326134,8 @@
                             "enum": [
                               "release",
                               "beta",
-                              "alpha"
+                              "alpha",
+                              null
                             ],
                             "nullable": true,
                             "type": [
@@ -326088,7 +326173,8 @@
                                   "~elyTyp": 7,
                                   "enum": [
                                     "client",
-                                    "server"
+                                    "server",
+                                    null
                                   ],
                                   "nullable": true,
                                   "type": [
@@ -326117,7 +326203,8 @@
                             "enum": [
                               "client",
                               "server",
-                              "client-and-server"
+                              "client-and-server",
+                              null
                             ],
                             "nullable": true,
                             "type": [
@@ -333778,7 +333865,8 @@
                           "enum": [
                             "matched",
                             "unavailable",
-                            "corrupt"
+                            "corrupt",
+                            null
                           ],
                           "nullable": true,
                           "type": [
@@ -333835,7 +333923,8 @@
                             "matched",
                             "conflict",
                             "unavailable",
-                            "corrupt"
+                            "corrupt",
+                            null
                           ],
                           "nullable": true,
                           "type": [
@@ -333894,7 +333983,8 @@
                           "~elyTyp": 7,
                           "enum": [
                             "rebuilt",
-                            "gap"
+                            "gap",
+                            null
                           ],
                           "nullable": true,
                           "type": [
@@ -333944,7 +334034,8 @@
                           "~elyTyp": 7,
                           "enum": [
                             "retired",
-                            "preserved"
+                            "preserved",
+                            null
                           ],
                           "nullable": true,
                           "type": [
@@ -333998,7 +334089,8 @@
                           "~elyTyp": 7,
                           "enum": [
                             "erased",
-                            "conflict"
+                            "conflict",
+                            null
                           ],
                           "nullable": true,
                           "type": [
@@ -334064,7 +334156,8 @@
                           "enum": [
                             "matched",
                             "unavailable",
-                            "corrupt"
+                            "corrupt",
+                            null
                           ],
                           "nullable": true,
                           "type": [
@@ -334121,7 +334214,8 @@
                             "matched",
                             "conflict",
                             "unavailable",
-                            "corrupt"
+                            "corrupt",
+                            null
                           ],
                           "nullable": true,
                           "type": [
@@ -334180,7 +334274,8 @@
                           "~elyTyp": 7,
                           "enum": [
                             "rebuilt",
-                            "gap"
+                            "gap",
+                            null
                           ],
                           "nullable": true,
                           "type": [
@@ -334230,7 +334325,8 @@
                           "~elyTyp": 7,
                           "enum": [
                             "retired",
-                            "preserved"
+                            "preserved",
+                            null
                           ],
                           "nullable": true,
                           "type": [
@@ -334284,7 +334380,8 @@
                           "~elyTyp": 7,
                           "enum": [
                             "erased",
-                            "conflict"
+                            "conflict",
+                            null
                           ],
                           "nullable": true,
                           "type": [
@@ -334800,7 +334897,8 @@
                           "enum": [
                             "matched",
                             "unavailable",
-                            "corrupt"
+                            "corrupt",
+                            null
                           ],
                           "nullable": true,
                           "type": [
@@ -334857,7 +334955,8 @@
                             "matched",
                             "conflict",
                             "unavailable",
-                            "corrupt"
+                            "corrupt",
+                            null
                           ],
                           "nullable": true,
                           "type": [
@@ -334916,7 +335015,8 @@
                           "~elyTyp": 7,
                           "enum": [
                             "rebuilt",
-                            "gap"
+                            "gap",
+                            null
                           ],
                           "nullable": true,
                           "type": [
@@ -334966,7 +335066,8 @@
                           "~elyTyp": 7,
                           "enum": [
                             "retired",
-                            "preserved"
+                            "preserved",
+                            null
                           ],
                           "nullable": true,
                           "type": [
@@ -335020,7 +335121,8 @@
                           "~elyTyp": 7,
                           "enum": [
                             "erased",
-                            "conflict"
+                            "conflict",
+                            null
                           ],
                           "nullable": true,
                           "type": [
@@ -373575,7 +373677,8 @@
                                 "stale-lock",
                                 "source-hash-mismatch",
                                 "native-error",
-                                "timeout"
+                                "timeout",
+                                null
                               ],
                               "nullable": true,
                               "type": [
@@ -374012,7 +374115,8 @@
                                 "stale-lock",
                                 "source-hash-mismatch",
                                 "native-error",
-                                "timeout"
+                                "timeout",
+                                null
                               ],
                               "nullable": true,
                               "type": [
@@ -375046,7 +375150,8 @@
                             "stale-lock",
                             "source-hash-mismatch",
                             "native-error",
-                            "timeout"
+                            "timeout",
+                            null
                           ],
                           "nullable": true,
                           "type": [
@@ -450928,7 +451033,8 @@
                                   "completed",
                                   "hiatus",
                                   "upcoming",
-                                  "cancelled"
+                                  "cancelled",
+                                  null
                                 ],
                                 "nullable": true,
                                 "type": [
@@ -453099,7 +453205,8 @@
                                   "completed",
                                   "hiatus",
                                   "upcoming",
-                                  "cancelled"
+                                  "cancelled",
+                                  null
                                 ],
                                 "nullable": true,
                                 "type": [
@@ -455279,7 +455386,8 @@
                                   "completed",
                                   "hiatus",
                                   "upcoming",
-                                  "cancelled"
+                                  "cancelled",
+                                  null
                                 ],
                                 "nullable": true,
                                 "type": [
@@ -457610,7 +457718,8 @@
                                   "completed",
                                   "hiatus",
                                   "upcoming",
-                                  "cancelled"
+                                  "cancelled",
+                                  null
                                 ],
                                 "nullable": true,
                                 "type": [
@@ -459952,7 +460061,8 @@
                                   "completed",
                                   "hiatus",
                                   "upcoming",
-                                  "cancelled"
+                                  "cancelled",
+                                  null
                                 ],
                                 "nullable": true,
                                 "type": [
@@ -462321,7 +462431,8 @@
                                   "completed",
                                   "hiatus",
                                   "upcoming",
-                                  "cancelled"
+                                  "cancelled",
+                                  null
                                 ],
                                 "nullable": true,
                                 "type": [
@@ -467673,7 +467784,8 @@
                                   "completed",
                                   "hiatus",
                                   "upcoming",
-                                  "cancelled"
+                                  "cancelled",
+                                  null
                                 ],
                                 "nullable": true,
                                 "type": [
@@ -468655,7 +468767,8 @@
                                   "completed",
                                   "hiatus",
                                   "upcoming",
-                                  "cancelled"
+                                  "cancelled",
+                                  null
                                 ],
                                 "nullable": true,
                                 "type": [
@@ -469649,7 +469762,8 @@
                                   "completed",
                                   "hiatus",
                                   "upcoming",
-                                  "cancelled"
+                                  "cancelled",
+                                  null
                                 ],
                                 "nullable": true,
                                 "type": [
@@ -470791,7 +470905,8 @@
                                   "completed",
                                   "hiatus",
                                   "upcoming",
-                                  "cancelled"
+                                  "cancelled",
+                                  null
                                 ],
                                 "nullable": true,
                                 "type": [
@@ -471943,7 +472058,8 @@
                                   "completed",
                                   "hiatus",
                                   "upcoming",
-                                  "cancelled"
+                                  "cancelled",
+                                  null
                                 ],
                                 "nullable": true,
                                 "type": [
@@ -473122,7 +473238,8 @@
                                   "completed",
                                   "hiatus",
                                   "upcoming",
-                                  "cancelled"
+                                  "cancelled",
+                                  null
                                 ],
                                 "nullable": true,
                                 "type": [
@@ -477194,7 +477311,8 @@
                                           "completed",
                                           "hiatus",
                                           "upcoming",
-                                          "cancelled"
+                                          "cancelled",
+                                          null
                                         ],
                                         "nullable": true,
                                         "type": [
@@ -478176,7 +478294,8 @@
                                           "completed",
                                           "hiatus",
                                           "upcoming",
-                                          "cancelled"
+                                          "cancelled",
+                                          null
                                         ],
                                         "nullable": true,
                                         "type": [
@@ -479170,7 +479289,8 @@
                                           "completed",
                                           "hiatus",
                                           "upcoming",
-                                          "cancelled"
+                                          "cancelled",
+                                          null
                                         ],
                                         "nullable": true,
                                         "type": [
@@ -480312,7 +480432,8 @@
                                           "completed",
                                           "hiatus",
                                           "upcoming",
-                                          "cancelled"
+                                          "cancelled",
+                                          null
                                         ],
                                         "nullable": true,
                                         "type": [
@@ -481464,7 +481585,8 @@
                                           "completed",
                                           "hiatus",
                                           "upcoming",
-                                          "cancelled"
+                                          "cancelled",
+                                          null
                                         ],
                                         "nullable": true,
                                         "type": [
@@ -482643,7 +482765,8 @@
                                           "completed",
                                           "hiatus",
                                           "upcoming",
-                                          "cancelled"
+                                          "cancelled",
+                                          null
                                         ],
                                         "nullable": true,
                                         "type": [
@@ -483669,7 +483792,8 @@
                                       "completed",
                                       "hiatus",
                                       "upcoming",
-                                      "cancelled"
+                                      "cancelled",
+                                      null
                                     ],
                                     "nullable": true,
                                     "type": [
@@ -484711,7 +484835,8 @@
                                       "completed",
                                       "hiatus",
                                       "upcoming",
-                                      "cancelled"
+                                      "cancelled",
+                                      null
                                     ],
                                     "nullable": true,
                                     "type": [
@@ -485680,7 +485805,8 @@
                                       "completed",
                                       "hiatus",
                                       "upcoming",
-                                      "cancelled"
+                                      "cancelled",
+                                      null
                                     ],
                                     "nullable": true,
                                     "type": [
@@ -489338,7 +489464,8 @@
                               "completed",
                               "hiatus",
                               "upcoming",
-                              "cancelled"
+                              "cancelled",
+                              null
                             ],
                             "nullable": true,
                             "type": [
@@ -506941,7 +507068,10 @@
                     },
                     "valueWithheld": {
                       "~elyTyp": 7,
-                      "const": "coverage-below-half",
+                      "enum": [
+                        "coverage-below-half",
+                        null
+                      ],
                       "nullable": true,
                       "type": [
                         "string",
@@ -514330,7 +514460,10 @@
                         },
                         "referrerPolicy": {
                           "~elyTyp": 7,
-                          "const": "no-referrer",
+                          "enum": [
+                            "no-referrer",
+                            null
+                          ],
                           "nullable": true,
                           "type": [
                             "string",
@@ -514704,7 +514837,8 @@
                       "~elyTyp": 7,
                       "enum": [
                         "realm-public-profile-v1",
-                        "realm-public-profile-v2"
+                        "realm-public-profile-v2",
+                        null
                       ],
                       "nullable": true,
                       "type": [
@@ -519871,7 +520005,8 @@
                             "~elyTyp": 7,
                             "enum": [
                               "accepted",
-                              "rejected"
+                              "rejected",
+                              null
                             ],
                             "nullable": true,
                             "type": [
@@ -520588,7 +520723,8 @@
                       "~elyTyp": 7,
                       "enum": [
                         "accepted",
-                        "rejected"
+                        "rejected",
+                        null
                       ],
                       "nullable": true,
                       "type": [
@@ -525666,7 +525802,10 @@
                         },
                         "referrerPolicy": {
                           "~elyTyp": 7,
-                          "const": "no-referrer",
+                          "enum": [
+                            "no-referrer",
+                            null
+                          ],
                           "nullable": true,
                           "type": [
                             "string",
@@ -541588,7 +541727,8 @@
                               "completed",
                               "hiatus",
                               "upcoming",
-                              "cancelled"
+                              "cancelled",
+                              null
                             ],
                             "nullable": true,
                             "type": [
@@ -545724,7 +545864,8 @@
                                   "completed",
                                   "hiatus",
                                   "upcoming",
-                                  "cancelled"
+                                  "cancelled",
+                                  null
                                 ],
                                 "nullable": true,
                                 "type": [
@@ -547062,7 +547203,8 @@
                               "completed",
                               "hiatus",
                               "upcoming",
-                              "cancelled"
+                              "cancelled",
+                              null
                             ],
                             "nullable": true,
                             "type": [
@@ -549246,7 +549388,8 @@
                             "~elyTyp": 7,
                             "enum": [
                               "accepted",
-                              "rejected"
+                              "rejected",
+                              null
                             ],
                             "nullable": true,
                             "type": [
@@ -550030,7 +550173,8 @@
                               "completed",
                               "hiatus",
                               "upcoming",
-                              "cancelled"
+                              "cancelled",
+                              null
                             ],
                             "nullable": true,
                             "type": [
@@ -551479,7 +551623,8 @@
                               "completed",
                               "hiatus",
                               "upcoming",
-                              "cancelled"
+                              "cancelled",
+                              null
                             ],
                             "nullable": true,
                             "type": [
@@ -555527,7 +555672,8 @@
                               "completed",
                               "hiatus",
                               "upcoming",
-                              "cancelled"
+                              "cancelled",
+                              null
                             ],
                             "nullable": true,
                             "type": [
@@ -572121,7 +572267,8 @@
                               "completed",
                               "hiatus",
                               "upcoming",
-                              "cancelled"
+                              "cancelled",
+                              null
                             ],
                             "nullable": true,
                             "type": [
@@ -573072,7 +573219,10 @@
                         },
                         "referrerPolicy": {
                           "~elyTyp": 7,
-                          "const": "no-referrer",
+                          "enum": [
+                            "no-referrer",
+                            null
+                          ],
                           "nullable": true,
                           "type": [
                             "string",
@@ -599069,7 +599219,8 @@
                                       "completed",
                                       "hiatus",
                                       "upcoming",
-                                      "cancelled"
+                                      "cancelled",
+                                      null
                                     ],
                                     "nullable": true,
                                     "type": [
@@ -600094,7 +600245,8 @@
                                       "release",
                                       "occurrence",
                                       "resource",
-                                      "projection"
+                                      "projection",
+                                      null
                                     ],
                                     "nullable": true,
                                     "type": [
@@ -600507,7 +600659,8 @@
                                                 "release",
                                                 "occurrence",
                                                 "resource",
-                                                "projection"
+                                                "projection",
+                                                null
                                               ],
                                               "nullable": true,
                                               "type": [
@@ -600972,7 +601125,8 @@
                                               "release",
                                               "occurrence",
                                               "resource",
-                                              "projection"
+                                              "projection",
+                                              null
                                             ],
                                             "nullable": true,
                                             "type": [
@@ -601604,7 +601758,8 @@
                                                 "release",
                                                 "occurrence",
                                                 "resource",
-                                                "projection"
+                                                "projection",
+                                                null
                                               ],
                                               "nullable": true,
                                               "type": [
@@ -602017,7 +602172,8 @@
                                                           "release",
                                                           "occurrence",
                                                           "resource",
-                                                          "projection"
+                                                          "projection",
+                                                          null
                                                         ],
                                                         "nullable": true,
                                                         "type": [
@@ -602482,7 +602638,8 @@
                                                         "release",
                                                         "occurrence",
                                                         "resource",
-                                                        "projection"
+                                                        "projection",
+                                                        null
                                                       ],
                                                       "nullable": true,
                                                       "type": [
@@ -602894,7 +603051,8 @@
                                               "~elyTyp": 7,
                                               "enum": [
                                                 "ltr",
-                                                "rtl"
+                                                "rtl",
+                                                null
                                               ],
                                               "nullable": true,
                                               "type": [
@@ -603083,7 +603241,8 @@
                                               "~elyTyp": 7,
                                               "enum": [
                                                 "draft",
-                                                "reviewed"
+                                                "reviewed",
+                                                null
                                               ],
                                               "nullable": true,
                                               "type": [
@@ -604242,7 +604401,8 @@
                                     "release",
                                     "occurrence",
                                     "resource",
-                                    "projection"
+                                    "projection",
+                                    null
                                   ],
                                   "nullable": true,
                                   "type": [
@@ -604655,7 +604815,8 @@
                                               "release",
                                               "occurrence",
                                               "resource",
-                                              "projection"
+                                              "projection",
+                                              null
                                             ],
                                             "nullable": true,
                                             "type": [
@@ -605120,7 +605281,8 @@
                                             "release",
                                             "occurrence",
                                             "resource",
-                                            "projection"
+                                            "projection",
+                                            null
                                           ],
                                           "nullable": true,
                                           "type": [
@@ -605449,7 +605611,8 @@
                             "software",
                             "ai",
                             "recipes",
-                            "media"
+                            "media",
+                            null
                           ],
                           "nullable": true,
                           "type": [
@@ -606154,7 +606317,8 @@
                                 "release",
                                 "occurrence",
                                 "resource",
-                                "projection"
+                                "projection",
+                                null
                               ],
                               "nullable": true,
                               "type": [
@@ -606567,7 +606731,8 @@
                                           "release",
                                           "occurrence",
                                           "resource",
-                                          "projection"
+                                          "projection",
+                                          null
                                         ],
                                         "nullable": true,
                                         "type": [
@@ -607032,7 +607197,8 @@
                                         "release",
                                         "occurrence",
                                         "resource",
-                                        "projection"
+                                        "projection",
+                                        null
                                       ],
                                       "nullable": true,
                                       "type": [
@@ -607336,7 +607502,8 @@
                             "completed",
                             "hiatus",
                             "upcoming",
-                            "cancelled"
+                            "cancelled",
+                            null
                           ],
                           "nullable": true,
                           "type": [
@@ -610711,7 +610878,8 @@
                           "enum": [
                             "shown",
                             "withheld-below-threshold",
-                            "no-data"
+                            "no-data",
+                            null
                           ],
                           "nullable": true,
                           "type": [
@@ -611985,7 +612153,8 @@
                                         "release",
                                         "occurrence",
                                         "resource",
-                                        "projection"
+                                        "projection",
+                                        null
                                       ],
                                       "nullable": true,
                                       "type": [
@@ -612398,7 +612567,8 @@
                                                   "release",
                                                   "occurrence",
                                                   "resource",
-                                                  "projection"
+                                                  "projection",
+                                                  null
                                                 ],
                                                 "nullable": true,
                                                 "type": [
@@ -612863,7 +613033,8 @@
                                                 "release",
                                                 "occurrence",
                                                 "resource",
-                                                "projection"
+                                                "projection",
+                                                null
                                               ],
                                               "nullable": true,
                                               "type": [
@@ -613275,7 +613446,8 @@
                                       "~elyTyp": 7,
                                       "enum": [
                                         "ltr",
-                                        "rtl"
+                                        "rtl",
+                                        null
                                       ],
                                       "nullable": true,
                                       "type": [
@@ -613464,7 +613636,8 @@
                                       "~elyTyp": 7,
                                       "enum": [
                                         "draft",
-                                        "reviewed"
+                                        "reviewed",
+                                        null
                                       ],
                                       "nullable": true,
                                       "type": [
@@ -620507,7 +620680,8 @@
                                   "release",
                                   "occurrence",
                                   "resource",
-                                  "projection"
+                                  "projection",
+                                  null
                                 ],
                                 "nullable": true,
                                 "type": [
@@ -620920,7 +621094,8 @@
                                             "release",
                                             "occurrence",
                                             "resource",
-                                            "projection"
+                                            "projection",
+                                            null
                                           ],
                                           "nullable": true,
                                           "type": [
@@ -621385,7 +621560,8 @@
                                           "release",
                                           "occurrence",
                                           "resource",
-                                          "projection"
+                                          "projection",
+                                          null
                                         ],
                                         "nullable": true,
                                         "type": [
@@ -628714,7 +628890,8 @@
                       "~elyTyp": 7,
                       "enum": [
                         "recognized",
-                        "invalidated"
+                        "invalidated",
+                        null
                       ],
                       "nullable": true,
                       "type": [
@@ -632338,7 +632515,10 @@
                   },
                   "exceptionKind": {
                     "~elyTyp": 7,
-                    "const": "fair_use",
+                    "enum": [
+                      "fair_use",
+                      null
+                    ],
                     "nullable": true,
                     "type": [
                       "string",
@@ -632631,7 +632811,10 @@
                   },
                   "exceptionKind": {
                     "~elyTyp": 7,
-                    "const": "fair_use",
+                    "enum": [
+                      "fair_use",
+                      null
+                    ],
                     "nullable": true,
                     "type": [
                       "string",
@@ -632924,7 +633107,10 @@
                   },
                   "exceptionKind": {
                     "~elyTyp": 7,
-                    "const": "fair_use",
+                    "enum": [
+                      "fair_use",
+                      null
+                    ],
                     "nullable": true,
                     "type": [
                       "string",
@@ -641267,7 +641453,8 @@
                               "completed",
                               "hiatus",
                               "upcoming",
-                              "cancelled"
+                              "cancelled",
+                              null
                             ],
                             "nullable": true,
                             "type": [
@@ -654457,7 +654644,8 @@
                               "source-terms",
                               "source-metadata",
                               "retained-only",
-                              "unmapped-retained"
+                              "unmapped-retained",
+                              null
                             ],
                             "nullable": true,
                             "type": [
@@ -654475,7 +654663,8 @@
                               "source-terms",
                               "source-metadata",
                               "retained-only",
-                              "unmapped-retained"
+                              "unmapped-retained",
+                              null
                             ],
                             "nullable": true,
                             "type": [
@@ -678877,7 +679066,10 @@
                     },
                     "semanticTypeBasis": {
                       "~elyTyp": 7,
-                      "const": "source-record-type",
+                      "enum": [
+                        "source-record-type",
+                        null
+                      ],
                       "nullable": true,
                       "type": [
                         "string",
@@ -679714,7 +679906,10 @@
                         },
                         "semanticTypeBasis": {
                           "~elyTyp": 7,
-                          "const": "source-record-type",
+                          "enum": [
+                            "source-record-type",
+                            null
+                          ],
                           "nullable": true,
                           "type": [
                             "string",
@@ -679910,7 +680105,10 @@
                         },
                         "semanticTypeBasis": {
                           "~elyTyp": 7,
-                          "const": "source-record-type",
+                          "enum": [
+                            "source-record-type",
+                            null
+                          ],
                           "nullable": true,
                           "type": [
                             "string",
@@ -707543,7 +707741,10 @@
                             },
                             "reason": {
                               "~elyTyp": 7,
-                              "const": "age_unknown",
+                              "enum": [
+                                "age_unknown",
+                                null
+                              ],
                               "nullable": true,
                               "type": [
                                 "string",
@@ -717017,7 +717218,8 @@
                               "software",
                               "ai",
                               "recipes",
-                              "media"
+                              "media",
+                              null
                             ],
                             "nullable": true,
                             "type": [
@@ -717484,7 +717686,8 @@
                       "software",
                       "ai",
                       "recipes",
-                      "media"
+                      "media",
+                      null
                     ],
                     "nullable": true,
                     "type": [
@@ -717781,7 +717984,8 @@
                       "software",
                       "ai",
                       "recipes",
-                      "media"
+                      "media",
+                      null
                     ],
                     "nullable": true,
                     "type": [
@@ -718078,7 +718282,8 @@
                       "software",
                       "ai",
                       "recipes",
-                      "media"
+                      "media",
+                      null
                     ],
                     "nullable": true,
                     "type": [
@@ -718460,7 +718665,8 @@
                             "software",
                             "ai",
                             "recipes",
-                            "media"
+                            "media",
+                            null
                           ],
                           "nullable": true,
                           "type": [
@@ -719515,7 +719721,8 @@
                             "software",
                             "ai",
                             "recipes",
-                            "media"
+                            "media",
+                            null
                           ],
                           "nullable": true,
                           "type": [
@@ -736837,7 +737044,8 @@
                               "completed",
                               "hiatus",
                               "upcoming",
-                              "cancelled"
+                              "cancelled",
+                              null
                             ],
                             "nullable": true,
                             "type": [
@@ -740172,7 +740380,8 @@
                         "completed",
                         "hiatus",
                         "upcoming",
-                        "cancelled"
+                        "cancelled",
+                        null
                       ],
                       "nullable": true,
                       "type": [
@@ -743204,7 +743413,8 @@
                               "completed",
                               "hiatus",
                               "upcoming",
-                              "cancelled"
+                              "cancelled",
+                              null
                             ],
                             "nullable": true,
                             "type": [
@@ -749771,7 +749981,8 @@
                             "enum": [
                               "volume",
                               "part",
-                              "extras"
+                              "extras",
+                              null
                             ],
                             "nullable": true,
                             "type": [
@@ -754773,7 +754984,8 @@
                       "~elyTyp": 7,
                       "enum": [
                         "undetermined",
-                        "restricted"
+                        "restricted",
+                        null
                       ],
                       "nullable": true,
                       "type": [
@@ -757571,7 +757783,8 @@
                             "completed",
                             "hiatus",
                             "upcoming",
-                            "cancelled"
+                            "cancelled",
+                            null
                           ],
                           "nullable": true,
                           "type": [
@@ -758361,7 +758574,8 @@
                                   "completed",
                                   "hiatus",
                                   "upcoming",
-                                  "cancelled"
+                                  "cancelled",
+                                  null
                                 ],
                                 "nullable": true,
                                 "type": [
@@ -758627,7 +758841,8 @@
                                 "enum": [
                                   "incidental",
                                   "substantial",
-                                  "central"
+                                  "central",
+                                  null
                                 ],
                                 "nullable": true,
                                 "type": [
@@ -758866,7 +759081,8 @@
                                   "completed",
                                   "hiatus",
                                   "upcoming",
-                                  "cancelled"
+                                  "cancelled",
+                                  null
                                 ],
                                 "nullable": true,
                                 "type": [
@@ -759132,7 +759348,8 @@
                                 "enum": [
                                   "incidental",
                                   "substantial",
-                                  "central"
+                                  "central",
+                                  null
                                 ],
                                 "nullable": true,
                                 "type": [
@@ -759371,7 +759588,8 @@
                                   "completed",
                                   "hiatus",
                                   "upcoming",
-                                  "cancelled"
+                                  "cancelled",
+                                  null
                                 ],
                                 "nullable": true,
                                 "type": [
@@ -759637,7 +759855,8 @@
                                 "enum": [
                                   "incidental",
                                   "substantial",
-                                  "central"
+                                  "central",
+                                  null
                                 ],
                                 "nullable": true,
                                 "type": [
@@ -795765,7 +795984,10 @@
                         },
                         "referrerPolicy": {
                           "~elyTyp": 7,
-                          "const": "no-referrer",
+                          "enum": [
+                            "no-referrer",
+                            null
+                          ],
                           "nullable": true,
                           "type": [
                             "string",
@@ -803425,7 +803647,10 @@
                             },
                             "referrerPolicy": {
                               "~elyTyp": 7,
-                              "const": "no-referrer",
+                              "enum": [
+                                "no-referrer",
+                                null
+                              ],
                               "nullable": true,
                               "type": [
                                 "string",
@@ -805311,7 +805536,10 @@
                             },
                             "referrerPolicy": {
                               "~elyTyp": 7,
-                              "const": "no-referrer",
+                              "enum": [
+                                "no-referrer",
+                                null
+                              ],
                               "nullable": true,
                               "type": [
                                 "string",
@@ -805596,7 +805824,10 @@
                             },
                             "referrerPolicy": {
                               "~elyTyp": 7,
-                              "const": "no-referrer",
+                              "enum": [
+                                "no-referrer",
+                                null
+                              ],
                               "nullable": true,
                               "type": [
                                 "string",
@@ -805639,7 +805870,8 @@
                                       "completed",
                                       "hiatus",
                                       "upcoming",
-                                      "cancelled"
+                                      "cancelled",
+                                      null
                                     ],
                                     "nullable": true,
                                     "type": [
@@ -806212,7 +806444,10 @@
                             },
                             "referrerPolicy": {
                               "~elyTyp": 7,
-                              "const": "no-referrer",
+                              "enum": [
+                                "no-referrer",
+                                null
+                              ],
                               "nullable": true,
                               "type": [
                                 "string",
