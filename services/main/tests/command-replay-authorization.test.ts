@@ -6,6 +6,11 @@ import ts from 'typescript-6';
 import { Pool } from 'pg';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
+import { readEnv } from '../../../scripts/dev/config.ts';
+import { stageQaBootstrap } from '../../../scripts/qa/bootstrap.ts';
+import { admitIntegrationWorkScope, qaStartupTestTimeout, runQaAdmissionChildAsync,
+  runQaStartupChildAsync } from '../../../scripts/qa/stack-startup.ts';
+import { exclusiveWorkScopeAssembler, qaStackEnvironment } from '../../../scripts/qa/stack-environment.ts';
 import { startMediaStack, type MediaStack } from '../../../tests/qa/integration/media-support.ts';
 import { deactivateFixtureController, ensureFixtureScopeGate, expireFixtureAuthority,
   grantFixtureAuthority, registerFixtureIdentity, reduceFixtureGrant } from '../src/modules/access/fixture-authority.ts';
@@ -23,6 +28,8 @@ let stack: MediaStack;
 let legacyCluster: PostgresCluster;
 let legacyPool: Pool;
 let legacyController: Member;
+let selfHostedRun: string | undefined;
+const savedEnvironment = { ...process.env };
 type Member = Awaited<ReturnType<MediaStack['member']>>;
 type Loss = 'expired' | 'revoked';
 interface Scenario {
@@ -42,6 +49,23 @@ interface ReplayFamily {
 
 beforeAll(async () => {
   mkdirSync(evidenceDirectory, { recursive: true });
+  if (!process.env.FUSEKI_URL || !process.env.REZICS_QA_RUN_ID) {
+    selfHostedRun = `command-replay-${randomUUID()}`;
+    const environment = { ...qaStackEnvironment(process.env),
+      REZICS_FUSEKI_ASSEMBLER: exclusiveWorkScopeAssembler };
+    const startup = await runQaStartupChildAsync(root,
+      ['stack:up', '--profile', 'qa', '--run-id', selfHostedRun], 180_000, environment, console.log);
+    if (!startup.ok) throw new Error(`Replay owner stack startup failed: ${startup.output.slice(-4000)}`);
+    const directory = join(root, '.temp/stack', `rezics-qa-${selfHostedRun}`);
+    const staged = stageQaBootstrap(directory);
+    const bootstrap = await runQaAdmissionChildAsync(root, 'bun', staged.args, 180_000, environment);
+    if (!bootstrap.ok) throw new Error(`Replay owner bootstrap failed: ${bootstrap.output.slice(-4000)}`);
+    const apps = readEnv(join(directory, 'apps.env'));
+    await admitIntegrationWorkScope({ root, projectRunId: selfHostedRun, fusekiUrl: apps.FUSEKI_URL!,
+      maintenanceToken: apps.FUSEKI_MAINTENANCE_TOKEN, environment });
+    Object.assign(process.env, apps, { REZICS_QA_RUN_ID: selfHostedRun });
+    expect(startup.activeElapsedMs + bootstrap.elapsedMs).toBeLessThan(600_000);
+  }
   stack = await startMediaStack('command-replay-authorization', { profileCredits: true });
   legacyCluster = await startPostgresCluster();
   legacyPool = new Pool({ ...legacyCluster.connection, max: 4 });
@@ -67,8 +91,17 @@ beforeAll(async () => {
   for (const file of files.filter(file => Number(file.split('_')[0]) >= 54 && Number(file.split('_')[0]) < 873)) {
     await legacyPool.query(readFileSync(join(root, 'services/main/migrations/access', file), 'utf8'));
   }
-}, 60_000);
-afterAll(async () => { await legacyPool?.end(); legacyCluster?.remove(); await stack?.stop(); });
+}, qaStartupTestTimeout(600_000));
+afterAll(async () => {
+  await legacyPool?.end(); legacyCluster?.remove(); await stack?.stop();
+  if (selfHostedRun) {
+    const stopped = await runQaAdmissionChildAsync(root, 'task',
+      ['stack:reset', '--', '--profile', 'qa', '--run-id', selfHostedRun], 60_000);
+    for (const name of Object.keys(process.env)) if (!(name in savedEnvironment)) delete process.env[name];
+    Object.assign(process.env, savedEnvironment);
+    if (!stopped.ok) throw new Error('Replay owner stack cleanup failed');
+  }
+});
 
 const request = (member: Member) => new Request('http://main.local/', {
   headers: { authorization: `Bearer ${member.token}` },
@@ -331,7 +364,7 @@ test('every discovered public saved-result command has a replay-authorization ro
   };
   const descend = (node: ts.Node, visit: (node: ts.Node) => void) => {
     visit(node);
-    ts.forEachChild(node, child => { if (!functionLike(child)) descend(child, visit); });
+    ts.forEachChild(node, child => descend(child, visit));
   };
   const edges = (node: ts.FunctionLikeDeclaration) => {
     const targets = new Set<ts.FunctionLikeDeclaration>();
