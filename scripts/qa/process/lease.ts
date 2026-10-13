@@ -84,8 +84,17 @@ function parseRecord(value: unknown): DirectoryLeaseRecord | undefined {
   };
 }
 
-function readJson(path: string): unknown {
-  return JSON.parse(readFileSync(path, 'utf8')) as unknown;
+function vanished(error: unknown): boolean {
+  return (error as NodeJS.ErrnoException).code === 'ENOENT';
+}
+
+function readRecord(path: string): DirectoryLeaseRecord | undefined {
+  try { return parseRecord(JSON.parse(readFileSync(path, 'utf8')) as unknown) ?? { pid: 0, invalid: true }; }
+  catch (error) {
+    if (vanished(error)) return undefined;
+    if (error instanceof SyntaxError) return { pid: 0, invalid: true };
+    throw error;
+  }
 }
 
 /**
@@ -94,26 +103,17 @@ function readJson(path: string): unknown {
  */
 export function readDirectoryLease(directory: string): DirectoryLeaseRecord | undefined {
   const identity = join(directory, 'identity.json');
-  if (existsSync(identity)) {
-    try {
-      const record = parseRecord(readJson(identity));
-      if (record) return record;
-    } catch { /* torn or unreadable; fall through would hide a live owner */ }
-    return { pid: 0, invalid: true };
-  }
+  const record = readRecord(identity);
+  if (record) return record;
   const owner = join(directory, 'owner.json');
-  if (existsSync(owner)) {
-    try {
-      const record = parseRecord(readJson(owner));
-      if (record) return record;
-    } catch { return { pid: 0, invalid: true }; }
-    return { pid: 0, invalid: true };
-  }
+  const legacy = readRecord(owner);
+  if (legacy) return legacy;
   try {
-    const pid = Number(readFileSync(join(directory, 'pid'), 'utf8'));
+    const text = readFileSync(join(directory, 'pid'), 'utf8');
+    const pid = Number(text);
     if (Number.isSafeInteger(pid) && pid > 0) return { pid };
-    if (readFileSync(join(directory, 'pid'), 'utf8').trim()) return { pid: 0, invalid: true };
-  } catch { /* no pid file */ }
+    if (text.trim()) return { pid: 0, invalid: true };
+  } catch (error) { if (!vanished(error)) throw error; }
   return undefined;
 }
 
@@ -130,12 +130,16 @@ function ownerAlive(record: DirectoryLeaseRecord, options: DirectoryLeaseOptions
  * and the process is gone. A reused pid fails start-time and boot-id comparison.
  */
 export function directoryLeaseState(directory: string, options: DirectoryLeaseOptions = {}): DirectoryLeaseState {
-  if (!existsSync(directory)) return 'free';
   const record = readDirectoryLease(directory);
+  let modified: number;
+  try { modified = statSync(directory).mtimeMs; }
+  catch (error) {
+    if (vanished(error)) return 'free';
+    throw error;
+  }
   if (record?.invalid) return 'stale';
   if (record) return ownerAlive(record, options) ? 'held' : 'stale';
-  const age = clock(options) - (statSync(directory, { throwIfNoEntry: false })?.mtimeMs ?? Number.NaN);
-  if (Number.isNaN(age)) return 'free'; // released by its holder since the check above
+  const age = clock(options) - modified;
   return age < (options.initializingMs ?? leaseInitializingMs) ? 'initializing' : 'stale';
 }
 
@@ -144,14 +148,20 @@ export function directoryLeaseHeld(directory: string, options: DirectoryLeaseOpt
   return state === 'held' || state === 'initializing';
 }
 
-function writeRecord(directory: string, record: DirectoryLeaseRecord): void {
+function writeRecord(directory: string, record: DirectoryLeaseRecord): boolean {
   const path = join(directory, 'identity.json');
   const temporary = `${path}.${process.pid}.tmp`;
   const body = { ...record };
   delete body.invalid;
-  writeFileSync(temporary, JSON.stringify(body));
-  renameSync(temporary, path);
-  writeFileSync(join(directory, 'pid'), String(record.pid));
+  try {
+    writeFileSync(temporary, JSON.stringify(body));
+    renameSync(temporary, path);
+    writeFileSync(join(directory, 'pid'), String(record.pid));
+    return true;
+  } catch (error) {
+    if (vanished(error)) return false;
+    throw error;
+  }
 }
 
 /**
@@ -168,8 +178,10 @@ export function releaseDirectoryLease(directory: string, token: string, ownerPid
 }
 
 function reclaimStale(directory: string, options: DirectoryLeaseOptions): boolean {
-  if (!existsSync(directory)) return true;
-  if (directoryLeaseHeld(directory, options)) return false;
+  const state = directoryLeaseState(directory, options);
+  // A released lease needs no removal: another acquirer may already be creating it.
+  if (state === 'free') return true;
+  if (state !== 'stale') return false;
   rmSync(directory, { recursive: true, force: true });
   return !existsSync(directory);
 }
@@ -181,10 +193,9 @@ function reclaimStale(directory: string, options: DirectoryLeaseOptions): boolea
 export function tryAcquireDirectoryLease(directory: string, options: DirectoryLeaseOptions = {}):
   AcquiredDirectoryLease | 'held' {
   for (let attempt = 0; attempt < 3; attempt++) {
-    if (existsSync(directory)) {
-      if (directoryLeaseHeld(directory, options)) return 'held';
-      if (!reclaimStale(directory, options)) return 'held';
-    }
+    const state = directoryLeaseState(directory, options);
+    if (state === 'held' || state === 'initializing') return 'held';
+    if (state === 'stale' && !reclaimStale(directory, options)) return 'held';
     try { mkdirSync(directory, options.mode !== undefined ? { mode: options.mode } : undefined); }
     catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'EEXIST') continue;
@@ -197,7 +208,7 @@ export function tryAcquireDirectoryLease(directory: string, options: DirectoryLe
       pid, token, ...(identity ? { start: identity.start, boot: identity.boot } : {}),
       ...noteOf(options.note ?? {}),
     };
-    try { writeRecord(directory, record); }
+    try { if (!writeRecord(directory, record)) continue; }
     catch (error) {
       releaseDirectoryLease(directory, token, pid);
       throw error;
@@ -211,8 +222,7 @@ export function tryAcquireDirectoryLease(directory: string, options: DirectoryLe
 export function updateDirectoryLeaseNote(directory: string, pid: number, note: DirectoryLeaseNote): boolean {
   const current = readDirectoryLease(directory);
   if (!current?.token || current.pid !== pid || !existsSync(join(directory, 'identity.json'))) return false;
-  writeRecord(directory, { ...current, ...noteOf({ ...current, ...note }) });
-  return true;
+  return writeRecord(directory, { ...current, ...noteOf({ ...current, ...note }) });
 }
 
 /**
@@ -223,12 +233,11 @@ export function adoptLeaseOwner(directory: string, pid: number, procRoot = '/pro
   const identity = processIdentity(pid, procRoot);
   const current = readDirectoryLease(directory);
   if (!identity || !current?.token) return false;
-  writeRecord(directory, {
+  return writeRecord(directory, {
     ...noteOf(current),
     pid: identity.pid, start: identity.start, boot: identity.boot, token: current.token,
     ...(current.delegatedFromPid !== undefined ? { delegatedFromPid: current.delegatedFromPid } : {}),
   });
-  return true;
 }
 
 export interface DirectoryLeaseTransferOptions {
@@ -251,11 +260,11 @@ export function transferDirectoryLease(directory: string, token: string, pid: nu
   const previous = {
     pid: current.pid, start: current.start, boot: current.boot, delegatedFromPid: current.delegatedFromPid,
   };
-  writeRecord(directory, {
+  if (!writeRecord(directory, {
     ...noteOf(current),
     pid: identity.pid, start: identity.start, boot: identity.boot, token,
     delegatedFromPid: expectedOwnerPid,
-  });
+  })) throw new Error('Shared lifecycle ownership changed before transfer');
   return () => {
     const now = readDirectoryLease(directory);
     if (now?.token !== token || now.pid !== pid) return;

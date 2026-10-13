@@ -14,10 +14,14 @@ export function acquireDatasetImportLock(context: string): () => void {
   const ownerPath = join(directory, 'owner.json');
   mkdirSync(join(repository, '.temp/datasets/import-locks'), { recursive: true });
   if (existsSync(ownerPath) && !existsSync(join(directory, 'identity.json'))) {
-    let owner: { pid?: unknown };
+    let owner: { pid?: unknown } | undefined;
+    let released = false;
     try { owner = JSON.parse(readFileSync(ownerPath, 'utf8')) as { pid?: unknown }; }
-    catch { throw new Error('Dataset import lock owner is invalid'); }
-    if (!Number.isSafeInteger(owner.pid) || (owner.pid as number) <= 0)
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new Error('Dataset import lock owner is invalid');
+      released = true;
+    }
+    if (!released && (!Number.isSafeInteger(owner?.pid) || (owner!.pid as number) <= 0))
       throw new Error('Dataset import lock owner is invalid');
   }
   const state = directoryLeaseState(directory);

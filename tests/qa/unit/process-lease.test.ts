@@ -1,10 +1,11 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
+import * as fs from 'node:fs';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { processAlive, processIdentity } from '../../../scripts/qa/process/identity.ts';
-import { directoryLeaseHeld, directoryLeaseState, leaseInitializingMs, releaseDirectoryLease,
-  tryAcquireDirectoryLease } from '../../../scripts/qa/process/lease.ts';
+import { adoptLeaseOwner, directoryLeaseHeld, directoryLeaseState, leaseInitializingMs, readDirectoryLease, releaseDirectoryLease,
+  tryAcquireDirectoryLease, updateDirectoryLeaseNote } from '../../../scripts/qa/process/lease.ts';
 import { terminateProcessGroup } from '../../../scripts/qa/process/terminate.ts';
 
 const scratch = join(import.meta.dir, '../../../.temp/process-lease');
@@ -212,6 +213,203 @@ test('an old cleanup after a new acquisition leaves the new owner in place', () 
     expect(existsSync(directory)).toBe(false);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+for (const file of ['identity.json', 'owner.json', 'pid']) {
+  test(`a lease released while reading ${file} has no holder`, () => {
+    const root = workspace();
+    const directory = join(root, 'slot');
+    mkdirSync(directory);
+    const path = join(directory, file);
+    writeFileSync(path, file === 'pid' ? String(process.pid) : JSON.stringify({ pid: process.pid, token: 'owner' }));
+    const read = fs.readFileSync;
+    const inspection = spyOn(fs, 'readFileSync').mockImplementation((...args) => {
+      if (args[0] === path) rmSync(directory, { recursive: true });
+      return read(...args);
+    });
+    try {
+      expect(readDirectoryLease(directory)).toBeUndefined();
+      expect(directoryLeaseHeld(directory)).toBe(false);
+      expect(() => releaseDirectoryLease(directory, 'owner')).not.toThrow();
+    } finally {
+      inspection.mockRestore();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+}
+
+test('a directory released before its age is inspected is free and immediately acquirable', () => {
+  const root = workspace();
+  const directory = join(root, 'slot');
+  const stat = fs.statSync;
+  mkdirSync(directory);
+  let removed = false;
+  const inspection = spyOn(fs, 'statSync').mockImplementation((...args) => {
+    if (args[0] === directory && !removed) {
+      removed = true;
+      rmSync(directory, { recursive: true });
+    }
+    return stat(...args);
+  });
+  try {
+    expect(directoryLeaseState(directory)).toBe('free');
+    mkdirSync(directory);
+    removed = false;
+    const lease = tryAcquireDirectoryLease(directory);
+    expect(lease).not.toBe('held');
+    if (lease !== 'held') lease.release();
+  } finally {
+    inspection.mockRestore();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a stale holder that releases before reclamation is immediately acquirable', () => {
+  const root = workspace();
+  const directory = join(root, 'slot');
+  mkdirSync(directory);
+  writeFileSync(join(directory, 'pid'), '2147483647');
+  try {
+    const lease = tryAcquireDirectoryLease(directory, { alive: () => {
+      rmSync(directory, { recursive: true });
+      return false;
+    } });
+    expect(lease).not.toBe('held');
+    if (lease !== 'held') lease.release();
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('releasing a lease whose record vanishes during inspection is done', () => {
+  const root = workspace();
+  const directory = join(root, 'slot');
+  const lease = tryAcquireDirectoryLease(directory);
+  expect(lease).not.toBe('held');
+  if (lease === 'held') return;
+  const read = fs.readFileSync;
+  const path = join(directory, 'identity.json');
+  const inspection = spyOn(fs, 'readFileSync').mockImplementation((...args) => {
+    if (args[0] === path && existsSync(directory)) rmSync(directory, { recursive: true });
+    return read(...args);
+  });
+  try {
+    expect(() => lease.release()).not.toThrow();
+    expect(existsSync(directory)).toBe(false);
+  } finally {
+    inspection.mockRestore();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a living holder is never taken', () => {
+  const root = workspace();
+  try {
+    const directory = join(root, 'slot');
+    const lease = tryAcquireDirectoryLease(directory);
+    expect(lease).not.toBe('held');
+    if (lease === 'held') return;
+    expect(directoryLeaseState(directory)).toBe('held');
+    expect(tryAcquireDirectoryLease(directory)).toBe('held');
+    expect(readDirectoryLease(directory)?.token).toBe(lease.token);
+    lease.release();
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+for (const file of ['identity.json', 'owner.json', 'pid']) {
+  test(`an error other than a vanished path reading ${file} is thrown`, () => {
+    const root = workspace();
+    const directory = join(root, 'slot');
+    const path = join(directory, file);
+    const denied = Object.assign(new Error('permission denied'), { code: 'EACCES' });
+    const read = fs.readFileSync;
+    const inspection = spyOn(fs, 'readFileSync').mockImplementation((...args) => {
+      if (args[0] === path) throw denied;
+      return read(...args);
+    });
+    try { expect(() => readDirectoryLease(directory)).toThrow(denied); }
+    finally {
+      inspection.mockRestore();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+}
+
+test('an error other than a vanished path inspecting directory age is thrown', () => {
+  const root = workspace();
+  const directory = join(root, 'slot');
+  mkdirSync(directory);
+  const denied = Object.assign(new Error('permission denied'), { code: 'EACCES' });
+  const stat = fs.statSync;
+  const inspection = spyOn(fs, 'statSync').mockImplementation((...args) => {
+    if (args[0] === directory) throw denied;
+    return stat(...args);
+  });
+  try { expect(() => directoryLeaseHeld(directory)).toThrow(denied); }
+  finally {
+    inspection.mockRestore();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a full disk while publishing the owner is thrown', () => {
+  const root = workspace();
+  const directory = join(root, 'slot');
+  const full = Object.assign(new Error('disk full'), { code: 'ENOSPC' });
+  const write = fs.writeFileSync;
+  const publishing = spyOn(fs, 'writeFileSync').mockImplementation((...args) => {
+    if (String(args[0]).startsWith(join(directory, 'identity.json'))) throw full;
+    return write(...args);
+  });
+  try { expect(() => tryAcquireDirectoryLease(directory)).toThrow(full); }
+  finally {
+    publishing.mockRestore();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('an acquisition retries immediately when the directory vanishes during publication', () => {
+  const root = workspace();
+  const directory = join(root, 'slot');
+  const write = fs.writeFileSync;
+  let removed = false;
+  const publishing = spyOn(fs, 'writeFileSync').mockImplementation((...args) => {
+    if (!removed && String(args[0]).startsWith(join(directory, 'identity.json'))) {
+      removed = true;
+      rmSync(directory, { recursive: true });
+    }
+    return write(...args);
+  });
+  try {
+    const lease = tryAcquireDirectoryLease(directory);
+    expect(removed).toBe(true);
+    expect(lease).not.toBe('held');
+    if (lease !== 'held') lease.release();
+  } finally {
+    publishing.mockRestore();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+for (const operation of ['annotate', 'adopt'] as const) {
+  test(`a lease released before ${operation} publication is no longer owned`, () => {
+    const root = workspace();
+    const directory = join(root, 'slot');
+    const lease = tryAcquireDirectoryLease(directory);
+    expect(lease).not.toBe('held');
+    if (lease === 'held') return;
+    const write = fs.writeFileSync;
+    const publishing = spyOn(fs, 'writeFileSync').mockImplementation((...args) => {
+      if (String(args[0]).startsWith(join(directory, 'identity.json'))) rmSync(directory, { recursive: true });
+      return write(...args);
+    });
+    try {
+      expect(operation === 'annotate' ? updateDirectoryLeaseNote(directory, process.pid, { command: 'test' })
+        : adoptLeaseOwner(directory, process.pid)).toBe(false);
+      expect(existsSync(directory)).toBe(false);
+    } finally {
+      publishing.mockRestore();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+}
 
 test('a descendant that ignores SIGTERM stops within the grace and slots release only after that', async () => {
   const root = workspace();
