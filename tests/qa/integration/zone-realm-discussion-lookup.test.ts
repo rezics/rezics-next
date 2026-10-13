@@ -44,7 +44,8 @@ test('a signed-in Zone Work page looks up its attached Realm discussion through 
   const costs: Array<{ request: string; budget: FusekiReadBudget;
     initialCalls: number; initialBytes: number; probes: Record<string, number> }> = [];
   let measureReads = false;
-  let moveClosingPosition = false;
+  let moveUnrelatedSequence = false;
+  let unrelatedSequenceChanges = 0;
   const positions = new WeakMap<FusekiReadBudget, number>();
   const query = home.stack.fuseki.query.bind(home.stack.fuseki);
   const queryObserver = spyOn(home.stack.fuseki, 'query').mockImplementation(async (...args) => {
@@ -64,14 +65,17 @@ test('a signed-in Zone Work page looks up its attached Realm discussion through 
       cost.probes[probe] = (cost.probes[probe] ?? 0) + 1;
     }
     const result = await query(...args);
-    // A moving closing graph fence exercises real retries and budget debit;
-    // it does not synthesize a Disclosure error or bypass its owner.
-    if (moveClosingPosition && budget && request?.includes('/about-thread?')
-      && /SELECT \?epoch \?sequence WHERE/.test(sparql)) {
+    // Dataset sequence is diagnostic; selected target revisions and the epoch
+    // remain unchanged while the opening and closing target probes differ.
+    if (moveUnrelatedSequence && budget && request?.includes('/about-thread?')
+      && /SELECT \?epoch \?sequence \?r \?revision/.test(sparql)) {
       const position = (positions.get(budget) ?? 0) + 1;
       positions.set(budget, position);
-      if (position % 2 === 0) for (const row of result.results?.bindings ?? []) {
-        if (row.sequence) row.sequence.value = String(BigInt(row.sequence.value) + 1n);
+      for (const row of result.results?.bindings ?? []) {
+        if (row.sequence) {
+          row.sequence.value = String(BigInt(row.sequence.value) + BigInt(position));
+          unrelatedSequenceChanges++;
+        }
       }
     }
     return result;
@@ -245,19 +249,41 @@ test('a signed-in Zone Work page looks up its attached Realm discussion through 
       return projection;
     })).toEqual(reads[0]);
     expect(requests.slice(cachedAt).some(value => new URL(value).pathname.includes('/resources/'))).toBe(false);
-    moveClosingPosition = true;
+    moveUnrelatedSequence = true;
     const path = `/v1/realms/${local(realm.realm)}/about-thread?${new URLSearchParams({ actingSubject: actor, about: work.work })}`;
-    const refused = await call('GET', path);
+    const unchanged = await call('GET', path);
+    expect(unchanged.status).toBe(200);
+    expect(await unchanged.json()).toEqual({ realm: realm.realm, about: work.work, thread: null });
+    expect(unrelatedSequenceChanges).toBeGreaterThanOrEqual(2);
+    moveUnrelatedSequence = false;
+
+    // A real attachment withdrawal invalidates the previously observed posting
+    // basis even though the Work and its independent Realm lookup stay readable.
+    const ready = reads[0];
+    if (!ready || ready.kind !== 'ready') throw new Error('Initial discussion basis is unavailable');
+    const effects = async () => (await contentPool.query(`SELECT
+      (SELECT count(*)::int FROM content.realm_about_post_operation WHERE realm=$1 AND about=$2) AS operations,
+      (SELECT count(*)::int FROM content.reply WHERE root_target=$2) AS replies`, [realm.realm, work.work])).rows[0];
+    const beforeWithdrawal = await effects();
+    await post(`zones/${local(site.zone)}/realm-attachment-withdrawals`, { realm: realm.realm, actingSubject: actor });
+    expect(await readAboutDiscussion(main, {
+      zone: site.zone, path: routePath, signedIn: true, personal: true, actingSubject: actor,
+    })).toEqual({ kind: 'none' });
+    const refused = await call('POST', `/v1/realms/${local(realm.realm)}/about-posts`, {
+      profile: 'realm-about-post-v1', zone: ready.basis.zone, path: ready.basis.path,
+      routeRevision: ready.basis.routeRevision, about: ready.basis.about,
+      targetRevision: ready.basis.targetRevision, actingSubject: actor,
+      language: 'en', direction: 'ltr', body: 'Refuse this ended attachment',
+    });
     expect(refused.status).toBe(503);
     expect(await refused.json()).toMatchObject({ code: 'work_read_unavailable' });
-    expect(faults).toContainEqual({ request: path, owner: 'main.route.work_read_unavailable',
-      error: { name: 'WorkReadUnavailable',
-        message: 'A consistent graph read could not be obtained within its budget', stack: expect.any(String),
-        cause: { name: 'WorkReadMoved', message: 'Graph changed during the read', stack: expect.any(String) } } });
-    // The browser's budget cause is distinct from the six-attempt consistency
-    // refusal above. Exercise the exact lookup under an enclosing budget with
+    expect(await effects()).toEqual(beforeWithdrawal);
+    const independent = await call('GET', path);
+    expect(independent.status).toBe(200);
+    expect(await independent.json()).toEqual({ realm: realm.realm, about: work.work, thread: null });
+    // Resource exhaustion remains distinct from attachment movement. Exercise
+    // the exact lookup under an enclosing budget with
     // eight calls left; the closing Disclosure head probe is the ninth read.
-    moveClosingPosition = false;
     constrainLookup = true;
     const exhausted = await call('GET', path);
     expect(exhausted.status).toBe(503);

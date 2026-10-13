@@ -1018,11 +1018,28 @@ test('Navigation and theme publish together with home Content; drafts, stale cut
 }, 120_000);
 
 test('publication proofs cover the full bounded page set and fail closed on an incomplete receipt', async () => {
+  const preparationStarted = performance.now();
   const f = await fixture();
   try {
     const pages: SelectedPage[] = [];
     for (let index = 0; index < ZONE_SITE_PUBLICATION_COST.maxPages; index++) pages.push(await f.save());
-    const published = await f.json<ZoneSitePublicationReceipt>(await f.publish(pages), 201);
+    const expectedHead = (await readZoneConfiguration(f.env, f.zone)).revision;
+    const key = randomUUID(), preparedAt = await f.content.ownerPosition();
+    const preparationMs = performance.now() - preparationStarted;
+    const response = await f.publish(pages, key, expectedHead);
+    if (response.status !== 201) {
+      const metadata = await f.content.readExactMetadataBatch(pages.map(page => page.revisionId), async ids => new Set(ids));
+      const pins = await f.pool.query(`SELECT revision_id,status,pin_active FROM content.publication_preparation
+        WHERE revision_id = ANY($1::uuid[]) ORDER BY revision_id`, [pages.map(page => page.revisionId)]);
+      await Bun.write(`.temp/zone-home-page-bound-${Bun.env.REZICS_QA_RUN_ID}.json`, JSON.stringify({
+        runId: Bun.env.REZICS_QA_RUN_ID, persona: 'verified Zone editor', preparationMs, preparedAt,
+        homeDocument: f.homeDocument, request: { method: 'POST', path: `${f.path}/site-publications`,
+          idempotencyKey: key, body: { ...f.selection, pages, expectedHead, actingSubject: f.actor } },
+        response: { status: response.status, body: await response.clone().json() },
+        metadata: [...metadata], pins: pins.rows,
+      }, null, 2));
+    }
+    const published = await f.json<ZoneSitePublicationReceipt>(response, 201);
     expect(published.pages).toHaveLength(pages.length);
     expect(boundPages(published.pages)).toEqual(expect.arrayContaining(boundPages(pages)));
     expect((await readZoneSitePublicationReceipt(f.env, published.receipt))?.pages).toEqual(published.pages);
