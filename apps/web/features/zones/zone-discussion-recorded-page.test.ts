@@ -38,6 +38,50 @@ function replay(
   return { seen, main: browserMainApi('https://recorded.invalid', { anonymous: true, fetcher }) };
 }
 
+function recordedLookup(answer: unknown): {
+  realm: string;
+  about: string;
+  thread: { reply: string; rootRevision: string } | null;
+} {
+  if (!answer || typeof answer !== 'object') throw new Error('Recorded about-thread missing');
+  const value = answer as { realm?: unknown; about?: unknown; thread?: unknown };
+  if (typeof value.realm !== 'string' || typeof value.about !== 'string') {
+    throw new Error('Recorded about-thread is incomplete');
+  }
+  if (value.thread === null) return { realm: value.realm, about: value.about, thread: null };
+  if (!value.thread || typeof value.thread !== 'object') {
+    throw new Error('Recorded thread pointer missing');
+  }
+  const thread = value.thread as { reply?: unknown; rootRevision?: unknown };
+  if (typeof thread.reply !== 'string' || typeof thread.rootRevision !== 'string') {
+    throw new Error('Recorded thread pointer is incomplete');
+  }
+  return {
+    realm: value.realm,
+    about: value.about,
+    thread: { reply: thread.reply, rootRevision: thread.rootRevision },
+  };
+}
+
+function recordedRefusal(answer: unknown): {
+  type: string;
+  title: string;
+  status: 404;
+  code: string;
+} {
+  if (!answer || typeof answer !== 'object') throw new Error('Recorded refusal missing');
+  const problem = answer as { type?: unknown; title?: unknown; status?: unknown; code?: unknown };
+  if (
+    typeof problem.type !== 'string' ||
+    typeof problem.title !== 'string' ||
+    problem.status !== 404 ||
+    typeof problem.code !== 'string'
+  ) {
+    throw new Error('Recorded refusal is incomplete');
+  }
+  return { type: problem.type, title: problem.title, status: 404, code: problem.code };
+}
+
 function recordedName(
   value: unknown,
 ): NonNullable<Extract<ZoneDiscussionEntryInput['header'], { ok: true }>['name']> {
@@ -72,7 +116,7 @@ test('the recorded attached discussion names its thread, and a missing body stay
     ['about-thread'].get({
       query: { about: lookupUrl.searchParams.get('about')!, actingSubject: actor },
     });
-  expect(lookup.data).toEqual(canonical.answer);
+  expect(lookup.data).toEqual(recordedLookup(canonical.answer));
   const pointer = lookup.data?.thread;
   if (!pointer) throw new Error('Recorded discussion has no thread');
   const routeAnswer = route.answer as {
@@ -132,8 +176,9 @@ test('a recorded forbidden about-thread is work_unavailable and exposes no discu
       query: { about: url.searchParams.get('about')! },
     });
   expect(lookup.data).toBeNull();
-  expect(lookup.error?.status).toBe(refused.status);
-  expect(lookup.error?.value).toEqual(refused.answer);
+  expect(refused.status).toBe(404);
+  if (lookup.error?.status !== 404) throw new Error('Recorded refusal was not unavailable');
+  expect(lookup.error.value).toEqual(recordedRefusal(refused.answer));
   const route = sample('stranger', 'current-discussion-route').answer as {
     realm: string;
     zone: string;
@@ -172,7 +217,8 @@ test('a recorded empty about-thread stays empty for the same published page', as
     ['about-thread'].get({
       query: { about: url.searchParams.get('about')! },
     });
-  expect(lookup.data).toEqual(empty.answer);
+  const recorded = recordedLookup(empty.answer);
+  expect(lookup.data).toEqual(recorded);
   expect(lookup.data?.thread).toBeNull();
   const route = sample('stranger', 'current-discussion-route').answer as {
     realm: string;
@@ -187,7 +233,7 @@ test('a recorded empty about-thread stays empty for the same published page', as
     }
   ).target;
   const header = sample('stranger', 'realm-policy').answer as { name: unknown; reviewMode: string };
-  const about = (empty.answer as { about: string }).about;
+  const about = recorded.about;
   expect(about).toBe(route.resource.id);
   expect(target.resource).toBe(about);
   const name = recordedName(header.name);
