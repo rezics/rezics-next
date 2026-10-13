@@ -2,12 +2,13 @@ import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { fromPlainText } from '@rezics/document';
 import declaration from '../../../../../scripts/qa/cases/outcomes/games/catalogue-browse-and-search-in-its-zone.ts';
-import { outcomeTest } from '../../../support/outcome-test.ts';
+import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
 setDefaultTimeout(60_000);
 type Work = { work: string; mainVersion: string };
 let sessions: PersonaSessions;
+const recording = new OutcomeRecorder(declaration);
 const short = (id: string) => id.slice(-36);
 const acting = (person: PersonaSession) => person.actingSubject
   ? `actingSubject=${encodeURIComponent(person.actingSubject)}` : '';
@@ -56,14 +57,17 @@ async function publish(game: Work) {
   }), 201);
   return selection;
 }
-async function credit(person: PersonaSession, game: Work) {
+async function credit(person: PersonaSession, game: Work, sample: ReturnType<typeof recording.session>) {
   const page = await answer<{ items: { role: string; participantKind: string; agent: string | null }[] }>(
-    person.main('GET', `/v1/works/${short(game.work)}/credits?${acting(person)}`));
+    sample('work-credits', 'GET', `/v1/works/${short(game.work)}/credits?${acting(person)}`));
   expect(page.items).toContainEqual(expect.objectContaining({
     role: 'author', participantKind: 'agent', agent: sessions.owner.actingSubject,
   }));
 }
-afterAll(async () => { await sessions?.close(); });
+afterAll(async () => {
+  try { await recording.publish(); }
+  finally { await sessions?.close(); }
+});
 
 type Selection = Awaited<ReturnType<typeof publish>>;
 type Page = { items: { id: string }[]; nextCursor: string | null; matches: { value: number; kind: string };
@@ -93,6 +97,7 @@ function adoption(selection: Selection, person: PersonaSession) {
 }
 beforeAll(async () => {
   sessions = await personaSessions('public');
+  await recording.prepare();
   const otherRealm = await fixture<{ realm: string }>(sessions.stranger.main('POST', '/v1/spaces', {
     profile: 'space-realm-v2', name: 'Unrelated synthetic catalogue Realm',
     handle: `unrelated-${randomUUID().slice(0, 12)}`, language: 'en', capabilities: ['realm'],
@@ -153,11 +158,13 @@ beforeAll(async () => {
 
 async function catalogue(name: PersonaName) {
   const person = sessions[name];
-  const home = await answer<{ kind: string; realm: string }>(person.main('GET',
+  const sample = recording.session(name, person);
+  const sampledCards = new Set<string>();
+  const home = await answer<{ kind: string; realm: string }>(sample('zone-home-route', 'GET',
     `/v1/zones/${short(sessions.zone)}/routes?path=%2F&${acting(person)}`));
   expect(home).toMatchObject({ kind: 'home', realm: sessions.realm });
   const root = `/v1/realms/${short(home.realm)}/modules/browse`;
-  expect(await answer<{ code: string }>(person.main('GET',
+  expect(await answer<{ code: string }>(sample('unsupported-query-shape', 'GET',
     `${root}?sort=relevance&limit=10&type=https%3A%2F%2Fschema.org%2FVideoGame`), 400))
     .toMatchObject({ code: 'unsupported_query_shape' });
   for (const sort of ['newest', 'updated', 'relevance']) {
@@ -165,8 +172,10 @@ async function catalogue(name: PersonaName) {
       const params = new URLSearchParams({ sort, limit: '2', type: 'https://schema.org/VideoGame', ...(q ? { q } : {}) });
       const seen: string[] = [];
       let page: Page;
+      let pageNumber = 0;
       do {
-        page = await answer<Page>(person.main('GET', `${root}?${params}`));
+        page = await answer<Page>(sample(`${q ? 'search' : 'browse'}-${sort}-${pageNumber++}`, 'GET', `${root}?${params}`));
+        for (const item of page.items) sampledCards.add(item.id);
         seen.push(...page.items.map(item => item.id));
         expect(seen.length).toBeLessThanOrEqual(games.length);
         if (page.nextCursor) params.set('cursor', page.nextCursor);
@@ -177,24 +186,24 @@ async function catalogue(name: PersonaName) {
       expect(page.query.appliedSort).toBe(sort === 'relevance' ? 'newest' : sort);
     }
   }
-  await credit(person, games[0]!);
+  await credit(person, games[0]!, sample);
   const attempt = adoption(unadoptedSelection, person);
   // The primary Realm's creator already holds its initialized adoption mandate.
   // Owning this Work supplies no such mandate in the independently owned Realm.
   if (name === 'owner') attempt.context.id = unrelatedRealm;
-  await answer(person.main('POST', '/v1/publication-selections', attempt),
+  await answer(sample('adoption-refused', 'POST', '/v1/publication-selections', attempt),
     name === 'visitor' ? 401 : 403);
   if (name === 'moderator') {
     // Joined moderation alone was refused above; this independent role supplies curation.
     await role({ kind: 'assignment', roleId: editorRole, member: person.actingSubject,
       assigned: true, validUntil: new Date(Date.now() + 3_600_000).toISOString() });
     const adopted = await answer<{ sourcePosition: { dataEpoch: string; sequence: string } }>(
-      person.main('POST', '/v1/publication-selections',
+      sample('adoption-authorized', 'POST', '/v1/publication-selections',
       adoption(unadoptedSelection, person)), 201);
     expect(adopted).toMatchObject({ work: unadopted.work, realm: sessions.realm,
       publicationDecision: unadoptedSelection.publicationDecision });
     games.push(unadopted);
-    const curated = await answer<Page>(person.main('GET',
+    const curated = await answer<Page>(sample('curated-search', 'GET',
       `${root}?${new URLSearchParams({ q: 'published but not adopted', type: 'https://schema.org/VideoGame' })}`));
     expect(curated.items.every(item => item.id === unadopted.work)).toBe(true);
     expect(curated.matches.value).toBe(curated.items.length);
@@ -212,17 +221,48 @@ async function catalogue(name: PersonaName) {
       expect(curated.matches.kind).toBe('lower-bound');
     }
   }
+  if (name === 'member') await supportingReads(person, sample, sampledCards);
 }
 
-outcomeTest(declaration, 'visitor', () => catalogue('visitor'));
+async function supportingReads(person: PersonaSession, sample: ReturnType<typeof recording.session>, cards: Set<string>) {
+  const viewer = (path: string) => `${path}${path.includes('?') ? '&' : '?'}${acting(person)}`;
+  const realm = `/v1/realms/${short(sessions.realm)}`;
+  const zone = `/v1/zones/${short(sessions.zone)}`;
+  const empty = await answer<Page>(sample('search-no-match', 'GET', `${realm}/modules/browse?${new URLSearchParams({
+    sort: 'relevance', limit: '10', type: 'https://schema.org/VideoGame', q: `${phrase}nomatch`,
+  })}`));
+  expect(empty.items).toEqual([]);
+  for (const [label, path] of [
+    ['realm-context', realm],
+    ['space-address', `/v1/addresses/resolve?${new URLSearchParams({ scope: 'space', key: short(sessions.space) })}`],
+    ['zone-presentation', `${zone}/presentation`],
+    ['facet-labels', '/v1/facets'],
+    ['joining-context', `${realm}/joining`],
+    ['follow-context', `/v1/follows/${short(sessions.realm)}?kind=realm`],
+  ] as const) await answer(sample(label, 'GET', viewer(path)));
+  await answer(sample('browse-route-fallback', 'GET', viewer(`${zone}/routes?path=browse`)), 404);
+  const states = new URLSearchParams({ works: [...cards].join(','), actingSubject: person.actingSubject! });
+  await answer(sample('card-reader-states', 'GET', `/v1/me/work-states?${states}`));
+  for (const [index, work] of games.entries()) {
+    if (!cards.has(work.work)) continue;
+    const id = short(work.work);
+    const projection = await answer<{ sections: { id: string; href: string }[] }>(
+      sample(`card-${index}-projection`, 'GET', viewer(`/v1/resources/${id}/page`)));
+    await answer(sample(`card-${index}-classifications`, 'GET', viewer(`/v1/works/${id}/classifications?scope=global`)));
+    const facts = projection.sections.find(section => section.id === 'statements');
+    if (facts) await answer(sample(`card-${index}-statements`, 'GET', viewer(facts.href)));
+  }
+}
 
-outcomeTest(declaration, 'stranger', () => catalogue('stranger'));
+outcomeTest(declaration, 'visitor', () => catalogue('visitor'), recording);
 
-outcomeTest(declaration, 'member', () => catalogue('member'));
+outcomeTest(declaration, 'stranger', () => catalogue('stranger'), recording);
 
-outcomeTest(declaration, 'owner', () => catalogue('owner'));
+outcomeTest(declaration, 'member', () => catalogue('member'), recording);
 
-outcomeTest(declaration, 'operator', () => catalogue('operator'));
+outcomeTest(declaration, 'owner', () => catalogue('owner'), recording);
 
-outcomeTest(declaration, 'moderator', () => catalogue('moderator'));
+outcomeTest(declaration, 'operator', () => catalogue('operator'), recording);
+
+outcomeTest(declaration, 'moderator', () => catalogue('moderator'), recording);
 
