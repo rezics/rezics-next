@@ -73,7 +73,6 @@ export interface AnswerContract {
   paths: Record<string, { parameters?: (Parameter | Reference)[] } & Record<string, unknown>>;
   components?: unknown;
 }
-const pointerPart = (value: string) => value.replaceAll('~', '~0').replaceAll('/', '~1');
 const sampleSchema = {
   type: 'object', additionalProperties: false,
   required: ['label', 'operationId', 'method', 'path', 'status', 'answer', 'headers'],
@@ -206,15 +205,20 @@ export class AnswerRecordValidator {
           if (parameter.in !== 'query' && parameter.in !== 'path') continue;
           const values = parameter.in === 'query' ? url.searchParams.getAll(parameter.name) :
             pathValues[parameter.name] === undefined ? [] : [pathValues[parameter.name]!];
-          const pointer = `/path/${parameter.in}/${pointerPart(parameter.name)}`;
-          if (!values.length) { if (parameter.required) reject(pointer, 'Required parameter is missing'); continue; }
+          const name = `${parameter.in} parameter ${parameter.name}`;
+          if (!values.length) { if (parameter.required) reject('/path', `${name} is required`); continue; }
           if (parameter.schema === undefined) continue;
           const validator = this.validator(parameter.schema);
           const raw = values.length === 1 ? values[0]! : values;
           // URL numbers and booleans are strings on the wire; coerce only for contract checking.
-          const coerced = typeof raw === 'string' && /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(raw)
-            ? Number(raw) : raw === 'true' ? true : raw === 'false' ? false : raw;
-          check(parameter.schema, validator.Check(raw) ? raw : coerced, pointer);
+          const coerce = (value: string) => /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(value)
+            ? Number(value) : value === 'true' ? true : value === 'false' ? false : value;
+          const coerced = typeof raw === 'string' ? coerce(raw) : raw;
+          // Form/explode array parameters remain arrays even when only one value is on the wire.
+          if (![raw, coerced, values, values.map(coerce)].some(candidate => validator.Check(candidate))) {
+            const error = validator.Errors(coerced)[1][0]!;
+            reject('/path', `${name}${error.instancePath}: ${error.message}`);
+          }
         }
         if (operation.requestBody) {
           const request = this.resolved(operation.requestBody);

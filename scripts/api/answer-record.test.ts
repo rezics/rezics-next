@@ -52,6 +52,8 @@ const contract: AnswerContract = {
   }, responses: { badQuery: { content: { 'application/problem+json': { schema: { $ref: '#/components/schemas/Problem' } } } } } },
   paths: { '/v1/browse': { get: { operationId: 'browse', parameters: [
     { name: 'limit', in: 'query', required: true, schema: { type: 'integer', minimum: 1, maximum: 20 } },
+    { name: 'type', in: 'query', schema: { type: 'array', items: { type: 'string', enum: ['Book', 'Collection'] } } },
+    { name: 'revisions', in: 'query', schema: { type: 'array', items: { type: 'integer', minimum: 0 } } },
   ], responses: {
     '200': { content: { 'application/json': { schema: { $ref: '#/components/schemas/Page' } } } },
     '400': { $ref: '#/components/responses/badQuery' },
@@ -98,6 +100,17 @@ test('names the row, persona, sample and JSON pointer on a changed nested field'
   const record = validRecord();
   record.personas.member[0]!.answer = { items: [{ kind: 'book', title: 3 }], nextCursor: null };
   expect(() => new AnswerRecordValidator(contract).validate(record)).toThrow(/row books\/browse, persona member, sample populated, \/personas\/member\/0\/answer\/items\/0/);
+});
+
+test('validates single and repeated array query values without changing their recorded wire representation', () => {
+  const record = validRecord();
+  for (const persona of answerPersonas) record.personas[persona][0]!.path = '/v1/browse?limit=10&type=Book&revisions=2&revisions=3';
+  const before = JSON.stringify(record);
+  const validator = new AnswerRecordValidator(contract);
+  validator.validate(record);
+  expect(JSON.stringify(record)).toBe(before);
+  record.personas.visitor[0]!.path = '/v1/browse?limit=10&type=Other';
+  expect(() => validator.validate(record)).toThrow('/personas/visitor/0/path: query parameter type');
 });
 
 test('rejects missing operations, wrong method/path, undeclared statuses, query bounds and invalid problems', () => {
