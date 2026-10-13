@@ -45,7 +45,8 @@ type Review = {
   rows: { index: number; version: number; source: CanonicalRow }[];
   nextCursor: number | null;
 };
-setDefaultTimeout(60_000);
+// The owner journey completes three applies, including its isolated reimport fixture.
+setDefaultTimeout(120_000);
 let people: PersonaSessions, book: string, upload: string, originals: CanonicalRow[];
 let applied: Promise<void> | undefined;
 let continuation: Promise<Page> | undefined;
