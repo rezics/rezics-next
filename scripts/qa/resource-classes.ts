@@ -50,6 +50,8 @@ export function qaResourceHeapBytes(name: QaResourceClass): number {
 
 /** Heavy files own one project each; retained data cannot accumulate in a 2 GiB shard. */
 export const integrationResourceClasses: ReadonlyMap<string, QaResourceClass> = new Map([
+  // Operator custody maintenance verifies harness-owned persistent owner volumes.
+  ['tests/qa/integration/model-custody-backfill.test.ts', 'catalogue-disk'],
   // Container restart must retain legacy RDF, and the terminal gap needs its own project.
   ['tests/qa/integration/local-read-basis.test.ts', 'catalogue-disk'],
   // Native projection restart evidence and its Lucene state must survive a container restart.

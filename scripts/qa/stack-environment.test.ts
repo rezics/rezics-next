@@ -5,10 +5,17 @@ import { startPostgresCluster } from '../../tests/qa/support/postgres-cluster.ts
 import { Client } from 'pg';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { integrationResourceClass, qaResourceClasses } from './resource-classes.ts';
 import { rawSparqlIntegrationFiles } from './isolated-integration-files.ts';
 
 const discoveryReplay = 'tests/qa/integration/discovery-read-isolation.test.ts';
 const commandOnly = 'tests/qa/integration/profile-corpus-restore.test.ts';
+
+test('model custody maintenance uses persistent harness owners within its existing test budget', () => {
+  const name = integrationResourceClass(['tests/qa/integration/model-custody-backfill.test.ts']);
+  expect(qaResourceClasses[name].storage).toBe('scale');
+  expect(qaResourceClasses[name].budgetMs).toBe(qaResourceClasses.ordinary.budgetMs);
+});
 
 test('QA saves the measured lock allocation for disposable and restored PostgreSQL', () => {
   const env = qaStackEnvironment({ REZICS_POSTGRES_MAX_LOCKS_PER_TRANSACTION: '64' });

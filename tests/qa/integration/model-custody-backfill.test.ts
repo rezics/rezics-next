@@ -21,6 +21,7 @@ import { DATASET, GRAPHS, RV, hash, initializeFreshGraph, iri, lit, prepareWorkC
   type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { RevisionCorrupt, RevisionUnavailable } from '../../../services/main/src/modules/work/history.ts';
 import { accessStateCoverage, captureGraphRecoveryCoverage } from '../../../services/main/src/modules/work/restore-lineage.ts';
+import { stackDirectory } from '../../../scripts/dev/config.ts';
 import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 class CountingObjects extends S3ImmutableObjects {
@@ -205,16 +206,8 @@ test('exact original model custody backfills retained generations with bounded r
 
     // Exercise the actual operator wrapper: credentials stay in the existing
     // stack environment, and only original build/checkpoint paths are inputs.
-    const operatorStack = join(directory, 'operator-stack');
-    mkdirSync(operatorStack, { recursive: true, mode: 0o700 });
-    const operatorEnv = { FUSEKI_URL: Bun.env.FUSEKI_URL!, FUSEKI_MAINTENANCE_TOKEN: Bun.env.FUSEKI_MAINTENANCE_TOKEN!,
-      FUSEKI_COMMAND_TOKEN: Bun.env.FUSEKI_COMMAND_TOKEN!, MAIN_DATA_EPOCH: env.lineage.dataEpoch,
-      MAIN_ROUTING_EPOCH: env.lineage.routingEpoch, MAIN_OBJECT_DIRECTORY: env.objectDirectory,
-      MAIN_S3_ENDPOINT: objectOptions.endpoint, MAIN_S3_BUCKET: objectOptions.bucket,
-      MAIN_S3_REGION: objectOptions.region ?? 'us-east-1', MAIN_S3_ACCESS_KEY: objectOptions.accessKeyId,
-      MAIN_S3_SECRET_KEY: objectOptions.secretAccessKey };
-    writeFileSync(join(operatorStack, 'dev.env'), Object.entries(operatorEnv).map(([key, value]) => `${key}=${value}`).join('\n') + '\n',
-      { mode: 0o600 });
+    const operatorStack = stackDirectory(resolve(import.meta.dir, '../../..'),
+      { profile: 'qa', runId: Bun.env.REZICS_QA_RUN_ID });
     const operatorCheckpoint = join(directory, 'operator-checkpoint.json');
     const operator = await backfillLocalDatasetModelCustody({ buildDirectories: options.buildDirectories,
       checkpoint: operatorCheckpoint, maxObjects: 64 }, operatorStack);
