@@ -37,22 +37,33 @@ import {
 // Loaded when a module actually reads Main. Importing this file must stay usable in a browser story:
 // `read.ts` reaches the server request store, and a slide with no Works never calls these.
 type RealmRead = typeof import('./read.ts');
-function lazyRead<K extends keyof RealmRead>(name: K): RealmRead[K] {
-  return ((...args: Parameters<RealmRead[K]>) => import('./read.ts').then(reads =>
-    (reads[name] as (...args: Parameters<RealmRead[K]>) => ReturnType<RealmRead[K]>)(...args))) as RealmRead[K];
+function realmReads(): Promise<RealmRead> {
+  return import('./read.ts');
 }
-const readLatestChapters = lazyRead('readLatestChapters');
-const readNewAdoptions = lazyRead('readNewAdoptions');
-const readRankings = lazyRead('readRankings');
-const readRealmWorks = lazyRead('readRealmWorks');
-const readRecentDecisions = lazyRead('readRecentDecisions');
-const readRecentlyCompleted = lazyRead('readRecentlyCompleted');
-const readRising = lazyRead('readRising');
-const readZoneDiscussions = lazyRead('readZoneDiscussions');
-const readZoneEditorLists = lazyRead('readZoneEditorLists');
-const readZoneGenres = lazyRead('readZoneGenres');
-const readZoneQuotes = lazyRead('readZoneQuotes');
-const readZoneRoute = lazyRead('readZoneRoute');
+const readLatestChapters: RealmRead['readLatestChapters'] = (...args) =>
+  realmReads().then(reads => reads.readLatestChapters(...args));
+const readNewAdoptions: RealmRead['readNewAdoptions'] = (...args) =>
+  realmReads().then(reads => reads.readNewAdoptions(...args));
+const readRankings: RealmRead['readRankings'] = (...args) =>
+  realmReads().then(reads => reads.readRankings(...args));
+const readRealmWorks: RealmRead['readRealmWorks'] = (...args) =>
+  realmReads().then(reads => reads.readRealmWorks(...args));
+const readRecentDecisions: RealmRead['readRecentDecisions'] = (...args) =>
+  realmReads().then(reads => reads.readRecentDecisions(...args));
+const readRecentlyCompleted: RealmRead['readRecentlyCompleted'] = (...args) =>
+  realmReads().then(reads => reads.readRecentlyCompleted(...args));
+const readRising: RealmRead['readRising'] = (...args) =>
+  realmReads().then(reads => reads.readRising(...args));
+const readZoneDiscussions: RealmRead['readZoneDiscussions'] = (...args) =>
+  realmReads().then(reads => reads.readZoneDiscussions(...args));
+const readZoneEditorLists: RealmRead['readZoneEditorLists'] = (...args) =>
+  realmReads().then(reads => reads.readZoneEditorLists(...args));
+const readZoneGenres: RealmRead['readZoneGenres'] = (...args) =>
+  realmReads().then(reads => reads.readZoneGenres(...args));
+const readZoneQuotes: RealmRead['readZoneQuotes'] = (...args) =>
+  realmReads().then(reads => reads.readZoneQuotes(...args));
+const readZoneRoute: RealmRead['readZoneRoute'] = (...args) =>
+  realmReads().then(reads => reads.readZoneRoute(...args));
 import { idOf, realmHref, siteHref } from './route.ts';
 import type { Loaded, MainAvatar, MainName, RankingMetric, ZonePresentationRead } from './types.ts';
 

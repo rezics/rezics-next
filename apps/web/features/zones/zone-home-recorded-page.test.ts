@@ -69,8 +69,8 @@ test('recorded published home keeps its slide, document, rights and continuation
   expect(data.navigationNext).toBeNull();
   expect(data.navigationComplete).toBe(true);
   const page = zoneHomePage(data.home);
+  if (!page || data.home == null || data.name === null) throw new Error('The recorded home document was dropped');
   expect(page).toBe(data.home);
-  if (!page || !data.home) throw new Error('The recorded home document was dropped');
   const identity = zoneHomeIdentity(data, 'en', realmMessages.home);
   expect(identity.zone.name.value).toBe(data.name);
   expect(identity.links.map(link => link.label.value)).toEqual([
@@ -87,9 +87,12 @@ test('recorded published home keeps its slide, document, rights and continuation
   expect(loaded.representedShowcases).toContain('$default');
   const hero = loaded.modules[0];
   if (!hero || hero.state.state !== 'ready' || !('slides' in hero.state.data)) throw new Error('The recorded hero did not load');
-  const slides = data.home.showcaseData?.slides ?? [];
+  const slides = (data.home.showcaseData?.slides ?? []).map(slide => {
+    if (typeof slide.title !== 'string' || !('href' in slide)) throw new Error('Recorded showcase slide has no title and href');
+    return { title: slide.title, href: slide.href };
+  });
   expect(hero.state.data.slides.map(slide => slide.title.value)).toEqual(slides.map(slide => slide.title));
-  expect(hero.state.data.slides.map(slide => slide.href)).toEqual(slides.map(slide => 'href' in slide ? slide.href : null));
+  expect(hero.state.data.slides.map(slide => slide.href)).toEqual(slides.map(slide => slide.href));
 
   const prose = zoneHomeProse(page.document, page.blocks, loaded.representedShowcases);
   const sourceBlocks = extensionBlocks(page.document);
@@ -106,7 +109,7 @@ test('recorded published home keeps its slide, document, rights and continuation
 
   const route = await readZoneRouteAnswer(main, zone, queryValue('published-home-route', 'path'));
   expect(route.ok).toBe(true);
-  if (!route.ok || route.data.kind !== 'home') throw new Error('The recorded home route was not a home');
+  if (!route.ok || route.data.kind !== 'home' || !route.data.page) throw new Error('The recorded home route was not a home');
   expect(route.data.page.document).toEqual(page.document);
 
   const revision = await readContentRevisionAnswer(main, pathId('published-content-revision'));
@@ -149,6 +152,7 @@ test('an empty published home and an empty mount keep their recorded continuatio
     moduleData: presentation.data.moduleData, slideMedia: presentation.data.slideMedia,
   }, identity.context, messages.moduleHeroCarousel);
   expect(loaded.modules).toEqual([]);
+  if (presentation.data.name === null) throw new Error('The recorded empty presentation has no name');
   expect(identity.zone.name.value).toBe(presentation.data.name);
   expect(identity.links.map(link => link.label.value)).toEqual([realmMessages.home]);
   expect(presentation.data.navigationNext).toBeNull();

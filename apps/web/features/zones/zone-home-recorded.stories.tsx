@@ -79,13 +79,19 @@ const ownerText = documentTexts(publishedHome.document)[0];
 const placeholder = publishedHome.blocks.find(block => block.status === 'placeholder');
 const resolvedBlock = publishedHome.blocks.find(block => block.status === 'resolved');
 if (!ownerText || !placeholder || !resolvedBlock) throw new Error('Recorded home is missing its text or blocks');
-const slide = published.presentation.slides[0];
-if (!slide?.title || !('href' in slide)) throw new Error('Recorded home is missing its slide');
+const recordedSlide = published.presentation.slides[0];
+if (!recordedSlide || !('href' in recordedSlide) || typeof recordedSlide.title !== 'string') {
+  throw new Error('Recorded home is missing its slide');
+}
+const slide = { title: recordedSlide.title, href: recordedSlide.href };
 const mount = published.navigation[0];
 if (!mount) throw new Error('Recorded home is missing its mount');
 const draftPath = queryValue('unpublished-route-refused', 'path');
-const refusalTitle = (sample('unpublished-route-refused').answer as { title?: string }).title;
-if (!refusalTitle) throw new Error('Recorded route refusal has no title');
+function refusalTitle(): string {
+  const title = (sample('unpublished-route-refused').answer as { title?: string }).title;
+  if (typeof title !== 'string') throw new Error('Recorded route refusal has no title');
+  return title;
+}
 
 function privateDraftText() {
   const draft = record.personas.owner?.find(item => item.label === 'draft-content-revision');
@@ -233,8 +239,8 @@ async function expectRefusal(canvasElement: HTMLElement) {
   await expect(canvas.queryByText(ownerText!)).toBeNull();
   await expect(canvas.queryByText(placeholder!.fallback)).toBeNull();
   await expect(canvas.queryByText(privateDraftText())).toBeNull();
-  await expect(canvas.queryByRole('heading', { name: refusalTitle })).toBeNull();
-  await expect(canvas.queryByText(refusalTitle)).toBeNull();
+  await expect(canvas.queryByRole('heading', { name: refusalTitle() })).toBeNull();
+  await expect(canvas.queryByText(refusalTitle())).toBeNull();
 }
 
 async function expectLoading(canvasElement: HTMLElement) {
