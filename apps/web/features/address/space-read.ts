@@ -66,7 +66,9 @@ export async function readSpacePage(
     const landingBody = landing?.ok ? await landing.json() : null;
     return classifyRealmSpacePage(realm, { ok: header.ok, status: header.status, body: headerBody },
       landing ? { ok: landing.ok, status: landing.status, body: landingBody } : null);
-  } catch {
+  } catch (error) {
+    // A replay miss must stay visible. Production's own read still becomes unavailable.
+    if (options.read) throw error;
     return { kind: 'unavailable' };
   }
 }

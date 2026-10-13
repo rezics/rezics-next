@@ -22,6 +22,15 @@ const config: StorybookConfig = {
   async viteFinal(config) {
     config.plugins ??= [];
     config.plugins.push(tailwindcss());
+    // Server readers call serviceOrigin, which reads process.env. Stories run in the browser.
+    // Shadow process only in that module so the rest of the bundle keeps Vite's NODE_ENV.
+    config.plugins.push({
+      name: 'story-server-env',
+      transform(code, id) {
+        if (!id.includes('/features/config/env.ts')) return;
+        return `const process = globalThis.process ?? { env: {} };\n${code}`;
+      },
+    });
     // vinext supplies next/navigation and next/link in the app; stories get stand-ins.
     config.resolve ??= {};
     config.resolve.alias = [
@@ -29,6 +38,9 @@ const config: StorybookConfig = {
         : Object.entries(config.resolve.alias ?? {}).map(([find, replacement]) => ({ find, replacement }))),
       { find: /^next\/navigation$/, replacement: local('./next-navigation.ts') },
       { find: /^next\/link$/, replacement: local('./next-link.tsx') },
+      { find: /^next\/headers$/, replacement: local('./next-headers.ts') },
+      // Production readers import the worker IP check. node:net cannot load in a browser story.
+      { find: /^(?:.*\/)?worker\/client-ip\.ts$/, replacement: local('./client-ip.ts') },
     ];
     config.optimizeDeps ??= {};
     config.optimizeDeps.include = [...new Set([...(config.optimizeDeps.include ?? []), ...arkEntries,

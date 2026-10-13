@@ -36,26 +36,40 @@ const visitorLanding = [
   { label: 'private-realm-hidden', state: 'error' },
   { label: 'request-landing', state: 'populated' },
 ] as const satisfies readonly RecordedSelection[];
-const memberJoined = [
-  { label: 'joined-realm-header', state: 'populated' },
-  { label: 'joining-policy', state: 'populated' },
-  { label: 'realm-follow', state: 'populated' },
+const joinedFrame = [
+  { label: 'frame-session-agent', state: 'populated' },
+  { label: 'frame-agent-choices', state: 'populated' },
+  { label: 'frame-acting-contexts', state: 'populated' },
+  { label: 'frame-acting-agent-profile', state: 'populated' },
+  { label: 'frame-person-preferences', state: 'populated' },
+  { label: 'frame-address', state: 'populated' },
+  { label: 'frame-public-realm', state: 'error' },
+  { label: 'frame-realm', state: 'populated' },
+  { label: 'frame-joining', state: 'populated' },
+  { label: 'frame-follow', state: 'populated' },
+  { label: 'frame-platform-access', state: 'populated' },
+] as const satisfies readonly RecordedSelection[];
+const ownerSession = [
+  { label: 'session-agent', state: 'populated' },
+  { label: 'agent-choices', state: 'populated' },
+  { label: 'acting-contexts', state: 'populated' },
+  { label: 'acting-agent-profile', state: 'populated' },
 ] as const satisfies readonly RecordedSelection[];
 const ownerRequests = [
+  ...ownerSession,
   { label: 'request-address-space-missing', state: 'error' },
   { label: 'request-inbox', state: 'populated' },
   { label: 'management-realm-header', state: 'populated' },
   { label: 'management-site-absent', state: 'error' },
-  { label: 'acting-agent-profile', state: 'populated' },
   { label: 'requester-name-stranger', state: 'populated' },
   { label: 'requester-name-operator', state: 'populated' },
 ] as const satisfies readonly RecordedSelection[];
 const ownerEmpty = [
+  ...ownerSession,
   { label: 'request-address-space-missing', state: 'error' },
   { label: 'request-inbox-empty', state: 'empty' },
   { label: 'management-realm-header', state: 'populated' },
   { label: 'management-site-absent', state: 'error' },
-  { label: 'acting-agent-profile', state: 'populated' },
 ] as const satisfies readonly RecordedSelection[];
 const ownerSearch = [
   ...ownerRequests,
@@ -65,7 +79,7 @@ const ownerSearch = [
 function Recorded({ persona, selections, surface }: {
   persona: AnswerPersona; selections: readonly RecordedSelection[]; surface: MembershipSurface;
 }) {
-  return <RecordedMembershipPage persona={persona} selections={selections} surface={surface} />;
+  return <RecordedMembershipPage record={record} persona={persona} selections={selections} surface={surface} />;
 }
 
 const meta = {
@@ -102,7 +116,7 @@ async function expectLoading(canvasElement: HTMLElement, name: string) {
 
 async function expectJoined(canvasElement: HTMLElement, persona: 'member' | 'moderator') {
   const canvas = within(canvasElement);
-  const name = text(persona, 'joined-realm-header', 'name');
+  const name = text(persona, 'frame-realm', 'name');
   await expect(canvas.findByRole('heading', { level: 1, name })).resolves.toBeVisible();
   await expect(canvas.getByRole('button', { name: new RegExp(`${relationships.joined}.*${name}.*${relationships.leave}`) })).toBeVisible();
   await expect(canvas.getByRole('button', { name: `${relationships.notifications}: ${relationships.highlights}` })).toBeVisible();
@@ -133,38 +147,23 @@ async function expectRequests(canvasElement: HTMLElement, label: string) {
 export const VisitorLanding: Story = { play: async ({ canvasElement }) => { await expectLanding(canvasElement); } };
 export const VisitorLandingPhone: Story = { globals: phone, play: async ({ canvasElement }) => { await expectLanding(canvasElement); } };
 
-/** Visitor: the Realm header is held unanswered. */
+/** Visitor: the Realm header is held unanswered. The route does not read admission basis before sign-in. */
 export const VisitorLoading: Story = {
   args: { selections: [{ label: 'private-realm-hidden', state: 'loading' }] },
   play: async ({ canvasElement }) => { await expectLoading(canvasElement, text('visitor', 'request-landing', 'name')); },
 };
-export const VisitorLoadingPhone: Story = {
-  ...VisitorLoading,
-  globals: phone,
-};
-
-/** Visitor: the recorded basis refusal keeps its problem sentence. */
-export const VisitorRefusal: Story = {
-  args: { selections: [{ label: 'join-basis-sign-in-required', state: 'error' }], surface: 'basis' },
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    await expect(canvas.findByRole('alert')).resolves.toHaveTextContent(text('visitor', 'join-basis-sign-in-required', 'title'));
-    await expect(canvas.queryByRole('link', { name: access.signIn })).toBeNull();
-    await expectNoOverflow(canvasElement);
-  },
-};
-export const VisitorRefusalPhone: Story = { ...VisitorRefusal, globals: phone };
+export const VisitorLoadingPhone: Story = { ...VisitorLoading, globals: phone };
 
 /** Member: the recorded joined Realm, with its follow level. */
 export const MemberJoined: Story = {
-  args: { persona: 'member', selections: memberJoined, surface: 'joined' },
+  args: { persona: 'member', selections: joinedFrame, surface: 'joined' },
   play: async ({ canvasElement }) => { await expectJoined(canvasElement, 'member'); },
 };
 export const MemberJoinedPhone: Story = { ...MemberJoined, globals: phone };
 
 /** Moderator: joined access, without admission administration. */
 export const ModeratorJoined: Story = {
-  args: { persona: 'moderator', selections: memberJoined, surface: 'joined' },
+  args: { persona: 'moderator', selections: joinedFrame, surface: 'joined' },
   play: async ({ canvasElement }) => { await expectJoined(canvasElement, 'moderator'); },
 };
 export const ModeratorJoinedPhone: Story = { ...ModeratorJoined, globals: phone };
@@ -213,11 +212,11 @@ export const OwnerSearchEmpty: Story = {
 };
 export const OwnerSearchEmptyPhone: Story = { ...OwnerSearchEmpty, globals: phone };
 
-/** Owner: the address read is held unanswered. The profile names the acting Person and is not requested while that read waits. */
+/** Owner: the address read is held unanswered. The session reads name the acting Person before that hold. */
 export const OwnerLoading: Story = {
   args: { persona: 'owner', selections: [
+    ...ownerSession,
     { label: 'request-address-space-missing', state: 'loading' },
-    { label: 'acting-agent-profile', state: 'populated' },
   ], surface: 'requests' },
   parameters: { route: { pathname: '/en/manage/r/recorded/requests' } },
   play: async ({ canvasElement }) => { await expectLoading(canvasElement, text('owner', 'management-realm-header', 'name')); },

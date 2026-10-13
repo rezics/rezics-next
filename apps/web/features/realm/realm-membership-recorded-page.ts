@@ -1,28 +1,26 @@
+import type { ReactNode } from 'react';
 import type { AnswerPersona, AnswerRecord, AnswerSample } from '../../../../scripts/api/answer-record.ts';
 import type { UiLocale } from '../../i18n/define.ts';
-import { classifyRealmSpacePage } from '../address/space-page.ts';
-import { browserMainApi } from '../api/browser.ts';
-import type { AgentOption } from '../auth/acting-identity.ts';
+import { joinRequestsBody } from '../../app/[locale]/manage/r/[realm]/requests/page.tsx';
+import { realmManagementFrame } from '../../app/[locale]/manage/r/[realm]/layout.tsx';
+import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
+import { readAgentProfile } from '../auth/agent-profile.ts';
+import { agentOptions, identityOptions, resolveSessionAgent, type AgentOption } from '../auth/acting-identity.ts';
+import { discoverActingContexts, discoverAgents, readMainSessionAgent } from '../auth/session.ts';
 import type { MainClient } from '../discover/types.ts';
-import { commandFailure, type CommandFailure } from '../manage/commands.ts';
-import { readAgents, readRealmHeader, settle } from '../manage/read.ts';
-import { realmEditSite } from '../manage/realm-site.ts';
-import { readRequestsAtAddress, type JoinBasis, type RequestPage } from '../manage/settings-api.ts';
-import { problemCode, uuidOf, type RealmHeader as ManageRealmHeader } from '../manage/types.ts';
+import { spaceAccessApi } from '../manage/settings-api.ts';
+import { readRequestsAtAddress } from '../manage/settings-api.ts';
 import type { RecordedSelection } from '../stories/recorded-fetch.ts';
-import { readMembership, type Membership } from './membership-state.ts';
-import type { RealmHeader } from './types.ts';
-
-/** Which recorded page the production route can reach. */
-export type MembershipSurface = 'landing' | 'joined' | 'requests' | 'basis';
-
-export type RecordedMembershipView =
-  | { kind: 'join'; page: Extract<ReturnType<typeof classifyRealmSpacePage>, { kind: 'join' }>['page'] }
-  | { kind: 'joined'; header: RealmHeader; membership: Membership; actingSubject: string }
-  | { kind: 'requests'; space: string; realm: string; page: RequestPage; header: ManageRealmHeader; agent: AgentOption; siteHref: string | null }
-  | { kind: 'refusal'; failure: CommandFailure; code?: string; problemTitle: string | null };
+import { loadRealmView, privateJoinPage, RealmFrame, type RealmReplay } from './realm-page.tsx';
+import { realmHref } from './route.ts';
 
 const recordedOrigin = 'https://recorded.invalid';
+/** Opaque session key. Recorded reads match the path, not this header. */
+const recordedSessionKey = '00000000-0000-4000-8000-000000000001';
+const recordedToken = 'recorded';
+
+/** Which production route the story reaches. Basis is not one of them. */
+export type MembershipSurface = 'landing' | 'joined' | 'requests';
 
 export function recordedSample(record: AnswerRecord, persona: AnswerPersona, label: string): AnswerSample {
   const found = record.personas[persona].filter(sample => sample.label === label);
@@ -38,7 +36,7 @@ export function recordedSubject(path: string): string | null {
   return new URL(path, recordedOrigin).searchParams.get('actingSubject');
 }
 
-/** Realm and acting Person named by the selected samples. Agent profile paths name neither Realm. */
+/** Realm named by the selected samples. Agent profile paths name no Realm. */
 export function recordedIdentity(record: AnswerRecord, persona: AnswerPersona, selections: readonly RecordedSelection[]):
   { realm: string; actingSubject: string | null } {
   let realm: string | null = null;
@@ -52,89 +50,67 @@ export function recordedIdentity(record: AnswerRecord, persona: AnswerPersona, s
   return { realm, actingSubject };
 }
 
-function problemTitle(value: unknown): string | null {
-  if (!value || typeof value !== 'object' || !('title' in value)) return null;
-  const title = (value as { title: unknown }).title;
-  return typeof title === 'string' && title.length > 0 ? title : null;
+export function recordedRead(fetcher: typeof fetch): RealmReplay['read'] {
+  return (path: string) => fetcher(new URL(`${BFF_PREFIX}${path}`, recordedOrigin));
 }
 
-function raise(probe: () => string | null) {
-  const missed = probe();
-  if (missed) throw new Error(missed);
-}
-
-function headerOf(answer: { data: unknown; error: { status: number; value: unknown } | null; status?: number }):
-  { ok: boolean; status: number; body: unknown } {
-  const status = answer.status ?? answer.error?.status ?? 0;
-  return { ok: answer.data != null, status, body: answer.data ?? answer.error?.value ?? null };
-}
-
-/** The same basis read as membership administration, keeping the problem sentence the command adapter drops. */
-export async function readAdmissionBasis(main: MainClient, realm: string, actingSubject: string):
-  Promise<Extract<RecordedMembershipView, { kind: 'refusal' }> | { kind: 'basis'; data: JoinBasis }> {
-  const answer = await main.v1.realms({ realm: uuidOf(realm) })['join-requests'].basis.get({ query: { actingSubject } });
-  if (answer.data) return { kind: 'basis', data: answer.data };
-  const code = problemCode(answer.error?.value);
-  return { kind: 'refusal', failure: commandFailure(answer.error?.status ?? answer.status ?? 0, code),
-    ...(code ? { code } : {}), problemTitle: problemTitle(answer.error?.value) };
+export function recordedReplay(fetcher: typeof fetch, signedIn: boolean): RealmReplay {
+  return {
+    fetch: fetcher, read: recordedRead(fetcher), personal: browserMainApi(recordedOrigin, { fetcher }),
+    origin: recordedOrigin, signedIn, ...(signedIn ? { token: recordedToken } : {}), languages: 'en',
+  };
 }
 
 /**
- * Membership and admission the community and request routes already read.
- * `probe` reports a replay that matched nothing, including a failure the typed
- * client turned into an empty result.
+ * The management session's acting Person, from the same reads `readSession` makes
+ * after the cookie record. Stories have no session cookie, so the token is explicit.
  */
-export async function loadRecordedMembership(main: MainClient, input: {
-  surface: MembershipSurface; realm: string; actingSubject: string | null; locale: UiLocale;
-  /** Replaying fetch for the unsigned landing. A signed client with no acting Person is not a public read. */
-  fetcher?: typeof fetch;
-}, probe: () => string | null = () => null): Promise<RecordedMembershipView> {
-  if (input.surface === 'basis') {
-    if (!input.actingSubject) throw new Error('Recorded admission basis names no acting Person');
-    const basis = await readAdmissionBasis(main, input.realm, input.actingSubject);
-    raise(probe);
-    if (basis.kind === 'basis') throw new Error('Recorded admission basis succeeded; this page shows its refusal');
-    return basis;
-  }
-  if (input.surface === 'landing') {
-    if (!input.fetcher) throw new Error('Recorded join landing has no public reader');
-    const publicRealm = browserMainApi(recordedOrigin, { anonymous: true, fetcher: input.fetcher });
-    const header = headerOf(await publicRealm.v1.realms({ realm: input.realm }).get({ query: {} }));
-    raise(probe);
-    const landing = !header.ok && [401, 403, 404].includes(header.status)
-      ? headerOf(await publicRealm.v1.realms({ realm: uuidOf(input.realm) })['join-page'].get({ query: {} })) : null;
-    raise(probe);
-    const classified = classifyRealmSpacePage(input.realm, header, landing);
-    if (classified.kind !== 'join') throw new Error(`Recorded join landing resolved to ${classified.kind}`);
-    return { kind: 'join', page: classified.page };
-  }
-  if (input.surface === 'joined') {
-    if (!input.actingSubject) throw new Error('Recorded joined Realm names no acting Person');
-    const header = headerOf(await main.v1.realms({ realm: input.realm }).get({ query: { actingSubject: input.actingSubject } }));
-    raise(probe);
-    const classified = classifyRealmSpacePage(input.realm, header, null);
-    if (classified.kind !== 'realm') throw new Error(`Recorded joined Realm resolved to ${classified.kind}`);
-    const membership = await readMembership(main, classified.header.id, input.actingSubject);
-    raise(probe);
-    return { kind: 'joined', header: classified.header, membership, actingSubject: input.actingSubject };
-  }
-  if (!input.actingSubject) throw new Error('Recorded join requests name no acting Person');
-  const actingSubject = input.actingSubject;
-  const requests = await readRequestsAtAddress(main, input.realm, actingSubject);
-  raise(probe);
-  if (!requests.ok) throw new Error(`Recorded join requests failed: ${requests.failure}`);
-  const [header, siteHref, names] = await Promise.all([
-    readRealmHeader(main, input.realm, input.locale, actingSubject),
-    realmEditSite({
-      zone: () => settle(() => main.v1.realms({ realm: input.realm }).zone.get({ query: { actingSubject } })),
-      editor: () => Promise.reject(new Error('No recorded Zone editor read')),
-    }),
-    readAgents(main, [actingSubject], actingSubject),
+export async function recordedManagementAgent(fetcher: typeof fetch, locale: UiLocale):
+  Promise<{ agent: AgentOption; actingSubject: string }> {
+  const [discovery, listed, state] = await Promise.all([
+    discoverActingContexts(recordedToken, fetcher),
+    discoverAgents(recordedToken, locale, fetcher),
+    readMainSessionAgent(recordedToken, recordedSessionKey, fetcher),
   ]);
-  raise(probe);
-  if (!header.ok) throw new Error(`Recorded management Realm failed: ${header.failure}`);
-  const agent = names[actingSubject];
-  return { kind: 'requests', space: requests.data.space, realm: requests.data.realm, page: requests.data.page,
-    header: header.data, siteHref, agent: { iri: actingSubject, label: agent?.label ?? null, handle: agent?.handle ?? null,
-      kind: null, path: null } };
+  const publishing = discovery ? agentOptions(discovery) : [];
+  const identities = listed ? identityOptions(listed, publishing) : null;
+  const resolved = resolveSessionAgent(identities, state?.sessionAgent.eligible ? state.sessionAgent.actingSubject : null);
+  if (resolved.status !== 'selected') throw new Error('Recorded management session has no acting Person');
+  const profile = await readAgentProfile(resolved.agent.iri, recordedToken, fetcher);
+  if (profile) {
+    resolved.agent.label = profile.displayName;
+    resolved.agent.avatarUrl = profile.avatarUrl;
+  }
+  return { agent: resolved.agent, actingSubject: resolved.agent.iri };
 }
+
+/** The community route: `loadRealmView`, then its join page or Zone frame. */
+export async function recordedRealmRoute(replay: RealmReplay, realm: string, locale: UiLocale): Promise<ReactNode> {
+  // The signed-in shell reads the session before the Realm view. There is no session cookie to replay.
+  if (replay.signedIn) await recordedManagementAgent(replay.fetch, locale);
+  const view = await loadRealmView(realm, locale, {}, 'community', replay);
+  if (view.kind === 'missing' || view.kind === 'unavailable') {
+    throw new Error(`Recorded Realm resolved to ${view.kind}`);
+  }
+  if (view.kind === 'join') {
+    // Signed out, this route does not read the session. The server reader builds a process-backed
+    // client; the story already knows there is no acting Person.
+    return privateJoinPage(view.page, locale, realmHref(locale, realm), { actingSubject: null });
+  }
+  // Resolve the server frame here. The story renders its result; it does not host a second reader.
+  return RealmFrame({ view, tab: 'discussions', locale, search: {}, children: null });
+}
+
+/** The request route inside its management frame. Both use the production readers. */
+export async function recordedRequestsRoute(main: MainClient, fetcher: typeof fetch, realm: string, locale: UiLocale):
+  Promise<ReactNode> {
+  const { agent, actingSubject } = await recordedManagementAgent(fetcher, locale);
+  const href = `/manage/r/${realm}/requests`;
+  const body = await joinRequestsBody({
+    main, realm, actingSubject, locale, signInHref: '/auth/start', href,
+    apiFor: (space, resolved) => spaceAccessApi(() => main, space, resolved, actingSubject),
+  });
+  return realmManagementFrame({ main, realm, address: realm, actingSubject, agent, locale, token: recordedToken, children: body });
+}
+
+export { readRequestsAtAddress };
