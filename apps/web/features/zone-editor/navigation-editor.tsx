@@ -27,7 +27,7 @@ import { confirmPublicationReview, readSavedPublicationSelection, reviewedPublic
 import { PublicationReviewPanel } from './publication-review-panel.tsx';
 import type { ZoneEditorMessages } from './messages.ts';
 import {
-  canPublish,
+  preparedHomeDocument, canPublish,
   isDirty,
   publicationChoice,
   reduceEditor,
@@ -60,7 +60,6 @@ const fieldClass =
  */
 export function ZoneNavigationEditor({
   zoneId,
-  zoneIri,
   actingSubject,
   locale,
   copy,
@@ -238,7 +237,7 @@ export function ZoneNavigationEditor({
   }
 
   function applyPublish(chosen: PublicationChoice, round: WriteRound) {
-    return commitCommand(round, (key) => pages.current!.publish(chosen, actingSubject, key)).then(
+    return commitCommand(round, (key) => pages.current!.publish(chosen, actingSubject, key, zoneId)).then(
       (result) => {
         if (result.ok)
           putPage({
@@ -278,7 +277,7 @@ export function ZoneNavigationEditor({
   }
 
   function siteChoice(navHead: string): PublicationChoice | null {
-    const choice = publicationChoice(pageRef.current, zoneIri);
+    const choice = publicationChoice(pageRef.current);
     if (
       !choice || !draftReady || !pageReady ||
       !stateRef.current.complete ||
@@ -383,7 +382,7 @@ export function ZoneNavigationEditor({
   function publishReviewed() {
     if (!review || busy || !publishable) return;
     const confirmed = confirmPublicationReview(review);
-    const choice = reviewedPublicationChoice(pageRef.current, zoneIri, confirmed);
+    const choice = reviewedPublicationChoice(pageRef.current, confirmed);
     if (!choice) return;
     setReview(null);
     putPage({ type: 'heads', zoneHead: review.selection.zoneHead, navigationRevision: review.selection.navigationRevision });
@@ -543,7 +542,7 @@ export function ZoneNavigationEditor({
         signInHref={signInHref}
         ready={draftReady && pageReady}
         review={review}
-        reviewPublishDisabled={!!busy || !publishable}
+        reviewPublishDisabled={!!busy || !publishable || !!review && !reviewedPublicationChoice(page, confirmPublicationReview(review))}
         onReview={reviewAgain}
         onRefresh={refreshAndPublish}
         onPublishReviewed={publishReviewed}
@@ -846,7 +845,7 @@ function isNavigationState(value: unknown): value is NavigationState {
 function isEditorState(value: unknown): value is EditorState {
   if (!value || typeof value !== 'object') return false;
   const state = value as Partial<EditorState>;
-  return typeof state.value === 'string' && typeof state.zoneHead === 'string'
+  return preparedHomeDocument(state) !== null && typeof state.value === 'string' && typeof state.zoneHead === 'string'
     && typeof state.navigationRevision === 'string' && typeof state.expectedHead !== 'undefined'
     && !!state.notice && typeof state.notice === 'object';
 }

@@ -121,7 +121,7 @@ export async function commitCommand<T>(round: WriteRound, write: (key: string) =
 
 export interface ZoneAuthoringClient {
   saveDraft(body: DraftWire, key: string): Promise<WriteResult<SavedDraft>>;
-  publish(choice: PublicationChoice, actingSubject: string, key: string): Promise<WriteResult<PublishedSite>>;
+  publish(choice: PublicationChoice, actingSubject: string, key: string, zoneId: string): Promise<WriteResult<PublishedSite>>;
   /** The saved home draft, including the epoch a publish has to name. */
   readDraft(zoneId: string, actingSubject: string): Promise<WriteResult<LoadedDraft>>;
   /** Configuration head and the navigation revision a publish must name for both cuts. */
@@ -136,8 +136,8 @@ export function browserZoneAuthoring(main: ReturnType<typeof browserMainApi> = b
     async saveDraft(body, key) {
       return savedOf(await post(() => main.v1['content-drafts'].post(body, { headers: { 'idempotency-key': key } })));
     },
-    async publish(choice, actingSubject, key) {
-      return publishedOf(await post(() => main.v1.zones({ id: zoneUuid(choice.page) })['site-publications'].post(
+    async publish(choice, actingSubject, key, zoneId) {
+      return publishedOf(await post(() => main.v1.zones({ id: zoneId })['site-publications'].post(
         publicationWire(choice, actingSubject), { headers: { 'idempotency-key': key } })));
     },
     async readDraft(zoneId, actingSubject) {
@@ -236,10 +236,6 @@ export function choiceWire(choice: DraftChoice): DraftWire {
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const digest = /^[0-9a-f]{64}$/;
 const iriPattern = /^https:\/\/rezics\.com\/id\/([0-9a-f-]{36})$/;
-
-function zoneUuid(page: string): string {
-  return iriPattern.exec(page)?.[1] ?? page;
-}
 
 async function post(call: () => Promise<HttpAnswer>): Promise<WriteResult<unknown>> {
   try {

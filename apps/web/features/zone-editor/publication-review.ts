@@ -1,10 +1,11 @@
 import { readCompleteZoneNavigation, type ZoneAuthoringClient, type ZoneNavigationClient, type ZoneThemeClient, type WriteResult } from './api.ts';
 import type { PublicationChoice, EditorState } from './model.ts';
-import { canPublish, publicationChoice } from './model.ts';
+import { canPublish, preparedHomeDocument, publicationChoice } from './model.ts';
 import type { SiteLink } from './navigation.ts';
 import { readPresentation, type StructuralThemeChoice, type ZonePresentationBaseline } from './theme.ts';
 
 export interface SavedPublicationSelection {
+  homeDocument: string;
   zoneHead: string;
   navigationRevision: string;
   navigationId: string;
@@ -41,6 +42,9 @@ export async function readSavedPublicationSelection(zoneId: string, actingSubjec
   if (!navigation.ok) return navigation;
   if (!configuration.ok) return configuration;
 
+  const homeDocument = preparedHomeDocument(configuration.data.configuration);
+  if (!homeDocument) return { ok: false, failure: 'unavailable' };
+
   if (configuration.data.revision !== heads.data.zoneHead
     || navigation.data.head !== heads.data.navigationRevision
     || navigation.data.zoneHead !== heads.data.zoneHead) {
@@ -57,6 +61,7 @@ export async function readSavedPublicationSelection(zoneId: string, actingSubjec
   return {
     ok: true,
     data: {
+      homeDocument,
       zoneHead: heads.data.zoneHead,
       navigationRevision: heads.data.navigationRevision,
       navigationId: navigation.data.navigation,
@@ -68,11 +73,12 @@ export async function readSavedPublicationSelection(zoneId: string, actingSubjec
 }
 
 /** Build a new publish choice only from a selection the author has already reviewed. */
-export function reviewedPublicationChoice(state: EditorState, zoneIri: string,
+export function reviewedPublicationChoice(state: EditorState,
   review: PublicationReview): PublicationChoice | null {
   if (!review.confirmed) return null;
   if (!canPublish(state)) return null;
-  const page = publicationChoice(state, zoneIri);
+  if (state.homeDocument !== review.selection.homeDocument) return null;
+  const page = publicationChoice(state);
   if (!page) return null;
   return {
     ...page,

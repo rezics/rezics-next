@@ -20,6 +20,7 @@ import { ZoneEditorDraftProvider } from './draft-provider.tsx';
 
 const zoneId = '00000000-0000-4000-8000-000000000301';
 const zoneIri = `https://rezics.com/id/${zoneId}`;
+const homeDocument = 'https://rezics.com/id/00000000-0000-4000-8000-000000000899';
 const actor = 'https://rezics.com/id/00000000-0000-4000-8000-000000000302';
 const navigation = 'https://rezics.com/id/00000000-0000-4000-8000-000000000303';
 const zoneHead = 'https://rezics.com/id/00000000-0000-4000-8000-000000000304';
@@ -47,7 +48,7 @@ interface Call {
 function opening(document: DocumentSnapshot | null, revisionId: string | null): EditorState {
   const model = authoringModel(
     {
-      revision: zoneHead,
+      configuration: { homeDocument }, revision: zoneHead,
       name: 'Harbor notes',
       language: 'en',
       direction: readingDirection,
@@ -627,7 +628,7 @@ function NavigationPage({ mode }: { mode: NavigationMode }) {
   });
   const [themeApi] = useState<ZoneThemeClient>(() => ({
     async readConfiguration() {
-      return { ok: true, data: { revision: zoneHead, configuration: { presentation: {
+      return { ok: true, data: { revision: zoneHead, configuration: { homeDocument, presentation: {
         profile: 'zone-presentation-v2', preset: 'clean', tokens: presetTokens.clean, navigation: [], modules: [], slides: [],
       } } } };
     },

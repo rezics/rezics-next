@@ -18,7 +18,7 @@ import { confirmPublicationReview, readSavedPublicationSelection, reviewedPublic
 import { PublicationReviewPanel } from './publication-review-panel.tsx';
 import type { ZoneEditorMessages } from './messages.ts';
 import {
-  blankDocument, canPublish, draftChoice, isDirty, publicationChoice, publicationStatus, reduceEditor,
+  preparedHomeDocument, blankDocument, canPublish, draftChoice, isDirty, publicationChoice, publicationStatus, reduceEditor,
   type DraftChoice, type EditorState, type PublicationChoice,
 } from './model.ts';
 
@@ -28,7 +28,7 @@ const choiceClass = 'h-auto min-h-9 w-auto whitespace-normal px-3 sm:h-9 sm:whit
  * Write, save and publish one Zone home page. A lost response retries the same command key.
  * A stale save keeps the text in the field and waits for the author to choose.
  */
-export function ZoneHomeEditor({ zoneId, zoneIri, actingSubject, locale, copy, initial, editable, document, previewHref, siteHref, signInHref, api }: {
+export function ZoneHomeEditor({ zoneId, actingSubject, locale, copy, initial, editable, document, previewHref, siteHref, signInHref, api, navigationApi, themeApi }: {
   zoneId: string;
   zoneIri: string;
   actingSubject: string;
@@ -41,6 +41,8 @@ export function ZoneHomeEditor({ zoneId, zoneIri, actingSubject, locale, copy, i
   siteHref: string;
   signInHref: string;
   api?: ZoneAuthoringClient;
+  navigationApi?: ZoneNavigationClient;
+  themeApi?: ZoneThemeClient;
 }) {
   const [state, dispatch, draftReady] = useZoneEditorDraft('home', initial, isDirty, isEditorState);
   const [canEdit, setCanEdit] = useState(editable);
@@ -63,8 +65,8 @@ export function ZoneHomeEditor({ zoneId, zoneIri, actingSubject, locale, copy, i
   const navigation = useRef<ZoneNavigationClient | null>(null);
   const theme = useRef<ZoneThemeClient | null>(null);
   if (!client.current) client.current = api ?? browserZoneAuthoring();
-  if (!navigation.current) navigation.current = browserZoneNavigation();
-  if (!theme.current) theme.current = browserZoneTheme();
+  if (!navigation.current) navigation.current = navigationApi ?? browserZoneNavigation();
+  if (!theme.current) theme.current = themeApi ?? browserZoneTheme();
   const saveLane = useZoneEditorRef<ReturnType<typeof commandLane<DraftChoice, WriteResult<SavedDraft>>> | null>('home-save-lane', null);
   const publishLane = useZoneEditorRef<ReturnType<typeof commandLane<PublicationChoice, WriteResult<{ zoneHead: string; replayed: boolean }>>> | null>('home-publish-lane', null);
   const saveChoice = useZoneEditorRef<DraftChoice | null>('home-save-choice', null);
@@ -73,13 +75,13 @@ export function ZoneHomeEditor({ zoneId, zoneIri, actingSubject, locale, copy, i
   if (!publishLane.current) publishLane.current = commandLane({ ok: false, failure: 'unavailable' });
   const dirty = isDirty(state) || saveChoice.current !== null;
   useZoneEditorExitActions('home', async () => {
-    if (!canEdit || inflight.current || stateRef.current.notice.kind === 'stale') return false;
+    if (!canEdit || !preparedHomeDocument(stateRef.current) || inflight.current || stateRef.current.notice.kind === 'stale') return false;
     if (publishChoice.current) {
       const published = await publishLane.current!.submit(publishChoice.current, applyPublish);
       if (!published.ok) return false;
     }
     if (!saveChoice.current && !isDirty(stateRef.current)) return true;
-    saveChoice.current ??= draftChoice(stateRef.current, zoneIri, actingSubject);
+    saveChoice.current ??= draftChoice(stateRef.current, actingSubject);
     const result = await saveLane.current!.submit(saveChoice.current, applySave);
     return result.ok && !isDirty(stateRef.current);
   }, () => {
@@ -115,7 +117,7 @@ export function ZoneHomeEditor({ zoneId, zoneIri, actingSubject, locale, copy, i
   }
 
   function applyPublish(chosen: PublicationChoice, round: WriteRound) {
-    return commitCommand(round, key => client.current!.publish(chosen, actingSubject, key)).then(result => {
+    return commitCommand(round, key => client.current!.publish(chosen, actingSubject, key, zoneId)).then(result => {
       if (result.ok) put({ type: 'published', zoneHead: result.data.zoneHead, revisionId: chosen.revisionId, replayed: result.data.replayed });
       else if (result.failure === 'stale') { setReview(null); put({ type: 'publish-stale' }); }
       else put({ type: 'failed', failure: result.failure });
@@ -125,13 +127,13 @@ export function ZoneHomeEditor({ zoneId, zoneIri, actingSubject, locale, copy, i
   }
 
   function save(next: EditorState = stateRef.current) {
-    if (!canEdit || busy || !draftReady) return;
-    saveChoice.current ??= draftChoice(next, zoneIri, actingSubject);
+    if (!canEdit || !preparedHomeDocument(next) || busy || !draftReady) return;
+    saveChoice.current ??= draftChoice(next, actingSubject);
     track('save', saveLane.current!.submit(saveChoice.current, applySave));
   }
 
   function publish(next: EditorState = stateRef.current) {
-    const choice = publishChoice.current ?? publicationChoice(next, zoneIri);
+    const choice = publishChoice.current ?? publicationChoice(next);
     if (!choice || busy || !draftReady) return;
     publishChoice.current = choice;
     track('publish', publishLane.current!.submit(choice, applyPublish));
@@ -177,7 +179,7 @@ export function ZoneHomeEditor({ zoneId, zoneIri, actingSubject, locale, copy, i
   function publishReviewed() {
     if (!review || busy) return;
     const confirmed = confirmPublicationReview(review);
-    const choice = reviewedPublicationChoice(stateRef.current, zoneIri, confirmed);
+    const choice = reviewedPublicationChoice(stateRef.current, confirmed);
     if (!choice) return;
     setReview(null);
     put({ type: 'heads', zoneHead: review.selection.zoneHead,
@@ -205,7 +207,7 @@ export function ZoneHomeEditor({ zoneId, zoneIri, actingSubject, locale, copy, i
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <h2 id="zone-home-title" className="font-semibold text-lg tracking-tight sm:text-xl">{copy.homeTitle}</h2>
         <EditorActions copy={copy} canEdit={canEdit} busy={busy}
-          saveDisabled={!draftReady || !!busy || !dirty || state.notice.kind === 'stale'}
+          saveDisabled={!draftReady || !preparedHomeDocument(state) || !!busy || !dirty || state.notice.kind === 'stale'}
           publishDisabled={!draftReady || !!busy || saveChoice.current !== null || !canPublish(state) || state.notice.kind === 'publish-stale'}
           onSave={() => save()} onPublish={() => publish()} previewHref={previewHref} siteHref={siteHref} />
       </div>
@@ -231,7 +233,7 @@ export function ZoneHomeEditor({ zoneId, zoneIri, actingSubject, locale, copy, i
 function isEditorState(value: unknown): value is EditorState {
   if (!value || typeof value !== 'object') return false;
   const state = value as Partial<EditorState>;
-  return typeof state.value === 'string' && typeof state.zoneHead === 'string'
+  return preparedHomeDocument(state) !== null && typeof state.value === 'string' && typeof state.zoneHead === 'string'
     && typeof state.navigationRevision === 'string' && typeof state.expectedHead !== 'undefined'
     && !!state.notice && typeof state.notice === 'object';
 }
@@ -261,7 +263,8 @@ function EditorNotice({ copy, state, busy, signInHref, review, onSaveOver, onLoa
         {!review ? <Button variant="outline" size="sm" className={choiceClass} disabled={!!busy}
           isLoading={busy === 'load'} onClick={onRefresh}>{copy.refreshAndPublish}</Button> : null}
       </NoticeAlert>
-      {review ? <PublicationReviewPanel selection={review.selection} copy={copy} busy={!!busy || !canPublish(state)} onPublish={onPublishReviewed} /> : null}
+      {review ? <PublicationReviewPanel selection={review.selection} copy={copy}
+        busy={!!busy || !reviewedPublicationChoice(state, confirmPublicationReview(review))} onPublish={onPublishReviewed} /> : null}
     </>;
   }
   const failure = failureCopy(copy, notice.kind);

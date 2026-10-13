@@ -10,6 +10,7 @@ import type { SavedPreviewReaders } from './saved-preview-frame.ts';
 
 const zoneId = '00000000-0000-4000-8000-000000000801';
 const zoneIri = `https://rezics.com/id/${zoneId}`;
+const homeDocument = 'https://rezics.com/id/00000000-0000-4000-8000-000000000899';
 const zoneHead = 'https://rezics.com/id/00000000-0000-4000-8000-000000000802';
 export const savedPreviewTheme = 'https://rezics.com/id/00000000-0000-4000-8000-000000000803';
 export const savedPreviewDigest = 'cd'.repeat(32);
@@ -21,7 +22,7 @@ export function savedPreviewAuthoring(realm: boolean): Extract<ZoneAuthoringLoad
   preview.presentation.tokens = { ...preview.presentation.tokens, density: 'compact', pageSurface: 'cards' };
   const document = fromPlainText('This saved page survives an unavailable public home.', 'blocks');
   const model = authoringModel({
-    revision: zoneHead, name: 'Saved harbor notes', language: 'en', direction: direction('en', 'Saved harbor notes'), preview,
+    configuration: { homeDocument }, revision: zoneHead, name: 'Saved harbor notes', language: 'en', direction: direction('en', 'Saved harbor notes'), preview,
     draft: { variantId: 'urn:rezics:variant:00000000-0000-4000-8000-000000000804',
       revisionId: '00000000-0000-4000-8000-000000000805',
       language: { kind: 'tag', tag: 'en', originalTag: 'en' },

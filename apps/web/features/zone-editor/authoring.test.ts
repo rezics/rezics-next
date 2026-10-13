@@ -9,6 +9,7 @@ import {
 
 const zoneId = '00000000-0000-4000-8000-000000000201';
 const zoneIri = `https://rezics.com/id/${zoneId}`;
+const homeDocument = 'https://rezics.com/id/00000000-0000-4000-8000-000000000899';
 const actor = 'https://rezics.com/id/00000000-0000-4000-8000-000000000202';
 const navigation = 'https://rezics.com/id/00000000-0000-4000-8000-000000000203';
 const zoneHead = 'https://rezics.com/id/00000000-0000-4000-8000-000000000204';
@@ -23,7 +24,7 @@ const zone = { revision: navigation, ownerRevision: zoneHead };
 
 function showcase(document: unknown, revisionId: string | null) {
   return {
-    revision: zoneHead, name: 'Harbor notes', language: 'en', direction: readingDirection,
+    configuration: { homeDocument }, revision: zoneHead, name: 'Harbor notes', language: 'en', direction: readingDirection,
     draft: {
       variantId, revisionId, language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: readingDirection,
       document, byteDigest: revisionId ? digest : null, editable: true,
@@ -68,7 +69,7 @@ test('loading the saved page replaces the text only then', () => {
   const start = reduceEditor(state(), { type: 'edit', value: 'Kept until load' });
   const savedPage = blankDocument();
   const loaded = reduceEditor(start, {
-    type: 'loaded', value: savedPage, expectedHead: head, basis: null, variantId, language: start.language,
+    type: 'loaded', homeDocument, value: savedPage, expectedHead: head, basis: null, variantId, language: start.language,
     direction: start.direction, zoneHead, navigationRevision: navigation, publishedRevisionId: null,
   });
   expect(loaded.value).toBe(savedPage);
@@ -83,7 +84,7 @@ test('loading a saved home adopts configuration and navigation heads atomically 
   const nextNavigation = 'https://rezics.com/id/00000000-0000-4000-8000-000000000212';
   const loaded = reduceEditor(start, { type: 'loaded', ...start, expectedHead: head,
     zoneHead: nextZoneHead, navigationRevision: nextNavigation });
-  const choice = publicationChoice(loaded, zoneIri);
+  const choice = publicationChoice(loaded);
   if (!choice) throw new Error('publishable loaded home');
   expect(publicationWire(choice, actor)).toMatchObject({
     expectedHead: nextZoneHead, navigationRevision: nextNavigation, routesRevision: nextNavigation,
@@ -118,7 +119,7 @@ test('a first empty page can be saved and cannot be published', () => {
 
 test('a save that lands keeps a keystroke made while it was in flight', () => {
   const start = state();
-  const choice = draftChoice(start, zoneIri, actor);
+  const choice = draftChoice(start, actor);
   const typed = reduceEditor(start, { type: 'edit', value: 'Still in the field' });
   const saved = reduceEditor(typed, {
     type: 'saved', captured: choice.captured, savedValue: choice.savedValue,
@@ -132,15 +133,17 @@ test('a save that lands keeps a keystroke made while it was in flight', () => {
 
 test('the publication names one structure revision for routes and navigation, and the saved basis', () => {
   const start = state();
-  const choice = publicationChoice(start, zoneIri);
+  expect(start.homeDocument).not.toBe(zoneIri);
+  const choice = publicationChoice(start);
   if (!choice) throw new Error('publishable');
   const body = publicationWire(choice, actor);
   expect(body.routesRevision).toBe(navigation);
   expect(body.navigationRevision).toBe(navigation);
   expect(body.expectedHead).toBe(zoneHead);
-  expect(body.pages).toEqual([{ page: zoneIri, variantId, revisionId: revision, byteDigest: digest, contentEpoch: epoch }]);
-  const wire = draftWire(draftChoice(start, zoneIri, actor));
+  expect(body.pages).toEqual([{ page: homeDocument, variantId, revisionId: revision, byteDigest: digest, contentEpoch: epoch }]);
+  const wire = draftWire(draftChoice(start, actor));
   expect(wire.profile).toBe('content-text-v1');
+  expect(wire.resourceId).toBe(homeDocument);
   expect(wire.expectedHead).toBe(revision);
   expect(wire).not.toHaveProperty('captured');
   expect(wire.document.profile).toBe('blocks');

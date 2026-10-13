@@ -31,6 +31,8 @@ export type Notice =
   | { kind: AuthoringFailure };
 
 export interface EditorState {
+  /** Content identity from the authorized prepared configuration; the Zone owns the commands. */
+  homeDocument: string;
   /** Serialized document the author is writing. A stale refusal never replaces it. */
   value: string;
   /** The last snapshot the server holds, or null when it has no draft yet. */
@@ -103,6 +105,7 @@ export type EditorEvent =
   | { type: 'stale'; currentHead: string | null }
   | { type: 'retarget'; currentHead: string }
   | { type: 'loaded'; value: string; expectedHead: string | null; basis: DraftBasis | null; embeds?: string[];
+      homeDocument: string;
       variantId: string; language: ContentLanguage; direction: 'ltr' | 'rtl' | 'none';
       zoneHead: string; navigationRevision: string; publishedRevisionId: string | null }
   | { type: 'published'; zoneHead: string; revisionId?: string; replayed: boolean }
@@ -118,7 +121,7 @@ export function isDirty(state: EditorState): boolean {
 
 /** Readers receive the saved snapshot, so a publish waits until the field matches it and the page has text. */
 export function canPublish(state: EditorState): boolean {
-  return Boolean(state.basis && state.savedValue !== null && !isDirty(state) && hasBodyContent(state.value));
+  return Boolean(preparedHomeDocument(state) && state.basis && state.savedValue !== null && !isDirty(state) && hasBodyContent(state.value));
 }
 
 export function publicationStatus(state: EditorState): 'private' | 'live' | 'behind' {
@@ -151,6 +154,7 @@ export function reduceEditor(state: EditorState, event: EditorEvent): EditorStat
     case 'loaded':
       return {
         ...state,
+        homeDocument: event.homeDocument,
         value: event.value,
         savedValue: event.basis ? event.value : null,
         expectedHead: event.expectedHead,
@@ -190,7 +194,9 @@ function clearsOnEdit(notice: Notice): boolean {
   return notice.kind === 'saved' || notice.kind === 'published' || notice.kind === 'loaded';
 }
 
-export function draftChoice(state: EditorState, resourceId: string, actingSubject: string): DraftChoice {
+export function draftChoice(state: EditorState, actingSubject: string): DraftChoice {
+  const resourceId = preparedHomeDocument(state);
+  if (!resourceId) throw new Error('Prepared home document is unavailable');
   const document = editorDocument(state.value);
   return {
     resourceId,
@@ -220,13 +226,13 @@ export function draftWire(choice: DraftChoice): DraftWire {
   };
 }
 
-export function publicationChoice(state: EditorState, zoneIri: string): PublicationChoice | null {
+export function publicationChoice(state: EditorState): PublicationChoice | null {
   if (!canPublish(state) || !state.basis) return null;
   return {
     routesRevision: state.navigationRevision,
     navigationRevision: state.navigationRevision,
     zoneHead: state.zoneHead,
-    page: zoneIri,
+    page: state.homeDocument,
     variantId: state.variantId,
     revisionId: state.basis.revisionId,
     byteDigest: state.basis.byteDigest,
@@ -264,6 +270,7 @@ export interface ZoneAuthoringModel {
 }
 
 interface LoadedDraft {
+  homeDocument: string;
   value: string;
   expectedHead: string | null;
   basis: DraftBasis | null;
@@ -294,6 +301,7 @@ export function authoringModel(showcase: unknown, zone: unknown, zoneId: string,
     editable: draft.editable,
     document: draft.document,
     state: {
+      homeDocument: draft.homeDocument,
       value: draft.value,
       savedValue: draft.basis ? draft.value : null,
       expectedHead: draft.expectedHead,
@@ -314,10 +322,11 @@ export function authoringModel(showcase: unknown, zone: unknown, zoneId: string,
 export function loadedDraft(showcase: unknown, zone: unknown): LoadedDraft | null {
   const row = record(showcase);
   const draft = record(row?.draft);
+  const homeDocument = preparedHomeDocument(row?.configuration);
   const variantId = typeof draft?.variantId === 'string' ? draft.variantId : '';
   const zoneHead = ownerHead(zone) ?? (typeof row?.revision === 'string' && iri.test(row.revision) ? row.revision : '');
   const navigation = navigationOf(zone);
-  if (!variant.test(variantId) || !iri.test(zoneHead) || !navigation) return null;
+  if (!homeDocument || !variant.test(variantId) || !iri.test(zoneHead) || !navigation) return null;
   const language = languageOf(draft?.language, typeof row?.language === 'string' ? row.language : 'und');
   const direction = directionOf(draft?.direction, row?.direction);
   const notes = draft?.notes !== undefined;
@@ -334,6 +343,7 @@ export function loadedDraft(showcase: unknown, zone: unknown): LoadedDraft | nul
     ? published.revisionId : null;
   const serverEditable = draft?.editable !== false;
   return {
+    homeDocument,
     value,
     expectedHead: revisionId,
     basis,
@@ -347,6 +357,13 @@ export function loadedDraft(showcase: unknown, zone: unknown): LoadedDraft | nul
     editable: serverEditable && !notes && embeds !== 'invalid' && (draft?.document == null || document !== null),
     document,
   };
+}
+
+/** Missing or malformed prepared identity cannot be replaced by the Zone identity. */
+export function preparedHomeDocument(configuration: unknown): string | null {
+  const home = record(configuration)?.homeDocument;
+  return typeof home === 'string' && home.startsWith('https://rezics.com/id/')
+    && uuid.test(home.slice('https://rezics.com/id/'.length)) ? home : null;
 }
 
 function navigationOf(zone: unknown): string | null {

@@ -14,6 +14,7 @@ import type { ZonePresentationBaseline } from './theme.ts';
 const zoneId = '00000000-0000-4000-8000-000000000501';
 const actor = 'https://rezics.com/id/00000000-0000-4000-8000-000000000502';
 const zoneIri = `https://rezics.com/id/${zoneId}`;
+const homeDocument = 'https://rezics.com/id/00000000-0000-4000-8000-000000000899';
 const zoneHead = 'https://rezics.com/id/00000000-0000-4000-8000-000000000503';
 const navigationRevision = 'https://rezics.com/id/00000000-0000-4000-8000-000000000504';
 const navigationId = 'https://rezics.com/id/00000000-0000-4000-8000-000000000505';
@@ -31,7 +32,7 @@ class MemoryStorage implements DraftStorage {
 
 function homeState(): EditorState {
   const model = authoringModel({
-    revision: zoneHead,
+    configuration: { homeDocument }, revision: zoneHead,
     name: 'Harbor site',
     language: 'en',
     direction: direction('en', 'Harbor site'),
@@ -87,7 +88,7 @@ function selectionClients(overrides: {
     async continueNavigation() { return { ok: false as const, failure: 'unavailable' as const }; },
   } as Pick<ZoneNavigationClient, 'readNavigation' | 'continueNavigation'>;
   const theme = {
-    async readConfiguration() { return { ok: true as const, data: { revision: currentZoneHead, configuration: { presentation } } }; },
+    async readConfiguration() { return { ok: true as const, data: { revision: currentZoneHead, configuration: { homeDocument, presentation } } }; },
   } as Pick<ZoneThemeClient, 'readConfiguration'>;
   return { authoring, navigation, theme };
 }
@@ -140,11 +141,11 @@ describe('saved Zone preview selection', () => {
       presentationNavigation: [{ label: 'Field notes', href: '/field-notes' }],
       navigation: [{ name: 'Journal', segment: 'journal' }],
     });
-    expect(reviewedPublicationChoice(local, zoneIri, staged)).toBeNull();
+    expect(reviewedPublicationChoice(local, staged)).toBeNull();
 
     const current = homeState();
     const confirmed = confirmPublicationReview(staged);
-    const choice = reviewedPublicationChoice(current, zoneIri, confirmed);
+    const choice = reviewedPublicationChoice(current, confirmed);
     expect(choice).toMatchObject({ zoneHead: latestZoneHead, navigationRevision: latestNavigationRevision,
       routesRevision: latestNavigationRevision });
   });
