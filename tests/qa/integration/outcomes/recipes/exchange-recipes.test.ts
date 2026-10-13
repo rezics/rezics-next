@@ -1,11 +1,12 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import exchange from '../../../../../scripts/qa/cases/outcomes/recipes/exchange-recipes.ts';
-import { outcomeTest } from '../../../support/outcome-test.ts';
+import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
 setDefaultTimeout(60_000);
 let sessions: PersonaSessions;
+const recording = new OutcomeRecorder(exchange);
 type Recipe = { work: string; mainVersion: string; structure: string; revision: string; workHead: string };
 type Export = { revision: string; recipe: { recipeIngredient: Record<string, unknown>[]; recipeInstructions: unknown[] }; sourceObservations: string[]; residuals: unknown[] };
 let source: Recipe;
@@ -22,15 +23,16 @@ async function answer<T>(request: Promise<Response>, status = 200): Promise<T> {
   expect(response.status, `${response.status}: ${raw}`).toBe(status);
   return JSON.parse(raw) as T;
 }
-async function destination(person: PersonaSession): Promise<Recipe> {
-  const work = await answer<{ work: string; mainVersion: string }>(person.main('POST', '/v1/works', {
+async function destination(person: PersonaSession, sample?: ReturnType<typeof recording.session>, prefix = 'destination'): Promise<Recipe> {
+  const request: ReturnType<typeof recording.session> = sample ?? ((_label, ...args) => person.main(...args));
+  const work = await answer<{ work: string; mainVersion: string }>(request(`${prefix}-work`, 'POST', '/v1/works', {
     profile: 'metadata-only-v1', title: 'Original recipe exchange fixture', language: 'en',
     semanticTypes: ['https://schema.org/Recipe'], authoring: 'own-work', actingSubject: person.actingSubject,
   }), 201);
-  const structure = await answer<{ structure: string; revision: string }>(person.main('POST', '/v1/compositions', {
+  const structure = await answer<{ structure: string; revision: string }>(request(`${prefix}-composition`, 'POST', '/v1/compositions', {
     profile: 'recipe-composition', work: work.work, mainVersion: work.mainVersion, actingSubject: person.actingSubject,
   }), 201);
-  const head = await answer<{ revision: string }>(person.main('GET', `/v1/works/${short(work.work)}/scalar-value${query(person)}`));
+  const head = await answer<{ revision: string }>(request(`${prefix}-work-head`, 'GET', `/v1/works/${short(work.work)}/scalar-value${query(person)}`));
   return { ...work, ...structure, workHead: head.revision };
 }
 const publish = (recipe: Recipe, person: PersonaSession) => ({
@@ -41,6 +43,7 @@ const publish = (recipe: Recipe, person: PersonaSession) => ({
 });
 beforeAll(async () => {
   sessions = await personaSessions('private');
+  await recording.prepare();
   const owner = sessions.owner;
   source = await destination(owner);
   const path = `/v1/compositions/${short(source.structure)}/changes`;
@@ -70,52 +73,58 @@ beforeAll(async () => {
   retained.revision = imported.revision;
   retained.observation = imported.sourceObservation;
 }, 180_000);
-afterAll(async () => { await sessions?.close(); });
+afterAll(async () => {
+  try { await recording.publish(); }
+  finally { await sessions?.close(); }
+});
 
 async function exchangeRecipe(name: PersonaName) {
   const person = sessions[name];
-  const publicPage = await answer<{ revision: string; ingredients: { originalText: string }[] }>(person.main('GET', `/v1/recipes/works/${short(source.work)}${query(person)}`));
+  const sample = recording.session(name, person);
+  await exchangeReads(name);
+  const publicPage = await answer<{ revision: string; ingredients: { originalText: string }[] }>(sample('public-recipe', 'GET', `/v1/recipes/works/${short(source.work)}${query(person)}`));
   expect(publicPage.revision).toBe(source.revision);
   expect(publicPage.ingredients.map(item => item.originalText)).toEqual(['flour', 'flour']);
-  const credits = await answer<{ items: { role: string; agent: string }[] }>(person.main('GET', `/v1/works/${short(source.work)}/credits${query(person)}`));
+  const credits = await answer<{ items: { role: string; agent: string }[] }>(sample('public-credits', 'GET', `/v1/works/${short(source.work)}/credits${query(person)}`));
   expect(credits.items.filter(item => item.role === 'author').map(item => item.agent)).toEqual([sessions.owner.actingSubject!]);
   if (name === 'visitor') {
-    await answer(person.main('GET', exportPath(source, sessions.owner)), 401);
-    await answer(person.main('POST', importPath(source, sessions.owner), sourceExport.recipe), 401);
-    await answer(person.main('POST', `/v1/recipes/${short(source.structure)}/imports`, {
+    await answer(sample('export-authentication-required', 'GET', exportPath(source, sessions.owner)), 401);
+    await answer(sample('file-import-authentication-required', 'POST', importPath(source, sessions.owner), sourceExport.recipe), 401);
+    await answer(sample('observation-import-authentication-required', 'POST', `/v1/recipes/${short(source.structure)}/imports`, {
       actingSubject: sessions.owner.actingSubject, expectedHead: source.revision, sourceObservation: retained.observation,
     }), 401);
     return;
   }
-  const exported = await answer<Export>(person.main('GET', exportPath(source, person)));
+  const exported = await answer<Export>(sample('schema-org-export', 'GET', exportPath(source, person)));
   expect(exported.revision).toBe(source.revision);
   expect(exported.recipe).toEqual(sourceExport.recipe);
   expect(exported.recipe.recipeIngredient.map(item => item.value)).toEqual(['3/2', '1/4']);
   expect(exported.recipe.recipeIngredient.map(item => item.inLanguage)).toEqual(['fr', 'fr']);
   expect(exported.residuals).toHaveLength(2);
   if (name !== 'owner') {
-    await answer(person.main('POST', importPath(source, person), exported.recipe), 403);
+    await answer(sample('peer-file-import-denied', 'POST', importPath(source, person), exported.recipe), 403);
     const observationRequest = { actingSubject: person.actingSubject, expectedHead: source.revision, sourceObservation: retained.observation };
-    const hidden = await person.main('POST', `/v1/recipes/${short(source.structure)}/imports`, observationRequest);
-    const absent = await person.main('POST', `/v1/recipes/${short(source.structure)}/imports`, { ...observationRequest, sourceObservation: `https://rezics.com/id/${randomUUID()}` });
+    const hidden = await sample('observation-import-concealed', 'POST', `/v1/recipes/${short(source.structure)}/imports`, observationRequest);
+    const absent = await sample('observation-import-absent', 'POST', `/v1/recipes/${short(source.structure)}/imports`, { ...observationRequest, sourceObservation: `https://rezics.com/id/${randomUUID()}` });
     expect(hidden.status).toBe(404);
     expect([hidden.status, await hidden.text()]).toEqual([absent.status, await absent.text()]);
   }
   if (name === 'moderator' || name === 'operator') return;
-  const own = await destination(person);
+  const own = await destination(person, sample, 'file-destination');
+  await answer(sample('recipe-empty', 'GET', `/v1/recipes/works/${short(own.work)}${query(person)}`));
   const key = randomUUID();
-  const imported = await answer<{ revision: string; sourceObservation: string; replayed: boolean }>(person.main('POST', importPath(own, person), exported.recipe, key), 201);
+  const imported = await answer<{ revision: string; sourceObservation: string; replayed: boolean }>(sample('file-import', 'POST', importPath(own, person), exported.recipe, key), 201);
   expect(imported.replayed).toBe(false);
-  expect(await answer(person.main('POST', importPath(own, person), exported.recipe, key), 200))
+  expect(await answer(sample('file-import-replay', 'POST', importPath(own, person), exported.recipe, key), 200))
     .toMatchObject({ ...imported, replayed: true });
-  await answer(person.main('POST', importPath(own, person), exported.recipe), 409);
+  await answer(sample('file-import-stale', 'POST', importPath(own, person), exported.recipe), 409);
   const importedRecipe = { ...own, revision: imported.revision };
-  const roundTrip = await answer<Export>(person.main('GET', exportPath(importedRecipe, person)));
+  const roundTrip = await answer<Export>(sample('round-trip-export', 'GET', exportPath(importedRecipe, person)));
   expect(roundTrip.recipe).toEqual(exported.recipe);
   expect(roundTrip.residuals.map(item => (item as { text: string }).text)).toEqual(['flour', 'flour']);
   expect(roundTrip.sourceObservations).toEqual([imported.sourceObservation]);
   type Page = { revision: string; ingredients: { originalText: string; amount: { numerator: number; denominator: number } }[]; occurrences: { occurrence: string; role: string; sourceKey?: string }[] };
-  const page = await answer<Page>(person.main('GET', `/v1/recipes/works/${short(own.work)}${query(person)}`));
+  const page = await answer<Page>(sample('imported-recipe', 'GET', `/v1/recipes/works/${short(own.work)}${query(person)}`));
   expect(page.revision).toBe(imported.revision);
   expect(page.ingredients.map(item => item.amount)).toEqual([{ numerator: 3, denominator: 2 }, { numerator: 1, denominator: 4 }]);
   const lines = page.occurrences.filter(item => item.role === 'ingredient');
@@ -123,23 +132,34 @@ async function exchangeRecipe(name: PersonaName) {
   expect(new Set(lines.map(item => item.occurrence)).size).toBe(2);
   expect(page.occurrences.every(item => item.sourceKey?.startsWith(imported.sourceObservation))).toBe(true);
   // File possession carries no publication grant or claim of original authorship.
-  expect(await answer<{ code: string }>(person.main('POST', '/v1/work-publications', publish(importedRecipe, person)), 403))
+  expect(await answer<{ code: string }>(sample('publication-denied', 'POST', '/v1/work-publications', publish(importedRecipe, person)), 403))
     .toMatchObject({ code: 'authority_denied' });
-  await answer(sessions.visitor.main('GET', `/v1/recipes/works/${short(own.work)}`), 404);
-  const second = await destination(person);
+  await answer(recording.session(name, sessions.visitor)('imported-recipe-concealed', 'GET', `/v1/recipes/works/${short(own.work)}`), 404);
+  const second = await destination(person, sample, 'observation-destination');
   const observationCommand = { actingSubject: person.actingSubject, expectedHead: second.revision,
     sourceObservation: imported.sourceObservation };
   const observationKey = randomUUID();
-  const importedObservation = await answer<{ revision: string }>(person.main('POST', `/v1/recipes/${short(second.structure)}/imports`, observationCommand, observationKey));
-  expect(await answer(person.main('POST', `/v1/recipes/${short(second.structure)}/imports`, observationCommand, observationKey)))
+  const importedObservation = await answer<{ revision: string }>(sample('observation-import', 'POST', `/v1/recipes/${short(second.structure)}/imports`, observationCommand, observationKey));
+  expect(await answer(sample('observation-import-replay', 'POST', `/v1/recipes/${short(second.structure)}/imports`, observationCommand, observationKey)))
     .toMatchObject({ revision: importedObservation.revision });
-  const observationExport = await answer<Export>(person.main('GET', exportPath({ ...second, revision: importedObservation.revision }, person)));
+  const observationExport = await answer<Export>(sample('observation-export', 'GET', exportPath({ ...second, revision: importedObservation.revision }, person)));
   expect(observationExport.recipe).toEqual(roundTrip.recipe);
   expect(observationExport.sourceObservations).toEqual([imported.sourceObservation]);
 }
-outcomeTest(exchange, 'visitor', () => exchangeRecipe('visitor'));
-outcomeTest(exchange, 'stranger', () => exchangeRecipe('stranger'));
-outcomeTest(exchange, 'member', () => exchangeRecipe('member'));
-outcomeTest(exchange, 'owner', () => exchangeRecipe('owner'));
-outcomeTest(exchange, 'moderator', () => exchangeRecipe('moderator'));
-outcomeTest(exchange, 'operator', () => exchangeRecipe('operator'));
+// Exchange controls live inside RecipeEditPage and share its initial reads.
+async function exchangeReads(name: PersonaName) {
+  const person = sessions[name], sample = recording.session(name, person), id = short(source.work);
+  await answer(sample('editor-authority', 'GET', `/v1/resources/${id}/page${query(person)}`));
+  await answer(sample('editor-work-header', 'GET', `/v1/works/${id}${query(person)}`));
+  if (name !== 'owner') return;
+  await answer(sample('editor-resource-summary', 'GET', `/v1/resources/${id}${query(person)}`));
+  await answer(sample('editor-metadata-empty', 'GET', `/v1/works/${id}/metadata${query(person)}`));
+  await answer(sample('editor-notes-empty', 'GET', `/v1/me/contributions${query(person)}&limit=20`));
+}
+
+outcomeTest(exchange, 'visitor', () => exchangeRecipe('visitor'), recording);
+outcomeTest(exchange, 'stranger', () => exchangeRecipe('stranger'), recording);
+outcomeTest(exchange, 'member', () => exchangeRecipe('member'), recording);
+outcomeTest(exchange, 'owner', () => exchangeRecipe('owner'), recording);
+outcomeTest(exchange, 'moderator', () => exchangeRecipe('moderator'), recording);
+outcomeTest(exchange, 'operator', () => exchangeRecipe('operator'), recording);
