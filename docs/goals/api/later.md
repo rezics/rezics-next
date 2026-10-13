@@ -44,6 +44,7 @@ positions are in the archived end-of-run tables
 
 ## Product
 
+- Schema.org Recipe export for outside readers (search engines and recipe managers): decide text recipeIngredient compatibility when a scope row asks for it; current exchange proof covers our enriched PropertyValue import/export carrier only (Program mail:8cbd808b-caed-4bd8-972d-3c193d0d30e5).
 - Merging a Work whose title is under title control is refused; whether it should be is the maintainer's question.
 - An owner closing or privatising their own Realm (only platform closure is in scope).
 - The Italian Gutenberg recipes record no amounts, because the importer reads only a leading amount.
