@@ -2,6 +2,8 @@ import { afterEach, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import ts from 'typescript-6';
 import { launchCoverage } from './launch-coverage.ts';
 import { scanRawSparqlIntegrationFiles } from '../isolated-integration-files.ts';
 import {
@@ -229,10 +231,87 @@ test('the outcomes module loads in status without importing bun:test', () => {
   expect(result.status, result.stderr).toBe(0);
 });
 
+test('the repository declarations load and register every proof title exactly once', async () => {
+  // Use the same root and defaults as status, scope and admission; do not replace declarations with fixtures.
+  const outcomes = await loadOutcomes();
+  for (const declaration of outcomes.values()) {
+    for (const persona of personas) {
+      const cell = declaration.cells[persona];
+      if (!cell || cell.state === 'notApplicable') continue;
+      const file = resolve(root, cell.file!);
+      const source = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
+      const helpers = new Set<string>();
+      const tests = new Set<string>();
+      const titles = new Set<string>();
+      const rows = new Set<string>();
+      for (const statement of source.statements) {
+        if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+        const importedFile = resolve(dirname(file), statement.moduleSpecifier.text);
+        if (statement.importClause?.name && !statement.importClause.isTypeOnly &&
+          importedFile.startsWith(join(root, 'scripts/qa/cases/outcomes/'))) {
+          const imported = await import(pathToFileURL(importedFile).href) as { default: { rowId: string } };
+          if (imported.default.rowId === declaration.rowId) rows.add(statement.importClause.name.text);
+        }
+        const bindings = statement.importClause?.namedBindings;
+        if (statement.importClause?.isTypeOnly || !bindings || !ts.isNamedImports(bindings)) continue;
+        for (const binding of bindings.elements) {
+          if (binding.isTypeOnly) continue;
+          const name = (binding.propertyName ?? binding.name).text;
+          if (name === 'outcomeTest' && resolve(dirname(file), statement.moduleSpecifier.text) === helperFile)
+            helpers.add(binding.name.text);
+          if (name === 'test' && statement.moduleSpecifier.text === 'bun:test') tests.add(binding.name.text);
+          if (name === 'outcomeTitle' && [moduleFile, cellsModuleFile].includes(importedFile)) titles.add(binding.name.text);
+        }
+      }
+      const title = outcomeTitle(declaration, persona);
+      let registrations = 0;
+      let proofRegistrations = 0;
+      const visit = (node: ts.Node): void => {
+        if (ts.isCallExpression(node)) {
+          const [first, second] = node.arguments;
+          const expression = ts.isPropertyAccessExpression(node.expression) ? node.expression.expression : node.expression;
+          if (ts.isIdentifier(expression)) {
+            if (helpers.has(expression.text) && first && ts.isIdentifier(first) && rows.has(first.text) &&
+              second && ts.isStringLiteral(second) && second.text === persona) {
+              registrations++;
+              proofRegistrations++;
+            }
+            const titleCall = first && ts.isCallExpression(first) && ts.isIdentifier(first.expression) &&
+              titles.has(first.expression.text) && first.arguments[0] && ts.isIdentifier(first.arguments[0]) &&
+              rows.has(first.arguments[0].text) && first.arguments[1] && ts.isStringLiteral(first.arguments[1]) &&
+              first.arguments[1].text === persona;
+            if (tests.has(expression.text) && first && (titleCall || (ts.isStringLiteralLike(first) && first.text === title)))
+              registrations++;
+          }
+        }
+        ts.forEachChild(node, visit);
+      };
+      visit(source);
+      expect(proofRegistrations, `Missing outcome test title for ${declaration.rowId} / ${persona}: ${cell.test} (${cell.file})`).toBeGreaterThan(0);
+      expect(registrations, `Duplicate outcome test title for ${declaration.rowId} / ${persona}: ${cell.test} (${cell.file})`).toBe(1);
+    }
+  }
+});
+
 test('declarations and outcomeTest reach only loader-free cells during integration planning', () => {
   const data = fixture();
-  data.write('scripts/qa/cases/outcome-cells.ts', readFileSync(cellsModuleFile, 'utf8'));
-  data.write('tests/qa/support/outcome-test.ts', readFileSync(helperFile, 'utf8'));
+  const copied = new Set<string>();
+  const copySupport = (file: string): void => {
+    if (copied.has(file)) return;
+    // The fixture deliberately has no loader: importing it must still break planning.
+    expect(file, 'Integration planning reaches the declaration loader').not.toBe(moduleFile);
+    copied.add(file);
+    const source = readFileSync(file, 'utf8');
+    const path = relative(root, file);
+    data.write(path, source);
+    if (!/^(tests\/|scripts\/(qa|fixture|dev)\/)/.test(path)) return;
+    for (const imported of ts.preProcessFile(source, true, true).importedFiles) {
+      if (!imported.fileName.startsWith('.')) continue;
+      copySupport(resolve(dirname(file), imported.fileName));
+    }
+  };
+  copySupport(cellsModuleFile);
+  copySupport(helperFile);
   data.write(
     'scripts/qa/cases/outcomes/books/read-a-book.ts',
     `import { proved, rowOutcomes } from '../../outcome-cells.ts';
