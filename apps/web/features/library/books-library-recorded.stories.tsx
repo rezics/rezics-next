@@ -3,16 +3,14 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import collectionRecord from '../../../../tests/qa/fixtures/outcomes/books/collection-tracking-and-progress.json';
-import progressRecord from '../../../../tests/qa/fixtures/outcomes/books/continue-progress-across-devices-two-device-progress.json';
 import importRecord from '../../../../tests/qa/fixtures/outcomes/books/library-import.json';
 import resumeRecord from '../../../../tests/qa/fixtures/outcomes/books/resume-an-interrupted-export-interrupted-exports.json';
 import { memoryExportStore } from '../library-backup/export-store.ts';
 import type { RecordedSelection } from '../stories/recorded-fetch.ts';
-import { BooksLibraryRecorded, RecordedLibraryImport, RecordedSecondDeviceProgress } from './books-library-recorded-page.tsx';
+import { BooksLibraryRecorded, RecordedLibraryImport } from './books-library-recorded-page.tsx';
 import { memoryImportShelf } from './import-store.ts';
 
 const collection = collectionRecord as AnswerRecord;
-const progress = progressRecord as AnswerRecord;
 const imported = importRecord as AnswerRecord;
 const resume = resumeRecord as AnswerRecord;
 
@@ -55,20 +53,6 @@ const exportLibrary: RecordedSelection[] = [
   { label: 'followed-authors', state: 'populated' },
   { label: changedExport.label, state: 'error' },
 ];
-
-const savedProgress = sample(progress, 'owner', 'device-two-resumed-chapter');
-const resumedChapter = sample(progress, 'owner', 'device-two-series-resume');
-const progressMatch = savedProgress.path.match(/\/compositions\/([^/]+)\/occurrences\/([^/]+)\//);
-const secondDevice = {
-  actingSubject: actingSubject(savedProgress.path),
-  work: `https://rezics.com/id/${resumedChapter.path.split('?')[0]!.split('/').at(-1)}`,
-  episode: { structure: `https://rezics.com/id/${progressMatch?.[1]}`,
-    occurrence: `https://rezics.com/id/${progressMatch?.[2]}` },
-  selections: [
-    { label: savedProgress.label, state: 'populated' },
-    { label: resumedChapter.label, state: 'populated' },
-  ] as RecordedSelection[],
-};
 
 const visitorRows = sample(imported, 'visitor', 'get-library-imports-rows-0');
 const visitorImport = {
@@ -172,18 +156,3 @@ export const VisitorImportRefused: Story = {
   play: async ({ canvasElement }) => { await expectVisitorImportRefused(canvasElement); },
 };
 export const VisitorImportRefusedPhone: Story = { ...VisitorImportRefused, ...phone };
-
-async function expectWinningProgress(canvasElement: HTMLElement) {
-  const canvas = within(canvasElement);
-  await expect(await canvas.findByText('device one paragraph')).toBeVisible();
-  const reading = within(canvas.getByRole('region', { name: 'Currently reading' }));
-  await expect(reading.getByText(/Next: Chapter 2/)).toBeVisible();
-}
-
-/** The second device shows the paragraph the first device saved, and the resumed chapter. */
-export const OwnerSecondDevice: Story = {
-  render: () => <RecordedSecondDeviceProgress record={progress} persona="owner" selections={secondDevice.selections}
-    actingSubject={secondDevice.actingSubject} work={secondDevice.work} episode={secondDevice.episode} />,
-  play: async ({ canvasElement }) => { await expectWinningProgress(canvasElement); },
-};
-export const OwnerSecondDevicePhone: Story = { ...OwnerSecondDevice, ...phone };

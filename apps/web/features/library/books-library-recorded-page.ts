@@ -5,7 +5,6 @@ import { type CatalogueWork, coverKindOf } from '../catalogue/work.ts';
 import type { MainClient } from '../discover/types.ts';
 import { settle } from '../feed/types.ts';
 import { shelfCard } from '../profile/cards.ts';
-import { mainTrackingApi } from '../tracking/api.ts';
 import { workHref } from '../work-page/route.ts';
 import { dayText, momentText } from './format.ts';
 import { type LibraryState, statusShelves } from './state.ts';
@@ -354,19 +353,4 @@ export async function loadBooksLibrary(reader: LibraryActingReader | null, input
     input.first ? readFollowedAuthors(reader, input.locale) : null,
     readYearlyGoal(reader, input.year), readReadingYear(reader, input.year)]);
   return { overview, view, reading, authors, goal, stats, avatarQuery: reader.avatarQuery };
-}
-
-/**
- * Winning progress a second device reads back: the series resume label and the
- * occurrence progress the first device saved. The library page's own continue
- * read is a different operation.
- */
-export async function loadSecondDeviceProgress(main: MainClient, input: {
-  actingSubject: string; work: string; episode: { structure: string; occurrence: string };
-}) {
-  const episodes = mainTrackingApi(input.actingSubject, () => main).episodes;
-  if (!episodes) return { resume: { ok: false as const, failure: 'unavailable' as const },
-    progress: { ok: false as const, failure: 'unavailable' as const } };
-  const [resume, progress] = await Promise.all([episodes.resume(input.work), episodes.progress(input.episode)]);
-  return { resume, progress };
 }

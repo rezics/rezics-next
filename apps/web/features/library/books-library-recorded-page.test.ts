@@ -1,19 +1,17 @@
 import { afterEach, expect, test } from 'bun:test';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import collectionRecord from '../../../../tests/qa/fixtures/outcomes/books/collection-tracking-and-progress.json';
-import progressRecord from '../../../../tests/qa/fixtures/outcomes/books/continue-progress-across-devices-two-device-progress.json';
 import exportRecord from '../../../../tests/qa/fixtures/outcomes/books/library-export.json';
 import importRecord from '../../../../tests/qa/fixtures/outcomes/books/library-import.json';
 import resumeRecord from '../../../../tests/qa/fixtures/outcomes/books/resume-an-interrupted-export-interrupted-exports.json';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import { ExportError, mainExportApi } from '../library-backup/export-api.ts';
 import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
-import { loadBooksLibrary, loadSecondDeviceProgress } from './books-library-recorded-page.ts';
+import { loadBooksLibrary } from './books-library-recorded-page.ts';
 import { ImportError, mainImportApi } from './import-api.ts';
 import { parseLibraryState } from './state.ts';
 
 const collection = collectionRecord as AnswerRecord;
-const progress = progressRecord as AnswerRecord;
 const exported = exportRecord as AnswerRecord;
 const imported = importRecord as AnswerRecord;
 const resume = resumeRecord as AnswerRecord;
@@ -92,19 +90,4 @@ test('an export continuation whose basis changed is the production restart refus
     [{ label: changed.label, state: 'error' }]));
   await expect(api.page({ cursor: url.searchParams.get('cursor')!, snapshot: url.searchParams.get('snapshot')! }))
     .rejects.toMatchObject({ failure: 'moved' });
-});
-
-test('the second device reads the winning paragraph and the resumed chapter', async () => {
-  const saved = sample(progress, 'owner', 'device-two-resumed-chapter');
-  const place = sample(progress, 'owner', 'device-two-series-resume');
-  const work = place.path.split('?')[0]!.split('/').at(-1)!;
-  const [, structure, occurrence] = saved.path.match(/\/compositions\/([^/]+)\/occurrences\/([^/]+)\//) ?? [];
-  const main = client(progress, 'owner', [
-    { label: saved.label, state: 'populated' }, { label: place.label, state: 'populated' }]);
-  const read = await loadSecondDeviceProgress(main, { actingSubject: actingSubject(saved.path),
-    work: `https://rezics.com/id/${work}`, episode: { structure: `https://rezics.com/id/${structure}`,
-      occurrence: `https://rezics.com/id/${occurrence}` } });
-  expect(read.progress.ok && read.progress.data.position).toBe('device one paragraph');
-  expect(read.progress.ok && read.progress.data.version).toBe(2);
-  expect(read.resume.ok && read.resume.data?.label).toBe('Chapter 2');
 });
