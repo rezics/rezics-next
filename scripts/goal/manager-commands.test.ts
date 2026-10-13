@@ -140,3 +140,16 @@ test('an ordinary shell launches directly without invoking a scope launcher', as
     expect(existsSync(join(f.dir,'coordinator-last-failed-pass.json'))).toBe(false);
   } finally { await f.close(); }
 });
+
+test('a fresh pass accepts a state directory that has not been created yet', async () => {
+  const f = fixture();
+  try {
+    f.writePass(`export function coordinatorPass() { console.log('fresh state'); }`);
+    f.launch(`import { freshCoordinatorPass } from ${JSON.stringify(managerModule)};
+      console.log(JSON.stringify(await freshCoordinatorPass(${JSON.stringify(join(f.dir,'state'))},${JSON.stringify(f.module)},'0::/example.service')));`);
+    expect(await f.exited()).toBe(0);
+    expect(f.output()).toContain('fresh state\n');
+    expect(f.output()).toContain('"code":0');
+    expect(f.error()).toBe('');
+  } finally { await f.close(); }
+});

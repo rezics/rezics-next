@@ -1,7 +1,7 @@
 import { resolve, join } from 'node:path';
 import { stateDir, activeGoals, root, managerOf } from './ledger.ts';
 import { type Ledger, effortsOf, modelOf, engineEnv } from './types.ts';
-import { existsSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { GoalMailStore } from './mail.ts';
 import { type WakeEvent, type LaunchDescriptor, processIdentity, claudeConfigHome, WAKE_PROMPT, WAKE_LAST_MESSAGE, tmuxServer, GoalCoordinator, TmuxLauncher, claudeNativeSession, claudeWakeArgs, nativeSession } from './coordinator.ts';
@@ -301,8 +301,8 @@ async function runCoordinatorPass(command: string[]): Promise<PassResult> {
       child.once('error',reject);
       child.once('exit',(code,signal) => resolveExit(code ?? 128 + (signal ? constants.signals[signal] : 0)));
     });
-    let remaining: Buffer | null;
-    while ((remaining = child.stderr!.read() as Buffer | null) !== null) capture(remaining);
+    // read() emits buffered bytes through the existing data listener too.
+    child.stderr!.read();
     return {code,lastError:tail.trim().split(/\r?\n/).at(-1) ?? ''};
   } finally { child.stderr!.destroy(); }
 }
@@ -310,6 +310,7 @@ async function runCoordinatorPass(command: string[]): Promise<PassResult> {
 /** Every pass loads current code in a scope whose descendants survive a service fault. */
 export async function freshCoordinatorPass(directory: string, module = import.meta.url,
   cgroup = existsSync('/proc/self/cgroup') ? readFileSync('/proc/self/cgroup','utf8') : ''): Promise<PassResult> {
+  mkdirSync(directory,{recursive:true});
   const started = join(directory,`coordinator-pass-${randomUUID()}.started`);
   const source = `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(started)}, 'started'); const { coordinatorPass } = await import(${JSON.stringify(module)}); await coordinatorPass(${JSON.stringify(directory)});`;
   const direct = [process.execPath,'-e',source];
