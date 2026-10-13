@@ -50,7 +50,8 @@ import { zoneTheme } from './theme.ts';
 import { savedSiteCuts, type SiteMountCut } from './site-cuts.ts';
 import { MemberList } from './site-pages.tsx';
 import { ZoneEditLink } from '../zone-editor/edit-link.tsx';
-import { zoneHomeDocument } from '../zone-editor/home-document.tsx';
+import { ZoneSiteRecordedCredit } from './zone-site-recorded-page.tsx';
+import { mapZoneSiteHome, zoneSiteRouteMissing } from './zone-site-recorded-page.ts';
 import { ZoneHomeContent } from '../zone-editor/home-content.tsx';
 import type { SitePresentationCut } from './site-cuts.ts';
 import type { ZoneContext, ZoneTokens } from '@rezics/zone-sdk';
@@ -198,15 +199,15 @@ export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps): Pr
         reference={homeView.reference} />;
     if (homeView.kind === 'join') return privateJoinPage(homeView.page, locale, siteHref(locale, space, path));
     if (homeView.kind !== 'view' || !homeView.publication) notFound();
-    const page = homeView.publication.home;
-    const document = zoneHomeDocument(page);
-    if (document) {
+    const mapped = mapZoneSiteHome(homeView.publication);
+    if (mapped.kind === 'published') {
       return <RealmFrame view={homeView} tab={null} locale={locale} search={search}
         address={siteHref(locale, homeView.context.ref, path)}>
-        <ZoneHomeContent page={page!} presentation={homeView.presentation}
+        <ZoneHomeContent page={mapped.page} presentation={homeView.presentation}
           moduleData={homeView.publication.moduleData}
           slideMedia={homeView.slideMedia} context={homeView.context} zone={homeView.zone}
           pkg={homeView.pkg} messages={homeView.zoneMessages} />
+        {mapped.credit ? <ZoneSiteRecordedCredit credit={mapped.credit} /> : null}
       </RealmFrame>;
     }
     return SiteHomeRoute(communityProps, async () => homeView);
@@ -432,7 +433,7 @@ async function standaloneSite(
     getMessages('workPage', locale),
     getMessages('zones', locale),
   ]);
-  if (route && !route.ok && route.failure === 'missing') notFound();
+  if (route && zoneSiteRouteMissing(route)) notFound();
   if (route && !route.ok || !presentation.ok) {
     const shown = shownZoneFailure(route ?? { ok: true }, presentation);
     return shown
@@ -467,15 +468,15 @@ async function standaloneSite(
   if (!path.length) {
     // The published home page is its Content document. Mounts stay in the site navigation.
     // Until a document is published, the page keeps the list of those mounts.
-    const page = presentation.data.home;
-    const document = zoneHomeDocument(page);
-    if (document) return frame(
-      <ZoneHomeContent page={page!} presentation={presentation.data.presentation}
+    const mapped = mapZoneSiteHome(presentation.data);
+    if (mapped.kind === 'published') return frame(<>
+      <ZoneHomeContent page={mapped.page} presentation={presentation.data.presentation}
         moduleData={presentation.data.moduleData}
         slideMedia={presentation.data.slideMedia} zone={zone} pkg={null} messages={zoneMessages}
         context={{ locale, ref, realm: resolved.zone, zone: resolved.zone,
-          mounts: new Map(mounts.map(mount => [mount.target, mount.segment])) }} />,
-    );
+          mounts: new Map(mounts.map(mount => [mount.target, mount.segment])) }} />
+      {mapped.credit ? <ZoneSiteRecordedCredit credit={mapped.credit} /> : null}
+    </>);
     return frame(<ZoneHomeContent page={null} presentation={presentation.data.presentation}
       moduleData={presentation.data.moduleData} slideMedia={presentation.data.slideMedia}
       zone={zone} pkg={null} messages={zoneMessages}
