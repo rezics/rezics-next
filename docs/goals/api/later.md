@@ -47,3 +47,11 @@ positions are in the archived end-of-run tables
 - An owner closing or privatising their own Realm (only platform closure is in scope).
 - The Italian Gutenberg recipes record no amounts, because the importer reads only a leading amount.
 - Occurrence progress is Account-principal-keyed while library status is Person-keyed; shared-Person progress across different principals is outside the current same-reader two-device outcome.
+- Disclosure freshness across stores and after the final fence into streaming/provider delivery remains a named limit; no mechanism for it is in this slice.
+- Public-domain Recipe import: new territory or use assessments are outside the accepted reading/publication slice.
+- Public-domain Recipe import: portable export provenance sidecars are outside the accepted reading/publication slice.
+- Public-domain Recipe import: later corrections and translations with their own source basis and credits are outside this slice.
+- Public-domain Recipe import: corpus-wide clearance is not established by pins or tests and is outside this slice.
+- Contributions/submissions cannot list one Work without scanning a capped population; no present row requires that discovery path.
+- `/v1/me/continue` has six preview candidates without a tail cursor; books outcome tests qualify complete shelves/follows traversal plus per-Work resume as the row's existing full path.
+- `work-publication-years` lacks Realm/Condition-scoped continuation; catalogue outcome tests qualify complete Realm browse and direct year filters. Complete year-facet enumeration is outside the present rows.
