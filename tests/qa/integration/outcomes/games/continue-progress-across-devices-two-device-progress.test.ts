@@ -59,13 +59,6 @@ async function publish(game: Work) {
   }), 201);
   return selection;
 }
-async function credit(person: PersonaSession, game: Work) {
-  const page = await answer<{ items: { role: string; participantKind: string; agent: string | null }[] }>(
-    person.main('GET', `/v1/works/${short(game.work)}/credits?${acting(person)}`));
-  expect(page.items).toContainEqual(expect.objectContaining({
-    role: 'author', participantKind: 'agent', agent: sessions.owner.actingSubject,
-  }));
-}
 afterAll(async () => { await sessions?.close(); });
 
 type Standing = { standing: string; version: number; replayed?: boolean };
@@ -76,7 +69,6 @@ let composed: Work;
 let sentinel: Work;
 let structure: string;
 let required: string;
-let extra: string;
 const wholePath = () => `/v1/works/${short(game.work)}/progress`;
 const partPath = (occurrence = required) => `/v1/compositions/${short(structure)}/occurrences/${short(occurrence)}/progress`;
 const statePath = (work: Work, person: PersonaSession) => `/v1/works/${short(work.work)}/reader-state?${acting(person)}`;
@@ -102,7 +94,7 @@ async function setupProgress() {
         { op: 'insert', parent: structure, position: 'last', role: 'part', target: bonus.work,
           displayLabel: 'Bonus garden route', inclusion: 'extra' },
       ] }));
-  [required, extra] = changed.occurrences as [string, string];
+  [required] = changed.occurrences as [string, string];
 }
 async function status(person: PersonaSession, work: Work, value: string | null) {
   const current = await answer<ReaderState>(person.main('GET', statePath(work, person)));
