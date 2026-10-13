@@ -171,13 +171,28 @@ outcomeTest(row, 'member', () => view('member'), recording);
 outcomeTest(row, 'moderator', () => view('moderator'), recording);
 outcomeTest(row, 'operator', () => view('operator'), recording);
 outcomeTest(row, 'owner', async () => {
-  const f = await site();
+  const prepared = await site();
   const owner = sessions.owner;
   const sample = recording.session('owner', owner);
+  // Keep the public baseline for the other proofs while recording this publication's own draft chain.
+  const variantId = `urn:rezics:variant:${randomUUID()}`;
+  const save = async (label: string, document: DocumentSnapshot, expectedHead: string | null) => {
+    const body = { ...prepared.draftBody(document, expectedHead), variantId };
+    const saved = await answer<{ revisionId: string; byteDigest: string; sourcePosition: { dataEpoch: string } }>(
+      sample(label, 'POST', '/v1/content-drafts', body), 201);
+    expect(body.resourceId).toBe(prepared.homeDocument);
+    return { page: body.resourceId, variantId, revisionId: saved.revisionId,
+      byteDigest: saved.byteDigest, contentEpoch: saved.sourcePosition.dataEpoch } satisfies Page;
+  };
+  const first = await save('save-home-draft', prepared.publishedDocument, null);
+  const draft = await save('save-home-draft-over-head', prepared.draftDocument, first.revisionId);
+  const f = { ...prepared, draft };
   await answer(sample('showcase-editor', 'GET', `${f.path}/showcase-editor${query(owner)}`));
   const before = await publicBundle(f, sessions.visitor, recording.session('owner', sessions.visitor));
-  const configuration = await answer<{ revision: string; configuration: { presentation: ZonePresentation } }>(
+  const configuration = await answer<{ revision: string; configuration: { presentation: ZonePresentation; homeDocument: string } }>(
     sample('draft-configuration', 'GET', `${f.path}/configuration${query(owner)}`));
+  expect(first.page).toBe(configuration.configuration.homeDocument);
+  expect(f.draft.page).toBe(configuration.configuration.homeDocument);
   expect(configuration.configuration.presentation).toEqual(f.draftPresentation);
   const navigation = await answer<{ revision: string; mounts: Array<{ occurrence: string }> }>(
     sample('draft-navigation', 'GET', `${f.path}${query(owner)}`));
@@ -207,6 +222,8 @@ outcomeTest(row, 'owner', async () => {
     f.publishBody(f.draft, f.configured.revision, f.draftNavigation.revision)), 201);
   expect(next).toMatchObject({ routesRevision: f.draftNavigation.revision,
     navigationRevision: f.draftNavigation.revision, themeRevision: f.configured.revision });
+  expect(next.homeDocument).toBe(configuration.configuration.homeDocument);
+  expect(next.pages).toMatchObject([{ page: f.draft.page, variantId: f.draft.variantId, revisionId: f.draft.revisionId }]);
   const delivered = await answer<Presentation>(recording.session('owner', sessions.visitor)('republished-presentation', 'GET', `${f.path}/presentation`));
   expect(delivered.presentation).toEqual(f.draftPresentation);
   expect(delivered.navigation.map(item => item.segment)).toEqual(['published-link', 'draft-link']);
