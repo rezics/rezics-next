@@ -8,6 +8,8 @@ export type BriefKind = typeof BRIEF_KINDS[number];
 export interface Brief {
   id: string; title: string; effort: string; engine?: Engine; cases: string[]; paths: string[];
   migrations: string[]; shared: string[]; depends: string[];
+  /** Repository files required on main before the first dispatch. */
+  needs?: string[];
   kind?: BriefKind; rows?: string[];
   /** Explicit proofs run together by the worker check command. */
   tests?: string[];

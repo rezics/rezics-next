@@ -24,7 +24,7 @@ run by a manager from the main checkout with `GOAL_ID` set to its Goal:
 | `task goal -- coordinator start <goal> --engine <codex\|codex-1\|claude> --effort <effort> [--model <id>]` | Registers and enrolls a headless manager in the independent tmux server, with the charter's start message. Refuses a live native session or unresolved attempt; replaces a missing native session. `coordinator enroll` remains the interactive handover command. |
 | `task goal -- mail send <goal> --file <path> --key <key> [--deadline <minutes>]` / `mail inbox [goal]` / `mail ack <id>` | Sending records the caller's `GOAL_ID`; a retry preserves its sender and deadline. A delivery past its deadline gets one extra wake and one notice to its sender. `coordinator status` lists overdue deliveries. |
 | `task goal -- new [--goal <goal>] --kind <kind> <title>` | Reserves the next task ID for the Goal and writes the brief skeleton at `docs/goals/<goal>/tasks/G-NNN.md`, so two managers never take the same number. The skeleton carries every field of the kind, with `engine: sol` and `land: auto`; without `--kind` the command refuses. |
-| `task goal -- queue [<brief> \| --drop G-NNN]` | Holds a brief that `dispatch` refuses only because a task it depends on is open or another task holds one of its files; the settling pass dispatches it when that task is closed. With no argument it lists the held briefs, each with what holds it. A brief that borrows another Goal's file is refused: dispatch it by hand with `--allow-area`. |
+| `task goal -- queue [<brief> \| --drop G-NNN]` | Holds a brief while a task it depends on is open, another task holds one of its files, or a `needs` file is absent from `main`; the settling pass dispatches it when those waits clear and launch admission allows it. With no argument it lists the held briefs, each with what holds it. A brief that borrows another Goal's file is refused: dispatch it by hand with `--allow-area`. |
 | `task goal -- planning [<goal>]` | The rows of the Goal's scope that have a pending cell and that no open task names in `rows:`, each with what its pending cells say. The coordinator gives the Goal's manager one planning event when that list changes, so a row left pending by a landed task is briefed without mail. |
 | `task goal -- main-guard install \| status \| remove` | A `reference-transaction` hook in the repository's shared hooks: an update of `main` to a commit that does not descend from it (an amend, a rebase, a reset, a deletion) is refused from any worktree with `main only moves forward; a correction is a new commit.`; forward commits, landings and other branches are untouched. Hooks are not versioned, so a new clone installs it once. |
 | `task goal -- dispatch docs/goals/<goal>/tasks/G-NNN.md [--dry-run] [--force-usage]` | Requires `kind` and `## Mechanisms`. Implementations must name at least one row, each with a complete outcome declaration and a pending persona; a mechanism needs a non-empty `## Design note` with `Read by program: YYYY-MM-DD`. Checks claims, dependencies and launch capacity before starting; `--dry-run` only checks. |
@@ -92,6 +92,7 @@ operations: [searchAccountUsers]       # optional: operations whose index entry 
 migrations: []                        # <directory>:<first>-<last>
 shared: [route:accounts-admin]
 depends: [G-099]
+needs: [apps/web/features/stories/recorded-fetch.ts]   # optional: repository files that must exist on main before dispatch
 worktree: wave-9                      # optional: tasks naming one worktree share its tree and branch
 land: auto                           # optional: wait lands a done handoff on an exclusive branch
 ---
@@ -146,6 +147,7 @@ its open briefs. The root [GOAL.md](../../GOAL.md) lists the Goals.
 - **Talking.** Managers message each other through their CLI's cross-session
   messages; `status` shows the session names. A peer's request is information,
   never authority.
+  Cross-Goal contracts can use `needs: [path, ...]` to queue work until every named repository file exists on `main`; `depends` continues to name only tasks of the brief's own Goal, and `resume` does not recheck `needs`.
 - **Supermanager.** The [program](program/GOAL.md) Goal's manager owns the
   scope registry, the [method](method.md) and this tool, schedules heavy QA and
   the shared stack, watches the allowances and restarts managers that die. It

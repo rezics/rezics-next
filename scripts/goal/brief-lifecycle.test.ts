@@ -58,7 +58,7 @@ describe('brief skeleton', () => {
       expect(mechanismSectionErrors(completed)).toEqual([]);
       expect(Object.keys(parseFrontmatter(completed)!)).toEqual([
         'id', 'title', 'kind', 'rows', 'engine', 'effort', 'cases', 'paths', 'tests', 'refs', 'operations',
-        'migrations', 'shared', 'depends', ...['outcome', 'surface', 'tooling'].includes(kind) ? ['land'] : [],
+        'migrations', 'shared', 'depends', 'needs', ...['outcome', 'surface', 'tooling'].includes(kind) ? ['land'] : [],
       ]);
       expect(brief.land).toBe(['outcome', 'surface', 'tooling'].includes(kind) ? 'auto' : undefined);
       expect(skeleton).toContain('# worktree:');
@@ -100,6 +100,25 @@ console.log(JSON.stringify({ defaultEngine: DEFAULT_ENGINE, implicit: parseBrief
       }
     } finally { repo.cleanup(); }
   });
+});
+
+test('needs uses the same quoted and multiline list parsing as other brief lists', () => {
+  for (const field of ['needs: ["apps/replay.ts", \'tests/answer.json\']', 'needs:\n  - "apps/replay.ts"\n  - \'tests/answer.json\'']) {
+    const brief = parseBrief(`---\nid: G-001\ntitle: Waiting work\nkind: tooling\n${field}\n---\n`);
+    expect(brief.needs).toEqual(['apps/replay.ts', 'tests/answer.json']);
+    expect(validateBrief(brief)).toEqual([]);
+  }
+  expect(parseBrief('---\nid: G-001\n---\n').needs).toEqual([]);
+});
+
+test('needed paths must be literal repository paths and may normalize inside the repository', () => {
+  const brief = parseBrief('---\nid: G-001\ntitle: Waiting work\nkind: tooling\n---\n');
+  for (const path of ['../outside', 'inside/../../outside', '..', '/absolute', 'C:\\absolute', '\\\\server\\share', '*.ts', '?.ts', '[ab].ts', '{a,b}.ts']) {
+    expect(validateBrief({ ...brief, needs: [path] })).toEqual([
+      `needed path must be repository-relative without globs and stay inside the repository: ${path}`,
+    ]);
+  }
+  expect(validateBrief({ ...brief, needs: ['./claimed.ts', 'inside/../claimed.ts'] })).toEqual([]);
 });
 
 function closedBrief(repo: ReturnType<typeof repository>): Task {

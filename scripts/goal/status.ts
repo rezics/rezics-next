@@ -12,6 +12,7 @@ import { validGoalSlug } from './briefs.ts';
 import { MAX_TRANSPORT_CONTINUATIONS, engineOf } from './types.ts';
 import { settlementReason } from './settle.ts';
 import { termspacesSession, termspacesTarget, windowTurns, workerWindowName, turnWindowName } from './windows.ts';
+import { listQueue, type QueueLedger } from './queue.ts';
 
 export async function status(): Promise<void> {
   await printScopeProgress();
@@ -81,4 +82,5 @@ export async function status(): Promise<void> {
   }
   const closed = tasks.length - tasks.filter(t => !['verified', 'cancelled'].includes(t.state)).length;
   if (closed) console.log(`${closed} closed task(s) omitted`);
+  if (Object.keys((ledger as QueueLedger).queue ?? {}).length) await listQueue();
 }

@@ -1,5 +1,5 @@
 import { type Brief, type BriefKind, type Engine, DEFAULT_ENGINE, BRIEF_KINDS, ENGINES, effortsOf, type Task, HOLDING } from './types.ts';
-import { isAbsolute } from 'node:path';
+import { isAbsolute, posix, win32 } from 'node:path';
 import { mechanisms } from '../static/mechanisms.ts';
 
 /** The leading `---` block of a brief or Goal file as flat `key: value` fields. `#` at the start of a line or after a
@@ -45,7 +45,7 @@ export function parseBrief(text: string): Brief {
     engine: (fields.engine as Engine | undefined) ?? DEFAULT_ENGINE,
     cases: list('cases'), paths: list('paths'), migrations: list('migrations'), shared: list('shared'),
     tests: list('tests'), refs: list('refs'), operations: list('operations'),
-    depends: list('depends'), ...fields.worktree ? { worktree: fields.worktree } : {},
+    depends: list('depends'), needs: list('needs'), ...fields.worktree ? { worktree: fields.worktree } : {},
     ...fields.land !== undefined ? { land: fields.land as Brief['land'] } : {},
   };
 }
@@ -72,6 +72,12 @@ export function validateBrief(brief: Brief): string[] {
   }
   for (const range of brief.migrations) if (!parseRange(range)) errors.push(`bad migration range: ${range}`);
   for (const id of brief.depends) if (!/^G-\d{3,}$/.test(id)) errors.push(`bad dependency: ${id}`);
+  for (const path of brief.needs ?? []) {
+    const normalized = posix.normalize(path);
+    if (isAbsolute(path) || win32.isAbsolute(path) || normalized === '..' || normalized.startsWith('../') || /[*?\[\]{}]/.test(path)) {
+      errors.push(`needed path must be repository-relative without globs and stay inside the repository: ${path}`);
+    }
+  }
   if (brief.worktree !== undefined && !/^[a-z][a-z0-9-]{1,40}$/.test(brief.worktree)) {
     errors.push(`worktree must be a lower-case name: ${brief.worktree}`);
   }

@@ -92,6 +92,73 @@ test('an open dependency waits until the settling pass after verification', () =
   ok(f.run('settle')); expect(f.ledger().tasks['G-002']!.state).toBe('running');
 });
 
+test('needed files wait for every result on main and are shown by queue and status', () => {
+  const f = repository();
+  const path = f.brief('G-002', ['needs: ["replay.ts", \'answer.json\']']);
+  writeFileSync(join(f.directory, 'replay.ts'), 'export {};\n');
+  writeFileSync(join(f.directory, 'answer.json'), '{}\n');
+  const queued = ok(f.run('queue', path));
+  for (const file of ['replay.ts', 'answer.json']) {
+    expect(queued).toContain(`${file}, which is absent from main`);
+    expect(ok(f.run('queue'))).toContain(`${file}, which is absent from main`);
+    expect(ok(f.run('status'))).toContain(`${file}, which is absent from main`);
+  }
+  ok(f.run('settle')); expect(f.ledger().tasks['G-002']).toBeUndefined();
+  f.git('add', 'replay.ts'); f.git('commit', '-qm', 'Land replay');
+  ok(f.run('settle')); expect(f.ledger().tasks['G-002']).toBeUndefined();
+  expect(f.ledger().queue!['G-002']!.waits).toEqual(['G-002 needs answer.json, which is absent from main']);
+  f.git('checkout', '-qb', 'result');
+  f.git('add', 'answer.json'); f.git('commit', '-qm', 'Prepare answer off main');
+  ok(f.run('settle')); expect(f.ledger().tasks['G-002']).toBeUndefined();
+  f.git('checkout', 'main'); f.git('merge', '--ff-only', 'result');
+  ok(f.run('settle'));
+  expect(f.ledger().tasks['G-002']!.state).toBe('running');
+  expect(f.ledger().queue?.['G-002']).toBeUndefined();
+});
+
+test('dispatch names all needed files absent from main before starting', () => {
+  const f = repository();
+  const path = f.brief('G-002', ['needs: [replay.ts, answer.json]']);
+  writeFileSync(join(f.directory, 'replay.ts'), 'export {};\n');
+  const result = f.run('dispatch', path);
+  expect(result.status).toBe(1);
+  for (const file of ['replay.ts', 'answer.json']) expect(result.stderr).toContain(`${file}, which is absent from main`);
+  expect(f.ledger().tasks['G-002']).toBeUndefined();
+  expect(existsSync(join(f.local, 'worktrees/g-002'))).toBe(false);
+});
+
+test('queue and dispatch refuse invalid needed paths at validation', () => {
+  const f = repository();
+  for (const file of ['../outside.ts', 'inside/../../outside.ts', '/absolute.ts', 'files/*.ts', 'files/?.ts', 'files/[ab].ts', 'files/{a,b}.ts']) {
+    const path = f.brief('G-002', [`needs: ["${file}"]`]);
+    for (const command of ['queue', 'dispatch']) {
+      const result = f.run(command, path);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('Invalid brief');
+      expect(result.stderr).toContain('needed path');
+    }
+    expect(f.ledger().queue?.['G-002']).toBeUndefined();
+    expect(f.ledger().tasks['G-002']).toBeUndefined();
+  }
+});
+
+test('resume does not recheck needed files for an already started task', () => {
+  const f = repository();
+  const output = join(f.local, 'previous.jsonl');
+  mkdirSync(join(f.local, 'goal'), { recursive: true });
+  writeFileSync(output, '');
+  const ledger = f.ledger();
+  const task = f.holder();
+  task.brief = f.brief('G-001', ['needs: [missing.ts]']);
+  task.needs = ['missing.ts'];
+  task.engine = 'codex';
+  task.attempts = [{ n: 1, effort: 'high', engine: 'codex', pid: 2147483647, session: 'recording-session',
+    output, startedAt: new Date().toISOString(), endedAt: new Date().toISOString() }];
+  ledger.tasks[task.id] = task; f.save(ledger);
+  expect(ok(f.run('resume', task.id, '-m', 'Continue the started work'))).toContain('attempt 2');
+  expect(f.ledger().tasks[task.id]!.state).toBe('running');
+});
+
 test('a path claim waits until its holder closes', () => {
   const f = repository(); const ledger = f.ledger(); ledger.tasks['G-001'] = f.holder('stopped', ['claimed.ts']); f.save(ledger);
   expect(ok(f.run('queue', f.brief()))).toContain('overlaps G-001');

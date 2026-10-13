@@ -1,7 +1,7 @@
 import { type Brief, DEFAULT_ENGINE, BRIEF_KINDS, HOLDING, type Task, type Ledger, isClaudeCode, modelOf, programOf, engineOf, MAX_CAPACITY_CONTINUATIONS, MAX_TRANSPORT_CONTINUATIONS, type Attempt, type Engine, effortsOf } from './types.ts';
 import { root, withLedger, briefGoal, unlandedChangeConflicts, areasOf, activeGoals, stateDir, git, managerOf, readLedger, pidAlive, claimingTasks, assertOwner, acquireDir, briefPathOf, landScope, archiveClosedBriefs, treeMentions, archiveDirOf, archiveFiles, removeFromTree, ARCHIVE_BRANCH } from './ledger.ts';
 import { pathToFileURL } from 'node:url';
-import { join, resolve, basename, relative, dirname } from 'node:path';
+import { join, resolve, basename, relative, dirname, posix } from 'node:path';
 import { readFileSync, existsSync, mkdirSync, writeFileSync, copyFileSync, readdirSync, readlinkSync, renameSync } from 'node:fs';
 import { parseBrief, validateBrief, mechanismSectionErrors, claimConflicts, areaConflicts, validGoalSlug, goalFile, GOALS_DIR, HISTORY_EXEMPT, nextTaskId, goalBriefFile } from './briefs.ts';
 import { launchGates, briefFile, launch, workerPrompt, lastAttempt, taskOf, readResult, capacityRefusal, transportDrop, transportContinuations, transportContinuationPrompt, handoffContinuations, hasHandoff, cleanSessionEnd, changedFiles, elapsed, describe, running } from './launch.ts';
@@ -59,6 +59,12 @@ export function removeDispatchLeftover(ledger: Ledger, id: string, worktree: str
   git(root, ['branch', '-D', branch]);
 }
 
+/** Cross-Goal results are repository files on main, independent of task ledgers and working trees. */
+export function neededFileWaits(brief: Brief): string[] {
+  return (brief.needs ?? []).filter(path => spawnSync('git', ['cat-file', '-e', `main:${posix.normalize(path)}`],
+    { cwd: root, encoding: 'utf8' }).status !== 0).map(path => `${brief.id} needs ${path}, which is absent from main`);
+}
+
 export async function dispatch(briefPath: string, flags: Set<string>): Promise<void> {
   const absolute = resolve(briefPath);
   const text = readFileSync(absolute, 'utf8');
@@ -88,6 +94,8 @@ export async function dispatch(briefPath: string, flags: Set<string>): Promise<v
         throw new Error(`${brief.id} depends on ${id}, which is ${dependency.state}`);
       }
     }
+    const needs = neededFileWaits(brief);
+    if (needs.length) throw new Error(needs.join('\n'));
     const engine = dispatchEngine(brief.engine ?? DEFAULT_ENGINE);
     const { live, limit, usage, account } = launchGates(tasks, engine, flags.has('--force-usage'));
     const name = brief.worktree ? `${goal ?? 'legacy'}-${brief.worktree}` : brief.id.toLowerCase();
@@ -705,6 +713,7 @@ export async function newBrief(args: string[]): Promise<void> {
       'refs: []                              # optional: files `dispatch` copies to `.temp/ref/` in the worktree before the worker starts',
       'operations: []                        # optional: operations whose index entry the first prompt carries',
       'migrations: []                        # <directory>:<first>-<last>', 'shared: []', 'depends: []',
+      'needs: []                             # optional: repository files that must exist on main before dispatch',
       '# worktree: wave-9                    # optional: tasks naming one worktree share its tree and branch',
       `${['outcome', 'surface', 'tooling'].includes(kind) ? '' : '# '}land: auto                           # optional: wait lands a done handoff on an exclusive branch`,
       '---', '', '## Outcome', '', '## Mechanisms', '', 'none',

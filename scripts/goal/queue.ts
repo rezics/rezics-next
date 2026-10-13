@@ -3,7 +3,7 @@ import { join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { activeGoals, areasOf, briefGoal, readLedger, root, stateDir, unlandedChangeConflicts, withLedger } from './ledger.ts';
 import { areaConflicts, claimConflicts, goalOfBriefPath, mechanismSectionErrors, parseBrief, validateBrief } from './briefs.ts';
-import { dispatchMethodErrors, removeDispatchLeftover } from './tasks.ts';
+import { dispatchMethodErrors, neededFileWaits, removeDispatchLeftover } from './tasks.ts';
 import { prepareHandover } from './handover.ts';
 import { processAlive, processIdentity } from '../qa/process/identity.ts';
 import { postgresSocketRefusal, physicalPath } from './postgres-socket.ts';
@@ -39,7 +39,7 @@ async function validatedBrief(path: string): Promise<Brief> {
 
 function waitsFor(ledger: QueueLedger, brief: Brief, entry?: QueuedBrief): string[] {
   const tasks = Object.values(ledger.tasks);
-  const waits = [...claimConflicts(brief, tasks), ...unlandedChangeConflicts(brief, tasks)];
+  const waits = [...claimConflicts(brief, tasks), ...unlandedChangeConflicts(brief, tasks), ...neededFileWaits(brief)];
   if (entry) {
     const holders = tasks.filter(task => claimConflicts(brief, [task]).length).map(task => task.id);
     const changers = unlandedChangeConflicts(brief, tasks).flatMap(line =>
@@ -141,8 +141,8 @@ async function startQueued(id: string, submission = false): Promise<void> {
     current.owner = undefined;
     if (current.goal && !activeGoals(ledger).includes(current.goal)) current.waits = [`Goal ${current.goal} is not active`];
     else if (gateRefusal(refusal)) current.waits = [refusal];
-    else if (refusal.startsWith(`Claim conflict for ${id}:`) || refusal.startsWith(`${id} depends on `)) {
-      // A task may have claimed a path while dispatch waited for the ledger lock.
+    else if (refusal.startsWith(`Claim conflict for ${id}:`) || refusal.startsWith(`${id} depends on `) || refusal.startsWith(`${id} needs `)) {
+      // Claims and main may have changed while dispatch waited for the ledger lock.
       try { current.waits = waitsFor(ledger, parseBrief(readFileSync(entry.brief, 'utf8')), current); }
       catch { current.waits = []; }
       if (!current.waits.length) recordRefusal(ledger, current, refusal);
