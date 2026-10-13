@@ -591,7 +591,13 @@ async function readPage(
 ): Promise<Page> {
   const path = `/v1/reading-positions/${short(work.work)}?${query(person, fields)}`;
   for (;;) {
-    const result = await observed(person.main('GET', path));
+    requestDeadline = Math.min(deadline, performance.now() + 20_000);
+    let result: Observation;
+    try {
+      result = await observed(person.main('GET', path));
+    } finally {
+      requestDeadline = undefined;
+    }
     if (result.status === 200) return JSON.parse(result.raw) as Page;
     if (
       result.status !== 503 ||
@@ -601,6 +607,46 @@ async function readPage(
       throw new Error(`GET ${path}: ${JSON.stringify(result)}`);
     await pause(250);
   }
+}
+
+async function search(person: PersonaSession, work: Work, label: string, budgetMs: number) {
+  const started = performance.now();
+  const deadline = started + budgetMs;
+  const readyDeadline = started + Math.min(projectionBudgetMs, budgetMs);
+  const items: Page['items'] = [];
+  let cursor: string | null = null;
+  for (let pages = 0; pages < 1100; pages++) {
+    const page = await readPage(
+      person,
+      work,
+      {
+        q: label,
+        limit: '100',
+        ...(cursor ? { cursor } : {}),
+      },
+      deadline,
+    );
+    if (page.search?.status === 'indexing') {
+      expect(
+        performance.now(),
+        `GET reading-positions?q=${label}: label projection remained indexing; ${JSON.stringify(page)}`,
+      ).toBeLessThan(readyDeadline);
+      items.length = 0;
+      cursor = null;
+      await pause(250);
+      continue;
+    }
+    expect(page.search).toEqual({ status: 'current' });
+    expect(page.count).toEqual({ value: page.items.length, kind: 'exact-page', total: null });
+    expect(page.complete).toBe(page.nextCursor === null);
+    items.push(...page.items);
+    cursor = page.nextCursor;
+    if (!cursor) return items;
+    expect(performance.now(), `continued label search deadline for ${label}`).toBeLessThan(
+      deadline,
+    );
+  }
+  throw new Error(`GET reading-positions?q=${label}: continuation exceeded 1100 pages`);
 }
 
 async function inventory(name: PersonaName) {
@@ -682,6 +728,10 @@ async function inventory(name: PersonaName) {
   );
   await credit(person, published);
   for (const episode of episodes) await credit(person, episode);
+  const found = await search(person, published, 'Episode 1000 重逢', 60_000);
+  expect(found).toHaveLength(1);
+  expect(found[0]!.occurrence).toBe(occurrences[999]!);
+  expect(found[0]!.labels).toContainEqual({ value: 'Episode 1000 重逢', language: 'en' });
 }
 
 async function continuedProjection(name: PersonaName) {
@@ -704,6 +754,15 @@ async function continuedProjection(name: PersonaName) {
   expect(last!.items[0]!.labels).toContainEqual({ value: laterLabel, language: 'en' });
   expect(last!.complete).toBe(true);
   await credit(person, laterWork);
+  // Plain inventory reads can resolve current Structure data even after the
+  // ordered relay stops. This public query also requires the label projection.
+  const found = await search(person, laterWork, laterLabel, projectionBudgetMs);
+  expect(
+    found,
+    `later occurrence ${last!.items[0]!.occurrence} is absent from label projection`,
+  ).toHaveLength(1);
+  expect(found[0]!.occurrence).toBe(last!.items[0]!.occurrence);
+  expect(found[0]!.labels).toContainEqual({ value: laterLabel, language: 'en' });
 }
 
 async function fences(name: PersonaName) {
