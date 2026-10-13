@@ -1,9 +1,10 @@
 # State
 
-The checkpoint for [this Goal](GOAL.md), recording the G-2205 decision for
-`mail:2aa9de5c-29ca-4311-bf1a-306f7113ad17` under
-`checkpoint:6741f284-d93e-45de-8fbc-3c95da6a55e7`, carrying forward the
-previous checkpoint's decisions.
+The checkpoint for [this Goal](GOAL.md), recording `task:G-2203:1`,
+`mail:4497e0a6-ce91-438d-b303-4e0c98de036e` and
+`mail:fe6d16dd-8b47-4a4f-9a93-edb140f5b189` under
+`checkpoint:c893b67c-a134-463d-97c7-8a81eb6ad7df`, carrying forward the
+previous checkpoint's decisions. Both listed mail deliveries are acknowledged.
 
 | Field | State |
 | --- | --- |
@@ -17,18 +18,28 @@ previous checkpoint's decisions.
 | Work | Decision and next action |
 | --- | --- |
 | G-2202, release payload and image (D026) | Running, first attempt. Capture the missing-import failure, then prove packaged Main and actual local release-image startup with image identity and a healthy answer. An API failure after startup is a partial handoff |
-| G-2203, disposable Fuseki support (D016, D075, D109) | Running, first attempt. Capture container logs and failing startup/restart, then prove readiness and explicit restart with the selected content-addressed image; keep erasure assertions intact |
+| G-2203, disposable Fuseki support (D016, D075, D109) | Partial support slice accepted at commit `10b4f374b4d25684667ffdc7b4eabe156dd6286b`: selected image, killed-container restart and bounded redacted readiness logs. Physical checks remain red. `land G-2203 --step` was reinvoked after API's baseline request; gates remain pending, with no accepted main revision or verified closure |
 | G-2205, campaign fixture evidence (D108) | Queued behind G-2203. Capture the actual readiness/compatibility mismatch on the retained small fixture and fix only fixture consumption. Missing producer evidence or API composition is a partial handoff |
+| G-2248, copied PostgreSQL startup | Committed and queued behind G-2203. Capture the copied fixture's startup refusal before cleanup, repair only fixture support and preserve backup/copy isolation, original assertions and the ten-minute preparation budget. The cause remains unknown |
+| G-2249, retained Content and crash-fence qualification | API owns two separate probes with current assertions intact. The qualification brief proves neither contract. API's later baseline request holds the probes until G-2203's accepted support reaches main; operations has notified API and Program that landing gates remain pending |
 | Access recovery classification | API owns the sole review and landing through `5bb07365f` in G-2214, including owner operations. G-2205's handled decision records Program's dated Design-note reading in G-2214. No accepted landing revision is recorded |
 | Erasure composition | API wrote G-2223 for the fourth `mediaObjects` constructor argument and real-composition Media regression from archived G-2062 Outcome item 4. Admission is held for its own dated Program reading, requested in mail:de0e769e-932f-468a-a62e-ca9f180d9cfc; no live composition claim, worker or accepted revision follows |
 
-**Next action.** Decide G-2202 and G-2203 on their handoffs; G-2205 follows
-G-2203. Independent physical restore and scheduling start only from API's
+**Next action.** Decide G-2202 on its handoff. On G-2203's landing event,
+close the accepted support step verified if gates accept it and send API the
+actual accepted main revision, or decide the reported gate refusal. G-2205 and
+G-2248 remain behind G-2203; do not duplicate the pending landing or resume API's
+probes on the unchanged baseline. D016's executed command module refuses
+incomplete retained Content source facts; crash-fence state after committed-
+generation auditing is a separate API qualification question. Original physical
+reruns require the relevant accepted revisions, not the qualification brief.
+Independent physical restore and scheduling start only from API's
 actual accepted Access main revision. Full erasure proofs also require API's
 separate accepted composition revision. API retains both notifications;
 operations creates no competing adoption or review. G-2205 remains fixture-only
 behind G-2203. API has already requested G-2223's Program reading; operations
-needs no additional ruling. This checkpoint grants no new worker work or proof.
+needs no additional ruling. This checkpoint grants no new worker work or proof
+and changes no brief, including G-2203's locked landing brief.
 The last recorded first-attempt share does not trigger the below-half dispatch
 stop; no refreshed reading is claimed.
 
