@@ -58,6 +58,10 @@ export function outcomeRepositoryViolations(root = process.cwd()): string[] {
  * their normal affected tiers; these entries enforce an inventory-wide rule. */
 export const repositoryGuards = [
   {
+    file: 'scripts/api/answer-records.guard.test.ts',
+    reason: 'Every outcome answer record must validate against the public contract generated from the tree.',
+  },
+  {
     file: 'scripts/qa/repository-guards.test.ts',
     reason: 'Outcome tests use the public API without importing product source or mocking modules.',
   },
