@@ -12,6 +12,7 @@ import { randomUUID } from 'node:crypto';
 import { clearRefusal, mergeTask } from './merge.ts';
 import { land, handoffResult } from './land.ts';
 import { COMPOSITION_ROOTS } from './composition-roots.ts';
+import { dispatchEngine, prepareHandover, stageHandover, handoverPrompt, strayFiles } from './handover.ts';
 
 /** Declarations and their test registrations belong to the outcomes loader, not to orchestration. */
 export async function dispatchMethodErrors(brief: Brief, markdown: string, outcomeRoot = root): Promise<string[]> {
@@ -53,7 +54,8 @@ export async function dispatch(briefPath: string, flags: Set<string>): Promise<v
   if (errors.length) throw new Error(`Invalid brief ${briefPath}:\n  ${errors.join('\n  ')}`);
   const methodErrors = await dispatchMethodErrors(brief, text);
   if (methodErrors.length) throw new Error(`Invalid brief ${briefPath}:\n  ${methodErrors.join('\n  ')}`);
-  await withLedger(ledger => {
+  const handover = await prepareHandover(brief, text);
+  await withLedger(async ledger => {
     if (ledger.tasks[brief.id]) throw new Error(`${brief.id} already exists (${ledger.tasks[brief.id]!.state}); use resume`);
     const goal = briefGoal(ledger, absolute);
     const reservedBy = ledger.reserved?.[brief.id];
@@ -73,7 +75,7 @@ export async function dispatch(briefPath: string, flags: Set<string>): Promise<v
         throw new Error(`${brief.id} depends on ${id}, which is ${dependency.state}`);
       }
     }
-    const engine = brief.engine ?? DEFAULT_ENGINE;
+    const engine = dispatchEngine(brief.engine ?? DEFAULT_ENGINE);
     const { live, limit, usage, account } = launchGates(tasks, engine, flags.has('--force-usage'));
     const name = brief.worktree ? `${goal ?? 'legacy'}-${brief.worktree}` : brief.id.toLowerCase();
     const worktree = join(root, '.temp', 'worktrees', name);
@@ -101,14 +103,15 @@ export async function dispatch(briefPath: string, flags: Set<string>): Promise<v
     }
     mkdirSync(join(worktree, '.temp', 'goal'), { recursive: true });
     const { worktree: _shared, ...claims } = brief;
-    const task: Task = { ...claims, brief: absolute, worktree, branch,
+    const task: Task = { ...claims, engine, brief: absolute, worktree, branch,
       base: reuse ? git(worktree, ['merge-base', 'HEAD', 'main']) : git(root, ['rev-parse', 'main']),
       state: 'running', attempts: [], ...brief.worktree ? { worktreeName: brief.worktree } : {},
       ...goal ? { goal } : {}, historyGate: true };
     copyFileSync(absolute, join(worktree, briefFile({ ...task, shared: !!task.worktreeName })));
+    stageHandover(worktree, handover);
     const manager = managerOf(ledger, goal);
     task.attempts.push(launch(task, brief.effort, isClaudeCode(engine) ? randomUUID() : '',
-      workerPrompt(task, manager, engine), false, manager, engine));
+      await workerPrompt(task, manager, engine, task.effort, handover), false, manager, engine));
     ledger.tasks[brief.id] = task;
     if (ledger.reserved) delete ledger.reserved[brief.id];
     ledger.lastId = Math.max(ledger.lastId ?? 0, Number(brief.id.slice(2)));
@@ -123,7 +126,7 @@ export async function finishAttempt(id: string, attemptNumber: number) {
   const watching = lastAttempt(taskOf(readLedger(), id));
   const result = readResult(watching);
   const refusedTurn = capacityRefusal(watching);
-  return await withLedger(ledger => {
+  return await withLedger(async ledger => {
     const current = taskOf(ledger, id);
     const last = lastAttempt(current);
     if (last.n !== attemptNumber) return { kind: 'replaced' as const, task: current };
@@ -158,7 +161,7 @@ export async function finishAttempt(id: string, attemptNumber: number) {
         launchGates(Object.values(ledger.tasks), engine, false);
         const manager = managerOf(ledger, current.goal);
         const session = isClaudeCode(engine) ? randomUUID() : '';
-        const prompt = `${workerPrompt(current, manager, engine, effort)}\n\n${transportContinuationPrompt(changedFiles(current).dirty)}`;
+        const prompt = `${await workerPrompt(current, manager, engine, effort)}\n\n${transportContinuationPrompt(changedFiles(current).dirty)}`;
         const next = launch(current, effort, session, prompt, false, manager, engine, 'continuation');
         next.continuedFor = 'transport';
         current.attempts.push(next);
@@ -176,12 +179,13 @@ export async function finishAttempt(id: string, attemptNumber: number) {
   });
 }
 
-function reportAttempt(task: Task, watching: Attempt, continued: boolean): void {
+function reportAttempt(task: Task, watching: Attempt, continued: boolean, strays: readonly string[]): void {
   const result = readResult(watching);
   console.log(`${task.id} attempt ${watching.n} ended after ${elapsed(watching.startedAt)}`
     + `${result.error ? ' WITH ERROR' : ''}${result.cost !== undefined ? `; cost $${result.cost.toFixed(2)}` : ''}`
     + `${result.tokens ? `; ${modelOf(engineOf(watching))} tokens ${result.tokens}` : ''}`);
   if (continued) return;
+  if (strays.length) console.log(`stray writes in the main checkout:\n  ${strays.join('\n  ')}`);
   console.log(describe(task));
   if (transportDrop(watching) && transportContinuations(task) >= MAX_TRANSPORT_CONTINUATIONS) console.log(`${task.id} stopped after repeated transport errors`);
   console.log(`--- handoff ---\n${result.text.length > 8000 ? `${result.text.slice(0, 8000)}\n[truncated]` : result.text}`);
@@ -195,6 +199,7 @@ export async function waitFor(id: string, options: { pollMs?: number; settleMs?:
   for (;;) {
     const alive = () => pidAlive(watching.pid, programOf(engineOf(watching)));
     while (alive() || (await Bun.sleep(options.settleMs ?? 3000), alive())) await Bun.sleep(options.pollMs ?? 5000);
+    const strays = strayFiles(taskOf(readLedger(), id));
     await settleTask(id, { capacityWaitMs: options.capacityWaitMs });
     let task = taskOf(readLedger(), id);
     while (lastAttempt(task).n === watching.n && task.settlement?.attempt === watching.n && !task.settlement.settledAt) {
@@ -203,7 +208,7 @@ export async function waitFor(id: string, options: { pollMs?: number; settleMs?:
       task = taskOf(readLedger(), id);
     }
     const next = lastAttempt(task);
-    reportAttempt(task, watching, next.n !== watching.n && !!next.continuedFor);
+    reportAttempt(task, watching, next.n !== watching.n && !!next.continuedFor, strays);
     if (next.n !== watching.n) {
       if (next.continuedFor) console.log(next.continuedFor === 'capacity'
         ? `${task.id} resumed by itself after a capacity refusal; same ${modelOf(engineOf(next))} session, pid ${next.pid}`
@@ -335,7 +340,7 @@ export async function resumeTask(id: string, args: string[]): Promise<void> {
     else throw new Error(`Unsupported resume option: ${args[i]}`);
   }
   if (!message.trim()) throw new Error('resume needs -m <message> or --file <path>');
-  await withLedger(ledger => {
+  await withLedger(async ledger => {
     const task = taskOf(ledger, id);
     assertOwner(task);
     if (running(task)) throw new Error(`${task.id} is still running; stop it first or message it`);
@@ -349,7 +354,10 @@ export async function resumeTask(id: string, args: string[]): Promise<void> {
     }
     const refusal = round === 'fix' ? resumeDecisionError(task.attempts, readFileSync(briefPathOf(task) ?? '', 'utf8')) : undefined;
     if (refusal) throw new Error(`${task.id}: ${refusal}`);
-    const nextEngine = engine ?? engineOf(previous);
+    const previousEngine = engineOf(previous);
+    const nextEngine = engine === 'sol'
+      ? previousEngine === 'codex' || previousEngine === 'codex-1' ? previousEngine : dispatchEngine(engine)
+      : engine ?? previousEngine;
     const nextEffort = effort ?? previous.effort;
     if (!effortsOf(nextEngine).includes(nextEffort)) {
       throw new Error(`${nextEngine} effort must be one of ${effortsOf(nextEngine).join(', ')}`);
@@ -363,8 +371,12 @@ export async function resumeTask(id: string, args: string[]): Promise<void> {
     const previousSession = sameEngine ? sameEngine.session || readResult(sameEngine).session || '' : '';
     const continuing = !fresh && !!previousSession;
     const session = continuing ? previousSession : isClaudeCode(nextEngine) ? randomUUID() : '';
-    const prompt = continuing ? message
-      : `${workerPrompt(task, manager, nextEngine, nextEffort)}\n\nManager note:\n${message}`;
+    const text = readFileSync(briefPathOf(task) ?? task.brief, 'utf8');
+    const handover = await prepareHandover(task, text);
+    copyFileSync(briefPathOf(task) ?? task.brief, join(task.worktree, briefFile({ ...task, shared: !!task.worktreeName })));
+    stageHandover(task.worktree, handover);
+    const prompt = continuing ? `${handoverPrompt(handover, task.tests ?? [])}\n\nManager note:\n${message}`
+      : `${await workerPrompt(task, manager, nextEngine, nextEffort, handover)}\n\nManager note:\n${message}`;
     task.attempts.push(launch(task, nextEffort, session, prompt, continuing, manager, nextEngine, round));
     task.engine = nextEngine;
     task.state = 'running';
@@ -488,6 +500,7 @@ export async function reclaimTask(id: string, briefPath: string, flags: Set<stri
     if (!flags.has('--allow-area')) conflicts.push(...areaConflicts(brief.paths, task.goal, areasOf(activeGoals(ledger))));
     if (conflicts.length) throw new Error(`Claim conflict for ${brief.id}:\n  ${conflicts.join('\n  ')}`);
     Object.assign(task, { kind: brief.kind, rows: brief.rows, title: brief.title, effort: brief.effort, cases: brief.cases, paths: brief.paths,
+      tests: brief.tests, refs: brief.refs, operations: brief.operations,
       migrations: brief.migrations, shared: brief.shared, depends: brief.depends, brief: absolute, land: brief.land });
     if (existsSync(task.worktree)) copyFileSync(absolute, join(task.worktree, briefFile({ ...task, shared: !!task.worktreeName })));
     console.log(`${task.id} claims replaced from ${briefPath}`);

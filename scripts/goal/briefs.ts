@@ -43,7 +43,7 @@ export function parseBrief(text: string): Brief {
     id: fields.id ?? '', title: fields.title ?? '', effort: fields.effort ?? 'medium',
     engine: (fields.engine as Engine | undefined) ?? DEFAULT_ENGINE,
     cases: list('cases'), paths: list('paths'), migrations: list('migrations'), shared: list('shared'),
-    tests: list('tests'),
+    tests: list('tests'), refs: list('refs'), operations: list('operations'),
     depends: list('depends'), ...fields.worktree ? { worktree: fields.worktree } : {},
     ...fields.land !== undefined ? { land: fields.land as Brief['land'] } : {},
   };

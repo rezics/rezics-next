@@ -5,6 +5,7 @@ import { existsSync, readFileSync, mkdirSync, openSync } from 'node:fs';
 import { currentUsage, codexAccounts, describeAccount } from './usage.ts';
 import { spawn } from 'node:child_process';
 import { type ChangedFile, isGeneratedOutput, outOfScope } from './briefs.ts';
+import { handoverPrompt, prepareHandover, type WorkerHandover } from './handover.ts';
 
 // Workers run in bypass permission mode, as the manager does, and accept no inbound session
 // messages; the manager changes a worker's instructions only by stopping or resuming it.
@@ -12,6 +13,7 @@ export function launchCommand(options: { id: string; effort: string; session: st
   resume: boolean; engine?: Engine; worktree?: string; lastMessage?: string }): [string, string[]] {
   const { id, effort, session, prompt, resume } = options;
   const engine = options.engine ?? 'claude';
+  if (engine === 'sol') throw new Error('Resolve sol to its Codex account before launching');
   // A prompt may start with `---` (brief frontmatter) or `-`, so no engine may parse it as an option:
   // Grok's parser takes a dash-leading value only in `--single=<prompt>` form; the others take the prompt after `--`.
   if (engine === 'grok') {
@@ -28,6 +30,7 @@ export function launchCommand(options: { id: string; effort: string; session: st
     // Maintainer, 2026-10-03: Codex workers run on the fast service tier unless GOAL_CODEX_SERVICE_TIER says otherwise.
     const tier = process.env.GOAL_CODEX_SERVICE_TIER ?? codexServiceTier();
     const common = ['-m', MODELS[engine], '-c', `model_reasoning_effort=${effort}`,
+      '-c', 'features.multi_agent=false', '-c', 'features.multi_agent_v2=false',
       ...(engine === 'luna' ? [] : ['-c', `model_context_window=${SOL_CONTEXT_WINDOW}`]),
       '-c', `model_auto_compact_token_limit=${codexCompactTokens(engine)}`,
       '-c', `tool_output_token_limit=${codexToolOutputTokens()}`,
@@ -37,6 +40,7 @@ export function launchCommand(options: { id: string; effort: string; session: st
       : ['exec', ...common, '-C', options.worktree ?? '.', '--', prompt]];
   }
   return ['claude', ['-p', '--model', MODELS[engine], '--effort', effort, '--dangerously-skip-permissions',
+    '--disallowedTools', 'Agent',
     ...(resume ? ['--resume', session] : ['--session-id', session]), '-n', id.toLowerCase(),
     '--output-format', 'json', '--', prompt]];
 }
@@ -82,7 +86,9 @@ export function briefFile(task: Pick<Task, 'id' | 'worktree'> & { shared?: boole
   return task.shared ? `.temp/goal/brief-${task.id.toLowerCase()}.md` : '.temp/goal/brief.md';
 }
 
-export function workerPrompt(task: Task, manager: string, engine: Engine = engineOf(task), effort = task.effort): string {
+export async function workerPrompt(task: Task, manager: string, engine: Engine = engineOf(task), effort = task.effort,
+  handover?: WorkerHandover): Promise<string> {
+  handover ??= await prepareHandover(task, readFileSync(task.brief, 'utf8'));
   return [
     `You are REZICS Goal worker ${task.id} (${modelOf(engine)}/${effort}). Work only inside ${task.worktree}.`,
     `Edit, create and delete files only under ${task.worktree} (and /tmp). The main checkout ${root} and every`
@@ -90,7 +96,8 @@ export function workerPrompt(task: Task, manager: string, engine: Engine = engin
       + ` translate such paths to ${task.worktree}.`,
     'goalctl commands you run (test, owner, slot) may write their own bookkeeping under the main checkout\'s'
       + ' .temp/goal-orchestration; that is allowed. Use `bun scripts/goal/goalctl.ts test` for QA.',
-    `Read docs/goals/worker.md there, then your brief at ${briefFile({ ...task, shared: !!task.worktreeName })}, and follow both.`,
+    `Read docs/goals/worker.md there and follow it and the brief below.`
+      + ` The brief's copy is at ${briefFile({ ...task, shared: !!task.worktreeName })}.`,
     ...task.worktreeName ? [`Other workers share this worktree at the same time (shared worktree "${task.worktreeName}").`
       + ' Change only your claimed paths; commit only them with `git commit --only <paths>` (retry if index.lock is held);'
       + ' never reset, checkout, stash or reformat files you did not change. Start no dev server, Storybook,'
@@ -100,6 +107,7 @@ export function workerPrompt(task: Task, manager: string, engine: Engine = engin
       + ' `bun scripts/goal/goalctl.ts test <files>`, one run at a time; an unverified fix is not done.'] : [],
     `${task.goal ? `Your Goal is ${task.goal}; its manager` : 'The manager'} session is "${manager}".`
       + ' End with the handoff that the worker protocol specifies.',
+    handoverPrompt(handover, task.tests ?? []),
   ].join('\n');
 }
 

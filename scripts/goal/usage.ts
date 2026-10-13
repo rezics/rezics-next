@@ -121,9 +121,11 @@ export function parseCodexUsage(text: string, nowMs: number): Partial<AccountUsa
       const ageSeconds = at === undefined ? undefined : Math.round(now - at);
       // A window whose reset has passed starts empty again.
       const live = windows.filter(w => (w.resets_at ?? Infinity) > now);
-      if (!live.length) return { used: 0, reached: false, plan: limits.plan_type, ageSeconds };
+      const week = windows.find(w => w.window_minutes === 7 * 24 * 60);
+      const weekUsed = week ? (week.resets_at ?? Infinity) > now ? week.used_percent : 0 : undefined;
+      if (!live.length) return { used: 0, reached: false, plan: limits.plan_type, ageSeconds, weekUsed };
       const fullest = live.reduce((a, b) => (b.used_percent! > a.used_percent! ? b : a));
-      return { used: fullest.used_percent, windowMinutes: fullest.window_minutes, plan: limits.plan_type, ageSeconds,
+      return { used: fullest.used_percent, windowMinutes: fullest.window_minutes, plan: limits.plan_type, ageSeconds, weekUsed,
         sampledAt: at, windowResetsAt: fullest.resets_at,
         resetInHours: fullest.resets_at === undefined ? undefined : Math.round((fullest.resets_at - now) / 360) / 10,
         reached: fullest.used_percent! >= 100 || !!limits.rate_limit_reached_type };

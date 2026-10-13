@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 
 export type State = 'running' | 'exited' | 'conflict' | 'merged' | 'stopped' | 'verified' | 'cancelled';
-export type Engine = 'claude' | 'sonnet' | 'haiku' | 'fable' | 'codex' | 'codex-1' | 'luna' | 'grok' | 'cursor';
+export type Engine = 'claude' | 'sonnet' | 'haiku' | 'fable' | 'sol' | 'codex' | 'codex-1' | 'luna' | 'grok' | 'cursor';
 export const BRIEF_KINDS = ['outcome', 'implementation', 'surface', 'mechanism', 'tooling'] as const;
 export type BriefKind = typeof BRIEF_KINDS[number];
 export interface Brief {
@@ -11,6 +11,10 @@ export interface Brief {
   kind?: BriefKind; rows?: string[];
   /** Explicit proofs run together by the worker check command. */
   tests?: string[];
+  /** Files staged under .temp/ref before the worker starts. */
+  refs?: string[];
+  /** Queries resolved by the API operation index for the initial prompt. */
+  operations?: string[];
   /** A shared worktree name within a Goal: its tasks work concurrently in one tree and branch. */
   worktree?: string;
   /** Opt in to review, merge and close when the worker's waiter sees a done handoff. */
@@ -73,6 +77,7 @@ export interface UsageReport {
 }
 export interface AccountUsage {
   account: string; home: string; engines: Engine[]; used?: number; windowMinutes?: number;
+  weekUsed?: number;
   resetInHours?: number; windowResetsAt?: number; sampledAt?: number; plan?: string; reached?: boolean; ageSeconds?: number;
 }
 export interface CodexResetStatus {
@@ -107,6 +112,7 @@ const ENGINE_EFFORTS: Record<Engine, string[]> = {
   haiku: ['low', 'medium', 'high', 'xhigh', 'max'],
   fable: ['low', 'medium', 'high', 'xhigh', 'max'],
   codex: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+  sol: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
   'codex-1': ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
   luna: ['low', 'medium', 'high', 'xhigh', 'max'],
   grok: ['low', 'medium', 'high'],
@@ -130,7 +136,7 @@ export const DEFAULT_ENGINE: Engine = (process.env.GOAL_ENGINE as Engine | undef
 export const CODEX_HOME = process.env.GOAL_CODEX_HOME ?? join(homedir(), '.codex');
 export const CODEX_1_HOME = process.env.GOAL_CODEX_1_HOME ?? join(homedir(), '.codex-1');
 export const engineOf = (item: { engine?: Engine }): Engine => item.engine ?? 'claude';
-export const MODELS: Record<Engine, string> = { claude: MODEL, sonnet: SONNET_MODEL, haiku: HAIKU_MODEL, fable: FABLE_MODEL, codex: CODEX_MODEL, 'codex-1': CODEX_MODEL, luna: LUNA_MODEL,
+export const MODELS: Record<Engine, string> = { claude: MODEL, sonnet: SONNET_MODEL, haiku: HAIKU_MODEL, fable: FABLE_MODEL, sol: CODEX_MODEL, codex: CODEX_MODEL, 'codex-1': CODEX_MODEL, luna: LUNA_MODEL,
   grok: GROK_MODEL, cursor: `${process.env.GOAL_CURSOR_MODEL ?? GROK_MODEL} (Cursor)` };
 export const modelOf = (engine: Engine): string => MODELS[engine];
 export const effortsOf = (engine: Engine): string[] => ENGINE_EFFORTS[engine] ?? [];
