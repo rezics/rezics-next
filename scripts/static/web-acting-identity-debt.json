@@ -1,0 +1,148 @@
+[
+  {
+    "id": "concept-works-public-query-branch",
+    "path": "apps/web/features/concept/works-read.ts",
+    "operation": "POST /v1/query",
+    "read": "main.v1.query.post(query)",
+    "input": "conceptQuery(state, cursor)",
+    "reason": "Analyzer does not discriminate /v1/query branches: conceptQuery selects public scope all; only scope mine requires an Agent. Program debt: expose operation/persona-specific read identity in the contract."
+  },
+  {
+    "id": "discovery-resource-list-public-query-branch",
+    "path": "apps/web/features/discover/api.ts",
+    "operation": "POST /v1/query",
+    "read": "contract.v1.query.post(query, { headers })",
+    "input": "query",
+    "reason": "Analyzer does not discriminate /v1/query branches: resources forwards ResourceQuery and resource-list uses publicWorkRead. Program debt: expose the public resource-list persona in the contract."
+  },
+  {
+    "id": "followed-concept-public-template-query",
+    "path": "apps/web/features/home/followed-concept-feed.ts",
+    "operation": "POST /v1/query",
+    "read": "main.v1.query.post(query)",
+    "input": "conceptFeedQuery(conceptId, { cursor, language })",
+    "reason": "Analyzer cannot resolve a template's authority: followed-concept-feed has public scope and executeTemplate uses publicWorkRead. Program debt: expose template/persona identity requirements."
+  },
+  {
+    "id": "role-impact-contract-body-forwarding",
+    "path": "apps/web/features/manage/commands.ts",
+    "operation": "POST /v1/realms/{realm}/role-impact",
+    "read": "main.v1.realms({ realm })['role-impact'].post(command)",
+    "input": "command",
+    "reason": "Analyzer cannot resolve imported conditional Eden body types: previewRole forwards RoleCommand, the required actingSubject body of role-impact. Guard debt: trace the contract-derived parameter alias."
+  },
+  {
+    "id": "release-works-public-query-branch",
+    "path": "apps/web/features/release-filter/read.ts",
+    "operation": "POST /v1/query",
+    "read": "main.v1.query.post(query, { headers: { 'accept-language': locale } })",
+    "input": "{ context: { realm: iri }, scope: { kind: 'realm' as const, realm: iri }, filter: { all: [group] }, sort: 'newest' as const, page: { size: RELEASE_PAGE, ...state.cursor ? { continuation: state.cursor } : {} } }",
+    "reason": "Analyzer does not discriminate /v1/query branches: release-works uses publicWorkRead and has no actingSubject schema field. Program debt: expose the public release-works persona in the contract."
+  },
+  {
+    "id": "search-filter-document-bearer-person-query",
+    "path": "apps/web/features/search/read.ts",
+    "operation": "POST /v1/query",
+    "read": "clients.search.v1.query.post(searchRequest(state, options.continuation))",
+    "input": "searchRequest(state, options.continuation)",
+    "reason": "Analyzer does not discriminate /v1/query branches: filter-document-v1 search uses public search and bearer-person mutes, without an Agent input. Program debt: expose that operation/persona identity contract."
+  },
+  {
+    "id": "zone-realm-name-manager-anonymous-client",
+    "path": "apps/web/app/[locale]/manage/z/[space]/realm/page.tsx",
+    "operation": "GET /v1/realms/{realm}",
+    "read": "anonymous.v1.realms({ realm: realm.slice(-36) }).get({ query: {} })",
+    "input": "{}",
+    "reason": "Analyzer cannot trace manager()'s destructured anonymous return from features/manage/server.ts to mainApiWithToken(undefined). Guard debt: trace cross-module client provenance."
+  },
+  {
+    "id": "discovery-realm-header-anonymous-caller",
+    "path": "apps/web/features/discover/read.ts",
+    "operation": "GET /v1/realms/{realm}",
+    "read": "main.v1.realms({ realm }).get({ query: {} })",
+    "input": "{}",
+    "reason": "Analyzer cannot trace readRealm's MainClient parameter to its sole caller in features/concept/read.ts, which supplies mainApiWithToken(undefined). Guard debt: trace cross-module client provenance."
+  },
+  {
+    "id": "discovery-contract-query-forwarding",
+    "path": "apps/web/features/discover/read.ts",
+    "operation": "GET /v1/works",
+    "read": "main.v1.works.get({ query })",
+    "input": "query",
+    "reason": "Analyzer cannot resolve imported Eden parameter aliases: readDiscovery forwards DiscoveryQuery including actingSubject unchanged. Guard debt: trace the contract-derived parameter alias."
+  },
+  {
+    "id": "feed-page-contextual-query-forwarding",
+    "path": "apps/web/features/feed/api.ts",
+    "operation": "GET /v1/feed",
+    "read": "main.v1.feed.get({ query })",
+    "input": "query",
+    "reason": "Analyzer cannot resolve contextually typed arrow parameters: FeedApi.page supplies FeedQuery including actingSubject unchanged. Guard debt: trace the contextual contract-derived parameter."
+  },
+  {
+    "id": "feed-head-contextual-input-forwarding",
+    "path": "apps/web/features/feed/api.ts",
+    "operation": "GET /v1/feed/head",
+    "read": "main.v1.feed.head.get({ query: input })",
+    "input": "input",
+    "reason": "Analyzer cannot resolve contextually typed arrow parameters: FeedApi.head's interface input includes actingSubject and is forwarded unchanged. Guard debt: trace the contextual identity parameter."
+  },
+  {
+    "id": "home-feed-contract-query-forwarding",
+    "path": "apps/web/features/home/server.ts",
+    "operation": "GET /v1/feed",
+    "read": "client.v1.feed.get({ query })",
+    "input": "query",
+    "occurrences": 2,
+    "reason": "Analyzer cannot resolve imported Eden aliases: readFeedPage forwards FeedQuery on the first read and retry; client is main only with query.actingSubject, otherwise anonymous. Guard debt: trace the contract-derived parameter alias."
+  },
+  {
+    "id": "dormant-private-space-join-page",
+    "path": "apps/web/features/manage/settings-api.ts",
+    "operation": "GET /v1/realms/{realm}/join-page",
+    "read": "main.v1.realms({ realm: uuidOf(realm) })['join-page'].get({ query: {} })",
+    "input": "{}",
+    "unusedExport": "readPrivateSpaceJoinPage",
+    "reason": "Dormant identity omission: only tests/g-947-access.test.ts calls this export. Any production caller must resolve identity forwarding; the guard checks that none exists."
+  },
+  {
+    "id": "agent-handle-availability-public-scope",
+    "path": "apps/web/features/onboarding/handle-field.tsx",
+    "operation": "GET /v1/addresses/availability",
+    "read": "browserMainApi().v1.addresses.availability.get({ query: { scope: 'agent', alias: handle }, fetch: { signal, cache: 'no-store' }, })",
+    "input": "{ scope: 'agent', alias: handle }",
+    "reason": "Analyzer cannot discriminate scope authority: withAliasAvailabilityAuthority needs actingSubject only for zone scope, whereas agent scope is public. Program debt: expose the public agent-scope persona in the contract."
+  },
+  {
+    "id": "followed-realm-name-shell-anonymous-client",
+    "path": "apps/web/features/shell/communities-read.ts",
+    "operation": "GET /v1/realms/{realm}",
+    "read": "reader.anonymous.v1.realms({ realm: uuidOf(item.realm) }).get()",
+    "input": "",
+    "reason": "Analyzer cannot trace shellReader().anonymous to mainApiWithToken(undefined). Guard debt: trace returned object client provenance."
+  },
+  {
+    "id": "followed-zone-realm-name-shell-anonymous-client",
+    "path": "apps/web/features/shell/communities-read.ts",
+    "operation": "GET /v1/realms/{realm}",
+    "read": "reader.anonymous.v1.realms({ realm: uuidOf(zone.realm) }).get()",
+    "input": "",
+    "reason": "Analyzer cannot trace shellReader().anonymous to mainApiWithToken(undefined). Guard debt: trace returned object client provenance."
+  },
+  {
+    "id": "inviter-name-shell-anonymous-caller",
+    "path": "apps/web/features/shell/notifications/invitations-read.ts",
+    "operation": "GET /v1/agents/{id}",
+    "read": "anonymous.v1.agents({ id: uuidOf(item.inviter) }).get({ query: {} })",
+    "input": "{}",
+    "reason": "Analyzer cannot trace readInvitationPage's anonymous parameter from notifications/page.tsx to shellReader().anonymous. Guard debt: trace cross-module client provenance."
+  },
+  {
+    "id": "invitation-realm-name-shell-anonymous-caller",
+    "path": "apps/web/features/shell/notifications/invitations-read.ts",
+    "operation": "GET /v1/realms/{realm}",
+    "read": "anonymous.v1.realms({ realm: uuidOf(item.realm) }).get({ query: { language } })",
+    "input": "{ language }",
+    "reason": "Analyzer cannot trace readInvitationPage's anonymous parameter from notifications/page.tsx to shellReader().anonymous. Guard debt: trace cross-module client provenance."
+  }
+]

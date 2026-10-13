@@ -1,9 +1,8 @@
 import { expect, test } from 'bun:test';
-import { createHash } from 'node:crypto';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { buildMainOpenApi } from '../api/generate.ts';
-import { unreviewedActingReads, webActingIdentityViolations, type ActingReadReview, type ReadContract } from './web-acting-identity.ts';
+import { unresolvedActingReads, webActingIdentityViolations, type ActingReadDebt, type ReadContract } from './web-acting-identity.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const contract: ReadContract = { paths: {
@@ -34,28 +33,34 @@ test('query comments, unrelated headers and explicit empty identities cannot sat
     main.v1.me['person-preferences'].get({ query: { /* actingSubject */ language: 'en' } });
     main.v1.me['person-preferences'].get({ query: {}, headers: { actingSubject: selected } });
     main.v1.me['person-preferences'].get({ query: { actingSubject: undefined } });
-  `)).toHaveLength(4);
+    main. /* client */ v1.me['person-preferences']. /* read */ get({ query: {} });
+  `)).toHaveLength(5);
 });
 
-test('inventory reviews cannot bless another read or survive a changed query initializer', () => {
+test('named debt ignores comments and correct new reads but cannot bless another read or changed input', () => {
   const directory = mkdtempSync(resolve(root, '.temp/web-acting-identity-'));
   const path = `${directory.slice(root.length + 1)}/read.ts`;
   const source = 'const query = incoming; main.v1.me["person-preferences"].get({ query });';
   try {
     writeFileSync(resolve(root, path), source);
     const violations = webActingIdentityViolations(root, [path], contract);
-    const reviews = { [path]: { sha256: createHash('sha256').update(source).digest('hex'),
-      reason: 'Fixture forwarding review', reads: violations.map(item => `${item.operation}: ${item.read}`) } };
-    expect(unreviewedActingReads(root, violations, reviews)).toEqual([]);
+    const debt = violations.map(item => ({ ...item, id: 'unknown-input-forwarding', reason: 'Analyzer cannot trace incoming.' }));
+    expect(unresolvedActingReads(root, violations, debt)).toEqual([]);
     writeFileSync(resolve(root, path), `// Explain the unchanged identity transport.\n${source}`);
-    expect(unreviewedActingReads(root, webActingIdentityViolations(root, [path], contract), reviews)).toEqual([]);
-    expect(unreviewedActingReads(root, [{ ...violations[0]!, operation: 'GET /v1/new-read' }], reviews)).toHaveLength(1);
+    expect(unresolvedActingReads(root, webActingIdentityViolations(root, [path], contract), debt)).toEqual([]);
+    writeFileSync(resolve(root, path), source.replace('{ query }', '{ /* unchanged */ query }') + `
+      main.v1.me['person-preferences'].get({ query: { actingSubject: selected } });
+      mainApiWithToken(undefined).v1.realms({ realm }).decisions.get();
+    `);
+    expect(unresolvedActingReads(root, webActingIdentityViolations(root, [path], contract), debt)).toEqual([]);
+    expect(unresolvedActingReads(root, [{ ...violations[0]!, operation: 'GET /v1/new-read' }], debt)).toHaveLength(1);
+    expect(unresolvedActingReads(root, [...violations, ...violations], debt)).toHaveLength(1);
     writeFileSync(resolve(root, path), source.replace('incoming', '{}'));
-    expect(unreviewedActingReads(root, webActingIdentityViolations(root, [path], contract), reviews)).toHaveLength(1);
+    expect(unresolvedActingReads(root, webActingIdentityViolations(root, [path], contract), debt)).toHaveLength(1);
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
-test('a dormant adapter cannot acquire a production caller without identity review', () => {
+test('dormant debt expires when an adapter acquires a production caller', () => {
   const directory = mkdtempSync(resolve(root, '.temp/web-acting-identity-'));
   const path = `${directory.slice(root.length + 1)}/read.ts`;
   const caller = `${directory.slice(root.length + 1)}/page.ts`;
@@ -63,13 +68,58 @@ test('a dormant adapter cannot acquire a production caller without identity revi
   try {
     writeFileSync(resolve(root, path), source);
     const violations = webActingIdentityViolations(root, [path], contract);
-    const reviews = { [path]: { sha256: createHash('sha256').update(source).digest('hex'),
-      reason: 'Fixture dormant export', unusedExport: 'legacyRead',
-      reads: violations.map(item => `${item.operation}: ${item.read}`) } };
-    expect(unreviewedActingReads(root, violations, reviews, [path])).toEqual([]);
+    const debt = violations.map(item => ({ ...item, id: 'dormant-helper', reason: 'No production caller.', unusedExport: 'legacyRead' }));
+    expect(unresolvedActingReads(root, violations, debt, [path])).toEqual([]);
     writeFileSync(resolve(root, caller), 'import { legacyRead as read } from "./read.ts"; read(main);');
-    expect(unreviewedActingReads(root, violations, reviews, [path, caller])).toHaveLength(1);
+    expect(unresolvedActingReads(root, violations, debt, [path, caller])).toHaveLength(1);
   } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('whole typed identity parameters are forwarded without a debt entry', () => {
+  expect(inspect(`
+    function page(query: { actingSubject?: string; cursor?: string }) {
+      main.v1.realms({ realm }).decisions.get({ query });
+      main.v1.realms({ realm }).decisions.get({ query: { ...query, limit: 10 } });
+    }
+    const read = (body: { resources: string[]; actingSubject: string }) =>
+      main.v1.resources.summaries.post(body);
+    function rest(input: { work: string; actingSubject?: string }) {
+      const { work, ...query } = input;
+      main.v1.realms({ realm }).decisions.get({ query: { ...query } });
+    }
+    function commented(/* chosen input */ input: /* identity shape */ { actingSubject?: string }) {
+      const query /* preserve input */ = /* forward */ input;
+      main.v1.realms({ realm }).decisions.get({ query /* transport */: query });
+      main. /* client */ v1.realms({ realm }).decisions. /* read */ get({ query });
+      const anonymous /* public client */ = mainApiWithToken(/* no token */ undefined);
+      anonymous.v1.realms({ realm }).decisions.get();
+    }
+  `)).toEqual([]);
+  expect(inspect(`
+    function page(query: { actingSubject: string }) {
+      function nested(query: { cursor?: string }) {
+        main.v1.realms({ realm }).decisions.get({ query });
+      }
+      function reconstructed() {
+        main.v1.realms({ realm }).decisions.get({ query: { cursor: query.cursor } });
+      }
+      function shadowed() {
+        const query = {};
+        main.v1.realms({ realm }).decisions.get({ query });
+      }
+      main.v1.realms({ realm }).decisions.get({ query: { ...query, actingSubject: undefined } });
+      const callback = query => main.v1.realms({ realm }).decisions.get({ query });
+      const { actingSubject, ...rest } = query;
+      main.v1.realms({ realm }).decisions.get({ query: { ...rest } });
+    }
+    function nestedField(query: { metadata: { actingSubject: string }; label: 'actingSubject:string' }) {
+      main.v1.realms({ realm }).decisions.get({ query });
+    }
+    function property(input: { actingSubject: string; query: { cursor: string } }) {
+      const { query } = input;
+      main.v1.realms({ realm }).decisions.get({ query });
+    }
+  `)).toHaveLength(8);
 });
 
 test('Eden authenticated reads cannot omit identity, including new callers and client aliases', () => {
@@ -143,6 +193,6 @@ test('production web reads introduce no acting identity omissions against live M
   const api = JSON.parse(await buildMainOpenApi()) as ReadContract;
   const violations = webActingIdentityViolations(root, files, api);
   writeFileSync(resolve(root, '.temp/web-acting-identity-inventory.json'), JSON.stringify(violations, null, 2));
-  const reviews = JSON.parse(readFileSync(resolve(import.meta.dir, 'web-acting-identity-reviews.json'), 'utf8')) as Record<string, ActingReadReview>;
-  expect(unreviewedActingReads(root, violations, reviews, files)).toEqual([]);
+  const debt = JSON.parse(readFileSync(resolve(import.meta.dir, 'web-acting-identity-debt.json'), 'utf8')) as ActingReadDebt[];
+  expect(unresolvedActingReads(root, violations, debt, files)).toEqual([]);
 });
