@@ -1,5 +1,5 @@
 import { Database } from 'bun:sqlite';
-import { expect, test } from 'bun:test';
+import { expect, setDefaultTimeout, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -18,6 +18,11 @@ import { cleanupQaStacks, forgetQaStack, QA_STACK_REGISTRY, rememberQaStack }
 import { createQaStackPool, qaStackFingerprint, type QaStackPoolLease } from '../../../scripts/qa/stack-pool.ts';
 
 const root = resolve(import.meta.dir, '../../..');
+
+// CLI cases prove process boundaries and event order, with no startup latency contract.
+// A watchdog ends a hung child; each case can start several children in sequence.
+const PROCESS_HANG_MS = 5 * 60_000;
+setDefaultTimeout(PROCESS_HANG_MS * 4);
 
 /** Exercise direct-run admission without starting the harness's unrelated tiers. */
 function harnessAdmission(env: NodeJS.ProcessEnv, slotDirectory: string) {
@@ -174,6 +179,9 @@ function coldPoolHarness(directory: string, inspectionError: string,
   mode: { initialPresent?: boolean; postMissing?: boolean; rejectSnapshot?: boolean; realPool?: boolean;
     leased?: boolean; capacity?: boolean; enabled?: boolean; eligible?: boolean; keep?: boolean;
     testFailed?: boolean; resetFailed?: boolean; switchOffAfterReset?: boolean } = {}) {
+  // Fingerprint an isolated, small checkout, as the inventory tests do. Scanning
+  // the live repository measures unrelated workers' source trees and host I/O.
+  fingerprintCheckout(directory);
   const events: string[] = [];
   const errors: string[] = [];
   const computed: string[] = [];
@@ -184,8 +192,8 @@ function coldPoolHarness(directory: string, inspectionError: string,
   const apps = { MAIN_OBJECT_DIRECTORY: join(directory, 'objects') };
   const compose = { REZICS_STACK_PROFILE: 'qa' };
   let realLease: QaStackPoolLease | undefined;
-  const realPool = mode.realPool ? createQaStackPool({ root, slotDirectory: join(directory, 'slots'),
-    slots: 1, janitor: false, destroy: async () => {}, destroySync: () => {} }) : undefined;
+  const realPool = mode.realPool ? createQaStackPool({ root: directory, slotDirectory: join(directory, 'slots'),
+    slots: 1, now: () => 100, janitor: false, destroy: async () => {}, destroySync: () => {} }) : undefined;
   if (realPool) {
     writeFileSync(join(directory, 'qa-stack-pool'), 'on\n');
     mkdirSync(apps.MAIN_OBJECT_DIRECTORY);
@@ -210,7 +218,7 @@ function coldPoolHarness(directory: string, inspectionError: string,
     async destroy() { events.push('destroy'); await realLease?.destroy(); },
   };
   const boundary = poolStartupBoundary({
-    root, directory, logs: directory, runId: 'cold-pool', Date, Bun, join, fusekiBuildInputs,
+    root: directory, directory, logs: directory, runId: 'cold-pool', Date, Bun, join, fusekiBuildInputs,
     process: { env: {} }, readFileSync, writeFileSync, appendFileSync, mkdirSync,
     options: { keep: mode.keep }, testPassed: !mode.testFailed,
     faultFixtureEnvironment: {}, qaSlotDirectory: join(directory, 'slots'),
@@ -412,7 +420,7 @@ function startupHarness(directory: string) {
     if (['scripts/qa/test.ts', 'scripts/qa/cli.ts'].includes(args[0]) || process.env.QA_HARNESS_REAL_HOST_TEST === '1' && args[0] === 'test') {
       const forwardedEnv = process.env.QA_HARNESS_REAL_HOST_TEST === '1' && args[0] === 'test'
         ? { ...process.env, QA_HARNESS_SLOT_OWNER: String(process.ppid) } : process.env;
-      const result = await commandAsync(${JSON.stringify(root)}, process.execPath, args, 20000, forwardedEnv,
+      const result = await commandAsync(${JSON.stringify(root)}, process.execPath, args, ${PROCESS_HANG_MS}, forwardedEnv,
         line => {
           console.log(line);
           if (line.startsWith('Admitted; QA memory:')) writeFileSync(join(process.env.QA_HARNESS_CONTROL, process.env.QA_HARNESS_NAME + '-admitted'), '');
@@ -437,11 +445,11 @@ function startupHarness(directory: string) {
       }
     } else if (args[0] === 'test') {
       captureFixtureEnvironment('test');
-      const result = await commandAsync(${JSON.stringify(root)}, 'bun', ['scripts/dev/cli.ts', 'stack:up'], 10000,
+      const result = await commandAsync(${JSON.stringify(root)}, 'bun', ['scripts/dev/cli.ts', 'stack:up'], ${PROCESS_HANG_MS},
         { ...process.env, QA_HARNESS_SLOT_OWNER: process.env.QA_HARNESS_SLOT_OWNER ?? String(process.ppid) });
       console.log(result.output);
       if (process.env.QA_HARNESS_REPEAT === '1') {
-        const next = await commandAsync(${JSON.stringify(root)}, 'bun', ['scripts/dev/cli.ts', 'stack:up'], 10000,
+        const next = await commandAsync(${JSON.stringify(root)}, 'bun', ['scripts/dev/cli.ts', 'stack:up'], ${PROCESS_HANG_MS},
           { ...process.env, QA_HARNESS_SLOT_OWNER: process.env.QA_HARNESS_SLOT_OWNER ?? String(process.ppid) });
         console.log(next.output);
       }
@@ -519,7 +527,7 @@ function startupHarness(directory: string) {
       cwd: root, stdout: 'pipe', stderr: 'pipe', env: { ...process.env,
         PATH: `${directory}:${process.env.PATH}`, GOAL_QA_SLOT_DIRECTORY: slots, GOAL_QA_SLOTS: '1',
         GOAL_QA_WAIT_DIR: join(slots, 'waiters'), GOAL_QA_HEAVY_RUN: '0', GOAL_IN_SLOT: '0',
-        REZICS_QA_MEMORY_DEADLINE: String(Date.now() + 15_000),
+        REZICS_QA_MEMORY_DEADLINE: String(Date.now() + PROCESS_HANG_MS),
         QA_HARNESS_CONTROL: control, QA_HARNESS_NAME: name, ...extraEnv,
       },
     });
@@ -540,7 +548,7 @@ function startupHarness(directory: string) {
 }
 
 async function until(predicate: () => boolean, description: string): Promise<void> {
-  const deadline = Date.now() + 10_000;
+  const deadline = Date.now() + PROCESS_HANG_MS;
   while (!predicate()) {
     if (Date.now() >= deadline) throw new Error(`Timed out waiting for ${description}`);
     await Bun.sleep(10);
@@ -607,7 +615,7 @@ for (const tier of ['model', 'integration', 'fault/recovery']) {
       expect(output).toContain('QA artifacts:');
       expect(existsSync(join(harness.slots, '0'))).toBe(false);
     } finally { await harness.stop(); rmSync(directory, { recursive: true, force: true }); }
-  }, 20_000);
+  }, PROCESS_HANG_MS * 4);
 }
 }
 
@@ -626,7 +634,8 @@ for (const file of [
     try {
       const run = harness.startGoal('native', [file], { QA_HARNESS_REAL_HOST_TEST: '1' });
       await until(() => existsSync(join(harness.control, 'native-admitted')), 'host memory admission');
-      await Bun.sleep(50);
+      await until(() => qaWaitStatusLines(harness.slots).some(line => line.startsWith('QA waiting for slot:')),
+        'native slot wait after host memory admission');
       expect(existsSync(join(harness.control, 'native-resource-attempt'))).toBe(false);
       expect(readFileSync(join(harness.slots, '0', 'pid'), 'utf8')).toBe(String(holder.pid));
       slot.release();
@@ -641,7 +650,7 @@ for (const file of [
       slot.release(); holder.kill(); await holder.exited;
       await harness.stop(); rmSync(directory, { recursive: true, force: true });
     }
-  }, 20_000);
+  }, PROCESS_HANG_MS * 4);
 }
 
 test('goalctl successive startup processes restart their sequences after a slot retry', async () => {
@@ -673,7 +682,7 @@ test('goalctl successive startup processes restart their sequences after a slot 
     slot.release(); holder.kill(); await holder.exited;
     await harness.stop(); rmSync(directory, { recursive: true, force: true });
   }
-}, 20_000);
+}, PROCESS_HANG_MS * 4);
 
 for (const blockedBy of ['memory', 'startup']) {
   test(`completed host tier releases its lease before model ${blockedBy} admission`, async () => {
@@ -717,7 +726,7 @@ for (const blockedBy of ['memory', 'startup']) {
       mutex.close(true); await harness.stop();
       rmSync(priorLink, { force: true }); rmSync(directory, { recursive: true, force: true });
     }
-  }, 20_000);
+  }, PROCESS_HANG_MS * 4);
 }
 
 test('an erasure-only selection prepares its default small fixture before the shard', async () => {
@@ -741,7 +750,7 @@ test('an erasure-only selection prepares its default small fixture before the sh
     expect(events.findIndex(event => event.phase === 'prepare'))
       .toBeLessThan(events.findIndex(event => event.phase === 'stack-up'));
   } finally { await harness.stop(); rmSync(directory, { recursive: true, force: true }); }
-}, 20_000);
+}, PROCESS_HANG_MS * 4);
 
 test('launch and erasure share one prepared small fixture across their selected shards', async () => {
   const directory = mkdtempSync(join(root, '.temp', 'qa-shared-fixture-preparation-'));
@@ -760,7 +769,7 @@ test('launch and erasure share one prepared small fixture across their selected 
     expect(shardEvents.every(event => event.values.G727_LAUNCH_FIXTURE === 'fixture-shared-small'
       && event.values.ERASURE_CAMPAIGN_FIXTURE === 'fixture-shared-small')).toBe(true);
   } finally { await harness.stop(); rmSync(directory, { recursive: true, force: true }); }
-}, 20_000);
+}, PROCESS_HANG_MS * 4);
 
 test('a supplied launch fixture does not suppress erasure small-fixture preparation', async () => {
   const directory = mkdtempSync(join(root, '.temp', 'qa-independent-fixture-needs-'));
@@ -780,7 +789,7 @@ test('a supplied launch fixture does not suppress erasure small-fixture preparat
     expect(shardEvents.every(event => event.values.G727_LAUNCH_FIXTURE === 'fixture-launch-caller'
       && event.values.ERASURE_CAMPAIGN_FIXTURE === 'fixture-erasure-prepared')).toBe(true);
   } finally { await harness.stop(); rmSync(directory, { recursive: true, force: true }); }
-}, 20_000);
+}, PROCESS_HANG_MS * 4);
 
 for (const scenario of [
   { name: 'explicit fixture', environment: { ERASURE_CAMPAIGN_FIXTURE: 'fixture-caller-retained' }, expected: 'fixture-caller-retained' },
@@ -805,7 +814,7 @@ for (const scenario of [
       }
       for (const [key, value] of Object.entries(scenario.environment)) expect(shard?.values[key]).toBe(value);
     } finally { await harness.stop(); rmSync(directory, { recursive: true, force: true }); }
-  }, 20_000);
+  }, PROCESS_HANG_MS * 4);
 }
 
 test('failed small-fixture preparation stops before any erasure shard starts', async () => {
@@ -824,7 +833,7 @@ test('failed small-fixture preparation stops before any erasure shard starts', a
     expect(events.some(event => event.phase === 'stack-up' || event.phase === 'test')).toBe(false);
     expect(existsSync(join(harness.control, 'failed-preparation-started'))).toBe(false);
   } finally { await harness.stop(); rmSync(directory, { recursive: true, force: true }); }
-}, 20_000);
+}, PROCESS_HANG_MS * 4);
 
 test('finished fixture preparation releases its lease before drill startup admission', async () => {
   const directory = mkdtempSync(join(root, '.temp', 'qa-preparation-stack-transition-'));
@@ -848,7 +857,7 @@ test('finished fixture preparation releases its lease before drill startup admis
     expect((await run.output).join('\n')).toContain('QA artifacts:');
     expect(existsSync(join(harness.slots, '0'))).toBe(false);
   } finally { await harness.stop(); rmSync(directory, { recursive: true, force: true }); }
-}, 20_000);
+}, PROCESS_HANG_MS * 4);
 
 test('real QA CLI retries fresh memory admission while its slot is busy', async () => {
   const directory = mkdtempSync(join(root, '.temp', 'qa-cli-slot-retry-'));
@@ -876,7 +885,7 @@ test('real QA CLI retries fresh memory admission while its slot is busy', async 
     slot.release(); holder.kill(); await holder.exited;
     await harness.stop(); rmSync(directory, { recursive: true, force: true });
   }
-}, 20_000);
+}, PROCESS_HANG_MS * 4);
 
 for (const tier of ['integration', 'fault/recovery']) {
 test(`real QA CLI ${tier} shards reuse their inherited one-slot lease`, async () => {
@@ -896,7 +905,7 @@ test(`real QA CLI ${tier} shards reuse their inherited one-slot lease`, async ()
   } finally {
     inherited.release(); await harness.stop(); rmSync(directory, { recursive: true, force: true });
   }
-}, 20_000);
+}, PROCESS_HANG_MS * 4);
 }
 
 test('independent projects owned by one runner keep distinct leases', async () => {
@@ -943,7 +952,7 @@ test(`real ${entry} startup contenders hold no slots until their startup turn`, 
     expect(existsSync(join(harness.slots, '0'))).toBe(false);
     expect(qaWaitStatusLines(harness.slots)).toEqual([]);
   } finally { mutex.close(true); await harness.stop(); rmSync(directory, { recursive: true, force: true }); }
-}, 20_000);
+}, PROCESS_HANG_MS * 4);
 }
 
 test('goalctl bounded owner tier delegates a CLI-owned slot after host admission', async () => {
@@ -969,7 +978,7 @@ test('goalctl bounded owner tier delegates a CLI-owned slot after host admission
     expect((await run.output).join('\n')).toContain('QA artifacts:');
     expect(existsSync(join(harness.slots, '0'))).toBe(false);
   } finally { await harness.stop(); rmSync(directory, { recursive: true, force: true }); }
-}, 20_000);
+}, PROCESS_HANG_MS * 4);
 
 for (const inherited of [false, true]) {
   test(`QA harness ${inherited ? 'inherited' : 'direct'} slot waits appear in Goal status until admitted`, async () => {

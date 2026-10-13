@@ -22,7 +22,7 @@ import { acquireHeavy, acquireSharedLifecycle, archiveFiles, areaConflicts, bala
 import { fastForwardMain, typeRechecksSpent, introducedTypecheckDiagnostics, typecheckDiagnostics, typecheckGate, typecheckWorkspaces, TYPECHECK_WORKSPACES, unclassifiedTypecheckLines,
   type FastForwardGates, type MainSync, type PreparedMerge, type TypecheckRun } from './goalctl.ts';
 import { reviewPrompt } from './land.ts';
-import { physicalPath, postgresSocketRefusal } from './postgres-socket.ts';
+import { POSTGRES_SOCKET_LIMIT, postgresSocketPath, postgresSocketRefusal } from './postgres-socket.ts';
 import { fixtureSpawns } from './fixtures/spawn-deadline.ts';
 
 // These fixtures exercise multiple CLI processes per case. Neither startup nor a whole case
@@ -188,9 +188,11 @@ describe('goalctl briefs', () => {
   });
 
   test('rejects efforts the engine does not accept, absolute or .temp paths and malformed ranges', () => {
-    const parsed = parseBrief(brief.replace('xhigh', 'ultra').replace('services/main/src/modules/poll/**', '/etc/**')
+    const parsed = parseBrief(brief.replace('effort: xhigh', 'engine: claude\neffort: ultra').replace('services/main/src/modules/poll/**', '/etc/**')
       .replace('040-044', '044-040'));
     expect(validateBrief(parsed)).toHaveLength(3);
+    expect(validateBrief({ ...parseBrief(brief), engine: 'codex-1', effort: 'ultra' })).toEqual([]);
+    expect(validateBrief({ ...parseBrief(brief), engine: 'claude', effort: 'max' })).toEqual([]);
     expect(validateBrief({ ...parseBrief(brief), paths: ['.temp/x'] })).toHaveLength(1);
   });
 
@@ -1340,18 +1342,16 @@ describe('goalctl runtime policy', () => {
     expect(fromTranscript.introduced).toEqual([{ file: pooled, cases: ['pool end runs'], fileError: false }]);
   });
 
-  test('the unit gate refuses a checkout too deep for a PostgreSQL socket', () => {
+  test('the unit gate admits deep checkouts through a short PostgreSQL socket alias', () => {
     // Fixed paths, so the result does not depend on where this checkout lives.
     const main = '/tmp/rezics-socket-check';
     const taskTree = join(main, '.temp/worktrees/g-1000');
     expect(gateTreeRefusal(taskTree, main)).toBeUndefined();
     const nested = join(taskTree, '.temp/gate-scratch', 'x'.repeat(40));
-    const refusal = gateTreeRefusal(nested, main);
-    expect(refusal).toBe(postgresSocketRefusal(physicalPath(nested)));
-    expect(refusal).toContain(physicalPath(nested));
-    expect(refusal).toContain('bytes');
-    expect(refusal).not.toContain('inconclusive');
-    expect(Number(/(\d+) bytes/.exec(refusal ?? '')?.[1])).toBeGreaterThan(107);
+    expect(gateTreeRefusal(nested, main)).toBeUndefined();
+    expect(postgresSocketRefusal(nested)).toBeUndefined();
+    expect(postgresSocketPath(nested)).toStartWith('/tmp/rezics-pg-');
+    expect(Buffer.byteLength(postgresSocketPath(nested))).toBeLessThanOrEqual(POSTGRES_SOCKET_LIMIT);
   });
 
   test('cases in one shard output are attributed to their own files', async () => {
@@ -3366,20 +3366,22 @@ ${edit}
     const r = repo();
     try {
       const guard = repositoryGuards[0].file;
+      const inventory = 'tests/qa/fixtures/outcomes/inventory.json';
+      mkdirSync(join(r.dir, dirname(inventory)), { recursive: true });
       mkdirSync(join(r.dir, guard, '..'), { recursive: true });
       writeFileSync(join(r.dir, guard), `import { test, expect } from 'bun:test';\nimport { readFileSync } from 'node:fs';\n`
-        + `test('inventory stays valid', () => expect(readFileSync('inventory.ts', 'utf8')).toBe('valid'));\n`);
-      writeFileSync(join(r.dir, 'inventory.ts'), 'valid');
+        + `test('inventory stays valid', () => expect(readFileSync(${JSON.stringify(inventory)}, 'utf8')).toBe('valid'));\n`);
+      writeFileSync(join(r.dir, inventory), 'valid');
       r.git('add', '.'); r.git('commit', '-qm', 'Baseline inventory');
       const task = await r.start('G-001');
-      const ledger = r.ledger(); ledger.tasks[task.id]!.paths.push('inventory.ts'); r.save(ledger);
+      const ledger = r.ledger(); ledger.tasks[task.id]!.paths.push(inventory); r.save(ledger);
       r.commit(task);
-      writeFileSync(join(task.worktree, 'inventory.ts'), 'invalid');
+      writeFileSync(join(task.worktree, inventory), 'invalid');
       expect(spawnSync('git', ['-C', task.worktree, 'commit', '-qam', 'Break inventory']).status).toBe(0);
       await r.stopFixture(task.id);
       expect(r.run(['merge', task.id, '--skip-unit-gate']).status).toBe(0);
       const firstMerge = r.git('rev-parse', 'main');
-      writeFileSync(join(task.worktree, 'inventory.ts'), 'still invalid');
+      writeFileSync(join(task.worktree, inventory), 'still invalid');
       expect(spawnSync('git', ['-C', task.worktree, 'commit', '-qam', 'Continue stream']).status).toBe(0);
       const result = r.run(['merge', task.id]);
       expect(result.stderr).toBe('');
@@ -3627,17 +3629,19 @@ process.exit(0);
       const r = repo();
       try {
         const guard = repositoryGuards[0].file;
-        // The guard scans a source outside its imports, reproducing a route or SQL inventory omission.
+        const inventory = 'tests/qa/fixtures/outcomes/inventory.json';
+        mkdirSync(join(r.dir, dirname(inventory)), { recursive: true });
+        // The scan input is in the guard's declared inventory, outside its imports.
         const source = `import { test, expect } from 'bun:test';\nimport { readFileSync } from 'node:fs';\n`
-          + `test('repository inventory is valid', () => expect(readFileSync('inventory.ts', 'utf8')).toBe('valid'));\n`;
+          + `test('repository inventory is valid', () => expect(readFileSync(${JSON.stringify(inventory)}, 'utf8')).toBe('valid'));\n`;
         mkdirSync(join(r.dir, guard, '..'), { recursive: true });
         writeFileSync(join(r.dir, guard), source);
-        writeFileSync(join(r.dir, 'inventory.ts'), outcome === 'inherited' ? 'invalid' : 'valid');
+        writeFileSync(join(r.dir, inventory), outcome === 'inherited' ? 'invalid' : 'valid');
         r.git('add', '.'); r.git('commit', '-qm', 'Baseline inventory guard');
         const task = await r.start('G-001');
-        const ledger = r.ledger(); ledger.tasks[task.id]!.paths.push('inventory.ts'); r.save(ledger);
+        const ledger = r.ledger(); ledger.tasks[task.id]!.paths.push(inventory); r.save(ledger);
         r.commit(task);
-        writeFileSync(join(task.worktree, 'inventory.ts'), 'invalid');
+        writeFileSync(join(task.worktree, inventory), 'invalid');
         expect(spawnSync('git', ['-C', task.worktree, 'commit', '--allow-empty', '-qam', 'Change inventory']).status).toBe(0);
         await r.stopFixture(task.id);
         const before = r.git('rev-parse', 'main');
@@ -5172,8 +5176,7 @@ describe('gate lanes', () => {
   });
 
   async function until(check: () => boolean): Promise<void> {
-    const deadline = Date.now() + 2_000;
-    while (!check() && Date.now() < deadline) await Bun.sleep(5);
+    await waitUntil(check);
   }
 
   test('the lane count comes from the file beside the lanes unless the environment names one', async () => {
@@ -5184,15 +5187,18 @@ describe('gate lanes', () => {
     const waiting = async (): Promise<string> => {
       const notes: string[] = [];
       const releases: (() => void)[] = [];
+      const gates = [gatedSleep(), gatedSleep(), gatedSleep()];
       const holders = [0, 1, 2].map(index => withGateLane(() => new Promise<void>(done => { releases.push(done); }), {
-        directory, command: `merge ${index}`, goal: 'program', pollMs: 5, announce: note => notes.push(note),
+        directory, command: `merge ${index}`, goal: 'program', now: () => 100,
+        sleep: () => gates[index]!.sleep(), announce: note => notes.push(note),
       }));
-      await Bun.sleep(80);
       const note = notes.find(line => line.includes('gate lanes busy')) ?? 'none waited';
-      let settled = false;
-      const all = Promise.all(holders).then(() => { settled = true; });
-      while (!settled) { releases.shift()?.(); await Bun.sleep(10); }
-      await all;
+      for (const [index, holder] of holders.entries()) {
+        gates[index]!.wake();
+        await Promise.resolve();
+        releases.shift()?.();
+        await holder;
+      }
       return note;
     };
     try {
@@ -5623,20 +5629,23 @@ describe('heavy QA lock', () => {
     } finally { rmSync(root, { recursive: true, force: true }); }
   });
 
-  test('refresh precedes round-robin Goals and each Goal keeps its arrival order', async () => {
+  test.each([
+    { kind: 'heavy QA', acquire: acquireHeavy, order: ['a-next', 'a-last', 'b-next', 'b-last', 'c-next', 'task dev:refresh'] },
+    { kind: 'shared lifecycle', acquire: acquireSharedLifecycle, order: ['task dev:refresh', 'b-next', 'c-next', 'a-next', 'b-last', 'a-last'] },
+  ])('$kind serves its queue policy and each Goal keeps its arrival order', async ({ kind, acquire, order }) => {
     const root = mkdtempSync(join(tmpdir(), 'heavy-goal-turns-'));
     const lockDir = join(root, 'heavy');
     const alive = () => true;
     let clock = 100;
     try {
-      const releaseHolder = await acquireHeavy(['holder'], { lockDir, goal: 'a', alive, bindExit: false, now: () => clock });
+      const releaseHolder = await acquire(['holder'], { lockDir, goal: 'a', alive, bindExit: false, now: () => clock });
       const runs = [
         ['a-next', 'a'], ['a-last', 'a'], ['b-next', 'b'], ['b-last', 'b'], ['c-next', 'c'], ['task dev:refresh', 'a'],
       ].map(([command, goal], index) => {
         const gate = gatedSleep();
         const sleeping = gate.next();
         clock++;
-        const done = acquireHeavy(command!.split(' '), {
+        const done = acquire(command!.split(' '), {
           lockDir, pid: 1000 + index, goal, alive, bindExit: false, now: () => clock, sleep: () => gate.sleep(),
         });
         return { command, gate, sleeping, done };
@@ -5644,11 +5653,11 @@ describe('heavy QA lock', () => {
       await Promise.all(runs.map(run => run.sleeping));
       releaseHolder();
       const served: string[] = [];
-      for (const command of ['task dev:refresh', 'b-next', 'c-next', 'a-next', 'b-last', 'a-last']) {
+      for (const command of order) {
         const run = runs.find(run => run.command === command)!;
-        // Polling a later ticket cannot steal the next Goal's turn.
-        if (command === 'b-next') {
-          const a = runs[0]!;
+        // Polling a later ticket cannot steal the next turn.
+        if (command === order[0] || kind === 'shared lifecycle' && command === 'b-next') {
+          const a = runs.find(run => run.command === (kind === 'heavy QA' ? 'task dev:refresh' : 'a-next'))!;
           const slept = a.gate.next();
           a.gate.wake();
           await slept;
@@ -5659,7 +5668,7 @@ describe('heavy QA lock', () => {
         served.push(JSON.parse(readFileSync(join(lockDir, 'identity.json'), 'utf8')).command);
         release();
       }
-      expect(served).toEqual(['task dev:refresh', 'b-next', 'c-next', 'a-next', 'b-last', 'a-last']);
+      expect(served).toEqual(order);
       expect(ticketRows(join(root, 'heavy-queue'))).toEqual([]);
     } finally { rmSync(root, { recursive: true, force: true }); }
   });
@@ -5824,7 +5833,7 @@ describe('heavy QA lock', () => {
           }
           throw new Error(`polled ${polls} times`);
         },
-      })).rejects.toThrow('The heavy QA lock stayed held for six hours');
+      })).rejects.toThrow('The heavy QA lock stayed held before the deadline');
       expect(polls).toBe(2);
       expect(readdirSync(queueDir).filter(name => name.endsWith('.json'))).toEqual([]);
       expect(readFileSync(join(lockDir, 'marker'), 'utf8')).toBe('held');
@@ -5873,8 +5882,8 @@ describe('heavy QA lock', () => {
     try {
       releaseHolder = await acquireHeavy(['holder'], { lockDir, alive, bindExit: false });
       await expect(acquireHeavy(['next'], { lockDir, pid: 1001, goal: 'program', alive, bindExit: false,
-        announce: message => messages.push(message), sleep: async () => {
-          expect(heavyQaWaiters(lockDir, alive)).toEqual(['QA waiting for heavy turn: Goal program (pid 1001): next']);
+        now: () => 100, announce: message => messages.push(message), sleep: async () => {
+          expect(heavyQaWaiters(lockDir, alive)).toEqual(['QA waiting for heavy turn: Goal program since 1970-01-01T00:00:00.100Z (pid 1001): next']);
           throw new Error('stop after observing the wait');
         } })).rejects.toThrow('stop after observing the wait');
       expect(messages[0]).toStartWith('waiting for heavy QA turn');
@@ -5892,7 +5901,7 @@ describe('heavy QA lock', () => {
         command: 'bun test selected', waitingFor: 'memory', message: 'Waiting; QA memory: host is short', since: '2026-10-07T00:00:00.000Z' }));
       writeFileSync(join(waiters, 'dead.json'), JSON.stringify({ pid: dead, command: 'gone', waitingFor: 'slot', since: 'now' }));
       expect(qaWaitStatusLines(slots)).toEqual([
-        `QA waiting for memory: Goal program (pid ${process.pid}): bun test selected; Waiting; QA memory: host is short`,
+        `QA waiting for memory: Goal program (pid ${process.pid}): bun test selected; since 2026-10-07T00:00:00.000Z; Waiting; QA memory: host is short`,
       ]);
       expect(existsSync(join(waiters, 'dead.json'))).toBe(false);
     } finally { rmSync(root, { recursive: true, force: true }); }
@@ -5973,7 +5982,7 @@ describe('heavy QA lock', () => {
             process.argv = argv;
             process.exitCode = 0;
           }
-        }, 15_000);
+        }, ${CLI_SPAWN_DEADLINE_MS});
       `);
       const result = spawnSync('bun', ['test', script], { cwd: process.cwd(), encoding: 'utf8',
         maxBuffer: 8 * 1024 * 1024, env: { ...testLogEnvironment(process.env), GOAL_QA_HEAVY_RUN: '1', GOAL_QA_SLOTS: '3',
@@ -6088,11 +6097,11 @@ describe('heavy QA lock', () => {
     const messages: string[] = [];
     try {
       const code = await withSlot(['fake light run'], false, undefined, {
-        slotDirectory: slots, slots: 3, pollMs: 1,
+        slotDirectory: slots, slots: 3, pollMs: 1, now: () => 100,
         announce: message => messages.push(message),
         sleep: async () => {
           expect(qaWaitStatusLines(slots, () => true)[0]).toContain(`QA waiting for slot: Goal `);
-          expect(qaWaitStatusLines(slots, () => true)[0]).toContain(`(pid ${process.pid}): fake light run; 3/3 ordinary slots busy`);
+          expect(qaWaitStatusLines(slots, () => true)[0]).toContain(`(pid ${process.pid}): fake light run; since 1970-01-01T00:00:00.100Z; 3/3 ordinary slots busy`);
           rmSync(join(slots, '1'), { recursive: true, force: true });
         },
         reap: () => {},
@@ -6305,7 +6314,8 @@ describe('Goal mail CLI', () => {
       const acknowledged = JSON.parse(mailCommand(['ack',first.id], {...options,callerGoal:'program'})[0]!);
       const retry = JSON.parse(mailCommand(['ack',first.id,'--goal','program'], options)[0]!);
       expect(retry.acknowledgedAt).toBe(acknowledged.acknowledgedAt);
-      expect(inbox()[0].acknowledged).toBe(true);
+      expect(inbox()).toEqual([]);
+      expect(JSON.parse(mailCommand(['inbox', '--all'], options)[0]!).acknowledged).toBe(true);
       expect(() => mailCommand(['ack',first.id,'--goal','kernel'],options)).toThrow('not delivered');
     } finally { rmSync(directory,{recursive:true,force:true}); }
   });
@@ -6356,14 +6366,15 @@ describe('registered Goal mail lifecycle', () => {
         cwd:join(import.meta.dir,'../..'),encoding:'utf8',
         env:{...process.env,GOAL_MAIL_STATE_DIR:directory,GOAL_ID:'program'}});
       expect(result.status).toBe(0);
-      return result.stdout.trim().split('\n').map(line=>JSON.parse(line));
+      return result.stdout.trim().split('\n').filter(Boolean).map(line=>JSON.parse(line));
     };
     try {
       const sent = invoke(['send','program','--file',payload,'--key','closed-goal-request'])[0];
       expect(invoke(['inbox'])[0]).toMatchObject({id:sent.id,acknowledged:false});
       const ack = invoke(['ack',sent.id])[0];
       expect(invoke(['ack',sent.id])[0].acknowledgedAt).toBe(ack.acknowledgedAt);
-      expect(invoke(['inbox'])[0].acknowledged).toBe(true);
+      expect(invoke(['inbox'])).toEqual([]);
+      expect(invoke(['inbox', '--all'])[0]).toMatchObject({ id: sent.id, acknowledged: true, acknowledgedAt: ack.acknowledgedAt });
     } finally { rmSync(directory,{recursive:true,force:true}); }
   });
 });
