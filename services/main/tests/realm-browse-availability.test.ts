@@ -86,6 +86,7 @@ test('a restored media owner still rejects the retained summary basis', async ()
 test('stale classification cannot assert an exact empty Condition inventory', async () => {
   const eligible = [id(1)], concept = id(2), realm = id(3);
   const session = { options: { limit: 5 }, position: { dataEpoch: 'epoch', sequence: '7' },
+    checkDeadline: () => {},
     realm: async () => ({ visibility: 'public', realmRevision: id(4) }),
     query: async (body: string) => body.includes('?evidence')
       ? eligible.map(work => ({ work: uri(work), main: uri(id(5)), head: uri(id(6)),

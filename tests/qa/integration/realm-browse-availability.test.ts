@@ -50,15 +50,30 @@ afterAll(async () => { await sessions?.close(); });
 
 import { acceptClassifiedStatement, discloseClassificationConcept, shareClassificationContext,
   type ClassificationPost } from '../../../scripts/dev/seed/classified-statement.ts';
-type Page = { items: { id: string; primaryCredits: unknown[] }[]; nextCursor: string | null;
+type Page = { items: { id: string; primaryCredits: { role: string; agent: string | null }[] }[]; nextCursor: string | null;
   matches: { value: number; kind: string }; query: { appliedSort: string } };
 const works: Work[] = [], tvWorks: Work[] = [];
+const phrase = `Realmavailability${randomUUID().replaceAll('-', '')}`;
 const adoptionOrder = new Map<string, bigint>();
 let tv: string;
 const evidence: unknown[] = [];
+const preparationAnswers: unknown[] = [];
 beforeAll(async () => {
   const started = Date.now();
+  try {
   sessions = await personaSessions();
+  for (const name of ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const) {
+    const person = sessions[name], main = person.main;
+    person.main = async (method, path, body, key, options) => {
+      key ??= ['GET', 'HEAD'].includes(method) ? undefined : randomUUID();
+      const response = await main(method, path, body, key, options);
+      if (!['GET', 'HEAD'].includes(method) || response.status >= 400) preparationAnswers.push({
+        persona: name, request: { method, path, body, key }, status: response.status,
+        answer: await response.clone().text(),
+      });
+      return response;
+    };
+  }
   const owner = sessions.owner, actor = owner.actingSubject!;
   const root = `/v1/realms/${short(sessions.realm)}`;
   const roleId = randomUUID();
@@ -96,7 +111,7 @@ beforeAll(async () => {
   for (const term of terms) await discloseClassificationConcept(post, '', actor, term.concept, randomUUID());
 
   const prepare = async (index: number) => {
-    const work = await publish(`Realm availability original animation ${index}`);
+    const work = await publish(`${phrase} original animation ${index}`);
     const adoption = await answer<{ sourcePosition: { sequence: string } }>(owner.main('POST', '/v1/publication-selections', {
       profile: 'realm-local-selection-v1', context: { kind: 'realm-local', id: sessions.realm },
       work: work.work, mainVersion: work.mainVersion, contribution: work.contribution,
@@ -120,23 +135,39 @@ beforeAll(async () => {
     conditionInventory: tvWorks.map(work => work.work) });
   await Bun.write(`.temp/realm-browse-availability-${Bun.env.REZICS_QA_RUN_ID}.json`, JSON.stringify(evidence, null, 2));
   expect(Date.now() - started).toBeLessThan(600_000);
+  } finally {
+    await Bun.write(`.temp/realm-browse-preparation-${Bun.env.REZICS_QA_RUN_ID}.json`,
+      JSON.stringify({ preparationMs: Date.now() - started, preparationAnswers }, null, 2));
+  }
 }, 360_000);
 
 for (const name of ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const) {
   test(`Realm Condition browse admits the complete Anime inventory for ${name}`, async () => {
     const person = sessions[name];
+    const original = globalThis.fetch;
+    globalThis.fetch = Object.assign(async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      const response = await original(input, init);
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      if (url.origin === `http://127.0.0.1:${Bun.env.MAIN_PORT}`
+        && url.pathname === `/v1/realms/${short(sessions.realm)}/modules/browse`) {
+        evidence.push({ persona: name, request: `GET ${url.pathname}${url.search}`, status: response.status,
+          answer: await response.clone().text() });
+        await Bun.write(`.temp/realm-browse-availability-${Bun.env.REZICS_QA_RUN_ID}.json`, JSON.stringify(evidence, null, 2));
+      }
+      return response;
+    }, { preconnect: original.preconnect });
+    try {
     // Inventory comes from successful command receipts, independently of browse.
-    for (const [condition, expected] of [[tv, tvWorks], [null, works]] as const) {
+    const traverse = async (condition: string | null, expected: Work[]) => {
       const params = new URLSearchParams({ sort: 'newest', limit: '5', ...(condition ? { concept: condition } : {}) });
       const seen: string[] = [], cursors = new Set<string>();
       do {
         const path = `/v1/realms/${short(sessions.realm)}/modules/browse?${params}`;
         const response = await person.main('GET', path);
-        const raw = await response.clone().text();
-        evidence.push({ persona: name, request: `GET ${path}`, status: response.status, answer: raw });
-        await Bun.write(`.temp/realm-browse-availability-${Bun.env.REZICS_QA_RUN_ID}.json`, JSON.stringify(evidence, null, 2));
         const page = await answer<Page>(Promise.resolve(response));
         expect(page.items.length).toBeLessThanOrEqual(5);
+        expect(page.items.every(item => item.primaryCredits.some(credit => credit.role === 'author'
+          && credit.agent === sessions.owner.actingSubject))).toBe(true);
         expect(page.query.appliedSort).toBe('newest');
         seen.push(...page.items.map(item => item.id));
         expect(page.matches.value).toBe(seen.length);
@@ -150,6 +181,9 @@ for (const name of ['visitor', 'stranger', 'member', 'owner', 'moderator', 'oper
       expect(seen).toEqual(expected.map(work => work.work).sort((a, b) =>
         adoptionOrder.get(a)! > adoptionOrder.get(b)! ? -1 : adoptionOrder.get(a)! < adoptionOrder.get(b)! ? 1
           : b.localeCompare(a)));
-    }
+    };
+    const traversals = await Promise.allSettled([traverse(tv, tvWorks), traverse(null, works)]);
+    for (const traversal of traversals) if (traversal.status === 'rejected') throw traversal.reason;
+    } finally { globalThis.fetch = original; }
   });
 }
