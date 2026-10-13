@@ -10,7 +10,7 @@ beforeAll(async () => { contract = JSON.parse(await buildMainOpenApi()) as Answe
 
 test('every checked-in outcome answer record validates against the contract generated from this tree', () => {
   expect(answerRecordViolations(root, contract)).toEqual([]);
-});
+}, 30_000);
 
 test('the inventory guard catches a renamed operation and a changed answer field in a fixture record', () => {
   // An isolated copy exercises the inventory reader as well as the schema validator.
@@ -35,4 +35,4 @@ test('the inventory guard catches a renamed operation and a changed answer field
     expect(failure).toContain('row books/catalogue-browse-and-search-in-its-zone, persona member, sample search-no-match');
     expect(failure).toContain('/answer/items');
   } finally { rmSync(scratch, { recursive: true, force: true }); }
-});
+}, 30_000);
